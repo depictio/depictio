@@ -275,12 +275,14 @@ workflows:
           type: "Table"
           source: "transformed"
           transform:
-            recipe: "salmon/sample_pca.py"
+            recipe: "nf-core/riboseq/sample_pca.py"
             source_overrides:
               matrix:
                 path: "quantification/salmon/salmon.merged.gene_tpm.tsv"
               samplesheet:
                 path: "{SAMPLESHEET_FILE}"
+            params:
+              group_col: "{GROUP_COL}"
           dc_specific_properties:
             format: "TSV"
             columns_description:
@@ -289,6 +291,7 @@ workflows:
               "dim_2": "Second principal component"
               "dim_3": "Third principal component"
               "group": "The sheet's most factor-like column (the assay type on a riboseq sheet)"
+              "{GROUP_COL}": "Design group of the library (GROUP_COL of the design table, else the sheet); the PCA colours by it, All libraries when the run has no design group"
               "genes_detected": "Genes with TPM above zero in this library"
               "genes_expressed": "Genes with TPM at or above 1 in this library"
               "median_tpm": "Median TPM over the genes the library detects"

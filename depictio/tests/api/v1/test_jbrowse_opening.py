@@ -158,6 +158,40 @@ class TestMateLocus:
         assert render.mate_locus_from_rows(rows, self.SPEC) is None
 
 
+class TestRowsInRegion:
+    """The latest of several picks frames the view: the one inside the region it published."""
+
+    SPEC = {"chrom_column": "chrom_a", "start_column": "pos_a"}
+    ROWS = [
+        {"label": "GOPC--ROS1", "chrom_a": "chr6", "pos_a": 117_000_000},
+        {"label": "ETV6--NTRK3", "chrom_a": "chr12", "pos_a": 11_900_000},
+        {"label": "EWSR1--ATF1", "chrom_a": "22", "pos_a": 29_300_000},
+    ]
+
+    def test_keeps_the_rows_inside_the_region(self):
+        region = {"chrom": "chr12", "start": 11_800_000, "end": 12_000_000}
+        assert [r["label"] for r in render.rows_in_region(self.ROWS, self.SPEC, region)] == [
+            "ETV6--NTRK3"
+        ]
+
+    def test_chromosome_names_compare_loosely_and_a_null_end_is_the_contig(self):
+        region = {"chrom": "chr22", "start": 0, "end": None}
+        assert [r["label"] for r in render.rows_in_region(self.ROWS, self.SPEC, region)] == [
+            "EWSR1--ATF1"
+        ]
+
+    def test_a_region_on_the_mate_side_picks_its_row(self):
+        spec = {**self.SPEC, "mate": {"chrom_column": "chrom_b", "start_column": "pos_b"}}
+        rows = [{**r, "chrom_b": "chr15", "pos_b": 88_000_000 + i} for i, r in enumerate(self.ROWS)]
+        region = {"chrom": "chr15", "start": 88_000_001, "end": 88_000_001}
+        assert [r["label"] for r in render.rows_in_region(rows, spec, region)] == ["ETV6--NTRK3"]
+
+    def test_empty_without_a_region_or_a_row_inside_it(self):
+        assert render.rows_in_region(self.ROWS, self.SPEC, None) == []
+        outside = {"chrom": "chr12", "start": 0, "end": 1000}
+        assert render.rows_in_region(self.ROWS, self.SPEC, outside) == []
+
+
 # --------------------------------------------------------------------------
 # Sashimi and circular tracks
 # --------------------------------------------------------------------------

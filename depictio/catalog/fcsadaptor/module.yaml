@@ -4,6 +4,7 @@
 # screened assembly that had nothing flagged.
 id: fcsadaptor
 name: FCS-adaptor
+version: "1.0.0"
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/fcs/fcsadaptor
 homepage: https://github.com/ncbi/fcs
 biotools_url: null

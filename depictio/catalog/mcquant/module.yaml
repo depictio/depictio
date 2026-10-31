@@ -7,6 +7,7 @@
 # numeric columns that are not an id or a morphology column.
 id: mcquant
 name: MCQUANT
+version: "1.0.0"
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/mcquant
 biotools_url: null  # no bio.tools entry for MCQUANT
 description: >-

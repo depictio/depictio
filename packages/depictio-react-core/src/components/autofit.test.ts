@@ -365,6 +365,30 @@ describe('fitLayoutHeights with a complex heatmap', () => {
   });
 });
 
+describe('fitLayoutHeights with a ranked table', () => {
+  const table = { index: 'rt', component_type: 'advanced_viz', viz_kind: 'ranked_table' };
+  const other = { index: 'ot', component_type: 'advanced_viz', viz_kind: 'volcano' };
+
+  it('shrinks to the rows it shows, where other advanced viz only grow', () => {
+    // 8 candidates: ~366 px, 4 rows, in a tile stored at 6.
+    const layouts = (i: string) => [{ i, y: 0, h: 6 }];
+    expect(fitLayoutHeights([table], layouts('rt'), { rt: 366 })[0].h).toBe(rowsForHeight(366));
+    expect(fitLayoutHeights([other], layouts('ot'), { ot: 366 })[0].h).toBe(6);
+  });
+
+  it('grows to a longer list and keeps the stored height until it publishes', () => {
+    expect(fitLayoutHeights([table], [{ i: 'rt', y: 0, h: 4 }], { rt: 700 })[0].h).toBe(
+      rowsForHeight(700),
+    );
+    expect(fitLayoutHeights([table], [{ i: 'rt', y: 0, h: 6 }], {})[0].h).toBe(6);
+  });
+
+  it('leaves a table the user fixed alone', () => {
+    const fixed = [{ ...table, fit: 'fixed' as const }];
+    expect(fitLayoutHeights(fixed, [{ i: 'rt', y: 0, h: 6 }], { rt: 366 })[0].h).toBe(6);
+  });
+});
+
 describe('fitLayoutHeights with compact cards', () => {
   const layouts = [
     { i: 'a', y: 0, h: 8 },

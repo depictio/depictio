@@ -248,9 +248,13 @@ export function contigSpellings(name: string | null | undefined): string[] | und
   return alt && alt !== name ? [alt] : undefined;
 }
 
-/** Columns a table names its position, interval start and interval end by. */
+/** Columns a table names its position, interval start and interval end by. A
+ *  feature-prefixed name (`orf_start`, `peak_end`) is the fallback when no plain
+ *  one is there. */
 const POSITION_COLUMN = /^(pos|position|start|chromstart|chrom_start|bp|locus_start)$/i;
 const END_COLUMN = /^(end|stop|chromend|chrom_end|locus_end)$/i;
+const PREFIXED_POSITION_COLUMN = /^[a-z0-9]+_(start|pos)$/i;
+const PREFIXED_END_COLUMN = /^[a-z0-9]+_(end|stop)$/i;
 
 /**
  * The interval a table row names, found by the usual column names (a contig
@@ -265,9 +269,21 @@ export function genomicFromRowByName(
   const keys = Object.keys(row);
   const chromCol = keys.find((k) => isContigColumn(k) && !isBlank(row[k]));
   if (!chromCol) return null;
-  const posCol = keys.find((k) => POSITION_COLUMN.test(k) && Number.isFinite(Number(row[k])) && !isBlank(row[k]));
+  const numeric = (k: string) => Number.isFinite(Number(row[k])) && !isBlank(row[k]);
+  const posCol =
+    keys.find((k) => POSITION_COLUMN.test(k) && numeric(k)) ??
+    keys.find((k) => PREFIXED_POSITION_COLUMN.test(k) && numeric(k));
   if (!posCol) return null;
-  const endCol = keys.find((k) => END_COLUMN.test(k) && Number.isFinite(Number(row[k])) && !isBlank(row[k]));
+  // The end that pairs with a prefixed start shares its prefix (`orf_start` → `orf_end`).
+  const prefix = POSITION_COLUMN.test(posCol) ? null : posCol.replace(/_(start|pos)$/i, '');
+  const endCol =
+    keys.find((k) => END_COLUMN.test(k) && numeric(k)) ??
+    keys.find(
+      (k) =>
+        PREFIXED_END_COLUMN.test(k) &&
+        numeric(k) &&
+        (prefix === null || k.toLowerCase().startsWith(`${prefix.toLowerCase()}_`)),
+    );
   return genomicFromRecord(row, chromCol, posCol, endCol);
 }
 

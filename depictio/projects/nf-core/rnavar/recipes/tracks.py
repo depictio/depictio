@@ -8,14 +8,16 @@ when a sample has no filtered twin. The snpEff-annotated twin
 (``annotation/<S>/<S>.haplotypecaller.filtered_snpEff.ann.vcf.gz``) comes first
 when the run annotated, so the browser can colour the calls by impact.
 
-Rows open on the design and on the reads: the VCF of one representative sample per
-group (the groups in the hub's order, the sample holding the run's strongest call
-standing for its group), then the duplicate-marked STAR alignment of that sample
-(``preprocessing/<S>/<S>.md.bam`` with its ``.bai``, 14 to 21 GB each in a full
-run), so the reads sit under the first call and ``show_junctions`` draws the
-splice arcs over their coverage on opening. The other samples' VCFs follow, the
-other alignments last. A run started from BAM or CRAM has no such file, and a file
-whose index is missing is left out of an upload (a bgzipped VCF cannot be read
+Rows open on the question of the Genome tab (are the PASS variants shared between the
+replicates of a cell line, and do the reads support them?): the VCFs of the replicates of
+the design group that holds the top shared variant (the first row of
+``shared_variants``, where the browser opens), then their duplicate-marked STAR
+alignments (``preprocessing/<S>/<S>.md.bam`` with its ``.bai``, 14 to 21 GB each in a full
+run), so the reads sit under the calls and ``show_junctions`` draws the splice arcs over
+their coverage on opening. The other groups' VCFs follow, one representative per group
+first, then the other alignments. Without ``shared_variants`` the group of the
+highest-QUAL call stands in for it. A run started from BAM or CRAM has no such file, and
+a file whose index is missing is left out of an upload (a bgzipped VCF cannot be read
 without its ``.tbi``, a BAM without its ``.bai``).
 
 The design group (the template's ``GROUP_COL``: a cell line, a condition) is a
@@ -33,8 +35,10 @@ Two ways the files are read:
 
 Sources:
     hub        ``samples`` (this template's ``samples.py``): the samples and their design group
-    variants   ``vcf_variants`` (optional): its highest-QUAL call, the one the browser opens on,
-               names the sample whose alignment opens beside the calls
+    shared     ``shared_variants`` (optional): its first row, the site the browser opens on,
+               names the design group whose replicates open
+    variants   ``vcf_variants`` (optional): its highest-QUAL call stands in for that site
+               when ``shared_variants`` is absent
 
 Parameters:
     group_col  the design column the tracks are coloured by (the template's ``GROUP_COL``)
@@ -60,7 +64,10 @@ from depictio.models.models.transforms import RecipeSource
 # The samples of the run; their files are then found under the data root.
 SOURCES: list[RecipeSource] = [
     RecipeSource(ref="hub", dc_ref="samples", input_schema={"sample": pl.Utf8}),
-    # Only its strongest call is read, to open the reads of that call's sample.
+    # Only its best row is read, to open the replicates of that site's group. Declared
+    # after the hub in the template, since it reads the hub's design group.
+    RecipeSource(ref="shared", dc_ref="shared_variants", optional=True),
+    # Fallback when there is no shared table: the sample of its strongest call.
     RecipeSource(
         ref="variants",
         dc_ref="vcf_variants",
@@ -112,6 +119,21 @@ def _top_call_sample(variants: pl.DataFrame | None, groups: dict[str, str]) -> s
     return best["sample"][0] if best.height else None
 
 
+def _top_shared_group(shared: pl.DataFrame | None, group: str, known: set[str]) -> str | None:
+    """The design group of the best shared variant (highest ``support_score``); None without one."""
+    if (
+        shared is None
+        or shared.is_empty()
+        or group not in shared.columns
+        or "support_score" not in shared.columns
+    ):
+        return None
+    best = shared.filter(pl.col(group).is_in(list(known))).sort(
+        ["support_score", "chrom", "pos"], descending=[True, False, False], nulls_last=True
+    )
+    return str(best[group][0]) if best.height else None
+
+
 def transform(
     sources: dict[str, pl.DataFrame | None],
     context=None,
@@ -132,20 +154,20 @@ def transform(
         groups = {s: NO_GROUP_VALUE for s in hub["sample"].drop_nulls().to_list()}
     if not groups:
         raise ValueError("rnavar tracks: the sample hub lists no sample")
-    # The browser opens on the first rows: one representative sample per group, the
-    # groups in the design's order (the hub's), then the other samples by name. The
-    # sample of the strongest call (the stepper's first stop) stands for its group.
+    # The browser opens on the first rows: the replicates of the group that holds the top
+    # shared variant (the stepper's first stop), then one representative per other group
+    # in the design's order (the hub's), then the other samples by name.
     ordered = sorted(groups)
-    top = _top_call_sample(sources.get("variants"), groups)
-    representatives = list(
-        {groups[s]: s for s in reversed(ordered)}.values()  # first sample by name per group
-    )
-    if top is not None:
-        representatives = [top if groups[s] == groups[top] else s for s in representatives]
     group_rank = {g: i for i, g in enumerate(dict.fromkeys(groups[s] for s in groups))}
+    top_group = _top_shared_group(sources.get("shared"), group, set(groups.values()))
+    if top_group is None:
+        top = _top_call_sample(sources.get("variants"), groups)
+        top_group = groups[top] if top is not None else groups[ordered[0]]
+    opening_samples = [s for s in ordered if groups[s] == top_group]
+    others = [s for s in ordered if groups[s] != top_group]
+    representatives = list({groups[s]: s for s in reversed(others)}.values())
     representatives.sort(key=lambda s: group_rank[groups[s]])
-    samples = [*representatives, *[s for s in ordered if s not in representatives]]
-    reads_first = top if top is not None else representatives[0]
+    samples = [*opening_samples, *representatives, *[s for s in others if s not in representatives]]
 
     def present(path: str, index: str) -> bool:
         return context.exists(path) and context.exists(path + index)
@@ -177,12 +199,10 @@ def transform(
                 "category": "Alignments",
             }
         )
-    # The representatives' calls, the reads of the strongest call's sample, then
-    # the other samples' calls and the other alignments.
-    n_rep = len(representatives)
-    opening = [b for b in bams if b["sample"] == reads_first]
-    rest = [b for b in bams if b["sample"] != reads_first]
-    rows = [*vcfs[:n_rep], *opening, *vcfs[n_rep:], *rest]
+    # The opening group's calls, then its reads, then the other samples' calls and
+    # the other alignments.
+    n_open = len(opening_samples)
+    rows = [*vcfs[:n_open], *bams[:n_open], *vcfs[n_open:], *bams[n_open:]]
     if not context.reads_in_place:
         held = [r for r in rows if present(r["uri"], ".tbi" if r["format"] == "vcf" else ".bai")]
         # A tables-only run holds no file: list what the pipeline publishes.

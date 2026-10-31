@@ -1195,8 +1195,6 @@ tabs:
       color_col: phase
       default_color_by: phase
       axis_prefix: PC
-      point_size: 14
-      marker_outline: true
       hover_cols: [time_point]
       legend_pos: bottom
       selection_enabled: true

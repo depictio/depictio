@@ -133,5 +133,6 @@ def test_template_tracks_dc_has_no_colour_column_and_the_dashboard_colours_by_gr
     browser = next(t for t in tiles if t["component_type"] == "jbrowse")
     nav = next(t for t in tiles if t.get("config", {}).get("viz_kind") == "genome_view")
     # The lanes and the tracks share one colour key, and the navigator does not filter on load.
-    assert browser["color_by"] == nav["config"]["category_col"] == "drop_group"
+    # Both name the template's GROUP_COL, not a hardcoded column.
+    assert browser["color_by"] == nav["config"]["category_col"] == "{GROUP_COL}"
     assert "default_region" not in nav["config"]

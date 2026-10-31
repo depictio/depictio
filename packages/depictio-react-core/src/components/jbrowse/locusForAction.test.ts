@@ -58,8 +58,14 @@ describe('genomeSelectionRegion', () => {
       end: Number.POSITIVE_INFINITY,
     });
   });
-  it('is null for several contigs, none, or other filter sources', () => {
-    expect(genomeSelectionRegion(region(['chr5', 'chr6'], null))).toBeNull();
+  it('is the first contig, whole, for a brush across several', () => {
+    expect(genomeSelectionRegion(region(['chr5', 'chr6'], null))).toEqual({
+      chrom: 'chr5',
+      start: 0,
+      end: Number.POSITIVE_INFINITY,
+    });
+  });
+  it('is null for no contig or other filter sources', () => {
     expect(genomeSelectionRegion(region([], null))).toBeNull();
     expect(genomeSelectionRegion([])).toBeNull();
     const other: InteractiveFilter = {

@@ -210,6 +210,50 @@ def _concrete_colors(colors: dict[str, Any]) -> dict[str, str]:
     }
 
 
+def _variant_palette(
+    spec: dict[str, Any] | None, category_colors: dict[str, dict[str, str]] | None
+) -> tuple[str, dict[str, str]] | None:
+    """``(fallback colour, {category: colour})`` of a ``variant_color_by``, in order.
+
+    None when there is no colour to apply: no spec, no ``category_colors`` for its
+    column, or only sentinels (``auto``) that were never turned into colours.
+    """
+    if not spec or not spec.get("column"):
+        return None
+    colors = (category_colors or {}).get(spec["column"])
+    if not isinstance(colors, dict):
+        return None
+    fallback = (
+        _concrete_colors({"*": spec.get("fallback_color") or colors.get("*")}).get("*")
+        or DEFAULT_FEATURE_COLOR
+    )
+    by_category = {k: v for k, v in _concrete_colors(colors).items() if k != "*"}
+    if not by_category:
+        return None
+    return fallback, by_category
+
+
+def variant_color_legend(
+    spec: dict[str, Any] | None, category_colors: dict[str, dict[str, str]] | None
+) -> dict[str, Any] | None:
+    """The key to ``variant_color_jexl``: what each variant colour stands for.
+
+    ``{"title": column, "entries": [{"label", "color"}, ...], "fallback": {"label",
+    "color"}}``, in the order the expression tests the categories, so the viewer
+    draws exactly the colours the track wears. None when the track is not coloured.
+    """
+    palette = _variant_palette(spec, category_colors)
+    if palette is None:
+        return None
+    fallback, by_category = palette
+    assert spec is not None
+    return {
+        "title": spec["column"],
+        "entries": [{"label": k, "color": v} for k, v in by_category.items()],
+        "fallback": {"label": spec.get("fallback_label") or "other", "color": fallback},
+    }
+
+
 def variant_color_jexl(
     spec: dict[str, Any] | None, category_colors: dict[str, dict[str, str]] | None
 ) -> str | None:
@@ -225,15 +269,11 @@ def variant_color_jexl(
     categories takes the one listed first. Returns None when there is no
     colour to apply.
     """
-    if not spec or not spec.get("column"):
+    palette = _variant_palette(spec, category_colors)
+    if palette is None:
         return None
-    colors = (category_colors or {}).get(spec["column"])
-    if not isinstance(colors, dict):
-        return None
-    fallback = _concrete_colors({"*": colors.get("*")}).get("*", DEFAULT_FEATURE_COLOR)
-    by_category = {k: v for k, v in _concrete_colors(colors).items() if k != "*"}
-    if not by_category:
-        return None
+    fallback, by_category = palette
+    assert spec is not None
     info_field = spec.get("info_field") or "ANN"
     if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", info_field):
         raise ValueError(f"Invalid INFO field name '{info_field}'")
@@ -250,9 +290,11 @@ def variant_color_jexl(
 def variant_label_jexl(spec: dict[str, Any] | None) -> str | None:
     """Jexl naming a variant by one ``|`` part of an INFO field, else its ID.
 
-    ``spec`` is the component's ``variant_label_by`` (``info_field``, ``part``).
+    ``spec`` is the component's ``variant_label_by`` (``info_field``, ``part``,
+    optional ``score_field``).
     An array field (``CSQ``, ``ANN``) is joined first, so the part is read from
-    its first annotation.
+    its first annotation. With ``score_field`` (e.g. ``RankScore``, whose value is
+    ``family:score``) the score follows the name in brackets.
     """
     if not spec:
         return None
@@ -261,7 +303,15 @@ def variant_label_jexl(spec: dict[str, Any] | None) -> str | None:
         raise ValueError(f"Invalid INFO field name '{info_field}'")
     part = int(spec.get("part", 3))
     value = f"join('|', get(feature,'INFO').{info_field})"
-    return f"jexl:split({value}, '|')[{part}] || get(feature,'name') || get(feature,'id')"
+    name = f"split({value}, '|')[{part}] || get(feature,'name') || get(feature,'id')"
+    score_field = spec.get("score_field")
+    if not score_field:
+        return f"jexl:{name}"
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", score_field):
+        raise ValueError(f"Invalid INFO field name '{score_field}'")
+    # ``family:score``: the part after the colon, of the first family.
+    score = f"split(join('|', get(feature,'INFO').{score_field}), ':')[1]"
+    return f"jexl:{score} ? ({name}) + ' (' + {score} + ')' : {name}"
 
 
 # --------------------------------------------------------------------------

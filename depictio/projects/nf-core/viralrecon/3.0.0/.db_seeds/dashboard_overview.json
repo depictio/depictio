@@ -143,7 +143,7 @@
       "order": 1,
       "alignment": "left",
       "vertical_alignment": "center",
-      "body": "### About this dashboard\nnf-core/viralrecon aligns each sample's reads to the viral reference, calls its variants, builds a consensus genome and names its lineage. This page sums up one run; each tab behind it answers one question, in the order of the steps below.\n\nThe sample filters in the left panel apply to every tab: narrow the samples once and the whole dashboard follows. A bar above a section narrows that section only.\n",
+      "body": "### About this dashboard\nnf-core/viralrecon aligns each sample's reads to the viral reference, calls its variants, builds a consensus genome and names its lineage. This page sums up one run; each tab behind it answers one question, in the order of the steps below.\n\nRead the tabs from left to right: data quality first (Sample QC, Coverage & Depth), then the mutations, from the cohort (Variants) to one gene (Gene) to one sample (Sample), then what they mean for typing (Lineage & Clustering).\n\nThe sample filters in the left panel apply to every tab: narrow the samples once and the whole dashboard follows, and pin one sample there to open the Sample tab on it. A bar above a section narrows that section only.\n",
       "surface": "card",
       "accent": null,
       "logo": null,
@@ -203,7 +203,7 @@
       "order": 1,
       "alignment": "left",
       "vertical_alignment": "center",
-      "body": "### Six steps from reads to lineages\nEach step names its settings and the tab that shows its result.\n\n::: steps\n1. ![](icon:mdi:content-cut) **Trim** Adapters cut by fastp \u00b7 [Settings](params:fastp) \u00b7 [MultiQC](tab:MultiQC)\n2. ![](icon:mdi:target) **Align** Bowtie 2, primers clipped by iVar \u00b7 [Settings](params:ivar_trim) \u00b7 [Sample QC](tab:Sample QC)\n3. ![](icon:mdi:chart-areaspline) **Cover** Depth by mosdepth \u00b7 [Settings](params:mosdepth) \u00b7 [Coverage](tab:Coverage & Depth)\n4. ![](icon:mdi:dna) **Call** Variants by {{param:variant_caller}}, effects by snpEff \u00b7 [Settings](params:variant) \u00b7 [Variants](tab:Variants)\n5. ![](icon:mdi:source-merge) **Consensus** One genome per sample \u00b7 [Settings](params:consensus) \u00b7 [Sample QC](tab:Sample QC)\n6. ![](icon:mdi:virus) **Type** Pangolin lineage, Nextclade clade \u00b7 [Settings](params:nextclade) \u00b7 [Lineages](tab:Lineage & Clustering)\n:::\n",
+      "body": "### Six steps from reads to lineages\nEach step names its settings and the tab that shows its result.\n\n::: steps\n1. ![](icon:mdi:content-cut) **Trim** Adapters cut by fastp \u00b7 [Settings](params:fastp) \u00b7 [MultiQC](tab:MultiQC)\n2. ![](icon:mdi:target) **Align** Bowtie 2, primers clipped by iVar \u00b7 [Settings](params:ivar_trim) \u00b7 [Sample QC](tab:Sample QC)\n3. ![](icon:mdi:chart-areaspline) **Cover** Depth by mosdepth \u00b7 [Settings](params:mosdepth) \u00b7 [Coverage](tab:Coverage & Depth)\n4. ![](icon:mdi:dna) **Call** Variants by {{param:variant_caller}}, effects by snpEff \u00b7 [Settings](params:variant) \u00b7 [Variants](tab:Variants) \u00b7 [Gene](tab:Gene)\n5. ![](icon:mdi:source-merge) **Consensus** One genome per sample \u00b7 [Settings](params:consensus) \u00b7 [Sample QC](tab:Sample QC) \u00b7 [Sample](tab:Sample)\n6. ![](icon:mdi:virus) **Type** Pangolin lineage, Nextclade clade \u00b7 [Settings](params:nextclade) \u00b7 [Lineages](tab:Lineage & Clustering)\n:::\n",
       "surface": "card",
       "accent": "green",
       "logo": null,
@@ -724,7 +724,7 @@
       "title_align": "left",
       "section": "Findings",
       "source_tab": "Variants",
-      "source_component": "var-manhattan",
+      "source_component": "var-navigator",
       "hide_legend": true,
       "caption": "One dot per call along the genome, as high as its allele frequency, coloured by effect; above the line, it enters the consensus."
     },
@@ -764,7 +764,7 @@
       "order": 1,
       "alignment": "left",
       "vertical_alignment": "center",
-      "body": "### Data & QC\n- [MultiQC](tab:MultiQC)\n- [Sample QC](tab:Sample QC)\n- [Coverage & Depth](tab:Coverage & Depth)\n\n### Genomes\n- [Variants](tab:Variants)\n- [Lineage & Clustering](tab:Lineage & Clustering)\n",
+      "body": "### Data & QC\n- [MultiQC](tab:MultiQC)\n- [Sample QC](tab:Sample QC)\n- [Coverage & Depth](tab:Coverage & Depth)\n\n### Mutations\n- [Variants](tab:Variants)\n- [Gene](tab:Gene)\n- [Sample](tab:Sample)\n\n### Typing\n- [Lineage & Clustering](tab:Lineage & Clustering)\n",
       "surface": "none",
       "accent": null,
       "logo": null,
@@ -1077,6 +1077,7 @@
       "compact": false,
       "row_selection_enabled": true,
       "row_selection_column": "sample",
+      "row_selection_mode": "multiple",
       "wf_tag": "nextflow/viralrecon"
     }
   ],
@@ -1562,7 +1563,7 @@
   },
   "is_public": true,
   "last_saved_ts": "2026-08-29 00:00:00",
-  "creation_time": "2026-10-22 10:02:19",
+  "creation_time": "2026-10-30 14:56:14",
   "screenshot_ts": "",
   "project_id": {
     "$oid": "746b0f3c1e4a2d7f8e5b9ca2"
@@ -1582,6 +1583,6 @@
   "template_origin": {
     "template_id": "nf-core/viralrecon/3.0.0",
     "template_version": "2.0.0",
-    "imported_at": "2026-10-29 11:02:02"
+    "imported_at": "2026-10-30 14:58:06"
   }
 }

@@ -47,7 +47,18 @@ python scripts/update_template_lock.py --write   # after bumping: refresh the lo
 that went down or is not `X.Y.Z`, and on a lock that is out of date. `--write` refuses the
 unbumped case unless given `--force`. A recipe in a pipeline's shared `recipes/` moves the hash
 of every version of that pipeline, so each of them is bumped. The platform code the recipes
-import (`depictio/recipes/lib`, the catalog modules) is not part of the hash.
+import (`depictio/recipes/lib`) is not part of the hash.
+
+Catalog modules carry their own revision: `version` in `depictio/catalog/<module>/module.yaml`,
+same semver rules (major: an output column changes; minor: a reader, recipe or render changes;
+patch: text only). `depictio/catalog/catalog_versions.lock.json` holds each module's version and
+a hash of its `.py` and `.yaml` files (fixtures are not part of it), and the same script checks
+and writes it. A template's hash covers the **version** of each module it consumes (a
+`recipe: <module>/<name>` that resolves in the catalog, a dashboard `use: <module>/...` or
+`catalog_source.toolId`, a recipe importing `depictio.catalog.<module>`), and its lock entry
+lists them under `catalog`. Editing a module therefore fails twice, on purpose: bump the module,
+then bump every template that consumes it. A `use:` is expanded into the dashboard at import, so
+an imported dashboard only picks up a module change through a re-import of its template.
 
 The guard is `depictio/tests/unit/test_template_lock.py` (skipped while the lock file does not
 exist) and the `check-template-versions` hook in `.pre-commit-config.yaml`.

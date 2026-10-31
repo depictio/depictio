@@ -6,6 +6,8 @@ into the effective projection (so filtering never silently drops a column), and
 the schema-guarded scan projection backed by a per-(collection, version) cache.
 """
 
+import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import MagicMock
 
@@ -326,3 +328,38 @@ class TestBaseDeltaScanCache:
             results = list(pool.map(call, range(400)))
         assert all(asked == got for asked, got in results)
         assert len(dtu._BASE_SCAN_CACHE) <= 4 + workers
+
+    def test_schema_is_resolved_once_before_the_scan_is_shared(self, monkeypatch):
+        # Two threads resolving one Delta scan's schema at once deadlock inside
+        # polars (its schema callback needs the GIL the second thread holds).
+        # The scan must reach other threads already resolved, by one thread.
+        active = 0
+        peak = 0
+        resolved: list[str] = []
+        guard = threading.Lock()
+
+        class Scan:
+            def __init__(self, loc: str) -> None:
+                self.loc = loc
+
+            def collect_schema(self) -> dict:
+                nonlocal active, peak
+                with guard:
+                    active += 1
+                    peak = max(peak, active)
+                time.sleep(0.005)
+                with guard:
+                    active -= 1
+                resolved.append(self.loc)
+                return {"a": pl.Int64}
+
+        monkeypatch.setattr(dtu, "_create_delta_scan", lambda loc, *a, **k: Scan(loc))
+        with ThreadPoolExecutor(max_workers=16) as pool:
+            scans = list(
+                pool.map(
+                    lambda i: dtu._base_delta_scan("s3://b/dc", "table", None, "v1"), range(64)
+                )
+            )
+        assert all(scan is scans[0] for scan in scans)
+        assert resolved == ["s3://b/dc"]
+        assert peak == 1

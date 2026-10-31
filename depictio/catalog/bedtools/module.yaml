@@ -14,6 +14,7 @@
 # browser cannot compute from a window in view.
 id: bedtools
 name: bedtools genomecov
+version: "1.0.0"
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/bedtools/genomecov
 homepage: https://bedtools.readthedocs.io/en/latest/content/tools/genomecov.html
 description: >-

@@ -15,7 +15,14 @@ import {
 } from '../../selection';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { demandForPx } from './contentDemand';
-import { VizNumberInput, VizSegmented } from './controls/VizControls';
+import {
+  VizControlGroup,
+  VizMultiSelect,
+  VizNumberInput,
+  VizSegmented,
+  VizSelect,
+  VizSwitch,
+} from './controls/VizControls';
 import FamilySection, {
   familyRowColumns,
   hasFamily,
@@ -26,15 +33,24 @@ import RankedPopover, { type PopoverContent } from './ranked_table/RankedPopover
 import {
   badgeColourOf,
   barFraction,
+  barLabel,
   barRange,
+  boundFromColumn,
+  categoricalColumns,
   clampTopN,
   columnLabel,
   columnsToFetch,
+  distinctValues,
   EMPTY_CELL,
   formatCell,
+  isFiltering,
+  isNumericColumn,
   missingColumns,
+  pickDefaultRow,
   rankedEcho,
   rankRows,
+  rowsKept,
+  sortableColumns,
   toNumber,
   type BarRange,
   type RankedRow,
@@ -61,6 +77,14 @@ interface RankedTableConfig extends FamilyConfig {
   selection_enabled?: boolean;
   selection_column?: string | null;
   family_open?: boolean;
+  sort_col?: string | null;
+  min_score?: number | null;
+  filter_col?: string | null;
+  filter_values?: string[];
+  hidden_columns?: string[];
+  compact?: boolean;
+  default_select_by?: string | null;
+  default_select_order?: 'desc' | 'asc';
 }
 
 interface Props {
@@ -77,7 +101,9 @@ const RANKED_TABLE_VIZ_KIND: AdvancedVizKind = 'ranked_table';
 
 const DEFAULT_TOP_N = 50;
 const ROW_PX = 40;
+const COMPACT_ROW_PX = 30;
 const HEADER_PX = 34;
+const FOOT_PX = 22;
 const DEMAND_ROWS = 12;
 
 type Pointer = { x: number; y: number };
@@ -115,6 +141,13 @@ const RankedTableRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, 
   const [topN, setTopN] = usePersistedVizControl<number>(metadata, 'top_n', DEFAULT_TOP_N);
   const [descending, setDescending] = usePersistedVizControl<boolean>(metadata, 'descending', true);
   const [familyOpen, setFamilyOpen] = usePersistedVizControl<boolean>(metadata, 'family_open', false);
+  const [sortColStored, setSortCol] = usePersistedVizControl<string | null>(metadata, 'sort_col', null);
+  const [minScore, setMinScore] = usePersistedVizControl<number | null>(metadata, 'min_score', null);
+  const [filterColStored, setFilterCol] = usePersistedVizControl<string | null>(metadata, 'filter_col', null);
+  const [filterValues, setFilterValues] = usePersistedVizControl<string[]>(metadata, 'filter_values', []);
+  const [hiddenColumns, setHiddenColumns] = usePersistedVizControl<string[]>(metadata, 'hidden_columns', []);
+  const [compact, setCompact] = usePersistedVizControl<boolean>(metadata, 'compact', false);
+  const [medals, setMedals] = usePersistedVizControl<boolean>(metadata, 'medals', true);
 
   const selectionColumn = onFilterChange ? advancedVizSelectionColumn(metadata) : undefined;
   const selectionEnabled = Boolean(selectionColumn);
@@ -146,6 +179,7 @@ const RankedTableRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, 
         selectionColumn,
       ),
       ...familyRowColumns(config, keyColumn),
+      ...(config.default_select_by ? [config.default_select_by] : []),
     ],
     // `config` is read through its parts: the family keys change with the config object.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -166,6 +200,7 @@ const RankedTableRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, 
       config.genotypes_dc_id,
       config.genotypes_row_col,
       config.genotype_columns,
+      config.default_select_by,
     ],
   );
   const fetchColumns = useMemo(
@@ -234,17 +269,44 @@ const RankedTableRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, 
   ]);
 
   // ---- Ranking -----------------------------------------------------------
+  // A stored column that the config no longer lists falls back to the default
+  // rather than ordering or filtering by nothing.
+  const sortable = useMemo(
+    () =>
+      sortableColumns(
+        config.score_col,
+        columnSpecs,
+        popoverColumns.filter((c) => isNumericColumn(rows?.[c])),
+      ),
+    [config.score_col, columnSpecs, popoverColumns, rows],
+  );
+  const sortCol = sortColStored && sortable.includes(sortColStored) ? sortColStored : config.score_col;
+  const categorical = useMemo(() => categoricalColumns(columnSpecs), [columnSpecs]);
+  const filterCol = filterColStored && categorical.includes(filterColStored) ? filterColStored : null;
+
   const shownN = clampTopN(topN, DEFAULT_TOP_N);
+  // The Data controls take rows out before the ranking, so ranks, the "of N"
+  // and the unscored count all describe the rows left.
+  const rowFilter = useMemo(
+    () => ({ scoreColumn: config.score_col, minScore, filterColumn: filterCol, filterValues }),
+    [config.score_col, minScore, filterCol, filterValues],
+  );
+  const filtering = isFiltering(rowFilter);
   const list = useMemo(
     () =>
       rows
         ? rankRows(
             rows,
-            { score: config.score_col, rank: config.rank_col },
-            { descending, topN: shownN },
+            // A precomputed rank describes the order by the score column only.
+            { score: sortCol, rank: sortCol === config.score_col ? config.rank_col : null },
+            { descending, topN: shownN, include: rowsKept(rows, rowFilter) },
           )
         : null,
-    [rows, config.score_col, config.rank_col, descending, shownN],
+    [rows, sortCol, config.score_col, config.rank_col, descending, shownN, rowFilter],
+  );
+  const categoryOptions = useMemo(
+    () => (rows && filterCol ? distinctValues(rows[filterCol]) : []),
+    [rows, filterCol],
   );
 
   // ---- Colours -----------------------------------------------------------
@@ -268,13 +330,19 @@ const RankedTableRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, 
     return out;
   }, [rows, columnSpecs, colourSource, palette]);
 
+  // A bar scaled to a column (`max_from` / `min_from`) is full at that column's
+  // largest value over the whole frame, so "14" of a possible 18 fills 14/18
+  // instead of the best row shown being a full bar; `top` is that bound, for
+  // the "14 / 18" label.
   const barRanges = useMemo(() => {
-    const out = new Map<string, BarRange>();
+    const out = new Map<string, BarRange & { top: number | null }>();
     if (!rows || !list) return out;
     for (const spec of columnSpecs) {
       if (spec.display === 'bar') {
         const values = list.rows.map((r) => toNumber(rows[spec.column]?.[r.source]));
-        out.set(spec.column, barRange(values, spec));
+        const top = spec.max_from ? boundFromColumn(rows[spec.max_from], 'max') : null;
+        const bottom = spec.min_from ? boundFromColumn(rows[spec.min_from], 'min') : null;
+        out.set(spec.column, { ...barRange(values, spec, { lo: bottom, hi: top }), top });
       }
     }
     return out;
@@ -307,6 +375,43 @@ const RankedTableRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, 
     },
     [selectionEnabled, selectionColumn, onFilterChange, keyOf, filters, metadata],
   );
+
+  // `default_select_by`: with nothing picked, on this tile or elsewhere on the
+  // column, select the best row once the frame is in, as a click on it would,
+  // so a linked record card opens filled. Once per mount: a Reset must stay a
+  // reset, and the filter this publishes comes back through `filters`, where
+  // `pickedValues` is no longer empty.
+  const defaultAppliedRef = useRef(false);
+  useEffect(() => {
+    if (defaultAppliedRef.current || loading) return;
+    if (!config.default_select_by || !selectionEnabled || !selectionColumn || !onFilterChange) return;
+    if (!rows || !list || list.rows.length === 0) return;
+    // Decided on the first frame: a selection already there (a shared link, a
+    // pick in a table beside) is left alone, and a later Reset is not undone.
+    defaultAppliedRef.current = true;
+    if (pickedValues.size > 0) return;
+    const best = pickDefaultRow(
+      list.rows,
+      rows[config.default_select_by],
+      config.default_select_order === 'asc' ? 'asc' : 'desc',
+      keyOf,
+    );
+    const value = best ? keyOf(best) : null;
+    if (value === null) return;
+    onFilterChange(advancedVizSelectionFilter(metadata, selectionColumn, [value]));
+  }, [
+    loading,
+    rows,
+    list,
+    pickedValues,
+    selectionEnabled,
+    selectionColumn,
+    onFilterChange,
+    keyOf,
+    metadata,
+    config.default_select_by,
+    config.default_select_order,
+  ]);
 
   // ---- Popover -----------------------------------------------------------
   const [hover, setHover] = useState<{ source: number; at: Pointer } | null>(null);
@@ -345,10 +450,13 @@ const RankedTableRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, 
   useEffect(() => {
     setPinned(null);
     setHover(null);
-  }, [rows, descending, shownN]);
+  }, [list]);
 
   const labels = config.labels ?? null;
-  const scoreLabel = columnLabel(config.score_col, null, labels);
+  const labelOf = (column: string) =>
+    columnLabel(column, columnSpecs.find((c) => c.column === column)?.label, labels);
+  const scoreLabel = labelOf(config.score_col);
+  const sortLabel = labelOf(sortCol);
   const rowByPinned = (state: { source: number } | null): RankedRow | null =>
     state && list ? (list.rows.find((r) => r.source === state.source) ?? null) : null;
 
@@ -405,14 +513,14 @@ const RankedTableRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, 
         );
       }
       case 'bar': {
-        const range = barRanges.get(spec.column) ?? { lo: 0, hi: 1 };
+        const range = barRanges.get(spec.column) ?? { lo: 0, hi: 1, top: null };
         const value = toNumber(raw);
         return (
           <div className="dpx-rt__score">
             <div className="dpx-rt__track" aria-hidden="true">
               <div className="dpx-rt__fill" style={{ width: `${barFraction(value, range) * 100}%` }} />
             </div>
-            <span className="dpx-rt__value">{text}</span>
+            <span className="dpx-rt__value">{barLabel(text, spec, range.top)}</span>
           </div>
         );
       }
@@ -425,8 +533,19 @@ const RankedTableRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, 
     }
   };
 
-  const useMedals = config.medals !== false;
-  const hasSubtitle = Boolean(config.subtitle_col);
+  const useMedals = medals;
+  const hiddenSet = useMemo(() => new Set(hiddenColumns), [hiddenColumns]);
+  const hasSubtitle = Boolean(config.subtitle_col) && !hiddenSet.has(config.subtitle_col as string);
+  const shownSpecs = useMemo(
+    () => columnSpecs.filter((spec) => !hiddenSet.has(spec.column)),
+    [columnSpecs, hiddenSet],
+  );
+  const hideableColumns = useMemo(() => {
+    const out: string[] = [];
+    if (config.subtitle_col) out.push(config.subtitle_col);
+    for (const spec of columnSpecs) if (!out.includes(spec.column)) out.push(spec.column);
+    return out;
+  }, [config.subtitle_col, columnSpecs]);
   const pinnedRow = rowByPinned(pinned);
   const hoverRow = pinned ? null : rowByPinned(hover);
 
@@ -446,20 +565,36 @@ const RankedTableRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, 
     pickedValues.size > 0
       ? `picked ${[...pickedValues].slice(0, 3).join(', ')}${pickedValues.size > 3 ? ` +${pickedValues.size - 3}` : ''}`
       : list && list.rows.length > 0
-        ? rankedEcho({ shown: list.rows.length, ranked: list.ranked, scoreLabel, descending })
+        ? rankedEcho({
+            shown: list.rows.length,
+            ranked: list.ranked,
+            scoreLabel: sortLabel,
+            descending,
+            filtered: filtering,
+          })
         : undefined;
 
+  // The rows shown (capped: a long list scrolls), the header, and a line for
+  // each footnote under the table. The family pedigree is not counted: it opens
+  // in a popover over the page, not in the tile.
+  const footnotes = (list && list.unscored > 0 ? 1 : 0) + (otherMissing.length > 0 ? 1 : 0);
   const contentDemand = useMemo(
     () =>
       list && list.rows.length > 0
-        ? demandForPx(Math.min(list.rows.length, DEMAND_ROWS) * ROW_PX + HEADER_PX + 12)
+        ? demandForPx(
+            Math.min(list.rows.length, DEMAND_ROWS) * (compact ? COMPACT_ROW_PX : ROW_PX) +
+              HEADER_PX +
+              12 +
+              footnotes * FOOT_PX,
+          )
         : undefined,
-    [list],
+    [list, footnotes, compact],
   );
 
-  const primaryControls = useMemo(
-    () => (
-      <>
+  // Encoding tier: which rows are ranked and in which order.
+  const primaryControls = (
+    <>
+      <VizControlGroup title="Data">
         <VizNumberInput
           label="Top N"
           value={shownN}
@@ -467,6 +602,47 @@ const RankedTableRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, 
           min={1}
           max={1000}
         />
+        <VizNumberInput
+          label={`Min ${scoreLabel}`}
+          placeholder="None"
+          value={minScore ?? ''}
+          onChange={(v) => setMinScore(toNumber(v))}
+        />
+        {categorical.length > 0 ? (
+          <VizSelect
+            label="Filter by"
+            data={categorical.map((c) => ({ value: c, label: labelOf(c) }))}
+            value={filterCol}
+            onChange={(v) => {
+              setFilterCol(v);
+              setFilterValues([]);
+            }}
+            placeholder="None"
+            clearable
+          />
+        ) : null}
+        {filterCol ? (
+          <VizMultiSelect
+            label={`Keep ${labelOf(filterCol)}`}
+            data={categoryOptions}
+            value={filterValues}
+            onChange={setFilterValues}
+            placeholder="All"
+            clearable
+            searchable={categoryOptions.length > 8}
+          />
+        ) : null}
+      </VizControlGroup>
+      <VizControlGroup title="Order">
+        {sortable.length > 1 ? (
+          <VizSelect
+            label="Sort by"
+            data={sortable.map((c) => ({ value: c, label: labelOf(c) }))}
+            value={sortCol}
+            onChange={(v) => setSortCol(v && v !== config.score_col ? v : null)}
+            allowDeselect={false}
+          />
+        ) : null}
         <VizSegmented
           label="First"
           value={descending ? 'high' : 'low'}
@@ -476,17 +652,45 @@ const RankedTableRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, 
             { value: 'low', label: 'Lowest' },
           ]}
         />
-      </>
-    ),
-    [shownN, descending, setTopN, setDescending],
+      </VizControlGroup>
+    </>
+  );
+
+  // Cosmetic tier: what the table shows and how tightly.
+  const controls = (
+    <VizControlGroup title="Display">
+      {hideableColumns.length > 1 ? (
+        <VizMultiSelect
+          label="Hide columns"
+          data={hideableColumns.map((c) => ({ value: c, label: labelOf(c) }))}
+          value={hiddenColumns}
+          onChange={setHiddenColumns}
+          placeholder="None"
+          clearable
+        />
+      ) : null}
+      <VizSwitch checked={medals} onChange={(e) => setMedals(e.currentTarget.checked)} label="Medals" />
+      <VizSwitch
+        checked={compact}
+        onChange={(e) => setCompact(e.currentTarget.checked)}
+        label="Compact rows"
+      />
+      {familyBound ? (
+        <VizSwitch
+          checked={familyOpen}
+          onChange={(e) => setFamilyOpen(e.currentTarget.checked)}
+          label="Open family details"
+        />
+      ) : null}
+    </VizControlGroup>
   );
 
   let emptyMessage: string | undefined;
   if (rows && list && list.rows.length === 0 && !bindingError) {
     emptyMessage =
       list.unscored > 0
-        ? `No candidate has a ${scoreLabel} to rank by`
-        : filtersForFetch.length > 0
+        ? `No candidate has a ${sortLabel} to rank by`
+        : filtering || filtersForFetch.length > 0
           ? 'No candidates match the current filters'
           : 'No candidates to rank';
   }
@@ -505,6 +709,7 @@ const RankedTableRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, 
       title={metadata.title || 'Ranked table'}
       subtitle={(metadata as any).description || (metadata as any).subtitle}
       primaryControls={primaryControls}
+      controls={controls}
       contentDemand={contentDemand}
       echo={echo}
       loading={loading}
@@ -514,7 +719,7 @@ const RankedTableRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, 
       dataRows={rows ?? undefined}
       dataColumns={fetchColumns}
     >
-      <div className="dpx-rt">
+      <div className={`dpx-rt${compact ? ' dpx-rt--compact' : ''}`}>
         <div className="dpx-rt__scroll" onScroll={closePin}>
           {list && list.rows.length > 0 ? (
             <table className="dpx-rt__table" role="grid" aria-label={metadata.title || 'Ranked table'}>
@@ -527,7 +732,7 @@ const RankedTableRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, 
                   {hasSubtitle ? (
                     <th scope="col">{columnLabel(config.subtitle_col as string, null, labels)}</th>
                   ) : null}
-                  {columnSpecs.map((spec) => (
+                  {shownSpecs.map((spec) => (
                     <th key={spec.column} scope="col" className={headerEnd(spec.display)}>
                       {columnLabel(spec.column, spec.label, labels)}
                     </th>
@@ -593,7 +798,7 @@ const RankedTableRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, 
                           </span>
                         </td>
                       ) : null}
-                      {columnSpecs.map((spec) => (
+                      {shownSpecs.map((spec) => (
                         <td key={spec.column} className={headerEnd(spec.display)}>
                           {renderCell(spec, row)}
                         </td>
@@ -626,7 +831,7 @@ const RankedTableRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, 
         </div>
         {list && list.unscored > 0 && list.rows.length > 0 ? (
           <Text size="xs" c="dimmed" className="dpx-rt__foot">
-            {list.unscored.toLocaleString('en-US')} without a {scoreLabel} are not ranked
+            {list.unscored.toLocaleString('en-US')} without a {sortLabel} are not ranked
           </Text>
         ) : null}
         {otherMissing.length > 0 ? (

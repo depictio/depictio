@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  featureClickSelection,
   jbrowseSelectionFilter,
   planTrackSync,
   selectionValuesFor,
@@ -51,5 +52,18 @@ describe('jbrowseSelectionFilter', () => {
     expect(f.metadata?.dc_id).toBe('dc-tracks');
     expect(f.column_name).toBe('cell');
     expect(f.value).toEqual(['c1']);
+  });
+});
+
+describe('featureClickSelection', () => {
+  it('toggles the clicked track\'s sample in the selection', () => {
+    expect(featureClickSelection('a', rows, [])).toEqual(['s1']);
+    expect(featureClickSelection('a', rows, ['s1', 's2'])).toEqual(['s2']);
+  });
+
+  it('is null for a track with no sample (a gene track, a multi-sample VCF): details only', () => {
+    expect(featureClickSelection('d', rows, ['s1'])).toBeNull();
+    expect(featureClickSelection('unknown', rows, [])).toBeNull();
+    expect(featureClickSelection(undefined, rows, [])).toBeNull();
   });
 });

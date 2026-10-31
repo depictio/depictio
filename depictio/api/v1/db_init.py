@@ -501,6 +501,8 @@ async def create_initial_dashboards(
                 "coverage_depth",
                 "lineage_clustering",
                 "variants",
+                "gene",
+                "sample",
                 "sample_qc",
             )
         ),

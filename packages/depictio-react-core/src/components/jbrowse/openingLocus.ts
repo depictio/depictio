@@ -57,34 +57,43 @@ export function locusWithinRegion(
 /**
  * The locus the view is created at, first match wins:
  * 1. a locus another tile handed over (`pending`, see pendingLocus.ts);
- * 2. the genome region in force (`region`, a navigator's brush or default
+ * 2. the window another genome tile has in force (`window`, a sashimi or a
+ *    coverage track the browser follows), when the opening is only a default
+ *    (`data`, `preset`): a place nobody asked for yields to the tile it follows;
+ * 3. the genome region in force (`region`, a navigator's brush or default
  *    region), so the browser opens where the navigator above shows, unless
  *    what the reader left the view at, or else the payload's location (a
  *    `locus_from` row), lies inside it: a zoom into it, not a whole contig
  *    where coverage reads as a few spikes;
- * 3. what the reader left the view at;
- * 4. the payload's location.
+ * 4. what the reader left the view at, unless the payload's location comes
+ *    from a dashboard pick (`opening: 'filter'`, a table row narrowing
+ *    `locus_from`): that pick is newer than the saved view, so it wins;
+ * 5. the payload's location.
  * `undefined` lets JBrowse show the whole assembly. The pending one is never
  * written back as the reader's own navigation.
  */
 export function initialLocus(args: {
   pending?: string | null;
+  window?: string | null;
   region?: { chrom: string; start: number; end: number } | null;
   regionLocus?: string | null;
   persisted: string | null;
   location: string | null;
   mateLocation?: string | null;
   bothSides: boolean;
+  opening?: Opening;
 }): string | undefined {
   if (args.pending) return args.pending;
+  if (args.window && (args.opening === 'data' || args.opening === 'preset')) return args.window;
+  const picked = args.opening === 'filter' ? args.location : null;
   if (args.region && args.regionLocus) {
+    if (picked && locusWithinRegion(picked, args.region)) return picked;
     if (args.persisted && locusWithinRegion(args.persisted, args.region)) return args.persisted;
     if (args.location && locusWithinRegion(args.location, args.region)) return args.location;
     return args.regionLocus;
   }
-  return (
-    args.persisted || sidesLocus(args.location, args.mateLocation, args.bothSides) || undefined
-  );
+  const located = sidesLocus(args.location, args.mateLocation, args.bothSides);
+  return (picked ? located : null) || args.persisted || located || undefined;
 }
 
 /**

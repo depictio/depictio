@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMantineColorScheme, useMantineTheme } from '@mantine/core';
 import Plot from './LegendAwarePlot';
+import { CHROMOSOME_PALETTE, chromosomeColourMap, chromosomeSortKey } from './chromosomeColours';
 
 import { usePlotAnnotationLayer } from '../annotations/usePlotAnnotationLayer';
 import { supportsAdvancedVizAnnotation } from '../../annotations/plotDecorate';
@@ -131,27 +132,7 @@ interface Props {
   groupRender?: GroupRenderState;
 }
 
-const _palette = [
-  '#1c7ed6',
-  '#e64980',
-  '#fab005',
-  '#37b24d',
-  '#7048e8',
-  '#f76707',
-  '#0ca678',
-  '#d6336c',
-];
-
-// Natural chromosome order: chr1..chr22, chrX, chrY, chrMT, then anything else
-// alphabetically. Returns Infinity for unrecognised labels so they sort last.
-function chromosomeSortKey(label: string): number {
-  const stripped = label.replace(/^chr/i, '').toUpperCase();
-  if (stripped === 'X') return 23;
-  if (stripped === 'Y') return 24;
-  if (stripped === 'MT' || stripped === 'M') return 25;
-  const n = Number.parseInt(stripped, 10);
-  return Number.isFinite(n) ? n : 100;
-}
+const _palette = CHROMOSOME_PALETTE;
 
 const ManhattanRenderer: React.FC<Props> = ({
   metadata,
@@ -493,9 +474,7 @@ const ManhattanRenderer: React.FC<Props> = ({
     //    rows and the counts row shows ABOVE / BELOW. It stays full-length
     //    because AdvancedVizFrame aligns it against the unfiltered `dataRows`.
     const xs = rowIdx.map((i) => (offsetByChr.get(chrs[i]) ?? 0) + (positions[i] ?? 0));
-    const colorByChr = new Map<string, string>(
-      allChrs.map((c, i) => [c, _palette[i % _palette.length]]),
-    );
+    const colorByChr = chromosomeColourMap(allChrs);
     // Rainfall does not read the score at all, so the threshold line, the
     // above/below sizing, the tier chips and the tier-coloured markers all go
     // with it rather than annotating an axis that is no longer on the plot.

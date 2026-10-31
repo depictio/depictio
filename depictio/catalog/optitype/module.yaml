@@ -4,6 +4,7 @@
 # coverage plot (PDF, not read). The nf-core module is modules/nf-core/optitype.
 id: optitype
 name: OptiType
+version: "1.0.0"
 description: >-
   HLA class I genotypes (HLA-A, -B and -C, two-field alleles) called by integer
   linear programming over the reads that map to the HLA reference, with the

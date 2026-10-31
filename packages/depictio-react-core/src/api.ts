@@ -18,6 +18,7 @@ import type {
   AnnotationStyle,
   Geometry,
 } from './annotations/types';
+import type { VariantLegendPayload } from './components/jbrowse/trackLegend';
 
 const API_BASE = '/depictio/api/v1';
 
@@ -2600,9 +2601,9 @@ export interface JBrowseTrackRow {
    *  manifest's `group` column. Labels the legend. */
   group?: string | null;
   /** Where the track comes from: a manifest row, the assembly's annotation,
-   *  a UCSC track, or a `config_overrides.extra_tracks` entry. Absent on an
-   *  older backend: read as `manifest`. */
-  source?: 'manifest' | 'annotation' | 'ucsc' | 'extra';
+   *  a UCSC track, a `config_overrides.extra_tracks` entry or the rank track
+   *  of `locus_from.rank_track`. Absent on an older backend: read as `manifest`. */
+  source?: 'manifest' | 'annotation' | 'ucsc' | 'extra' | 'ranking';
   /** Display-only, sanitized (no query, userinfo or bucket key) location of the
    *  track's file; manifest tracks only. Never what the browser fetches. */
   uri?: string | null;
@@ -2616,6 +2617,23 @@ export interface JBrowseTrackRow {
 /** `POST /dashboards/render_jbrowse` — everything the embedded linear genome
  *  view is built from. File locations are signed, short-lived API URLs (or the
  *  raw https URL for `direct_access` collections). */
+/** The `locus_from` rows a genome browser points at (see `picked_from_rows`). */
+export interface JBrowsePicked {
+  /** One unpadded `chrom:start-end` per row, 1-based inclusive. */
+  loci: string[];
+  /** Names a feature matches by (a transcript id, else the row's label). */
+  names: string[];
+  /** Per row, the `locus_from` columns that identify it, for a table of the
+   *  same collection. */
+  keys: Array<Record<string, unknown>>;
+  /** The best calls of the opening, best first: the star and name of the
+   *  first three wear a medal (gold, silver, bronze), their box keeps its colour. */
+  medals?: boolean;
+  /** With a transcript pick: the gene symbols it sits under, starred but not
+   *  coloured, so the view finds the gene among its neighbours. */
+  genes?: string[];
+}
+
 export interface JBrowseSessionResponse {
   assembly: Record<string, unknown>;
   tracks: Array<Record<string, unknown> & { trackId: string }>;
@@ -2654,8 +2672,13 @@ export interface JBrowseSessionResponse {
   /** Locus of the second side of the call `location` was taken from, when
    *  `locus_from.mate` is declared. */
   mate_location?: string | null;
+  /** The rows the view points at (the pick, else the best call): the viewer
+   *  paints them, and the table rows they name, in the selection colour. */
+  picked?: JBrowsePicked | null;
   /** Ids of the tracks the circular view can draw (SV VCF, BEDPE). */
   sv_track_ids?: string[];
+  /** Colour key of `variant_color_by`, for the status-bar legend. */
+  variant_legend?: VariantLegendPayload | null;
   /** Initial display of the alignment tracks, echoed from the component. */
   read_pairs_display?: 'pileup' | 'arcs' | 'cloud';
   /** The collection and columns a region taken on the browser is expressed in
@@ -2902,12 +2925,19 @@ export async function fetchJBrowseSession(
   componentId: string,
   filters: InteractiveFilter[],
   dataVersions?: Record<string, unknown>,
+  region?: { chrom: string; start: number; end: number } | null,
 ): Promise<JBrowseSessionResponse> {
+  // The genome selection in force never filters: when the filters leave
+  // several `locus_from` rows, it says which frames the view. A whole contig
+  // has an infinite end, sent as null.
+  const regionBody = region
+    ? { region: { ...region, end: Number.isFinite(region.end) ? region.end : null } }
+    : {};
   const res = await authFetch(
     `${API_BASE}/dashboards/render_jbrowse/${dashboardId}/${componentId}`,
     {
       method: 'POST',
-      body: JSON.stringify({ filters, ...(dataVersions ?? {}) }),
+      body: JSON.stringify({ filters, ...regionBody, ...(dataVersions ?? {}) }),
     },
   );
   if (!res.ok) await throwRenderError(res, 'Failed to render JBrowse', dataVersions);
@@ -7776,6 +7806,8 @@ export interface CatalogRender {
   filterable?: boolean;
   row_selection_enabled?: boolean;
   row_selection_column?: string;
+  /** `single`: a click replaces the picked row instead of adding to it. */
+  row_selection_mode?: 'multiple' | 'single';
   /** advanced_viz only: the pre-computed config blob (role bindings + data-derived
    *  viz-control defaults like manhattan `score_threshold`) the catalog preview
    *  rendered with. Persisting it verbatim makes the added component match its

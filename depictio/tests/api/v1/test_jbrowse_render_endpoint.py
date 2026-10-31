@@ -82,8 +82,13 @@ def calls(monkeypatch):
         mate_locus=None,
         first_call=None,
         locus_source=None,
+        picked=None,
+        rank_rows=None,
+        pick_rows=None,
     ):
         seen["payload"] = delta_version
+        seen["picked"] = picked
+        seen["rank_rows"] = rank_rows
         seen["locus_source"] = locus_source
         seen["anonymous"] = anonymous
         seen["category_colors"] = category_colors
@@ -226,7 +231,16 @@ def test_no_location_and_no_narrowing_opens_on_the_first_call(calls, fusion):
     )
     _render({"as_of_version": "v1"})
     assert calls["locus"] is None
-    assert calls["first_call"] == {"locus": "chr22:1990-2110", "mate_locus": "chr9:7990-8010"}
+    assert calls["first_call"] == {
+        "locus": "chr22:1990-2110",
+        "mate_locus": "chr9:7990-8010",
+        "picked": {
+            "loci": ["chr22:2000-2100"],
+            "names": [],
+            "keys": [{"chrom": "chr22", "start": 2000}],
+            "medals": True,
+        },
+    }
     sort = calls["sorted"]
     assert (sort["sort_by"], sort["descending"], sort["page"]) == ("reads", True, (0, 1))
     assert sort["delta_version"] == 7
@@ -245,7 +259,8 @@ def test_the_first_call_follows_the_filters_when_they_do_not_narrow(calls, fusio
 def test_without_a_sort_the_first_call_is_the_first_row_in_delta_order(calls, monkeypatch):
     calls["calls"] = _frame(chrom=["chr3"], start=[10], end=[20])
     _render({})
-    assert calls["first_call"] == {"locus": "chr3:1-30", "mate_locus": None}
+    assert calls["first_call"]["locus"] == "chr3:1-30"
+    assert calls["first_call"]["picked"]["loci"] == ["chr3:10-20"]
     assert calls["natural"]["page"] == (0, 1)
     assert "sorted" not in calls
 
@@ -257,7 +272,14 @@ def test_span_top_opens_on_the_span_of_the_best_calls_when_they_sit_together(cal
         chrom=["21"] * 3, start=[1_000, 50_000, 20_000], end=[1_000, 50_001, 20_000]
     )
     _render({})
-    assert calls["first_call"]["locus"] == "21:990-50011"
+    # Centred on the best call (at 1,000): the far side sets the half-width,
+    # and the start clamps at 1. The pick is the best three calls, best first.
+    assert calls["first_call"]["locus"] == "21:1-50011"
+    assert calls["first_call"]["picked"]["loci"] == [
+        "21:1000-1000",
+        "21:50000-50001",
+        "21:20000-20000",
+    ]
     assert calls["sorted"]["page"] == (0, 3)
 
 
@@ -544,6 +566,67 @@ class TestFindProjectDc:
 
     def test_an_unknown_collection_is_none(self):
         assert routes._find_project_dc(self.PID, "nope", workflow_tag="rna") is None
+
+
+class TestFindProjectDcOptional:
+    """An optional table no ingestion populated is not in the project for a lookup."""
+
+    PID = "646b0f3c1e4a2d7f8e5b8d00"
+    SV = "646b0f3c1e4a2d7f8e5b8d11"
+    CALLS = "646b0f3c1e4a2d7f8e5b8d12"
+    PROJECT = {
+        "workflows": [
+            {
+                "_id": "w1",
+                "name": "sarek",
+                "workflow_tag": "sarek",
+                "data_collections": [
+                    {
+                        "_id": SV,
+                        "data_collection_tag": "sv_calls",
+                        "optional": True,
+                        "config": {"type": "table"},
+                    },
+                    {
+                        "_id": CALLS,
+                        "data_collection_tag": "vcf_variants",
+                        "optional": True,
+                        "config": {"type": "table"},
+                    },
+                    {
+                        "_id": "646b0f3c1e4a2d7f8e5b8d13",
+                        "data_collection_tag": "samples",
+                        "config": {"type": "table"},
+                    },
+                ],
+            }
+        ]
+    }
+
+    @pytest.fixture(autouse=True)
+    def project(self, monkeypatch):
+        from depictio.api.v1 import db
+
+        monkeypatch.setattr(
+            routes, "projects_collection", SimpleNamespace(find_one=lambda *a, **k: self.PROJECT)
+        )
+        ingested = {self.CALLS}
+        monkeypatch.setattr(
+            db,
+            "deltatables_collection",
+            SimpleNamespace(
+                find_one=lambda q: {"_id": 1} if str(q["data_collection_id"]) in ingested else None
+            ),
+        )
+
+    def test_an_optional_collection_without_a_delta_record_is_skipped(self):
+        assert routes._find_project_dc(self.PID, "sv_calls") is None
+
+    def test_an_optional_collection_with_one_resolves(self):
+        assert routes._find_project_dc(self.PID, "vcf_variants") == ("w1", self.CALLS)
+
+    def test_a_required_collection_is_never_skipped(self):
+        assert routes._find_project_dc(self.PID, "samples") is not None
 
 
 class TestListing:
@@ -888,3 +971,27 @@ def test_track_summary_group_reads_color_by_then_the_manifest_group() -> None:
     assert render._track_summary(track, None, props)["group"] == "A"
     assert render._track_summary(track, None, props, group_column="condition")["group"] == "treated"
     assert render._track_summary(track, None, props, group_column="empty")["group"] is None
+
+
+def test_a_missing_manifest_table_is_told_apart_from_other_failures() -> None:
+    """A 404 anywhere in the cause chain means the track collection was never ingested."""
+    import httpx
+
+    from depictio.api.v1.services.jbrowse.tracks import _is_missing_table
+
+    request = httpx.Request("GET", "http://api/deltatables/get/x")
+    missing = httpx.HTTPStatusError(
+        "404", request=request, response=httpx.Response(404, request=request)
+    )
+    try:
+        try:
+            raise missing
+        except httpx.HTTPStatusError as inner:
+            raise Exception("Error loading deltatable") from inner
+    except Exception as outer:
+        assert _is_missing_table(outer)
+    broken = httpx.HTTPStatusError(
+        "500", request=request, response=httpx.Response(500, request=request)
+    )
+    assert not _is_missing_table(Exception("x"))
+    assert not _is_missing_table(broken)

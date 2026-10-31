@@ -5,10 +5,10 @@
  * apart from the Settings panel because they are a tool the reader picks up and
  * puts down, not a property of the figure:
  *
- *  - `pointer` (the default): hover tooltips and clicks. A drag does nothing,
- *    the wheel scrolls the page (Cmd / Ctrl + wheel still zooms, as on every
- *    figure).
- *  - `pan`: a drag moves the view, the wheel zooms.
+ *  - `pointer`: hover tooltips and clicks. A drag does nothing, the wheel
+ *    scrolls the page (Cmd / Ctrl + wheel still zooms, as on every figure).
+ *  - `pan` (the default): a drag moves the view, the wheel zooms; hover
+ *    tooltips and clicks work as in `pointer`.
  *  - `select`: a drag draws the region brush, which publishes the region.
  *
  * GenomeSpy ties panning to a plain drag and the brush to a drag the interval
@@ -35,12 +35,12 @@ const isMode = (v: unknown): v is InteractionMode =>
   typeof v === 'string' && (INTERACTION_MODES as readonly string[]).includes(v);
 
 /** The mode a tile opens in: its own `interaction_mode`, else what the older
- *  `drag_mode` asks for, else the pointer. */
+ *  `drag_mode` asks for, else pan (a genome axis is read by moving along it). */
 export function initialInteractionMode(config: InteractionModeConfig): InteractionMode {
   if (isMode(config.interaction_mode)) return config.interaction_mode;
   if (config.drag_mode === 'pan') return 'pan';
   if (config.drag_mode === 'select') return 'select';
-  return 'pointer';
+  return 'pan';
 }
 
 /**

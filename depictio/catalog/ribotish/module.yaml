@@ -8,6 +8,7 @@
 # genomic stop codon, which is how it is compared with other ORF callers.
 id: ribotish
 name: Ribo-TISH
+version: "1.0.0"
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/ribotish/predict
 homepage: https://github.com/zhpn1024/ribotish
 description: >-

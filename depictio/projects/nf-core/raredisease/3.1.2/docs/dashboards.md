@@ -38,7 +38,8 @@ tracks.
 | `alignment_qc` | Picard alignment summary, insert size, WGS or hybrid-selection metrics, MarkDuplicates and the mosdepth summary | sample |
 | `contig_depth` | mosdepth summary | sample and contig |
 | `vcf_variants` | `call_snv/genome/<family>_snv.vcf.gz`, one row per call a sample carries (`variants.py`) | call |
-| `vcf_callset_summary`, `vcf_substitution_spectrum`, `vcf_filter_breakdown` | `vcf_variants` (catalog `vcf/*`) | sample; sample and class; sample and FILTER value |
+| `vcf_callset_summary`, `vcf_filter_breakdown` | `vcf_variants` (catalog `vcf/*`) | sample; sample and FILTER value |
+| `vcf_substitution_spectrum` | `vcf_variants` and the pedigree (`substitution_spectrum.py`, the catalog `vcf/substitution_spectrum` plus the sample's `role`) | sample and class |
 | `vcf_variant_density` | `vcf_variants` (catalog `vcf/variant_density`) | sample and 1 Mb window |
 | `ranked_variants` | `rank_and_filter/<family>_snv_ranked_*.vcf.gz`, clinical and research sets merged; carries the family's `rank_score_min` and `rank_score_max` and a `genotypes` column (`sample|GT` for every individual) | variant |
 | `ranked_genotypes` | `ranked_variants` | variant and sample |
@@ -92,7 +93,7 @@ The import prunes what depends on an absent collection (RULES section 13):
   that fit a model with the clinical set, the parent-child IBS0 share, and PASS calls with the Ts/Tv
   range expected for a genome or an exome and the coverage. Below them, a compact leaderboard of
   the eight best-ranked variants (the same tile as the top candidates of the Ranked tab, linked to
-  it), then two highlights: the genotypes of the 20 best variants across the family (Ranked) and
+  it; it autofits to its rows and its rank score bar reads against the family's bounds, see Ranked), then two highlights: the genotypes of the 20 best variants across the family (Ranked) and
   the pedigree (Family).
 
 ## The tabs
@@ -112,7 +113,8 @@ The import prunes what depends on an absent collection (RULES section 13):
   to that sample). The descriptions say what the values mean: Ts/Tv about 2.0 to 2.1 for a genome and
   2.8 to 3.0 for an exome, a lower value pointing to false positives; het/hom 1.5 to 2 for outbred
   samples, lower with consanguinity or loss of heterozygosity, higher with contamination. The
-  substitution spectrum is folded onto six classes. The karyotype of one sample (a brush on it
+  substitution spectrum is folded onto six classes, one bar per sample coloured by role like the two
+  sorted bars. The karyotype of one sample (a brush on it
   filters the dashboard to that region; only the contigs that carry calls are drawn) and the
   allele fraction per sample are collapsed, with the tables. The allele fraction is the share of
   each sample's PASS calls read at least 10 times in each 0.05 bin, split by variant type, with the
@@ -122,7 +124,10 @@ The import prunes what depends on an absent collection (RULES section 13):
 - **Ranked**: ranked variants by set, those that fit a model, high and moderate impact variants and
   the top rank score; the 50 best candidates as a leaderboard, best first (gold, silver and bronze
   on the first three), with the gene and protein change, the inheritance model and impact as
-  coloured badges and the rank score as a bar. Hovering a row lists its consequence, coding change,
+  coloured badges and the rank score as a bar. GENMOD scores are signed (a negative score is
+  evidence against the variant), so the bar runs from the family's lowest to its highest possible
+  score (`min_from: rank_score_min`, `max_from: rank_score_max`) and the number reads
+  score / highest possible. Hovering a row lists its consequence, coding change,
   variant set, gnomAD frequency, CADD, pLI, position, alleles and carriers; a click pins that
   popover, picks the variant for the record beside it (gene links go to GeneCards) and opens a
   Family section: the pedigree of the sample sheet, labelled by role, with the proband marked by an
@@ -150,12 +155,21 @@ The import prunes what depends on an absent collection (RULES section 13):
   collapsed.
 - **Locus**: cards on the region in view (ranked variants, calls, top rank score, depth); the
   navigator draws every ranked variant at its position, higher for a higher rank score and coloured
-  by the inheritance model it fits, opening on the chromosome the browser shows
-  (`open_on_view_window`), and, linked to it, a JBrowse browser.
-  The browser opens on the span of the three best-ranked variants when they sit on one contig within
-  1 Mb of each other (otherwise on the best one), padded on both sides. It shows the research ranked
+  by the inheritance model it fits, opening zoomed on the window the browser shows
+  (`open_on_view_window` with `default_view: region`) and keeping the browser's window in the middle
+  of its axis (`follow_view_window`), and, linked to it, a JBrowse browser. Both keep a colour key (the
+  navigator's under its axis, the browser's variant colours in its status bar). The colours are a
+  data effect: the best-ranked variants of a family often fit one model (compound heterozygous,
+  purple on the megatest) and variants no model fits are grey, so the height, not the colour,
+  carries the ranking; a rank score slider in the left panel narrows the points to the top.
+  The browser opens on the span of the 20 best-ranked variants (`span_top: 20`, `max_span` 1 Mb) when
+  they lie close together, else on the top-ranked one, padded 25 kb on both sides, so the window
+  holds many variants and genes and the alignments load without a force-load prompt
+  (`fetch_size_limit_mb: 20`). A navigator window wider than the browser's (several Mb around the
+  best variants) needs a platform field, because the navigator can only frame the browser's window.
+  It shows the research ranked
   VCF first, with variants coloured by inheritance model like the navigator and named by their gene
-  (`variant_label_by`, VEP CSQ SYMBOL), then the proband
+  and rank score (`variant_label_by`, VEP CSQ SYMBOL and the INFO `RankScore`), then the proband
   alignment and its coverage and the parents' alignments, plus the UCSC ClinVar and dbSNP common
   tracks of the assembly; the clinical VCF, the repeat and mobile element VCFs, the other samples and
   the signal tracks are in its track menu. Each sample's track names carry its role, e.g.

@@ -19,6 +19,23 @@ export interface GenomeTracksColours {
   samples: Record<string, string>;
   /** Value of the `color_by` / `color_scale` column → colour. */
   groups: Record<string, string>;
+  /** What the colours are keyed by, for another tile's legend; absent on a tile
+   *  that does not say. */
+  key?: GenomeTracksColourKey | null;
+}
+
+/** The scale behind `GenomeTracksColours`: the column, its values in scale
+ *  order and the sample → value map, so a genome view can key its lanes the
+ *  way the browser keys its tracks (a ramp for a `color_scale`). */
+export interface GenomeTracksColourKey {
+  column: string;
+  /** Every value of the column the browser's tracks carry, in colour order. */
+  values: string[];
+  /** A sequential `color_scale` (a ramp), not one hue per value. */
+  ordered: boolean;
+  scheme: string | null;
+  /** Sample → its value of the column. */
+  sampleGroups: Record<string, string>;
 }
 
 export interface GenomeTracksEntry {
@@ -103,7 +120,8 @@ export function setGenomeTracksColours(
     (prev !== null &&
       colours !== null &&
       sameRecord(prev.samples, colours.samples) &&
-      sameRecord(prev.groups, colours.groups));
+      sameRecord(prev.groups, colours.groups) &&
+      JSON.stringify(prev.key ?? null) === JSON.stringify(colours.key ?? null));
   if (same) return;
   write(dashboardId, index, { colours });
 }
@@ -218,8 +236,64 @@ export function useTrackGroupColours(dashboardId?: string): Record<string, strin
   return useSyncExternalStore(subscribe, snapshot, snapshot);
 }
 
+/**
+ * The key to the colours the browser tiles of a dashboard resolved from
+ * `color_by` / `color_scale` (the first tile that publishes one wins), or null.
+ * Same dashboard rule as `trackGroupColours`.
+ */
+export function trackColourKey(dashboardId?: string): GenomeTracksColourKey | null {
+  let dashboard = dashboardId;
+  if (dashboard === undefined) {
+    let latest: GenomeTracksEntry | null = null;
+    for (const e of entries.values()) if (e.colours && (!latest || e.seq > latest.seq)) latest = e;
+    if (!latest) return null;
+    dashboard = latest.dashboardId;
+  }
+  const ordered = [...entries.values()]
+    .filter((e) => e.dashboardId === dashboard && e.colours?.key)
+    .sort((a, b) => a.seq - b.seq);
+  return ordered[0]?.colours?.key ?? null;
+}
+
+/** `trackColourKey`, re-read when a tile writes; stable while unchanged. */
+export function useTrackColourKey(dashboardId?: string): GenomeTracksColourKey | null {
+  const cache = useRef<{ key: string; value: GenomeTracksColourKey | null }>({
+    key: 'null',
+    value: null,
+  });
+  const snapshot = useCallback(() => {
+    const value = trackColourKey(dashboardId);
+    const key = JSON.stringify(value);
+    if (key !== cache.current.key) cache.current = { key, value };
+    return cache.current.value;
+  }, [dashboardId]);
+  return useSyncExternalStore(subscribe, snapshot, snapshot);
+}
+
 /** Test seam: forget everything. */
 export function resetGenomeTracks(): void {
   entries.clear();
   listeners.forEach((l) => l());
+}
+
+/**
+ * The `locus_from` rows the genome browsers of a dashboard point at, as the
+ * JSON of their keys (`picked.keys`, see `JBrowsePicked`): a string, so the
+ * snapshot is stable between writes. Keyed by column name, like a dashboard
+ * filter: a table of another collection that carries the same columns (an
+ * isoform table next to the browser's loci) finds the same rows. `'[]'` when
+ * no browser points at anything.
+ */
+export function pickedRowKeysJson(dashboardId: string): string {
+  const keys: Array<Record<string, unknown>> = [];
+  for (const e of entries.values()) {
+    if (e.dashboardId === dashboardId) keys.push(...(e.payload?.picked?.keys ?? []));
+  }
+  return JSON.stringify(keys);
+}
+
+/** `pickedRowKeysJson`, re-read whenever a browser writes. */
+export function usePickedRowKeysJson(dashboardId: string): string {
+  const snapshot = useCallback(() => pickedRowKeysJson(dashboardId), [dashboardId]);
+  return useSyncExternalStore(subscribe, snapshot, snapshot);
 }

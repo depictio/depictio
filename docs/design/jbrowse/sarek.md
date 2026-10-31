@@ -100,8 +100,12 @@ and their indexes, and no CRAM, so a local ingest lists the ten VCFs and no read
 
 ## Limits
 
-- Germline runs only. A somatic pair (`<tumour>_vs_<normal>`) has no row, as on the sample hub;
-  sarek publishes no somatic profile on the megatest.
+- A pair (`<tumour>_vs_<normal>`) and a tumour called on its own are listed in the category
+  `Somatic variants` (Mutect2 and Strelka VCFs, track id `<unit>.<caller>`), and the tumour's CRAM
+  is one of the alignments. They follow the germline VCFs, so a run with a normal opens on the
+  normal; pick the patient in the left panel to see the tumour reads and the somatic calls
+  beside it. sarek publishes no somatic profile on the megatest, so the megatest has none; the local
+  `-profile test` run named in `megatest.yaml` has the tracks but no somatic call in its VCFs.
 - Read in place, the recipe uses the first layout of each file (snpEff-annotated VCF,
   recalibrated CRAM) without checking that it exists. A run without snpEff in `--tools` has no
   `annotation/` folder: ingest it without `TRACKS_URI`, or the VCF tracks load nothing.

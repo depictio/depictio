@@ -11,11 +11,28 @@
 # platform's canonicalisation, and the genome build is the GENOME variable.
 #
 # WHAT A RUN MAY LACK.
-# The annotation collections (snpeff_*) and the VCFtools ones (vcftools_*) are
-# optional: a run without snpEff in --tools, or with vcftools skipped, drops
-# the Consequences, Genes and Protein tabs (and the VCFtools panels) instead of failing
-# to ingest. The somatic collections (ASCAT, CNVkit, MSIsensor-pro,
-# NGSCheckMate) are optional too, and no tile binds them yet.
+# Only the sample hub, the genome tracks, the MultiQC report and the mosdepth
+# coverage are required. Everything built from a VCF is optional: the bcftools
+# stats (bcftools_*), the call table (vcf_calls_raw, vcf_variants), the callset QC
+# profile, the structural variants (sv_calls, needs Manta or TIDDIT), the
+# annotation (snpeff_*) and the VCFtools ones (vcftools_*). A mapping-only run
+# (no --tools) therefore ingests cleanly and imports the Overview, MultiQC,
+# Coverage and Locus tabs; each caller or annotator it does have brings back its
+# tabs. The ingestion report lists the optional collections it skipped.
+#
+# WHAT A RUN CALLS ON: SAMPLES, PAIRS, TUMOURS.
+# sarek calls variants per unit: a sample, or a tumour/normal pair named
+# `<tumour>_vs_<normal>`. The hub reads each sample's status (0 normal, 1 tumour)
+# from the csv/ manifests and gives its patient a `design` (Paired, Germline only,
+# Tumour-only); `pairs` lists the pairs. The germline tabs read the units of a
+# normal sample only (vcf_variants, snpeff_ann_variants, sv_calls), whichever
+# callers also ran on a pair or a tumour; the Somatic tabs read the others
+# (somatic_calls, cnv_segments, cnv_summary, msi, somatic_vs_germline, patient_call_counts).
+# Each is optional, so a germline run has no Somatic tab and a run with tumours
+# and no paired caller keeps only the tabs its files feed. The report-level
+# collections (bcftools, VCFtools, snpEff summaries) leave a pair out by its file
+# name; a tumour called on its own is told apart from the hub only where a call
+# is parsed, so its reports stay with the callsets.
 #
 # STRUCTURAL-VARIANT CALLERS.
 # Manta and TIDDIT call few or no SNPs, so bcftools stats reports Ts/Tv 0.0 for
@@ -143,11 +160,34 @@ workflows:
               "sex": "Sex as declared in the samplesheet (XX, XY or NA)"
               "status": "0 = normal, 1 = tumour (sarek convention); empty when only variantcalled.csv was published"
               "status_label": "Normal, Tumour or Unknown, derived from status"
-              "n_callers": "Variant callers that produced a VCF for the sample"
+              "design": "What the run can say about the patient: Paired (a tumour and a normal), Germline only (normals, or status unknown) or Tumour-only (tumours alone)"
+              "n_callers": "Variant callers that produced a VCF for the sample; a pair's callers count for its tumour"
+
+      # ----------------------------------------------------------------
+      # Tumour/normal pairs of the samplesheet, `<tumour>_vs_<normal>` being the
+      # name sarek gives the files of a paired caller. A design fact: listed
+      # whether or not a paired caller ran. Absent without a pair.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "pairs"
+        description: "Tumour/normal pairs of the samplesheet, the units the paired callers run on"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/sarek/pairs.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "pair_id": "<tumour>_vs_<normal>, the name sarek gives the pair's files"
+              "patient": "Patient both samples belong to"
+              "tumour": "Tumour sample (status 1)"
+              "normal": "Normal sample (status 0)"
 
       # ----------------------------------------------------------------
       # Genome tracks. A manifest of the run's track files (every caller's
-      # VCF and the CRAM of every sample) that the genome browser reads by
+      # VCF, the somatic callsets and the CRAM of every sample) that the genome browser reads by
       # range, through the API. One row per file, keyed on sample_id like the
       # hub; the recipe spells it out from the same csv/ manifests. The CRAM
       # needs the reference sequence, which the {GENOME} preset supplies.
@@ -180,10 +220,10 @@ workflows:
                   - type: "LinearVariantDisplay"
                     height: 40
             columns_description:
-              "track_id": "<sample_id>.<caller> or <sample_id>.alignments, unique per file"
-              "sample_id": "Sample the file belongs to"
+              "track_id": "<sample_id>.<caller> or <sample_id>.alignments, unique per file; <unit>.<caller>[.<qualifier>] for a somatic callset"
+              "sample_id": "Sample the file belongs to; the tumour for a pair's calls"
               "caller": "Variant caller of a VCF row; empty on an alignment row"
-              "kind": "variants, sv or alignments"
+              "kind": "variants, sv, somatic or alignments"
               "format": "Track file format"
               "uri": "Path relative to the results folder"
               "name": "Track label shown in the browser"
@@ -274,6 +314,7 @@ workflows:
       # ----------------------------------------------------------------
       - data_collection_tag: "bcftools_stats_raw"
         description: "Raw per-caller, per-sample bcftools stats reports (input of bcftools_stats_summary and bcftools_stats_tstv)"
+        optional: true
         config:
           type: "Table"
           metatype: "Aggregate"
@@ -281,7 +322,7 @@ workflows:
             mode: "recursive"
             scan_parameters:
               regex_config:
-                pattern: ".*\\.bcftools_stats\\.txt$"
+                pattern: "^(?!.*_vs_).*\\.bcftools_stats\\.txt$"
           dc_specific_properties:
             format: "TSV"
             polars_kwargs:
@@ -297,6 +338,7 @@ workflows:
 
       - data_collection_tag: "bcftools_stats_summary"
         description: "Per-sample, per-caller variant record counts (SNPs, indels, multiallelic sites) from bcftools stats"
+        optional: true
         config:
           type: "Table"
           metatype: "Aggregate"
@@ -319,6 +361,7 @@ workflows:
 
       - data_collection_tag: "bcftools_stats_tstv"
         description: "Per-sample, per-caller transition/transversion ratio from bcftools stats"
+        optional: true
         config:
           type: "Table"
           metatype: "Aggregate"
@@ -345,6 +388,7 @@ workflows:
       # ----------------------------------------------------------------
       - data_collection_tag: "bcftools_stats_sections"
         description: "Per-caller indel-length, substitution, depth and allele-frequency distributions from bcftools stats"
+        optional: true
         config:
           type: "Table"
           metatype: "Aggregate"
@@ -367,6 +411,7 @@ workflows:
       # why they are collections rather than two views of the long table.
       - data_collection_tag: "bcftools_substitution_spectrum"
         description: "SNV substitution spectrum per callset, folded onto the six pyrimidine classes and split into transitions and transversions"
+        optional: true
         config:
           type: "Table"
           metatype: "Aggregate"
@@ -386,6 +431,7 @@ workflows:
 
       - data_collection_tag: "bcftools_indel_spectrum"
         description: "Indel length spectrum per callset, deletions negative, within 20 bp either side"
+        optional: true
         config:
           type: "Table"
           metatype: "Aggregate"
@@ -502,6 +548,8 @@ workflows:
               "stage": "Which CRAM the kept mosdepth pass ran on: recal (recalibrated) when present, else md (duplicate-marked)"
               "sample_stage": "Sample and stage together"
               "n_targets": "Capture targets that fall in the window"
+              "sample_id": "The sample again, under the key the dashboard pins sample colours on"
+              "depth_capped": "Depth held at three times the sample's median window depth (at least 40x), what the navigator's lanes draw"
 
       - data_collection_tag: "mosdepth_summary_raw"
         description: "Raw mosdepth per-contig coverage summary (input of mosdepth_summary)"
@@ -584,7 +632,7 @@ workflows:
             mode: "recursive"
             scan_parameters:
               regex_config:
-                pattern: ".*\\.FILTER\\.summary$"
+                pattern: "^(?!.*_vs_).*\\.FILTER\\.summary$"
           dc_specific_properties:
             format: "TSV"
             polars_kwargs:
@@ -632,7 +680,7 @@ workflows:
             mode: "recursive"
             scan_parameters:
               regex_config:
-                pattern: ".*\\.TsTv\\.qual$"
+                pattern: "^(?!.*_vs_).*\\.TsTv\\.qual$"
           dc_specific_properties:
             format: "TSV"
             polars_kwargs:
@@ -679,37 +727,54 @@ workflows:
       # the sample and nf-core spells that name differently per caller, so a
       # header-based scan has no single schema across a run's files.
       # ----------------------------------------------------------------
+      # The header lines are kept (no comment_prefix): a paired Mutect2 VCF says in its
+      # header which genotype column is the tumour, and nothing else does. The readers
+      # keep the data lines (a contig and a numeric position). No quote character: a
+      # header description may hold an unbalanced quote that would swallow the lines after it.
       - data_collection_tag: "vcf_calls_raw"
-        description: "Raw per-caller, per-sample VCF lines, annotator output and gVCFs excluded (input of vcf_variants)"
+        description: "Raw per-caller, per-unit VCF lines with their header, annotator output and gVCFs excluded (input of vcf_variants, sv_calls and somatic_calls)"
+        optional: true
         config:
           type: "Table"
           metatype: "Aggregate"
+          # One file per caller and unit. A run with --normalize_vcfs or a
+          # consensus also publishes filtered/, normalized/ and consensus/ copies
+          # of the same calls, and freebayes and Mutect2 publish their unfiltered
+          # VCF beside the filtered one; each would count every call again.
           scan:
             mode: "recursive"
             scan_parameters:
               regex_config:
                 pattern: "^(?!.*_(?:snpEff|VEP)\\.ann\\.vcf\\.gz$)(?!.*\\.g(?:enome)?\\.vcf\\.gz$).*\\.vcf\\.gz$"
+              # The regex sees the file name only; these globs see the run-relative path.
+              ignore:
+                - "*variant_calling/filtered/*"
+                - "*variant_calling/normalized/*"
+                - "*variant_calling/consensus/*"
+                - "*.freebayes.vcf.gz"
+                - "*.mutect2.vcf.gz"
           dc_specific_properties:
             format: "TSV"
             polars_kwargs:
               separator: "\u001e"
               has_header: false
-              comment_prefix: "#"
+              quote_char: null
               new_columns: ["raw_line"]
               include_file_paths: "source_path"
               infer_schema_length: 0
             columns_description:
-              "raw_line": "One full tab-separated VCF data line, the header and the meta lines already stripped"
-              "source_path": "File the row came from; sample and caller are derived from its name"
+              "raw_line": "One full line of the VCF, the header and the meta lines included"
+              "source_path": "File the row came from; unit (a sample or a pair) and caller are derived from its name"
 
       - data_collection_tag: "vcf_variants"
-        description: "One row per variant call as the caller reported it: locus, allele, quality, filter, genotype, depth and allele fraction"
+        description: "One row per germline variant call as the caller reported it: locus, allele, quality, filter, genotype, depth and allele fraction"
+        optional: true
         config:
           type: "Table"
           metatype: "Aggregate"
           source: "transformed"
           transform:
-            recipe: "vcf/variants.py"
+            recipe: "nf-core/sarek/vcf_variants.py"
           dc_specific_properties:
             format: "TSV"
             columns_description:
@@ -728,6 +793,37 @@ workflows:
               "dp": "Read depth at the locus; null for a caller that reports none, such as Manta"
               "vaf": "Variant allele fraction, from the caller's own VAF field or from the allele depths"
 
+      # The structural-variant callers' records (Manta, TIDDIT), with the type,
+      # the length and the end the small-variant table has no column for. Absent
+      # without such a caller: the Structural variants tab goes with it.
+      - data_collection_tag: "sv_calls"
+        description: "One row per structural-variant record the SV callers (Manta, TIDDIT) wrote: locus, type, length, end, quality and filter"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/sarek/sv_calls.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the call was made on"
+              "caller": "Structural-variant caller that made it (manta or tiddit)"
+              "chrom": "Contig of the first breakend"
+              "pos": "Position, 1-based"
+              "end": "End of the event (INFO END, else position plus the length of a deletion, duplication or inversion); the position itself for an insertion; null for a breakend, which has two loci"
+              "svtype": "Event type from INFO SVTYPE (DEL, DUP, INS, INV, BND...)"
+              "svlen": "Signed length in base pairs (negative for a deletion); null when the caller wrote none, as for a breakend"
+              "size_bp": "Absolute length in base pairs"
+              "qual": "Caller quality score; null when the caller wrote none"
+              "filter_status": "The record's FILTER field, verbatim"
+              "is_pass": "True when the caller kept the record"
+              "imprecise": "True when the caller flagged the breakpoints as imprecise"
+              "primary": "True on one record of each event: a breakend is two records that name each other, and only the first counts"
+              "mate_chrom": "Contig of the other breakend of a BND; null otherwise"
+              "mate_pos": "Position of the other breakend of a BND; null otherwise"
+
       - data_collection_tag: "snpeff_ann_vcf_raw"
         description: "Raw snpEff-annotated VCF lines (input of snpeff_ann_variants)"
         optional: true
@@ -738,7 +834,7 @@ workflows:
             mode: "recursive"
             scan_parameters:
               regex_config:
-                pattern: ".*_snpEff\\.ann\\.vcf\\.gz$"
+                pattern: "^(?!.*_vs_).*_snpEff\\.ann\\.vcf\\.gz$"
           dc_specific_properties:
             format: "TSV"
             polars_kwargs:
@@ -760,7 +856,7 @@ workflows:
           metatype: "Aggregate"
           source: "transformed"
           transform:
-            recipe: "snpeff/ann_variants.py"
+            recipe: "nf-core/sarek/ann_variants.py"
           dc_specific_properties:
             format: "TSV"
             columns_description:
@@ -867,7 +963,7 @@ workflows:
             mode: "recursive"
             scan_parameters:
               regex_config:
-                pattern: ".*_snpEff\\.csv$"
+                pattern: "^(?!.*_vs_).*_snpEff\\.csv$"
           dc_specific_properties:
             format: "TSV"
             polars_kwargs:
@@ -909,7 +1005,7 @@ workflows:
             mode: "recursive"
             scan_parameters:
               regex_config:
-                pattern: ".*_snpEff\\.genes\\.txt$"
+                pattern: "^(?!.*_vs_).*_snpEff\\.genes\\.txt$"
           dc_specific_properties:
             format: "TSV"
             polars_kwargs:
@@ -982,6 +1078,7 @@ workflows:
       # ----------------------------------------------------------------
       - data_collection_tag: "callset_qc"
         description: "One row per callset (sample and caller) with the eight numbers a germline callset is judged on; reads the annotated VCFs when present, the caller VCFs otherwise"
+        optional: true
         config:
           type: "Table"
           metatype: "Aggregate"
@@ -1022,7 +1119,7 @@ workflows:
             mode: "recursive"
             scan_parameters:
               regex_config:
-                pattern: "^(?!.*\\.(?:manta|tiddit)\\.).*_snpEff\\.ann\\.vcf\\.gz$"
+                pattern: "^(?!.*(?:_vs_|\\.(?:manta|tiddit)\\.)).*_snpEff\\.ann\\.vcf\\.gz$"
           dc_specific_properties:
             format: "vcf"
             assembly: "{GENOME}"
@@ -1030,14 +1127,284 @@ workflows:
             max_file_size_mb: 32
 
       # ----------------------------------------------------------------
-      # SOMATIC. None of the collections below exists on a germline run:
-      # ASCAT, CNVkit, MSIsensor-pro and NGSCheckMate only execute on a
-      # tumour/normal (or multi-library) run.
-      # here. They are declared `optional: true` with the globs sarek's own
-      # `test_full` somatic profile writes, so the same template lights them up
-      # on a run that has them without a second template to maintain. No
-      # dashboard tile binds them: a tile on a collection a run did not produce
-      # would break the tab it sits on.
+      # SOMATIC. None of the collections below exists on a germline run: they
+      # read the pairs and the tumours of the samplesheet. Each is optional, so
+      # the same template lights up the Somatic tabs on a run that has the
+      # files, without a second template to maintain.
+      #
+      # somatic_calls reads the same raw VCF lines as vcf_variants, but the
+      # units that one leaves out: a tumour/normal pair, called by Mutect2 and
+      # Strelka, and a tumour called on its own. The two never share a scale:
+      # `unit_type` is a colour and a filter wherever they meet.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "somatic_calls"
+        description: "One row per somatic call: a tumour/normal pair's (Mutect2, Strelka) and a tumour's called on its own, with the allele fraction and depth in the tumour and, for a pair, in the normal"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/sarek/somatic_calls.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "unit": "What the caller ran on: a sample, or <tumour>_vs_<normal> for a pair"
+              "unit_type": "paired or tumour_only; the two are never drawn on one scale"
+              "patient": "Patient the call belongs to"
+              "sample": "Tumour sample the call was made in; the sample filters narrow on it"
+              "normal": "The pair's normal sample; null for a tumour called on its own"
+              "caller": "Variant caller that made the call"
+              "chrom": "Contig"
+              "pos": "Position, 1-based"
+              "ref": "Reference allele"
+              "alt": "Alternate allele or alleles"
+              "variant_key": "Contig, position and alleles joined, the key the germline calls use"
+              "variant_type": "SNP, MNP, INDEL or SV, from the first alternate allele"
+              "qual": "Caller quality score; null when the caller wrote none (Mutect2 and Strelka write none)"
+              "score": "The caller's own confidence: Strelka SomaticEVS, Mutect2 TLOD, else QUAL. Not comparable between callers"
+              "filter_status": "The call's FILTER field, verbatim"
+              "is_pass": "True when the caller kept the call"
+              "tumour_vaf": "Allele fraction of the call in the tumour"
+              "tumour_dp": "Read depth at the call in the tumour"
+              "normal_vaf": "Allele fraction in the pair's normal; null for a tumour on its own"
+              "normal_dp": "Read depth at the call in the pair's normal"
+
+      # A pair's somatic calls against its normal's own germline calls. It reads
+      # `pairs`, so a run with no pair has no such table, and the tab that
+      # compares them goes with it.
+      - data_collection_tag: "somatic_vs_germline"
+        description: "One row per somatic call of a pair, with the normal's allele fraction and whether a PASS germline call of the normal is the same variant"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/sarek/somatic_vs_germline.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "unit": "<tumour>_vs_<normal>"
+              "patient": "Patient of the pair"
+              "sample": "Tumour sample; the sample filters narrow on it"
+              "normal": "Normal sample of the pair"
+              "caller": "Somatic caller that made the call"
+              "chrom": "Contig"
+              "pos": "Position, 1-based"
+              "ref": "Reference allele"
+              "alt": "Alternate allele or alleles"
+              "variant_key": "Contig, position and alleles joined"
+              "variant_type": "SNP, MNP, INDEL or SV"
+              "filter_status": "The somatic call's FILTER field"
+              "is_pass": "True when the somatic caller kept the call"
+              "tumour_vaf": "Allele fraction in the tumour"
+              "tumour_dp": "Read depth in the tumour"
+              "normal_vaf": "Allele fraction in the normal: the paired call's own, else the matching germline call's"
+              "normal_vaf_source": "paired call or germline call: where normal_vaf comes from"
+              "germline_callers": "Callers with a PASS germline call of the same variant in the normal"
+              "in_germline": "True when a PASS germline call of the normal is the same variant, a likely inherited variant the somatic caller failed to subtract"
+              "origin": "in_germline as a label, for a colour: also in, or not in, the normal's germline calls"
+
+      - data_collection_tag: "patient_call_counts"
+        description: "Per patient with a pair: distinct PASS variants of the normal's germline calls and of the pair's somatic calls"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/sarek/patient_call_counts.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "patient": "Patient with a tumour/normal pair"
+              "call_class": "Germline (normal) or Somatic (pair)"
+              "variants": "Distinct PASS variants of that class; a variant several callers agree on counts once"
+
+      # ----------------------------------------------------------------
+      # Copy number. CNVkit publishes its files under
+      # variant_calling/cnvkit/<unit>/, the unit being a sample or a pair. The
+      # raw scans keep the called segments (`*.call.cns`, in the three spellings
+      # sarek uses: somatic, germline or plain) and the bins (`*.cnr`); the paths
+      # have a folder in them, which is what makes the pattern match on the
+      # path. Their headers differ between spellings, and the scan fills the
+      # columns a file lacks with nulls.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "cnvkit_segments_raw"
+        description: "Raw CNVkit called segments of every unit (input of cnv_segments)"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "^.*cnvkit/[^/]+/[^/]+\\.(?:somatic\\.|germline\\.)?call\\.cns$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              has_header: true
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "chromosome": "Contig the segment sits on"
+              "start": "Segment start"
+              "end": "Segment end"
+              "gene": "Genes the segment covers, or a placeholder"
+              "log2": "Log2 copy ratio against the reference"
+              "cn": "Integer copy number call"
+              "depth": "Mean read depth over the segment"
+              "probes": "Bins the segment is made of"
+              "weight": "Weight of the segment"
+              "source_path": "File the row came from; the unit is its folder"
+
+      - data_collection_tag: "cnvkit_bins_raw"
+        description: "Raw CNVkit bin-level copy ratios of every unit (input of cnv_segments)"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "^.*cnvkit/[^/]+/[^/]+\\.cnr$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              has_header: true
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "chromosome": "Contig the bin sits on"
+              "start": "Bin start"
+              "end": "Bin end"
+              "gene": "Gene the bin sits in, or a placeholder"
+              "depth": "Mean read depth over the bin"
+              "log2": "Log2 copy ratio against the reference"
+              "weight": "Weight of the bin"
+              "source_path": "File the row came from; the unit is its folder"
+
+      - data_collection_tag: "cnv_segments"
+        description: "CNVkit copy-number profile per unit: called segments as strokes and bins as points, with the unit's patient and type"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/sarek/cnv_segments.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the profile belongs to: the tumour of a pair, else the sample itself"
+              "chrom": "Contig"
+              "start": "Start of the bin or segment"
+              "end": "End of the bin or segment"
+              "log2": "Log2 copy ratio, floored at -3"
+              "baf": "B-allele frequency; null, CNVkit has none without a SNV VCF"
+              "copy_number": "Integer copy number of a segment; null on a bin"
+              "segment": "Row type: segment (the call) or bin (the evidence)"
+              "label": "Short hover label: the copy number of a segment, the gene of a bin"
+              "depth": "Mean read depth behind the row"
+              "unit": "A sample, or <tumour>_vs_<normal> for a pair"
+              "unit_type": "germline, tumour_only or paired"
+              "patient": "Patient the unit belongs to"
+              "normal": "The pair's normal sample; null for a single sample"
+              "call_source": "Which file the row comes from: somatic, germline or call (segments), bins"
+
+      # One row per profile: the megabases gained and lost and the share of the genome
+      # they make, which a card cannot compute from the segments alone.
+      - data_collection_tag: "cnv_summary"
+        description: "What each copy-number profile adds up to: megabases gained and lost, and the fraction of the genome altered, per unit"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/sarek/cnv_summary.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "unit": "A sample, or <tumour>_vs_<normal> for a pair"
+              "unit_type": "germline, tumour_only or paired"
+              "patient": "Patient the unit belongs to"
+              "sample": "Sample the profile belongs to: the tumour of a pair, else the sample itself"
+              "normal": "The pair's normal sample; null for a single sample"
+              "call_source": "Which CNVkit file the segments come from: somatic, germline or call"
+              "n_segments": "Called segments"
+              "n_gains": "Segments with a log2 ratio above 0.3"
+              "n_losses": "Segments with a log2 ratio below -0.3"
+              "covered_mb": "Megabases inside the called segments"
+              "gained_mb": "Megabases in gained segments"
+              "lost_mb": "Megabases in lost segments"
+              "altered_mb": "Megabases in gained or lost segments"
+              "fga_pct": "Fraction of the genome altered: altered megabases over covered megabases, in percent"
+              "gained_pct": "Gained megabases over covered megabases, in percent"
+              "lost_pct": "Lost megabases over covered megabases, in percent"
+              "contigs": "Contigs with a called segment"
+              "altered_contigs": "Contigs with at least a tenth of their called length gained or lost"
+              "max_log2": "Log2 ratio of the strongest gain (the highest segment)"
+              "min_log2": "Log2 ratio of the deepest loss (the lowest segment)"
+
+      # ----------------------------------------------------------------
+      # Microsatellite instability. MSIsensor-pro writes a summary named after
+      # the pair, beside its site tables; the pattern keeps the summary (the file
+      # whose name repeats its folder's).
+      # ----------------------------------------------------------------
+      - data_collection_tag: "msisensorpro_raw"
+        description: "Raw MSIsensor-pro summaries, one row per pair (input of msi)"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "^(?:.*/)?msisensorpro/([^/]+)/\\1$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              has_header: true
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "Total_Number_of_Sites": "Microsatellite sites evaluated"
+              "Number_of_Unstable_Sites": "Sites that are unstable in the tumour against the normal"
+              "%": "Percentage of unstable sites, the MSI score"
+              "source_path": "File the row came from; the pair is its folder"
+
+      - data_collection_tag: "msi"
+        description: "MSIsensor-pro microsatellite instability score per tumour/normal pair"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/sarek/msi.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "unit": "<tumour>_vs_<normal>"
+              "unit_type": "paired"
+              "patient": "Patient of the pair"
+              "sample": "Tumour sample; the sample filters narrow on it"
+              "normal": "Normal sample of the pair"
+              "total_sites": "Microsatellite sites evaluated"
+              "unstable_sites": "Sites that are unstable"
+              "msi_score": "Share of unstable sites, in percent"
+
+      # ----------------------------------------------------------------
+      # Left without a tile: ASCAT and NGSCheckMate. A tile on a collection a
+      # run did not produce would break the tab it sits on.
       # ----------------------------------------------------------------
       - data_collection_tag: "ascat_segments"
         description: "ASCAT allele-specific copy-number segments, on a somatic run"
@@ -1063,57 +1430,6 @@ workflows:
               "endpos": "Segment end"
               "nMajor": "Copies of the major allele"
               "nMinor": "Copies of the minor allele"
-              "source_path": "File the row came from; the tumour/normal pair is derived from it"
-
-      - data_collection_tag: "cnvkit_segments"
-        description: "CNVkit log2 copy-ratio segments, on a somatic run; binds the cnv_profile kind"
-        optional: true
-        config:
-          type: "Table"
-          metatype: "Aggregate"
-          scan:
-            mode: "recursive"
-            scan_parameters:
-              regex_config:
-                pattern: ".*\\.call\\.cns$"
-          dc_specific_properties:
-            format: "TSV"
-            polars_kwargs:
-              separator: "\t"
-              has_header: true
-              include_file_paths: "source_path"
-              infer_schema_length: 0
-            columns_description:
-              "chromosome": "Contig the segment sits on"
-              "start": "Segment start"
-              "end": "Segment end"
-              "log2": "Log2 copy ratio against the reference"
-              "cn": "Integer copy number call"
-              "baf": "B-allele frequency in the segment"
-              "source_path": "File the row came from; the sample is derived from it"
-
-      - data_collection_tag: "msisensorpro_summary"
-        description: "MSIsensor-pro microsatellite instability score, on a somatic run"
-        optional: true
-        config:
-          type: "Table"
-          metatype: "Aggregate"
-          scan:
-            mode: "recursive"
-            scan_parameters:
-              regex_config:
-                pattern: ".*msisensorpro.*(?<!_dis)(?<!_germline)(?<!_somatic)$"
-          dc_specific_properties:
-            format: "TSV"
-            polars_kwargs:
-              separator: "\t"
-              has_header: true
-              include_file_paths: "source_path"
-              infer_schema_length: 0
-            columns_description:
-              "Total_Number_of_Sites": "Microsatellite sites evaluated"
-              "Number_of_Somatic_Sites": "Sites called unstable"
-              "%": "Percentage of unstable sites, the MSI score"
               "source_path": "File the row came from; the tumour/normal pair is derived from it"
 
       - data_collection_tag: "ngscheckmate_matches"
@@ -1238,6 +1554,16 @@ links:
       resolver: "direct"
       target_field: "sample"
     description: "Filter the variant calls by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "sv_calls"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the structural variants by the samples picked in the left panel"
     enabled: true
 
   - source_dc_tag: "samples"
@@ -1542,4 +1868,101 @@ links:
       resolver: "direct"
       target_field: "sample_id"
     description: "Open the genome tracks of the samples a picked call was made in"
+    enabled: true
+
+  # ----------------------------------------------------------------
+  # Somatic collections. The hub's filters (status, design, patient, sample)
+  # reach them through the sample whose reads carry the call: the tumour of a
+  # pair, or the tumour called on its own. A pair has no hub row of its own.
+  # ----------------------------------------------------------------
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "pairs"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "tumour"
+    description: "Filter the pairs by the tumours picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "somatic_calls"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the somatic calls by the tumours picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "somatic_vs_germline"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the pair-against-normal comparison by the tumours picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "patient"
+    target_dc_tag: "patient_call_counts"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "patient"
+    description: "Filter the per-patient counts by the patients the left panel keeps"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "cnv_segments"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the copy-number profiles by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "cnv_summary"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the copy-number summaries by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "msi"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the microsatellite scores by the tumours picked in the left panel"
+    enabled: true
+
+  # A somatic call opens the genome tracks of its tumour, like a germline call
+  # opens its sample's.
+  - source_dc_tag: "somatic_calls"
+    source_column: "sample"
+    target_dc_tag: "tracks"
+    target_type: "genomic_tracks"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Open the genome tracks of the tumour a picked somatic call was made in"
+    enabled: true
+
+  - source_dc_tag: "somatic_calls"
+    source_column: "caller"
+    target_dc_tag: "somatic_vs_germline"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "caller"
+    description: "Carry the caller picked on the Somatic calls tab over to the comparison with the normal"
     enabled: true

@@ -305,11 +305,12 @@ workflows:
           metatype: "Aggregate"
           source: "transformed"
           transform:
-            recipe: "vcf/substitution_spectrum.py"
+            recipe: "nf-core/raredisease/substitution_spectrum.py"
           dc_specific_properties:
             format: "TSV"
             columns_description:
               "sample": "Sample the callset belongs to"
+              "role": "Proband, Father, Mother, Sibling or Other, from the pedigree"
               "caller": "Variant caller"
               "callset": "Sample and caller together"
               "substitution_class": "Substitution folded onto its pyrimidine reference (C to A ... T to G)"

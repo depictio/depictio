@@ -670,12 +670,20 @@ def test_no_double_track_binding():
 
 # Families that may carry more than one `jbrowse` tile: their tabs show disjoint track sets
 # (oncoanalyser: small variants vs structural variants; variantbenchmarking: germline vs
-# structural), and the showcase exists to exercise the browser itself.
+# structural; rnafusion: fusion breakpoints vs the reads under the sashimi of the Splice
+# Junctions tab, which follows that tile's locus), and the showcase exists to exercise the
+# browser itself.
 _MULTI_JBROWSE_ALLOWED = (
     "depictio/projects/nf-core/oncoanalyser/",
+    "depictio/projects/nf-core/rnafusion/",
     "depictio/projects/nf-core/variantbenchmarking/",
     "depictio/projects/init/genome_tracks_examples/",
 )
+
+# Families whose Plotly genomic tiles may offer (or open on) the GenomeSpy view even though
+# the family carries a `jbrowse` tile. Explicit and narrow: the browser is otherwise the one
+# locus view of a template. rnafusion: sashimi in GenomeSpy, breakpoints in JBrowse.
+_GENOMESPY_WITH_BROWSER_ALLOWED = ("depictio/projects/nf-core/rnafusion/",)
 
 # The kind showcase exercises every option of every kind (a follower with the brush off
 # included), so it is not held to the template roles of the genome_view lint.
@@ -839,11 +847,15 @@ def test_no_genomespy_toggle_in_a_family_with_a_browser():
     cnv_profile whose `views` is null or lists `locus`, or a sashimi whose `views` is
     null or lists `genomespy`, adds a second locus view of the same rows behind a
     toggle. Pin `views` to the Plotly entry (`[track]` / `[plotly]`).
+
+    Families in `_GENOMESPY_WITH_BROWSER_ALLOWED` are exempt (rnafusion).
     """
     offenders: list[str] = []
     for path in _shipped_yamls():
         doc = yaml.safe_load(path.read_text())
         if not isinstance(doc, dict):
+            continue
+        if _rel(path).startswith(_GENOMESPY_WITH_BROWSER_ALLOWED):
             continue
         tabs = [(label, tab) for label, tab in _tabs_of(doc) if isinstance(tab, dict)]
         if not any(_jbrowse_tags(tab) for _, tab in tabs):

@@ -7,6 +7,8 @@ configuration with signed proxy URLs, and works out the locus.
 
 from __future__ import annotations
 
+import re
+from collections.abc import Callable
 from typing import Any
 
 from bson import ObjectId
@@ -23,6 +25,7 @@ from depictio.api.v1.services.jbrowse.config_builder import (
     resolve_preset,
     storage_index_checker,
     variant_color_jexl,
+    variant_color_legend,
     variant_label_jexl,
 )
 from depictio.api.v1.services.jbrowse.tracks import (
@@ -205,6 +208,372 @@ def locus_from_rows(rows: list[dict[str, Any]], spec: dict[str, Any]) -> str | N
     return f"{chrom}:{max(lo - pad, 1)}-{hi + pad}"
 
 
+def _bare_chrom(chrom: Any) -> str:
+    """A chromosome name compared loosely: ``chr15``, ``Chr15`` and ``15`` are one."""
+    text = str(chrom).strip().lower()
+    return text[3:] if text.startswith("chr") else text
+
+
+def rows_in_region(
+    rows: list[dict[str, Any]], spec: dict[str, Any], region: dict[str, Any] | None
+) -> list[dict[str, Any]]:
+    """The ``rows`` with a side (primary or ``mate``) inside ``region``, in their order.
+
+    ``region`` is the genome selection in force (``{chrom, start, end}``, a null
+    ``end`` for a whole contig), the one a pick on another tile publishes with
+    its value. When the filters narrow ``locus_from`` to several picks (a chord
+    whose picks accumulate), the region names the latest one, so the view frames
+    it rather than whichever of them sorts first. A chord publishes the end that
+    was clicked, so the mate side counts too. Empty when nothing sits inside.
+    """
+    if not region or region.get("chrom") in (None, ""):
+        return []
+    chrom = _bare_chrom(region["chrom"])
+    try:
+        lo = float(region.get("start") or 0)
+        hi = float(region["end"]) if region.get("end") is not None else float("inf")
+    except (TypeError, ValueError):
+        return []
+    sides = [(spec["chrom_column"], spec["start_column"])]
+    if spec.get("mate"):
+        sides.append((spec["mate"]["chrom_column"], spec["mate"]["start_column"]))
+
+    def inside(row: dict[str, Any], chrom_column: str, start_column: str) -> bool:
+        if row.get(chrom_column) is None or _bare_chrom(row[chrom_column]) != chrom:
+            return False
+        try:
+            return lo <= float(row.get(start_column)) <= hi  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            return False
+
+    return [row for row in rows if any(inside(row, c, s) for c, s in sides)]
+
+
+def pad_locus(locus: str | None, pad: int) -> str | None:
+    """``locus`` (``chrom:start-end``) widened by ``pad`` on both sides, start clamped at 1."""
+    match = _GENE_LOCUS.match(locus) if locus else None
+    if not match:
+        return locus
+    return f"{match['chrom']}:{max(int(match['start']) - pad, 1)}-{int(match['end']) + pad}"
+
+
+def centred_locus_from_rows(rows: list[dict[str, Any]], spec: dict[str, Any]) -> str | None:
+    """Like ``locus_from_rows``, with the first row in the middle of the frame.
+
+    The opening frames the best call together with its close neighbours
+    (``span_top``); framed from the smallest start to the largest end, the best
+    call can sit at an edge. Here the window is widened on the short side until
+    the first row's midpoint is its centre. Rows on another chromosome than the
+    first are ignored.
+    """
+    if len(rows) < 2:
+        return locus_from_rows(rows, spec)
+    end_column = spec.get("end_column") or spec["start_column"]
+    chrom = rows[0].get(spec["chrom_column"])
+    spans: list[tuple[int, int]] = []
+    for row in rows:
+        if row.get(spec["chrom_column"]) != chrom:
+            continue
+        try:
+            lo = int(float(row.get(spec["start_column"])))  # type: ignore[arg-type]
+            hi = int(float(row.get(end_column)))  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            continue
+        spans.append((min(lo, hi), max(lo, hi)))
+    if not spans or chrom is None:
+        return locus_from_rows(rows[:1], spec)
+    pad = int(spec.get("padding", 5000))
+    mid = (spans[0][0] + spans[0][1]) // 2
+    half = max(mid - min(s for s, _ in spans), max(e for _, e in spans) - mid)
+    return f"{chrom}:{max(mid - half - pad, 1)}-{mid + half + pad}"
+
+
+# Genes a name fallback looks up: a handful of rows narrowed by a pick, each a
+# round trip to the UCSC search (cached an hour, 5 s timeout).
+GENE_FALLBACK_MAX = 3
+# An Ensembl stable id (gene, transcript, protein, exon), versioned or not.
+# UCSC's search resolves these on human assemblies (GENCODE tracks) as it does
+# a symbol, so they are looked up like any name.
+_ENSEMBL_ID = re.compile(r"^ENS[A-Z]{0,6}[GTPE]\d{6,}(\.\d+)?$", re.IGNORECASE)
+_GENE_LOCUS = re.compile(r"^(?P<chrom>[^:]+):(?P<start>\d+)-(?P<end>\d+)$")
+
+
+def gene_names_from_rows(rows: list[dict[str, Any]], spec: dict[str, Any]) -> list[str]:
+    """The distinct names of ``rows`` a gene search looks up, first seen first.
+
+    Per row, the ``locate_column`` value (a transcript id, which places the
+    picked transcript rather than its whole gene) else the ``label_column``
+    one. Empty without either column; blanks and values that cannot be a
+    search term (spaces, characters the search endpoint refuses) are skipped.
+    """
+    columns = [c for c in (spec.get("locate_column"), spec.get("label_column")) if c]
+    names: list[str] = []
+    for row in rows:
+        for column in columns:
+            value = row.get(column)
+            name = str(value).strip() if value is not None else ""
+            if name and name.lower() != "nan" and re.fullmatch(r"[A-Za-z0-9._-]{1,64}", name):
+                if name not in names:
+                    names.append(name)
+                break
+    return names
+
+
+def gene_symbols(
+    names: list[str],
+    genome: str | None,
+    search: Callable[[str, str, int], list[dict[str, str]]] | None = None,
+) -> list[str]:
+    """``names`` with each Ensembl id replaced by its gene symbol, when UCSC knows it.
+
+    The gene annotation groups a gene's transcripts under its symbol, so a pick
+    naming its gene by id (``ENSG…``) would find no gene to star. The symbol is
+    the first hit of the search whose label is not an Ensembl id (the search is
+    cached: the gene fallback asked it already). Names kept as they are without
+    a genome, a hit, or a reachable search.
+    """
+    if not genome:
+        return names
+    if search is None:
+        from depictio.api.v1.services.jbrowse.assemblies import search_genes
+
+        search = search_genes
+    out: list[str] = []
+    for name in names:
+        symbol = name
+        if _ENSEMBL_ID.match(name):
+            try:
+                hits = search(genome, name, 10)
+            except Exception as exc:  # noqa: BLE001 - an unreachable UCSC keeps the id
+                logger.info(f"jbrowse: symbol search for {name!r} failed: {exc}")
+                hits = []
+            symbol = next(
+                (h["label"] for h in hits if h.get("label") and not _ENSEMBL_ID.match(h["label"])),
+                name,
+            )
+        if symbol not in out:
+            out.append(symbol)
+    return out
+
+
+def gene_fallback_locus(
+    rows: list[dict[str, Any]],
+    spec: dict[str, Any],
+    genome: str | None,
+    search: Callable[[str, str, int], list[dict[str, str]]] | None = None,
+) -> str | None:
+    """``chrom:start-end`` of the genes named by ``rows``, for rows with no coordinates.
+
+    A ``locus_from`` collection built without genomic coordinates (an isoform
+    table whose extended annotation was not written) still names its gene in
+    ``label_column``. Each of the first ``GENE_FALLBACK_MAX`` distinct names is
+    looked up in the UCSC ``genome`` through ``search`` (``search_genes`` by
+    default); a symbol must match a hit's label exactly, an Ensembl id (which
+    the hit's label spells differently) takes the first hit. The loci found on
+    the most frequent chromosome are framed like ``locus_from_rows`` does, with
+    the same ``padding``. None without a genome, a name, or a hit; a failed
+    search is skipped, never raised.
+    """
+    if not genome:
+        return None
+    if search is None:
+        from depictio.api.v1.services.jbrowse.assemblies import search_genes
+
+        search = search_genes
+    spans: dict[str, list[tuple[int, int]]] = {}
+    for name in gene_names_from_rows(rows, spec)[:GENE_FALLBACK_MAX]:
+        try:
+            hits = search(genome, name, 10)
+        except Exception as exc:  # noqa: BLE001 - an unreachable UCSC must not fail the view
+            logger.info(f"jbrowse: gene fallback search for {name!r} failed: {exc}")
+            continue
+        if _ENSEMBL_ID.match(name):
+            hit = hits[0] if hits else None
+        else:
+            hit = next((h for h in hits if h.get("label", "").upper() == name.upper()), None)
+        match = _GENE_LOCUS.match(hit["locus"]) if hit else None
+        if match:
+            spans.setdefault(match["chrom"], []).append((int(match["start"]), int(match["end"])))
+    if not spans:
+        return None
+    pad = int(spec.get("padding", 5000))
+    chrom = max(spans, key=lambda c: len(spans[c]))
+    lo = min(s for s, _ in spans[chrom])
+    hi = max(e for _, e in spans[chrom])
+    return f"{chrom}:{max(lo - pad, 1)}-{hi + pad}"
+
+
+def union_locus(focus: str | None, other: str | None) -> str | None:
+    """The smallest ``chrom:start-end`` holding both loci, named like ``focus``.
+
+    ``focus`` alone when ``other`` is missing, unreadable or on another
+    chromosome (a ``chr`` prefix aside: the gene search speaks UCSC, the rows
+    may not).
+    """
+    a = _GENE_LOCUS.match(focus) if focus else None
+    b = _GENE_LOCUS.match(other) if other else None
+    if not a or not b:
+        return focus
+    bare = lambda c: c.removeprefix("chr")  # noqa: E731
+    if bare(a["chrom"]) != bare(b["chrom"]):
+        return focus
+    lo = min(int(a["start"]), int(b["start"]))
+    hi = max(int(a["end"]), int(b["end"]))
+    return f"{a['chrom']}:{lo}-{hi}"
+
+
+# Rows a view points at that the viewer colours: a pick is a few rows, the
+# table's ``max_rows`` at most.
+PICKED_MAX = 20
+# Calls picked at the opening among those it frames (``span_top``): the best
+# three wear the selection colour and a star.
+OPENING_PICKED = 3
+# The mark of a top call, in front of its name on the rank track.
+TOP_CALL_STAR = "\u2605"
+# The rank track's id and the colour of a call nobody picked (Mantine gray.6).
+RANK_TRACK_ID = "depictio-ranked-calls"
+RANK_TRACK_COLOR = "#868e96"
+
+
+def picked_from_rows(rows: list[dict[str, Any]], spec: dict[str, Any]) -> dict[str, Any] | None:
+    """What the viewer colours for the rows a view points at; None when nothing names them.
+
+    ``loci``: one unpadded ``chrom:start-end`` per row (a variant or a call on a
+    variant or rank track). ``names``: the names a feature track matches by
+    (``gene_names_from_rows``: the transcript id, else the label). ``genes``,
+    with a ``locate_column`` only: the labels (gene symbols) of rows named by a
+    transcript, so the viewer finds the gene the picked transcript sits under
+    without colouring its other isoforms. ``keys``: per row, the ``locus_from``
+    columns that identify it (chromosome and start, the locate column), which a
+    table of the same collection matches its rows by.
+    """
+    rows = rows[:PICKED_MAX]
+    unpadded = {**spec, "padding": 0}
+    loci: list[str] = []
+    for row in rows:
+        locus = locus_from_rows([row], unpadded)
+        if locus and locus not in loci:
+            loci.append(locus)
+    key_columns = [
+        c
+        for c in (spec.get("chrom_column"), spec.get("start_column"), spec.get("locate_column"))
+        if c
+    ]
+    keys = []
+    for row in rows:
+        key = {c: row[c] for c in key_columns if row.get(c) is not None}
+        if key:
+            keys.append(key)
+    names = gene_names_from_rows(rows, spec)
+    if not (loci or names):
+        return None
+    picked: dict[str, Any] = {"loci": loci, "names": names, "keys": keys}
+    if spec.get("locate_column") and spec.get("label_column"):
+        genes = gene_names_from_rows(rows, {"label_column": spec["label_column"]})
+        if genes := [g for g in genes if g not in names]:
+            picked["genes"] = genes
+    return picked
+
+
+def rank_track_config(
+    rows: list[dict[str, Any]],
+    spec: dict[str, Any],
+    assembly_name: str,
+    picked_rows: list[dict[str, Any]] | None = None,
+    category_colors: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    """A feature track of ``rows`` (the best calls, best first) named ``#rank label``.
+
+    The first ``OPENING_PICKED`` calls carry a star in front of their name. A
+    picked row outside them (``picked_rows``: a riboseq ORF below the top 20)
+    is drawn too, named by its label alone, so the pick always has a feature.
+
+    The features live in the config (``FromConfigAdapter``), so the track needs
+    no file. Each call takes the category colour of its ``rank_color_by`` value
+    (``category_colors``, the dashboard's map), the colour a genome_view coloured
+    by that column gives it; grey otherwise. The viewer adds the medals and the
+    picked calls. None when no row has usable coordinates.
+    """
+    end_column = spec.get("end_column") or spec["start_column"]
+    label_column = spec.get("label_column")
+    color_column = spec.get("rank_color_by")
+    palette = (category_colors or {}).get(color_column) if color_column else None
+    palette = palette if isinstance(palette, dict) else {}
+
+    def colour(row: dict[str, Any]) -> dict[str, str]:
+        hit = palette.get(str(row.get(color_column))) if color_column else None
+        return {"color": hit} if isinstance(hit, str) else {}
+
+    def span(row: dict[str, Any]) -> tuple[str, int, int] | None:
+        chrom = row.get(spec["chrom_column"])
+        try:
+            lo, hi = sorted(
+                (int(float(row.get(spec["start_column"]))), int(float(row.get(end_column))))  # type: ignore[arg-type]
+            )
+        except (TypeError, ValueError):
+            return None
+        return None if chrom is None else (str(chrom), max(lo - 1, 0), max(hi, lo))
+
+    features = []
+    ranked = 0
+    for rank, row in enumerate(rows, start=1):
+        where = span(row)
+        if where is None:
+            continue
+        ranked += 1
+        label = row.get(label_column) if label_column else None
+        name = f"#{rank} {label}" if label not in (None, "") else f"#{rank}"
+        features.append(
+            {
+                "uniqueId": f"rank-{rank}",
+                "refName": where[0],
+                "start": where[1],
+                "end": where[2],
+                "name": f"{TOP_CALL_STAR} {name}" if rank <= OPENING_PICKED else name,
+                "rank": rank,
+                **colour(row),
+            }
+        )
+    drawn = {(f["refName"], f["start"], f["end"]) for f in features}
+    for i, row in enumerate(picked_rows or []):
+        where = span(row)
+        if where is None or where in drawn:
+            continue
+        drawn.add(where)
+        label = row.get(label_column) if label_column else None
+        features.append(
+            {
+                "uniqueId": f"picked-{i}",
+                "refName": where[0],
+                "start": where[1],
+                "end": where[2],
+                "name": str(label) if label not in (None, "") else "picked",
+                **colour(row),
+            }
+        )
+    if not features:
+        return None
+    return {
+        "type": "FeatureTrack",
+        "trackId": RANK_TRACK_ID,
+        "name": f"Top {ranked} {spec.get('name') or 'calls'}".strip(),
+        "category": ["Ranking"],
+        "assemblyNames": [assembly_name],
+        "adapter": {"type": "FromConfigAdapter", "features": features},
+        "displays": [
+            {
+                "type": "LinearBasicDisplay",
+                "displayId": f"{RANK_TRACK_ID}-LinearBasicDisplay",
+                "renderer": {
+                    "type": "CanvasFeatureRenderer",
+                    "color1": f"jexl:get(feature,'color') || '{RANK_TRACK_COLOR}'",
+                    "height": 10,
+                },
+            }
+        ],
+    }
+
+
 def opening_rows(rows: list[dict[str, Any]], spec: dict[str, Any]) -> list[dict[str, Any]]:
     """The calls the view opens on: the first one, or the first ``span_top`` when they sit together.
 
@@ -253,6 +622,21 @@ def mate_locus_from_rows(rows: list[dict[str, Any]], spec: dict[str, Any]) -> st
     )
 
 
+def _opening_tracks(component: dict[str, Any], all_tracks: list[TrackRow]) -> list[TrackRow]:
+    """The tracks the view opens with when no dashboard filter narrows the manifest.
+
+    ``initial_categories`` picks them by the manifest's category column: the tracks
+    of those categories that belong to the sample of the first such row (rows
+    without a sample ride with any). Otherwise the first ``initial_tracks`` rows.
+    """
+    categories = set(component.get("initial_categories") or [])
+    if not categories:
+        return all_tracks[: int(component.get("initial_tracks", 5) or 0)]
+    wanted = [t for t in all_tracks if t.category in categories]
+    lead = next((t.sample for t in wanted if t.sample), None)
+    return [t for t in wanted if lead is None or t.sample in (None, lead)]
+
+
 def build_jbrowse_payload(
     component: dict[str, Any],
     tdc: TracksDC,
@@ -265,6 +649,9 @@ def build_jbrowse_payload(
     mate_locus: str | None = None,
     first_call: dict[str, str | None] | None = None,
     locus_source: dict[str, str | None] | None = None,
+    picked: dict[str, Any] | None = None,
+    rank_rows: list[dict[str, Any]] | None = None,
+    pick_rows: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """The render payload.
 
@@ -296,7 +683,7 @@ def build_jbrowse_payload(
     if filtered_rows is not None:
         matched = filtered_rows
     else:
-        matched = all_tracks[: int(component.get("initial_tracks", 5) or 0)]
+        matched = _opening_tracks(component, all_tracks)
     shown = [by_id[i] for i in default_ids if i in by_id]
     shown += [t for t in matched if t.track_id not in default_ids]
     shown = [t for t in shown if t.fmt != "fasta"]
@@ -394,6 +781,17 @@ def build_jbrowse_payload(
         tracks_conf.append(apply_fetch_size_limit(conf, fetch_size_limit))
         shown_ids.insert(at + i, conf["trackId"])
         track_rows.append(_conf_summary(conf, "ucsc"))
+    # The ranked calls open right under the gene annotation, above the UCSC tracks.
+    source = primary_locus_source(component)
+    rank_conf = (
+        rank_track_config(rank_rows, source, assembly_name, pick_rows, category_colors)
+        if rank_rows and source
+        else None
+    )
+    if rank_conf:
+        tracks_conf.append(rank_conf)
+        shown_ids.insert(at, rank_conf["trackId"])
+        track_rows.append(_conf_summary(rank_conf, "ranking"))
     for extra in overrides.get("extra_tracks") or []:
         if isinstance(extra, dict) and extra.get("trackId"):
             extra = {"assemblyNames": [assembly_name], **extra}
@@ -426,14 +824,17 @@ def build_jbrowse_payload(
     # of ``locus_from``), the first region holding data in the first tracks
     # shown (read from their index), the preset's default.
     mate_location: str | None = None
+    picked_rows: dict[str, Any] | None = None
     if locus:
         location, opening = locus, "filter"
         mate_location = mate_locus
+        picked_rows = picked
     elif component.get("location"):
         location, opening = component["location"], "yaml"
     elif first_call and first_call.get("locus"):
         location, opening = first_call["locus"], "first_call"
         mate_location = first_call.get("mate_locus")
+        picked_rows = first_call.get("picked")
     else:
         probed = probe.first_region(tdc, shown, delta_version)
         location, opening = (probed, "data") if probed else (preset_location, "preset")
@@ -445,6 +846,9 @@ def build_jbrowse_payload(
         "location": location,
         "opening": opening,
         "mate_location": mate_location,
+        # The rows the view points at (the pick, else the best call): the
+        # viewer paints them, and the table rows they name, in one colour.
+        "picked": picked_rows,
         "view": view,
         "configuration": configuration,
         "track_rows": track_rows,
@@ -458,6 +862,8 @@ def build_jbrowse_payload(
         "force_load": bool(component.get("force_load", False)),
         "ucsc_missing": ucsc_missing,
         "data_version": delta_version,
+        # What the variant colours stand for (the key to ``variant_color_by``).
+        "variant_legend": variant_color_legend(component.get("variant_color_by"), category_colors),
         "remote_base": display_base_uri(props.remote_base_uri, anonymous),
         "assembly_kind": "custom" if isinstance(assembly_spec, CustomAssembly) else "preset",
         "sv_track_ids": sv_track_ids,

@@ -49,6 +49,10 @@ main_dashboard:
       Proteotypic: '#1c7ed6'
       Shared: '#adb5bd'
     pair: auto
+    contrast: auto
+    p_region:
+      p below 0.05: '#e8590c'
+      p of 0.05 or more: '#adb5bd'
   # Persistent: drawn in every tab's filter panel, picks kept across tabs. Both
   # are bound to the design, the source of every run link.
   filter_sections:
@@ -333,7 +337,7 @@ main_dashboard:
     section: Findings
     source_tab: Proteins
     source_component: prot-cv-intensity
-    caption: 'Variation between runs against abundance, one point per protein group: precision usually falls toward the faint end, and groups on one peptide scatter most.'
+    caption: 'Variation between runs against abundance, one point per protein group: precision usually falls toward the faint end. The dashed line is a CV of 20 %, under which quantification is tight; the most variable groups above it are labelled.'
     tag: qm-ov-hl-variation
     index: ov-hl-variation
     layout: {x: 4, y: 2, w: 4, h: 4}
@@ -341,7 +345,7 @@ main_dashboard:
     section: Findings
     source_tab: Differential abundance
     source_component: da-volcano
-    caption: 'Adjusted p-value against log2 fold change for every tested protein, the strongest labelled by gene; the dashed lines are the cut-offs. Nothing beyond them means no protein changed enough to call.'
+    caption: 'Adjusted p-value against log2 fold change for every tested protein, the strongest labelled by gene; the dashed lines are the cut-offs, an adjusted p of 0.05 and a twofold change either way. Nothing beyond them means no protein changed enough to call.'
     tag: qm-ov-hl-volcano
     index: ov-hl-volcano
     layout: {x: 0, y: 6, w: 4, h: 4}
@@ -349,7 +353,7 @@ main_dashboard:
     section: Findings
     source_tab: Differential abundance
     source_component: da-pvalue-histogram
-    caption: 'Raw p-values of the tested proteins. Flat is a calibrated test with nothing changing; a spike near zero marks real changes, one near one a test that is too cautious.'
+    caption: 'Raw p-values of the tested proteins. The orange bin holds the proteins below 0.05; a bar above the dashed level (what to expect if none changed) is the excess that marks real changes, a flat histogram a test with nothing to find.'
     tag: qm-ov-hl-pvalues
     index: ov-hl-pvalues
     layout: {x: 4, y: 6, w: 4, h: 4}
@@ -820,8 +824,9 @@ tabs:
       lim = max(15.0, float(long['value'].abs().max() or 0) * 1.1)
       fig = px.bar(long.to_pandas(), y=lab, x='value', color=grp if grp in df.columns else None, facet_col='measure', orientation='h', color_discrete_map=colors, category_orders={lab: order, 'measure': list(measures.values())}, labels={lab: '', 'value': '', 'measure': ''})
       fig.update_xaxes(range=[-lim, lim], ticksuffix='%', zeroline=True)
-      fig.update_yaxes(autorange='reversed', automargin=True)
-      fig.add_vrect(x0=-10, x1=10, fillcolor='rgba(47,158,68,0.15)', line_width=0, layer='below', row='all', col='all')
+      fig.update_yaxes(automargin=True)
+      fig.add_vrect(x0=-10, x1=10, fillcolor='rgba(134,142,150,0.2)', line_width=0, layer='below', row='all', col='all')
+      fig.add_trace(go.Scatter(x=[None], y=[None], mode='markers', marker=dict(symbol='square', size=12, color='rgba(134,142,150,0.45)'), name='Grey band: within 10% of the median', showlegend=True))
       fig.for_each_annotation(lambda a: a.update(text=a.text.split('=')[-1]))
       fig.add_annotation(text='Deviation from the median of the runs in view', xref='paper', yref='paper', x=0.5, y=-0.1, showarrow=False)
       fig.update_layout(margin=dict(t=30, b=70), legend_title_text='')
@@ -829,7 +834,7 @@ tabs:
     tag: qm-id-fig-runqc
     index: id-run-qc
     title: Run quality, weakest run first
-    description: 'How far each run sits from the median of the runs in view, in percent, for precursors, yield per thousand MS2 spectra, modified share and missed-cleavage share; runs sorted by yield, weakest on top. The green band is within 10% of the median, where runs of one experiment normally stay.'
+    description: 'The grey band in each panel is the range within 10% either side of the median of the runs in view; a bar that leaves it is a run to check. The 10% is a rule of thumb of this dashboard for runs of one experiment, not a published cut-off. Each bar is how far a run sits from that median, in percent, for precursors, yield per thousand MS2 spectra, modified share and missed-cleavage share; runs are sorted by yield, weakest on top, and coloured by condition.'
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: advanced_viz
     workflow_tag: quantms
@@ -880,7 +885,7 @@ tabs:
       colors = depictio_group_kwargs.get('color_discrete_map') or depictio_category_colors.get("{GROUP_COL}") or {}
       order = df.group_by('run_id').agg(pl.col('evidence').median().alias('m')).sort('m')['run_id'].to_list()
       fig = px.violin(df.to_pandas(), y='run_id', x='evidence', color=grp if grp in df.columns else None, orientation='h', box=True, points=False, color_discrete_map=colors, category_orders={'run_id': order}, labels={'run_id': '', 'evidence': 'DIA-NN evidence score'})
-      fig.update_yaxes(autorange='reversed', automargin=True)
+      fig.update_yaxes(automargin=True)
       fig.update_layout(margin=dict(t=10), legend_title_text='', violinmode='overlay')
     section: Peptide properties
     tag: qm-id-fig-score
@@ -1073,15 +1078,27 @@ tabs:
     visu_type: bar
     mode: code
     code_content: |-
-      d = df.group_by('runs_detected', 'peptide_support').len().rename({'len': 'groups'}).sort('runs_detected')
-      fig = px.bar(d.to_pandas(), x='runs_detected', y='groups', color='peptide_support', barmode='group', log_y=True, color_discrete_map=depictio_category_colors.get('peptide_support') or {}, category_orders={'peptide_support': ['1 peptide', '2 to 3 peptides', '4 or more peptides']}, labels={'runs_detected': 'Runs that quantified the protein group', 'groups': 'Protein groups (log scale)', 'peptide_support': ''})
-      fig.update_xaxes(dtick=1)
-      fig.update_layout(margin=dict(t=10), legend_title_text='')
+      # The protein groups quantified in only some of the runs, by how many runs saw them, stacked by peptide support. The groups seen in every run are the bulk of a good experiment, so they sit in the note and the rest reads on a plain count axis.
+      n_runs = int(df['runs_total'].max() or df['runs_detected'].max() or 1)
+      total = df.height
+      full = int((df['runs_detected'] >= n_runs).sum())
+      part = df.filter(pl.col('runs_detected') < n_runs)
+      part = part if part.height else df
+      d = part.group_by('runs_detected', 'peptide_support').len().rename({'len': 'groups'})
+      tot = part.group_by('runs_detected').len().sort('runs_detected')
+      colors = depictio_category_colors.get('peptide_support') or {}
+      fig = go.Figure(layout=go.Layout(barmode='stack', bargap=0.2, margin=dict(t=50), xaxis=dict(title='Runs that quantified the protein group', dtick=1, range=[0.4, int(part['runs_detected'].max()) + 0.6]), yaxis=dict(title='Protein groups', range=[0, float(tot['len'].max()) * 1.2])))
+      for ps in ['1 peptide', '2 to 3 peptides', '4 or more peptides']:
+          s = d.filter(pl.col('peptide_support') == ps).sort('runs_detected')
+          fig.add_bar(x=s['runs_detected'].to_list(), y=s['groups'].to_list(), name=ps, marker_color=colors.get(ps), hovertemplate='%{y} protein groups on ' + ps + '<extra></extra>')
+      fig.add_scatter(x=tot['runs_detected'].to_list(), y=tot['len'].to_list(), mode='text', text=[str(v) for v in tot['len'].to_list()], textposition='top center', showlegend=False, hoverinfo='skip')
+      fig.add_annotation(text='%d of %d protein groups (%d%%) were quantified in all %d runs<br>and are not drawn here' % (full, total, round(100 * full / max(total, 1)), n_runs), xref='paper', yref='paper', x=0, y=1.02, xanchor='left', yanchor='bottom', showarrow=False, align='left')
+      fig.update_layout(legend=dict(orientation='h', y=-0.3, title_text='', traceorder='normal'))
     section: Detection across runs
     tag: qm-prot-fig-detection
     index: prot-detection
-    title: Protein groups by number of runs
-    description: 'Protein groups by how many runs quantified them, on a log scale so the rare incomplete groups stay visible, split by peptide support.'
+    title: Protein groups missed in some runs
+    description: 'Protein groups quantified in some runs but not all, by how many runs quantified them; the note counts the groups seen in every run.'
     layout: {x: 0, y: 0, w: 4, h: 5}
   - component_type: figure
     workflow_tag: quantms
@@ -1107,19 +1124,23 @@ tabs:
       viz_kind: scatter_xy
       x_col: mean_log2_intensity
       y_col: cv_pct
-      color_col: peptide_support
       label_col: genes
       x_title: Mean log2 quantity
       y_title: Variation between runs (CV, %)
-      density_threshold: 5000
-      opacity: 0.6
-      marker_size: 5
-      legend_pos: bottom
+      reference_line: horizontal
+      reference_value: 20
+      reference_label: 20 % CV
+      reference_highlight: above
+      top_n_labels: 8
+      density_threshold: 2000
+      opacity: 0.5
+      marker_size: 4
+      legend_pos: none
     section: Quantification precision
     tag: qm-prot-av-rank
     index: prot-cv-intensity
     title: Variation against abundance
-    description: 'One point per protein group. Precision usually falls toward the faint end; groups on one peptide are the ones that scatter most.'
+    description: 'One point per protein group. The dashed line is a coefficient of variation of 20 %, under which label-free quantification is tight (the threshold of the Variation card); points under it are dimmed and the eight most variable groups above it are labelled by gene. Precision usually falls toward the faint end. A cloud of 2000 protein groups or more is drawn as a density.'
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: quantms
@@ -1197,7 +1218,7 @@ tabs:
     body: >
       Runs of one condition are replicates: they should quantify the same proteins at similar
       levels, and the runs of different conditions should separate in the projection. A pair that
-      leaves the band around no difference, or a run that sits with another condition, points at one injection to check.
+      leaves the grey band around no difference, or a run that sits with another condition, points at one injection to check.
     tag: qm-rep-intro
     index: rep-intro
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -1318,8 +1339,6 @@ tabs:
       color_col: '{GROUP_COL}'
       default_color_by: '{GROUP_COL}'
       axis_prefix: PC
-      point_size: 12
-      marker_outline: true
       show_centroids: false
       legend_pos: right
       selection_enabled: true
@@ -1343,34 +1362,37 @@ tabs:
       cluster_method: average
       normalize: none
       colorscale: Blues
+      max_rows: 9
     section: Run-to-run correlation
     tag: qm-rep-av-corr
     index: rep-correlation
     title: Run-to-run correlation
-    description: 'Pearson correlation of the protein quantities of every pair of runs; the dendrograms group the runs that behave alike. Replicate runs correlate above 0.95, so the colours differ little.'
-    layout: {x: 0, y: 0, w: 8, h: 6}
+    description: 'Each cell is the Pearson correlation of the protein quantities of two runs; the dendrograms group the runs that behave alike. Replicate runs correlate above 0.95, so the colours differ little.'
+    layout: {x: 0, y: 0, w: 8, h: 7}
   - component_type: figure
     workflow_tag: quantms
     data_collection_tag: quantms_replicate_pairs
     visu_type: scatter
     mode: code
     code_content: |-
-      # Difference against mean of the log2 quantities of two runs, one point per protein group and pair; the dotted line is no difference and the green band is within one log2 unit (a twofold change).
+      # Difference against mean of the log2 quantities of two runs, one point per protein group and pair; the dotted line is no difference and the grey band is within one log2 unit (a twofold change).
       grp = depictio_group_by[0] if depictio_group_by else '{GROUP_COL}'
       colors = depictio_group_kwargs.get('color_discrete_map') or depictio_category_colors.get('{GROUP_COL}') or {}
       d = df if grp in df.columns else df.with_columns(pl.lit('All runs').alias(grp))
       d = d.filter(pl.col('log2_x').is_not_null() & pl.col('log2_y').is_not_null()).with_columns(((pl.col('log2_x') + pl.col('log2_y')) / 2).alias('mean_log2'), (pl.col('log2_y') - pl.col('log2_x')).alias('diff_log2'))
       fig = px.scatter(d.to_pandas(), x='mean_log2', y='diff_log2', color=grp, color_discrete_map=colors, opacity=0.45, hover_name='genes', hover_data=['pair', 'run_x', 'run_y'], labels={'mean_log2': 'Mean log2 quantity of the two runs', 'diff_log2': 'Difference between the runs (log2)', grp: ''})
       fig.update_traces(marker=dict(size=4))
-      fig.add_hrect(y0=-1, y1=1, fillcolor='rgba(47,158,68,0.12)', line_width=0, layer='below')
+      fig.add_hrect(y0=-1, y1=1, fillcolor='rgba(134,142,150,0.2)', line_width=0, layer='below')
       fig.add_hline(y=0, line_dash='dot', line_width=1, opacity=0.6)
+      fig.add_annotation(text='twofold difference either way', xref='paper', yref='y', x=1, y=1, xanchor='right', yanchor='bottom', showarrow=False)
+      fig.add_annotation(text='no difference', xref='paper', yref='y', x=1, y=0, xanchor='right', yanchor='bottom', showarrow=False)
       fig.update_yaxes(automargin=True, zeroline=False)
       fig.update_layout(margin=dict(t=10), legend=dict(orientation='h', y=-0.2))
     section: Replicate agreement
     tag: qm-rep-av-pairs
     index: rep-pairs-scatter
     title: Run against run, difference over mean
-    description: One point per protein group quantified in both runs of a pair, coloured by condition. A reproducible pair stays inside the green band (within a twofold change) at every level; a tilt or a fan marks a pair to check.
+    description: One point per protein group quantified in both runs of a pair, coloured by condition. The dotted line is no difference between the two runs (a log2 difference of 0). The grey band is one log2 unit either side of it, a twofold difference, the same twofold the differential abundance calls use; it is a reading guide, not a quality cut-off. A reproducible pair stays inside the band at every level, and a tilt or a fan marks a pair to check.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: figure
     workflow_tag: quantms
@@ -1413,6 +1435,10 @@ tabs:
     icon: mdi:counter
     color: pink
     description: 'How many proteins were tested and how many changed'
+  - name: Calls per contrast
+    icon: mdi:chart-bar
+    color: pink
+    description: 'Proteins that go up or down in each contrast'
   - name: Volcano, MA and QQ
     icon: mdi:chart-scatter-plot
     color: pink
@@ -1573,6 +1599,30 @@ tabs:
     title: Significant proteins
     description: 'Proteins with an adjusted p-value below 0.05 and a two-fold change or more. The bar splits them by direction.'
     layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: figure
+    workflow_tag: quantms
+    data_collection_tag: quantms_comparisons
+    visu_type: bar
+    mode: code
+    code_content: |-
+      # Proteins called Up and Down in each contrast, with the number tested; a contrast that calls nothing still shows its two empty bars.
+      d = df.filter(pl.col('p_value').is_not_null())
+      tested = d.group_by('contrast').agg(pl.col('protein').n_unique().alias('tested')).sort('contrast')
+      names = {c: '%s (%d tested)' % (c, t) for c, t in zip(tested['contrast'].to_list(), tested['tested'].to_list())}
+      rows = [{'contrast': names[c], 'direction': dr, 'proteins': d.filter((pl.col('contrast') == c) & (pl.col('direction') == dr)).height} for c in tested['contrast'].to_list() for dr in ['Up', 'Down']]
+      calls = pl.DataFrame(rows, schema={'contrast': pl.Utf8, 'direction': pl.Utf8, 'proteins': pl.Int64})
+      order = calls.group_by('contrast').agg(pl.col('proteins').sum().alias('n')).sort(['n', 'contrast'], descending=[False, True])['contrast'].to_list()
+      fig = px.bar(calls.to_pandas(), y='contrast', x='proteins', color='direction', barmode='group', orientation='h', text='proteins', color_discrete_map=depictio_category_colors.get('direction') or {}, category_orders={'direction': ['Up', 'Down'], 'contrast': order}, labels={'contrast': '', 'proteins': 'Proteins called', 'direction': ''})
+      fig.update_traces(textposition='outside', cliponaxis=False)
+      fig.update_yaxes(automargin=True)
+      fig.update_xaxes(dtick=1 if calls['proteins'].max() <= 8 else None, rangemode='tozero')
+      fig.update_layout(margin=dict(t=10, r=30), legend_title_text='', legend=dict(orientation='h', y=-0.3))
+    section: Calls per contrast
+    tag: qm-da-fig-contrast-calls
+    index: da-contrast-calls
+    title: Proteins called in each contrast
+    description: 'Each bar is the number of proteins called Up (higher in the first condition of the contrast) or Down (lower), at an adjusted p-value below 0.05 and a twofold change or more, with the number of proteins tested in brackets. A contrast with two empty bars was tested and found nothing to call.'
+    layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: advanced_viz
     workflow_tag: quantms
     data_collection_tag: quantms_comparisons
@@ -1602,18 +1652,49 @@ tabs:
     tag: qm-da-av-volcano
     index: da-volcano
     title: Volcano, MA and QQ
-    description: '-log10(adjusted p) against log2 fold change; the View switch puts the fold change against mean abundance (MA) or the raw p-values against the null (QQ). The dashed lines are the cut-offs.'
+    description: 'Each point is a protein group in a contrast: -log10(adjusted p) against log2 fold change. The horizontal dashed line is an adjusted p-value of 0.05, the usual significance level for Benjamini-Hochberg adjusted p-values; the two vertical dashed lines are at log2 fold changes of -1 and 1, a twofold change either way, the usual minimum effect for label-free proteomics. A protein beyond both is called Up or Down; the cut-offs are this dashboard''s, MSstats reports the adjusted p-value only. The View switch puts the fold change against mean abundance (MA) or the raw p-values against the null (QQ). With several contrasts the points of all are drawn together, so pick one in the Contrast filter.'
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: figure
     workflow_tag: quantms
     data_collection_tag: quantms_comparisons
-    visu_type: histogram
-    dict_kwargs: {x: p_value, nbins: 20, labels: {p_value: Raw p-value}}
+    visu_type: bar
+    mode: code
+    code_content: |-
+      # Raw p-values in 20 bins of 0.05, so the first bin is exactly the p < 0.05 cut-off; with several contrasts the bars are stacked and coloured by contrast, with one the first bin is orange. The dashed line is the level a bin would hold if no protein changed: the share of unchanged proteins (pi0, Storey with lambda = 0.5, from the flat right half) times the bin average.
+      d = df.filter(pl.col('p_value').is_not_null())
+      n = d.height
+      cut = 0.05
+      counts, edges = np.histogram(d['p_value'].to_numpy(), bins=20, range=(0, 1))
+      mid = (edges[:-1] + edges[1:]) / 2
+      pi0 = min(1.0, float((d['p_value'] > 0.5).sum()) / (0.5 * max(n, 1)))
+      level = pi0 * n / 20
+      lo, hi = 'p below 0.05', 'p of 0.05 or more'
+      colors = depictio_category_colors.get('p_region') or {}
+      below = mid < cut
+      contrasts = sorted(d['contrast'].unique().to_list()) if 'contrast' in d.columns else []
+      if len(contrasts) > 1:
+          cc = depictio_category_colors.get('contrast') or {}
+          bars = []
+          for c in contrasts:
+              cnt, edge = np.histogram(d.filter(pl.col('contrast') == c)['p_value'].to_numpy(), bins=20, range=(0, 1))
+              bars.append(go.Bar(x=mid.tolist(), y=cnt.tolist(), width=0.047, name=c, marker_color=cc.get(c), hovertemplate='p from %{customdata[0]:.2f} to %{customdata[1]:.2f}<br>%{y} proteins<extra></extra>', customdata=np.column_stack([edges[:-1], edges[1:]])))
+          fig = go.Figure(bars)
+          fig.update_layout(barmode='stack')
+      else:
+          fig = go.Figure([go.Bar(x=mid[keep].tolist(), y=counts[keep].tolist(), width=0.047, name=name, marker_color=colors.get(name), hovertemplate='p from %{customdata[0]:.2f} to %{customdata[1]:.2f}<br>%{y} proteins<extra></extra>', customdata=np.column_stack([edges[:-1][keep], edges[1:][keep]])) for name, keep in ((lo, below), (hi, ~below))])
+      fig.add_scatter(x=[0, 1], y=[level, level], mode='lines', name='level if none changed', line=dict(dash='dash', width=1.5, color='gray'), hoverinfo='skip')
+      fig.add_vline(x=cut, line_dash='dot', line_width=1, line_color='gray')
+      n_low = int(counts[below].sum())
+      chance = level * int(below.sum())
+      fig.add_annotation(text='%d of %d proteins below %s<br>about %d expected if none changed<br>unchanged share (pi0): %d%%' % (n_low, n, cut, round(chance), round(pi0 * 100)), xref='paper', yref='paper', x=0.98, y=0.98, xanchor='right', yanchor='top', showarrow=False, align='right')
+      fig.update_xaxes(title='Raw p-value', range=[0, 1])
+      fig.update_yaxes(title='Proteins', rangemode='tozero')
+      fig.update_layout(margin=dict(t=10), bargap=0, legend=dict(orientation='h', y=-0.3, title_text=''))
     section: Calibration
     tag: qm-da-fig-pvalue
     index: da-pvalue-histogram
     title: p-value histogram
-    description: 'Raw p-values of the tested proteins: flat with a spike near zero is a calibrated test with real changes; a spike near one says there are none.'
+    description: 'Raw p-values of the tested proteins. The dashed line is the level a bin would hold if no protein changed (the estimated share of unchanged proteins times the bin average) and the dotted line is p = 0.05. With one contrast the first bin is coloured as the proteins below 0.05; with several, the bars are stacked and coloured by contrast.'
     layout: {x: 0, y: 0, w: 4, h: 5}
   - component_type: figure
     workflow_tag: quantms

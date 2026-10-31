@@ -4,18 +4,28 @@ import { NEUTRAL_CATEGORY_COLOR } from '../../../categoryColors';
 import {
   badgeColourOf,
   barFraction,
+  barLabel,
   barRange,
+  boundFromColumn,
+  categoricalColumns,
   clampTopN,
   columnLabel,
   columnsToFetch,
   denseRanks,
+  distinctValues,
   formatCell,
+  isFiltering,
+  isNumericColumn,
   missingColumns,
+  pickDefaultRow,
   placePopover,
   rankRows,
   rankTier,
   rankedEcho,
+  rowsKept,
+  sortableColumns,
   toNumber,
+  type RankedRow,
 } from './rankedTable';
 
 describe('toNumber', () => {
@@ -162,6 +172,58 @@ describe('bars', () => {
   });
 });
 
+describe('bars scaled to a column', () => {
+  it('is full at the column bound, so the best row shown is not a full bar', () => {
+    // 14 of a possible 18: the default would draw 14 as full.
+    expect(barRange([14, 9], {}, { hi: boundFromColumn([18, 18, 17], 'max') })).toEqual({ lo: 0, hi: 18 });
+    expect(barFraction(14, barRange([14, 9], {}, { hi: 18 }))).toBeCloseTo(14 / 18);
+  });
+
+  it('reads the largest and smallest of the whole frame, skipping blanks', () => {
+    expect(boundFromColumn(['3', null, 9, 'x', 4], 'max')).toBe(9);
+    expect(boundFromColumn(['3', null, 9, 'x', 4], 'min')).toBe(3);
+    expect(boundFromColumn([], 'max')).toBeNull();
+    expect(boundFromColumn(undefined, 'min')).toBeNull();
+  });
+
+  it('lets a literal min / max win and falls back on the data without a bound', () => {
+    expect(barRange([5, 10], { max: 25 }, { hi: 18 }).hi).toBe(25);
+    expect(barRange([5, 10], {}, { hi: null })).toEqual({ lo: 0, hi: 10 });
+    expect(barRange([5, 10], {}, { lo: 2, hi: 12 })).toEqual({ lo: 2, hi: 12 });
+  });
+
+  it('writes the bound beside the value unless told not to', () => {
+    expect(barLabel('14', { max_from: 'm' }, 18)).toBe('14 / 18');
+    expect(barLabel('0.5', { max_from: 'm', decimals: 2 }, 1)).toBe('0.5 / 1.00');
+    expect(barLabel('14', { max_from: 'm', show_bound: false }, 18)).toBe('14');
+    expect(barLabel('14', {}, 18)).toBe('14');
+    expect(barLabel('14', { max_from: 'm' }, null)).toBe('14');
+    expect(barLabel('–', { max_from: 'm' }, 18)).toBe('–');
+  });
+});
+
+describe('pickDefaultRow', () => {
+  const row = (source: number): RankedRow => ({ source, score: 0, rank: source + 1, tier: null });
+  const rows = [row(0), row(1), row(2), row(3)];
+  const key = (r: RankedRow) => (r.source === 3 ? null : `v${r.source}`);
+
+  it('takes the highest, or the lowest on request', () => {
+    expect(pickDefaultRow(rows, [4, 9, 2, 1], 'desc', key)?.source).toBe(1);
+    expect(pickDefaultRow(rows, [4, 9, 2, 1], 'asc', key)?.source).toBe(2);
+  });
+
+  it('gives a tie to the row ranked higher', () => {
+    expect(pickDefaultRow(rows, [7, 7, 7, 7], 'desc', key)?.source).toBe(0);
+  });
+
+  it('skips rows without a number or without a key, and says null for none', () => {
+    expect(pickDefaultRow(rows, [null, 'x', 3, 100], 'desc', key)?.source).toBe(2);
+    expect(pickDefaultRow(rows, [null, 'x', null, 100], 'desc', key)).toBeNull();
+    expect(pickDefaultRow(rows, undefined, 'desc', key)).toBeNull();
+    expect(pickDefaultRow([], [1], 'desc', key)).toBeNull();
+  });
+});
+
 describe('formatCell', () => {
   it('writes blanks as a dash', () => {
     for (const v of [null, undefined, '', Number.NaN, Infinity]) expect(formatCell(v)).toBe('–');
@@ -265,6 +327,95 @@ describe('rankedEcho', () => {
     );
     expect(rankedEcho({ shown: 6, ranked: 6, scoreLabel: 'p', descending: false })).toBe(
       'top 6 by p (lowest first)',
+    );
+  });
+});
+
+describe('rowsKept', () => {
+  const rows = {
+    gene: ['A', 'B', 'C', 'D'],
+    score: [10, 7, null, 3],
+    impact: ['HIGH', 'LOW', 'HIGH', ''],
+  };
+  it('keeps every row (null) while no control narrows', () => {
+    expect(rowsKept(rows, { scoreColumn: 'score' })).toBeNull();
+    expect(rowsKept(rows, { scoreColumn: 'score', filterColumn: 'impact', filterValues: [] })).toBeNull();
+    expect(isFiltering({ scoreColumn: 'score', minScore: null })).toBe(false);
+  });
+  it('drops rows under a floor, and rows with no score', () => {
+    expect(rowsKept(rows, { scoreColumn: 'score', minScore: 5 })).toEqual(new Set([0, 1]));
+  });
+  it('keeps only the chosen category values, never a blank one', () => {
+    expect(
+      rowsKept(rows, { scoreColumn: 'score', filterColumn: 'impact', filterValues: ['HIGH'] }),
+    ).toEqual(new Set([0, 2]));
+  });
+  it('combines a floor and a category', () => {
+    expect(
+      rowsKept(rows, { scoreColumn: 'score', minScore: 5, filterColumn: 'impact', filterValues: ['HIGH'] }),
+    ).toEqual(new Set([0]));
+  });
+});
+
+describe('rankRows with include', () => {
+  const rows = { score: [10, 7, 7, 3], other: [1, 4, 2, 9] };
+  it('ranks only the rows kept and counts the rest out', () => {
+    const list = rankRows(rows, { score: 'score' }, { descending: true, topN: 10, include: new Set([1, 2, 3]) });
+    expect(list.rows.map((r) => [r.source, r.rank])).toEqual([
+      [1, 1],
+      [2, 1],
+      [3, 2],
+    ]);
+    expect(list.ranked).toBe(3);
+    expect(list.unscored).toBe(0);
+  });
+  it('counts a kept row with no score as unscored', () => {
+    const list = rankRows(
+      { score: [10, null, 3] },
+      { score: 'score' },
+      { descending: true, topN: 10, include: new Set([0, 1]) },
+    );
+    expect(list.ranked).toBe(1);
+    expect(list.unscored).toBe(1);
+  });
+  it('orders by another column when asked', () => {
+    const list = rankRows(rows, { score: 'other' }, { descending: false, topN: 2 });
+    expect(list.rows.map((r) => r.source)).toEqual([0, 2]);
+  });
+});
+
+describe('column pickers', () => {
+  const specs = [
+    { column: 'model', display: 'badge' as const },
+    { column: 'score', display: 'bar' as const },
+    { column: 'af', display: 'number' as const },
+    { column: 'hgvs', display: 'mono' as const },
+    { column: 'note' },
+  ];
+  it('sorts by the score first, then bar and number columns once', () => {
+    expect(sortableColumns('score', specs)).toEqual(['score', 'af']);
+    expect(sortableColumns('rank', specs)).toEqual(['rank', 'score', 'af']);
+    expect(sortableColumns('score', specs, ['cadd', 'af'])).toEqual(['score', 'af', 'cadd']);
+  });
+  it('reads a column as numeric only when every filled cell is a number', () => {
+    expect(isNumericColumn([1, '2.5', null, ''])).toBe(true);
+    expect(isNumericColumn([1, 'absent'])).toBe(false);
+    expect(isNumericColumn([null, ''])).toBe(false);
+    expect(isNumericColumn(undefined)).toBe(false);
+  });
+  it('filters on text, monospace and badge columns', () => {
+    expect(categoricalColumns(specs)).toEqual(['model', 'hgvs', 'note']);
+  });
+  it('lists distinct values, sorted naturally, skipping blanks', () => {
+    expect(distinctValues(['b', 'a', '', null, 'a', 10, 9])).toEqual(['9', '10', 'a', 'b']);
+    expect(distinctValues(undefined)).toEqual([]);
+  });
+});
+
+describe('rankedEcho filtered', () => {
+  it('says so when the Data controls took rows out', () => {
+    expect(rankedEcho({ shown: 3, ranked: 3, scoreLabel: 's', descending: true, filtered: true })).toBe(
+      'top 3 by s (highest first, filtered)',
     );
   });
 });

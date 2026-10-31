@@ -249,3 +249,100 @@ export function windowInDomain(
   const before = winRank < hiRank || (winRank === hiRank && win.end <= Number(hi.pos) + slack);
   return after && before;
 }
+
+/** A region on one contig, as a zoom takes it. */
+export interface FollowTarget {
+  chrom: string;
+  start: number;
+  end: number;
+}
+
+/** A window narrower than this share of the visible domain is "lost" in it
+ *  (a gene in a whole chromosome or the whole genome): the axis zooms to it
+ *  rather than leaving it a sliver. */
+export const FOLLOW_FRAME_RATIO = 0.02;
+/** The span a framed window gets, as a multiple of its width: the window in
+ *  the middle third, the rest context. A framed view is far above
+ *  {@link FOLLOW_FRAME_RATIO}, so framing it again is a no-op. */
+export const FOLLOW_FRAME_FACTOR = 3;
+/** Narrowest span a framed window gets (bp), so a one-base window is not a
+ *  three-base view. */
+const FOLLOW_FRAME_MIN_SPAN = 1000;
+
+/** The view that frames `win`: centred on it, `FOLLOW_FRAME_FACTOR` times its
+ *  width, shifted to stay inside the contig when its `size` is known. */
+export function frameWindow(
+  win: WindowRow,
+  size?: number | null,
+  minSpan?: number | null,
+): FollowTarget {
+  const centre = (win.start + win.end) / 2;
+  const wanted = Math.max(
+    (win.end - win.start) * FOLLOW_FRAME_FACTOR,
+    FOLLOW_FRAME_MIN_SPAN,
+    minSpan && minSpan > 0 ? minSpan : 0,
+  );
+  const room = size && size > 0 ? Math.min(wanted, size) : wanted;
+  let start = centre - room / 2;
+  let end = centre + room / 2;
+  if (start < 0) [start, end] = [0, room];
+  if (size && size > 0 && end > size) [start, end] = [Math.max(0, size - room), size];
+  return { chrom: win.chrom, start: Math.round(start), end: Math.round(end) };
+}
+
+/**
+ * Where the axis goes to keep the genome browser's window in the middle of its
+ * view (`follow_view_window`):
+ *
+ * - `'stay'`: the window lies inside the visible domain with its centre in the
+ *   middle 60% of it, so nothing moves (a brush the browser followed, a small
+ *   pan, the window coming back as it was sent);
+ * - a region: the same width as the domain (the reader's zoom is kept), centred
+ *   on the window, and wider than that only when the window is wider (the
+ *   browser zoomed out: the axis opens to 1.5 times it), shifted to stay inside
+ *   the contig when its `size` is known;
+ * - the window framed ({@link frameWindow}) when it is a sliver of the domain
+ *   (under {@link FOLLOW_FRAME_RATIO} of it) or the domain spans several
+ *   contigs (the whole genome the axis opens on): centring alone would move
+ *   nothing on a whole chromosome;
+ * - `null`: nothing can be said (the domain is unreadable, or the window is on
+ *   another contig than the domain's), and the caller keeps its own rule
+ *   (frame the browser's chromosome).
+ *
+ * `minSpan` (`follow_context_bp`) is the least the axis shows around the
+ * window, so a navigator can keep megabases of context around a browser
+ * zoomed on a few kilobases; a narrower domain is reframed to it.
+ */
+export function followWindowTarget(
+  domain: unknown[] | null,
+  win: WindowRow,
+  contigNames: readonly string[],
+  size?: number | null,
+  minSpan?: number | null,
+): 'stay' | FollowTarget | null {
+  if (!domain || domain.length < 2) return null;
+  const locus = (x: unknown) => x as { chrom?: unknown; pos?: unknown };
+  const [lo, hi] = [locus(domain[0]), locus(domain[domain.length - 1])];
+  const rank = (c: unknown) => contigNames.indexOf(String(c));
+  if (rank(lo.chrom) < 0 || rank(hi.chrom) < 0 || rank(win.chrom) < 0) return null;
+  if (rank(lo.chrom) !== rank(hi.chrom)) return frameWindow(win, size, minSpan);
+  if (rank(win.chrom) !== rank(lo.chrom)) return null;
+  const [d0, d1] = [Number(lo.pos), Number(hi.pos)];
+  const span = d1 - d0;
+  if (!Number.isFinite(span) || span <= 0) return null;
+  const width = win.end - win.start;
+  const context = minSpan && minSpan > 0 ? Math.min(minSpan, size && size > 0 ? size : minSpan) : 0;
+  if (width < span * FOLLOW_FRAME_RATIO || span < context * 0.9) return frameWindow(win, size, minSpan);
+  const centre = (win.start + win.end) / 2;
+  const slack = Math.max(2, span * 0.02);
+  const inside = win.start >= d0 - slack && win.end <= d1 + slack;
+  const middle = centre >= d0 + span * 0.2 && centre <= d1 - span * 0.2;
+  if (inside && middle) return 'stay';
+  const target = Math.max(span, width * 1.5);
+  const room = size && size > 0 ? Math.min(target, size) : target;
+  let start = centre - room / 2;
+  let end = centre + room / 2;
+  if (start < 0) [start, end] = [0, room];
+  if (size && size > 0 && end > size) [start, end] = [Math.max(0, size - room), size];
+  return { chrom: win.chrom, start: Math.round(start), end: Math.round(end) };
+}

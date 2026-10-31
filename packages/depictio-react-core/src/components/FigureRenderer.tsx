@@ -28,6 +28,7 @@ import { useNewItemIds } from '../hooks/useNewItemIds';
 import { useTransientFlag } from '../hooks/useTransientFlag';
 import { ActiveHighlight } from '../highlight';
 import { asNumberArray, extractCustomdataIds } from '../plotlyData';
+import { markSelectedPoints, standingSelectionValues } from '../standingSelection';
 import { adaptGlTraces, PlotlyTrace, useWebglSlot } from '../webglBudget';
 import { tintSingleSeries } from '../figureTint';
 import { useTabHue } from '../tabColor';
@@ -441,10 +442,22 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
     [figure, tabHue],
   );
 
+  const standingSelection = useMemo(
+    () =>
+      standingSelectionValues(filters, {
+        index: String(metadata.index),
+        dcId: typeof metadata.dc_id === 'string' ? metadata.dc_id : undefined,
+        column: selectionColumn ?? null,
+      }),
+    [filters, metadata.index, metadata.dc_id, selectionColumn],
+  );
+
   const figureData = useMemo<unknown[]>(() => {
-    const base = adaptGlTraces((tinted.data as PlotlyTrace[]) || [], glGranted);
+    let traces = (tinted.data as PlotlyTrace[]) || [];
+    if (standingSelection) traces = markSelectedPoints(traces, standingSelection, selectionColumnIndex);
+    const base = adaptGlTraces(traces, glGranted);
     return overlayTrace ? [...base, overlayTrace] : base;
-  }, [tinted, overlayTrace, glGranted]);
+  }, [tinted, overlayTrace, glGranted, standingSelection, selectionColumnIndex]);
 
   const baseLayout = useMemo<Record<string, unknown>>(() => {
     // The chrome style's Plotly patch (fonts, backgrounds, grid) lands over the

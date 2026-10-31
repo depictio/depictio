@@ -34,7 +34,8 @@ import {
   VizSwitch,
 } from './controls/VizControls';
 import { looksContinuous } from './colourScales';
-import { densityHeatmap } from './densityBins';
+import { plotlyColorscale } from '../../utils/colorScale';
+import { densityColours, densityHeatmap, sparseSources, type DensityScale } from './densityBins';
 import {
   applyDataTheme,
   applyLayoutTheme,
@@ -81,6 +82,7 @@ interface ScatterXyConfig {
   density?: boolean;
   density_threshold?: number;
   density_bins?: number;
+  density_scale?: DensityScale;
   quadrants?: Quadrants | null;
 }
 
@@ -132,10 +134,14 @@ const COLOUR_SCALES = ['Viridis', 'Cividis', 'RdBu', 'Blackbody'] as const;
 // 0: the tile never leaves the point view on its own. An author who wants the
 // automatic switch names the row count (`density_threshold`).
 const DEFAULT_DENSITY_THRESHOLD = 0;
-// Below this many points a marker cloud never overplots into a blob, so the
-// Points/Density switch is noise: it is offered only above it, or when the
-// author opted into density.
-const DENSITY_OFFER_MIN_POINTS = 2000;
+// Below this many points a marker cloud never overplots into a blob and a
+// count per cell is mostly 1 or 2, so density is neither offered nor drawn,
+// whatever `density` says. Documented on `ScatterXyConfig.density`.
+const DENSITY_MIN_POINTS = 1000;
+// The rows kept as points over the density: those in a cell of at most this
+// many, up to the cap. The halo a colour scale cannot show, hoverable.
+const SPARSE_CELL_MAX_COUNT = 2;
+const SPARSE_POINTS_CAP = 1500;
 const DEFAULT_DENSITY_BINS = 60;
 // Opacity kept by the points on the side of the guide not being looked at.
 const DIMMED_OPACITY = 0.2;
@@ -402,15 +408,17 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
 
   const densityThreshold = config.density_threshold ?? DEFAULT_DENSITY_THRESHOLD;
   const densityBins = config.density_bins ?? DEFAULT_DENSITY_BINS;
+  const pointCount = points?.length ?? 0;
+  const densityAllowed = pointCount >= DENSITY_MIN_POINTS;
   const densityView =
-    densityOverride ??
-    (density || (densityThreshold > 0 && (points?.length ?? 0) > densityThreshold));
+    densityAllowed &&
+    (densityOverride ?? (density || (densityThreshold > 0 && pointCount > densityThreshold)));
+  const densityScale: DensityScale = config.density_scale === 'linear' ? 'linear' : 'log';
   // A box select over a binned density catches no points, and every
   // `Plotly.react` would then report an empty selection and clear whatever the
   // reader had filtered on. Selection is a point-view capability.
   const selectionActive = selectionEnabled && !densityView;
-  const densityOffered =
-    densityView || density || densityThreshold > 0 || (points?.length ?? 0) >= DENSITY_OFFER_MIN_POINTS;
+  const densityOffered = densityAllowed;
 
   const figure = useMemo(() => {
     if (!points) return null;
@@ -475,24 +483,56 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
       // One counted cell per `density_bins` x `density_bins` grid square
       // instead of one marker per row. The cells are counted here and handed
       // to a `heatmap` with explicit edges: `histogram2d` binning on a log
-      // axis crashed the tab (see `densityHeatmap`).
-      const grid = densityHeatmap(
-        points.map((p) => p.x),
-        points.map((p) => p.y),
-        { logX, logY, bins: densityBins },
-      );
+      // axis crashed the tab (see `densityHeatmap`). Empty cells are
+      // transparent, the colour follows the count on a log scale, and the rows
+      // in the sparsest cells stay drawn as points on top: the halo is where
+      // the unusual rows are, and a colour scale cannot show a cell of two.
+      const xs = points.map((p) => p.x);
+      const ys = points.map((p) => p.y);
+      const grid = densityHeatmap(xs, ys, { logX, logY, bins: densityBins });
       if (grid) {
+        const colours = densityColours(grid.z, densityScale);
         data.push({
           type: 'heatmap' as const,
           x: grid.xEdges,
           y: grid.yEdges,
-          z: grid.z,
-          colorscale: colourScale,
-          colorbar: { thickness: 10, len: 0.75, title: { text: 'count', side: 'right' } },
-          hovertemplate: `${xTitle}: %{x}<br>${yTitle}: %{y}<br>count: %{z}<extra></extra>`,
+          z: colours.z,
+          customdata: colours.counts,
+          colorscale: plotlyColorscale(colourScale),
+          hoverongaps: false,
+          colorbar: {
+            thickness: 10,
+            len: 0.75,
+            title: { text: 'count', side: 'right' },
+            ...(colours.tickvals ? { tickmode: 'array', tickvals: colours.tickvals, ticktext: colours.ticktext } : {}),
+          },
+          hovertemplate: `${xTitle}: %{x}<br>${yTitle}: %{y}<br>count: %{customdata}<extra></extra>`,
           showlegend: false,
           name: yTitle,
         });
+        const sparse = sparseSources(grid, {
+          maxCount: SPARSE_CELL_MAX_COUNT,
+          cap: SPARSE_POINTS_CAP,
+        }).map((i) => points[i]);
+        if (sparse.length > 0) {
+          data.push({
+            type: 'scattergl' as const,
+            mode: 'markers' as const,
+            name: 'sparse rows',
+            x: sparse.map((p) => p.x),
+            y: sparse.map((p) => p.y),
+            text: sparse.map((p) => p.label),
+            customdata: sparse.map((p) => [p.key]),
+            marker: {
+              size: Math.max(3, markerSize),
+              color: themeColors.textColor,
+              opacity: 0.55,
+              line: { width: 0 },
+            },
+            hovertemplate: `%{text}<br>${hoverTail}`,
+            showlegend: false,
+          });
+        }
       }
     } else if (config.color_col && numericColour) {
       // `customdata` is one array per point: slot 0 is the selection key.
@@ -511,7 +551,7 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
           opacity: pointOpacity(points),
           size: pointSize(points),
           color: points.map((p) => num(p.colour) ?? 0),
-          colorscale: colourScale,
+          colorscale: plotlyColorscale(colourScale),
           showscale: true,
           colorbar: { thickness: 10, len: 0.75, title: { text: config.color_col, side: 'right' } },
         },
@@ -776,6 +816,7 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
     legendPos,
     densityView,
     densityBins,
+    densityScale,
     markedKeys,
     selectionActive,
     selectionRevision,
@@ -786,6 +827,7 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
     pinnedColours,
     quadrantLabelColor,
     themeColors.zeroLineColor,
+    themeColors.textColor,
   ]);
 
   // Box select, click and deselect all land on the same

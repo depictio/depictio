@@ -22,6 +22,11 @@ describe('sidesLocus', () => {
 });
 
 describe('initialLocus', () => {
+  it('lets a dashboard pick beat the locus the reader left the view at', () => {
+    const args = { persisted: 'chr1:5-9', location: 'chr10:100-400', bothSides: false };
+    expect(initialLocus({ ...args, opening: 'filter' })).toBe('chr10:100-400');
+    expect(initialLocus({ ...args, opening: 'first_call' })).toBe('chr1:5-9');
+  });
   it('zooms into the region on the payload location when it lies inside it', () => {
     const region = { chrom: 'chr1', start: 0, end: Number.POSITIVE_INFINITY };
     const args = { region, regionLocus: 'chr1', persisted: null, bothSides: false };
@@ -38,6 +43,20 @@ describe('initialLocus', () => {
         bothSides: false,
       }),
     ).toBe('chr8:100-200');
+  });
+  it('opens on the window another genome tile has in force when the opening is a default', () => {
+    const args = {
+      window: 'chr12:6,000-9,000',
+      persisted: 'chr1:5-9',
+      location: 'chr4:1-2',
+      bothSides: false,
+    };
+    expect(initialLocus({ ...args, opening: 'data' })).toBe('chr12:6,000-9,000');
+    expect(initialLocus({ ...args, opening: 'preset' })).toBe('chr12:6,000-9,000');
+    // A place the dashboard asked for is not a default: it keeps the view.
+    expect(initialLocus({ ...args, opening: 'yaml' })).toBe('chr1:5-9');
+    expect(initialLocus({ ...args, opening: 'first_call' })).toBe('chr1:5-9');
+    expect(initialLocus({ ...args, opening: 'filter' })).toBe('chr4:1-2');
   });
   it('ignores an empty hand-over', () => {
     expect(

@@ -1404,6 +1404,12 @@ class TableLiteComponent(BaseLiteComponent):
     row_selection_column: str | None = Field(
         default=None, description="Column to extract from selected rows"
     )
+    row_selection_mode: Literal["multiple", "single"] = Field(
+        default="multiple",
+        description="'single': a click picks one row and drops the previous one (a table "
+        "driving a genome browser, which frames one feature); 'multiple' adds it to the "
+        "selection",
+    )
 
 
 class ImageLiteComponent(BaseLiteComponent):
@@ -1510,6 +1516,29 @@ class JBrowseLocusSource(BaseModel):
     label_column: str | None = Field(
         default=None, description="Column shown as the name of a call in the stepper"
     )
+    locate_column: str | None = Field(
+        default=None,
+        description="For rows without coordinates: the column whose value (a transcript "
+        "id) the gene search looks up first, before label_column",
+    )
+    frame_gene: bool = Field(
+        default=False,
+        description="Frame the whole gene a picked row names in label_column (found by the "
+        "gene search), not only the row's own span (an ORF, an exon, a transcript)",
+    )
+    rank_track: int | None = Field(
+        default=None,
+        ge=1,
+        le=50,
+        description="Add a track of the first N calls (sort_by order, under the dashboard "
+        "filters but not the selections) named by rank and label_column ('#1 GENE')",
+    )
+    rank_color_by: str | None = Field(
+        default=None,
+        description="With rank_track: the column whose category colour (the dashboard's "
+        "category_colors) fills each call of the rank track, as in a genome_view coloured "
+        "by the same column; grey otherwise",
+    )
     mate: JBrowseMateSource | None = Field(
         default=None,
         description="Columns of the second side of a call (fusion partner, breakend B)",
@@ -1566,6 +1595,15 @@ class JBrowseVariantColor(BaseModel):
         pattern=r"^[A-Za-z_][A-Za-z0-9_]*$",
         description="VCF INFO field read from each variant (snpEff: 'ANN')",
     )
+    fallback_color: str | None = Field(
+        default=None,
+        description="Colour of a variant none of the categories matches (a CSS colour); "
+        "unset = JBrowse's own default",
+    )
+    fallback_label: str | None = Field(
+        default=None,
+        description="Name of that fallback in the tile's colour key; unset = 'other'",
+    )
 
 
 class JBrowseVariantLabel(BaseModel):
@@ -1588,6 +1626,13 @@ class JBrowseVariantLabel(BaseModel):
         ge=0,
         le=200,
         description="Index of the '|'-separated part shown (VEP CSQ SYMBOL: 3, snpEff ANN gene: 3)",
+    )
+    score_field: str | None = Field(
+        default=None,
+        pattern=r"^[A-Za-z_][A-Za-z0-9_]*$",
+        description="VCF INFO field whose value follows the name in brackets, e.g. "
+        "'RankScore' (``family:score``, the part after the colon) so the ranked "
+        "variant reads 'GENE (14)'; a variant without it keeps the bare name",
     )
 
 
@@ -1759,6 +1804,13 @@ class JBrowseLiteComponent(BaseLiteComponent):
         ge=0,
         le=200,
         description="Tracks shown when no filter is active (first rows of the manifest)",
+    )
+    initial_categories: list[str] = Field(
+        default_factory=list,
+        description="Track categories (the manifest's category column) shown when no filter "
+        "is active, instead of the first `initial_tracks` rows: the tracks of those "
+        "categories that belong to the sample of the first such row, so a caller missing "
+        "from a run leaves a gap rather than pulling in the next sample's track",
     )
     default_tracks: list[str] = Field(
         default_factory=list,

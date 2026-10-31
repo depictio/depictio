@@ -7,6 +7,7 @@
 # them; every output here reads one of those two tables.
 id: epitopeprediction
 name: nf-core/epitopeprediction
+version: "1.0.0"
 description: >-
   MHC binding predictions of nf-core/epitopeprediction: every peptide of every
   sample scored against its alleles by each prediction tool (affinity, IC50,

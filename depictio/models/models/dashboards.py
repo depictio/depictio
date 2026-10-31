@@ -63,6 +63,7 @@ _JBROWSE_FIELDS: tuple[str, ...] = (
     "track_mode",
     "max_tracks",
     "initial_tracks",
+    "initial_categories",
     "default_tracks",
     "show_annotation",
     "ucsc_tracks",
@@ -1138,6 +1139,7 @@ class DashboardDataLite(BaseModel):
                 "filterable",
                 "row_selection_enabled",
                 "row_selection_column",
+                "row_selection_mode",
             ],
             "image": [
                 # mandatory
@@ -1726,6 +1728,8 @@ class DashboardDataLite(BaseModel):
                     lite_comp["row_selection_enabled"] = True
                     if comp.get("row_selection_column"):
                         lite_comp["row_selection_column"] = comp["row_selection_column"]
+                    if comp.get("row_selection_mode") == "single":
+                        lite_comp["row_selection_mode"] = "single"
 
             elif comp_type == "image":
                 lite_comp["image_column"] = comp.get("image_column", "")
@@ -2223,6 +2227,7 @@ class DashboardDataLite(BaseModel):
                         # Row selection filtering fields
                         "row_selection_enabled": comp_dict.get("row_selection_enabled", False),
                         "row_selection_column": comp_dict.get("row_selection_column"),
+                        "row_selection_mode": comp_dict.get("row_selection_mode", "multiple"),
                     }
                 )
                 for f in ["description", "title_size", "title_align"]:

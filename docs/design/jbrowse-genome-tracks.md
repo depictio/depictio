@@ -77,6 +77,10 @@ The consequences for a template:
   one detail tile.
 - A template with a browser pins the Plotly tiles to their Plotly view, so no
   toggle leads to a second locus view of the same rows.
+- A navigator opens in pan mode (a drag moves the axis, the wheel zooms; hover
+  and clicks work). `top_stars: N` draws the N best scores as gold, silver and
+  bronze six-pointed stars (two overlaid triangles: GenomeSpy has no star
+  shape), and `hover_cols` adds columns to the hover tooltip.
 
 ### Open in genome browser
 
@@ -207,6 +211,7 @@ only the present ones when they are uploaded.
   track_mode: filtered        # or `all`: every track, filters ignored
   max_tracks: 16              # cap on tracks shown under a filter
   initial_tracks: 6           # tracks shown when nothing is filtered
+  initial_categories: []      # or: open on these track categories (of the first one's sample) instead
   default_tracks: []          # track ids always shown
   show_annotation: true       # the preset's gene track
   ucsc_tracks: [clinvarMain]  # UCSC tracks opened by default (see below)
@@ -278,6 +283,53 @@ without restating the display.
   locus becomes the first N calls (in `sort_by` order), framed together when
   they lie on one chromosome within `max_span` bases (default 1 Mb), else the
   first call alone: the best few variants of one locus show in one window.
+  The window is centred on the first call. Rows without coordinates are
+  placed by a gene search on `locate_column` (a transcript id), else
+  `label_column`.
+- The rows the view points at (the filtered rows, else the best three of the
+  calls the opening frames) come back as `picked`: one unpadded locus per row, the names a feature carries
+  (the `locate_column` value, else the label) and per row the key columns
+  (chromosome, start, locate column). The viewer rewrites each track's
+  renderer colours (`color1`, `color3`, `outline`, `labels.nameColor`) as a
+  jexl test in front of the track's own colour: a variant (or a call of the
+  rank track) is picked by position, an annotation feature by name, version
+  suffix ignored, an exon through its transcript, or by its gene symbol
+  (`geneName` of UCSC's knownGene, `name2` of ncbiRefSeq; knownGene's `name2`
+  is a UCSC id and `geneName2` a UniProt one). Picked features take the
+  theme's primary colour, an outline and a star in front of their name; the
+  others keep theirs. At the opening (`picked.medals`) the best three calls
+  keep their own colour and wear a gold, silver and bronze star and name
+  instead. With a `locate_column`, `picked.genes` names the gene a picked
+  transcript sits under (an Ensembl id resolved to its symbol through the
+  UCSC search): that gene is starred, not coloured. The gene annotation
+  groups transcripts under their symbol (`aggregateField: geneName` for
+  knownGene, `name2` for ncbiRefSeq; JBrowse's default is the UniProt id).
+  The canvas renderer sends the client its layout and labels, not the
+  features, so a starred label is how the viewer finds the pick: the track
+  grows to show it (up to 320 px) and scrolls to it once. A double click on
+  the bottom edge of a track (its last pixels, the handle, or the gap to the
+  next track, found by geometry) fits it to its content (up to 1200 px). A
+  navigation asked before the view knows its assembly waits for it. A table row
+  carrying every key column with the same values (any collection, matched by
+  column name like a filter) wears the same colour as a left bar, and so does
+  a row selected in a table.
+- `rank_track: N` adds a feature track of the first N calls (`sort_by` order,
+  under the dashboard filters but not the `*_selection` ones, so a call keeps
+  its rank once clicked), each named `#rank label` (a star in front of the
+  first three), under the gene annotation. `rank_color_by: <column>` fills
+  each call with that column's dashboard category colour, as a genome_view
+  coloured by it does. A picked row below the top is drawn too, by its label,
+  and an open view takes the new features into the existing track config.
+  Its features live in the config (`FromConfigAdapter`); a reader whose track
+  set was saved before the track existed sees it open once.
+- A table driving the browser can set `row_selection_mode: single`: a click
+  replaces the picked row instead of adding to it, so the browser frames one
+  feature.
+- A click on a feature opens depictio's panel instead of JBrowse's widget:
+  the panel reads the JSON JBrowse hands its widget (nothing is refetched).
+  A gene model shows its symbol as the title, then the transcript, gene,
+  UniProt and UCSC ids, biotype, class and tags; the rest stays under
+  "All fields".
 
 **Chrome:** the tile's settings action (the same icon and *Controls* popover
 as every other tile's viz settings) holds one switch per display option,
@@ -345,7 +397,10 @@ render payload carries `location` and `opening`, the level that produced it; the
 first level that gives a locus wins:
 
 1. `filter`: a dashboard filter narrowed the `locus_from` collection to at most
-   `max_rows` rows (a picked table row, a volcano point, a gene);
+   `max_rows` rows (a picked table row, a volcano point, a gene). With
+   `frame_gene: true` the frame also holds the whole gene the row names in
+   `label_column` (the UCSC gene search), so a picked ORF or transcript opens
+   inside its gene, in the row's own chromosome naming;
 2. `yaml`: the tile's `location`;
 3. `first_call`: the first row of `locus_from` (of the filtered rows, when there
    are some), ordered by `sort_by`, `descending` by default; without `sort_by`,
@@ -736,7 +791,7 @@ a fake run tree only.
 | chipseq 1.2.0 | Genome tracks section | bigWig (ChIP and input), MACS2 peaks, BAM | A peak's signal against its input | Live |
 | cutandrun 3.1 | Genome tracks section | bigWig, SEACR/MACS2 peaks, BAM | A target's peaks across replicates | Live |
 | rnaseq 3.26.0 | Genome tracks section | Stranded bigWig, BAM | A gene's coverage per condition | Live |
-| viralrecon 3.0.0 (`v2.yaml`) | Coverage, Variants, Gene, Sample | VCF (snpEff), BAM | A mutation's reads and the amplicon under it | Live |
+| viralrecon 3.0.0 | Variants (navigator and browser); Coverage, Gene, Sample open it | VCF (snpEff), BAM | A mutation's reads and the amplicon under it | Live |
 | [sarek 3.10.0](jbrowse/sarek.md) | Locus, Caller concordance | VCF per caller, Manta, CRAM | A call checked against the reads, callers compared on one locus | Live |
 | [oncoanalyser 3.0.0](jbrowse/oncoanalyser.md) | Small variants, Copy number, Structural variants | PURPLE somatic, germline and SV VCFs, tumour and normal BAMs | A driver in tumour versus normal, a segment beside its breakends | Live |
 | [variantbenchmarking 1.4.0](jbrowse/variantbenchmarking.md) | Germline, Structural & CNV | FP, FN and TP VCFs (rtg-tools, Truvari) | Where a callset's errors fall | Live (germline), recipe (Truvari) |

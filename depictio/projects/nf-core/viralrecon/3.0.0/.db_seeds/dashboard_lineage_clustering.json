@@ -600,12 +600,12 @@
         "pcoa_distance": "bray_curtis",
         "axis_prefix": "PC",
         "show_density": false,
-        "point_size": 8,
-        "marker_outline_width": 1.5,
-        "plot_style": "default",
+        "point_size": null,
+        "marker_outline_width": null,
+        "plot_style": "lines",
         "default_color_by": null,
         "show_centroids": false,
-        "marker_outline": false,
+        "marker_outline": null,
         "legend_pos": "right",
         "ncontours": 14,
         "density_opacity": 0.45,
@@ -669,9 +669,56 @@
         "show_values": false,
         "show_annotations": true,
         "set_category_column": null,
-        "selection_enabled": false,
-        "selection_column": null
+        "selection_enabled": true,
+        "selection_column": "mutation_label"
       },
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "lin-intersection-table",
+      "component_type": "table",
+      "title": "Mutations in the picked intersection",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "variants_long",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c12"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Per-sample variant calls with functional annotations",
+        "data_collection_tag": "variants_long",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "746b0f3c1e4a2d7f8e5b9c12"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "Click an intersection in the UpSet above to list its mutations here.",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "ivar/variants_long",
+      "catalog_source": {
+        "toolId": "ivar",
+        "toolName": "iVar",
+        "outputId": "ivar_variants_long",
+        "use": "ivar/variants_long",
+        "description": "Per-sample annotated variant calls (long table)."
+      },
+      "section": "Mutations in an intersection",
+      "columns": [],
+      "page_size": 100,
+      "sortable": true,
+      "filterable": true,
+      "compact": false,
+      "row_selection_enabled": true,
+      "row_selection_column": "mutation_label",
+      "row_selection_mode": "multiple",
       "wf_tag": "nextflow/viralrecon"
     },
     {
@@ -820,6 +867,7 @@
       "compact": false,
       "row_selection_enabled": true,
       "row_selection_column": "sample",
+      "row_selection_mode": "multiple",
       "wf_tag": "nextflow/viralrecon"
     },
     {
@@ -889,7 +937,9 @@
         "selection_source": "table_selection",
         "linked_component": "lin-pangolin-table",
         "max_fields": 40,
-        "default_record": null
+        "default_record": null,
+        "default_record_by": null,
+        "default_record_ascending": false
       },
       "wf_tag": "nextflow/viralrecon"
     },
@@ -936,6 +986,7 @@
       "compact": false,
       "row_selection_enabled": true,
       "row_selection_column": "sample",
+      "row_selection_mode": "multiple",
       "wf_tag": "nextflow/viralrecon"
     }
   ],
@@ -1073,6 +1124,21 @@
       "y": 6,
       "w": 8,
       "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-lin-intersection-table",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 6,
       "static": false,
       "resizeHandles": [
         "se",
@@ -1245,7 +1311,23 @@
       "name": "Variant profiles",
       "icon": "mdi:set-merge",
       "color": "gray",
-      "description": "Samples placed by the mutations they share, and the mutations each lineage holds; reads best with several samples",
+      "description": "Samples placed by shared mutations; a click on an UpSet bar lists them below. Reads best with several samples",
+      "collapsed": true,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    },
+    {
+      "name": "Mutations in an intersection",
+      "icon": "mdi:table",
+      "color": "gray",
+      "description": "A click on an UpSet intersection lists its mutations, genes, effects and samples",
       "collapsed": true,
       "persistent": false,
       "pin": "top",
@@ -1341,7 +1423,7 @@
   },
   "is_public": true,
   "last_saved_ts": "2026-08-29 00:00:00",
-  "creation_time": "2026-10-22 10:02:20",
+  "creation_time": "2026-10-30 14:56:16",
   "screenshot_ts": "",
   "project_id": {
     "$oid": "746b0f3c1e4a2d7f8e5b9ca2"
@@ -1350,11 +1432,11 @@
   "parent_dashboard_id": {
     "$oid": "746b0f3c1e4a2d7f8e5b9ca2"
   },
-  "tab_order": 5,
+  "tab_order": 7,
   "main_tab_name": null,
   "tab_icon": "mdi:virus",
   "tab_icon_color": "red",
-  "tab_group": "Genomes",
+  "tab_group": "Typing",
   "parent_dashboard_title": null,
   "project_realtime": null,
   "inherited_brand_theme": null,
@@ -1363,6 +1445,6 @@
   "template_origin": {
     "template_id": "nf-core/viralrecon/3.0.0",
     "template_version": "2.0.0",
-    "imported_at": "2026-10-29 11:02:02"
+    "imported_at": "2026-10-30 14:58:06"
   }
 }

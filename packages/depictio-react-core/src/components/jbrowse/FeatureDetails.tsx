@@ -14,13 +14,12 @@ import {
   Tooltip,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
-import { reaction } from 'mobx';
 
 import { Z_LAYERS } from '../../zLayers';
 import { useFullscreenPortalTarget } from '../chrome/useFullscreenPortalTarget';
+import { type FeatureWidgetLike, type FeatureWidgetSession, watchFeatureWidgets } from './featureWidgetWatch';
 import {
   buildFeatureView,
-  isFeatureWidgetType,
   type AnnotationRow,
   type ChipGroup,
   type Fact,
@@ -33,18 +32,8 @@ const ANNOTATION_PREVIEW = 5;
 /** Genotype rows shown before "show N more" (a cohort VCF has hundreds). */
 const GENOTYPE_PREVIEW = 12;
 
-interface WidgetLike {
-  type?: string;
-  featureData?: unknown;
-  unformattedFeatureData?: unknown;
-  descriptions?: unknown;
-  track?: { configuration?: unknown } | null;
-}
-
-interface SessionLike {
-  visibleWidget?: WidgetLike;
-  hideAllWidgets: () => void;
-}
+type WidgetLike = FeatureWidgetLike;
+type SessionLike = FeatureWidgetSession;
 
 interface Shown {
   view: FeatureView;
@@ -56,9 +45,13 @@ interface Props {
   session: SessionLike;
   /** The track's display name, read at click time (`readConfObject(track.configuration, 'name')`). */
   trackNameOf?: (track: WidgetLike['track']) => string | undefined;
-  /** True while a feature widget must be left alone: the click-to-filter
-   *  reaction owns it (hides it and emits a dashboard filter). */
-  leaveWidget: (widgetType: string) => boolean;
+  /** True while a feature widget must be left alone (a caller that handles it
+   *  itself). Optional: the genome browser's click-to-filter no longer takes
+   *  the widget, it emits its filter and leaves the details to this panel. */
+  leaveWidget?: (widgetType: string) => boolean;
+  /** Sees every clicked feature's widget before this panel hides it: the
+   *  genome browser's click-to-filter reads the track from it. */
+  onFeatureWidget?: (widget: WidgetLike) => void;
 }
 
 const PortalCtx = createContext<HTMLElement | undefined>(undefined);
@@ -368,37 +361,39 @@ const Body: React.FC<{ view: FeatureView }> = ({ view }) => (
  * Depictio's replacement for JBrowse's feature details drawer.
  *
  * JBrowse opens a feature widget (`BaseFeatureWidget`, `VariantFeatureWidget`,
- * `AlignmentsFeatureWidget`) when a feature is clicked. A MobX reaction on
- * `session.visibleWidget` copies the widget's `featureData` (plain JSON), hides
+ * `AlignmentsFeatureWidget`) when a feature is clicked. `watchFeatureWidgets`
+ * hands it to `onFeatureWidget` first, then this panel copies the widget's
+ * `featureData` (plain JSON), hides
  * the widget so `ModalWidget` renders nothing for it, and shows the data in a
  * Mantine modal: portaled out of the tile (which clips its children) and, in
  * native fullscreen, into the fullscreen element. Every other widget keeps
  * JBrowse's own dialog.
  */
-const FeatureDetails: React.FC<Props> = ({ session, trackNameOf, leaveWidget }) => {
+const FeatureDetails: React.FC<Props> = ({ session, trackNameOf, leaveWidget, onFeatureWidget }) => {
   const [shown, setShown] = useState<Shown | null>(null);
   const portalTarget = useFullscreenPortalTarget();
   const leaveRef = useRef(leaveWidget);
   leaveRef.current = leaveWidget;
   const nameRef = useRef(trackNameOf);
   nameRef.current = trackNameOf;
+  const onWidgetRef = useRef(onFeatureWidget);
+  onWidgetRef.current = onFeatureWidget;
 
   useEffect(
     () =>
-      reaction(
-        () => session.visibleWidget,
-        (widget) => {
-          if (!widget || !isFeatureWidgetType(widget.type)) return;
-          if (leaveRef.current(widget.type as string)) return;
+      watchFeatureWidgets(session, {
+        onFeatureWidget: (widget) => onWidgetRef.current?.(widget),
+        show: (widget) => {
+          if (leaveRef.current?.(widget.type as string)) return false;
           const raw = widget.featureData ?? widget.unformattedFeatureData;
-          if (!raw || typeof raw !== 'object') return;
+          if (!raw || typeof raw !== 'object') return false;
           let data: Record<string, unknown>;
           let descriptions: unknown;
           try {
             data = JSON.parse(JSON.stringify(raw));
             descriptions = widget.descriptions ? JSON.parse(JSON.stringify(widget.descriptions)) : undefined;
           } catch {
-            return; // not plain JSON: leave JBrowse's drawer to show it
+            return false; // not plain JSON: leave JBrowse's drawer to show it
           }
           let trackName: string | undefined;
           try {
@@ -411,12 +406,12 @@ const FeatureDetails: React.FC<Props> = ({ session, trackNameOf, leaveWidget }) 
             view = buildFeatureView(data, { descriptions, widgetType: widget.type });
           } catch (e) {
             console.error('Feature panel could not read the feature; showing JBrowse details', e);
-            return;
+            return false;
           }
-          session.hideAllWidgets();
           setShown({ view, trackName });
+          return true;
         },
-      ),
+      }),
     [session],
   );
 

@@ -13,9 +13,9 @@ import {
 } from './interactionMode';
 
 describe('initialInteractionMode', () => {
-  it('opens as a plain pointer when the tile says nothing', () => {
-    expect(initialInteractionMode({})).toBe('pointer');
-    expect(initialInteractionMode({ interaction_mode: null, drag_mode: null })).toBe('pointer');
+  it('opens in pan when the tile says nothing', () => {
+    expect(initialInteractionMode({})).toBe('pan');
+    expect(initialInteractionMode({ interaction_mode: null, drag_mode: null })).toBe('pan');
   });
 
   it('keeps the older drag_mode as the opening mode', () => {

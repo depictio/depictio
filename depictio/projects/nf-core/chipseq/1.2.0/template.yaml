@@ -579,6 +579,22 @@ workflows:
               "gene_name": "Symbol of the nearest gene"
               "gene_type": "Biotype of the nearest gene; empty when the run annotated against a plain GTF"
 
+      - data_collection_tag: "homer_feature_classes"
+        description: "Peaks per library and HOMER feature class, the long form the feature-class composition reads"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/chipseq/feature_classes.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Library the peaks were called in"
+              "annotation_class": "Coarse HOMER feature class; unclassified peaks are counted as Unclassified"
+              "peak_count": "Peaks of that library in that feature class"
+              "rank": "Constant label of the one level (Feature class) the composition tile reads"
+
       - data_collection_tag: "homer_tss_distance_profile"
         description: "Where each sample's peaks sit relative to the nearest TSS, counted in 250 bp bins across a 20 kb window"
         config:
@@ -919,6 +935,26 @@ links:
 
   - source_dc_tag: "design"
     source_column: "sample_id"
+    target_dc_tag: "homer_feature_classes"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the feature-class composition by the samples picked in the left rail"
+    enabled: true
+
+  - source_dc_tag: "homer_annotated_peaks"
+    source_column: "annotation_class"
+    target_dc_tag: "homer_feature_classes"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "annotation_class"
+    description: "A feature class picked on the annotation narrows the feature-class composition"
+    enabled: true
+
+  - source_dc_tag: "design"
+    source_column: "sample_id"
     target_dc_tag: "macs2_summit_profile"
     target_type: "table"
     link_config:
@@ -970,27 +1006,23 @@ links:
   # samples merged into it (EZH2_IP, FOXA1_IP) and a contrast after the two
   # groups compared (EZH2_IP_NTKOvsEZH2_IP_TKO). The `wildcard` resolver matches
   # a target value that starts with the antibody, which is what makes the
-  # persistent antibody filter reach the Consensus and Differential binding
-  # tabs. A per-sample link cannot exist there: neither collection has a sample
-  # column, because both aggregate over samples by construction.
-  - source_dc_tag: "design"
-    source_column: "antibody"
-    target_dc_tag: "macs2_consensus_boolean"
-    target_type: "table"
-    link_config:
-      resolver: "wildcard"
-      target_field: "consensus_set"
-    description: "Narrow the consensus overlap panels to the antibody picked in the left panel"
-    enabled: true
-
-  - source_dc_tag: "design"
-    source_column: "antibody"
+  # persistent antibody filter reach the Differential binding tab. A per-sample
+  # link cannot exist there: neither collection has a sample column, because
+  # both aggregate over samples by construction.
+  #
+  # The Consensus tab is the exception, on purpose: it picks its set with its own
+  # `Consensus set` filter, tab-local, and the persistent antibody filter does not
+  # reach it. Linked, an antibody picked on another tab (the Locus tab, say)
+  # carried over and silently pre-filtered sets the reader had not touched. The
+  # set picked there reaches the signal heatmap on the shared label.
+  - source_dc_tag: "macs2_consensus_boolean"
+    source_column: "consensus_set"
     target_dc_tag: "macs2_consensus_fc"
     target_type: "table"
     link_config:
-      resolver: "wildcard"
+      resolver: "direct"
       target_field: "consensus_set"
-    description: "Narrow the consensus signal heatmap to the antibody picked in the left panel"
+    description: "Narrow the consensus signal heatmap to the consensus set picked on the Consensus tab"
     enabled: true
 
   - source_dc_tag: "design"

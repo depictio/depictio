@@ -1,8 +1,9 @@
 """nf-core/rnavar genome-browser manifest and the design-group recipes behind the redone Overview.
 
 The manifest lists the HaplotypeCaller VCF and the BAM of every sample of the hub,
-with the design group as a column the tile colours by, and opens on the calls of one sample
-per group followed by the reads of the strongest call's sample. The group recipes (window
+with the design group as a column the tile colours by, and opens on the calls of the replicates
+of one group followed by their reads: the group of the top shared PASS site (``shared_variants``),
+else the group of the strongest call. The group recipes (window
 lanes, replicate agreement, genotype concordance) read the calls and the hub. Nothing
 here reads a real track file: the reference run is tables only.
 """
@@ -44,7 +45,9 @@ def _tracks(root: Path, hub: pl.DataFrame = HUB, extra: dict | None = None, **kw
     )
 
 
-def test_present_files_are_listed_vcfs_first_and_bams_need_their_index(tmp_path: Path) -> None:
+def test_present_files_are_listed_opening_group_first_and_bams_need_their_index(
+    tmp_path: Path,
+) -> None:
     for s in ("A_1", "B_1"):
         _touch(
             tmp_path,
@@ -54,15 +57,17 @@ def test_present_files_are_listed_vcfs_first_and_bams_need_their_index(tmp_path:
     _touch(tmp_path, "preprocessing/A_1/A_1.md.bam", "preprocessing/A_1/A_1.md.bam.bai")
     _touch(tmp_path, "preprocessing/B_1/B_1.md.bam")  # no index: left out
     df = _tracks(tmp_path)
+    # No shared table, no calls: group A (the first by name) opens, its VCF then its BAM,
+    # then the other group's VCF.
     assert df["track_id"].to_list() == [
         "A_1.haplotypecaller",
-        "B_1.haplotypecaller",
         "A_1.alignments",
+        "B_1.haplotypecaller",
     ]
-    assert df["format"].to_list() == ["vcf", "vcf", "bam"]
+    assert df["format"].to_list() == ["vcf", "bam", "vcf"]
     assert df["order"].to_list() == [1, 2, 3]
-    assert df["cell_line"].to_list() == ["A", "B", "A"]
-    assert df["uri"].to_list()[-1] == "preprocessing/A_1/A_1.md.bam"
+    assert df["cell_line"].to_list() == ["A", "A", "B"]
+    assert df["uri"].to_list()[1] == "preprocessing/A_1/A_1.md.bam"
 
 
 def test_annotated_vcf_comes_first_when_the_run_annotated(tmp_path: Path) -> None:
@@ -79,8 +84,8 @@ def test_annotated_vcf_comes_first_when_the_run_annotated(tmp_path: Path) -> Non
 def test_tables_only_run_keeps_every_row(tmp_path: Path) -> None:
     df = _tracks(tmp_path)
     assert df.height == 8
-    # One call set per group, the reads of the first one, the other calls, the other reads.
-    assert df["format"].to_list() == ["vcf", "vcf", "bam", "vcf", "vcf", "bam", "bam", "bam"]
+    # The opening group's calls then reads, then the other group's calls then reads.
+    assert df["format"].to_list() == ["vcf", "vcf", "bam", "bam", "vcf", "vcf", "bam", "bam"]
     assert df["track_id"].is_unique().all()
 
 
@@ -101,16 +106,48 @@ def _strongest(sample: str) -> pl.DataFrame:
     return pl.DataFrame(rows, schema={"sample": pl.Utf8, "qual": pl.Float64}, orient="row")
 
 
-def test_the_reads_of_the_strongest_call_open_beside_the_calls(tmp_path: Path) -> None:
+def test_without_shared_variants_the_group_of_the_strongest_call_opens(tmp_path: Path) -> None:
     df = _tracks(tmp_path, extra={"variants": _strongest("B_2")})
-    # B_2 stands for group B: its calls open, and its alignment follows them at once.
+    # B_2 stands for group B: the calls of its replicates open, their alignments follow at once.
     assert df["track_id"].to_list()[:4] == [
-        "A_1.haplotypecaller",
+        "B_1.haplotypecaller",
         "B_2.haplotypecaller",
+        "B_1.alignments",
         "B_2.alignments",
-        "A_2.haplotypecaller",
     ]
-    assert df.filter(pl.col("format") == "bam")["track_id"].to_list()[0] == "B_2.alignments"
+    assert df.filter(pl.col("format") == "bam")["track_id"].to_list()[0] == "B_1.alignments"
+    assert df["order"].to_list() == list(range(1, df.height + 1))
+
+
+def _shared(top_group: str) -> pl.DataFrame:
+    """One site per group; `top_group` holds the best-supported one."""
+    rows = [("chr1", 100, g, 3.0 if g == top_group else 2.0) for g in ("A", "B")]
+    return pl.DataFrame(
+        rows,
+        schema={
+            "chrom": pl.Utf8,
+            "pos": pl.Int64,
+            "cell_line": pl.Utf8,
+            "support_score": pl.Float64,
+        },
+        orient="row",
+    )
+
+
+def test_the_top_shared_variant_group_opens_with_its_calls_then_its_reads(tmp_path: Path) -> None:
+    # The strongest QUAL sits in group A, the top shared site in group B: shared_variants wins.
+    df = _tracks(tmp_path, extra={"shared": _shared("B"), "variants": _strongest("A_1")})
+    assert df["track_id"].to_list() == [
+        "B_1.haplotypecaller",
+        "B_2.haplotypecaller",
+        "B_1.alignments",
+        "B_2.alignments",
+        "A_1.haplotypecaller",
+        "A_2.haplotypecaller",
+        "A_1.alignments",
+        "A_2.alignments",
+    ]
+    assert df["cell_line"].to_list()[:4] == ["B", "B", "B", "B"]
     assert df["order"].to_list() == list(range(1, df.height + 1))
 
 
@@ -125,8 +162,8 @@ def test_a_bam_without_its_index_is_not_the_opening_reads(tmp_path: Path) -> Non
     _touch(tmp_path, "preprocessing/B_2/B_2.md.bam")  # no index: left out
     df = _tracks(tmp_path, extra={"variants": _strongest("B_2")})
     assert df["track_id"].to_list() == [
-        "A_1.haplotypecaller",
         "B_2.haplotypecaller",
+        "A_1.haplotypecaller",
         "A_1.alignments",
     ]
 
@@ -261,7 +298,7 @@ def test_template_wires_the_override_and_the_links() -> None:
         assert pair in links
 
 
-def test_rows_open_on_one_sample_per_group_in_the_design_order(tmp_path: Path) -> None:
+def test_the_other_groups_follow_one_sample_each_in_the_design_order(tmp_path: Path) -> None:
     hub = pl.DataFrame(
         {
             "sample": ["B_1", "B_2", "A_1", "A_2", "C_1"],
@@ -270,8 +307,9 @@ def test_rows_open_on_one_sample_per_group_in_the_design_order(tmp_path: Path) -
     )
     df = _tracks(tmp_path, hub=hub)
     vcfs = df.filter(pl.col("format") == "vcf")["sample"].to_list()
-    # The hub lists B, A, C: one sample of each group first, then the replicates.
-    assert vcfs == ["B_1", "A_1", "C_1", "A_2", "B_2"]
+    # No shared table, no calls: A (first by name) opens with both replicates; the hub lists
+    # B, A, C, so B and C each give one sample, in that order, before the other replicates.
+    assert vcfs == ["A_1", "A_2", "B_1", "C_1", "B_2"]
     assert df["order"].to_list() == list(range(1, df.height + 1))
 
 

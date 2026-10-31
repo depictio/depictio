@@ -599,6 +599,10 @@ class CatalogTool(BaseModel):
 
     id: str
     name: str
+    # The module's own revision (semver), held to its content by
+    # `depictio/catalog/catalog_versions.lock.json`. A template's lock entry records
+    # the revision of each module it consumes, so bumping a module bumps them too.
+    version: str = Field(default="1.0.0", pattern=r"^\d+\.\d+\.\d+$")
     description: str = ""
     homepage: str | None = None
     # Where a non-nf-core source (Snakemake wrapper / Galaxy tool) was fetched

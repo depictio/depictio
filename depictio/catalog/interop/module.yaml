@@ -6,6 +6,7 @@
 # MultiQC's `interop` module reads.
 id: interop
 name: Illumina InterOp
+version: "1.0.0"
 source_url: https://github.com/Illumina/interop
 homepage: https://illumina.github.io/interop/summary_table.html
 description: >-

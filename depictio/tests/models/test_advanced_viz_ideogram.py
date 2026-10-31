@@ -122,11 +122,18 @@ def test_the_server_never_samples_it():
 # ---------------------------------------------------------------------------
 
 
+def test_lock_assembly_is_a_tri_state():
+    assert IdeogramConfig(assembly="hg38").lock_assembly is None
+    assert IdeogramConfig(assembly="hg38", lock_assembly=False).lock_assembly is False
+    assert IdeogramConfig(lock_assembly=True).lock_assembly is True
+
+
 def test_defaults():
     config = IdeogramConfig()
     assert config.mode == "marks"
     assert config.orientation == "horizontal"
     assert config.assembly is None
+    assert config.lock_assembly is None
     assert config.bin_size is None
     assert config.chromosomes is None
     assert config.facet_by_sample is True

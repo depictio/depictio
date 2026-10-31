@@ -84,6 +84,7 @@ describe('labels', () => {
     expect(regionNoun(['Consensus'])).toBe('consensus');
     expect(regionNoun(['Genes', 'Peaks'])).toBe('region');
     expect(regionNoun([])).toBe('region');
+    expect(regionNoun(['variants_long'])).toBe('region');
   });
 
   it('captions a region with its label, else its locus, and the merged sample count', () => {

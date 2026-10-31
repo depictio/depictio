@@ -8,6 +8,7 @@
 # the database hits, most of them below the call threshold.
 id: fcsgx
 name: FCS-GX
+version: "1.0.0"
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/fcsgx/rungx
 homepage: https://github.com/ncbi/fcs
 biotools_url: null

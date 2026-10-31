@@ -2,11 +2,22 @@
 # seeded dashboards. Every rule it follows is written out in
 # depictio/projects/nf-core/RULES.md.
 #
+# The family has eight tabs: Overview, MultiQC, Sample QC, Coverage & Depth,
+# Variants, Gene, Sample and Lineage & Clustering. The Variants tab holds the
+# only genome browser, on the `tracks` collection, linked to a GenomeSpy
+# navigator of the calls; the Coverage, Gene and Sample tabs reach it through
+# the Open in genome browser action of their genomic plots. Gene and Sample
+# each open on one pick.
+#
 # Routes: summary_metrics is the sample hub (the source of every link in
 # template.yaml). A nanopore run (IS_NANOPORE) prunes it with the illumina-only
 # variant collections, so the tabs keep a tab-local filter on a collection that
 # route keeps (mosdepth, Pangolin, Nextclade, multiqc_data). A non-SARS run has
 # no Pangolin or Nextclade output and loses those tiles with their data.
+#
+# Tables are full width in this family (a narrower table is only allowed beside
+# its linked record card), so where a section needs a narrow pick list it draws
+# a selectable figure, and the table sits in a collapsed section below.
 main_dashboard:
   title: nf-core/viralrecon
   subtitle: Viral genomes, from reads to variants, consensus and lineage
@@ -170,7 +181,9 @@ main_dashboard:
       ### About this dashboard
       nf-core/viralrecon aligns each sample's reads to the viral reference, calls its variants, builds a consensus genome and names its lineage. This page sums up one run; each tab behind it answers one question, in the order of the steps below.
 
-      The sample filters in the left panel apply to every tab: narrow the samples once and the whole dashboard follows. A bar above a section narrows that section only.
+      Read the tabs from left to right: data quality first (Sample QC, Coverage & Depth), then the mutations, from the cohort (Variants) to one gene (Gene) to one sample (Sample), then what they mean for typing (Lineage & Clustering).
+
+      The sample filters in the left panel apply to every tab: narrow the samples once and the whole dashboard follows, and pin one sample there to open the Sample tab on it. A bar above a section narrows that section only.
     tag: vr-ov-about
     index: ov-about
     layout: {x: 0, y: 1, w: 5, h: 3}
@@ -202,8 +215,8 @@ main_dashboard:
       1. ![](icon:mdi:content-cut) **Trim** Adapters cut by fastp · [Settings](params:fastp) · [MultiQC](tab:MultiQC)
       2. ![](icon:mdi:target) **Align** Bowtie 2, primers clipped by iVar · [Settings](params:ivar_trim) · [Sample QC](tab:Sample QC)
       3. ![](icon:mdi:chart-areaspline) **Cover** Depth by mosdepth · [Settings](params:mosdepth) · [Coverage](tab:Coverage & Depth)
-      4. ![](icon:mdi:dna) **Call** Variants by {{param:variant_caller}}, effects by snpEff · [Settings](params:variant) · [Variants](tab:Variants)
-      5. ![](icon:mdi:source-merge) **Consensus** One genome per sample · [Settings](params:consensus) · [Sample QC](tab:Sample QC)
+      4. ![](icon:mdi:dna) **Call** Variants by {{param:variant_caller}}, effects by snpEff · [Settings](params:variant) · [Variants](tab:Variants) · [Gene](tab:Gene)
+      5. ![](icon:mdi:source-merge) **Consensus** One genome per sample · [Settings](params:consensus) · [Sample QC](tab:Sample QC) · [Sample](tab:Sample)
       6. ![](icon:mdi:virus) **Type** Pangolin lineage, Nextclade clade · [Settings](params:nextclade) · [Lineages](tab:Lineage & Clustering)
       :::
     tag: vr-ov-steps
@@ -230,7 +243,7 @@ main_dashboard:
     threshold_direction: min
     display:
       icon_name: mdi:flask-outline
-      icon_color: orange
+      icon_color: blue
       caption: against the 1,000-read floor for calling
       link: tab:MultiQC
       decimals: 0
@@ -251,7 +264,7 @@ main_dashboard:
     secondary_layout: box_plot
     display:
       icon_name: mdi:chart-line
-      icon_color: indigo
+      icon_color: cyan
       caption: median per sample, with its spread
       link: tab:Sample QC
       decimals: 0
@@ -273,7 +286,7 @@ main_dashboard:
     coverage_max: 100
     display:
       icon_name: mdi:chart-areaspline
-      icon_color: teal
+      icon_color: cyan.8
       caption: median share of the genome
       link: tab:Coverage & Depth
       decimals: 1
@@ -298,7 +311,7 @@ main_dashboard:
     secondary_layout: box_plot
     display:
       icon_name: mdi:dna
-      icon_color: grape
+      icon_color: violet
       caption: median per sample, with its spread
       link: tab:Variants
       decimals: 0
@@ -390,11 +403,11 @@ main_dashboard:
     tag: vr-ov-hl-qc-score
     index: ov-hl-qc-score
     layout: {x: 4, y: 2, w: 4, h: 5}
-  # top_n_labels is 0 on the source: mutation labels pile up over the points.
+  # The navigator names no point: mutation labels would pile up over the dots.
   - component_type: highlight
     section: Findings
     source_tab: Variants
-    source_component: var-manhattan
+    source_component: var-navigator
     caption: One dot per call along the genome, as high as its allele frequency, coloured by effect; above the line, it enters the consensus.
     hide_legend: true
     tag: vr-ov-hl-manhattan
@@ -418,8 +431,12 @@ main_dashboard:
       - [Sample QC](tab:Sample QC)
       - [Coverage & Depth](tab:Coverage & Depth)
 
-      ### Genomes
+      ### Mutations
       - [Variants](tab:Variants)
+      - [Gene](tab:Gene)
+      - [Sample](tab:Sample)
+
+      ### Typing
       - [Lineage & Clustering](tab:Lineage & Clustering)
     section: How to read this dashboard
     tag: vr-ov-how-to-read
@@ -776,7 +793,7 @@ tabs:
   tab_group: Data & QC
   tab_order: 2
   tab_icon: mdi:stethoscope
-  tab_icon_color: indigo
+  tab_icon_color: blue
   icon: /assets/images/workflows/nf-core.png
   icon_color: green
   workflow_system: nf-core
@@ -786,20 +803,26 @@ tabs:
   filter_sections:
   - name: Variant yield
     icon: mdi:filter-variant
-    color: indigo
+    color: blue
     description: Narrows the samples by the calls they produced and the bases they miss
   grid_sections:
   - name: QC at a glance
     icon: mdi:counter
-    color: indigo
+    color: blue
     description: Reads, depth and breadth over the samples in view
-  - name: Diagnostics
+  # The scatter and the record card of the sample picked in it share one screen.
+  - name: Depth and breadth
     icon: mdi:chart-scatter-plot
-    color: indigo
-    description: Depth against breadth, then the consensus as Nextclade reads it
+    color: blue
+    description: Depth against breadth, with the record of the sample picked in it
+    display: linked
+  - name: Diagnostics
+    icon: mdi:shield-check-outline
+    color: blue
+    description: The consensus as Nextclade reads it
   - name: Breadth per sample
     icon: mdi:chart-bar
-    color: indigo
+    color: blue
     description: Genome covered at 1x and at 10x, sample by sample
   components:
   # The tab's intro: the method, with its link, and how to read the tab.
@@ -823,7 +846,7 @@ tabs:
     column_type: float64
     display:
       icon_name: mdi:dna
-      custom_color: grape
+      custom_color: blue
     section: Variant yield
     group: Variant counts
     tag: vr-qc-filter-snps
@@ -838,7 +861,7 @@ tabs:
     column_type: float64
     display:
       icon_name: mdi:dna
-      custom_color: violet
+      custom_color: blue
     section: Variant yield
     group: Variant counts
     tag: vr-qc-filter-indels
@@ -853,7 +876,7 @@ tabs:
     column_type: int64
     display:
       icon_name: mdi:alert-outline
-      custom_color: orange
+      custom_color: blue
     section: Variant yield
     group: Consensus
     tag: vr-qc-filter-missing
@@ -873,7 +896,7 @@ tabs:
     threshold_direction: min
     display:
       icon_name: mdi:target
-      icon_color: indigo.4
+      icon_color: blue.4
       caption: samples against the 1,000-read floor
       decimals: 0
     section: QC at a glance
@@ -894,7 +917,7 @@ tabs:
     coverage_max: 100
     display:
       icon_name: mdi:percent-outline
-      icon_color: indigo.6
+      icon_color: blue.6
       caption: median share of each sample's reads
       decimals: 1
     section: QC at a glance
@@ -914,7 +937,7 @@ tabs:
     secondary_layout: box_plot
     display:
       icon_name: mdi:chart-line
-      icon_color: indigo.8
+      icon_color: blue.8
       caption: median per sample, with its spread
       decimals: 0
     section: QC at a glance
@@ -934,7 +957,7 @@ tabs:
     secondary_layout: histogram
     display:
       icon_name: mdi:chart-areaspline
-      icon_color: indigo.9
+      icon_color: blue.9
       caption: median, with its distribution
       decimals: 1
     section: QC at a glance
@@ -973,12 +996,12 @@ tabs:
       fig.update_layout(margin=dict(t=10), legend_title_text='')
     selection_enabled: true
     selection_column: sample
-    section: Diagnostics
+    section: Depth and breadth
     tag: vr-qc-depth-breadth
     index: qc-depth-breadth
     title: Median depth against genome covered at 10x
     description: A thin sample sits low and left; a deep one under the line lost amplicons. Coverage only, the consensus is rated below.
-    layout: {x: 0, y: 0, w: 5, h: 5}
+    layout: {x: 0, y: 0, w: 5, h: 6}
   # No default_record: the card waits for a pick rather than opening on a
   # sample of the reference run.
   - component_type: advanced_viz
@@ -1005,12 +1028,12 @@ tabs:
         num_variants_indel: Indels
         num_variants_total: Variants
         lineage: Pangolin lineage
-    section: Diagnostics
+    section: Depth and breadth
     tag: vr-qc-sample-record
     index: qc-sample-record
     title: Sample record
     description: The sample picked in the scatter or the run summary, with its alignment, breadth and calls.
-    layout: {x: 5, y: 0, w: 3, h: 5}
+    layout: {x: 5, y: 0, w: 3, h: 6}
   - component_type: figure
     workflow_tag: viralrecon
     data_collection_tag: nextclade_results
@@ -1047,7 +1070,7 @@ tabs:
     index: qc-nextclade-load
     title: Differences and missing bases per consensus genome (Nextclade)
     description: Substitutions and deleted bases above, bases it could not read below (log axis); a tall green bar or a red dot is worth a look.
-    layout: {x: 0, y: 5, w: 8, h: 6}
+    layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: figure
     workflow_tag: viralrecon
     data_collection_tag: summary_metrics
@@ -1075,7 +1098,7 @@ tabs:
   tab_group: Data & QC
   tab_order: 3
   tab_icon: mdi:chart-areaspline
-  tab_icon_color: teal
+  tab_icon_color: cyan
   icon: /assets/images/workflows/nf-core.png
   icon_color: green
   workflow_system: nf-core
@@ -1085,21 +1108,26 @@ tabs:
   filter_sections:
   - name: Coverage filters
     icon: mdi:filter-variant
-    color: teal
+    color: cyan
     description: Narrows the windows and amplicons by depth
   grid_sections:
   - name: Coverage at a glance
     icon: mdi:counter
-    color: teal
+    color: cyan
     description: Depth per window and per amplicon over the samples in view
   - name: Along the genome
     icon: mdi:chart-line
-    color: teal
+    color: cyan
     description: Depth per 200 bp window, one lane per sample
   - name: Per amplicon
     icon: mdi:chart-timeline-variant
-    color: teal
-    description: Depth per amplicon, as tracks and as a clustered heatmap
+    color: cyan
+    description: Median depth of each amplicon, and one lane per sample; pick one to isolate it
+  - name: Amplicon patterns
+    icon: mdi:chart-box-outline
+    color: gray
+    description: Depth per sample and amplicon, clustered
+    collapsed: true
   - name: Amplicon table
     icon: mdi:table
     color: gray
@@ -1110,9 +1138,12 @@ tabs:
   - component_type: text
     order: 1
     body: >
-      Depth from [mosdepth](https://github.com/brentp/mosdepth), per 200 bp window and per
-      amplicon. A gap in the genome track is a dropout; the amplicon views name the amplicon
-      behind it, a dark column in the heatmap being a primer problem and a dark row a sample one.
+      An amplicon dropout is a stretch of the genome whose PCR product failed, so too few reads
+      cover it and the consensus masks it. Depth comes from
+      [mosdepth](https://github.com/brentp/mosdepth), per 200 bp window and per amplicon; a gap in
+      the genome track is a dropout. Open a dropout in the genome browser of the
+      [Variants](tab:Variants) tab to see the reads and the primers at the spot; picking an
+      amplicon in the second plot isolates it.
     tag: vr-cov-intro
     index: cov-intro
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -1124,7 +1155,7 @@ tabs:
     column_type: float64
     display:
       icon_name: mdi:chart-line
-      custom_color: blue
+      custom_color: cyan
     section: Coverage filters
     group: Depth
     tag: vr-cov-filter-genome-depth
@@ -1154,7 +1185,7 @@ tabs:
     column_type: int64
     display:
       icon_name: mdi:chart-areaspline
-      custom_color: teal
+      custom_color: cyan
     section: Coverage filters
     group: Depth
     tag: vr-cov-filter-amplicon-depth
@@ -1171,7 +1202,7 @@ tabs:
     secondary_layout: histogram
     display:
       icon_name: mdi:chart-line
-      icon_color: teal.4
+      icon_color: cyan.4
       caption: per window, with its distribution
       decimals: 0
     section: Coverage at a glance
@@ -1194,7 +1225,7 @@ tabs:
     secondary_layout: histogram
     display:
       icon_name: mdi:chart-timeline-variant
-      icon_color: teal.6
+      icon_color: cyan.6
       caption: their depth, from no reads to just under 10x
       decimals: 0
     section: Coverage at a glance
@@ -1215,7 +1246,7 @@ tabs:
     threshold_direction: min
     display:
       icon_name: mdi:chart-areaspline
-      icon_color: teal.8
+      icon_color: cyan.8
       caption: sample and amplicon pairs against 10x
       decimals: 0
     section: Coverage at a glance
@@ -1235,7 +1266,7 @@ tabs:
     secondary_layout: uniqueness
     display:
       icon_name: mdi:alert-outline
-      icon_color: teal.9
+      icon_color: cyan.9
       caption: and the one that drops out most often
       decimals: 0
     section: Coverage at a glance
@@ -1254,12 +1285,42 @@ tabs:
       y_scale: linear
       smoothing_window: 5
       show_annotation_lane: false
+      views: [track]
     section: Along the genome
     tag: vr-cov-genome-track
     index: cov-genome-track
     title: Depth along the genome
     description: One lane per sample on a linear axis; a dropout reads as a gap.
-    layout: {x: 0, y: 0, w: 8, h: 6}
+    layout: {x: 0, y: 0, w: 8, h: 3}
+  # The pick figure: one point per amplicon, at its start, as high as the median
+  # depth over the samples in view. A pick filters mosdepth_amplicon_coverage on
+  # region, which narrows the lanes beside it and the table. custom_data carries
+  # the region the selection reads.
+  - component_type: figure
+    workflow_tag: viralrecon
+    data_collection_tag: mosdepth_amplicon_coverage
+    use: mosdepth/amplicon_coverage
+    visu_type: scatter
+    mode: code
+    code_content: |-
+      # Median depth of each amplicon over the samples in view, along the genome,
+      # on a log axis floored at 1x. The dashed line is the 10x the consensus
+      # needs; a point under it is an amplicon that drops out.
+      d = df.group_by(['region', 'start']).agg(pl.col('coverage').median().alias('depth')).sort('start')
+      d = d.with_columns(pl.col('depth').clip(lower_bound=1))
+      fig = px.scatter(d.to_pandas(), x='start', y='depth', log_y=True, custom_data=['region'], hover_name='region', labels={'start': 'Genome position', 'depth': 'Median depth'})
+      fig.update_traces(marker=dict(size=8))
+      fig.add_hline(y=10, line_dash='dash')
+      fig.update_yaxes(dtick=1)
+      fig.update_layout(margin=dict(t=10))
+    selection_enabled: true
+    selection_column: region
+    section: Per amplicon
+    tag: vr-cov-amplicon-pick
+    index: cov-amplicon-pick
+    title: Median depth per amplicon
+    description: Pick an amplicon to read its depth per sample beside it.
+    layout: {x: 0, y: 0, w: 4, h: 5}
   - component_type: advanced_viz
     workflow_tag: viralrecon
     use: mosdepth/coverage_track_amplicon
@@ -1269,12 +1330,14 @@ tabs:
       sample_col: sample
       value_col: coverage
       y_scale: log
+      views: [track]
     section: Per amplicon
     tag: vr-cov-amplicon-track
     index: cov-amplicon-track
-    title: Depth per amplicon
+    title: Depth per amplicon, by sample
     description: One lane per sample on a log axis; the amplicon filter on the left narrows it.
-    layout: {x: 0, y: 0, w: 8, h: 6}
+    layout: {x: 4, y: 0, w: 4, h: 5}
+  # Blues, low to high: a weak amplicon or sample reads pale.
   - component_type: advanced_viz
     workflow_tag: viralrecon
     data_collection_tag: complex_heatmap_canonical
@@ -1285,30 +1348,31 @@ tabs:
       cluster_rows: true
       cluster_cols: false
       normalize: none
-      colorscale: Viridis
-    section: Per amplicon
+      colorscale: Blues
+    section: Amplicon patterns
     tag: vr-cov-heatmap
     index: cov-heatmap
     title: Amplicon depth per sample (clustered)
-    description: Log10 depth, samples in rows clustered, amplicons in scheme order; dark is a dropout.
-    layout: {x: 0, y: 6, w: 8, h: 5}
+    description: Log10 depth, samples clustered, amplicons in scheme order. A pale column is a weak amplicon of the scheme, a pale row a weak sample, an isolated pale cell a likely primer-site mutation.
+    layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: table
     workflow_tag: viralrecon
     data_collection_tag: mosdepth_amplicon_coverage
     use: mosdepth/amplicon_coverage
     row_selection_enabled: true
-    row_selection_column: sample
+    row_selection_column: region
     section: Amplicon table
     tag: vr-cov-amplicon-table
     index: cov-amplicon-table
     title: Depth per sample and amplicon
+    description: Tick a row to narrow the dashboard to its amplicon.
     layout: {x: 0, y: 0, w: 8, h: 6}
 - title: Variants
   subtitle: Which mutations does each sample carry, and how well supported?
-  tab_group: Genomes
+  tab_group: Mutations
   tab_order: 4
   tab_icon: mdi:dna
-  tab_icon_color: grape
+  tab_icon_color: violet
   icon: /assets/images/workflows/nf-core.png
   icon_color: green
   workflow_system: nf-core
@@ -1316,31 +1380,34 @@ tabs:
   filter_sections:
   - name: Variant filters
     icon: mdi:filter-variant
-    color: grape
+    color: violet
     description: Narrows the calls by gene, effect and support
   # A separate collection on purpose: the mutation type narrows the matrix
   # without touching the calls above it.
   - name: Matrix filter
     icon: mdi:relation-many-to-many
-    color: grape
+    color: violet
     description: Narrows the mutation matrix only
     collapsed: true
   grid_sections:
   - name: Calls at a glance
     icon: mdi:counter
-    color: grape
+    color: violet
     description: How many calls, how distinct, and how well supported
+  # The navigator and the browser share one screen: pick a call and the browser
+  # opens on its position, with the reads and variants of the samples carrying it.
   - name: Along the genome
     icon: mdi:chart-timeline-variant
-    color: grape
-    description: Every call at its position, as high as its allele frequency
+    color: violet
+    description: Calls by position and frequency; the browser below follows the pick, the brush and the window
+    display: linked
   - name: Support
     icon: mdi:chart-bell-curve
-    color: grape
+    color: violet
     description: Allele frequency of the calls against the cut-off the consensus takes
   - name: Co-occurrence
     icon: mdi:relation-many-to-many
-    color: grape
+    color: gray
     description: Which genes carry calls in which samples
   - name: Genes and effects
     icon: mdi:chart-bar
@@ -1350,7 +1417,7 @@ tabs:
   - name: Variant table
     icon: mdi:table
     color: gray
-    description: Every call with its support and annotation
+    description: Every call with its support and annotation; a row click centres the genome browser on it
     collapsed: true
   components:
   # The tab's intro: the method, with its link, and how to read the tab.
@@ -1359,8 +1426,10 @@ tabs:
     body: >
       Every variant call ([iVar](https://andersen-lab.github.io/ivar/html/) by default) with its
       [snpEff](https://pcingola.github.io/SnpEff/) effect, one row per sample and mutation. A
-      call at an allele frequency of 0.75 or more enters the consensus; the left panel narrows the
-      calls by gene, effect and support.
+      call at an allele frequency of 0.75 or more enters the consensus. Pick a dot or a table
+      row to open that position in the genome browser, which opens on the best supported call (the
+      highest allele frequency, then depth, intergenic calls last); the left panel narrows the calls
+      by gene, effect and support.
     tag: vr-var-intro
     index: var-intro
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -1372,7 +1441,7 @@ tabs:
     column_type: object
     display:
       icon_name: mdi:dna
-      custom_color: lime
+      custom_color: violet
     section: Variant filters
     group: Call properties
     tag: vr-var-filter-gene
@@ -1402,7 +1471,7 @@ tabs:
     column_type: object
     display:
       icon_name: mdi:shape-outline
-      custom_color: indigo
+      custom_color: violet
     section: Variant filters
     group: Call properties
     tag: vr-var-filter-funclass
@@ -1417,7 +1486,7 @@ tabs:
     column_type: float64
     display:
       icon_name: mdi:percent-outline
-      custom_color: pink
+      custom_color: violet
     section: Variant filters
     group: Support
     tag: vr-var-filter-af
@@ -1432,7 +1501,7 @@ tabs:
     column_type: int64
     display:
       icon_name: mdi:layers-outline
-      custom_color: orange
+      custom_color: violet
     section: Variant filters
     group: Support
     tag: vr-var-filter-depth
@@ -1464,7 +1533,7 @@ tabs:
     breakdown_col: FUNCLASS
     display:
       icon_name: mdi:dna
-      icon_color: grape.4
+      icon_color: violet.4
       caption: calls, by functional class
       decimals: 0
     section: Calls at a glance
@@ -1483,7 +1552,7 @@ tabs:
     secondary_layout: uniqueness
     display:
       icon_name: mdi:map-marker-outline
-      icon_color: grape.6
+      icon_color: violet.6
       caption: and the one most samples share
       decimals: 0
     section: Calls at a glance
@@ -1505,7 +1574,7 @@ tabs:
     threshold_direction: min
     display:
       icon_name: mdi:percent-outline
-      icon_color: grape.8
+      icon_color: violet.8
       caption: calls against the 0.75 consensus cut-off
       decimals: 2
     section: Calls at a glance
@@ -1525,7 +1594,7 @@ tabs:
     secondary_layout: box_plot
     display:
       icon_name: mdi:layers-outline
-      icon_color: grape.9
+      icon_color: violet.9
       caption: median per call, with its spread
       decimals: 0
     section: Calls at a glance
@@ -1536,28 +1605,88 @@ tabs:
     layout: {x: 6, y: 0, w: 2, h: 2}
   # No point labels: mutation labels pile up over the dots at any width, and
   # the Overview highlight draws this tile as it is here.
+  # The navigator: every call at its position, as high as its allele frequency, in
+  # its snpEff effect's colour. The browser below follows a pick, a brush and a
+  # locus typed here, and its window shows on this axis as a band. No
+  # default_region: the browser opens on the best supported call and the axis
+  # opens on the window it shows.
   - component_type: advanced_viz
     workflow_tag: viralrecon
-    use: ivar/manhattan
     data_collection_tag: variants_long
+    viz_kind: genome_view
     config:
+      viz_kind: genome_view
+      chr_col: CHROM
+      pos_col: POS
+      score_col: AF
       feature_col: mutation_label
-      score_kind: Allele frequency (AF)
+      category_col: EFFECT
+      mark: point
+      point_size: 8
+      score_title: Allele frequency
       # 0.75: the allele frequency at which the consensus takes a call.
       score_threshold: 0.75
-      top_n_labels: 0
-      color_by_columns:
-      - EFFECT
-      - FUNCLASS
-      default_color_by: EFFECT
+      # The call's sample, gene, change, effect and depth, in the tooltip.
+      hover_cols: [sample, GENE, AA, EFFECT, DP]
+      region_filter_enabled: true
+      open_on_view_window: true
+      default_view: region
+      follow_view_window: true
+      # The least the axis shows around the browser's window, in bases.
+      follow_context_bp: 10000
       selection_enabled: true
-      selection_column: sample
+      # The mutation, not the sample: the browser jumps to the position and
+      # opens the samples that carry it.
+      selection_column: mutation_label
     section: Along the genome
-    tag: vr-var-manhattan
-    index: var-manhattan
+    tag: vr-var-navigator
+    index: var-navigator
     title: Allele frequency along the genome
-    description: One dot per call; above the 0.75 line, it enters the consensus.
-    layout: {x: 0, y: 0, w: 8, h: 6}
+    description: One dot per call, coloured by its effect; above the dashed 0.75 line, the call enters the consensus.
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: jbrowse
+    workflow_tag: viralrecon
+    data_collection_tag: tracks
+    section: Along the genome
+    initial_tracks: 4
+    max_tracks: 8
+    show_overview: false
+    selection_enabled: true
+    selection_column: sample_id
+    # The ARTIC primers the amplicons come from and the Nextstrain clade markers,
+    # beside the assembly's gene track (show_annotation is on by default).
+    ucsc_tracks: [artic, nextstrainClade]
+    # The tracks take the hue the plots give the sample's lineage (the manifest
+    # holds no colour of its own); the variants take their snpEff effect's colour.
+    color_by: lineage
+    # No fixed location: a location is a contig, and the view opens on the best
+    # supported call instead: call_score ranks the allele frequency, then the depth
+    # (the tie-break at 1.0), and puts intergenic calls last. The opening tracks are
+    # the variants and the reads of that call's sample (the manifest leads with it),
+    # then the next sample's. A picked call (navigator dot or table row) narrows
+    # variants_long to the samples carrying it, and the view jumps to it; the
+    # window then follows the other genome tiles of the tab.
+    follow_window: true
+    locus_from:
+      data_collection_tag: variants_long
+      chrom_column: CHROM
+      start_column: POS
+      padding: 150
+      max_rows: 20
+      sort_by: call_score
+      descending: true
+      label_column: mutation_label
+      sample_column: sample
+      columns: [GENE, EFFECT, AF]
+      search_columns: [GENE, AA]
+    # Variants take the colour the plots give their snpEff effect.
+    variant_color_by:
+      column: EFFECT
+    tag: vr-var-browser
+    index: var-browser
+    title: Genome browser
+    description: The variants and reads of the samples in view, at the call picked in the navigator above; it opens on the best supported call.
+    layout: {x: 0, y: 4, w: 8, h: 9}
   - component_type: figure
     workflow_tag: viralrecon
     data_collection_tag: variants_long
@@ -1566,9 +1695,12 @@ tabs:
     mode: code
     code_content: |-
       # Allele frequency of every call, stacked by snpEff effect in the family's
-      # effect colours; the dashed line is the 0.75 consensus cut-off.
+      # effect colours, or by the column the reader picks in the Colour by
+      # control (or by Analysis mode's groups); the dashed line is the 0.75
+      # consensus cut-off.
       d = df.filter(pl.col('AF').is_not_null())
-      fig = px.histogram(d.to_pandas(), x='AF', color='EFFECT', nbins=40, color_discrete_map=depictio_category_colors.get('EFFECT') or {}, labels={'AF': 'Allele frequency', 'EFFECT': 'Effect'})
+      kw = depictio_group_kwargs or {'color': 'EFFECT', 'color_discrete_map': depictio_category_colors.get('EFFECT') or {}}
+      fig = px.histogram(d.to_pandas(), x='AF', nbins=40, labels={'AF': 'Allele frequency', 'EFFECT': 'Effect'}, **kw)
       fig.add_vline(x=0.75, line_dash='dash')
       fig.update_layout(barmode='stack', yaxis_title='Calls', margin=dict(t=10))
     section: Support
@@ -1651,18 +1783,512 @@ tabs:
     data_collection_tag: variants_long
     use: ivar/variants_long
     row_selection_enabled: true
-    row_selection_column: sample
+    # The mutation, like the navigator: a row click opens its position in the
+    # genome browser above, on the samples that carry it.
+    row_selection_column: mutation_label
     section: Variant table
     tag: vr-var-table
     index: var-table
     title: Variant calls
+    description: Pick a row to open its position in the genome browser.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+- title: Gene
+  subtitle: Which mutations does this gene carry, and where do they sit?
+  tab_group: Mutations
+  tab_order: 5
+  tab_icon: mdi:map-marker-outline
+  tab_icon_color: grape
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  dashboard_id: 746b0f3c1e4a2d7f8e5b9cb6
+  filter_sections:
+  - name: Gene pick
+    icon: mdi:tune
+    color: grape
+    description: Choose the gene the tab shows, and the effects it keeps
+  grid_sections:
+  - name: Gene at a glance
+    icon: mdi:counter
+    color: grape
+    description: How many calls the picked gene carries, and how well supported
+  # The lollipop and the carriers' plot share one screen: pick a stem or a
+  # sample and the other follows.
+  - name: Mutations in the gene
+    icon: mdi:map-marker-outline
+    color: grape
+    description: Every mutation of the gene along it, beside the calls sample by sample
+    display: linked
+  - name: Mutations
+    icon: mdi:table
+    color: gray
+    description: Every call of the gene with its support and annotation
+    collapsed: true
+  components:
+  # always_selected: the plots show one gene, so the picker
+  # always names one. default_by ranks by call_score, descending (allele
+  # frequency, then depth, intergenic calls last): the tab opens on the gene
+  # holding the best supported call, never on an intergenic pseudo-gene. No
+  # banner_facts: the value is the gene itself.
+  - component_type: interactive
+    workflow_tag: viralrecon
+    data_collection_tag: variants_long
+    interactive_component_type: Select
+    always_selected: true
+    default_by: call_score
+    default_order: desc
+    column_name: GENE
+    column_type: object
+    display:
+      icon_name: mdi:dna
+      custom_color: grape
+    placement: left
+    section: Gene pick
+    group: Gene
+    tag: vr-ge-filter-gene
+    index: ge-filter-gene
+    title: Gene
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: viralrecon
+    data_collection_tag: variants_long
+    interactive_component_type: MultiSelect
+    column_name: EFFECT
+    column_type: object
+    display:
+      icon_name: mdi:alert-circle-outline
+      custom_color: grape
+    placement: left
+    section: Gene pick
+    group: Mutations
+    tag: vr-ge-filter-effect
+    index: ge-effect-filter
+    title: Effect
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: text
+    order: 1
+    body: >
+      Pick a gene on the left, and the lollipop gives each mutation's allele frequency along
+      the gene while the dots give it sample by sample. Pick a stem or a sample to narrow the
+      other plot and the table to that one. Open a mutation in the genome browser of the
+      [Variants](tab:Variants) tab to read it against the [ARTIC](https://artic.network) primers
+      and the reads.
+    tag: vr-ge-intro
+    index: ge-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: card
+    workflow_tag: viralrecon
+    data_collection_tag: variants_long
+    use: ivar/variants_long
+    aggregation: count
+    column_name: POS
+    column_type: int64
+    secondary_layout: composition
+    breakdown_col: FUNCLASS
+    display:
+      icon_name: mdi:dna
+      icon_color: grape.4
+      caption: calls, by functional class
+      decimals: 0
+    section: Gene at a glance
+    tag: vr-ge-card-calls
+    index: ge-card-calls
+    title: Variant calls
+    description: Calls in the picked gene, one per sample and mutation.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: viralrecon
+    data_collection_tag: variants_long
+    use: ivar/variants_long
+    aggregation: nunique
+    column_name: mutation_label
+    column_type: object
+    secondary_layout: uniqueness
+    display:
+      icon_name: mdi:map-marker-outline
+      icon_color: grape.6
+      caption: and the one most samples share
+      decimals: 0
+    section: Gene at a glance
+    tag: vr-ge-card-mutations
+    index: ge-card-mutations
+    title: Distinct mutations
+    description: Distinct mutations of the picked gene; one that many samples share is a lineage marker.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  # 0.75: the allele frequency at which viralrecon's consensus takes a call.
+  - component_type: card
+    workflow_tag: viralrecon
+    data_collection_tag: variants_long
+    use: ivar/variants_long
+    aggregation: median
+    column_name: AF
+    column_type: float64
+    secondary_layout: threshold
+    threshold_value: 0.75
+    threshold_direction: min
+    display:
+      icon_name: mdi:percent-outline
+      icon_color: grape.8
+      caption: calls against the 0.75 consensus cut-off
+      decimals: 2
+    section: Gene at a glance
+    tag: vr-ge-card-af
+    index: ge-card-af
+    title: Allele frequency
+    description: Median allele frequency of the gene's calls; the bar counts those the consensus takes.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: viralrecon
+    data_collection_tag: variants_long
+    use: ivar/variants_long
+    aggregation: median
+    column_name: DP
+    column_type: int64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:layers-outline
+      icon_color: grape.9
+      caption: median per call, with its spread
+      decimals: 0
+    section: Gene at a glance
+    tag: vr-ge-card-depth
+    index: ge-card-depth
+    title: Read depth
+    description: Median read depth at the positions of the gene's calls.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  # A stem is a mutation: a pick emits mutation_label, which narrows the table
+  # and the cards to it.
+  - component_type: advanced_viz
+    workflow_tag: viralrecon
+    use: ivar/lollipop
+    data_collection_tag: variants_long
+    config:
+      effect_col: AF
+      label_col: mutation_label
+      max_subplot_genes: 6
+      selection_enabled: true
+      selection_column: mutation_label
+    section: Mutations in the gene
+    tag: vr-ge-lollipop
+    index: ge-lollipop
+    title: Mutations along the gene (lollipop)
+    description: One stem per mutation, as high as its allele frequency; pick one to narrow the table to it.
+    layout: {x: 0, y: 0, w: 5, h: 6}
+  - component_type: figure
+    workflow_tag: viralrecon
+    data_collection_tag: variants_long
+    use: ivar/variants_long
+    visu_type: scatter
+    mode: code
+    code_content: |-
+      # Allele frequency of every call of the gene, one dot per call, samples
+      # ordered by their best supported call. The colour is the snpEff effect, or
+      # Analysis mode's groups when it has some; the dashed line is the 0.75
+      # consensus cut-off. custom_data carries the sample the selection reads.
+      d = df.filter(pl.col('AF').is_not_null())
+      order = d.group_by('sample').agg(pl.col('AF').max().alias('top')).sort('top', descending=True)['sample'].to_list()
+      kw = depictio_group_kwargs or {'color': 'EFFECT', 'color_discrete_map': depictio_category_colors.get('EFFECT') or {}}
+      fig = px.scatter(d.to_pandas(), x='sample', y='AF', custom_data=['sample'], hover_name='mutation_label', labels={'sample': 'Sample', 'AF': 'Allele frequency', 'EFFECT': 'Effect'}, **kw)
+      fig.update_traces(marker=dict(size=12))
+      fig.add_hline(y=0.75, line_dash='dash')
+      fig.update_xaxes(tickangle=-45, tickfont={'size': 9}, categoryorder='array', categoryarray=order)
+      fig.update_yaxes(range=[0, 1.05])
+      fig.update_layout(showlegend=False, margin=dict(t=10))
+    selection_enabled: true
+    selection_column: sample
+    section: Mutations in the gene
+    tag: vr-ge-af-by-sample
+    index: ge-af-by-sample
+    title: Allele frequency per sample
+    description: One dot per call, coloured by effect; pick a sample to narrow the table to it.
+    layout: {x: 5, y: 0, w: 3, h: 6}
+  - component_type: table
+    workflow_tag: viralrecon
+    data_collection_tag: variants_long
+    use: ivar/variants_long
+    row_selection_enabled: true
+    row_selection_column: mutation_label
+    section: Mutations
+    tag: vr-ge-table
+    index: ge-table
+    title: Mutations of the gene
+    description: Tick a row to narrow the plots to that mutation.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+- title: Sample
+  subtitle: What does one sample's genome look like, from reads to variants?
+  tab_group: Mutations
+  tab_order: 6
+  tab_icon: mdi:test-tube
+  tab_icon_color: pink
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  dashboard_id: 746b0f3c1e4a2d7f8e5b9cb7
+  # The picker reads summary_metrics, the hub every link starts from, so its
+  # pick reaches the calls, the depth and the tracks of the sample.
+  filter_sections:
+  - name: Sample pick
+    icon: mdi:tune
+    color: pink
+    description: Choose the sample the tab shows, and the calls it keeps
+  grid_sections:
+  - name: Sample at a glance
+    icon: mdi:counter
+    color: pink
+    description: The calls, their support and the depth of the picked sample
+  # The call picker and the record card share one screen: pick a call and the
+  # card reads it out.
+  - name: The sample's genome
+    icon: mdi:dna
+    color: pink
+    description: The sample's calls along the genome, beside the one picked
+    display: linked
+  - name: Depth along the genome
+    icon: mdi:chart-line
+    color: pink
+    description: Depth per 200 bp window; a dropout reads as a gap
+  - name: Variant table
+    icon: mdi:table
+    color: gray
+    description: Every call of the sample with its support and annotation
+    collapsed: true
+  components:
+  # always_selected: the cards and the tracks show one sample, so
+  # the picker always names one. default_by ranks by median depth, descending:
+  # the tab opens on the best covered sample, whose calls are best supported.
+  # banner_facts read the sample's row of the run summary.
+  - component_type: interactive
+    workflow_tag: viralrecon
+    data_collection_tag: summary_metrics
+    interactive_component_type: Select
+    always_selected: true
+    default_by: coverage_median
+    default_order: desc
+    banner_facts:
+    - {column: lineage, label: Lineage, icon: 'tabler:dna-2'}
+    - {column: pct_genome_covered_10x, label: Genome at 10x (%), format: 'decimals:1', icon: 'tabler:chart-area-line'}
+    - {column: coverage_median, label: Median depth, format: si, icon: 'tabler:layers-intersect'}
+    - {column: num_variants_total, label: Variants, format: integer, icon: 'tabler:variable'}
+    column_name: sample
+    column_type: object
+    display:
+      icon_name: mdi:flask-outline
+      custom_color: pink
+    placement: left
+    section: Sample pick
+    group: Sample
+    tag: vr-sm-filter-sample
+    index: sm-filter-sample
+    title: Sample
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: viralrecon
+    data_collection_tag: variants_long
+    interactive_component_type: RangeSlider
+    column_name: AF
+    column_type: float64
+    display:
+      icon_name: mdi:percent-outline
+      custom_color: pink
+    placement: left
+    section: Sample pick
+    group: Calls
+    tag: vr-sm-filter-af
+    index: sm-filter-af
+    title: Allele frequency
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: text
+    order: 1
+    body: >
+      Pick a sample on the left and the tab shows that one alone: its calls along the genome,
+      with the one picked read out beside them. The depth track below shows where its coverage
+      fell away. Open a call in the genome browser of the [Variants](tab:Variants) tab to read
+      its reads.
+    tag: vr-sm-intro
+    index: sm-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: card
+    workflow_tag: viralrecon
+    data_collection_tag: variants_long
+    use: ivar/variants_long
+    aggregation: count
+    column_name: POS
+    column_type: int64
+    secondary_layout: composition
+    breakdown_col: FUNCLASS
+    display:
+      icon_name: mdi:dna
+      icon_color: pink.4
+      caption: calls, by functional class
+      decimals: 0
+    section: Sample at a glance
+    tag: vr-sm-card-calls
+    index: sm-card-calls
+    title: Variant calls
+    description: Calls of the picked sample, one per mutation.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  # 0.75: the allele frequency at which viralrecon's consensus takes a call.
+  - component_type: card
+    workflow_tag: viralrecon
+    data_collection_tag: variants_long
+    use: ivar/variants_long
+    aggregation: median
+    column_name: AF
+    column_type: float64
+    secondary_layout: threshold
+    threshold_value: 0.75
+    threshold_direction: min
+    display:
+      icon_name: mdi:percent-outline
+      icon_color: pink.6
+      caption: calls against the 0.75 consensus cut-off
+      decimals: 2
+    section: Sample at a glance
+    tag: vr-sm-card-af
+    index: sm-card-af
+    title: Allele frequency
+    description: Median allele frequency of the sample's calls; the bar counts those the consensus takes.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: viralrecon
+    data_collection_tag: mosdepth_amplicon_coverage
+    use: mosdepth/amplicon_coverage
+    aggregation: median
+    column_name: coverage
+    column_type: int64
+    secondary_layout: threshold
+    threshold_value: 10
+    threshold_direction: min
+    display:
+      icon_name: mdi:chart-areaspline
+      icon_color: pink.8
+      caption: amplicons against 10x
+      decimals: 0
+    section: Sample at a glance
+    tag: vr-sm-card-amplicon-depth
+    index: sm-card-amplicon-depth
+    title: Amplicon depth
+    description: Median depth over the sample's amplicons; the bar counts those at 10x or more.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: viralrecon
+    data_collection_tag: mosdepth_genome_coverage
+    use: mosdepth/genome_coverage
+    aggregation: count
+    column_name: coverage
+    column_type: float64
+    filter_expr: col('coverage') < 10
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:chart-timeline-variant
+      icon_color: pink.9
+      caption: their depth, from no reads to just under 10x
+      decimals: 0
+    section: Sample at a glance
+    tag: vr-sm-card-low-windows
+    index: sm-card-low-windows
+    title: Windows under 10x
+    description: 200 bp windows of the sample under 10x, which the consensus masks; a bar at 0 is a true gap.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  # The call picker of the linked section: a Manhattan of the
+  # picked sample's calls. A pick emits the mutation, which the record card
+  # follows. The table sits in its own section below.
+  - component_type: advanced_viz
+    workflow_tag: viralrecon
+    use: ivar/manhattan
+    data_collection_tag: variants_long
+    config:
+      feature_col: mutation_label
+      score_kind: Allele frequency (AF)
+      # 0.75: the allele frequency at which the consensus takes a call.
+      score_threshold: 0.75
+      top_n_labels: 0
+      marker_size_above: 12
+      color_by_columns:
+      - EFFECT
+      - FUNCLASS
+      - sample
+      default_color_by: EFFECT
+      hover_cols: [GENE, AA, EFFECT, DP]
+      selection_enabled: true
+      selection_column: mutation_label
+    section: The sample's genome
+    tag: vr-sm-manhattan
+    index: sm-manhattan
+    title: Calls along the genome
+    description: Pick a call to read it out beside the plot.
+    layout: {x: 0, y: 0, w: 5, h: 5}
+  # No default_record: the card waits for a pick. It follows the call picked in
+  # the Manhattan and shows that call's row of the picked sample.
+  - component_type: advanced_viz
+    workflow_tag: viralrecon
+    data_collection_tag: variants_long
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      linked_component: vr-sm-manhattan
+      id_col: mutation_label
+      title_col: mutation_label
+      selection_source: any
+      sections:
+        Call: [GENE, AA, EFFECT, FUNCLASS]
+        Support: [AF, DP, REF_DP, ALT_DP]
+        Position: [CHROM, POS, REF, ALT]
+      labels:
+        GENE: Gene
+        AA: Amino acid change
+        EFFECT: Effect
+        FUNCLASS: Functional class
+        AF: Allele frequency
+        DP: Read depth
+        REF_DP: Reference reads
+        ALT_DP: Alternate reads
+        CHROM: Reference sequence
+        POS: Position
+        REF: Reference base
+        ALT: Alternate base
+    section: The sample's genome
+    tag: vr-sm-record
+    index: sm-record
+    title: Picked mutation
+    description: The call picked in the plot, with its gene, effect and read support.
+    layout: {x: 5, y: 0, w: 3, h: 5}
+  - component_type: advanced_viz
+    workflow_tag: viralrecon
+    use: mosdepth/coverage_track_genome
+    data_collection_tag: coverage_track_canonical
+    config:
+      end_col: end
+      sample_col: sample
+      y_scale: linear
+      smoothing_window: 5
+      show_annotation_lane: false
+      views: [track]
+    section: Depth along the genome
+    tag: vr-sm-genome-track
+    index: sm-genome-track
+    title: Depth along the genome
+    description: The picked sample on a linear axis; a dropout reads as a gap.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: viralrecon
+    data_collection_tag: variants_long
+    use: ivar/variants_long
+    row_selection_enabled: true
+    row_selection_column: mutation_label
+    section: Variant table
+    tag: vr-sm-var-table
+    index: sm-var-table
+    title: Variant calls
+    description: Tick a row to read the call out in the card above.
     layout: {x: 0, y: 0, w: 8, h: 6}
 - title: Lineage & Clustering
   subtitle: Which lineage and clade is each sample, and do they agree?
-  tab_group: Genomes
-  tab_order: 5
+  tab_group: Typing
+  tab_order: 7
   tab_icon: mdi:virus
-  tab_icon_color: red
+  tab_icon_color: green
   icon: /assets/images/workflows/nf-core.png
   icon_color: green
   workflow_system: nf-core
@@ -1670,32 +2296,36 @@ tabs:
   filter_sections:
   - name: Typing filters
     icon: mdi:filter-variant
-    color: red
+    color: green
     description: Narrows the samples by their calls and the QC verdict on each
   grid_sections:
   - name: Typing at a glance
     icon: mdi:counter
-    color: red
+    color: green
     description: Lineages, clades and the quality of the consensus they were called from
   - name: Consensus quality
     icon: mdi:shield-check-outline
-    color: red
+    color: green
     description: Nextclade's QC score of each consensus genome, the worst first
   - name: Typing per sample
     icon: mdi:table
-    color: red
+    color: green
     description: Each sample's Pangolin call, with a record of the one ticked
-  # Collapsed: the next three compare samples with each other, so on a run of a
-  # few samples they draw a handful of one-to-one ribbons and points.
+  # The next two compare samples with each other, so on a run of a few samples
+  # they draw a handful of one-to-one ribbons and points; they stay open all the
+  # same, and the intersection table below them stays collapsed.
   - name: Classification flow
     icon: mdi:relation-many-to-many
     color: gray
     description: Each sample from its QC verdict to its lineage and its clade; reads best with several samples
-    collapsed: true
   - name: Variant profiles
     icon: mdi:set-merge
     color: gray
-    description: Samples placed by the mutations they share, and the mutations each lineage holds; reads best with several samples
+    description: Samples placed by shared mutations; a click on an UpSet bar lists them below. Reads best with several samples
+  - name: Mutations in an intersection
+    icon: mdi:table
+    color: gray
+    description: A click on an UpSet intersection lists its mutations, genes, effects and samples
     collapsed: true
   - name: Calls per lineage and clade
     icon: mdi:chart-bar
@@ -1729,7 +2359,7 @@ tabs:
     column_type: object
     display:
       icon_name: mdi:virus
-      custom_color: red
+      custom_color: green
     section: Typing filters
     group: Calls
     tag: vr-lin-filter-lineage
@@ -1744,7 +2374,7 @@ tabs:
     column_type: object
     display:
       icon_name: mdi:family-tree
-      custom_color: grape
+      custom_color: green
     section: Typing filters
     group: Calls
     tag: vr-lin-filter-clade
@@ -1759,7 +2389,7 @@ tabs:
     column_type: object
     display:
       icon_name: mdi:check-decagram
-      custom_color: pink
+      custom_color: green
     section: Typing filters
     group: QC verdicts
     tag: vr-lin-filter-pangolin-qc
@@ -1793,7 +2423,7 @@ tabs:
     breakdown_col: lineage
     display:
       icon_name: mdi:virus
-      icon_color: red.4
+      icon_color: green.4
       caption: samples per assigned lineage
       decimals: 0
     section: Typing at a glance
@@ -1813,7 +2443,7 @@ tabs:
     breakdown_col: clade
     display:
       icon_name: mdi:family-tree
-      icon_color: red.6
+      icon_color: green.6
       caption: samples per clade
       decimals: 0
     section: Typing at a glance
@@ -1836,7 +2466,7 @@ tabs:
     threshold_warn: 100
     display:
       icon_name: mdi:shield-check-outline
-      icon_color: red.8
+      icon_color: green.8
       caption: genomes against 30 (good) and 100 (bad)
       decimals: 1
     section: Typing at a glance
@@ -1856,7 +2486,7 @@ tabs:
     secondary_layout: box_plot
     display:
       icon_name: mdi:alert-outline
-      icon_color: red.9
+      icon_color: green.9
       caption: median per genome, with its spread
       decimals: 0
     section: Typing at a glance
@@ -1930,7 +2560,6 @@ tabs:
       compute_method: pca
       color_col: lineage
       cluster_col: clade
-      point_size: 8
       show_density: false
       axis_prefix: PC
       selection_enabled: true
@@ -1956,12 +2585,28 @@ tabs:
       min_size: 1
       show_set_sizes: true
       color_intersections_by: degree
+      # The mutations of the clicked intersection: variants_long narrows by the
+      # shared column name.
+      selection_enabled: true
+      selection_column: mutation_label
     section: Variant profiles
     tag: vr-lin-upset
     index: lin-upset
     title: Mutations shared across lineages (UpSet)
     description: Each set is a lineage, each bar the mutations a combination of lineages shares.
     layout: {x: 0, y: 6, w: 8, h: 5}
+  - component_type: table
+    workflow_tag: viralrecon
+    data_collection_tag: variants_long
+    use: ivar/variants_long
+    row_selection_enabled: true
+    row_selection_column: mutation_label
+    section: Mutations in an intersection
+    tag: vr-lin-intersection-table
+    index: lin-intersection-table
+    title: Mutations in the picked intersection
+    description: Click an intersection in the UpSet above to list its mutations here.
+    layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: figure
     workflow_tag: viralrecon
     data_collection_tag: pangolin_lineages

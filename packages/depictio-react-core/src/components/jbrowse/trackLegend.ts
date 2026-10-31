@@ -4,6 +4,7 @@
  * `color_by` value or the manifest's group), else by the samples wearing it.
  */
 import type { JBrowseTrackRow } from '../../api';
+import type { GenomeTracksColourKey } from './genomeTracksStore';
 import { sequentialRamp } from '../../categoryColors';
 
 export interface LegendEntry {
@@ -93,4 +94,83 @@ export function legendRamp(
     to: values[values.length - 1],
     values,
   };
+}
+
+/** One colour of a key and what it stands for, before colours are folded. */
+export interface KeyItem {
+  label: string;
+  color: string;
+}
+
+/**
+ * Entries of a key from `items` in order: items wearing one colour share an
+ * entry (two categories drawn alike, `XR, XD`), and more than `MAX_NAMES`
+ * names fold into "+N", exactly as the track legend does.
+ */
+export function foldByColour(items: readonly KeyItem[]): LegendEntry[] {
+  const byColour = new Map<string, string[]>();
+  for (const { label, color } of items) {
+    if (!color) continue;
+    const names = byColour.get(color) ?? [];
+    if (!names.includes(label)) names.push(label);
+    byColour.set(color, names);
+  }
+  return [...byColour.entries()].map(([color, names]) => {
+    const shown = names.slice(0, MAX_NAMES).join(', ');
+    const more = names.length - MAX_NAMES;
+    return { color, names, label: more > 0 ? `${shown} +${more}` : shown };
+  });
+}
+
+/** A column name as a reader says it: `genetic_model` is "genetic model". */
+export function keyTitle(column: string): string {
+  return column.replace(/[_-]+/g, ' ').trim();
+}
+
+/** The payload's key to `variant_color_by` (see `variant_color_legend`). */
+export interface VariantLegendPayload {
+  title: string;
+  entries: KeyItem[];
+  fallback?: KeyItem | null;
+}
+
+/**
+ * The key to the colours of the variant tracks, or null when the tile does not
+ * colour them. The categories come in the order the track tests them; the
+ * fallback (what no category matched) comes last, unless it wears the colour of
+ * a category already listed.
+ */
+export function variantLegend(
+  payload: VariantLegendPayload | null | undefined,
+): { title: string; entries: LegendEntry[] } | null {
+  if (!payload || !payload.entries?.length) return null;
+  const items = [...payload.entries];
+  if (payload.fallback) items.push(payload.fallback);
+  const entries = foldByColour(items);
+  return entries.length ? { title: keyTitle(payload.title), entries } : null;
+}
+
+/**
+ * What the browser publishes of its colour scale for other tiles' keys: the
+ * column, its values in colour order and which sample carries which value.
+ * `colours` is the value → colour map the tracks were painted with (its order
+ * is the scale's); only samples whose tracks carry one value are listed.
+ */
+export function colourKeyOf(
+  column: string,
+  colours: ReadonlyMap<string, string>,
+  ordered: boolean,
+  scheme: string | null | undefined,
+  rows: readonly JBrowseTrackRow[],
+): GenomeTracksColourKey {
+  const seen = new Map<string, Set<string>>();
+  for (const row of rows) {
+    if (!row.sample || !row.group || !colours.has(row.group)) continue;
+    const values = seen.get(row.sample) ?? new Set<string>();
+    values.add(row.group);
+    seen.set(row.sample, values);
+  }
+  const sampleGroups: Record<string, string> = {};
+  for (const [sample, values] of seen) if (values.size === 1) sampleGroups[sample] = [...values][0];
+  return { column, values: [...colours.keys()], ordered, scheme: scheme ?? null, sampleGroups };
 }

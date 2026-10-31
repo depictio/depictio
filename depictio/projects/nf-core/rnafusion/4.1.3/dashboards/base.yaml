@@ -1580,8 +1580,8 @@ tabs:
     data_collection_tag: fusioninspector_fusions
     use: fusioninspector/evidence_dot_plot
     config:
-      colour_scale: Spectral
-      reverse_scale: true
+      # Purple to yellow, in the tab's hue: a red end read as a failed call.
+      colour_scale: Plasma
       gene_sort: mean
       max_dot_size: 22
       max_genes: 30
@@ -1609,10 +1609,10 @@ tabs:
       d = d.with_columns((pl.col('label') + pl.lit(' · ') + pl.col('sample') if many else pl.col('label')).alias('label'))
       d = d.with_columns(pl.when(pl.col('label').is_duplicated()).then(pl.col('label') + pl.lit(' #') + (pl.int_range(pl.len()).over('label') + 1).cast(pl.Utf8)).otherwise(pl.col('label')).alias('label')).sort(['imbalance', 'label'])
       fig = px.bar(d.to_pandas(), x='imbalance', y='label', color='prot_fusion_type', color_discrete_map=depictio_category_colors.get('prot_fusion_type') or {}, custom_data=['fusion'], category_orders={'label': d.get_column('label').to_list()}, labels={'imbalance': "log2 (5' ratio / 3' ratio)", 'label': '', 'prot_fusion_type': 'Predicted protein'})
-      fig.add_vrect(x0=-1, x1=1, fillcolor='rgba(128, 128, 128, 0.15)', line_width=0, layer='below', annotation_text='balanced', annotation_position='top left')
+      fig.add_vrect(x0=-1, x1=1, fillcolor='rgba(128, 128, 128, 0.15)', line_width=0, layer='below', annotation_text='balanced', annotation_position='top', annotation=dict(yref='paper', y=1, yanchor='bottom'))
       fig.add_vline(x=0, line_width=1, opacity=0.5)
       fig.update_yaxes(automargin=True)
-      fig.update_layout(margin=dict(t=10), legend_title_text='', legend=dict(orientation='h', y=-0.2))
+      fig.update_layout(margin=dict(t=28), legend_title_text='', legend=dict(orientation='h', y=-0.2))
     selection_enabled: true
     selection_column: fusion
     section: Allelic ratio
@@ -1874,7 +1874,7 @@ tabs:
   - name: Junction arcs
     icon: mdi:waves
     color: blue
-    description: The busiest loci, each junction drawn from donor to acceptor
+    description: The busiest loci, each junction drawn from donor to acceptor, and the reads behind them
   - name: Junction table
     icon: mdi:table
     color: gray
@@ -1888,7 +1888,8 @@ tabs:
       [CTAT-splicing](https://github.com/TrinityCTAT/CTAT-SPLICING) reads the splice
       junctions of the STAR alignment and counts the reads crossing each, uniquely and
       multi-mapped. The Manhattan places each junction along the genome by its unique read
-      support, and the arcs draw the busiest loci from donor to acceptor. Junctions are keyed
+      support, and the arcs draw the busiest loci from donor to acceptor, in the colour of
+      their chromosome on the Manhattan. Junctions are keyed
       on the intron, so the fusion filters do not reach this tab; the sample filters do.
     tag: rf-splice-intro
     index: splice-intro
@@ -2026,12 +2027,48 @@ tabs:
       min_count: 2
       top_n: 40
       log_width: true
-      views: [plotly]
+      # The Manhattan's chromosome colours, so a locus reads the same on both.
+      color_by: chromosome
+      # The sashimi is drawn in GenomeSpy; the reads behind it (coverage, alignments,
+      # junction arcs from the BAM) are the genome browser right below, which follows
+      # this tile's locus. Hence the one template with two genome browsers
+      # (allowlisted in test_shipped_dashboard_yamls). The Plotly arc panel stays
+      # behind the header switch. One lane per sample, with the inferred exon model
+      # and the hg38 gene lane (rnafusion is GRCh38 only) under them. The inferred
+      # exon support is off: drawn under the arcs it reads like coverage, and the
+      # browser below has the measured one.
+      sample_col: sample
+      view: genomespy
+      views: [genomespy, plotly]
+      annotation: hg38
+      show_support_track: false
     section: Junction arcs
     tag: rf-splice-arcs
     index: splice-arcs
     title: Junction arcs over the busiest loci
+    description: One arc per junction, its width the uniquely mapped fragments STAR counted across it (CTAT-splicing's uniq_mapped), a read pair counted once. The browser below counts every aligned read instead, so its arcs read about a fifth higher on these paired-end data.
     layout: {x: 0, y: 0, w: 8, h: 6}
+  # The reads behind the arcs above, for the same locus: STAR coverage, the
+  # alignments and the splice-junction arcs drawn from them (JBrowse's own sashimi
+  # over the coverage). It follows the window of the sashimi (its locus pick and
+  # its zoom), opens on it, and shows the samples the tab's sample filter leaves,
+  # at most `initial_tracks` of them open (each is a BAM read by range).
+  - component_type: jbrowse
+    workflow_tag: rnafusion
+    data_collection_tag: tracks
+    section: Junction arcs
+    initial_tracks: 2
+    max_tracks: 6
+    show_overview: false
+    show_junctions: true
+    follow_window: true
+    color_by: sample
+    ucsc_tracks: [mane]
+    tag: rf-splice-reads
+    index: splice-reads
+    title: Reads at the locus
+    description: STAR coverage, alignments and splice-junction arcs of the samples in view, following the locus of the arcs above. Its arc counts are aligned reads, both mates of a pair and multi-mapped reads included, so they run higher than the unique fragments of the sashimi above.
+    layout: {x: 0, y: 6, w: 8, h: 8}
   - component_type: table
     workflow_tag: rnafusion
     data_collection_tag: splice_junctions

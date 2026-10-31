@@ -330,6 +330,13 @@ function heatmapMaxRows(member: FittableMember): number | undefined {
   return typeof raw === 'number' && Number.isFinite(raw) && raw > 0 ? Math.round(raw) : undefined;
 }
 
+/** The ranked table. Its demand is exact (one row per shown candidate, header
+ *  and footnotes included), so its tile follows it both ways: a top-8 table
+ *  stored at 6 rows would otherwise keep 230 px of blank under the last row.
+ *  The family pedigree is a popover over the page, not tile content, and is
+ *  not part of the demand. */
+export const RANKED_TABLE_FIT_TYPE = 'advanced_viz_ranked_table';
+
 /** The key a component's fit policy and default are looked up under. */
 export function fitType(member: FittableMember): string {
   if (
@@ -353,6 +360,9 @@ export function fitType(member: FittableMember): string {
   }
   if (member.component_type === 'advanced_viz' && member.viz_kind === 'complex_heatmap') {
     return COMPLEX_HEATMAP_FIT_TYPE;
+  }
+  if (member.component_type === 'advanced_viz' && member.viz_kind === 'ranked_table') {
+    return RANKED_TABLE_FIT_TYPE;
   }
   return member.component_type ?? '';
 }
@@ -400,6 +410,7 @@ const FIT_POLICIES: Readonly<Record<string, FitPolicy>> = {
   // browser with twenty tracks stops at the cap and scrolls the rest.
   [GENOME_FIT_TYPE]: { min: 3, max: 16, grow: true, shrink: true },
   [COMPLEX_HEATMAP_FIT_TYPE]: { min: 3, max: 16, grow: false, shrink: true },
+  [RANKED_TABLE_FIT_TYPE]: { min: 3, max: 16, grow: true, shrink: true },
 };
 
 /**
@@ -420,6 +431,7 @@ const DEFAULT_FIT: Readonly<Record<string, FitMode>> = {
   [PHYLOGENY_FIT_TYPE]: 'auto',
   [GENOME_FIT_TYPE]: 'auto',
   [COMPLEX_HEATMAP_FIT_TYPE]: 'auto',
+  [RANKED_TABLE_FIT_TYPE]: 'auto',
   figure: 'fixed',
   multiqc: 'fixed',
 };

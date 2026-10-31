@@ -17,6 +17,7 @@
 # signal with the spike-in factor the pipeline applied to the bedGraph.
 id: cutandrun
 name: nf-core/cutandrun roll-ups
+version: "1.0.0"
 description: >-
   The run-level tables nf-core/cutandrun assembles from its own outputs: the
   sample hub behind every link, the peak-caller agreement between SEACR and

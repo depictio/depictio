@@ -13,6 +13,7 @@
 # the same gene selection by `depictio/recipes/lib/count_matrix.py`.
 id: subread
 name: Subread featureCounts
+version: "1.0.0"
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/subread/featurecounts
 homepage: http://bioinf.wehi.edu.au/featureCounts/
 description: >-

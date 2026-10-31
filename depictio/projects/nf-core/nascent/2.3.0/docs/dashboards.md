@@ -173,7 +173,9 @@ over the `tracks` manifest, which carries both columns from the hub, so the libr
 ramp in time order whatever their names. The binned lanes (`genome_view`, `sample_col: sample`)
 wear the colour the browser gives the same library, so the two tiles agree without a second
 setting. A `color_scale` on the `genome_view` itself would need the time point among its own rows,
-and `bedtools_strand_bins` does not carry it.
+and `bedtools_strand_bins` does not carry it. Both tiles key the ramp: the browser's status bar and
+the strip under the lanes show it from the first to the last time point (the lanes read it off the
+browser's scale, so no setting is needed; `show_legend: false` hides the lanes' strip).
 
 The other tiles that colour a library draw on the same ramp, so a library keeps one colour on
 every tab. The library bars of Library QC compute their colours in the code figure from the same

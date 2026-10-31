@@ -1,6 +1,6 @@
 # nf-core/viralrecon 3.0.0: Depictio dashboards
 
-One dashboard: an **Overview**, then child tabs in two groups, read as a funnel from the
+One dashboard: an **Overview**, then child tabs in three groups, read as a funnel from the
 reads to the lineage of each consensus genome. The template follows the family rules in
 `depictio/projects/nf-core/RULES.md`, and is one of the two reference templates shipped
 with seeded dashboards.
@@ -10,8 +10,10 @@ with seeded dashboards.
 | Data & QC | MultiQC | Did reads trim, align and cover the genome in every sample? |
 | Data & QC | Sample QC | Did each sample yield a well-covered, trustworthy consensus genome? |
 | Data & QC | Coverage & Depth | Where along the genome does each sample lose depth? |
-| Genomes | Variants | Which mutations does each sample carry, and how well supported? |
-| Genomes | Lineage & Clustering | Which lineage and clade is each sample, and do they agree? |
+| Mutations | Variants | Which mutations does each sample carry, and how well supported? |
+| Mutations | Gene | Which mutations does this gene carry, and where do they sit? |
+| Mutations | Sample | What does one sample's genome look like, from reads to variants? |
+| Typing | Lineage & Clustering | Which lineage and clade is each sample, and do they agree? |
 
 `summary_metrics` (the pipeline's variant summary, one row per sample) is the source of
 every project link, so a filter on it reaches every tab. The template names no virus,
@@ -97,22 +99,25 @@ amplicon and amplicon depth.
 
 **Variants.** Strip: the calls (by functional class), the distinct mutations (with the one
 most samples share), the median allele frequency (calls against the 0.75 consensus cut-off)
-and the median read depth (with its spread). Then the allele frequency of every call along
-the genome (no point labels: mutation labels pile up over the dots), the allele frequency
-histogram, and the mutation matrix
-per sample and gene. Collapsed: the per-gene lollipops, calls per gene and per sample, and
-the variant table. Filters: gene, effect, functional class, allele frequency and read
-depth; a collapsed `Matrix filter` narrows the mutation matrix by mutation type only.
+and the median read depth (with its spread). Then the genome navigator and browser (below),
+the allele frequency histogram, and the mutation matrix per sample and gene. Collapsed: the
+per-gene lollipops, calls per gene and per sample, and the variant table. Filters: gene,
+effect, functional class, allele frequency and read depth; a collapsed `Matrix filter`
+narrows the mutation matrix by mutation type only.
 
-**Genome browser (preview dashboard `v2.yaml`).** The preview dashboard adds a genome
-browser to the Variants tab, linked to the allele frequency plot. It has no fixed location:
+**Genome navigator and browser.** The Variants tab holds the family's only genome browser,
+linked to a GenomeSpy navigator that draws every call at its position, as high as its allele
+frequency and in its snpEff effect's colour (no point labels: mutation labels pile up over
+the dots). The browser follows the navigator's brush, a locus typed in its header and a
+picked dot, and its window shows on the navigator as a band. It has no fixed location:
 it opens on the best supported call and lists the calls in its region picker with their gene,
 effect and frequency. "Best supported" is the `call_score` column the variant recipe
 (`recipes/variants_long.py`) adds: the allele frequency first, the read depth to break the
 ties at 1.0, and the calls outside a gene (snpEff's intergenic pseudo-genes) last, so the
-first call is never one of those. Picking a dot of the plot or a row of the variant table
+first call is never one of those. Picking a dot of the navigator or a row of the variant table
 narrows the calls to that mutation and centres the browser on it, on the samples that carry
-it. The window follows the other genome tiles of the tab. The tracks manifest holds one
+it. The Coverage, Gene and Sample tabs reach the browser through the Open in genome browser
+action of their genomic plots. The tracks manifest holds one
 variant and one alignment file per sample and no colour of its own: the tracks take the
 colour of the sample's Pangolin lineage (`color_by: lineage`, the key of `category_colors`
 the plots read) and the variants the colour of their snpEff effect. The manifest leads with
@@ -131,13 +136,11 @@ cuts short). Collapsed, because they compare samples with each other and say lit
 of a few: the classification flow from Pangolin QC verdict to lineage to clade (ribbons
 coloured by their target: on most runs every flow leaves the one verdict "pass"), the PCA of
 the samples by the mutations they share, the UpSet of the mutations shared across lineages
-(no annotation strip, which would list every mutation in its legend), and, in the preview
-dashboard, the table of the mutations of a clicked intersection. Also collapsed: samples per
+(no annotation strip, which would list every mutation in its legend), and the table of the mutations of a clicked intersection. Also collapsed: samples per
 lineage and per clade (the eight largest, the rest as Other) and the Nextclade table.
 Filters: lineage, clade and the two QC verdicts.
 
-**Gene and Sample (preview dashboard `v2.yaml`).** The preview dashboard groups its tabs as
-Data & QC, Mutations (Variants, Gene, Sample) and Typing (Lineage & Clustering). Gene and
+**Gene and Sample.** The tabs are grouped as Data & QC, Mutations (Variants, Gene, Sample) and Typing (Lineage & Clustering). Gene and
 Sample each open on one pick. The Gene picker starts on the gene holding the best supported
 call (`default_by: call_score`, which never picks an intergenic pseudo-gene) and shows the
 mutations of that gene along it (a lollipop) beside the allele frequency of its calls

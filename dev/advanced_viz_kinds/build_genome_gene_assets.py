@@ -21,8 +21,9 @@ Examples
     python dev/advanced_viz_kinds/build_genome_gene_assets.py \
         --assembly mm10 --release M25 --max-bytes 1500000
 
-Sources (both CC BY 4.0, mirrored by EMBL-EBI):
+Sources (all CC BY 4.0, mirrored by EMBL-EBI):
     hg38 / GRCh38 -> Gencode_human/release_<N>/gencode.v<N>.basic.annotation.gtf.gz
+    hg19 / GRCh37 -> Gencode_human/release_19/gencode.v19.annotation.gtf.gz
     mm10 / GRCm38 -> Gencode_mouse/release_M25/gencode.vM25.basic.annotation.gtf.gz
 """
 
@@ -45,6 +46,15 @@ ASSEMBLIES: dict[str, tuple[str, str, tuple[str, ...]]] = {
         "47",
         tuple(f"chr{c}" for c in [*range(1, 23), "X", "Y", "M"]),
     ),
+    "hg19": (
+        # Release 19 is the last GENCODE human release natively on GRCh37 (= hg19),
+        # and predates the `basic` file: the full annotation, filtered to
+        # protein-coding genes below, is the same gene set. Later releases only
+        # lift GRCh38 over, which moves coordinates.
+        "Gencode_human",
+        "19",
+        tuple(f"chr{c}" for c in [*range(1, 23), "X", "Y", "M"]),
+    ),
     "mm10": (
         # M25 is the last GENCODE mouse release on GRCm38 (= mm10). Newer
         # releases are GRCm39 (= mm39), whose coordinates do not transfer.
@@ -59,9 +69,14 @@ BASE_URL = "https://ftp.ebi.ac.uk/pub/databases/gencode"
 _ATTR = re.compile(r'(\S+) "([^"]*)"')
 
 
+#: Releases published without a `basic` annotation file.
+_NO_BASIC_RELEASES = frozenset({("Gencode_human", "19")})
+
+
 def gtf_url(assembly: str, release: str) -> str:
     species, _, _ = ASSEMBLIES[assembly]
-    return f"{BASE_URL}/{species}/release_{release}/gencode.v{release}.basic.annotation.gtf.gz"
+    kind = "annotation" if (species, release) in _NO_BASIC_RELEASES else "basic.annotation"
+    return f"{BASE_URL}/{species}/release_{release}/gencode.v{release}.{kind}.gtf.gz"
 
 
 def parse_genes(handle, contigs: tuple[str, ...]) -> list[list[object]]:
@@ -97,7 +112,7 @@ def build(assembly: str, release: str, out_path: Path, max_bytes: int) -> int:
 
     payload = {
         "assembly": assembly,
-        "source": f"GENCODE {release} basic annotation ({species}), protein-coding genes",
+        "source": f"GENCODE {release} {'annotation' if (species, release) in _NO_BASIC_RELEASES else 'basic annotation'} ({species}), protein-coding genes",
         "url": url,
         "generated_by": "dev/advanced_viz_kinds/build_genome_gene_assets.py",
         "columns": ["name", "chrom", "start", "end", "strand"],

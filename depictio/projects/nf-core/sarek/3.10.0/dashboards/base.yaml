@@ -7,6 +7,17 @@ version: 1
 # -> what the calls do to the transcripts, which genes carry them and one
 # region on one axis (Annotation).
 #
+# A run without `--tools` (mapping only) has no calls: every collection built
+# from a VCF or a bcftools report is optional, so it imports with the Overview,
+# MultiQC, Coverage and Locus tabs (depth and reads) and nothing else. The texts
+# that cite a call count carry it as a live value, so the line goes with its data.
+#
+# Germline and somatic are two sets of tabs. A call belongs to a unit: a sample, or
+# a tumour/normal pair named `<tumour>_vs_<normal>`. The germline tabs read the single
+# samples only (a pair's or a tumour's callset never reaches them); the Somatic tabs
+# read the pairs and the tumours called on their own, and exist only when the run
+# has such data (somatic_calls, cnv_segments, msi, somatic_vs_germline are optional).
+#
 # Nothing here is a truth comparison: "concordance" is agreement between
 # callers and samples. nf-core/variantbenchmarking has its own template.
 #
@@ -16,7 +27,7 @@ version: 1
 # Overview tiles and rows that read them).
 main_dashboard:
   title: nf-core/sarek
-  subtitle: Germline variant calls, from coverage to the genes they hit
+  subtitle: Coverage, then the calls and genes the run produced
   project_tag: Sarek Germline Variant Calling
   main_tab_name: Overview
   tab_icon: mdi:compass-outline
@@ -30,12 +41,44 @@ main_dashboard:
   # Declared once here, read by every tab: figures, advanced viz and filter
   # chips all colour a value the same way.
   category_colors:
-    caller: auto
+    # The callers are a known vocabulary, so they are pinned off the first palette slots
+    # that `sample_id: auto` below hands to the first samples: a caller never wears the
+    # colour of a sample in the same section. Any other caller takes a free slot.
+    caller:
+      '*': auto
+      deepvariant: '#4a3aa7'
+      haplotypecaller: '#008300'
+      strelka: '#e87ba4'
+      mutect2: '#0c8599'
+      freebayes: '#eda100'
+      manta: '#e34948'
+      tiddit: '#868e96'
     status_label:
       '*': auto
       Normal: '#1098ad'
       Tumour: '#c2255c'
       Unknown: '#adb5bd'
+    # A patient's design, and the same three values on a unit of calls: a tumour called
+    # on its own is never drawn on the scale of a paired one.
+    design:
+      Paired: '#7048e8'
+      Germline only: '#1098ad'
+      Tumour-only: '#c2255c'
+    unit_type:
+      paired: '#7048e8'
+      tumour_only: '#c2255c'
+      germline: '#1098ad'
+    call_class:
+      Germline (normal): '#1098ad'
+      Somatic (pair): '#7048e8'
+    # A somatic call the normal's germline calls also hold is a likely leak of an
+    # inherited variant: it takes the warm colour.
+    origin:
+      Also in the normal's germline calls: '#e8590c'
+      Not in the normal's germline calls: '#7048e8'
+    cn_state:
+      Gain: '#e8590c'
+      Loss: '#1c7ed6'
     variant_type:
       SNP: '#1c7ed6'
       INDEL: '#7048e8'
@@ -57,6 +100,15 @@ main_dashboard:
     indel_class:
       insertion: '#0ca678'
       deletion: '#c2255c'
+    # Structural-variant types: deletions and insertions keep the colours of the
+    # indel classes they extend.
+    svtype:
+      DEL: '#c2255c'
+      INS: '#0ca678'
+      DUP: '#1c7ed6'
+      INV: '#f08c00'
+      BND: '#7048e8'
+      CNV: '#868e96'
     # A caller writes its own FILTER reasons, more than the palette's eight on
     # a multi-caller run: the commonest take the palette, PASS stays green.
     filter_label:
@@ -68,7 +120,7 @@ main_dashboard:
     scope:
       region: '#1c7ed6'
       genome: '#868e96'
-    # The browser colours a sample's tracks by it and the depth lanes wear the same colour.
+    # The browser colours a sample's reads by it and the depth lanes wear the same colour.
     sample_id: auto
   # Persistent: drawn in every tab's filter panel, picks kept across tabs.
   # Bound to the sample hub, which links to every per-sample collection.
@@ -149,9 +201,9 @@ main_dashboard:
     logo_dark: https://raw.githubusercontent.com/nf-core/sarek/master/docs/images/nf-core-sarek_logo_dark.png
     order: 1
     body: >
-      Germline variant calling from reads to genes: how deeply the targets were covered, what
-      each caller called, which calls the callers share and what they do to the transcripts.
-      [Run parameters](params:)
+      From reads to genes: how deeply the targets were covered and, for a run that called
+      variants, what each caller called, which calls the callers share and what they do to the
+      transcripts. [Run parameters](params:)
     tag: sk-ov-hero
     index: ov-hero
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -159,9 +211,11 @@ main_dashboard:
     surface: card
     body: |
       ### About this dashboard
-      nf-core/sarek maps each sample's reads, measures the depth over the intervals, calls variants with one or more callers and annotates the calls with SnpEff. This page sums up one run; each tab behind it answers one question, in the order of the steps below.
+      nf-core/sarek maps each sample's reads and measures the depth over the intervals. A run that asks for callers (`--tools`) also calls variants and, with SnpEff, annotates them. Each tab answers one question, in the order of the steps below; a skipped step has no tab.
 
-      The sample filters in the left panel apply to every tab: narrow the samples once and the whole dashboard follows. A bar above a section narrows that section only.
+      Sarek calls every sample on its own and, when the sheet names a tumour (status 1) and a normal (status 0) for a patient, the pair as well. A pair is named `<tumour>_vs_<normal>`: the Variant calls and Annotation tabs read the normal samples called on their own, and the Somatic group appears when the run has pairs or tumours to show. The Design filter keeps the patients that were paired, tumour-only or germline only.
+
+      The sample filters in the left panel apply to every tab. A bar above a section narrows that section only.
     tag: sk-ov-about
     index: ov-about
     layout: {x: 0, y: 1, w: 5, h: 3}
@@ -183,26 +237,56 @@ main_dashboard:
     tag: sk-ov-run
     index: ov-run
     layout: {x: 5, y: 1, w: 3, h: 3}
+  # A step past the depth cites a count from its tab's collection, so the import takes
+  # the line out with its data: a run that called nothing keeps the first two steps.
   - component_type: text
     surface: card
     accent: green
+    values:
+      n_callsets: {dc: bcftools_stats_summary, column: sample, aggregation: count, format: integer}
+      n_qc: {dc: callset_qc, column: callset, aggregation: count, format: integer}
+      n_calls: {dc: vcf_variants, column: variant_key, aggregation: count, format: si}
+      n_ann: {dc: snpeff_ann_variants, column: variant_key, aggregation: count, format: si}
     body: |
-      ### Six steps from reads to genes
-      Each step names its settings and the tab that shows its result.
+      ### Steps from reads to genes
+      Each step names its settings and the tab that shows its result. A step the run skipped drops out.
 
       ::: steps
       1. ![](icon:mdi:content-cut) **Map** Trim, align, mark duplicates · [Settings](params:aligner) · [MultiQC](tab:MultiQC)
       2. ![](icon:mdi:layers-outline) **Cover** Depth over the intervals · [Settings](params:intervals) · [Coverage](tab:Coverage)
-      3. ![](icon:mdi:dna) **Call** One callset per caller and sample · [Settings](params:tools) · [Yield](tab:Variant yield)
-      4. ![](icon:mdi:check-decagram) **Check** Ts/Tv, PASS share, zygosity · [Settings](params:skip_tools) · [Quality](tab:Call quality)
-      5. ![](icon:mdi:set-merge) **Compare** Calls the callers share · [Settings](params:joint_germline) · [Concordance](tab:Caller concordance)
-      6. ![](icon:mdi:tag-outline) **Annotate** SnpEff effects and genes · [Settings](params:snpeff) · [Consequences](tab:Consequences)
+      3. ![](icon:mdi:dna) **Call** {{n_callsets}} callsets, one per caller and sample · [Settings](params:tools) · [Yield](tab:Variant yield)
+      4. ![](icon:mdi:check-decagram) **Check** Ts/Tv, PASS share and zygosity of {{n_qc}} callsets · [Settings](params:skip_tools) · [Quality](tab:Call quality)
+      5. ![](icon:mdi:set-merge) **Compare** Calls the callers share, among {{n_calls}} calls · [Settings](params:joint_germline) · [Concordance](tab:Caller concordance)
+      6. ![](icon:mdi:tag-outline) **Annotate** SnpEff effects and genes on {{n_ann}} calls · [Settings](params:snpeff) · [Consequences](tab:Consequences)
       :::
     tag: sk-ov-steps
     index: ov-steps
     layout: {x: 0, y: 4, w: 8, h: 3}
-  # Key figures: one card per stage of the funnel, each on a collection every
-  # run writes, each opening the tab that explains it in that tab's colour.
+  # The design of the run in one card: every patient has a normal, a tumour, or both. The
+  # hub is the one collection every route writes, so it keeps its slot on a mapping-only run.
+  - component_type: card
+    workflow_tag: sarek
+    data_collection_tag: samples
+    aggregation: nunique
+    column_name: patient
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: design
+    top_n_count: 3
+    display:
+      icon_name: mdi:account-group-outline
+      icon_color: gray
+      caption: patients, by design
+      decimals: 0
+    section: Key figures
+    tag: sk-ov-kf-patients
+    index: ov-kf-patients
+    title: Patients
+    description: Patients on the sample sheet. The bars rank the designs, where a patient is Paired (tumour and normal), Germline only or Tumour-only.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  # Key figures: one card per stage of the funnel, each opening the tab that explains it
+  # in that tab's colour. The patients and depth cards read collections that every run
+  # writes; a mapping-only run keeps those two, widened to the row.
   - component_type: card
     workflow_tag: sarek
     data_collection_tag: bcftools_stats_summary
@@ -223,7 +307,7 @@ main_dashboard:
     index: ov-kf-calls
     title: Variant calls
     description: Records the callers wrote, summed over the callsets. The bar splits them by caller.
-    layout: {x: 0, y: 0, w: 2, h: 2}
+    layout: {x: 4, y: 0, w: 2, h: 2}
   # The `total` row of the region scope is mosdepth's own roll-up over the
   # intervals: one value per sample.
   - component_type: card
@@ -248,28 +332,6 @@ main_dashboard:
     title: Depth on target
     description: Median depth over the intervals, one value per sample. The box shows how it spreads.
     layout: {x: 2, y: 0, w: 2, h: 2}
-  # Callsets with no record (a caller that found nothing) have no share to give.
-  - component_type: card
-    workflow_tag: sarek
-    data_collection_tag: callset_qc
-    aggregation: median
-    column_name: pass_pct
-    column_type: float64
-    filter_expr: "col('n_records') > 0"
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
-    display:
-      icon_name: mdi:check-decagram
-      icon_color: cyan
-      caption: median per callset, with its spread
-      link: tab:Call quality
-      decimals: 1
-    section: Key figures
-    tag: sk-ov-kf-pass
-    index: ov-kf-pass
-    title: PASS share (%)
-    description: Median share of a callset's calls the caller kept (FILTER PASS or unset). The box shows how it spreads.
-    layout: {x: 4, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: sarek
     data_collection_tag: bcftools_stats_tstv
@@ -292,7 +354,9 @@ main_dashboard:
     tag: sk-ov-kf-tstv
     index: ov-kf-tstv
     title: Ts/Tv
-    description: Median transition to transversion ratio of the callsets with SNPs. Below 1.8 reads as noise.
+    description: Median transition to transversion ratio of the callsets with SNPs. A human genome sits near
+      2.0 to 2.1 and an exome near 2.8 to 3.0; below the 1.8 floor false calls dilute the transitions, and the
+      bar turns red under 1.5.
     layout: {x: 6, y: 0, w: 2, h: 2}
   # Findings filter bar: the caller (it narrows every collection with a
   # caller column), then the sample.
@@ -398,6 +462,12 @@ main_dashboard:
       - [Variant yield](tab:Variant yield)
       - [Call quality](tab:Call quality)
       - [Caller concordance](tab:Caller concordance)
+      - [Structural variants](tab:Structural variants)
+
+      ### Somatic
+      - [Somatic calls](tab:Somatic calls)
+      - [Copy number & MSI](tab:Copy number & MSI)
+      - [Germline vs somatic](tab:Germline vs somatic)
 
       ### Annotation
       - [Consequences](tab:Consequences)
@@ -407,9 +477,9 @@ main_dashboard:
     section: How to read this dashboard
     tag: sk-ov-how-to-read
     index: ov-how-to-read
-    layout: {x: 0, y: 0, w: 8, h: 2}
-  # Persistent sample filters: the tumour/normal status first, then patient
-  # and sample.
+    layout: {x: 0, y: 0, w: 8, h: 3}
+  # Persistent sample filters: the tumour/normal status and the patient's design
+  # first, then patient and sample.
   - component_type: interactive
     workflow_tag: sarek
     data_collection_tag: samples
@@ -429,6 +499,21 @@ main_dashboard:
     workflow_tag: sarek
     data_collection_tag: samples
     interactive_component_type: MultiSelect
+    column_name: design
+    column_type: object
+    display:
+      icon_name: mdi:account-multiple-outline
+      custom_color: grape
+    section: Sample filters
+    group: Sample scope
+    tag: sk-filter-design
+    index: sample-filters-design
+    title: Design
+    layout: {x: 0, y: 2, w: 1, h: 2}
+  - component_type: interactive
+    workflow_tag: sarek
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
     column_name: patient
     column_type: object
     display:
@@ -439,7 +524,7 @@ main_dashboard:
     tag: sk-filter-patient
     index: sample-filters-patient
     title: Patient
-    layout: {x: 0, y: 2, w: 1, h: 3}
+    layout: {x: 0, y: 4, w: 1, h: 3}
   - component_type: interactive
     workflow_tag: sarek
     data_collection_tag: samples
@@ -454,7 +539,7 @@ main_dashboard:
     tag: sk-filter-sample
     index: sample-filters-sample
     title: Sample ID
-    layout: {x: 0, y: 5, w: 1, h: 3}
+    layout: {x: 0, y: 7, w: 1, h: 3}
   - component_type: table
     workflow_tag: sarek
     data_collection_tag: samples
@@ -464,7 +549,7 @@ main_dashboard:
     tag: sk-sample-sheet
     index: sample-sheet
     title: Sample sheet
-    description: One row per sample, with its patient, sex, status and the callers run on it. A sex of NA means the samplesheet did not state it; the Coverage tab infers it from the sex chromosomes.
+    description: One row per sample, with its patient, sex, status, design and the callers run on it. A sex of NA means the samplesheet did not state it; the Coverage tab infers it from the sex chromosomes.
     layout: {x: 0, y: 0, w: 8, h: 6}
 tabs:
 # ============================================================================
@@ -504,10 +589,11 @@ tabs:
     order: 1
     body: >
       [MultiQC](https://multiqc.info) gathers the per-sample reports of FastQC, fastp, Samtools,
-      GATK, mosdepth, bcftools, VCFtools, SnpEff and VEP. Read whether every sample kept its
-      reads, mapped well and reached a usable depth before reading any call. A library carries
-      a lane and a read suffix, so a sample can appear once per read; the per-caller summaries
-      of the calls are on the Variant yield, Call quality and Consequences tabs.
+      GATK and mosdepth, and of the callers' bcftools, VCFtools, SnpEff and VEP when the run made
+      calls. Read whether every sample kept its reads, mapped well and reached a usable depth
+      before reading any call. A library carries a lane and a read suffix, so a sample can appear
+      once per read; the per-caller summaries of the calls are on the Variant yield, Call quality
+      and Consequences tabs.
     tag: sk-mqc-intro
     index: mqc-intro
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -659,7 +745,7 @@ tabs:
     color: blue
     filter_bar: true
     visible_filters: 1
-    description: Mean depth per contig and sample; the bar picks the intervals or whole contigs
+    description: Mean depth per contig and sample. It opens on the intervals, where the callers look for calls; the bar switches to whole contigs.
   - name: Sex check
     icon: mdi:chart-scatter-plot
     color: blue
@@ -734,7 +820,7 @@ tabs:
     tag: sk-cov-card-target
     index: cov-card-target
     title: Depth per interval
-    description: Median mean depth of an interval in a sample. Below 20x a heterozygous call gets hard.
+    description: Median mean depth of an interval in a sample. The bar turns amber under the 20x floor, where a heterozygous call gets hard to tell from noise, and red under 10x.
     layout: {x: 2, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: sarek
@@ -839,7 +925,9 @@ tabs:
     index: cov-sex-scatter
     title: X depth against Y depth
     description: One point per library, coloured by the sex its X/Y depth ratio implies. The pink wedge is
-      the XX zone (ratio of 10 or more), the blue one the XY zone; the label is a heuristic, not a genotype.
+      the XX zone (X depth at least ten times Y depth), the blue one the XY zone. The line between them is a
+      cut-off of this template, since a male has one X and one Y so his ratio sits near 1, a female has almost no
+      Y reads so hers is far above 10. The label is a heuristic, not a genotype.
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: table
     workflow_tag: sarek
@@ -883,7 +971,7 @@ tabs:
   - name: Yield filters
     icon: mdi:filter-variant
     color: violet
-    description: The callers in view, and the bcftools block the distribution reads
+    description: The callers in view, and the bcftools block the distribution reads; it opens on read depth, the first check of a call
   grid_sections:
   - name: Yield at a glance
     icon: mdi:counter
@@ -900,7 +988,7 @@ tabs:
   - name: bcftools distributions
     icon: mdi:chart-bell-curve
     color: gray
-    description: The depth, quality and allele-frequency blocks of bcftools stats
+    description: The blocks of bcftools stats, one at a time; it opens on read depth, the first check of a call, and the left panel picks another
     collapsed: true
   - name: Yield table
     icon: mdi:table
@@ -1086,17 +1174,31 @@ tabs:
     data_collection_tag: bcftools_stats_sections
     use: bcftools/stats_sections
     visu_type: bar
-    dict_kwargs:
-      x: bin
-      y: count
-      color: caller
-      barmode: group
-      labels: {bin: Bin, count: Records, caller: Caller}
+    mode: code
+    code_content: |-
+      # The block picked in the left panel, caller by caller. Each caller's records are drawn as a share of its own total, so a caller with more calls does not flatten the others; a numeric block keeps the bins that hold 99% of the records, and a log axis steps in when a few bins dominate the rest.
+      sec = (df['section'].unique().to_list() or ['depth'])[0]
+      cat = sec in ['substitution', 'singleton_stats']
+      key = 'label' if cat else 'bin'
+      titles = {'depth': 'Read depth at the site', 'indel_length': 'Indel length (bp; deletions negative)', 'allele_frequency': 'Non-reference allele frequency', 'substitution': 'Substitution', 'singleton_stats': 'Singleton type'}
+      d = df.filter(pl.col(key).is_not_null() & (pl.col('count') > 0)).group_by(['caller', key]).agg(pl.col('count').sum()).with_columns((100.0 * pl.col('count') / pl.col('count').sum().over('caller')).alias('share'))
+      pooled = d.group_by(key).agg(pl.col('count').sum()).sort(key).with_columns((pl.col('count').cum_sum() / pl.col('count').sum()).alias('cum'))
+      lo = pooled.filter(pl.col('cum') >= 0.005)[key].min()
+      hi = pooled.filter(pl.col('cum') >= 0.995)[key].min()
+      d = d if cat else d.filter((pl.col('bin') >= lo) & (pl.col('bin') <= hi))
+      d = d.with_columns(pl.col(key).cast(pl.Utf8).alias('x')) if cat else d.with_columns(pl.col('bin').cast(pl.Utf8).alias('x')).sort(['caller', 'bin'])
+      bars = cat or d['bin'].n_unique() <= 12
+      log = (not bars) and d['share'].max() > 25 * max(d['share'].median(), 0.001)
+      by = d.group_by('x').agg(pl.col('share').sum(), pl.col(key).first().alias('k')).sort('share' if cat else 'k', descending=cat)
+      colors = depictio_category_colors.get('caller') or {}
+      labels = {'x': titles.get(sec, 'Bin'), 'bin': titles.get(sec, 'Bin'), 'share': "Share of the caller's records (%)" + (' - log scale' if log else ''), 'caller': 'Caller'}
+      fig = px.bar(d.to_pandas(), x='x', y='share', color='caller', barmode='group', category_orders={'x': by['x'].to_list()}, color_discrete_map=colors, labels=labels) if bars else px.line(d.to_pandas(), x='bin', y='share', color='caller', markers=d['bin'].n_unique() <= 80, log_y=log, color_discrete_map=colors, labels=labels)
+      fig.update_layout(margin=dict(t=10))
     section: bcftools distributions
     tag: sk-vy-fig-dist
     index: vy-dist-bars
     title: The chosen block, caller by caller
-    description: Pick the block in the left panel; the substitution and singleton blocks read in the table.
+    description: Pick the block in the left panel. Each caller is drawn as a share of its own records so the yield does not flatten the rest; depth and indel length keep the bins that hold 99% of the records, and a log axis steps in when a few bins dominate.
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: table
     workflow_tag: sarek
@@ -1314,23 +1416,32 @@ tabs:
     title: Callset QC profile
     description: Each axis rescaled to compare, ticks in their units; colour is the caller. Brush an axis to keep a range.
     layout: {x: 0, y: 0, w: 8, h: 6}
-  - component_type: figure
+  # One bar per caller, its FILTER values stacked (summed over the samples in
+  # view). PASS keeps the green of category_colors.filter_label; the controls
+  # switch counts and shares, sort the callers and hide values.
+  - component_type: advanced_viz
     workflow_tag: sarek
     data_collection_tag: vcftools_filter_summary
-    use: vcftools/filter_summary
-    visu_type: bar
-    dict_kwargs:
-      x: caller
-      y: n_variants
-      color: filter_label
-      barmode: stack
-      labels: {caller: '', n_variants: Calls, filter_label: FILTER}
+    viz_kind: stacked_taxonomy
+    config:
+      viz_kind: stacked_taxonomy
+      sample_id_col: caller
+      taxon_col: filter_label
+      abundance_col: n_variants
+      normalise_to_one: true
+      orientation: h
+      sample_sort: category
+      sort_category: PASS
+      top_n: 8
+      value_title: ''
+      x_title: ''
+      hidden_controls: [rank, group]
     section: FILTER partitions
     tag: sk-cq-fig-filter
     index: cq-filter-partitions
     title: Calls per FILTER value
-    description: A bar's height is everything the caller wrote; the PASS slice is what it stands behind.
-    layout: {x: 0, y: 0, w: 8, h: 4}
+    description: One bar per caller, split by the FILTER value it wrote; PASS is what it stands behind. Switch Normalise for counts, or sort on PASS.
+    layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: advanced_viz
     workflow_tag: sarek
     data_collection_tag: vcftools_tstv_qual
@@ -1354,7 +1465,7 @@ tabs:
     visu_type: bar
     mode: code
     code_content: |-
-      # Ts/Tv of every callset with SNPs, lowest first, in its caller's colour; the dashed line is the 1.8 floor and the dotted one the 1.5 warning level of the Ts/Tv card.
+      # Ts/Tv of every callset with SNPs, in its caller's colour; the dashed line is the 1.8 floor (human genome 2.0 to 2.1, exome 2.8 to 3.0) and the dotted one the 1.5 warning level of the Ts/Tv card.
       d = df.filter(pl.col('ts_tv') > 0).sort('ts_tv', descending=True)
       fig = px.bar(d.to_pandas(), x='ts_tv', y='callset', color='caller', orientation='h', color_discrete_map=depictio_category_colors.get('caller') or {}, category_orders={'callset': d['callset'].to_list()}, labels={'ts_tv': 'Ts/Tv', 'callset': '', 'caller': 'Caller'})
       fig.add_vline(x=1.8, line_dash='dash', line_color='gray', annotation_text='floor 1.8', annotation_position='top')
@@ -1364,7 +1475,11 @@ tabs:
     tag: sk-cq-fig-tstv
     index: cq-tstv-bars
     title: Ts/Tv per callset
-    description: One bar per sample and caller, in the caller's colour. A bar left of the dashed line is under the 1.8 floor.
+    description: One bar per sample and caller, in the caller's colour. The dashed line is the 1.8 Ts/Tv floor
+      of a germline callset; a human genome sits near 2.0 to 2.1 and an exome near 2.8 to 3.0, and below about
+      1.8 false calls dilute the transitions. The dotted line is the 1.5 warning level of the Ts/Tv card, set by
+      this template well under the floor (random errors give about 0.5). A bar left of the dashed line is
+      under the floor.
     layout: {x: 0, y: 0, w: 4, h: 6}
   - component_type: table
     workflow_tag: sarek
@@ -1605,7 +1720,11 @@ tabs:
     tag: sk-cc-fig-vaf
     index: cc-vaf-dist
     title: Allele fraction per caller
-    description: Share of each caller's calls per allele-fraction bin. A germline callset peaks near 0.5 (heterozygous) and near 1 (homozygous alternate); a heterozygous peak off 0.5 or a shoulder of low fractions flags contamination or noise calls.
+    description: Share of each caller's calls per allele-fraction bin. A germline callset peaks near 0.5
+      (heterozygous) and near 1 (homozygous alternate). The grey bands mark where those peaks are expected, 0.35
+      to 0.65 for heterozygous calls and 0.9 to 1 for homozygous-alternate ones, the spread that read sampling
+      gives around 0.5 and 1 at usual depths; a peak outside its band or a shoulder of low fractions flags
+      contamination or noise calls.
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: table
     workflow_tag: sarek
@@ -1619,6 +1738,1208 @@ tabs:
     title: Variant calls
     description: Locus, allele, quality, FILTER, genotype, depth and allele fraction, one row per call and caller.
     layout: {x: 0, y: 0, w: 8, h: 6}
+# Structural variants: the records of the SV callers (Manta, TIDDIT), which the
+# small-variant tabs leave out. Optional with sv_calls: a run without such a
+# caller does not get the tab. A click on a table row centres the genome browser
+# of the Locus tab (the table carries chrom, pos and end).
+- title: Structural variants
+  subtitle: Which structural variants did the SV callers find, and how big?
+  tab_group: Variant calls
+  tab_order: 6
+  tab_icon: mdi:vector-polyline
+  tab_icon_color: lime
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: SV filters
+    icon: mdi:filter-variant
+    color: lime
+    description: The types, callers and lengths in view; a breakend has no length and leaves a length range
+  grid_sections:
+  - name: SVs at a glance
+    icon: mdi:counter
+    color: lime
+    description: Events, their types and their lengths over the callsets in view
+  - name: Types and lengths
+    icon: mdi:chart-bar
+    color: lime
+    description: The types each sample holds, and how long each type runs on a log axis
+  - name: Along the genome
+    icon: mdi:chart-donut
+    color: lime
+    description: Where the events sit on each chromosome, and which loci a breakend joins
+  - name: Size classes and evidence
+    icon: mdi:check-decagram
+    color: lime
+    description: How the types spread over size classes, and how well the caller supports them
+  - name: SV table
+    icon: mdi:table
+    color: gray
+    description: One row per record as the caller wrote it; a click centres the genome browser on it
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      [Manta](https://github.com/Illumina/manta) and [TIDDIT](https://github.com/SciLifeLab/TIDDIT)
+      call structural variants from the alignments: deletions, duplications, insertions and
+      breakends. A breakend is written as two records, one per side, and counts once in the cards
+      and the bars. Click a row of the table to centre the genome browser of the Locus tab on it.
+    tag: sk-sv-intro
+    index: sv-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: interactive
+    workflow_tag: sarek
+    data_collection_tag: sv_calls
+    interactive_component_type: MultiSelect
+    column_name: svtype
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: lime
+    section: SV filters
+    tag: sk-sv-filter-type
+    index: sv-type-filter
+    title: SV type
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: sarek
+    data_collection_tag: sv_calls
+    interactive_component_type: MultiSelect
+    column_name: caller
+    column_type: object
+    display:
+      icon_name: mdi:dna
+      custom_color: indigo
+    section: SV filters
+    tag: sk-sv-filter-caller
+    index: sv-caller-filter
+    title: Caller
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: sarek
+    data_collection_tag: sv_calls
+    interactive_component_type: RangeSlider
+    column_name: size_bp
+    column_type: int64
+    show_histogram: true
+    display:
+      icon_name: mdi:ruler
+      custom_color: yellow
+    section: SV filters
+    tag: sk-sv-filter-size
+    index: sv-size-filter
+    title: Length (bp)
+    layout: {x: 0, y: 6, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: sarek
+    data_collection_tag: sv_calls
+    aggregation: count
+    column_name: chrom
+    column_type: object
+    filter_expr: "col('primary') == True"
+    secondary_layout: composition
+    breakdown_col: svtype
+    display:
+      icon_name: mdi:vector-polyline
+      icon_color: lime.4
+      caption: events in view, by type
+      decimals: 0
+    section: SVs at a glance
+    tag: sk-sv-card-events
+    index: sv-card-events
+    title: SV events
+    description: Structural variants over the callsets in view, a breakend counted once. The bar splits them by type.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: sarek
+    data_collection_tag: sv_calls
+    aggregation: count
+    column_name: chrom
+    column_type: object
+    filter_expr: "col('primary') == True"
+    secondary_layout: donut
+    breakdown_col: sample
+    display:
+      icon_name: mdi:test-tube
+      icon_color: lime.6
+      caption: events in view, by sample
+      decimals: 0
+    section: SVs at a glance
+    tag: sk-sv-card-samples
+    index: sv-card-samples
+    title: Events per sample
+    description: The same events, split by sample, to see whether one library carries most of them.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: sarek
+    data_collection_tag: sv_calls
+    aggregation: median
+    column_name: size_bp
+    column_type: int64
+    filter_expr: "col('size_bp') > 0"
+    secondary_layout: top_n
+    breakdown_col: svtype
+    top_n_count: 3
+    display:
+      icon_name: mdi:ruler
+      icon_color: lime.8
+      caption: median length by type, the longest first
+      format: si
+    section: SVs at a glance
+    tag: sk-sv-card-median
+    index: sv-card-median
+    title: Median length (bp)
+    description: Median length of the events that have one; a breakend has none. The bars rank the types by their own median.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: sarek
+    data_collection_tag: sv_calls
+    aggregation: max
+    column_name: size_bp
+    column_type: int64
+    filter_expr: "col('size_bp') > 0"
+    secondary_layout: top_n
+    breakdown_col: svtype
+    top_n_count: 3
+    display:
+      icon_name: mdi:arrow-expand-horizontal
+      icon_color: lime.9
+      caption: longest event by type
+      format: si
+    section: SVs at a glance
+    tag: sk-sv-card-longest
+    index: sv-card-longest
+    title: Longest event (bp)
+    description: Length of the longest deletion, duplication or insertion in view. The bars rank the types by their longest.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: figure
+    workflow_tag: sarek
+    data_collection_tag: sv_calls
+    visu_type: bar
+    mode: code
+    code_content: |-
+      # SV events per sample, stacked by type; a breakend is counted once. The colours are the SV-type colours of the dashboard.
+      d = df.filter(pl.col('primary')).group_by(['sample', 'svtype']).agg(pl.len().alias('events')).sort(['sample', 'svtype'])
+      colors = depictio_category_colors.get('svtype') or {}
+      fig = px.bar(d.to_pandas(), x='sample', y='events', color='svtype', barmode='stack', color_discrete_map=colors, category_orders={'svtype': list(colors)}, labels={'sample': '', 'events': 'SV events', 'svtype': 'Type'})
+      fig.update_xaxes(automargin=True)
+      fig.update_layout(margin=dict(t=10))
+    section: Types and lengths
+    tag: sk-sv-fig-types
+    index: sv-types-per-sample
+    title: SV types per sample
+    description: One stacked bar per sample, one segment per type.
+    layout: {x: 0, y: 0, w: 4, h: 4}
+  - component_type: figure
+    workflow_tag: sarek
+    data_collection_tag: sv_calls
+    visu_type: histogram
+    mode: code
+    code_content: |-
+      # SV lengths on a log axis, one colour per type, in the colours and order of the bar beside it.
+      # Binned on log10 of the length: plotly.js bins a log axis in linear space, which draws nothing.
+      colors = depictio_category_colors.get('svtype') or {}
+      d = df.filter(pl.col('size_bp') > 0).with_columns(pl.col('size_bp').cast(pl.Float64).log10().alias('log_len'))
+      fig = px.histogram(d.to_pandas(), x='log_len', color='svtype', nbins=40, barmode='overlay', opacity=0.75, color_discrete_map=colors, category_orders={'svtype': list(colors)}, labels={'log_len': 'Length (bp)', 'svtype': 'Type', 'count': 'Events'})
+      fig.update_xaxes(tickvals=[1, 2, 3, 4, 5, 6, 7], ticktext=['10', '100', '1k', '10k', '100k', '1M', '10M'])
+      fig.update_yaxes(title_text='Events')
+      fig.update_layout(margin=dict(t=10))
+    section: Types and lengths
+    tag: sk-sv-fig-sizes
+    index: sv-size-hist
+    title: SV length by type
+    description: Events per length bin on a log axis, one colour per type; a breakend has no length and is not drawn.
+    layout: {x: 4, y: 0, w: 4, h: 4}
+  - component_type: advanced_viz
+    workflow_tag: sarek
+    data_collection_tag: sv_calls
+    viz_kind: ideogram
+    config:
+      viz_kind: ideogram
+      chrom_col: chrom
+      start_col: pos
+      end_col: end
+      category_col: svtype
+      sample_col: sample
+      label_col: svtype
+      assembly: '{GENOME}'
+      mode: auto
+      orientation: horizontal
+      facet_by_sample: false
+      max_chromosomes: 24
+    section: Along the genome
+    tag: sk-sv-av-ideogram
+    index: sv-ideogram
+    title: SVs on the karyotype
+    description: Every record on its chromosome, coloured by type, one sample at a time (picked above the chart). A deletion or duplication spans its length; a breakend and an insertion are a point. Click a chromosome to zoom along it.
+    layout: {x: 0, y: 0, w: 5, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: sarek
+    data_collection_tag: sv_calls
+    viz_kind: genome_chord
+    config:
+      viz_kind: genome_chord
+      chrom_a_col: chrom
+      pos_a_col: pos
+      chrom_b_col: link_chrom
+      pos_b_col: link_pos
+      category_col: svtype
+      label_col: svtype
+      sample_col: sample
+      assembly: '{GENOME}'
+      colour_by: category
+      intra_chromosomal: true
+      max_links: 500
+    section: Along the genome
+    tag: sk-sv-av-chord
+    index: sv-chord
+    title: What each event joins
+    description: One chord per event from its start to its far end, coloured by type. A breakend joins two loci, often on two chromosomes; a deletion, duplication or inversion links its two ends on one chromosome. Insertions have one locus and are not drawn.
+    layout: {x: 5, y: 0, w: 3, h: 6}
+  - component_type: figure
+    workflow_tag: sarek
+    data_collection_tag: sv_calls
+    visu_type: bar
+    mode: code
+    code_content: |-
+      # Events per chromosome in karyotype order, stacked by type, one panel per sample.
+      colors = depictio_category_colors.get('svtype') or {}
+      d = df.filter(pl.col('primary')).group_by(['sample', 'chrom', 'svtype']).agg(pl.len().alias('events'))
+      bare = pl.col('chrom').str.replace('^chr', '')
+      rank = pl.coalesce(bare.cast(pl.Int64, strict=False), bare.replace_strict({'X': 100, 'Y': 101, 'M': 102, 'MT': 102}, default=200, return_dtype=pl.Int64))
+      order = d.select('chrom').unique().with_columns(rank.alias('r')).sort(['r', 'chrom'])['chrom'].to_list()
+      fig = px.bar(d.to_pandas(), x='chrom', y='events', color='svtype', facet_row='sample', barmode='stack', color_discrete_map=colors, category_orders={'svtype': list(colors), 'chrom': order}, labels={'chrom': '', 'events': 'Events', 'svtype': 'Type', 'sample': 'Sample'})
+      fig.for_each_annotation(lambda a: a.update(text=a.text.split('=')[-1]))
+      fig.update_layout(margin=dict(t=10, b=10), legend=dict(orientation='h', y=-0.12, yanchor='top', x=0, title_text=''))
+    section: Along the genome
+    tag: sk-sv-fig-per-chrom
+    index: sv-per-chrom
+    title: Events per chromosome
+    description: Events on each chromosome in karyotype order, stacked by type, one row per sample. A chromosome far above its neighbours for one sample only points at a local rearrangement or a noisy region.
+    layout: {x: 0, y: 6, w: 8, h: 4}
+  - component_type: figure
+    workflow_tag: sarek
+    data_collection_tag: sv_calls
+    visu_type: heatmap
+    mode: code
+    code_content: |-
+      # Events per type and size class; the cells hold the count, the shade its share of the type.
+      colors = depictio_category_colors.get('svtype') or {}
+      classes = ['50 bp-1 kb', '1-10 kb', '10-100 kb', '100 kb-1 Mb', '>1 Mb']
+      size = pl.col('size_bp')
+      cls = pl.when(size < 1_000).then(pl.lit(classes[0])).when(size < 10_000).then(pl.lit(classes[1])).when(size < 100_000).then(pl.lit(classes[2])).when(size < 1_000_000).then(pl.lit(classes[3])).otherwise(pl.lit(classes[4]))
+      d = df.filter(pl.col('primary') & (size > 0)).with_columns(cls.alias('size_class')).group_by(['svtype', 'size_class']).agg(pl.len().alias('events'))
+      # Types in the dashboard's SV-type order, any other after them.
+      rank = pl.DataFrame({'svtype': list(colors), 'r': list(range(len(colors)))})
+      types = d.select('svtype').unique().join(rank, on='svtype', how='left').sort(['r', 'svtype'], nulls_last=True)['svtype'].to_list()
+      grid = pl.DataFrame({'svtype': types}).join(pl.DataFrame({'size_class': classes}), how='cross').join(d, on=['svtype', 'size_class'], how='left').with_columns(pl.col('events').fill_null(0))
+      grid = grid.with_columns((pl.col('events') / pl.col('events').sum().over('svtype').clip(lower_bound=1) * 100).alias('share'))
+      order = pl.DataFrame({'svtype': types})
+      counts = order.join(grid.pivot(on='size_class', index='svtype', values='events'), on='svtype', how='left').select(classes).rows()
+      share = order.join(grid.pivot(on='size_class', index='svtype', values='share'), on='svtype', how='left').select(classes).rows()
+      fig = go.Figure(go.Heatmap(z=share, x=classes, y=types, text=counts, texttemplate='%{text}', colorscale='Greens', zmin=0, zmax=100, colorbar=dict(title='% of type'), hovertemplate='%{y}, %{x}: %{text} events (%{z:.0f}% of the type)<extra></extra>'))
+      fig.update_yaxes(autorange='reversed')
+      fig.update_layout(margin=dict(t=10), xaxis_title='Size class')
+    section: Size classes and evidence
+    tag: sk-sv-fig-size-class
+    index: sv-size-class
+    title: Types by size class
+    description: Events per type and size class, the number in the cell and the shade its share of the type. Short-read callers find most deletions under 1 kb; a type piling up above 1 Mb is worth a look in the genome browser.
+    layout: {x: 0, y: 0, w: 3, h: 4}
+  - component_type: figure
+    workflow_tag: sarek
+    data_collection_tag: sv_calls
+    visu_type: bar
+    mode: code
+    code_content: |-
+      # Per type, the share of events that PASS the caller's filters and the share it placed precisely.
+      d = df.filter(pl.col('primary')).group_by('svtype').agg((pl.col('is_pass').mean() * 100).alias('PASS'), ((~pl.col('imprecise')).mean() * 100).alias('Precise breakpoints'), pl.len().alias('events'))
+      colors = depictio_category_colors.get('svtype') or {}
+      order = d.select('svtype').join(pl.DataFrame({'svtype': list(colors), 'r': list(range(len(colors)))}), on='svtype', how='left').sort('r', nulls_last=True)['svtype'].to_list()
+      long = d.unpivot(index=['svtype', 'events'], on=['PASS', 'Precise breakpoints'], variable_name='measure', value_name='share')
+      fig = px.bar(long.to_pandas(), x='svtype', y='share', color='measure', barmode='group', range_y=[0, 100], category_orders={'svtype': order}, color_discrete_sequence=['#5c940d', '#a9e34b'], custom_data=['events'], labels={'svtype': '', 'share': 'Share of events (%)', 'measure': ''})
+      fig.update_traces(hovertemplate='%{x}: %{y:.0f}% of %{customdata[0]} events<extra>%{fullData.name}</extra>')
+      fig.update_layout(margin=dict(t=10), legend=dict(orientation='h', y=1.02, yanchor='bottom', x=0))
+    section: Size classes and evidence
+    tag: sk-sv-fig-evidence
+    index: sv-evidence
+    title: Filters passed and precise breakpoints
+    description: Per type, the share of events that pass the caller's own filters and the share whose breakpoints it placed to the base (the rest are IMPRECISE, located from read pairs only). Breakends and long events are usually the least precise.
+    layout: {x: 3, y: 0, w: 3, h: 4}
+  - component_type: figure
+    workflow_tag: sarek
+    data_collection_tag: sv_calls
+    visu_type: box
+    mode: code
+    code_content: |-
+      # Caller QUAL per type, one box per type in the type colours, the events behind it as points.
+      colors = depictio_category_colors.get('svtype') or {}
+      d = df.filter(pl.col('primary') & pl.col('qual').is_not_null())
+      fig = px.box(d.to_pandas(), x='svtype', y='qual', color='svtype', points='outliers', color_discrete_map=colors, category_orders={'svtype': d.select('svtype').unique().join(pl.DataFrame({'svtype': list(colors), 'r': list(range(len(colors)))}), on='svtype', how='left').sort('r', nulls_last=True)['svtype'].to_list()}, labels={'svtype': '', 'qual': 'QUAL'})
+      fig.update_layout(margin=dict(t=10), showlegend=False)
+    section: Size classes and evidence
+    tag: sk-sv-fig-qual
+    index: sv-qual
+    title: Call quality by type
+    description: The caller's QUAL per type (Tukey boxes). Each caller scales QUAL its own way, so compare types within one caller (the caller filter on the left).
+    layout: {x: 6, y: 0, w: 2, h: 4}
+  - component_type: table
+    workflow_tag: sarek
+    data_collection_tag: sv_calls
+    section: SV table
+    tag: sk-sv-table
+    index: sv-table
+    title: Structural variant records
+    description: Locus, type, length, end, quality and FILTER, one row per record. A breakend is two rows, each naming the other side.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+# ============================================================================
+# Somatic
+# ============================================================================
+# The tumour/normal pairs and the tumours called on their own, read from the
+# collections that hold no germline call: somatic_calls, cnv_segments, msi and
+# the comparison with the normal's germline calls. Each is optional, so a run
+# without a tumour keeps none of these three tabs, and a run whose paired callers
+# found nothing has no Somatic calls tab (the VCFs are empty) while its
+# copy-number and MSI files still feed the second one.
+- title: Somatic calls
+  subtitle: What did the somatic callers find, and how clean are the calls?
+  tab_group: Somatic
+  tab_order: 7
+  tab_icon: mdi:target-variant
+  tab_icon_color: yellow
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Somatic filters
+    icon: mdi:filter-variant
+    color: yellow
+    description: The design, caller and type of the calls in view
+  grid_sections:
+  - name: Somatic at a glance
+    icon: mdi:counter
+    color: yellow
+    description: Calls, how many passed, and the allele fraction and depth behind them
+  - name: Allele fractions
+    icon: mdi:chart-bell-curve
+    color: yellow
+    description: Tumour allele fraction per calling design, so a tumour-only callset keeps its own scale
+  - name: Calls by caller
+    icon: mdi:chart-bar
+    color: yellow
+    description: Calls per caller and type, one panel per calling design
+  - name: Somatic call table
+    icon: mdi:table
+    color: gray
+    description: One row per call as the caller wrote it; a click centres the genome browser on it
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      [Mutect2](https://gatk.broadinstitute.org/hc/en-us/articles/360037593851-Mutect2) and
+      [Strelka2](https://github.com/Illumina/strelka) call a tumour against its matched normal,
+      and a tumour with no normal is called alone. The two designs are never drawn on one
+      scale: a tumour-only callset keeps the patient's own germline variants, so its allele
+      fractions pile up near 0.5 and 1. Click a row of the table to centre the genome browser
+      of the Locus tab on it.
+    tag: sk-som-intro
+    index: som-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: interactive
+    workflow_tag: sarek
+    data_collection_tag: somatic_calls
+    interactive_component_type: MultiSelect
+    column_name: unit_type
+    column_type: object
+    display:
+      icon_name: mdi:account-multiple-outline
+      custom_color: grape
+    section: Somatic filters
+    tag: sk-som-filter-design
+    index: som-design-filter
+    title: Calling design
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: sarek
+    data_collection_tag: somatic_calls
+    interactive_component_type: MultiSelect
+    column_name: caller
+    column_type: object
+    display:
+      icon_name: mdi:dna
+      custom_color: indigo
+    section: Somatic filters
+    tag: sk-som-filter-caller
+    index: som-caller-filter
+    title: Caller
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: sarek
+    data_collection_tag: somatic_calls
+    interactive_component_type: MultiSelect
+    column_name: variant_type
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: green
+    section: Somatic filters
+    tag: sk-som-filter-type
+    index: som-type-filter
+    title: Variant type
+    layout: {x: 0, y: 6, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: sarek
+    data_collection_tag: somatic_calls
+    aggregation: count
+    column_name: variant_key
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: unit_type
+    display:
+      icon_name: mdi:target-variant
+      icon_color: yellow.4
+      caption: calls in view, by calling design
+      decimals: 0
+    section: Somatic at a glance
+    tag: sk-som-card-calls
+    index: som-card-calls
+    title: Somatic calls
+    description: Calls of the pairs and tumours in view, one per caller that made them. The bar splits them by calling design.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: sarek
+    data_collection_tag: somatic_calls
+    aggregation: count
+    column_name: variant_key
+    column_type: object
+    filter_expr: "col('is_pass') == True"
+    secondary_layout: composition
+    breakdown_col: caller
+    display:
+      icon_name: mdi:check-decagram
+      icon_color: yellow.6
+      caption: PASS calls, by caller
+      decimals: 0
+    section: Somatic at a glance
+    tag: sk-som-card-pass
+    index: som-card-pass
+    title: PASS calls
+    description: Calls the caller kept (FILTER PASS). The bar splits them by caller.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: sarek
+    data_collection_tag: somatic_calls
+    aggregation: median
+    column_name: tumour_vaf
+    column_type: float64
+    secondary_layout: top_n
+    breakdown_col: unit_type
+    top_n_count: 3
+    display:
+      icon_name: mdi:chart-bell-curve
+      icon_color: yellow.8
+      caption: median by calling design
+      decimals: 2
+    section: Somatic at a glance
+    tag: sk-som-card-vaf
+    index: som-card-vaf
+    title: Tumour allele fraction
+    description: Median share of the tumour's reads that carry the call, per calling design. A paired somatic callset sits well under 0.5; a tumour-only one includes germline variants near 0.5 and 1.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: sarek
+    data_collection_tag: somatic_calls
+    aggregation: median
+    column_name: tumour_dp
+    column_type: int64
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:layers-outline
+      icon_color: yellow.9
+      caption: median per call, with its distribution
+      decimals: 0
+    section: Somatic at a glance
+    tag: sk-som-card-dp
+    index: som-card-dp
+    title: Depth in the tumour
+    description: Median read depth in the tumour at the calls in view. A call on a few reads is the first to doubt.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: figure
+    workflow_tag: sarek
+    data_collection_tag: somatic_calls
+    visu_type: histogram
+    mode: code
+    code_content: |-
+      # Tumour allele fraction in 20 bins, one panel per calling design so a tumour-only callset (germline variants at 0.5 and 1) never shares an axis with a paired one. The colours are the caller colours of the dashboard.
+      d = df.select(['unit_type', 'caller', 'tumour_vaf']).drop_nulls()
+      fig = px.histogram(d.to_pandas(), x='tumour_vaf', color='caller', facet_col='unit_type', nbins=20, range_x=[0, 1], color_discrete_map=depictio_category_colors.get('caller') or {}, labels={'tumour_vaf': 'Tumour allele fraction', 'caller': 'Caller', 'unit_type': 'Design'})
+      fig.update_yaxes(title_text='Calls')
+      fig.for_each_annotation(lambda a: a.update(text=a.text.split('=')[-1]))
+      fig.update_layout(margin=dict(t=30))
+    section: Allele fractions
+    tag: sk-som-fig-vaf
+    index: som-vaf-hist
+    title: Tumour allele fraction by design
+    description: Calls per allele-fraction bin, one panel per calling design and one colour per caller. A real somatic call sits low; a peak at 0.5 or 1 is the patient's own variant.
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: figure
+    workflow_tag: sarek
+    data_collection_tag: somatic_calls
+    visu_type: bar
+    mode: code
+    code_content: |-
+      # Calls per caller, stacked by variant type, one panel per calling design. The colours are the variant-type colours of the dashboard.
+      d = df.group_by(['unit_type', 'caller', 'variant_type']).agg(pl.len().alias('calls')).sort(['unit_type', 'caller', 'variant_type'])
+      fig = px.bar(d.to_pandas(), x='caller', y='calls', color='variant_type', facet_col='unit_type', barmode='stack', color_discrete_map=depictio_category_colors.get('variant_type') or {}, labels={'caller': '', 'calls': 'Calls', 'variant_type': 'Type', 'unit_type': 'Design'})
+      fig.for_each_annotation(lambda a: a.update(text=a.text.split('=')[-1]))
+      fig.update_xaxes(automargin=True)
+      fig.update_layout(margin=dict(t=30))
+    section: Calls by caller
+    tag: sk-som-fig-callers
+    index: som-callers-bar
+    title: Calls per caller and type
+    description: One stacked bar per caller, one segment per variant type, one panel per calling design.
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: table
+    workflow_tag: sarek
+    data_collection_tag: somatic_calls
+    columns: [unit, unit_type, caller, chrom, pos, ref, alt, variant_type, filter_status, score, tumour_vaf, tumour_dp, normal_vaf, normal_dp]
+    section: Somatic call table
+    tag: sk-som-table
+    index: som-table
+    title: Somatic call records
+    description: Locus, alleles, FILTER, the caller's own score, and the allele fraction and depth in the tumour and, for a pair, the normal.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+- title: Copy number & MSI
+  subtitle: Which regions gained or lost copies, and is the tumour unstable?
+  tab_group: Somatic
+  tab_order: 8
+  tab_icon: mdi:chart-timeline-variant
+  tab_icon_color: green
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Copy-number filters
+    icon: mdi:filter-variant
+    color: green
+    description: The contigs and calling design of the genome views, the profile and the tables
+  grid_sections:
+  - name: Copy number at a glance
+    icon: mdi:counter
+    color: green
+    description: How much of the genome is gained or lost, and the MSI score, per sample
+  - name: Genome-wide gains and losses
+    icon: mdi:chart-timeline-variant
+    color: green
+    description: Every called segment along the genome, one row per sample, with the gain and loss cut-offs
+  - name: One tumour in detail
+    icon: mdi:microscope
+    color: green
+    description: The bins and called segments of one sample, with a switch to zoom on a chromosome
+  - name: Chromosome by chromosome
+    icon: mdi:dna
+    color: green
+    description: Mean log2 ratio of each chromosome, per sample
+  - name: Per tumour, altered genome and MSI
+    icon: mdi:chart-bar
+    color: green
+    description: The share of the genome altered, and the MSI score against its usual cut-off
+  - name: Tables
+    icon: mdi:table
+    color: gray
+    description: The MSIsensor-pro summary, and one row per called segment with the bins behind it
+    collapsed: true
+  components:
+  - component_type: text
+    surface: card
+    accent: green
+    body: |
+      ### How to read this tab
+      - ![](icon:mdi:chart-timeline-variant) **log2 ratio** The coverage of a region in the tumour against the reference, on a log scale. 0 is balanced (two copies), +0.58 is about three copies, -1 about one copy.
+      - ![](icon:mdi:arrow-up-bold-outline) **Gain** A called segment above +0.3, drawn in orange. The dashed line of the figures marks the cut-off.
+      - ![](icon:mdi:arrow-down-bold-outline) **Loss** A called segment below -0.3, drawn in blue. The dashed line of the figures marks the cut-off.
+      - ![](icon:mdi:percent-outline) **Genome altered** The megabases in gained or lost segments over the megabases [CNVkit](https://cnvkit.readthedocs.io) called.
+      - ![](icon:mdi:barcode) **MSI score** The share of microsatellite sites whose length differs between a tumour and its matched normal ([MSIsensor-pro](https://github.com/xjtu-omics/msisensor-pro)). A tumour called without a normal has none.
+    tag: sk-cn-intro
+    index: cn-intro
+    layout: {x: 0, y: 0, w: 5, h: 4}
+  - component_type: text
+    surface: card
+    accent: green
+    body: |
+      ### Where to look
+      ::: steps
+      1. ![](icon:mdi:counter) **Key figures** summarise the samples in view
+      2. ![](icon:mdi:chart-timeline-variant) **Genome-wide** shows where the gains and losses sit
+      3. ![](icon:mdi:magnify-scan) **One tumour** opens the bins and segments of a sample
+      4. ![](icon:mdi:grid) **Chromosomes** compares the samples on one grid
+      5. ![](icon:mdi:barcode) **MSI** ranks the tumours against the usual 20% cut-off
+      :::
+    tag: sk-cn-steps
+    index: cn-steps
+    layout: {x: 5, y: 0, w: 3, h: 4}
+  - component_type: interactive
+    workflow_tag: sarek
+    data_collection_tag: cnv_segments
+    interactive_component_type: MultiSelect
+    column_name: chrom
+    column_type: object
+    display:
+      icon_name: mdi:dna
+      custom_color: green
+    section: Copy-number filters
+    tag: sk-cn-filter-chrom
+    index: cn-chrom-filter
+    title: Contig
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: sarek
+    data_collection_tag: cnv_segments
+    interactive_component_type: MultiSelect
+    column_name: unit_type
+    column_type: object
+    display:
+      icon_name: mdi:account-multiple-outline
+      custom_color: grape
+    section: Copy-number filters
+    tag: sk-cn-filter-design
+    index: cn-design-filter
+    title: Calling design
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: sarek
+    data_collection_tag: cnv_summary
+    aggregation: median
+    column_name: fga_pct
+    column_type: float64
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 3
+    display:
+      icon_name: mdi:percent-outline
+      icon_color: green.3
+      caption: "% of the called genome, by sample"
+      decimals: 1
+    section: Copy number at a glance
+    tag: sk-cn-card-fga
+    index: cn-card-fga
+    title: "Fraction of genome altered"
+    description: "Megabases in segments past the 0.3 and -0.3 cut-offs over the megabases CNVkit called, in percent, median over the samples in view. It covers the whole genome, so the contig filter does not change it."
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: sarek
+    data_collection_tag: cnv_summary
+    aggregation: median
+    column_name: gained_mb
+    column_type: float64
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 3
+    display:
+      icon_name: mdi:arrow-up-bold-outline
+      icon_color: green.5
+      caption: "Mb gained, by sample"
+      decimals: 0
+    section: Copy number at a glance
+    tag: sk-cn-card-gained
+    index: cn-card-gained
+    title: "Megabases gained"
+    description: "Megabases in segments above the 0.3 gain cut-off, median over the samples in view. It covers the whole genome, so the contig filter does not change it."
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: sarek
+    data_collection_tag: cnv_summary
+    aggregation: median
+    column_name: lost_mb
+    column_type: float64
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 3
+    display:
+      icon_name: mdi:arrow-down-bold-outline
+      icon_color: green.7
+      caption: "Mb lost, by sample"
+      decimals: 0
+    section: Copy number at a glance
+    tag: sk-cn-card-lost
+    index: cn-card-lost
+    title: "Megabases lost"
+    description: "Megabases in segments below the -0.3 loss cut-off, median over the samples in view. It covers the whole genome, so the contig filter does not change it."
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: sarek
+    data_collection_tag: cnv_summary
+    aggregation: median
+    column_name: altered_contigs
+    column_type: int64
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 3
+    display:
+      icon_name: mdi:dna
+      icon_color: green.9
+      caption: "chromosomes altered, by sample"
+      decimals: 0
+    section: Copy number at a glance
+    tag: sk-cn-card-contigs
+    index: cn-card-contigs
+    title: "Altered chromosomes"
+    description: "Contigs where at least a tenth of the called length is gained or lost, median over the samples in view. A small noisy segment does not count a whole contig."
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: sarek
+    data_collection_tag: msi
+    aggregation: max
+    column_name: msi_score
+    column_type: float64
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 3
+    display:
+      icon_name: mdi:barcode
+      icon_color: green.4
+      caption: "unstable sites (%), by tumour"
+      decimals: 1
+    section: Copy number at a glance
+    tag: sk-cn-card-msi
+    index: cn-card-msi
+    title: "MSI score (%)"
+    description: "Share of the tested microsatellite sites whose length differs between the tumour and its normal, the highest tumour in view. MSIsensor-pro writes no call: 20% is the cut-off most often used, drawn here for reference, and the right one depends on the assay."
+    layout: {x: 0, y: 2, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: sarek
+    data_collection_tag: msi
+    aggregation: median
+    column_name: total_sites
+    column_type: int64
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 3
+    display:
+      icon_name: mdi:counter
+      icon_color: green.6
+      caption: "sites tested, by tumour"
+      decimals: 0
+    section: Copy number at a glance
+    tag: sk-cn-card-sites
+    index: cn-card-sites
+    title: "Microsatellite sites tested"
+    description: "Sites MSIsensor-pro evaluated, median over the tumours in view. A score over few sites is noisy: read the two together."
+    layout: {x: 2, y: 2, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: sarek
+    data_collection_tag: cnv_summary
+    aggregation: max
+    column_name: max_log2
+    column_type: float64
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 3
+    display:
+      icon_name: mdi:trending-up
+      icon_color: green.8
+      caption: "log2 of the highest segment, by sample"
+      decimals: 2
+    section: Copy number at a glance
+    tag: sk-cn-card-maxlog2
+    index: cn-card-maxlog2
+    title: "Strongest gain (log2)"
+    description: "Log2 ratio of the highest called segment, the first place to look for a focal amplification. The highest sample in view is the figure."
+    layout: {x: 4, y: 2, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: sarek
+    data_collection_tag: cnv_summary
+    aggregation: min
+    column_name: min_log2
+    column_type: float64
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 3
+    display:
+      icon_name: mdi:trending-down
+      icon_color: green.9
+      caption: "log2 of the lowest segment, by sample"
+      decimals: 2
+    section: Copy number at a glance
+    tag: sk-cn-card-minlog2
+    index: cn-card-minlog2
+    title: "Deepest loss (log2)"
+    description: "Log2 ratio of the lowest called segment, the first place to look for a deletion. The lowest sample in view is the figure; a floor of -3 stands for a region with no coverage."
+    layout: {x: 6, y: 2, w: 2, h: 2}
+  - component_type: figure
+    workflow_tag: sarek
+    data_collection_tag: cnv_segments
+    visu_type: line
+    mode: code
+    code_content: |-
+      # Called segments along the genome, one row per sample: height is the log2 ratio, red above 0.3 (gain), blue below -0.3 (loss), grey in between. Chromosomes in karyotype order, alternate ones shaded; the dashed lines are the cut-offs.
+      key = pl.col('chrom').str.replace('^chr', '')
+      rank = pl.when(key.str.contains('^[0-9]+$')).then(key.cast(pl.Int64, strict=False)).when(key == 'X').then(23).when(key == 'Y').then(24).when(key.is_in(['M', 'MT'])).then(25).otherwise(100)
+      seg = df.filter(pl.col('segment') == 'segment').with_columns(key.alias('c'), rank.alias('r'), pl.when(pl.col('unit_type') == 'paired').then(0).when(pl.col('unit_type') == 'tumour_only').then(1).otherwise(2).alias('u')).with_row_index('sid')
+      chroms = seg.group_by('c').agg(pl.col('r').first(), (pl.col('end').max() / 1e6).alias('len')).sort(['r', 'c']).with_columns((pl.col('len').cum_sum() - pl.col('len')).alias('off')).with_columns((pl.col('off') + pl.col('len')).alias('stop'), (pl.col('off') + pl.col('len') / 2).alias('mid'))
+      seg = seg.join(chroms.select('c', 'off'), on='c').with_columns((pl.col('off') + pl.col('start') / 1e6).alias('x0'), (pl.col('off') + pl.col('end') / 1e6).alias('x1'), pl.when(pl.col('log2') > 0.3).then(pl.lit('Gain')).when(pl.col('log2') < -0.3).then(pl.lit('Loss')).otherwise(pl.lit('Neutral')).alias('state'))
+      seg = seg.with_columns(pl.format('chr{}:{}-{} Mb, log2 {}, copy number {}', pl.col('c'), (pl.col('start') / 1e6).round(1), (pl.col('end') / 1e6).round(1), pl.col('log2').round(2), pl.col('copy_number')).alias('tip'))
+      base = seg.select('sid', 'sample', 'u', 'state', 'log2', 'tip')
+      poly = pl.concat([base.with_columns(seg['x0'].alias('x'), pl.lit(0.0).alias('y'), pl.lit(0).alias('k')), base.with_columns(seg['x0'].alias('x'), pl.col('log2').alias('y'), pl.lit(1).alias('k')), base.with_columns(((seg['x0'] + seg['x1']) / 2).alias('x'), pl.col('log2').alias('y'), pl.lit(2).alias('k')), base.with_columns(seg['x1'].alias('x'), pl.col('log2').alias('y'), pl.lit(3).alias('k')), base.with_columns(seg['x1'].alias('x'), pl.lit(0.0).alias('y'), pl.lit(4).alias('k')), base.with_columns(seg['x0'].alias('x'), pl.lit(0.0).alias('y'), pl.lit(5).alias('k')), base.with_columns(pl.lit(None, dtype=pl.Float64).alias('x'), pl.lit(None, dtype=pl.Float64).alias('y'), pl.lit(6).alias('k'))]).sort(['u', 'sample', 'state', 'sid', 'k'])
+      steps = poly
+      samples = steps.sort(['u', 'sample'])['sample'].unique(maintain_order=True).to_list()
+      names = chroms['c'].to_list()
+      starts = chroms['off'].to_list()
+      stops = chroms['stop'].to_list()
+      mids = chroms['mid'].to_list()
+      amax = seg['log2'].abs().max()
+      ymax = max(1.0, round(float(amax) + 0.25, 1))
+      colors = depictio_category_colors.get('cn_state') or {}
+      fig = px.line(steps.to_pandas(), x='x', y='y', color='state', facet_row='sample', custom_data=['tip'], category_orders={'sample': samples, 'state': ['Loss', 'Neutral', 'Gain']}, color_discrete_map={'Gain': colors.get('Gain', '#e8590c'), 'Loss': colors.get('Loss', '#1c7ed6'), 'Neutral': '#adb5bd'}, labels={'x': 'Genome position, chromosomes in karyotype order (Mb)', 'y': 'log2 ratio', 'state': 'Segment', 'sample': 'Sample'})
+      fig.update_traces(fill='toself', line_width=1, hovertemplate='%{customdata[0]}<extra></extra>')
+      for i in range(len(names)):
+          if i % 2 == 0:
+              fig.add_vrect(x0=starts[i], x1=stops[i], row='all', col='all', fillcolor='#868e96', opacity=0.08, line_width=0, layer='below')
+      fig.update_xaxes(tickmode='array', tickvals=mids, ticktext=names, range=[0, stops[-1]], showgrid=False, tickfont_size=10)
+      fig.update_yaxes(range=[-ymax, ymax], zeroline=True, zerolinecolor='#868e96', showgrid=False, title_font_size=11)
+      fig.add_hline(y=0.3, line_dash='dash', line_width=1, line_color=colors.get('Gain', '#e8590c'), row='all', col='all', annotation_text='gain above 0.3', annotation_position='top left', annotation_font_size=10, annotation_font_color=colors.get('Gain', '#e8590c'))
+      fig.add_hline(y=-0.3, line_dash='dash', line_width=1, line_color=colors.get('Loss', '#1c7ed6'), row='all', col='all', annotation_text='loss below -0.3', annotation_position='bottom left', annotation_font_size=10, annotation_font_color=colors.get('Loss', '#1c7ed6'))
+      fig.for_each_annotation(lambda a: a.update(text=a.text.split('=')[-1]) if '=' in a.text else None)
+      fig.update_layout(margin=dict(t=30, r=10), legend=dict(orientation='h', y=1.08, x=0, title_text=''))
+    section: Genome-wide gains and losses
+    tag: sk-cn-fig-genome
+    index: cn-genome
+    title: Gains and losses along the genome
+    description: Each block is a called segment, as high as its log2 ratio. Orange above the 0.3 cut-off is a gain, blue below -0.3 is a loss, grey is balanced. Chromosomes follow the karyotype order and alternate in shade. One row per sample; narrow the samples or the contigs to read a row larger.
+    layout: {x: 0, y: 0, w: 8, h: 7}
+  - component_type: advanced_viz
+    workflow_tag: sarek
+    data_collection_tag: cnv_segments
+    viz_kind: cnv_profile
+    config:
+      viz_kind: cnv_profile
+      sample_col: sample
+      chrom_col: chrom
+      start_col: start
+      end_col: end
+      log2_col: log2
+      baf_col: baf
+      copy_number_col: copy_number
+      segment_col: segment
+      label_col: label
+      annotation: '{GENOME}'
+      # The template has a genome browser (Locus), so the profile stays on Plotly.
+      view: plotly
+      views: [plotly]
+      show_baf: false
+      facet_by_sample: false
+      y_range: 2.5
+      point_size: 4
+      gain_threshold: 0.3
+      loss_threshold: -0.3
+    section: One tumour in detail
+    tag: sk-cn-av-profile
+    index: cn-profile
+    title: Copy-number profile of one sample
+    description: Each dot is a bin's log2 ratio against the reference and the strokes are CNVkit's called segments, red above 0.3 and blue below -0.3. Pick the sample and a chromosome to zoom on in the controls; the profile opens on a tumour. CNVkit gives no B-allele frequency here, so none is drawn. Open in genome browser shows the reads at the region.
+    layout: {x: 0, y: 0, w: 8, h: 9}
+  - component_type: figure
+    workflow_tag: sarek
+    data_collection_tag: cnv_segments
+    visu_type: heatmap
+    mode: code
+    code_content: |-
+      # Length-weighted mean log2 ratio of the called segments, one cell per sample and chromosome: red where the chromosome is gained, blue where it is lost, white where it is balanced. The number is printed in the cells past the 0.3 cut-offs.
+      key = pl.col('chrom').str.replace('^chr', '')
+      rank = pl.when(key.str.contains('^[0-9]+$')).then(key.cast(pl.Int64, strict=False)).when(key == 'X').then(23).when(key == 'Y').then(24).when(key.is_in(['M', 'MT'])).then(25).otherwise(100)
+      seg = df.filter(pl.col('segment') == 'segment').with_columns(key.alias('c'), rank.alias('r'), ((pl.col('end') - pl.col('start')) / 1e6).alias('mb'), pl.when(pl.col('unit_type') == 'paired').then(0).when(pl.col('unit_type') == 'tumour_only').then(1).otherwise(2).alias('u'))
+      cell = seg.group_by(['u', 'sample', 'c', 'r']).agg(((pl.col('log2') * pl.col('mb')).sum() / pl.col('mb').sum()).alias('v')).with_columns(pl.when(pl.col('v').abs() >= 0.3).then(pl.col('v').map_elements(lambda x: f'{x:+.2f}', return_dtype=pl.Utf8)).otherwise(pl.lit('')).alias('t'))
+      samples = cell.sort(['u', 'sample'])['sample'].unique(maintain_order=True).to_list()
+      chroms = cell.sort(['r', 'c'])['c'].unique(maintain_order=True).to_list()
+      wide = cell.pivot(on='c', index='sample', values='v').with_columns(pl.col('sample').cast(pl.Utf8))
+      words = cell.pivot(on='c', index='sample', values='t')
+      grid = pl.DataFrame({'sample': samples}).join(wide, on='sample', how='left').select(['sample'] + chroms)
+      text = pl.DataFrame({'sample': samples}).join(words, on='sample', how='left').select(['sample'] + chroms)
+      gain = depictio_category_colors.get('cn_state', {}).get('Gain', '#e8590c')
+      loss = depictio_category_colors.get('cn_state', {}).get('Loss', '#1c7ed6')
+      fig = go.Figure(go.Heatmap(z=grid.drop('sample').rows(), x=chroms, y=samples, text=text.drop('sample').fill_null('').rows(), texttemplate='%{text}', textfont=dict(size=10), colorscale=[[0, loss], [0.5, '#f8f9fa'], [1, gain]], zmin=-1.0, zmax=1.0, zmid=0, xgap=2, ygap=2, hovertemplate='Sample %{y}<br>Chromosome %{x}<br>Mean log2 %{z:.2f}<extra></extra>', colorbar=dict(title='Mean log2', thickness=12, len=0.9)))
+      fig.update_yaxes(autorange='reversed', title_text='', automargin=True)
+      fig.update_xaxes(title_text='Chromosome', type='category', side='bottom')
+      fig.update_layout(margin=dict(t=10, r=10))
+    section: Chromosome by chromosome
+    tag: sk-cn-fig-heatmap
+    index: cn-heatmap
+    title: Mean log2 ratio per chromosome
+    description: Length-weighted mean log2 ratio of the called segments of each chromosome, one row per sample. Orange is gained, blue is lost, white is balanced; the value is printed where it passes the 0.3 cut-offs. A chromosome with no called segment is left empty.
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: figure
+    workflow_tag: sarek
+    data_collection_tag: cnv_summary
+    visu_type: bar
+    mode: code
+    code_content: |-
+      # Share of the called genome that is gained (red) or lost (blue) in each sample, the fraction of the genome altered, largest first. A segment counts when its log2 ratio is above 0.3 or below -0.3.
+      d = df.filter(pl.col('fga_pct').is_not_null()).sort('fga_pct', descending=True).with_columns(pl.col('fga_pct').round(1).cast(pl.Utf8).alias('total'))
+      samples = d['sample'].to_list()
+      totals = d['fga_pct'].to_list()
+      labels = d['total'].to_list()
+      long = d.select('sample', pl.col('gained_pct').alias('Gain'), pl.col('lost_pct').alias('Loss'), 'gained_mb', 'lost_mb', 'covered_mb').unpivot(['Gain', 'Loss'], index=['sample', 'gained_mb', 'lost_mb', 'covered_mb'], variable_name='state', value_name='pct').with_columns(pl.when(pl.col('state') == 'Gain').then(pl.col('gained_mb')).otherwise(pl.col('lost_mb')).round(1).alias('mb'))
+      colors = depictio_category_colors.get('cn_state') or {}
+      top = min(118.0, max(10.0, max(totals) * 1.3))
+      fig = px.bar(long.to_pandas(), x='pct', y='sample', color='state', orientation='h', barmode='stack', custom_data=['mb', 'covered_mb'], category_orders={'sample': samples, 'state': ['Gain', 'Loss']}, color_discrete_map={'Gain': colors.get('Gain', '#e8590c'), 'Loss': colors.get('Loss', '#1c7ed6')}, labels={'pct': 'Fraction of the genome altered (% of called Mb)', 'sample': '', 'state': 'Segment'})
+      fig.update_traces(hovertemplate='%{y}: %{x:.1f}% of the called genome<br>%{customdata[0]} Mb of %{customdata[1]:.0f} Mb called<extra>%{fullData.name}</extra>')
+      fig.add_trace(go.Scatter(x=totals, y=samples, mode='text', text=labels, texttemplate='%{text}%', textposition='middle right', showlegend=False, hoverinfo='skip', textfont=dict(size=12)))
+      fig.update_yaxes(automargin=True)
+      fig.update_xaxes(range=[0, top], ticksuffix='%')
+      fig.update_layout(margin=dict(t=10, r=10), legend=dict(orientation='h', y=1.12, x=0, title_text=''))
+    section: Per tumour, altered genome and MSI
+    tag: sk-cn-fig-fga
+    index: cn-fga
+    title: Fraction of the genome altered
+    description: Share of the called genome that is gained (orange) or lost (blue), largest first, with the total at the end of the bar. A segment counts when its log2 ratio is past the 0.3 or -0.3 cut-off. Hover a bar for the megabases behind it.
+    layout: {x: 0, y: 0, w: 4, h: 4}
+  - component_type: figure
+    workflow_tag: sarek
+    data_collection_tag: msi
+    visu_type: bar
+    mode: code
+    code_content: |-
+      # MSIsensor-pro score of each tumour: the share of tested microsatellite sites whose length differs from the normal, largest first. The dashed line is the 20% usual cut-off, drawn for reference.
+      cut = 20.0
+      d = df.filter(pl.col('msi_score').is_not_null()).sort('msi_score', descending=True).with_columns(pl.when(pl.col('msi_score') >= 20.0).then(pl.lit('At or above 20%')).otherwise(pl.lit('Below 20%')).alias('band'), pl.format(' {}% ({} of {} sites)', pl.col('msi_score').round(1), pl.col('unstable_sites'), pl.col('total_sites')).alias('lab'))
+      samples = d['sample'].to_list()
+      scores = d['msi_score'].to_list()
+      labels = d['lab'].to_list()
+      top = max(30.0, max(scores) * 2.0)
+      fig = px.bar(d.to_pandas(), x='msi_score', y='sample', color='band', orientation='h', category_orders={'sample': samples, 'band': ['Below 20%', 'At or above 20%']}, color_discrete_map={'Below 20%': '#69db7c', 'At or above 20%': '#2b8a3e'}, custom_data=['unstable_sites', 'total_sites'], labels={'msi_score': 'Unstable microsatellite sites (%)', 'sample': '', 'band': 'MSIsensor-pro score'})
+      fig.update_traces(hovertemplate='%{y}: %{x:.2f}% unstable<br>%{customdata[0]} of %{customdata[1]} sites<extra></extra>')
+      fig.add_trace(go.Scatter(x=scores, y=samples, mode='text', text=labels, textposition='middle right', showlegend=False, hoverinfo='skip', textfont=dict(size=12)))
+      fig.add_vrect(x0=cut, x1=top, fillcolor='#2b8a3e', opacity=0.07, line_width=0, layer='below')
+      fig.add_vline(x=cut, line_dash='dash', line_width=1.5, line_color='#2b8a3e', annotation_text='usual cut-off: 20%', annotation_position='top', annotation_font_size=11, annotation_font_color='#2b8a3e')
+      fig.update_yaxes(automargin=True)
+      fig.update_xaxes(range=[0, top], ticksuffix='%')
+      fig.update_layout(margin=dict(t=30, r=10), legend=dict(orientation='h', y=-0.35, x=0, title_text=''))
+    section: Per tumour, altered genome and MSI
+    tag: sk-cn-fig-msi
+    index: cn-msi
+    title: MSI score per tumour
+    description: Unstable microsatellite sites as a share of the sites tested, largest first, with the counts beside each bar. The dashed line is 20%, the cut-off MSIsensor-pro users most often apply; it is a convention, not a call, and the right value depends on the assay. A score over a handful of sites is noisy.
+    layout: {x: 4, y: 0, w: 4, h: 4}
+  - component_type: table
+    workflow_tag: sarek
+    data_collection_tag: msi
+    columns: [unit, unit_type, patient, sample, normal, total_sites, unstable_sites, msi_score]
+    section: Tables
+    tag: sk-cn-table-msi
+    index: cn-table-msi
+    title: MSIsensor-pro summary
+    description: One row per tumour and its normal. A tumour with few tested sites gives a noisy score; read the sites beside it.
+    layout: {x: 0, y: 0, w: 8, h: 3}
+  - component_type: table
+    workflow_tag: sarek
+    data_collection_tag: cnv_segments
+    columns: [unit, unit_type, sample, chrom, start, end, segment, log2, copy_number, depth, label, call_source]
+    section: Tables
+    tag: sk-cn-table-segments
+    index: cn-table-segments
+    title: Copy-number segments and bins
+    description: Locus, log2 ratio, copy number and read depth of each segment (and of the bins behind it), as CNVkit wrote them.
+    layout: {x: 0, y: 3, w: 8, h: 6}
+- title: Germline vs somatic
+  subtitle: Are the somatic calls really absent from the normal?
+  tab_group: Somatic
+  tab_order: 9
+  tab_icon: mdi:compare-horizontal
+  tab_icon_color: gray
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Comparison filters
+    icon: mdi:filter-variant
+    color: gray
+    description: The caller and the overlap with the normal's germline calls
+  grid_sections:
+  - name: Comparison at a glance
+    icon: mdi:counter
+    color: gray
+    description: Distinct variants of both kinds, and the allele fractions in the pair
+  - name: Per patient
+    icon: mdi:account-group-outline
+    color: gray
+    description: Distinct PASS variants of the normal's germline calls and of the pair's somatic calls
+  - name: Tumour against normal
+    icon: mdi:chart-scatter-plot
+    color: gray
+    description: Each somatic call by its allele fraction in the normal and in the tumour
+  - name: Comparison table
+    icon: mdi:table
+    color: gray
+    description: One row per somatic call of a pair, with the normal's allele fraction and the overlap
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      A somatic caller subtracts the patient's own variants with the matched normal; a call that
+      is also a PASS germline call of the normal is probably inherited and slipped through.
+      The scatter puts each somatic call by its allele fraction in the normal and in the tumour,
+      and a real somatic call sits well above the diagonal. Pick a patient in the sample
+      filters and click a table row to see the tumour and the normal together in the Locus tab.
+    tag: sk-gs-intro
+    index: gs-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: interactive
+    workflow_tag: sarek
+    data_collection_tag: somatic_vs_germline
+    interactive_component_type: MultiSelect
+    column_name: origin
+    column_type: object
+    display:
+      icon_name: mdi:set-merge
+      custom_color: orange
+    section: Comparison filters
+    tag: sk-gs-filter-origin
+    index: gs-origin-filter
+    title: Overlap with the normal
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: sarek
+    data_collection_tag: somatic_vs_germline
+    interactive_component_type: MultiSelect
+    column_name: caller
+    column_type: object
+    display:
+      icon_name: mdi:dna
+      custom_color: indigo
+    section: Comparison filters
+    tag: sk-gs-filter-caller
+    index: gs-caller-filter
+    title: Caller
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: sarek
+    data_collection_tag: patient_call_counts
+    aggregation: sum
+    column_name: variants
+    column_type: int64
+    secondary_layout: composition
+    breakdown_col: call_class
+    display:
+      icon_name: mdi:set-all
+      icon_color: gray.4
+      caption: distinct PASS variants, by class
+      format: si
+    section: Comparison at a glance
+    tag: sk-gs-card-variants
+    index: gs-card-variants
+    title: PASS variants
+    description: Distinct PASS variants of the normals' germline calls and of the pairs' somatic calls, a variant several callers agree on counted once.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: sarek
+    data_collection_tag: somatic_vs_germline
+    aggregation: count
+    column_name: variant_key
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: origin
+    display:
+      icon_name: mdi:target-variant
+      icon_color: gray.6
+      caption: somatic calls, by overlap with the normal
+      decimals: 0
+    section: Comparison at a glance
+    tag: sk-gs-card-calls
+    index: gs-card-calls
+    title: Somatic calls of pairs
+    description: Calls of the pairs in view. The bar splits them by whether a PASS germline call of the normal is the same variant.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: sarek
+    data_collection_tag: somatic_vs_germline
+    aggregation: median
+    column_name: normal_vaf
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:account-outline
+      icon_color: gray.8
+      caption: median per call, with its spread
+      decimals: 2
+    section: Comparison at a glance
+    tag: sk-gs-card-normal
+    index: gs-card-normal
+    title: Allele fraction in the normal
+    description: Median share of the normal's reads that carry a somatic call. A true somatic call is near 0; a high value is a germline variant or a contaminated normal.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: sarek
+    data_collection_tag: somatic_vs_germline
+    aggregation: median
+    column_name: tumour_vaf
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:account-alert-outline
+      icon_color: gray.9
+      caption: median per call, with its spread
+      decimals: 2
+    section: Comparison at a glance
+    tag: sk-gs-card-tumour
+    index: gs-card-tumour
+    title: Allele fraction in the tumour
+    description: Median share of the tumour's reads that carry the same calls.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: figure
+    workflow_tag: sarek
+    data_collection_tag: patient_call_counts
+    visu_type: bar
+    dict_kwargs:
+      x: patient
+      y: variants
+      color: call_class
+      barmode: group
+      labels: {patient: Patient, variants: Distinct PASS variants, call_class: Class}
+    section: Per patient
+    tag: sk-gs-fig-patients
+    index: gs-patient-bars
+    title: Germline and somatic variants per patient
+    description: Distinct PASS variants of the normal's germline calls and of the pair's somatic calls, side by side. The germline bar is usually the taller one by far.
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: advanced_viz
+    workflow_tag: sarek
+    data_collection_tag: somatic_vs_germline
+    viz_kind: scatter_xy
+    config:
+      viz_kind: scatter_xy
+      x_col: normal_vaf
+      y_col: tumour_vaf
+      label_col: variant_key
+      color_col: origin
+      x_title: Allele fraction in the normal
+      y_title: Allele fraction in the tumour
+      reference_line: diagonal
+      reference_label: same fraction in both
+      marker_size: 9
+      legend_pos: bottom
+    section: Tumour against normal
+    tag: sk-gs-av-scatter
+    index: gs-vaf-scatter
+    title: Tumour against normal allele fraction
+    description: Each point is a somatic call of a pair. Above the diagonal the tumour carries more of it than the normal, as a real somatic call does; on or under it the normal carries as much, and the colour says whether the normal's germline calls hold the same variant.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: sarek
+    data_collection_tag: somatic_vs_germline
+    columns: [unit, caller, chrom, pos, ref, alt, filter_status, tumour_vaf, tumour_dp, normal_vaf, normal_vaf_source, germline_callers, origin]
+    section: Comparison table
+    tag: sk-gs-table
+    index: gs-table
+    title: Somatic calls against the normal
+    description: Locus, alleles, FILTER, the allele fraction in both samples, where the normal's value comes from and how many germline callers made the same call.
+    layout: {x: 0, y: 0, w: 8, h: 6}
 # ============================================================================
 # Annotation
 # ============================================================================
@@ -1627,7 +2948,7 @@ tabs:
 - title: Consequences
   subtitle: What do the calls do to the transcripts?
   tab_group: Annotation
-  tab_order: 6
+  tab_order: 10
   tab_icon: mdi:chart-donut
   tab_icon_color: red
   icon: /assets/images/workflows/nf-core.png
@@ -1640,7 +2961,7 @@ tabs:
   - name: Consequence filters
     icon: mdi:filter-variant
     color: red
-    description: The callers in view, and the SnpEff summary section to read
+    description: The callers in view, and the SnpEff summary section to read; it opens on impact, the shortest summary of what the annotation says
   grid_sections:
   - name: Consequences at a glance
     icon: mdi:counter
@@ -1649,7 +2970,7 @@ tabs:
   - name: What kind of variants
     icon: mdi:chart-bar
     color: red
-    description: SnpEff's own counts for the section picked in the left panel, per caller
+    description: SnpEff's own counts for the section picked in the left panel, per caller; it opens on impact, and the other sections are one pick away
   - name: Impact per call
     icon: mdi:chart-donut
     color: red
@@ -1852,7 +3173,7 @@ tabs:
     tag: sk-cs-fig-impact-share
     index: cs-impact-by-caller
     title: Impact classes per caller
-    description: HIGH, MODERATE and LOW calls as shares of each caller's coding calls.
+    description: HIGH, MODERATE and LOW calls as shares of each caller's coding calls. MODIFIER calls (intergenic, intronic) are left out, they would fill every bar.
     layout: {x: 0, y: 0, w: 4, h: 4}
   - component_type: figure
     workflow_tag: sarek
@@ -1926,7 +3247,7 @@ tabs:
 - title: Genes
   subtitle: Which genes carry the calls, and which do the callers share?
   tab_group: Annotation
-  tab_order: 7
+  tab_order: 11
   tab_icon: mdi:dna
   tab_icon_color: pink
   icon: /assets/images/workflows/nf-core.png
@@ -2126,7 +3447,7 @@ tabs:
 - title: Protein
   subtitle: Where on the protein do the coding variants sit?
   tab_group: Annotation
-  tab_order: 8
+  tab_order: 12
   tab_icon: mdi:molecule
   tab_icon_color: grape
   icon: /assets/images/workflows/nf-core.png
@@ -2300,7 +3621,10 @@ tabs:
     tag: sk-pr-av-genes
     index: pr-genes
     title: Genes with coding variants
-    description: One point per gene of the lollipop, coloured by its worst impact class, over the whole run; the six genes the callers agree on least are named. A gene low on the axis carries variants one caller sees, often a mapping artefact.
+    description: Each point is a gene with coding variants, placed by its number of distinct coding variants
+      (log axis) and the share of its calls made by two or more callers, and coloured by its worst impact class.
+      It covers the whole run; the six genes with the lowest share are named. A gene low on the axis carries
+      variants one caller sees, often a mapping artefact. A click picks the gene the lollipop draws.
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: advanced_viz
     workflow_tag: sarek
@@ -2339,7 +3663,7 @@ tabs:
 - title: Locus
   subtitle: What do depth and calls show at one region?
   tab_group: Annotation
-  tab_order: 9
+  tab_order: 13
   tab_icon: mdi:map-marker-outline
   tab_icon_color: indigo
   icon: /assets/images/workflows/nf-core.png
@@ -2359,15 +3683,15 @@ tabs:
     icon: mdi:dna
     color: indigo
     description: Brush the lanes and the browser follows; its window shows as a band on the lanes
-    # One screen: the depth lanes and the browser they drive, as on atacseq.
-    display: linked
   components:
   - component_type: text
     order: 1
     body: >
       The navigator draws the mean depth of every sample in 1 Mb windows over the genome;
-      the genome browser below shows every caller's calls, in the caller's colour of the other tabs, and the reads at its region. Type a
-      locus or a gene in its header, or brush its axis, and the browser and cards follow.
+      the genome browser below shows the reads at its region and, when the run called variants,
+      every caller's calls in the caller's colour of the other tabs. Pick a patient in the sample
+      filters to load a tumour and its normal side by side, with the somatic calls under the
+      reads. Type a locus or a gene in its header, or brush its axis, and the browser and cards follow.
     tag: sk-loc-intro
     index: loc-intro
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -2492,17 +3816,27 @@ tabs:
       chr_col: chrom
       pos_col: pos
       end_col: end
-      score_col: depth
+      # depth_capped holds each sample's windows at 3x its median (the recipe says why):
+      # the few windows over repeats read ten times the rest and flatten the lane.
+      score_col: depth_capped
       feature_col: sample
       # One lane per sample: a dropout in one library shows as a gap in its
-      # lane, which a pooled bar hides.
-      sample_col: sample
+      # lane, which a pooled bar hides. The lane is titled with the sample and
+      # wears the dashboard's colour for it (sample_id), the one the browser gives
+      # that sample's reads; category_col keeps the browser's caller colours off it.
+      sample_col: sample_id
+      category_col: sample_id
       facet_by_sample: true
-      max_facets: 6
-      mark: rect
+      max_facets: 8
+      lane_height: 80
+      auto_height: true
+      facet_y_scale: shared
+      mark: bar
       assembly: '{GENOME}'
-      score_title: mean depth
-      opacity: 0.8
+      score_title: mean depth, capped at 3x the median
+      # The 20x floor of the depth card.
+      score_threshold: 20
+      opacity: 0.9
       # No default_region: a contig-wide region would filter the whole contig, the
       # browser would follow it and every track would ask to be force-loaded. The
       # browser opens on its locus_from top call instead.
@@ -2511,20 +3845,31 @@ tabs:
     tag: sk-loc-av-genome
     index: loc-depth-navigator
     title: Depth per sample, 1 Mb windows
-    description: Mean depth per megabase window, one lane per sample. A locus or gene in the header, or a brush, moves the browser below.
-    layout: {x: 0, y: 0, w: 8, h: 4}
+    description: Mean depth per megabase window, one lane per sample, capped at 3 times the sample's median so repeats do not flatten it. The dashed line is the 20x floor of the depth cards, under which a heterozygous call gets hard to tell from noise. A locus or gene in the header, or a brush, moves the browser below.
+    layout: {x: 0, y: 0, w: 8, h: 6}
   # The navigator's brush moves the view without filtering. Unpicked, it opens
-  # on the call with the highest quality, and the stepper walks the others. The
+  # on the span of the 20 best calls by quality when they lie within 2 Mb of each
+  # other (else on the best call with 100 kb around it), so the window holds many
+  # calls and genes rather than one. The stepper walks the others. The
   # circular view lists the structural variants.
   - component_type: jbrowse
     workflow_tag: sarek
     data_collection_tag: tracks
     section: Depth and reads on one axis
-    # Opens on every small-variant caller of the first sample and its reads, with
-    # dbSNP and ClinVar under them, so a call is read against what it is known as.
-    initial_tracks: 5
+    # Opens on the first sample's small-variant callers, its reads and its
+    # structural-variant callers (picked by category, so a run without Manta or
+    # without any caller opens on what it has), with dbSNP and ClinVar under them,
+    # so a call is read against what it is known as. The browser takes the sample of the
+    # first such track: a run with a normal opens on it, and a run with tumours only opens
+    # on the tumour and its somatic calls. A pair's tumour reads and somatic calls load
+    # when the patient is picked in the sample filters.
+    initial_categories: [Small variants, Alignments, Structural variants, Somatic variants]
     max_tracks: 12
     ucsc_tracks: [dbSnp155Common, clinvarMain]
+    show_annotation: true
+    # A 200 kb window holds a few dozen calls and several genes; the per-track limit
+    # lets the alignments of that window load without the force-load prompt.
+    fetch_size_limit_mb: 20
     follow_window: true
     color_by: caller
     show_overview: false
@@ -2539,13 +3884,15 @@ tabs:
       data_collection_tag: vcf_variants
       chrom_column: chrom
       start_column: pos
-      padding: 300
+      padding: 100000
       max_rows: 60
       sort_by: qual
       descending: true
+      span_top: 20
+      max_span: 2000000
       label_column: variant_key
     tag: sk-loc-browser
     index: loc-reads-browser
     title: Genome browser
-    description: Each caller's VCF in its colour, the reads of the samples in scope, and the dbSNP and ClinVar tracks, framed on the region of the navigator above.
-    layout: {x: 0, y: 4, w: 8, h: 8}
+    description: The reads of the samples in scope, tumour and normal alike, each caller's VCF in its colour (the somatic callers' under the reads) when the run called variants, the genes and the dbSNP and ClinVar tracks. It opens on the best calls by quality, else on the data, and follows the navigator above.
+    layout: {x: 0, y: 6, w: 8, h: 10}

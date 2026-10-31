@@ -3,6 +3,7 @@
 # microbial protein families.
 id: checkv
 name: CheckV
+version: "1.0.0"
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/checkv/endtoend
 homepage: https://bitbucket.org/berkeleylab/checkv
 biotools_url: https://bio.tools/checkv # from nf-core meta.yml identifier

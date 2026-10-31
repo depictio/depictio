@@ -7,9 +7,18 @@ import {
   advancedVizSelectionFilter,
   filtersExcludingOwn,
 } from '../../selection';
+import { categoryColorMap } from '../../categoryColors';
+import { mantineCategoricalPalette } from '../../colors';
+import { useCategoryColorSource, useCategoryPalette } from '../../hooks/useCategoryColors';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { demandForPx } from './contentDemand';
-import { VizSwitch } from './controls/VizControls';
+import {
+  VizControlGroup,
+  VizNumberInput,
+  VizSelect,
+  VizSlider,
+  VizSwitch,
+} from './controls/VizControls';
 import {
   buildPedigree,
   DEFAULT_LAYOUT,
@@ -20,6 +29,7 @@ import {
 } from './pedigree/pedigreeLayout';
 import { packFamilies } from './pedigree/pedigreeRows';
 import { probandKeyOf, romanNumeral } from './pedigree/probands';
+import { personLabel, spacedLayout, visibleFamilies, type LabelMode } from './pedigree/pedigreeView';
 import { usePersistedVizControl } from './usePersistedVizControl';
 
 /** Mirrors `PedigreeConfig` in depictio/models/components/advanced_viz/configs.py.
@@ -36,6 +46,15 @@ interface PedigreeConfig {
   deceased_col?: string | null;
   proband_col?: string | null;
   show_labels?: boolean;
+  label_mode?: LabelMode;
+  symbol_size?: number;
+  generation_spacing?: number;
+  show_generations?: boolean;
+  show_family_labels?: boolean;
+  color_by?: 'status' | 'family';
+  show_legend?: boolean;
+  focus_family?: string | null;
+  affected_families_only?: boolean;
   max_individuals?: number;
   max_families?: number;
   selection_enabled?: boolean;
@@ -59,6 +78,8 @@ const DEFAULT_MAX_FAMILIES = 12;
 /** Drawing units (the SVG viewBox): room left of the trees for the generation
  *  numerals, around them, and under the last row for the labels. */
 const GUTTER = 34;
+/** Left margin without the generation numerals. */
+const GUTTER_BARE = 8;
 const PAD_X = 14;
 const PAD_BOTTOM = 40;
 /** Text is sized in screen px, so it reads at any fit scale. */
@@ -238,6 +259,50 @@ const PedigreeRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onF
   const hatchId = `ped-hatch-${useId().replace(/:/g, '')}`;
 
   const [showLabels, setShowLabels] = usePersistedVizControl<boolean>(metadata, 'show_labels', true);
+  const [labelMode, setLabelMode] = usePersistedVizControl<LabelMode>(metadata, 'label_mode', 'label');
+  const [symbolSize, setSymbolSize] = usePersistedVizControl<number>(
+    metadata,
+    'symbol_size',
+    DEFAULT_LAYOUT.symbol,
+  );
+  const [generationSpacing, setGenerationSpacing] = usePersistedVizControl<number>(
+    metadata,
+    'generation_spacing',
+    DEFAULT_LAYOUT.rowHeight,
+  );
+  const [showGenerations, setShowGenerations] = usePersistedVizControl<boolean>(
+    metadata,
+    'show_generations',
+    true,
+  );
+  const [showFamilyLabels, setShowFamilyLabels] = usePersistedVizControl<boolean>(
+    metadata,
+    'show_family_labels',
+    true,
+  );
+  const [colorBy, setColorBy] = usePersistedVizControl<'status' | 'family'>(metadata, 'color_by', 'status');
+  const [showLegend, setShowLegend] = usePersistedVizControl<boolean>(metadata, 'show_legend', true);
+  const [focusFamily, setFocusFamily] = usePersistedVizControl<string | null>(
+    metadata,
+    'focus_family',
+    null,
+  );
+  const [affectedOnly, setAffectedOnly] = usePersistedVizControl<boolean>(
+    metadata,
+    'affected_families_only',
+    false,
+  );
+  const [maxIndividuals, setMaxIndividuals] = usePersistedVizControl<number>(
+    metadata,
+    'max_individuals',
+    DEFAULT_MAX_INDIVIDUALS,
+  );
+  const [maxFamilies, setMaxFamilies] = usePersistedVizControl<number>(
+    metadata,
+    'max_families',
+    DEFAULT_MAX_FAMILIES,
+  );
+  const familyBound = Boolean(config.family_col);
 
   const selectionColumn = onFilterChange ? advancedVizSelectionColumn(metadata) : undefined;
   const selectionEnabled = Boolean(selectionColumn);
@@ -336,7 +401,7 @@ const PedigreeRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onF
     refreshTick,
   ]);
 
-  const input = useMemo(
+  const built = useMemo(
     () =>
       rows
         ? buildPedigree(
@@ -352,8 +417,8 @@ const PedigreeRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onF
               deceased: config.deceased_col,
             },
             {
-              maxIndividuals: config.max_individuals ?? DEFAULT_MAX_INDIVIDUALS,
-              maxFamilies: config.max_families ?? DEFAULT_MAX_FAMILIES,
+              maxIndividuals,
+              maxFamilies,
             },
           )
         : null,
@@ -367,17 +432,35 @@ const PedigreeRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onF
       config.family_col,
       config.label_col,
       config.deceased_col,
-      config.max_individuals,
-      config.max_families,
+      maxIndividuals,
+      maxFamilies,
     ],
   );
 
-  const layout = useMemo(
+  // The Data controls narrow what is drawn after the table is read: the guards
+  // above cap it first, so a family cut by them cannot be picked here.
+  const input = useMemo(
     () =>
-      input
-        ? layoutPedigree(input, { labelSpace: showLabels ? DEFAULT_LAYOUT.labelSpace : 0 })
+      built
+        ? {
+            ...built,
+            families: visibleFamilies(built.families, {
+              focus: familyBound ? focusFamily : null,
+              affectedOnly: familyBound && affectedOnly,
+            }),
+          }
         : null,
-    [input, showLabels],
+    [built, familyBound, focusFamily, affectedOnly],
+  );
+  const labelSpace = showLabels ? DEFAULT_LAYOUT.labelSpace : 0;
+  const layoutOptions = useMemo(
+    () => ({ labelSpace, ...spacedLayout(symbolSize, generationSpacing, DEFAULT_LAYOUT.labelSpace) }),
+    [labelSpace, symbolSize, generationSpacing],
+  );
+
+  const layout = useMemo(
+    () => (input ? layoutPedigree(input, layoutOptions) : null),
+    [input, layoutOptions],
   );
 
   // ---- What is picked, read back out of the filter list ------------------
@@ -437,6 +520,36 @@ const PedigreeRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onF
     [isDark, theme],
   );
   const lineColour = paint.ink;
+
+  // ---- Family colours --------------------------------------------------------
+  // With "Colour by: Family" an affected symbol wears its family's colour, the
+  // dashboard's pin for that family or the colorway's hue for its place in the
+  // sorted list, the rule every other tile follows.
+  const colourSource = useCategoryColorSource();
+  const dashboardPalette = useCategoryPalette();
+  const palette = useMemo(
+    () => dashboardPalette ?? mantineCategoricalPalette(theme, isDark),
+    [dashboardPalette, theme, isDark],
+  );
+  const familyIds = useMemo(() => (built?.families ?? []).map((f) => f.id), [built]);
+  const familyColours = useMemo(
+    () =>
+      colorBy === 'family' && familyBound
+        ? categoryColorMap(colourSource, config.family_col, familyIds, palette)
+        : null,
+    [colorBy, familyBound, colourSource, config.family_col, familyIds, palette],
+  );
+  const familyPaints = useMemo(() => {
+    const out = new Map<string, SymbolPaint>();
+    if (!familyColours) return out;
+    for (const [id, colour] of familyColours) out.set(id, { ...paint, affected: colour });
+    return out;
+  }, [familyColours, paint]);
+  // Filled stands for affected in the legend when no one colour does.
+  const legendPaint = useMemo(
+    () => (familyColours ? { ...paint, affected: paint.ink } : paint),
+    [familyColours, paint],
+  );
   const mutedText = isDark ? theme.colors.gray[5] : theme.colors.gray[7];
 
   // ---- Probands --------------------------------------------------------------
@@ -478,22 +591,24 @@ const PedigreeRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onF
     ro.observe(viewEl);
     return () => ro.disconnect();
   }, [viewEl]);
-  const symbol = DEFAULT_LAYOUT.symbol;
+  const symbol = layoutOptions.symbol;
+  const gutter = showGenerations ? GUTTER : GUTTER_BARE;
   // Families wrap into rows when that lets the symbols grow: a few small
   // families side by side are a strip, and wrapped they fill a taller tile.
   const packing = useMemo(
     () =>
       input
         ? packFamilies(input.families, {
-            labelSpace: showLabels ? DEFAULT_LAYOUT.labelSpace : 0,
+            labelSpace,
+            layout: layoutOptions,
             availW: view.w - 16,
             availH: view.h - 12,
-            gutter: GUTTER,
+            gutter,
             padX: PAD_X,
             padBottom: PAD_BOTTOM,
           })
         : null,
-    [input, showLabels, view.w, view.h],
+    [input, labelSpace, layoutOptions, gutter, view.w, view.h],
   );
   const contentW = packing?.contentW ?? 0;
   const contentH = packing?.contentH ?? 0;
@@ -537,12 +652,125 @@ const PedigreeRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onF
       ? `picked ${[...picked].slice(0, 3).join(', ')}${picked.size > 3 ? ` +${picked.size - 3}` : ''}`
       : undefined;
 
+  const manyFamilies = familyBound && (built?.families.length ?? 0) > 1;
+  const focusValue = focusFamily && familyIds.includes(focusFamily) ? focusFamily : null;
+
+  // Encoding tier: which individuals are drawn.
+  const primaryControls = (
+    <VizControlGroup title="Data">
+      {manyFamilies || focusValue ? (
+        <VizSelect
+          label="Family"
+          data={familyIds}
+          value={focusValue}
+          onChange={(v) => setFocusFamily(v)}
+          placeholder="All families"
+          clearable
+          searchable={familyIds.length > 8}
+        />
+      ) : null}
+      {familyBound ? (
+        <VizSwitch
+          checked={affectedOnly}
+          onChange={(e) => setAffectedOnly(e.currentTarget.checked)}
+          label="Families with an affected member only"
+        />
+      ) : null}
+      {familyBound ? (
+        <VizNumberInput
+          label="Max families"
+          min={1}
+          max={100}
+          allowDecimal={false}
+          value={maxFamilies}
+          onChange={(v) => setMaxFamilies(Math.min(100, Math.max(1, Math.round(Number(v)) || DEFAULT_MAX_FAMILIES)))}
+        />
+      ) : null}
+      <VizNumberInput
+        label="Max individuals"
+        min={1}
+        max={5000}
+        allowDecimal={false}
+        value={maxIndividuals}
+        onChange={(v) =>
+          setMaxIndividuals(Math.min(5000, Math.max(1, Math.round(Number(v)) || DEFAULT_MAX_INDIVIDUALS)))
+        }
+      />
+    </VizControlGroup>
+  );
+
+  // Cosmetic tier: symbols, text and colour.
   const controls = (
-    <VizSwitch
-      checked={showLabels}
-      onChange={(e) => setShowLabels(e.currentTarget.checked)}
-      label="Labels under symbols"
-    />
+    <>
+      <VizControlGroup title="Display">
+        <VizSwitch
+          checked={showLabels}
+          onChange={(e) => setShowLabels(e.currentTarget.checked)}
+          label="Labels under symbols"
+        />
+        {showLabels && config.label_col ? (
+          <VizSelect
+            label="Label text"
+            data={[
+              { value: 'label', label: config.label_col },
+              { value: 'id', label: 'Individual ID' },
+            ]}
+            value={labelMode}
+            onChange={(v) => setLabelMode(v === 'id' ? 'id' : 'label')}
+            allowDeselect={false}
+          />
+        ) : null}
+        <VizSlider
+          label="Symbol size"
+          min={16}
+          max={48}
+          step={2}
+          value={symbolSize}
+          onChange={setSymbolSize}
+          thumbLabel={(v) => `${v}px`}
+        />
+        <VizSlider
+          label="Generation spacing"
+          min={60}
+          max={160}
+          step={4}
+          value={generationSpacing}
+          onChange={setGenerationSpacing}
+          thumbLabel={(v) => `${v}px`}
+        />
+        <VizSwitch
+          checked={showGenerations}
+          onChange={(e) => setShowGenerations(e.currentTarget.checked)}
+          label="Generation numerals"
+        />
+        {familyBound ? (
+          <VizSwitch
+            checked={showFamilyLabels}
+            onChange={(e) => setShowFamilyLabels(e.currentTarget.checked)}
+            label="Family names"
+          />
+        ) : null}
+      </VizControlGroup>
+      <VizControlGroup title="Colour">
+        {familyBound ? (
+          <VizSelect
+            label="Colour affected by"
+            data={[
+              { value: 'status', label: 'Affected status' },
+              { value: 'family', label: 'Family' },
+            ]}
+            value={colorBy}
+            onChange={(v) => setColorBy(v === 'family' ? 'family' : 'status')}
+            allowDeselect={false}
+          />
+        ) : null}
+        <VizSwitch
+          checked={showLegend}
+          onChange={(e) => setShowLegend(e.currentTarget.checked)}
+          label="Show legend"
+        />
+      </VizControlGroup>
+    </>
   );
 
   // ---- Tooltip ---------------------------------------------------------------
@@ -586,7 +814,7 @@ const PedigreeRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onF
             deceased={Boolean(options.deceased)}
             proband={options.proband}
             size={10}
-            paint={paint}
+            paint={legendPaint}
             hatchId={legendId}
           />
         </g>
@@ -605,7 +833,12 @@ const PedigreeRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onF
     };
   }, [layout]);
 
-  const emptyMessage = rows && layout && layout.families.length === 0 ? 'No individuals' : undefined;
+  const emptyMessage =
+    rows && layout && layout.families.length === 0
+      ? built && built.families.length > 0
+        ? 'No family matches the Data controls'
+        : 'No individuals'
+      : undefined;
   const hoveredKey = hover?.person.person.key ?? null;
 
   const svg =
@@ -623,7 +856,7 @@ const PedigreeRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onF
         onMouseLeave={() => setHover(null)}
       >
         <HatchDefs id={hatchId} paint={paint} />
-        {generationRows.map((ys, rowIndex) =>
+        {(showGenerations ? generationRows : []).map((ys, rowIndex) =>
           ys.map(([generation, y]) => (
             <text
               key={`generation-${rowIndex}-${generation}`}
@@ -641,9 +874,9 @@ const PedigreeRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onF
           )),
         )}
         {(packing?.rows ?? []).map((row, rowIndex) => (
-        <g key={`row-${rowIndex}`} transform={`translate(${GUTTER + PAD_X} ${row.y})`}>
+        <g key={`row-${rowIndex}`} transform={`translate(${gutter + PAD_X} ${row.y})`}>
           {row.layout.families.map((family) => {
-            const showCaption = Boolean(config.family_col);
+            const showCaption = familyBound && showFamilyLabels;
             return (
               <g key={`family-${family.id}`}>
                 {showCaption ? (
@@ -652,7 +885,7 @@ const PedigreeRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onF
                     y={fontUnits + 2}
                     fontSize={fontUnits}
                     fontWeight={700}
-                    fill={mutedText}
+                    fill={familyColours?.get(family.id) ?? mutedText}
                     textAnchor="middle"
                   >
                     {family.id || 'family'}
@@ -694,7 +927,7 @@ const PedigreeRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onF
                         status={person.status}
                         deceased={person.deceased}
                         size={symbol}
-                        paint={paint}
+                        paint={familyPaints.get(person.family) ?? paint}
                         hatchId={hatchId}
                         dashed={person.placeholder}
                         picked={isPicked}
@@ -710,7 +943,7 @@ const PedigreeRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onF
                           textAnchor="middle"
                           pointerEvents="none"
                         >
-                          {shorten(person.label, labelChars)}
+                          {shorten(personLabel(person, labelMode), labelChars)}
                         </text>
                       ) : null}
                     </g>
@@ -729,6 +962,7 @@ const PedigreeRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onF
       estimated={estimated}
       title={metadata.title || 'Pedigree'}
       subtitle={(metadata as any).description || (metadata as any).subtitle}
+      primaryControls={primaryControls}
       controls={controls}
       contentDemand={contentDemand}
       echo={echo}
@@ -774,10 +1008,10 @@ const PedigreeRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onF
             </Paper>
           ) : null}
         </div>
-        {layout && layout.families.length > 0 ? (
+        {showLegend && layout && layout.families.length > 0 ? (
           <Group gap={10} wrap="wrap" justify="center" style={{ flex: '0 0 auto', paddingTop: 2 }}>
             <svg width={0} height={0} aria-hidden="true" style={{ position: 'absolute' }}>
-              <HatchDefs id={legendId} paint={paint} />
+              <HatchDefs id={legendId} paint={legendPaint} />
             </svg>
             {legendItem('Male', 'male', 'unaffected')}
             {legendItem('Female', 'female', 'unaffected')}

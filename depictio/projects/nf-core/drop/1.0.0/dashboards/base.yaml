@@ -36,7 +36,6 @@ main_dashboard:
   # written out; the group takes its colours from the server.
   category_colors:
     '{GROUP_COL}': auto
-    drop_group: auto
     kind:
       Expression: '#2a78d6'
       Splicing: '#eb6834'
@@ -219,14 +218,14 @@ main_dashboard:
     display:
       icon_name: mdi:flask-outline
       icon_color: orange
-      caption: in the largest group, 30 or more wanted
+      caption: largest group; 30 or more recommended
       link: tab:Candidates
       decimals: 0
     section: Key figures
     tag: dr-ov-kf-samples
     index: ov-kf-samples
     title: Cohort size
-    description: Samples in the largest analysis group, the set of samples one analysis (outrider, fraser, mae or a batch of the sample sheet) fits together. OUTRIDER and FRASER learn what is normal from that cohort, so under about 30 samples their expected counts are poor and few adjusted p-values pass; the strip counts the samples whose group reaches 30.
+    description: Samples in the largest analysis group, the set of samples one analysis (outrider, fraser, mae or a batch of the sample sheet) fits together. OUTRIDER and FRASER learn what is normal from that cohort and recommend at least 30 samples; below it their expected counts are poor and few or no adjusted p-values pass. The strip counts each sample as pass (its group has 30 or more samples, the recommended minimum), warn (20 to 29, the level this dashboard sets as borderline) or fail (under 20), so a small run shows every sample failing, which is expected and says the run lacks power, not that the samples are faulty. A run with no call at that size reads as too little data to call, not as healthy samples.
     layout: {x: 0, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: drop
@@ -235,19 +234,19 @@ main_dashboard:
     column_name: total_outliers
     column_type: int64
     secondary_layout: top_n
-    breakdown_col: drop_group
+    breakdown_col: '{GROUP_COL}'
     top_n_count: 4
     display:
       icon_name: mdi:target
       icon_color: red
-      caption: outliers, by group, most first
+      caption: calls (adjusted p), by group, most first
       link: tab:Candidates
       decimals: 0
     section: Key figures
     tag: dr-ov-kf-outliers
     index: ov-kf-outliers
     title: Outliers called
-    description: Expression and splicing outlier genes plus mono-allelic variants, summed over the samples in view.
+    description: Expression and splicing outlier genes plus mono-allelic variants that pass their adjusted cut-offs, summed over the samples in view. A run under about 30 samples has too little power for an expression or splicing adjusted p-value to pass, so only mono-allelic calls may count here; the next card counts the hits at the raw p-value.
     layout: {x: 2, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: drop
@@ -331,16 +330,18 @@ main_dashboard:
       n_multi: {dc: outlier_genes, column: call_id, aggregation: nunique, filter_expr: "col('n_analyses') >= 2", format: integer}
       nom_ae: {dc: expression_outliers, column: call_id, aggregation: nunique, filter_expr: "col('nominal')", format: integer}
       nom_as: {dc: splicing_outliers, column: call_id, aggregation: nunique, filter_expr: "col('nominal')", format: integer}
+      nom_multi: {dc: outlier_genes, column: call_id, aggregation: nunique, filter_expr: "col('n_nominal') >= 2", format: integer}
+      cohort: {dc: samples, column: group_size, aggregation: max, format: integer}
     body: |
-      - **{{n_ae}}** expression outliers in **{{s_ae}}** samples – genes far from the count the cohort predicts [Expression](tab:Expression)
-      - **{{n_as}}** genes with a splicing outlier – a junction used far more or less than in the cohort [Splicing](tab:Splicing)
-      - **{{n_mae}}** mono-allelic variants – one allele carries nearly all the RNA reads [Mono-allelic](tab:Mono-allelic)
-      - **{{n_multi}}** genes called by two or more analyses in a sample – the strongest leads [Candidates](tab:Candidates)
-      - **{{nom_ae}}** expression and **{{nom_as}}** splicing hits at the raw p-value, before correction – leads to check when a small run calls few or none (a share {NOMINAL_P} of tests passes by chance)
+      - **{{n_ae}}** expression outliers in **{{s_ae}}** samples (adjusted p {AE_PADJ} or less), **{{nom_ae}}** at the raw p-value – genes far from the count the cohort predicts [Expression](tab:Expression)
+      - **{{n_as}}** genes with a splicing outlier (gene adjusted p {AS_PADJ} or less, delta PSI {AS_MIN_DPSI} or more), **{{nom_as}}** at the raw p-value – a junction used far more or less than in the cohort [Splicing](tab:Splicing)
+      - **{{n_mae}}** mono-allelic variants (adjusted p {MAE_PADJ} or less, {MAE_MIN_RATIO} of the reads on one allele) – one allele carries nearly all the RNA reads [Mono-allelic](tab:Mono-allelic)
+      - **{{n_multi}}** genes called by two or more analyses in a sample, **{{nom_multi}}** at the raw p-value – the strongest leads [Candidates](tab:Candidates)
+      - A cohort of **{{cohort}}** samples in the largest group: OUTRIDER and FRASER recommend at least 30, because their adjusted p-values need that many samples to pass. Below it zero calls is the expected answer, and the raw-p hits (a share {NOMINAL_P} of tests passes by chance) are leads to check, not findings.
     section: Findings
     tag: dr-ov-findings
     index: ov-findings
-    layout: {x: 0, y: 0, w: 8, h: 2}
+    layout: {x: 0, y: 0, w: 8, h: 3}
   # Two even halves per row (a volcano reads poorly at a third of the row). The first
   # tile answers the sample-level quality question, the three others the analyses.
   - component_type: figure
@@ -352,7 +353,7 @@ main_dashboard:
       top = df.with_columns((pl.col('expression_nominal') + pl.col('splicing_nominal') + pl.col('mae_calls')).alias('hits')).sort(['hits', 'sample'], descending=[True, False]).head(15)
       long = top.select('sample', 'expression_nominal', 'splicing_nominal', 'mae_calls').unpivot(index='sample', variable_name='kind', value_name='hits').with_columns(pl.col('kind').replace({'expression_nominal': 'Expression', 'splicing_nominal': 'Splicing', 'mae_calls': 'Mono-allelic'}))
       fig = px.bar(long.to_pandas(), y='sample', x='hits', color='kind', orientation='h', color_discrete_map=depictio_category_colors.get('kind') or {}, category_orders={'kind': ['Expression', 'Splicing', 'Mono-allelic'], 'sample': top['sample'].to_list()}, labels={'sample': 'Sample', 'hits': 'Genes at the raw p-value, and mono-allelic calls', 'kind': 'Analysis'})
-      fig.update_yaxes(autorange='reversed', automargin=True)
+      fig.update_yaxes(automargin=True)
       fig.update_xaxes(dtick=1 if top['hits'].max() <= 8 else None)
       fig.update_layout(margin=dict(t=10), legend_title_text='')
     section: Findings
@@ -360,7 +361,7 @@ main_dashboard:
     index: ov-burden
     title: Hits per sample
     description: Genes at a raw p-value of {NOMINAL_P} or less (expression, splicing) and mono-allelic calls, per sample. A share {NOMINAL_P} of the tests passes by chance, so look for a sample far above the others; that is usually a quality or batch problem, not a patient.
-    layout: {x: 0, y: 2, w: 4, h: 5}
+    layout: {x: 0, y: 3, w: 4, h: 5}
   - component_type: highlight
     section: Findings
     source_tab: Expression
@@ -369,7 +370,7 @@ main_dashboard:
     caption: One point per sample and gene; right of the line the gene is expressed above its expected count, left of it below.
     tag: dr-ov-hl-expression
     index: ov-hl-expression
-    layout: {x: 4, y: 2, w: 4, h: 5}
+    layout: {x: 4, y: 3, w: 4, h: 5}
   - component_type: highlight
     section: Findings
     source_tab: Splicing
@@ -378,7 +379,7 @@ main_dashboard:
     caption: One point per sample and gene, at its most significant junction; right of the line the junction is used more than in the cohort.
     tag: dr-ov-hl-splicing
     index: ov-hl-splicing
-    layout: {x: 0, y: 7, w: 4, h: 5}
+    layout: {x: 0, y: 8, w: 4, h: 5}
   - component_type: highlight
     section: Findings
     source_tab: Mono-allelic
@@ -387,7 +388,7 @@ main_dashboard:
     caption: One point per heterozygous variant; far left or right of the line, one allele carries most of the reads.
     tag: dr-ov-hl-mae
     index: ov-hl-mae
-    layout: {x: 4, y: 7, w: 4, h: 5}
+    layout: {x: 4, y: 8, w: 4, h: 5}
   # Link-only tab tiles: each tile prints its tab's subtitle. A tab the run does
   # not have is left out, and a heading whose tabs are all missing is hidden.
   - component_type: text
@@ -648,11 +649,14 @@ tabs:
       medals: true
       selection_enabled: true
       selection_column: call_id
+      # The first row of the list is the one the record shows on load.
+      default_select_by: significance
+      default_select_order: desc
     section: Ranked per sample
     tag: dr-cand-ranked
     index: cand-ranked-genes
     title: Genes ranked per sample
-    description: The best-supported genes first, with the analyses that call each one. The -log10 p bar adds up the raw p-values of the analyses that tested the gene (2 is p = 0.01 for one analysis), so a longer bar is more or stronger evidence. Hover a row for its statistics; a click picks the gene for the record beside it.
+    description: The best-supported genes first, with the analyses that call each one. The -log10 p bar adds up the raw p-values of the analyses that tested the gene (2 is p = 0.01 for one analysis), so a longer bar is more or stronger evidence. Hover a row for its statistics; the record beside it opens on the first row (the highest bar of the genes in view) and follows a click on another.
     layout: {x: 0, y: 0, w: 5, h: 7}
   - component_type: advanced_viz
     workflow_tag: drop
@@ -664,6 +668,8 @@ tabs:
       title_col: gene_name
       selection_source: any
       linked_component: dr-cand-ranked
+      # Opens on the top row of the list beside it until a row is picked.
+      default_record_by: significance
       sections:
         Call: [gene_name, sample, called_in, phenotype, sample_rank]
         Expression: [z_score, l2fc, expression_padj, expression_score]
@@ -724,7 +730,7 @@ tabs:
   - name: Samples and genes
     icon: mdi:chart-bar
     color: blue
-    description: Which samples carry the calls, and which genes are called again and again
+    description: Which samples carry the hits, and the strongest genes with the samples that share them
   - name: Gene detail
     icon: mdi:information-outline
     color: gray
@@ -882,7 +888,7 @@ tabs:
     tag: dr-ae-volcano
     index: dr-ae-volcano
     title: 'OUTRIDER: p-value against fold change'
-    description: The raw p-value, since a small run has no adjusted one under the cut-off. The dashed line is p = 0.05; a red point is a call (adjusted p), an orange one a nominal hit that corrected testing does not support.
+    description: The raw p-value, since a small run has no adjusted one under the cut-off. The horizontal dashed line is p = 0.05, the default raw p-value at or below which a row counts as a nominal hit. The two vertical dotted lines are at log2 fold changes of -0.5 and 0.5 (a 1.4-fold change either way), a reading guide of this dashboard and not a cut-off of OUTRIDER, whose calls rest on the adjusted p-value and the z-score ({AE_MIN_Z} or more here). A red point is a call (adjusted p), an orange one a nominal hit that corrected testing does not support. Each point is a gene in a sample.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: figure
     workflow_tag: drop
@@ -890,19 +896,25 @@ tabs:
     visu_type: bar
     mode: code
     code_content: |-
+      # Hits per sample, split by the direction of the change; the number at the end of a bar is its total, with the calls that also pass the adjusted p-value.
       hits = df.filter(pl.col('nominal'))
-      per = hits.group_by('sample', 'status').len().rename({'len': 'hits'})
-      order = per.group_by('sample').agg(pl.col('hits').sum().alias('total')).sort(['total', 'sample'], descending=[True, False]).head(15)['sample'].to_list()
+      per = hits.group_by('sample', 'direction').agg(pl.col('gene_name').n_unique().alias('hits'))
+      tot = per.group_by('sample').agg(pl.col('hits').sum().alias('total')).sort(['total', 'sample'], descending=[True, False]).head(15)
+      order = tot['sample'].to_list()
       per = per.filter(pl.col('sample').is_in(order))
-      fig = px.bar(per.to_pandas(), y='sample', x='hits', color='status', orientation='h', color_discrete_map=depictio_category_colors.get('status') or {}, category_orders={'sample': order, 'status': ['called (adjusted p)', 'nominal p only']}, labels={'sample': 'Sample', 'hits': 'Genes at the raw p-value', 'status': 'Status'})
-      fig.update_yaxes(autorange='reversed', automargin=True)
-      fig.update_xaxes(dtick=1 if per['hits'].sum() <= 8 else None)
-      fig.update_layout(margin=dict(t=10), legend_title_text='')
+      calls = hits.filter(pl.col('significant')).group_by('sample').agg(pl.col('gene_name').n_unique().alias('n'))
+      called = dict(zip(calls['sample'].to_list(), calls['n'].to_list()))
+      fig = px.bar(per.to_pandas(), y='sample', x='hits', color='direction', orientation='h', color_discrete_map=depictio_category_colors.get('direction') or {}, category_orders={'sample': order, 'direction': ['over-expressed', 'under-expressed']}, labels={'sample': 'Sample', 'hits': 'Genes at the raw p-value', 'direction': ''})
+      for s, n in zip(order, tot['total'].to_list()):
+          fig.add_annotation(x=n, y=s, text=str(n) + (' (%d called)' % called[s] if s in called else ''), xanchor='left', xshift=4, showarrow=False)
+      fig.update_yaxes(automargin=True)
+      fig.update_xaxes(dtick=1 if tot['total'].max() <= 8 else None, range=[0, float(tot['total'].max()) * 1.3])
+      fig.update_layout(margin=dict(t=10), legend_title_text='', legend=dict(orientation='h', y=-0.2))
     section: Samples and genes
     tag: dr-ae-per-sample
     index: ae-per-sample
     title: Samples with the most hits
-    description: Genes at a raw p-value of {NOMINAL_P} or less per sample; the red part is called after correction, the orange part is not.
+    description: 'Genes at a raw p-value of {NOMINAL_P} or less per sample, split by the direction of the change; the number at the end of a bar is its total, with the calls that pass the adjusted p-value.'
     layout: {x: 0, y: 0, w: 4, h: 4}
   - component_type: figure
     workflow_tag: drop
@@ -910,19 +922,22 @@ tabs:
     visu_type: bar
     mode: code
     code_content: |-
-      hits = df.filter(pl.col('nominal'))
-      per = hits.group_by('gene_name', 'status').agg(pl.col('sample').n_unique().alias('samples'))
-      order = per.group_by('gene_name').agg(pl.col('samples').sum().alias('total')).sort(['total', 'gene_name'], descending=[True, False]).head(15)['gene_name'].to_list()
-      per = per.filter(pl.col('gene_name').is_in(order))
-      fig = px.bar(per.to_pandas(), y='gene_name', x='samples', color='status', orientation='h', color_discrete_map=depictio_category_colors.get('status') or {}, category_orders={'gene_name': order, 'status': ['called (adjusted p)', 'nominal p only']}, labels={'gene_name': 'Gene', 'samples': 'Samples with a hit', 'status': 'Status'})
-      fig.update_yaxes(autorange='reversed', automargin=True)
-      fig.update_xaxes(dtick=1 if per['samples'].sum() <= 8 else None)
-      fig.update_layout(margin=dict(t=10), legend_title_text='')
+      # The genes with the strongest hits in the samples in view: the bar is the best -log10 p-value of the gene, coloured by the direction of that hit, and the label says how many samples share it. Ranked by that count first, so a gene hit again and again leads. The genes are whatever the OUTRIDER table holds for the samples in view; none is named here.
+      hits = df.filter(pl.col('nominal')).sort(['p_value', 'abs_z_score'], descending=[False, True], nulls_last=True)
+      per = hits.group_by('gene_name', maintain_order=True).agg(pl.col('sample').n_unique().alias('samples'), pl.col('neg_log10_p').first().alias('strength'), pl.col('direction').first().alias('direction'))
+      per = per.sort(['samples', 'strength', 'gene_name'], descending=[True, True, False]).head(15)
+      order = per['gene_name'].to_list()
+      notes = [str(n) + (' sample' if n == 1 else ' samples') for n in per['samples'].to_list()]
+      fig = px.bar(per.to_pandas().assign(note=notes), y='gene_name', x='strength', color='direction', text='note', orientation='h', color_discrete_map=depictio_category_colors.get('direction') or {}, category_orders={'gene_name': order, 'direction': ['over-expressed', 'under-expressed']}, labels={'gene_name': 'Gene', 'strength': 'Strongest evidence (-log10 p-value)', 'direction': ''})
+      fig.update_traces(textposition='outside', cliponaxis=False)
+      fig.update_yaxes(automargin=True)
+      fig.update_xaxes(range=[0, float(per['strength'].max()) * 1.3])
+      fig.update_layout(margin=dict(t=10), legend_title_text='', legend=dict(orientation='h', y=-0.2))
     section: Samples and genes
     tag: dr-ae-recurrent
     index: ae-recurrent-genes
-    title: Genes hit in several samples
-    description: A gene hit in many samples of a group is more often a technical artefact than a diagnosis.
+    title: Strongest genes, and how many samples share them
+    description: 'The genes with the best raw p-value, coloured by direction and labelled with the samples that hit them; a gene hit in many samples is more often a technical artefact than a diagnosis.'
     layout: {x: 4, y: 0, w: 4, h: 4}
   - component_type: table
     workflow_tag: drop
@@ -946,7 +961,7 @@ tabs:
       selection_source: any
       linked_component: dr-ae-table
       sections:
-        Call: [gene_name, sample, direction, drop_group]
+        Call: [gene_name, sample, direction, '{GROUP_COL}']
         Evidence: [z_score, l2fc, padj, p_value]
         Counts: [raw_count, expected_count, mean_count]
         Phenotype: [hpo_match, hpo_label_overlap]
@@ -1153,7 +1168,7 @@ tabs:
     tag: dr-as-volcano
     index: dr-as-volcano
     title: 'FRASER: p-value against delta PSI'
-    description: The raw p-value of each junction, since a small run has no adjusted one under the cut-off. The dashed line is p = 0.05; a red point is a call (adjusted p), an orange one a nominal hit that corrected testing does not support.
+    description: The raw p-value of each junction, since a small run has no adjusted one under the cut-off. The horizontal dashed line is p = 0.05, the default raw p-value at or below which a row counts as a nominal hit. The two vertical dotted lines are at delta PSI of -0.1 and 0.1, a shift of 10 percentage points in the usage of the junction, a reading guide of this dashboard and below the {AS_MIN_DPSI} that a FRASER call here requires (together with a gene-level adjusted p of {AS_PADJ} or less). A red point is a call (adjusted p), an orange one a nominal hit that corrected testing does not support. Each point is a gene in a sample, at its most significant junction.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: figure
     workflow_tag: drop
@@ -1161,19 +1176,25 @@ tabs:
     visu_type: bar
     mode: code
     code_content: |-
+      # Hits per sample, split by the direction of the change; the number at the end of a bar is its total, with the calls that also pass the adjusted p-value.
       hits = df.filter(pl.col('nominal'))
-      per = hits.group_by('sample', 'status').agg(pl.col('gene_name').n_unique().alias('genes'))
-      order = per.group_by('sample').agg(pl.col('genes').sum().alias('total')).sort(['total', 'sample'], descending=[True, False]).head(15)['sample'].to_list()
+      per = hits.group_by('sample', 'direction').agg(pl.col('gene_name').n_unique().alias('hits'))
+      tot = per.group_by('sample').agg(pl.col('hits').sum().alias('total')).sort(['total', 'sample'], descending=[True, False]).head(15)
+      order = tot['sample'].to_list()
       per = per.filter(pl.col('sample').is_in(order))
-      fig = px.bar(per.to_pandas(), y='sample', x='genes', color='status', orientation='h', color_discrete_map=depictio_category_colors.get('status') or {}, category_orders={'sample': order, 'status': ['called (adjusted p)', 'nominal p only']}, labels={'sample': 'Sample', 'genes': 'Genes at the raw p-value', 'status': 'Status'})
-      fig.update_yaxes(autorange='reversed', automargin=True)
-      fig.update_xaxes(dtick=1 if per['genes'].sum() <= 8 else None)
-      fig.update_layout(margin=dict(t=10), legend_title_text='')
+      calls = hits.filter(pl.col('significant')).group_by('sample').agg(pl.col('gene_name').n_unique().alias('n'))
+      called = dict(zip(calls['sample'].to_list(), calls['n'].to_list()))
+      fig = px.bar(per.to_pandas(), y='sample', x='hits', color='direction', orientation='h', color_discrete_map=depictio_category_colors.get('direction') or {}, category_orders={'sample': order, 'direction': ['more usage', 'less usage']}, labels={'sample': 'Sample', 'hits': 'Genes at the raw p-value', 'direction': ''})
+      for s, n in zip(order, tot['total'].to_list()):
+          fig.add_annotation(x=n, y=s, text=str(n) + (' (%d called)' % called[s] if s in called else ''), xanchor='left', xshift=4, showarrow=False)
+      fig.update_yaxes(automargin=True)
+      fig.update_xaxes(dtick=1 if tot['total'].max() <= 8 else None, range=[0, float(tot['total'].max()) * 1.3])
+      fig.update_layout(margin=dict(t=10), legend_title_text='', legend=dict(orientation='h', y=-0.2))
     section: Samples and effects
     tag: dr-as-per-sample
     index: as-per-sample
     title: Samples with the most hits
-    description: Genes at a raw p-value of {NOMINAL_P} or less per sample; the red part is called after correction, the orange part is not.
+    description: 'Genes at a raw p-value of {NOMINAL_P} or less per sample, split by the direction of the change; the number at the end of a bar is its total, with the calls that pass the adjusted p-value.'
     layout: {x: 0, y: 0, w: 4, h: 4}
   - component_type: figure
     workflow_tag: drop
@@ -1183,16 +1204,26 @@ tabs:
     code_content: |-
       calls = df.filter(pl.col('nominal') & pl.col('potential_impact').is_not_null())
       calls = calls.with_columns(pl.col('potential_impact').replace({'annotatedIntron_reducedUsage': 'intron used less', 'annotatedIntron_increasedUsage': 'intron used more', 'exonElongation': 'exon extended', 'exonTruncation': 'exon shortened'}).str.replace_all(r'([a-z])([A-Z])', '$1 $2').str.replace_all('_', ' ').str.to_lowercase().alias('effect'))
-      fig = px.histogram(calls.to_pandas(), y='effect', color='status', barmode='stack', color_discrete_map=depictio_category_colors.get('status') or {}, category_orders={'status': ['called (adjusted p)', 'nominal p only']}, labels={'effect': 'Effect', 'status': 'Status'})
+      cols = ['effect', 'status', 'genes', 'basis']
+      nominal = calls.group_by('effect', 'status').len().rename({'len': 'genes'}).with_columns(pl.col('genes').cast(pl.Int64), pl.lit('Raw p-value (calls included)').alias('basis')).select(cols)
+      called = calls.filter(pl.col('significant')).group_by('effect', 'status').len().rename({'len': 'genes'}).with_columns(pl.col('genes').cast(pl.Int64), pl.lit('Called (adjusted p)').alias('basis')).select(cols)
+      none_called = called.height == 0
+      if none_called:
+          called = pl.DataFrame({'effect': [nominal['effect'][0] if nominal.height else 'none'], 'status': ['called (adjusted p)'], 'genes': [0], 'basis': ['Called (adjusted p)']})
+      both = pl.concat([called, nominal.with_columns(pl.col('genes').cast(pl.Int64))])
+      fig = px.bar(both.to_pandas(), y='effect', x='genes', color='status', facet_col='basis', orientation='h', barmode='stack', color_discrete_map=depictio_category_colors.get('status') or {}, category_orders={'basis': ['Called (adjusted p)', 'Raw p-value (calls included)'], 'status': ['called (adjusted p)', 'nominal p only']}, labels={'effect': 'Effect', 'genes': 'Genes', 'status': 'Status', 'basis': ''})
+      fig.for_each_annotation(lambda a: a.update(text=a.text.split('=')[-1]))
       fig.update_yaxes(categoryorder='total ascending', automargin=True, title_text='')
-      top = calls.group_by('effect').len()['len'].max() or 0
-      fig.update_xaxes(title='Genes at the raw p-value', dtick=1 if top <= 8 else None)
-      fig.update_layout(margin=dict(t=10), legend_title_text='')
+      top = both.group_by('basis', 'effect').agg(pl.col('genes').sum().alias('n'))['n'].max() or 0
+      fig.update_xaxes(title_text='Genes', dtick=1 if top <= 8 else None)
+      if none_called:
+          fig.add_annotation(text='No gene passes the adjusted cut-off', xref='x domain', yref='y domain', x=0.5, y=0.5, showarrow=False)
+      fig.update_layout(margin=dict(t=30), legend_title_text='')
     section: Samples and effects
     tag: dr-as-impact
     index: as-impact
     title: What the hit junctions do
-    description: FRASER's reading of each hit junction against the transcript annotation. An annotated intron used less or more than in the cohort is the commonest effect; an extended or shortened exon moves the exon boundary.
+    description: 'FRASER''s reading of each hit junction against the transcript annotation: an annotated intron used less or more than in the cohort, or an exon extended or shortened. Two panels on one scale: the left counts only the calls, genes whose gene-level adjusted p is {AS_PADJ} or less with a delta PSI of {AS_MIN_DPSI} or more; the right counts every hit at the raw p-value of {NOMINAL_P} or less, the calls included, split into called and nominal only. A small run has no call, so the left panel is empty and the right one is the only reading; a nominal hit is a lead, since a share {NOMINAL_P} of the tests passes by chance.'
     layout: {x: 4, y: 0, w: 4, h: 4}
   - component_type: table
     workflow_tag: drop
@@ -1216,7 +1247,7 @@ tabs:
       selection_source: any
       linked_component: dr-as-table
       sections:
-        Call: [gene_name, sample, direction, drop_group]
+        Call: [gene_name, sample, direction, '{GROUP_COL}']
         Junction: [locus, strand, psi_type, annotated_junction]
         Usage: [psi_value, delta_psi, split_reads, total_reads]
         Test: [p_value, padj, padj_gene]
@@ -1403,7 +1434,7 @@ tabs:
     tag: dr-mae-volcano
     index: dr-mae-volcano
     title: 'MAE: p-value against allelic ratio'
-    description: The raw p-value of each heterozygous variant, since a small run shares one adjusted p-value among most of them. The dashed line is p = 0.05; the dotted lines are at log2 of -2 and 2, where one allele is read four times as often as the other (80% of the reads). A red point leans to the alternative allele, a blue one to the reference.
+    description: The raw p-value of each heterozygous variant, since a small run shares one adjusted p-value among most of them. The horizontal dashed line is p = 0.05, the usual raw significance level. The vertical dotted lines are at log2 of -2 and 2, where one allele is read four times as often as the other, an 80% share of the reads, the default for a call (this run requires {MAE_MIN_RATIO}, together with an adjusted p of {MAE_PADJ} or less). A red point leans to the alternative allele, a blue one to the reference.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: drop
@@ -1438,9 +1469,9 @@ tabs:
     index: dr-mae-record
     title: Variant record
     layout: {x: 5, y: 0, w: 3, h: 6}
-# The navigator and the browser it drives share one screen. The lanes carry the genes
+# The navigator and the browser it drives share one screen. The axis carries the genes
 # of every sample's triage list on one axis, the browser shows the alignments and
-# genotypes of the samples in view on the locus the lanes frame. It is the only
+# genotypes of the samples in view on the locus the axis frames. It is the only
 # browser of the template; the volcanoes reach it through the Open in genome browser
 # action.
 - title: Locus
@@ -1465,18 +1496,18 @@ tabs:
   - name: Genes on one axis
     icon: mdi:dna
     color: indigo
-    description: The lanes drive the browser below. A brush or a locus on the lanes moves it, and its view comes back on the lanes as a dashed band.
-    # One screen: the lanes and the browser they drive, compact headers with each
+    description: The gene dots drive the browser below. A brush, a pan or a locus on the axis moves it, and its view comes back on the axis as a dashed band.
+    # One screen: the axis and the browser it drives, compact headers with each
     # tile's kind, as the protein templates' linked views.
     display: linked
   components:
   - component_type: text
     order: 1
     body: >
-      The genes of every sample's triage list on one genome axis, one lane per sample and coloured by
-      its analysis group like the tracks under it, with the reads and the genotypes of the samples in
+      The genes of every sample's triage list as dots on one genome axis, coloured by the sample's
+      analysis group like the tracks under it, with the reads and the genotypes of the samples in
       a genome browser. The tab opens on the best-supported gene and on the reads of its sample; type
-      a locus in the lanes' header or brush their axis, and the browser and the cards follow. The
+      a locus in the axis header or brush the axis, and the browser and the cards follow. The
       number of analyses that call a gene is the filter on the left and the badge in the Candidates
       tab.
     tag: dr-loc-intro
@@ -1619,19 +1650,29 @@ tabs:
       score_col: significance
       feature_col: gene_name
       sample_col: sample
-      category_col: drop_group
-      mark: rect
+      category_col: '{GROUP_COL}'
+      # One dot per gene at its start: a gene is a fraction of a pixel wide on a
+      # chromosome, so an interval mark would vanish at the zoom the tab opens on.
+      mark: point
+      point_size: 11
       score_title: Summed -log10 p-value of the analyses
-      opacity: 0.8
+      opacity: 0.9
       assembly: '{GENOME}'
       # No default_region: `first` filters the whole first contig on load, the browser
-      # follows it and every track shows "Force load". The browser opens on its locus_from.
+      # follows it and every track shows "Force load". The browser opens on its locus_from
+      # (the best-supported gene), and the axis opens on that window, then keeps it in view.
       region_filter_enabled: true
+      open_on_view_window: true
+      default_view: region
+      follow_view_window: true
+      # 5 Mb of context around the browser's window: framed at three times a gene's
+      # width, the axis showed a single dot.
+      follow_context_bp: 5000000
     section: Genes on one axis
     tag: dr-loc-navigator
     index: loc-navigator
     title: Genes on the genome
-    description: Every gene of the triage lists with a position, one lane per sample, coloured by the sample's analysis group as in the browser below. The locus field and a brush on this axis move the browser.
+    description: Each dot is a gene of a sample's triage list, at its start. Its height is the summed -log10 p-value of the analyses that test it (higher is stronger evidence) and its colour the sample's analysis group, as in the browser below. The axis opens on the window around the best-supported gene; look for tall dots, and for dots of one group that sit together on a locus, which a technical effect makes more likely than a diagnosis. Zoom out to see the chromosome (Cmd or Ctrl and the wheel, or the pan mode in the header); the locus field and a brush move the browser.
     layout: {x: 0, y: 0, w: 8, h: 6}
   # No fixed location: the browser opens on the best-supported gene, and a brush on
   # the navigator moves it without filtering. No selection write-back here: a picked
@@ -1645,10 +1686,12 @@ tabs:
     initial_tracks: 4
     max_tracks: 12
     show_overview: false
+    # Follows the navigator's brush and its pan and zoom.
+    follow_window: true
     # Splice arcs over the coverage of the BAMs.
     show_junctions: true
     # The samples of a group share a hue, as in the navigator's lanes.
-    color_by: drop_group
+    color_by: '{GROUP_COL}'
     # Common dbSNP sites and ClinVar under the genotypes, from UCSC.
     ucsc_tracks: [dbSnp155Common, clinvarMain]
     locus_from:
@@ -1666,9 +1709,9 @@ tabs:
       search_columns: [gene_name]
     tag: dr-loc-browser
     index: loc-browser
-    # The lanes above already say where the browser is: its locus bar only costs
+    # The axis above already says where the browser is: its locus bar only costs
     # height here, and the tile's menu brings it back.
     show_header: false
     title: Genome browser
-    description: The reads (with splice-junction arcs) and genotypes of the samples in view on the region of the lanes above, opening on the sample of the strongest gene; common dbSNP sites and ClinVar come from UCSC.
+    description: The reads (with splice-junction arcs) and genotypes of the samples in view on the region of the axis above, opening on the sample of the strongest gene; common dbSNP sites and ClinVar come from UCSC.
     layout: {x: 0, y: 6, w: 8, h: 7}

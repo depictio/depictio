@@ -150,9 +150,41 @@ describe('colour by condition', () => {
       displays: [{ type: 'LinearWiggleDisplay', renderers: { XYPlotRenderer: { color: 'tomato' } } }],
     };
     const out = colourTracksBy([...confs, authored], 'condition', colours);
-    expect(out[3]).toBe(confs[3]);
     expect(out[4]).toBe(confs[4]);
     expect(out[5]).toBe(authored);
+  });
+
+  it('draws the calls of a VCF track in its colour unless its renderer sets one', () => {
+    const out = colourTracksBy(confs, 'condition', colours);
+    expect(out[3].displays).toEqual([
+      {
+        type: 'LinearVariantDisplay',
+        displayId: 'v1-LinearVariantDisplay',
+        renderer: { type: 'CanvasFeatureRenderer', color1: '#ff0000' },
+      },
+    ]);
+    const byImpact = {
+      ...confs[3],
+      displays: [{ type: 'LinearVariantDisplay', renderer: { color1: 'jexl:impact' } }],
+    };
+    expect(colourTracksBy([byImpact], 'condition', colours)[0]).toBe(byImpact);
+  });
+
+  it('gives a sample a colour only when the column holds one value per sample', () => {
+    const tracks = [
+      { type: 'VariantTrack', trackId: 'd', metadata: { caller: 'deepvariant' } },
+      { type: 'VariantTrack', trackId: 'h', metadata: { caller: 'haplotypecaller' } },
+      { type: 'VariantTrack', trackId: 'n', metadata: { caller: 'deepvariant' } },
+    ];
+    const byCaller = new Map([
+      ['deepvariant', '#4a3aa7'],
+      ['haplotypecaller', '#008300'],
+    ]);
+    const callerRows = [row('d', 'T1'), row('h', 'T1'), row('n', 'N1')];
+    expect(trackColoursBy(tracks, callerRows, 'caller', byCaller)).toEqual({
+      groups: { deepvariant: '#4a3aa7', haplotypecaller: '#008300' },
+      samples: { N1: '#4a3aa7' },
+    });
   });
 
   it('then lets the per-sample colour fill only what is still bare', () => {

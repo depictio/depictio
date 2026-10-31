@@ -5,6 +5,7 @@
 # repeats the same counts.
 id: tiara
 name: Tiara
+version: "1.0.0"
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/tiara/tiara
 homepage: https://ibe-uw.github.io/tiara/
 biotools_url: https://bio.tools/tiara

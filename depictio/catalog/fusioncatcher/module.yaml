@@ -1,5 +1,6 @@
 id: fusioncatcher
 name: FusionCatcher
+version: "1.0.0"
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/fusioncatcher/fusioncatcher
 description: >-
   FusionCatcher searches for novel/known somatic fusion genes, translocations,

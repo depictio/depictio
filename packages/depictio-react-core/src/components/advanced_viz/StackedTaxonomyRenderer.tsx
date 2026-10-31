@@ -311,7 +311,8 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
         : [],
     [wantedRank, config.rank_col, metadata.index, metadata.dc_id],
   );
-  const rankReady = rankUniverse !== null || rankLookupFailed;
+  // No rank column: nothing to look up, so nothing to wait for.
+  const rankReady = !config.rank_col || rankUniverse !== null || rankLookupFailed;
 
   // The bindings (long form) or the sample id and value columns (wide form),
   // then the columns any annotation strip needs, so the renderer looks up

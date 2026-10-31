@@ -7,6 +7,7 @@ expected row is kept.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -104,6 +105,43 @@ def test_a_run_holding_none_lists_every_expected_file(tmp_path: Path) -> None:
         "annotation/haplotypecaller/S2/S2.haplotypecaller.filtered_snpEff.ann.vcf.gz",
         "preprocessing/recalibrated/S2/S2.recal.cram",
     ]
+
+
+def _params(root: Path, tools: str) -> None:
+    (root / "pipeline_info").mkdir(exist_ok=True)
+    (root / "pipeline_info" / "params_2026-01-01_00-00-00.json").write_text(
+        json.dumps({"tools": tools}), encoding="utf-8"
+    )
+
+
+def test_a_tables_only_run_without_snpeff_lists_the_unannotated_calls(tmp_path: Path) -> None:
+    _params(tmp_path, "haplotypecaller,deepvariant,manta")
+    df = _run(tmp_path)
+    assert df["uri"].to_list() == [
+        "variant_calling/haplotypecaller/S1/S1.haplotypecaller.filtered.vcf.gz",
+        "variant_calling/deepvariant/S1/S1.deepvariant.vcf.gz",
+        "preprocessing/recalibrated/S1/S1.recal.cram",
+        "variant_calling/manta/S1/S1.manta.diploid_sv.vcf.gz",
+        "variant_calling/haplotypecaller/S2/S2.haplotypecaller.filtered.vcf.gz",
+        "preprocessing/recalibrated/S2/S2.recal.cram",
+    ]
+
+
+def test_a_tables_only_run_with_snpeff_still_lists_the_annotated_calls(tmp_path: Path) -> None:
+    _params(tmp_path, "haplotypecaller,deepvariant,manta,snpeff")
+    df = _run(tmp_path)
+    assert df["uri"].to_list()[0] == (
+        "annotation/haplotypecaller/S1/S1.haplotypecaller.filtered_snpEff.ann.vcf.gz"
+    )
+
+
+def test_calls_held_without_an_annotated_twin_fall_back_when_read_in_place(
+    tmp_path: Path,
+) -> None:
+    _touch(tmp_path, "variant_calling/haplotypecaller/S1/S1.haplotypecaller.filtered.vcf.gz")
+    df = _run(tmp_path, properties={"remote_base_uri": "s3://bucket/results"})
+    vcfs = df.filter(df["format"] == "vcf")["uri"].to_list()
+    assert vcfs and all(u.startswith("variant_calling/") for u in vcfs)
 
 
 def test_read_in_place_keeps_every_row(tmp_path: Path) -> None:

@@ -65,7 +65,10 @@ export function windowLocus(win: GenomeWindow | null | undefined): string | null
  * or sidebar control wrote it: the columns come from the filters themselves (a
  * multi-select names the contig column, a range slider the position one), so
  * the browser needs no binding of its own. With several emitters the last one
- * wins. Null unless exactly one contig is selected.
+ * wins. A brush across several contigs carries no range and is read as the
+ * first of them, whole: the browser shows one contig, and following that one
+ * beats staying where it was while the rest of the dashboard moved. Null when
+ * no contig is selected.
  */
 export function genomeSelectionRegion(
   filters: readonly InteractiveFilter[] | undefined | null,
@@ -83,7 +86,11 @@ export function genomeSelectionRegion(
   if (!chromEntry) return null;
   const chrom = columnOf(chromEntry) as string;
   const start = rangeEntries.length ? (columnOf(rangeEntries[rangeEntries.length - 1]) as string) : '';
-  return regionFromFilters(region as InteractiveFilter[], { chrom, start: start || `${chrom}\u0000` });
+  const contigs = Array.isArray(chromEntry.value) ? chromEntry.value : [];
+  const read = contigs.length > 1
+    ? region.map((f) => (f === chromEntry ? { ...f, value: [contigs[0]] } : f))
+    : region;
+  return regionFromFilters(read as InteractiveFilter[], { chrom, start: start || `${chrom}\u0000` });
 }
 
 /** Index of the tile whose region `genomeSelectionRegion` reads (the last

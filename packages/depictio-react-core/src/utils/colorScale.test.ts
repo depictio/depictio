@@ -25,4 +25,19 @@ describe('sampleColorscale', () => {
     expect(Array.isArray(stops)).toBe(true);
     expect((stops as Array<[number, string]>)[0]).toEqual([0, 'rgb(0,0,4)']);
   });
+  it('emits stops for every advanced-viz scale, since plotly.js knows only some by name', () => {
+    for (const name of COLOUR_SCALES) {
+      const stops = plotlyColorscale(name);
+      expect(Array.isArray(stops)).toBe(true);
+      const arr = stops as Array<[number, string]>;
+      expect(arr[0][0]).toBe(0);
+      expect(arr[arr.length - 1][0]).toBe(1);
+      expect(arr.every(([, c]) => /^rgb\(\d+,\d+,\d+\)$/.test(c))).toBe(true);
+    }
+    expect((plotlyColorscale('Plasma') as Array<[number, string]>)[0]).toEqual([0, 'rgb(13,8,135)']);
+  });
+
+  it('passes a name it does not hold through, for plotly.js builtins', () => {
+    expect(plotlyColorscale('Hot')).toBe('Hot');
+  });
 });

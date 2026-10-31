@@ -13,6 +13,8 @@ import type { Contig, GenomeViewConfig } from './genomeSpySpec';
 import {
   compactRegion,
   fallbackBoxes,
+  followWindowTarget,
+  frameWindow,
   fractionOfDomain,
   hoverRows,
   paddedRegion,
@@ -300,5 +302,108 @@ describe('windowInDomain tolerance', () => {
   it('still fails for a window that really left', () => {
     expect(windowInDomain(dom, { chrom: 'chr1', start: 800, end: 4000 }, names3)).toBe(false);
     expect(windowInDomain(dom, { chrom: 'chr1', start: 4000, end: 6000 }, names3)).toBe(false);
+  });
+});
+
+describe('frameWindow', () => {
+  it('centres the window at three times its width', () => {
+    expect(frameWindow({ chrom: 'chr1', start: 4000, end: 5000 })).toEqual({
+      chrom: 'chr1',
+      start: 3000,
+      end: 6000,
+    });
+  });
+  it('keeps a floor under a tiny window and stays inside the contig', () => {
+    expect(frameWindow({ chrom: 'chr1', start: 10, end: 11 }, 5000)).toEqual({
+      chrom: 'chr1',
+      start: 0,
+      end: 1000,
+    });
+    expect(frameWindow({ chrom: 'chr1', start: 4990, end: 5000 }, 5000)).toEqual({
+      chrom: 'chr1',
+      start: 4000,
+      end: 5000,
+    });
+  });
+});
+
+describe('followWindowTarget', () => {
+  const names = ['chr1', 'chr2'];
+  const domain = (chrom: string, a: number, b: number, c2 = chrom) => [
+    { chrom, pos: a },
+    { chrom: c2, pos: b },
+  ];
+  const win = (start: number, end: number, chrom = 'chr1') => ({ chrom, start, end });
+
+  it('keeps follow_context_bp of context around a small window', () => {
+    const size = 48_000_000;
+    // Opening on the whole genome: frame 7 Mb around a 200 kb window.
+    expect(
+      followWindowTarget(domain('chr1', 0, 9_000_000, 'chr2'), win(10_900_000, 11_100_000), names, size, 7_000_000),
+    ).toEqual({ chrom: 'chr1', start: 7_500_000, end: 14_500_000 });
+    // A view already narrower than the context is widened to it.
+    expect(
+      followWindowTarget(domain('chr1', 10_000_000, 12_000_000), win(10_900_000, 11_100_000), names, size, 7_000_000),
+    ).toEqual({ chrom: 'chr1', start: 7_500_000, end: 14_500_000 });
+    // A view that already shows the context stays.
+    expect(
+      followWindowTarget(domain('chr1', 7_500_000, 14_500_000), win(10_900_000, 11_100_000), names, size, 7_000_000),
+    ).toBe('stay');
+  });
+  it('stays while the window sits in the middle of the view', () => {
+    expect(followWindowTarget(domain('chr1', 0, 1000), win(400, 500), names)).toBe('stay');
+    // A brush the browser followed: the window is the region the view was framed on.
+    expect(followWindowTarget(domain('chr1', 0, 1300), win(150, 1150), names)).toBe('stay');
+  });
+
+  it('centres the window, keeping the zoom, when it drifts to an edge', () => {
+    expect(followWindowTarget(domain('chr1', 0, 1000), win(900, 960), names)).toEqual({
+      chrom: 'chr1',
+      start: 430,
+      end: 1430,
+    });
+  });
+
+  it('opens out to 1.5 times a window wider than the view', () => {
+    const t = followWindowTarget(domain('chr1', 400, 500), win(0, 1000), names);
+    expect(t).toEqual({ chrom: 'chr1', start: 0, end: 1500 });
+  });
+
+  it('shifts to stay inside the contig', () => {
+    expect(followWindowTarget(domain('chr1', 0, 400), win(950, 990), names, 1000)).toEqual({
+      chrom: 'chr1',
+      start: 600,
+      end: 1000,
+    });
+    expect(followWindowTarget(domain('chr1', 500, 900), win(10, 40), names, 1000)).toEqual({
+      chrom: 'chr1',
+      start: 0,
+      end: 400,
+    });
+  });
+
+  it('frames a window that is a sliver of a whole chromosome', () => {
+    // The follow used to find the window "inside" and never move.
+    expect(followWindowTarget(domain('chr1', 0, 1_000_000), win(400_000, 410_000), names, 1_000_000)).toEqual({
+      chrom: 'chr1',
+      start: 390_000,
+      end: 420_000,
+    });
+  });
+
+  it('frames the window out of the whole-genome domain the axis opens on', () => {
+    expect(followWindowTarget(domain('chr1', 0, 500, 'chr2'), win(100, 400), names, 1000)).toEqual({
+      chrom: 'chr1',
+      start: 0,
+      end: 1000,
+    });
+    // Once framed it is a third of the view: nothing left to do.
+    expect(followWindowTarget(domain('chr1', 0, 900), win(300, 600), names)).toBe('stay');
+  });
+
+  it('leaves the call to the caller when it cannot tell', () => {
+    expect(followWindowTarget(null, win(1, 2), names)).toBeNull();
+    expect(followWindowTarget(domain('chr1', 0, 100), win(1, 2, 'chr2'), names)).toBeNull();
+    expect(followWindowTarget(domain('chrZ', 0, 100), win(1, 2, 'chrZ'), names)).toBeNull();
   });
 });

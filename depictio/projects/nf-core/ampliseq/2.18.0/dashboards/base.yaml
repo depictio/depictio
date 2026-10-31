@@ -1021,7 +1021,6 @@ tabs:
       dim_1_col: dim_1
       dim_2_col: dim_2
       color_col: '{GROUP_COL}'
-      point_size: 10
       show_density: false
       axis_prefix: PCo
       # A lasso here becomes an analysis group. Points carry sample_id_col in

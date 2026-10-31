@@ -265,16 +265,25 @@ def preset_annotation_track(
     """Gene annotation track of a preset, or None when UCSC publishes none."""
     if not preset.annotation_uri:
         return None
+    adapter: dict[str, Any] = {
+        "type": "BigBedAdapter",
+        "bigBedLocation": _uri(url_for(preset, "annotation")),
+    }
+    # JBrowse groups the transcripts of a gene under a parent named by
+    # ``aggregateField``, ``geneName2`` by default: the UniProt id in knownGene,
+    # so a gene was labelled Q86WR7. Its symbol is ``geneName`` in knownGene,
+    # ``name2`` in ncbiRefSeq.
+    if preset.annotation_uri.endswith("knownGene.bb"):
+        adapter["aggregateField"] = "geneName"
+    elif "ncbiRefSeq" in preset.annotation_uri:
+        adapter["aggregateField"] = "name2"
     return {
         "type": "FeatureTrack",
         "trackId": f"{preset.name}-genes",
         "name": preset.annotation_name,
         "category": ["Annotation"],
         "assemblyNames": [preset.name],
-        "adapter": {
-            "type": "BigBedAdapter",
-            "bigBedLocation": _uri(url_for(preset, "annotation")),
-        },
+        "adapter": adapter,
     }
 
 

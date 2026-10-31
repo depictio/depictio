@@ -11,37 +11,49 @@ Each file has a few homes. The first one the run holds is used:
 - variants: the snpEff-annotated twin first (``annotation/<caller>/<S>/``: its
   ``ANN`` field colours the browser's calls by impact), else the caller's own
   VCF (``variant_calling/<caller>/<S>/``). A filtered VCF (HaplotypeCaller,
-  FreeBayes) comes before the unfiltered one;
+  FreeBayes) comes before the unfiltered one. A file the root does not hold
+  (read in place, or a tables-only run) takes the annotated path only when the
+  run annotated with snpEff, else the caller's own, so a run without snpEff
+  does not list tracks that 404;
 - alignments: ``preprocessing/recalibrated/<S>/<S>.recal.cram`` when the run
   recalibrated base qualities, else ``preprocessing/markduplicates/<S>/<S>.md.cram``.
 
-Row order is what the browser opens on (``initial_tracks`` shows the first
-rows): the light VCFs first, one block per sample (the small-variant callers,
+Row order is what the browser opens on when it does not pick by category
+(``initial_tracks`` shows the first rows; the template picks by ``category``
+instead): the light VCFs first, one block per sample (the small-variant callers,
 then the structural-variant callers), and the CRAMs, which are gigabytes each,
 close the manifest. The leading rows are a caller comparison with the reads under
 it, though: every small-variant caller of the first sample, then that sample's
 CRAM, so the browser opens on what the callers agree on and the evidence for it,
 not on the first N rows of one block.
 
-Germline runs only: a somatic pair (``<tumour>_vs_<normal>``) names its caller
-rows after the pair, not a sample, and is left out as it is on the hub. A CRAM
-and a bgzipped VCF cannot be read without their index (``.crai``, ``.tbi``),
-so a file whose index is missing is left out of an upload.
+A somatic callset (a tumour/normal pair, ``<tumour>_vs_<normal>``, or a tumour
+called on its own) names its files after the unit, not a sample. Its VCFs are listed
+too, in the ``Somatic variants`` category, keyed on the *tumour* sample so the hub's
+sample filters reach them. The file names come from the ``vcf`` column of
+``variantcalled.csv`` (its basename only: the folder is rebuilt under the results
+folder, the manifest's absolute paths belong to the machine that ran the pipeline), so a
+caller that writes several files for a pair (Strelka's SNVs and indels) gets a row each.
+A paired callset beside the CRAMs of its tumour and its normal is what the browser shows
+for a pair. A CRAM and a bgzipped VCF cannot be read without their index (``.crai``,
+``.tbi``), so a file whose index is missing is left out of an upload.
 
 Two ways the files are read:
 - ``TRACKS_URI`` is set (the template turns it into ``remote_base_uri``): every
   expected row is kept and read in place under that results folder, on the
-  first layout of each file (annotated VCF, recalibrated CRAM). The folder must
-  hold the annotation (snpEff) output the dashboard's other tabs read;
+  first layout of each file the root holds, else (annotated VCF when the run
+  annotated with snpEff, recalibrated CRAM). The folder must hold the files at
+  the layout the data root shows;
 - otherwise the rows whose file and index are present under DATA_ROOT are kept
   and the CLI uploads them at ingestion (all rows are kept when none is
   present, so a tables-only run still lists what the pipeline publishes).
 
 Output schema:
     track_id : Utf8     `<sample_id>.<caller>` or `<sample_id>.alignments`, unique per file
-    sample_id : Utf8    the sample (links to the `samples` hub)
+                        (`<unit>.<caller>[.<qualifier>]` for a somatic callset)
+    sample_id : Utf8    the sample (links to the `samples` hub); a pair's is its tumour
     caller : Utf8       the variant caller; null on an alignment row
-    kind : Utf8         variants / sv / alignments
+    kind : Utf8         variants / sv / somatic / alignments
     format : Utf8       vcf / cram
     uri : Utf8          path relative to the results folder
     name : Utf8         track label shown in the browser
@@ -51,9 +63,12 @@ Output schema:
 
 from __future__ import annotations
 
+import json
+
 import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
+from depictio.recipes.lib.sarek_units import PAIR_SEP, split_pair
 
 _CSV_KWARGS = {"infer_schema_length": 0}
 
@@ -112,7 +127,41 @@ _VCF_NAMES = {
 }
 
 # A somatic caller names its row after the pair, not a sample.
-_PAIR_MARK = "_vs_"
+_PAIR_MARK = PAIR_SEP
+
+# What a pair's caller writes when the manifest does not name the file (the manifest
+# lists them; this is the fallback of a run whose variantcalled.csv lacks the column).
+_SOMATIC_NAMES = {
+    "mutect2": ("{u}.mutect2.filtered.vcf.gz",),
+    "strelka": ("{u}.strelka.somatic_snvs.vcf.gz", "{u}.strelka.somatic_indels.vcf.gz"),
+}
+_VCF_SUFFIX = ".vcf.gz"
+
+
+def _somatic_candidates(unit: str, caller: str, basename: str) -> list[str]:
+    """Paths of a somatic callset's VCF: the snpEff twin first, then the caller's own."""
+    stem = basename[: -len(_VCF_SUFFIX)] if basename.endswith(_VCF_SUFFIX) else basename
+    return [
+        f"annotation/{caller}/{unit}/{stem}_snpEff.ann.vcf.gz",
+        f"variant_calling/{caller}/{unit}/{basename}",
+    ]
+
+
+def _somatic_track(unit: str, caller: str, basename: str, tumour: str, normal: str | None) -> dict:
+    """The manifest row (without ``uri`` and ``order``) of one somatic VCF."""
+    stem = basename[: -len(_VCF_SUFFIX)] if basename.endswith(_VCF_SUFFIX) else basename
+    qualifiers = [q for q in stem.split(".")[2:] if q != "filtered"]
+    label = f"{tumour} vs {normal}" if normal else tumour
+    detail = " ".join(q.replace("somatic_", "").replace("_", " ") for q in qualifiers)
+    return {
+        "track_id": ".".join([unit, caller, *qualifiers]),
+        "sample_id": tumour,
+        "caller": caller,
+        "kind": "somatic",
+        "format": "vcf",
+        "name": " ".join(filter(None, [label, caller, detail])),
+        "category": "Somatic variants",
+    }
 
 
 def _vcf_candidates(sample_id: str, caller: str) -> list[str]:
@@ -123,6 +172,30 @@ def _vcf_candidates(sample_id: str, caller: str) -> list[str]:
     ]
     plain = [f"variant_calling/{caller}/{sample_id}/{n}" for n in names]
     return [*annotated, *plain]
+
+
+def _snpeff_ran(context) -> bool:
+    """Whether the run annotated its calls with snpEff, as far as the data root can tell.
+
+    Its annotated VCFs under ``annotation/`` say yes; calls under ``variant_calling/``
+    with no annotated twin say no; a tables-only root has neither, so the run's own
+    ``--tools`` (``pipeline_info/params*.json``) decides. Unknown: yes, the layout the
+    manifest listed before it looked.
+    """
+    if context is None:
+        return True
+    if context.glob("annotation/*/*/*_snpEff.ann.vcf.gz"):
+        return True
+    if context.glob("variant_calling/*/*/*.vcf.gz"):
+        return False
+    for rel in reversed(context.glob("pipeline_info/params*.json")):
+        try:
+            tools = json.loads(context.root.read_bytes(rel)).get("tools")
+        except (OSError, ValueError, AttributeError):
+            continue
+        if isinstance(tools, str):
+            return "snpeff" in {t.strip().lower() for t in tools.split(",")}
+    return True
 
 
 def _cram_candidates(sample_id: str, stage: str | None) -> list[str]:
@@ -148,16 +221,42 @@ def transform(sources: dict[str, pl.DataFrame | None], context=None) -> pl.DataF
         for sample_id in _column(sources.get(ref), "sample"):
             stage.setdefault(sample_id, ref)
 
+    status: dict[str, int] = {}  # sample -> 0 normal / 1 tumour, from the design manifests
+    for ref in _DESIGN_REFS:
+        df = sources.get(ref)
+        if df is not None and {"sample", "status"} <= set(df.columns):
+            for sample_id, value in zip(
+                df["sample"].to_list(), df["status"].to_list(), strict=True
+            ):
+                try:
+                    status.setdefault(str(sample_id).strip(), int(value))
+                except (TypeError, ValueError):
+                    continue
+
     called = sources.get("variantcalled")
     callers: dict[str, list[str]] = {}  # sample -> callers, in the manifest's order
+    # (unit, caller, file name) of the calls that are somatic: a pair's, or a tumour's own.
+    somatic: dict[tuple[str, str, str], None] = {}
     if called is not None and {"sample", "variantcaller"} <= set(called.columns):
-        for sample_id, caller in zip(
-            called["sample"].to_list(), called["variantcaller"].to_list(), strict=True
+        vcfs = called["vcf"].to_list() if "vcf" in called.columns else [None] * called.height
+        for sample_id, caller, vcf in zip(
+            called["sample"].to_list(), called["variantcaller"].to_list(), vcfs, strict=True
         ):
             sample_id, caller = str(sample_id or "").strip(), str(caller or "").strip().lower()
-            if sample_id and caller and _PAIR_MARK not in sample_id:
-                if caller not in callers.setdefault(sample_id, []):
-                    callers[sample_id].append(caller)
+            if not (sample_id and caller):
+                continue
+            tumour, _ = split_pair(sample_id)
+            if _PAIR_MARK in sample_id or status.get(sample_id) == 1:
+                names = [str(vcf).strip().rsplit("/", 1)[-1]] if vcf and str(vcf).strip() else []
+                names = names or [
+                    n.format(u=sample_id)
+                    for n in _SOMATIC_NAMES.get(caller, ("{u}." + caller + ".vcf.gz",))
+                ]
+                for name in names:
+                    somatic[(sample_id, caller, name)] = None
+                callers.setdefault(tumour, [])
+            elif caller not in callers.setdefault(sample_id, []):
+                callers[sample_id].append(caller)
 
     samples = sorted({*stage, *callers})
     if not samples:
@@ -176,13 +275,21 @@ def transform(sources: dict[str, pl.DataFrame | None], context=None) -> pl.DataF
         """The file and its index are under the data root (an upload needs both)."""
         return context is not None and context.exists(path) and context.exists(_index_of(path))
 
+    snpeff: list[bool] = []  # looked up once, and only when a file is not held
+
     def uri_for(candidates: list[str]) -> str:
-        """The first candidate the run holds; the first one when none (or in place)."""
-        if in_place:
+        """The first candidate the root holds; else the first the run is expected to write."""
+        held = next((p for p in candidates if present(p)), None)
+        if held:
+            return held
+        if not snpeff:
+            snpeff.append(_snpeff_ran(context))
+        if snpeff[0]:
             return candidates[0]
-        return next((p for p in candidates if present(p)), candidates[0])
+        return next((p for p in candidates if not p.startswith("annotation/")), candidates[0])
 
     variants: list[dict] = []
+    somatic_rows: list[dict] = []
     alignments: list[dict] = []
     for sample_id in samples:
         for caller in sorted(callers.get(sample_id, []), key=rank):
@@ -212,8 +319,13 @@ def transform(sources: dict[str, pl.DataFrame | None], context=None) -> pl.DataF
                     "category": "Alignments",
                 }
             )
+    for unit, caller, basename in sorted(somatic):
+        tumour, normal = split_pair(unit)
+        row = _somatic_track(unit, caller, basename, tumour, normal)
+        row["uri"] = uri_for(_somatic_candidates(unit, caller, basename))
+        somatic_rows.append(row)
 
-    rows = [*variants, *alignments]
+    rows = [*variants, *somatic_rows, *alignments]
     if not in_place and any(present(r["uri"]) for r in rows):
         rows = [r for r in rows if present(r["uri"])]
     # Every small-variant caller of the first sample leads, then its CRAM: a caller

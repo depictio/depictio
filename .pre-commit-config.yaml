@@ -79,7 +79,7 @@ repos:
 
 # A template whose content changed must bump `template.version`: the lock holds the
 # version and content hash of every template (~0.3 s, runs only when a template file,
-# its dashboards, its recipes or the lock itself is staged). To fix a failure, bump
+# its dashboards, its recipes, a catalog module or a lock is staged). To fix a failure, bump
 # the version in the template.yaml, then `python scripts/update_template_lock.py --write`.
 -   repo: local
     hooks:
@@ -88,7 +88,7 @@ repos:
         description: 'Fail when a template changed without a template.version bump'
         entry: uv run --extra dev python scripts/update_template_lock.py --check
         language: system
-        files: ^depictio/projects/(.+/)?(template\.yaml|dashboards/.+\.ya?ml|recipes/.+)$|^depictio/projects/template_versions\.lock\.json$|^scripts/update_template_lock\.py$
+        files: ^depictio/projects/(.+/)?(template\.yaml|dashboards/.+\.ya?ml|recipes/.+)$|^depictio/projects/template_versions\.lock\.json$|^depictio/catalog/[^_/][^/]*/.+\.(py|ya?ml)$|^depictio/catalog/catalog_versions\.lock\.json$|^scripts/update_template_lock\.py$
         pass_filenames: false
 
 # Clean jupyter notebooks

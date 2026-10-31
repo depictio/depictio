@@ -8,6 +8,7 @@
 # `*_only.bed`/`.wig` error tracks are not read.
 id: merqury
 name: Merqury
+version: "1.0.0"
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/merqury/merqury
 homepage: https://github.com/marbl/merqury
 description: K-mer based assembly consensus quality (QV), k-mer completeness and copy-number spectra.

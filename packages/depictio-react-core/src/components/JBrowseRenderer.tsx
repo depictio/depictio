@@ -3,7 +3,6 @@ import {
   ActionIcon,
   Badge,
   Box,
-  ColorSwatch,
   Group,
   Text,
   Tooltip,
@@ -19,11 +18,12 @@ import { ModalWidget } from '@jbrowse/embedded-core';
 import { getEnv, isAlive } from '@jbrowse/mobx-state-tree';
 import GtfPlugin from '@jbrowse/plugin-gtf';
 import { Paper, ScopedCssBaseline, ThemeProvider, createTheme } from '@mui/material';
-import { comparer, reaction } from 'mobx';
+import { comparer, reaction, when } from 'mobx';
 import { observer } from 'mobx-react';
 
 import {
   fetchJBrowseSession,
+  HttpError,
   InteractiveFilter,
   JBrowseCall,
   JBrowseSessionResponse,
@@ -46,14 +46,15 @@ import RefetchOverlay from './RefetchOverlay';
 import { useReportLoadStatus } from './DashboardLoadingProvider';
 import JBrowseDataPopover from './jbrowse/JBrowseDataPopover';
 import FeatureDetails from './jbrowse/FeatureDetails';
+import type { FeatureWidgetLike } from './jbrowse/featureWidgetWatch';
 import type { RegionGridProps } from './jbrowse/RegionPicker';
 import VizKindBadge, { AdvancedVizKindContext } from './advanced_viz/VizKindBadge';
 import { useDensity } from './density';
 import {
   jbrowseSelectionFilter,
   planTrackSync,
+  featureClickSelection,
   selectionValuesFor,
-  toggleValue,
 } from './jbrowse/trackSync';
 import { hideAllIds, manifestTrackIds, withSectionCategory } from './jbrowse/trackMenuModel';
 import CallNavigator from './jbrowse/CallNavigator';
@@ -97,6 +98,19 @@ import type { VisibleRegion } from './jbrowse/navigatorSteps';
 import { locusSources } from './jbrowse/locusSources';
 import { viewLeavesRegion, withAlpha } from './jbrowse/locusHighlight';
 import {
+  PICK_FONT_PX,
+  PICK_SLOTS,
+  RANK_TRACK_ID,
+  pickMatchOf,
+  pickRules,
+  pickedLabelValue,
+  pickedNumberValue,
+  rulesSlotValue,
+  type PickPalette,
+} from './jbrowse/pickedColour';
+import { usePickedInView } from './jbrowse/usePickedInView';
+import { useFitTrackOnDoubleClick } from './jbrowse/useFitTrackOnDoubleClick';
+import {
   hoverBand,
   hoverEventFromFeature,
   watchFeatureHover,
@@ -116,7 +130,8 @@ import {
   setGenomeTracksLocus,
   setGenomeTracksPayload,
 } from './jbrowse/genomeTracksStore';
-import { legendRamp, trackLegend } from './jbrowse/trackLegend';
+import ColourKey from './jbrowse/ColourKey';
+import { colourKeyOf, legendRamp, trackLegend, variantLegend } from './jbrowse/trackLegend';
 import { categoryColorMap, readColorScale } from '../categoryColors';
 import {
   canonicalRefName,
@@ -146,6 +161,16 @@ import ViewMenu, { type ViewMenuItem } from './jbrowse/ViewMenu';
 import { useDisplaySettings } from './jbrowse/useDisplaySettings';
 import { useSharedScale } from './jbrowse/useSharedScale';
 import { useFitTracks } from './jbrowse/useFitTracks';
+import { collectScoreDisplays, rescaleDisplays } from './jbrowse/autoscale';
+import {
+  collectTrackDisplays,
+  collectViewTracks,
+  fitDisplaysToContent,
+  FIT_TO_CONTENT_LABEL,
+  maxFitPx,
+} from './jbrowse/fitToContent';
+import { FIT_TRACKS_HINT } from './jbrowse/fitTracks';
+import { useTrackKinds } from './jbrowse/useTrackKinds';
 import { useJBrowseAutoHeight } from './jbrowse/useAutoHeight';
 import { canScrollBy, wheelIntent, wheelPixels, zoomFactor } from './jbrowse/wheel';
 import { attachZoomGate } from './zoomGateDom';
@@ -241,6 +266,26 @@ const assemblyRegionsOf = (
 
 const openTrackIds = (view: LgvView): string[] =>
   view.tracks.map((t) => t.configuration.trackId);
+
+/** The rank track carries its calls in its config, and a new pick below the
+ *  top adds one: an open view takes the payload's features (and name) into
+ *  the existing config, which redraws the track. */
+function refreshRankFeatures(sessionTracks: unknown, conf: Record<string, unknown>): void {
+  type Slot = { value: unknown; set: (v: unknown) => void };
+  const existing = (sessionTracks as Array<{ trackId: string; name?: Slot; adapter?: { features?: Slot } }>).find(
+    (t) => t.trackId === RANK_TRACK_ID,
+  );
+  const slot = existing?.adapter?.features;
+  const next = (conf.adapter as { features?: unknown } | undefined)?.features;
+  const name = typeof conf.name === 'string' ? conf.name : null;
+  if (!slot || typeof slot.set !== 'function' || next === undefined) return;
+  try {
+    if (JSON.stringify(slot.value) !== JSON.stringify(next)) slot.set(next);
+    if (name && existing?.name && existing.name.value !== name) existing.name.set(name);
+  } catch (err) {
+    console.warn('jbrowse: cannot refresh the rank track', err);
+  }
+}
 
 /** Signed track URLs live `url_ttl_s` (6 h by default) server-side; rebuild the
  *  view well before that so a long-open dashboard never reads with a stale one. */
@@ -342,18 +387,29 @@ function readString(key: string): string | null {
 }
 
 /** The ordered ids of the open tracks, per viewer; [] when nothing is stored. */
-function readTrackIds(key: string): string[] {
+const strings = (v: unknown): string[] =>
+  Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
+
+/**
+ * The open tracks a reader left, kept only while the tile still opens on the
+ * set they were left from: a dashboard whose default tracks changed since (a
+ * caller added, a category opened) opens on its new default instead of a list
+ * saved before it. A bare array is the older shape, which recorded no default.
+ */
+function readTrackIds(key: string, opening: readonly string[]): string[] {
   try {
-    const v = JSON.parse(window.localStorage.getItem(key) ?? '[]');
-    return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
+    const v = JSON.parse(window.localStorage.getItem(key) ?? 'null') as unknown;
+    if (!v || typeof v !== 'object' || Array.isArray(v)) return [];
+    const { base, ids } = v as { base?: unknown; ids?: unknown };
+    return comparer.structural(strings(base), [...opening]) ? strings(ids) : [];
   } catch {
     return [];
   }
 }
 
-function writeTrackIds(key: string, ids: string[]): void {
+function writeTrackIds(key: string, opening: readonly string[], ids: string[]): void {
   try {
-    window.localStorage.setItem(key, JSON.stringify(ids));
+    window.localStorage.setItem(key, JSON.stringify({ base: opening, ids }));
   } catch {
     // Private mode / blocked storage: the track choice just won't persist.
   }
@@ -426,12 +482,11 @@ function trackNameOf(track: { configuration?: unknown } | null | undefined): str
 const EmbeddedLGV = observer(function EmbeddedLGV({
   viewState,
   muiThemeOverrides,
-  leaveFeatureWidget,
+  onFeatureWidget,
 }: {
   viewState: ViewState;
   muiThemeOverrides: Record<string, unknown>;
-  /** True for a feature widget the click-to-filter reaction already handles. */
-  leaveFeatureWidget: (widgetType: string) => boolean;
+  onFeatureWidget?: (widget: FeatureWidgetLike) => void;
 }) {
   const { session } = viewState;
   const { view } = session;
@@ -470,12 +525,10 @@ const EmbeddedLGV = observer(function EmbeddedLGV({
       </div>
       {/* A clicked feature opens Depictio's panel (Mantine), not JBrowse's
           drawer: the widget is hidden as it appears. Every other widget (track
-          config, about-track...) still renders here. */}
-      <FeatureDetails
-        session={session}
-        leaveWidget={leaveFeatureWidget}
-        trackNameOf={trackNameOf}
-      />
+          config, about-track...) still renders here. Click-to-filter sees the
+          widget first (`onFeatureWidget`): the sample is picked and the details
+          show. */}
+      <FeatureDetails session={session} trackNameOf={trackNameOf} onFeatureWidget={onFeatureWidget} />
       <ModalWidget session={session} />
     </ThemeProvider>
   );
@@ -509,7 +562,10 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
   const [payload, setPayload] = useState<JBrowseSessionResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [emptyReason, setEmptyReason] = useState<string | null>(null);
   const [viewState, setViewState] = useState<ViewState | null>(null);
+  // The tracks the current payload opens on: a saved track list is tied to it.
+  const openingTrackIds = useRef<readonly string[]>([]);
   const viewMeta = useRef<{
     assembly: string;
     createdAt: number;
@@ -552,6 +608,12 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
   );
   const selectionRegionRef = useRef(selectionRegion);
   selectionRegionRef.current = selectionRegion;
+  // The window another genome tile has in force (a sashimi, a coverage track),
+  // read before the view exists: a tile whose own opening is only a default
+  // (`data`, `preset`) opens on it rather than on a place unrelated to it.
+  const windowAtBuild = useViewWindow(String(metadata.index), metadata.follow_window !== false);
+  const windowAtBuildRef = useRef(windowAtBuild);
+  windowAtBuildRef.current = windowAtBuild;
   const followedRegionKey = useRef('');
   // Data time travel: the version body goes into the request, its key into
   // the fetch deps. The key of the request the current payload answered is
@@ -597,6 +659,10 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
   // the tracks are grouped and coloured by.
   const colorScale = readColorScale(metadata.color_scale);
   const colorBy = colorScale?.column ?? (typeof metadata.color_by === 'string' ? metadata.color_by : '');
+  // A tile that colours its variants (`variant_color_by`) keys them as well.
+  const hasVariantColour = Boolean(
+    (metadata.variant_color_by as { column?: unknown } | null | undefined)?.column,
+  );
   const [toolbar, setToolbar] = useState<JBrowseToolbarState>(() => ({
     showHeader: readToggle(`${storageKey}.header`, metadata.show_header !== false),
     showOverview: readToggle(`${storageKey}.overview`, metadata.show_overview !== false),
@@ -610,22 +676,11 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
     // On by default only when a `color_by` / `color_scale` colours the tracks:
     // the per-sample colours alone barely show on reads, and the legend then
     // reads as noise (the track names say whose track it is).
-    showLegend: readToggle(`${storageKey}.legend`, Boolean(colorBy)),
+    showLegend: readToggle(`${storageKey}.legend`, Boolean(colorBy) || hasVariantColour),
     fitTracks: readToggle(`${storageKey}.fitTracks`, false),
   }));
   const toolbarRef = useRef(toolbar);
   toolbarRef.current = toolbar;
-  // With click-to-filter on, a clicked feature's BaseFeatureWidget belongs to
-  // the feature_click reaction below (it hides the widget and emits the
-  // filter); Depictio's feature panel stands aside for exactly that case.
-  const leaveRef = useRef<(type: string) => boolean>(() => false);
-  leaveRef.current = (type) =>
-    type === 'BaseFeatureWidget' &&
-    selectionEnabled &&
-    !!payload?.selection_column &&
-    selectionMode === 'feature_click' &&
-    toolbar.clickFilters;
-  const leaveFeatureWidget = useCallback((type: string) => leaveRef.current(type), []);
   const setToggle = useCallback(
     (key: keyof JBrowseToolbarState, suffix: string) => {
       setToolbar((prev) => {
@@ -671,14 +726,23 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetchJBrowseSession(dashboardId, metadata.index, fetchFilters, versionBody)
+    setEmptyReason(null);
+    // The region rides along without keying the fetch: a brush alone moves the
+    // view client-side, a pick that also changes the filters is framed by it.
+    fetchJBrowseSession(dashboardId, metadata.index, fetchFilters, versionBody, selectionRegionRef.current)
       .then((res) => {
         if (cancelled) return;
         payloadVersionKey.current = versionKey;
         setPayload(res);
       })
       .catch((err: Error) => {
-        if (!cancelled) setError(err?.message || String(err));
+        if (cancelled) return;
+        // A 404 with a reason (no track collection data) is a state, not a failure.
+        if (err instanceof HttpError && err.status === 404 && err.detail) {
+          setEmptyReason(err.detail);
+          return;
+        }
+        setError(err?.message || String(err));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -748,7 +812,16 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
       dashboardId,
       metadata.index,
       colorBy && conditionColours
-        ? trackColoursBy(confs, payload.track_rows, colorBy, conditionColours)
+        ? {
+            ...trackColoursBy(confs, payload.track_rows, colorBy, conditionColours),
+            key: colourKeyOf(
+              colorBy,
+              conditionColours,
+              Boolean(colorScale),
+              colorScale?.scheme,
+              payload.track_rows,
+            ),
+          }
         : null,
     );
     const tracks = colourAlignmentTracks(
@@ -767,10 +840,24 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
     if (!viewState || viewMeta.current.assembly !== assemblyName || stale || otherVersion) {
       // The open tracks and their order as the user left them (per viewer),
       // restricted to tracks this payload still knows about.
-      const savedIds = timeTravel ? [] : readTrackIds(`${storageKey}.tracks`);
+      openingTrackIds.current = payload.shown_track_ids;
+      const savedIds = timeTravel
+        ? []
+        : readTrackIds(`${storageKey}.tracks`, payload.shown_track_ids);
       const known = new Set(payload.track_rows.map((r) => r.track_id));
       const savedKnown = savedIds.filter((id) => known.has(id));
-      const openAtStart = savedKnown.length ? savedKnown : payload.shown_track_ids;
+      const openAtStart = savedKnown.length ? [...savedKnown] : payload.shown_track_ids;
+      // The rank track is new to a reader whose open tracks were saved before
+      // it existed: it opens once, where the payload puts it; closed after
+      // that, it stays closed.
+      const rankAt = payload.shown_track_ids.indexOf(RANK_TRACK_ID);
+      const rankSeenKey = `${storageKey}.rankSeen`;
+      if (rankAt >= 0 && !timeTravel && !readString(rankSeenKey)) {
+        if (savedKnown.length && !openAtStart.includes(RANK_TRACK_ID)) {
+          openAtStart.splice(Math.min(rankAt, openAtStart.length), 0, RANK_TRACK_ID);
+        }
+        writeString(rankSeenKey, '1');
+      }
       // A locus handed over by another tile wins over everything, and is not
       // a navigation of the reader's: `userActedRef` never saw it.
       const pending =
@@ -815,12 +902,21 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
                   : readString(`${storageKey}.${PERSISTED_LOCUS_SUFFIX}`);
                 const loc = initialLocus({
                   pending,
+                  window:
+                    toolbarRef.current.followWindow && windowAtBuildRef.current
+                      ? windowLocus({
+                          chrom: windowAtBuildRef.current.entity,
+                          start: windowAtBuildRef.current.start,
+                          end: windowAtBuildRef.current.end,
+                        })
+                      : null,
                   region: selectionRegionRef.current,
                   regionLocus: windowLocus(selectionRegionRef.current),
                   persisted,
                   location: payload.location,
                   mateLocation: payload.mate_location,
                   bothSides: toolbarRef.current.bothSides,
+                  opening: payload.opening,
                 });
                 traceGenome(String(metadata.index), 'browser opens', {
                   loc,
@@ -861,6 +957,7 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
     );
     for (const conf of tracks) {
       if (!known.has(conf.trackId)) session.addTrackConf(conf);
+      else if (conf.trackId === RANK_TRACK_ID) refreshRankFeatures(session.tracks, conf);
     }
     const open = (view.tracks as Array<{ configuration: { trackId: string } }>).map(
       (t) => t.configuration.trackId,
@@ -892,9 +989,20 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
         toolbarRef.current.bothSides,
       );
       if (target) {
-        view.navToLocString(target).catch((err: unknown) => {
-          console.warn('jbrowse: navigation failed', err);
-        });
+        // A payload landing right after the view was built (a pick restored
+        // with the dashboard) comes before the view knows its assembly, and
+        // navigating then fails for good ("assemblyName:undefined"): wait.
+        const initialized = () => (view as unknown as { initialized?: boolean }).initialized !== false;
+        when(
+          () => !aliveNode(view) || initialized(),
+          () => {
+            if (!aliveNode(view)) return;
+            view.navToLocString(target).catch((err: unknown) => {
+              console.warn('jbrowse: navigation failed', err);
+            });
+          },
+          { timeout: 30_000, onError: () => undefined },
+        );
       }
     }
     viewMeta.current.location = payload.location;
@@ -911,7 +1019,10 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
       (ids) => {
         if (ids == null) return;
         window.clearTimeout(timer);
-        timer = window.setTimeout(() => writeTrackIds(`${storageKey}.tracks`, ids), 400);
+        timer = window.setTimeout(
+          () => writeTrackIds(`${storageKey}.tracks`, openingTrackIds.current, ids),
+          400,
+        );
       },
       { equals: comparer.structural },
     );
@@ -1062,6 +1173,31 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
     autoHeight ? inFullscreen : toolbar.fitTracks || inFullscreen,
   );
   useJBrowseAutoHeight(String(metadata.index), lgvBoxRef, autoHeight, !!viewState, inFullscreen);
+
+  // Which actions the open tracks allow (fit every track, fit to the tile), live.
+  const trackKinds = useTrackKinds(viewState ? viewState.session.view : null);
+  // "Fit every track to what is in view": one click, two things. Every score
+  // display goes back on a local autoscale with its fixed bounds lifted
+  // (`jbrowse/autoscale.ts`), and every track takes the height its content
+  // needs in the rendered region (`jbrowse/fitToContent.ts`).
+  const yScaleShared = displaySettings.value('y_scale') === 'shared';
+  const fitEveryTrack = useCallback(() => {
+    if (!viewState) return;
+    const tracks = collectViewTracks(viewState.session.view);
+    try {
+      rescaleDisplays(collectScoreDisplays(tracks), yScaleShared);
+    } catch (err) {
+      console.warn('jbrowse: rescale failed', err);
+    }
+    try {
+      fitDisplaysToContent(
+        collectTrackDisplays(tracks),
+        maxFitPx(lgvBoxRef.current?.clientHeight ?? 0),
+      );
+    } catch (err) {
+      console.warn('jbrowse: fit to content failed', err);
+    }
+  }, [viewState, yScaleShared]);
 
   // ---- region density strip --------------------------------------------------
   // Where the regions of the enabled sources fall along the genome, one row per
@@ -1293,6 +1429,94 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
       bandSet.current = false;
     }
   }, [hovered, viewState, primaryColour, withView, ownRegion, locusSource, regionKey, visibleRegions]);
+
+  // ---- picked rows → their features in the selection colour ----------------
+  // The rows the view points at (a pick in the table, else the best call) are
+  // painted in the theme's primary colour with an outline, on every track that
+  // carries them: a variant by position, a transcript by name. The colour each
+  // slot had is kept, so a new pick (or none) restores the others.
+  const pickedOriginals = useRef<{ state: unknown; slots: Map<string, unknown> }>({
+    state: null,
+    slots: new Map(),
+  });
+  const picked = payload?.picked ?? null;
+  useEffect(() => {
+    if (!viewState) return;
+    // A rebuilt view has fresh track configs: their colours are the originals.
+    if (pickedOriginals.current.state !== viewState) {
+      pickedOriginals.current = { state: viewState, slots: new Map() };
+    }
+    const primary = mantineTheme.colors[mantineTheme.primaryColor] ?? mantineTheme.colors.blue;
+    const dark = colorScheme === 'dark';
+    const { yellow, gray, orange } = mantineTheme.colors;
+    // Medals colour the star and name only (gold, silver, bronze): the box
+    // keeps the category colour the navigator gives the call.
+    const palette: PickPalette = {
+      fill: primaryColour,
+      light: primary[dark ? 2 : 4],
+      outline: primary[dark ? 1 : 9],
+      medals: [yellow[dark ? 4 : 7], gray[dark ? 4 : 6], orange[dark ? 5 : 9]],
+    };
+    type Slot = { value: unknown; set: (v: unknown) => void };
+    type TrackConf = {
+      trackId: string;
+      type: string;
+      displays?: Array<{ renderer?: Record<string, unknown> }>;
+    };
+    const originals = pickedOriginals.current.slots;
+    for (const conf of viewState.session.tracks as unknown as TrackConf[]) {
+      const match = pickMatchOf(conf.trackId, conf.type);
+      if (!match) continue;
+      const { rules, any: condition } = pickRules(picked, match, conf.trackId, palette);
+      (conf.displays ?? []).forEach((display, d) => {
+        for (const slotName of PICK_SLOTS) {
+          // The rank track names its top calls with a star already.
+          if (slotName === 'labels.name' && conf.trackId === RANK_TRACK_ID) continue;
+          const slot = slotName
+            .split('.')
+            .reduce<unknown>(
+              (node, part) => (node as Record<string, unknown> | undefined)?.[part],
+              display.renderer,
+            ) as Slot | undefined;
+          if (!slot || typeof slot.set !== 'function') continue;
+          const key = `${conf.trackId}|${d}|${slotName}`;
+          if (!originals.has(key)) {
+            if (!condition) continue;
+            originals.set(key, slot.value);
+          }
+          const original = originals.get(key);
+          let next = original;
+          if (condition) {
+            if (slotName === 'labels.name') next = pickedLabelValue(condition, original);
+            else if (slotName === 'labels.fontSize') {
+              next = pickedNumberValue(condition, PICK_FONT_PX, original);
+            } else {
+              const key =
+                slotName === 'color3'
+                  ? 'light'
+                  : slotName === 'outline'
+                    ? 'outline'
+                    : slotName === 'labels.nameColor'
+                      ? 'label'
+                      : 'fill';
+              next = rulesSlotValue(rules, key, original);
+            }
+          }
+          if (slot.value !== next) {
+            try {
+              slot.set(next);
+            } catch (err) {
+              console.warn(`jbrowse: cannot colour the pick on ${conf.trackId}`, err);
+            }
+          }
+        }
+      });
+    }
+  }, [viewState, picked, primaryColour, mantineTheme, colorScheme]);
+  // A picked transcript laid out below its track's height grows the track.
+  usePickedInView(viewState?.session.view, picked);
+  // A double click on the handle under a track fits it to its content.
+  useFitTrackOnDoubleClick(viewState?.session.view);
 
   // ---- cursor and window → the other genomic tiles --------------------------
   // The inverse of the band above. The base under the pointer goes out on the
@@ -1598,12 +1822,15 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
       lastFollowed.current = null;
       return;
     }
-    if (!followed) return;
+    // The baseline is whatever is in force when following starts, nothing
+    // included: a window published after the view exists is then followed,
+    // not swallowed as the first one seen.
     if (!followBaselined.current) {
       followBaselined.current = true;
       lastFollowed.current = followed;
       return;
     }
+    if (!followed) return;
     if (sameViewWindow(lastFollowed.current, followed)) return;
     lastFollowed.current = followed;
     const view = viewRef.current;
@@ -1776,42 +2003,45 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
   );
 
   useEffect(() => {
+    // visible_tracks: the open tracks are the selection.
     if (!viewState || !selectionEnabled || !payload?.selection_column) return;
+    if (selectionMode !== 'visible_tracks') return;
     const { session } = viewState;
-    if (selectionMode === 'visible_tracks') {
-      let timer: number | undefined;
-      const dispose = reaction(
-        () =>
-          (session.view.tracks as Array<{ configuration: { trackId: string } }>).map(
-            (t) => t.configuration.trackId,
-          ),
-        (ids) => {
-          window.clearTimeout(timer);
-          timer = window.setTimeout(() => emit(selectionValuesFor(ids, rowsRef.current)), 400);
-        },
-      );
-      return () => {
+    let timer: number | undefined;
+    const dispose = reaction(
+      () =>
+        (session.view.tracks as Array<{ configuration: { trackId: string } }>).map(
+          (t) => t.configuration.trackId,
+        ),
+      (ids) => {
         window.clearTimeout(timer);
-        dispose();
-      };
-    }
-    // feature_click: JBrowse opens a BaseFeatureWidget for the clicked feature;
-    // read the track off it, turn it into a filter, and (unless the user
-    // switched click-to-filter off) close the details dialog it would show.
-    return reaction(
-      () => session.visibleWidget,
-      (widget: { type?: string; track?: { configuration?: { trackId?: string } } } | undefined) => {
-        if (!widget || widget.type !== 'BaseFeatureWidget' || !toolbarRef.current.clickFilters)
-          return;
-        const trackId = widget.track?.configuration?.trackId;
-        const [value] = trackId ? selectionValuesFor([trackId], rowsRef.current) : [];
-        session.hideAllWidgets();
-        if (value == null) return;
-        emit(toggleValue(selectedRef.current, value));
+        timer = window.setTimeout(() => emit(selectionValuesFor(ids, rowsRef.current)), 400);
       },
     );
+    return () => {
+      window.clearTimeout(timer);
+      dispose();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewState, selectionEnabled, selectionMode, payload?.selection_column, emit]);
+
+  // feature_click: JBrowse opens a BaseFeatureWidget for the clicked feature,
+  // which `FeatureDetails` hands here before hiding it (a reaction of our own
+  // would find it already gone). Read the track off it and, unless the user
+  // switched click-to-filter off, turn it into a filter: a track that maps to
+  // no sample (a multi-sample VCF, a gene track) is a plain request for the
+  // details, and one that does map gets them beside its filter.
+  const featureClickRef = useRef<(widget: FeatureWidgetLike) => void>(() => {});
+  featureClickRef.current = (widget) => {
+    if (!selectionEnabled || selectionMode !== 'feature_click' || !payload?.selection_column) return;
+    // Any feature widget (a VCF record opens VariantFeatureWidget, a read
+    // AlignmentsFeatureWidget): the track it came from names the sample.
+    if (!toolbarRef.current.clickFilters) return;
+    const track = widget.track as { configuration?: { trackId?: string } } | null | undefined;
+    const next = featureClickSelection(track?.configuration?.trackId, rowsRef.current, selectedRef.current);
+    if (next) emit(next);
+  };
+  const onFeatureWidget = useCallback((widget: FeatureWidgetLike) => featureClickRef.current(widget), []);
 
   // ---- chrome toggles -------------------------------------------------------
   const trackRows = payload?.track_rows ?? EMPTY_ROWS;
@@ -1870,7 +2100,10 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
               key: 'fittracks',
               group: 'View' as const,
               label: 'Fit tracks to the tile',
-              description: 'Signal tracks share the height of the tile. Always on in fullscreen',
+              description: trackKinds.hasFittable
+                ? 'Signal tracks share the height of the tile. Always on in fullscreen'
+                : FIT_TRACKS_HINT,
+              disabled: !trackKinds.hasFittable,
               checked: toolbar.fitTracks,
               onChange: () => setToggle('fitTracks', 'fitTracks'),
             },
@@ -1987,6 +2220,18 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
             </ActionIcon>
           </Tooltip>
         )}
+        <Tooltip key="fit-content" label={FIT_TO_CONTENT_LABEL} openDelay={400}>
+          <ActionIcon
+            size="sm"
+            variant="subtle"
+            aria-label={FIT_TO_CONTENT_LABEL}
+            disabled={!viewState || !trackKinds.hasTracks}
+            onClick={fitEveryTrack}
+            data-testid="jbrowse-rescale-y"
+          >
+            <Icon icon="tabler:arrows-vertical" width={16} height={16} />
+          </ActionIcon>
+        </Tooltip>
         <JBrowseDataPopover
           key="data"
           trackRows={trackData.rows}
@@ -2021,6 +2266,8 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
     metadata.follow_window,
     metadata.auto_height,
     metadata.show_density,
+    trackKinds,
+    fitEveryTrack,
     locusFrom,
     canBreakpoint,
     canCircular,
@@ -2049,7 +2296,9 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
   // The colours the open tracks wear, by the same rules the view applies them:
   // the manifest's colour, else `color_by`'s, else the sample's.
   const legend = useMemo(() => {
-    if (!payload || !toolbar.showLegend) return [];
+    // With variant colours and no `color_by`, the status bar keys the variants,
+    // not the per-sample track colours (which the track names already say).
+    if (!payload || !toolbar.showLegend || (hasVariantColour && !colorBy)) return [];
     const rows = payload.track_rows;
     const byGroup = colorBy
       ? colorScale
@@ -2065,7 +2314,21 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
     return trackLegend(rows, openIds, (r) =>
       r.color || (byGroup ? byGroup.get(r.group ?? '') : r.sample ? bySample.get(r.sample) : null),
     );
-  }, [payload, toolbar.showLegend, openIds, colorBy, colorSource, colorPalette, sequentialLegendMap]);
+  }, [
+    payload,
+    toolbar.showLegend,
+    openIds,
+    colorBy,
+    colorSource,
+    colorPalette,
+    sequentialLegendMap,
+    hasVariantColour,
+  ]);
+  // The colours of the variant tracks, as the backend's expression applies them.
+  const variantKey = useMemo(
+    () => (payload && toolbar.showLegend ? variantLegend(payload.variant_legend) : null),
+    [payload, toolbar.showLegend],
+  );
   // A `color_scale` draws a gradient between its extreme open values rather
   // than one swatch per value.
   const legendGradient = useMemo(
@@ -2189,6 +2452,11 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
           Genome browser failed: {error}
         </Text>
       )}
+      {emptyReason && !payload && (
+        <Text size="sm" c="dimmed" p="md">
+          {emptyReason}
+        </Text>
+      )}
       {viewState && (
         <Box
           ref={lgvBoxRef}
@@ -2198,7 +2466,7 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
           <EmbeddedLGV
             viewState={viewState}
             muiThemeOverrides={muiThemeOverrides}
-            leaveFeatureWidget={leaveFeatureWidget}
+            onFeatureWidget={onFeatureWidget}
           />
         </Box>
       )}
@@ -2215,49 +2483,20 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
           <Text size="xs" c="dimmed" truncate>
             {statusText}
           </Text>
-          {legendGradient && (
-            <Tooltip label={legendGradient.values.join(' > ')} withinPortal={false}>
-              <Group gap={4} wrap="nowrap" data-testid="jbrowse-legend-ramp" style={{ flexShrink: 0 }}>
-                <Text size="xs" c="dimmed">
-                  {legendGradient.from}
-                </Text>
-                <Box
-                  style={{
-                    width: 56,
-                    height: 8,
-                    borderRadius: 4,
-                    background: `linear-gradient(to right, ${legendGradient.stops.join(', ')})`,
-                  }}
-                />
-                <Text size="xs" c="dimmed">
-                  {legendGradient.to}
-                </Text>
-              </Group>
-            </Tooltip>
+          {(legendGradient || legend.length > 0) && (
+            <ColourKey
+              entries={legendGradient ? [] : legend}
+              ramp={legendGradient}
+              testId="jbrowse-legend"
+              rampTestId="jbrowse-legend-ramp"
+            />
           )}
-          {legend.length > 0 && !legendGradient && (
-            <Group
-              gap={8}
-              wrap="nowrap"
-              data-testid="jbrowse-legend"
-              style={{ minWidth: 0, overflow: 'hidden', flexShrink: 1 }}
-            >
-              {legend.map((entry) => (
-                <Tooltip
-                  key={entry.color}
-                  label={entry.names.join(', ')}
-                  withinPortal={false}
-                  disabled={entry.names.length < 2}
-                >
-                  <Group gap={4} wrap="nowrap" style={{ flexShrink: 0 }}>
-                    <ColorSwatch color={entry.color} size={8} withShadow={false} />
-                    <Text size="xs" c="dimmed">
-                      {entry.label}
-                    </Text>
-                  </Group>
-                </Tooltip>
-              ))}
-            </Group>
+          {variantKey && (
+            <ColourKey
+              title="Variants"
+              entries={variantKey.entries}
+              testId="jbrowse-variant-legend"
+            />
           )}
           {payload.filter_applied && (
             <Badge size="xs" variant="light">

@@ -65,10 +65,19 @@ rest. `nominal` is true for the first two. The volcanoes plot the raw p-value, w
 dashed line at p = 0.05, and colour the points by status; the tables are sorted by raw p-value;
 the cards add the nominal hits, the samples that carry one and the strongest -log10 p; the
 samples-and-genes views count the nominal hits and split them into called and not called.
-The Overview findings list the nominal counts beside the calls. A nominal hit is a lead: a
+The Overview findings list the nominal counts beside the calls, state each call's cut-off, and end with a row that reads the cohort size: OUTRIDER and FRASER recommend at least 30 samples, below which every adjusted p-value tends to 1 and zero calls is the expected answer (the Cohort size card counts each sample as pass at a group of 30 or more, warn from 20, fail under 20, the 20 being this dashboard's borderline level). A nominal hit is a lead: a
 share `NOMINAL_P` of all tests passes by chance, so a count near that share of the genes tested
 is what chance alone gives. The tables keep the near-null background out, so the number of
 tests per sample is not known and the dashboard states the rate, not an expected count.
+
+Reference lines on the volcanoes, each explained in the tile's description: the horizontal dashed
+line is p = 0.05, the default raw p-value for a nominal hit. The vertical dotted lines of the
+expression volcano are at log2 fold changes of -0.5 and 0.5 (a 1.4-fold change) and those of the
+splicing volcano at delta PSI of -0.1 and 0.1 (10 percentage points of junction usage): reading
+guides of this dashboard, not cut-offs of OUTRIDER or FRASER, whose calls rest on the adjusted
+p-value with `AE_MIN_Z` or `AS_MIN_DPSI` (0.3 by default, above the guide). The vertical dotted lines
+of the allelic volcano are at log2 of -2 and 2, a four-to-one read ratio, the 80% allele share that
+`MAE_MIN_RATIO` requires by default.
 
 A nominal hit is a lead. Out of 20 000 genes tested, 1 000 pass p = 0.05 by chance alone, so
 read it as a gene worth a look in the raw reads or in the other analyses, never as a finding.
@@ -92,7 +101,7 @@ The landing page, at compact width with the filter panel collapsed:
   and FRASER learn what is normal from that cohort and have little power below it; a group is
   the set of samples one analysis fits together), outliers called (by group, most first), the
   heaviest sample (its genes at the raw p-value, with the spread over all samples as a box) and
-  calls on a phenotype gene. All four read the per-sample table, which every
+  calls on a phenotype gene (the outliers-called card says that a small run may count only mono-allelic calls). All four read the per-sample table, which every
   route builds, so none of them disappears when an analysis is skipped. A group and a sample
   filter above them narrow these four only.
 - **Findings**: result rows whose values are computed under the filters, each with a link to
@@ -125,7 +134,7 @@ samples with a call, genes called by two or more analyses, and phenotype matches
 list first: a ranked table of each sample's genes, the strongest evidence first (medals on the
 first three, the analyses that call the gene, the support and the phenotype match as badges, the
 summed -log10 p as a bar, 2 being p = 0.01 for one analysis, the statistics in a popover on hover), beside a record card for the
-picked gene (the evidence of each analysis, the position, the gene linked to GeneCards and the
+picked gene (the list publishes its top row on load, `default_select_by: significance`, so the record opens on the first row and follows a click on another; the record card also falls back to the highest `significance` with `default_record_by`) (the evidence of each analysis, the position, the gene linked to GeneCards and the
 locus to the UCSC browser).
 Picking a sample in the left panel reads that sample's list. A gene enters the list when an
 analysis calls it or when it is among the sample's best-supported genes, so a run with no
@@ -140,16 +149,22 @@ have nothing to join on and stay in their own tab.
 samples with a nominal hit (by group) and the strongest signal (the highest -log10 p, with
 its spread); see "Called and nominal" above. Then the OUTRIDER volcano of fold change
 against the raw p-value, coloured by status, with the MA view (no QQ view, see the
-background note above), and two ranked views of the hits: the samples with the most hits and
-the genes hit in the most samples (a gene hit again and again is more often technical).
+background note above), and two ranked views of the hits: the samples with the most hits
+(each bar split by the direction of the change, the calls that pass the adjusted p-value
+counted at its end) and the strongest genes (the bar is a gene's best -log10 p-value, coloured
+by the direction of that hit and labelled with the number of samples that share it; a gene
+hit again and again is more often technical). The genes are read from the OUTRIDER result
+table of the run: the nominal hits of the samples in view, ranked by the number of samples
+that hit them, then by the strength of the best hit. Nothing is listed by name in the
+dashboard.
 Collapsed: the result table, strongest first, with the call record card beside it (evidence,
 counts and the phenotype match). Filters: call direction and absolute z-score.
 
 **Splicing.** Strip: outlier genes (split by direction), nominal hits (split by direction),
 samples with a nominal hit (by group) and the strongest signal (the highest -log10 p). Then
 the FRASER volcano of delta PSI against the raw p-value, coloured by status, with the MA
-view, and the samples with the most hits beside what the hit
-junctions do (an intron used less or more, an exon extended or shortened). Collapsed: the junction table, strongest first, with its record card. Filters: call
+view, and the samples with the most hits (split by the direction of the change) beside what the hit
+junctions do (an intron used less or more, an exon extended or shortened), in two panels on one scale: the genes called (gene-level adjusted p of `AS_PADJ` or less and a delta PSI of `AS_MIN_DPSI` or more) and every hit at the raw p-value, calls included, split into called and nominal only. A small run has no call, so the first panel says so and the second is the reading. Collapsed: the junction table, strongest first, with its record card. Filters: call
 direction, absolute delta PSI and splicing metric. There is no sashimi: the pipeline
 publishes no junction counts to draw one from.
 
@@ -166,8 +181,7 @@ evidence), a strip of four cards that recount on the region in view (genes, samp
 genes and the strongest evidence), then one linked section: a single GenomeSpy navigator
 carrying the genes of every sample's triage list on one genome axis, one lane per sample,
 coloured by the sample's group, and the genome browser under it. The navigator sets no
-default region (one on the whole first contig would make the browser load it all); a brush on
-it or a locus typed in its header moves the browser. The browser shows the alignments (with
+default region (one on the whole first contig would make the browser load it all). Each gene is a dot at its start (an interval mark is a fraction of a pixel wide on a chromosome), as high as the summed -log10 p of the analyses that test it and coloured by the sample's group. The axis opens on the browser's window around the best-supported gene (`open_on_view_window` with `default_view: region`) and keeps it in view (`follow_view_window`), the browser follows the axis (`follow_window`); a brush, a pan or a locus typed in its header moves the browser. The browser shows the alignments (with
 splice-junction arcs) and the genotypes of the samples in view, coloured by the same group
 key, with common dbSNP sites and ClinVar from UCSC. It opens on the best-supported gene (it
 steps through the genes by evidence, labelled by symbol) and on the reads and genotypes of

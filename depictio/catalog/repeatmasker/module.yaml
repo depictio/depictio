@@ -6,6 +6,7 @@
 # masked FASTA are not read. Parsing lives in depictio/recipes/lib/repeatmasker_tbl.py.
 id: repeatmasker
 name: RepeatMasker
+version: "1.0.0"
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/repeatmasker/repeatmasker
 homepage: https://www.repeatmasker.org
 biotools_url: https://bio.tools/repeatmasker

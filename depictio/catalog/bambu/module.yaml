@@ -8,6 +8,7 @@
 # see dexseq/results.yaml and the nanoseq template.yaml for the wiring).
 id: bambu
 name: Bambu
+version: "1.0.0"
 description: >-
   Long-read transcript discovery and quantification from spliced alignments,
   used by nf-core/nanoseq for gene- and transcript-level counting.

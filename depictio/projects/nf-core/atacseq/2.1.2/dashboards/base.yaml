@@ -381,11 +381,10 @@ main_dashboard:
   - component_type: highlight
     section: Findings
     source_tab: Peaks
-    source_component: pk-manhattan
-    caption: One point per peak at the centre of its region, as high as its significance; colour is the library.
-    hide_legend: true
-    tag: at-ov-hl-manhattan
-    index: ov-hl-manhattan
+    source_component: pk-density
+    caption: Peak calls per megabase along the genome, one row per library; brighter is more calls.
+    tag: at-ov-hl-calls
+    index: ov-hl-calls
     layout: {x: 4, y: 2, w: 4, h: 4}
   - component_type: highlight
     section: Findings
@@ -397,7 +396,8 @@ main_dashboard:
     index: ov-hl-tss
     layout: {x: 0, y: 6, w: 4, h: 4}
   # The consensus UpSet draws one set per library, too many for a third of the
-  # row: this summary counts the intervals by how many libraries call them.
+  # row: this summary counts the intervals by how many replicates of each group
+  # call them, so the bars wear the group colours of the other tabs.
   - component_type: figure
     workflow_tag: atacseq
     data_collection_tag: macs2_consensus_boolean
@@ -405,14 +405,18 @@ main_dashboard:
     visu_type: bar
     mode: code
     code_content: |-
-      # Consensus intervals by the number of libraries calling a peak on them.
-      d = df.group_by('num_samples').agg(pl.len().cast(pl.Int64).alias('intervals')).sort('num_samples')
-      fig = px.bar(d.to_pandas(), x='num_samples', y='intervals', labels={'num_samples': 'Libraries calling the interval', 'intervals': 'Consensus intervals'})
+      # Consensus intervals by how many replicates of each group call a peak on them. The per-library 0/1 columns are unpivoted and the group is the library name without its merge suffix and replicate, the design group of the other tabs. Intervals a group does not call are left out.
+      libs = [c for c in df.columns if c.endswith('.mLb.clN')]
+      long = df.select(['peak_id', *libs]).unpivot(index='peak_id', on=libs, variable_name='library', value_name='called')
+      long = long.with_columns(pl.col('library').str.replace(r'\.mLb\.clN$', '').str.replace(r'_R(EP)?\d+$', '').alias('group'), pl.col('called').cast(pl.Int64))
+      per = long.group_by(['group', 'peak_id']).agg(pl.col('called').sum().alias('replicates'))
+      d = per.filter(pl.col('replicates') > 0).group_by(['group', 'replicates']).agg(pl.len().cast(pl.Int64).alias('intervals')).sort(['group', 'replicates'])
+      fig = px.bar(d.to_pandas(), x='replicates', y='intervals', color='group', barmode='group', color_discrete_map=depictio_category_colors.get('group') or {}, labels={'replicates': 'Replicates of the group calling the interval', 'intervals': 'Consensus intervals', 'group': ''})
       fig.update_xaxes(dtick=1)
       fig.update_layout(margin=dict(t=10))
     title: Replicate agreement
     link: tab:Consensus
-    caption: Consensus intervals by how many libraries call a peak on them; the right-hand bars are the reproducible set.
+    caption: Consensus intervals by how many replicates of each group call a peak on them; the right-hand bars of a group are the intervals all its replicates agree on.
     section: Findings
     tag: at-ov-consensus-support
     index: ov-consensus-support
@@ -950,7 +954,7 @@ tabs:
     tag: at-aq-tss-coverage
     index: aq-tss-coverage
     title: Coverage around start sites
-    description: One curve per library. A sharp central spike is a well transposed library; a flat line is not.
+    description: One curve per library. A sharp central spike is a well transposed library; a flat line is not. The dotted vertical line at 0 marks the start site the profiles are centred on.
     layout: {x: 0, y: 0, w: 4, h: 4}
   - component_type: figure
     workflow_tag: atacseq
@@ -1073,7 +1077,7 @@ tabs:
     tag: at-aq-ladder
     index: aq-ladder
     title: Fragment length distribution
-    description: Fraction of reads at each fragment length, per library, from 0 to 800 bp; shaded, the nucleosome-free (NFR) and mono-nucleosome windows.
+    description: Fraction of reads at each fragment length, per library, from 0 to 800 bp; shaded, the nucleosome-free (NFR, up to 100 bp) and mono-nucleosome (150 to 324 bp) windows, as ataqv defines them.
     layout: {x: 0, y: 2, w: 5, h: 4}
   - component_type: figure
     workflow_tag: atacseq
@@ -1091,24 +1095,37 @@ tabs:
     title: Reads per fragment class
     description: How each library splits across the four nucleosome windows.
     layout: {x: 5, y: 2, w: 3, h: 4}
-  - component_type: advanced_viz
+  - component_type: figure
     workflow_tag: atacseq
     data_collection_tag: ataqv_chromosome_counts
     use: ataqv/read_distribution
-    config:
-      colour_scale: Viridis
-      max_dot_size: 26
-      min_dot_size: 3
-      gene_sort: name
-      cluster_sort: name
-      max_genes: 30
-      marker_outline: true
+    visu_type: heatmap
+    mode: code
+    code_content: |-
+      # Each library's share of reads on every sequence against the median share of the libraries in view (log2), sequences in karyotype order. Red is a sequence a library over-reads against its peers, blue one it under-reads; a library alone in view shows its plain share.
+      c = pl.col('chromosome').str.replace('^chr', '')
+      rk = pl.when(c.str.contains('^[0-9]+$')).then(c.cast(pl.Int64, strict=False)).when(c == 'X').then(1001).when(c == 'Y').then(1002).when(c.is_in(['M', 'MT'])).then(1003).otherwise(2000)
+      d = df.with_columns(rk.alias('rk'), (pl.col('fraction_of_reads') * 100).alias('pct'))
+      d = d.with_columns(pl.col('pct').median().over('chromosome').alias('expected'))
+      d = d.with_columns(((pl.col('pct') + 0.001) / (pl.col('expected') + 0.001)).log(2.0).clip(-1.0, 1.0).alias('lr'))
+      chroms = d.select(['rk', 'chromosome']).unique().sort(['rk', 'chromosome']).get_column('chromosome').to_list()
+      samples = sorted(d.get_column('sample').unique().to_list())
+      grid = pl.DataFrame({'sample': [s for s in samples for k in chroms], 'chromosome': [ch for s in samples for ch in chroms]})
+      full = grid.join(d.select(['sample', 'chromosome', 'pct', 'lr']), on=['sample', 'chromosome'], how='left').with_columns(pl.col('pct').fill_null(0.0), pl.col('lr').fill_null(0.0))
+      share = full.get_column('pct').to_numpy().reshape(len(samples), len(chroms))
+      ratio = full.get_column('lr').to_numpy().reshape(len(samples), len(chroms))
+      peers = len(samples) > 1
+      labels = [ch.replace('chr', '') for ch in chroms]
+      fig = go.Figure(go.Heatmap(z=ratio if peers else share, x=labels, y=samples, customdata=share, xgap=1, ygap=1, colorscale='RdBu_r' if peers else 'Viridis', zmid=0 if peers else None, zmin=-1 if peers else 0, zmax=1 if peers else None, colorbar=dict(title='Against the median library' if peers else 'Share of reads (%)', tickmode='array', tickvals=[-1, -0.5, 0, 0.5, 1], ticktext=['2x fewer', '1.4x fewer', 'median', '1.4x more', '2x more']) if peers else dict(title='Share of reads (%)'), hovertemplate='<b>%{y}</b> on %{x}<br>%{customdata:.2f}% of its reads<extra></extra>'))
+      fig.update_xaxes(type='category', tickangle=0, title='Reference sequence')
+      fig.update_yaxes(autorange='reversed', automargin=True, title='')
+      fig.update_layout(margin=dict(t=10))
     section: Read distribution
     tag: at-aq-read-distribution
     index: aq-read-distribution
-    title: Read distribution matrix
-    description: Every library against every reference sequence ataqv counted; colour is log10 read count, size the share of the library.
-    layout: {x: 0, y: 0, w: 8, h: 6}
+    title: Reads per reference sequence
+    description: Each library's share of reads on every sequence, against the median library in view; red is a sequence it over-reads, blue one it under-reads.
+    layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: table
     workflow_tag: atacseq
     data_collection_tag: ataqv_metrics
@@ -1141,7 +1158,7 @@ tabs:
     color: cyan
     description: The deepTools and Picard numbers a library's signal is judged on
   - name: Coverage concentration
-    icon: mdi:chart-scatter-plot
+    icon: mdi:chart-bar
     color: cyan
     description: How far each library's coverage departs from a uniform library of its depth
   - name: Complexity and metagene
@@ -1300,28 +1317,34 @@ tabs:
     title: Signal at the start site
     description: Mean metagene signal of each library in the start-site bin, where an ATAC library peaks.
     layout: {x: 6, y: 0, w: 2, h: 2}
-  - component_type: advanced_viz
+  - component_type: figure
     workflow_tag: atacseq
     data_collection_tag: deeptools_fingerprint_metrics
-    use: deeptools/fingerprint_scatter
-    config:
-      x_title: Area under the observed coverage curve
-      y_title: Divergence from a uniform library
-      marker_size: 12
-      opacity: 0.85
-      marker_outline: true
-      # The legend names the libraries; point labels piled up on the replicates.
-      top_n_labels: 0
-      color_col: sample
-      legend_pos: right
-      selection_enabled: true
-      selection_column: sample
+    use: deeptools/fingerprint_metrics
+    visu_type: bar
+    mode: code
+    code_content: |-
+      # One bar per library, the least concentrated on top. Left, the area under its coverage curve over that of a uniform library: red past 0.95 (no better than uniform), amber from 0.85, cyan below. Right, its Jensen-Shannon distance to a uniform library, coloured the same way.
+      names = {'auc_ratio': 'Coverage area over uniform', 'synthetic_js_distance': 'Distance to uniform (JS)'}
+      d = df.filter(pl.col('auc_ratio').is_not_null()).with_columns(pl.when(pl.col('auc_ratio') > 0.95).then(pl.lit('Flat')).when(pl.col('auc_ratio') > 0.85).then(pl.lit('Borderline')).otherwise(pl.lit('Concentrated')).alias('verdict')).sort(['auc_ratio', 'sample'], descending=[True, True])
+      long = d.select(['sample', 'verdict', 'auc_ratio', 'synthetic_js_distance']).unpivot(index=['sample', 'verdict'], variable_name='metric', value_name='value').with_columns(pl.col('metric').replace(names))
+      fig = px.bar(long.to_pandas(), x='value', y='sample', color='verdict', color_discrete_map={'Concentrated': '#15aabf', 'Borderline': '#f59f00', 'Flat': '#e03131'}, facet_col='metric', orientation='h', custom_data=['sample'], category_orders={'sample': d.get_column('sample').to_list(), 'metric': list(names.values()), 'verdict': ['Concentrated', 'Borderline', 'Flat']}, labels={'value': '', 'sample': '', 'verdict': ''})
+      fig.update_traces(hovertemplate='<b>%{customdata[0]}</b><br>%{x:.3f}<extra></extra>')
+      fig.update_xaxes(matches=None, showticklabels=True)
+      fig.update_yaxes(automargin=True)
+      fig.update_xaxes(range=[0, 1], col=1)
+      fig.for_each_annotation(lambda a: a.update(text=a.text.split('=')[-1]))
+      fig.add_vrect(x0=0.85, x1=0.95, fillcolor='rgba(245,159,0,0.15)', line_width=0, layer='below', col=1)
+      fig.add_vrect(x0=0.95, x1=1, fillcolor='rgba(224,49,49,0.15)', line_width=0, layer='below', col=1)
+      fig.update_layout(margin=dict(t=30), legend=dict(orientation='h', y=-0.12))
+    selection_enabled: true
+    selection_column: sample
     section: Coverage concentration
     tag: at-sig-fingerprint
     index: sig-fingerprint
     title: Coverage concentration per library
-    description: plotFingerprint's own metrics, enrichment against divergence from a uniform library. Click a point to select the library.
-    layout: {x: 0, y: 0, w: 8, h: 6}
+    description: One bar per library, the least concentrated on top. deepTools plotFingerprint ranks the genome's bins by read count and compares the cumulative share of reads with that of a library whose reads are spread evenly. Left, the area under the library's curve over that of the even one, 1 for an even spread and lower as the reads pile into few bins, as in a successful ATAC library; the amber band (0.85 to 0.95) is a weak concentration and the red band (from 0.95) is no better than an even library, a failed library. Both cut-offs are rules of thumb of the catalog's fingerprint module, not values deepTools publishes; right, the Jensen-Shannon distance to the even library, bars coloured by the same verdict. Click a bar to select the library.
+    layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: advanced_viz
     workflow_tag: atacseq
     data_collection_tag: picard_markduplicates_metrics
@@ -1359,7 +1382,7 @@ tabs:
     tag: at-sig-metagene
     index: sig-metagene
     title: Metagene signal profile
-    description: Mean accessibility of every library along a scaled gene with 3 kb flanks, the start site marked and the gene body shaded.
+    description: Mean accessibility of every library along a scaled gene with 3 kb flanks, the line at bin 300 is the transcription start site, where the 3 kb upstream flank ends, and the shaded bins 300 to 400 are the gene body, scaled to one length.
     layout: {x: 4, y: 0, w: 4, h: 6}
   - component_type: advanced_viz
     workflow_tag: atacseq
@@ -1402,10 +1425,10 @@ tabs:
     icon: mdi:counter
     color: indigo
     description: How many calls the libraries made, how wide, how enriched and how significant
-  - name: Significance along the genome
-    icon: mdi:chart-scatter-plot
+  - name: Calls along the genome
+    icon: mdi:chart-timeline-variant
     color: indigo
-    description: Every call at the centre of its region, as high as its q-value
+    description: Calls per megabase of each library, chromosome by chromosome
   - name: Peak width
     icon: mdi:ruler
     color: indigo
@@ -1421,8 +1444,8 @@ tabs:
     body: >
       [MACS2](https://github.com/macs3-project/MACS) broad peaks, one row per peak and
       library: a broad call reports a region rather than a summit. The cards count the
-      calls and sum up their width, enrichment and significance. A lasso on the
-      genome-wide panel narrows the cards, the widths and the table to the peaks picked.
+      calls and sum up their width, enrichment and significance. The
+      genome-wide panel shows where each library calls its peaks.
     tag: at-pk-intro
     index: pk-intro
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -1553,49 +1576,83 @@ tabs:
     title: Median -log10 q
     description: Median significance of the calls, as -log10 of the MACS2 q-value.
     layout: {x: 6, y: 0, w: 2, h: 2}
-  - component_type: advanced_viz
-    workflow_tag: atacseq
-    data_collection_tag: macs2_broad_peaks
-    use: macs2/broad_peak_significance
-    viz_kind: manhattan
-    config:
-      viz_kind: manhattan
-      chr_col: chr
-      pos_col: midpoint
-      score_col: neg_log10_qvalue
-      feature_col: peak_id
-      score_kind: -log10(q)
-      color_by_columns: [sample]
-      default_color_by: sample
-      selection_enabled: true
-      selection_column: peak_id
-      # Peak ids say nothing as point labels; they piled up over the tallest calls.
-      top_n_labels: 0
-    section: Significance along the genome
-    tag: at-pk-manhattan
-    index: pk-manhattan
-    title: Peak significance along the genome
-    description: Every broad call at its region centre; height is -log10 of the MACS2 q-value, colour is the library.
-    layout: {x: 0, y: 0, w: 8, h: 6}
-  # Log x: peak width is a long tail. On a linear axis the widest call sets the
-  # range and the panel reads as a single spike.
+  # Calls per 1 Mb window, one row per library: where each library calls its peaks and whether
+  # replicates agree. The significance of a call is no contrast (every call already passes the
+  # caller's cut-off), so it is not drawn.
   - component_type: figure
     workflow_tag: atacseq
     data_collection_tag: macs2_broad_peaks
     use: macs2/broad_peaks
-    visu_type: histogram
-    dict_kwargs:
-      x: width
-      color: sample
-      nbins: 60
-      log_x: true
-      labels: {width: Peak width (bp), sample: Library}
+    visu_type: heatmap
+    mode: code
+    code_content: |-
+      # Peak calls per 1 Mb window, one row per library, chromosomes in karyotype order: where each library calls peaks, and whether replicates agree.
+      c = pl.col('chr').str.replace('^chr', '')
+      rk = pl.when(c.str.contains('^[0-9]+$')).then(c.cast(pl.Int64, strict=False)).when(c == 'X').then(1001).when(c == 'Y').then(1002).when(c.is_in(['M', 'MT'])).then(1003).otherwise(2000)
+      d = df.with_columns(rk.alias('rk'), (((pl.col('start') + pl.col('end')) // 2) // 1000000).alias('win'))
+      spans = d.group_by(['rk', 'chr']).agg(pl.col('win').max().alias('nwin')).sort('nwin', descending=True).head(60).sort(['rk', 'chr'])
+      chroms = spans.get_column('chr').to_list()
+      sizes = [n + 1 for n in spans.get_column('nwin').to_list()]
+      grid = pl.DataFrame({'chr': [ch for ch, n in zip(chroms, sizes) for k in range(n)], 'win': [w for n in sizes for w in range(n)]}).with_row_index('idx').with_columns((pl.col('chr') + ':' + pl.col('win').cast(pl.Utf8) + ' Mb').alias('lab'))
+      samples = sorted(d.get_column('sample').unique().to_list())
+      counts = d.group_by(['sample', 'chr', 'win']).agg(pl.len().cast(pl.Int64).alias('n'))
+      full = grid.join(pl.DataFrame({'sample': samples}), how='cross').join(counts, on=['sample', 'chr', 'win'], how='left').with_columns(pl.col('n').fill_null(0)).sort(['sample', 'idx'])
+      z = full.get_column('n').to_numpy().reshape(len(samples), grid.height)
+      labs = grid.get_column('lab').to_list()
+      ticks = []
+      texts = []
+      off = 0
+      for i, (ch, n) in enumerate(zip(chroms, sizes)):
+          ticks.append(labs[off + n // 2])
+          texts.append(('<br>' if i % 2 else '') + ch.replace('chr', ''))
+          off += n
+      marks = [0, 1, 3, 10, 30, 100, 300]
+      fig = go.Figure(go.Heatmap(z=np.log1p(z), x=labs, y=samples, customdata=z, colorscale='Viridis', zmin=0, colorbar=dict(title='Calls per Mb', tickmode='array', tickvals=[float(np.log1p(m)) for m in marks], ticktext=[str(m) for m in marks]), hovertemplate='<b>%{y}</b><br>%{x}<br>%{customdata} calls<extra></extra>'))
+      off = 0
+      for n in sizes[:-1]:
+          off += n
+          fig.add_vline(x=off - 0.5, line_width=1, line_color='rgba(255,255,255,0.55)')
+      fig.update_xaxes(type='category', tickmode='array', tickvals=ticks, ticktext=texts, showgrid=False, tickangle=0, title='')
+      fig.update_yaxes(autorange='reversed', automargin=True, title='')
+      fig.update_layout(margin=dict(t=10))
+    section: Calls along the genome
+    tag: at-pk-density
+    index: pk-density
+    title: Peak calls along the genome
+    description: Calls per megabase, one row per library, chromosomes in karyotype order; a band shared by replicates is a region that binds reproducibly, and white vertical lines mark the chromosome boundaries.
+    layout: {x: 0, y: 0, w: 8, h: 5}
+  # Log x: peak width is a long tail. On a linear axis the widest call sets the
+  # range. One box per library from precomputed quartiles, so a run of 60k calls
+  # per library sends 5 numbers, not the calls.
+  - component_type: figure
+    workflow_tag: atacseq
+    data_collection_tag: macs2_broad_peaks
+    use: macs2/broad_peaks
+    visu_type: box
+    mode: code
+    code_content: |-
+      # Peak width per library, the widest median on top, on a log axis. The box is the middle half of the calls, the line inside it the median, the whiskers 1.5 times the interquartile range. A box wears the colour of its group, the library name without its replicate suffix, as on the other tabs.
+      q = df.group_by('sample').agg(pl.col('width').quantile(0.25).alias('q1'), pl.col('width').median().alias('med'), pl.col('width').quantile(0.75).alias('q3'), pl.col('width').min().alias('lo'), pl.col('width').max().alias('hi'), pl.len().alias('n')).sort(['med', 'sample'], descending=[True, True])
+      q = q.with_columns((pl.col('q1') - 1.5 * (pl.col('q3') - pl.col('q1'))).clip(lower_bound=pl.col('lo')).alias('wlo'), (pl.col('q3') + 1.5 * (pl.col('q3') - pl.col('q1'))).clip(upper_bound=pl.col('hi')).alias('whi'))
+      q = q.with_columns(pl.col('sample').str.replace(r'\.m(Lb|Rp)\.clN$', '').str.replace(r'_R(EP)?\d+$', '').alias('grp'))
+      colors = depictio_category_colors.get('group') or {}
+      traces = []
+      for g in q.get_column('grp').unique(maintain_order=True).to_list():
+          s = q.filter(pl.col('grp') == g)
+          c = colors.get(g)
+          traces.append(go.Box(name=g, y=s.get_column('sample').to_list(), q1=s.get_column('q1').to_list(), median=s.get_column('med').to_list(), q3=s.get_column('q3').to_list(), lowerfence=s.get_column('wlo').to_list(), upperfence=s.get_column('whi').to_list(), orientation='h', marker_color=c, line=dict(color=c, width=1.5), customdata=s.get_column('n').to_list(), hovertemplate='<b>%{y}</b><br>median %{median:,.0f} bp<br>middle half %{q1:,.0f} to %{q3:,.0f} bp<extra></extra>'))
+      fig = go.Figure(data=traces)
+      lo, hi = q.get_column('wlo').min(), q.get_column('whi').max()
+      tv = [v for v in (20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000, 100000) if lo / 1.5 <= v <= hi * 1.5]
+      fig.update_xaxes(type='log', title='Peak width (bp)', tickmode='array', tickvals=tv, ticktext=[f'{v:,}' for v in tv])
+      fig.update_yaxes(autorange='reversed', automargin=True, title='', categoryorder='array', categoryarray=q.get_column('sample').to_list())
+      fig.update_layout(margin=dict(t=10), boxmode='overlay', legend=dict(title_text='', orientation='h', y=-0.2))
     section: Peak width
     tag: at-pk-width
     index: pk-width
-    title: Peak width distribution
-    description: How wide the calls are, per library, on a log axis. Broad calling gives wider regions than a narrow-peak run.
-    layout: {x: 0, y: 0, w: 8, h: 4}
+    title: Peak width per library
+    description: The middle half of each library's calls, widest median on top, on a log axis, coloured by group. Broad calling gives wider regions than a narrow-peak run.
+    layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: table
     workflow_tag: atacseq
     data_collection_tag: macs2_broad_peaks
@@ -1760,23 +1817,30 @@ tabs:
     title: Peak score
     description: Median score the peak caller gave the annotated peaks.
     layout: {x: 6, y: 0, w: 2, h: 2}
-  # A share per library, not a count, so libraries of different depth compare.
-  - component_type: figure
+  - component_type: advanced_viz
     workflow_tag: atacseq
-    data_collection_tag: homer_annotated_peaks
-    use: homer/annotated_peaks
-    visu_type: histogram
-    dict_kwargs:
-      x: sample
-      color: annotation_class
-      barnorm: percent
-      labels: {sample: '', annotation_class: Feature class}
+    data_collection_tag: homer_feature_classes
+    viz_kind: stacked_taxonomy
+    config:
+      viz_kind: stacked_taxonomy
+      sample_id_col: sample
+      taxon_col: annotation_class
+      rank_col: rank
+      abundance_col: peak_count
+      top_n: 12
+      sort_by: abundance
+      normalise_to_one: true
+      sample_sort: name
+      orientation: h
+      value_title: Share of the library's peaks
+      x_title: ''
+      hidden_controls: [rank, top_n]
     section: Feature classes
     tag: at-anno-classes
     index: anno-classes
     title: Feature classes per library
-    description: The share of each library's peaks in each feature class, as a percentage.
-    layout: {x: 0, y: 0, w: 8, h: 4}
+    description: The share of each library's peaks in each HOMER feature class; switch to counts, sort the libraries or hide a class from the controls.
+    layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: advanced_viz
     workflow_tag: atacseq
     data_collection_tag: homer_tss_distance_profile
@@ -1793,7 +1857,7 @@ tabs:
     tag: at-anno-tss-distance
     index: anno-tss-distance
     title: Peaks around the nearest TSS
-    description: Peaks counted in 250 bp bins across a 20 kb window; the band is the 1 kb promoter window either side.
+    description: Peaks counted in 250 bp bins across a 20 kb window; the line at 0 is the transcription start site and the band is the promoter window, 1 kb either side of it.
     layout: {x: 0, y: 0, w: 8, h: 6}
   # Master and detail: a picked row is the selection the record card follows.
   - component_type: table
@@ -2014,12 +2078,17 @@ tabs:
       score_col: neg_log10_qvalue
       feature_col: peak_id
       sample_col: sample
-      mark: rect
+      mark: bar
       facet_by_sample: true
-      max_facets: 6
+      lane_height: 56
+      max_facets: 8
+      # Per lane: one protocol can reach far higher q-values than the others,
+      # which a shared ruler would draw flat.
+      facet_y_scale: independent
       score_title: -log10(q-value)
       opacity: 0.8
       assembly: '{GENOME}'
+      interaction_mode: select
       default_region: first
       region_filter_enabled: true
       selection_enabled: true
@@ -2028,8 +2097,8 @@ tabs:
     tag: at-loc-navigator
     index: loc-navigator
     title: Broad calls per library
-    description: Every MACS2 broad call from start to end, one lane per library. The locus field and a brush on this axis move the cards above.
-    layout: {x: 0, y: 0, w: 8, h: 6}
+    description: Each lane is a library and each bar a MACS2 broad call, spanning its start to its end and as high as its -log10(q). Look for regions called in every replicate of a group, and for regions called in one group only. It opens on the first chromosome of the calls; drag on the axis to pick a region, or type a locus.
+    layout: {x: 0, y: 0, w: 8, h: 7}
 # ============================================================================
 # Comparison
 # ============================================================================
@@ -2226,7 +2295,7 @@ tabs:
     index: cons-upset
     title: Consensus peak overlap
     description: Intersections of the libraries calling each consensus interval, largest first.
-    layout: {x: 0, y: 0, w: 8, h: 5}
+    layout: {x: 0, y: 0, w: 8, h: 8}
   - component_type: advanced_viz
     workflow_tag: atacseq
     data_collection_tag: macs2_consensus_fc
@@ -2283,7 +2352,6 @@ tabs:
       marker_outline: true
       axis_prefix: PC
       legend_pos: right
-      plot_style: grid
       selection_enabled: true
       selection_column: sample_id
     section: Sample space

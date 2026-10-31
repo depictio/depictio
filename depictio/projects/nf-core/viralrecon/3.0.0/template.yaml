@@ -29,7 +29,6 @@ template:
       required: false
   dashboards:
     - "dashboards/base.yaml"
-    - "dashboards/v2.yaml"
   # How a run's provenance is collected. Without this block the CLI falls back
   # to _DEFAULT_PROVENANCE_SPEC, which reads params.json but drops every key
   # into a single ungrouped "Parameters" list and never looks at the software

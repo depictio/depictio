@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { JBrowseTrackRow } from '../../api';
-import { legendRamp, trackLegend } from './trackLegend';
+import { foldByColour, legendRamp, trackLegend, variantLegend } from './trackLegend';
 
 const row = (track_id: string, over: Partial<JBrowseTrackRow> = {}): JBrowseTrackRow => ({
   track_id,
@@ -76,5 +76,49 @@ describe('legendRamp', () => {
     expect(legendRamp(rows, ['a', 'c'], scale, 'blues')).toMatchObject({ from: 'early', to: 'mid' });
     expect(legendRamp(rows, ['a'], scale, 'blues')).toBeNull();
     expect(legendRamp(rows, ['genes'], scale, 'blues')).toBeNull();
+  });
+});
+
+describe('foldByColour', () => {
+  it('shares one entry between categories drawn alike', () => {
+    const entries = foldByColour([
+      { label: 'AD', color: '#1c7ed6' },
+      { label: 'XR', color: '#0ca678' },
+      { label: 'XD', color: '#0ca678' },
+    ]);
+    expect(entries.map((e) => e.label)).toEqual(['AD', 'XR, XD']);
+    expect(entries[1].names).toEqual(['XR', 'XD']);
+  });
+
+  it('folds a long list into +N', () => {
+    const entries = foldByColour(['a', 'b', 'c', 'd'].map((label) => ({ label, color: '#111' })));
+    expect(entries).toHaveLength(1);
+    expect(entries[0].label).toBe('a, b +2');
+  });
+});
+
+describe('variantLegend', () => {
+  const payload = {
+    title: 'genetic_model',
+    entries: [
+      { label: 'AR_comp', color: '#7048e8' },
+      { label: 'AD', color: '#1c7ed6' },
+    ],
+    fallback: { label: 'other', color: 'goldenrod' },
+  };
+
+  it('lists the categories then the fallback, under a readable title', () => {
+    const key = variantLegend(payload);
+    expect(key?.title).toBe('genetic model');
+    expect(key?.entries.map((e) => [e.label, e.color])).toEqual([
+      ['AR_comp', '#7048e8'],
+      ['AD', '#1c7ed6'],
+      ['other', 'goldenrod'],
+    ]);
+  });
+
+  it('is null when the tile colours no variant', () => {
+    expect(variantLegend(null)).toBeNull();
+    expect(variantLegend({ ...payload, entries: [] })).toBeNull();
   });
 });

@@ -12,11 +12,17 @@
 # source replicate and flow-cell run; `metadata` and `design` are pruned, and with
 # `design` the filters and rings bound to it (preparation, source replicate,
 # flow-cell run) and the Preparations line of "The run".
-# The isoform structures and the weighted introns of the Isoform usage tab need
+# The isoform structures and the weighted introns of the Locus tab need
 # bambu/extended_annotations.gtf, which a quantification-only run does not write.
 # The genome browser of that tab takes its calls from `isoform_loci`, written on
-# every run: without the annotation its rows have no coordinates and the browser
-# opens on the first region its tracks hold.
+# every run: without the annotation its rows have no coordinates, so the browser
+# frames a transcript by its gene symbol where it can, else it opens on the first
+# region its tracks hold.
+#
+# The design group is the `condition` column of every collection: the hub names it
+# from GROUP_COL, but the Bambu collections of the catalog (counts, PCA, correlation)
+# write `condition` from the `<group>_R<n>` sample name, so the dashboard keys on that
+# column rather than on {GROUP_COL}.
 #
 # The MultiQC report was reprocessed with MultiQC 1.35 from the run's raw tool
 # outputs (nanoseq 3.0.0 writes no parquet); the module and plot names below
@@ -182,7 +188,7 @@ main_dashboard:
       2. ![](icon:mdi:dna) **Align** minimap2 to the reference · [Versions](params:minimap2) · [Alignment](tab:Alignment)
       3. ![](icon:mdi:counter) **Count** Bambu, per gene and transcript · [Versions](params:bambu) · [Quantification](tab:Quantification)
       4. ![](icon:mdi:scale-balance) **Genes** DESeq2 between the conditions · [Versions](params:deseq2) · [Genes](tab:Gene expression)
-      5. ![](icon:mdi:chart-timeline-variant) **Isoforms** DEXSeq on transcript usage, reads in the browser · [Versions](params:dexseq) · [Isoforms](tab:Isoform usage)
+      5. ![](icon:mdi:chart-timeline-variant) **Isoforms** DEXSeq on transcript usage, reads in the browser · [Versions](params:dexseq) · [Isoforms](tab:Isoform usage) · [Locus](tab:Locus)
       :::
     tag: ns-ov-steps
     index: ov-steps
@@ -333,7 +339,7 @@ main_dashboard:
       - **{{q7}}%** of a library's reads reach Q7, the basecaller's pass floor – the median over the libraries [Reads](tab:Reads)
       - **{{pc1}}%** of the expression variance lies on the first principal component – log CPM of the most variable genes [Quantification](tab:Quantification)
       - **{{n_up}}** genes up and **{{n_down}}** down between the conditions – DESeq2, 5% FDR and a two-fold change [Genes](tab:Gene expression)
-      - **{{n_dtu}}** of {{n_tx}} transcripts shift their share of their gene – DEXSeq, gene-level 5% FDR; pick one to read its splice arcs in the genome browser [Isoforms](tab:Isoform usage)
+      - **{{n_dtu}}** of {{n_tx}} transcripts shift their share of their gene – DEXSeq, gene-level 5% FDR; pick one to read its splice arcs in the genome browser [Locus](tab:Locus)
     section: Findings
     tag: ns-ov-findings
     index: ov-findings
@@ -392,6 +398,7 @@ main_dashboard:
       - [Quantification](tab:Quantification)
       - [Gene expression](tab:Gene expression)
       - [Isoform usage](tab:Isoform usage)
+      - [Locus](tab:Locus)
     section: How to read this dashboard
     tag: ns-ov-how-to-read
     index: ov-how-to-read
@@ -821,25 +828,26 @@ tabs:
     visu_type: bar
     mode: code
     code_content: |-
-      # Mean read length, mean read quality and yield per library, sorted by quality; the solid line is Q7 (pass), the dashed one Q10 (good).
+      # Mean read length, mean read quality and yield per library, sorted by quality, coloured by condition; the solid line is Q7 (pass), the dashed one Q10 (good). A picked bar stays full, the others dim.
       names = {'mean_read_length': 'Mean read length (bases)', 'mean_read_quality': 'Mean read quality (Phred)', 'total_gigabases': 'Yield (Gb)'}
-      d = df.filter(pl.col('mean_read_quality').is_not_null()).sort(['mean_read_quality', 'sample'])
-      long = d.select(['sample', *names.keys()]).unpivot(index='sample', variable_name='metric', value_name='value').with_columns(pl.col('metric').replace(names))
-      fig = px.bar(long.to_pandas(), x='value', y='sample', facet_col='metric', orientation='h', custom_data=['sample'], category_orders={'sample': d.get_column('sample').to_list(), 'metric': list(names.values())}, labels={'value': '', 'sample': ''})
+      d = df.filter(pl.col('mean_read_quality').is_not_null()).sort(['mean_read_quality', 'sample']).with_columns(pl.col('sample').str.replace(r'_(?:R|r|rep|REP|Rep)\d+$', '').alias('condition'))
+      long = d.select(['sample', 'condition', *names.keys()]).unpivot(index=['sample', 'condition'], variable_name='metric', value_name='value').with_columns(pl.col('metric').replace(names))
+      fig = px.bar(long.to_pandas(), x='value', y='sample', color='condition', color_discrete_map=depictio_category_colors.get('condition') or {}, facet_col='metric', orientation='h', custom_data=['sample'], category_orders={'sample': d.get_column('sample').to_list(), 'metric': list(names.values())}, labels={'value': '', 'sample': '', 'condition': 'Condition'})
       fig.update_xaxes(matches=None, showticklabels=True)
       fig.update_yaxes(automargin=True)
       fig.for_each_annotation(lambda a: a.update(text=a.text.split('=')[-1]))
       fig.update_xaxes(range=[0, max(12, (d['mean_read_quality'].max() or 0) * 1.1)], col=2)
       fig.add_vline(x=7, line_width=1, opacity=0.6, annotation_text='Q7 pass', annotation_position='top left', col=2)
       fig.add_vline(x=10, line_dash='dash', line_width=1, opacity=0.6, annotation_text='Q10 good', col=2)
-      fig.update_layout(margin=dict(t=30), showlegend=False)
+      fig.update_traces(unselected=dict(marker=dict(opacity=0.3)))
+      fig.update_layout(margin=dict(t=30), clickmode='event+select', legend=dict(orientation='h', y=-0.12, title_text=''))
     selection_enabled: true
     selection_column: sample
     section: Length and quality
     tag: ns-rd-length-quality
     index: rd-length-quality
     title: Length, quality and yield per library
-    description: Libraries sorted by mean quality, the best on top; Q7 passes, Q10 is good. Click a library to read its summary.
+    description: Libraries sorted by mean quality, the best on top, coloured by condition. The solid line is Q7, the basecaller's pass floor (Guppy and Dorado sort reads at it); the dashed one is Q10, the usual mark of good quality. Click a library to read its summary.
     layout: {x: 0, y: 0, w: 5, h: 6}
   - component_type: advanced_viz
     workflow_tag: nanoseq
@@ -895,7 +903,7 @@ tabs:
     tag: ns-rd-nx-ladder
     index: rd-nx-ladder
     title: Nx ladder per library
-    description: The shortest read inside the longest x% of the bases; the marker is N50.
+    description: The shortest read inside the longest x% of the bases. The marker is N50, the length at which half the bases lie in reads that long or longer.
     layout: {x: 0, y: 0, w: 4, h: 6}
   - component_type: advanced_viz
     workflow_tag: nanoseq
@@ -913,7 +921,7 @@ tabs:
     tag: ns-rd-quality-ladder
     index: rd-quality-ladder
     title: Reads above each quality floor
-    description: Where a curve falls off is the quality floor that library can afford; the marker is the Q7 pass floor.
+    description: Where a curve falls off is the quality floor that library can afford. The marker is Q7, the basecaller's pass floor.
     layout: {x: 4, y: 0, w: 4, h: 6}
   - component_type: table
     workflow_tag: nanoseq
@@ -1321,9 +1329,7 @@ tabs:
     config:
       color_col: condition
       default_color_by: condition
-      point_size: 15
       axis_prefix: PC
-      plot_style: grid
       hover_cols: [total_counts, n_genes_detected, top50_share_pct]
       selection_enabled: true
       selection_column: sample_id
@@ -1333,7 +1339,8 @@ tabs:
     title: Libraries on log-CPM gene expression (PCA)
     description: A first component that follows the preparation or the run, not the condition, is a confounder.
     layout: {x: 0, y: 0, w: 8, h: 6}
-  # Library ids on both axes: full width, or the labels leave the plot no room.
+  # Library ids on both axes: full width, and 40 px cells, or the heatmap draws as
+  # a strip (the viewer sizes it from its rows at 12 px a cell by default).
   - component_type: advanced_viz
     workflow_tag: nanoseq
     data_collection_tag: bambu_sample_correlation
@@ -1347,12 +1354,14 @@ tabs:
       cluster_cols: true
       cluster_method: ward
       colorscale: Blues
+      min_cell_px: 40
+      max_rows: 10
     section: Sample correlation
     tag: ns-qt-correlation
     index: qt-correlation
     title: Library correlation (Spearman, log CPM)
-    description: Replicates should correlate more with each other than across conditions.
-    layout: {x: 0, y: 0, w: 8, h: 5}
+    description: Each cell is the Spearman correlation of two libraries on log CPM; the libraries are clustered, and replicates should sit next to each other.
+    layout: {x: 0, y: 0, w: 8, h: 10}
   - component_type: advanced_viz
     workflow_tag: nanoseq
     data_collection_tag: bambu_top_variable_genes
@@ -1682,7 +1691,7 @@ tabs:
     tag: ns-de-volcano
     index: de-volcano
     title: Effect size against significance
-    description: The View switch reads the same rows as an MA plot or a QQ plot of the raw p-values.
+    description: One point per tested annotation entry. The dotted lines are the call, DESeq2's 0.05 adjusted p-value (a 5% false discovery rate) and a log2 fold change of 1 either way (two-fold, this template's cut-off); the View switch reads the same rows as an MA plot or a QQ plot.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: advanced_viz
     workflow_tag: nanoseq
@@ -1699,7 +1708,7 @@ tabs:
     tag: ns-de-barplot
     index: de-barplot
     title: The twenty largest fold changes
-    description: Signed, the ones clearing the adjusted p-value cut-off highlighted.
+    description: Signed, the ones clearing the 0.05 adjusted p-value cut-off (DESeq2's 5% false discovery rate) highlighted.
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: table
     workflow_tag: nanoseq
@@ -1723,7 +1732,7 @@ tabs:
   - name: Isoform filters
     icon: mdi:filter-variant
     color: pink
-    description: Biotype and expression floor on the transcript counts
+    description: Gene picks the genes of the usage split; biotype and floor narrow the transcript counts
   grid_sections:
   - name: Usage at a glance
     icon: mdi:counter
@@ -1735,22 +1744,12 @@ tabs:
     description: Change in usage against the gene-level q-value, one point per transcript
   - name: Usage per library
     icon: mdi:chart-bar
-    color: gray
-    description: Each top gene's split across its transcripts, library by library
-    collapsed: true
+    color: pink
+    description: Opens on the 6 best genes by q-value; the Gene filter picks up to 12 of the best 40.
   - name: Isoform expression
     icon: mdi:chart-box-outline
     color: gray
     description: Transcript-level counts per library
-    collapsed: true
-  - name: Isoform detail
-    icon: mdi:dna
-    color: pink
-    description: Pick a transcript, then read its record and its reads with their splice arcs
-  - name: Isoform structure
-    icon: mdi:chart-timeline-variant
-    color: gray
-    description: The exon lanes and the weighted introns of the transcript picked above
     collapsed: true
   - name: Isoform tables
     icon: mdi:table
@@ -1767,12 +1766,31 @@ tabs:
       [DEXSeq](https://bioconductor.org/packages/DEXSeq/) asks whether a transcript is used more
       or less relative to its gene's other transcripts, on Bambu's transcript counts, once over the
       whole run: significance is the gene-level adjusted q-value, and a gain is a higher share in
-      the first condition of {{contrast}}. Pick a transcript in the DEXSeq table to read its record
-      and its reads with their splice arcs in the genome browser. The collapsed sections hold the
-      split of each top gene library by library and the introns of the pick, weighted by condition.
+      the first condition of {{contrast}}. To choose a gene, use the Gene filter at the head of this
+      tab's filters in the left panel: it lists the 40 genes with the best q-value and redraws the usage split of the ones you
+      pick. A transcript's record and its reads in the genome browser are on the [Locus](tab:Locus) tab.
     tag: ns-is-intro
     index: is-intro
     layout: {x: 0, y: 0, w: 8, h: 2}
+  # First filter of the tab on purpose: it is how a gene is chosen. The recipe keeps
+  # the forty best-ranked genes and any of them can be picked here. Only the
+  # usage-per-library tile has this column (gene id with its q-value), so no
+  # other tile of the tab narrows.
+  - component_type: interactive
+    workflow_tag: nanoseq
+    data_collection_tag: dexseq_usage
+    interactive_component_type: MultiSelect
+    column_name: gene_label
+    column_type: object
+    display:
+      icon_name: mdi:dna
+      custom_color: pink
+    section: Isoform filters
+    group: Genes
+    tag: ns-is-filter-gene
+    index: is-gene-filter
+    title: Gene
+    layout: {x: 0, y: 0, w: 1, h: 3}
   - component_type: interactive
     workflow_tag: nanoseq
     data_collection_tag: bambu_counts_transcript_long
@@ -1787,7 +1805,7 @@ tabs:
     tag: ns-is-filter-biotype
     index: is-biotype-filter
     title: Gene biotype
-    layout: {x: 0, y: 0, w: 1, h: 3}
+    layout: {x: 0, y: 3, w: 1, h: 3}
   - component_type: interactive
     workflow_tag: nanoseq
     data_collection_tag: bambu_counts_transcript_long
@@ -1803,7 +1821,7 @@ tabs:
     tag: ns-is-filter-logcpm
     index: is-logcpm-filter
     title: log2(CPM + 1)
-    layout: {x: 0, y: 3, w: 1, h: 3}
+    layout: {x: 0, y: 6, w: 1, h: 3}
   # Not a ring by direction: "not significant" fills it, and one call in 400
   # rounds to 0%. The threshold counts the calls exactly. One row per
   # transcript, every one with a q-value, so the count is the transcripts.
@@ -1911,7 +1929,7 @@ tabs:
     tag: ns-is-volcano
     index: iso-volcano
     title: Change in usage against significance
-    description: The View switch reads the raw p-values as a QQ plot.
+    description: One point per transcript. The dotted horizontal line is the call, DEXSeq's 0.05 gene-level q-value (a 5% false discovery rate); the vertical line is no change in usage, since the q-value alone decides the call. The View switch reads the raw p-values as a QQ plot.
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: figure
     workflow_tag: nanoseq
@@ -1920,17 +1938,23 @@ tabs:
     mode: code
     code_content: |-
       # Each library's split of its gene's reads across the gene's transcripts,
-      # one panel per top DEXSeq gene, its q-value in the panel title.
-      d = df.sort(['gene_label', 'sample'])
-      fig = px.bar(d.to_pandas(), x='sample', y='usage_pct', color='transcript_id', facet_col='gene_label', facet_col_wrap=3, labels={'sample': 'Library', 'usage_pct': 'Share of the gene (%)', 'transcript_id': 'Transcript', 'gene_label': 'Gene'})
+      # one panel per gene, its q-value in the panel title. The recipe keeps the
+      # best-ranked genes; unfiltered the tile draws the six best, and a pick of
+      # up to twelve genes in the left panel is drawn whole.
+      d = df.sort(['gene_padj', 'gene_id', 'sample', 'transcript_id'], nulls_last=True)
+      genes = d.get_column('gene_label').unique(maintain_order=True).to_list()
+      if len(genes) > 12:
+          genes = genes[:6]
+      d = d.filter(pl.col('gene_label').is_in(genes))
+      fig = px.bar(d.to_pandas(), x='sample', y='usage_pct', color='transcript_id', facet_col='gene_label', facet_col_wrap=3, category_orders={'gene_label': genes}, labels={'sample': 'Library', 'usage_pct': 'Share of the gene (%)', 'transcript_id': 'Transcript', 'gene_label': 'Gene'})
       fig.for_each_annotation(lambda a: a.update(text=a.text.split('=')[-1]))
       # No legend: one entry per transcript id of every panel; a hover names it.
       fig.update_layout(barmode='stack', showlegend=False, margin=dict(t=30))
     section: Usage per library
     tag: ns-is-usage
     index: is-usage
-    title: Transcript usage per library, top DEXSeq genes
-    description: Each bar sums to 100% of its gene's reads; hover a segment for its transcript.
+    title: Transcript usage per library, chosen genes
+    description: The six best DEXSeq genes, or the genes picked in the Gene filter. Each bar sums to 100% of its gene's reads; hover a segment for its transcript.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: figure
     workflow_tag: nanoseq
@@ -1951,19 +1975,191 @@ tabs:
     title: Transcript expression per library
     description: The transcript-level twin of the gene distribution, on the same CPM scale.
     layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: table
+    workflow_tag: nanoseq
+    data_collection_tag: bambu_counts_transcript_long
+    use: bambu/counts_transcript_long
+    section: Isoform tables
+    tag: ns-is-table-counts
+    index: is-table-counts
+    title: Transcript counts per library
+    layout: {x: 0, y: 0, w: 8, h: 6}
+# The transcripts DEXSeq tested, picked in a table: its record, its structure and
+# its reads follow the pick. The table is the browser's picker (`isoform_loci` is
+# linked to it in template.yaml); the sample filters pick the libraries whose reads
+# are drawn.
+- title: Locus
+  subtitle: Which transcript shifts its usage, and what do its reads show?
+  tab_group: Expression
+  tab_order: 7
+  tab_icon: mdi:map-marker-outline
+  tab_icon_color: teal
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Locus filters
+    icon: mdi:filter-variant
+    color: teal
+    description: These picks narrow the cards and the table, and the transcripts the browser steps through
+  grid_sections:
+  - name: Transcripts at a glance
+    icon: mdi:counter
+    color: teal
+    description: The transcripts in view, the genes they belong to and where the annotation places them
+  - name: Transcript at its locus
+    icon: mdi:dna
+    color: teal
+    description: Pick a transcript; its record and its reads with their splice arcs follow.
+  - name: Isoform structure
+    icon: mdi:chart-timeline-variant
+    color: gray
+    description: The exon lanes and the weighted introns of the transcript picked above
+    collapsed: true
+  components:
+  # The tab's intro: the method, with its link, and how to read the tab.
+  - component_type: text
+    order: 1
+    body: >
+      [DEXSeq](https://bioconductor.org/packages/DEXSeq/) tested each transcript's share of its
+      gene once over the whole run, so the sample filters pick the libraries the browser draws but
+      do not narrow the table. Pick a transcript in the table: the browser opens on the strongest
+      shift of usage, steps through the next ones and frames the pick, with the splice arcs over
+      the coverage. Without bambu/extended_annotations.gtf the transcripts carry no coordinates and
+      the browser frames them by gene symbol where it can, else it opens on the first region its tracks hold.
+    tag: ns-loc-intro
+    index: loc-intro
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: interactive
+    workflow_tag: nanoseq
+    data_collection_tag: dexseq_results
+    interactive_component_type: MultiSelect
+    column_name: direction
+    column_type: object
+    display:
+      icon_name: mdi:swap-vertical
+      custom_color: red
+    section: Locus filters
+    group: Transcripts
+    tag: ns-loc-filter-direction
+    index: loc-direction-filter
+    title: Direction of the shift
+    layout: {x: 0, y: 0, w: 1, h: 2}
+  - component_type: interactive
+    workflow_tag: nanoseq
+    data_collection_tag: dexseq_results
+    interactive_component_type: MultiSelect
+    column_name: gene_id
+    column_type: object
+    display:
+      icon_name: mdi:dna
+      custom_color: cyan
+    section: Locus filters
+    group: Transcripts
+    tag: ns-loc-filter-gene
+    index: loc-gene-filter
+    title: Gene
+    layout: {x: 0, y: 2, w: 1, h: 3}
+  # One row per transcript, every one with a q-value, so the count is the transcripts.
+  - component_type: card
+    workflow_tag: nanoseq
+    data_collection_tag: dexseq_results
+    use: dexseq/results
+    aggregation: count
+    column_name: padj
+    column_type: float64
+    secondary_layout: threshold
+    threshold_value: 0.05
+    threshold_direction: max
+    display:
+      icon_name: mdi:counter
+      icon_color: teal.4
+      caption: transcripts against a 5% gene-level q-value
+      decimals: 0
+    section: Transcripts at a glance
+    tag: ns-loc-card-tested
+    index: loc-card-tested
+    title: Transcripts in view
+    description: Transcripts the filters keep; the bar counts those whose gene clears a 5% q-value.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: nanoseq
+    data_collection_tag: dexseq_results
+    use: dexseq/results
+    aggregation: nunique
+    column_name: gene_id
+    column_type: object
+    filter_expr: col('significant') == True
+    secondary_layout: top_n
+    breakdown_col: direction
+    top_n_count: 2
+    display:
+      icon_name: mdi:dna
+      icon_color: teal.6
+      caption: genes with a call, by direction
+      decimals: 0
+    section: Transcripts at a glance
+    tag: ns-loc-card-genes
+    index: loc-card-genes
+    title: Genes with a call
+    description: Distinct genes with a transcript that clears the 5% gene-level q-value, ranked by direction.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: nanoseq
+    data_collection_tag: dexseq_results
+    use: dexseq/results
+    aggregation: median
+    column_name: log2fc
+    column_type: float64
+    filter_expr: (col('significant') == True) & (col('log2fc') > 0)
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:trending-up
+      icon_color: teal.8
+      caption: median of the significant gains, with its spread
+      decimals: 2
+    section: Transcripts at a glance
+    tag: ns-loc-card-gain
+    index: loc-card-gain
+    title: Usage gain (log2)
+    description: Median log2 fold change of the significant transcripts used more in the first condition of the contrast.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  # The transcripts the annotation places: the browser frames only those. Empty
+  # on a run that did not let Bambu extend the annotation.
+  - component_type: card
+    workflow_tag: nanoseq
+    data_collection_tag: isoform_loci
+    aggregation: count
+    column_name: transcript_id
+    column_type: object
+    filter_expr: col('chrom').is_not_null()
+    display:
+      icon_name: mdi:map-marker-outline
+      icon_color: teal.9
+      caption: transcripts the extended annotation places
+    section: Transcripts at a glance
+    tag: ns-loc-card-located
+    index: loc-card-located
+    title: Transcripts with a locus
+    description: Transcripts the extended annotation gives coordinates; the browser frames only these, and a run without that file shows 0.
+    layout: {x: 6, y: 0, w: 2, h: 2}
   # The DEXSeq table is the picker of this section: a row narrows the record
   # card, the exon lanes, the weighted introns and the browser to one transcript.
   - component_type: table
     workflow_tag: nanoseq
     data_collection_tag: dexseq_results
     use: dexseq/results
+    columns: [feature_id, gene_id, log2fc, padj, significant, direction]
     row_selection_enabled: true
     row_selection_column: feature_id
-    section: Isoform detail
-    tag: ns-is-table-dexseq
-    index: is-table-dexseq
+    # One pick at a time: the browser frames one feature.
+    row_selection_mode: single
+    section: Transcript at its locus
+    tag: ns-loc-table-dexseq
+    index: loc-table-dexseq
     title: DEXSeq usage results
-    description: One row per transcript tested; a picked row opens its record, its structure and its reads below.
+    description: One row per transcript tested; a picked row opens its record and moves the browser below.
     layout: {x: 0, y: 0, w: 5, h: 5}
   - component_type: advanced_viz
     workflow_tag: nanoseq
@@ -1974,16 +2170,16 @@ tabs:
       id_col: feature_id
       title_col: gene_id
       selection_source: any
-      linked_component: ns-is-table-dexseq
+      linked_component: ns-loc-table-dexseq
       sections:
         Transcript: [feature_id, gene_id]
         Usage: [log2fc, direction]
         Test: [padj, pvalue, significant]
       link_templates:
         gene_id: https://www.ensembl.org/id/{value}
-    section: Isoform detail
-    tag: ns-is-record
-    index: is-record
+    section: Transcript at its locus
+    tag: ns-loc-record
+    index: loc-record
     title: Transcript record
     description: The transcript picked in the table and the gene-level call DEXSeq made on it.
     layout: {x: 5, y: 0, w: 3, h: 5}
@@ -1992,15 +2188,14 @@ tabs:
   # by the extended annotation, ranked by the DEXSeq verdict (rank_score). It opens
   # on the strongest shift, the header steps to the next ones, and a transcript
   # picked in the DEXSeq table frames its span. Without bambu/extended_annotations.gtf
-  # the rows carry no coordinates: no call to frame or step through, and the
-  # tracks open on the first region that holds data; the assembly's gene track
-  # (show_annotation) still names the genes, and a gene symbol can be searched in
-  # the header. The alignments open first, so the junction arcs a long read draws
-  # over its coverage show at once.
+  # the rows carry no coordinates: no span to frame, so the gene symbol (label_column)
+  # stands in, and failing that the tracks open on the first region that holds data; the
+  # assembly's gene track (show_annotation) still names the genes. The alignments open
+  # first, so the junction arcs a long read draws over its coverage show at once.
   - component_type: jbrowse
     workflow_tag: nanoseq
     data_collection_tag: tracks
-    section: Isoform detail
+    section: Transcript at its locus
     initial_tracks: 4
     max_tracks: 12
     show_overview: false
@@ -2016,16 +2211,19 @@ tabs:
       end_column: end
       padding: 500
       max_rows: 20
+      # A pick opens on its whole gene, the row's own span inside it.
+      frame_gene: true
       sort_by: rank_score
       descending: true
       label_column: gene_name
+      locate_column: transcript_id
       columns: [log2fc, padj]
       search_columns: [gene_id, transcript_id]
-    tag: ns-is-browser
-    index: is-browser
+    tag: ns-loc-browser
+    index: loc-browser
     title: Genome browser
-    description: The reads and coverage of the libraries in view, with their splice arcs. It opens on the strongest shift of usage and frames the transcript picked in the table; without the extended annotation it opens on the first region the tracks hold.
-    layout: {x: 0, y: 5, w: 8, h: 8}
+    description: The reads and coverage of the libraries in view, with their splice arcs. It opens on the strongest shift of usage and frames the transcript picked in the table.
+    layout: {x: 0, y: 5, w: 8, h: 9}
   # Needs bambu/extended_annotations.gtf, which only a run that lets Bambu
   # extend the annotation writes; without it the import drops the tile.
   - component_type: advanced_viz
@@ -2036,8 +2234,8 @@ tabs:
       max_transcripts: 25
       colour_by: transcript_class
     section: Isoform structure
-    tag: ns-is-structures
-    index: is-structures
+    tag: ns-loc-structures
+    index: loc-structures
     title: Isoform structures
     description: One lane per transcript, exons on a base-pair axis; the table's pick narrows it to that transcript.
     layout: {x: 0, y: 0, w: 4, h: 6}
@@ -2063,17 +2261,8 @@ tabs:
       view: plotly
       views: [plotly]
     section: Isoform structure
-    tag: ns-is-sashimi
-    index: is-sashimi
+    tag: ns-loc-sashimi
+    index: loc-sashimi
     title: Weighted introns of the transcript
     description: Reads per library the transcript holds in each condition, on each of its introns.
     layout: {x: 4, y: 0, w: 4, h: 6}
-  - component_type: table
-    workflow_tag: nanoseq
-    data_collection_tag: bambu_counts_transcript_long
-    use: bambu/counts_transcript_long
-    section: Isoform tables
-    tag: ns-is-table-counts
-    index: is-table-counts
-    title: Transcript counts per library
-    layout: {x: 0, y: 0, w: 8, h: 6}

@@ -42,6 +42,8 @@ import { useHighlight, usePublishHighlight } from '../highlight/bus';
 import { genomicFromRowByName, rowMatcher, type RowMatcher } from '../highlight/genomicHover';
 import { useGenomeBrowserTarget } from './jbrowse/browserTarget';
 import { centreGenomeBrowser } from './jbrowse/openAction';
+import { usePickedRowKeysJson } from './jbrowse/genomeTracksStore';
+import { pickedRowMatcher } from './jbrowse/pickedColour';
 import { useUiScale } from '../uiScale';
 import { rowsForHeight, useContentDemand } from './autofit';
 import RefetchOverlay from './RefetchOverlay';
@@ -113,6 +115,47 @@ const TableHoverLink: React.FC<{
     if (flipped.length) api.redrawRows({ rowNodes: flipped });
   }, [hovered, selectionColumn, gridApiRef, matcherRef]);
   // The grid is rebuilt (new data version, "show all"): drop the stale nodes.
+  useEffect(
+    () => () => {
+      litRef.current = new Set();
+      matcherRef.current = null;
+    },
+    [matcherRef],
+  );
+  return null;
+};
+
+/**
+ * Marks the rows a genome browser of the dashboard points at (the pick, else
+ * its best call), the way `TableHoverLink` lights a hover: the matcher goes
+ * into `matcherRef` and only the rows whose state flipped are redrawn. The
+ * browser paints the same rows' features in the same colour.
+ */
+const TablePickLink: React.FC<{
+  dashboardId: string;
+  gridApiRef: React.RefObject<GridApi | null>;
+  matcherRef: React.MutableRefObject<RowMatcher | null>;
+}> = ({ dashboardId, gridApiRef, matcherRef }) => {
+  const keysJson = usePickedRowKeysJson(dashboardId);
+  const litRef = useRef<Set<IRowNode>>(new Set());
+  useEffect(() => {
+    const matcher = pickedRowMatcher(JSON.parse(keysJson) as Array<Record<string, unknown>>);
+    matcherRef.current = matcher;
+    const api = gridApiRef.current;
+    if (!api || api.isDestroyed()) return;
+    const before = litRef.current;
+    const now = new Set<IRowNode>();
+    if (matcher) {
+      for (const node of api.getRenderedNodes()) {
+        if (node.data && matcher(node.data as Record<string, unknown>)) now.add(node);
+      }
+    }
+    const flipped: IRowNode[] = [];
+    for (const n of now) if (!before.has(n)) flipped.push(n);
+    for (const n of before) if (!now.has(n)) flipped.push(n);
+    litRef.current = now;
+    if (flipped.length) api.redrawRows({ rowNodes: flipped });
+  }, [keysJson, gridApiRef, matcherRef]);
   useEffect(
     () => () => {
       litRef.current = new Set();
@@ -681,6 +724,8 @@ const TableRenderer: React.FC<TableRendererProps> = ({
 
   // The row test for the hover in force (set by `TableHoverLink`).
   const hoverMatcherRef = useRef<RowMatcher | null>(null);
+  // The rows a genome browser points at (set by `TablePickLink`).
+  const pickMatcherRef = useRef<RowMatcher | null>(null);
   const publishHover = usePublishHighlight(componentIndex);
   const getRowClass = useMemo(() => {
     const legacyOn = !!rowIdColumn && highlightActive && newRowIds.size > 0;
@@ -721,6 +766,7 @@ const TableRenderer: React.FC<TableRendererProps> = ({
       // Read at draw time: the hover lands in a ref so it never rebuilds this
       // callback (which would redraw every row on every hover).
       if (hoverMatcherRef.current?.(data)) classes.push('depictio-row-linked');
+      if (pickMatcherRef.current?.(data)) classes.push('depictio-row-picked');
       return classes.length ? classes : undefined;
     };
   }, [
@@ -1208,7 +1254,13 @@ const TableRenderer: React.FC<TableRendererProps> = ({
               // path separator and tries ``row.sepal.length`` (nested), which
               // fails because the row has flat keys → empty cells.
               suppressFieldDotNotation
-              rowSelection={selectionEnabled ? 'multiple' : undefined}
+              rowSelection={
+                selectionEnabled
+                  ? metadata.row_selection_mode === 'single'
+                    ? 'single'
+                    : 'multiple'
+                  : undefined
+              }
               // Plain click adds/removes from the selection set — without this
               // AG Grid Community requires Ctrl/Shift modifiers, which is not
               // discoverable. The checkbox column rendered on the first column
@@ -1229,6 +1281,11 @@ const TableRenderer: React.FC<TableRendererProps> = ({
               selectionColumn={rowIdColumn}
               gridApiRef={gridApiRef}
               matcherRef={hoverMatcherRef}
+            />
+            <TablePickLink
+              dashboardId={dashboardId}
+              gridApiRef={gridApiRef}
+              matcherRef={pickMatcherRef}
             />
             {annotating && layer && (
               <AnnotateToolbar

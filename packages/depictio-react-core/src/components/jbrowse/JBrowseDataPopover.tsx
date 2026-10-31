@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useState } from 'react';
+import React, { Suspense, lazy, useRef, useState } from 'react';
 import {
   ActionIcon,
   CloseButton,
@@ -14,6 +14,8 @@ import { TILE_ACTION_STYLE } from '../chrome/actionStyles';
 import { useFullscreenPortalTarget } from '../chrome/useFullscreenPortalTarget';
 import DataGridModal from '../data/DataGridModal';
 import type { RegionGridProps } from './RegionPicker';
+import TableActions, { useIsFullscreen } from './TableActions';
+import { columnsCsv, downloadText, exportFileName } from './tableExport';
 
 // Both grids pull AG Grid in: loaded on the first open, as the other tiles'.
 const DataGridBody = lazy(() => import('../data/DataGridBody'));
@@ -49,6 +51,12 @@ const JBrowseDataPopover: React.FC<Props> = ({
   const [tab, setTab] = useState<Tab>('regions');
   const portalTarget = useFullscreenPortalTarget();
   const shown: Tab = regions ? tab : 'tracks';
+  // The tracks table's own actions (the regions tab carries its own, next to
+  // its search: its rows are paged from the server). Reset remounts the grid,
+  // which drops its filters and sorting.
+  const bodyRef = useRef<HTMLDivElement | null>(null);
+  const fullscreen = useIsFullscreen(bodyRef);
+  const [gridKey, setGridKey] = useState(0);
 
   const close = () => {
     setOpened(false);
@@ -71,6 +79,14 @@ const JBrowseDataPopover: React.FC<Props> = ({
         <span />
       )}
       <Group gap={6} wrap="nowrap">
+        {shown === 'tracks' ? (
+          <TableActions
+            fullscreenRef={bodyRef}
+            onReset={() => setGridKey((k) => k + 1)}
+            onDownload={() => downloadText(exportFileName('genome_browser_tracks'), columnsCsv(trackRows, trackColumns))}
+            downloadDisabled={Object.keys(trackRows).length === 0}
+          />
+        ) : null}
         <Tooltip label={expanded ? 'Shrink the table' : 'Enlarge the table'} withinPortal={false}>
           <ActionIcon
             size="sm"
@@ -88,7 +104,12 @@ const JBrowseDataPopover: React.FC<Props> = ({
   );
 
   const body = (
-    <Stack gap="xs">
+    <Stack
+      gap="xs"
+      ref={bodyRef}
+      // Native fullscreen shows this element alone: it needs a page of its own.
+      style={fullscreen ? { height: '100%', padding: 12, background: 'var(--mantine-color-body)' } : undefined}
+    >
       {header}
       <Suspense fallback={null}>
         {shown === 'regions' && regions ? (
@@ -101,7 +122,14 @@ const JBrowseDataPopover: React.FC<Props> = ({
             }}
           />
         ) : (
-          <DataGridBody dataRows={trackRows} dataColumns={trackColumns} expanded={expanded} />
+          <DataGridBody
+            key={gridKey}
+            dataRows={trackRows}
+            dataColumns={trackColumns}
+            expanded={expanded}
+            // Fullscreen: what the header row and the padding leave.
+            height={fullscreen ? 'calc(100vh - 96px)' : undefined}
+          />
         )}
       </Suspense>
     </Stack>

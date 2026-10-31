@@ -8,6 +8,7 @@
 # MultipleSequenceAlignments/) are never read.
 id: orthofinder
 name: OrthoFinder
+version: "1.0.0"
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/orthofinder
 homepage: https://github.com/davidemms/OrthoFinder
 biotools_url: https://bio.tools/orthofinder

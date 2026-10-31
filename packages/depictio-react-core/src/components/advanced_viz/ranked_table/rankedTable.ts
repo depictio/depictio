@@ -19,6 +19,12 @@ export interface RankedTableColumnSpec {
   decimals?: number | null;
   min?: number | null;
   max?: number | null;
+  /** Column whose largest value (over the rows read) the bar is full at. */
+  max_from?: string | null;
+  /** Column whose smallest value (over the rows read) the bar starts at. */
+  min_from?: string | null;
+  /** With `max_from`, write the bound beside the value (default true). */
+  show_bound?: boolean;
 }
 
 /** The columns the ranking itself reads (the bound roles). */
@@ -107,12 +113,16 @@ function shownRank(raw: unknown, dense: number): number | string {
 export function rankRows(
   rows: ColumnarRows,
   bindings: Pick<RankedTableBindings, 'score' | 'rank'>,
-  options: { descending: boolean; topN: number },
+  options: { descending: boolean; topN: number; include?: ReadonlySet<number> | null },
 ): RankedList {
   const scores = rows[bindings.score] ?? [];
   const n = Math.max(...Object.values(rows).map((c) => c.length), 0);
   const scored: { source: number; score: number }[] = [];
+  // `include` (see `rowsKept`) takes rows out before anything is counted, so
+  // the dense ranks and `unscored` describe the rows that are left.
+  const eligible = options.include ? options.include.size : n;
   for (let i = 0; i < n; i += 1) {
+    if (options.include && !options.include.has(i)) continue;
     const score = toNumber(scores[i]);
     if (score !== null) scored.push({ source: i, score });
   }
@@ -126,7 +136,117 @@ export function rankRows(
     const rank = rankColumn ? shownRank(rankColumn[source], dense[i]) : dense[i];
     return { source, score, rank, tier: rankTier(rank) };
   });
-  return { rows: kept, ranked: scored.length, unscored: n - scored.length };
+  return { rows: kept, ranked: scored.length, unscored: eligible - scored.length };
+}
+
+// ---------------------------------------------------------------------------
+// In-tile data controls
+// ---------------------------------------------------------------------------
+
+/** What the reader's Data controls leave in: a floor on the score and the
+ *  values kept of one categorical column. */
+export interface RowFilter {
+  scoreColumn: string;
+  minScore?: number | null;
+  filterColumn?: string | null;
+  filterValues?: readonly string[];
+}
+
+/** Whether `filter` keeps anything out. */
+export function isFiltering(filter: RowFilter): boolean {
+  return (
+    toNumber(filter.minScore) !== null ||
+    Boolean(filter.filterColumn && filter.filterValues && filter.filterValues.length > 0)
+  );
+}
+
+/**
+ * The positions of the rows `filter` keeps, or null when it keeps every row (no
+ * set to look up). A row without a score never passes a floor on the score; a
+ * row whose category is blank never passes the category filter.
+ */
+export function rowsKept(rows: ColumnarRows, filter: RowFilter): Set<number> | null {
+  if (!isFiltering(filter)) return null;
+  const n = Math.max(...Object.values(rows).map((c) => c.length), 0);
+  const floor = toNumber(filter.minScore);
+  const scores = rows[filter.scoreColumn] ?? [];
+  const wanted =
+    filter.filterColumn && filter.filterValues && filter.filterValues.length > 0
+      ? new Set(filter.filterValues)
+      : null;
+  const categories = filter.filterColumn ? (rows[filter.filterColumn] ?? []) : [];
+  const out = new Set<number>();
+  for (let i = 0; i < n; i += 1) {
+    if (floor !== null) {
+      const score = toNumber(scores[i]);
+      if (score === null || score < floor) continue;
+    }
+    if (wanted) {
+      const raw = categories[i];
+      if (isBlank(raw) || !wanted.has(String(raw))) continue;
+    }
+    out.add(i);
+  }
+  return out;
+}
+
+/** Whether a column holds numbers: some value, and every filled one reads as a
+ *  number (a column of "absent" and 0.2 is text, not a sort key). */
+export function isNumericColumn(column: readonly unknown[] | undefined): boolean {
+  if (!column) return false;
+  let seen = 0;
+  for (const raw of column) {
+    if (isBlank(raw)) continue;
+    if (toNumber(raw) === null) return false;
+    seen += 1;
+  }
+  return seen > 0;
+}
+
+/**
+ * The columns a table can be ordered by: the score first, then every bar or
+ * number column, then `extra` (columns the caller found numeric, such as the
+ * popover's), once each, in the order the config lists them.
+ */
+export function sortableColumns(
+  scoreColumn: string,
+  specs: readonly Pick<RankedTableColumnSpec, 'column' | 'display'>[],
+  extra: readonly string[] = [],
+): string[] {
+  const out = [scoreColumn];
+  for (const spec of specs) {
+    if ((spec.display === 'bar' || spec.display === 'number') && !out.includes(spec.column)) {
+      out.push(spec.column);
+    }
+  }
+  for (const column of extra) if (!out.includes(column)) out.push(column);
+  return out;
+}
+
+/** The columns whose values can be kept or dropped: the ones drawn as text,
+ *  monospace or badges (a bar or a number has no discrete values). */
+export function categoricalColumns(
+  specs: readonly Pick<RankedTableColumnSpec, 'column' | 'display'>[],
+): string[] {
+  const out: string[] = [];
+  for (const spec of specs) {
+    const display = spec.display ?? 'text';
+    if ((display === 'text' || display === 'mono' || display === 'badge') && !out.includes(spec.column)) {
+      out.push(spec.column);
+    }
+  }
+  return out;
+}
+
+/** Distinct non-blank values of a column as text, sorted, for a picker. */
+export function distinctValues(column: readonly unknown[] | undefined, max = 200): string[] {
+  if (!column) return [];
+  const seen = new Set<string>();
+  for (const raw of column) {
+    if (!isBlank(raw)) seen.add(String(raw));
+    if (seen.size >= max) break;
+  }
+  return [...seen].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 }
 
 /** The `top_n` a stored config or a control can hand over, kept in 1..max. */
@@ -147,23 +267,57 @@ export interface BarRange {
 }
 
 /**
- * The range a bar column is drawn on. A bound the config states wins. A bar
- * starts at 0 (a score of 12 is half of a score of 24) unless a value shown is
- * negative, when it starts at the smallest; it is full at the largest shown.
- * A degenerate range (one value, or all equal) is widened so every bar is
- * full rather than undefined.
+ * The range a bar column is drawn on. A bound the config states wins, whether a
+ * literal (`min` / `max`) or read from a column (`bounds`, see `boundFromColumn`).
+ * A bar starts at 0 (a score of 12 is half of a score of 24) unless a value
+ * shown is negative, when it starts at the smallest; it is full at the largest
+ * shown. A degenerate range (one value, or all equal) is widened so every bar
+ * is full rather than undefined.
  */
 export function barRange(
   values: readonly (number | null)[],
   spec: Pick<RankedTableColumnSpec, 'min' | 'max'> = {},
+  bounds: { lo?: number | null; hi?: number | null } = {},
 ): BarRange {
   const finite = values.filter((v): v is number => v !== null && Number.isFinite(v));
   const dataMin = finite.length ? Math.min(...finite) : 0;
   const dataMax = finite.length ? Math.max(...finite) : 0;
-  const lo = spec.min ?? Math.min(0, dataMin);
-  let hi = spec.max ?? dataMax;
+  const lo = spec.min ?? bounds.lo ?? Math.min(0, dataMin);
+  let hi = spec.max ?? bounds.hi ?? dataMax;
   if (hi <= lo) hi = lo + 1;
   return { lo, hi };
+}
+
+/**
+ * A bar bound read from a column: its largest (`end: 'max'`) or smallest value
+ * over every row of the frame, not just the rows shown, so the scale does not
+ * move with `top_n`. Null when the column is absent or holds no number, which
+ * leaves the bar on its data range.
+ */
+export function boundFromColumn(
+  column: unknown[] | undefined,
+  end: 'max' | 'min',
+): number | null {
+  if (!column) return null;
+  let out: number | null = null;
+  for (const raw of column) {
+    const n = toNumber(raw);
+    if (n === null) continue;
+    if (out === null || (end === 'max' ? n > out : n < out)) out = n;
+  }
+  return out;
+}
+
+/** The text of a bar's value: `14`, or `14 / 18` when the bar is scaled to a
+ *  column and `show_bound` has not been turned off. `bound` is the range's top
+ *  as the column gave it; a bar on its data range reads as the value alone. */
+export function barLabel(
+  text: string,
+  spec: Pick<RankedTableColumnSpec, 'max_from' | 'show_bound' | 'decimals'>,
+  bound: number | null,
+): string {
+  if (!spec.max_from || spec.show_bound === false || bound === null || text === EMPTY_CELL) return text;
+  return `${text} / ${formatCell(bound, spec.decimals)}`;
 }
 
 /** How much of the track a value fills, 0 to 1; a missing value fills none. */
@@ -171,6 +325,38 @@ export function barFraction(value: number | null, range: BarRange): number {
   if (value === null || !Number.isFinite(value)) return 0;
   const f = (value - range.lo) / (range.hi - range.lo);
   return Math.min(1, Math.max(0, f));
+}
+
+// ---------------------------------------------------------------------------
+// Default selection
+// ---------------------------------------------------------------------------
+
+/**
+ * The row a table selects on its own when the reader has picked nothing
+ * (`default_select_by`): the best of `rows` by `values[row.source]`, highest
+ * unless `order` is `asc`. Only rows with a number and a selection key
+ * (`keyOf` null drops the row) can win, so the pick is always a row the click
+ * handler would also accept. Ties go to the row that comes first in `rows`,
+ * i.e. the one ranked higher. Null when no row qualifies.
+ */
+export function pickDefaultRow(
+  rows: readonly RankedRow[],
+  values: readonly unknown[] | undefined,
+  order: 'desc' | 'asc',
+  keyOf: (row: RankedRow) => string | null,
+): RankedRow | null {
+  if (!values) return null;
+  let best: RankedRow | null = null;
+  let bestValue = 0;
+  for (const row of rows) {
+    const n = toNumber(values[row.source]);
+    if (n === null || keyOf(row) === null) continue;
+    if (best === null || (order === 'asc' ? n < bestValue : n > bestValue)) {
+      best = row;
+      bestValue = n;
+    }
+  }
+  return best;
 }
 
 // ---------------------------------------------------------------------------
@@ -233,6 +419,8 @@ export function columnsToFetch(
     bindings.subtitle,
     bindings.rank,
     ...columns.map((c) => c.column),
+    ...columns.map((c) => c.max_from),
+    ...columns.map((c) => c.min_from),
     ...popover,
     ...grid,
     selection,
@@ -300,7 +488,10 @@ export function rankedEcho(args: {
   ranked: number;
   scoreLabel: string;
   descending: boolean;
+  /** The Data controls leave some rows out. */
+  filtered?: boolean;
 }): string {
   const of = args.ranked > args.shown ? ` of ${args.ranked.toLocaleString('en-US')}` : '';
-  return `top ${args.shown.toLocaleString('en-US')}${of} by ${args.scoreLabel} (${args.descending ? 'highest' : 'lowest'} first)`;
+  const kept = args.filtered ? ', filtered' : '';
+  return `top ${args.shown.toLocaleString('en-US')}${of} by ${args.scoreLabel} (${args.descending ? 'highest' : 'lowest'} first${kept})`;
 }

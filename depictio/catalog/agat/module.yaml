@@ -8,6 +8,7 @@
 # genes, lengths).
 id: agat
 name: AGAT
+version: "1.0.0"
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/agat/spstatistics
 homepage: https://github.com/NBISweden/AGAT
 biotools_url: https://bio.tools/agat

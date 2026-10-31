@@ -388,7 +388,7 @@ main_dashboard:
     caption: The genotype each individual has at the 20 best-scoring variants, coloured by zygosity; grey is homozygous reference.
     tag: rd-ov-hl-genotypes
     index: ov-hl-genotypes
-    layout: {x: 4, y: 8, w: 4, h: 5}
+    layout: {x: 4, y: 7, w: 4, h: 5}
   - component_type: highlight
     section: Findings
     source_tab: Family
@@ -396,7 +396,7 @@ main_dashboard:
     caption: The family as the sample sheet states it; squares are males, circles females, filled marks affected.
     tag: rd-ov-hl-family
     index: ov-hl-family
-    layout: {x: 0, y: 8, w: 4, h: 5}
+    layout: {x: 0, y: 7, w: 4, h: 5}
   - component_type: advanced_viz
     workflow_tag: raredisease
     data_collection_tag: ranked_variants
@@ -410,7 +410,7 @@ main_dashboard:
       columns:
       - {column: model_class, label: Model, display: badge}
       - {column: impact, label: Impact, display: badge}
-      - {column: rank_score, label: Rank score, display: bar, decimals: 0}
+      - {column: rank_score, label: Rank score, display: bar, decimals: 0, max_from: rank_score_max, min_from: rank_score_min}
       labels:
         consequence: Consequence
         hgvs_c: Coding change
@@ -448,8 +448,11 @@ main_dashboard:
     tag: rd-ov-top-candidates
     index: ov-top-candidates
     title: Top candidates
-    description: The eight best-ranked variants. Hover a row for its annotation; the Ranked tab holds the full list, why each one ranks and the record of a picked variant.
-    layout: {x: 0, y: 2, w: 8, h: 6}
+    description: The eight best-ranked variants. The rank score bar runs from the lowest to the highest score
+      the family's pedigree allows (GENMOD scores are signed, a negative one is evidence against the variant),
+      and the number reads score / highest possible. Hover a row for its annotation; the Ranked tab holds the
+      full list, why each one ranks and the record of a picked variant.
+    layout: {x: 0, y: 2, w: 8, h: 5}
   - component_type: text
     body: |
       ### Data & QC
@@ -1347,17 +1350,21 @@ tabs:
     visu_type: bar
     mode: code
     code_content: |-
-      # Share of each sample's PASS SNVs per folded class, transitions first.
-      colors = depictio_category_colors.get('sample') or {}
+      # Share of each sample's PASS SNVs per folded class, transitions first; one bar per sample, coloured by role.
+      grp = depictio_group_by[0] if depictio_group_by else 'role'
+      colors = depictio_group_kwargs.get('color_discrete_map') or depictio_category_colors.get('role') or {}
       order = ['C to T', 'T to C', 'C to A', 'C to G', 'T to A', 'T to G']
-      d = df.with_columns((pl.col('fraction') * 100).alias('share')).sort(['sample', 'substitution_class'])
-      fig = px.bar(d.to_pandas(), x='substitution_class', y='share', color='sample', barmode='group', color_discrete_map=colors, category_orders={'substitution_class': order}, labels={'substitution_class': '', 'share': 'Share of the PASS SNVs (%)', 'sample': 'Sample'})
+      d = df.with_columns((pl.col('fraction') * 100).alias('share')).sort([grp, 'sample', 'substitution_class'])
+      shapes = 'sample' if d.group_by(grp).agg(pl.col('sample').n_unique().alias('n')).get_column('n').max() > 1 else None
+      fig = px.bar(d.to_pandas(), x='substitution_class', y='share', color=grp, pattern_shape=shapes, barmode='group', color_discrete_map=colors, category_orders={'substitution_class': order}, hover_data=['sample'], labels={'substitution_class': '', 'share': 'Share of the PASS SNVs (%)', 'sample': 'Sample', 'role': 'Role'})
       fig.update_layout(margin=dict(t=10), legend_title_text='')
     section: Substitution spectrum
     tag: rd-cs-spectrum
     index: cs-spectrum
     title: Substitution spectrum per sample
-    description: The six pyrimidine-folded classes as shares of each sample's PASS SNVs.
+    description: The six pyrimidine-folded classes as shares of each sample's PASS SNVs, coloured by role. The
+      first two classes are transitions; a sample whose bars depart from its relatives' points to a calling or
+      contamination problem.
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: figure
     workflow_tag: raredisease
@@ -1814,7 +1821,7 @@ tabs:
       columns:
       - {column: model_class, label: Model, display: badge}
       - {column: impact, label: Impact, display: badge}
-      - {column: rank_score, label: Rank score, display: bar, decimals: 0}
+      - {column: rank_score, label: Rank score, display: bar, decimals: 0, max_from: rank_score_max, min_from: rank_score_min}
       labels:
         consequence: Consequence
         hgvs_c: Coding change
@@ -1852,7 +1859,10 @@ tabs:
     tag: rd-rk-top-candidates
     index: rk-top-candidates
     title: Top candidates
-    description: The 50 best-ranked variants, best first. Hover a row for its annotation and frequencies; a click pins it, picks the variant for the record beside it and opens the family with its carriers.
+    description: The 50 best-ranked variants, best first. The rank score bar runs from the lowest to the highest
+      score the family's pedigree allows (GENMOD scores are signed, a negative one is evidence against the
+      variant), and the number reads score / highest possible. Hover a row for its annotation and frequencies;
+      a click pins it, picks the variant for the record beside it and opens the family with its carriers.
     layout: {x: 0, y: 0, w: 5, h: 7}
   - component_type: table
     workflow_tag: raredisease
@@ -2272,7 +2282,8 @@ tabs:
     title: Repeat counts against the thresholds
     description: One row per locus with its disease, one marker per sample, placed by its repeat count as a
       share of the locus's pathogenic threshold. Green is the normal range, amber intermediate and red
-      pathogenic (1 and above); the marker colour is Stranger's verdict. Loci with no call are left out.
+      pathogenic; the dotted line at 1 is the pathogenic threshold, and both limits come from the locus
+      catalogue Stranger reads. The marker colour is Stranger's verdict. Loci with no call are left out.
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: figure
     workflow_tag: raredisease
@@ -2363,13 +2374,14 @@ tabs:
     order: 1
     body: >
       The navigator draws every ranked variant at its position, higher for a higher rank score, in the colour of its inheritance model. A brush,
-      or a locus typed in its header, moves the browser and recounts the cards. The browser opens on the
-      span of the three best-ranked variants when they lie within a megabase, else on the best one, with the ranked VCF,
-      the proband's alignment and coverage, the parents' alignments and the ClinVar and common dbSNP sites; the other
-      tracks of the family are in its track menu.
+      or a locus typed in its header, moves the browser and recounts the cards; the navigator follows the browser's
+      window. The browser opens on the span of the 20 best-ranked variants when they lie close together (else on the
+      top-ranked one), with the ranked VCF (each variant named by its gene and rank score), the proband's alignment and
+      coverage, the parents' alignments, the gene annotation and the ClinVar and common dbSNP sites; the other tracks of
+      the family are in its track menu.
     tag: rd-loc-intro
     index: loc-intro
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: interactive
     workflow_tag: raredisease
     data_collection_tag: ranked_variants
@@ -2400,6 +2412,22 @@ tabs:
     index: loc-type-filter
     title: Variant type
     layout: {x: 0, y: 2, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: raredisease
+    data_collection_tag: ranked_variants
+    interactive_component_type: RangeSlider
+    column_name: rank_score
+    column_type: float64
+    show_histogram: true
+    display:
+      icon_name: mdi:podium-gold
+      custom_color: grape
+    section: Locus filters
+    group: Locus
+    tag: rd-loc-score-range
+    index: loc-score-range
+    title: Rank score
+    layout: {x: 0, y: 5, w: 1, h: 3}
   - component_type: card
     workflow_tag: raredisease
     data_collection_tag: ranked_variants
@@ -2490,20 +2518,35 @@ tabs:
       category_col: model_class
       mark: point
       point_size: 9
+      # The three best variants as a gold, silver and bronze star, the medals of
+      # the browser's stars.
+      top_stars: 3
+      # What a hover says beyond the position, score, gene and model.
+      hover_cols: [ref, alt, consequence, hgvs_p, gnomad_af, cadd, carriers]
       assembly: '{GENOME}'
       score_title: Rank score
-      # No default region: a whole contig as the opening filter sends the
-      # browser below to the whole contig, where every track asks for a force
-      # load. The navigator opens on the genome, the browser on the best variants.
+      # No default region: a fixed region as the opening filter sends the browser
+      # below to it, where every track asks for a force load. The browser opens on
+      # the span of the best variants and the navigator frames that window.
       region_filter_enabled: true
-      # Opens on the chromosome the browser shows (the best variants), not the genome.
+      # Opens zoomed on the window the browser shows (the best variants), not on the
+      # whole chromosome, then follows the browser: its window stays in the middle.
       open_on_view_window: true
+      default_view: region
+      follow_view_window: true
+      # 7 Mb of context around the browser's window, so the neighbouring ranked
+      # variants stay in view while the browser is zoomed on a few kilobases.
+      follow_context_bp: 7000000
     section: Variants on one axis
     tag: rd-loc-navigator
     index: loc-navigator
     title: Ranked variants along the genome
-    description: Each point is a ranked variant, coloured by the inheritance model it fits like the ranked
-      table and the variant track below. A locus or gene in the header, or a brush, moves the browser.
+    description: Each point is a ranked variant, higher for a higher rank score, so the best candidates sit at
+      the top. The colour is the inheritance model it fits, as in the ranked table and the variant track below
+      (purple compound heterozygous, orange recessive, blue dominant, green X-linked, grey no model fits). The
+      best candidates of a family often share one model, so one colour can fill the top; the height carries the
+      ranking. The axis keeps about 7 Mb around the browser's window, the band, so the neighbouring candidates
+      stay in view. A locus or gene in the header, or a brush, moves the browser.
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: jbrowse
     workflow_tag: raredisease
@@ -2511,6 +2554,7 @@ tabs:
     section: Variants on one axis
     initial_tracks: 5
     max_tracks: 12
+    show_annotation: true
     follow_window: true
     fetch_size_limit_mb: 20
     show_overview: false
@@ -2524,12 +2568,17 @@ tabs:
       chrom_column: chrom
       start_column: pos
       end_column: end
-      padding: 150
+      padding: 25000
       max_rows: 20
       sort_by: rank_score
-      span_top: 3
-      max_span: 1000000
       descending: true
+      span_top: 20
+      max_span: 1000000
+      # A "Top 20" track under the genes names each call by its rank (#1 GENE);
+      # the best call, or the row picked in the table, wears the selection colour.
+      rank_track: 20
+      # Each call in the colour the navigator gives it (its inheritance model).
+      rank_color_by: model_class
       label_column: call_label
       columns: [gene, consequence, model_class]
     - data_collection_tag: repeat_expansions
@@ -2559,17 +2608,22 @@ tabs:
       sample_column: sample
       columns: [gt, filter_status]
     ucsc_tracks: [clinvarMain, dbSnp155Common]
+    # A variant no model fits (the "No model fits" grey of the navigator) wears the fallback.
     variant_color_by:
       column: genetic_model
       info_field: GeneticModels
+      fallback_color: '#adb5bd'
+      fallback_label: No model fits
     # The gene (VEP CSQ SYMBOL), not the 21_10950631_T_A key, names each variant.
+    # The rank score (INFO RankScore, `family:score`) follows the gene in brackets.
     variant_label_by:
       info_field: CSQ
       part: 3
+      score_field: RankScore
     tag: rd-loc-browser
     index: loc-browser
     title: Genome browser
-    description: The ranked VCFs, the alignments, ClinVar and common dbSNP sites at the region of the navigator.
+    description: The ranked VCFs, the alignments, ClinVar and common dbSNP sites at the region of the navigator. The Top 20 track names each call by its rank; the best call, or the row picked in the table, is drawn in the selection colour on every track and in the table.
     layout: {x: 0, y: 4, w: 8, h: 7}
   - component_type: table
     workflow_tag: raredisease
@@ -2578,6 +2632,8 @@ tabs:
       n_carriers]
     row_selection_enabled: true
     row_selection_column: variant_key
+    # One pick at a time: the browser frames one feature.
+    row_selection_mode: single
     section: Ranked variants in the region
     tag: rd-loc-table-ranked
     index: loc-table-ranked

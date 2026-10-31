@@ -3,6 +3,7 @@
 # nf-core/oncoanalyser publishes <group_id>/lilac/<tumor_id>.lilac.*.
 id: lilac
 name: LILAC
+version: "1.0.0"
 description: >-
   HLA class I and II typing from the germline reads, and the state of each called allele in the tumor.
 homepage: https://github.com/hartwigmedical/hmftools/tree/master/lilac

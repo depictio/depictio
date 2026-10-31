@@ -29,6 +29,7 @@ from depictio.api.v1.services.jbrowse.config_builder import (
     deep_merge,
     resolve_preset,
     variant_color_jexl,
+    variant_color_legend,
     variant_label_jexl,
 )
 from depictio.api.v1.services.jbrowse.tracks import (
@@ -339,6 +340,46 @@ class TestVariantColor:
         )
         (display,) = conf["displays"]
         assert display["renderer"] == {"type": "CanvasFeatureRenderer", "labels": {"name": label}}
+
+    def test_a_label_can_carry_a_score(self):
+        label = variant_label_jexl({"info_field": "CSQ", "part": 3, "score_field": "RankScore"})
+        score = "split(join('|', get(feature,'INFO').RankScore), ':')[1]"
+        name = (
+            "split(join('|', get(feature,'INFO').CSQ), '|')[3]"
+            " || get(feature,'name') || get(feature,'id')"
+        )
+        assert label == f"jexl:{score} ? ({name}) + ' (' + {score} + ')' : {name}"
+        with pytest.raises(ValueError):
+            variant_label_jexl({"info_field": "CSQ", "score_field": "A') || ('"})
+
+    def test_the_legend_lists_the_colours_the_expression_tests(self):
+        legend = variant_color_legend(BY_EFFECT, EFFECT_COLORS)
+        assert legend == {
+            "title": "EFFECT",
+            "entries": [
+                {"label": "missense_variant", "color": "#e8590c"},
+                {"label": "synonymous_variant", "color": "#2f9e44"},
+                {"label": "stop_gained", "color": "#c92a2a"},
+            ],
+            "fallback": {"label": "other", "color": "goldenrod"},
+        }
+
+    def test_the_legend_fallback_is_the_wildcard_colour(self):
+        colors = {"EFFECT": {"*": "#adb5bd", "a": "#111111"}}
+        assert variant_color_legend(BY_EFFECT, colors)["fallback"]["color"] == "#adb5bd"
+
+    def test_a_declared_fallback_colours_and_names_the_unmatched(self):
+        spec = {"column": "EFFECT", "fallback_color": "#adb5bd", "fallback_label": "No model fits"}
+        assert variant_color_jexl(spec, EFFECT_COLORS).endswith(": '#adb5bd'")
+        assert variant_color_legend(spec, EFFECT_COLORS)["fallback"] == {
+            "label": "No model fits",
+            "color": "#adb5bd",
+        }
+
+    def test_no_colour_means_no_legend(self):
+        assert variant_color_legend(BY_EFFECT, {"EFFECT": {"*": "auto"}}) is None
+        assert variant_color_legend(BY_EFFECT, None) is None
+        assert variant_color_legend(None, EFFECT_COLORS) is None
 
     def test_a_label_field_is_checked(self):
         assert variant_label_jexl(None) is None

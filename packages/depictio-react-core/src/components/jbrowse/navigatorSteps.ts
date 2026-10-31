@@ -54,12 +54,16 @@ export function formatCount(n: number): string {
 /**
  * What one region of a source is called, from the source's name: "Peaks"
  * gives "peak", "Consensus" stays "consensus" (a name ending in -us or -ss is
- * not a plural); no name, or several sources at once, gives "region".
+ * not a plural); no name, a collection tag, or several sources at once,
+ * gives "region".
  */
 export function regionNoun(sourceNames: readonly string[]): string {
   if (sourceNames.length !== 1) return 'region';
   const name = sourceNames[0].trim().toLowerCase();
   if (!name) return 'region';
+  // A source without a name goes by its collection tag (`vcf_variants`),
+  // which is no word to count with.
+  if (name.includes('_')) return 'region';
   return /[^us]s$/.test(name) ? name.slice(0, -1) : name;
 }
 

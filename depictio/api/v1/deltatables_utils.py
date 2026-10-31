@@ -1433,6 +1433,15 @@ def _estimate_frame_size_bytes(delta_scan: pl.LazyFrame) -> int:
 # (``None``) is never cached, since nothing then says the table has not changed.
 _BASE_SCAN_CACHE: dict[tuple[str, str | None, int | None, str], pl.LazyFrame] = {}
 _BASE_SCAN_CACHE_MAX = 64
+# A cached scan is shared across request threads, and its first schema
+# resolution must not run on two of them at once: polars resolves a Delta schema
+# by calling back into Python on its own pool, and a second thread entering
+# `collect_schema()` meanwhile waits inside polars holding the GIL, so the
+# callback never runs and every request that touches the table hangs (seen on a
+# tab whose cards, filters and charts read the same collections at once). The
+# schema is resolved here, under the lock, before the scan is shared; once
+# resolved, `collect_schema()` answers without calling back.
+_BASE_SCAN_LOCK = threading.Lock()
 
 
 def _base_delta_scan(
@@ -1446,8 +1455,14 @@ def _base_delta_scan(
         return _create_delta_scan(file_id, dc_type, delta_version)
     key = (file_id, dc_type, delta_version, str(version_salt))
     scan = _BASE_SCAN_CACHE.get(key)
-    if scan is None:
+    if scan is not None:
+        return scan
+    with _BASE_SCAN_LOCK:
+        scan = _BASE_SCAN_CACHE.get(key)
+        if scan is not None:
+            return scan
         scan = _create_delta_scan(file_id, dc_type, delta_version)
+        scan.collect_schema()
         # Bounded like the schema cache: a scan is cheap to rebuild, so clearing
         # on overflow avoids tracking per-entry recency.
         if len(_BASE_SCAN_CACHE) >= _BASE_SCAN_CACHE_MAX:

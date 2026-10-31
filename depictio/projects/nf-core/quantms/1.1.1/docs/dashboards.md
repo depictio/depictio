@@ -108,7 +108,7 @@ retention-time window for the two gradient profiles.
 modification), protein groups per run and the identification yield per thousand MS2 spectra.
 Then one per-run quality view, the weakest run on top: the deviation from the median of the
 runs, in percent, of the precursors, yield per thousand MS2 spectra, modified share and
-missed-cleavage share, each bar coloured by condition and a green band within 10% (the runs are
+missed-cleavage share, each bar coloured by condition and a grey band within 10% of the median (a rule of thumb of this dashboard, named in the legend and the description) (the runs are
 labelled by condition and replicate, from the hub's `run_label`); the gap between observed
 and library-predicted retention time along the gradient, coloured by condition (a density view
 above a point threshold); and the peptide length
@@ -119,10 +119,10 @@ Filters: modification, charge and peptide length.
 **Proteins.** Strip: completeness (the median share of the runs that quantified a group, a
 threshold at 100% with a warning from 80%; the strip counts the groups quantified in every
 run), peptide support (a ring), peptides per group (its distribution) and the abundance of the
-groups (a box). Then the variation between runs against abundance for every group. Collapsed:
-the protein groups by the number of runs that quantified them (log scale, split by peptide
-support) with the abundance of the groups missed in some runs, which show one bar on a
-complete experiment, and the protein-group table with its record card, which opens on the
+groups (a box). Then the variation between runs against abundance for every group: one series, a dashed line at a coefficient of variation of 20 % (the threshold of the Variation card) that dims the points under it, the eight most variable groups above it labelled by gene, and a density past 2000 groups. Collapsed:
+the protein groups missed in some runs, by how many runs quantified them (stacked by peptide
+support, with the groups seen in every run counted in a note) beside the abundance of those
+groups, which show one bar on a complete experiment, and the protein-group table with its record card, which opens on the
 selected row and links the UniProt entry. Filters: detection,
 peptide support and a variation range.
 
@@ -130,15 +130,22 @@ peptide support and a variation range.
 condition, the variance the first component explains and the protein groups paired between
 runs; the first component's card says it is high when the first axis is the condition. Then
 the run projection (a lasso filters the linked panels), the difference between two runs
-against their mean for every replicate pair (a zero line and a green band within a twofold
-change, coloured by condition), and the variation within each condition as a violin (with its
+against their mean for every replicate pair (a dotted zero line and a grey band within a twofold
+change, both labelled in the plot, coloured by condition), and the variation within each condition as a violin (with its
 box), where under 20 is tight and over 30 noisy. Collapsed: the clustered run correlation
 (replicates correlate above 0.95, so its colours differ little) and the per-condition table. Filters: replicate pair and a variation range.
 
 **Differential abundance.** Strip: the median effect size, the smallest adjusted p-value (with
 the distribution of all of them), the median standard error and the proteins called
-significant, split by direction. Then the volcano with its MA and QQ views, the p-value
-histogram and the fold-change histogram. Collapsed: the MSstats table with its record card.
+significant, split by direction. Then the proteins called Up and Down in each contrast (grouped
+bars with the number tested in brackets), the volcano with its MA and QQ views (a dashed line at an
+adjusted p of 0.05 and two at log2 fold changes of -1 and 1, the usual significance level and the
+usual minimum effect for label-free proteomics; both are the dashboard's cut-offs, MSstats reports
+the adjusted p-value only), the p-value histogram (twenty bins; with one contrast the first one
+is coloured as the proteins below 0.05, with several the bars are stacked and coloured by
+contrast; a dashed line at the level a bin would hold if no protein changed, and a note with the
+count below 0.05, the count expected by chance and the estimated share of unchanged proteins)
+and the fold-change histogram. Collapsed: the MSstats table with its record card.
 Filters: contrast, direction, effect size and missing values.
 
 ## Routes and pruning
@@ -169,6 +176,22 @@ other tile that reads the same collection or a collection linked from it:
 - The protein tables and the variation scatter and the volcano select on `protein_group`;
   a protein picked in the MSstats table also reaches the protein summary.
 - A record card sits beside the table that drives it and waits for a picked row or point.
+
+## What the run publishes for differential abundance
+
+Audit of the result folders of the DIA mode: `msstats/*_comparisons.csv` is the only test
+output, one row per protein and contrast (log2 fold change, standard error, t value, degrees of
+freedom, p-value, adjusted p-value, missing and imputed share, `issue`), and the template
+reads all of it (`quantms_comparisons`). `diannconvert/*_msstats_in.csv` is the MSstats input
+(precursor and fragment intensities per run, the long table behind the quantities) and
+`*_triqler_in.tsv` the Triqler input; neither holds a test, and the run does not publish
+Triqler results, so neither feeds the tab. The test run publishes a single contrast (two
+conditions, four runs), so the per-contrast views read one contrast there: the calls-per-contrast
+bars show one Up and one Down bar, and the p-value histogram keeps its single colouring. A run
+with several contrasts gets one pair of bars per contrast and a histogram stacked by contrast
+(the stacked path was exercised on a synthetic table, not on a live run). The volcano draws the
+points of every contrast in view together, so a multi-contrast run is read one contrast at a time
+through the Contrast filter; a facet per contrast needs a volcano option that does not exist yet.
 
 ## Methods and assumptions
 

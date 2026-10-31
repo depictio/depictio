@@ -4,6 +4,7 @@
 # fusion tables), named <tumor_id>.neo.*.
 id: neo
 name: Neo
+version: "1.0.0"
 description: >-
   Neoepitope prediction from point mutations, indels and fusions, scored with the tumor's HLA alleles and RNA expression.
 homepage: https://github.com/hartwigmedical/hmftools/tree/master/neo

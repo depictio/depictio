@@ -222,6 +222,18 @@ describe('genomicFromRowByName', () => {
       end: 50,
     });
   });
+  it('falls back to feature-prefixed bounds, pairing the end by prefix', () => {
+    expect(
+      genomicFromRowByName({ chrom: '10', orf_start: 100, cds_end: 900, orf_end: 400 }),
+    ).toEqual({ refName: '10', start: 100, end: 400 });
+  });
+  it('prefers a plain position over a prefixed one', () => {
+    expect(genomicFromRowByName({ chrom: '1', peak_start: 5, start: 10, end: 20 })).toEqual({
+      refName: '1',
+      start: 10,
+      end: 20,
+    });
+  });
   it('is null without a contig and a numeric position', () => {
     expect(genomicFromRowByName({ gene: 'TP53', score: 3 })).toBeNull();
     expect(genomicFromRowByName({ chrom: 'chr1', pos: 'n/a' })).toBeNull();

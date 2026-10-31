@@ -18,6 +18,8 @@ import type { ColDef, GridApi, GridReadyEvent, IDatasource, IGetRowsParams } fro
 import { fetchJBrowseCalls, type InteractiveFilter, type JBrowseCall } from '../../api';
 import { useUiScale } from '../../uiScale';
 import type { NamedLocusSource } from './locusSources';
+import TableActions, { useIsFullscreen } from './TableActions';
+import { collectAllPages, csvText, downloadText, exportFileName } from './tableExport';
 import {
   PICKER_PAGE_SIZE,
   cellValue,
@@ -118,6 +120,8 @@ const PickerBody: React.FC<RegionGridProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [total, setTotal] = useState<number | null>(null);
   const gridApiRef = useRef<GridApi | null>(null);
+  const boxRef = useRef<HTMLDivElement | null>(null);
+  const fullscreen = useIsFullscreen(boxRef);
 
   useEffect(() => {
     const t = window.setTimeout(() => setSearch(searchInput), SEARCH_DEBOUNCE_MS);
@@ -206,10 +210,69 @@ const PickerBody: React.FC<RegionGridProps> = ({
     event.api.setGridOption('datasource', datasource);
   };
 
+  // Back to the full list: no search, no column filter, the backend's order.
+  // The grid keeps its own filter and sort models, so they are cleared there;
+  // clearing them re-requests the rows.
+  const reset = () => {
+    setSearchInput('');
+    const api = gridApiRef.current;
+    if (!api || api.isDestroyed()) return;
+    api.setFilterModel(null);
+    api.applyColumnState({ defaultState: { sort: null } });
+  };
+
+  // Every row the grid would list under its search, filters and sort, not just
+  // the blocks scrolled to (the infinite row model holds a few pages).
+  const download = async () => {
+    const api = gridApiRef.current;
+    const l = live.current;
+    const sortModel = api && !api.isDestroyed()
+      ? api.getColumnState().map((c) => ({ colId: c.colId, sort: c.sort }))
+      : [];
+    const filterModel = api && !api.isDestroyed() ? api.getFilterModel() : null;
+    try {
+      const { rows, truncated } = await collectAllPages<JBrowseCall>(async (start, end) => {
+        const res = await fetchJBrowseCalls(
+          dashboardId,
+          index,
+          pickerRequest({
+            filters: l.filters,
+            versionBody: l.versionBody,
+            startRow: start,
+            endRow: end,
+            sortModel,
+            columns: l.columns,
+            search: l.search,
+            sources: l.sourcesParam,
+            merged: l.merged,
+            filterModel,
+          }),
+        );
+        return { rows: res.rows, total: res.total };
+      });
+      downloadText(
+        exportFileName(`${index}_regions`),
+        csvText(
+          l.columns.map((c) => c.header),
+          rows.map((call) => l.columns.map((c) => cellValue(call, c.id))),
+        ),
+      );
+      if (truncated) setError('The download holds the first 20,000 regions.');
+    } catch (err) {
+      setError((err as Error)?.message || String(err));
+    }
+  };
+
   const gridHeight = height ?? (width < PICKER_MODAL_BELOW ? 340 : PICKER_HEIGHT - 84);
   const isDark = colorScheme === 'dark';
   return (
-    <Stack gap="xs" data-testid="jbrowse-region-picker">
+    <Stack
+      gap="xs"
+      data-testid="jbrowse-region-picker"
+      ref={boxRef}
+      // Native fullscreen shows this element alone: it needs a page of its own.
+      style={fullscreen ? { height: '100%', padding: 12, background: 'var(--mantine-color-body)' } : undefined}
+    >
       <Group gap="xs" wrap="nowrap">
         <TextInput
           size="xs"
@@ -233,13 +296,15 @@ const PickerBody: React.FC<RegionGridProps> = ({
             { value: 'rows', label: 'Rows' },
           ]}
         />
+        <TableActions fullscreenRef={boxRef} onReset={reset} onDownload={download} />
       </Group>
       <div
         className={isDark ? 'ag-theme-alpine-dark' : 'ag-theme-alpine'}
         style={
           {
             width: '100%',
-            height: gridHeight,
+            // Fullscreen: the grid takes what the search row and the count leave.
+            ...(fullscreen ? { flex: 1, minHeight: 0 } : { height: gridHeight }),
             ...(uiScale !== 1
               ? {
                   '--ag-font-size': `${Math.round(13 * uiScale)}px`,

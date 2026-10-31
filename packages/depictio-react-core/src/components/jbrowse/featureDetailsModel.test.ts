@@ -320,3 +320,42 @@ describe('buildFeatureView: gene', () => {
     expect(v.fields.map((f) => f.key)).toContain('gene_name');
   });
 });
+
+describe('buildFeatureView: a GENCODE transcript (knownGene bigBed)', () => {
+  const tx = {
+    refName: 'chr6',
+    start: 31_638_542,
+    end: 31_652_747,
+    strand: -1,
+    name: 'ENST00000211379.5',
+    name2: 'uc003nvi.4',
+    geneName: 'BAG6',
+    geneName2: 'P46379',
+    geneType: 'protein_coding',
+    transcriptType: 'protein_coding',
+    transcriptClass: 'coding',
+    tag: 'basic,Ensembl_canonical,MANE_Select',
+    uniqueId: 'x',
+  };
+  it('heads with the gene symbol and lists the ids without "All fields"', () => {
+    const v = buildFeatureView(tx);
+    expect(v.title).toBe('BAG6');
+    expect(v.typeLabel).toBe('Transcript');
+    const facts = Object.fromEntries(v.facts.map((f) => [f.label, f.value]));
+    expect(facts.Transcript).toBe('ENST00000211379.5');
+    expect(facts.UniProt).toBe('P46379');
+    expect(facts['UCSC ID']).toBe('uc003nvi.4');
+    expect(facts.Biotype).toBe('protein coding');
+    expect(facts.Class).toBe('coding');
+    expect(v.chips[0].chips.map((c) => c.text)).toEqual(['basic', 'Ensembl canonical', 'MANE Select']);
+    expect(v.fields).toEqual([]);
+  });
+});
+
+describe('buildFeatureView: a RefSeq transcript (ncbiRefSeq bigBed)', () => {
+  it('reads the symbol from name2', () => {
+    const v = buildFeatureView({ refName: 'chr17', start: 1, end: 900, name: 'NM_007294.4', name2: 'BRCA1' });
+    expect(v.title).toBe('BRCA1');
+    expect(Object.fromEntries(v.facts.map((f) => [f.label, f.value])).Transcript).toBe('NM_007294.4');
+  });
+});

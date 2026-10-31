@@ -7,6 +7,7 @@
 # full, the same documented exception as crisprseq and mhcquant.
 id: viralmetagenome
 name: nf-core/viralmetagenome
+version: "1.0.0"
 description: >-
   Per-sample and per-genome tables of nf-core/viralmetagenome: read
   preprocessing and host removal, the de novo contigs with their taxonomic

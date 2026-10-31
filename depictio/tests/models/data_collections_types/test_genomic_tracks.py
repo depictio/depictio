@@ -212,6 +212,7 @@ class TestJBrowseLiteComponent:
         assert comp.track_mode == "filtered"
         assert comp.max_tracks == 20
         assert comp.initial_tracks == 5
+        assert comp.initial_categories == []
         assert comp.default_tracks == []
         assert comp.show_annotation is True
         assert comp.selection_enabled is False
@@ -223,6 +224,16 @@ class TestJBrowseLiteComponent:
         assert set(_JBROWSE_DEFAULTS) == set(_JBROWSE_FIELDS)
         assert _JBROWSE_DEFAULTS["max_tracks"] == 20
         assert _JBROWSE_DEFAULTS["default_tracks"] == []
+        assert _JBROWSE_DEFAULTS["initial_categories"] == []
+
+    def test_initial_categories_are_kept(self):
+        comp = JBrowseLiteComponent(
+            tag="g",
+            workflow_tag="w",
+            data_collection_tag="t",
+            initial_categories=["Small variants", "Alignments"],
+        )
+        assert comp.initial_categories == ["Small variants", "Alignments"]
 
     def test_bounds(self):
         with pytest.raises(ValidationError):

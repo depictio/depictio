@@ -360,7 +360,9 @@ class TestShippedTemplates:
                 "create it with `python scripts/update_template_lock.py --write`"
             )
 
-        findings = lock.compare(lock.compute(_PROJECTS), lock.load_lock(lock_path) or {})
+        findings = lock.compare(
+            lock.compute(_PROJECTS, _PROJECTS.parent / "catalog"), lock.load_lock(lock_path) or {}
+        )
 
         assert not findings, (
             "Template content changed without a template.version bump, or the lock is stale:\n"
@@ -369,4 +371,143 @@ class TestShippedTemplates:
             "collection, column or variable changed; minor: dashboards, figures or recipes "
             "changed; patch: text only), then run "
             "`python scripts/update_template_lock.py --write`."
+        )
+
+
+def _module(catalog: Path, module_id: str, version: str = "1.0.0") -> Path:
+    module_dir = catalog / module_id
+    module_dir.mkdir(parents=True)
+    (module_dir / "module.yaml").write_text(
+        f'id: {module_id}\nname: {module_id}\nversion: "{version}"\n'
+    )
+    (module_dir / "summary.yaml").write_text("id: summary\n")
+    (module_dir / "summary.py").write_text("SOURCES = []\n")
+    (module_dir / "summary.tsv").write_text("a\tb\n")
+    return module_dir
+
+
+@pytest.fixture()
+def catalog_tree(tree: Path) -> Path:
+    """``tree`` with a sibling catalog: demo 1.0.0 reads ``tool`` through a recipe,
+    demo 2.0.0 through a dashboard ``use:``, and ``init/solo`` reads nothing."""
+    catalog = tree.parent / "catalog"
+    _module(catalog, "tool")
+    _module(catalog, "other")
+    (tree / "nf-core" / "demo" / "1.0.0" / "template.yaml").write_text(
+        'template:\n  template_id: "nf-core/demo/1.0.0"\n  version: "1.0.0"\n'
+        "workflows:\n  - data_collections:\n      - config:\n"
+        '          recipe: "tool/summary.py"\n'
+    )
+    (tree / "nf-core" / "demo" / "2.0.0" / "dashboards" / "base.yaml").write_text(
+        "title: a\ncomponents:\n  - use: tool/summary\n"
+    )
+    return catalog
+
+
+def _bump_module(catalog: Path, module_id: str, version: str) -> None:
+    (catalog / module_id / "module.yaml").write_text(
+        f'id: {module_id}\nname: {module_id}\nversion: "{version}"\n'
+    )
+
+
+class TestCatalog:
+    def test_a_template_lists_the_modules_it_consumes(
+        self, lock: ModuleType, tree: Path, catalog_tree: Path
+    ) -> None:
+        current = lock.compute(tree, catalog_tree)
+
+        assert current["nf-core/demo/1.0.0"]["catalog"] == {"tool": "1.0.0"}
+        assert current["nf-core/demo/2.0.0"]["catalog"] == {"tool": "1.0.0"}
+        assert "catalog" not in current["init/solo"]
+
+    def test_a_recipe_importing_a_module_consumes_it(
+        self, lock: ModuleType, tree: Path, catalog_tree: Path
+    ) -> None:
+        (tree / "nf-core" / "demo" / "recipes" / "table.py").write_text(
+            "from depictio.catalog.other.summary import read\n"
+        )
+
+        current = lock.compute(tree, catalog_tree)
+
+        assert current["nf-core/demo/1.0.0"]["catalog"] == {"other": "1.0.0", "tool": "1.0.0"}
+
+    def test_a_module_bump_moves_every_template_that_consumes_it(
+        self, lock: ModuleType, tree: Path, catalog_tree: Path
+    ) -> None:
+        before = lock.compute(tree, catalog_tree)
+
+        _bump_module(catalog_tree, "tool", "1.1.0")
+
+        after = lock.compute(tree, catalog_tree)
+        for template_id in ("nf-core/demo/1.0.0", "nf-core/demo/2.0.0"):
+            assert after[template_id]["content_hash"] != before[template_id]["content_hash"]
+        assert after["init/solo"]["content_hash"] == before["init/solo"]["content_hash"]
+
+    def test_fixtures_do_not_count_in_a_module_hash(
+        self, lock: ModuleType, catalog_tree: Path
+    ) -> None:
+        before = lock.module_hash(catalog_tree / "tool")
+
+        (catalog_tree / "tool" / "summary.tsv").write_text("a\tb\n1\t2\n")
+
+        assert lock.module_hash(catalog_tree / "tool") == before
+
+    def test_a_module_edited_without_a_bump_fails_until_bumped_and_its_templates_too(
+        self,
+        lock: ModuleType,
+        tree: Path,
+        catalog_tree: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        assert lock.main(["--write", "--projects-dir", str(tree)]) == 0
+        assert (catalog_tree / lock.CATALOG_LOCK_NAME).is_file()
+        (catalog_tree / "tool" / "summary.py").write_text("SOURCES = [1]\n")
+
+        assert _check(lock, tree) == 1
+        assert "tool: content changed but version is still 1.0.0" in capsys.readouterr().out
+
+        _bump_module(catalog_tree, "tool", "1.1.0")
+        assert _check(lock, tree) == 1
+        out = capsys.readouterr().out
+        assert "nf-core/demo/1.0.0: content changed but template.version" in out
+        assert "nf-core/demo/2.0.0: content changed but template.version" in out
+        assert "init/solo" not in out
+
+    def test_a_catalog_without_modules_writes_no_catalog_lock(
+        self, lock: ModuleType, tree: Path
+    ) -> None:
+        (tree.parent / "catalog").mkdir()
+
+        assert lock.main(["--write", "--projects-dir", str(tree)]) == 0
+
+        assert not (tree.parent / "catalog" / lock.CATALOG_LOCK_NAME).exists()
+
+
+class TestShippedCatalog:
+    """The real catalog against its lock."""
+
+    _CATALOG = _PROJECTS.parent / "catalog"
+
+    def test_every_module_declares_a_semver_version(self, lock: ModuleType) -> None:
+        wrong = [
+            f"{module_id}: version {lock.read_module_version(path)!r}"
+            for module_id, path in lock.discover_modules(self._CATALOG).items()
+            if not lock._SEMVER.match(lock.read_module_version(path) or "")
+        ]
+        assert not wrong, "module.yaml version must be X.Y.Z:\n" + "\n".join(wrong)
+
+    def test_no_module_changed_without_a_version_bump(self, lock: ModuleType) -> None:
+        lock_path = self._CATALOG / lock.CATALOG_LOCK_NAME
+        findings = lock.compare(
+            lock.compute_catalog(self._CATALOG),
+            lock.load_lock(lock_path, "modules") or {},
+            "version",
+            "its module.yaml",
+        )
+
+        assert not findings, (
+            "A catalog module changed without a version bump, or the lock is stale:\n"
+            + "\n".join(f"  {f.template}: {f.message}" for f in findings)
+            + "\n\nBump `version` in the module's module.yaml, bump every template that "
+            "consumes it, then run `python scripts/update_template_lock.py --write`."
         )

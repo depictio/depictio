@@ -9,6 +9,7 @@
 # parsing lives in depictio/recipes/lib/stable_expression.py.
 id: stableexpression
 name: nf-core/stableexpression
+version: "1.0.0"
 description: >-
   Gene expression stability across public datasets, from nf-core/stableexpression:
   the stability score of every candidate gene and the measures behind it, the

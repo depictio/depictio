@@ -249,7 +249,9 @@ def _https_call(call):
             return call()
         except httpx.TransportError as exc:
             if attempt == 2:
-                raise RemoteReadError(502, f"Remote host unreachable: {type(exc).__name__}") from exc
+                raise RemoteReadError(
+                    502, f"Remote host unreachable: {type(exc).__name__}"
+                ) from exc
     raise AssertionError("unreachable")
 
 

@@ -90,7 +90,7 @@ interface Props {
 const ALL_VIEWS = ['plotly', 'locus'] as const;
 type CnvView = (typeof ALL_VIEWS)[number];
 const VIEW_LABEL: Record<CnvView, string> = { plotly: 'Profile', locus: 'Locus' };
-type GeneLane = 'none' | 'hg38' | 'mm10';
+type GeneLane = 'none' | 'hg38' | 'hg19' | 'mm10';
 
 // The server does not reduce this kind (`KIND_SAMPLING_POLICY["cnv_profile"]
 // is "none"`): dropping rows at random would erase a focal amplification, and
@@ -339,13 +339,19 @@ const CnvProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
 
   // Sample and chromosome domains come from the whole frame, so narrowing the
   // drawing down to one of them never removes the option to go back.
-  const samples = useMemo(() => {
+  // The picker lists them alphabetically, but the profile opens on the first one
+  // the data holds: a recipe orders its rows so that one is worth seeing first
+  // (sarek puts a tumour against its normal ahead of the normal on its own).
+  const { samples, firstSeen } = useMemo(() => {
     const seen = Array.from(new Set(parsed.map((r) => r.sample).filter((s) => s !== '')));
-    return seen.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+    return {
+      firstSeen: seen[0] ?? null,
+      samples: [...seen].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' })),
+    };
   }, [parsed]);
   const allChroms = useMemo(() => sortChromosomes(parsed.map((r) => r.chrom)), [parsed]);
 
-  const activeSample = sample && samples.includes(sample) ? sample : (samples[0] ?? null);
+  const activeSample = sample && samples.includes(sample) ? sample : firstSeen;
 
   // A region brushed elsewhere on this collection's own chrom/start/end
   // columns takes the chromosome control's place while it is set: the tile is

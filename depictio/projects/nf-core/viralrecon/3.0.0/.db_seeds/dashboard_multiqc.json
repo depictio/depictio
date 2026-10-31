@@ -121,6 +121,38 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
+      "index": "mqc-fail-mapped",
+      "component_type": "multiqc",
+      "title": "",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "multiqc_data",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c10"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "MultiQC report data with QC metrics from all pipeline tools",
+        "data_collection_tag": "multiqc_data",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "746b0f3c1e4a2d7f8e5b9c10"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "QC overview",
+      "selected_module": "fail_mapped_samples",
+      "selected_plot": "fail_mapped_samples-section",
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
       "index": "mqc-fastp-filtered",
       "component_type": "multiqc",
       "title": "",
@@ -791,7 +823,7 @@
     {
       "i": "box-mqc-general-stats",
       "x": 0,
-      "y": 1,
+      "y": 0,
       "w": 8,
       "h": 4,
       "static": false,
@@ -804,9 +836,24 @@
       ]
     },
     {
-      "i": "box-mqc-fastp-filtered",
+      "i": "box-mqc-fail-mapped",
       "x": 0,
-      "y": 5,
+      "y": 4,
+      "w": 4,
+      "h": 4,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-mqc-fastp-filtered",
+      "x": 4,
+      "y": 4,
       "w": 4,
       "h": 4,
       "static": false,
@@ -820,8 +867,8 @@
     },
     {
       "i": "box-mqc-bowtie2",
-      "x": 4,
-      "y": 5,
+      "x": 0,
+      "y": 8,
       "w": 4,
       "h": 4,
       "static": false,
@@ -835,9 +882,9 @@
     },
     {
       "i": "box-mqc-mosdepth-cumulative",
-      "x": 0,
-      "y": 9,
-      "w": 8,
+      "x": 4,
+      "y": 8,
+      "w": 4,
       "h": 4,
       "static": false,
       "resizeHandles": [
@@ -851,7 +898,7 @@
     {
       "i": "box-mqc-fastqc-quality",
       "x": 0,
-      "y": 13,
+      "y": 0,
       "w": 4,
       "h": 4,
       "static": false,
@@ -866,7 +913,7 @@
     {
       "i": "box-mqc-fastqc-status",
       "x": 4,
-      "y": 13,
+      "y": 0,
       "w": 4,
       "h": 4,
       "static": false,
@@ -881,7 +928,7 @@
     {
       "i": "box-mqc-kraken",
       "x": 0,
-      "y": 17,
+      "y": 4,
       "w": 4,
       "h": 4,
       "static": false,
@@ -896,7 +943,7 @@
     {
       "i": "box-mqc-samtools-flagstat",
       "x": 4,
-      "y": 17,
+      "y": 4,
       "w": 4,
       "h": 4,
       "static": false,
@@ -911,7 +958,7 @@
     {
       "i": "box-mqc-mosdepth-contig",
       "x": 0,
-      "y": 21,
+      "y": 8,
       "w": 4,
       "h": 4,
       "static": false,
@@ -926,7 +973,7 @@
     {
       "i": "box-mqc-cutadapt",
       "x": 4,
-      "y": 21,
+      "y": 8,
       "w": 4,
       "h": 4,
       "static": false,
@@ -941,7 +988,7 @@
     {
       "i": "box-mqc-ivar",
       "x": 0,
-      "y": 25,
+      "y": 0,
       "w": 4,
       "h": 4,
       "static": false,
@@ -956,7 +1003,7 @@
     {
       "i": "box-mqc-snpeff-impact",
       "x": 4,
-      "y": 25,
+      "y": 0,
       "w": 4,
       "h": 4,
       "static": false,
@@ -971,7 +1018,7 @@
     {
       "i": "box-mqc-snpeff-region",
       "x": 0,
-      "y": 29,
+      "y": 4,
       "w": 4,
       "h": 4,
       "static": false,
@@ -986,7 +1033,7 @@
     {
       "i": "box-mqc-bcftools",
       "x": 4,
-      "y": 29,
+      "y": 4,
       "w": 4,
       "h": 4,
       "static": false,
@@ -1001,7 +1048,7 @@
     {
       "i": "box-mqc-quast",
       "x": 0,
-      "y": 33,
+      "y": 8,
       "w": 4,
       "h": 4,
       "static": false,
@@ -1016,7 +1063,7 @@
     {
       "i": "box-mqc-summary-assembly",
       "x": 4,
-      "y": 33,
+      "y": 8,
       "w": 4,
       "h": 4,
       "static": false,
@@ -1031,7 +1078,7 @@
     {
       "i": "box-mqc-summary-variants",
       "x": 0,
-      "y": 37,
+      "y": 12,
       "w": 8,
       "h": 4,
       "static": false,
@@ -1163,7 +1210,7 @@
   },
   "is_public": true,
   "last_saved_ts": "2026-08-29 00:00:00",
-  "creation_time": "2026-10-22 10:02:20",
+  "creation_time": "2026-10-30 14:56:15",
   "screenshot_ts": "",
   "project_id": {
     "$oid": "746b0f3c1e4a2d7f8e5b9ca2"
@@ -1185,6 +1232,6 @@
   "template_origin": {
     "template_id": "nf-core/viralrecon/3.0.0",
     "template_version": "2.0.0",
-    "imported_at": "2026-10-29 11:02:02"
+    "imported_at": "2026-10-30 14:58:06"
   }
 }

@@ -194,6 +194,20 @@
   font-size: var(--mantine-font-size-xs);
 }
 
+/* Compact rows (the Display control): about 10px less per row */
+.dpx-rt--compact .dpx-rt__table th,
+.dpx-rt--compact .dpx-rt__table td {
+  padding-block: 2px;
+}
+.dpx-rt--compact .dpx-rt__medal {
+  min-width: 22px;
+  height: 20px;
+  border-radius: 10px;
+}
+.dpx-rt--compact .dpx-rt__table {
+  font-size: var(--mantine-font-size-xs);
+}
+
 .dpx-rt__foot {
   flex: 0 0 auto;
   padding-top: 4px;

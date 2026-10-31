@@ -10,6 +10,7 @@
 # tab-separated files beside the PDFs.
 id: deeptools
 name: deepTools
+version: "1.0.0"
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/deeptools/plotfingerprint
 homepage: https://deeptools.readthedocs.io/
 description: >-

@@ -29,6 +29,8 @@ export interface ViewMenuItem {
   group: ViewMenuGroup;
   checked: boolean;
   onChange: () => void;
+  /** Greyed out, e.g. no open track the option could act on (say why in `description`). */
+  disabled?: boolean;
 }
 
 interface ViewMenuProps {
@@ -202,7 +204,7 @@ const ViewMenu: React.FC<ViewMenuProps> = ({ items, displaySettings, disabled })
                 label={item.label}
                 description={item.description}
                 checked={item.checked}
-                disabled={disabled}
+                disabled={disabled || item.disabled}
                 onChange={item.onChange}
                 data-testid={`jbrowse-option-${item.key}`}
               />

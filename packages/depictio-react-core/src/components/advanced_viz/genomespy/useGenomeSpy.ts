@@ -30,6 +30,9 @@ import { BRUSH_PARAM, DATASET_NAME, GENOME_SCALE_NAME } from './genomeSpySpec';
 import type { Contig } from './genomeSpySpec';
 import { attachInteractionMode, wheelZooms } from './interactionMode';
 import type { InteractionMode } from './interactionMode';
+import { hasMarkEvents, launchWithRetry, toError } from './embedLaunch';
+import { attachDragTracker, brushToPublish } from './pointerGesture';
+import type { LaunchAttempt } from './embedLaunch';
 
 export type GenomeSpyBackend = 'webgl' | 'canvas';
 
@@ -51,8 +54,9 @@ export interface UseGenomeSpyOptions {
   lazySources?: boolean;
   /** Called with the picked row on a mark click. */
   onPick?: (datum: Readonly<Record<string, unknown>>) => void;
-  /** Called with the brushed genome interval (linearised coordinates), or
-   *  `null` when the brush is cleared. */
+  /** Called with the brushed genome interval (linearised coordinates) when a
+   *  drag is released. A cleared or click-sized brush is not reported: the tile
+   *  clears its region itself (double-click, Escape, the badge). */
   onBrush?: (interval: number[] | null) => void;
   /** Called with the row under the pointer, and `null` when it leaves the
    *  marks or the canvas. Best effort: it needs GenomeSpy's `mouseover`
@@ -175,6 +179,10 @@ export function useGenomeSpy(
     });
     // The pointer mode keeps a drag from panning (see `attachInteractionMode`).
     const detachMode = attachInteractionMode(el, interactionMode);
+    // GenomeSpy emits `click` after a drag too (a pan, a brush): see
+    // `pointerGesture.ts`. The drag is the gesture; the mark under its end
+    // point is not a pick.
+    const drag = attachDragTracker(el);
 
     (async () => {
       const [{ embed }] = await Promise.all([
@@ -187,23 +195,56 @@ export function useGenomeSpy(
           : import('@genome-spy/core/rendering/canvas.js'),
       ]);
       if (cancelled) return;
-      const result = await embed(el, spec, {
-        renderer: backend,
-        // GenomeSpy would otherwise render its own param widgets under the
-        // canvas; Depictio's Settings popover is where controls live.
-        inputBindingContainer: 'none',
-        onError: (err) => {
-          if (!cancelled) setError(err instanceof Error ? err.message : String(err));
-          return true;
+      // `embed()` resolves even when the launch failed: the error arrives
+      // through `onError` only, and the result is half-built. Collect it per
+      // attempt, retry once (first-load race), and wire nothing onto a result
+      // that did not launch.
+      const attempt = async (): Promise<LaunchAttempt<EmbedResult>> => {
+        let failure: Error | null = null;
+        const result = await embed(el, spec, {
+          renderer: backend,
+          // GenomeSpy would otherwise render its own param widgets under the
+          // canvas; Depictio's Settings popover is where controls live.
+          inputBindingContainer: 'none',
+          onError: (err) => {
+            failure ??= toError(err);
+            return true;
+          },
+        });
+        if (!failure && !hasMarkEvents(result)) {
+          failure = new Error('GenomeSpy did not finish loading the view.');
+        }
+        return { result, failure };
+      };
+      const launched = await launchWithRetry(
+        attempt,
+        (half) => {
+          try {
+            half.finalize();
+          } catch {
+            // Nothing built to tear down.
+          }
         },
-      });
+        { isCancelled: () => cancelled },
+      );
+      const result = launched.result;
       if (cancelled) {
-        result.finalize();
+        try {
+          result.finalize();
+        } catch {
+          // Already torn down.
+        }
+        return;
+      }
+      if (launched.failure) {
+        // The original message, not whatever a half-built embed throws next.
+        setError(launched.failure.message);
         return;
       }
       live = result;
       unsubscribes.push(
         result.views.root().marks.subscribe('click', (event) => {
+          if (drag.wasDrag()) return;
           onPickRef.current?.(event.hit.datum);
         }),
       );
@@ -266,7 +307,15 @@ export function useGenomeSpy(
             brush.subscribe(
               (snapshot) => {
                 const x = snapshot.intervals.x;
-                onBrushRef.current?.(snapshot.active && x ? [x[0], x[1]] : null);
+                // Only a deliberate drag is a region. An emptied brush (a click,
+                // `clear()`) or a jitter is not: it would clear the filter and
+                // zoom the axis back out under the reader's click.
+                const interval = brushToPublish(
+                  snapshot.active && x ? [x[0], x[1]] : null,
+                  readScaleDomain(result),
+                );
+                if (interval) onBrushRef.current?.(interval);
+                else if (snapshot.active) clearGenomeSpyBrush(result);
               },
               { delivery: 'commit' },
             ),
@@ -289,6 +338,7 @@ export function useGenomeSpy(
       cancelled = true;
       detachZoomGate();
       detachMode();
+      drag.detach();
       for (const off of unsubscribes) off();
       if (live) {
         lastViewRef.current = readViewDomain(live) ?? lastViewRef.current;

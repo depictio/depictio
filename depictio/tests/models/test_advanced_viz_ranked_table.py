@@ -231,6 +231,47 @@ def test_a_column_is_checked():
     assert column.label is None
 
 
+def test_a_bar_takes_its_bounds_from_columns():
+    column = RankedTableColumn(column="score", display="bar", max_from="score_max", min_from="lo")
+    assert (column.max_from, column.min_from, column.show_bound) == ("score_max", "lo", True)
+    assert RankedTableColumn(column="x", display="bar").max_from is None
+    assert (
+        RankedTableColumn(column="x", display="bar", max_from="m", show_bound=False).show_bound
+        is False
+    )
+
+
+def test_a_bound_is_stated_once_and_only_on_a_bar():
+    with pytest.raises(ValidationError, match="max_from"):
+        RankedTableColumn(column="x", display="bar", max=10, max_from="m")
+    with pytest.raises(ValidationError, match="min_from"):
+        RankedTableColumn(column="x", display="bar", min=0, min_from="m")
+    with pytest.raises(ValidationError, match="display to bar"):
+        RankedTableColumn(column="x", display="number", max_from="m")
+    # min with max_from is two different ends: allowed.
+    assert RankedTableColumn(column="x", display="bar", min=0, max_from="m").max_from == "m"
+
+
+def test_default_select_picks_a_row_and_needs_the_selection_on():
+    config = RankedTableConfig(selection_enabled=True, default_select_by="rank_score")
+    assert (config.default_select_by, config.default_select_order) == ("rank_score", "desc")
+    assert RankedTableConfig().default_select_by is None
+    assert (
+        RankedTableConfig(
+            selection_enabled=True, default_select_by="p", default_select_order="asc"
+        ).default_select_order
+        == "asc"
+    )
+    with pytest.raises(ValidationError, match="selection_enabled"):
+        RankedTableConfig(default_select_by="rank_score")
+    with pytest.raises(ValidationError):
+        RankedTableConfig(
+            selection_enabled=True,
+            default_select_by="x",
+            default_select_order="up",  # type: ignore[arg-type]
+        )
+
+
 # ---------------------------------------------------------------------------
 # The family section
 # ---------------------------------------------------------------------------

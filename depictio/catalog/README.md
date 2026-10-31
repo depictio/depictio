@@ -101,6 +101,14 @@ each gets a distinct handle (`rarefaction_alpha` vs `rarefaction`).
 Don't know a recipe's output column names while writing `roles`?
 `depictio dev catalog columns <recipe>` prints them.
 
+## Module versions
+
+Every `module.yaml` declares `version` (semver). Bump it in the same commit as any change to
+the module's `.py` or `.yaml` files (major: an output column changes; minor: a reader, recipe or
+render changes; patch: text only), bump the templates that consume the module, then run
+`python scripts/update_template_lock.py --write`. `catalog_versions.lock.json` and the
+`check-template-versions` hook fail otherwise. See `docs/design/template-versioning.md`.
+
 ## Catalog vs `projects/` — where a reshape lives
 
 A reshape is **tool-domain logic** the moment it depends only on a tool's

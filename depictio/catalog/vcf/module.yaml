@@ -12,6 +12,7 @@
 # All four read the `vcf_variants` collection through `dc_ref`.
 id: vcf
 name: VCF
+version: "1.0.0"
 description: >-
   Per-variant records read straight out of the VCFs a variant caller publishes,
   for the panels that need one row per call rather than a per-file summary.

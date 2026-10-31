@@ -672,7 +672,7 @@ workflows:
       # recomputed from the Bambu transcript counts DEXSeq ran on, for the
       # genes the table ranks first.
       - data_collection_tag: "dexseq_usage"
-        description: "Per-library transcript usage (share of the gene's reads) for the genes with the smallest DEXSeq gene-level q-value"
+        description: "Per-library transcript usage (share of the gene's reads) for the forty genes with the smallest DEXSeq gene-level q-value"
         config:
           type: "Table"
           metatype: "Aggregate"

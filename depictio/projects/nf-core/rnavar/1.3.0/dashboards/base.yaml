@@ -43,6 +43,12 @@ main_dashboard:
       Y: '#0ca678'
       mitochondrion: '#f08c00'
       other: '#adb5bd'
+    # How many replicates of a group call a site; the Genome tab's shared variants.
+    sharing:
+      In every replicate: '#2f9e44'
+      In some replicates: '#f08c00'
+      In one replicate: '#e8590c'
+      Single sample: '#adb5bd'
     variant_type:
       SNP: '#1c7ed6'
       INDEL: '#7048e8'
@@ -298,7 +304,7 @@ main_dashboard:
     tag: rv-ov-kf-tstv
     index: ov-kf-tstv
     title: Transitions over transversions
-    description: Ts/Tv of the PASS SNVs, median over the samples. Calls on exons read about 2.5 to 3; a lower value mixes in errors, which fall evenly on both kinds of change.
+    description: Ts/Tv of the PASS SNVs, median over the samples. Calls on exons read about 2.5 to 3, the template's working range; a lower value mixes in errors, which fall evenly on both kinds of change, and the card warns under 2.
     layout: {x: 2, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: rnavar
@@ -397,7 +403,7 @@ main_dashboard:
     caption: Share of PASS genotype calls two samples have in common; replicates of one group should cluster.
     tag: rv-ov-hl-concordance
     index: ov-hl-concordance
-    layout: {x: 0, y: 6, w: 8, h: 5}
+    layout: {x: 0, y: 6, w: 8, h: 8}
   # Link-only tab tiles: each tile prints its tab's subtitle, the question the
   # tab answers. A tile whose tab a route pruned draws nothing.
   - component_type: text
@@ -758,7 +764,7 @@ tabs:
     tag: rv-aln-fig-unique-dup
     index: aln-unique-vs-dup
     title: Unique mapping and duplication per sample
-    description: One dot per sample, the lowest unique mapping on top, with the median of the samples in view dashed. Red marks under 60% uniquely mapped and amber over 80% duplicates, where a few genes fill the library; duplication tracks expression in RNA-seq, so read it by group. A sample far from the median carries its name; a click opens its record.
+    description: One dot per sample, the lowest unique mapping on top, with the median of the samples in view dashed. Red shades under 60% uniquely mapped, amber over 80% duplicates, where a few genes fill the library; both are working limits of this template, and duplication tracks expression in RNA-seq, so read it by group. A sample more than 3 scaled median absolute deviations from the median carries its name; a click opens its record.
     layout: {x: 0, y: 0, w: 5, h: 6}
   - component_type: advanced_viz
     workflow_tag: rnavar
@@ -947,7 +953,7 @@ tabs:
     tag: rv-cov-card-mito
     index: cov-card-mito
     title: Mitochondrial reads
-    description: Mapped reads on the mitochondrial genome, in percent. A stressed or dying culture sends more there; above 10% the library is partly spent on it.
+    description: Mapped reads on the mitochondrial genome, in percent. A stressed or dying culture sends more there; the card passes up to 5% and warns above 10%, both working limits of this template.
     layout: {x: 4, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: rnavar
@@ -1213,7 +1219,7 @@ tabs:
     visu_type: bar
     mode: code
     code_content: |-
-      # Ts/Tv and het/hom ratio of each sample as sorted bars, the weakest Ts/Tv on top; the green band is the range a callset on exons usually falls in, and a bar outside it is worth a look.
+      # Ts/Tv and het/hom ratio of each sample as sorted bars, the weakest Ts/Tv on top. Green bands: Ts/Tv 2.5 to 3 (exonic human callsets sit near 3; random errors fall evenly on transitions and transversions and pull the ratio toward 0.5) and het/hom 1.5 to 2 (the range outbred human exomes report; allele-specific expression in RNA lowers it). The band edges are working values of this template, not pipeline thresholds.
       grp = depictio_group_by[0] if depictio_group_by else '{GROUP_COL}'
       colors = depictio_group_kwargs.get('color_discrete_map') or depictio_category_colors.get('{GROUP_COL}') or {}
       names = {'ts_tv': 'Ts/Tv', 'het_hom_ratio': 'Het/hom ratio'}
@@ -1235,7 +1241,7 @@ tabs:
     tag: rv-cs-fig-quality
     index: cs-quality-bars
     title: Ts/Tv and het/hom ratio per sample
-    description: One bar per sample, the lowest Ts/Tv on top, with the usual range of an exonic callset shaded (Ts/Tv 2.5 to 3, het/hom 1.5 to 2). A bar outside it points at a sample with a different error profile or genotype mix; a het/hom ratio below the band is often allele-specific expression, which RNA shows and DNA does not, rather than a call error.
+    description: One bar per sample, the lowest Ts/Tv on top, with a working range shaded in green on each panel. Ts/Tv 2.5 to 3 is where exonic callsets sit, since random errors fall evenly on transitions and transversions and pull the ratio down; het/hom 1.5 to 2 is the range outbred exomes report. A bar outside a band points at a different error profile or genotype mix, and a het/hom ratio below it is often allele-specific expression, which RNA shows and DNA does not, rather than a call error.
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: figure
     workflow_tag: rnavar
@@ -1273,12 +1279,15 @@ tabs:
       cluster_cols: true
       cluster_method: average
       colorscale: Blues
+      # A square matrix of eight or so samples: rows 40 px tall, not the 12 px default
+      # that suits a long list, or the tile asks for a strip.
+      min_cell_px: 40
     section: Agreement between samples
     tag: rv-cs-av-concordance
     index: cs-concordance
     title: Genotype concordance between samples
     description: Calls both samples make with the same genotype, over the calls either makes (percent), clustered. A replicate that leaves its group is a swap or a shallow library.
-    layout: {x: 0, y: 0, w: 8, h: 5}
+    layout: {x: 0, y: 0, w: 8, h: 9}
   - component_type: figure
     workflow_tag: rnavar
     data_collection_tag: vcf_substitution_spectrum
@@ -1311,7 +1320,7 @@ tabs:
     visu_type: bar
     mode: code
     code_content: |-
-      # Each sample's PASS calls over the allele fraction, as the share of its calls in each 0.05 bin (calls read fewer than 10 times are left out); the green band is where a heterozygous germline call sits (0.3 to 0.7), the blue one where a homozygous-alternate call sits (0.9 to 1).
+      # Each sample's PASS calls over the allele fraction, as the share of its calls in each 0.05 bin (calls read fewer than 10 times are left out); the green band is where a heterozygous germline call sits (0.3 to 0.7: an even split gives 0.5 and read sampling spreads it), the blue one where a homozygous-alternate call sits (0.9 to 1); both are working edges of this template.
       grp = depictio_group_by[0] if depictio_group_by else '{GROUP_COL}'
       colors = depictio_group_kwargs.get('color_discrete_map') or depictio_category_colors.get('{GROUP_COL}') or {}
       d = df if grp in df.columns else df.with_columns(pl.lit('All samples').alias(grp))
@@ -1333,7 +1342,7 @@ tabs:
     tag: rv-cs-fig-vaf
     index: cs-vaf-distribution
     title: Allele fraction per sample
-    description: Share of each sample's PASS calls (read at least 10 times) in each 0.05 bin of allele fraction; the depth and variant type filters on the left narrow it. A germline sample peaks in the green band at 0.5 (heterozygous) and in the blue one near 1 (homozygous-alternate). A heterozygous peak off 0.5, or a broad shoulder of low fractions, flags contamination, allelic imbalance (in RNA, allele-specific expression) or artefacts.
+    description: Share of each sample's PASS calls in each 0.05 bin of allele fraction; only calls read at least 10 times count, below which one read moves the fraction by 0.1, and the depth and variant type filters on the left narrow it. A germline sample peaks in the green band, 0.3 to 0.7 around the 0.5 of a heterozygous call, and in the blue one, 0.9 to 1, of a homozygous-alternate call. A heterozygous peak off 0.5, or a broad shoulder of low fractions, flags contamination, allelic imbalance (in RNA, allele-specific expression) or artefacts.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: rnavar
@@ -1559,17 +1568,22 @@ tabs:
     visu_type: bar
     mode: code
     code_content: |-
-      # The twelve commonest consequence terms over the samples in view.
+      # The twelve commonest consequence terms over the samples in view, coloured by the impact class snpEff gives the term (the Sequence Ontology term's class: loss of function HIGH, protein-changing MODERATE, silent or near-silent LOW, the rest MODIFIER).
+      high = ['transcript_ablation', 'splice_acceptor_variant', 'splice_donor_variant', 'stop_gained', 'frameshift_variant', 'stop_lost', 'start_lost', 'exon_loss_variant', 'gene_fusion', 'rare_amino_acid_variant', 'transcript_amplification', 'feature_ablation']
+      moderate = ['missense_variant', 'inframe_insertion', 'inframe_deletion', 'disruptive_inframe_insertion', 'disruptive_inframe_deletion', 'conservative_inframe_insertion', 'conservative_inframe_deletion', 'protein_altering_variant', '5_prime_UTR_truncation', '3_prime_UTR_truncation', 'coding_sequence_variant', 'initiator_codon_variant', 'non_canonical_start_codon']
+      low = ['synonymous_variant', 'stop_retained_variant', 'start_retained_variant', 'splice_region_variant', '5_prime_UTR_premature_start_codon_gain_variant', 'splice_donor_5th_base_variant', 'splice_donor_region_variant', 'splice_polypyrimidine_tract_variant']
+      impact_of = {**{t: 'HIGH' for t in high}, **{t: 'MODERATE' for t in moderate}, **{t: 'LOW' for t in low}}
       d = df.filter(pl.col('section') == 'effect').group_by('category').agg(pl.col('count').sum()).sort('count', descending=True).head(12)
-      d = d.with_columns(pl.col('category').str.replace_all('_', ' '))
-      fig = px.bar(d.to_pandas(), x='count', y='category', orientation='h', labels={'count': 'Effects', 'category': ''})
-      fig.update_layout(margin=dict(t=10), yaxis={'categoryorder': 'total ascending'})
+      d = d.with_columns(pl.col('category').str.split('&').list.first().replace_strict(impact_of, default='MODIFIER').alias('impact'), pl.col('category').str.replace_all('_', ' '))
+      colors = depictio_category_colors.get('impact') or {}
+      fig = px.bar(d.to_pandas(), x='count', y='category', color='impact', color_discrete_map=colors, category_orders={'impact': ['HIGH', 'MODERATE', 'LOW', 'MODIFIER']}, orientation='h', labels={'count': 'Effects', 'category': '', 'impact': ''})
+      fig.update_layout(margin=dict(t=10), yaxis={'categoryorder': 'total ascending'}, legend=dict(orientation='h', y=-0.15, title_text=''))
       fig.update_yaxes(automargin=True)
     section: Consequences
     tag: rv-ann-fig-effects
     index: ann-consequences
     title: Commonest consequence terms
-    description: The twelve consequence terms snpEff assigned most often, summed over the samples.
+    description: The twelve consequence terms snpEff assigned most often, summed over the samples and coloured by the impact class snpEff gives each term. Most are MODIFIER (intron, UTR, up- and downstream); the few HIGH and MODERATE terms are the ones that change a protein.
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: table
     workflow_tag: rnavar
@@ -1605,7 +1619,7 @@ tabs:
 # navigator as a dashed band, and a row clicked in the call table centres the
 # browser on that call. The cards opt in to the region with follow_region_filter.
 - title: Genome
-  subtitle: Where along the genome do the calls fall?
+  subtitle: Are PASS variants shared between replicates, and do the reads support them?
   tab_group: Variants
   tab_order: 6
   tab_icon: mdi:map-marker-outline
@@ -1617,17 +1631,26 @@ tabs:
   - name: Locus filters
     icon: mdi:filter-variant
     color: indigo
-    description: These picks narrow the call table and cards; the navigator and the VCF lanes read every PASS call
+    description: Type and FILTER narrow the call table and cards; Sharing narrows the shared variants
   grid_sections:
+  - name: Shared between replicates
+    icon: mdi:set-merge
+    color: indigo
+    description: The PASS sites of each group and how many of its replicates call them
   - name: Region at a glance
     icon: mdi:counter
     color: indigo
     description: What the region in view holds, recounted on every brush or locus entry
-  - name: Calls on one axis
+  - name: Replicates and their reads
     icon: mdi:dna
     color: indigo
-    description: The navigator's lanes are the groups. Its window drives the browser's samples below, and the browser's view comes back as a dashed band.
+    description: Are PASS variants shared between a line's replicates, and do the reads support them?
     display: linked
+  - name: Shared variants
+    icon: mdi:table
+    color: gray
+    description: The shared PASS sites, best supported first. Click a row to centre the browser on the site.
+    collapsed: true
   - name: Call detail
     icon: mdi:table
     color: gray
@@ -1637,13 +1660,14 @@ tabs:
   - component_type: text
     order: 1
     body: >
-      The navigator draws one lane per group, each window its distinct PASS variants per megabase,
-      and the browser below shows the calls and reads at its region. Type a locus or a gene in the
-      navigator's header, or brush its axis, and the browser, the cards and the call table follow;
-      zoom the browser and its window comes back on the navigator.
+      A cell line sequenced twice should give the same variants twice. The browser opens on the
+      best supported variant that every replicate of a line calls, with the replicates' calls above
+      their alignments, so you can read whether the reads carry the call. The navigator draws one
+      lane per group (distinct PASS variants per megabase): type a locus or a gene in its header,
+      or brush its axis, and the browser follows.
     tag: rv-gen-intro
     index: gen-intro
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: interactive
     workflow_tag: rnavar
     data_collection_tag: vcf_variants
@@ -1674,6 +1698,101 @@ tabs:
     index: gen-status-filter
     title: FILTER value
     layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: rnavar
+    data_collection_tag: shared_variants
+    interactive_component_type: MultiSelect
+    column_name: sharing
+    column_type: object
+    display:
+      icon_name: mdi:set-merge
+      custom_color: grape
+    section: Locus filters
+    group: Locus
+    tag: rv-gen-filter-sharing
+    index: gen-sharing-filter
+    title: Sharing
+    layout: {x: 0, y: 6, w: 1, h: 3}
+  # The question of the tab, counted on the shared sites: PASS sites of each
+  # group, by how many replicates call them. The cards do not follow the
+  # navigator's region (the shared table is not linked to it).
+  - component_type: card
+    workflow_tag: rnavar
+    data_collection_tag: shared_variants
+    aggregation: count
+    column_name: variant_key
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: sharing
+    display:
+      icon_name: mdi:set-merge
+      icon_color: indigo.4
+      caption: PASS sites, by replicates calling them
+      format: si
+    section: Shared between replicates
+    tag: rv-gen-card-sites
+    index: gen-card-sites
+    title: PASS sites
+    description: PASS sites of every group in view, a site counted once per group; the bar splits them by how many of the group's replicates call it.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: rnavar
+    data_collection_tag: shared_variants
+    aggregation: count
+    column_name: variant_key
+    column_type: object
+    filter_expr: col('sharing') == 'In every replicate'
+    display:
+      icon_name: mdi:check-all
+      icon_color: indigo.6
+      caption: called by every replicate of the group
+      format: si
+    section: Shared between replicates
+    tag: rv-gen-card-every
+    index: gen-card-every
+    title: In every replicate
+    description: PASS sites that every replicate of a group calls; a group of a single sample has none.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: rnavar
+    data_collection_tag: shared_variants
+    aggregation: median
+    column_name: min_dp
+    column_type: int64
+    secondary_layout: threshold
+    threshold_value: 10
+    threshold_direction: min
+    threshold_warn: 5
+    display:
+      icon_name: mdi:layers-outline
+      icon_color: indigo.8
+      caption: weakest call read 10 times or more, warn from 5
+      decimals: 0
+    section: Shared between replicates
+    tag: rv-gen-card-mindp
+    index: gen-card-mindp
+    title: Depth of the weakest call
+    description: Median, over the sites, of the read depth at the call in the replicate that read it least. Under 10 reads an allele fraction is too coarse to tell a heterozygous call from a homozygous one.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: rnavar
+    data_collection_tag: shared_variants
+    aggregation: median
+    column_name: median_vaf
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:chart-box-outline
+      icon_color: indigo.9
+      caption: median per site, with its spread
+      decimals: 2
+    section: Shared between replicates
+    tag: rv-gen-card-sharedvaf
+    index: gen-card-sharedvaf
+    title: Allele fraction
+    description: Median allele fraction of the calls at each site; a heterozygous site sits near 0.5 and a homozygous-alternate one near 1.
+    layout: {x: 6, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: rnavar
     data_collection_tag: vcf_variants
@@ -1771,31 +1890,32 @@ tabs:
       category_col: '{GROUP_COL}'
       facet_by_sample: true
       max_facets: 8
-      lane_height: 26
-      mark: rect
+      # Bars, the coverage-profile look: a window's height reads at once in a lane.
+      mark: bar
+      # No lane_height: the lanes fit the tile (a fixed 26 px lane read as a sliver).
       assembly: '{GENOME}'
       score_title: PASS variants
       opacity: 0.8
       # No default_region: `first` filters the whole first contig on load, the browser
       # follows it and every track shows "Force load". The browser opens on its locus_from.
       region_filter_enabled: true
-    section: Calls on one axis
+    section: Replicates and their reads
     tag: rv-gen-av-navigator
     index: gen-navigator
     title: Variant navigator, 1 Mb windows
-    description: Distinct PASS variants per megabase window, one lane per group. A locus or gene in the header, or a brush, moves the browser below.
+    description: Distinct PASS variants per megabase window, one lane per group. A locus or gene in the header, or a brush, moves the browser below, whose window comes back as a band.
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: jbrowse
     workflow_tag: rnavar
     data_collection_tag: tracks
-    section: Calls on one axis
-    # One VCF lane per group and the reads of the strongest call's sample open
-    # (the order of tracks.py); the other samples follow in the track menu.
-    initial_tracks: 5
+    section: Replicates and their reads
+    # The replicates' VCFs of the group that holds the best shared variant, then
+    # their alignments (the order of tracks.py); the other groups' VCFs follow in
+    # the track menu. Four tracks suit two replicates; a third replicate's
+    # alignment is one click away in the menu.
+    initial_tracks: 4
     max_tracks: 16
     show_overview: false
-    # The navigator above already says where the browser is.
-    show_header: false
     # Sashimi arcs over the coverage of the BAMs.
     show_junctions: true
     # The samples of a group share a hue, as in the navigator's lanes.
@@ -1806,26 +1926,45 @@ tabs:
     follow_window: true
     selection_enabled: true
     selection_column: sample
+    # The shared PASS sites of every group, best first: sites every replicate
+    # calls, then some, then one; deeper weakest call first inside a tier. The
+    # browser opens on the first, the stepper walks the next ones, and a row
+    # picked in the shared-variant table frames its site.
     locus_from:
-      - data_collection_tag: vcf_variants
-        name: Calls
+      - data_collection_tag: shared_variants
+        name: Shared variants
         color: indigo
         chrom_column: chrom
         start_column: pos
+        end_column: end
         padding: 150
         max_rows: 20
-        sort_by: qual
+        sort_by: support_score
         descending: true
         label_column: variant_key
-        sample_column: sample
-        columns: [variant_type, filter_status, vaf]
+        columns: [sharing, min_dp, median_vaf]
     variant_color_by:
       column: filter_status
     tag: rv-gen-browser
     index: gen-browser
     title: Genome browser
-    description: The calls (coloured by FILTER) of one sample per group and the reads of the strongest call's sample at the navigator's window; the other samples are in the track menu.
-    layout: {x: 0, y: 4, w: 8, h: 7}
+    description: The calls (coloured by FILTER) of the replicates of one line above their alignments, opening on the best supported shared variant; the stepper walks the next ones and the other lines are in the track menu.
+    layout: {x: 0, y: 4, w: 8, h: 9}
+  # One row per group and PASS site, best supported first: pick one to frame it
+  # in the browser above. The group column is the cell line, so a site shared by
+  # two lines is two rows.
+  - component_type: table
+    workflow_tag: rnavar
+    data_collection_tag: shared_variants
+    columns: ['{GROUP_COL}', chrom, pos, ref, alt, variant_type, sharing, n_calling, samples, min_dp, median_vaf, best_qual]
+    row_selection_enabled: true
+    row_selection_column: variant_key
+    section: Shared variants
+    tag: rv-gen-table-shared
+    index: gen-table-shared
+    title: Shared PASS variants
+    description: One row per group and PASS site with how many replicates call it and how deeply the weakest call was read; a click centres the browser.
+    layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: rnavar
     data_collection_tag: vcf_variants

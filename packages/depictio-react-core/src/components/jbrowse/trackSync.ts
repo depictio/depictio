@@ -40,6 +40,21 @@ export function toggleValue(current: string[], value: string): string[] {
 }
 
 /**
+ * The selection a feature click on ``trackId`` leads to, or ``null`` when the
+ * track maps to no selection value (a multi-sample VCF, a gene or annotation
+ * track): nothing to filter on, and the click is only a request for the
+ * feature's details.
+ */
+export function featureClickSelection(
+  trackId: string | undefined,
+  rows: JBrowseTrackRow[],
+  current: string[],
+): string[] | null {
+  const [value] = trackId ? selectionValuesFor([trackId], rows) : [];
+  return value == null ? null : toggleValue(current, value);
+}
+
+/**
  * The dashboard filter a genome-browser selection emits. ``dc_id`` is the
  * track manifest's, so link resolution carries it to the sample tables the
  * manifest is linked to (the phylogeny tree does the same with its metadata).

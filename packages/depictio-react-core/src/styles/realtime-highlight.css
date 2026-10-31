@@ -74,3 +74,18 @@
 .ag-theme-alpine-dark .ag-row.depictio-row-linked {
   background-color: var(--mantine-primary-color-light) !important;
 }
+
+/**
+ * Rows a genome browser points at (the pick, else its best call), and the rows
+ * picked in the table itself, which a browser frames. The browser paints their
+ * features in the primary colour with an outline; the row wears the same
+ * colour as a bar on its left edge over the light tint.
+ */
+.ag-theme-alpine .ag-row.depictio-row-picked,
+.ag-theme-alpine-dark .ag-row.depictio-row-picked,
+.ag-theme-alpine .ag-row.ag-row-selected,
+.ag-theme-alpine-dark .ag-row.ag-row-selected {
+  background-color: var(--mantine-primary-color-light) !important;
+  box-shadow: inset 4px 0 0 var(--mantine-primary-color-filled);
+  font-weight: 600;
+}

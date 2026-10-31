@@ -7,7 +7,7 @@ caller sees. The two catalog recipes key every ORF by its genomic stop codon
 (``orf_id``), which makes the calls comparable even when the callers chose
 different starts or transcripts.
 
-Membership columns (0/1, the UpSet sets):
+Membership columns (0/1, one per set):
     ribotish       reported by Ribo-TISH in at least one library
     ribocode       reported by RiboCode in at least one library
     annotated_cds  either caller classed it as the annotated CDS, so the

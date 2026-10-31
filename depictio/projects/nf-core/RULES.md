@@ -43,6 +43,13 @@ holds the version and content hash of every template; `test_template_lock.py` an
 After bumping, run `python scripts/update_template_lock.py --write`. A recipe shared by several
 versions of a pipeline moves the hash of all of them: bump each one.
 
+Catalog modules are versioned too (`version` in `depictio/catalog/<module>/module.yaml`, held by
+`depictio/catalog/catalog_versions.lock.json`). Changing a module's reader, recipe or render
+bumps the module and then every template that consumes it (the lock lists them under
+`catalog`): major when an output column changes, minor otherwise. Look in the catalog before
+writing a template recipe or figure for a tool's output; write one in the template only when the
+module does not cover the need, and name the module it overrides in the recipe's docstring.
+
 ## 2. The family of tabs
 
 - The main tab is the **Overview**: `main_tab_name: Overview`, and the family keeps
@@ -272,6 +279,10 @@ A KPI strip is four different readings, not four numbers in one style:
   with a short `strip_label`, except for the case above. Never `display: strip`.
 - Put the group filter (`{GROUP_COL}`) first among the Overview's filters: the Guide demos the
   first categorical filter it finds.
+- A filter or a view that opens on a default (`default_value`, `default_state`, `default_rank`,
+  `always_selected`, a SnpEff section) says so in its section's description, with the reason:
+  "opens on the HIGH and MODERATE impacts, the ones that change a protein". A reader who does not
+  know the tab is pre-filtered reads its counts as the whole run.
 
 ## 7. Colours
 
@@ -281,6 +292,13 @@ A KPI strip is four different readings, not four numbers in one style:
   data column (a single series, a sorted bar, a histogram) draw in that hue. Data colours
   (`category_colors`, `color_scale`, verdict colours such as pass/fail) are never replaced by
   the tab hue: a sample or a model class keeps its colour on every tab.
+- A distribution drawn per library or per sample (a box, a violin, a bar per library) colours
+  by the group (`{GROUP_COL}`, or the hub's design column such as `antibody` or `condition`),
+  not by the tab hue: the reader compares groups, and one colour hides them. The tab hue is for
+  a figure with no group to show.
+- A template that declares `GROUP_COL` uses `{GROUP_COL}` wherever it colours, splits or
+  filters by the group. A hardcoded `condition`, `group` or `drop_group` breaks the run whose
+  sheet names its design column differently.
 - `category_colors` is declared once, on the main tab; child tabs inherit it.
   - Known vocabularies are written out (taxonomic kingdoms, pass/warn/fail, variant classes...).
   - The group column takes `"{GROUP_COL}": auto`: the server gives each of its values a colour
@@ -344,7 +362,8 @@ A KPI strip is four different readings, not four numbers in one style:
   reference only, and a curated `chr9:…` window opens empty on a run aligned to part of the
   genome): write `default_region: first`, which opens the first contig the data carries (in
   the assembly's order when the tile names one), or leave it unset on a model genome where a
-  gene or band says more.
+  gene or band says more. A navigator that drives a browser is the exception: see "Linking
+  the navigator and the browser".
 - A `source: file` genome_view reads its files only under `file_window_size` (1 Mb for VCF by
   default), and a view of exactly 1 Mb is not under it. When the tab opens on a region, keep
   that region inside the window or raise `file_window_size`, or the lanes open empty.
@@ -399,6 +418,10 @@ viz to their content. Never write `fit: fixed`.
 | jbrowse | 9 for the linear view (10 with per-sample read tracks open); 12 when the tile offers the breakpoint or circular view |
 | genome_view | 4 for one lane per group; 6 or more for per-sample lanes (`facet_by_sample`), with `lane_height` |
 
+- A heatmap labelled with sample ids on both axes (a sample concordance or correlation matrix)
+  takes `min_cell_px: 40` and `h: 9` at `w: 8` (8 as a highlight): the viewer sizes a heatmap from
+  its rows at `min_cell_px` (12 px by default, for a long list), so without it eight samples ask
+  for a strip however tall the stored `h`.
 - Tables are full width (`w: 8`), except beside their linked record card (`w: 5` + `w: 3`).
 - When in doubt, give a tile more height, never less. Genome browsers, multi-view browsers,
   UpSet plots and heatmaps read badly when squeezed: a reader scrolls a tall tile, but cannot
@@ -455,6 +478,13 @@ step). Text, highlights and links bind no data of their own, so:
   `fig.update_layout(margin=dict(t=10))` (px keeps a title band the tile already draws).
 - Text follows the figure: when a default changes (the view, the rank, `top_n`), update the
   title, the section description, the caption and `docs/dashboards.md` with it.
+- Every reference mark drawn on a figure is explained in its description, with its value and
+  where the value comes from: lines (`add_hline`, `add_vline`, `score_threshold`), bands and
+  zones (`add_hrect`, `add_vrect`, a green "good" zone), floors and cut-offs. "The dashed line is
+  the 1.8 Ts/Tv floor of a whole-genome callset; below it, false calls dilute the transitions"
+  rather than a bare "floor 1.8" label. A label inside the plot does not replace it.
+- A description names the chart it sits on ("each point is a gene"), never a neighbouring tile
+  it drives ("one point per gene of the lollipop").
 - No megatest sample names, genes or loci: the sibling `megatest.yaml` `forbidden_terms` are
   checked in every title, description, body, caption and value filter.
 - Icons come from the bundled sets (`mdi:` mostly); section icons and colours from
@@ -559,6 +589,9 @@ they are connected.
 - The browser sets `follow_window: true`: it follows the navigator's brush and its pan and
   zoom, and the navigator draws the browser's window as a band. The section description says
   so in one sentence.
+- That navigator sets no `default_region`: the browser opens on its own locus, and a navigator
+  opening on a whole contig would pull the browser out to it. Set `open_on_view_window: true`
+  instead, so the navigator opens zoomed to the chromosome the browser shows.
 - Colours are shared: the browser's `color_by` (a category) or `color_scale` (an ordered
   column: time point, dose, stage) colours its tracks, and the navigator's lanes pick up the
   same map. Never set a different colour key on the two tiles.

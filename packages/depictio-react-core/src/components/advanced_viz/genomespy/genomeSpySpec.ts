@@ -28,10 +28,43 @@
  *    container-wide overlay for it and `gridChild.js` deliberately skips it so
  *    the controllers do not double up.
  */
-import { sequentialColorMap, type ColorScaleSpec } from '../../../categoryColors';
+import { sequentialColorMap, sequentialRamp, type ColorScaleSpec } from '../../../categoryColors';
+import {
+  foldByColour,
+  keyTitle,
+  type LegendEntry,
+  type LegendRamp,
+} from '../../jbrowse/trackLegend';
 import { sortNaturalOrDuration } from '../../../durationOrder';
 import { brushTrigger, laneCursor, specInteractionMode } from './interactionMode';
 import type { InteractionMode } from './interactionMode';
+
+
+/** Share of the score span added at both ends of a point lane's domain. */
+export const POINT_SCORE_MARGIN = 0.06;
+
+/**
+ * The y domain of a point lane: the scores' span widened by
+ * `POINT_SCORE_MARGIN` on both ends (half a unit for a single value), so the
+ * points at the extremes show whole. GenomeSpy's pixel `padding` on the scale
+ * collapsed the lane to [0, 0.35]. Null without a finite score.
+ */
+export function paddedScoreDomain(
+  data: Record<string, unknown>[],
+  scoreCol: string,
+): [number, number] | null {
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (const d of data) {
+    const v = num(d[scoreCol]);
+    if (v === null) continue;
+    if (v < lo) lo = v;
+    if (v > hi) hi = v;
+  }
+  if (!Number.isFinite(lo)) return null;
+  const pad = hi > lo ? (hi - lo) * POINT_SCORE_MARGIN : 0.5;
+  return [lo - pad, hi + pad];
+}
 
 export interface GenomeViewConfig {
   /** `table` reads rows from /advanced_viz/data; `file` hands GenomeSpy an
@@ -51,11 +84,16 @@ export interface GenomeViewConfig {
   max_facets?: number;
   /** Y scale of the stacked lanes (default `shared`). */
   facet_y_scale?: 'shared' | 'independent';
-  annotation?: 'none' | 'hg38' | 'mm10';
+  annotation?: 'none' | 'hg38' | 'hg19' | 'mm10';
   assembly?: string | null;
   score_title?: string;
   score_threshold?: number | null;
   point_size?: number;
+  /** Extra columns the hover tooltip shows. */
+  hover_cols?: string[] | null;
+  /** Point mark: the N best scores (at most 3) drawn as a large gold, silver
+   *  and bronze star instead of a point, the medals of the browser's stars. */
+  top_stars?: number;
   opacity?: number;
   region_filter_enabled?: boolean;
   /** What the pointer does on the axis (see `interactionMode.ts`). The
@@ -75,13 +113,18 @@ export interface GenomeViewConfig {
   /** `chr1:10,000,000-12,000,000`: the region the section opens on, emitted
    *  once on the tile's first render. See `defaultRegion.ts`. */
   default_region?: string | null;
-  /** Fixed height of each stacked lane in px; unset, they share the tile
-   *  (never under `FACET_LANE_HEIGHT` nor over `FACET_LANE_MAX_HEIGHT`). */
+  /** Fixed height of each stacked lane in px; unset, they share the tile, filling
+   *  it (never under `FACET_LANE_HEIGHT`). */
   lane_height?: number | null;
   /** On opening: the whole chromosome of the region (default) or the region. */
   default_view?: 'chromosome' | 'region';
   /** On opening: the chromosome the genome browser shows, not the whole genome. */
   open_on_view_window?: boolean;
+  /** The axis keeps the genome browser's window in the middle of its view. */
+  follow_view_window?: boolean;
+  follow_context_bp?: number | null;
+  /** Draw the key to the marks' colours under the axis. */
+  show_legend?: boolean;
   selection_enabled?: boolean;
   selection_column?: string | null;
   // --- source: 'file' only -------------------------------------------------
@@ -122,6 +165,8 @@ export interface GenomeSpyThemeColors {
   /** The one colour of marks no category, lane colour or pin names. Unset:
    *  the palette's first hue. */
   neutral?: string | null;
+  /** Gold, silver and bronze of the `top_stars` (see `markTopStars`). */
+  medals?: readonly string[] | null;
 }
 
 /** One gene of the bundled annotation asset, already decoded. */
@@ -202,9 +247,28 @@ export interface BuiltGenomeSpec {
   /** The colour a row's mark wears (null: the neutral one), for a hover to
    *  hand to the tiles that draw it. */
   colorOf: (datum: Readonly<Record<string, unknown>>) => string | null;
+  /** The lanes whose top-scored rows the star overlay draws (see `StarLane`).
+   *  Empty when the tile draws no stars. */
+  starLanes: StarLane[];
   /** Names of the named data sources that feed the overlay layers, one pair
    *  per data lane (see `overlaySourceNames`). Empty without `colors.overlay`. */
   overlays: OverlaySources[];
+  /** The key to the marks' colours; null when they all wear the neutral one. */
+  legend: GenomeLegend | null;
+  /** What colours the marks: a `color_scale`, a `category_col`, the sample (the
+   *  genome browser's colour of the library) or nothing. */
+  colourBy: 'scale' | 'category' | 'sample' | 'none';
+  /** The samples the marks' colours are looked up for (a lane each when faceted). */
+  colourSamples: string[];
+}
+
+/** What the colours of a genome view's marks stand for: swatches, or a ramp
+ *  for an ordered `color_scale`. */
+export interface GenomeLegend {
+  /** The column the colours encode, as a reader says it. */
+  title: string;
+  entries: LegendEntry[];
+  ramp: LegendRamp | null;
 }
 
 /** Name of the axis-only view under a scrolling stack of lanes. */
@@ -248,11 +312,32 @@ export const DATA_ASSEMBLY = 'data';
  *  `api.getScaleResolutionByName()` and zoom to an incoming region filter. */
 export const GENOME_SCALE_NAME = 'genomeX';
 
+/** Name of the score (y) scale of the data lanes. GenomeSpy's public API
+ *  reaches a scale only by name (`getScaleResolutionByName`), and the star
+ *  overlay (`useStarOverlay`) reads the score domain from it. Shared across
+ *  lanes when they share one ruler, else suffixed per lane
+ *  (`scoreScaleName`). */
+export const SCORE_SCALE_NAME = 'scoreY';
+
+/** The y scale name of data lane `lane` (see `SCORE_SCALE_NAME`). */
+export function scoreScaleName(lane: string, independent: boolean): string {
+  return independent ? `${SCORE_SCALE_NAME}_${lane}` : SCORE_SCALE_NAME;
+}
+
+/** A data lane that draws `top_stars`: the overlay finds its unit view by
+ *  `lane`, its score domain by `scale`, and its rows by `sample` (a faceted
+ *  lane draws one sample only; null: every row). */
+export interface StarLane {
+  lane: string;
+  scale: string;
+  sample: string | null;
+}
+
 /** GenomeSpy's bundled assemblies. Anything else is treated as data-derived. */
 export const BUILTIN_ASSEMBLIES: readonly string[] = ['hg38', 'hg19', 'hg18', 'mm10', 'mm9', 'dm6'];
 
 /** Assemblies a gene annotation lane ships for. */
-export const ANNOTATION_ASSEMBLIES: readonly string[] = ['hg38', 'mm10'];
+export const ANNOTATION_ASSEMBLIES: readonly string[] = ['hg38', 'hg19', 'mm10'];
 
 /** Natural chromosome order: chr1..chr22, chrX, chrY, chrM(T), then the rest
  *  alphabetically. Same rule ManhattanRenderer uses. */
@@ -280,6 +365,59 @@ function num(v: unknown): number | null {
 
 /** Column-oriented rows → array of plain objects, dropping rows with no
  *  usable chromosome or position. Only the listed columns are carried. */
+/** Opacity of the hover-only point under each star. Not 0: a mark GenomeSpy
+ *  draws at 0 is not picked, and the tooltip would be lost. The SVG star sits
+ *  above and hides it. */
+export const STAR_HOVER_OPACITY = 0.01;
+
+/** The field `markTopStars` writes: 1, 2, 3 for the best scores, else 0. */
+export const STAR_FIELD = '_star';
+
+/** The rank field `markTopStars` writes: 1 for the best score, 2 for the next,
+ *  and so on. No leading `_`, so GenomeSpy's default tooltip lists it. */
+export const RANK_FIELD = 'rank';
+/** Where the rank goes when the data already has a `rank` column. */
+export const RANK_FIELD_FALLBACK = 'rank_#';
+
+/**
+ * Ranks the `n` (at most 3) highest `scoreCol` values of `rows` into
+ * `STAR_FIELD`, best first; ties keep the row order. Rows without a numeric
+ * score and the others get 0.
+ *
+ * Every row with a score also gets a 1-based rank by score, descending, in
+ * `RANK_FIELD` (or `RANK_FIELD_FALLBACK` when the data has a `rank` column of
+ * its own, and none at all when it has both), so the tooltip says "rank 57",
+ * not only whether a call won a medal. It is the rank among the rows given,
+ * i.e. the fetched, filtered rows. The rank is written first on the row, so it
+ * heads the tooltip; the array is updated in place and the rows with a score
+ * are replaced by copies.
+ */
+export function markTopStars(
+  rows: Record<string, unknown>[],
+  scoreCol: string,
+  n: number,
+): Record<string, unknown>[] {
+  const scored = rows
+    .map((row, i) => ({ i, score: num(row[scoreCol]) }))
+    .filter((r): r is { i: number; score: number } => r.score !== null)
+    .sort((a, b) => b.score - a.score || a.i - b.i);
+  const stars = Math.max(0, Math.min(3, n));
+  const taken = (field: string) => rows.some((row) => field in row);
+  const rankField = !taken(RANK_FIELD) ? RANK_FIELD : !taken(RANK_FIELD_FALLBACK) ? RANK_FIELD_FALLBACK : null;
+  for (const row of rows) row[STAR_FIELD] = 0;
+  scored.forEach((r, k) => {
+    const row = rows[r.i];
+    if (k < stars) row[STAR_FIELD] = k + 1;
+    if (rankField) rows[r.i] = { [rankField]: k + 1, ...row };
+  });
+  return rows;
+}
+
+/** Whether a tile draws its best scores as stars (`top_stars`, point mark). */
+export function drawsTopStars(config: GenomeViewConfig): boolean {
+  return (config.mark ?? 'point') === 'point' && (config.top_stars ?? 0) > 0;
+}
+
 export function rowsToObjects(
   rows: Record<string, unknown[]>,
   columns: readonly string[],
@@ -393,6 +531,7 @@ export function requiredColumns(config: GenomeViewConfig, selectionColumn?: stri
     config.color_scale?.column,
     config.color_scale?.order_by,
     selectionColumn,
+    ...(config.hover_cols ?? []),
   ]) {
     if (c && !cols.includes(c)) cols.push(c);
   }
@@ -497,14 +636,16 @@ export function regionFromInterval(
 const ANNOTATION_LANE_HEIGHT = 34;
 /** Minimum height of one data lane once several are stacked. */
 export const FACET_LANE_HEIGHT = 26;
-/** Height one data lane takes at most when it fits the tile, so a few lanes in
- *  a tall tile stay lanes instead of stretching into slabs. */
-export const FACET_LANE_MAX_HEIGHT = 160;
-/** A stacked lane takes its share of the tile between its floor and its cap,
- *  so a taller tile, or the tile in fullscreen, draws taller lanes. */
-const FACET_LANE_SIZE = { grow: 1, minPx: FACET_LANE_HEIGHT, maxPx: FACET_LANE_MAX_HEIGHT };
+/** Least height of the lone lane of an unfaceted tile, so a short tile still draws
+ *  a lane worth reading (the tile scrolls nothing: the lane takes what is left). */
+export const SINGLE_LANE_MIN_HEIGHT = 96;
+/** A stacked lane takes its share of the tile from its floor up, with no cap: the
+ *  lanes always fill the tile they sit in (a lone lane in a tall tile is not a
+ *  sliver over a blank), and a taller tile, or the tile in fullscreen, draws
+ *  taller lanes. Lanes under their floor scroll (see `scrolls`). */
+const FACET_LANE_SIZE = { grow: 1, minPx: FACET_LANE_HEIGHT };
 
-export type LaneSize = number | { grow: number; minPx: number; maxPx?: number };
+export type LaneSize = number | { grow: number; minPx: number };
 
 /** Unset, lanes share the tile (fit, a resize redraws them); set, each lane
  *  is that tall whatever the tile, which scrolls when they do not fit. */
@@ -665,6 +806,63 @@ export function markColourOf(
   };
 }
 
+/**
+ * The key to the colours `markColour` gives: one entry per colour the marks
+ * wear (values sharing one fold into a single entry), a gradient for a
+ * `color_scale` of two or more values. Mirrors `markColour` branch for branch.
+ * Null when every mark wears one colour (neutral or not), so a tile with
+ * nothing to tell apart draws no key. Lanes that already name each sample in their title (one lane per
+ * sample, every colour its own) need no key either.
+ */
+export function markLegend(
+  config: GenomeViewConfig,
+  colors: GenomeSpyThemeColors,
+  categories: string[],
+  samples: string[],
+  scale: ResolvedColorScale | null = null,
+  faceted = false,
+): GenomeLegend | null {
+  const neutral = colors.neutral || colors.palette[0];
+  if (scale) {
+    const shared = { ...colors.groupColors, ...colors.laneColors };
+    const colourOf = (v: string) => shared[v] ?? scale.colours[v] ?? neutral;
+    if (scale.domain.length >= 2) {
+      return {
+        title: keyTitle(scale.column),
+        entries: [],
+        ramp: {
+          stops: sequentialRamp(config.color_scale?.scheme, 7),
+          from: scale.domain[0],
+          to: scale.domain[scale.domain.length - 1],
+          values: [...scale.domain],
+        },
+      };
+    }
+    const entries = foldByColour(scale.domain.map((v) => ({ label: v, color: colourOf(v) })));
+    return entries.length > 1 ? { title: keyTitle(scale.column), entries, ramp: null } : null;
+  }
+  if (config.category_col && categories.length) {
+    const overrides = { ...colors.groupColors, ...colors.pinned?.[config.category_col] };
+    const entries = foldByColour(
+      categories.map((v, i) => ({
+        label: v,
+        color: overrides[v] ?? colors.palette[i % colors.palette.length],
+      })),
+    );
+    return entries.length > 1 ? { title: keyTitle(config.category_col), entries, ramp: null } : null;
+  }
+  const sampleCol = config.sample_col;
+  if (!sampleCol) return null;
+  const bySample = { ...colors.pinned?.[sampleCol], ...colors.laneColors };
+  const coloured = samples.filter((v) => bySample[v]);
+  if (!coloured.length) return null;
+  const entries = foldByColour(coloured.map((v) => ({ label: v, color: bySample[v] })));
+  // One colour tells nothing apart; a lane per sample, each its own colour: the
+  // lane titles are the key.
+  if (entries.length < 2 || (faceted && entries.length === coloured.length)) return null;
+  return { title: keyTitle(sampleCol), entries, ramp: null };
+}
+
 function markFor(
   mark: 'point' | 'rect' | 'bar',
   config: GenomeViewConfig,
@@ -822,6 +1020,10 @@ function buildDataLane(
     /** The lane sits in a scrolling stack whose axis is drawn apart (see
      *  `STICKY_AXIS_NAME`): keep its chromosome grid, draw no axis of its own. */
     gridOnly?: boolean;
+    /** Fixed y domain of a point lane (see `paddedScoreDomain`). */
+    scoreDomain?: [number, number] | null;
+    /** Name of the lane's y scale (see `SCORE_SCALE_NAME`). */
+    scoreScale?: string;
   },
 ): Record<string, unknown> {
   const color = markColour(config, colors, categories, samples, opts.laneSample, opts.scale);
@@ -839,6 +1041,16 @@ function buildDataLane(
       type: 'quantitative',
       title: opts.noYTitle ? null : (config.score_title ?? config.score_col),
       axis: { grid: true },
+      // A point sits centred on its score: the best one, at the top of the
+      // domain, lost its upper half to the lane edge (see `paddedScoreDomain`).
+      ...(opts.scoreDomain || opts.scoreScale
+        ? {
+            scale: {
+              ...(opts.scoreScale ? { name: opts.scoreScale } : {}),
+              ...(opts.scoreDomain ? { domain: opts.scoreDomain, zero: false } : {}),
+            },
+          }
+        : {}),
     },
     color,
     opacity: {
@@ -862,9 +1074,12 @@ function buildDataLane(
     encoding.y2 = { field: config.score_col };
   }
 
+  const stars = mark === 'point' && drawsTopStars(config) && (colors.medals?.length ?? 0) >= 3;
   const layers: Record<string, unknown>[] = [
     {
       name: `${opts.name}-marks`,
+      // The starred calls are drawn by the star layer below, not as points.
+      ...(stars ? { transform: [{ type: 'filter', expr: `!(datum.${STAR_FIELD} > 0)` }] } : {}),
       // The point selection belongs to the *unit* view that owns the mark, not
       // to the layer above it: GenomeSpy allocates the selection texture from
       // the mark's own view, and a param declared one level up makes it throw
@@ -875,6 +1090,30 @@ function buildDataLane(
       encoding,
     },
   ];
+  if (stars) {
+    // The best calls are drawn as five-pointed stars, but not by GenomeSpy: a
+    // point `shape` is one of a fixed set of shader SDFs (circle, square,
+    // cross, diamond, 60 degree triangles, ticks, x, +), not a path, and its
+    // text marks use bitmap atlases (the bundled Lato is ASCII only, so U+2605
+    // is a "?"). `useStarOverlay` draws them as SVG above the canvas, placed
+    // from this lane's layout bounds and its genome and score scales.
+    //
+    // What stays here is one point layer for those rows, invisible but there
+    // to be hovered: GenomeSpy's tooltip (with the rank) and its pointer
+    // cursor still work over a star. Its size is the star's body.
+    const { x, y } = encoding as { x: unknown; y: unknown };
+    layers.push({
+      name: `${opts.name}-stars`,
+      transform: [{ type: 'filter', expr: `datum.${STAR_FIELD} > 0` }],
+      mark: {
+        type: 'point',
+        size: ((config.point_size ?? 5) * 1.6) ** 2,
+        filled: true,
+        ...(opts.clickable ? { cursor: 'pointer' } : {}),
+      },
+      encoding: { x, y, color: { value: colors.textColor }, opacity: { value: STAR_HOVER_OPACITY } },
+    });
+  }
   const threshold = config.score_threshold;
   if (threshold !== null && threshold !== undefined && Number.isFinite(threshold)) {
     layers.push({
@@ -997,6 +1236,7 @@ export function buildGenomeSpySpec({
     config.selection_enabled && config.selection_column ? config.selection_column : undefined,
   );
   const data = rowsToObjects(rows, columns, config.chr_col, config.pos_col);
+  if (drawsTopStars(config)) markTopStars(data, config.score_col, config.top_stars ?? 0);
   const mark = effectiveMark(config);
 
   const builtin =
@@ -1020,6 +1260,7 @@ export function buildGenomeSpySpec({
     : [];
 
   const scale = resolveColorScale(data, config.color_scale);
+  const scoreDomain = mark === 'point' ? paddedScoreDomain(data, config.score_col) : null;
   const faceted = facetingEnabled(config);
   const { kept, dropped } = faceted
     ? facetValues(data, config.sample_col as string, config.max_facets ?? 8)
@@ -1042,6 +1283,7 @@ export function buildGenomeSpySpec({
   // their cap, so lanes fill the tile when they can and scroll when they cannot.
   const scrolls = faceted && kept.length > 1;
   const lanes: Record<string, unknown>[] = [];
+  const starLanes: StarLane[] = [];
   if (faceted && kept.length > 0) {
     const sampleCol = config.sample_col as string;
     kept.forEach((sample, i) => {
@@ -1061,9 +1303,20 @@ export function buildGenomeSpySpec({
           height: laneSize(config.lane_height),
           overlay: overlayFor(i),
           scale,
+          scoreDomain,
           gridOnly: scrolls,
+          scoreScale: drawsTopStars(config)
+            ? scoreScaleName(`track_${i}`, config.facet_y_scale === 'independent')
+            : undefined,
         }),
       );
+      if (drawsTopStars(config)) {
+        starLanes.push({
+          lane: `track_${i}`,
+          scale: scoreScaleName(`track_${i}`, config.facet_y_scale === 'independent'),
+          sample,
+        });
+      }
     });
   } else {
     lanes.push(
@@ -1071,10 +1324,16 @@ export function buildGenomeSpySpec({
         name: 'track',
         pickParam: PICK_PARAM,
         clickable,
+        // The lone lane fills the tile: unsized, it drew a sliver at the top of
+        // a tall one. The gene lane (fixed) and the axis keep their own height.
+        height: config.lane_height ? config.lane_height : { grow: 1, minPx: SINGLE_LANE_MIN_HEIGHT },
         overlay: overlayFor(0),
         scale,
+        scoreDomain,
+        scoreScale: drawsTopStars(config) ? SCORE_SCALE_NAME : undefined,
       }),
     );
+    if (drawsTopStars(config)) starLanes.push({ lane: 'track', scale: SCORE_SCALE_NAME, sample: null });
   }
 
   const laneGenes =
@@ -1084,6 +1343,7 @@ export function buildGenomeSpySpec({
   const annotationLane = laneGenes.length ? buildAnnotationLane(laneGenes, colors, scrolls) : null;
   if (annotationLane && !scrolls) lanes.push(annotationLane);
 
+  const colourSamples = faceted && kept.length ? kept : samplesOf(data, config);
   const datasets: Record<string, unknown[]> = { [DATASET_NAME]: data };
   if (laneGenes.length) datasets[GENES_DATASET_NAME] = laneGenes as unknown[];
   // Seeded empty so the named sources exist before the first window or hover.
@@ -1187,7 +1447,17 @@ export function buildGenomeSpySpec({
     rowCount: data.length,
     geneCount: laneGenes.length,
     scrolls,
+    starLanes,
     colorOf: markColourOf(config, colors, categories, scale),
     overlays,
+    legend: markLegend(config, colors, categories, colourSamples, scale, faceted && kept.length > 0),
+    colourBy: scale
+      ? 'scale'
+      : config.category_col && categories.length
+        ? 'category'
+        : config.sample_col
+          ? 'sample'
+          : 'none',
+    colourSamples,
   };
 }

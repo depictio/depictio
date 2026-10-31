@@ -90,4 +90,14 @@ describe('packFamilies', () => {
     const many = packFamilies(trios(14), { ...base, availW: 500, availH: 900 });
     expect(many.rows.flatMap((r) => r.families)).toHaveLength(14);
   });
+
+  it('follows the generation spacing and slot the reader sets', () => {
+    const families = trios(2);
+    const plain = packFamilies(families, { ...base, availW: 0, availH: 0 });
+    const tall = packFamilies(families, { ...base, availW: 0, availH: 0, layout: { rowHeight: 160 } });
+    expect(tall.contentH).toBeGreaterThan(plain.contentH);
+    expect(tall.contentW).toBe(plain.contentW);
+    const wide = packFamilies(families, { ...base, availW: 0, availH: 0, layout: { slot: 96 } });
+    expect(wide.contentW).toBeGreaterThan(plain.contentW);
+  });
 });

@@ -4990,6 +4990,20 @@ def get_cross_tab_components(
 # ============================================================================
 
 
+def _is_unpopulated_optional_dc(dc: dict) -> bool:
+    """An optional, delta-backed table that holds no data: the run lacked its inputs.
+
+    The rule `_component_has_data` hides a card on. The project keeps such a DC
+    (skipped at ingestion, not removed), so a reader that looks a DC up by tag
+    must pass over it, or a `locus_from` naming it reads a table that is not there.
+    """
+    if not dc.get("optional") or str((dc.get("config") or {}).get("type") or "").lower() != "table":
+        return False
+    from depictio.api.v1.db import deltatables_collection
+
+    return deltatables_collection.find_one({"data_collection_id": ObjectId(str(dc["_id"]))}) is None
+
+
 def _find_project_dc(
     project_id: Any, dc_tag: str, workflow_tag: str | None = None
 ) -> tuple[str, str] | None:
@@ -4997,7 +5011,8 @@ def _find_project_dc(
 
     ``workflow_tag`` prefers the DC of the workflow with that tag (or name), for a
     project whose workflows share a collection tag; without a match the first
-    workflow holding the tag answers.
+    workflow holding the tag answers. An optional DC no ingestion populated is
+    not in the project for this purpose (see `_is_unpopulated_optional_dc`).
     """
     project = projects_collection.find_one(
         {"_id": ObjectId(str(project_id))},
@@ -5011,7 +5026,7 @@ def _find_project_dc(
     first: tuple[str, str] | None = None
     for wf in (project or {}).get("workflows", []) or []:
         for dc in wf.get("data_collections", []) or []:
-            if dc.get("data_collection_tag") != dc_tag:
+            if dc.get("data_collection_tag") != dc_tag or _is_unpopulated_optional_dc(dc):
                 continue
             found = (str(wf.get("_id")), str(dc.get("_id")))
             if not workflow_tag or workflow_tag in (wf.get("workflow_tag"), wf.get("name")):
@@ -5157,6 +5172,8 @@ def _jbrowse_call_columns(spec: dict) -> list[str]:
         spec.get("end_column"),
         spec.get("sort_by"),
         spec.get("label_column"),
+        spec.get("locate_column"),
+        spec.get("rank_color_by"),
         spec.get("sample_column"),
         spec.get("run_column"),
         *(spec.get("columns") or []),
@@ -5386,7 +5403,7 @@ def _jbrowse_first_call(
     access_token: str | None,
     pins: DataVersionPins,
 ) -> dict[str, str | None] | None:
-    """``{"locus", "mate_locus"}`` of the first call (best ``sort_by`` row), if any.
+    """``{"locus", "mate_locus", "picked"}`` of the first call (best ``sort_by`` row), if any.
 
     With ``span_top`` it frames the first N calls together when they sit close
     (``opening_rows``). Among the rows left by the dashboard filters when there are some, so a
@@ -5394,9 +5411,11 @@ def _jbrowse_first_call(
     lacks, an unreadable table) is not the view's: it opens at the next level.
     """
     from depictio.api.v1.services.jbrowse.render import (
-        locus_from_rows,
+        OPENING_PICKED,
+        centred_locus_from_rows,
         mate_locus_from_rows,
         opening_rows,
+        picked_from_rows,
     )
 
     try:
@@ -5409,10 +5428,45 @@ def _jbrowse_first_call(
     except Exception as e:  # noqa: BLE001
         logger.warning(f"render_jbrowse: first call lookup failed: {e}")
         return None
-    locus = locus_from_rows(rows, source[0]) if rows else None
+    # The best call sits in the middle of the frame, and is the one picked.
+    locus = centred_locus_from_rows(rows, source[0]) if rows else None
     if not locus:
         return None
-    return {"locus": locus, "mate_locus": mate_locus_from_rows(rows, source[0])}
+    picked = picked_from_rows(rows[:OPENING_PICKED], source[0])
+    return {
+        "locus": locus,
+        "mate_locus": mate_locus_from_rows(rows, source[0]),
+        # The best few of the calls it frames (``span_top``), the best alone
+        # otherwise; best first, so the viewer gives each its medal.
+        "picked": picked and {**picked, "medals": True},
+    }
+
+
+def _jbrowse_rank_rows(
+    component: dict,
+    filters: list[dict],
+    project_id: Any,
+    access_token: str | None,
+    pins: DataVersionPins,
+) -> list[dict] | None:
+    """The first ``rank_track`` calls (``sort_by`` order) for the rank track, if asked for.
+
+    Under the dashboard filters but not the picks made in a tile (a filter whose
+    ``source`` ends in ``_selection``), so a call keeps its rank once clicked. Any failure leaves the track out.
+    """
+    from depictio.api.v1.services.jbrowse.render import primary_locus_source
+
+    spec = primary_locus_source(component) or {}
+    top = int(spec.get("rank_track") or 0)
+    if top <= 0:
+        return None
+    kept = [f for f in filters if not str(f.get("source") or "").endswith("_selection")]
+    try:
+        source = _jbrowse_calls_source(component, kept, project_id, access_token)
+        return _jbrowse_calls_page(source, pins, 0, top) if source else None
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"render_jbrowse: rank track lookup failed: {e}")
+        return None
 
 
 @dashboards_endpoint_router.post("/render_jbrowse/{dashboard_id}/{component_id}")
@@ -5442,21 +5496,34 @@ def render_jbrowse_endpoint(
     rows, the component's ``location``, the first call of ``locus_from``, the
     first region holding data in the first tracks, the assembly's default.
     ``mate_location`` is the second side of the filtered or first call.
+    ``region`` (optional, ``{chrom, start, end}``) is the genome selection in
+    force; it never filters, but when the filters leave several ``locus_from``
+    rows, the ones inside it frame the view (the latest of several picks).
     ``locus_source`` is the ``locus_from`` collection and columns (null without
     ``locus_from``), and ``display`` the YAML display defaults (null when unset).
     """
+    from depictio.api.v1.services.jbrowse import ucsc
     from depictio.api.v1.services.jbrowse.render import (
         build_jbrowse_payload,
         filtered_track_rows,
+        gene_fallback_locus,
+        gene_symbols,
         locus_from_rows,
         mate_locus_from_rows,
+        pad_locus,
+        picked_from_rows,
+        rows_in_region,
+        union_locus,
     )
-    from depictio.api.v1.services.jbrowse.tracks import find_tracks_dc
+    from depictio.api.v1.services.jbrowse.tracks import TracksNotIngested, find_tracks_dc
 
     if not settings.jbrowse.enabled:
         raise HTTPException(status_code=404, detail="The genome browser is disabled.")
 
     filters = (request or {}).get("filters") or []
+    region = (request or {}).get("region")
+    if not isinstance(region, dict):
+        region = None
 
     dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
     if not dashboard_data:
@@ -5489,11 +5556,47 @@ def render_jbrowse_endpoint(
     try:
         delta_version = pins.for_dc(str(dc_id))
         filtered = filtered_track_rows(tdc, _build_filter_metadata(merged_filters), delta_version)
-        locus = mate_locus = first_call = None
+        locus = mate_locus = first_call = focus = picked = None
         narrowed = _jbrowse_filter_rows(component, filters, project_id, access_token, pins)
         if narrowed is not None:
-            locus = locus_from_rows(narrowed[1], narrowed[0])
-            mate_locus = mate_locus_from_rows(narrowed[1], narrowed[0])
+            unpadded = {**narrowed[0], "padding": 0}
+            # Several picks (a chord's accumulate): the genome region the latest
+            # one published frames the view, every pick stays highlighted.
+            framed = rows_in_region(narrowed[1], narrowed[0], region) or narrowed[1]
+            focus = locus_from_rows(framed, unpadded)
+            if focus is None and settings.jbrowse.ucsc_tracks_enabled:
+                # Rows without coordinates (an isoform table built without the
+                # extended annotation): the gene they name still places the view.
+                focus = gene_fallback_locus(
+                    framed,
+                    unpadded,
+                    ucsc.ucsc_genome(component.get("assembly") or tdc.props.assembly),
+                )
+            if (
+                focus is not None
+                and narrowed[0].get("frame_gene")
+                and narrowed[0].get("label_column")
+                and settings.jbrowse.ucsc_tracks_enabled
+            ):
+                # The whole gene the picked row sits in, not only its ORF or
+                # transcript: the gene search on the label, never the locate id.
+                focus = union_locus(
+                    focus,
+                    gene_fallback_locus(
+                        framed,
+                        {**unpadded, "locate_column": None},
+                        ucsc.ucsc_genome(component.get("assembly") or tdc.props.assembly),
+                    ),
+                )
+            locus = pad_locus(focus, int(narrowed[0].get("padding", 5000)))
+            mate_locus = mate_locus_from_rows(framed, narrowed[0])
+            picked = picked_from_rows(narrowed[1], narrowed[0])
+            if picked and picked.get("genes") and settings.jbrowse.ucsc_tracks_enabled:
+                # The annotation names a gene by its symbol, a row may by its id.
+                picked["genes"] = gene_symbols(
+                    picked["genes"],
+                    ucsc.ucsc_genome(component.get("assembly") or tdc.props.assembly),
+                )
         # The first call only matters when nothing nearer opens the view.
         if locus is None and not component.get("location"):
             first_call = _jbrowse_first_call(component, filters, project_id, access_token, pins)
@@ -5506,6 +5609,10 @@ def render_jbrowse_endpoint(
             mate_locus=mate_locus,
             first_call=first_call,
             locus_source=_jbrowse_locus_source(component, project_id),
+            picked=picked,
+            rank_rows=_jbrowse_rank_rows(component, filters, project_id, access_token, pins),
+            # A picked row below the top is drawn on the rank track too.
+            pick_rows=narrowed[1] if narrowed is not None else None,
             delta_version=delta_version,
             category_colors=effective_category_colors(dashboard_data),
             # The anonymous user is the owner in single-user mode, a stranger on a
@@ -5513,6 +5620,13 @@ def render_jbrowse_endpoint(
             anonymous=bool(getattr(current_user, "is_anonymous", False))
             and not settings.auth.is_single_user_mode,
         )
+    except TracksNotIngested as e:
+        # A template's optional track collection the run had no files for: the
+        # tile says so instead of failing.
+        raise HTTPException(
+            status_code=404,
+            detail="No genome-browser tracks: this project's track collection holds no data.",
+        ) from e
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:

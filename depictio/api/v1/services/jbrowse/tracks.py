@@ -237,6 +237,21 @@ _manifest_lock = threading.Lock()
 _MANIFEST_TTL_S = 60.0
 
 
+class TracksNotIngested(LookupError):
+    """The manifest collection exists in the project but has no table: never ingested."""
+
+
+def _is_missing_table(exc: BaseException) -> bool:
+    """A 404 from the deltatable lookup anywhere in the cause chain."""
+    seen: BaseException | None = exc
+    while seen is not None:
+        response = getattr(seen, "response", None)
+        if getattr(response, "status_code", None) == 404:
+            return True
+        seen = seen.__cause__
+    return False
+
+
 def tracks_by_key(tdc: TracksDC, delta_version: int | None = None) -> dict[str, TrackRow]:
     """All tracks of a DC keyed by ``track_key`` (cached briefly for the proxy).
 
@@ -252,12 +267,17 @@ def tracks_by_key(tdc: TracksDC, delta_version: int | None = None) -> dict[str, 
 
     from depictio.api.v1.deltatables_utils import load_deltatable_lite
 
-    df = load_deltatable_lite(
-        workflow_id=ObjectId(tdc.wf_id),
-        data_collection_id=tdc.dc_id,
-        init_data=tdc.init_data(),
-        delta_version=delta_version,
-    )
+    try:
+        df = load_deltatable_lite(
+            workflow_id=ObjectId(tdc.wf_id),
+            data_collection_id=tdc.dc_id,
+            init_data=tdc.init_data(),
+            delta_version=delta_version,
+        )
+    except Exception as exc:
+        if _is_missing_table(exc):
+            raise TracksNotIngested(tdc.dc_id) from exc
+        raise
     mapping = {t.key: t for t in manifest_rows(df, tdc.props)}
     with _manifest_lock:
         _manifest_cache[cache_key] = (now, mapping)

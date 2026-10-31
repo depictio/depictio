@@ -92,6 +92,27 @@ export function colourAlignmentTracks<T extends TrackConf>(
 }
 
 const WIGGLE_DISPLAY = 'LinearWiggleDisplay';
+const VARIANT_DISPLAY = 'LinearVariantDisplay';
+
+/** A VCF track's calls in `colour`, unless its renderer already sets `color1`
+ *  (the tile's `variant_color_by`, or a config override). */
+function colourVariantTrack<T extends TrackConf>(track: T, colour: string | undefined): T {
+  if (!colour) return track;
+  const displays = (Array.isArray(track.displays) ? track.displays : []).map((d) => ({
+    ...(d as Record<string, unknown>),
+  }));
+  let display = displays.find((d) => d.type === VARIANT_DISPLAY);
+  if (!display) {
+    display = { type: VARIANT_DISPLAY, displayId: `${track.trackId}-${VARIANT_DISPLAY}` };
+    displays.push(display);
+  }
+  const renderer = { ...((display.renderer as Record<string, unknown>) ?? {}) };
+  if (renderer.color1) return track;
+  renderer.type ??= 'CanvasFeatureRenderer';
+  renderer.color1 = colour;
+  display.renderer = renderer;
+  return { ...track, displays };
+}
 const WIGGLE_RENDERERS = ['XYPlotRenderer', 'LinePlotRenderer', 'DensityRenderer'] as const;
 
 /**
@@ -162,6 +183,11 @@ export function trackColoursBy(
 ): GenomeTracksColours {
   const groups: Record<string, string> = {};
   const samples: Record<string, string> = {};
+  // A sample takes the colour only when `column` is a sample-level column (one
+  // value across all of that sample's tracks, like its condition). Coloured by
+  // caller, a sample's tracks span several values, and handing it its first
+  // caller's colour painted the sample's lanes elsewhere as that caller.
+  const valuesOf = new Map<string, Set<string>>();
   const rowOf = new Map(rows.map((r) => [r.track_id, r]));
   for (const t of tracks) {
     const value = conditionOf(t, column);
@@ -169,7 +195,13 @@ export function trackColoursBy(
     if (value === null || !colour) continue;
     groups[value] = colour;
     const row = rowOf.get(t.trackId);
-    if (row?.sample && !row.color && !(row.sample in samples)) samples[row.sample] = colour;
+    if (!row?.sample || row.color) continue;
+    const seen = valuesOf.get(row.sample) ?? new Set<string>();
+    seen.add(value);
+    valuesOf.set(row.sample, seen);
+  }
+  for (const [sample, values] of valuesOf) {
+    if (values.size === 1) samples[sample] = groups[[...values][0]];
   }
   return { samples, groups };
 }
@@ -197,6 +229,7 @@ export function colourTracksBy<T extends TrackConf>(
     selection_value: null,
   }));
   return colourAlignmentTracks(tracks, rows, colours).map((track) => {
+    if (track.type === 'VariantTrack') return colourVariantTrack(track, colours.get(conditionOf(track, column) ?? ''));
     if (track.type !== 'QuantitativeTrack') return track;
     const colour = colours.get(conditionOf(track, column) ?? '');
     if (!colour) return track;

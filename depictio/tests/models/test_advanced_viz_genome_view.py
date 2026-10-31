@@ -125,12 +125,13 @@ def test_line_is_not_a_mark_because_genomespy_has_none():
 
 
 def test_annotation_falls_back_to_none_without_a_shipped_gene_table():
-    for assembly in ("hg38", "mm10"):
+    for assembly in ("hg38", "hg19", "mm10"):
         assert GenomeViewConfig(annotation=assembly).annotation == assembly  # type: ignore[arg-type]
     # A run's genome is a template variable, so an assembly without a shipped
     # gene table degrades to no gene lane rather than failing the import.
-    assert GenomeViewConfig(annotation="hg19").annotation == "none"  # type: ignore[arg-type]
+    assert GenomeViewConfig(annotation="TAIR10").annotation == "none"  # type: ignore[arg-type]
     assert GenomeViewConfig(annotation="GRCh38").annotation == "hg38"  # type: ignore[arg-type]
+    assert GenomeViewConfig(annotation="GRCh37").annotation == "hg19"  # type: ignore[arg-type]
 
 
 def test_max_facets_is_bounded_so_lanes_stay_readable():
@@ -232,6 +233,28 @@ def test_the_older_drag_mode_is_still_accepted() -> None:
 def test_auto_height_and_the_window_publish_are_opt_in() -> None:
     config = GenomeViewConfig(auto_height=True, publish_view_window=True)
     assert config.auto_height is True and config.publish_view_window is True
+
+
+def test_the_axis_follows_the_browser_only_on_request_and_keys_its_colours_by_default() -> None:
+    assert GenomeViewConfig().follow_view_window is False
+    assert GenomeViewConfig(follow_view_window=True).follow_view_window is True
+    assert GenomeViewConfig().show_legend is True
+    assert GenomeViewConfig(show_legend=False).show_legend is False
+
+
+def test_a_browser_names_and_colours_its_variants_with_the_new_fields() -> None:
+    from depictio.models.components.lite import JBrowseVariantColor, JBrowseVariantLabel
+
+    label = JBrowseVariantLabel(info_field="CSQ", part=3, score_field="RankScore")
+    assert label.score_field == "RankScore"
+    assert JBrowseVariantLabel().score_field is None
+    with pytest.raises(ValidationError):
+        JBrowseVariantLabel(score_field="Rank Score")
+    color = JBrowseVariantColor(
+        column="genetic_model", fallback_color="#adb5bd", fallback_label="None"
+    )
+    assert (color.fallback_color, color.fallback_label) == ("#adb5bd", "None")
+    assert JBrowseVariantColor(column="x").fallback_color is None
 
 
 def test_color_scale_is_optional_and_validated():

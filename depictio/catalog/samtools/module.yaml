@@ -7,6 +7,7 @@
 # rename them.
 id: samtools
 name: SAMtools
+version: "1.1.0"
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/samtools/flagstat
 homepage: https://www.htslib.org
 description: >-

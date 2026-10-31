@@ -12,7 +12,13 @@
  *
  * Pure: the geometry is `layoutPedigree`'s, the scoring `fitScale`'s.
  */
-import { DEFAULT_LAYOUT, layoutPedigree, type PedigreeFamily, type PedigreeLayout } from './pedigreeLayout';
+import {
+  DEFAULT_LAYOUT,
+  layoutPedigree,
+  type LayoutOptions,
+  type PedigreeFamily,
+  type PedigreeLayout,
+} from './pedigreeLayout';
 import { fitScale } from './probands';
 
 /** Beyond this many families every split is not tried: the families are cut
@@ -49,6 +55,9 @@ export interface PackOptions {
   rowGap?: number;
   /** Space under a symbol for its label (0 without labels). */
   labelSpace: number;
+  /** Symbol size and generation spacing (and anything else of the layout) the
+   *  reader changed; the defaults otherwise. */
+  layout?: Partial<LayoutOptions>;
 }
 
 interface FamilyBox {
@@ -93,8 +102,9 @@ export function packFamilies(families: PedigreeFamily[], options: PackOptions): 
   const empty: Packing = { rows: [], contentW: 0, contentH: 0, scale: 1 };
   if (families.length === 0) return empty;
 
-  const lay = { labelSpace: options.labelSpace };
-  const gap = DEFAULT_LAYOUT.familyGap * DEFAULT_LAYOUT.slot;
+  const lay = { ...options.layout, labelSpace: options.labelSpace };
+  const merged = { ...DEFAULT_LAYOUT, ...lay };
+  const gap = merged.familyGap * merged.slot;
   // One family at a time: its own width and how many generations it needs.
   const boxes: FamilyBox[] = families.map((family) => {
     const one = layoutPedigree([family], lay);

@@ -7,6 +7,7 @@
 # rather than an nf-core one.
 id: sidle
 name: q2-sidle
+version: "1.0.0"
 description: >-
   QIIME 2 plugin that reconstructs one feature table from several amplified
   16S regions, so a multi-region run is read as a single community rather than

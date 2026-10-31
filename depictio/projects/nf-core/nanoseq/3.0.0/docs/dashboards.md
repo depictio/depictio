@@ -12,6 +12,7 @@ family rules in `depictio/projects/nf-core/RULES.md`.
 | Expression | Quantification | Do the libraries group by condition, or by preparation? |
 | Expression | Gene expression | Which genes differ between the two conditions? |
 | Expression | Isoform usage | Which transcripts change their share of their gene? |
+| Expression | Locus | Which transcript shifts its usage, and what do its reads show? |
 
 The template was validated against the AWS megatest run
 `results-1e60482a2c4621234393a6eef8e9a104309c20ae` (the 3.0.0 release tag).
@@ -108,8 +109,8 @@ entries, a hover names each) beside the aligned read-length profile. The distrib
 **Quantification.** Strip: reads Bambu assigned (by condition), the median genes detected
 (with its spread), the median protein-coding share (a gauge) and the median share of the 50 top
 genes (with its distribution). Then the PCA on log CPM over the 500 most variable genes and
-the Spearman correlation heatmap (full width: library ids on both axes; the libraries only, not
-the mean-correlation column). Collapsed: the 100 most variable genes, row-standardised (the
+the Spearman correlation heatmap (two thirds of the width, cells at least 40 px, so the library
+ids on both axes read; the libraries only, not the mean-correlation column). Collapsed: the 100 most variable genes, row-standardised (the
 libraries only, not the variance they were ranked by; its hundred rows outgrow the tab's
 budget), the libraries by preparation and by flow-cell run, the
 per-library gene expression distribution, then the tables. Filters:
@@ -122,7 +123,8 @@ spread) and of the down calls (with its distribution), each direction on its own
 neither cancels the other, and the strong effects: the genes with a call at four-fold or more
 either way, ranked by biotype (a maximum significance against the 5% cut-off would always pass).
 Then one volcano tile with three views (MA
-from `log2_base_mean`, QQ from the raw p-values), without point labels (the labels are Ensembl
+from `log2_base_mean`, QQ from the raw p-values). Its dotted lines are the 0.05 adjusted p-value
+and the two-fold change (log2 fold change of plus and minus 1) that colour the calls. It has no point labels (the labels are Ensembl
 ids), and the twenty largest fold changes. The 200 best-measured rows are collapsed. Filters:
 adjusted p-value, log2 fold change, biotype and mean expression; no direction filter, which
 would empty one of the two direction cards.
@@ -135,15 +137,21 @@ transcript would be noise: most are not significant), each on its own card, and 
 isoforms (by condition). The intro names the contrast; a gain is a higher share in its first
 condition. Then
 the volcano (QQ view; DEXSeq writes no mean intensity, so no MA view), without point labels and
-with no fold-change cut, so its colours are DEXSeq's own calls. The per-library transcript
-shares of the top genes (no legend: a hover names the transcript) are collapsed.
+with no fold-change cut, so its colours are DEXSeq's own calls and its dotted horizontal line is the
+0.05 gene-level q-value. The per-library transcript shares of a gene's transcripts (no legend: a
+hover names the transcript) are open under the filters, with the `Gene` filter first in the
+filter bar: they open on the six best DEXSeq genes, and the filter picks any of the forty
+best-ranked ones (up to twelve are drawn at once). The intro points at the filter and at the
+Locus tab.
 
-Then the isoform detail, open: the DEXSeq table with the transcript record card beside it and
-the genome browser right under them. The isoform lanes beside the weighted introns sit in a
-collapsed section of their own under it, to keep the open rows within the budget of 20.
-The table is the picker. A picked transcript fills the record card (its id links to Ensembl),
-narrows the lanes to its exons (`gtf_transcripts`, through a link on the transcript id), narrows
-the weighted introns the same way and frames the browser on its span.
+**Locus.** The last Expression tab, reached from the Overview and the Isoform usage intro.
+Filters: direction and gene (on the DEXSeq results). Strip: the transcripts tested, the genes
+they belong to, the genes with a usage gain and the transcripts the extended annotation locates.
+Then, open, the DEXSeq table with the transcript record card beside it and the genome browser
+right under them; the isoform lanes beside the weighted introns sit in a collapsed section of
+their own under it. The table is the picker. A picked transcript fills the record card (its id
+links to Ensembl), narrows the lanes to its exons (`gtf_transcripts`, through a link on the
+transcript id), narrows the weighted introns the same way and frames the browser on its span.
 
 The browser takes its calls from `isoform_loci`
 (`depictio/projects/nf-core/nanoseq/recipes/isoform_loci.py`): one row per transcript DEXSeq
@@ -156,7 +164,8 @@ the alignments of one library of each condition before their coverage (four trac
 conditions of the comparison, replicate 1 first), so the splice arcs drawn from the long reads
 show at once; the `tracks` manifest lists a sample's BAM before its bigWig for that reason, and
 the assembly's gene track (`show_annotation`) names the genes. The tracks wear the condition's
-colour of the dashboard (`color_by: condition`, the manifest writes no colour of its own).
+colour of the dashboard (`color_by: condition`, the manifest writes no colour of its own). The
+Locus tab labels the loci by gene symbol (`label_column: gene_name`).
 Without the extended annotation the transcripts carry no span: there is no call to frame or
 step through, and the browser opens on the first region its tracks hold (a gene symbol can be
 searched in its header).
@@ -202,8 +211,8 @@ and follow Analysis mode's groups when it has some.
 Every per-library plot (the length, quality and yield bars, the ladders, the coverage, indel and
 read-length curves, the PCA) and every per-library table selects on
 the library, which the hub links to every sample-keyed collection, so a pick narrows the rest
-of the tab. The length, quality and yield bars drive the library record card, which waits for
-a pick. The gene and transcript count tables and the DESeq2 table are not selectable: their
+of the tab. The length, quality and yield bars, coloured by condition, drive the library record card, which
+waits for a pick; the picked library stays full and the others dim. The gene and transcript count tables and the DESeq2 table are not selectable: their
 feature ids link to no other collection.
 
 ## Controls
@@ -235,6 +244,21 @@ depictio-cli ingest --template nf-core/nanoseq/3.0.0 \
   --dry-run
 ```
 
+## Changes from the second review
+
+- Quantification: the correlation heatmap is two thirds wide with cells of at least 40 px.
+- Locus: the DEXSeq table, the record card and the genome browser moved from Isoform usage to a
+  Locus tab of their own, linked from the Overview and the Isoform usage intro; the lanes and
+  weighted introns went with them.
+- Isoform usage: the `Gene` filter is the first control of the filter bar, and its description
+  says what it picks.
+- Volcanoes: the descriptions state the dotted lines (0.05 adjusted p-value and q-value, plus
+  and minus 1 log2 fold change for DESeq2).
+- Reads: the Q7 and Q10 lines, the N50 ladder and the 0.05 bar cut-off say what they are and
+  where the value comes from.
+- Not done: the `condition` column is written by the Bambu catalog recipes under that name, so
+  the dashboard cannot read `GROUP_COL` until those recipes take a `group_col` parameter.
+
 ## Changes from the first review
 
 - Isoform usage: the browser sat alone in a collapsed `Isoform structures` section, below the
@@ -253,6 +277,11 @@ depictio-cli ingest --template nf-core/nanoseq/3.0.0 \
 - Isoform usage: the open rows were 34 against a budget of 20. The per-library usage bars and the
   isoform lanes with the weighted introns are collapsed; the table, record card and browser stay
   open.
+- Reads: the length, quality and yield bars were one colour with no mark on the picked library;
+  they now take the condition's colour and dim the bars that are not picked.
+- Isoform usage: the usage bars drew six fixed genes; the recipe now keeps the forty best-ranked
+  and a `Gene` filter picks which are drawn. The PCA drops its explicit point size and plot style
+  so the embedding's own defaults apply.
 - Tab hue: each key figure card takes a shade (4, 6, 8 and 9) of its tab's colour.
 - Genome tracks: the manifest dropped its fixed colour column (it won over the dashboard's
   palette) and carries the hub's `condition`; the browser colours by it. The browser opens on

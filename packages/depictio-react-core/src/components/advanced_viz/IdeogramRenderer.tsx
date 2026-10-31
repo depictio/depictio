@@ -122,6 +122,7 @@ import {
   type Window,
   buildChromIndex,
 } from './ideogram/ideogramView';
+import { isAssemblyLocked, pinnedAssembly } from './ideogram/assemblyLock';
 import { plotlyThemeColors } from './plotlyTheme';
 import { usePersistedVizControl } from './usePersistedVizControl';
 
@@ -138,6 +139,7 @@ interface IdeogramConfig {
   label_col?: string | null;
   chrom_length_col?: string | null;
   assembly?: string | null;
+  lock_assembly?: boolean | null;
   mode?: RenderMode;
   bin_size?: number | null;
   orientation?: Orientation;
@@ -326,7 +328,11 @@ const IdeogramRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onF
   // ---- Controls. Defaults agree with IdeogramConfig's own. ---------------
   const [mode, setMode] = usePersistedVizControl<RenderMode>(metadata, 'mode', 'marks');
   const [orientation, setOrientation] = usePersistedVizControl<Orientation>(metadata, 'orientation', 'horizontal');
-  const [assembly, setAssembly] = usePersistedVizControl<string | null>(metadata, 'assembly', null);
+  const [pickedAssembly, setAssembly] = usePersistedVizControl<string | null>(metadata, 'assembly', null);
+  // A template that states its assembly pins it: the menu is withheld and a
+  // pick persisted before that (or by an older build) is ignored.
+  const assemblyLocked = isAssemblyLocked(config);
+  const assembly = assemblyLocked ? pinnedAssembly(config) : pickedAssembly;
   const [binSize, setBinSize] = usePersistedVizControl<number | null>(metadata, 'bin_size', null);
   const [colourScale, setColourScale] = usePersistedVizControl<ColourScale>(metadata, 'colour_scale', 'Viridis');
   const [facetBySample, setFacetBySample] = usePersistedVizControl<boolean>(metadata, 'facet_by_sample', true);
@@ -1470,19 +1476,21 @@ const IdeogramRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onF
   const controls = (
     <>
       <VizControlGroup title="Chromosomes">
-        <VizSelect
-          label="Assembly"
-          value={assembly ?? ASSEMBLY_AUTO}
-          onChange={(v) => setAssembly(v && v !== ASSEMBLY_AUTO ? v : null)}
-          data={[
-            {
-              value: ASSEMBLY_AUTO,
-              label: config.chrom_length_col ? 'From the length column' : 'From the data',
-            },
-            ...ASSEMBLY_NAMES.map((name) => ({ value: name, label: name })),
-          ]}
-          allowDeselect={false}
-        />
+        {assemblyLocked ? null : (
+          <VizSelect
+            label="Assembly"
+            value={assembly ?? ASSEMBLY_AUTO}
+            onChange={(v) => setAssembly(v && v !== ASSEMBLY_AUTO ? v : null)}
+            data={[
+              {
+                value: ASSEMBLY_AUTO,
+                label: config.chrom_length_col ? 'From the length column' : 'From the data',
+              },
+              ...ASSEMBLY_NAMES.map((name) => ({ value: name, label: name })),
+            ]}
+            allowDeselect={false}
+          />
+        )}
         <VizSegmented
           label="Bars"
           value={orientation}

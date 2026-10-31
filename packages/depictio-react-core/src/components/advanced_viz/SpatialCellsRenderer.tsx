@@ -31,6 +31,7 @@ import {
   VizSwitch,
 } from './controls/VizControls';
 import { COLOUR_SCALES, type ColourScale } from './colourScales';
+import { plotlyColorscale } from '../../utils/colorScale';
 import {
   applyDataTheme,
   applyLayoutTheme,
@@ -586,7 +587,7 @@ const SpatialCellsRenderer: React.FC<Props> = ({
             showlegend: false,
             marker: {
               color: idx.map((i) => colour.transformed[i] ?? range?.min ?? 0),
-              colorscale: colourScale,
+              colorscale: plotlyColorscale(colourScale),
               reversescale: reverseScale,
               cmin: range?.min,
               cmax: range?.max,

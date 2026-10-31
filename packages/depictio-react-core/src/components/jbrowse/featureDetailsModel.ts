@@ -692,6 +692,19 @@ function subfeatureLabel(type: string): string {
   return /^[A-Z]+$/.test(type) ? type : clean(type);
 }
 
+/** An Ensembl / RefSeq / UCSC transcript id (`ENST…`, `NM_…`, `uc002yis.1`). */
+const TRANSCRIPT_ID = /^(ENS[A-Z]*T\d|[NX][MR]_\d|uc\d{3}[a-z]{3}\.\d)/;
+/** An Ensembl gene id. */
+const GENE_ID = /^ENS[A-Z]*G\d/;
+/** A UCSC knownGene id (`uc002yis.1`). */
+const UCSC_ID = /^uc\d{3}[a-z]{3}\.\d/;
+
+/** ncbiRefSeq's `name2` is the gene symbol; knownGene's is a UCSC id. */
+function refSeqSymbol(r: Reader): string | undefined {
+  const v = r.data.name2;
+  return typeof v === 'string' && v && !UCSC_ID.test(v) ? r.text('name2') : undefined;
+}
+
 function buildGeneric(data: Rec): FeatureView {
   const r = new Reader(data);
   const refName = r.text('refName') ?? '';
@@ -701,19 +714,61 @@ function buildGeneric(data: Rec): FeatureView {
   const type = r.text('type');
   const source = r.text('source');
   const score = toNum(r.take('score'));
-  const biotype = r.text('biotype', 'gene_biotype', 'transcript_biotype', 'gene_type', 'transcript_type');
+  // A gene model names a transcript by its id and its gene apart: UCSC's
+  // knownGene (`geneName` = symbol, `geneName2` = UniProt, `name2` = UCSC id),
+  // its ncbiRefSeq (`name2` = symbol), a GFF (`gene_name`, `gene_id`). The
+  // symbol is what a reader looks for, so it heads the panel and the ids
+  // follow it, without opening "All fields".
+  const id = r.text('name', 'transcript_id', 'id');
+  // A name that is not an accession (a GFF `Name=TP53`) is the symbol itself;
+  // an alias holding something else then stays for "All fields".
+  const isAccession = !!id && (TRANSCRIPT_ID.test(id) || GENE_ID.test(id));
+  const symbol =
+    id && !isAccession
+      ? id
+      : (r.text('gene_name', 'geneName', 'gene_symbol', 'geneSymbol', 'symbol', 'gene') ??
+        refSeqSymbol(r));
+  const geneIdRaw = r.text('gene_id');
+  const geneId = geneIdRaw && geneIdRaw !== symbol ? geneIdRaw : undefined;
+  const ucscId = r.text('name2');
+  const uniprot = r.text('geneName2');
+  const transcriptType = r.text('transcriptType', 'transcript_type', 'transcript_biotype');
+  const biotype = r.text('geneType', 'biotype', 'gene_biotype', 'gene_type');
+  const transcriptClass = r.text('transcriptClass');
+  const tags = (r.text('tag') ?? '').split(',').map((t) => t.trim()).filter(Boolean);
   const description = r.text('description', 'note', 'product');
-  const name = r.text('name', 'gene_name', 'gene', 'symbol', 'id');
   r.skip('uniqueId', 'parentId', 'subfeatures');
+  const isTranscript = !!id && TRANSCRIPT_ID.test(id);
 
   const facts: Fact[] = [];
+  if (symbol && id && id !== symbol) {
+    facts.push({ label: isTranscript ? 'Transcript' : 'ID', value: id, mono: true });
+  }
+  if (geneId) facts.push({ label: 'Gene ID', value: geneId, mono: GENE_ID.test(geneId) });
+  if (uniprot && uniprot !== 'none') facts.push({ label: 'UniProt', value: uniprot, mono: true });
+  if (ucscId && ucscId !== symbol && UCSC_ID.test(ucscId)) {
+    facts.push({ label: 'UCSC ID', value: ucscId, mono: true });
+  }
   if (strand !== undefined && strand !== 0) facts.push({ label: 'Strand', value: strand < 0 ? '−' : '+' });
   if (biotype) facts.push({ label: 'Biotype', value: clean(biotype) });
+  if (transcriptType && transcriptType !== biotype) {
+    facts.push({ label: 'Transcript type', value: clean(transcriptType) });
+  }
+  if (transcriptClass) facts.push({ label: 'Class', value: clean(transcriptClass) });
   facts.push({ label: 'Length', value: `${formatInt(end - start)} bp` });
   if (source) facts.push({ label: 'Source', value: source });
   if (score !== undefined) facts.push({ label: 'Score', value: formatNumber(score) });
 
   const chips: ChipGroup[] = [];
+  if (tags.length) {
+    chips.push({
+      label: 'Tags',
+      chips: tags.map((t) => ({
+        text: clean(t),
+        tone: (/mane|canonical/i.test(t) ? 'blue' : 'gray') as Tone,
+      })),
+    });
+  }
   // bigBed `block` children are drawing detail, not structure.
   const counts = countSubfeatures(data.subfeatures).filter(([t]) => t !== 'block');
   if (counts.length) {
@@ -725,8 +780,14 @@ function buildGeneric(data: Rec): FeatureView {
 
   return {
     kind: 'feature',
-    title: name ?? formatLocus(refName, start, end),
-    typeLabel: type ? upperFirst(clean(type)) : 'Feature',
+    title: symbol ?? id ?? formatLocus(refName, start, end),
+    typeLabel: type
+      ? upperFirst(clean(type))
+      : isTranscript
+        ? 'Transcript'
+        : id && GENE_ID.test(id)
+          ? 'Gene'
+          : 'Feature',
     locus: formatLocus(refName, start, end),
     facts,
     description,

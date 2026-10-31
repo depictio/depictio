@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { fitTrackHeights, isFittableDisplay } from './fitTracks';
+import { anyFittable, fitTrackHeights, isFittableDisplay } from './fitTracks';
 
 describe('fitTrackHeights', () => {
   it('shares the free height among the signal tracks', () => {
@@ -38,5 +38,16 @@ describe('isFittableDisplay', () => {
     expect(isFittableDisplay('MultiLinearWiggleDisplay')).toBe(true);
     expect(isFittableDisplay('LinearBasicDisplay')).toBe(false);
     expect(isFittableDisplay(undefined)).toBe(false);
+  });
+});
+
+describe('anyFittable', () => {
+  it('is true when one open track is a signal track', () => {
+    expect(anyFittable(['LinearBasicDisplay', 'LinearWiggleDisplay'])).toBe(true);
+  });
+
+  it('is false for reads, variants, genes or nothing', () => {
+    expect(anyFittable(['LinearAlignmentsDisplay', 'LinearVariantDisplay', undefined])).toBe(false);
+    expect(anyFittable([])).toBe(false);
   });
 });

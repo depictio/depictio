@@ -33,7 +33,12 @@ import { useViewWindow } from '../../highlight/viewWindow';
 import { useAutofitValue, useTileChrome } from '../autofit';
 import type { GroupRenderState } from '../../selectionGroups';
 import type { GenomePoint, OpenLocusReader } from '../jbrowse/locusForAction';
-import { useTrackGroupColours, useTrackSampleColours } from '../jbrowse/genomeTracksStore';
+import ColourKey from '../jbrowse/ColourKey';
+import {
+  useTrackColourKey,
+  useTrackGroupColours,
+  useTrackSampleColours,
+} from '../jbrowse/genomeTracksStore';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { plotlyThemeColors } from './plotlyTheme';
 import { usePersistedVizControl } from './usePersistedVizControl';
@@ -46,8 +51,10 @@ import {
   regionFromInterval,
   requiredColumns,
   rowsToObjects,
+  markTopStars,
+  drawsTopStars,
 } from './genomespy/genomeSpySpec';
-import type { Contig, GenomeRegion, GenomeViewConfig } from './genomespy/genomeSpySpec';
+import type { Contig, GenomeRegion, GenomeViewConfig, StarLane } from './genomespy/genomeSpySpec';
 import { loadGeneAnnotation } from './genomespy/geneAnnotations';
 import type { GeneAnnotation } from './genomespy/geneAnnotations';
 import {
@@ -108,10 +115,12 @@ import {
   zoomToRegion,
 } from './genomespy/useGenomeSpy';
 import { useGenomeSpyOverlays } from './genomespy/useGenomeSpyOverlays';
+import { useStarOverlay } from './genomespy/useStarOverlay';
 import { useViewWindowPublish } from './genomespy/useViewWindowPublish';
 import { approxSameWindow, CODE_ZOOM_QUIET_MS } from './genomespy/viewWindowPublish';
 import {
   compactRegion,
+  followWindowTarget,
   hoverRows as buildHoverRows,
   paddedRegion,
   selectionRows as buildSelectionRows,
@@ -120,6 +129,7 @@ import {
   windowRows as buildWindowRows,
 } from './genomespy/overlayRows';
 import OverlayLegend from './genomespy/OverlayLegend';
+import { browserKeyLegend } from './genomespy/genomeLegend';
 import LinkedTileChip from '../genomeLink/LinkedTileChip';
 import { setTileStats } from '../chrome/tileStats';
 import { LINK_COLOR, tileTitle } from '../genomeLink/linkedTile';
@@ -173,6 +183,7 @@ function regionLabel(region: GenomeRegion | null): string | null {
 
 /** No named overlay sources (a file-backed tile): the DOM fallback paints. */
 const NO_OVERLAYS: never[] = [];
+const NO_STAR_LANES: StarLane[] = [];
 /** Fixed lane heights offered once lanes stop fitting the tile. */
 const LANE_HEIGHTS = [
   { px: 40, label: 'S' },
@@ -211,7 +222,7 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
     null,
   );
   const [assembly, setAssembly] = usePersistedVizControl<string | null>(metadata, 'assembly', null);
-  const [annotation, setAnnotation] = usePersistedVizControl<'none' | 'hg38' | 'mm10'>(
+  const [annotation, setAnnotation] = usePersistedVizControl<'none' | 'hg38' | 'hg19' | 'mm10'>(
     metadata,
     'annotation',
     'none',
@@ -246,6 +257,8 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
     'follow_region_filter',
     false,
   );
+  // The key to the marks' colours under the axis: on when there is one.
+  const [showLegend, setShowLegend] = usePersistedVizControl<boolean>(metadata, 'show_legend', true);
 
   // ---- Selection as a cross-filter ---------------------------------------
   const selectionColumn = onFilterChange ? advancedVizSelectionColumn(metadata) : undefined;
@@ -623,6 +636,9 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
   // The values a browser's `color_by` / `color_scale` colours (a condition, a
   // timepoint): a category of this tile that carries one wears its colour.
   const groupColors = useTrackGroupColours();
+  // How the browser keys those colours (its column, the scale's order), for the
+  // key under the axis when the lanes wear the browser's colours.
+  const browserKey = useTrackColourKey();
   const neutralColor = isDark ? theme.colors.gray[5] : theme.colors.gray[6];
 
   // The rows as GenomeSpy reads them, from the *current* fetch: they feed the
@@ -630,9 +646,14 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
   const liveData = useMemo(
     () =>
       rows
-        ? rowsToObjects(rows, requiredCols, effectiveConfig.chr_col, effectiveConfig.pos_col)
+        ? (() => {
+            const objs = rowsToObjects(rows, requiredCols, effectiveConfig.chr_col, effectiveConfig.pos_col);
+            return drawsTopStars(effectiveConfig)
+              ? markTopStars(objs, effectiveConfig.score_col, effectiveConfig.top_stars ?? 0)
+              : objs;
+          })()
         : null,
-    [rows, requiredCols, effectiveConfig.chr_col, effectiveConfig.pos_col],
+    [rows, requiredCols, effectiveConfig],
   );
   const rowCount = liveData?.length ?? 0;
 
@@ -651,6 +672,12 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
     effectiveConfig,
   );
   const seed = seedRef.current;
+  // The medals of the genome browser's starred calls: gold, silver, bronze.
+  const medals = [
+    theme.colors.yellow[isDark ? 4 : 7],
+    theme.colors.gray[isDark ? 4 : 6],
+    theme.colors.orange[isDark ? 5 : 9],
+  ];
   const built = useMemo(() => {
     if (!seed) return null;
     return buildGenomeSpySpec({
@@ -666,6 +693,7 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
         groupColors,
         neutral: neutralColor,
         overlay: overlayColors,
+        medals,
       },
       assemblyContigs,
       genes: geneAnnotation?.genes ?? null,
@@ -691,7 +719,19 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
     neutralColor,
     overlayColors,
     selectionEnabled,
+    isDark,
+    medals.join(','),
   ]);
+  // The key under the axis: for lanes that wear the browser's per-library colours,
+  // the browser's own key (its column, a ramp for a scale), else the marks' own.
+  const legend = useMemo(() => {
+    if (!built) return null;
+    const fromBrowser =
+      built.colourBy === 'sample'
+        ? browserKeyLegend(browserKey, built.colourSamples, groupColors)
+        : null;
+    return fromBrowser ?? built.legend;
+  }, [built, browserKey, groupColors]);
   // The file-backed spec. Built from the manifest, so it changes when the
   // presigned URLs are refreshed; that is a genuine remount, since the lazy
   // sources hold the old URLs.
@@ -988,6 +1028,25 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
     colors: overlayColors,
   });
 
+  // `top_stars`: the stars themselves are SVG over the canvas (GenomeSpy has no
+  // star shape), placed from the lanes' layout bounds and scales.
+  useStarOverlay({
+    api,
+    container: containerRef,
+    lanes: (!fileMode && built?.starLanes) || NO_STAR_LANES,
+    contigs,
+    rows: liveData,
+    cols: {
+      chr: effectiveConfig.chr_col,
+      pos: effectiveConfig.pos_col,
+      score: effectiveConfig.score_col,
+      sample: effectiveConfig.sample_col,
+    },
+    medals,
+    outline: themeColors.textColor,
+    pointSize: effectiveConfig.point_size ?? 5,
+  });
+
   // Rows changed after the embed was built (filter moved, refresh tick): swap
   // the dataset in place. On the seed rows the spec already carries them, and
   // `datasets.set` with the same content is a harmless no-op. An empty fetch
@@ -1009,7 +1068,7 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
   // after it are the zoom's own, not a gesture to publish to the browsers.
   const codeZoomEndedRef = useRef(0);
   const zoomFromCode = useCallback(
-    async (region: { chrom: string; start: number; end: number } | null) => {
+    async (region: { chrom: string; start: number; end: number } | null, exact = false) => {
       if (!api) return;
       zoomingFromCodeRef.current = true;
       try {
@@ -1017,11 +1076,15 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
         const opening = !!region && openedApiRef.current !== api && config.default_view !== 'region';
         if (region) openedApiRef.current = api;
         // Opening: the whole chromosome, the region framed in it. Otherwise a
-        // margin around the region, so its frame shows against the rest.
+        // margin around the region, so its frame shows against the rest. An
+        // `exact` region (the axis following the browser's window) is the view
+        // itself, already sized.
         const target = region
-          ? opening && size
-            ? { ...region, start: 0, end: size }
-            : paddedRegion(region, size)
+          ? exact
+            ? region
+            : opening && size
+              ? { ...region, start: 0, end: size }
+              : paddedRegion(region, size)
           : null;
         traceGenome(String(metadata.index), target ? 'zoom from code' : 'zoom from code: whole genome', target);
         await zoomToRegion(api, target, contigs);
@@ -1088,12 +1151,34 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
     const opening =
       !!config.open_on_view_window && openedOnWindowRef.current !== api && !restoredView && !incomingRegion;
     openedOnWindowRef.current = api;
-    if (!opening && windowInDomain(readViewDomain(api), win, overlayContigNames)) return;
+    if (!opening && !config.follow_view_window && windowInDomain(readViewDomain(api), win, overlayContigNames))
+      return;
     // The browser that followed this axis reports the window it was sent: that
     // is our own pan coming back, not the browser leaving.
     if (!opening && approxSameWindow({ entity: win.chrom, start: win.start, end: win.end }, lastPublished.current))
       return;
     const size = contigs?.find((c) => c.name === win.chrom)?.size;
+    // `follow_view_window`: the axis keeps the window in the middle of its view,
+    // panning (the reader's zoom kept) rather than snapping to the chromosome,
+    // and frames a window that is a sliver of the view (on opening, the whole
+    // genome) instead of leaving it a thin band in it.
+    if (config.follow_view_window) {
+      const move = followWindowTarget(
+        readViewDomain(api),
+        win,
+        overlayContigNames,
+        size,
+        config.follow_context_bp,
+      );
+      if (move === 'stay') return;
+      if (move) {
+        traceGenome(String(metadata.index), 'axis follows the browser', move);
+        void zoomFromCode(move, true);
+        return;
+      }
+    }
+    // Only a window that left the axis altogether brings it along to the chromosome.
+    if (!opening && windowInDomain(readViewDomain(api), win, overlayContigNames)) return;
     traceGenome(String(metadata.index), 'browser left the axis', win);
     void zoomFromCode(
       config.default_view === 'region' || !size ? win : { chrom: win.chrom, start: 0, end: size },
@@ -1105,6 +1190,8 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
     contigs,
     config.default_view,
     config.open_on_view_window,
+    config.follow_view_window,
+    config.follow_context_bp,
     restoredView,
     incomingRegion,
     metadata.index,
@@ -1384,6 +1471,13 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
       {fileControls}
       <VizControlGroup title="Marks">
         {fileMode ? null : (
+          <VizSwitch
+            checked={showLegend}
+            onChange={(e) => setShowLegend(e.currentTarget.checked)}
+            label="Colour key under the axis (drawn when the marks are coloured by a category or scale)"
+          />
+        )}
+        {fileMode ? null : (
           <>
             <VizSegmented
               label="Mark"
@@ -1500,7 +1594,7 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
             label="Gene annotation lane"
             description="Protein-coding genes under the track; labels appear as you zoom in"
             value={annotation}
-            onChange={(v) => setAnnotation((v as 'none' | 'hg38' | 'mm10') ?? 'none')}
+            onChange={(v) => setAnnotation((v as 'none' | 'hg38' | 'hg19' | 'mm10') ?? 'none')}
             data={[
               { value: 'none', label: 'None' },
               ...ANNOTATION_ASSEMBLIES.map((a) => ({ value: a, label: a })),
@@ -1635,6 +1729,20 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
             position: 'relative',
           }}
         />
+        {showLegend && legend && !fileMode ? (
+          <div
+            data-testid="genome-view-colour-key"
+            style={{ flex: 'none', padding: '3px 4px 0', minWidth: 0, overflow: 'hidden' }}
+          >
+            <ColourKey
+              title={legend.title}
+              entries={legend.entries}
+              ramp={legend.ramp}
+              testId="genome-view-legend"
+              rampTestId="genome-view-legend-ramp"
+            />
+          </div>
+        ) : null}
       </div>
       {noRows && spec ? (
         <Text

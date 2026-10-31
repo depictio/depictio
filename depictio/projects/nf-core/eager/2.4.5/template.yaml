@@ -62,7 +62,7 @@
 template:
   template_id: "nf-core/eager/2.4.5"
   description: "nf-core/eager template: ancient-DNA QC funnel from raw reads through adapter trimming and collapsing, endogenous DNA, duplication and coverage, to the terminal deamination signature that authenticates the library and the genotypes called from it."
-  version: "1.1.0"
+  version: "1.2.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory containing eager output (fastqc/, adapterremoval/, samtools/, deduplication/, damageprofiler/, qualimap/, preseq/, endorspy/, bcftools/, pipeline_info/) plus the reprocessed multiqc/multiqc_data/multiqc.parquet, and the run's --input TSV under input/ (see the LAYOUT NOTE above)."

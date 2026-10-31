@@ -94,7 +94,7 @@ interface CoverageTrackConfig {
    *  and the browser allow. */
   views?: CoverageView[] | null;
   /** Locus view only: bundled gene lane drawn under the track. */
-  locus_annotation?: 'none' | 'hg38' | 'mm10';
+  locus_annotation?: 'none' | 'hg38' | 'hg19' | 'mm10';
   /** Locus view only: assembly whose contig lengths lay out the genome axis.
    *  Null derives the axis from the rows themselves. */
   locus_assembly?: string | null;

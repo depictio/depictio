@@ -31,3 +31,10 @@ export function fitTrackHeights(
   const overheadPx = contentPx - tracksPx;
   return Math.max(minPx, Math.floor((hostPx - overheadPx - fixedPx) / fittable));
 }
+
+/** Whether any open track can stretch; the "Fit tracks" option is offered only then. */
+export const anyFittable = (displayTypes: readonly unknown[]): boolean =>
+  displayTypes.some(isFittableDisplay);
+
+/** Why the option is off when `anyFittable` is false. */
+export const FIT_TRACKS_HINT = 'Only coverage/signal tracks can stretch';
