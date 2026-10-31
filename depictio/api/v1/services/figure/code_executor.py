@@ -431,8 +431,11 @@ def _code_figure_audit_hook(event: str, args) -> None:
         # is trying to pull in fresh (e.g. ``pty``, ``ctypes.util``) — refused.
         # (User code cannot ``import`` at all: RestrictedPython has no
         # ``__import__``. This guards a library being coaxed into a new import.)
+        # ModuleNotFoundError, not PermissionError: a library probing an optional
+        # dependency (``try: import x / except ImportError``) must read the refusal
+        # as "not installed" and carry on, not abort the figure.
         if top and top not in sys.modules:
-            raise PermissionError(f"importing '{name}' is not allowed in a code figure")
+            raise ModuleNotFoundError(f"importing '{name}' is not allowed in a code figure")
 
 
 _AUDIT_HOOK_INSTALLED = False
