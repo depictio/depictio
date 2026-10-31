@@ -77,6 +77,11 @@ class TestDashboardField:
 
 
 class TestNotContent:
+    @pytest.fixture(autouse=True)
+    def _server_extra(self):
+        # The versioning module reads the API config, which needs the server extra.
+        pytest.importorskip("cryptography")
+
     def test_it_is_excluded_from_snapshots_on_purpose(self):
         from depictio.api.v1.endpoints.dashboards_endpoints.versioning import (
             SNAPSHOT_EXCLUDED_FIELDS,

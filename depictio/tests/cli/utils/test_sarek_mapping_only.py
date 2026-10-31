@@ -15,7 +15,11 @@ from pathlib import Path
 import pytest
 import yaml
 
-import depictio.api.v1.endpoints.dashboards_endpoints.routes as routes
+# The CLI job installs the base package only; the dashboard routes need the server extra.
+pytest.importorskip("fastapi")
+pytest.importorskip("cryptography")
+
+import depictio.api.v1.endpoints.dashboards_endpoints.routes as routes  # noqa: E402
 from depictio.cli.cli.utils.template_preview import preview_data_root
 from depictio.tests.cli.s3_stubs import write_tree
 
