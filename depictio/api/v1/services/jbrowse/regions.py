@@ -406,10 +406,14 @@ def merge_regions(df: pl.DataFrame, descending: bool = True) -> pl.DataFrame:
     new_region = previous_end.is_null() | (pl.col("start") > previous_end)
     base = base.with_columns(_g=new_region.cast(pl.Int64).cum_sum())
 
+    # Ties on the score (every score null included) go to the earliest row in
+    # genome order, explicitly: a stable sort alone was seen to pick another.
     best = (
-        base.sort("score", descending=descending, nulls_last=True, maintain_order=True)
+        base.with_row_index("_i")
+        .sort(["score", "_i"], descending=[descending, False], nulls_last=True)
         .group_by("_g", maintain_order=True)
         .first()
+        .drop("_i")
     )
     joined = base.group_by("_g", maintain_order=True).agg(
         pl.col("start").min().alias("_lo"),
