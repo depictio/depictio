@@ -343,44 +343,276 @@ SAMPLES = [f"sample_{c}_{n}" for c in ("gut", "skin", "soil") for n in range(1, 
 
 # (Kingdom, Phylum, Class, Order, Family, Genus): (gut, skin, soil) weight
 TAXA: dict[tuple[str, str, str, str, str, str], tuple[float, float, float]] = {
-    ("Bacteria", "Firmicutes", "Clostridia", "Eubacteriales", "Oscillospiraceae", "Faecalibacterium"): (14, 0.2, 0.3),
-    ("Bacteria", "Firmicutes", "Clostridia", "Eubacteriales", "Oscillospiraceae", "Ruminococcus"): (6, 0.1, 0.4),
-    ("Bacteria", "Firmicutes", "Clostridia", "Eubacteriales", "Lachnospiraceae", "Roseburia"): (7, 0.1, 0.2),
-    ("Bacteria", "Firmicutes", "Clostridia", "Eubacteriales", "Lachnospiraceae", "Blautia"): (8, 0.2, 0.2),
-    ("Bacteria", "Firmicutes", "Clostridia", "Eubacteriales", "Clostridiaceae", "Clostridium"): (3, 0.3, 2.5),
-    ("Bacteria", "Firmicutes", "Bacilli", "Lactobacillales", "Lactobacillaceae", "Lactobacillus"): (2.5, 1.0, 0.2),
-    ("Bacteria", "Firmicutes", "Bacilli", "Lactobacillales", "Streptococcaceae", "Streptococcus"): (1.5, 6, 0.1),
-    ("Bacteria", "Firmicutes", "Bacilli", "Bacillales", "Staphylococcaceae", "Staphylococcus"): (0.2, 16, 0.2),
+    (
+        "Bacteria",
+        "Firmicutes",
+        "Clostridia",
+        "Eubacteriales",
+        "Oscillospiraceae",
+        "Faecalibacterium",
+    ): (14, 0.2, 0.3),
+    ("Bacteria", "Firmicutes", "Clostridia", "Eubacteriales", "Oscillospiraceae", "Ruminococcus"): (
+        6,
+        0.1,
+        0.4,
+    ),
+    ("Bacteria", "Firmicutes", "Clostridia", "Eubacteriales", "Lachnospiraceae", "Roseburia"): (
+        7,
+        0.1,
+        0.2,
+    ),
+    ("Bacteria", "Firmicutes", "Clostridia", "Eubacteriales", "Lachnospiraceae", "Blautia"): (
+        8,
+        0.2,
+        0.2,
+    ),
+    ("Bacteria", "Firmicutes", "Clostridia", "Eubacteriales", "Clostridiaceae", "Clostridium"): (
+        3,
+        0.3,
+        2.5,
+    ),
+    ("Bacteria", "Firmicutes", "Bacilli", "Lactobacillales", "Lactobacillaceae", "Lactobacillus"): (
+        2.5,
+        1.0,
+        0.2,
+    ),
+    ("Bacteria", "Firmicutes", "Bacilli", "Lactobacillales", "Streptococcaceae", "Streptococcus"): (
+        1.5,
+        6,
+        0.1,
+    ),
+    ("Bacteria", "Firmicutes", "Bacilli", "Bacillales", "Staphylococcaceae", "Staphylococcus"): (
+        0.2,
+        16,
+        0.2,
+    ),
     ("Bacteria", "Firmicutes", "Bacilli", "Bacillales", "Bacillaceae", "Bacillus"): (0.3, 0.6, 4),
-    ("Bacteria", "Firmicutes", "Negativicutes", "Veillonellales", "Veillonellaceae", "Veillonella"): (2, 2, 0.1),
-    ("Bacteria", "Bacteroidetes", "Bacteroidia", "Bacteroidales", "Bacteroidaceae", "Bacteroides"): (20, 0.4, 0.3),
-    ("Bacteria", "Bacteroidetes", "Bacteroidia", "Bacteroidales", "Prevotellaceae", "Prevotella"): (8, 2.5, 0.2),
-    ("Bacteria", "Bacteroidetes", "Bacteroidia", "Bacteroidales", "Rikenellaceae", "Alistipes"): (4, 0.1, 0.1),
-    ("Bacteria", "Bacteroidetes", "Bacteroidia", "Bacteroidales", "Tannerellaceae", "Parabacteroides"): (3, 0.1, 0.1),
-    ("Bacteria", "Bacteroidetes", "Flavobacteriia", "Flavobacteriales", "Flavobacteriaceae", "Flavobacterium"): (0.1, 0.5, 5),
-    ("Bacteria", "Bacteroidetes", "Sphingobacteriia", "Sphingobacteriales", "Chitinophagaceae", "Chitinophaga"): (0.1, 0.2, 3.5),
-    ("Bacteria", "Proteobacteria", "Gammaproteobacteria", "Enterobacterales", "Enterobacteriaceae", "Escherichia"): (3, 0.3, 0.3),
-    ("Bacteria", "Proteobacteria", "Gammaproteobacteria", "Enterobacterales", "Enterobacteriaceae", "Klebsiella"): (1.2, 0.2, 0.3),
-    ("Bacteria", "Proteobacteria", "Gammaproteobacteria", "Pseudomonadales", "Pseudomonadaceae", "Pseudomonas"): (0.2, 1.5, 7),
-    ("Bacteria", "Proteobacteria", "Gammaproteobacteria", "Pseudomonadales", "Moraxellaceae", "Acinetobacter"): (0.1, 4, 1.5),
-    ("Bacteria", "Proteobacteria", "Alphaproteobacteria", "Hyphomicrobiales", "Nitrobacteraceae", "Bradyrhizobium"): (0.05, 0.2, 9),
-    ("Bacteria", "Proteobacteria", "Alphaproteobacteria", "Hyphomicrobiales", "Rhizobiaceae", "Rhizobium"): (0.05, 0.1, 4),
-    ("Bacteria", "Proteobacteria", "Alphaproteobacteria", "Sphingomonadales", "Sphingomonadaceae", "Sphingomonas"): (0.1, 1.2, 5),
-    ("Bacteria", "Proteobacteria", "Betaproteobacteria", "Burkholderiales", "Burkholderiaceae", "Burkholderia"): (0.1, 0.3, 3.5),
-    ("Bacteria", "Proteobacteria", "Betaproteobacteria", "Burkholderiales", "Sutterellaceae", "Sutterella"): (1.5, 0.05, 0.05),
-    ("Bacteria", "Proteobacteria", "Deltaproteobacteria", "Desulfovibrionales", "Desulfovibrionaceae", "Desulfovibrio"): (1, 0.05, 0.8),
-    ("Bacteria", "Actinobacteria", "Actinomycetia", "Bifidobacteriales", "Bifidobacteriaceae", "Bifidobacterium"): (5, 0.2, 0.1),
-    ("Bacteria", "Actinobacteria", "Actinomycetia", "Propionibacteriales", "Propionibacteriaceae", "Cutibacterium"): (0.2, 24, 0.3),
-    ("Bacteria", "Actinobacteria", "Actinomycetia", "Mycobacteriales", "Corynebacteriaceae", "Corynebacterium"): (0.2, 14, 0.4),
-    ("Bacteria", "Actinobacteria", "Actinomycetia", "Micrococcales", "Micrococcaceae", "Micrococcus"): (0.05, 4, 1.5),
-    ("Bacteria", "Actinobacteria", "Actinomycetia", "Kitasatosporales", "Streptomycetaceae", "Streptomyces"): (0.05, 0.2, 8),
-    ("Bacteria", "Actinobacteria", "Coriobacteriia", "Coriobacteriales", "Coriobacteriaceae", "Collinsella"): (3, 0.05, 0.05),
-    ("Bacteria", "Verrucomicrobia", "Verrucomicrobiae", "Verrucomicrobiales", "Akkermansiaceae", "Akkermansia"): (4, 0.05, 0.1),
-    ("Bacteria", "Verrucomicrobia", "Spartobacteria", "Chthoniobacterales", "Chthoniobacteraceae", "Chthoniobacter"): (0.02, 0.02, 3),
-    ("Bacteria", "Acidobacteria", "Acidobacteriia", "Acidobacteriales", "Acidobacteriaceae", "Granulicella"): (0.02, 0.05, 5),
-    ("Bacteria", "Acidobacteria", "Blastocatellia", "Blastocatellales", "Blastocatellaceae", "Blastocatella"): (0.02, 0.02, 3),
-    ("Archaea", "Euryarchaeota", "Methanobacteria", "Methanobacteriales", "Methanobacteriaceae", "Methanobrevibacter"): (2.5, 0.05, 0.3),
-    ("Archaea", "Thaumarchaeota", "Nitrososphaeria", "Nitrososphaerales", "Nitrososphaeraceae", "Nitrososphaera"): (0.02, 0.1, 2.5),
+    (
+        "Bacteria",
+        "Firmicutes",
+        "Negativicutes",
+        "Veillonellales",
+        "Veillonellaceae",
+        "Veillonella",
+    ): (2, 2, 0.1),
+    (
+        "Bacteria",
+        "Bacteroidetes",
+        "Bacteroidia",
+        "Bacteroidales",
+        "Bacteroidaceae",
+        "Bacteroides",
+    ): (20, 0.4, 0.3),
+    ("Bacteria", "Bacteroidetes", "Bacteroidia", "Bacteroidales", "Prevotellaceae", "Prevotella"): (
+        8,
+        2.5,
+        0.2,
+    ),
+    ("Bacteria", "Bacteroidetes", "Bacteroidia", "Bacteroidales", "Rikenellaceae", "Alistipes"): (
+        4,
+        0.1,
+        0.1,
+    ),
+    (
+        "Bacteria",
+        "Bacteroidetes",
+        "Bacteroidia",
+        "Bacteroidales",
+        "Tannerellaceae",
+        "Parabacteroides",
+    ): (3, 0.1, 0.1),
+    (
+        "Bacteria",
+        "Bacteroidetes",
+        "Flavobacteriia",
+        "Flavobacteriales",
+        "Flavobacteriaceae",
+        "Flavobacterium",
+    ): (0.1, 0.5, 5),
+    (
+        "Bacteria",
+        "Bacteroidetes",
+        "Sphingobacteriia",
+        "Sphingobacteriales",
+        "Chitinophagaceae",
+        "Chitinophaga",
+    ): (0.1, 0.2, 3.5),
+    (
+        "Bacteria",
+        "Proteobacteria",
+        "Gammaproteobacteria",
+        "Enterobacterales",
+        "Enterobacteriaceae",
+        "Escherichia",
+    ): (3, 0.3, 0.3),
+    (
+        "Bacteria",
+        "Proteobacteria",
+        "Gammaproteobacteria",
+        "Enterobacterales",
+        "Enterobacteriaceae",
+        "Klebsiella",
+    ): (1.2, 0.2, 0.3),
+    (
+        "Bacteria",
+        "Proteobacteria",
+        "Gammaproteobacteria",
+        "Pseudomonadales",
+        "Pseudomonadaceae",
+        "Pseudomonas",
+    ): (0.2, 1.5, 7),
+    (
+        "Bacteria",
+        "Proteobacteria",
+        "Gammaproteobacteria",
+        "Pseudomonadales",
+        "Moraxellaceae",
+        "Acinetobacter",
+    ): (0.1, 4, 1.5),
+    (
+        "Bacteria",
+        "Proteobacteria",
+        "Alphaproteobacteria",
+        "Hyphomicrobiales",
+        "Nitrobacteraceae",
+        "Bradyrhizobium",
+    ): (0.05, 0.2, 9),
+    (
+        "Bacteria",
+        "Proteobacteria",
+        "Alphaproteobacteria",
+        "Hyphomicrobiales",
+        "Rhizobiaceae",
+        "Rhizobium",
+    ): (0.05, 0.1, 4),
+    (
+        "Bacteria",
+        "Proteobacteria",
+        "Alphaproteobacteria",
+        "Sphingomonadales",
+        "Sphingomonadaceae",
+        "Sphingomonas",
+    ): (0.1, 1.2, 5),
+    (
+        "Bacteria",
+        "Proteobacteria",
+        "Betaproteobacteria",
+        "Burkholderiales",
+        "Burkholderiaceae",
+        "Burkholderia",
+    ): (0.1, 0.3, 3.5),
+    (
+        "Bacteria",
+        "Proteobacteria",
+        "Betaproteobacteria",
+        "Burkholderiales",
+        "Sutterellaceae",
+        "Sutterella",
+    ): (1.5, 0.05, 0.05),
+    (
+        "Bacteria",
+        "Proteobacteria",
+        "Deltaproteobacteria",
+        "Desulfovibrionales",
+        "Desulfovibrionaceae",
+        "Desulfovibrio",
+    ): (1, 0.05, 0.8),
+    (
+        "Bacteria",
+        "Actinobacteria",
+        "Actinomycetia",
+        "Bifidobacteriales",
+        "Bifidobacteriaceae",
+        "Bifidobacterium",
+    ): (5, 0.2, 0.1),
+    (
+        "Bacteria",
+        "Actinobacteria",
+        "Actinomycetia",
+        "Propionibacteriales",
+        "Propionibacteriaceae",
+        "Cutibacterium",
+    ): (0.2, 24, 0.3),
+    (
+        "Bacteria",
+        "Actinobacteria",
+        "Actinomycetia",
+        "Mycobacteriales",
+        "Corynebacteriaceae",
+        "Corynebacterium",
+    ): (0.2, 14, 0.4),
+    (
+        "Bacteria",
+        "Actinobacteria",
+        "Actinomycetia",
+        "Micrococcales",
+        "Micrococcaceae",
+        "Micrococcus",
+    ): (0.05, 4, 1.5),
+    (
+        "Bacteria",
+        "Actinobacteria",
+        "Actinomycetia",
+        "Kitasatosporales",
+        "Streptomycetaceae",
+        "Streptomyces",
+    ): (0.05, 0.2, 8),
+    (
+        "Bacteria",
+        "Actinobacteria",
+        "Coriobacteriia",
+        "Coriobacteriales",
+        "Coriobacteriaceae",
+        "Collinsella",
+    ): (3, 0.05, 0.05),
+    (
+        "Bacteria",
+        "Verrucomicrobia",
+        "Verrucomicrobiae",
+        "Verrucomicrobiales",
+        "Akkermansiaceae",
+        "Akkermansia",
+    ): (4, 0.05, 0.1),
+    (
+        "Bacteria",
+        "Verrucomicrobia",
+        "Spartobacteria",
+        "Chthoniobacterales",
+        "Chthoniobacteraceae",
+        "Chthoniobacter",
+    ): (0.02, 0.02, 3),
+    (
+        "Bacteria",
+        "Acidobacteria",
+        "Acidobacteriia",
+        "Acidobacteriales",
+        "Acidobacteriaceae",
+        "Granulicella",
+    ): (0.02, 0.05, 5),
+    (
+        "Bacteria",
+        "Acidobacteria",
+        "Blastocatellia",
+        "Blastocatellales",
+        "Blastocatellaceae",
+        "Blastocatella",
+    ): (0.02, 0.02, 3),
+    (
+        "Archaea",
+        "Euryarchaeota",
+        "Methanobacteria",
+        "Methanobacteriales",
+        "Methanobacteriaceae",
+        "Methanobrevibacter",
+    ): (2.5, 0.05, 0.3),
+    (
+        "Archaea",
+        "Thaumarchaeota",
+        "Nitrososphaeria",
+        "Nitrososphaerales",
+        "Nitrososphaeraceae",
+        "Nitrososphaera",
+    ): (0.02, 0.1, 2.5),
 }
 PHYLA = list(dict.fromkeys(lineage[1] for lineage in TAXA))
 HABITAT_INDEX = {"gut": 0, "skin": 1, "soil": 2}
@@ -414,9 +646,7 @@ for s in SAMPLES:
         R.gauss(0.0, 1.0)
     h = HABITAT_INDEX[s.split("_")[1]]
 
-    genus_weights = {
-        lineage: w[h] * RT.lognormvariate(0.0, 0.45) for lineage, w in TAXA.items()
-    }
+    genus_weights = {lineage: w[h] * RT.lognormvariate(0.0, 0.45) for lineage, w in TAXA.items()}
     genus_counts = _allocate_counts(sample_total, genus_weights)
 
     phylum_counts = {p: 0 for p in PHYLA}
@@ -429,7 +659,19 @@ for s in SAMPLES:
     for lineage, count in genus_counts.items():
         kingdom, phylum, klass, order, family, genus = lineage
         rows.append(
-            [s, genus, "Genus", count, f"{phylum};{genus}", kingdom, phylum, klass, order, family, genus]
+            [
+                s,
+                genus,
+                "Genus",
+                count,
+                f"{phylum};{genus}",
+                kingdom,
+                phylum,
+                klass,
+                order,
+                family,
+                genus,
+            ]
         )
 
 write_tsv(
@@ -3935,8 +4177,18 @@ def generate_sc_umap_demo() -> None:
         "pDC": (30, [(2.6, -4.2, 0.25, 0.2, 0.0, 1.0)]),
         "Platelet": (25, [(1.8, 6.4, 0.15, 0.12, 0.0, 1.0)]),
     }
-    genes_mu = {"Naive CD4 T": 820, "Memory CD4 T": 900, "CD8 T": 880, "NK": 950, "B": 870,
-                "CD14 Mono": 1350, "FCGR3A Mono": 1250, "DC": 1450, "pDC": 1100, "Platelet": 420}
+    genes_mu = {
+        "Naive CD4 T": 820,
+        "Memory CD4 T": 900,
+        "CD8 T": 880,
+        "NK": 950,
+        "B": 870,
+        "CD14 Mono": 1350,
+        "FCGR3A Mono": 1250,
+        "DC": 1450,
+        "pDC": 1100,
+        "Platelet": 420,
+    }
     rows = []
     n = 0
     for cell_type, (count, parts) in cell_types.items():
@@ -3981,7 +4233,15 @@ def generate_sample_pca_demo() -> None:
         for i in range(20):
             batch = f"batch_{1 + i % 2}"
             shift = 2.5 if batch == "batch_2" else 0.0
-            rows.append([f"{g}_{i + 1:02d}", round(rng.normal(cx, sx), 3), round(rng.normal(cy, sy) + shift, 3), g, batch])
+            rows.append(
+                [
+                    f"{g}_{i + 1:02d}",
+                    round(rng.normal(cx, sx), 3),
+                    round(rng.normal(cy, sy) + shift, 3),
+                    g,
+                    batch,
+                ]
+            )
     write_tsv(OUT / "sample_pca_demo.tsv", ["sample_id", "PC1", "PC2", "group", "batch"], rows)
 
 
