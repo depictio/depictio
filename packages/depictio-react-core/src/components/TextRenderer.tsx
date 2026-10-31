@@ -157,9 +157,7 @@ const renderInlineMarkdown = (
               width: '0.6em',
               height: '0.6em',
               borderRadius: '50%',
-              background: /^[a-z]+\.[0-9]$/.test(token.color)
-                ? `var(--mantine-color-${token.color.replace('.', '-')})`
-                : glyphColorVar(token.color),
+              background: glyphColorVar(token.color),
               marginRight: '0.3em',
               verticalAlign: '0.02em',
             }}
@@ -440,44 +438,86 @@ const FactTable: React.FC<{
  * not what was found), and as one panel it takes the height its rows need
  * instead of a card's worth of grid rows each.
  */
+/** Width of the stat column of a stat list, in px. */
+const STAT_COLUMN_PX = 150;
+
+/** Whether a filled-in stat is short enough to set at the large size: a
+ *  number with its unit, not a name. */
+/**
+ * The stat of a stat-list row. A number reads big; a name (a gene and its
+ * change) would wrap mid-word at that size, so once filled in it drops a step.
+ * Measured off the rendered text, since a value arrives after the first paint.
+ */
+const StatCell: React.FC<{
+  style: React.CSSProperties;
+  color?: string;
+  children: React.ReactNode;
+}> = ({ style, color, children }) => {
+  const ref = useRef<HTMLSpanElement>(null);
+  const [long, setLong] = useState(false);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return undefined;
+    const check = () => setLong((el.textContent ?? '').trim().length > SHORT_STAT_CHARS);
+    check();
+    const observer = new MutationObserver(check);
+    observer.observe(el, { childList: true, subtree: true, characterData: true });
+    return () => observer.disconnect();
+  }, []);
+  return (
+    <span
+      ref={ref}
+      style={{
+        ...style,
+        fontSize: long ? 18 : 28,
+        fontWeight: 800,
+        lineHeight: 1.1,
+        letterSpacing: '-0.02em',
+        fontVariantNumeric: 'tabular-nums',
+        color,
+      }}
+    >
+      {children}
+    </span>
+  );
+};
+
+/** Longest stat, in characters, set at the large size. */
+const SHORT_STAT_CHARS = 7;
+
 const StatList: React.FC<{
   rows: StatRow[];
   inline: (text: string) => React.ReactNode[];
   resolveTab: TabLinkResolver | null;
   fill: Fill;
 }> = ({ rows, inline, resolveTab, fill }) => (
-  <div style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
+  // One grid for every row, so the claims line up on a common edge whatever
+  // the length of the stat beside them.
+  <div
+    style={{
+      display: 'grid',
+      gridTemplateColumns: `minmax(0, ${STAT_COLUMN_PX}px) minmax(0, 1fr) auto`,
+      width: '100%',
+    }}
+  >
     {rows.map((row, i) => {
       const tabName = row.link ? /\]\(tab:(.+)\)$/.exec(row.link)?.[1] ?? null : null;
       const color = tabName ? resolveTab?.(tabName)?.color ?? null : null;
+      const stat = fill(row.stat);
+      const cell: React.CSSProperties = {
+        padding: '12px 0',
+        borderTop: i === 0 ? undefined : `1px solid ${CARD_RULE}`,
+        alignSelf: 'stretch',
+        display: 'flex',
+        alignItems: 'center',
+      };
       return (
-        <div
-          key={i}
-          style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            alignItems: 'center',
-            columnGap: 20,
-            rowGap: 4,
-            padding: '12px 0',
-            borderTop: i === 0 ? undefined : `1px solid ${CARD_RULE}`,
-          }}
-        >
-          <span
-            style={{
-              flex: '0 0 auto',
-              minWidth: 92,
-              fontSize: 28,
-              fontWeight: 800,
-              lineHeight: 1.05,
-              letterSpacing: '-0.02em',
-              fontVariantNumeric: 'tabular-nums',
-              color: color ? glyphColorVar(color) : undefined,
-            }}
-          >
-            {fill(row.stat)}
-          </span>
-          <span style={{ flex: '1 1 260px', minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+        <React.Fragment key={i}>
+          {/* The gutter is padding, not a grid gap, so each row's rule runs unbroken. */}
+          <StatCell style={{ ...cell, paddingRight: 20 }} color={color ? glyphColorVar(color) : undefined}>
+            {stat}
+          </StatCell>
+          <span style={{ ...cell, paddingRight: 20, minWidth: 0, flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'center' }}>
             <Text size="sm" fw={700} lh={1.35}>
               {inline(row.claim)}
             </Text>
@@ -487,12 +527,10 @@ const StatList: React.FC<{
               </Text>
             ) : null}
           </span>
-          {row.link ? (
-            <Text size="sm" style={{ flex: '0 0 auto', marginLeft: 'auto' }}>
-              {inline(row.link)}
-            </Text>
-          ) : null}
-        </div>
+          <span style={{ ...cell, justifyContent: 'flex-end' }}>
+            {row.link ? <Text size="sm">{inline(row.link)}</Text> : null}
+          </span>
+        </React.Fragment>
       );
     })}
   </div>

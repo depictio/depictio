@@ -150,7 +150,7 @@ def decimate_bins(bins: pl.DataFrame, max_bins: int | None = None) -> pl.DataFra
             pl.col("end").max().alias("end"),
             pl.col("log2").mean().alias("log2"),
             pl.col("baf").mean().alias("baf"),
-            pl.col("copy_number").mean().round(0).alias("copy_number"),
+            pl.col("copy_number").mean().round(0).cast(pl.Int64).alias("copy_number"),
             pl.col("segment").first().alias("segment"),
             pl.col("label").first().alias("label"),
             pl.col("depth").mean().alias("depth"),

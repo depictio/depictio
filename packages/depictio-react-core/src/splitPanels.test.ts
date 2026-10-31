@@ -117,6 +117,7 @@ describe('splitPanels', () => {
       'lollipop',
       'da_barplot',
       'metric_ci_bars',
+      'spatial_cells',
     ];
     const NONE = [
       'phylogenetic',
@@ -139,6 +140,7 @@ describe('splitPanels', () => {
       'transcript_structure',
       'cnv_profile',
       'genome_chord',
+      'ideogram',
       'record_card',
       'parallel_coordinates',
       'molecule_3d',
@@ -149,6 +151,10 @@ describe('splitPanels', () => {
       'domain_architecture',
       'pae_matrix',
       'ramachandran',
+      'ranked_distribution',
+      'allele_grid',
+      'pedigree',
+      'ranked_table',
     ];
 
     it('places every model kind in its bucket, and no kind twice', () => {

@@ -901,6 +901,53 @@ workflows:
               weight: "Supporting reads. Spans two orders of magnitude, which is what the log-scaled chord width is for."
               category: "Event class: translocation, inversion, deletion or duplication. Colours the chords; only translocations join two chromosomes."
 
+      # Ideogram (the 8dax block, from 8da6: several kind agents reserve ids in
+      # this file at once). Two collections: BUSCO genes on three non-model
+      # assemblies, and a binned variant density on GRCh38. 8da6 is the tab.
+      - id: "646b0f3c1e4a2d7f8e5b8da7"
+        data_collection_tag: "ideogram_busco_demo"
+        description: "BUSCO genes (eukaryota_odb10) located on three synthetic assemblies: 770 hits on 12 to 14 sequences each, coloured by status"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/ideogram_busco_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              genome: "Assembly the BUSCO was searched in. One karyotype per value."
+              sequence: "Chromosome or scaffold the BUSCO gene was found on, as BUSCO's full table names it. One bar per value."
+              gene_start: "Start of the BUSCO gene on its sequence, in base pairs."
+              gene_end: "End of the BUSCO gene on its sequence, in base pairs."
+              busco_id: "BUSCO identifier (eukaryota_odb10). A Duplicated BUSCO appears twice, once per copy."
+              status: "BUSCO status: Complete, Duplicated or Fragmented. Missing BUSCOs have no row."
+              sequence_length: "Length of the sequence from the assembly's FASTA index. Scales the bar, since no assembly table knows these genomes."
+
+      - id: "646b0f3c1e4a2d7f8e5b8da8"
+        data_collection_tag: "ideogram_density_demo"
+        description: "Small-variant density in 2 Mb bins over the 24 GRCh38 chromosomes, for two samples"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/ideogram_density_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              sample: "Sample the variants were called in. The tile shows one at a time."
+              chrom: "Chromosome of the bin, named as GRCh38 names it, so the bars take the assembly's lengths."
+              start: "Bin start in base pairs."
+              end: "Bin end in base pairs: 2 Mb after the start, or the chromosome end."
+              variant_count: "Variants called in the bin. Zero over centromeres and telomeres, highest on the gene-rich chr17, chr19 and chr22."
+
       - id: "646b0f3c1e4a2d7f8e5b8d8d"
         data_collection_tag: "cnv_profile_demo"
         description: "A synthetic somatic copy-number profile: 20 000 bins over 5 chromosomes for 2 tumour samples, with the called segments in the same table"
@@ -988,6 +1035,61 @@ workflows:
               insert_size_median: "Median insert size in base pairs."
               percent_rrna: "Percentage of reads assigned to rRNA. The clearest single separator of the degraded group."
               genes_detected: "Number of genes with at least one assigned read."
+
+      # Ranked distribution (the 8f5x block): gene stability in the shape of
+      # nf-core/stableexpression, once pre-aggregated (one row per gene with its
+      # box statistics over a 4332-sample cohort) and once long form (the 40
+      # most stable genes over 60 samples). Both carry the same `gene_id`
+      # values, so a gene picked on one tile is marked on the other.
+      - id: "646b0f3c1e4a2d7f8e5b8f51"
+        data_collection_tag: "ranked_distribution_demo"
+        description: "200 genes with a stability score, a rank, an expression section and the box statistics of their normalised counts over 4332 samples"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/ranked_distribution_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              gene_id: "Ensembl-style gene identifier, one row per gene. What a click on the tile selects."
+              gene_name: "Gene symbol shown on the feature axis."
+              rank: "Stability rank, 1 for the most stable gene."
+              stability_score: "Stability score, lower is more stable. Drawn as the lollipop."
+              section: "Expression section of the gene: high, medium or low mean expression. Colours the boxes."
+              q1: "First quartile of the gene's normalised counts across the cohort."
+              median: "Median normalised count across the cohort."
+              q3: "Third quartile of the gene's normalised counts."
+              lower: "Lower whisker end: the smallest count within 1.5 IQR of the box."
+              upper: "Upper whisker end: the largest count within 1.5 IQR of the box."
+              mean: "Mean normalised count across the cohort."
+              n_samples: "Number of samples the statistics summarise."
+
+      - id: "646b0f3c1e4a2d7f8e5b8f52"
+        data_collection_tag: "ranked_distribution_values_demo"
+        description: "The normalised counts of the 40 most stable genes over 60 samples, one row per gene and sample"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/ranked_distribution_values_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              gene_id: "Ensembl-style gene identifier, the same values as the pre-aggregated table."
+              gene_name: "Gene symbol shown on the feature axis."
+              sample: "Sample the count was measured in."
+              stability_score: "Stability score of the gene, repeated on each of its rows. Lower is more stable."
+              section: "Expression section of the gene: high, medium or low mean expression."
+              value: "Normalised count of the gene in the sample."
 
       # Protein structure (the 8ddx block). One predicted structure and the
       # four tables the protein tiles read, all keyed on the same `entity` and
@@ -1226,6 +1328,227 @@ workflows:
               p_strand: "Probability of strand, for the S4PRED source."
               p_coil: "Probability of coil, for the S4PRED source."
 
+      # Spatial cells (the 8e7x block, so it cannot collide with the blocks
+      # other kinds reserve). An mcquant single-cell table of two synthetic
+      # tonsil images, drawn by `spatial_cells` and, beside it, by an
+      # `embedding` bound to the centroids, for the section 8 comparison.
+      - id: "646b0f3c1e4a2d7f8e5b8e71"
+        data_collection_tag: "spatial_cells_demo"
+        description: "mcquant single-cell table of two tonsil images (about 3,900 cells each): eight marker intensities, centroids in image pixels, regionprops morphology and a called cell type"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/spatial_cells_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              CellID: "Segmentation label of the cell, as mcquant writes it. Restarts at 1 in each image."
+              DNA_1: "Mean nuclear stain (Hoechst) intensity over the cell mask."
+              CD3: "Mean CD3 intensity: T cells, in the zone around and between the follicles."
+              CD20: "Mean CD20 intensity: B cells, in the follicles."
+              CD45: "Mean CD45 intensity: every immune cell."
+              PanCK: "Mean pan-cytokeratin intensity: the epithelial band along the top edge."
+              Ki67: "Mean Ki67 intensity: proliferating cells, the germinal centres in the middle of the follicles."
+              CD68: "Mean CD68 intensity: macrophages, scattered through the section."
+              aSMA: "Mean alpha smooth muscle actin intensity: the walls of the vessels."
+              X_centroid: "Cell centroid x, in pixels of its image."
+              Y_centroid: "Cell centroid y, in pixels of its image, growing downwards from the top edge."
+              Area: "Cell mask area in pixels."
+              MajorAxisLength: "Major axis of the ellipse fitted to the mask, in pixels."
+              MinorAxisLength: "Minor axis of the ellipse fitted to the mask, in pixels."
+              Eccentricity: "Eccentricity of that ellipse: 0 is a circle."
+              Solidity: "Mask area over its convex hull area."
+              Extent: "Mask area over its bounding box area."
+              Orientation: "Angle of the major axis, in radians."
+              sample: "Image the cell was segmented from: tonsil_1 (1000 x 800 px) or tonsil_2 (900 x 900 px, a weaker stain)."
+              cell_id: "Cell id qualified by its image (sample:CellID), unique across the table. What a lasso selects."
+              cell_type: "Cell type called from the markers: B cell, Germinal centre B, T cell, Epithelial, Macrophage or Stromal."
+
+      # Allele grid tab (the 8dax block; 8da0 is the dashboard): HLA genotypes
+      # one row per allele call, and the epitope predictions an allele pick on
+      # the grid narrows through the direct link at the end of this file.
+      - id: "646b0f3c1e4a2d7f8e5b8da1"
+        data_collection_tag: "allele_grid_demo"
+        description: "HLA class I and II genotypes of 24 donors at 5 loci, one row per allele call (OptiType's A1..C2 columns melted long, plus DRB1 and DQB1)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/allele_grid_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              sample_id: "Donor the genotype belongs to. DONOR_04 and DONOR_15 are homozygous for the 8.1 ancestral haplotype at every locus, DONOR_09 carries one copy of it."
+              locus: "HLA gene the call is at: HLA-A, HLA-B and HLA-C (class I), HLA-DRB1 and HLA-DQB1 (class II)."
+              allele: "Allele called, at two-field resolution as OptiType writes it (A*02:01). Two rows per donor and locus; equal values are a homozygous locus."
+              haplotype: "Which of the two calls the row is, 1 or 2. Phase is not known, so this only orders the halves of a cell."
+              hla_class: "HLA class of the locus. Groups the grid's columns under a header."
+              objective: "OptiType's objective for the donor, the same on every row of the donor. Grows with the reads it explains."
+              reads: "Reads the typing used for the donor, the same on every row of the donor."
+
+      - id: "646b0f3c1e4a2d7f8e5b8da2"
+        data_collection_tag: "epitope_predictions_demo"
+        description: "Predicted binding of 40 viral peptides to the 12 commonest class I alleles of the cohort, nf-core/epitopeprediction style"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/epitope_predictions_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              peptide: "Peptide sequence the prediction is for, 9 or 10 residues."
+              protein: "Source protein of the peptide."
+              length: "Peptide length."
+              allele: "HLA allele the binding is predicted for, spelled as the genotype table spells it, so an allele picked on the grid narrows this table."
+              affinity_nm: "Predicted binding affinity, in nM. Lower binds tighter."
+              percentile_rank: "Percentile rank of the affinity among random peptides for the allele."
+              binder: "strong below 50 nM, weak below 500 nM, none above."
+
+      # Pedigree tab (the 8f6x block; 8f60 is the dashboard): three families in
+      # the PED coding, one row per individual.
+      - id: "646b0f3c1e4a2d7f8e5b8f61"
+        data_collection_tag: "pedigree_demo"
+        description: "Three families in the PED coding (18 individuals): a three-generation family with a couple married in, a trio with a sibling, and a mother with no father in the table"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/pedigree_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              family: "Family the individual belongs to. One tree per value, side by side."
+              individual: "Individual identifier, unique across the table. One symbol each, and what a click filters on."
+              father: "Identifier of the father; 0 means a founder on that side, as in a PED file."
+              mother: "Identifier of the mother; 0 means a founder on that side, as in a PED file."
+              sex: "PED sex: 1 male (square), 2 female (circle), 0 unknown (diamond)."
+              status: "PED phenotype: 2 affected (filled), 1 unaffected (open), 0 unknown (hatched)."
+              deceased: "1 when the individual has died (diagonal slash), else 0."
+              label: "Generation and position in the family (I-1, II-2), written under the symbol."
+              note: "Free-text clinical note, shown in the hover."
+
+      # Ranked table tab (the 8f7x block; 8f70 is the dashboard): the top
+      # variants of a rare-disease run with the family and genotypes behind a
+      # row, and the outlier genes of three samples.
+      - id: "646b0f3c1e4a2d7f8e5b8f71"
+        data_collection_tag: "ranked_variants_demo"
+        description: "Thirteen candidate variants of two cases, ranked by a rank score, with the genotypes of the proband and both parents"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/ranked_variants_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              variant_key: "Variant identifier (chromosome:position), unique. What a click filters on."
+              case_id: "Case the variant was called in. Matches the family table."
+              gene: "Gene symbol, drawn bold."
+              hgvs_p: "Protein change in HGVS notation, drawn in monospace."
+              model_class: "Inheritance model the variant fits."
+              impact: "Predicted consequence severity."
+              clinvar: "ClinVar classification."
+              rank_score: "Combined rank score. Higher ranks first."
+              cadd: "CADD phred score."
+              gnomad_af: "gnomAD allele frequency, or absent."
+              chrom: "Chromosome."
+              pos: "Position on the chromosome."
+              gt_proband: "Genotype of the proband."
+              gt_mother: "Genotype of the mother."
+              gt_father: "Genotype of the father."
+
+      - id: "646b0f3c1e4a2d7f8e5b8f72"
+        data_collection_tag: "ranked_family_demo"
+        description: "Two families in the PED coding: a trio and a quartet with an unaffected sister, with a proband flag"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/ranked_family_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              case_id: "Case the individual belongs to."
+              individual: "Individual identifier, unique across the table."
+              father: "Identifier of the father; 0 means a founder."
+              mother: "Identifier of the mother; 0 means a founder."
+              sex: "PED sex: 1 male, 2 female, 0 unknown."
+              status: "PED phenotype: 2 affected, 1 unaffected, 0 unknown."
+              proband: "1 for the proband of the case, else 0."
+
+      - id: "646b0f3c1e4a2d7f8e5b8f73"
+        data_collection_tag: "ranked_genotypes_demo"
+        description: "The genotype of every family member at each ranked variant, one row per variant and person"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/ranked_genotypes_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              variant_key: "Variant identifier, matches the variants table."
+              sample: "Individual identifier, matches the family table."
+              gt_class: "Genotype call (0/0, 0/1, 1/1 or ./.)."
+
+      - id: "646b0f3c1e4a2d7f8e5b8f74"
+        data_collection_tag: "ranked_outliers_demo"
+        description: "Outlier genes of three samples, ranked by significance, with the analyses that flagged each"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/ranked_outliers_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              sample: "Sample the outlier was found in."
+              gene: "Gene symbol, drawn bold."
+              signal: "What the outlier looks like."
+              status: "Whether the outlier is called, a candidate or not called."
+              expression: "yes when the expression analysis flags the gene."
+              splicing: "yes when the splicing analysis flags the gene."
+              mae: "yes when the mono-allelic expression analysis flags the gene."
+              neg_log10_p: "Minus log10 of the p-value. Higher ranks first."
+              pvalue: "Nominal p-value."
+              padj: "Adjusted p-value."
+              z_score: "Expression z-score."
+              delta_psi: "Change in percent spliced in."
+
 # Region links. A genomic region travels as a chromosome filter plus a
 # position range on the emitting collection's own columns; a region link
 # renames that pair onto the target's columns (depictio/models/models/links.py),
@@ -1249,3 +1572,11 @@ links:
       resolver: "region"
       columns: { chrom: "chrom", pos: "start" }
     description: "A region brushed or typed on the CTCF peak track narrows the ChIP coverage"
+  # An allele picked on the allele grid narrows the epitope predictions to the
+  # peptides predicted for that allele.
+  - source_dc_id: "646b0f3c1e4a2d7f8e5b8da1"  # allele_grid_demo
+    source_column: "allele"
+    target_dc_id: "646b0f3c1e4a2d7f8e5b8da2"  # epitope_predictions_demo
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "allele"}
+    description: "An allele picked on the genotype grid narrows the epitope predictions to that allele"

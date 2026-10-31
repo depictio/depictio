@@ -3,6 +3,7 @@
 # here are the filter breakdown and the Ts/Tv quality sweep.
 id: vcftools
 name: VCFtools
+version: "1.0.0"
 description: >-
   Summary statistics computed directly on a VCF: how the caller's own filters
   partition the calls, and how the transition/transversion ratio moves as the

@@ -2,6 +2,155 @@
   "kinds": [
     {
       "category": "plot",
+      "description": "Sample by locus grid of diploid genotypes: each cell split into its two haplotypes, coloured by allele group, homozygous loci merged. Click an allele to filter the dashboard to it (HLA typing).",
+      "heavy": false,
+      "icon": "tabler:layout-columns",
+      "label": "Allele grid",
+      "legacy": false,
+      "required_roles": [
+        "sample_id",
+        "locus",
+        "allele"
+      ],
+      "role_names": {
+        "allele": [
+          "allele",
+          "allele_name",
+          "call",
+          "genotype",
+          "hla_allele"
+        ],
+        "category": [
+          "category",
+          "class",
+          "hla_class",
+          "locus_class",
+          "mhc_class"
+        ],
+        "haplotype": [
+          "allele_index",
+          "chromosome_copy",
+          "copy",
+          "hap",
+          "haplotype"
+        ],
+        "locus": [
+          "gene",
+          "hla",
+          "hla_gene",
+          "hla_locus",
+          "locus"
+        ],
+        "reads": [
+          "fragments",
+          "n_reads",
+          "read_count",
+          "reads",
+          "ref_fragments"
+        ],
+        "sample_id": [
+          "donor",
+          "sample",
+          "sample_id",
+          "sample_name",
+          "subject"
+        ],
+        "value": [
+          "confidence",
+          "objective",
+          "quality",
+          "score",
+          "value"
+        ]
+      },
+      "roles": {
+        "allele": {
+          "description": "Allele called at the locus, in HLA nomenclature (A*02:01, HLA-A*02:01:01).",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "category": {
+          "description": "Optional locus class (HLA class I / II): groups the columns under a header.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "haplotype": {
+          "description": "Optional 1 or 2: which half of the cell a call fills; else row order.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "String",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "locus": {
+          "description": "One grid column per locus (HLA-A, HLA-B, DRB1); the 'HLA-' prefix is dropped.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "reads": {
+          "description": "Optional per-sample read support, drawn as a side bar or as cell opacity.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": false
+        },
+        "sample_id": {
+          "description": "One grid row per sample (donor, tumour, library).",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "value": {
+          "description": "Optional per-sample score (OptiType objective), drawn as a side bar.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": false
+        }
+      },
+      "viz_kind": "allele_grid"
+    },
+    {
+      "category": "plot",
       "description": "Log2 ratio per bin along the genome with the called segments over it and, when bound, the B-allele frequency underneath.",
       "heavy": false,
       "icon": "tabler:chart-dots-3",
@@ -2242,6 +2391,184 @@
     },
     {
       "category": "plot",
+      "description": "A karyotype: one bar per chromosome scaled to its length, with a glyph per feature or density bins. Click a chromosome to zoom along it, then filter the dashboard to it or to the visible range.",
+      "heavy": false,
+      "icon": "tabler:align-left",
+      "label": "Ideogram",
+      "legacy": false,
+      "required_roles": [
+        "chrom",
+        "start",
+        "end"
+      ],
+      "role_names": {
+        "category": [
+          "busco_status",
+          "category",
+          "class",
+          "status",
+          "type"
+        ],
+        "chrom": [
+          "chr",
+          "chrom",
+          "chromosome",
+          "contig",
+          "scaffold",
+          "seqid",
+          "seqname",
+          "sequence"
+        ],
+        "chrom_length": [
+          "chrom_len",
+          "chrom_length",
+          "length",
+          "seq_length",
+          "sequence_length",
+          "size"
+        ],
+        "end": [
+          "bin_end",
+          "end",
+          "gene_end",
+          "stop",
+          "to"
+        ],
+        "label": [
+          "busco_id",
+          "feature",
+          "gene",
+          "gene_name",
+          "label",
+          "name"
+        ],
+        "sample": [
+          "assembly",
+          "genome",
+          "id",
+          "library",
+          "sample",
+          "sample_id"
+        ],
+        "start": [
+          "begin",
+          "bin_start",
+          "from",
+          "gene_start",
+          "start"
+        ],
+        "value": [
+          "count",
+          "density",
+          "depth",
+          "n_variants",
+          "score",
+          "value",
+          "variant_count"
+        ]
+      },
+      "roles": {
+        "category": {
+          "description": "Optional class (BUSCO status, variant type) drawn in categorical colours.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "chrom": {
+          "description": "Chromosome the feature sits on: one bar per distinct value.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "chrom_length": {
+          "description": "Optional chromosome length in base pairs; scales the bar.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": false
+        },
+        "end": {
+          "description": "Feature end along its chromosome, in base pairs.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        },
+        "label": {
+          "description": "Optional feature name shown in the hover.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "sample": {
+          "description": "Optional sample or genome: one karyotype per distinct value.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "start": {
+          "description": "Feature start along its chromosome, in base pairs.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        },
+        "value": {
+          "description": "Optional number (a density, a count) drawn on a sequential colour scale.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": false
+        }
+      },
+      "viz_kind": "ideogram"
+    },
+    {
+      "category": "plot",
       "description": "Barcode-rank curve, UMI count vs rank on log-log axes, one line per sample, cell-calling cutoff marked.",
       "heavy": false,
       "icon": "tabler:trending-down",
@@ -3178,6 +3505,233 @@
     },
     {
       "category": "plot",
+      "description": "A family tree from a PED table: generations top to bottom, couple and sibship lines, square / circle / diamond by sex, filled when affected. Click an individual to filter the dashboard to it.",
+      "heavy": false,
+      "icon": "mdi:family-tree",
+      "label": "Pedigree",
+      "legacy": false,
+      "required_roles": [
+        "individual",
+        "father",
+        "mother",
+        "sex",
+        "status"
+      ],
+      "role_names": {
+        "deceased": [
+          "dead",
+          "deceased",
+          "is_deceased",
+          "vital_status"
+        ],
+        "family": [
+          "family",
+          "family_id",
+          "fid",
+          "kindred",
+          "pedigree"
+        ],
+        "father": [
+          "dad",
+          "father",
+          "father_id",
+          "pat",
+          "paternal",
+          "paternal_id"
+        ],
+        "individual": [
+          "id",
+          "iid",
+          "individual",
+          "individual_id",
+          "person",
+          "sample",
+          "sample_id"
+        ],
+        "label": [
+          "display_name",
+          "label",
+          "name",
+          "sample_name"
+        ],
+        "mother": [
+          "mat",
+          "maternal",
+          "maternal_id",
+          "mom",
+          "mother",
+          "mother_id"
+        ],
+        "proband": [
+          "index",
+          "index_case",
+          "is_proband",
+          "proband",
+          "propositus"
+        ],
+        "sex": [
+          "gender",
+          "inferred_sex",
+          "reported_sex",
+          "sex"
+        ],
+        "status": [
+          "affected",
+          "affected_status",
+          "affection",
+          "disease_status",
+          "phenotype",
+          "status"
+        ]
+      },
+      "roles": {
+        "deceased": {
+          "description": "Optional flag drawn as a diagonal slash across the symbol.",
+          "dtypes": [
+            "Boolean",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "String",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "family": {
+          "description": "Optional family identifier: one tree per value, drawn side by side.",
+          "dtypes": [
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "String",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "father": {
+          "description": "Identifier of the person's father; 0, empty or null for a founder.",
+          "dtypes": [
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "String",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "individual": {
+          "description": "One symbol per distinct value: the person a row describes.",
+          "dtypes": [
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "String",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "label": {
+          "description": "Optional text under each symbol; the individual identifier when unbound.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "mother": {
+          "description": "Identifier of the person's mother; 0, empty or null for a founder.",
+          "dtypes": [
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "String",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "proband": {
+          "description": "Optional flag (1 / true / yes / proband) marking the proband with an arrow.",
+          "dtypes": [
+            "Boolean",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "String",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "sex": {
+          "description": "Sex as 1 / 2 / 0 or male / female / unknown: square, circle or diamond.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "String",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "status": {
+          "description": "Affected status as 2 / 1 / 0 (or -9) or the words: filled, open or hatched.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "String",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8",
+            "Utf8"
+          ],
+          "required": true
+        }
+      },
+      "viz_kind": "pedigree"
+    },
+    {
+      "category": "plot",
       "description": "Newick tree + tip metadata (Microreact-style): 5 layouts, tip search, subtree highlight.",
       "heavy": false,
       "icon": "tabler:hierarchy-3",
@@ -3626,6 +4180,382 @@
         }
       },
       "viz_kind": "ramachandran"
+    },
+    {
+      "category": "plot",
+      "description": "The top-N features ranked by a score, each with its distribution across samples as a box or violin beside a lollipop of the score, on one shared feature axis. Gene stability, housekeeping genes.",
+      "heavy": false,
+      "icon": "tabler:chart-candle",
+      "label": "Ranked distribution",
+      "legacy": false,
+      "required_roles": [
+        "feature_id",
+        "score"
+      ],
+      "role_names": {
+        "feature_id": [
+          "ensembl_gene_id",
+          "feature_id",
+          "gene",
+          "gene_id",
+          "probe_id"
+        ],
+        "group": [
+          "category",
+          "class",
+          "expression_level",
+          "group",
+          "section"
+        ],
+        "label": [
+          "gene_name",
+          "gene_symbol",
+          "label",
+          "name",
+          "symbol"
+        ],
+        "lower": [
+          "lower",
+          "lower_fence",
+          "min",
+          "p5",
+          "whisker_low"
+        ],
+        "mean": [
+          "average",
+          "avg",
+          "mean"
+        ],
+        "median": [
+          "median",
+          "p50",
+          "q2",
+          "q50"
+        ],
+        "q1": [
+          "first_quartile",
+          "p25",
+          "q1",
+          "q25",
+          "quartile_1"
+        ],
+        "q3": [
+          "p75",
+          "q3",
+          "q75",
+          "quartile_3",
+          "third_quartile"
+        ],
+        "rank": [
+          "gene_rank",
+          "rank",
+          "stability_rank"
+        ],
+        "score": [
+          "coefficient_of_variation",
+          "cv",
+          "genorm_m",
+          "m_value",
+          "normfinder_stability",
+          "robust_cv",
+          "stability",
+          "stability_score",
+          "stability_value"
+        ],
+        "upper": [
+          "max",
+          "p95",
+          "upper",
+          "upper_fence",
+          "whisker_high"
+        ],
+        "value": [
+          "expression",
+          "normalised_count",
+          "normalized_count",
+          "tpm",
+          "value"
+        ]
+      },
+      "roles": {
+        "feature_id": {
+          "description": "One feature per value (gene id): a category on the shared axis.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "group": {
+          "description": "Optional class colouring each feature (a stability section, a gene class).",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "label": {
+          "description": "Optional display name (gene symbol) shown on the category axis.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "lower": {
+          "description": "Pre-aggregated: optional lower whisker end.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": false
+        },
+        "mean": {
+          "description": "Pre-aggregated: optional mean, drawn as a dashed line in the box.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": false
+        },
+        "median": {
+          "description": "Pre-aggregated: median of the feature's values.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": false
+        },
+        "q1": {
+          "description": "Pre-aggregated: first quartile of the feature's values.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": false
+        },
+        "q3": {
+          "description": "Pre-aggregated: third quartile of the feature's values.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": false
+        },
+        "rank": {
+          "description": "Optional precomputed rank, 1 first; otherwise ranked by the score.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": false
+        },
+        "score": {
+          "description": "Score the features are ranked by (stability score, CV), drawn as the lollipop.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        },
+        "upper": {
+          "description": "Pre-aggregated: optional upper whisker end.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": false
+        },
+        "value": {
+          "description": "Long form: one value per feature and sample, summarised as a box or violin.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": false
+        }
+      },
+      "viz_kind": "ranked_distribution"
+    },
+    {
+      "category": "plot",
+      "description": "A leaderboard of candidates ordered by a score: medals on the first three, badges coloured by value and bars in the cells, the fields behind a row in a hover popover. Click a row to filter the dashboard to it.",
+      "heavy": false,
+      "icon": "mdi:podium",
+      "label": "Ranked table",
+      "legacy": false,
+      "required_roles": [
+        "title",
+        "score"
+      ],
+      "role_names": {
+        "rank": [
+          "position_in_rank",
+          "rank",
+          "rank_position",
+          "ranking"
+        ],
+        "score": [
+          "combined_score",
+          "priority",
+          "priority_score",
+          "rank_score",
+          "ranking_score",
+          "score",
+          "weighted_score"
+        ],
+        "subtitle": [
+          "change",
+          "hgvs",
+          "hgvs_c",
+          "hgvs_p",
+          "hgvsp",
+          "protein_change",
+          "subtitle"
+        ],
+        "title": [
+          "candidate",
+          "gene",
+          "gene_name",
+          "gene_symbol",
+          "hgnc_symbol",
+          "symbol",
+          "title",
+          "variant",
+          "variant_id"
+        ]
+      },
+      "roles": {
+        "rank": {
+          "description": "Optional precomputed rank shown in the medal; else the position by score.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": false
+        },
+        "score": {
+          "description": "Numeric column the rows are ordered by (the ranking metric).",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        },
+        "subtitle": {
+          "description": "Optional text in monospace beside the title (a protein change).",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "title": {
+          "description": "Row name, drawn bold: a gene, a sample or a variant.",
+          "dtypes": [
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "String",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8",
+            "Utf8"
+          ],
+          "required": true
+        }
+      },
+      "viz_kind": "ranked_table"
     },
     {
       "category": "plot",
@@ -4456,6 +5386,179 @@
     },
     {
       "category": "plot",
+      "description": "Segmented cells where they sit in the image: one marker per cell at its centroid, sized by its area, coloured by a marker picked from the panel or by cell type, over an optional image of the sample. A lasso selects cells.",
+      "heavy": false,
+      "icon": "tabler:microscope",
+      "label": "Spatial cells",
+      "legacy": false,
+      "required_roles": [
+        "cell_id",
+        "x",
+        "y"
+      ],
+      "role_names": {
+        "area": [
+          "area",
+          "cell_area",
+          "nucleus_area",
+          "size"
+        ],
+        "category": [
+          "annotation",
+          "category",
+          "cell_type",
+          "celltype",
+          "cluster",
+          "phenotype"
+        ],
+        "cell_id": [
+          "cell",
+          "cell_id",
+          "cell_label",
+          "cell_uid",
+          "cellid",
+          "object_id",
+          "objectnumber"
+        ],
+        "sample": [
+          "core",
+          "fov",
+          "image",
+          "roi",
+          "sample",
+          "sample_id"
+        ],
+        "value": [
+          "expression",
+          "intensity",
+          "mean_intensity",
+          "value"
+        ],
+        "x": [
+          "cell_x",
+          "center_x",
+          "centroid_x",
+          "spatial_x",
+          "x",
+          "x_centroid",
+          "x_coord",
+          "x_location",
+          "x_position"
+        ],
+        "y": [
+          "cell_y",
+          "center_y",
+          "centroid_y",
+          "spatial_y",
+          "y",
+          "y_centroid",
+          "y_coord",
+          "y_location",
+          "y_position"
+        ]
+      },
+      "roles": {
+        "area": {
+          "description": "Optional cell area, which sizes each marker like the cell it stands for.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": false
+        },
+        "category": {
+          "description": "Optional cell type, phenotype or segmenter, coloured categorically.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "cell_id": {
+          "description": "One row per segmented cell; a lasso emits these ids, so keep them unique.",
+          "dtypes": [
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "String",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "sample": {
+          "description": "Optional image the cell belongs to: each one is drawn in its own frame.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "value": {
+          "description": "Optional marker intensity the cells are coloured by first.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": false
+        },
+        "x": {
+          "description": "Cell centroid x in the image frame (pixels, or microns with a pixel size).",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        },
+        "y": {
+          "description": "Cell centroid y in the image frame, growing downwards from the top-left.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        }
+      },
+      "viz_kind": "spatial_cells"
+    },
+    {
+      "category": "plot",
       "description": "Per-sample stacked relative-abundance bar with rank dropdown.",
       "heavy": false,
       "icon": "tabler:chart-pie",
@@ -4464,7 +5567,6 @@
       "required_roles": [
         "sample_id",
         "taxon",
-        "rank",
         "abundance"
       ],
       "role_names": {
@@ -4518,12 +5620,12 @@
           "required": true
         },
         "rank": {
-          "description": "Taxonomic rank / level (e.g. Phylum, Genus).",
+          "description": "Optional level column (e.g. Phylum, Genus): adds a rank picker. Omit for a single-level composition.",
           "dtypes": [
             "String",
             "Utf8"
           ],
-          "required": true
+          "required": false
         },
         "sample_id": {
           "description": "Identifier for each sample / observation.",

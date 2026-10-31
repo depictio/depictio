@@ -150,11 +150,11 @@ member peaks.
 **Locus.** One region on one genome axis. Strip: SEACR regions (by sample), their coverage per
 base, the MACS2 peaks (by sample) and the consensus intervals (by support) of the region in
 view; the cards
-follow the navigator's region as the tracks do. Then the SEACR navigator (`genome_view`, rect
-marks, `assembly: {GENOME}`), opening on the first contig the calls sit on, and three tracks that
-follow its region through the `region` links of `template.yaml`: the fragment pile-up
-(`coverage_track`, one lane per sample, a switch to the GenomeSpy locus view), the MACS2 calls
-and the consensus intervals over the gene lane. A tab of its own because those region filters
+follow the navigator's region. Then the SEACR navigator (`genome_view`, rect marks,
+`assembly: {GENOME}`), opening on the first contig the calls sit on, and the fragment pile-up
+that follows its region through the `region` links of `template.yaml` (`coverage_track`, one
+lane per sample, a switch to the GenomeSpy locus view). This template has no genome browser
+tile. A tab of its own because those region filters
 narrow every tile of their collections on the tab. Filters: SEACR coverage per base, MACS2
 q-value and replicate support.
 
@@ -162,10 +162,10 @@ q-value and replicate support.
 
 | Route | What changes |
 |---|---|
-| `--peakcaller seacr` (no MACS2) | No MACS2 peak table, significance plot, Locus MACS2 track or card. The caller comparison keeps one row per sample with 0 MACS2 peaks, so it reads as complete disagreement rather than missing data (`VALIDATION_REPORT.md`, CR-D3). |
+| `--peakcaller seacr` (no MACS2) | No MACS2 peak table, significance plot or Locus card. The caller comparison keeps one row per sample with 0 MACS2 peaks, so it reads as complete disagreement rather than missing data (`VALIDATION_REPORT.md`, CR-D3). |
 | `--peakcaller macs2` (no SEACR) | The SEACR collections drop out, with the Peaks, Consensus and Locus tiles and the Findings rows that read them. |
 | No fragment BEDs published | No pile-up profile, pile-up matrix or Locus pile-up track, nor the pile-up highlight on the Overview. |
-| Another genome build | Pass `--var GENOME=<assembly>`; every Locus track reads it (default `hg38`). |
+| Another genome build | Pass `--var GENOME=<assembly>`; every Locus tile reads it (default `hg38`). |
 | Re-generated MultiQC report (`--var MULTIQC_REPROCESSED=true`) | `multiqc_data` binds `multiqc/multiqc_data/multiqc.parquet` at the root instead of the pipeline's own report. The spike-in Bowtie 2 tile is dropped (no `bowtie2-1` module) and the target tile takes the row. Nothing on the Overview reads the report. |
 | A sample a caller found nothing for | The caller still writes its peak file, at 0 bytes; the ingest skips it with a warning. The caller comparison keeps an `n_peaks = 0` row for the sample. |
 

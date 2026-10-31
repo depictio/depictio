@@ -20,11 +20,16 @@
 # spellings and any aligner sub-directory, because pinning `star_salmon` made a
 # --skip_alignment run (which writes `multiqc/salmon/`) find no report at all
 # while PSEUDOALIGNER_ONLY repointed everything else correctly.
+#
+# GENOME TRACKS. The run's stranded bigWigs and BAMs are not part of the
+# tables-only megatest subset. Pass `--var TRACKS_URI=<aligner_star_salmon folder>`
+# to read them in place (see the variable below); without it the `tracks`
+# collection uploads whichever of them DATA_ROOT holds.
 # ============================================================================
 template:
   template_id: "nf-core/rnaseq/3.26.0"
   description: "nf-core/rnaseq template for bulk RNA-seq: MultiQC funnel, Salmon expression overview, gene explorer"
-  version: "1.0.0"
+  version: "2.0.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory containing rnaseq pipeline output for one aligner route (multiqc/, star_salmon/, salmon/, trimgalore/)"
@@ -40,6 +45,9 @@ template:
       required: false
     - name: "SKIP_QUANTIFICATION_MERGE"
       description: "Set (--var SKIP_QUANTIFICATION_MERGE=true) for a run with --skip_quantification_merge. The merged salmon.merged.gene_*.tsv matrices are absent, so every expression panel loses its source and only the QC tab survives."
+      required: false
+    - name: "TRACKS_URI"
+      description: "s3:// or https:// folder holding the aligner route's results (the folder DATA_ROOT mirrors), to read the genome-browser tracks (stranded bigWig, BAM) in place instead of uploading them from DATA_ROOT. For the megatest: s3://nf-core-awsmegatests/rnaseq/results-e7ca46272c8f9d5ceee3f71759f4ba551d3217a4/aligner_star_salmon"
       required: false
   # Variables supplied when materialising the BUNDLED reference/demo dataset
   # (db_init_reference_datasets.resolve_template_for_init). The megatest run is
@@ -109,8 +117,10 @@ template:
     # --skip_alignment: no star_salmon/ subtree at all. The pseudo-aligner
     # writes the same file names under salmon/, which is also where the catalog
     # recipes look by default, so this route only has to undo the STAR + Salmon
-    # repointing the DCs below apply.
+    # repointing the DCs below apply. Without an alignment there is no BAM and
+    # no bigWig either, so the genome tracks go too.
     - if_var_present: "PSEUDOALIGNER_ONLY"
+      remove_dc_tags: ["tracks"]
       override_dcs:
         - data_collection_tag: "sample_overview"
           source_overrides:
@@ -133,6 +143,14 @@ template:
           source_overrides:
             dists: {glob_pattern: "salmon/deseq2_qc/*sample.dists.txt"}
       dashboards: ["dashboards/base.yaml"]
+    # Genome tracks: read in place when TRACKS_URI names the results folder,
+    # uploaded from DATA_ROOT otherwise (the `tracks` recipe keeps only the
+    # files it finds there).
+    - if_var_present: "TRACKS_URI"
+      override_dcs:
+        - data_collection_tag: "tracks"
+          dc_properties:
+            remote_base_uri: "{TRACKS_URI}"
 
 # ============================================================================
 # PROJECT CONFIGURATION
@@ -274,6 +292,56 @@ workflows:
               "replicate": "Replicate index within the condition"
               "read_type": "paired-end when the sheet declares a second FASTQ, else single-end"
               "strandedness": "Library strandedness declared in the sheet (auto means the pipeline inferred it)"
+
+      # ----------------------------------------------------------------
+      # Genome tracks. A manifest of the run's track files (strand-specific
+      # bigWig coverage and the duplicate-marked STAR BAM) that the genome
+      # browser reads by range, through the API. One row per file, keyed on
+      # `sample` like the hub. The megatest was aligned to Ensembl GRCh37
+      # (chromosomes 1, 2, ...): the hg19 preset's chromAlias maps them.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "tracks"
+        description: "Genome-browser tracks of the run: forward and reverse strand bigWig coverage and the duplicate-marked BAM of every sample, one row per file"
+        config:
+          type: "genomic_tracks"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/rnaseq/tracks.py"
+            source_overrides:
+              samplesheet:
+                path: "{SAMPLESHEET_FILE}"
+          dc_specific_properties:
+            format: "TSV"
+            uri_column: "uri"
+            track_id_column: "track_id"
+            sample_column: "sample"
+            format_column: "format"
+            name_column: "name"
+            category_column: "category"
+            order_column: "order"
+            assembly: "hg19"
+            display_defaults:
+              bigwig:
+                displays:
+                  - type: "LinearWiggleDisplay"
+                    height: 50
+                    autoscale: "local"
+              bam:
+                displays:
+                  - type: "LinearPileupDisplay"
+                    height: 100
+            columns_description:
+              "track_id": "<sample>.<kind>, unique per file"
+              "sample": "Sample the file belongs to"
+              "condition": "Biological group, read off the sample name; the browser colours its tracks by it"
+              "strand": "Genomic strand of the coverage track, empty for the BAM"
+              "kind": "coverage_forward, coverage_reverse or alignments"
+              "format": "Track file format"
+              "uri": "Path relative to the results folder"
+              "name": "Track label shown in the browser"
+              "category": "Track-selector folder"
+              "order": "Row order the browser opens with"
 
       # ----------------------------------------------------------------
       # Salmon expression: three views of one merged gene-level TPM matrix.
@@ -484,10 +552,14 @@ workflows:
       # and which condition it peaks in. It feeds the gene record (a scatter
       # to pick a gene on and the card that reads the pick back); the
       # pipeline runs no differential test, so variability across libraries
-      # is the honest thing to rank on.
+      # is the honest thing to rank on. The gene's contig, start and end come
+      # from StringTie's gene tables (the matrix has none), so the genome
+      # browser can open on a picked gene (StringTie is on by default); a
+      # --skip_stringtie run leaves them empty and the browser opens on the first
+      # region that holds data. The run publishes no GTF to read them from.
       # ----------------------------------------------------------------
       - data_collection_tag: "gene_summary"
-        description: "Expressed genes, one row each: mean and spread of log2(TPM + 1) and the condition each peaks in"
+        description: "Expressed genes, one row each: mean and spread of log2(TPM + 1), the condition each peaks in and its locus"
         config:
           type: "Table"
           source: "transformed"
@@ -508,6 +580,9 @@ workflows:
               "top_condition": "Condition with the highest mean log2(TPM + 1)"
               "log2fc_top_vs_rest": "Mean log2(TPM + 1) of the top condition minus the mean of the other conditions"
               "libraries_detected": "Libraries with a TPM above zero"
+              "chrom": "Contig the gene sits on, from the StringTie gene tables (empty when StringTie was skipped)"
+              "start": "Gene start, from the StringTie gene tables"
+              "end": "Gene end, from the StringTie gene tables"
 
       # ----------------------------------------------------------------
       # The raw merged count matrix, shown as rows in Reference tables.
@@ -544,6 +619,40 @@ workflows:
 # sample names against gene names, and the panel goes empty.
 # ============================================================================
 links:
+  # Hub <-> genome tracks: picking samples opens their tracks, and clicking a
+  # coverage track in the browser picks its sample back.
+  - source_dc_tag: "samplesheet"
+    source_column: "sample"
+    target_dc_tag: "tracks"
+    target_type: "genomic_tracks"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Show the genome tracks of the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "tracks"
+    source_column: "sample"
+    target_dc_tag: "samplesheet"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the dashboard by the samples whose tracks are picked in the genome browser"
+    enabled: true
+
+  # A pick on the Sample Space PCA (sample_overview) opens the picked libraries'
+  # tracks in the genome browser of the Gene Explorer tab.
+  - source_dc_tag: "sample_overview"
+    source_column: "sample_id"
+    target_dc_tag: "tracks"
+    target_type: "genomic_tracks"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Show the genome tracks of the samples picked in the sample-overview scatter"
+    enabled: true
+
   - source_dc_tag: "samplesheet"
     source_column: "sample"
     target_dc_tag: "multiqc_data"

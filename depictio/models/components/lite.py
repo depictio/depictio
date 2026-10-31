@@ -22,6 +22,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from depictio.models.components.color_scale import ColorScale
 from depictio.models.components.constants import (
     AGGREGATION_COMPATIBILITY,
     COLUMN_TYPES,
@@ -217,8 +218,8 @@ class FigureLiteComponent(BaseLiteComponent):
     )
     icon_color: str | None = Field(
         default=None,
-        description="Colour of the header badge: a Mantine palette name or a CSS colour. "
-        "Unset uses the brand's primary colour.",
+        description="Colour of the header badge: a Mantine palette name, optionally with a "
+        "shade 0-9 (`orange`, `orange.4`), or a CSS colour. Unset uses the brand's primary colour.",
     )
     hide_legend: bool | None = Field(
         default=None,
@@ -685,6 +686,8 @@ class CardLiteComponent(BaseLiteComponent):
 
 # Controls whose initial state is a ``[low, high]`` pair.
 _RANGE_DEFAULT_TYPES: tuple[str, ...] = ("RangeSlider", "DateRangePicker", "DatePicker")
+#: Controls that list the distinct values of a column, so ``order_by`` can order them.
+_ORDERABLE_TYPES: tuple[str, ...] = ("Select", "MultiSelect", "SegmentedControl")
 
 
 class OptionCard(BaseModel):
@@ -868,6 +871,16 @@ class InteractiveLiteComponent(BaseLiteComponent):
         description="With ``default_by``: ``desc`` starts on the largest value, ``asc`` on "
         "the smallest.",
     )
+    order_by: str | None = Field(
+        default=None,
+        description="Select / MultiSelect / SegmentedControl: a column of the same data "
+        "collection that orders the options, e.g. a ``time_order`` next to a "
+        "``time_point``. Each option follows the smallest value of this column it "
+        "carries (numerically when every one is a number, else naturally). Unset, "
+        "options sort naturally, and options that all end in a duration (``30min``, "
+        "``2h``, ``GM_1d``) sort by that duration, so ``30min`` comes before ``1h`` "
+        "and ``18h`` after ``2h``.",
+    )
     banner_facts: list[BannerFact] | None = Field(
         default=None,
         description="always_selected Select only: facts shown in the scope banner of a tab "
@@ -963,6 +976,10 @@ class InteractiveLiteComponent(BaseLiteComponent):
             raise ValueError(
                 "option_cards is only valid for a SegmentedControl, or for an always_selected "
                 f"Select (its scope banner reads the labels), not {kind}."
+            )
+        if self.order_by is not None and kind not in _ORDERABLE_TYPES:
+            raise ValueError(
+                f"order_by orders the options of {', '.join(_ORDERABLE_TYPES)}, not a {kind}."
             )
         if self.default_by is not None and not self.always_selected:
             raise ValueError(
@@ -1387,6 +1404,12 @@ class TableLiteComponent(BaseLiteComponent):
     row_selection_column: str | None = Field(
         default=None, description="Column to extract from selected rows"
     )
+    row_selection_mode: Literal["multiple", "single"] = Field(
+        default="multiple",
+        description="'single': a click picks one row and drops the previous one (a table "
+        "driving a genome browser, which frames one feature); 'multiple' adds it to the "
+        "selection",
+    )
 
 
 class ImageLiteComponent(BaseLiteComponent):
@@ -1415,6 +1438,600 @@ class ImageLiteComponent(BaseLiteComponent):
     thumbnail_size: int = Field(default=150, description="Grid thumbnail size in pixels")
     columns: int = Field(default=4, description="Number of grid columns")
     max_images: int = Field(default=20, description="Maximum images to display")
+
+
+class JBrowseMateSource(BaseModel):
+    """The second locus of a call that has two sides (a fusion, a SV breakend).
+
+    Read from the same row as the primary locus, with the same padding, so the
+    browser can show both sides together (``mate_location`` of the payload).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    chrom_column: str = Field(..., description="Mate chromosome column")
+    start_column: str = Field(..., description="Mate start column")
+    end_column: str | None = Field(
+        default=None, description="Mate end column (defaults to the mate start)"
+    )
+
+
+class JBrowseLocusSource(BaseModel):
+    """Where the genome browser takes its locus from when the dashboard filters.
+
+    When the filtered rows of ``data_collection_tag`` shrink to a handful (a
+    table row click, a volcano point, a gene), the view frames the span of
+    those rows: from the smallest start to the largest end among the rows on
+    the most frequent chromosome (ties: the first seen), plus ``padding`` bp on
+    each side. One row frames that row; no jump above ``max_rows``.
+
+    With no such narrowing, and no ``location`` on the component, the view opens
+    on the first call: the first row (of the filtered rows, if any) ordered by
+    ``sort_by``, else in the collection's own order. The same order drives the
+    region picker (sortable, searchable), the next / previous step runs over the
+    regions by position, and the density strip counts them per genome bin. With
+    ``span_top`` the view opens on the span of the first N calls when they sit within
+    ``max_span`` bases of each other, so the best few variants of one locus show together.
+
+    A tile lists several sources when its regions come from several collections
+    (peaks, DE genes, variants), possibly of several workflows (``workflow_tag``);
+    the first one is the primary source: it frames the view, carries the ``mate``
+    and is what "Use this region" filters on.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    data_collection_tag: str = Field(..., description="DC holding the coordinates")
+    chrom_column: str = Field(..., description="Chromosome column")
+    start_column: str = Field(..., description="Start column")
+    end_column: str | None = Field(default=None, description="End column (defaults to start)")
+    padding: int = Field(default=5000, ge=0, description="Bases added on each side")
+    max_rows: int = Field(
+        default=20,
+        ge=1,
+        description="Frame the matching rows only when at most this many rows match",
+    )
+    sort_by: str | None = Field(
+        default=None,
+        description="Column the calls are ordered by (first call, stepper); "
+        "unset = the collection's own order",
+    )
+    descending: bool = Field(
+        default=True, description="Order calls from the highest sort_by value down"
+    )
+    span_top: int | None = Field(
+        default=None,
+        ge=2,
+        le=50,
+        description="Open the view on the span of the first N calls (in sort_by order) "
+        "instead of the first one, when they all lie on one chromosome within max_span "
+        "bases of each other; otherwise it opens on the first call alone",
+    )
+    max_span: int = Field(
+        default=1_000_000,
+        ge=1,
+        description="With span_top: the widest span (bases, first start to last end) the "
+        "opening view may cover",
+    )
+    label_column: str | None = Field(
+        default=None, description="Column shown as the name of a call in the stepper"
+    )
+    locate_column: str | None = Field(
+        default=None,
+        description="For rows without coordinates: the column whose value (a transcript "
+        "id) the gene search looks up first, before label_column",
+    )
+    frame_gene: bool = Field(
+        default=False,
+        description="Frame the whole gene a picked row names in label_column (found by the "
+        "gene search), not only the row's own span (an ORF, an exon, a transcript)",
+    )
+    rank_track: int | None = Field(
+        default=None,
+        ge=1,
+        le=50,
+        description="Add a track of the first N calls (sort_by order, under the dashboard "
+        "filters but not the selections) named by rank and label_column ('#1 GENE')",
+    )
+    rank_color_by: str | None = Field(
+        default=None,
+        description="With rank_track: the column whose category colour (the dashboard's "
+        "category_colors) fills each call of the rank track, as in a genome_view coloured "
+        "by the same column; grey otherwise",
+    )
+    mate: JBrowseMateSource | None = Field(
+        default=None,
+        description="Columns of the second side of a call (fusion partner, breakend B)",
+    )
+    name: str | None = Field(
+        default=None,
+        description="Name of the source in a list of locus_from (defaults to the "
+        "collection tag); unique within the tile",
+    )
+    color: str | None = Field(
+        default=None, description="Mantine palette name the source is drawn with"
+    )
+    workflow_tag: str | None = Field(
+        default=None,
+        description="Workflow holding the collection, when several workflows have the tag",
+    )
+    sample_column: str | None = Field(
+        default=None, description="Column naming the sample (library) a region belongs to"
+    )
+    run_column: str | None = Field(
+        default=None, description="Column naming the run a region belongs to"
+    )
+    columns: list[str] | None = Field(
+        default=None, description="Extra columns shown in the region picker"
+    )
+    search_columns: list[str] | None = Field(
+        default=None,
+        description="Columns the picker's search box matches, besides label_column",
+    )
+
+    @property
+    def source_name(self) -> str:
+        """The name the source goes by: ``name``, else the collection tag."""
+        return (self.name or self.data_collection_tag).strip()
+
+
+class JBrowseVariantColor(BaseModel):
+    """Colour variant (VCF) features by the text of one of their INFO fields.
+
+    The colours are the dashboard's ``category_colors`` for ``column``, so a
+    variant shares its colour with the same category in every figure (e.g. a
+    snpEff effect coloured as in the Manhattan plot). Needs an annotated VCF.
+    A category is matched as a substring of the whole INFO value, in the order
+    ``category_colors`` lists them: the first one found wins.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    column: str = Field(
+        ..., description="category_colors column whose colours are used (e.g. 'EFFECT')"
+    )
+    info_field: str = Field(
+        default="ANN",
+        pattern=r"^[A-Za-z_][A-Za-z0-9_]*$",
+        description="VCF INFO field read from each variant (snpEff: 'ANN')",
+    )
+    fallback_color: str | None = Field(
+        default=None,
+        description="Colour of a variant none of the categories matches (a CSS colour); "
+        "unset = JBrowse's own default",
+    )
+    fallback_label: str | None = Field(
+        default=None,
+        description="Name of that fallback in the tile's colour key; unset = 'other'",
+    )
+
+
+class JBrowseVariantLabel(BaseModel):
+    """Name variant (VCF) features by one ``|``-separated part of an INFO field.
+
+    A VCF's own ID is often a key such as ``21_10950631_T_A``; the gene reads
+    better. VEP's ``CSQ`` puts the gene symbol at part 3. A variant with an
+    empty part (an intergenic call) keeps its ID.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    info_field: str = Field(
+        default="CSQ",
+        pattern=r"^[A-Za-z_][A-Za-z0-9_]*$",
+        description="VCF INFO field read from each variant (VEP: 'CSQ', snpEff: 'ANN')",
+    )
+    part: int = Field(
+        default=3,
+        ge=0,
+        le=200,
+        description="Index of the '|'-separated part shown (VEP CSQ SYMBOL: 3, snpEff ANN gene: 3)",
+    )
+    score_field: str | None = Field(
+        default=None,
+        pattern=r"^[A-Za-z_][A-Za-z0-9_]*$",
+        description="VCF INFO field whose value follows the name in brackets, e.g. "
+        "'RankScore' (``family:score``, the part after the colon) so the ranked "
+        "variant reads 'GENE (14)'; a variant without it keeps the bare name",
+    )
+
+
+class JBrowseDisplaySettings(BaseModel):
+    """Default display settings of the genome browser, per kind of track.
+
+    Every field is optional: unset keeps JBrowse's own default. A viewer's
+    choice in the tile's display menu wins over these (kept per tile in the
+    browser). ``track_labels``, ``sashimi_arcs`` and ``lower_panel`` overlap the
+    top-level ``track_labels``, ``show_junctions`` and ``read_pairs_display``;
+    setting both to different values is an error.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    # View
+    center_line: bool | None = Field(default=None, description="Show the centre line")
+    gridlines: bool | None = Field(default=None, description="Show the gridlines")
+    cytobands: bool | None = Field(default=None, description="Show the cytobands on the ruler")
+    track_outlines: bool | None = Field(default=None, description="Outline each track")
+    color_by_cds: bool | None = Field(
+        default=None, description="Colour gene features by their coding sequence"
+    )
+    track_labels: Literal["overlapping", "offset", "hidden"] | None = Field(
+        default=None, description="Track label placement"
+    )
+
+    # Alignments
+    color_scheme: (
+        Literal[
+            "normal",
+            "mappingQuality",
+            "strand",
+            "perBaseQuality",
+            "stranded",
+            "pairOrientation",
+            "insertSize",
+            "tag",
+            "modifications",
+            "methylation",
+        ]
+        | None
+    ) = Field(default=None, description="How reads are coloured")
+    color_tag: str | None = Field(
+        default=None, description="Read tag that colours the reads (color_scheme: tag)"
+    )
+    soft_clipping: bool | None = Field(default=None, description="Show soft-clipped bases")
+    mismatch_alpha: bool | None = Field(default=None, description="Fade mismatches by base quality")
+    read_height: Literal["normal", "compact", "super_compact"] | None = Field(
+        default=None, description="Height of a read row"
+    )
+    hide_small_indels: bool | None = Field(default=None, description="Hide small indels")
+    hide_mismatches: bool | None = Field(default=None, description="Hide mismatches")
+    lower_panel: Literal["pileup", "arcs", "cloud"] | None = Field(
+        default=None, description="What an alignment track draws under its coverage"
+    )
+    coverage_height: int | None = Field(
+        default=None, ge=20, le=2000, description="Height of the coverage track in pixels"
+    )
+    sashimi_arcs: bool | None = Field(
+        default=None, description="Draw splice-junction arcs over the coverage"
+    )
+    min_arc_score: int | None = Field(
+        default=None, ge=0, description="Hide junction arcs supported by fewer reads"
+    )
+
+    # Quantitative (wiggle) tracks
+    scale: Literal["linear", "log"] | None = Field(default=None, description="Score scale")
+    autoscale: Literal["local", "global", "globalsd", "localsd"] | None = Field(
+        default=None, description="How the score range is chosen"
+    )
+    y_scale: Literal["per_track", "shared"] | None = Field(
+        default=None,
+        description=(
+            "``shared`` puts every quantitative track on one y scale (signal "
+            "tracks and alignment coverage each on their own), so tracks compare "
+            "at equal height; ``per_track`` (JBrowse's default) scales each alone"
+        ),
+    )
+    renderer: Literal["xyplot", "density", "line"] | None = Field(
+        default=None, description="How scores are drawn"
+    )
+    fill: Literal["filled", "line", "emphasis"] | None = Field(
+        default=None, description="Fill of an xy plot"
+    )
+    summary: Literal["min", "max", "avg", "whiskers"] | None = Field(
+        default=None, description="Score summary when zoomed out"
+    )
+
+    # Feature tracks
+    feature_mode: Literal["normal", "compact", "reducedRepresentation", "collapse"] | None = Field(
+        default=None, description="Feature display mode"
+    )
+    feature_labels: bool | None = Field(default=None, description="Show feature names")
+    feature_descriptions: bool | None = Field(default=None, description="Show feature descriptions")
+    gene_glyph: Literal["all", "longest", "longestCoding"] | None = Field(
+        default=None, description="Which transcripts of a gene are drawn"
+    )
+
+    # Variant tracks
+    variant_row_height: int | None = Field(
+        default=None, ge=1, le=50, description="Row height of a multi-sample variant track"
+    )
+    phased: bool | None = Field(default=None, description="Draw genotypes as phased haplotypes")
+
+    @model_validator(mode="after")
+    def validate_color_tag(self) -> "JBrowseDisplaySettings":
+        """``color_tag`` names the tag of ``color_scheme: tag``, and only of that."""
+        if self.color_scheme == "tag" and not self.color_tag:
+            raise ValueError("display.color_scheme 'tag' requires display.color_tag")
+        if self.color_tag and self.color_scheme != "tag":
+            raise ValueError("display.color_tag is only used with display.color_scheme 'tag'")
+        return self
+
+
+class JBrowseLiteComponent(BaseLiteComponent):
+    """Lite JBrowse (genome browser) component for user definition.
+
+    Binds to a ``genomic_tracks`` data collection. Dashboard filters (and link
+    resolution) narrow the manifest, and the browser shows the matching tracks;
+    clicking a feature (or changing the visible tracks) emits a
+    ``jbrowse_selection`` filter on ``selection_column`` back to the dashboard.
+
+    Example YAML:
+        - tag: sv-browser
+          component_type: jbrowse
+          workflow_tag: strandseq
+          data_collection_tag: sv_tracks
+          location: chr17:45,000,000-47,000,000
+          max_tracks: 12
+          selection_enabled: true
+          selection_column: cell
+          show_header: true
+          show_overview: false
+    """
+
+    component_type: Literal["jbrowse"] = "jbrowse"
+
+    # Reference / navigation
+    assembly: str | None = Field(
+        default=None,
+        description="Assembly preset overriding the data collection's (e.g. 'hg19')",
+    )
+    location: str | None = Field(
+        default=None, description="Initial locus (e.g. 'chr1:1-1,000,000' or a gene name)"
+    )
+    locus_from: JBrowseLocusSource | list[JBrowseLocusSource] | None = Field(
+        default=None,
+        description="Where the regions come from: one source or a list of them (several "
+        "collections, possibly of several workflows). The first one is the primary source: "
+        "it frames the span of the filtered rows' coordinates and carries the mate",
+    )
+    show_density: bool | None = Field(
+        default=None,
+        description="The genome-wide density of the regions of locus_from under the header: "
+        "unset offers it in the tile's view menu, hidden; true shows it on opening; false "
+        "removes it",
+    )
+
+    # Track selection
+    track_mode: Literal["filtered", "all"] = Field(
+        default="filtered",
+        description="'filtered': show the tracks matching the dashboard filters; "
+        "'all': keep every track loaded (filters only pick what is shown first)",
+    )
+    max_tracks: int = Field(default=20, ge=1, le=200, description="Maximum tracks shown")
+    initial_tracks: int = Field(
+        default=5,
+        ge=0,
+        le=200,
+        description="Tracks shown when no filter is active (first rows of the manifest)",
+    )
+    initial_categories: list[str] = Field(
+        default_factory=list,
+        description="Track categories (the manifest's category column) shown when no filter "
+        "is active, instead of the first `initial_tracks` rows: the tracks of those "
+        "categories that belong to the sample of the first such row, so a caller missing "
+        "from a run leaves a gap rather than pulling in the next sample's track",
+    )
+    default_tracks: list[str] = Field(
+        default_factory=list,
+        description="Track ids always shown (e.g. an annotation track)",
+    )
+    show_annotation: bool = Field(
+        default=True, description="Show the assembly preset's gene annotation track"
+    )
+    ucsc_tracks: list[str] = Field(
+        default_factory=list,
+        description="UCSC Genome Browser tracks shown by default, by UCSC track name "
+        "(e.g. 'clinvarMain', 'encodeCcreCombined'); resolved through the UCSC API "
+        "for the assembly. Tracks backed by a bigBed / bigWig / VCF file only",
+    )
+
+    # Cross-filtering (JBrowse → dashboard)
+    selection_enabled: bool = Field(
+        default=False, description="Emit a filter when a feature or track is picked"
+    )
+    selection_column: str | None = Field(
+        default=None,
+        description="Manifest column emitted (defaults to the DC's sample_column)",
+    )
+    selection_mode: Literal["feature_click", "visible_tracks"] = Field(
+        default="feature_click",
+        description="'feature_click': the clicked feature's track; "
+        "'visible_tracks': every track open in the view",
+    )
+
+    # Display
+    show_header: bool = Field(default=True, description="Show the navigation header")
+    show_overview: bool = Field(
+        default=True, description="Show the overview / ruler bar under the header"
+    )
+    track_labels: Literal["overlapping", "offset", "hidden"] = Field(
+        default="offset", description="Track label placement"
+    )
+
+    display: JBrowseDisplaySettings | None = Field(
+        default=None,
+        description="Default display settings per kind of track (colour scheme, read "
+        "height, score scale...); a viewer's own choice in the tile menu wins",
+    )
+
+    variant_color_by: JBrowseVariantColor | None = Field(
+        default=None,
+        description="Colour variant tracks by a category of the dashboard's "
+        "category_colors (e.g. the snpEff effect); unset = the track colour",
+    )
+    variant_label_by: JBrowseVariantLabel | None = Field(
+        default=None,
+        description="Name variant features by a part of an INFO field (e.g. the "
+        "gene of VEP's CSQ) instead of the VCF ID; unset = the ID",
+    )
+
+    color_by: str | None = Field(
+        default=None,
+        description="Column of the tracks manifest whose value colours (from the "
+        "dashboard's category_colors) and groups the tracks, e.g. the condition",
+    )
+    color_scale: ColorScale | None = Field(
+        default=None,
+        description="Colour the tracks along a sequential ramp instead of one hue per "
+        "value: ``{column, order_by, scheme}`` over a column of the tracks manifest "
+        "(e.g. the timepoint, ordered by its day). Replaces ``color_by``; the "
+        "genome view tiles of the dashboard wear the same colours",
+    )
+    show_junctions: bool = Field(
+        default=False,
+        description="Draw splice-junction arcs (sashimi) over the coverage of RNA alignment tracks",
+    )
+    read_pairs_display: Literal["pileup", "arcs", "cloud"] = Field(
+        default="pileup",
+        description="How DNA alignment tracks open: 'pileup', 'arcs' (read arcs) or "
+        "'cloud' (read cloud); the others stay reachable from the track menu",
+    )
+
+    # Navigation helpers and linked view (frontend behaviour, read from stored metadata)
+    call_stepper: bool = Field(
+        default=True,
+        description="Show previous / next through the calls of locus_from in the header",
+    )
+    follow_window: bool = Field(
+        default=True,
+        description="Follow the genomic window published by the other genome tiles",
+    )
+    auto_height: bool = Field(
+        default=False,
+        description="Let the tile's height follow the open tracks (their heights plus the "
+        "header) instead of the stored grid height: it grows and shrinks between 3 and 16 "
+        "grid rows, and a tile on the same grid row takes the tallest answer given on that "
+        "row. A tile the reader has resized by hand keeps their height",
+    )
+    views: list[Literal["breakpoint", "circular"]] = Field(
+        default_factory=list,
+        description="Extra views offered from the toolbar: 'breakpoint' (split view of "
+        "both sides of a call; needs locus_from.mate) and 'circular' (SVs and fusions)",
+    )
+    circular_categories: list[str] = Field(
+        default_factory=lambda: ["sv"],
+        description="Track categories (manifest category column) the circular view shows",
+    )
+
+    # Layout placement (same meaning as on a map)
+    placement: str = Field(
+        default="grid",
+        description="Where to render the browser: 'grid' (default, a normal dashboard "
+        "tile) or 'floating' (a panel reachable from every tab of the dashboard).",
+    )
+    floating_initial_state: str = Field(
+        default="compact",
+        description="How the floating panel presents itself on a viewer's first visit: "
+        "'compact' or 'expanded' (a draggable card), 'docked' (pinned below the "
+        "filter panel) or 'hidden' (reachable from the header). Their own saved "
+        "preference takes over from then on. Ignored when placement='grid'.",
+    )
+
+    # Loading limits
+    force_load: bool = Field(
+        default=False,
+        description="Start with force load on: fetch every track even when the region "
+        "holds more data than JBrowse's limits (viewers can toggle it)",
+    )
+    fetch_size_limit_mb: float | None = Field(
+        default=None,
+        gt=0,
+        le=10_000,
+        description="Per-track download limit (MB) before JBrowse asks to force load; "
+        "unset = JBrowse's default (1 MB, alignments excepted)",
+    )
+
+    # Custom configuration
+    preset: str | None = Field(
+        default=None,
+        description="Named config preset (built-in, or from the DC's `presets`)",
+    )
+    config_overrides: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Raw JBrowse config deep-merged last: keys 'formats' (per track "
+        "format), 'tracks' (by trackId), 'extra_tracks' (full track configs), "
+        "'assembly', 'view' and 'configuration'",
+    )
+
+    @property
+    def primary_locus(self) -> JBrowseLocusSource | None:
+        """The primary source of ``locus_from`` (the first of a list), if any."""
+        if isinstance(self.locus_from, list):
+            return self.locus_from[0]
+        return self.locus_from
+
+    @model_validator(mode="after")
+    def validate_locus_sources(self) -> "JBrowseLiteComponent":
+        """A list of sources is not empty and its source names are unique."""
+        if not isinstance(self.locus_from, list):
+            return self
+        if not self.locus_from:
+            raise ValueError("locus_from: a list needs at least one source")
+        names = [s.source_name for s in self.locus_from]
+        dupes = sorted({n for n in names if names.count(n) > 1})
+        if dupes:
+            raise ValueError(
+                f"locus_from: source names must be unique, got {', '.join(dupes)} twice "
+                "(set `name` on the sources that share a data_collection_tag)"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def validate_views(self) -> "JBrowseLiteComponent":
+        """Check the placement values, and that the breakpoint view has a mate to frame."""
+        if self.placement not in MAP_PLACEMENTS:
+            valid = ", ".join(MAP_PLACEMENTS)
+            raise ValueError(f"Invalid placement '{self.placement}'. Valid values: {valid}")
+        if self.floating_initial_state not in FLOATING_PANEL_STATES:
+            valid = ", ".join(FLOATING_PANEL_STATES)
+            raise ValueError(
+                f"Invalid floating_initial_state '{self.floating_initial_state}'. "
+                f"Valid values: {valid}"
+            )
+        primary = self.primary_locus
+        if "breakpoint" in self.views and not (primary and primary.mate):
+            raise ValueError("views: 'breakpoint' requires locus_from.mate")
+        self._check_display_conflicts()
+        return self
+
+    def _check_display_conflicts(self) -> None:
+        """Reject a ``display`` field that contradicts its top-level equivalent.
+
+        A legacy field still at its default counts as unset, so only an explicit
+        different value on both sides is a conflict (the same value is fine).
+        """
+        if self.display is None:
+            return
+        pairs = (
+            (
+                "track_labels",
+                self.display.track_labels,
+                "track_labels",
+                self.track_labels,
+                "offset",
+            ),
+            (
+                "sashimi_arcs",
+                self.display.sashimi_arcs,
+                "show_junctions",
+                self.show_junctions,
+                False,
+            ),
+            (
+                "lower_panel",
+                self.display.lower_panel,
+                "read_pairs_display",
+                self.read_pairs_display,
+                "pileup",
+            ),
+        )
+        for name, shown, legacy_name, legacy, legacy_default in pairs:
+            if shown is not None and legacy != legacy_default and shown != legacy:
+                raise ValueError(
+                    f"display.{name}={shown!r} contradicts {legacy_name}={legacy!r}; "
+                    f"set only one (display.{name} wins)"
+                )
 
 
 class MultiQCLiteComponent(BaseLiteComponent):
@@ -1660,6 +2277,7 @@ LiteComponent = (
     | TextLiteComponent
     | HighlightLiteComponent
     | ImageLiteComponent
+    | JBrowseLiteComponent
     | MultiQCLiteComponent
     | MapLiteComponent
     | AdvancedVizLiteComponent

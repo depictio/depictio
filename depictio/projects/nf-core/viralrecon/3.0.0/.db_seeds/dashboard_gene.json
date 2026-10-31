@@ -1,0 +1,782 @@
+{
+  "_id": {
+    "$oid": "746b0f3c1e4a2d7f8e5b9cb6"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "746b0f3c1e4a2d7f8e5b9cb6"
+  },
+  "version": 1,
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_metadata": [
+    {
+      "index": "ge-filter-gene",
+      "component_type": "interactive",
+      "title": "Gene",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "variants_long",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c12"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Per-sample variant calls with functional annotations",
+        "data_collection_tag": "variants_long",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "746b0f3c1e4a2d7f8e5b9c12"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_align": "left",
+      "section": "Gene pick",
+      "interactive_component_type": "Select",
+      "column_name": "GENE",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Gene",
+      "timescale": null,
+      "show_marks": null,
+      "show_mark_labels": null,
+      "show_histogram": null,
+      "slider_mode": null,
+      "always_selected": true,
+      "default_by": "call_score",
+      "custom_color": "lime",
+      "icon_name": "mdi:dna",
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "ge-effect-filter",
+      "component_type": "interactive",
+      "title": "Effect",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "variants_long",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c12"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Per-sample variant calls with functional annotations",
+        "data_collection_tag": "variants_long",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "746b0f3c1e4a2d7f8e5b9c12"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_align": "left",
+      "section": "Gene pick",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "EFFECT",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Mutations",
+      "timescale": null,
+      "show_marks": null,
+      "show_mark_labels": null,
+      "show_histogram": null,
+      "slider_mode": null,
+      "custom_color": "violet",
+      "icon_name": "mdi:alert-circle-outline",
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "ge-intro",
+      "component_type": "text",
+      "title": "",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": null,
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_align": "left",
+      "section": null,
+      "order": 1,
+      "alignment": "left",
+      "vertical_alignment": "center",
+      "body": "Pick a gene on the left, and the lollipop gives each mutation's allele frequency along the gene while the dots give it sample by sample. Pick a stem or a sample to narrow the other plot and the table to that one. Open a mutation in the genome browser of the [Variants](tab:Variants) tab to read it against the [ARTIC](https://artic.network) primers and the reads.\n",
+      "surface": "none",
+      "accent": null,
+      "logo": null,
+      "logo_dark": null
+    },
+    {
+      "index": "ge-card-calls",
+      "component_type": "card",
+      "title": "Variant calls",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "variants_long",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c12"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Per-sample variant calls with functional annotations",
+        "data_collection_tag": "variants_long",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "746b0f3c1e4a2d7f8e5b9c12"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "Calls in the picked gene, one per sample and mutation.",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "ivar/variants_long",
+      "catalog_source": {
+        "toolId": "ivar",
+        "toolName": "iVar",
+        "outputId": "ivar_variants_long",
+        "use": "ivar/variants_long",
+        "description": "Per-sample annotated variant calls (long table)."
+      },
+      "section": "Gene at a glance",
+      "aggregation": "count",
+      "column_name": "POS",
+      "column_type": "int64",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "composition",
+      "breakdown_col": "FUNCLASS",
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "follow_region_filter": false,
+      "icon_name": "mdi:dna",
+      "icon_color": "pink.4",
+      "caption": "calls, by functional class",
+      "decimals": 0,
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "ge-card-mutations",
+      "component_type": "card",
+      "title": "Distinct mutations",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "variants_long",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c12"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Per-sample variant calls with functional annotations",
+        "data_collection_tag": "variants_long",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "746b0f3c1e4a2d7f8e5b9c12"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "Distinct mutations of the picked gene; one that many samples share is a lineage marker.",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "ivar/variants_long",
+      "catalog_source": {
+        "toolId": "ivar",
+        "toolName": "iVar",
+        "outputId": "ivar_variants_long",
+        "use": "ivar/variants_long",
+        "description": "Per-sample annotated variant calls (long table)."
+      },
+      "section": "Gene at a glance",
+      "aggregation": "nunique",
+      "column_name": "mutation_label",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "uniqueness",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "follow_region_filter": false,
+      "icon_name": "mdi:map-marker-outline",
+      "icon_color": "pink.6",
+      "caption": "and the one most samples share",
+      "decimals": 0,
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "ge-card-af",
+      "component_type": "card",
+      "title": "Allele frequency",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "variants_long",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c12"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Per-sample variant calls with functional annotations",
+        "data_collection_tag": "variants_long",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "746b0f3c1e4a2d7f8e5b9c12"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "Median allele frequency of the gene's calls; the bar counts those the consensus takes.",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "ivar/variants_long",
+      "catalog_source": {
+        "toolId": "ivar",
+        "toolName": "iVar",
+        "outputId": "ivar_variants_long",
+        "use": "ivar/variants_long",
+        "description": "Per-sample annotated variant calls (long table)."
+      },
+      "section": "Gene at a glance",
+      "aggregation": "median",
+      "column_name": "AF",
+      "column_type": "float64",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "threshold",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": 0.75,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "follow_region_filter": false,
+      "icon_name": "mdi:percent-outline",
+      "icon_color": "pink.8",
+      "caption": "calls against the 0.75 consensus cut-off",
+      "decimals": 2,
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "ge-card-depth",
+      "component_type": "card",
+      "title": "Read depth",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "variants_long",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c12"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Per-sample variant calls with functional annotations",
+        "data_collection_tag": "variants_long",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "746b0f3c1e4a2d7f8e5b9c12"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "Median read depth at the positions of the gene's calls.",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "ivar/variants_long",
+      "catalog_source": {
+        "toolId": "ivar",
+        "toolName": "iVar",
+        "outputId": "ivar_variants_long",
+        "use": "ivar/variants_long",
+        "description": "Per-sample annotated variant calls (long table)."
+      },
+      "section": "Gene at a glance",
+      "aggregation": "median",
+      "column_name": "DP",
+      "column_type": "int64",
+      "value": null,
+      "aggregations": [
+        "box_plot_stats"
+      ],
+      "filter_expr": null,
+      "secondary_layout": "box_plot",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "follow_region_filter": false,
+      "icon_name": "mdi:layers-outline",
+      "icon_color": "pink.9",
+      "caption": "median per call, with its spread",
+      "decimals": 0,
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "ge-lollipop",
+      "component_type": "advanced_viz",
+      "title": "Mutations along the gene (lollipop)",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "variants_long",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c12"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Per-sample variant calls with functional annotations",
+        "data_collection_tag": "variants_long",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "746b0f3c1e4a2d7f8e5b9c12"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "One stem per mutation, as high as its allele frequency; pick one to narrow the table to it.",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "ivar/lollipop",
+      "catalog_source": {
+        "toolId": "ivar",
+        "toolName": "iVar",
+        "outputId": "ivar_variants_long",
+        "use": "ivar/lollipop",
+        "description": "Per-sample annotated variant calls (long table)."
+      },
+      "section": "Mutations in the gene",
+      "viz_kind": "lollipop",
+      "config": {
+        "controls_placement": "popover",
+        "viz_kind": "lollipop",
+        "feature_id_col": "GENE",
+        "position_col": "POS",
+        "category_col": "EFFECT",
+        "effect_col": "AF",
+        "label_col": "mutation_label",
+        "max_subplot_genes": 6,
+        "point_size": 8,
+        "stem_width": 1.2,
+        "scale_points_by_effect": true,
+        "show_stems": true,
+        "marker_outline": false,
+        "palette": "tab10",
+        "gene_sort": "count",
+        "top_n_labels": 0,
+        "selection_enabled": true,
+        "selection_column": "mutation_label"
+      },
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "ge-af-by-sample",
+      "component_type": "figure",
+      "title": "Allele frequency per sample",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "variants_long",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c12"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Per-sample variant calls with functional annotations",
+        "data_collection_tag": "variants_long",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "746b0f3c1e4a2d7f8e5b9c12"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "One dot per call, coloured by effect; pick a sample to narrow the table to it.",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "ivar/variants_long",
+      "catalog_source": {
+        "toolId": "ivar",
+        "toolName": "iVar",
+        "outputId": "ivar_variants_long",
+        "use": "ivar/variants_long",
+        "description": "Per-sample annotated variant calls (long table)."
+      },
+      "section": "Mutations in the gene",
+      "visu_type": "scatter",
+      "dict_kwargs": {},
+      "mode": "code",
+      "code_content": "# Allele frequency of every call of the gene, one dot per call, samples\n# ordered by their best supported call. The colour is the snpEff effect, or\n# Analysis mode's groups when it has some; the dashed line is the 0.75\n# consensus cut-off. custom_data carries the sample the selection reads.\nd = df.filter(pl.col('AF').is_not_null())\norder = d.group_by('sample').agg(pl.col('AF').max().alias('top')).sort('top', descending=True)['sample'].to_list()\nkw = depictio_group_kwargs or {'color': 'EFFECT', 'color_discrete_map': depictio_category_colors.get('EFFECT') or {}}\nfig = px.scatter(d.to_pandas(), x='sample', y='AF', custom_data=['sample'], hover_name='mutation_label', labels={'sample': 'Sample', 'AF': 'Allele frequency', 'EFFECT': 'Effect'}, **kw)\nfig.update_traces(marker=dict(size=12))\nfig.add_hline(y=0.75, line_dash='dash')\nfig.update_xaxes(tickangle=-45, tickfont={'size': 9}, categoryorder='array', categoryarray=order)\nfig.update_yaxes(range=[0, 1.05])\nfig.update_layout(showlegend=False, margin=dict(t=10))",
+      "displayed_data_count": 0,
+      "total_data_count": 0,
+      "was_sampled": false,
+      "filter_applied": false,
+      "max_points": null,
+      "selection_enabled": true,
+      "selection_column": "sample",
+      "font_scale": null,
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "ge-table",
+      "component_type": "table",
+      "title": "Mutations of the gene",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "variants_long",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c12"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Per-sample variant calls with functional annotations",
+        "data_collection_tag": "variants_long",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "746b0f3c1e4a2d7f8e5b9c12"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "Tick a row to narrow the plots to that mutation.",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "ivar/variants_long",
+      "catalog_source": {
+        "toolId": "ivar",
+        "toolName": "iVar",
+        "outputId": "ivar_variants_long",
+        "use": "ivar/variants_long",
+        "description": "Per-sample annotated variant calls (long table)."
+      },
+      "section": "Mutations",
+      "columns": [],
+      "page_size": 100,
+      "sortable": true,
+      "filterable": true,
+      "compact": false,
+      "row_selection_enabled": true,
+      "row_selection_column": "mutation_label",
+      "row_selection_mode": "multiple",
+      "wf_tag": "nextflow/viralrecon"
+    }
+  ],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-ge-filter-gene",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-ge-effect-filter",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-ge-intro",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 1,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-ge-card-calls",
+      "x": 0,
+      "y": 0,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-ge-card-mutations",
+      "x": 2,
+      "y": 0,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-ge-card-af",
+      "x": 4,
+      "y": 0,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-ge-card-depth",
+      "x": 6,
+      "y": 0,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-ge-lollipop",
+      "x": 0,
+      "y": 0,
+      "w": 5,
+      "h": 6,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-ge-af-by-sample",
+      "x": 5,
+      "y": 0,
+      "w": 3,
+      "h": 6,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-ge-table",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 6,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "filter_sections": [
+    {
+      "name": "Gene pick",
+      "icon": "mdi:tune",
+      "color": "pink",
+      "description": "Choose the gene the tab shows, and the effects it keeps",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Gene at a glance",
+      "icon": "mdi:counter",
+      "color": "pink",
+      "description": "How many calls the picked gene carries, and how well supported",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    },
+    {
+      "name": "Mutations in the gene",
+      "icon": "mdi:map-marker-outline",
+      "color": "pink",
+      "description": "Every mutation of the gene along it, beside the calls sample by sample",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": "linked",
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    },
+    {
+      "name": "Mutations",
+      "icon": "mdi:table",
+      "color": "gray",
+      "description": "Every call of the gene with its support and annotation",
+      "collapsed": true,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    }
+  ],
+  "category_colors": null,
+  "funnel_filtering": true,
+  "filter_panel_default": "open",
+  "content_width_default": "full",
+  "show_tab_header": true,
+  "open_with_defaults": false,
+  "show_guide": true,
+  "guide_intro": "",
+  "advanced_viz_controls": "popover",
+  "autofit": true,
+  "brand_theme": null,
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "Gene",
+  "subtitle": "Which mutations does this gene carry, and where do they sit?",
+  "icon": "/assets/images/workflows/nf-core.png",
+  "icon_color": "green",
+  "icon_variant": "filled",
+  "workflow_system": "nf-core",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": false,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": [],
+    "group_owners": [],
+    "group_editors": [],
+    "group_viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-08-29 00:00:00",
+  "creation_time": "2026-10-30 14:56:15",
+  "screenshot_ts": "",
+  "project_id": {
+    "$oid": "746b0f3c1e4a2d7f8e5b9ca2"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "746b0f3c1e4a2d7f8e5b9ca2"
+  },
+  "tab_order": 5,
+  "main_tab_name": null,
+  "tab_icon": "mdi:map-marker-outline",
+  "tab_icon_color": "pink",
+  "tab_group": "Mutations",
+  "parent_dashboard_title": null,
+  "project_realtime": null,
+  "inherited_brand_theme": null,
+  "inherited_category_colors": null,
+  "source_key": "nf-core/viralrecon:dashboards/base.yaml#Gene",
+  "template_origin": {
+    "template_id": "nf-core/viralrecon/3.0.0",
+    "template_version": "2.0.0",
+    "imported_at": "2026-10-30 14:58:06"
+  }
+}

@@ -15,6 +15,7 @@
 # map and nothing more; see the `gene_track` output.
 id: prokka
 name: Prokka
+version: "1.0.0"
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/prokka
 homepage: https://github.com/tseemann/prokka
 description: Structural and functional annotation of prokaryotic genomes and metagenome-assembled genomes.

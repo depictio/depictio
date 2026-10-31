@@ -5,6 +5,7 @@
 # built on one demultiplexer reads the other unchanged.
 id: bclconvert
 name: BCL Convert
+version: "1.0.0"
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/bclconvert
 homepage: https://support.illumina.com/sequencing/sequencing_software/bcl-convert.html
 description: >-

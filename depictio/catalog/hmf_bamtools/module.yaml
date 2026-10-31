@@ -5,6 +5,7 @@
 # unrelated BamTools can take the plain name.
 id: hmf_bamtools
 name: BamTools (hmftools)
+version: "1.0.0"
 description: >-
   One pass over each DNA BAM for coverage, duplicate and read-quality metrics.
 homepage: https://github.com/hartwigmedical/hmftools/tree/master/bam-tools

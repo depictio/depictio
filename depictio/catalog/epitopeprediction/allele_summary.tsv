@@ -1,0 +1,5 @@
+allele_key	sample	allele	hla_locus	mhc_class	predictors	peptides	binders	binder_rate	median_ic50_nm	best_ic50_nm	median_affinity_score
+PEPTIDES1|HLA-A*01:01	PEPTIDES1	HLA-A*01:01	HLA-A	Class I	mhcflurry, mhcnuggets	123	3	0.0244	5442.41	139.81	0.205
+PEPTIDES1|HLA-A*02:01	PEPTIDES1	HLA-A*02:01	HLA-A	Class I	mhcflurry, mhcnuggets	123	10	0.0813	5592.6	43.52	0.2025
+TUMOR2|HLA-DRB1*01:01	TUMOR2	HLA-DRB1*01:01	HLA-DR	Class II	mhcnuggetsii	875	89	0.1017	5446.09	11.52	0.2049
+TUMOR1|HLA-A*02:01	TUMOR1	HLA-A*02:01	HLA-A	Class I	mhcflurry, mhcnuggets	225	4	0.0178	5590.06	45.72	0.2025

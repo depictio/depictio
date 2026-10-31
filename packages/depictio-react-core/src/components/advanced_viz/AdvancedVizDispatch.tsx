@@ -35,6 +35,7 @@ import GeneArrowTrackRenderer from './GeneArrowTrackRenderer';
 import GseaRunningScoreRenderer from './GseaRunningScoreRenderer';
 import SashimiRenderer from './SashimiRenderer';
 import ScatterXyRenderer from './ScatterXyRenderer';
+import SpatialCellsRenderer from './SpatialCellsRenderer';
 import ContactMapRenderer from './ContactMapRenderer';
 import KneePlotRenderer from './KneePlotRenderer';
 import DamageProfileRenderer from './DamageProfileRenderer';
@@ -43,8 +44,13 @@ import GroupCompareRenderer from './GroupCompareRenderer';
 import TranscriptStructureRenderer from './TranscriptStructureRenderer';
 import CnvProfileRenderer from './CnvProfileRenderer';
 import GenomeChordRenderer from './GenomeChordRenderer';
+import IdeogramRenderer from './IdeogramRenderer';
+import AlleleGridRenderer from './AlleleGridRenderer';
+import PedigreeRenderer from './PedigreeRenderer';
+import RankedTableRenderer from './RankedTableRenderer';
 import RecordCardRenderer from './RecordCardRenderer';
 import ParallelCoordinatesRenderer from './ParallelCoordinatesRenderer';
+import RankedDistributionRenderer from './RankedDistributionRenderer';
 import MsaRenderer from './MsaRenderer';
 import SequenceTrackRenderer from './SequenceTrackRenderer';
 import {
@@ -54,6 +60,7 @@ import {
   AdvancedVizSettingsPopover,
   AdvancedVizZoomSyncToggle,
 } from './AdvancedVizExtras';
+import OpenInGenomeBrowserButton from './OpenInGenomeBrowserButton';
 import { vizKindLabel } from './vizKindTag';
 import { AdvancedVizKindContext } from './VizKindBadge';
 import { useDensity } from '../density';
@@ -98,6 +105,7 @@ import {
   advancedVizShowcase,
   tabLinkName,
 } from './advancedVizShowcase';
+import { describeFilters, traceGenome } from '../genomeLink/genomeDebug';
 
 /** The viewer's fold of a tile's docked controls, kept per component in this
  *  browser. Storage can be missing or refuse (a private window): then the
@@ -253,8 +261,10 @@ const RENDERERS: Record<string, React.ComponentType<any>> = {
   transcript_structure: TranscriptStructureRenderer,
   cnv_profile: CnvProfileRenderer,
   genome_chord: GenomeChordRenderer,
+  ideogram: IdeogramRenderer,
   record_card: RecordCardRenderer,
   parallel_coordinates: ParallelCoordinatesRenderer,
+  ranked_distribution: RankedDistributionRenderer,
   molecule_3d: Molecule3DRenderer,
   msa: MsaRenderer,
   sequence_track: SequenceTrackRenderer,
@@ -263,6 +273,10 @@ const RENDERERS: Record<string, React.ComponentType<any>> = {
   domain_architecture: DomainArchitectureRenderer,
   pae_matrix: PaeMatrixRenderer,
   ramachandran: RamachandranRenderer,
+  spatial_cells: SpatialCellsRenderer,
+  allele_grid: AlleleGridRenderer,
+  pedigree: PedigreeRenderer,
+  ranked_table: RankedTableRenderer,
 };
 
 /**
@@ -574,13 +588,29 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
   const onResetSelection =
     onFilterChange && own.filters.length > 0
       ? () => {
-          for (const cleared of clearedSelectionFilters(own.filters)) onFilterChange(cleared);
+          const cleared = clearedSelectionFilters(own.filters);
+          traceGenome(String(metadata.index), 'tile reset: own selection cleared', describeFilters(cleared));
+          for (const filter of cleared) onFilterChange(filter);
         }
       : undefined;
 
-  const combinedExtras = popovers || extraActions ? (
+  // "Open in genome browser": on a genomic tile that says where it is looking,
+  // when the family has a browser (the button hides itself otherwise). Built
+  // here rather than in `popovers` because it reads the dashboard filters.
+  const openInBrowser = published?.openLocus ? (
+    <OpenInGenomeBrowserButton
+      key="open-genome-browser"
+      reader={published.openLocus}
+      vizKind={vizKind}
+      config={metadata.config}
+      index={String(metadata.index)}
+      filters={filters}
+    />
+  ) : null;
+  const combinedExtras = popovers || openInBrowser || extraActions ? (
     <>
       {popovers}
+      {openInBrowser}
       {extraActions}
     </>
   ) : undefined;

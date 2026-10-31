@@ -1,0 +1,4 @@
+genome	seq_id	start	end	seq_len	action	division	division_group	contaminant_cov	top_taxon	flagged_bp
+Apis_mellifera					none					0
+Bombus_impatiens					none					0
+Polistes_canadensis	NW_014571578.1	1	2136	2136	EXCLUDE	prok:CFB group bacteria	prok	89.0	Bacteroides ihuae	2136

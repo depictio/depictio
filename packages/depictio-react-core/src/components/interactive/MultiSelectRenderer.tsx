@@ -5,7 +5,7 @@ import ComponentSkeleton from '../ComponentSkeleton';
 import { InteractiveFilter, StoredMetadata } from '../../api';
 import { useAvailableSet, useFunnelState } from '../../availableValues';
 import { isAlwaysSelected, rankPickOptions, singlePick } from './alwaysSelected';
-import { orderCategoricalOptions } from './categoricalOptions';
+import { optionOrderOf, orderCategoricalOptions } from './categoricalOptions';
 import { FunnelAvailabilityBadge, FunnelOptionMarker } from './funnelDecorations';
 import {
   INTERACTIVE_FRAME,
@@ -29,6 +29,7 @@ const MultiSelectRenderer: React.FC<{
     metadata.dc_id,
     metadata.column_name,
     metadata.filter_expr,
+    metadata.order_by,
   );
 
   const selected =
@@ -49,7 +50,7 @@ const MultiSelectRenderer: React.FC<{
   const funnel = useFunnelState(metadata.index);
   const optionItems = useMemo(
     () =>
-      orderCategoricalOptions(options, availableSet).map((v) =>
+      orderCategoricalOptions(options, availableSet, optionOrderOf(metadata)).map((v) =>
         availableSet
           ? { value: v, label: optionLabel(metadata, v), disabled: !availableSet.has(v) }
           : { value: v, label: optionLabel(metadata, v) },

@@ -1,0 +1,26 @@
+id: mcquant_cell_markers
+name: Marker intensity per cell
+mode: imaging/markers
+description: >-
+  The MCQUANT cell table melted on its marker columns: one row per cell and
+  marker with the cell's mean intensity in the channel and the same through
+  asinh(x / 150), which puts markers of very different brightness on one axis,
+  the marker's position in the panel and whether it is a nuclear stain or a
+  marker. The cell key matches the cell table, so a selection of cells reaches
+  their intensities.
+find:
+  path_glob: "**/quantification/mcquant/*/*.csv"
+recipe: mcquant/cell_markers.py
+fixture: cell_markers.tsv
+renders_as:
+  # One box per marker, split by segmenter: the panel's dynamic range at a glance.
+  - id: marker_box
+    component: figure
+    visu_type: box
+    dict_kwargs: { x: marker, y: asinh_intensity, color: segmenter }
+  - { id: marker_violin, component: figure, visu_type: violin, dict_kwargs: { x: marker, y: asinh_intensity, color: segmenter } }
+  - { id: measurement_count, component: card, column: cell_key, aggregation: count, secondary_layout: donut, breakdown_col: marker_role }
+  - { component: card, column: asinh_intensity, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: interactive, interactive_type: MultiSelect, column_name: marker }
+  - { component: interactive, interactive_type: MultiSelect, column_name: marker_role }
+  - { component: table, row_selection_enabled: true, row_selection_column: cell_key }

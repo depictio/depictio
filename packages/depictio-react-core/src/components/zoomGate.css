@@ -11,7 +11,10 @@
 .depictio-zoom-hint {
   position: fixed;
   transform: translate(-50%, -50%);
-  max-width: min(90vw, 20rem);
+  /* As wide as its text, which wraps only past this width: a hint naming
+   * the zoom and the drag gestures runs long. */
+  width: max-content;
+  max-width: min(90vw, 36rem);
   padding: 0.4rem 0.9rem;
   border: 1px solid var(--gl-float-line, var(--mantine-color-default-border));
   border-radius: var(--mantine-radius-xl);
@@ -22,7 +25,7 @@
   font-size: var(--mantine-font-size-sm);
   font-weight: 500;
   line-height: 1.3;
-  white-space: nowrap;
+  text-align: center;
   pointer-events: none;
   opacity: 0;
   transition: opacity 180ms ease;

@@ -28,6 +28,7 @@ import {
   chipFilterValue,
   chipSelectionMode,
   filterEvent,
+  optionOrderOf,
   orderCategoricalOptions,
   selectedValues,
   toggleChip,
@@ -95,11 +96,12 @@ export const StripCategorical: React.FC<StripControlProps> = ({
     metadata.dc_id,
     metadata.column_name,
     metadata.filter_expr,
+    metadata.order_by,
   );
   const availableSet = useAvailableSet(metadata.dc_id, metadata.column_name, metadata.index);
   const ordered = useMemo(
-    () => orderCategoricalOptions(options, availableSet),
-    [options, availableSet],
+    () => orderCategoricalOptions(options, availableSet, optionOrderOf(metadata)),
+    [options, availableSet, metadata],
   );
   // Keyed on the full universe, not on `ordered`: a value keeps its colour
   // while the funnel greys other values out. Null: no dots for this column.

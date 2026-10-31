@@ -21,9 +21,23 @@ const table = (values: unknown[], dcId = 'dc-1'): InteractiveFilter => ({
   metadata: { dc_id: dcId, column_name: 'run' },
 });
 
+const genome = (values: unknown[], dcId = 'dc-1'): InteractiveFilter => ({
+  index: 'tile-g',
+  value: values,
+  source: 'jbrowse_selection',
+  column_name: 'sample',
+  interactive_component_type: 'MultiSelect',
+  metadata: { dc_id: dcId, column_name: 'sample' },
+});
+
 describe('honouredSelectionSources', () => {
   it('takes every source for "any" and for an unset value', () => {
-    const all = ['scatter_selection', 'table_selection', 'residue_selection'];
+    const all = [
+      'scatter_selection',
+      'table_selection',
+      'jbrowse_selection',
+      'residue_selection',
+    ];
     expect(honouredSelectionSources('any')).toEqual(all);
     expect(honouredSelectionSources(undefined)).toEqual(all);
   });
@@ -34,6 +48,26 @@ describe('honouredSelectionSources', () => {
 });
 
 describe('readRecordSelection', () => {
+  it('follows a genome browser selection under "any" and when named', () => {
+    const expected = {
+      source: 'jbrowse_selection',
+      column: 'sample',
+      values: ['S3'],
+      ownCollection: true,
+    };
+    expect(readRecordSelection([genome(['S3'])], { dcId: 'dc-1' })).toEqual(expected);
+    expect(
+      readRecordSelection([genome(['S3'])], { dcId: 'dc-1', selectionSource: 'jbrowse_selection' }),
+    ).toEqual(expected);
+    expect(
+      readRecordSelection([genome(['S3'])], { dcId: 'dc-1', selectionSource: 'table_selection' }),
+    ).toBeNull();
+  });
+
+  it('ignores a cleared genome browser selection', () => {
+    expect(readRecordSelection([genome([])], { dcId: 'dc-1' })).toBeNull();
+  });
+
   it('returns null when nothing is selected', () => {
     expect(readRecordSelection([], { dcId: 'dc-1' })).toBeNull();
     expect(readRecordSelection(undefined, { dcId: 'dc-1' })).toBeNull();

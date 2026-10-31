@@ -1,0 +1,34 @@
+id: stableexpression_dataset_summary
+name: Downloaded datasets
+mode: expression/datasets
+description: >-
+  One row per public dataset the run downloaded: accession, platform,
+  normalisation state and array design, the samples and conditions it came with,
+  its gene ID mapping (ids in, kept, collapsed, rare, unmapped, mapped share),
+  the samples each filter rejected and the samples kept in the merged matrix,
+  the median zero share, missing share and skewness of its samples, and its
+  outcome: merged, no gene mapped, only rare genes, or all samples filtered out.
+find:
+  path_glob: "**/statistics/zero_values_filter_stats.csv"
+recipe: stableexpression/dataset_summary.py
+fixture: dataset_summary.tsv
+renders_as:
+  # Datasets through the pipeline's steps, as attrition: downloaded, ID-mapped,
+  # merged.
+  - { id: dataset_attrition, component: card, column: downloaded, aggregation: sum,
+      secondary_layout: attrition, attrition_cols: [id_mapped, merged], headline: true }
+  - { id: sample_attrition, component: card, column: samples_downloaded, aggregation: sum,
+      secondary_layout: attrition, attrition_cols: [samples_id_mapped, samples_after_zero_filter, samples_kept] }
+  - { id: dataset_outcomes, component: card, column: dataset, aggregation: count, secondary_layout: donut, breakdown_col: outcome }
+  - { id: mapped_share_card, component: card, column: mapped_share, aggregation: median, secondary_layout: histogram }
+  - { id: samples_per_dataset, component: figure, visu_type: histogram, dict_kwargs: { x: samples_kept, color: platform } }
+  # The share of genes a dataset misses is set by what measured it: one
+  # strip per array design (RNA-seq its own), one point per dataset.
+  - { id: missing_by_design, component: figure, visu_type: strip, dict_kwargs: { x: design, y: missing_share, color: platform } }
+  - { component: interactive, interactive_type: MultiSelect, column_name: outcome }
+  - { component: interactive, interactive_type: MultiSelect, column_name: platform }
+  - { id: dataset_table, component: table, row_selection_enabled: true, row_selection_column: dataset }
+  - id: dataset_record
+    component: advanced_viz
+    kind: record_card
+    roles: { id: dataset, title: accession }

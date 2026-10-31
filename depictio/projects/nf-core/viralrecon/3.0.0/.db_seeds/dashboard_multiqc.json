@@ -73,6 +73,7 @@
       "group": null,
       "timescale": null,
       "show_marks": null,
+      "show_mark_labels": null,
       "show_histogram": null,
       "slider_mode": null,
       "custom_color": "teal",
@@ -1163,6 +1164,7 @@
   "filter_panel_default": "open",
   "content_width_default": "full",
   "show_tab_header": true,
+  "open_with_defaults": false,
   "show_guide": true,
   "guide_intro": "",
   "advanced_viz_controls": "popover",
@@ -1201,11 +1203,14 @@
       }
     ],
     "editors": [],
-    "viewers": []
+    "viewers": [],
+    "group_owners": [],
+    "group_editors": [],
+    "group_viewers": []
   },
   "is_public": true,
   "last_saved_ts": "2026-08-29 00:00:00",
-  "creation_time": "2026-10-08 21:52:39",
+  "creation_time": "2026-10-30 14:56:15",
   "screenshot_ts": "",
   "project_id": {
     "$oid": "746b0f3c1e4a2d7f8e5b9ca2"
@@ -1223,5 +1228,10 @@
   "project_realtime": null,
   "inherited_brand_theme": null,
   "inherited_category_colors": null,
-  "source_key": "nf-core/viralrecon:dashboards/base.yaml#MultiQC"
+  "source_key": "nf-core/viralrecon:dashboards/base.yaml#MultiQC",
+  "template_origin": {
+    "template_id": "nf-core/viralrecon/3.0.0",
+    "template_version": "2.0.0",
+    "imported_at": "2026-10-30 14:58:06"
+  }
 }

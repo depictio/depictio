@@ -55,7 +55,7 @@ main_dashboard:
   - name: rtg-tools cross-check
     icon: mdi:check-decagram
     color: teal
-    description: The same callers scored by rtg-tools vcfeval
+    description: rtg-tools vcfeval over all variants, not som.py's one type – compare ranks
     collapsed: true
   - name: Reference tables
     icon: mdi:table
@@ -336,9 +336,10 @@ main_dashboard:
     body: >
       The pipeline benchmarks the somatic callers with two tools.
       [rtg-tools](https://github.com/RealTimeGenomics/rtg-tools) vcfeval matches
-      haplotypes rather than sites, so its precision and recall differ slightly
-      from som.py's; a caller that moves rank between the two views deserves a
-      closer look.
+      haplotypes rather than sites, and scores every variant of a callset where
+      som.py scores one variant type, so its counts and precision differ from
+      som.py's. Compare how the callers rank, not the values: a caller that moves
+      rank between the two views deserves a closer look.
     workflow_tag: variantbenchmarking
     data_collection_tag: vcfeval_summary
     layout: {x: 0, y: 0, w: 8, h: 1}

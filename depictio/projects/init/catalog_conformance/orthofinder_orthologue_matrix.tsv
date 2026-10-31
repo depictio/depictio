@@ -1,0 +1,4 @@
+genome	Apis_mellifera	Bombus_impatiens	Polistes_canadensis
+Apis_mellifera		8421	8184
+Bombus_impatiens	8421		8111
+Polistes_canadensis	8184	8111	

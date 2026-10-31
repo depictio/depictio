@@ -1,0 +1,23 @@
+# nf-core/viralmetagenome: viral genome reconstruction from metagenomic reads
+# (de novo assembly, clustering and iterative refinement, and mapping to
+# constraint references). The tables read here come from pipeline-local
+# processes (the overview tables the pipeline builds from its own MultiQC
+# sections, the contig classification merge and the contig clustering), so
+# there is no nf-core module to derive identity from and it is declared in
+# full, the same documented exception as crisprseq and mhcquant.
+id: viralmetagenome
+name: nf-core/viralmetagenome
+version: "1.0.0"
+description: >-
+  Per-sample and per-genome tables of nf-core/viralmetagenome: read
+  preprocessing and host removal, the de novo contigs with their taxonomic
+  call and cluster, and every consensus genome (de novo or against a
+  constraint reference) with its closest reference, ambiguous bases, CheckV
+  call, mapping, depth and variant counts.
+homepage: https://nf-co.re/viralmetagenome
+biotools_url: null  # no bio.tools entry for this pipeline
+source_url: https://github.com/nf-core/viralmetagenome/tree/1.2.0/modules/local
+edam_topics:
+  - http://edamontology.org/topic_0781 # Virology
+  - http://edamontology.org/topic_3174 # Metagenomics
+stage: other

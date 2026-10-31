@@ -1659,6 +1659,10 @@ def run_ingest(opts: IngestOptions, ingestion: _IngestionRecord) -> IngestOutcom
     # where someone reading a finished pipeline log looks for somewhere to click,
     # and for what a refresh did to the dashboards edited in the viewer.
     imported_dashboards: list[tuple[str, str, str]] = []
+    # Optional collections step 6 left out because their inputs are absent. The
+    # inline warnings scroll past, so the summary repeats them: a run that took
+    # a lighter route (sarek without --tools) shows what it is missing.
+    skipped_optional_dcs: list[str] = []
     # --dashboard is honoured whether or not a template is in play. It used
     # to be read only inside the template branch, so a pipeline Depictio
     # ships no template for could ask for a dashboard and be silently
@@ -2528,12 +2532,18 @@ def run_ingest(opts: IngestOptions, ingestion: _IngestionRecord) -> IngestOutcom
             success_count += 1
             _proc = locals().get("process_result") or {}
             _n_ok = _proc.get("total_processed")
+            skipped_optional_dcs = list(_proc.get("skipped_optional") or [])
+            _skipped_note = (
+                f", {len(skipped_optional_dcs)} optional skipped: {', '.join(skipped_optional_dcs)}"
+                if skipped_optional_dcs
+                else ""
+            )
             _rec(
                 "process",
                 "success",
-                f"{_n_ok} data collection(s) processed"
+                f"{_n_ok} data collection(s) processed{_skipped_note}"
                 if _n_ok is not None
-                else "data collections processed",
+                else f"data collections processed{_skipped_note}",
             )
             if image_uploads:
                 _rec(
@@ -2664,6 +2674,9 @@ def run_ingest(opts: IngestOptions, ingestion: _IngestionRecord) -> IngestOutcom
                     template_id=(
                         template_metadata.template_id if template_metadata is not None else None
                     ),
+                    template_version=(
+                        template_metadata.version if template_metadata is not None else None
+                    ),
                     base_dir=Path(project_config_path).parent if project_config_path else None,
                 )
 
@@ -2781,6 +2794,13 @@ def run_ingest(opts: IngestOptions, ingestion: _IngestionRecord) -> IngestOutcom
         link = f": {viewer_url}/dashboard/{dashboard_id}" if viewer_url else ""
         rich_print_checked_statement(
             f"Dashboard '{escape(dashboard_title)}' {dashboard_status}{link}", "info"
+        )
+
+    if skipped_optional_dcs:
+        rich_print_checked_statement(
+            f"Skipped {len(skipped_optional_dcs)} optional data collection(s), their inputs are "
+            f"absent from this run: {escape(', '.join(skipped_optional_dcs))}",
+            "warning",
         )
 
     if template_metadata is not None:

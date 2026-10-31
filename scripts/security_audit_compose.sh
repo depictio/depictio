@@ -161,12 +161,15 @@ else
     pass "file-delete IDOR predicate fixed"
 fi
 
-# 1.7 — JBrowse iframe sandbox dropped allow-same-origin (active JSX only)
-if grep -nE 'sandbox="[^"]*allow-same-origin' \
-        packages/depictio-react-core/src/components/JBrowseRenderer.tsx >/dev/null; then
-    fail "JBrowse iframe sandbox tightened" "still has allow-same-origin in active sandbox attribute"
+# 1.7 — JBrowse is embedded (no iframe to a side service) and its remote
+# track reads never follow redirects (an allow-listed host must not bounce the
+# proxy to an arbitrary URL).
+if grep -nE '<iframe' packages/depictio-react-core/src/components/JBrowseRenderer.tsx >/dev/null; then
+    fail "JBrowse embedded without iframe" "JBrowseRenderer.tsx renders an <iframe>"
+elif ! grep -q 'follow_redirects=False' depictio/api/v1/services/remote_read.py; then
+    fail "JBrowse remote reads refuse redirects" "remote_read.py lost follow_redirects=False"
 else
-    pass "JBrowse iframe sandbox tightened"
+    pass "JBrowse embedded, remote track reads refuse redirects"
 fi
 
 # 1.8 — nginx CSP and HSTS in viewer template

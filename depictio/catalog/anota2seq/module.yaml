@@ -8,6 +8,7 @@
 # four tables with anota2seq's own default selection thresholds.
 id: anota2seq
 name: anota2seq
+version: "1.0.0"
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/anota2seq/anota2seqrun
 homepage: https://bioconductor.org/packages/anota2seq
 description: >-

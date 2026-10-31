@@ -26,7 +26,7 @@ export function clearSelectionLabel(count: number | undefined): string {
 const ClearSelectionButton: React.FC<ClearSelectionButtonProps> = ({ onClear, count }) => {
   const label = clearSelectionLabel(count);
   return (
-    <Tooltip label={label} withArrow position="bottom-end">
+    <Tooltip label={`${label} · Esc`} withArrow position="bottom-end">
       <ActionIcon variant="light" color="orange" size="sm" onClick={onClear} aria-label={label}>
         <Icon icon="bx:reset" width={16} height={16} />
       </ActionIcon>

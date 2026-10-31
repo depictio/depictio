@@ -112,7 +112,33 @@ def test_mosdepth_windows_renames_onto_the_shared_coordinate_names():
         "recal",
         "NA1 (recal)",
         120,
+        "NA1",
+        95.5,
     )
+
+
+def test_mosdepth_windows_caps_the_plotted_depth_at_three_times_the_sample_median():
+    depths = [90.0, 100.0, 110.0, 1000.0, 0.0]
+    regions = pl.DataFrame(
+        {
+            "chromosome": ["chr1"] * 5 + ["chr1"],
+            "position": [i * 1_000_000 for i in range(5)] + [0],
+            "end": [(i + 1) * 1_000_000 for i in range(5)] + [1_000_000],
+            "value": [*depths, 5.0],
+            "sample": ["NA1"] * 5 + ["NA2"],
+            "stage": ["recal"] * 6,
+            "sample_stage": ["x"] * 6,
+            "n_targets": [10] * 6,
+        }
+    )
+    out = _run("mosdepth_windows.py", {"regions": regions})
+    na1 = out.filter(pl.col("sample") == "NA1").sort("pos")
+    # Median of the non-zero windows is 105, so the cap is 315; depth itself is untouched.
+    assert na1["depth_capped"].to_list() == [90.0, 100.0, 110.0, 315.0, 0.0]
+    assert na1["depth"].to_list() == depths
+    # A thin sample keeps the 40x floor, so the 20x line stays on the axis.
+    assert out.filter(pl.col("sample") == "NA2")["depth_capped"].to_list() == [5.0]
+    assert out["sample_id"].to_list() == out["sample"].to_list()
 
 
 def test_callset_qc_joins_the_three_sources_and_drops_snv_free_callsets():

@@ -200,6 +200,7 @@ const SELECTION_SOURCES = new Set([
   // position half is a `[start, end]` span, which as group members would mean
   // "residue start or residue end", so it is left out below.
   'residue_selection',
+  'jbrowse_selection',
 ]);
 
 /** A `[low, high]` span rather than picked values (a residue range half). */

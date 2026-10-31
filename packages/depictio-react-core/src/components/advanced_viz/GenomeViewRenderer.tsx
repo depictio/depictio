@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Badge,
+  CloseButton,
   Group,
   Stack,
   Text,
@@ -26,7 +27,18 @@ import {
   regionFromFilters,
 } from '../../selection';
 import { useWebglSlot } from '../../webglBudget';
+import { useHighlight, usePublishHighlight } from '../../highlight/bus';
+import { hoverInterval } from '../../highlight/genomicHover';
+import { useViewWindow } from '../../highlight/viewWindow';
+import { useAutofitValue, useTileChrome } from '../autofit';
 import type { GroupRenderState } from '../../selectionGroups';
+import type { GenomePoint, OpenLocusReader } from '../jbrowse/locusForAction';
+import ColourKey from '../jbrowse/ColourKey';
+import {
+  useTrackColourKey,
+  useTrackGroupColours,
+  useTrackSampleColours,
+} from '../jbrowse/genomeTracksStore';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { plotlyThemeColors } from './plotlyTheme';
 import { usePersistedVizControl } from './usePersistedVizControl';
@@ -39,8 +51,10 @@ import {
   regionFromInterval,
   requiredColumns,
   rowsToObjects,
+  markTopStars,
+  drawsTopStars,
 } from './genomespy/genomeSpySpec';
-import type { Contig, GenomeRegion, GenomeViewConfig } from './genomespy/genomeSpySpec';
+import type { Contig, GenomeRegion, GenomeViewConfig, StarLane } from './genomespy/genomeSpySpec';
 import { loadGeneAnnotation } from './genomespy/geneAnnotations';
 import type { GeneAnnotation } from './genomespy/geneAnnotations';
 import {
@@ -53,6 +67,7 @@ import {
 import {
   filtersForGenomeViewFetch,
   loadGenomeViewRows,
+  mergeWindowRows,
   navigatorWindow,
   navigatorWindowFilters,
   ownRegion,
@@ -78,15 +93,47 @@ import {
 import {
   buildFileGenomeSpec,
   fetchIndexedFileManifest,
+  fileLaneMinPx,
   fileTrackOptions,
 } from './genomespy/fileSpec';
+import { genomeContentPx, tileFitPx } from './genomespy/autoHeight';
+import InteractionModeSwitch from './genomespy/InteractionModeSwitch';
+import {
+  initialInteractionMode,
+  isTypingTarget,
+  modeForKey,
+  modeHint,
+} from './genomespy/interactionMode';
+import type { InteractionMode } from './genomespy/interactionMode';
 import type { IndexedFileManifest } from './genomespy/fileSpec';
 import {
+  clearGenomeSpyBrush,
   loadAssemblyContigs,
+  readViewDomain,
   setGenomeSpyRows,
   useGenomeSpy,
   zoomToRegion,
 } from './genomespy/useGenomeSpy';
+import { useGenomeSpyOverlays } from './genomespy/useGenomeSpyOverlays';
+import { useStarOverlay } from './genomespy/useStarOverlay';
+import { useViewWindowPublish } from './genomespy/useViewWindowPublish';
+import { approxSameWindow, CODE_ZOOM_QUIET_MS } from './genomespy/viewWindowPublish';
+import {
+  compactRegion,
+  followWindowTarget,
+  hoverRows as buildHoverRows,
+  paddedRegion,
+  selectionRows as buildSelectionRows,
+  windowInDomain,
+  windowIsRegion,
+  windowRows as buildWindowRows,
+} from './genomespy/overlayRows';
+import OverlayLegend from './genomespy/OverlayLegend';
+import { browserKeyLegend } from './genomespy/genomeLegend';
+import LinkedTileChip from '../genomeLink/LinkedTileChip';
+import { setTileStats } from '../chrome/tileStats';
+import { LINK_COLOR, tileTitle } from '../genomeLink/linkedTile';
+import { describeFilters, traceGenome } from '../genomeLink/genomeDebug';
 
 /**
  * `genome_view`: a genomic view drawn by GenomeSpy (issue #1083).
@@ -119,8 +166,8 @@ interface Props {
   /** Absent on read-only hosts (catalog, project previews): no picking, no
    *  region brush. */
   onFilterChange?: (filter: InteractiveFilter) => void;
-  /** Dashboard-wide analysis grouping. Not applied: this kind colours by
-   *  chromosome or by its category column, and `GROUPING_MODE_BY_KIND` says
+  /** Dashboard-wide analysis grouping. Not applied: this kind colours by its
+   *  category column or by sample, and `GROUPING_MODE_BY_KIND` says
    *  'none', so the chrome's badge reports that the groups did not reach this
    *  tile. */
   groupRender?: GroupRenderState;
@@ -133,6 +180,18 @@ function regionLabel(region: GenomeRegion | null): string | null {
   if (!region.range) return region.chroms.join(', ');
   return `${region.chroms[0]}:${Math.round(region.range[0])}-${Math.round(region.range[1])}`;
 }
+
+/** No named overlay sources (a file-backed tile): the DOM fallback paints. */
+const NO_OVERLAYS: never[] = [];
+const NO_STAR_LANES: StarLane[] = [];
+/** Fixed lane heights offered once lanes stop fitting the tile. */
+const LANE_HEIGHTS = [
+  { px: 40, label: 'S' },
+  { px: 64, label: 'M' },
+  { px: 100, label: 'L' },
+];
+/** The height lanes take when "Fit lanes to the tile" is switched off. */
+const DEFAULT_FIXED_LANE_PX = 64;
 
 const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFilterChange }) => {
   const { colorScheme } = useMantineColorScheme();
@@ -154,7 +213,7 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
   const fileMode = config.source === 'file';
 
   // Tier-2 controls. Defaults agree with GenomeViewConfig's own.
-  const [mark, setMark] = usePersistedVizControl<'point' | 'rect' | 'bar'>(metadata, 'mark', 'point');
+  const [mark, setMark] = usePersistedVizControl<'point' | 'rect' | 'bar'>(metadata, 'mark', 'rect');
   const [pointSize, setPointSize] = usePersistedVizControl<number>(metadata, 'point_size', 5);
   const [opacity, setOpacity] = usePersistedVizControl<number>(metadata, 'opacity', 0.85);
   const [scoreThreshold, setScoreThreshold] = usePersistedVizControl<number | null>(
@@ -163,7 +222,7 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
     null,
   );
   const [assembly, setAssembly] = usePersistedVizControl<string | null>(metadata, 'assembly', null);
-  const [annotation, setAnnotation] = usePersistedVizControl<'none' | 'hg38' | 'mm10'>(
+  const [annotation, setAnnotation] = usePersistedVizControl<'none' | 'hg38' | 'hg19' | 'mm10'>(
     metadata,
     'annotation',
     'none',
@@ -174,16 +233,40 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
     false,
   );
   const [maxFacets, setMaxFacets] = usePersistedVizControl<number>(metadata, 'max_facets', 8);
+  // What the pointer does on the axis: the header's switch, not a panel
+  // control. Opens as the YAML says (`interaction_mode`, else the older
+  // `drag_mode`), else as a plain pointer.
+  const [interactionMode, setInteractionMode] = usePersistedVizControl<InteractionMode>(
+    metadata,
+    'interaction_mode',
+    initialInteractionMode(config),
+  );
+  const [publishWindow, setPublishWindow] = usePersistedVizControl<boolean>(
+    metadata,
+    'publish_view_window',
+    false,
+  );
+  const [laneHeight, setLaneHeight] = usePersistedVizControl<number | null>(metadata, 'lane_height', null);
+  const [facetYScale, setFacetYScale] = usePersistedVizControl<'shared' | 'independent'>(
+    metadata,
+    'facet_y_scale',
+    'shared',
+  );
   const [followRegion, setFollowRegion] = usePersistedVizControl<boolean>(
     metadata,
     'follow_region_filter',
     false,
   );
+  // The key to the marks' colours under the axis: on when there is one.
+  const [showLegend, setShowLegend] = usePersistedVizControl<boolean>(metadata, 'show_legend', true);
 
   // ---- Selection as a cross-filter ---------------------------------------
   const selectionColumn = onFilterChange ? advancedVizSelectionColumn(metadata) : undefined;
   const selectionEnabled = Boolean(selectionColumn);
   const regionBrushEnabled = Boolean(onFilterChange) && config.region_filter_enabled !== false;
+  // A tile that cannot take a region has no brush to draw: select is the pointer.
+  const mode: InteractionMode =
+    interactionMode === 'select' && !regionBrushEnabled ? 'pointer' : interactionMode;
 
   // ---- Holding the first fetch for a default region -----------------------
   // A tile with a `default_region` to emit is a navigator: it announces that
@@ -221,8 +304,11 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
       annotation,
       facet_by_sample: facetBySample,
       max_facets: maxFacets,
+      lane_height: laneHeight,
+      facet_y_scale: facetYScale,
       follow_region_filter: followRegion,
       region_filter_enabled: regionBrushEnabled,
+      interaction_mode: mode,
       selection_enabled: selectionEnabled,
       selection_column: selectionColumn ?? null,
     }),
@@ -236,6 +322,9 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
       annotation,
       facetBySample,
       maxFacets,
+      laneHeight,
+      mode,
+      facetYScale,
       followRegion,
       regionBrushEnabled,
       selectionEnabled,
@@ -271,7 +360,13 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
     return () => clearTimeout(timer);
   }, []);
 
-  const [rows, setRows] = useState<Record<string, unknown[]> | null>(null);
+  // The fetch as read: the window when the tile is narrowed to one, else the
+  // whole genome. `rows` (below) is what the tile draws.
+  const [fetchedRows, setRows] = useState<Record<string, unknown[]> | null>(null);
+  // The chromosome `fetchedRows` was narrowed to, null for a whole-genome
+  // read: the merge below must use the window the rows came from, not the
+  // one a newer brush asks for while its read is in flight.
+  const [fetchedChrom, setFetchedChrom] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [estimated, setEstimated] = useState(false);
@@ -368,6 +463,7 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
       return undefined;
     }
     let cancelled = false;
+    const windowChrom = fetchWindowChrom;
     setLoading(true);
     setFetchError(null);
     loadGenomeViewRows(fetchAdvancedVizData, {
@@ -380,6 +476,7 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
       .then((res) => {
         if (cancelled) return;
         setRows(res.rows);
+        setFetchedChrom(windowChrom);
         setEstimated(res.estimated);
       })
       .catch((err: unknown) => {
@@ -403,6 +500,59 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
     scoreThreshold,
     refreshTick,
   ]);
+
+  // While narrowed to a window, the whole genome is read too, once per
+  // filter set: the other chromosomes keep their marks around the region.
+  // Not refetched on a brush or a chromosome change, only on the filters.
+  const [genomeRows, setGenomeRows] = useState<Record<string, unknown[]> | null>(null);
+  const needsGenome = Boolean(fetchWindow) && !holdOwnFetch && followerGateOpen;
+  useEffect(() => {
+    if (fileMode || !needsGenome) return undefined;
+    let cancelled = false;
+    loadGenomeViewRows(fetchAdvancedVizData, {
+      metadata,
+      config: effectiveConfig,
+      filters: filtersForFetch,
+      selectionColumn,
+    })
+      .then((res) => {
+        if (!cancelled) setGenomeRows(res.rows);
+      })
+      // The window still draws; only the context around it is missing.
+      .catch(() => {
+        if (!cancelled) setGenomeRows(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    fileMode,
+    needsGenome,
+    metadata.wf_id,
+    metadata.dc_id,
+    JSON.stringify(requiredCols),
+    JSON.stringify(filtersForFetch),
+    scoreThreshold,
+    refreshTick,
+  ]);
+  const knownContigs = useMemo(
+    () => (assemblyContigs ? new Set(assemblyContigs.map((c) => c.name)) : null),
+    [assemblyContigs],
+  );
+  const rows = useMemo(
+    () =>
+      fetchedRows && fetchedChrom && genomeRows
+        ? mergeWindowRows(
+            genomeRows,
+            fetchedRows,
+            effectiveConfig.chr_col,
+            fetchedChrom,
+            knownContigs,
+          )
+        : fetchedRows,
+    [fetchedRows, fetchedChrom, genomeRows, effectiveConfig.chr_col, knownContigs],
+  );
 
   const [geneAnnotation, setGeneAnnotation] = useState<GeneAnnotation | null>(null);
   // Whether the lane's gene table has been read (or there is none to read), so
@@ -449,27 +599,61 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
 
   const themeColors = plotlyThemeColors(isDark, theme);
   const palette = resolveCategoricalPalette(theme);
-  // A category (or a chromosome) wears the dashboard's colour for it. Keyed
+  // The selection, the window band and the hover rule wear the theme's
+  // primary colour, as the other genomic tiles' cursors do.
+  const overlayColor =
+    theme.colors[theme.primaryColor]?.[isDark ? 4 : 7] ?? theme.colors.blue[isDark ? 4 : 7];
+  // The browser's window wears the link's colour, as the tags of both tiles do.
+  const linkColor = theme.colors[LINK_COLOR][isDark ? 4 : 6];
+  // The window band reads on a card of either scheme: a faint tint of the
+  // link colour all but vanishes on a dark one, so it is filled a little
+  // stronger there.
+  const overlayColors = useMemo(
+    () => ({
+      windowColor: linkColor,
+      hoverColor: overlayColor,
+      selectionColor: overlayColor,
+      windowOpacity: isDark ? 0.24 : 0.14,
+    }),
+    [overlayColor, linkColor, isDark],
+  );
+  // A category (or a sample) wears the dashboard's colour for it. Keyed
   // by content below, so a refetched dashboard with the same colours does not
   // tear the embed down.
   const categorySource = useCategoryColorSource();
   const pinned = useMemo(() => {
     const out: Record<string, Record<string, string>> = {};
-    for (const column of [effectiveConfig.category_col, effectiveConfig.chr_col]) {
+    for (const column of [effectiveConfig.category_col, effectiveConfig.sample_col]) {
       const colours = columnCategoryColors(categorySource, column);
       if (column && colours) out[column] = colours;
     }
     return Object.keys(out).length ? out : null;
-  }, [categorySource, effectiveConfig.category_col, effectiveConfig.chr_col]);
+  }, [categorySource, effectiveConfig.category_col, effectiveConfig.sample_col]);
+  // A lane wears the colour the genome browser gives the same library's
+  // tracks (e.g. one per design group), read from the browser tiles of this
+  // dashboard; marks no colour names stay neutral.
+  const laneColors = useTrackSampleColours();
+  // The values a browser's `color_by` / `color_scale` colours (a condition, a
+  // timepoint): a category of this tile that carries one wears its colour.
+  const groupColors = useTrackGroupColours();
+  // How the browser keys those colours (its column, the scale's order), for the
+  // key under the axis when the lanes wear the browser's colours.
+  const browserKey = useTrackColourKey();
+  const neutralColor = isDark ? theme.colors.gray[5] : theme.colors.gray[6];
 
   // The rows as GenomeSpy reads them, from the *current* fetch: they feed the
   // dataset swap below and the row count the chrome reports.
   const liveData = useMemo(
     () =>
       rows
-        ? rowsToObjects(rows, requiredCols, effectiveConfig.chr_col, effectiveConfig.pos_col)
+        ? (() => {
+            const objs = rowsToObjects(rows, requiredCols, effectiveConfig.chr_col, effectiveConfig.pos_col);
+            return drawsTopStars(effectiveConfig)
+              ? markTopStars(objs, effectiveConfig.score_col, effectiveConfig.top_stars ?? 0)
+              : objs;
+          })()
         : null,
-    [rows, requiredCols, effectiveConfig.chr_col, effectiveConfig.pos_col],
+    [rows, requiredCols, effectiveConfig],
   );
   const rowCount = liveData?.length ?? 0;
 
@@ -477,15 +661,23 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
   // colours. It is built from the first *non-empty* rows only; later rows go
   // through `setGenomeSpyRows` so a moved filter does not tear the embed down.
   // An empty first fetch is not a seed: it would fix an empty contig list into
-  // the spec (see `latchSeedRows`), so the tile waits for rows instead.
+  // the spec (see `latchSeedRows`), so the tile waits for rows instead. A
+  // faceted tile is re-seeded when a filter changes which libraries it draws.
   const seedRef = useRef<Record<string, unknown[]> | null>(null);
   seedRef.current = latchSeedRows(
     seedRef.current,
     rows,
     effectiveConfig.chr_col,
     effectiveConfig.pos_col,
+    effectiveConfig,
   );
   const seed = seedRef.current;
+  // The medals of the genome browser's starred calls: gold, silver, bronze.
+  const medals = [
+    theme.colors.yellow[isDark ? 4 : 7],
+    theme.colors.gray[isDark ? 4 : 6],
+    theme.colors.orange[isDark ? 5 : 9],
+  ];
   const built = useMemo(() => {
     if (!seed) return null;
     return buildGenomeSpySpec({
@@ -497,9 +689,15 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
         ruleColor: themeColors.zeroLineColor,
         palette,
         pinned,
+        laneColors,
+        groupColors,
+        neutral: neutralColor,
+        overlay: overlayColors,
+        medals,
       },
       assemblyContigs,
       genes: geneAnnotation?.genes ?? null,
+      clickable: selectionEnabled,
     });
     // `seed` is null until the first non-empty fetch and the same object ever
     // after, so keying on it rebuilds exactly once, when it latches.
@@ -516,7 +714,24 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
     themeColors.zeroLineColor,
     palette.join(','),
     JSON.stringify(pinned),
+    laneColors,
+    groupColors,
+    neutralColor,
+    overlayColors,
+    selectionEnabled,
+    isDark,
+    medals.join(','),
   ]);
+  // The key under the axis: for lanes that wear the browser's per-library colours,
+  // the browser's own key (its column, a ramp for a scale), else the marks' own.
+  const legend = useMemo(() => {
+    if (!built) return null;
+    const fromBrowser =
+      built.colourBy === 'sample'
+        ? browserKeyLegend(browserKey, built.colourSamples, groupColors)
+        : null;
+    return fromBrowser ?? built.legend;
+  }, [built, browserKey, groupColors]);
   // The file-backed spec. Built from the manifest, so it changes when the
   // presigned URLs are refreshed; that is a genuine remount, since the lazy
   // sources hold the old URLs.
@@ -532,10 +747,13 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
           gridColor: themeColors.gridColor,
           ruleColor: themeColors.zeroLineColor,
           palette,
+          laneColors,
+          groupColors,
         },
         assemblyContigs,
         assembly: effectiveConfig.assembly ?? null,
         regionBrushEnabled,
+        interactionMode: mode,
       });
       setFileSpecError(null);
       return out;
@@ -552,10 +770,13 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
     pointSize,
     assemblyContigs,
     regionBrushEnabled,
+    mode,
     themeColors.textColor,
     themeColors.gridColor,
     themeColors.zeroLineColor,
     palette.join(','),
+    laneColors,
+    groupColors,
   ]);
 
   const spec = ((fileMode ? builtFile?.spec : built?.spec) ?? null) as RootSpec | null;
@@ -568,13 +789,27 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
     },
     [onFilterChange, selectionColumn, metadata],
   );
+  // The last mark the reader clicked, as a contig and a position: where "Open
+  // in genome browser" goes, whether or not the tile selects. The visible
+  // window is not offered: the brushed region (read off the filters by the
+  // action) is what the tile's address bar shows.
+  const lastPointRef = useRef<GenomePoint | null>(null);
   const handlePick = useCallback(
     (datum: Readonly<Record<string, unknown>>) => {
+      const chrom = datum[config.chr_col];
+      const pos = Number(datum[config.pos_col]);
+      if (chrom != null && chrom !== '' && Number.isFinite(pos)) {
+        lastPointRef.current = { chrom: String(chrom), pos };
+      }
       if (!selectionColumn) return;
       const v = datum[selectionColumn];
       emitSelection(v === null || v === undefined ? [] : [String(v)]);
     },
-    [emitSelection, selectionColumn],
+    [emitSelection, selectionColumn, config.chr_col, config.pos_col],
+  );
+  const openLocus = useCallback<OpenLocusReader>(
+    () => ({ point: lastPointRef.current }),
+    [],
   );
 
   const [brushedRegion, setBrushedRegion] = useState<string | null>(null);
@@ -591,6 +826,7 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
       if (zoomingFromCodeRef.current) return;
       const region = regionFromInterval(contigs, interval);
       setBrushedRegion(regionLabel(region));
+      traceGenome(String(metadata.index), region ? 'brush released' : 'brush emptied', region);
       // Two entries, one per column: `mergeFiltersBySource` keys on
       // (index, source) and they carry different indices, so they coexist.
       const pair = genomeRegionFilters(metadata, config.chr_col, config.pos_col, region);
@@ -602,13 +838,213 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
     [onFilterChange, contigs, metadata, config.chr_col, config.pos_col],
   );
 
+  // ---- Hover → the other tiles ----------------------------------------------
+  // The mark under the pointer goes out whole: a contig interval for a genome
+  // browser, the row as `record` for a table or a plot reading its own columns.
+  // Best effort (see `onHover` in useGenomeSpy). Overlay marks carry no
+  // chromosome / position column of this tile's, so they publish nothing.
+  const ownIndex = String(metadata.index);
+  const publishHighlight = usePublishHighlight(ownIndex);
+  // Read through a ref: a rebuilt spec must not remount the embed's hover
+  // subscription just to change what colour a hover carries.
+  const markColorOfRef = useRef<((datum: Readonly<Record<string, unknown>>) => string | null) | null>(null);
+  markColorOfRef.current = built?.colorOf ?? null;
+  const handleHover = useCallback(
+    (datum: Readonly<Record<string, unknown>> | null) => {
+      if (!datum) {
+        publishHighlight(null);
+        return;
+      }
+      const chrom = datum[config.chr_col];
+      const pos = Number(datum[config.pos_col]);
+      if (chrom == null || chrom === '' || !Number.isFinite(pos)) {
+        traceGenome(ownIndex, 'hover: datum has no position, nothing published', Object.keys(datum));
+        return;
+      }
+      const rawEnd = config.end_col ? Number(datum[config.end_col]) : Number.NaN;
+      const end = Number.isFinite(rawEnd) && rawEnd >= pos ? rawEnd : pos;
+      const key = selectionColumn ? datum[selectionColumn] : undefined;
+      publishHighlight({
+        entity: String(chrom),
+        start: pos,
+        end,
+        positionColumn: config.pos_col,
+        rowKeys: key != null && key !== '' ? [String(key)] : undefined,
+        genomic: { refName: String(chrom), start: pos, end },
+        record: { ...datum },
+        // The colour of the mark under the pointer, so the band it draws on a
+        // genome browser wears it.
+        color: markColorOfRef.current?.(datum) ?? undefined,
+      });
+    },
+    [publishHighlight, config.chr_col, config.pos_col, config.end_col, selectionColumn, ownIndex],
+  );
+
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const { api, error: embedError } = useGenomeSpy(containerRef, spec, {
+
+  // ---- Mode keys (V pointer, H pan, M select) -------------------------------
+  // Only while the pointer is over this tile, so two genome tiles on a page
+  // never switch together and the keys stay free everywhere else.
+  useEffect(() => {
+    const tile = containerRef.current?.closest('.react-grid-item') ?? containerRef.current;
+    if (!tile) return undefined;
+    let over = false;
+    const enter = () => {
+      over = true;
+    };
+    const leave = () => {
+      over = false;
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (!over || e.repeat || isTypingTarget(e.target)) return;
+      const next = modeForKey(e, regionBrushEnabled);
+      if (next) setInteractionMode(next);
+    };
+    tile.addEventListener('pointerenter', enter);
+    tile.addEventListener('pointerleave', leave);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      tile.removeEventListener('pointerenter', enter);
+      tile.removeEventListener('pointerleave', leave);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [regionBrushEnabled, setInteractionMode]);
+  const { api, error: embedError, restoredView } = useGenomeSpy(containerRef, spec, {
     backend,
     // Only a file-backed spec needs the parsers, so only it pays for them.
     lazySources: fileMode,
-    onPick: selectionEnabled ? handlePick : undefined,
+    onPick: handlePick,
     onBrush: regionBrushEnabled ? handleBrush : undefined,
+    onHover: handleHover,
+    interactionMode: mode,
+    dragHint:
+      // Many lanes scroll inside the tile: say so, a plain wheel moves them.
+      (built?.scrolls && !fileMode && mode !== 'pan' ? 'scroll to move through the lanes · ' : '') +
+      modeHint(mode, regionBrushEnabled),
+    // In pan mode the wheel is the zoom's, not the lanes'.
+    scrollLanes: Boolean(built?.scrolls) && !fileMode && mode !== 'pan',
+  });
+
+  // ---- Clearing the region: Escape (the chrome), double-click, the badge's x ----
+  // The brush drawn on the axis goes with the filter, wherever the clear came
+  // from: the tile's reset or Escape remove the filter, this follows.
+  const clearOwnRegion = useCallback(() => {
+    traceGenome(String(metadata.index), 'clear own region (double-click or badge)');
+    setBrushedRegion(null);
+    brushedKeyRef.current = null;
+    if (api) clearGenomeSpyBrush(api);
+    if (!onFilterChange) return;
+    for (const filter of genomeRegionFilters(metadata, config.chr_col, config.pos_col, null)) {
+      onFilterChange(filter);
+    }
+  }, [api, onFilterChange, metadata, config.chr_col, config.pos_col]);
+  const hadOwnRegion = useRef(false);
+  useEffect(() => {
+    const has = Boolean(ownRegionNow);
+    if (hadOwnRegion.current && !has && api) {
+      // Cleared from outside: drop the drawing without publishing anything.
+      traceGenome(String(metadata.index), 'own region cleared from outside: brush dropped, view stays');
+      zoomingFromCodeRef.current = true;
+      clearGenomeSpyBrush(api);
+      zoomingFromCodeRef.current = false;
+      setBrushedRegion(null);
+      brushedKeyRef.current = null;
+    }
+    hadOwnRegion.current = has;
+  }, [ownRegionNow, api, metadata.index]);
+
+  // ---- The region in force -------------------------------------------------
+  // Read off the *unstripped* filters, this tile's own included. The locus
+  // field shows it (the field is the section's address bar, so it must show
+  // where the reader is even when that is where they just sent everyone), and
+  // the selection overlay frames it.
+  const displayedRegion = useMemo(
+    () => regionFromFilters(filters, config.chr_col, config.pos_col),
+    [filters, config.chr_col, config.pos_col],
+  );
+  useEffect(() => {
+    traceGenome(
+      String(metadata.index),
+      displayedRegion ? 'region in force' : 'no region in force (whole genome fetched)',
+      displayedRegion ?? undefined,
+    );
+  }, [displayedRegion, metadata.index]);
+  const selectionLabel = displayedRegion
+    ? compactRegion(displayedRegion.chrom, displayedRegion.start, displayedRegion.end)
+    : null;
+  const selectionOverlayRows = useMemo(
+    () =>
+      buildSelectionRows(
+        displayedRegion,
+        contigs ?? [],
+        selectionLabel ? `Filter ${selectionLabel}` : undefined,
+      ),
+    [displayedRegion, contigs, selectionLabel],
+  );
+
+  // ---- The genome browser's window and hover → a band and a rule ---------------
+  // Both are drawn from named data sources (or a DOM overlay when the embed has
+  // no such API): the window is a band, never a zoom, and the hover a rule at
+  // the feature. Nothing is emitted back and no filter moves.
+  const viewWindow = useViewWindow(ownIndex);
+  const hovered = useHighlight(ownIndex);
+  const overlayContigNames = useMemo(() => (contigs ?? []).map((c) => c.name), [contigs]);
+  const windowBandRows = useMemo(() => {
+    const rows = buildWindowRows(viewWindow, overlayContigNames);
+    // The browser on the region in force: a band over the whole selection,
+    // which the frame already marks.
+    if (windowIsRegion(rows, displayedRegion ?? ownRegionNow)) return [];
+    return rows.map((r) => ({ ...r, label: 'Browser view' }));
+  }, [viewWindow, overlayContigNames, displayedRegion, ownRegionNow]);
+  // The browser publishing that window, for the legend's chip.
+  const browserIndex = viewWindow?.sourceIndex ?? null;
+  const linkedBrowser = browserIndex
+    ? { index: browserIndex, title: tileTitle(browserIndex) ?? 'Genome browser' }
+    : null;
+  const hoverRuleRows = useMemo(() => {
+    if (!hovered) return [];
+    // A browser's feature or a table row, else the plain cursor's contig.
+    const interval =
+      hoverInterval(hovered, config.chr_col, config.pos_col, config.end_col) ??
+      (hovered.entity
+        ? {
+            refName: hovered.entity,
+            start: hovered.start,
+            end: hovered.end ?? hovered.start,
+            aliases: hovered.entityAliases,
+          }
+        : null);
+    // The rule wears the colour of the tile that hovered, else the theme's.
+    return buildHoverRows(interval, overlayContigNames, hovered.color, overlayColor);
+  }, [hovered, overlayContigNames, config.chr_col, config.pos_col, config.end_col, overlayColor]);
+  useGenomeSpyOverlays({
+    api,
+    container: containerRef,
+    overlays: (!fileMode && built?.overlays) || NO_OVERLAYS,
+    contigs,
+    window: windowBandRows,
+    hover: hoverRuleRows,
+    selection: selectionOverlayRows,
+    colors: overlayColors,
+  });
+
+  // `top_stars`: the stars themselves are SVG over the canvas (GenomeSpy has no
+  // star shape), placed from the lanes' layout bounds and scales.
+  useStarOverlay({
+    api,
+    container: containerRef,
+    lanes: (!fileMode && built?.starLanes) || NO_STAR_LANES,
+    contigs,
+    rows: liveData,
+    cols: {
+      chr: effectiveConfig.chr_col,
+      pos: effectiveConfig.pos_col,
+      score: effectiveConfig.score_col,
+      sample: effectiveConfig.sample_col,
+    },
+    medals,
+    outline: themeColors.textColor,
+    pointSize: effectiveConfig.point_size ?? 5,
   });
 
   // Rows changed after the embed was built (filter moved, refresh tick): swap
@@ -625,21 +1061,43 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
   // Every programmatic zoom goes through here so the brush handler can ignore
   // what it provokes. The flag drops a frame after the zoom settles, since
   // GenomeSpy publishes param changes on its own render tick.
+  // The embed that has had its opening zoom: the first region an embed shows
+  // opens on its whole chromosome (`default_view`), every later one zooms in.
+  const openedApiRef = useRef<typeof api>(null);
+  // When the last zoom issued from code ended: the axis' domain events just
+  // after it are the zoom's own, not a gesture to publish to the browsers.
+  const codeZoomEndedRef = useRef(0);
   const zoomFromCode = useCallback(
-    async (region: { chrom: string; start: number; end: number } | null) => {
+    async (region: { chrom: string; start: number; end: number } | null, exact = false) => {
       if (!api) return;
       zoomingFromCodeRef.current = true;
       try {
-        await zoomToRegion(api, region, contigs);
+        const size = region ? contigs?.find((c) => c.name === region.chrom)?.size : null;
+        const opening = !!region && openedApiRef.current !== api && config.default_view !== 'region';
+        if (region) openedApiRef.current = api;
+        // Opening: the whole chromosome, the region framed in it. Otherwise a
+        // margin around the region, so its frame shows against the rest. An
+        // `exact` region (the axis following the browser's window) is the view
+        // itself, already sized.
+        const target = region
+          ? exact
+            ? region
+            : opening && size
+              ? { ...region, start: 0, end: size }
+              : paddedRegion(region, size)
+          : null;
+        traceGenome(String(metadata.index), target ? 'zoom from code' : 'zoom from code: whole genome', target);
+        await zoomToRegion(api, target, contigs);
       } catch {
         // A zoom on a view torn down mid-flight is not worth a tile error.
       } finally {
+        codeZoomEndedRef.current = performance.now();
         requestAnimationFrame(() => {
           zoomingFromCodeRef.current = false;
         });
       }
     },
-    [api, contigs],
+    [api, contigs, metadata.index, config.default_view],
   );
 
   // ---- Following someone else's region ------------------------------------
@@ -647,13 +1105,99 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
     () => (followRegion ? regionFromFilters(filtersForFetch, config.chr_col, config.pos_col) : null),
     [followRegion, filtersForFetch, config.chr_col, config.pos_col],
   );
+  const followedRef = useRef<{ api: typeof api; key: string }>({ api: null, key: '' });
   useEffect(() => {
     if (!api || !followRegion) return;
     if (!incomingRegion) return;
+    const key = JSON.stringify(incomingRegion);
+    const rebuilt = followedRef.current.api !== api;
+    const same = followedRef.current.key === key;
+    followedRef.current = { api, key };
+    // A rebuilt embed that reopened on the old view is already there, wherever
+    // the reader zoomed since following.
+    if (rebuilt && same && restoredView) return;
     // A chromosome with no range means "the whole contig", which needs the
     // contig's own length rather than an infinite end.
     void zoomFromCode(incomingRegion);
-  }, [api, followRegion, incomingRegion, zoomFromCode]);
+  }, [api, followRegion, incomingRegion, zoomFromCode, restoredView]);
+
+  // ---- The axis → the genome browsers ----------------------------------------
+  // The reader's own pans and zooms go out on the view-window store, so a
+  // browser that follows the other genome tiles pans with this axis. The
+  // tile's own zooms (the opening region, a followed filter, the axis following
+  // a browser) are not published.
+  const { lastPublished } = useViewWindowPublish({
+    api,
+    index: ownIndex,
+    contigs,
+    // Off unless the tile opts in: moving around this axis does not move a
+    // browser. A brushed region still does (it is a filter, not a window).
+    enabled: publishWindow,
+    isCodeZoom: () =>
+      zoomingFromCodeRef.current || performance.now() - codeZoomEndedRef.current < CODE_ZOOM_QUIET_MS,
+  });
+
+  // ---- The browser leaving the axis brings the axis along -------------------
+  // The link runs both ways: when the genome browser moves out of what the axis
+  // shows (next region, another chromosome), the axis moves to the browser's
+  // chromosome, so its dashed band stays in sight. A view only, no filter.
+  // `open_on_view_window`: the first browser window an embed sees opens the
+  // axis on that chromosome, unless a region or a restored view got there first.
+  const openedOnWindowRef = useRef<typeof api>(null);
+  useEffect(() => {
+    if (!api) return;
+    const win = buildWindowRows(viewWindow, overlayContigNames)[0];
+    if (!win) return;
+    const opening =
+      !!config.open_on_view_window && openedOnWindowRef.current !== api && !restoredView && !incomingRegion;
+    openedOnWindowRef.current = api;
+    if (!opening && !config.follow_view_window && windowInDomain(readViewDomain(api), win, overlayContigNames))
+      return;
+    // The browser that followed this axis reports the window it was sent: that
+    // is our own pan coming back, not the browser leaving.
+    if (!opening && approxSameWindow({ entity: win.chrom, start: win.start, end: win.end }, lastPublished.current))
+      return;
+    const size = contigs?.find((c) => c.name === win.chrom)?.size;
+    // `follow_view_window`: the axis keeps the window in the middle of its view,
+    // panning (the reader's zoom kept) rather than snapping to the chromosome,
+    // and frames a window that is a sliver of the view (on opening, the whole
+    // genome) instead of leaving it a thin band in it.
+    if (config.follow_view_window) {
+      const move = followWindowTarget(
+        readViewDomain(api),
+        win,
+        overlayContigNames,
+        size,
+        config.follow_context_bp,
+      );
+      if (move === 'stay') return;
+      if (move) {
+        traceGenome(String(metadata.index), 'axis follows the browser', move);
+        void zoomFromCode(move, true);
+        return;
+      }
+    }
+    // Only a window that left the axis altogether brings it along to the chromosome.
+    if (!opening && windowInDomain(readViewDomain(api), win, overlayContigNames)) return;
+    traceGenome(String(metadata.index), 'browser left the axis', win);
+    void zoomFromCode(
+      config.default_view === 'region' || !size ? win : { chrom: win.chrom, start: 0, end: size },
+    );
+  }, [
+    api,
+    viewWindow,
+    overlayContigNames,
+    contigs,
+    config.default_view,
+    config.open_on_view_window,
+    config.follow_view_window,
+    config.follow_context_bp,
+    restoredView,
+    incomingRegion,
+    metadata.index,
+    zoomFromCode,
+    lastPublished,
+  ]);
 
   // ---- Zooming to the region this tile emitted ------------------------------
   // The fetch strips this tile's own region (so a brush can widen again), which
@@ -666,9 +1210,18 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
   useEffect(() => {
     if (!api) return;
     if (zoomedApiRef.current !== api) {
-      // A rebuilt embed (spec, backend or theme changed) opens on the whole
-      // genome again, so the region in force has to be re-applied to it.
       zoomedApiRef.current = api;
+      if (restoredView) {
+        // A rebuilt embed (a mark, a lane or the theme changed) that reopened
+        // on the view the old one showed: the region in force is already
+        // framed, or zoomed past by the reader, and re-framing it would undo
+        // that. The refs keep what they held for the old embed.
+        traceGenome(String(metadata.index), 'embed rebuilt: view kept');
+        openedApiRef.current = api;
+        return;
+      }
+      // Otherwise it opens on the whole genome again, so the region in force
+      // has to be re-applied to it.
       ownRegionKeyRef.current = '';
       zoomedByCodeRef.current = false;
     }
@@ -683,6 +1236,12 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
       followedRegion: incomingRegion,
     });
     ownRegionKeyRef.current = key;
+    if (decision.action !== 'none' || key !== '') {
+      traceGenome(String(metadata.index), `own region: ${decision.action}`, {
+        key,
+        brushed: key !== '' && key === brushedKeyRef.current,
+      });
+    }
     if (decision.action === 'none') {
       // A brush of the reader's own supersedes any earlier zoom from code.
       if (key && key === brushedKeyRef.current) zoomedByCodeRef.current = false;
@@ -690,16 +1249,17 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
     }
     zoomedByCodeRef.current = decision.action === 'zoom';
     void zoomFromCode(decision.action === 'zoom' ? decision.region : null);
-  }, [api, filters, metadata.index, config.chr_col, config.pos_col, incomingRegion, zoomFromCode]);
+  }, [
+    api,
+    restoredView,
+    filters,
+    metadata.index,
+    config.chr_col,
+    config.pos_col,
+    incomingRegion,
+    zoomFromCode,
+  ]);
 
-  // ---- The locus field ----------------------------------------------------
-  // Reads the region back off the *unstripped* filters, this tile's own
-  // included: the field is the section's address bar, so it must show where
-  // the reader is even when that is where they just sent everyone.
-  const displayedRegion = useMemo(
-    () => regionFromFilters(filters, config.chr_col, config.pos_col),
-    [filters, config.chr_col, config.pos_col],
-  );
   // ---- Opening on the section's default region ----------------------------
   // The section's address is written in the YAML rather than typed by the
   // reader, once, so a locus section never opens on the whole genome or on
@@ -754,6 +1314,11 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
       filters,
     });
     settleDefaultRegion(metadata.index, Boolean(toEmit));
+    traceGenome(
+      String(metadata.index),
+      toEmit ? 'default region emitted' : 'default region: none emitted',
+      toEmit ? describeFilters(toEmit) : undefined,
+    );
     setDefaultOutcome(toEmit ? 'emitted' : 'none');
     if (!toEmit) return;
     // Recorded before the emit, so the dispatch reads it on the re-render the
@@ -792,12 +1357,12 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
       // No row count to report: the browser only ever holds the window it is
       // looking at, so what the chrome can honestly say is how many files the
       // collection published and how many got a lane.
-      const out: Record<string, number> = { files: manifest.files.length, [backend]: 1 };
+      const out: Record<string, number> = { files: manifest.files.length };
       if (builtFile?.lanes.length) out.lanes = builtFile.lanes.length;
       return out;
     }
     if (!rows) return undefined;
-    const out: Record<string, number> = { rows: rowCount, [backend]: 1 };
+    const out: Record<string, number> = { rows: rowCount };
     if (built?.facets.length) out.lanes = built.facets.length;
     if (built?.geneCount) out.genes = built.geneCount;
     return out;
@@ -811,14 +1376,61 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
     built?.facets.length,
     built?.geneCount,
   ]);
+  // Published for the metadata panel, with the renderer, instead of header badges.
+  useEffect(() => {
+    setTileStats(
+      String(metadata.index),
+      counts ? { ...counts, renderer: backend === 'webgl' ? 'WebGL' : 'Canvas fallback' } : undefined,
+    );
+  }, [counts, backend, metadata.index]);
 
   // The frame replaces its children with `emptyMessage`, which would unmount
   // the container under a live embed and strand it on a detached node. So the
   // frame's message is only used before any embed exists; once one is up, an
   // empty fetch is reported by an overlay and the container stays mounted.
+  // Stacked lanes scroll inside GenomeSpy (its viewport keeps the genome axis
+  // in sight), so the tile hands the embed its own height and the DOM scrolls
+  // nothing.
   const noRows = fileMode
     ? Boolean(manifest) && (builtFile?.lanes.length ?? 0) === 0
     : Boolean(rows) && rowCount === 0;
+
+  // ---- Height that follows the content (`auto_height`) -----------------------
+  // The lanes at a comfortable pitch, the axis and the gene lane, plus what the
+  // tile spends around the box the embed sits in; the grid sizes the tile to
+  // that between 3 and 16 rows (`GENOME_FIT_TYPE`). Counted, never measured off
+  // the embed, which fills whatever box it gets.
+  const autoHeight = config.auto_height === true;
+  const chromePx = useTileChrome(containerRef, spec ? 1 : 0);
+  const fitHeight = useMemo(() => {
+    if (!autoHeight || !spec) return null;
+    const content = fileMode
+      ? genomeContentPx({
+          lanes: builtFile?.lanes.length ?? 0,
+          fileLaneMinPx: fileLaneMinPx(
+            manifest?.format ?? 'bigwig',
+            effectiveConfig.file_bam_view,
+          ),
+        })
+      : genomeContentPx({
+          lanes: built?.facets.length ?? 0,
+          laneHeight,
+          annotation: (built?.geneCount ?? 0) > 0,
+        });
+    return tileFitPx(content, chromePx);
+  }, [
+    autoHeight,
+    spec,
+    fileMode,
+    builtFile?.lanes.length,
+    manifest?.format,
+    effectiveConfig.file_bam_view,
+    built?.facets.length,
+    built?.geneCount,
+    laneHeight,
+    chromePx,
+  ]);
+  useAutofitValue(ownIndex, fitHeight);
 
   const canFacet = Boolean(config.sample_col);
   const annotationHint =
@@ -858,6 +1470,13 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
     <>
       {fileControls}
       <VizControlGroup title="Marks">
+        {fileMode ? null : (
+          <VizSwitch
+            checked={showLegend}
+            onChange={(e) => setShowLegend(e.currentTarget.checked)}
+            label="Colour key under the axis (drawn when the marks are coloured by a category or scale)"
+          />
+        )}
         {fileMode ? null : (
           <>
             <VizSegmented
@@ -920,6 +1539,37 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
               onChange={(v) => setMaxFacets(typeof v === 'number' ? v : 8)}
             />
           ) : null}
+          {facetBySample && canFacet ? (
+            <VizSwitch
+              checked={!laneHeight}
+              onChange={(e) => setLaneHeight(e.currentTarget.checked ? null : DEFAULT_FIXED_LANE_PX)}
+              label="Fit lanes to the tile (off: fixed height, scroll)"
+            />
+          ) : null}
+          {facetBySample && canFacet && laneHeight ? (
+            <VizSegmented
+              label="Lane height"
+              value={String(laneHeight)}
+              onChange={(v) => setLaneHeight(Number(v))}
+              data={[
+                ...LANE_HEIGHTS.map((h) => ({ value: String(h.px), label: h.label })),
+                ...(!LANE_HEIGHTS.some((h) => h.px === laneHeight)
+                  ? [{ value: String(laneHeight), label: `${laneHeight} px` }]
+                  : []),
+              ]}
+            />
+          ) : null}
+          {facetBySample && canFacet ? (
+            <VizSegmented
+              label="Y scale"
+              value={facetYScale}
+              onChange={(v) => setFacetYScale(v === 'independent' ? 'independent' : 'shared')}
+              data={[
+                { value: 'shared', label: 'Shared' },
+                { value: 'independent', label: 'Per lane' },
+              ]}
+            />
+          ) : null}
           {built && built.droppedFacets > 0 ? (
             <VizFullRow>
               <Text size="xs" c="dimmed">
@@ -944,7 +1594,7 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
             label="Gene annotation lane"
             description="Protein-coding genes under the track; labels appear as you zoom in"
             value={annotation}
-            onChange={(v) => setAnnotation((v as 'none' | 'hg38' | 'mm10') ?? 'none')}
+            onChange={(v) => setAnnotation((v as 'none' | 'hg38' | 'hg19' | 'mm10') ?? 'none')}
             data={[
               { value: 'none', label: 'None' },
               ...ANNOTATION_ASSEMBLIES.map((a) => ({ value: a, label: a })),
@@ -963,15 +1613,35 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
           onChange={(e) => setFollowRegion(e.currentTarget.checked)}
           label="Zoom to an incoming region instead of the whole genome"
         />
+        <VizSwitch
+          checked={publishWindow}
+          onChange={(e) => setPublishWindow(e.currentTarget.checked)}
+          label="Panning and zooming here moves the genome browsers (off: only a selected region does)"
+        />
       </VizControlGroup>
       <VizFullRow>
         <Group gap={4}>
-          <Badge size="xs" variant="light">
-            {backend === 'webgl' ? 'WebGL' : 'Canvas fallback'}
-          </Badge>
           {regionBrushEnabled ? (
-            <Badge size="xs" variant="light">
-              {brushedRegion ? `region ${brushedRegion}` : 'drag to filter a region'}
+            <Badge
+              size="xs"
+              variant="light"
+              data-testid="genome-view-region-badge"
+              rightSection={
+                brushedRegion || ownRegionNow ? (
+                  <CloseButton
+                    size="xs"
+                    aria-label="Clear region"
+                    onClick={clearOwnRegion}
+                    data-testid="genome-view-region-clear"
+                  />
+                ) : undefined
+              }
+            >
+              {brushedRegion
+                ? `region ${brushedRegion}`
+                : mode === 'select'
+                  ? 'drag to filter a region · double-click or Esc clears'
+                  : 'Select mode filters a region · double-click or Esc clears'}
             </Badge>
           ) : null}
           {selectionEnabled ? (
@@ -988,8 +1658,49 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
     <AdvancedVizFrame
       estimated={estimated}
       title={metadata.title || 'Genome view'}
+      openLocus={openLocus}
       subtitle={(metadata as any).description || (metadata as any).subtitle}
-      counts={counts}
+      // The counts go to the metadata panel (`tileStats`): the header keeps the
+      // link tag and the key to the overlays.
+      // One header line: the link tag, then the key to the overlays it explains.
+      badges={[
+        <InteractionModeSwitch
+          key="mode"
+          value={mode}
+          onChange={setInteractionMode}
+          selectEnabled={regionBrushEnabled}
+        />,
+        ...(linkedBrowser
+          ? [
+              <LinkedTileChip
+                key="link"
+                role="drives"
+                otherIndex={linkedBrowser.index}
+                fallbackTitle={linkedBrowser.title}
+                region={displayedRegion ? selectionLabel : null}
+                explanation={
+                  displayedRegion
+                    ? `The region selected here filters the dashboard, and ${linkedBrowser.title} opens on it. ` +
+                      'Its view is drawn here as a dashed band; moving it there moves the band, and this axis ' +
+                      'follows when it leaves.'
+                    : `${linkedBrowser.title} draws its view here as a dashed band.`
+                }
+                data-testid="genome-view-link-chip"
+              />,
+            ]
+          : []),
+        <OverlayLegend
+          key="legend"
+          selection={displayedRegion ? selectionLabel : null}
+          selectionColor={overlayColor}
+          window={
+            windowBandRows.length
+              ? compactRegion(windowBandRows[0].chrom, windowBandRows[0].start, windowBandRows[0].end)
+              : null
+          }
+          windowColor={linkColor}
+        />,
+      ]}
       primaryControls={locusControls}
       controls={controls}
       loading={loading && !rows && !manifest}
@@ -1000,13 +1711,39 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
       dataRows={rows ?? undefined}
       dataColumns={requiredCols}
     >
-      {/* GenomeSpy sizes its canvas to this box; the tile's flex column gives
-          it the height, so a fixed min keeps it visible in a short tile. */}
-      <div
-        ref={containerRef}
-        className="depictio-genome-view"
-        style={{ width: '100%', height: '100%', minHeight: 160, position: 'relative' }}
-      />
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+        {/* GenomeSpy sizes its canvas to this box; the tile's flex column gives
+            it the height, so a fixed min keeps it visible in a short tile. */}
+        <div
+          ref={containerRef}
+          // A double-click drops the region brush (a single click picks a mark).
+          onDoubleClick={regionBrushEnabled && ownRegionNow ? clearOwnRegion : undefined}
+          className="depictio-genome-view"
+          style={{
+            width: '100%',
+            // A zero basis, not `auto`: the canvas inside is as tall as the last
+            // layout, so an `auto` basis would hold the box at that height and
+            // it never shrinks.
+            flex: '1 1 0',
+            minHeight: 160,
+            position: 'relative',
+          }}
+        />
+        {showLegend && legend && !fileMode ? (
+          <div
+            data-testid="genome-view-colour-key"
+            style={{ flex: 'none', padding: '3px 4px 0', minWidth: 0, overflow: 'hidden' }}
+          >
+            <ColourKey
+              title={legend.title}
+              entries={legend.entries}
+              ramp={legend.ramp}
+              testId="genome-view-legend"
+              rampTestId="genome-view-legend-ramp"
+            />
+          </div>
+        ) : null}
+      </div>
       {noRows && spec ? (
         <Text
           size="sm"

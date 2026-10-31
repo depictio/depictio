@@ -94,6 +94,15 @@ const KIND_ROLES: Record<string, KindRoles[]> = {
       end: { field: 'end_col', fallback: 'end' },
     },
   ],
+  // A karyotype's features: its click and drag emit on chrom_col / start_col,
+  // and a region from another tile is shaded on the matching bar.
+  ideogram: [
+    {
+      chrom: { field: 'chrom_col', fallback: 'chrom' },
+      start: { field: 'start_col', fallback: 'start' },
+      end: { field: 'end_col', fallback: 'end' },
+    },
+  ],
   transcript_structure: [
     {
       chrom: { field: 'chrom_col', fallback: 'chrom' },

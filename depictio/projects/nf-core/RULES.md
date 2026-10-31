@@ -22,6 +22,34 @@ text tile accepts is `packages/depictio-react-core/src/components/markdownCheats
   through `dc_ref`. Ingest builds them in that order, and an optional reference declared later
   reads as absent (`test_template_dc_order.py`).
 
+### Template versioning
+
+`template.version` in `template.yaml` is the template's own revision, not the pipeline's (that
+is the directory, `nf-core/nascent/2.3.0`). One version covers the whole bundle: `template.yaml`,
+`dashboards/*.yaml` and the recipes (the version's `recipes/` and the pipeline's shared
+`<pipeline>/recipes/`). Docs, `megatest.yaml`, test data and `.db_seeds` are not part of it.
+Semver, bumped in the same commit as the change:
+
+- **major**: a data collection, a column or a template variable changes (added, removed,
+  renamed, retyped, or a recipe output the dashboards read): the project must be ingested again.
+- **minor**: dashboards, figures or recipes change and every collection still has the same
+  columns: importing the dashboards again is enough.
+- **patch**: text only (titles, captions, prose, descriptions).
+
+The project records the revision it was ingested with and each dashboard the revision it was
+imported from, and the viewer warns when they differ. `depictio/projects/template_versions.lock.json`
+holds the version and content hash of every template; `test_template_lock.py` and the
+`check-template-versions` pre-commit hook fail on a template that changed with the same version.
+After bumping, run `python scripts/update_template_lock.py --write`. A recipe shared by several
+versions of a pipeline moves the hash of all of them: bump each one.
+
+Catalog modules are versioned too (`version` in `depictio/catalog/<module>/module.yaml`, held by
+`depictio/catalog/catalog_versions.lock.json`). Changing a module's reader, recipe or render
+bumps the module and then every template that consumes it (the lock lists them under
+`catalog`): major when an output column changes, minor otherwise. Look in the catalog before
+writing a template recipe or figure for a tool's output; write one in the template only when the
+module does not cover the need, and name the module it overrides in the recipe's docstring.
+
 ## 2. The family of tabs
 
 - The main tab is the **Overview**: `main_tab_name: Overview`, and the family keeps
@@ -165,8 +193,11 @@ main_dashboard:
 
 A KPI strip is four different readings, not four numbers in one style:
 
-- Each card has its own icon and its own `icon_color`, a Mantine palette name (the viewer
-  resolves it to the theme's shade); no two cards of a strip share a colour.
+- Each card has its own icon and its own `icon_color`, and no two cards of a strip share a
+  colour. The colours are shades of the tab's hue (`tab_icon_color`), written
+  `<palette>.<shade>` (`orange.4`, `orange.6`, `orange.8`, `orange.9`), so the strip reads as
+  one tab and each card stays distinct. Shades 4 to 9 only: lighter ones vanish on the light
+  theme.
 - Each card has a secondary chosen for what it says: `box_plot` or `histogram` for a
   per-sample index, `gauge` for a bounded value (`coverage_max`), `threshold` for a cut-off the
   tool defines, `completeness` for how many reached a rank, `donut` or `composition` for parts
@@ -248,9 +279,26 @@ A KPI strip is four different readings, not four numbers in one style:
   with a short `strip_label`, except for the case above. Never `display: strip`.
 - Put the group filter (`{GROUP_COL}`) first among the Overview's filters: the Guide demos the
   first categorical filter it finds.
+- A filter or a view that opens on a default (`default_value`, `default_state`, `default_rank`,
+  `always_selected`, a SnpEff section) says so in its section's description, with the reason:
+  "opens on the HIGH and MODERATE impacts, the ones that change a protein". A reader who does not
+  know the tab is pre-filtered reads its counts as the whole run.
 
 ## 7. Colours
 
+- **Tab hue.** Every child tab has a `tab_icon_color` that no other tab of the family uses
+  (the Overview keeps `brandPrimary`, MultiQC `orange`). Its sections take the same `color`,
+  its KPI cards take shades of it (§5), and its figures and advanced viz that colour by no
+  data column (a single series, a sorted bar, a histogram) draw in that hue. Data colours
+  (`category_colors`, `color_scale`, verdict colours such as pass/fail) are never replaced by
+  the tab hue: a sample or a model class keeps its colour on every tab.
+- A distribution drawn per library or per sample (a box, a violin, a bar per library) colours
+  by the group (`{GROUP_COL}`, or the hub's design column such as `antibody` or `condition`),
+  not by the tab hue: the reader compares groups, and one colour hides them. The tab hue is for
+  a figure with no group to show.
+- A template that declares `GROUP_COL` uses `{GROUP_COL}` wherever it colours, splits or
+  filters by the group. A hardcoded `condition`, `group` or `drop_group` breaks the run whose
+  sheet names its design column differently.
 - `category_colors` is declared once, on the main tab; child tabs inherit it.
   - Known vocabularies are written out (taxonomic kingdoms, pass/warn/fail, variant classes...).
   - The group column takes `"{GROUP_COL}": auto`: the server gives each of its values a colour
@@ -314,7 +362,8 @@ A KPI strip is four different readings, not four numbers in one style:
   reference only, and a curated `chr9:…` window opens empty on a run aligned to part of the
   genome): write `default_region: first`, which opens the first contig the data carries (in
   the assembly's order when the tile names one), or leave it unset on a model genome where a
-  gene or band says more.
+  gene or band says more. A navigator that drives a browser is the exception: see "Linking
+  the navigator and the browser".
 - A `source: file` genome_view reads its files only under `file_window_size` (1 Mb for VCF by
   default), and a view of exactly 1 Mb is not under it. When the tab opens on a region, keep
   that region inside the window or raise `file_window_size`, or the lanes open empty.
@@ -326,6 +375,14 @@ A KPI strip is four different readings, not four numbers in one style:
 - A heatmap draws every numeric column it is given. Name its `value_columns`, or a count
   column washes the others out.
 - Minimal tiles and highlights on the Overview keep their controls behind the icon, by design.
+- A composition per sample or library (feature classes, FILTER values, read fates, BUSCO
+  classes: parts that add up to each sample's total) is a `stacked_taxonomy` advanced viz,
+  not a Plotly stacked bar: the reader switches between counts and shares, sorts the samples
+  and hides parts from its controls, and its legend stays out of the plot. A code figure
+  stacks only when the parts are few (at most 4) and the figure needs no controls.
+- A distribution split by sample (peak widths, insert sizes, read lengths) is never a stacked
+  histogram: stacked bins hide every sample but the bottom one. Use a box or violin per sample
+  (sorted by median), or overlaid density lines when there are few samples.
 
 ## 9. Live values in text
 
@@ -358,8 +415,17 @@ viz to their content. Never write `fit: fixed`.
 | advanced viz | 5 for kinds that report their height (heatmaps, stacked taxonomy, UpSet, DA bars, record card), 6 otherwise |
 | MultiQC panel | 4 |
 | highlight | 4 |
+| jbrowse | 9 for the linear view (10 with per-sample read tracks open); 12 when the tile offers the breakpoint or circular view |
+| genome_view | 4 for one lane per group; 6 or more for per-sample lanes (`facet_by_sample`), with `lane_height` |
 
+- A heatmap labelled with sample ids on both axes (a sample concordance or correlation matrix)
+  takes `min_cell_px: 40` and `h: 9` at `w: 8` (8 as a highlight): the viewer sizes a heatmap from
+  its rows at `min_cell_px` (12 px by default, for a long list), so without it eight samples ask
+  for a strip however tall the stored `h`.
 - Tables are full width (`w: 8`), except beside their linked record card (`w: 5` + `w: 3`).
+- When in doubt, give a tile more height, never less. Genome browsers, multi-view browsers,
+  UpSet plots and heatmaps read badly when squeezed: a reader scrolls a tall tile, but cannot
+  read a short one. The stored `h` of every genome tile is at least the table above.
 
 ## 11. Height budget
 
@@ -412,10 +478,50 @@ step). Text, highlights and links bind no data of their own, so:
   `fig.update_layout(margin=dict(t=10))` (px keeps a title band the tile already draws).
 - Text follows the figure: when a default changes (the view, the rank, `top_n`), update the
   title, the section description, the caption and `docs/dashboards.md` with it.
+- Every reference mark drawn on a figure is explained in its description, with its value and
+  where the value comes from: lines (`add_hline`, `add_vline`, `score_threshold`), bands and
+  zones (`add_hrect`, `add_vrect`, a green "good" zone), floors and cut-offs. "The dashed line is
+  the 1.8 Ts/Tv floor of a whole-genome callset; below it, false calls dilute the transitions"
+  rather than a bare "floor 1.8" label. A label inside the plot does not replace it.
+- A description names the chart it sits on ("each point is a gene"), never a neighbouring tile
+  it drives ("one point per gene of the lollipop").
 - No megatest sample names, genes or loci: the sibling `megatest.yaml` `forbidden_terms` are
   checked in every title, description, body, caption and value filter.
 - Icons come from the bundled sets (`mdi:` mostly); section icons and colours from
   `depictio/viewer/src/components/sections/sectionIcons.ts`.
+
+### Scatters and small-n figures
+
+A figure earns its tile when a reader can say what to do after looking at it.
+
+- A scatter with fewer than 10 points (one point per sample on a small cohort, one row per
+  callset) is not informative on its own. Keep it only when the reading is encoded in the
+  figure: shaded zones or cut-off lines that say which region is good, borderline or failed
+  (e.g. an 80% breadth floor, an expected Ts/Tv band, XX/XY clusters), points coloured by that
+  verdict or by a gradient, and outliers labelled. Otherwise use a sorted bar per sample with
+  the same cut-off as a line and the outliers flagged, or a KPI card for a single row.
+- Never plot two metrics of the same tool against each other per sample when the MultiQC tab
+  already shows them; link to the MultiQC tile instead.
+- A relation that is a diagonal by construction or by agreement (min vs max, caller A vs
+  caller B, REF vs ALT depth) shows only the departures: a diverging bar of the difference,
+  a difference-vs-mean plot, or the rows where x differs from y.
+- Two tiles with the same axes on different collections become one, or a box/violin of the y
+  variable per category.
+- A Manhattan earns its tile when its y axis is a contrast or a test (a differential
+  p-value, an association, a rank score). The significance of each peak call is neither:
+  tens of thousands of calls per library sit in a dense band just above the caller's
+  threshold (median -log10 q about 6 on the chipseq megatest) under a few tall spikes, and
+  the libraries overplot. Show where the calls are instead (calls per 1 Mb window per
+  library on a `genome_view`, or per chromosome normalised by its length), or drop the tile.
+- Keep as scatters: PCA and embeddings, volcanoes, manhattans, position-axis plots, precision
+  vs recall per callset, and anything with thousands of genes, calls or peptides (use
+  `density: true` past ~50k points).
+- A per-sample figure that drives a record card keeps its click (`selection_enabled`) after
+  the swap; bars carry the key in `customdata[0]`.
+- Code figures run in a RestrictedPython sandbox: the final `fig = ...` line must name a
+  dataframe (`df` or a preprocessing variable). `depictio/tests/unit/test_template_code_figures.py`
+  checks every shipped code figure; run it, and `scripts/check_deployment.py --dispatch-compute`
+  on the live stack, before calling a template done.
 
 ## 15. Live check before a template is done
 
@@ -435,3 +541,120 @@ On a running stack, with the template ingested from its megatest data:
 - each conditional route still renders without a broken highlight or a stray `{VAR}`;
 - a sample picked in the left panel moves every card of a child tab, and the Locus tab opens
   on data (non-zero region cards) on every scenario, a partial-genome run included.
+
+## 16. Genome views and tracks
+
+### Genome views
+
+Views on genomic coordinates overlap, so each family of tile has one role in a template. The
+same table is never drawn twice on a genomic axis.
+
+| Role | Tile | Does | Does not |
+| --- | --- | --- | --- |
+| Summary | Plotly (`manhattan`, `coverage_track`, `cnv_profile`, `sashimi`) | Shows a table over the whole genome | Zoom to a locus behind a toggle |
+| Navigator | GenomeSpy `genome_view` with `region_filter_enabled: true` | Brushes a region that filters the dashboard and moves the browser | Follow a brush, or redraw a table another tile draws |
+| Locus detail | `jbrowse` | Shows the run's own files at a locus | Narrow a table |
+
+- A `genome_view` is a navigator, at most one per tab. The one exception is a tile that stacks
+  per-sample lanes (`facet_by_sample: true`), which JBrowse does not draw in one view. A
+  `genome_view` with `region_filter_enabled: false` and no lanes only follows a brush: remove
+  it, since a `coverage_track` with `mark: rect` already follows the region.
+- One `jbrowse` per template (per dashboard family, not per tab), in full width in the tab that
+  works at a locus. A second browser in another tab repeats the first. The exception is a
+  template whose tabs show disjoint track sets (oncoanalyser, variantbenchmarking), and the
+  showcase.
+- A template with a `jbrowse` sets `views: [track]` on its `coverage_track`, and `views: [plotly]`
+  on its `cnv_profile` and `sashimi`: no Plotly to GenomeSpy toggle. A template with no browser
+  keeps the toggle.
+- The other tabs do not get their own browser. Their genomic tiles carry the "Open in genome
+  browser" action, which opens the browser's tab on the clicked point, the brushed region or
+  the visible window. It replaces the per-tab copies, so no intro says "see the browser below"
+  for a tile of another tab.
+- The browser follows the navigator's brush of its own tab and moves without filtering. A
+  navigator therefore sits above the browser, in the same tab.
+- A floating browser is not used in a template (see below).
+
+`test_shipped_dashboard_yamls.py` enforces the first four points (one browser per family, no
+follower `genome_view`, no table drawn twice on a genomic axis, no GenomeSpy toggle beside a
+browser).
+
+### Linking the navigator and the browser
+
+GenomeSpy and JBrowse on one tab read as one instrument, so the reader never has to guess how
+they are connected.
+
+- They sit in one section, navigator on top (h3 to h4 for one lane per group; per-sample lanes
+  set `lane_height` so the chromosome axis stays pinned while the lanes scroll), browser below
+  at w8. No `display: linked` unless both tiles fit one screen height.
+- The browser sets `follow_window: true`: it follows the navigator's brush and its pan and
+  zoom, and the navigator draws the browser's window as a band. The section description says
+  so in one sentence.
+- That navigator sets no `default_region`: the browser opens on its own locus, and a navigator
+  opening on a whole contig would pull the browser out to it. Set `open_on_view_window: true`
+  instead, so the navigator opens zoomed to the chromosome the browser shows.
+- Colours are shared: the browser's `color_by` (a category) or `color_scale` (an ordered
+  column: time point, dose, stage) colours its tracks, and the navigator's lanes pick up the
+  same map. Never set a different colour key on the two tiles.
+- The opening tracks cover the design: one representative library per group or time point,
+  in the design's order, not the first N rows of the manifest.
+- Tables of calls on the same tab carry `chrom`/`pos` (or `start`/`end`) so a row click centres
+  the browser; a chord or ideogram click on the tab opens the browser on that locus.
+
+### Genome tracks
+
+When a pipeline publishes indexed BAM/CRAM, VCF, bigWig or peak files, a genome browser can sit
+beside the tiles that point at a locus. The per-workflow pages are in
+`docs/design/jbrowse/`; `docs/design/jbrowse-genome-tracks.md` is the reference.
+
+- A `recipes/tracks.py` builds the manifest from the sample sheet, not from a glob: one row per
+  sample and kind, light tracks first (bigWig, VCF, peaks), BAM and CRAM last, `order` assigned
+  after filtering. Exception: a long-read RNA template with no junction table (nanoseq) puts
+  each sample's BAM before its coverage, so the junction arcs show on the opening tracks. On a tables-only run it keeps every row; with `remote_base_uri` it keeps every
+  row and checks nothing.
+- The `tracks` collection is `genomic_tracks` with `assembly: "{GENOME}"`, `display_defaults` per
+  format, links both ways with the hub on the sample column, and a link from the collection the
+  browser follows (`locus_from`). A `TRACKS_URI` variable sets `remote_base_uri`; its description
+  stays generic, megatest URIs go in the workflow page.
+- The browser goes into an existing tab whose rows carry coordinates (the Locus or Variants
+  tab), never into a tab of its own. Its section's description (at most 90 characters) says what it adds to the tiles beside
+  it; the generic gestures belong to the Guide, not to the dashboard.
+- The section starts collapsed when the tab would pass its open-row budget (§11). Tiles are w8:
+  the browser's header needs about 600 px.
+- No `location` naming a contig, and no genome name in any text (§14, `forbidden_terms`).
+- The browser opens on the first call of `locus_from`, so declare a `sort_by` on it (a column of
+  that collection, checked against its recipe; `descending` is true by default) and a
+  `label_column` that names a call in the stepper: split reads for a fusion, QUAL for a variant,
+  the q-value or signal for a peak. A collection whose rows are not calls (one exon block per
+  row) gets no `sort_by` and `call_stepper: false`. A tile with no `locus_from` opens on the
+  first region that holds data.
+- `locus_from` is one source or a list. List several sources rather than several tiles when the
+  regions belong together (peaks, DE genes and variants of one question); the first is the
+  primary source: it frames the view, carries the `mate` and feeds "Use this region". Give each
+  a `name` when two share a collection tag, and `workflow_tag` when several workflows do.
+- Declare `sample_column` (and `run_column`) on a region collection that holds the rows of
+  several libraries or runs: the picker shows them, merged regions count `n_samples` and the
+  density can be split per sample. `columns` lists what the picker shows beyond the label (a
+  fold change, a q-value), `search_columns` what its search box matches; keep both short.
+- The next / previous buttons step by position over regions merged across samples, so no
+  template needs a ranked list to be navigable; `sort_by` still decides the first call and the
+  picker's default order. `show_density: false` only for a collection with a handful of rows.
+- A fusion or SV tab declares `locus_from.mate` (the columns of the second breakend) and
+  `views: [breakpoint]`; DNA alignments on an SV tab open as `read_pairs_display: arcs`. Add
+  `views: [circular]` only when the tracks collection has SV tracks, and set `circular_categories`
+  to their `category` when it is not `sv`.
+- RNA templates set `show_junctions: true` (sashimi arcs over the coverage). `color_by` names a
+  manifest column that has a `category_colors` entry (the condition). An ordered design column
+  (time point, dose, stage) uses `color_scale: {column, order_by, scheme}` instead; the browser
+  shares the resolved colours with the `genome_view` lanes, so do not also write a `color`
+  column in the manifest (it wins over the scale).
+- `display:` carries a template's default display settings (e.g. `color_scheme: pairOrientation`
+  on an SV tab, `scale: log` on coverage); set only what differs from JBrowse's default. Never
+  repeat a top-level field in it (`track_labels`, `show_junctions`, `read_pairs_display`): a
+  different value is a validation error.
+- `color_scheme: tag` needs `color_tag`, and `color_tag` is refused with any other scheme.
+- "Use this region" (header button, rubberband menu) filters on the `locus_from` columns, so a
+  tile without `locus_from` has no button; no extra YAML enables it.
+- No floating browser (`placement: floating`) in a template, only in a showcase: it is too small
+  to read alignments, and enlarged it hides the tiles that drive it.
+- A recipe test builds a fake run tree and validates the substituted collection with
+  `DCGenomicTracksConfig`.

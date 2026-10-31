@@ -1020,6 +1020,7 @@ def _create_project_from_run(
     report.dashboards = _import_template_dashboards(
         dashboard_paths,
         template_id=template_metadata.template_id,
+        template_version=template_metadata.version,
         project_id=project_oid,
         variables=resolved_vars,
         current_user=current_user,

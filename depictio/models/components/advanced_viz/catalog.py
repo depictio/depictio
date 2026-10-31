@@ -162,6 +162,8 @@ _LIST_ROLES: dict[str, frozenset[str]] = {
     "sankey": frozenset({"steps"}),
     "sunburst": frozenset({"ranks"}),
     "complex_heatmap": frozenset({"value_columns", "row_annotation_cols"}),
+    # The markers a spatial_cells tile's colour picker offers.
+    "spatial_cells": frozenset({"value_columns"}),
 }
 
 # Roles that pick a *setting* rather than a column, so they are accepted as
@@ -597,6 +599,10 @@ class CatalogTool(BaseModel):
 
     id: str
     name: str
+    # The module's own revision (semver), held to its content by
+    # `depictio/catalog/catalog_versions.lock.json`. A template's lock entry records
+    # the revision of each module it consumes, so bumping a module bumps them too.
+    version: str = Field(default="1.0.0", pattern=r"^\d+\.\d+\.\d+$")
     description: str = ""
     homepage: str | None = None
     # Where a non-nf-core source (Snakemake wrapper / Galaxy tool) was fetched

@@ -1,0 +1,13 @@
+genome	feature_type	genes	transcripts	transcripts_per_gene	exons	exons_per_transcript	single_exon_genes	single_exon_gene_pct	overlapping_genes	mean_gene_length	median_gene_length	mean_transcript_length	mean_exon_length	mean_intron_length	mean_cds_length	total_gene_length
+Apis_mellifera	mrna	9934	23471	2.4	243171	7.5	284	2.86	1120	16890.0	3989.0	15035.0	357.0	2783.0	1823.0	167784517
+Apis_mellifera	lnc_rna	1858	3146	1.7	14118	3.2	0	0.0	34	9290.0	3053.0	8798.0	568.0	2800.0		17260718
+Apis_mellifera	transcript	477	949	2.0	9713	10.2	0	0.0	3	35436.0	10206.0	27340.0	397.0	2669.0		16903163
+Apis_mellifera	mirna	238	248	1.0	248	1.0	238	100.0	4	24.0	22.0	22.0	22.0			5606
+Bombus_impatiens	mrna	10632	24471	2.3	233415	7.2	402	3.78	1313	16195.0	3990.0	14660.0	360.0	2361.0	1746.0	172182795
+Bombus_impatiens	lnc_rna	2009	2481	1.2	7041	2.6	1	0.05	38	7125.0	2336.0	6821.0	546.0	3348.0		14313695
+Bombus_impatiens	transcript	495	780	1.6	7170	9.5	0	0.0	7	27620.0	8703.0	23101.0	343.0	2633.0		13672033
+Bombus_impatiens	trna	203	203	1.0	215	1.1	191	94.09	0	76.0	73.0	76.0	70.0	29.0		15327
+Polistes_canadensis	mrna	9876	19297	2.0	182372	7.3	371	3.76	892	12163.0	3621.0	11335.0	338.0	1923.0	1793.0	120117026
+Polistes_canadensis	lnc_rna	596	799	1.3	2496	2.9	0	0.0	5	9422.0	2171.0	9109.0	384.0	4039.0		5615455
+Polistes_canadensis	transcript	267	365	1.4	3789	10.4	0	0.0	3	12926.0	6368.0	11251.0	300.0	842.0		3451276
+Polistes_canadensis	trna	194	194	1.0	205	1.1	183	94.33	0	76.0	73.0	76.0	70.0	25.0		14657

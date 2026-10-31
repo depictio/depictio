@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { binEdges, densityGrid, densityHeatmap } from './densityBins';
+import { binEdges, densityColours, densityGrid, densityHeatmap, sparseSources } from './densityBins';
 
 describe('binEdges', () => {
   it('covers the range in exactly the requested number of bins', () => {
@@ -95,5 +95,76 @@ describe('densityHeatmap', () => {
 
   it('is null when no pair is drawable', () => {
     expect(densityHeatmap([-1, 0], [1, 2], { logX: true, logY: false, bins: 4 })).toBeNull();
+  });
+});
+
+describe('densityHeatmap bookkeeping', () => {
+  it('maps every counted pair back to its row, skipping the undrawable ones', () => {
+    const heat = densityHeatmap([1, Number.NaN, 5, 9], [1, 2, 5, 9], { logX: false, logY: false, bins: 2 });
+    expect(heat?.source).toEqual([0, 2, 3]);
+    // Cell = row * bins + column: (1,1) in the corner, (9,9) in the opposite one.
+    expect(heat?.cell).toEqual([0, 3, 3]);
+  });
+});
+
+describe('densityColours', () => {
+  const z = [
+    [0, 1],
+    [100, 7],
+  ];
+
+  it('leaves empty cells null so they stay transparent', () => {
+    const c = densityColours(z, 'log');
+    expect(c.z[0][0]).toBeNull();
+    expect(c.counts[0][0]).toBeNull();
+    expect(densityColours(z, 'linear').z[0][0]).toBeNull();
+  });
+
+  it('spends the colour range on orders of magnitude on a log scale', () => {
+    const c = densityColours(z, 'log');
+    expect(c.z[0][1]).toBe(0);
+    expect(c.z[1][0]).toBe(2);
+    expect(c.z[1][1]).toBeCloseTo(Math.log10(7));
+    expect(c.counts[1][0]).toBe(100);
+  });
+
+  it('ticks the bar in counts, ending on the largest', () => {
+    expect(densityColours(z, 'log')).toMatchObject({ tickvals: [0, 1, 2], ticktext: ['1', '10', '100'] });
+    const small = densityColours([[3, 8]], 'log');
+    expect(small.ticktext).toEqual(['1', '8']);
+    expect(small.tickvals?.[1]).toBeCloseTo(Math.log10(8));
+  });
+
+  it('keeps a linear scale in plain counts, with default ticks', () => {
+    const c = densityColours(z, 'linear');
+    expect(c.z[1][0]).toBe(100);
+    expect(c.tickvals).toBeUndefined();
+  });
+
+  it('copes with an empty grid', () => {
+    expect(densityColours([[0, 0]], 'log').tickvals).toEqual([]);
+  });
+});
+
+describe('sparseSources', () => {
+  // 2 x 2 cells: three points in the left-bottom cell, one each elsewhere.
+  const heat = {
+    z: [
+      [3, 1],
+      [0, 1],
+    ],
+    cell: [0, 0, 0, 1, 3],
+    source: [10, 11, 12, 13, 14],
+  };
+
+  it('returns the rows of cells at or under the count', () => {
+    expect(sparseSources(heat, { maxCount: 1, cap: 100 })).toEqual([13, 14]);
+    expect(sparseSources(heat, { maxCount: 3, cap: 100 })).toEqual([10, 11, 12, 13, 14]);
+    expect(sparseSources(heat, { maxCount: 0, cap: 100 })).toEqual([]);
+  });
+
+  it('keeps the sparsest first when over the cap', () => {
+    expect(sparseSources(heat, { maxCount: 3, cap: 2 })).toEqual([13, 14]);
+    expect(sparseSources(heat, { maxCount: 3, cap: 0 })).toEqual([]);
   });
 });

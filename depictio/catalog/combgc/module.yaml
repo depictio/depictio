@@ -3,6 +3,7 @@
 # `bin/comBGC.py` inside the pipeline and runs as a local process).
 id: combgc
 name: comBGC
+version: "1.0.0"
 description: >-
   Aggregates the biosynthetic gene cluster predictions of antiSMASH, DeepBGC
   and GECCO into one table per sample plus a run-level summary, with the

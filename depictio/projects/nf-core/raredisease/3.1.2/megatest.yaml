@@ -1,0 +1,81 @@
+# Megatest manifest for nf-core/raredisease 3.1.2 (read by scripts/nfcore_megatest.py).
+#
+# WHY THERE IS NO AWS MEGATEST BEHIND THIS TEMPLATE
+# -------------------------------------------------
+# The template was built on a real `test_full` run of nf-core/raredisease 3.1.2 (Nextflow
+# 25.10.7) executed on the EMBL cluster, not on a run published under
+# s3://nf-core-awsmegatests/raredisease/. Its input is the pipeline's own full test profile:
+# a trio on a reduced GRCh37 reference restricted to one autosome and the mitochondrion, at
+# about 1.4x mean coverage on the autosome. `results_sha` is therefore null and the shared
+# fetch has nothing to download; the run lives under
+# ~/Data/depictio-nfcore/raredisease/3.1.2/test_full and is the template's DATA_ROOT.
+#
+# What that run is, and is not, good for:
+#   * every route the template reads is present: alignment and Picard / mosdepth QC, the
+#     joint family callset, the GENMOD-ranked clinical and research VCFs, the mitochondrial
+#     branch, ExpansionHunter + Stranger, mobile elements and SMNCopyNumberCaller;
+#   * the depth is far too low for the numbers to mean anything biological: the relatedness
+#     estimate is unreliable, the repeat and SMN calls are mostly "No call", and the
+#     mitochondrion is covered thousands of times deeper than the autosome;
+#   * there is no X or Y contig, so the sex check reads "Not tested";
+#   * peddy, GENS, the germline CNV caller and structural variant calling were skipped by
+#     the run (`skip_tools`, `skip_subworkflows`), so no tab reads their outputs.
+pipeline: raredisease
+version: "3.1.2"
+results_sha: null
+run_root: ""
+multiqc:
+  version: "1.35"
+  parquet: multiqc/multiqc_data/multiqc.parquet
+  reprocess: false
+keys:
+  - pedigree/*.ped
+  - alignment/*_sorted_md.metrics.txt
+  - qc_bam/*_multiplemetrics.*
+  - qc_bam/*_wgsmetrics.*
+  - qc_bam/*_hsmetrics.*
+  - qc_bam/*_mosdepth.mosdepth.*
+  - call_snv/genome/*_snv.vcf.gz
+  - rank_and_filter/*_ranked_*.vcf.gz
+  - repeat_expansions/*_repeat_expansion_stranger.vcf.gz
+  - call_mobile_elements/*_mobile_elements.vcf.gz
+  - smncopynumbercaller/out/*_smncopynumbercaller.tsv
+  - multiqc/multiqc_data/multiqc.parquet
+  - pipeline_info/params_*.json
+  - pipeline_info/*software*versions*.yml
+  # Read by the genome browser through their indexes, never loaded as tables:
+  #   alignment/*_sorted_md.bam (+ .bai), the ranked and repeat VCFs (+ .tbi),
+  #   qc_bam/*_tidditcov.bw and annotate_snv/genome/*_rhocallviz/*.bw.
+  # Deliberately NOT fetched: the BAMs (inputs of the browser only) and every HTML report.
+prefix_keys: []
+renames: {}
+post_fetch_help: |
+  === Quick test commands ===
+
+  # 1. Dry run (validates the template against the data, no ingestion)
+  depictio-cli ingest --template nf-core/raredisease/3.1.2 --data-root {dest} --dry-run
+
+  # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
+  depictio-cli ingest --template nf-core/raredisease/3.1.2 --data-root {dest}
+# Test-run facts that must never appear in a dashboard text (lint rule e,
+# depictio/tests/models/test_template_conventions.py): sample ids, the family, the assembly,
+# and the genes, loci and diseases seen in the run.
+forbidden_terms:
+  - earlycasualcaiman
+  - slowlycivilbuck
+  - hugelymodelbat
+  - justhusky
+  - GRCh37
+  - hg19
+  - chr21
+  - megatest
+  - test_full
+  - TIAM1
+  - ITSN1
+  - BRWD1
+  - TPTE
+  - BAGE2
+  - ANKRD30BP2
+  - CSTB
+  - EPM1
+  - POLLY

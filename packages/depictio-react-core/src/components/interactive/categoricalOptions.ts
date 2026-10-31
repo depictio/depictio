@@ -6,6 +6,7 @@
  * ordered or what a click emits, and so the rules are unit-testable.
  */
 import type { InteractiveFilter, StoredMetadata } from '../../api';
+import { naturalOrDurationCompare } from '../../durationOrder';
 
 /** Up to this many values a filter bar draws a segmented control, several
  *  segments pickable at once for a multi-select filter. */
@@ -22,21 +23,34 @@ const COLLATOR = new Intl.Collator(undefined, { numeric: true, sensitivity: 'bas
 
 /**
  * Options in display order: values still available first (so they are
- * immediately visible), then the greyed ones; natural sort within each bucket
- * so `Sample_2` precedes `Sample_10`. `available` null means every value is.
+ * immediately visible), then the greyed ones. Within each bucket, natural sort
+ * so `Sample_2` precedes `Sample_10`, and by duration when every option names
+ * one so `30min` precedes `1h` and `18h` follows `2h`.
+ *
+ * `given` keeps the order the options arrived in (a filter with `order_by`,
+ * which the server has ordered by its companion column).
+ * `available` null means every value is.
  */
 export function orderCategoricalOptions(
   options: readonly string[],
   available: ReadonlySet<string> | null,
+  order: 'natural' | 'given' = 'natural',
 ): string[] {
+  const compare = order === 'given' ? () => 0 : naturalOrDurationCompare(options);
   return [...options].sort((a, b) => {
     if (available) {
       const aAvail = available.has(a);
       const bAvail = available.has(b);
       if (aAvail !== bAvail) return aAvail ? -1 : 1;
     }
-    return COLLATOR.compare(a, b);
+    return compare(a, b);
   });
+}
+
+/** How a filter's options are ordered: as the server gave them when the
+ *  filter names an `order_by` column, naturally otherwise. */
+export function optionOrderOf(metadata: Pick<StoredMetadata, 'order_by'> | null | undefined): 'natural' | 'given' {
+  return metadata?.order_by ? 'given' : 'natural';
 }
 
 export type CategoricalDisplay = 'segments' | 'chips' | 'list';

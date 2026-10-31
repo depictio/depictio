@@ -6,6 +6,7 @@
 # table per event type; the recipes match on those file names.
 id: rmats
 name: rMATS
+version: "1.0.0"
 description: >-
   Differential alternative splicing of annotated and novel events (skipped
   exons, retained introns, mutually exclusive exons, alternative 3' and 5'

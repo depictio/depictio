@@ -2,7 +2,7 @@ import React from 'react';
 import { Anchor, Avatar, Badge, Box, Group, Stack, Text, Tooltip } from '@mantine/core';
 
 import type { ParsedTemplate, ProjectListEntry } from 'depictio-react-core';
-import { parseTemplateOrigin } from 'depictio-react-core';
+import { parseTemplateOrigin, readTemplateRevision } from 'depictio-react-core';
 
 /** Template identifiers are parsed and matched in `depictio-react-core`
  *  (`templateFilter.ts`), where both listings' filters can share the rules and
@@ -231,6 +231,34 @@ export const TemplateChip: React.FC<{
       >
         {chip}
       </Anchor>
+    </Tooltip>
+  );
+};
+
+/** The revision of the template a project was ingested with ("template v1.2.0"),
+ *  beside the chip, whose version is the pipeline's. Nothing for a project whose
+ *  `template_origin` records no revision. */
+export const TemplateRevisionBadge: React.FC<{ origin: unknown }> = ({ origin }) => {
+  const revision = readTemplateRevision(origin);
+  if (!revision) return null;
+  return (
+    <Tooltip
+      withArrow
+      withinPortal
+      multiline
+      w={260}
+      label={`${revision.templateId}, revision ${revision.version}. The template's own version, bumped when its data collections or dashboards change; the version in the chip is the pipeline's.`}
+    >
+      <Badge
+        variant="outline"
+        color="gray"
+        size="sm"
+        radius="sm"
+        data-testid="project-template-revision"
+        style={{ textTransform: 'none', fontWeight: 600 }}
+      >
+        template v{revision.version}
+      </Badge>
     </Tooltip>
   );
 };

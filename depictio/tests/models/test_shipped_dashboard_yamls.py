@@ -664,3 +664,217 @@ def test_no_double_track_binding():
                 if {"coverage_track", "genome_view"} <= kinds:
                     offenders.append(f"{_rel(path)} {label} on '{dc}'")
     assert not offenders, "coverage_track and genome_view bound on one DC:\n" + "\n".join(offenders)
+
+
+# --- Genome views: one role per tile (RULES.md, "Genome views") ----------------------------
+
+# Families that may carry more than one `jbrowse` tile: their tabs show disjoint track sets
+# (oncoanalyser: small variants vs structural variants; variantbenchmarking: germline vs
+# structural; rnafusion: fusion breakpoints vs the reads under the sashimi of the Splice
+# Junctions tab, which follows that tile's locus), and the showcase exists to exercise the
+# browser itself.
+_MULTI_JBROWSE_ALLOWED = (
+    "depictio/projects/nf-core/oncoanalyser/",
+    "depictio/projects/nf-core/rnafusion/",
+    "depictio/projects/nf-core/variantbenchmarking/",
+    "depictio/projects/init/genome_tracks_examples/",
+)
+
+# Families whose Plotly genomic tiles may offer (or open on) the GenomeSpy view even though
+# the family carries a `jbrowse` tile. Explicit and narrow: the browser is otherwise the one
+# locus view of a template. rnafusion: sashimi in GenomeSpy, breakpoints in JBrowse.
+_GENOMESPY_WITH_BROWSER_ALLOWED = ("depictio/projects/nf-core/rnafusion/",)
+
+# The kind showcase exercises every option of every kind (a follower with the brush off
+# included), so it is not held to the template roles of the genome_view lint.
+_GENOME_VIEW_LINT_EXEMPT = ("depictio/projects/init/advanced_viz_showcase/",)
+
+# Kinds that draw a table along a chromosome axis.
+_GENOMIC_AXIS_KINDS = frozenset({"manhattan", "genome_view", "coverage_track", "cnv_profile"})
+
+# Per kind, the `views` entry that switches the tile to a GenomeSpy drawing.
+_GENOMESPY_VIEW_OF_KIND = {
+    "coverage_track": "locus",
+    "cnv_profile": "locus",
+    "sashimi": "genomespy",
+}
+
+
+def _viz_option(comp: dict[str, Any], key: str, default: Any = None) -> Any:
+    """A viz option as written in the YAML: `config:` first, then the tile itself."""
+    cfg = comp.get("config")
+    if isinstance(cfg, dict) and key in cfg:
+        return cfg[key]
+    return comp.get(key, default)
+
+
+def _advanced_viz_tiles(tab: dict[str, Any]) -> list[tuple[str, str, dict[str, Any]]]:
+    """(kind, tag, component) for every advanced_viz tile of one tab."""
+    out: list[tuple[str, str, dict[str, Any]]] = []
+    for comp in tab.get("components") or []:
+        if not isinstance(comp, dict) or comp.get("component_type") != "advanced_viz":
+            continue
+        kind = _viz_kind_of(comp)
+        if kind:
+            out.append((kind, str(comp.get("tag") or comp.get("index") or "?"), comp))
+    return out
+
+
+def _is_navigator(comp: dict[str, Any]) -> bool:
+    """A genome_view that brushes a region for the dashboard. The model defaults it to on."""
+    return bool(_viz_option(comp, "region_filter_enabled", True))
+
+
+def _jbrowse_tags(tab: dict[str, Any]) -> list[str]:
+    return [
+        str(c.get("tag") or c.get("index") or "?")
+        for c in tab.get("components") or []
+        if isinstance(c, dict) and c.get("component_type") == "jbrowse"
+    ]
+
+
+@pytest.mark.no_db
+def test_one_jbrowse_per_dashboard_family():
+    """A family of tabs carries one genome browser, in the tab that works at a locus.
+
+    A second browser in another tab repeats the tracks of the first; the "Open in
+    genome browser" action on the genomic tiles of the other tabs brings the reader
+    to the one that exists, already positioned. Families whose tabs show disjoint
+    track sets are listed in `_MULTI_JBROWSE_ALLOWED`.
+    """
+    offenders: list[str] = []
+    for path in _shipped_yamls():
+        rel = _rel(path)
+        if rel.startswith(_MULTI_JBROWSE_ALLOWED):
+            continue
+        doc = yaml.safe_load(path.read_text())
+        if not isinstance(doc, dict):
+            continue
+        found = [
+            (label, tag)
+            for label, tab in _tabs_of(doc)
+            if isinstance(tab, dict)
+            for tag in _jbrowse_tags(tab)
+        ]
+        if len(found) > 1:
+            where = ", ".join(f"{label} '{tag}'" for label, tag in found)
+            offenders.append(f"{rel}: {len(found)} jbrowse tiles ({where})")
+    assert not offenders, (
+        "More than one jbrowse per dashboard family. Keep the one in the locus tab and "
+        "reach it from the other tabs through the 'Open in genome browser' action (add "
+        "the family to _MULTI_JBROWSE_ALLOWED only when its tabs show disjoint track sets):\n"
+        + "\n".join(offenders)
+    )
+
+
+@pytest.mark.no_db
+def test_genome_view_is_a_navigator_or_has_lanes():
+    """A GenomeSpy `genome_view` tile either brushes the region (the navigator) or
+    stacks one lane per sample.
+
+    A tile that does neither only redraws what a `coverage_track` follows through
+    `follow_region_filter`, or what the browser shows at the locus, for a GPU cost
+    and no extra reading. `region_filter_enabled` defaults to true, so only an
+    explicit `false` without `facet_by_sample` is caught.
+    """
+    offenders: list[str] = []
+    for path in _shipped_yamls():
+        if _rel(path).startswith(_GENOME_VIEW_LINT_EXEMPT):
+            continue
+        doc = yaml.safe_load(path.read_text())
+        if not isinstance(doc, dict):
+            continue
+        for label, tab in _tabs_of(doc):
+            if not isinstance(tab, dict):
+                continue
+            for kind, tag, comp in _advanced_viz_tiles(tab):
+                if kind != "genome_view":
+                    continue
+                if _is_navigator(comp) or _viz_option(comp, "facet_by_sample", False):
+                    continue
+                offenders.append(f"{_rel(path)} {label} '{tag}'")
+    assert not offenders, (
+        "genome_view tiles with region_filter_enabled: false and no facet_by_sample "
+        "(a follower that only redraws a navigator or the browser; remove it, or make "
+        "it the navigator, or give it per-sample lanes):\n" + "\n".join(offenders)
+    )
+
+
+@pytest.mark.no_db
+def test_no_table_drawn_twice_on_a_genomic_axis():
+    """One table, one drawing along the chromosome axis, per tab.
+
+    Generalises `test_no_double_track_binding` to manhattan, genome_view,
+    coverage_track and cnv_profile. The one allowed pair is a navigator (a
+    `genome_view` with `region_filter_enabled`) plus a single detail tile on the same
+    collection, which reads the region the navigator brushes.
+    """
+    offenders: list[str] = []
+    for path in _shipped_yamls():
+        doc = yaml.safe_load(path.read_text())
+        if not isinstance(doc, dict):
+            continue
+        for label, tab in _tabs_of(doc):
+            if not isinstance(tab, dict):
+                continue
+            by_dc: dict[str, list[tuple[str, str, dict[str, Any]]]] = {}
+            for kind, tag, comp in _advanced_viz_tiles(tab):
+                if kind not in _GENOMIC_AXIS_KINDS:
+                    continue
+                dc = str(comp.get("data_collection_tag") or comp.get("dc_tag") or "?")
+                by_dc.setdefault(dc, []).append((kind, tag, comp))
+            for dc, tiles in sorted(by_dc.items()):
+                if len(tiles) < 2:
+                    continue
+                navigators = [t for t in tiles if t[0] == "genome_view" and _is_navigator(t[2])]
+                if len(tiles) == 2 and len(navigators) == 1:
+                    continue
+                names = ", ".join(f"'{tag}' ({kind})" for kind, tag, _ in tiles)
+                offenders.append(f"{_rel(path)} {label} on '{dc}': {names}")
+    assert not offenders, (
+        "The same table is drawn more than once on a genomic axis in one tab (allowed: "
+        "one navigator plus one detail tile). Keep one and reach the others through "
+        "region links:\n" + "\n".join(offenders)
+    )
+
+
+@pytest.mark.no_db
+def test_no_genomespy_toggle_in_a_family_with_a_browser():
+    """Where a family has a `jbrowse` tile, a Plotly genomic tile does not offer the
+    GenomeSpy view in its switch.
+
+    The browser is the locus-level view of that template. A coverage_track or
+    cnv_profile whose `views` is null or lists `locus`, or a sashimi whose `views` is
+    null or lists `genomespy`, adds a second locus view of the same rows behind a
+    toggle. Pin `views` to the Plotly entry (`[track]` / `[plotly]`).
+
+    Families in `_GENOMESPY_WITH_BROWSER_ALLOWED` are exempt (rnafusion).
+    """
+    offenders: list[str] = []
+    for path in _shipped_yamls():
+        doc = yaml.safe_load(path.read_text())
+        if not isinstance(doc, dict):
+            continue
+        if _rel(path).startswith(_GENOMESPY_WITH_BROWSER_ALLOWED):
+            continue
+        tabs = [(label, tab) for label, tab in _tabs_of(doc) if isinstance(tab, dict)]
+        if not any(_jbrowse_tags(tab) for _, tab in tabs):
+            continue
+        for label, tab in tabs:
+            for kind, tag, comp in _advanced_viz_tiles(tab):
+                genomespy_view = _GENOMESPY_VIEW_OF_KIND.get(kind)
+                if genomespy_view is None:
+                    continue
+                views = _viz_option(comp, "views")
+                if views is None:
+                    offenders.append(
+                        f"{_rel(path)} {label} '{tag}' ({kind}): views unset, offers '{genomespy_view}'"
+                    )
+                elif genomespy_view in views:
+                    offenders.append(
+                        f"{_rel(path)} {label} '{tag}' ({kind}): views {list(views)} includes '{genomespy_view}'"
+                    )
+    assert not offenders, (
+        "A GenomeSpy view is offered by a Plotly genomic tile in a family that has a "
+        "jbrowse tile (set views: [track] / [plotly]):\n" + "\n".join(offenders)
+    )

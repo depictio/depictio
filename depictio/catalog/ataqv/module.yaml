@@ -12,6 +12,7 @@
 # the tool writes, matched on file name rather than on a pipeline path.
 id: ataqv
 name: ataqv
+version: "1.0.0"
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/ataqv/ataqv
 homepage: https://github.com/ParkerLab/ataqv
 description: Ataqv is a toolkit for measuring and comparing ATAC-seq results.

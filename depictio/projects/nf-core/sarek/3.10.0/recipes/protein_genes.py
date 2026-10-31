@@ -5,8 +5,7 @@ one row per sample, caller and variant, on the genes carrying the most of them)
 and folds it to one row per gene:
 
 * ``gene``: the gene symbol, the same column name and values as the lollipop,
-  so a point picked on the scatter narrows the lollipop and moves the 3D
-  structure to that gene;
+  so a point picked on the scatter narrows the lollipop to that gene;
 * ``variants``: distinct variants on the protein; ``positions``: distinct
   amino-acid positions they hit;
 * ``calls``: distinct sample and variant pairs, whatever the caller;

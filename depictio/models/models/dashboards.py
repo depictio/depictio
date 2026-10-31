@@ -38,6 +38,7 @@ from depictio.models.components.lite import (
     HighlightLiteComponent,
     ImageLiteComponent,
     InteractiveLiteComponent,
+    JBrowseLiteComponent,
     LiteComponent,
     MapLiteComponent,
     MultiQCLiteComponent,
@@ -49,7 +50,59 @@ from depictio.models.components.types import CardVariant, FigureStyle
 from depictio.models.logging import logger
 from depictio.models.models.base import MongoModel, PyObjectId, convert_objectid_to_str
 from depictio.models.models.branding import BrandTheme
+from depictio.models.models.templates import DashboardTemplateOrigin
 from depictio.models.models.users import Permission
+
+# JBrowse component fields carried between the lite (YAML) and full (stored)
+# forms, with the lite model's defaults so YAML export stays minimal.
+_JBROWSE_FIELDS: tuple[str, ...] = (
+    "assembly",
+    "location",
+    "locus_from",
+    "show_density",
+    "track_mode",
+    "max_tracks",
+    "initial_tracks",
+    "initial_categories",
+    "default_tracks",
+    "show_annotation",
+    "ucsc_tracks",
+    "selection_enabled",
+    "selection_column",
+    "selection_mode",
+    "show_header",
+    "show_overview",
+    "track_labels",
+    "display",
+    "variant_color_by",
+    "variant_label_by",
+    "color_by",
+    "color_scale",
+    "show_junctions",
+    "read_pairs_display",
+    "call_stepper",
+    "follow_window",
+    "auto_height",
+    "views",
+    "circular_categories",
+    "force_load",
+    "fetch_size_limit_mb",
+    "preset",
+    "config_overrides",
+)
+
+
+def _without_nulls(value: Any) -> Any:
+    """``value`` (a dict, possibly nested) without its null entries."""
+    if isinstance(value, dict):
+        return {k: _without_nulls(v) for k, v in value.items() if v is not None}
+    return value
+
+
+_JBROWSE_DEFAULTS: dict[str, Any] = {
+    f: JBrowseLiteComponent.model_fields[f].get_default(call_default_factory=True)
+    for f in _JBROWSE_FIELDS
+}
 
 
 class LayoutItem(BaseModel):
@@ -88,6 +141,7 @@ _DEFAULT_PLACEMENT: dict[str, str] = {
     "interactive": "left",
     "map": "grid",
     "advanced_viz": "grid",
+    "jbrowse": "grid",
 }
 
 
@@ -454,7 +508,11 @@ class DashboardDataLite(BaseModel):
     tab_icon: str | None = Field(
         default=None, description="Icon for child tabs (e.g., 'mdi:chart-bar')"
     )
-    tab_icon_color: str | None = Field(default=None, description="Color for tab icon")
+    tab_icon_color: str | None = Field(
+        default=None,
+        description="Colour of the tab icon, also the hue of the tab's single-series plots: a "
+        "Mantine palette name, optionally with a shade 0-9 (`teal`, `teal.4`), or a CSS colour.",
+    )
     # A dashboard with a dozen tabs reads better in categories (context, then
     # analysis, then QC) than as one flat list. Tabs naming the same group are
     # listed together under it in the sidebar; the main tab is never grouped.
@@ -648,6 +706,7 @@ class DashboardDataLite(BaseModel):
         "interactive": InteractiveLiteComponent,
         "table": TableLiteComponent,
         "image": ImageLiteComponent,
+        "jbrowse": JBrowseLiteComponent,
         "multiqc": MultiQCLiteComponent,
         "map": MapLiteComponent,
         "text": TextLiteComponent,
@@ -1080,6 +1139,7 @@ class DashboardDataLite(BaseModel):
                 "filterable",
                 "row_selection_enabled",
                 "row_selection_column",
+                "row_selection_mode",
             ],
             "image": [
                 # mandatory
@@ -1094,6 +1154,10 @@ class DashboardDataLite(BaseModel):
                 # mandatory
                 "selected_module",
                 "selected_plot",
+            ],
+            "jbrowse": [
+                # optional user-defined
+                *_JBROWSE_FIELDS,
             ],
         }
 
@@ -1629,6 +1693,8 @@ class DashboardDataLite(BaseModel):
                     lite_comp["default_value"] = default_state["default_value"]
                 if comp.get("option_cards"):
                     lite_comp["option_cards"] = _option_cards_payload(comp["option_cards"])
+                if comp.get("order_by"):
+                    lite_comp["order_by"] = comp["order_by"]
                 if comp.get("always_selected"):
                     lite_comp["always_selected"] = True
                     if comp.get("default_by"):
@@ -1662,6 +1728,8 @@ class DashboardDataLite(BaseModel):
                     lite_comp["row_selection_enabled"] = True
                     if comp.get("row_selection_column"):
                         lite_comp["row_selection_column"] = comp["row_selection_column"]
+                    if comp.get("row_selection_mode") == "single":
+                        lite_comp["row_selection_mode"] = "single"
 
             elif comp_type == "image":
                 lite_comp["image_column"] = comp.get("image_column", "")
@@ -1673,6 +1741,29 @@ class DashboardDataLite(BaseModel):
                     lite_comp["columns"] = comp["columns"]
                 if comp.get("max_images") and comp["max_images"] != 20:
                     lite_comp["max_images"] = comp["max_images"]
+
+            elif comp_type == "jbrowse":
+                # Exported only when they differ from the model defaults.
+                for f in _JBROWSE_FIELDS:
+                    value = comp.get(f)
+                    if value is None or value == _JBROWSE_DEFAULTS.get(f):
+                        continue
+                    if f == "color_scale":
+                        value = _without_nulls(value)
+                    if f == "locus_from":
+                        # One source or a list; the model dump carries every unset key.
+                        value = (
+                            [_without_nulls(v) for v in value]
+                            if isinstance(value, list)
+                            else _without_nulls(value)
+                        )
+                    lite_comp[f] = value
+                # `placement: floating` was written by the prologue above; its
+                # opening state travels with it, skipped at the default.
+                if comp.get("placement") == "floating" and comp.get(
+                    "floating_initial_state", "compact"
+                ) not in ("compact", None):
+                    lite_comp["floating_initial_state"] = comp["floating_initial_state"]
 
             elif comp_type == "map":
                 # Fields exported only when they differ from model defaults
@@ -1976,8 +2067,13 @@ class DashboardDataLite(BaseModel):
                 comp_dict = {**comp_dict, **layout_nested}
 
             # Unpack nested display dict (card/interactive styling) into flat comp_dict fields
+            # (A jbrowse tile's `display` is a typed block of its own, kept nested.)
             display_nested = comp_dict.get("display", {})
-            if display_nested and isinstance(display_nested, dict):
+            if (
+                display_nested
+                and isinstance(display_nested, dict)
+                and comp_dict.get("component_type") != "jbrowse"
+            ):
                 comp_dict = {**comp_dict, **display_nested}
 
             full_comp = build_base_component(comp_dict)
@@ -2103,6 +2199,8 @@ class DashboardDataLite(BaseModel):
                 # keep their shape (and their snapshot hash).
                 if comp_dict.get("option_cards"):
                     full_comp["option_cards"] = _option_cards_payload(comp_dict["option_cards"])
+                if comp_dict.get("order_by"):
+                    full_comp["order_by"] = comp_dict["order_by"]
                 if comp_dict.get("always_selected"):
                     full_comp["always_selected"] = True
                     if comp_dict.get("default_by"):
@@ -2129,6 +2227,7 @@ class DashboardDataLite(BaseModel):
                         # Row selection filtering fields
                         "row_selection_enabled": comp_dict.get("row_selection_enabled", False),
                         "row_selection_column": comp_dict.get("row_selection_column"),
+                        "row_selection_mode": comp_dict.get("row_selection_mode", "multiple"),
                     }
                 )
                 for f in ["description", "title_size", "title_align"]:
@@ -2153,6 +2252,26 @@ class DashboardDataLite(BaseModel):
                         "max_images": comp_dict.get("max_images", 20),
                     }
                 )
+
+            elif comp_type == "jbrowse":
+                for f in _JBROWSE_FIELDS:
+                    full_comp[f] = comp_dict.get(f, _JBROWSE_DEFAULTS.get(f))
+                # Only the settings the YAML sets: the model dump carries every
+                # unset one as null.
+                if isinstance(full_comp.get("color_scale"), dict):
+                    full_comp["color_scale"] = _without_nulls(full_comp["color_scale"]) or None
+                if isinstance(full_comp.get("display"), dict):
+                    full_comp["display"] = {
+                        k: v for k, v in full_comp["display"].items() if v is not None
+                    } or None
+                # Written only when it floats, like an advanced viz's: a stored
+                # grid tile keeps its shape. The layout loop below reads
+                # `placement` to give a floating tile no grid slot.
+                if comp_dict.get("placement") == "floating":
+                    full_comp["placement"] = "floating"
+                    full_comp["floating_initial_state"] = (
+                        comp_dict.get("floating_initial_state") or "compact"
+                    )
 
             elif comp_type == "map":
                 _MAP_FULL_DEFAULTS: dict[str, Any] = {
@@ -2499,6 +2618,13 @@ class DashboardData(MongoModel):
     # exports never carry it, and a save from the viewer cannot change it. None for
     # dashboards built in the viewer and for those imported before it existed.
     source_key: Optional[str] = None
+    # The template revision this dashboard was last imported from (id, version,
+    # date). Server-owned like `source_key`: not in DashboardDataLite, so YAML
+    # files and exports never carry it, and a viewer save cannot change it.
+    # Provenance rather than content, so it is in SNAPSHOT_PROVENANCE_FIELDS and a
+    # re-import that only moves it records no version. None for dashboards built
+    # in the viewer, imported from a plain file, or imported before it existed.
+    template_origin: Optional[DashboardTemplateOrigin] = None
 
     model_config = ConfigDict(
         arbitrary_types_allowed=True,

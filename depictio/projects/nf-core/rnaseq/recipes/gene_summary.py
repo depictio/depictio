@@ -9,9 +9,14 @@ This recipe reduces the matrix to that plane plus the facts a gene record
 shows once a gene is picked (identifier, symbol, the condition it peaks in).
 
 Sources:
-    matrix  ``salmon.merged.gene_tpm.tsv`` (``gene_id``, ``gene_name``, one TPM
-            column per library). The template repoints it at the aligner route
-            it covers.
+    matrix    ``salmon.merged.gene_tpm.tsv`` (``gene_id``, ``gene_name``, one TPM
+              column per library). The template repoints it at the aligner route
+              it covers.
+    stringtie optional, ``star_salmon/stringtie/*.gene.abundance.txt``: one table
+              per library, with the reference sequence, start and end of every
+              gene. The matrix carries no coordinates, and StringTie (on by
+              default, ``--skip_stringtie`` drops it) is the only gene-level table
+              of the run that does.
 
 Output, genes expressed at 1 TPM or more in at least one library (the rule the
 gene explorer's long table uses), one row per gene:
@@ -23,6 +28,10 @@ gene explorer's long table uses), one row per gene:
     top_condition             the condition with the highest mean log2(TPM + 1)
     log2fc_top_vs_rest        that condition's mean minus the mean of the rest
     libraries_detected        libraries with TPM above zero (Int64)
+    chrom, start, end         where the gene sits (Utf8, Int64, Int64), from the
+                              StringTie gene tables; null when the run skipped
+                              StringTie. The genome browser frames a picked gene on
+                              them.
 Conditions are read off the ``<condition>_REP<n>`` sample names nf-core
 RNA-seq uses; a run without that suffix treats each library as its own
 condition, which keeps every column filled.
@@ -45,6 +54,14 @@ SOURCES: list[RecipeSource] = [
         format="tsv",
         read_kwargs={"infer_schema_length": 10000},
     ),
+    # StringTie's per-library gene tables; a run with --skip_stringtie has none.
+    RecipeSource(
+        ref="stringtie",
+        glob_pattern="star_salmon/stringtie/*.gene.abundance.txt",
+        format="tsv",
+        optional=True,
+        read_kwargs={"infer_schema_length": 0},
+    ),
 ]
 
 # OUTPUT SCHEMA: the columns transform() returns, checked after it.
@@ -58,6 +75,9 @@ OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "top_condition": pl.Utf8,
     "log2fc_top_vs_rest": pl.Float64,
     "libraries_detected": pl.Int64,
+    "chrom": pl.Utf8,
+    "start": pl.Int64,
+    "end": pl.Int64,
 }
 
 MIN_TPM = 1.0
@@ -71,7 +91,38 @@ def _condition(sample: str) -> str:
     return match.group("condition") if match else sample
 
 
-def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
+def _gene_loci(stringtie: pl.DataFrame | None) -> pl.DataFrame:
+    """One ``gene_id, chrom, start, end`` row per gene from the StringTie tables.
+
+    Every library repeats the gene; the span is the widest one on the contig most
+    of the rows name (a gene id shared by two contigs, the PAR genes, keeps the
+    contig it is most often reported on).
+    """
+    empty = pl.DataFrame(
+        schema={"gene_id": pl.Utf8, "chrom": pl.Utf8, "start": pl.Int64, "end": pl.Int64}
+    )
+    if stringtie is None or stringtie.is_empty():
+        return empty
+    needed = {"Gene ID", "Reference", "Start", "End"}
+    if not needed <= set(stringtie.columns):
+        return empty
+    return (
+        stringtie.select(
+            pl.col("Gene ID").cast(pl.Utf8).alias("gene_id"),
+            pl.col("Reference").cast(pl.Utf8).alias("chrom"),
+            pl.col("Start").cast(pl.Int64, strict=False).alias("start"),
+            pl.col("End").cast(pl.Int64, strict=False).alias("end"),
+        )
+        .drop_nulls()
+        .group_by("gene_id", "chrom")
+        .agg(pl.col("start").min(), pl.col("end").max(), pl.len().alias("_n"))
+        .sort(["_n", "chrom"], descending=[True, False])
+        .unique("gene_id", keep="first", maintain_order=True)
+        .drop("_n")
+    )
+
+
+def transform(sources: dict[str, pl.DataFrame | None]) -> pl.DataFrame:
     """Reduce the gene x library TPM matrix to one summary row per gene."""
     matrix = sources["matrix"]
     id_col = "gene_id" if "gene_id" in matrix.columns else matrix.columns[0]
@@ -132,6 +183,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         .cast(pl.Float64)
         .alias("log2fc_top_vs_rest"),
     )
+    out = out.join(_gene_loci(sources.get("stringtie")), on="gene_id", how="left")
     return (
         out.select(list(OUTPUT_SCHEMA))
         .with_columns(pl.col("sd_log2_tpm").fill_null(0.0))

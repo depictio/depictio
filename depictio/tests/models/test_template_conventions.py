@@ -374,6 +374,11 @@ PINNED_FILTER_DCS_NOT_SAMPLE_LEVEL: dict[str, dict[str, str]] = {
     "mag": {
         "bin_summary": "bin-level filters (assembler, binner): a bin is not a MultiQC sample",
     },
+    "mcmicro": {
+        "samples": "the report's one section is the prelude's custom-content check matrix, "
+        "whose rows are the checks and whose columns the images: no MultiQC sample is an "
+        "image, so a sample link would empty the panel rather than narrow it",
+    },
     "rnafusion": {
         "fusion_consensus": "fusion-level filters (fusion, caller agreement), not sample-level",
     },

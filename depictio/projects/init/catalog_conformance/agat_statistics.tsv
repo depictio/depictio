@@ -1,0 +1,25 @@
+genome	isoforms	feature_type	metric	value	metric_order
+Apis_mellifera	all	mrna	Number of gene	9934.0	1
+Apis_mellifera	all	mrna	Number of mrna	23471.0	2
+Apis_mellifera	all	mrna	Number of mrnas with utr both sides	21873.0	3
+Apis_mellifera	all	mrna	Number of mrnas with at least one utr	23213.0	4
+Apis_mellifera	longest	mrna	Number of gene	9934.0	1
+Apis_mellifera	longest	mrna	Number of mrna	9934.0	2
+Apis_mellifera	longest	mrna	Number of mrnas with utr both sides	9126.0	3
+Apis_mellifera	longest	mrna	Number of mrnas with at least one utr	9783.0	4
+Bombus_impatiens	all	mrna	Number of gene	10632.0	1
+Bombus_impatiens	all	mrna	Number of mrna	24471.0	2
+Bombus_impatiens	all	mrna	Number of mrnas with utr both sides	22036.0	3
+Bombus_impatiens	all	mrna	Number of mrnas with at least one utr	24194.0	4
+Bombus_impatiens	longest	mrna	Number of gene	10632.0	1
+Bombus_impatiens	longest	mrna	Number of mrna	10632.0	2
+Bombus_impatiens	longest	mrna	Number of mrnas with utr both sides	9404.0	3
+Bombus_impatiens	longest	mrna	Number of mrnas with at least one utr	10404.0	4
+Polistes_canadensis	all	mrna	Number of gene	9876.0	1
+Polistes_canadensis	all	mrna	Number of mrna	19297.0	2
+Polistes_canadensis	all	mrna	Number of mrnas with utr both sides	17731.0	3
+Polistes_canadensis	all	mrna	Number of mrnas with at least one utr	18689.0	4
+Polistes_canadensis	longest	mrna	Number of gene	9876.0	1
+Polistes_canadensis	longest	mrna	Number of mrna	9876.0	2
+Polistes_canadensis	longest	mrna	Number of mrnas with utr both sides	8526.0	3
+Polistes_canadensis	longest	mrna	Number of mrnas with at least one utr	9270.0	4

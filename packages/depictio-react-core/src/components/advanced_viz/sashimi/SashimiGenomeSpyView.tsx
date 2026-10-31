@@ -16,8 +16,13 @@ import { useWebglSlot } from '../../../webglBudget';
 import type { Contig, GeneRow, GenomeSpyThemeColors } from '../genomespy/genomeSpySpec';
 import { BUILTIN_ASSEMBLIES } from '../genomespy/genomeSpySpec';
 import { loadGeneAnnotation } from '../genomespy/geneAnnotations';
+import { useViewWindowPublish } from '../genomespy/useViewWindowPublish';
+import { windowFromDomain } from '../genomespy/viewWindowPublish';
+import { usePublishViewWindow } from '../../../highlight/viewWindow';
 import {
+  isGenomeSpyLive,
   loadAssemblyContigs,
+  readViewDomain,
   setGenomeSpyRows,
   useGenomeSpy,
   zoomToRegion,
@@ -36,6 +41,8 @@ import type {
 } from './sashimiGenomeSpySpec';
 
 export interface SashimiGenomeSpyViewProps {
+  /** The tile's own index: the source of the windows it publishes to the genome browsers. */
+  index: string;
   /** The junctions drawn: the arc panel's region, strongest `top_n` per lane. */
   junctions: SashimiJunctionDatum[];
   /** Every junction in the data, drawn or not: a data-derived axis spans them,
@@ -48,13 +55,15 @@ export interface SashimiGenomeSpyViewProps {
   exons: SashimiExonDatum[];
   lanes: string[];
   annotations: string[];
-  colorBy: 'annotation' | 'sample';
+  colorBy: 'annotation' | 'sample' | 'chromosome';
+  chroms: string[];
+  chromColours: string[];
   laneColours: string[];
   annotationColours: string[];
   colors: GenomeSpyThemeColors;
   /** The window to show: the picked locus, a zoom, or a followed region. */
   region: SashimiRegion | null;
-  annotation: 'none' | 'hg38' | 'mm10';
+  annotation: 'none' | 'hg38' | 'hg19' | 'mm10';
   logWidth: boolean;
   maxArcWidth: number;
   showCounts: boolean;
@@ -128,6 +137,8 @@ const SashimiGenomeSpyView: React.FC<SashimiGenomeSpyViewProps> = (props) => {
       lanes,
       annotations,
       colorBy: props.colorBy,
+      chroms: props.chroms,
+      chromColours: props.chromColours,
       laneColours,
       annotationColours,
       colors,
@@ -157,6 +168,8 @@ const SashimiGenomeSpyView: React.FC<SashimiGenomeSpyViewProps> = (props) => {
     annotations.join('\u0000'),
     laneColours.join(','),
     annotationColours.join(','),
+    props.chroms.join('\u0000'),
+    props.chromColours.join(','),
     colors.textColor,
     colors.gridColor,
     colors.palette.join(','),
@@ -185,12 +198,32 @@ const SashimiGenomeSpyView: React.FC<SashimiGenomeSpyViewProps> = (props) => {
   }, [api, junctions, exons, coverage]);
 
   // A region pick, a zoom from the Plotly view, or a followed dashboard region.
+  // The window it settles on goes out right away: the axis opens on the region
+  // through the spec (no domain event), and a pick is a zoom from code, which
+  // the gesture publisher below leaves to the reader's own moves.
+  const publishWindow = usePublishViewWindow(props.index);
+  const contigsRef = useRef(contigs);
+  contigsRef.current = contigs;
   const regionKey = region ? `${region.chrom}:${region.start}-${region.end}` : '';
   useEffect(() => {
     const target = dataRef.current.region;
-    if (!api || !target) return;
-    void zoomToRegion(api, target);
-  }, [api, regionKey]);
+    if (!api || !target) return undefined;
+    let cancelled = false;
+    void zoomToRegion(api, target).then(() => {
+      if (cancelled || !isGenomeSpyLive(api)) return;
+      publishWindow(windowFromDomain(readViewDomain(api), contigsRef.current));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [api, regionKey, publishWindow]);
+
+  // The axis → the genome browsers. Unlike a `genome_view`, every move is
+  // published, the locus pick and the zoom to a region included: that is the
+  // window a browser below the sashimi (`follow_window`) should show reads for.
+  useViewWindowPublish({ api, index: props.index, contigs, isCodeZoom: () => false });
+  // Leaving the view (the Plotly one, another tab) takes the window back.
+  useEffect(() => () => publishWindow(null), [publishWindow]);
 
   return (
     <>

@@ -6,8 +6,8 @@ WiGiTS toolkit on tumor and normal DNA and on tumor RNA: SAGE and PAVE call and 
 variants, ESVEE calls structural variants, AMBER and COBALT feed PURPLE's purity, ploidy and
 copy-number fit, LINX clusters the SVs and calls fusions, and CUPPA, SIGS, CHORD, LILAC, TEAL, Neo
 and QSEE add tissue of origin, signatures, HRD, HLA typing, telomere length, neoepitopes and QC.
-The template reads their tables; it reads no BAM and no MultiQC report (the pipeline writes
-none). The family rules it follows are in `depictio/projects/nf-core/RULES.md`.
+The template reads their tables and lists PURPLE's VCFs and the BAMs as genome-browser tracks;
+it reads no MultiQC report (the pipeline writes none). The family rules it follows are in `depictio/projects/nf-core/RULES.md`.
 
 ## Inputs
 
@@ -31,6 +31,7 @@ none). The family rules it follows are in `depictio/projects/nf-core/RULES.md`.
 | `neo_neoepitopes` | `neo/scorer/*.neo.neoepitope.tsv` | neoepitope |
 | `hmf_bamtools_*` | `bamtools/*/*.bam_metric.{summary,coverage,frag_length}.tsv` | DNA sample |
 | `qsee_status` | `qsee/*.qsee.status.tsv.gz` | sample and QC feature |
+| `tracks` | built by `recipes/tracks.py` from the samplesheet: PURPLE's VCFs and the REDUX BAMs (no colour column: tracks are coloured by `kind`) | track file |
 
 oncoanalyser publishes every output under `<group_id>/<tool>/`, so `DATA_ROOT` is the pipeline
 outdir and every recipe globs its files recursively: a cohort run is several group directories
@@ -50,7 +51,8 @@ context tab when LILAC, Neo and TEAL are all missing.
 | `METADATA_FILE` | `{DATA_ROOT}/input/samplesheet.csv` | samplesheet read by `samples` |
 | `METADATA_ID_COL` | `sample_id` | samplesheet id column (fixed by the pipeline) |
 | `GROUP_COL`, `GROUP_COL_DISPLAY` | `sample_class`, `Sample class` | grouping filter, Key figures breakdown and group colours |
-| `GENOME` | `hg38` | assembly of the chord diagram, the copy-number locus view and the genome track |
+| `GENOME` | `hg38` | assembly of the chord diagram and the genome tracks |
+| `TRACKS_URI` | unset | `s3://` or `https://` outdir to read the genome tracks in place; unset uploads the VCFs and BAMs DATA_ROOT holds |
 
 `sample_class` is derived by the sample hub (`sample_type` and `sequence_type` joined, for
 example `tumor_dna`), so the default works on any sheet; any sheet column can be named instead.
@@ -78,11 +80,6 @@ example `tumor_dna`), so the default works on any sheet; any sheet column can be
   reported drivers.
 - **Fusion structure.** Exon spans are drawn in exon units along the fused transcript (the
   pipeline writes no transcript model), from the fused and total exon counts of each partner.
-- **Structure.** The pipeline predicts no 3D structure. The structure tile resolves the picked
-  gene's protein from its symbol (UniProt, then the AlphaFold DB model) through the Depictio
-  structure resolver, which is **off by default**: an administrator turns it on with
-  `DEPICTIO_STRUCTURE_RESOLVER_ENABLED=true`. With it off the tile says "Structure lookup is
-  disabled on this server" and the scatter, the lollipop and the tables are unaffected.
 - **Not shown.** LINX's protein-domain plot table is in genomic coordinates with no CDS offset,
   so it is not mapped onto residues; the virus table, Isofox, PEACH, CIDER and ORANGE are not
   read yet.
@@ -98,27 +95,39 @@ every other tab.
 **Data & QC**
 
 1. **Sequencing QC.** *Is the sequencing deep and clean enough for the calls?* Mean coverage,
-   reads per sample, the highest duplicate share and the lowest share at 30x or more. Cumulative
+   reads per sample, the highest duplicate share (against QSEE's 30% fail line) and the lowest
+   share at 10x or more (against QSEE's 90% fail line); fractions read as percentages. Cumulative
    coverage and insert-size curves per sample, and QSEE's PASS, WARN and FAIL verdicts per tool.
    The BamTools summary with a library record card and the QSEE checks are collapsed.
 
 **Genome**
 
-2. **Tumor profile.** *How pure is the tumor, and what kind of tumor is it?* Purity, ploidy,
-   mutations per Mb and microsatellite indels. CUPPA's cancer-type probability per classifier
-   (heatmap); the share of SNVs per COSMIC signature beside the HRD probability and the SNVs
-   allocated; purity against ploidy per tumor. The PURPLE fit table with a tumor record card and
+2. **Tumor profile.** *How pure is the tumor, and what kind of tumor is it?* Purity (against
+   QSEE's 20% fail line), ploidy (split by PURPLE fit status), mutations per Mb (against PURPLE's
+   high-burden line at 10) and microsatellite indels (against its instability line at 4), each
+   description saying what a normal value is. CUPPA's cancer-type probability per classifier
+   (heatmap); the share of SNVs per COSMIC signature, sorted and coloured by the signature's
+   proposed cause (hover names it), beside the HRD probability (against CHORD's 50% line) and
+   the SNVs allocated. The PURPLE fit table with a tumor record card and
    the CUPPA and CHORD tables are collapsed.
 3. **Copy number.** *Which regions are gained or lost, and in which genes?* Segments, segment
    copy number, genes in view and the LOH share. The PURPLE copy-number profile (log2 of copy
-   number over 2 with BAF, plus a locus view) and lowest against highest copy number per gene.
-   The tab opens with the event filter on amplifications and deletions, so the gene scatter
-   stays readable; clearing it adds the genes with loss of heterozygosity or no change. The gene
+   number over 2 with BAF, Plotly view only) and the number of genes under each copy-number call
+   (log axis: loss of heterozygosity holds most genes and would flatten every gain and loss; its
+   genome share is the LOH card).
+   The profile's Open in genome browser action opens the reads and the SV breakpoints at the
+   region clicked, selected or in view, in a genome browser tab.
+   The tab opens with the event filter on amplifications and deletions, so the gene counts
+   stay readable; clearing it adds the genes with loss of heterozygosity or no change. The gene
    table with a gene record card is collapsed.
 4. **Structural variants.** *Which rearrangements shaped the genome, and which fusions follow?*
    SVs, clusters, junction copy number and candidate fusions. A chord diagram of breakend pairs
-   beside the SVs per resolved event, then kept and lost exons per fusion beside the fusions per
-   reading frame. The fusion table with a fusion record card and the SV table are collapsed.
+   beside the SVs per resolved event (both coloured by the resolved event), then kept and lost
+   exons per fusion beside the fusions per reading frame. The fusions card ranks the 5' partners. The fusion table with a fusion record card and the SV table are collapsed,
+   as is a genome browser (Reads at the breakends) that jumps to the first breakend of the SV
+   picked in the chord diagram or the table. It opens on the first tumor's four VCFs and its
+   tumor and normal reads (six tracks), on the SV with the highest junction copy number; the
+   stepper lists 20 SVs, each with its type, length and genes.
 
 **Variants**
 
@@ -130,19 +139,26 @@ every other tab.
    record card is collapsed.
 6. **Small variants.** *How many somatic variants are there, and how clonal?* PASS calls, coding
    calls, purity-adjusted allele frequency and variant copy number; their histograms (variant
-   types keep one colour on every tile); every call along the genome (GenomeSpy, with a gene
-   lane). The variant table with a variant record card is collapsed.
-7. **Protein changes.** *Which proteins change, and where on the protein and its structure?*
+   types keep one colour on every tile); then one linked section: every call along the genome
+   (GenomeSpy, with a gene lane, coloured by coding effect as the browser's calls) and the
+   genome browser under it, which follows its brush (its window shows as a band on the calls)
+   and jumps to the call picked in the table. It opens on the tumor's VCFs, its tumor and normal
+   reads and the dbSNP and ClinVar tracks, on a reported driver call when there is one.
+   The variant table with a variant record card is collapsed.
+7. **Protein changes.** *Which proteins change, and where on the protein?*
    Protein changes, proteins hit, hotspots and allele frequency. A scatter of the genes with a
-   change (highest purity-adjusted allele frequency against PURPLE's driver likelihood, sized by
-   change count, coloured by worst effect) sits beside the 3D structure of the picked gene,
-   resolved from its symbol, above its written sequence; the full-width lollipop below narrows
-   to the same gene. Without a pick, the views open on the protein with the most changes; the
-   Protein filter drives them too. The protein change table with a record card is collapsed.
+   change (highest purity-adjusted allele frequency against PURPLE's driver likelihood, coloured by
+   worst effect, the eight most likely drivers named) sits beside the needle plot, which narrows to the
+   gene picked on the scatter. Without a pick, the needles open on the protein with the most
+   changes; the Protein filter drives them too. Collapsed: the protein change table with a
+   record card. The Gene role filter opens on the driver-panel genes (the genes outside it all sit at a
+   likelihood of 0 and bury the scatter); clearing it adds them. The tab draws no 3D structure: that tile needs the server's structure resolver,
+   which is off by default, and it would have read as a message above the figures that matter.
 8. **Immune context.** *Which HLA alleles does the tumor keep, and what could they present?*
    HLA alleles, neoepitopes, neoepitope expression and telomere length; tumor copy number per
-   HLA allele and telomere length per sample; neoepitope expression against variant copy number
-   and the neoepitopes per source event. The neoepitope table with a record card and the allele
+   HLA allele and telomere length per sample (with the tumor to normal ratio); neoepitope
+   expression against variant copy number and the neoepitopes per source event, one colour per
+   event. The neoepitope table with a record card and the allele
    and telomere tables are collapsed.
 
 Every child tab carries the persistent Sample filters and an open tab-local filter section:
@@ -152,17 +168,29 @@ variants); driver type, gene role, origin and report status (Drivers); coding ef
 type and allele frequency (Small variants); protein and coding effect (Protein changes); HLA gene
 and neoepitope source (Immune context).
 
+## Genome tracks
+
+The `tracks` collection lists PURPLE's somatic and germline VCFs of every analysis group and
+the tumor and normal REDUX BAMs, one row per file, built from the samplesheet by
+`recipes/tracks.py`. Every row is keyed on the group's tumor sample, so a sample pick (or a call,
+copy-number segment or SV of that tumor) opens the tumor's VCFs and both alignments. The VCFs
+come first and the BAMs, 80 to 170 GB each on a WGS run, last, except that the first group
+leads with everything: its four VCFs, then its tumor and normal BAMs, so a browser opens on a
+call with the reads under it. With `--var TRACKS_URI=<outdir>`
+the files are read in place by range; without it the VCFs and BAMs that DATA_ROOT holds, with
+their index, are uploaded. The browsers colour a track by its `kind` (somatic, SV, germline, tumor reads, normal reads)
+through `category_colors`; the manifest has no colour column. The tumor RNA alignment is not
+listed. The use cases are in
+`docs/design/jbrowse/oncoanalyser.md`.
+
 ## Selection
 
 - The sample sheet selects on `sample_id`; the links carry it to every collection's `sample`
   column (`sampleId` for TEAL).
 - A driver selection narrows the protein changes to its genes (`gene` to `entity`); a gene
-  selected in the gene copy-number table or scatter narrows the driver catalog.
-- The gene scatter selects on `entity`, the column the protein changes, the lollipop and the 3D
-  structure read, so a click moves all three to that gene.
-- The lollipop and the 3D structure read the same collection, so a residue picked in one (a
-  needle, a residue in 3D or a letter of the written sequence) rings the same residue in the
-  other and is drawn red on the structure.
+  selected in the gene copy-number table narrows the driver catalog.
+- The gene scatter selects on `entity`, the column the protein changes and the needles read, so
+  a click moves the needles to that gene.
 - Each record card sits beside the table that drives it (`linked_component`) and opens on the
   selected row.
 
@@ -170,8 +198,10 @@ and neoepitope source (Immune context).
 
 `category_colors` is declared once on the Overview: the group column (`auto`), the QC verdicts
 (`qc_status`), the variant types, the coding effects (`coding_effect`, `worst_effect` and
-`category`, which also holds the gene roles), the copy-number events, the driver types and the
-fusion reading frames. Figures, advanced viz and filter chips all read it.
+`category`, which also holds the gene roles), the copy-number events, the driver types, the
+fusion reading frames, the event an SV cluster resolves to (`resolved_type`, shared by the
+chords and the bar beside them), the track kinds and the proposed cause of a mutational
+signature (`signature_cause`). Figures, advanced viz and filter chips all read it.
 
 ## Height budget
 

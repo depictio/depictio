@@ -32,7 +32,7 @@ from __future__ import annotations
 import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
-from depictio.recipes.lib.mosdepth import keep_one_stage
+from depictio.recipes.lib.mosdepth import keep_one_stage, region_depth
 
 RAW_DC_TAG = "mosdepth_regions_raw"
 # INPUT SCHEMA: the columns each source must contain, checked before transform().
@@ -101,7 +101,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         pl.col("chrom").alias("chromosome"),
         pl.col("start").cast(pl.Int64, strict=False).alias("start_bp"),
         pl.col("end").cast(pl.Int64, strict=False).alias("end_bp"),
-        pl.col("coverage").cast(pl.Float64, strict=False).alias("depth"),
+        region_depth(df).alias("depth"),
         pl.coalesce(
             basename.str.extract(_NAME_RE, 1), basename.str.extract(_PLAIN_NAME_RE, 1)
         ).alias("sample"),

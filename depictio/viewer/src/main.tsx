@@ -28,6 +28,28 @@ import '@mantine/tiptap/styles.css';
 import '@fontsource-variable/inter';
 import './styles/app.css';
 
+// A deploy (or a rebuild under `depictio local`) replaces the hashed chunks: a
+// page opened before it then fails to import a lazy chunk ("Failed to fetch
+// dynamically imported module"). Reload once onto the new bundle; the session
+// flag stops a loop when the chunk is missing for another reason.
+window.addEventListener('vite:preloadError', (event) => {
+  try {
+    if (sessionStorage.getItem('depictio:chunk-reload')) return;
+    sessionStorage.setItem('depictio:chunk-reload', '1');
+  } catch {
+    return;
+  }
+  event.preventDefault();
+  window.location.reload();
+});
+window.addEventListener('load', () => {
+  try {
+    window.setTimeout(() => sessionStorage.removeItem('depictio:chunk-reload'), 10_000);
+  } catch {
+    // Storage blocked: the guard above already returned.
+  }
+});
+
 // Each route tree is its own async chunk. Only one tree renders per page load
 // (resolveTree picks it by pathname), so eagerly importing all thirteen forced
 // the entry bundle to carry every route's dependencies — including the

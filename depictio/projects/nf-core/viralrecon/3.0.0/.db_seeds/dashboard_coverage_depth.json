@@ -30,7 +30,7 @@
       "order": 1,
       "alignment": "left",
       "vertical_alignment": "center",
-      "body": "Depth from [mosdepth](https://github.com/brentp/mosdepth), per 200 bp window and per amplicon. A gap in the genome track is a dropout; the amplicon views name the amplicon behind it, a dark column in the heatmap being a primer problem and a dark row a sample one.\n",
+      "body": "An amplicon dropout is a stretch of the genome whose PCR product failed, so too few reads cover it and the consensus masks it. Depth comes from [mosdepth](https://github.com/brentp/mosdepth), per 200 bp window and per amplicon; a gap in the genome track is a dropout. Open a dropout in the genome browser of the [Variants](tab:Variants) tab to see the reads and the primers at the spot; picking an amplicon in the second plot isolates it.\n",
       "surface": "none",
       "accent": null,
       "logo": null,
@@ -73,6 +73,7 @@
       "group": "Depth",
       "timescale": null,
       "show_marks": null,
+      "show_mark_labels": null,
       "show_histogram": null,
       "slider_mode": null,
       "custom_color": "blue",
@@ -116,6 +117,7 @@
       "group": "Depth",
       "timescale": null,
       "show_marks": null,
+      "show_mark_labels": null,
       "show_histogram": null,
       "slider_mode": null,
       "custom_color": "cyan",
@@ -159,6 +161,7 @@
       "group": "Depth",
       "timescale": null,
       "show_marks": null,
+      "show_mark_labels": null,
       "show_histogram": null,
       "slider_mode": null,
       "custom_color": "teal",
@@ -219,7 +222,7 @@
       "trend_col": null,
       "follow_region_filter": false,
       "icon_name": "mdi:chart-line",
-      "icon_color": "blue",
+      "icon_color": "teal.4",
       "caption": "per window, with its distribution",
       "decimals": 0,
       "wf_tag": "nextflow/viralrecon"
@@ -278,7 +281,7 @@
       "trend_col": null,
       "follow_region_filter": false,
       "icon_name": "mdi:chart-timeline-variant",
-      "icon_color": "orange",
+      "icon_color": "teal.6",
       "caption": "their depth, from no reads to just under 10x",
       "decimals": 0,
       "wf_tag": "nextflow/viralrecon"
@@ -337,7 +340,7 @@
       "trend_col": null,
       "follow_region_filter": false,
       "icon_name": "mdi:chart-areaspline",
-      "icon_color": "teal",
+      "icon_color": "teal.8",
       "caption": "sample and amplicon pairs against 10x",
       "decimals": 0,
       "wf_tag": "nextflow/viralrecon"
@@ -396,7 +399,7 @@
       "trend_col": null,
       "follow_region_filter": false,
       "icon_name": "mdi:alert-outline",
-      "icon_color": "red",
+      "icon_color": "teal.9",
       "caption": "and the one that drops out most often",
       "decimals": 0,
       "wf_tag": "nextflow/viralrecon"
@@ -462,14 +465,67 @@
         "locus_annotation": "none",
         "locus_assembly": null,
         "view": "track",
-        "views": null
+        "views": [
+          "track"
+        ]
       },
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "cov-amplicon-pick",
+      "component_type": "figure",
+      "title": "Median depth per amplicon",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "mosdepth_amplicon_coverage",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c16"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Per-amplicon coverage depth across all samples (from mosdepth)",
+        "data_collection_tag": "mosdepth_amplicon_coverage",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "746b0f3c1e4a2d7f8e5b9c16"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "Pick an amplicon to read its depth per sample beside it.",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "mosdepth/amplicon_coverage",
+      "catalog_source": {
+        "toolId": "mosdepth",
+        "toolName": "mosdepth",
+        "outputId": "mosdepth_amplicon_coverage",
+        "use": "mosdepth/amplicon_coverage",
+        "description": "Per-amplicon coverage depth, aggregated across all samples (bindable as-is)."
+      },
+      "section": "Per amplicon",
+      "visu_type": "scatter",
+      "dict_kwargs": {},
+      "mode": "code",
+      "code_content": "# Median depth of each amplicon over the samples in view, along the genome,\n# on a log axis floored at 1x. The dashed line is the 10x the consensus\n# needs; a point under it is an amplicon that drops out.\nd = df.group_by(['region', 'start']).agg(pl.col('coverage').median().alias('depth')).sort('start')\nd = d.with_columns(pl.col('depth').clip(lower_bound=1))\nfig = px.scatter(d.to_pandas(), x='start', y='depth', log_y=True, custom_data=['region'], hover_name='region', labels={'start': 'Genome position', 'depth': 'Median depth'})\nfig.update_traces(marker=dict(size=8))\nfig.add_hline(y=10, line_dash='dash')\nfig.update_yaxes(dtick=1)\nfig.update_layout(margin=dict(t=10))",
+      "displayed_data_count": 0,
+      "total_data_count": 0,
+      "was_sampled": false,
+      "filter_applied": false,
+      "max_points": null,
+      "selection_enabled": true,
+      "selection_column": "region",
+      "font_scale": null,
       "wf_tag": "nextflow/viralrecon"
     },
     {
       "index": "cov-amplicon-track",
       "component_type": "advanced_viz",
-      "title": "Depth per amplicon",
+      "title": "Depth per amplicon, by sample",
       "workflow_tag": "viralrecon",
       "data_collection_tag": "mosdepth_amplicon_coverage",
       "wf_id": {
@@ -527,7 +583,9 @@
         "locus_annotation": "none",
         "locus_assembly": null,
         "view": "track",
-        "views": null
+        "views": [
+          "track"
+        ]
       },
       "wf_tag": "nextflow/viralrecon"
     },
@@ -556,7 +614,7 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
-      "description": "Log10 depth, samples in rows clustered, amplicons in scheme order; dark is a dropout.",
+      "description": "Log10 depth, samples clustered, amplicons in scheme order. A pale column is a weak amplicon of the scheme, a pale row a weak sample, an isolated pale cell a likely primer-site mutation.",
       "title_size": "sm",
       "title_align": "left",
       "use": "mosdepth/complex_heatmap",
@@ -567,7 +625,7 @@
         "use": "mosdepth/complex_heatmap",
         "description": "Log10 amplicon-coverage matrix (samples \u00d7 amplicons)."
       },
-      "section": "Per amplicon",
+      "section": "Amplicon patterns",
       "viz_kind": "complex_heatmap",
       "config": {
         "controls_placement": "popover",
@@ -587,7 +645,9 @@
         "cluster_method": "ward",
         "cluster_metric": "euclidean",
         "normalize": "none",
-        "colorscale": "Viridis"
+        "colorscale": "Blues",
+        "min_cell_px": null,
+        "max_rows": null
       },
       "wf_tag": "nextflow/viralrecon"
     },
@@ -616,6 +676,7 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "Tick a row to narrow the dashboard to its amplicon.",
       "title_size": "sm",
       "title_align": "left",
       "use": "mosdepth/amplicon_coverage",
@@ -633,7 +694,8 @@
       "filterable": true,
       "compact": false,
       "row_selection_enabled": true,
-      "row_selection_column": "sample",
+      "row_selection_column": "region",
+      "row_selection_mode": "multiple",
       "wf_tag": "nextflow/viralrecon"
     }
   ],
@@ -717,7 +779,22 @@
       "x": 0,
       "y": 0,
       "w": 8,
-      "h": 6,
+      "h": 3,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-cov-amplicon-pick",
+      "x": 0,
+      "y": 0,
+      "w": 4,
+      "h": 5,
       "static": false,
       "resizeHandles": [
         "se",
@@ -729,10 +806,10 @@
     },
     {
       "i": "box-cov-amplicon-track",
-      "x": 0,
+      "x": 4,
       "y": 0,
-      "w": 8,
-      "h": 6,
+      "w": 4,
+      "h": 5,
       "static": false,
       "resizeHandles": [
         "se",
@@ -745,7 +822,7 @@
     {
       "i": "box-cov-heatmap",
       "x": 0,
-      "y": 6,
+      "y": 0,
       "w": 8,
       "h": 5,
       "static": false,
@@ -828,8 +905,24 @@
       "name": "Per amplicon",
       "icon": "mdi:chart-timeline-variant",
       "color": "teal",
-      "description": "Depth per amplicon, as tracks and as a clustered heatmap",
+      "description": "Median depth of each amplicon, and one lane per sample; pick one to isolate it",
       "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    },
+    {
+      "name": "Amplicon patterns",
+      "icon": "mdi:chart-box-outline",
+      "color": "gray",
+      "description": "Depth per sample and amplicon, clustered",
+      "collapsed": true,
       "persistent": false,
       "pin": "top",
       "appearance": "box",
@@ -862,6 +955,7 @@
   "filter_panel_default": "open",
   "content_width_default": "full",
   "show_tab_header": true,
+  "open_with_defaults": false,
   "show_guide": true,
   "guide_intro": "",
   "advanced_viz_controls": "popover",
@@ -900,11 +994,14 @@
       }
     ],
     "editors": [],
-    "viewers": []
+    "viewers": [],
+    "group_owners": [],
+    "group_editors": [],
+    "group_viewers": []
   },
   "is_public": true,
   "last_saved_ts": "2026-08-29 00:00:00",
-  "creation_time": "2026-10-08 21:52:39",
+  "creation_time": "2026-10-30 14:56:15",
   "screenshot_ts": "",
   "project_id": {
     "$oid": "746b0f3c1e4a2d7f8e5b9ca2"
@@ -922,5 +1019,10 @@
   "project_realtime": null,
   "inherited_brand_theme": null,
   "inherited_category_colors": null,
-  "source_key": "nf-core/viralrecon:dashboards/base.yaml#Coverage & Depth"
+  "source_key": "nf-core/viralrecon:dashboards/base.yaml#Coverage & Depth",
+  "template_origin": {
+    "template_id": "nf-core/viralrecon/3.0.0",
+    "template_version": "2.0.0",
+    "imported_at": "2026-10-30 14:58:06"
+  }
 }

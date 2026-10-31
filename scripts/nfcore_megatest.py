@@ -829,6 +829,7 @@ class Manifest:
     prefix_keys: list[str] = field(default_factory=list)
     renames: dict[str, str] = field(default_factory=dict)
     post_fetch_help: str = ""
+    subsets: dict[str, list[str]] = field(default_factory=dict)
     path: Path | None = None
 
     @property
@@ -847,6 +848,7 @@ _MANIFEST_FIELDS = {
     "renames",
     "post_fetch_help",
     "forbidden_terms",
+    "subsets",
 }
 _MULTIQC_FIELDS = {"version", "parquet", "reprocess"}
 
@@ -929,6 +931,14 @@ def manifest_from_dict(data: Any, path: Path | None = None) -> Manifest:
     if not isinstance(help_text, str):
         raise ValueError(f"{where}: 'post_fetch_help' must be a string")
 
+    subsets_raw = data.get("subsets") or {}
+    if not isinstance(subsets_raw, dict) or not all(isinstance(k, str) for k in subsets_raw):
+        raise ValueError(f"{where}: 'subsets' must map a name to a list of keys")
+    subsets = {
+        name: _require_str_list(keys, f"subsets.{name}", where)
+        for name, keys in subsets_raw.items()
+    }
+
     return Manifest(
         pipeline=data["pipeline"].strip(),
         version=data["version"].strip(),
@@ -939,6 +949,7 @@ def manifest_from_dict(data: Any, path: Path | None = None) -> Manifest:
         prefix_keys=_require_str_list(data.get("prefix_keys"), "prefix_keys", where),
         renames=dict(renames_raw),
         post_fetch_help=help_text,
+        subsets=subsets,
         path=path,
     )
 
@@ -1283,7 +1294,13 @@ def cmd_fetch(args: argparse.Namespace) -> int:
                 f"not the {version} release sha ({release['tag_sha'][:12]}); keeping the pin"
             )
 
-    keys = list(args.key) if args.key else manifest.keys  # type: ignore[union-attr]
+    if args.subset:
+        if manifest is None or args.subset not in manifest.subsets:
+            known = sorted(manifest.subsets) if manifest else []
+            raise ValueError(f"no subset {args.subset!r} in the manifest (known: {known})")
+        keys = list(manifest.subsets[args.subset])
+    else:
+        keys = list(args.key) if args.key else manifest.keys  # type: ignore[union-attr]
     prefix_keys = [] if args.key else (manifest.prefix_keys if manifest else [])
     renames = manifest.renames if manifest else {}
     dest = Path(args.dest).expanduser() if args.dest else default_dest(args.pipeline, version)
@@ -1360,6 +1377,10 @@ def build_parser() -> argparse.ArgumentParser:
         help=f"target directory (default {DEFAULT_DEST_ROOT}/<pipeline>/<version>/megatest)",
     )
     p_fetch.add_argument("--key", action="append", help="fetch only these keys/globs (repeatable)")
+    p_fetch.add_argument(
+        "--subset",
+        help="fetch a named subset of the manifest ('subsets:' in megatest.yaml) instead of all keys",
+    )
     p_fetch.add_argument("--run-root", help="override the manifest run_root")
     p_fetch.add_argument("--dry-run", action="store_true", help="plan only, write nothing")
     p_fetch.add_argument(

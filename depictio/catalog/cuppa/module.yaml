@@ -5,6 +5,7 @@
 # <group_id>/cuppa/<tumor_id>.cuppa.* from a pipeline-local module.
 id: cuppa
 name: CUPPA
+version: "1.0.0"
 description: >-
   Cancer of unknown primary prediction: tissue-of-origin probabilities from the tumor's mutational profile, drivers and SVs and, with RNA, its expression and splicing.
 homepage: https://github.com/hartwigmedical/hmftools/tree/master/cuppa

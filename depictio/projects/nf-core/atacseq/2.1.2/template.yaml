@@ -85,7 +85,7 @@
 template:
   template_id: "nf-core/atacseq/2.1.2"
   description: "nf-core/atacseq template: ataqv library quality, deepTools and Picard signal QC, MACS2 broad peaks, HOMER peak annotation, the consensus peak set and its DESeq2 QC, on top of the pipeline's MultiQC report."
-  version: "1.0.0"
+  version: "2.0.0"
   variables:
     - name: "DATA_ROOT"
       description: "The atacseq --outdir: ALIGNER/merged_library/, fastqc/, trimgalore/, multiqc/, pipeline_info/, plus a MultiQC 1.31 or later parquet, either the pipeline's own under multiqc/broad_peak/multiqc_data/ or a reprocessed one under multiqc/multiqc_data/."
@@ -727,6 +727,22 @@ workflows:
               "gene_name": "Symbol of the nearest gene"
               "gene_type": "Biotype of the nearest gene; empty when the run annotated against a plain GTF"
 
+      - data_collection_tag: "homer_feature_classes"
+        description: "Peaks per library and HOMER feature class, the long form the feature-class composition reads"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/atacseq/feature_classes.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Library the peaks were called in"
+              "annotation_class": "Coarse HOMER feature class; unclassified peaks are counted as Unclassified"
+              "peak_count": "Peaks of that library in that feature class"
+              "rank": "Constant label of the one level (Feature class) the composition tile reads"
+
       - data_collection_tag: "homer_tss_distance_profile"
         description: "Where each sample's peaks sit relative to the nearest TSS, counted in 250 bp bins across a 20 kb window"
         config:
@@ -985,6 +1001,26 @@ links:
       resolver: "direct"
       target_field: "sample"
     description: "Filter the TSS distance profiles by the samples picked in the left rail"
+    enabled: true
+
+  - source_dc_tag: "sample_design"
+    source_column: "merged_library"
+    target_dc_tag: "homer_feature_classes"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the feature-class composition by the samples picked in the left rail"
+    enabled: true
+
+  - source_dc_tag: "homer_annotated_peaks"
+    source_column: "annotation_class"
+    target_dc_tag: "homer_feature_classes"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "annotation_class"
+    description: "A feature class picked on the annotation narrows the feature-class composition"
     enabled: true
 
   # Peak-level selection: pick peaks on the MACS2 panels, read their annotation.

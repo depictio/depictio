@@ -29,6 +29,7 @@ import {
 } from './record_card/recordRows';
 import { readRecordSelection, type RecordSelectionSource } from './record_card/recordSelection';
 import {
+  bestRecordId,
   defaultRecordFilter,
   recordEcho,
   resolveRecordTarget,
@@ -60,6 +61,8 @@ interface RecordCardConfig {
   linked_component?: string | null;
   max_fields?: number;
   default_record?: string | null;
+  default_record_by?: string | null;
+  default_record_ascending?: boolean;
 }
 
 interface Props {
@@ -82,6 +85,8 @@ const ROW_PICKER_PX = 56;
  *  project does not declare narrows nothing, and the card must not pull a
  *  whole collection across to show five of its rows. */
 const MAX_FETCHED_ROWS = 200;
+/** Rows read to find the `default_record_by` best: two columns each. */
+const MAX_RANKED_ROWS = 500_000;
 
 /** One column of the bound collection, as `/deltatables/specs` describes it. */
 interface ColumnSpec {
@@ -126,11 +131,45 @@ const RecordCardRenderer: React.FC<Props> = ({ metadata, filters, refreshTick })
     [filters, metadata.dc_id, config.selection_source, config.linked_component],
   );
 
+  // `default_record_by`: with nothing picked, the best row under the current
+  // filters. Two columns only, so it costs little; skipped once a pick exists.
+  const byCol = config.default_record_by || null;
+  const [bestId, setBestId] = useState<string | null>(null);
+  const needBest = Boolean(byCol) && !config.default_record && !selection;
+  useEffect(() => {
+    if (!needBest || !byCol || !metadata.wf_id || !metadata.dc_id) return;
+    let cancelled = false;
+    fetchAdvancedVizData({
+      wfId: metadata.wf_id,
+      dcId: metadata.dc_id,
+      columns: unique([idCol, byCol]),
+      filters,
+      limitRows: MAX_RANKED_ROWS,
+      vizKind: RECORD_CARD_VIZ_KIND,
+      roles: { id: idCol },
+    })
+      .then((res) => {
+        if (!cancelled) setBestId(bestRecordId(res.rows, idCol, byCol, config.default_record_ascending));
+      })
+      .catch(() => {
+        // No default then: the card waits for a pick, as without the option.
+        if (!cancelled) setBestId(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [needBest, byCol, idCol, metadata.wf_id, metadata.dc_id, JSON.stringify(filters), config.default_record_ascending, refreshTick]);
+
   // The selection when there is one, else the configured default record. A
   // real pick always wins; clearing it brings the default back.
   const target = useMemo(
-    () => resolveRecordTarget(selection, { idCol, defaultRecord: config.default_record }),
-    [selection, idCol, config.default_record],
+    () =>
+      resolveRecordTarget(selection, {
+        idCol,
+        defaultRecord: config.default_record || (byCol ? bestId : null),
+      }),
+    [selection, idCol, config.default_record, byCol, bestId],
   );
   const match = useMemo(() => targetMatch(target), [target]);
   const defaultValue = target?.kind === 'default' ? target.value : null;

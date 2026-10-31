@@ -276,6 +276,7 @@ def test_a_child_tab_names_its_parent_by_key(mock_db, tmp_path):
         results = from_manifest._import_template_dashboards(
             [main, tab],
             template_id="generic/not-shipped/1",
+            template_version="1.2.0",
             project_id=ObjectId(),
             variables={},
             current_user=_user(),
@@ -286,6 +287,10 @@ def test_a_child_tab_names_its_parent_by_key(mock_db, tmp_path):
     assert main_call.kwargs["parent_source_key"] is None
     assert tab_call.kwargs["parent_source_key"] == main_call.kwargs["source_key"]
     assert tab_call.kwargs["source_key"] != main_call.kwargs["source_key"]
+    # Each dashboard records the template revision it was imported from.
+    for call in (main_call, tab_call):
+        assert call.kwargs["template_origin"].template_id == "generic/not-shipped/1"
+        assert call.kwargs["template_origin"].template_version == "1.2.0"
 
 
 # One entry on a host the gateway rejects (the other host passes).

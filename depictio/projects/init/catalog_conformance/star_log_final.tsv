@@ -1,0 +1,5 @@
+sample	input_reads	avg_input_read_length	uniquely_mapped	uniquely_mapped_pct	multimapped	multimapped_pct	too_many_loci_pct	unmapped_pct	mapped_pct	avg_mapped_length	splices_total	splices_annotated	splices_annotated_pct	splices_noncanonical	splices_noncanonical_pct	mismatch_rate_pct	deletion_rate_pct	insertion_rate_pct	chimeric_pct
+GM12878_REP1	93555584	202.0	82418023	88.1	8059578	8.61	0.13	3.16	96.71	201.1	59972033	59879230	99.85	121428	0.2	0.28	0.01	0.01	0.0
+H1_REP1	125395196	152.0	110105119	87.81	9314564	7.43	0.07	4.69	95.24	150.82	52261868	52057727	99.61	221567	0.42	0.52	0.02	0.0	0.0
+K562_REP1	92172367	202.0	75588908	82.01	12066032	13.09	0.16	4.74	95.1	201.02	55830867	55741480	99.84	96813	0.17	0.3	0.01	0.01	0.0
+MCF7_REP1	128178110	152.0	111660515	87.11	9793284	7.64	0.17	5.08	94.75	150.6	47809911	47609758	99.58	216702	0.45	0.73	0.01	0.01	0.0

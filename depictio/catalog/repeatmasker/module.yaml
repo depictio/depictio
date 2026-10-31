@@ -1,0 +1,18 @@
+# RepeatMasker: masks the interspersed repeats and low-complexity sequence of an
+# assembly against a repeat library (Dfam, or a de novo RepeatModeler library).
+# Its `.tbl` summary is read twice: the assembly totals (length, GC, share
+# masked) and the repeat classes and families with their element counts, length
+# and share of the assembly. The per-repeat `.out` table (tens of MB) and the
+# masked FASTA are not read. Parsing lives in depictio/recipes/lib/repeatmasker_tbl.py.
+id: repeatmasker
+name: RepeatMasker
+version: "1.0.0"
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/repeatmasker/repeatmasker
+homepage: https://www.repeatmasker.org
+biotools_url: https://bio.tools/repeatmasker
+description: >-
+  Screens DNA sequences for interspersed repeats and low-complexity regions
+  against a repeat library, and masks them.
+edam_topics:
+  - http://edamontology.org/topic_0157 # Sequence composition, complexity and repeats
+stage: annotation

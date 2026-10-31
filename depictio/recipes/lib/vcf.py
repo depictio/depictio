@@ -52,6 +52,15 @@ _DATA_LINE_RE = r"^[^\t]+\t\d+\t"
 #: snpEff writes its per-variant annotations into an ``ANN=`` INFO key.
 _ANN_INFO_RE = r"(?:^|;)ANN=([^;\t]+)"
 _INFO_DP_RE = r"(?:^|;)DP=(\d+)"
+#: Structural-variant INFO keys (VCF 4.2 / Manta / TIDDIT). ``SVLEN`` may be a
+#: comma list on a multi-ALT record; the first value is the first ALT's.
+_INFO_SVTYPE_RE = r"(?:^|;)SVTYPE=([^;]+)"
+_INFO_END_RE = r"(?:^|;)END=(\d+)"
+_INFO_SVLEN_RE = r"(?:^|;)SVLEN=(-?\d+)"
+_INFO_MATEID_RE = r"(?:^|;)MATEID=([^;,]+)"
+_INFO_IMPRECISE_RE = r"(?:^|;)IMPRECISE(?:;|$)"
+#: A breakend ALT names the mate locus: ``A]chr22:29769937]`` or ``[chr22:29767384[CG``.
+_BND_MATE_RE = r"[\[\]]([^:\[\]]+):(\d+)[\[\]]"
 #: ``p.Arg123Gly`` / ``p.Ter45*`` -> 123 / 45.
 _HGVS_P_POS_RE = r"p\.[A-Za-z]{3}(\d+)"
 
@@ -150,6 +159,112 @@ def finite_float(column: str) -> pl.Expr:
     return pl.when(value.is_finite()).then(value).otherwise(None)
 
 
+def _split_records(raw: pl.DataFrame) -> pl.DataFrame:
+    """The data lines of a raw frame split into their VCF columns, with sample and caller."""
+    fields = pl.col(RAW_LINE_COL).str.split("\t")
+    return (
+        raw.filter(
+            pl.col(RAW_LINE_COL).is_not_null() & pl.col(RAW_LINE_COL).str.contains(_DATA_LINE_RE)
+        )
+        .with_columns(
+            fields.list.get(0, null_on_oob=True).alias("chrom"),
+            fields.list.get(1, null_on_oob=True).cast(pl.Int64, strict=False).alias("pos"),
+            fields.list.get(2, null_on_oob=True).alias("record_id"),
+            fields.list.get(3, null_on_oob=True).alias("ref"),
+            fields.list.get(4, null_on_oob=True).alias("alt"),
+            fields.list.get(5, null_on_oob=True).alias("qual_text"),
+            fields.list.get(6, null_on_oob=True).alias("filter_status"),
+            fields.list.get(7, null_on_oob=True).alias("info"),
+            fields.list.get(8, null_on_oob=True).alias("format"),
+            fields.list.get(9, null_on_oob=True).alias("sample_field"),
+        )
+        .join(sample_and_caller(raw), on=SOURCE_PATH_COL, how="left")
+    )
+
+
+#: Columns every ``sv_to_long`` frame carries, in order.
+SV_COLUMNS = [
+    "sample",
+    "caller",
+    "chrom",
+    "pos",
+    "end",
+    "svtype",
+    "svlen",
+    "size_bp",
+    "qual",
+    "filter_status",
+    "is_pass",
+    "imprecise",
+    "primary",
+    "mate_chrom",
+    "mate_pos",
+]
+
+
+def sv_to_long(raw: pl.DataFrame) -> pl.DataFrame:
+    """One row per structural-variant record, from a raw ``raw_line`` / ``source_path`` frame.
+
+    Reads the INFO keys structural-variant callers write (Manta, TIDDIT):
+
+    * ``svtype``: ``SVTYPE`` (DEL, DUP, INS, INV, BND...), else the ``<TYPE>`` of a
+      symbolic ALT, else BND for a breakend ALT;
+    * ``end``: ``END``; else ``pos`` plus ``|SVLEN|`` for a DEL, DUP, INV or CNV;
+      the position itself for an INS; null for a BND, which has two loci;
+    * ``svlen`` / ``size_bp``: ``SVLEN`` (negative for a deletion) and its absolute
+      value; null when the caller wrote none (a BND). ``CIPOS`` is not read: an
+      imprecise record is flagged by ``imprecise`` alone;
+    * ``mate_chrom`` / ``mate_pos``: the other breakend of a BND ALT;
+    * ``primary``: one record per event. A BND is two records that name each
+      other with ``MATEID``; the one whose ID sorts first is primary, so a count of
+      events keeps one side of each pair. Every other record is primary.
+
+    Records are kept as written (both sides of a BND are rows), so a count of
+    rows is a count of records; filter on ``primary`` for events. Nothing here
+    changes ``vcf_to_long``: a small-variant frame has no ``SVTYPE`` and the
+    columns above come out null.
+    """
+    df = _split_records(raw)
+    alt_first = pl.col("alt").str.split(",").list.get(0, null_on_oob=True)
+    symbolic = alt_first.str.extract(r"^<([A-Za-z]+)", 1).str.to_uppercase()
+    breakend = alt_first.str.contains(r"[\[\]]")
+    svtype = pl.coalesce(
+        pl.col("info").str.extract(_INFO_SVTYPE_RE, 1),
+        symbolic,
+        pl.when(breakend).then(pl.lit("BND")),
+    )
+    df = df.with_columns(
+        svtype.alias("svtype"),
+        pl.col("info").str.extract(_INFO_SVLEN_RE, 1).cast(pl.Int64, strict=False).alias("svlen"),
+        pl.col("info").str.extract(_INFO_END_RE, 1).cast(pl.Int64, strict=False).alias("_end"),
+        pl.col("qual_text").cast(pl.Float64, strict=False).alias("qual"),
+        pl.col("info").str.contains(_INFO_IMPRECISE_RE).alias("imprecise"),
+        pl.col("alt").str.extract(_BND_MATE_RE, 1).alias("mate_chrom"),
+        pl.col("alt").str.extract(_BND_MATE_RE, 2).cast(pl.Int64, strict=False).alias("mate_pos"),
+        pl.col("info").str.extract(_INFO_MATEID_RE, 1).alias("_mate_id"),
+    ).with_columns(
+        pl.col("svlen").abs().alias("size_bp"),
+        pl.when(pl.col("svtype") == "INS")
+        .then(pl.coalesce(pl.col("_end"), pl.col("pos")))
+        .when(pl.col("svtype") == "BND")
+        .then(pl.col("_end"))
+        .otherwise(
+            pl.coalesce(
+                pl.col("_end"),
+                pl.when(pl.col("svlen").is_not_null()).then(pl.col("pos") + pl.col("svlen").abs()),
+            )
+        )
+        .alias("end"),
+        pl.col("filter_status").is_in(["PASS", ".", ""]).alias("is_pass"),
+        (
+            pl.col("_mate_id").is_null()
+            | pl.col("record_id").is_null()
+            | (pl.col("record_id") <= pl.col("_mate_id"))
+        ).alias("primary"),
+    )
+    return df.select(SV_COLUMNS)
+
+
 def vcf_to_long(raw: pl.DataFrame, *, with_annotation: bool = False) -> pl.DataFrame:
     """One row per variant call, from a raw ``raw_line`` / ``source_path`` frame.
 
@@ -164,24 +279,7 @@ def vcf_to_long(raw: pl.DataFrame, *, with_annotation: bool = False) -> pl.DataF
     denominator. That is the same first-ALT convention ``variant_type`` and
     ``variant_key`` follow, so the three columns describe one allele.
     """
-    fields = pl.col(RAW_LINE_COL).str.split("\t")
-    df = (
-        raw.filter(
-            pl.col(RAW_LINE_COL).is_not_null() & pl.col(RAW_LINE_COL).str.contains(_DATA_LINE_RE)
-        )
-        .with_columns(
-            fields.list.get(0, null_on_oob=True).alias("chrom"),
-            fields.list.get(1, null_on_oob=True).cast(pl.Int64, strict=False).alias("pos"),
-            fields.list.get(3, null_on_oob=True).alias("ref"),
-            fields.list.get(4, null_on_oob=True).alias("alt"),
-            fields.list.get(5, null_on_oob=True).alias("qual_text"),
-            fields.list.get(6, null_on_oob=True).alias("filter_status"),
-            fields.list.get(7, null_on_oob=True).alias("info"),
-            fields.list.get(8, null_on_oob=True).alias("format"),
-            fields.list.get(9, null_on_oob=True).alias("sample_field"),
-        )
-        .join(sample_and_caller(raw), on=SOURCE_PATH_COL, how="left")
-    )
+    df = _split_records(raw)
 
     allele_depths = _format_value("AD").str.split(",")
     ad_ref = allele_depths.list.get(0, null_on_oob=True).cast(pl.Float64, strict=False)

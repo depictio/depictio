@@ -393,7 +393,14 @@ smooth coverage curve). An optional gene lane reads a bundled hg38 or mm10 asset
 only). A brush emits two `InteractiveFilter`s with source `genome_selection`, a `MultiSelect` on
 `chr_col` and a `RangeSlider` on `pos_col`, which `add_filter` already understands, so any tile on
 a collection carrying the same columns narrows with it; `follow_region_filter: true` makes a
-tile zoom to an incoming region instead. Measured on atacseq's `macs2_broad_peaks` (224,137
+tile zoom to an incoming region instead. The pointer has three modes, switched from the tile's
+header: `pointer` (the default: tooltips and clicks, the wheel scrolls the page), `pan` (a drag
+moves the view, the wheel zooms) and `select` (a drag draws the region brush); `interaction_mode`
+sets the opening one, and the older `drag_mode` still does when it is unset. Panning and zooming
+publish no view window to the genome browsers unless `publish_view_window: true`, so only a
+selected region moves them. Stacked lanes sit in GenomeSpy's scrolling viewport with a sticky
+axis and fill the tile between 26 and 160 px each; `auto_height: true` lets the tile follow its
+lanes (3 to 16 grid rows). Measured on atacseq's `macs2_broad_peaks` (224,137
 rows): one WebGL context against Plotly scattergl's two, gesture frames at the vsync floor for
 both, so the honest reading is "no worse" (`docs/design/genomespy-eval.md`).
 
@@ -802,6 +809,135 @@ File-backed structures and matrices are fetched by the browser from presigned UR
 storage origin must be in the CSP `connect-src` (see `docs/indexed-files.md`). The full design,
 including the opt-in structure resolver and its privacy trade-off, is in
 `docs/design/protein-structure.md`.
+
+### Wave 4 kinds (2026-10)
+
+Four kinds came with the wave 4 nf-core templates, each guided by a template that had no
+honest way to draw its main table. `ideogram` and `ranked_distribution` are bound by catalog
+outputs; `allele_grid` and `spatial_cells` are bound too but stay in `INCUBATING` until the
+section 8 review against the nearest existing kind (`oncoplot`, `embedding`) is decided. Their
+showcase tabs draw both from one table for that comparison.
+
+**`ideogram`.** A karyotype: one bar per chromosome, all from a common origin and drawn to the
+chromosome's length on one scale shared by every facet, so genomes compare by size first.
+Required roles `chrom`, `start`, `end`; optional `value`, `category`, `sample` (one karyotype per
+value, `facet_by_sample`, capped by `max_facets`, else a sample picker), `label` and
+`chrom_length`. Bar length comes from `chrom_length_col` (a FASTA index), else the `assembly`
+table the genome chord ring uses (hg38 / hg19 / mm10), else the furthest feature; bars follow
+natural order (1..22, X, Y, M, then contigs by numeric-aware name), or the `chromosomes` list
+when given, and `max_chromosomes` keeps the longest. `mode: marks` draws a glyph per row,
+coloured by category or on a sequential scale by value; a feature narrower than 2 px becomes a
+tick that overhangs the bar. `mode: density` draws heat bands: rows already binned with a value
+are drawn as they are, otherwise rows fall in `bin_size` bins as a mean value or a count. The
+server never samples (`none`); above `max_features` the tile draws density instead of marks and
+says so in the echo, never a subset. Like `genome_chord` it is hand-drawn SVG with every number
+in `ideogram/ideogramLayout.ts`, tested without a DOM. A click on a bar, or a drag along it,
+emits the `genome_selection` pair a `genome_view` brush emits (`region_filter_enabled`, on by
+default); a region from another tile is shaded on the matching bar through `genomicAxis.ts`.
+Producers: tidk windows and per-sequence BUSCO counts (nf-core/genomeqc), binned VCF densities
+(`vcf/variant_density`, nf-core/rnavar).
+
+**`ranked_distribution`.** Puts the top N features of a score on one ordered category axis
+shared by two linked Plotly panels: each feature's distribution across samples as a box or a
+violin, and a lollipop of the score that ranked it, rank 1 first. In long form (`value_col`,
+one row per feature and sample) the renderer takes quartiles and Tukey whiskers itself.
+Pre-aggregated (`q1_col`, `median_col`, `q3_col`, optional `lower_col`, `upper_col`,
+`mean_col`, one row per feature) is how nf-core/stableexpression's cohort of thousands of
+samples ships. The model refuses half a shape and a violin of statistics. A bound `rank_col`
+keeps the pipeline's own order; otherwise the score ranks, `ascending` by default since a lower
+stability score is more stable. The server never samples it; `max_features` caps `top_n`. A
+click emits a `scatter_selection` on `selection_column`, else `feature_id_col`, which a record
+card can follow, and picks from any tile are marked rather than filtering the tile. It is a new
+set of marks, not a preset: a box figure cannot order its categories by a column it does not
+draw, nor hold that column beside the boxes.
+
+**`allele_grid`.** A sample by locus grid of diploid genotypes: the HLA typing of
+nf-core/hlatyping (OptiType's A1 to C2 melted long), later LILAC in oncoanalyser. Required
+roles `sample_id`, `locus`, `allele`; optional `haplotype` (1/2, else the order of a sample's
+rows at the locus), `category` (HLA class, a header band over the columns), `value` / `reads`
+(per-sample side bars, or `reads_as_opacity`). Each cell is split into its two haplotypes. The
+allele group (first field) picks a hue family and the full allele a shade inside it, so every
+A*02 reads as one family; a locus whose two calls agree at the display `resolution` (1 to 4
+fields, default 2) is one merged cell with a dot, and a missing call is a dashed half.
+Nomenclature parsing (HLA-A*02:01:01:01, A*02:01, A02:01, pre-2010 A*0201, N/G suffixes),
+pairing, ordering and the `max_samples` / `max_loci` guards live in
+`allele_grid/alleleGridLayout.ts`. The server never samples: a sampled genotype loses a
+haplotype. A click on an allele half emits a `scatter_selection` carrying every raw value that
+truncates to the picked label. Alleles are spelled as epitopeprediction spells them
+(`HLA-A*02:01`), but the two runs are separate projects and links join collections within one
+project only, so the pick does not reach the peptide tables yet. The case for a kind: an oncoplot cell holds one value, so a heterozygous locus shows
+one of its two alleles.
+
+**`pedigree`.** A family tree from a PED-like table, one row per individual. Required roles
+`individual`, `father`, `mother`, `sex`, `status`; optional `family` (one tree per value, side
+by side), `label` (the text under the symbol, else the identifier), `deceased` (a diagonal
+slash) and `proband` (a flag, 1 / true / yes / proband, that an arrow points at; without one
+the first affected child of each family is marked). The standard symbols: a square is a male, a circle a female and a diamond a person of
+unknown sex; a filled symbol is affected, an open one unaffected and a hatched one of unknown
+status. The renderer reads the encodings PED files come in: sex `1` / `2` / `0` or the words,
+status `2` affected, `1` unaffected, `0` / `-9` unknown or the words, and a parent of `0`, an
+empty cell or null as a founder. A parent named by a row but absent from the table is drawn as
+a dashed placeholder of the sex its role implies, so the child still hangs under a couple.
+Founders sit on the top row and each generation under the one it descends from; a founder who
+marries in is lowered to the row of the partner, a person with several partners sits between
+them, and a couple is centred over its children. Parsing, dedupe on (family, individual), the
+`max_individuals` / `max_families` guards (whole families only, counted in the echo) and every
+coordinate live in `pedigree/pedigreeLayout.ts`, tested without a DOM. The server never
+samples: a sampled frame drops a parent and its child would read as a founder. A click emits a
+`scatter_selection` on `selection_column`, else `individual_col`, opt-in with
+`selection_enabled`, which a record card or a sample-keyed table can follow. Known limit: a
+consanguineous loop is placed once, so its second couple line crosses the tree.
+
+**`ranked_table`.** A leaderboard of candidates, one row each, ordered by a score. Required
+roles `title` (the bold name: a gene, a sample, a variant) and `score` (numeric, what the rows
+are ordered by); optional `subtitle` (monospace, beside the title) and `rank` (a precomputed
+rank shown as stored). The other cells are named in `columns`, in order, each with a `display`:
+`text`, `mono`, `badge` (a pill coloured by value: the dashboard's `category_colors` for the
+column, else the colorway by the value's place in the sorted universe, so a value keeps its
+colour when the cut moves), `bar` (a bar and its number, from 0 or the stated `min` to the
+stated `max` or the largest value shown) and `number`. Ranks are dense: ties share a rank and
+the next score follows without a gap. The first three ranks wear a gold, silver and bronze
+medal and a stripe on their row (`medals`); `descending: false` ranks the smallest first.
+Hover opens a popover with `popover_columns` as label / value pairs and `popover_grid_columns`
+as a small grid of cells (the genotype of each family member), labelled from `labels`. A click
+picks the row (`selection_enabled`, on `selection_column`, else `title_col`; a modifier key
+adds to the pick) as a `scatter_selection`.
+
+The optional **Family** section turns the popover into something to use. When `family_dc_tag`
+names a PED-like collection (one row per individual: the same columns as `pedigree`, plus a
+proband flag), a click on a row, or on its chevron, pins the popover (Esc, its close button or
+a click outside unpins it) and a collapsible Family section draws the row's family with the
+proband marked and each member filled by genotype: solid homozygous alternate, half
+heterozygous, open reference, grey for no call; an affected member wears a red ring. The family
+is the one whose `family_family_col` equals the row's `family_row_col`, or the whole
+collection when neither is set. Genotypes come from columns of the row (`genotype_columns`,
+keyed by an individual's identifier or by `proband` / `father` / `mother`) or from a long table
+(`genotypes_dc_tag`: one row per variant and individual, joined on `genotypes_key_col`); the
+two are exclusive and need a family. Both collections are read lazily, when the section is
+first opened, through the ordinary data endpoint, and are kept per row. The secondary
+collections are bound by flat `<x>_dc_tag` fields because the dashboard import resolves a
+top-level config key of that name to the `<x>_dc_id` / `<x>_wf_id` pair. The tree is
+`pedigree/pedigreeLayout.ts`; the mini drawing is its own component. Ordering, ranks, bar
+scales, badge colours and popover placement are in `ranked_table/rankedTable.ts` and the
+genotype classes and fills in `ranked_table/familyData.ts`, both tested without a DOM. The
+server never samples: a sampled frame drops candidates and shifts every rank under them
+(a collection past the no-sample ceiling is reduced anyway and the tile says its ranks are
+estimates). `top_n` bounds what is drawn.
+
+**`spatial_cells`.** Segmented cells drawn where they sit in the image. One row per cell
+(`cell_id`, `x`, `y` required; `value`, `category`, `sample`, `area` optional) is the table
+nf-core/mcmicro's MCQUANT writes; Xenium `cells.csv` and molkart bind the same way. scattergl in
+the frame of the image: origin top-left, y down (`y_axis: image`, or `cartesian`), equal aspect
+always, the frame being the image and not the data's bounding box, each marker drawn at the
+diameter its area implies at the current zoom. In a wide table the colouring marker is picked
+in the tile from `value_columns` (or the numeric columns `value_columns_pattern` matches),
+through `asinh(x / cofactor)` or `log1p`, clipped to `clip_low_pct`-`clip_high_pct` of the
+image shown. A sample is one image (`sample_display: select` or `facet`). An optional underlay
+comes from an Image collection (one preview per sample, `background_dc_tag`) or
+`background_url`, placed at pixel (0, 0) and scaled by `background_image_scale`. A lasso emits a
+`scatter_selection` on `cell_id` (MCQUANT's CellID restarts per image: bind a sample-qualified
+id). Sampling is `hash`, as for `embedding`. The case for a kind is the underlay and the
+per-image frame; without them it would be `embedding` with a spatial view.
 
 ---
 

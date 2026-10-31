@@ -39,7 +39,9 @@
 # (library preparation, source replicate, flow-cell run: design-table columns
 # `protocol`, `source_replicate`, `run_id`) come from an optional design table
 # declared through METADATA_FILE, the ampliseq convention. Without it the
-# condition is the samplesheet group and the three confounders read "unknown".
+# condition is the samplesheet group and the three confounders read "unknown":
+# the `design` collection (the hub's three confounder columns, apart) is then
+# dropped, and with it the filters and rings bound to it.
 #
 # LAYOUT NOTE. bambu/, dexseq/ and deseq2/ sit under a single BAMBU/ output
 # stage rather than per-sample directories: bambu/counts_gene.txt and
@@ -55,6 +57,15 @@
 # every other per-sample collection, so one pick in the left panel narrows
 # read QC, alignment distributions, sample structure and counts together.
 #
+# GENOME TRACKS. The long-read BAMs and coverage bigWigs are not part of the
+# tables-only megatest subset. Pass `--var TRACKS_URI=<results folder>` to read
+# them in place (see the variable below); without it the `tracks` collection
+# uploads whichever of them DATA_ROOT holds. The assembly is the GENOME variable.
+# The manifest writes no colour: the tile colours the tracks by `condition`, with
+# the dashboard's `category_colors`. `isoform_loci` is the browser's locus
+# source: one call per transcript DEXSeq tested, spanned by the extended
+# annotation when the run has one (empty coordinates otherwise).
+#
 # CATALOG NOTE. `deseq2_results` no longer uses the pipeline-agnostic
 # `deseq2/results_long.py`: nanoseq runs DESeq2 straight on Bambu's matrix, so
 # every feature id is a GTF attribute string and the volcano / MA labels were
@@ -68,7 +79,7 @@
 template:
   template_id: "nf-core/nanoseq/3.0.0"
   description: "nf-core/nanoseq template: Nanopore long-read QC (NanoStat, FastQC, samtools stats), minimap2 alignment distributions, Bambu gene/transcript quantification with sample structure, and the DESeq2 / DEXSeq differential expression and usage results computed on top of it."
-  version: "1.0.0"
+  version: "2.0.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory containing nanoseq output (bambu/, fastqc/, minimap2/, nanoplot/, pipeline_info/) plus the reprocessed multiqc/multiqc_data/multiqc.parquet."
@@ -88,6 +99,13 @@ template:
     - name: "ANNOTATION_COLS"
       description: "Auto-populated: comma-separated factor columns of METADATA_FILE."
       required: false
+    - name: "GENOME"
+      description: "UCSC name of the assembly the run aligned to (hg38, hg19, mm10): the axis and gene lane of the genome browser."
+      required: false
+      default: "hg38"
+    - name: "TRACKS_URI"
+      description: "s3:// or https:// folder holding the run's results (the folder DATA_ROOT mirrors), to read the genome-browser tracks (coverage bigWig, long-read BAM) in place instead of uploading them from DATA_ROOT. Without it the `tracks` collection uploads whichever of those files DATA_ROOT holds."
+      required: false
   # The bundled reference dataset: the megatest's design table is vendored in
   # input/ (built once from the source dataset's library annotations; see
   # VALIDATION_REPORT.md).
@@ -97,6 +115,7 @@ template:
       METADATA_ID_COL: "sample"
       GROUP_COL: "condition"
       GROUP_COL_DISPLAY: "Condition"
+      GENOME: "hg19"
   provenance:
     sources:
       - name: "software_versions"
@@ -110,13 +129,23 @@ template:
   dashboards:
     - "dashboards/base.yaml"
   conditional:
-    # No design table: the hub falls back to the samplesheet group, so only
-    # the table's own collection goes.
+    # No design table: the hub falls back to the samplesheet group, so the
+    # table's own collection goes, and with it `design`, the hub's preparation,
+    # source replicate and flow-cell run (all "unknown" without a table): their
+    # filters and rings are bound to it and leave the dashboard at import.
     - if_var_absent: "METADATA_FILE"
-      remove_dc_tags: ["metadata"]
+      remove_dc_tags: ["metadata", "design"]
       dashboards: ["dashboards/base.yaml"]
     - if_var_present: "METADATA_FILE"
       dashboards: ["dashboards/base.yaml"]
+    # Genome tracks: read in place when TRACKS_URI names the results folder,
+    # uploaded from DATA_ROOT otherwise (the `tracks` recipe keeps only the
+    # files it finds there).
+    - if_var_present: "TRACKS_URI"
+      override_dcs:
+        - data_collection_tag: "tracks"
+          dc_properties:
+            remote_base_uri: "{TRACKS_URI}"
 
 # ============================================================================
 # PROJECT CONFIGURATION
@@ -193,6 +222,25 @@ workflows:
               "reference": "Genome/transcriptome build used for alignment (the samplesheet `fasta` column)"
               "is_transcripts": "True when the input FASTQ is already a transcriptome, not reads to align"
               "has_fast5": "True when a nanopolish fast5 directory was supplied for this sample"
+
+      # The hub's design columns apart, so that a run without a design table
+      # drops them (conditional above) instead of drawing one-option filters
+      # and one-segment rings of "unknown".
+      - data_collection_tag: "design"
+        description: "Library preparation, source replicate and flow-cell run of every sample, from the design table (pruned without METADATA_FILE)"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/nanoseq/design.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample_id": "The samplesheet sample name, as the hub has it"
+              "protocol": "Library preparation (cdna, directcdna, ...), the design table's protocol column; unknown when the table lacks it"
+              "source_replicate": "The replicate number the source dataset gave this library, the design table's source_replicate column; unknown when the table lacks it"
+              "run_id": "The flow-cell run the library came off, the design table's run_id column; unknown when the table lacks it"
 
       - data_collection_tag: "samplesheet"
         description: "The samplesheet the pipeline validated, one row per sample with its input FASTQ, reference and nanopolish inputs"
@@ -624,7 +672,7 @@ workflows:
       # recomputed from the Bambu transcript counts DEXSeq ran on, for the
       # genes the table ranks first.
       - data_collection_tag: "dexseq_usage"
-        description: "Per-library transcript usage (share of the gene's reads) for the genes with the smallest DEXSeq gene-level q-value"
+        description: "Per-library transcript usage (share of the gene's reads) for the forty genes with the smallest DEXSeq gene-level q-value"
         config:
           type: "Table"
           metatype: "Aggregate"
@@ -717,6 +765,115 @@ workflows:
               "transcript_class": "Novelty label from Bambu's `novel` flag, else `known`"
               "sample": "Annotation the block was read from; `all_samples` for the run-level extended annotation"
               "expression": "TPM, else FPKM, else coverage, when the writer recorded one"
+
+      # ----------------------------------------------------------------
+      # The introns of those isoforms, one row per condition, transcript and
+      # intron, weighted by the transcript's Bambu counts: the junction table
+      # the sashimi draws. It reads both collections above through dc_ref, so
+      # it is declared after them; without the extended annotation it is empty.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "isoform_junctions"
+        description: "Intron chains of the isoforms Bambu extended, per condition, weighted by the transcript's reads"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/nanoseq/junctions.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "chrom": "Contig the transcript sits on"
+              "start": "Donor of the intron (last base of the exon before it)"
+              "end": "Acceptor of the intron (first base of the exon after it)"
+              "reads": "Reads Bambu assigned to the transcript, averaged over the libraries of the condition"
+              "condition": "Condition the arc is drawn in"
+              "transcript_id": "Bambu transcript the intron belongs to"
+              "gene_id": "Gene the transcript belongs to"
+              "gene_name": "Readable gene symbol, falling back to the gene id"
+              "annotation": "known when the transcript is in the reference annotation, else novel"
+
+      # ----------------------------------------------------------------
+      # The calls the genome browser opens on: every transcript DEXSeq tested,
+      # with its span from the extended annotation where the run has one and the
+      # DEXSeq verdict as a score (rank_score), so the browser opens on the
+      # strongest shift, steps through the next ones, and a transcript picked in
+      # the DEXSeq table frames its span. Always written (DEXSeq always runs):
+      # without the annotation the rows carry no coordinates and the browser
+      # opens on the first region its tracks hold.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "isoform_loci"
+        description: "Transcripts DEXSeq tested, with their span from the extended annotation (empty coordinates without it) and a score for the genome browser to open on"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/nanoseq/isoform_loci.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "transcript_id": "DEXSeq featureID, a Bambu transcript id"
+              "gene_id": "Ensembl gene id"
+              "gene_name": "Readable gene symbol from the annotation, else the gene id"
+              "chrom": "Contig of the transcript; empty without the extended annotation"
+              "start": "First base of the transcript's first exon; empty without the annotation"
+              "end": "Last base of the transcript's last exon; empty without the annotation"
+              "strand": "Transcript strand"
+              "n_exons": "Exon blocks of the transcript"
+              "transcript_class": "Novelty label of the annotation (known, novel, ...)"
+              "log2fc": "DEXSeq log2 fold change of the transcript's usage"
+              "padj": "DEXSeq gene-level adjusted q-value"
+              "significant": "padj below 0.05"
+              "direction": "up / down / not significant"
+              "rank_score": "-log10(padj) plus |log2fc| / 1000: the gene's q-value is shared by its transcripts, the effect size breaks the tie"
+
+      # ----------------------------------------------------------------
+      # Genome tracks. A manifest of the run's track files (coverage bigWig
+      # and the coordinate-sorted long-read BAM of every sample) that the
+      # genome browser reads by range, through the API. One row per file,
+      # keyed on `sample` like the hub. The megatest was aligned to Ensembl
+      # GRCh37 (chromosomes 1, 2, ...): the hg19 preset's chromAlias maps them.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "tracks"
+        description: "Genome-browser tracks of the run: coverage (bigWig) and long-read alignments (BAM) of every sample, one row per file"
+        config:
+          type: "genomic_tracks"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/nanoseq/tracks.py"
+          dc_specific_properties:
+            format: "TSV"
+            uri_column: "uri"
+            track_id_column: "track_id"
+            sample_column: "sample"
+            format_column: "format"
+            name_column: "name"
+            category_column: "category"
+            order_column: "order"
+            assembly: "{GENOME}"
+            display_defaults:
+              bigwig:
+                displays:
+                  - type: "LinearWiggleDisplay"
+                    height: 50
+                    autoscale: "local"
+              bam:
+                displays:
+                  - type: "LinearPileupDisplay"
+                    height: 120
+            columns_description:
+              "track_id": "<sample>.<kind>, unique per file"
+              "sample": "Sample the file belongs to"
+              "condition": "The sample's condition (the hub's), the column the browser colours the tracks by"
+              "kind": "coverage or alignments"
+              "format": "Track file format"
+              "uri": "Path relative to the results folder"
+              "name": "Track label shown in the browser"
+              "category": "Track-selector folder"
+              "order": "Row order the browser opens with"
 
 links:
   # Hub -> MultiQC, keyed on the sample name.
@@ -833,6 +990,40 @@ links:
     description: "Filter the isoform structures by the samples picked in the left panel"
     enabled: true
 
+  # Hub <-> design columns: a pick on the preparation, source replicate or run
+  # filter scopes the hub and, through it (links are walked over several hops),
+  # every per-sample collection; the hub's own filters scope the design rings.
+  # Both links go with `design` when the run has no design table.
+  - source_dc_tag: "design"
+    source_column: "sample_id"
+    target_dc_tag: "samples"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Scope the sample hub by the preparation, source replicate or flow-cell run picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "design"
+    source_column: "sample_id"
+    target_dc_tag: "multiqc_data"
+    target_type: "multiqc"
+    link_config:
+      resolver: "sample_mapping"
+      target_field: "sample_name"
+    description: "Filter the MultiQC panels by the preparation, source replicate or flow-cell run picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "design"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Scope the design rings by the samples picked in the left panel"
+    enabled: true
+
   # Reverse: picking a library on the read-QC table scopes the hub and, through
   # it, the rest of the dashboard.
   - source_dc_tag: "nanostats"
@@ -853,4 +1044,62 @@ links:
       resolver: "direct"
       target_field: "sample_id"
     description: "Scope the sample hub to a sample picked on the PCA"
+    enabled: true
+
+  # Hub <-> genome tracks: picking samples opens their tracks, and clicking a
+  # track in the browser picks its sample back.
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "tracks"
+    target_type: "genomic_tracks"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Show the genome tracks of the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "tracks"
+    source_column: "sample"
+    target_dc_tag: "samples"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Filter the dashboard by the samples whose tracks are picked in the genome browser"
+    enabled: true
+
+  # A picked DEXSeq transcript narrows the isoform structures to its exons,
+  # whose span the genome browser frames (`locus_from`).
+  - source_dc_tag: "dexseq_results"
+    source_column: "feature_id"
+    target_dc_tag: "gtf_transcripts"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "transcript_id"
+    description: "Carry a transcript picked in the DEXSeq results onto its isoform structure"
+    enabled: true
+
+  # The same pick frames the transcript in the genome browser: its span is the
+  # browser's locus (`isoform_loci`, always written; no coordinates without the
+  # extended annotation).
+  - source_dc_tag: "dexseq_results"
+    source_column: "feature_id"
+    target_dc_tag: "isoform_loci"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "transcript_id"
+    description: "Carry a transcript picked in the DEXSeq results onto its span, where the genome browser opens"
+    enabled: true
+
+  # The same pick draws that transcript's intron chain, one lane per condition.
+  - source_dc_tag: "dexseq_results"
+    source_column: "feature_id"
+    target_dc_tag: "isoform_junctions"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "transcript_id"
+    description: "Carry a transcript picked in the DEXSeq results onto its weighted intron chain"
     enabled: true

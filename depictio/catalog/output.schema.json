@@ -141,7 +141,13 @@
                 "secondary_structure",
                 "domain_architecture",
                 "pae_matrix",
-                "ramachandran"
+                "ramachandran",
+                "ideogram",
+                "ranked_distribution",
+                "spatial_cells",
+                "allele_grid",
+                "pedigree",
+                "ranked_table"
               ],
               "type": "string"
             },

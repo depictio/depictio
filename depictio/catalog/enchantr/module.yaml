@@ -10,6 +10,7 @@
 # `origin_tool: alakazam`, the library that computes them.
 id: enchantr
 name: enchantR
+version: "1.0.0"
 description: >-
   Immcantation R package that drives nf-core/airrflow's adaptive immune receptor
   repertoire (AIRR) analysis: clonal assignment, nearest-neighbour distance

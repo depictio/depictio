@@ -5,7 +5,7 @@ import { CompactControlSlot } from 'depictio-components';
 import { InteractiveFilter, StoredMetadata } from '../../api';
 import { useAvailableSet, useFunnelState } from '../../availableValues';
 import ComponentSkeleton from '../ComponentSkeleton';
-import { orderCategoricalOptions } from './categoricalOptions';
+import { optionOrderOf, orderCategoricalOptions } from './categoricalOptions';
 import { FunnelAvailabilityBadge, FunnelOptionMarker } from './funnelDecorations';
 import { InteractiveFrame, InteractiveTitle, interactiveAccent, interactiveAccentRaw } from './frame';
 import SwitchCards from './SwitchCards';
@@ -44,7 +44,7 @@ const SegmentedControlRenderer: React.FC<{
     data: options,
     loading,
     error,
-  } = useUniqueValues(metadata.dc_id, metadata.column_name, metadata.filter_expr);
+  } = useUniqueValues(metadata.dc_id, metadata.column_name, metadata.filter_expr, metadata.order_by);
 
   const filterEntry = filters.find((f) => f.index === metadata.index);
   const selectedValue =
@@ -61,7 +61,7 @@ const SegmentedControlRenderer: React.FC<{
   const funnelHighlight = funnel.active && availableSet !== null;
   const cards = metadata.option_cards ?? null;
   const data = useMemo(() => {
-    let sorted = orderCategoricalOptions(options, availableSet);
+    let sorted = orderCategoricalOptions(options, availableSet, optionOrderOf(metadata));
     // Cards read in the order the YAML declares them (SILVA before PR2), not
     // alphabetically: the first is the one a reader expects to be the default.
     if (cards) sorted = orderByDeclared(sorted, Object.keys(cards));
@@ -74,7 +74,7 @@ const SegmentedControlRenderer: React.FC<{
       ),
       disabled: availableSet ? !availableSet.has(v) : false,
     }));
-  }, [options, availableSet, funnelHighlight, cards]);
+  }, [options, availableSet, funnelHighlight, cards, metadata]);
   const availableCount = funnelHighlight
     ? options.filter((v) => availableSet!.has(v)).length
     : null;

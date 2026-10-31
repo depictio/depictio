@@ -37,6 +37,11 @@
 # (optional, ampliseq convention) adds factors: first column the sample id,
 # the others annotations, GROUP_COL its first annotation column.
 #
+# Genome tracks. The run's stranded bigWigs and BAMs are not part of the tables-only
+# subset. Pass `--var TRACKS_URI=<results folder>` to read them in place (see the
+# variable below); without it the `tracks` collection uploads whichever of them
+# DATA_ROOT holds. The assembly is the GENOME variable.
+#
 # Thresholds are variables with generic defaults: SPLICING_FDR (0.05) on every
 # tool's adjusted p-value (SUPPA2's empirical p-value), MIN_DPSI (0.1) on the
 # event-level PSI change of rMATS and SUPPA2, RMATS_MIN_READS (10) mean
@@ -45,7 +50,7 @@
 template:
   template_id: "nf-core/rnasplice/1.0.4"
   description: "nf-core/rnasplice template: MultiQC funnel, sample space, cross-tool differential splicing (DEXSeq exon and DTU, edgeR, rMATS, SUPPA2) with per-tool volcanoes, event types and a sashimi of the junctions around the rMATS calls"
-  version: "1.0.0"
+  version: "2.0.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory of one rnasplice run (multiqc/, pipeline_info/, contrastsheet/, star_salmon/ and/or salmon/)"
@@ -69,9 +74,12 @@ template:
       required: false
       default: "star_salmon"
     - name: "GENOME"
-      description: "UCSC assembly name the event loci link out to (the genome the run aligned to)."
+      description: "UCSC assembly name the event loci link out to and the genome browser opens on (the genome the run aligned to)."
       required: false
       default: "hg38"
+    - name: "TRACKS_URI"
+      description: "s3:// or https:// folder holding the run's results (the folder DATA_ROOT mirrors), to read the genome-browser tracks (stranded bigWig, BAM) in place instead of uploading them from DATA_ROOT. Without it the `tracks` collection uploads whichever of those files DATA_ROOT holds."
+      required: false
     - name: "SPLICING_FDR"
       description: "Significance cut-off on the adjusted p-values of every splicing tool (SUPPA2: its empirical p-value)."
       required: false
@@ -143,6 +151,14 @@ template:
       dashboards: ["dashboards/base.yaml"]
     - if_var_present: "METADATA_FILE"
       dashboards: ["dashboards/base.yaml"]
+    # Genome tracks: read in place when TRACKS_URI names the results folder,
+    # uploaded from DATA_ROOT otherwise (the `tracks` recipe keeps only the
+    # files it finds there).
+    - if_var_present: "TRACKS_URI"
+      override_dcs:
+        - data_collection_tag: "tracks"
+          dc_properties:
+            remote_base_uri: "{TRACKS_URI}"
 
 # ============================================================================
 # PROJECT CONFIGURATION
@@ -538,6 +554,55 @@ workflows:
               "suppa_max_abs_dpsi": "Largest absolute delta PSI among its significant SUPPA2 events"
               "suppa_min_pvalue": "Smallest SUPPA2 p-value of the gene"
 
+      # ----------------------------------------------------------------
+      # Genome tracks. A manifest of the run's track files (strand-specific
+      # bigWig coverage and the STAR BAM of every sample) that the genome
+      # browser reads by range, through the API. One row per file, keyed on
+      # `sample` like the hub. The reference run was aligned to Ensembl GRCh37
+      # (chromosomes 1, 2, ...): the hg19 preset's chromAlias maps them.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "tracks"
+        description: "Genome-browser tracks of the run: forward and reverse strand coverage (bigWig) and the STAR alignments (BAM) of every sample, one row per file"
+        config:
+          type: "genomic_tracks"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/rnasplice/tracks.py"
+          dc_specific_properties:
+            format: "TSV"
+            uri_column: "uri"
+            track_id_column: "track_id"
+            sample_column: "sample"
+            format_column: "format"
+            name_column: "name"
+            color_column: "color"
+            category_column: "category"
+            order_column: "order"
+            assembly: "{GENOME}"
+            display_defaults:
+              bigwig:
+                displays:
+                  - type: "LinearWiggleDisplay"
+                    height: 50
+                    autoscale: "local"
+              bam:
+                displays:
+                  - type: "LinearPileupDisplay"
+                    height: 120
+            columns_description:
+              "track_id": "<sample>.<kind>, unique per file"
+              "sample": "Sample the file belongs to"
+              "condition": "Condition of the sample sheet"
+              "strand": "Genomic strand of the coverage track, empty for the BAM"
+              "kind": "coverage_forward, coverage_reverse or alignments"
+              "format": "Track file format"
+              "uri": "Path relative to the results folder"
+              "name": "Track label shown in the browser"
+              "color": "Track colour"
+              "category": "Track-selector folder"
+              "order": "Row order the browser opens with"
+
 # ============================================================================
 # LINKS
 # The sample hub fans out to the per-sample collections; MultiQC names are
@@ -671,4 +736,21 @@ links:
     target_type: "table"
     link_config: {resolver: "direct", target_field: "gene_id"}
     description: "Carry the cross-tool gene selection onto the sashimi of the rMATS events"
+    enabled: true
+
+  # Hub <-> genome tracks: picking samples opens their tracks, and clicking a
+  # track in the browser picks its sample back.
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "tracks"
+    target_type: "genomic_tracks"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Show the genome tracks of the samples picked in the left panel"
+    enabled: true
+  - source_dc_tag: "tracks"
+    source_column: "sample"
+    target_dc_tag: "samples"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the dashboard by the samples whose tracks are picked in the genome browser"
     enabled: true

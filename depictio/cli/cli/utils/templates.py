@@ -919,6 +919,8 @@ def _apply_conditionals(
                 if ov.source_overrides is not None:
                     so = cfg.setdefault("transform", {}).setdefault("source_overrides", {})
                     so.update(ov.source_overrides)
+                if ov.dc_properties:
+                    cfg.setdefault("dc_specific_properties", {}).update(ov.dc_properties)
                 logger.info(f"Repointed DC '{dc.get('data_collection_tag')}' for route")
 
     return config, active_dashboards, removal_reasons
@@ -1854,6 +1856,7 @@ def import_dashboards_from_template(
     dashboard_name: str | None = None,
     template_id: str | None = None,
     base_dir: Path | None = None,
+    template_version: str | None = None,
 ) -> list[dict[str, Any]]:
     """Import dashboard YAML files from a template into the server.
 
@@ -1882,6 +1885,11 @@ def import_dashboards_from_template(
             template's own dashboards.
         base_dir: Directory of the --project-config-path file, for the source
             keys of the dashboards under it.
+        template_version: The template's own revision (``template.version``).
+            With ``template_id``, each dashboard the server writes records both
+            as its ``template_origin``. Only the template's own dashboards are
+            stamped: a ``--dashboard`` file next to ``--template`` is not part
+            of the template, so it claims no revision of it.
 
     Returns:
         List of result dicts, one per dashboard file.  Each contains
@@ -1963,6 +1971,10 @@ def import_dashboards_from_template(
                 params["parent_source_key"] = main_keys[parent_tag]
             if project_id:
                 params["project_id"] = project_id
+            if template_id and template_version and template_dir is not None:
+                if path.resolve().is_relative_to(template_dir.resolve()):
+                    params["template_id"] = template_id
+                    params["template_version"] = template_version
 
             response = httpx.post(
                 url,

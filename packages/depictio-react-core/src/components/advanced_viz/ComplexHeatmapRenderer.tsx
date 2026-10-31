@@ -31,11 +31,9 @@ import { namedColumns } from './namedColumns';
 import { withRanksInOrder } from './phylo/view';
 import { applyDataTheme, applyLayoutTheme } from './plotlyTheme';
 import { usePersistedVizControl } from './usePersistedVizControl';
-import { demandForItems } from './contentDemand';
+import { demandForPx } from './contentDemand';
+import { heatmapDemandPx } from './heatmapDemand';
 
-/** The shortest a heatmap row may be drawn and still be read as a band rather
- *  than a line. Below this the matrix stops being a picture of the data. */
-const MIN_CELL_PX = 12;
 /** Column labels along the bottom, the title strip and the colourbar, none of
  *  which scale with the number of rows. */
 const HEATMAP_CHROME_PX = 130;
@@ -80,7 +78,7 @@ interface ComplexHeatmapConfig {
   normalize?: 'none' | 'row_z' | 'col_z' | 'log1p';
   colorscale?: string | null;
   /** Shortest a row may be drawn (px) when the tile asks the grid for height.
-   *  Default MIN_CELL_PX. */
+   *  Unset: 12, with a 320 px floor on the matrix (see heatmapDemand.ts). */
   min_cell_px?: number | null;
   /** Most grid rows the tile may ask for. Default: the advanced_viz ceiling. */
   max_rows?: number | null;
@@ -314,13 +312,15 @@ const ComplexHeatmapRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
   // when the columns cluster, and one strip per drawn annotation. Row
   // annotations are a right-side strip and cost no height.
   const drawnRows = dims?.rows ?? 0;
-  const minCellPx = config.min_cell_px ?? MIN_CELL_PX;
+  // `min_cell_px` unset: the shortest readable row, with a floor on the matrix
+  // so a small one (a 12-run correlation) does not shrink to a strip.
+  const minCellPx = config.min_cell_px;
   const maxRows = config.max_rows;
   const bandsPx =
     (clusterCols ? COL_DENDROGRAM_PX : 0) + drawnColAnnotations.length * ANNOTATION_BAND_PX;
   const contentDemand = useMemo(
     () =>
-      demandForItems(drawnRows, minCellPx, HEATMAP_CHROME_PX + bandsPx, {
+      demandForPx(heatmapDemandPx(drawnRows, HEATMAP_CHROME_PX + bandsPx, minCellPx), {
         max: maxRows ?? undefined,
       }),
     [drawnRows, bandsPx, minCellPx, maxRows],

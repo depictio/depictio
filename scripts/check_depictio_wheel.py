@@ -16,7 +16,9 @@ import re
 import sys
 import zipfile
 
-MAX_MB = 15
+# 15 MB until the genome browser: its JBrowse and GenomeSpy chunks and the
+# bundled hg19/hg38/mm10 gene annotations put the wheel near 17 MB.
+MAX_MB = 20
 REQUIRED = [
     r"depictio/viewer/dist/index\.html",
     r"depictio/projects/init/iris/\.db_seeds/dashboard\.json",

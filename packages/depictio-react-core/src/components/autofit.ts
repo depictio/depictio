@@ -2,6 +2,7 @@ import {
   createContext,
   useContext,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type DependencyList,
@@ -104,6 +105,42 @@ export function useAutofitValue(index: string, height: number | null): void {
     publishHeight(key, height && height > 0 ? Math.ceil(height) : 0);
   }, [index, key, height]);
   useEffect(() => () => publishHeight(key, 0), [key]);
+}
+
+/**
+ * The height, in px, a tile spends around the box `bodyRef` points at (its
+ * header, a controls strip, the padding), or null while it cannot be measured
+ * (no grid tile around it: a catalog preview, a Guide copy).
+ *
+ * For a renderer that knows how tall its content is but draws into a box that
+ * fills the tile: `useAutofitValue(index, content + chrome)`. The difference
+ * between the tile and the box is the same whatever height the tile has, so
+ * the grid answering with a taller tile cannot change the answer.
+ */
+export function useTileChrome(
+  bodyRef: RefObject<HTMLElement | null>,
+  remeasureOn: unknown = null,
+): number | null {
+  const [chrome, setChrome] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    const body = bodyRef.current;
+    const tile = body?.closest('.react-grid-item') as HTMLElement | null;
+    if (!body || !tile || typeof ResizeObserver === 'undefined') {
+      setChrome(null);
+      return undefined;
+    }
+    const measure = () => {
+      const next = Math.max(0, Math.round(tile.clientHeight - body.clientHeight));
+      // Held within 2 px: reflow churn must not republish the height.
+      setChrome((prev) => (prev !== null && Math.abs(prev - next) < 2 ? prev : next));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(tile);
+    observer.observe(body);
+    return () => observer.disconnect();
+  }, [bodyRef, remeasureOn]);
+  return chrome;
 }
 
 /**
@@ -254,11 +291,14 @@ interface FittableMember {
   selected_plot?: string | null;
   /** Advanced viz only: which kind it draws. */
   viz_kind?: unknown;
-  /** Advanced viz only: the kind's own settings (a heatmap reads `max_rows`). */
+  /** Advanced viz only: the kind's own settings (a heatmap reads `max_rows`,
+   *  a `genome_view` its `auto_height`). */
   config?: unknown;
   /** A card's style, its section's already folded in: a row of compact cards
    *  fits its content both ways. */
   variant?: unknown;
+  /** A genome browser (`jbrowse`): its height follows its open tracks. */
+  auto_height?: unknown;
 }
 
 /** The MultiQC general statistics table, the one MultiQC tile that is a table
@@ -272,6 +312,12 @@ export const MULTIQC_GENERAL_STATS_FIT_TYPE = 'multiqc_general_stats';
  *  keeps the height its author gave it. */
 export const PHYLOGENY_FIT_TYPE = 'advanced_viz_phylogenetic';
 
+/** A genome browser or a GenomeSpy genome view that opted into `auto_height`:
+ *  its tile follows the height of its tracks or lanes, both ways. Without the
+ *  opt-in each is what it always was (an advanced viz grows, a browser holds
+ *  the height it was given). */
+export const GENOME_FIT_TYPE = 'genome_auto_height';
+
 /** The clustered heatmap. Its demand is one row per matrix row, so a tile
  *  authored for a short matrix would jump to the 16-row ceiling the moment a
  *  large one answered. It keeps the height its author gave it and shrinks to a
@@ -284,6 +330,13 @@ function heatmapMaxRows(member: FittableMember): number | undefined {
   return typeof raw === 'number' && Number.isFinite(raw) && raw > 0 ? Math.round(raw) : undefined;
 }
 
+/** The ranked table. Its demand is exact (one row per shown candidate, header
+ *  and footnotes included), so its tile follows it both ways: a top-8 table
+ *  stored at 6 rows would otherwise keep 230 px of blank under the last row.
+ *  The family pedigree is a popover over the page, not tile content, and is
+ *  not part of the demand. */
+export const RANKED_TABLE_FIT_TYPE = 'advanced_viz_ranked_table';
+
 /** The key a component's fit policy and default are looked up under. */
 export function fitType(member: FittableMember): string {
   if (
@@ -295,8 +348,21 @@ export function fitType(member: FittableMember): string {
   if (member.component_type === 'advanced_viz' && member.viz_kind === 'phylogenetic') {
     return PHYLOGENY_FIT_TYPE;
   }
+  if (member.component_type === 'jbrowse' && member.auto_height === true) {
+    return GENOME_FIT_TYPE;
+  }
+  if (
+    member.component_type === 'advanced_viz' &&
+    member.viz_kind === 'genome_view' &&
+    (member.config as { auto_height?: unknown } | null | undefined)?.auto_height === true
+  ) {
+    return GENOME_FIT_TYPE;
+  }
   if (member.component_type === 'advanced_viz' && member.viz_kind === 'complex_heatmap') {
     return COMPLEX_HEATMAP_FIT_TYPE;
+  }
+  if (member.component_type === 'advanced_viz' && member.viz_kind === 'ranked_table') {
+    return RANKED_TABLE_FIT_TYPE;
   }
   return member.component_type ?? '';
 }
@@ -340,7 +406,11 @@ const FIT_POLICIES: Readonly<Record<string, FitPolicy>> = {
   // A tile sized for the full tree (a thousand-tip drawing) shrinks to the ten
   // lineages its summary shows.
   [PHYLOGENY_FIT_TYPE]: { min: 2, max: 16, grow: true, shrink: true },
+  // Tracks and lanes are counted, so the tile follows them both ways; a
+  // browser with twenty tracks stops at the cap and scrolls the rest.
+  [GENOME_FIT_TYPE]: { min: 3, max: 16, grow: true, shrink: true },
   [COMPLEX_HEATMAP_FIT_TYPE]: { min: 3, max: 16, grow: false, shrink: true },
+  [RANKED_TABLE_FIT_TYPE]: { min: 3, max: 16, grow: true, shrink: true },
 };
 
 /**
@@ -359,7 +429,9 @@ const DEFAULT_FIT: Readonly<Record<string, FitMode>> = {
   [MULTIQC_GENERAL_STATS_FIT_TYPE]: 'auto',
   advanced_viz: 'auto',
   [PHYLOGENY_FIT_TYPE]: 'auto',
+  [GENOME_FIT_TYPE]: 'auto',
   [COMPLEX_HEATMAP_FIT_TYPE]: 'auto',
+  [RANKED_TABLE_FIT_TYPE]: 'auto',
   figure: 'fixed',
   multiqc: 'fixed',
 };

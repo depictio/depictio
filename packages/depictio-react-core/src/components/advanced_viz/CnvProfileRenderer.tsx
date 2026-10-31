@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Text, useMantineColorScheme, useMantineTheme } from '@mantine/core';
 import Plot from './LegendAwarePlot';
 
@@ -40,6 +40,13 @@ import {
   plotlyThemeFragment,
 } from './plotlyTheme';
 import { regionXRange, useFollowedRegion } from './genomicAxis';
+import {
+  pointOnAxis,
+  readPlotXRange,
+  windowOnOneChrom,
+  type GenomePoint,
+  type OpenLocusReader,
+} from '../jbrowse/locusForAction';
 import { usePersistedVizControl } from './usePersistedVizControl';
 
 /** Mirrors `CnvProfileConfig` in depictio/models/components/advanced_viz/configs.py.
@@ -83,7 +90,7 @@ interface Props {
 const ALL_VIEWS = ['plotly', 'locus'] as const;
 type CnvView = (typeof ALL_VIEWS)[number];
 const VIEW_LABEL: Record<CnvView, string> = { plotly: 'Profile', locus: 'Locus' };
-type GeneLane = 'none' | 'hg38' | 'mm10';
+type GeneLane = 'none' | 'hg38' | 'hg19' | 'mm10';
 
 // The server does not reduce this kind (`KIND_SAMPLING_POLICY["cnv_profile"]
 // is "none"`): dropping rows at random would erase a focal amplification, and
@@ -155,7 +162,11 @@ const CnvProfilePlot = React.memo<{
   figure: { data?: unknown[]; layout?: Record<string, unknown> };
   isDark: boolean;
   theme: Theme;
-}>(({ figure, isDark, theme }) => {
+  /** A click on a point, as Plotly reports it. */
+  onClick?: (event: any) => void;
+  /** The graph div, once Plotly has drawn it. */
+  onGraph?: (gd: unknown) => void;
+}>(({ figure, isDark, theme, onClick, onGraph }) => {
   const themedData = useMemo(
     () => applyDataTheme(figure.data, isDark, theme),
     [figure.data, isDark, theme],
@@ -171,6 +182,9 @@ const CnvProfilePlot = React.memo<{
       useResizeHandler
       style={PLOT_STYLE}
       config={PLOT_CONFIG as any}
+      onClick={onClick}
+      onInitialized={onGraph ? (_fig: unknown, gd: unknown) => onGraph(gd) : undefined}
+      onUpdate={onGraph ? (_fig: unknown, gd: unknown) => onGraph(gd) : undefined}
     />
   );
 });
@@ -325,13 +339,19 @@ const CnvProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
 
   // Sample and chromosome domains come from the whole frame, so narrowing the
   // drawing down to one of them never removes the option to go back.
-  const samples = useMemo(() => {
+  // The picker lists them alphabetically, but the profile opens on the first one
+  // the data holds: a recipe orders its rows so that one is worth seeing first
+  // (sarek puts a tumour against its normal ahead of the normal on its own).
+  const { samples, firstSeen } = useMemo(() => {
     const seen = Array.from(new Set(parsed.map((r) => r.sample).filter((s) => s !== '')));
-    return seen.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+    return {
+      firstSeen: seen[0] ?? null,
+      samples: [...seen].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' })),
+    };
   }, [parsed]);
   const allChroms = useMemo(() => sortChromosomes(parsed.map((r) => r.chrom)), [parsed]);
 
-  const activeSample = sample && samples.includes(sample) ? sample : (samples[0] ?? null);
+  const activeSample = sample && samples.includes(sample) ? sample : firstSeen;
 
   // A region brushed elsewhere on this collection's own chrom/start/end
   // columns takes the chromosome control's place while it is set: the tile is
@@ -526,6 +546,9 @@ const CnvProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
 
     return {
       data,
+      // Where each drawn chromosome starts on the x axis, for the action that
+      // reads a click or the visible window back as a contig and a position.
+      offsets: axis.offset as ReadonlyMap<string, number>,
       layout: {
         ...plotlyThemeFragment(isDark, theme),
         xaxis,
@@ -731,6 +754,31 @@ const CnvProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
     </>
   );
 
+  // "Open in genome browser": the last point clicked on the Plotly profile and
+  // the axis' visible window when it covers one chromosome. Refs throughout, a
+  // click or a zoom redraws nothing.
+  const offsetsRef = useRef<ReadonlyMap<string, number> | null>(null);
+  offsetsRef.current = figure?.offsets ?? null;
+  const lastPointRef = useRef<GenomePoint | null>(null);
+  const gdRef = useRef<unknown>(null);
+  const handlePlotClick = useCallback((event: any) => {
+    const x = Number(event?.points?.[0]?.x);
+    const point = offsetsRef.current ? pointOnAxis(x, offsetsRef.current) : null;
+    if (point) lastPointRef.current = point;
+  }, []);
+  const handleGraph = useCallback((gd: unknown) => {
+    gdRef.current = gd;
+  }, []);
+  const openLocus = useCallback<OpenLocusReader>(
+    () => ({
+      point: lastPointRef.current,
+      window: offsetsRef.current
+        ? windowOnOneChrom(readPlotXRange(gdRef.current), offsetsRef.current)
+        : null,
+    }),
+    [],
+  );
+
   // The frame appends the region filter itself, brushed here or elsewhere.
   const echo = locus ? (facetOn ? `${locusLanes.length} samples` : (activeSample ?? undefined)) : undefined;
 
@@ -738,6 +786,7 @@ const CnvProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
     <AdvancedVizFrame
       estimated={estimated}
       title={metadata.title || 'Copy-number profile'}
+      openLocus={openLocus}
       subtitle={(metadata as any).description || (metadata as any).subtitle}
       primaryControls={primaryControls}
       controls={controls}
@@ -768,7 +817,13 @@ const CnvProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
           onFilterChange={onFilterChange}
         />
       ) : null}
-      {!locus && figure ? <CnvProfilePlot figure={figure} isDark={isDark} theme={theme} /> : null}
+      {!locus && figure ? <CnvProfilePlot
+          figure={figure}
+          isDark={isDark}
+          theme={theme}
+          onClick={handlePlotClick}
+          onGraph={handleGraph}
+        /> : null}
     </AdvancedVizFrame>
   );
 };

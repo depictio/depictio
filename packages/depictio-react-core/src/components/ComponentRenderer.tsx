@@ -40,8 +40,10 @@ import SaveGroupAction, {
 } from './chrome/SaveGroupAction';
 import MapDataButton from './map/MapDataButton';
 import { SectionColorContext } from './SectionIcon';
+import { paletteHex } from '../paletteColor';
 import {
   cardScopedFilters,
+  clearedSelectionFilters,
   isMapSelectionEnabled,
   isSourceFilterActive,
   ownSelection,
@@ -388,24 +390,16 @@ const ComponentRendererBody: React.FC<ComponentRendererProps> = ({
   }
 
   if (metadata.component_type === 'jbrowse' && dashboardId) {
-    // JBrowse fetches its session on mount and pulls a heavy chunk, so gate the
-    // whole thing on the viewport — off-screen tracks neither fetch nor load
-    // their code until scrolled near. Chrome stays *outside* the gate (as for
-    // multiqc) so a deferred panel still shows its card border and title rather
-    // than a bare unframed shimmer.
-    return wrapWithChrome(
-      'jbrowse',
-      metadata,
-      undefined,
-      <LazyMount>
-        <JBrowseRenderer
-          dashboardId={dashboardId}
-          metadata={metadata}
-          filters={filters}
-          refreshTick={refreshTick}
-        />
-      </LazyMount>,
-      { extraActions, showDragHandle },
+    return (
+      <JBrowseBlock
+        dashboardId={dashboardId}
+        metadata={metadata}
+        filters={filters}
+        onFilterChange={onFilterChange}
+        refreshTick={refreshTick}
+        extraActions={chromeExtras}
+        showDragHandle={showDragHandle}
+      />
     );
   }
 
@@ -633,6 +627,82 @@ const MapBlock: React.FC<{
       showDragHandle,
       sourceFilterActive,
       selectionCount: ownSelection(filters, metadata.index).count,
+    },
+  );
+};
+
+const JBrowseBlock: React.FC<{
+  dashboardId: string;
+  metadata: StoredMetadata;
+  filters: InteractiveFilter[];
+  onFilterChange?: (filter: InteractiveFilter) => void;
+  refreshTick?: number;
+  extraActions?: React.ReactNode;
+  showDragHandle?: boolean;
+}> = ({
+  dashboardId,
+  metadata,
+  filters,
+  onFilterChange,
+  refreshTick,
+  extraActions,
+  showDragHandle,
+}) => {
+  // The header / overview / status toggles live in the renderer (they drive
+  // the JBrowse view model) and are handed up here for the chrome action row,
+  // the same hand-off MapBlock uses for its settings popover. The renderer
+  // keys its node so ComponentChrome's positional re-keying never remounts it.
+  const [toolbarNode, setToolbarNode] = React.useState<React.ReactNode>(null);
+  const selectionEnabled = Boolean(metadata.selection_enabled) && !!onFilterChange;
+  // The tile's own region ("Use this region") is a selection too: Reset drops
+  // it with the track pick, through the same scheme every selection tile uses.
+  const ownRegion = ownSelection(filters, metadata.index);
+  const onResetSelection =
+    (selectionEnabled || ownRegion.filters.length > 0) && onFilterChange
+      ? () => {
+          if (selectionEnabled) {
+            onFilterChange({
+              index: metadata.index,
+              value: [],
+              source: 'jbrowse_selection',
+            });
+          }
+          for (const cleared of clearedSelectionFilters(ownRegion.filters)) onFilterChange(cleared);
+        }
+      : undefined;
+  const sourceFilterActive =
+    isSourceFilterActive(filters, metadata.index, 'jbrowse_selection') ||
+    ownRegion.filters.length > 0;
+  const jbrowseExtras = (
+    <>
+      {extraActions}
+      {toolbarNode}
+    </>
+  );
+  // JBrowse pulls a heavy chunk and fetches its config on mount, so gate the
+  // whole thing on the viewport. Chrome stays *outside* the gate (as for
+  // multiqc) so a deferred panel still shows its frame and title.
+  return wrapWithChrome(
+    'jbrowse',
+    metadata,
+    undefined,
+    <LazyMount>
+      <Suspense fallback={<CellPlaceholder />}>
+        <JBrowseRenderer
+          dashboardId={dashboardId}
+          metadata={metadata}
+          filters={filters}
+          onFilterChange={onFilterChange}
+          refreshTick={refreshTick}
+          onToolbarNode={setToolbarNode}
+        />
+      </Suspense>
+    </LazyMount>,
+    {
+      onResetFilter: onResetSelection,
+      extraActions: jbrowseExtras,
+      showDragHandle,
+      sourceFilterActive,
     },
   );
 };
@@ -955,9 +1025,8 @@ const CardRenderer: React.FC<{
   const sectionColor = useContext(SectionColorContext);
   const theme = useMantineTheme();
   const ownColor = metadata.icon_color as string | undefined;
-  const iconColor =
-    (ownColor ? (theme.colors[ownColor]?.[6] ?? ownColor) : undefined) ||
-    (sectionColor ? theme.colors[sectionColor]?.[6] : undefined);
+  // `paletteHex` takes `orange` and the shaded `orange.4` alike.
+  const iconColor = paletteHex(theme, ownColor) || paletteHex(theme, sectionColor);
   const wrapperStyle: React.CSSProperties = {
     opacity: dimming ? 0.6 : 1,
     transition: 'opacity 120ms ease-out',

@@ -37,8 +37,8 @@ import {
   useControlsPlacement,
   useRegionEcho,
 } from './AdvancedVizInlineControls';
-import { VizControlsGrid } from './controls/VizControls';
 import { frameTiers } from './frameTiers';
+import type { OpenLocusReader } from '../jbrowse/locusForAction';
 import { usePlotSlotResize } from './plotSlotResize';
 
 /**
@@ -123,6 +123,9 @@ interface AdvancedVizFrameProps {
   dataColumns?: string[];
   /** The tile takes part in zoom sync: its row offers the switch. */
   zoomSync?: boolean;
+  /** A genomic tile says where it is looking, for the "Open in genome
+   *  browser" action (see `AdvancedVizExtrasPayload.openLocus`). */
+  openLocus?: OpenLocusReader;
   /**
    * Threshold-aware per-row annotation aligned with `dataRows` (volcano UP/DN/NS,
    * manhattan HIT/MISS, etc.). When set, the data popover prepends a `__tier`
@@ -241,6 +244,7 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
   dataRows,
   dataColumns,
   zoomSync = false,
+  openLocus,
   tierAnnotation,
   counts,
   reduction,
@@ -290,6 +294,13 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
   const onToggleRef = useRef(reduction?.onToggle);
   onToggleRef.current = reduction?.onToggle;
   const stableToggle = useCallback(() => onToggleRef.current?.(), []);
+  // Same for `openLocus`: renderers hand a callback closed over their refs, a
+  // fresh function per render, and only whether there is one belongs in the
+  // payload's identity.
+  const hasOpenLocus = Boolean(openLocus);
+  const openLocusRef = useRef(openLocus);
+  openLocusRef.current = openLocus;
+  const stableOpenLocus = useCallback(() => openLocusRef.current?.() ?? null, []);
 
   // Where this tile's controls are drawn. Resolved once by the dispatch (which
   // holds the config and the dashboard default) and read here and there, so
@@ -349,14 +360,15 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
   // Docking is what `popover` placement does on a tile with room for it: a
   // tile pinned to its strip or rail already draws its controls in place.
   // Both tiers dock, the encoding one first; the view switch heads the panel
-  // and is never folded under "More options".
+  // and is never folded under "More options". The panel lays them out itself:
+  // a column beside the plot, one compact line above it.
   const docking = useMemo(
     () =>
       primaryControls || controls ? (
-        <VizControlsGrid layout="column">
+        <>
           {primaryControls}
           {controls}
-        </VizControlsGrid>
+        </>
       ) : null,
     [primaryControls, controls],
   );
@@ -377,6 +389,7 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
     if (stripControls) payload.primaryControls = stripControls;
     if (docked) payload.docked = true;
     if (zoomSync) payload.zoomSync = true;
+    if (hasOpenLocus) payload.openLocus = stableOpenLocus;
     if (dataRows) {
       payload.data = { rows: dataRows, columns: dataColumns, tierAnnotation };
     }
@@ -395,6 +408,8 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
     stripControls,
     docked,
     zoomSync,
+    hasOpenLocus,
+    stableOpenLocus,
     dataRows,
     dataColumns,
     tierAnnotation,
@@ -650,7 +665,7 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
         </Group>
       ) : null}
       {extraBadges ? (
-        <Group gap={4} wrap="nowrap" mt={2}>
+        <Group gap={4} wrap="wrap" mt={2} style={{ rowGap: 2 }}>
           {extraBadges}
         </Group>
       ) : null}

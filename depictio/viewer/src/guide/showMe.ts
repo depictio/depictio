@@ -23,6 +23,7 @@ export type GuideTarget =
   | 'analysis'
   | 'comments'
   | 'versions'
+  | 'genome'
   | 'settings';
 
 const RING_MS = 2200;
@@ -107,6 +108,18 @@ export function findDemoTargets(target: GuideTarget, demo: ParentNode): HTMLElem
     }
     case 'versions':
       return one(first(demo, '[data-guide-version-preview]'));
+    case 'genome': {
+      // The demo's summary of the tile, and the tile itself on the canvas
+      // when it can be seen: with the Guide open it is usually under its layer.
+      const summary = first(demo, '[data-guide-genome]');
+      const index = summary?.dataset.guideGenomeTile;
+      const tile = index
+        ? document.querySelector<HTMLElement>(
+            `[data-component-index="${CSS.escape(index)}"]`,
+          )
+        : null;
+      return [...one(summary), ...(tile && isShown(tile) ? [tile] : [])];
+    }
     case 'settings':
       return [...demo.querySelectorAll<HTMLElement>('[data-guide-show]')].filter(hasBox);
   }

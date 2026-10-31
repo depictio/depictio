@@ -61,6 +61,10 @@ main_dashboard:
       Downstream ORF: '#1baf7a'
       Internal ORF: '#eda100'
       Novel ORF: '#e34948'
+    # One class per bar of the caller-agreement figure: known coding sequence or not.
+    orf_annotation:
+      Annotated CDS: '#2a78d6'
+      Outside the annotated CDS: '#e34948'
   # Persistent: drawn in every tab's filter panel, picks kept across tabs. The
   # library and assay filters read the sample sheet, the hub template.yaml links
   # to every per-library collection; the group filter reads the optional design
@@ -192,7 +196,7 @@ main_dashboard:
       3. ![](icon:mdi:dna) **Quantify** Salmon per gene, both assays · [Settings](params:pseudo_aligner) · [Sample space](tab:Sample space)
       4. ![](icon:mdi:scale-balance) **Efficiency** Footprints over mRNA, per gene · [Settings](params:te_) · [Efficiency](tab:Translational efficiency)
       5. ![](icon:mdi:compare-horizontal) **Regulation** anota2seq per contrast · [Settings](params:translational_efficiency) · [Regulation](tab:Translational regulation)
-      6. ![](icon:mdi:set-merge) **ORFs** Ribo-TISH and RiboCode · [Settings](params:orf) · [ORF discovery](tab:ORF discovery)
+      6. ![](icon:mdi:set-merge) **ORFs** Ribo-TISH and RiboCode · [Settings](params:orf) · [ORF discovery](tab:ORF discovery) · [Locus](tab:Locus)
       :::
     tag: rb-ov-steps
     index: ov-steps
@@ -328,31 +332,22 @@ main_dashboard:
       te_genes: {dc: translational_efficiency, column: gene_id, aggregation: nunique, format: integer}
       n_transl: {dc: anota2seq_regulation, column: gene_id, aggregation: nunique, filter_expr: "col('regulation_mode') == 'translation'",
         format: integer}
-      n_buffer: {dc: anota2seq_regulation, column: gene_id, aggregation: nunique, filter_expr: "col('regulation_mode') == 'buffering'",
+      n_regulated: {dc: anota2seq_regulation, column: gene_id, aggregation: nunique, filter_expr: "col('regulation_mode') != 'not regulated'",
         format: integer}
       n_new: {dc: orf_overlap, column: orf_id, aggregation: nunique, filter_expr: "(col('annotated_cds') == 0) & (col('ribotish') == 1) & (col('ribocode') == 1)",
         format: integer}
     body: |
       - **{{frame0}}%** of CDS P-sites sit in the annotated frame – median per Ribo-seq library [Ribo-seq QC](tab:Ribo-seq QC)
       - **{{te_high}}** of {{te_genes}} genes have a translational efficiency of 2 or more – pooled over the run [Efficiency](tab:Translational efficiency)
-      - **{{n_transl}}** genes change translation, **{{n_buffer}}** are buffered – anota2seq, contrasts in view [Regulation](tab:Translational regulation)
-      - **{{n_new}}** ORFs outside the annotated CDS are called by both Ribo-TISH and RiboCode – the best supported [ORFs](tab:ORF discovery)
+      - **{{n_transl}}** genes change translation beyond their mRNA level, of **{{n_regulated}}** regulated in any mode – anota2seq, contrasts in view [Regulation](tab:Translational regulation)
+      - **{{n_new}}** ORFs outside the annotated CDS are called by both Ribo-TISH and RiboCode – the best supported; the genome browser opens on the top-ranked one [ORFs](tab:ORF discovery) · [Locus](tab:Locus)
     section: Findings
     tag: rb-ov-findings
     index: ov-findings
     layout: {x: 0, y: 0, w: 8, h: 2}
-  # One highlight per tab with a result, in the order of the rows above: the
-  # metagene profile stands for Ribo-seq QC, the run's first question.
-  - component_type: highlight
-    section: Findings
-    source_tab: Ribo-seq QC
-    source_component: rq-start-profile
-    # The legend lists every library and takes a third of the tile.
-    hide_legend: true
-    caption: One curve per Ribo-seq library; a phased library peaks at the start codon, then every three nucleotides.
-    tag: rb-ov-hl-start-profile
-    index: ov-hl-start-profile
-    layout: {x: 0, y: 2, w: 4, h: 4}
+  # One highlight per Translation or ORF tab, in the order of the rows above. The
+  # Ribo-seq QC result (the phasing) is the first Findings row and the frame-0
+  # card; its metagene profile stays on its own tab.
   - component_type: highlight
     section: Findings
     source_tab: Translational efficiency
@@ -360,7 +355,7 @@ main_dashboard:
     caption: One point per gene; above the diagonal, more footprints than its mRNA level predicts.
     tag: rb-ov-hl-te-plane
     index: ov-hl-te-plane
-    layout: {x: 4, y: 2, w: 4, h: 4}
+    layout: {x: 0, y: 2, w: 4, h: 4}
   - component_type: highlight
     section: Findings
     source_tab: Translational regulation
@@ -368,15 +363,15 @@ main_dashboard:
     caption: One point per gene and contrast, coloured by mode; off the diagonal, translation changes on its own.
     tag: rb-ov-hl-fold-change
     index: ov-hl-fold-change
-    layout: {x: 0, y: 6, w: 4, h: 4}
+    layout: {x: 4, y: 2, w: 4, h: 4}
   - component_type: highlight
     section: Findings
     source_tab: ORF discovery
     source_component: orf-caller-upset
-    caption: ORFs per combination of callers and annotation; the bars without the annotated CDS are new ORFs.
+    caption: ORFs by the callers that report them, split into the annotated CDS and new ORFs; compare the share of new ORFs when both callers agree with each caller alone.
     tag: rb-ov-hl-orf-upset
     index: ov-hl-orf-upset
-    layout: {x: 4, y: 6, w: 4, h: 4}
+    layout: {x: 0, y: 6, w: 8, h: 4}
   # Link-only tab tiles: each tile prints its tab's subtitle, the question the
   # tab answers. A tab the run does not have is left out, and a heading whose
   # tabs are all missing is hidden.
@@ -393,6 +388,7 @@ main_dashboard:
 
       ### ORFs
       - [ORF discovery](tab:ORF discovery)
+      - [Locus](tab:Locus)
     section: How to read this dashboard
     tag: rb-ov-how-to-read
     index: ov-how-to-read
@@ -493,14 +489,10 @@ tabs:
     icon: mdi:dna
     color: orange
     description: The reads SortMeRNA matched to rRNA, then what STAR placed on the genome
-  - name: Footprint quality
-    icon: mdi:ruler
-    color: orange
-    description: Reading-frame proportions and footprint lengths, as Ribo-TISH measured them
   - name: QC details
     icon: mdi:file-document-outline
     color: gray
-    description: The remaining FastQC, samtools and Salmon panels
+    description: The remaining FastQC, samtools and Salmon panels, and Ribo-TISH's frame and length panels
     collapsed: true
   components:
   # The tab's intro: the method, with its link, and how to read the tab.
@@ -594,20 +586,20 @@ tabs:
     use: multiqc/ribotish
     selected_module: ribotish
     selected_plot: Reading Frame Proportions
-    section: Footprint quality
+    section: QC details
     tag: rb-mqc-ribotish-frames
     title: Reading frame proportions
-    layout: {x: 0, y: 0, w: 4, h: 4}
+    layout: {x: 0, y: 12, w: 4, h: 4}
   - component_type: multiqc
     workflow_tag: riboseq
     data_collection_tag: multiqc_data
     use: multiqc/ribotish
     selected_module: ribotish
     selected_plot: Read Length Distribution
-    section: Footprint quality
+    section: QC details
     tag: rb-mqc-ribotish-length
     title: Footprint length distribution
-    layout: {x: 4, y: 0, w: 4, h: 4}
+    layout: {x: 4, y: 12, w: 4, h: 4}
   - component_type: multiqc
     workflow_tag: riboseq
     data_collection_tag: multiqc_data
@@ -689,9 +681,9 @@ tabs:
     color: grape
     description: P-site signal around the start and the stop codon
   - name: Libraries
-    icon: mdi:chart-scatter-plot
+    icon: mdi:chart-bar
     color: grape
-    description: Each library's phasing against its CDS share, and its footprint lengths
+    description: Each library's frame margin and CDS share, sorted and coloured by design group, and its footprint lengths
   - name: Library detail
     icon: mdi:table
     color: gray
@@ -705,7 +697,8 @@ tabs:
       [riboWaltz](https://github.com/LabTranslationalArchitectomics/riboWaltz) places the
       P-site of each footprint and checks that it steps one codon at a time. Look for a
       frame-0 share well above a third in the CDS and P-sites enriched in the CDS; a library
-      that fails both is not reporting translation.
+      that fails both is not reporting translation. Ribo-TISH's own frame and length panels
+      are under QC details of [MultiQC](tab:MultiQC).
     tag: rb-rq-intro
     index: rq-intro
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -750,7 +743,7 @@ tabs:
     secondary_layout: histogram
     display:
       icon_name: mdi:counter
-      icon_color: indigo
+      icon_color: grape.4
       caption: total; its spread over libraries
     section: Periodicity at a glance
     tag: rb-rq-card-psites
@@ -770,7 +763,7 @@ tabs:
     secondary_layout: box_plot
     display:
       icon_name: mdi:waves
-      icon_color: grape
+      icon_color: grape.6
       caption: median, with its spread
       decimals: 1
     section: Periodicity at a glance
@@ -792,14 +785,14 @@ tabs:
     threshold_warn: 10
     display:
       icon_name: mdi:alert-outline
-      icon_color: orange
+      icon_color: grape.8
       caption: lowest; libraries at 20 points or more pass
       decimals: 1
     section: Periodicity at a glance
     tag: rb-rq-card-margin
     index: rq-card-margin
     title: Frame margin (points)
-    description: Frame-0 share minus the larger of the two other frames, for the weakest library in view.
+    description: Frame-0 share of the CDS P-sites minus the larger of the two other frames, for the weakest library in view. A margin of 20 points passes and 10 warns; these are the template's working cut-offs, and with no periodicity the margin is near 0.
     layout: {x: 4, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: riboseq
@@ -813,7 +806,7 @@ tabs:
     coverage_max: 100
     display:
       icon_name: mdi:dna
-      icon_color: teal
+      icon_color: grape.9
       caption: median share, 0 to 100
       decimals: 1
     section: Periodicity at a glance
@@ -853,7 +846,7 @@ tabs:
     tag: rb-rq-start-profile
     index: rq-start-profile
     title: P-sites around the start codon
-    description: A phased library peaks at the start codon and repeats every three nucleotides along the CDS.
+    description: The vertical line is the start codon (distance 0). A phased library peaks there and repeats every three nucleotides along the CDS.
     layout: {x: 0, y: 0, w: 4, h: 6}
   - component_type: advanced_viz
     workflow_tag: riboseq
@@ -870,27 +863,49 @@ tabs:
     tag: rb-rq-stop-profile
     index: rq-stop-profile
     title: P-sites around the stop codon
-    description: The three-nucleotide pattern should run up to the stop codon and fade after it, where ribosomes release.
+    description: The vertical line is the stop codon (distance 0). The three-nucleotide pattern should run up to it and fade after it, where ribosomes release.
     layout: {x: 4, y: 0, w: 4, h: 6}
-  - component_type: advanced_viz
+  # Six libraries or so: a scatter of two shares would be a handful of points.
+  # Sorted bars carry the same readings, coloured by the design group and
+  # labelled by the library's description; the frame margin carries the lines of
+  # the Frame margin card (20 passes, 10 warns), so the figure and the card agree.
+  - component_type: figure
     workflow_tag: riboseq
     data_collection_tag: ribowaltz_summary
-    use: ribowaltz/phasing_plane
-    config:
-      x_title: P-sites in CDS (%)
-      y_title: Frame 0 in CDS (%)
-      reference_line: horizontal
-      reference_value: 33.3
-      reference_highlight: above
-      top_n_labels: 0
-      selection_enabled: true
-      selection_column: sample
-      legend_pos: bottom
+    use: ribowaltz/library_summary
+    visu_type: bar
+    mode: code
+    code_content: |-
+      # Frame margin (frame-0 share of the CDS P-sites minus the larger of the two other frames, in points) and CDS share of all P-sites per library, sorted by margin and coloured by the design group. Dashed line at 20 points: the margin a library should reach; dotted line at 10: the warning level. Both are the template's working cut-offs (the Frame margin card's threshold_value and threshold_warn in the ribowaltz/library_summary catalog entry), not riboWaltz's. With no periodicity the three frames hold a third each, so the margin is near 0. The CDS share panel has no cut-off.
+      names = {'frame_bias': 'Frame margin (points)', 'cds_pct': 'P-sites in CDS (%)'}
+      grp = depictio_group_by[0] if depictio_group_by else '{GROUP_COL}'
+      colors = depictio_group_kwargs.get('color_discrete_map') or depictio_category_colors.get('{GROUP_COL}') or {}
+      grouped = grp in df.columns
+      d = df.filter(pl.col('frame_bias').is_not_null())
+      d = d if grouped else d.with_columns(pl.lit('All libraries').alias(grp))
+      lab = 'sample_description' if 'sample_description' in d.columns else 'sample'
+      d = d.with_columns(pl.col(lab).fill_null(pl.col('sample')).alias('library')).sort(['frame_bias', 'sample'])
+      long = d.select(['sample', 'library', grp, *names.keys()]).unpivot(index=['sample', 'library', grp], variable_name='metric', value_name='value').with_columns(pl.col('metric').replace(names))
+      fig = px.bar(long.to_pandas(), x='value', y='library', color=grp, color_discrete_map=colors, facet_col='metric', orientation='h', custom_data=['sample'], category_orders={'library': d.get_column('library').to_list(), 'metric': list(names.values())}, labels={'value': '', 'library': '', grp: ''})
+      fig.update_xaxes(matches=None, showticklabels=True)
+      fig.update_xaxes(range=[0, 100], col=2)
+      if not d.is_empty():
+          fig.update_xaxes(range=[min(0.0, float(d['frame_bias'].min())), max(25.0, float(d['frame_bias'].max()) * 1.05)], col=1)
+      fig.update_yaxes(automargin=True)
+      fig.for_each_annotation(lambda a: a.update(text=a.text.split('=')[-1]))
+      fig.add_vline(x=20, line_dash='dash', line_width=1, opacity=0.6, annotation_text='pass 20', col=1)
+      fig.add_vline(x=10, line_dash='dot', line_width=1, opacity=0.6, annotation_text='warn 10', col=1)
+      fig.update_layout(margin=dict(t=30), showlegend=grouped, legend=dict(orientation='h', y=-0.12, title_text=''))
+    selection_enabled: true
+    selection_column: sample
     section: Libraries
     tag: rb-rq-phasing
-    index: rq-phasing-plane
-    title: Phasing against CDS share
-    description: One point per Ribo-seq library, sized by P-sites. The line is one third, the share of a library with no periodicity.
+    index: rq-phasing
+    title: Phasing and CDS share per library
+    description: >-
+      Libraries sorted by frame margin, the best on top, coloured by design group and named by their description; click one to read its record.
+      Left, the frame margin is the frame-0 share of the CDS P-sites minus the larger of the other two frames, in points: the dashed line at 20 is the margin to reach and the dotted line at 10 the warning level, the template's working cut-offs as on the Frame margin card.
+      Right is the CDS share of all P-sites, without a cut-off; with no periodicity each frame holds a third and the margin is near 0.
     layout: {x: 0, y: 0, w: 4, h: 6}
   - component_type: advanced_viz
     workflow_tag: riboseq
@@ -922,7 +937,7 @@ tabs:
     title: P-sites per transcript region
     description: Share of each library's P-sites in the 5' UTR, CDS and 3' UTR. The share expected from length alone is in the region table below.
     layout: {x: 0, y: 0, w: 8, h: 5}
-  # Master and detail: a picked row (or a point on the phasing plane) is the
+  # Master and detail: a picked row (or a library on the phasing bars) is the
   # selection the record card follows.
   - component_type: table
     workflow_tag: riboseq
@@ -953,7 +968,7 @@ tabs:
     tag: rb-rq-record
     index: rq-record
     title: Library record
-    description: The library picked in the table or on the phasing plane, as a fact panel.
+    description: The library picked in the table or on the phasing bars, as a fact panel.
     layout: {x: 5, y: 5, w: 3, h: 6}
   - component_type: table
     workflow_tag: riboseq
@@ -1021,7 +1036,8 @@ tabs:
     index: sp-expressed-filter
     title: Genes expressed
     layout: {x: 0, y: 0, w: 1, h: 3}
-  # One row per library, so a count splits into the groups as parts of a whole.
+  # A plain count: the sheet's leading factor splits the libraries evenly by
+  # design (as many footprint as mRNA libraries), so a ring would say nothing.
   - component_type: card
     workflow_tag: riboseq
     data_collection_tag: sample_pca
@@ -1029,17 +1045,15 @@ tabs:
     aggregation: count
     column_name: sample_id
     column_type: object
-    secondary_layout: donut
-    breakdown_col: group
     display:
       icon_name: mdi:flask-outline
-      icon_color: violet
-      caption: one point each, by group
+      icon_color: cyan.4
+      caption: one point each on the PCA
     section: Libraries at a glance
     tag: rb-sp-card-libraries
     index: sp-card-libraries
     title: Libraries placed
-    description: Libraries on the PCA, split by the sheet's leading factor (the assay on a riboseq sheet).
+    description: Libraries on the PCA, both assays together.
     layout: {x: 0, y: 0, w: 2, h: 2}
   # Every gene of the merged matrix carries a symbol, so a completeness bar
   # read 100%: the detected genes per library say more.
@@ -1053,7 +1067,7 @@ tabs:
     secondary_layout: histogram
     display:
       icon_name: mdi:dna
-      icon_color: cyan
+      icon_color: cyan.6
       caption: median per library, its distribution
       decimals: 0
     section: Libraries at a glance
@@ -1073,7 +1087,7 @@ tabs:
     secondary_layout: box_plot
     display:
       icon_name: mdi:chart-bell-curve
-      icon_color: teal
+      icon_color: cyan.8
       caption: median per library, with its spread
       decimals: 0
     section: Libraries at a glance
@@ -1093,7 +1107,7 @@ tabs:
     secondary_layout: box_plot
     display:
       icon_name: mdi:sigma
-      icon_color: blue
+      icon_color: cyan.9
       caption: median per library, with its spread
       decimals: 2
     section: Libraries at a glance
@@ -1107,7 +1121,9 @@ tabs:
     data_collection_tag: sample_pca
     use: salmon/pca
     config:
-      color_col: group
+      # The design group (GROUP_COL), a column the sample_pca recipe adds; the
+      # catalog's `group` (the assay on a riboseq sheet) stays a Colour-by option.
+      color_col: '{GROUP_COL}'
       point_size: 12
       # No centroid marks: a group's centroid label covers its replicates.
       show_centroids: false
@@ -1119,7 +1135,7 @@ tabs:
     tag: rb-sp-pca
     index: sp-pca
     title: Library PCA on Salmon TPMs
-    description: One point per library, coloured by the sheet's leading factor; colour by any other sheet column from the controls. A lasso filters the linked panels.
+    description: One point per library, coloured by the design group ({GROUP_COL_DISPLAY}). The first component usually splits the two assays, so read the design on the next ones; colour by the assay or any other sheet column from the controls. A lasso filters the linked panels.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: riboseq
@@ -1143,7 +1159,7 @@ tabs:
       selection_source: any
       linked_component: rb-sp-table
       sections:
-        Library: [sample_id, group]
+        Library: [sample_id, '{GROUP_COL}', group]
         Expression: [genes_detected, genes_expressed, median_tpm]
         Position: [dim_1, dim_2, dim_3]
     section: Library rows
@@ -1236,7 +1252,7 @@ tabs:
     secondary_layout: histogram
     display:
       icon_name: mdi:dna
-      icon_color: cyan
+      icon_color: teal.4
       caption: by the Ribo-seq libraries that see them
     section: Efficiency at a glance
     tag: rb-te-card-genes
@@ -1254,7 +1270,7 @@ tabs:
     secondary_layout: box_plot
     display:
       icon_name: mdi:scale-balance
-      icon_color: teal
+      icon_color: teal.6
       caption: median over genes, with its spread
       decimals: 2
     section: Efficiency at a glance
@@ -1263,41 +1279,46 @@ tabs:
     title: Efficiency (log2)
     description: Median log2 of Ribo-seq CPM over RNA-seq CPM; 0 is a gene translated in line with its mRNA.
     layout: {x: 2, y: 0, w: 2, h: 2}
+  # Genes past a fold in either direction: how many carry more, and how many
+  # fewer, ribosomes than their mRNA level predicts. The bars spread them by
+  # their own efficiency.
   - component_type: card
     workflow_tag: riboseq
     data_collection_tag: translational_efficiency
-    aggregation: median
-    column_name: log2_ribo_cpm
+    aggregation: count
+    column_name: log2_te
     column_type: float64
+    filter_expr: col('log2_te') >= 1
     secondary_layout: histogram
     display:
-      icon_name: mdi:waves
-      icon_color: grape
-      caption: median, its distribution over genes
-      decimals: 2
+      icon_name: mdi:trending-up
+      icon_color: teal.8
+      caption: efficiency of those genes, log2
+      decimals: 0
     section: Efficiency at a glance
-    tag: rb-te-card-ribo
-    index: te-card-ribo
-    title: Ribo-seq log2(CPM + 1)
-    description: Median footprint abundance of the genes in view.
+    tag: rb-te-card-high
+    index: te-card-high
+    title: Efficiency of 2 or more
+    description: Genes with at least twice as many footprints as their mRNA level predicts (log2 efficiency of 1 or more).
     layout: {x: 4, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: riboseq
     data_collection_tag: translational_efficiency
-    aggregation: median
-    column_name: log2_rna_cpm
+    aggregation: count
+    column_name: log2_te
     column_type: float64
+    filter_expr: col('log2_te') <= -1
     secondary_layout: histogram
     display:
-      icon_name: mdi:chart-bell-curve
-      icon_color: blue
-      caption: median, its distribution over genes
-      decimals: 2
+      icon_name: mdi:trending-down
+      icon_color: teal.9
+      caption: efficiency of those genes, log2
+      decimals: 0
     section: Efficiency at a glance
-    tag: rb-te-card-rna
-    index: te-card-rna
-    title: RNA-seq log2(CPM + 1)
-    description: Median mRNA abundance of the genes in view.
+    tag: rb-te-card-low
+    index: te-card-low
+    title: Efficiency of 0.5 or less
+    description: Genes with at most half the footprints their mRNA level predicts (log2 efficiency of -1 or less).
     layout: {x: 6, y: 0, w: 2, h: 2}
   - component_type: advanced_viz
     workflow_tag: riboseq
@@ -1327,7 +1348,7 @@ tabs:
     tag: rb-te-plane
     index: te-plane
     title: Ribo-seq against RNA-seq abundance
-    description: One point per gene, coloured by log2 efficiency. The diagonal is equal efficiency; a picked point opens its record in Gene detail.
+    description: One point per gene, coloured by log2 efficiency. On the diagonal Ribo-seq and RNA-seq abundance are equal (log2 efficiency 0); above it a gene carries more footprints than its mRNA level predicts. A picked point opens its record in Gene detail.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: riboseq
@@ -1382,7 +1403,7 @@ tabs:
   - name: Regulation at a glance
     icon: mdi:counter
     color: indigo
-    description: Regulated calls by mode and direction, and how strong the translation effect is
+    description: Regulated calls by mode and direction, how strong the translation effect is, and the p-values behind it
   - name: Fold-change plane
     icon: mdi:chart-scatter-plot
     color: indigo
@@ -1484,7 +1505,7 @@ tabs:
     breakdown_col: regulation_mode
     display:
       icon_name: mdi:chart-donut
-      icon_color: indigo
+      icon_color: indigo.4
       caption: calls, by mode
     section: Regulation at a glance
     tag: rb-tr-card-regulated
@@ -1504,7 +1525,7 @@ tabs:
     breakdown_col: direction
     display:
       icon_name: mdi:trending-up
-      icon_color: red
+      icon_color: indigo.6
       caption: calls, up and down
     section: Regulation at a glance
     tag: rb-tr-card-translation
@@ -1519,39 +1540,40 @@ tabs:
     aggregation: median
     column_name: translation_effect
     column_type: float64
+    filter_expr: col('regulation_mode') == 'translation'
     aggregations: [box_plot_stats]
     secondary_layout: box_plot
     display:
       icon_name: mdi:chart-bell-curve
-      icon_color: grape
-      caption: median over genes, with its spread
+      icon_color: indigo.8
+      caption: median over translation genes, with its spread
       decimals: 2
     section: Regulation at a glance
     tag: rb-tr-card-effect
     index: tr-card-effect
     title: Translation effect (log2)
-    description: Change in ribosome-bound mRNA not explained by total mRNA, over the genes in view.
+    description: Change in ribosome-bound mRNA not explained by total mRNA, over the genes called translation-regulated. Over every gene it would sit at 0; its sign here says which direction dominates.
     layout: {x: 4, y: 0, w: 2, h: 2}
+  # One row per contrast and gene. The bars spread the raw p-values of the
+  # translation analysis: a spike near 0 is signal, a flat histogram is none.
   - component_type: card
     workflow_tag: riboseq
     data_collection_tag: anota2seq_regulation
     use: anota2seq/regulation
-    aggregation: min
-    column_name: translation_padj
+    aggregation: count
+    column_name: translation_pvalue
     column_type: float64
-    secondary_layout: threshold
-    threshold_value: 0.15
-    threshold_direction: max
+    filter_expr: col('translation_pvalue').is_not_null()
+    secondary_layout: histogram
     display:
       icon_name: mdi:check-decagram
-      icon_color: orange
-      caption: smallest; genes at or under 0.15 pass
-      decimals: 3
+      icon_color: indigo.9
+      caption: raw p-values; a spike near 0 is signal
     section: Regulation at a glance
     tag: rb-tr-card-padj
     index: tr-card-padj
-    title: Best adjusted p
-    description: Smallest adjusted p-value of the translation analysis, against anota2seq's default cut-off of 0.15.
+    title: Genes tested
+    description: Genes anota2seq tested for a translation effect, one per contrast. The bars spread their raw p-values.
     layout: {x: 6, y: 0, w: 2, h: 2}
   - component_type: advanced_viz
     workflow_tag: riboseq
@@ -1574,7 +1596,7 @@ tabs:
     tag: rb-tr-plane
     index: tr-fold-change-plane
     title: Ribosome-bound against total mRNA change
-    description: One point per gene, coloured by regulatory mode. On the diagonal, the mRNA level drives the change; off it, translation does.
+    description: One point per gene, coloured by regulatory mode. The diagonal marks an equal change in ribosome-bound and total mRNA, so the mRNA level drives the change; off it, translation does.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: advanced_viz
     workflow_tag: riboseq
@@ -1597,7 +1619,7 @@ tabs:
     tag: rb-tr-volcano
     index: tr-translation-volcano
     title: Translation effect against significance
-    description: The translation analysis; the View switch draws the QQ plot of its raw p-values. The dashed lines are anota2seq's defaults, adjusted p 0.15 and a 1.2-fold change.
+    description: The translation analysis; the View switch draws the QQ plot of its raw p-values. The dotted lines are anota2seq's defaults, adjusted p 0.15 and a 1.2-fold change (0.263 in log2).
     layout: {x: 0, y: 0, w: 4, h: 6}
   - component_type: advanced_viz
     workflow_tag: riboseq
@@ -1618,7 +1640,7 @@ tabs:
     tag: rb-tr-analysis-volcano
     index: tr-analysis-volcano
     title: Each anota2seq analysis
-    description: The same plot for one analysis at a time; pick total mRNA, ribosome-bound mRNA, translation or buffering with the analysis filter.
+    description: The same plot for one analysis at a time; pick total mRNA, ribosome-bound mRNA, translation or buffering with the analysis filter. The dotted lines are the same anota2seq defaults, adjusted p 0.15 and a 1.2-fold change (0.263 in log2).
     layout: {x: 4, y: 0, w: 4, h: 6}
   - component_type: table
     workflow_tag: riboseq
@@ -1676,18 +1698,14 @@ tabs:
     icon: mdi:counter
     color: pink
     description: How many ORFs each caller reported, of which class and length
-  - name: ORF classes per library
-    icon: mdi:chart-bar
-    color: pink
-    description: The share of each ORF class per library, for each caller
   - name: Caller agreement
     icon: mdi:set-merge
     color: pink
     description: Which ORFs one caller, both, or the annotation support
-  - name: ORF detail
-    icon: mdi:table
+  - name: ORF classes per library
+    icon: mdi:chart-bar
     color: gray
-    description: The pooled ORFs with the record of the one picked
+    description: The share of each ORF class per library, for each caller
     collapsed: true
   - name: Calls per library
     icon: mdi:table
@@ -1702,7 +1720,8 @@ tabs:
       [Ribo-TISH](https://github.com/zhpn1024/ribotish) and
       [RiboCode](https://github.com/xryanglab/RiboCode) call translated ORFs from different
       signals, compared here on their stop codon. ORFs outside the annotated CDS that both
-      callers report are the best supported new candidates.
+      callers report are the best supported new candidates. The [Locus](tab:Locus) tab lists
+      them and shows the footprints of the one you pick on the genome.
     tag: rb-orf-intro
     index: orf-intro
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -1762,7 +1781,7 @@ tabs:
     breakdown_col: orf_class
     display:
       icon_name: mdi:set-merge
-      icon_color: pink
+      icon_color: pink.4
       caption: pooled over libraries, by class
     section: ORFs at a glance
     tag: rb-orf-card-pooled
@@ -1784,7 +1803,7 @@ tabs:
     secondary_layout: histogram
     display:
       icon_name: mdi:magnify-scan
-      icon_color: grape
+      icon_color: pink.6
       caption: ORFs, by the libraries reporting them
     section: ORFs at a glance
     tag: rb-orf-card-ribotish
@@ -1802,7 +1821,7 @@ tabs:
     secondary_layout: histogram
     display:
       icon_name: mdi:sine-wave
-      icon_color: violet
+      icon_color: pink.8
       caption: ORFs, by the libraries reporting them
     section: ORFs at a glance
     tag: rb-orf-card-ribocode
@@ -1820,7 +1839,7 @@ tabs:
     secondary_layout: box_plot
     display:
       icon_name: mdi:ruler
-      icon_color: indigo
+      icon_color: pink.9
       caption: median, with its spread
       decimals: 0
     section: ORFs at a glance
@@ -1852,58 +1871,32 @@ tabs:
     title: ORF classes per library
     description: Share of each library's ORFs per class. The tile opens on Ribo-TISH and the level switch changes the caller; the annotated CDS dominates, so compare the other classes.
     layout: {x: 0, y: 0, w: 8, h: 5}
-  - component_type: advanced_viz
+  - component_type: figure
     workflow_tag: riboseq
     data_collection_tag: orf_overlap
-    viz_kind: upset_plot
-    config:
-      viz_kind: upset_plot
-      set_columns: [ribotish, ribocode, annotated_cds]
-      sort_by: cardinality
-      sort_order: descending
-      min_size: 1
-      show_set_sizes: true
-      color_intersections_by: degree
-      default_annotation_cols: [orf_class]
+    visu_type: bar
+    mode: code
+    code_content: |-
+      # ORFs by which caller reports them (both, or one), split by whether they are the annotated CDS; the note at the end of a bar is its share of new ORFs. Three bars replace the UpSet of the same three sets.
+      d = df.with_columns(pl.when((pl.col('ribotish') == 1) & (pl.col('ribocode') == 1)).then(pl.lit('Both callers')).when(pl.col('ribotish') == 1).then(pl.lit('Ribo-TISH only')).otherwise(pl.lit('RiboCode only')).alias('support'), pl.when(pl.col('annotated_cds') == 1).then(pl.lit('Annotated CDS')).otherwise(pl.lit('Outside the annotated CDS')).alias('status'))
+      g = d.group_by('support', 'status').len().rename({'len': 'orfs'})
+      tot = g.group_by('support').agg(pl.col('orfs').sum().alias('total'))
+      order = [s for s in ['Both callers', 'Ribo-TISH only', 'RiboCode only'] if s in tot['support'].to_list()]
+      colors = depictio_category_colors.get('orf_annotation') or {}
+      fig = go.Figure(layout=go.Layout(barmode='stack', bargap=0.35, margin=dict(t=10, r=10), xaxis=dict(title='ORFs', range=[0, float(tot['total'].max()) * 1.18]), yaxis=dict(autorange='reversed', categoryorder='array', categoryarray=order, automargin=True), legend=dict(orientation='h', y=-0.25, title_text='', traceorder='normal')))
+      for st in ['Annotated CDS', 'Outside the annotated CDS']:
+          s = g.filter(pl.col('status') == st)
+          fig.add_bar(y=s['support'].to_list(), x=s['orfs'].to_list(), orientation='h', name=st, marker_color=colors.get(st), texttemplate='%{x:,}', textposition='inside', textangle=0, insidetextanchor='middle', hovertemplate='%{y}: %{x:,} ORFs<extra>' + st + '</extra>')
+      new = g.filter(pl.col('status') != 'Annotated CDS')
+      for sup, total in zip(tot['support'].to_list(), tot['total'].to_list()):
+          n_new = int(new.filter(pl.col('support') == sup)['orfs'].sum())
+          fig.add_annotation(x=total, y=sup, text='%d%% new' % round(100 * n_new / max(total, 1)), xanchor='left', yanchor='middle', xshift=6, showarrow=False)
     section: Caller agreement
     tag: rb-orf-upset
     index: orf-caller-upset
     title: ORFs per caller and annotation
-    description: Each bar counts the ORFs in one combination of Ribo-TISH, RiboCode and the annotated CDS. New ORFs both callers report sit in the bar without the annotation.
-    layout: {x: 0, y: 0, w: 8, h: 5}
-  - component_type: table
-    workflow_tag: riboseq
-    data_collection_tag: orf_overlap
-    row_selection_enabled: true
-    row_selection_column: orf_id
-    section: ORF detail
-    tag: rb-orf-table-pooled
-    index: orf-table-pooled
-    title: ORFs pooled over libraries
-    description: One row per ORF with its caller support; a picked row opens its record and narrows the per-library calls.
-    layout: {x: 0, y: 0, w: 5, h: 6}
-  - component_type: advanced_viz
-    workflow_tag: riboseq
-    data_collection_tag: orf_overlap
-    viz_kind: record_card
-    config:
-      viz_kind: record_card
-      id_col: orf_id
-      title_col: gene_name
-      selection_source: any
-      linked_component: rb-orf-table-pooled
-      sections:
-        ORF: [orf_id, orf_class, aa_length]
-        Gene: [gene_name, gene_id, gene_type]
-        Support: [ribotish, ribocode, annotated_cds, ribotish_libraries, ribocode_libraries]
-      link_templates:
-        gene_id: "https://www.ensembl.org/id/{value}"
-    section: ORF detail
-    tag: rb-orf-record
-    index: orf-record
-    title: ORF record
-    description: The ORF picked in the table, its gene and which caller reported it in how many libraries.
-    layout: {x: 5, y: 0, w: 3, h: 6}
+    description: Each bar counts the ORFs reported by both callers or by one, split into the annotated CDS and the rest, which are new ORFs. The note at the end of a bar is its share of new ORFs.
+    layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: table
     workflow_tag: riboseq
     data_collection_tag: ribotish_orfs
@@ -1926,3 +1919,231 @@ tabs:
     title: RiboCode calls per library
     description: One row per library and ORF with the RiboCode type, frame-0 P-sites and adjusted p-value.
     layout: {x: 0, y: 6, w: 8, h: 6}
+
+- title: Locus
+  subtitle: Where does an ORF sit, and do the footprints agree?
+  tab_group: ORFs
+  tab_order: 7
+  tab_icon: mdi:map-marker-outline
+  tab_icon_color: blue
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Locus filters
+    icon: mdi:filter-variant
+    color: blue
+    description: These picks narrow the cards and the table, and the ORFs the browser steps through
+  grid_sections:
+  - name: ORFs at a glance
+    icon: mdi:counter
+    color: blue
+    description: The ORFs in view, how many are new and where they sit
+  - name: ORF at its locus
+    icon: mdi:dna
+    color: blue
+    description: Pick an ORF; its record and the footprints over its span follow.
+  components:
+  # The tab's intro: how the browser is framed, and what the span means.
+  - component_type: text
+    order: 1
+    body: >
+      The browser opens on the top-ranked ORF (new ORFs both callers report first, then new ORFs
+      one caller reports, then annotated CDSs both report); pick a row in the table to move it to
+      that ORF. The span is approximate: the stop codon coordinate pushed back 3 bases per amino
+      acid, so an ORF split over exons reaches further than the frame shown. Contigs are named as
+      in the reference (1, 2, X, MT).
+    tag: rb-loc-intro
+    index: loc-intro
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: interactive
+    workflow_tag: riboseq
+    data_collection_tag: orf_overlap
+    interactive_component_type: MultiSelect
+    column_name: orf_class
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: blue
+    section: Locus filters
+    group: Locus
+    tag: rb-loc-filter-class
+    index: loc-class-filter
+    title: ORF class
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: riboseq
+    data_collection_tag: orf_overlap
+    interactive_component_type: MultiSelect
+    column_name: gene_name
+    column_type: object
+    display:
+      icon_name: mdi:dna
+      custom_color: cyan
+    section: Locus filters
+    group: Locus
+    tag: rb-loc-filter-gene
+    index: loc-gene-filter
+    title: Gene
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: riboseq
+    data_collection_tag: orf_overlap
+    interactive_component_type: RangeSlider
+    column_name: aa_length
+    column_type: int64
+    display:
+      icon_name: mdi:ruler
+      custom_color: indigo
+    section: Locus filters
+    group: Locus
+    tag: rb-loc-filter-length
+    index: loc-length-filter
+    title: Protein length (aa)
+    layout: {x: 0, y: 6, w: 1, h: 3}
+  # The strip counts the ORFs in view; the blues run light to dark across it.
+  - component_type: card
+    workflow_tag: riboseq
+    data_collection_tag: orf_overlap
+    aggregation: count
+    column_name: orf_id
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: orf_class
+    display:
+      icon_name: mdi:set-merge
+      icon_color: blue.4
+      caption: in view, by class
+    section: ORFs at a glance
+    tag: rb-loc-card-orfs
+    index: loc-card-orfs
+    title: ORFs
+    description: ORFs either caller reported in at least one library, split by class.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: riboseq
+    data_collection_tag: orf_overlap
+    aggregation: count
+    column_name: orf_id
+    column_type: object
+    filter_expr: (col('annotated_cds') == 0) & (col('ribotish') == 1) & (col('ribocode') == 1)
+    display:
+      icon_name: mdi:star-circle-outline
+      icon_color: blue.6
+      caption: outside the annotated CDS, both callers
+    section: ORFs at a glance
+    tag: rb-loc-card-new
+    index: loc-card-new
+    title: New ORFs, both callers
+    description: ORFs outside the annotated CDS that Ribo-TISH and RiboCode both reported, the best supported new candidates.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: riboseq
+    data_collection_tag: orf_overlap
+    aggregation: nunique
+    column_name: gene_name
+    column_type: object
+    display:
+      icon_name: mdi:dna
+      icon_color: blue.8
+      caption: with a gene symbol
+    section: ORFs at a glance
+    tag: rb-loc-card-genes
+    index: loc-card-genes
+    title: Genes
+    description: Distinct gene symbols of the ORFs in view; an ORF outside any annotated gene has none.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: riboseq
+    data_collection_tag: orf_overlap
+    aggregation: median
+    column_name: aa_length
+    column_type: int64
+    display:
+      icon_name: mdi:ruler
+      icon_color: blue.9
+      caption: median, amino acids
+      decimals: 0
+    section: ORFs at a glance
+    tag: rb-loc-card-length
+    index: loc-card-length
+    title: Protein length (aa)
+    description: Median length of the ORFs in view, the longest either caller reported.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: table
+    workflow_tag: riboseq
+    data_collection_tag: orf_overlap
+    row_selection_enabled: true
+    row_selection_column: orf_id
+    # One ORF at a time: the browser below frames one ORF.
+    row_selection_mode: single
+    section: ORF at its locus
+    tag: rb-loc-table-pooled
+    index: loc-table-pooled
+    title: ORFs pooled over libraries
+    description: One row per ORF with its caller support; a picked row opens its record and moves the browser below.
+    layout: {x: 0, y: 0, w: 5, h: 5}
+  - component_type: advanced_viz
+    workflow_tag: riboseq
+    data_collection_tag: orf_overlap
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      id_col: orf_id
+      title_col: gene_name
+      selection_source: any
+      linked_component: rb-loc-table-pooled
+      sections:
+        ORF: [orf_id, orf_class, aa_length]
+        Gene: [gene_name, gene_id, gene_type]
+        Support: [ribotish, ribocode, annotated_cds, ribotish_libraries, ribocode_libraries]
+      link_templates:
+        gene_id: "https://www.ensembl.org/id/{value}"
+    section: ORF at its locus
+    tag: rb-loc-record
+    index: loc-record
+    title: ORF record
+    description: The ORF picked in the table, its gene and which caller reported it in how many libraries.
+    layout: {x: 5, y: 0, w: 3, h: 5}
+  # The footprints on the ORF picked above: the table row narrows orf_overlap
+  # to one ORF, whose coordinates (read off its key and protein length) the
+  # view frames. Unpicked, it opens on the best supported new ORF (support_score:
+  # new ORFs both callers report first), and the stepper walks the others.
+  # The six opening tracks are the coverage of one library per assay and design
+  # group (the manifest orders them); the P-sites and reads are in the track
+  # menu: the P-site bedGraphs are read whole and the BAMs run to gigabytes.
+  # The gene track is the assembly's own (show_annotation).
+  - component_type: jbrowse
+    workflow_tag: riboseq
+    data_collection_tag: tracks
+    section: ORF at its locus
+    initial_tracks: 6
+    max_tracks: 12
+    show_overview: false
+    show_annotation: true
+    # The libraries of a design group share a hue, as on the other tiles.
+    color_by: '{GROUP_COL}'
+    selection_enabled: true
+    selection_column: sample
+    locus_from:
+      data_collection_tag: orf_overlap
+      name: ORFs
+      chrom_column: chrom
+      start_column: orf_start
+      end_column: orf_end
+      padding: 300
+      max_rows: 20
+      # A pick opens on its whole gene, the row's own span inside it.
+      frame_gene: true
+      sort_by: support_score
+      descending: true
+      label_column: gene_name
+      # No track draws an ORF: a "Top 20" track names the best supported ones
+      # by rank and gene (#1 GENE); the picked ORF, or the best three unpicked,
+      # wear the selection colour there, and the transcripts of its gene too.
+      rank_track: 20
+    tag: rb-loc-browser
+    index: loc-browser
+    title: Genome browser
+    description: The coverage of one library per assay and group opens on the ORF picked in the table, or on the top-ranked ORF (new ORFs both callers report first); P-sites and reads are in the track menu. The Top 20 track draws the best supported ORFs by rank; the picked ORF and the transcripts of its gene are drawn in the selection colour.
+    layout: {x: 0, y: 5, w: 8, h: 9}

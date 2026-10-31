@@ -1,5 +1,6 @@
 id: melon
 name: Melon
+version: "1.0.0"
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/melon
 description: >-
   Taxonomic identification and quantification of long-read metagenomes using

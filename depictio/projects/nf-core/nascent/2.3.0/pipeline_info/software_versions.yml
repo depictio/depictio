@@ -1,0 +1,44 @@
+BBMAP_PILEUP:
+  bbmap: 39.01
+  samtools: 1.16.1
+  pigz: 2.6
+BEDTOOLS_GENOMECOV_MINUS:
+  bedtools: 2.31.1
+BEDTOOLS_GENOMECOV_PLUS:
+  bedtools: 2.31.1
+BWA_MEM:
+  bwa: 0.7.18-r1243-dirty
+  samtools: 1.2
+CUSTOM_GETCHROMSIZES:
+  getchromsizes: 1.2
+DEEPTOOLS_BAMCOVERAGE_MINUS:
+  deeptools: 3.5.5
+DEEPTOOLS_BAMCOVERAGE_PLUS:
+  deeptools: 3.5.5
+FASTP:
+  fastp: 0.23.4
+FASTQC:
+  fastqc: 0.12.1
+GROHMM_PARAMETERTUNING:
+  r-base: 4.3.3
+  bioconductor-grohmm: 1.39.0
+PINTS_CALLER:
+  python: 3.12.6
+  pints: 1.1.13
+PRESEQ_CCURVE:
+  preseq: 3.1.1
+PRESEQ_LCEXTRAP:
+  preseq: 3.1.1
+RSEQC_INFEREXPERIMENT:
+  rseqc: 5.0.2
+RSEQC_READDISTRIBUTION:
+  rseqc: 5.0.2
+RSEQC_READDUPLICATION:
+  rseqc: 5.0.2
+SAMTOOLS_MERGE:
+  samtools: 1.21
+SUBREAD_FEATURECOUNTS_GENE:
+  subread: 2.0.1
+Workflow:
+    nf-core/nascent: v2.3.0-g7d4fe61
+    Nextflow: 25.10.2

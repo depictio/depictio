@@ -19,6 +19,16 @@ from depictio.models.models.deltatables import latest_complete_aggregation
 # Cap on how many distinct categorical values we sample into ``specs`` for the
 # card-builder preview. Kept small so specs stay compact in Mongo.
 _UNIQUE_VALUES_PREVIEW_CAP = 20
+# Cap on the length of any string recorded in ``specs``. A cell can be megabytes
+# (CNVkit lists every gene of a segment in one), and the specs of every column
+# share one Mongo document, which may not pass 16 MB.
+_SPEC_STRING_CAP = 256
+
+
+def _cap_spec_string(value):
+    if isinstance(value, str) and len(value) > _SPEC_STRING_CAP:
+        return value[: _SPEC_STRING_CAP - 1] + "\u2026"
+    return value
 
 
 def delta_identity_hash(delta_table_location: str, storage_options: dict) -> str:
@@ -487,7 +497,7 @@ def precompute_columns_specs(
             # too) and "aggregation dropped" (nested dtype, see _aggregate).
             if value is None:
                 continue
-            tmp_dict["specs"][str(method_name)] = numpy_to_python(value)
+            tmp_dict["specs"][str(method_name)] = _cap_spec_string(numpy_to_python(value))
 
         # Categorical columns: record a small, frequency-ordered sample of the
         # actual distinct values so the React card-builder preview can show real
@@ -505,7 +515,8 @@ def precompute_columns_specs(
                     .collect()
                 )
                 unique_values = [
-                    str(v) for v in value_counts[column].to_list()[:_UNIQUE_VALUES_PREVIEW_CAP]
+                    _cap_spec_string(str(v))
+                    for v in value_counts[column].to_list()[:_UNIQUE_VALUES_PREVIEW_CAP]
                 ]
                 if unique_values:
                     tmp_dict["specs"]["unique_values"] = unique_values
