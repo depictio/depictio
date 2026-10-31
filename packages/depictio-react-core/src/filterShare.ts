@@ -275,6 +275,18 @@ export function buildFilterShareUrl(filters: InteractiveFilter[]): string | null
   return `${origin}${pathname}#${FILTER_HASH_PARAM}=${encoded}`;
 }
 
+/**
+ * The component a filter entry belongs to. A selection made of two halves
+ * keys its second half on the component index plus a suffix (`::pos` of a
+ * genome region, `::res`, `::chain`), so the entry's own index names no
+ * component: judging it by that index dropped the position half of every
+ * restored region and left a bare chromosome, the whole contig in view.
+ */
+export function filterComponentIndex(index: string): string {
+  const cut = index.indexOf('::');
+  return cut === -1 ? index : index.slice(0, cut);
+}
+
 /** Drop restored entries that don't correspond to a component of this
  *  dashboard family (stale storage, a deleted tile, a link minted on another
  *  tab). `knownIndices` is the family-wide set: this tab's components plus the
@@ -283,5 +295,5 @@ export function sanitizeRestoredFilters(
   filters: InteractiveFilter[],
   knownIndices: Set<string>,
 ): InteractiveFilter[] {
-  return filters.filter((f) => knownIndices.has(f.index));
+  return filters.filter((f) => knownIndices.has(filterComponentIndex(f.index)));
 }

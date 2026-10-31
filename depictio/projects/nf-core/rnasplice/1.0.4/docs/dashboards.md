@@ -112,10 +112,10 @@ junction reads against transcript abundances. Only the rMATS one is labelled, wi
 symbols of its top genes. Then a sashimi of the junctions around the called rMATS events:
 one lane per condition, one arc per junction labelled with its mean reads per replicate. A
 gene picked in the left panel draws that gene's locus; without a pick the tile opens on
-the busiest cluster of junctions, the others in its locus menu, and its View switch redraws
-the junctions in GenomeSpy. Collapsed: the rMATS event table with the event record card
+the busiest cluster of junctions, the others in its locus menu. Collapsed: the rMATS event table with the event record card
 beside it (inclusion and junction reads per condition, the locus linked to the UCSC browser
-on `GENOME`), and the SUPPA2 event table. Filters: event type, call and absolute PSI
+on `GENOME`) and the genome browser under them (the coverage and reads of the samples in view,
+framed on the picked event's region), and the SUPPA2 event table. Filters: event type, call and absolute PSI
 change, each narrowing both tools.
 
 ## Routes and pruning
@@ -132,6 +132,7 @@ the agreement key figure and the agreement row survive any combination of tools.
 | DEXSeq DTU skipped | No Transcript Usage tab, DTU row or DTU highlight. |
 | rMATS and SUPPA2 both skipped | No Splicing Events tab, rMATS key figure, event row or event-type highlight. |
 | rMATS skipped, or no STAR junction tables | No sashimi section on Splicing Events. |
+| No `bigwig/` or BAM under `star_salmon/` (`--skip_bigwig`, no `--save_align_intermeds`) | The genome browser lists the files the run was expected to publish, so those tracks fail to open; read the run in place with `TRACKS_URI` only when they exist. |
 | Pseudo-alignment only (`QUANT_ROUTE=salmon`) | The PCA, the heatmap, DTU and SUPPA2 read the `salmon/` copy; STAR-based panels and tools have nothing to show. |
 
 The import re-packs the Overview grid after a drop, so a lone highlight takes the full row.

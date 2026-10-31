@@ -231,6 +231,7 @@ def _import_template_dashboards(
     dashboard_paths: list[Path],
     *,
     template_id: str,
+    template_version: str,
     project_id: ObjectId,
     variables: dict[str, str],
     current_user,
@@ -244,7 +245,8 @@ def _import_template_dashboards(
     same project with this template so finds these dashboards instead of adding
     a second copy of each. In-process, through the shared import handler, which
     binds DC tags to the ids just persisted and drops components whose optional
-    DC was pruned.
+    DC was pruned. Each dashboard records the template revision (``template_version``)
+    it was imported from.
     """
     import yaml
 
@@ -257,6 +259,7 @@ def _import_template_dashboards(
         locate_template,
         substitute_template_variables,
     )
+    from depictio.models.models.templates import DashboardTemplateOrigin
 
     try:
         template_dir: Path | None = locate_template(template_id).parent
@@ -304,6 +307,9 @@ def _import_template_dashboards(
                 keep_titles=True,
                 parent_source_key=main_keys.get(parent_tag) if parent_tag else None,
                 existing="keep",
+                template_origin=DashboardTemplateOrigin(
+                    template_id=template_id, template_version=template_version
+                ),
             )
             entry.success = bool(result.get("success"))
             entry.dashboard_id = result.get("dashboard_id")
@@ -461,6 +467,7 @@ def _create_project_from_manifest(
     report.dashboards = _import_template_dashboards(
         dashboard_paths,
         template_id=template_metadata.template_id,
+        template_version=template_metadata.version,
         project_id=project_oid,
         variables=resolved_vars,
         current_user=current_user,

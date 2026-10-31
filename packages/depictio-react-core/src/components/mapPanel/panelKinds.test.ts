@@ -34,6 +34,17 @@ describe('floatingPanelKindOf', () => {
     ).toBe('structure');
   });
 
+  it('sends a floating jbrowse to the genome panel', () => {
+    expect(floatingPanelKindOf({ component_type: 'jbrowse', placement: 'floating' })).toBe('genome');
+  });
+
+  it('leaves a grid genome browser on the grid', () => {
+    expect(floatingPanelKindOf({ component_type: 'jbrowse', placement: 'grid' })).toBeNull();
+    expect(floatingPanelKindOf({ component_type: 'jbrowse' })).toBeNull();
+    expect(isFloatingComponent({ component_type: 'jbrowse' })).toBe(false);
+    expect(isFloatingComponent({ component_type: 'jbrowse', placement: 'floating' })).toBe(true);
+  });
+
   it('leaves a grid tile on the grid whatever it is', () => {
     expect(floatingPanelKindOf({ component_type: 'map', placement: 'grid' })).toBeNull();
     expect(floatingPanelKindOf({ component_type: 'map' })).toBeNull();
@@ -90,9 +101,14 @@ describe('partitionFloating', () => {
       'a',
     );
     const map2 = floating(meta({ index: 'm2', component_type: 'map', placement: 'floating' }), 'b');
-    const out = partitionFloating([map1, fold, map2]);
+    const browser = floating(
+      meta({ index: 'g1', component_type: 'jbrowse', placement: 'floating' }),
+      'b',
+    );
+    const out = partitionFloating([map1, fold, browser, map2]);
     expect(out.map.map((c) => c.metadata.index)).toEqual(['m1', 'm2']);
     expect(out.structure.map((c) => c.metadata.index)).toEqual(['f1']);
+    expect(out.genome.map((c) => c.metadata.index)).toEqual(['g1']);
   });
 
   it('drops what no panel can hold rather than guessing one', () => {
@@ -104,11 +120,11 @@ describe('partitionFloating', () => {
         viz_kind: 'volcano',
       }),
     );
-    expect(partitionFloating([odd])).toEqual({ map: [], structure: [] });
+    expect(partitionFloating([odd])).toEqual({ map: [], structure: [], genome: [] });
   });
 
   it('is empty for an empty family', () => {
-    expect(partitionFloating([])).toEqual({ map: [], structure: [] });
+    expect(partitionFloating([])).toEqual({ map: [], structure: [], genome: [] });
   });
 });
 
@@ -120,6 +136,20 @@ describe('PANEL_KINDS', () => {
   it('gives each kind its own storage entry, so both panels coexist', () => {
     expect(PANEL_KINDS.structure.storagePrefix).not.toBe(PANEL_KINDS.map.storagePrefix);
     expect(PANEL_KINDS.structure.storagePrefix).toBe('depictio:structure-panel:');
+  });
+
+  it('gives the genome panel its own storage entry and a bundled icon', () => {
+    expect(PANEL_KINDS.genome.storagePrefix).toBe('depictio:genome-panel:');
+    const prefixes = Object.values(PANEL_KINDS).map((k) => k.storagePrefix);
+    expect(new Set(prefixes).size).toBe(prefixes.length);
+    expect(PANEL_KINDS.genome.icon).toBe('tabler:dna');
+  });
+
+  it('starts the genome card clear of the map card', () => {
+    // The map's card spans right 16 .. 16 + its width at the bottom right.
+    const mapEdge = PANEL_KINDS.map.anchor.right + PANEL_KINDS.map.compact.width;
+    expect(PANEL_KINDS.genome.anchor.bottom).toBeDefined();
+    expect(PANEL_KINDS.genome.anchor.right).toBeGreaterThanOrEqual(mapEdge);
   });
 
   it('starts the two floating cards in different corners', () => {
@@ -162,6 +192,14 @@ describe('panel selection', () => {
 
   it('does not read a residue pick as a map selection', () => {
     expect(selectionCount('map', pick('f1'), 'f1')).toBe(0);
+  });
+
+  it('counts no selection for a genome browser, whatever filters it emitted', () => {
+    const filters: InteractiveFilter[] = [
+      { index: 'g1', value: ['S1'], source: 'jbrowse_selection', column_name: 'sample' },
+    ];
+    expect(selectionCount('genome', filters, 'g1')).toBe(0);
+    expect(clearSelectionFilters('genome', filters, 'g1')).toEqual([]);
   });
 
   it('clears a map with one empty map_selection entry', () => {

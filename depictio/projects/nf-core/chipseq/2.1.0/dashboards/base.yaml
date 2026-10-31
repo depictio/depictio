@@ -354,11 +354,10 @@ main_dashboard:
   - component_type: highlight
     section: Findings
     source_tab: Peaks
-    source_component: pk-manhattan
-    caption: One point per peak at its summit, as high as its significance; colour is the library.
-    hide_legend: true
-    tag: cs-ov-hl-manhattan
-    index: ov-hl-manhattan
+    source_component: pk-density
+    caption: Peak calls per megabase along the genome, one row per library; brighter is more calls.
+    tag: cs-ov-hl-calls
+    index: ov-hl-calls
     layout: {x: 0, y: 2, w: 4, h: 4}
   - component_type: highlight
     section: Findings
@@ -744,7 +743,7 @@ tabs:
     color: cyan
     description: The fingerprint and duplication numbers a library's signal is judged on
   - name: Coverage concentration
-    icon: mdi:chart-scatter-plot
+    icon: mdi:chart-bar
     color: cyan
     description: How far each library's coverage departs from a uniform one
   - name: Metagene and complexity
@@ -918,34 +917,33 @@ tabs:
     title: Duplicate reads
     description: Median share of a library's reads Picard MarkDuplicates flags as duplicates before they are removed; a high share is a library sequenced past its complexity.
     layout: {x: 6, y: 0, w: 2, h: 2}
-  - component_type: advanced_viz
+  - component_type: figure
     workflow_tag: chipseq
     data_collection_tag: deeptools_fingerprint_metrics
-    use: deeptools/fingerprint_scatter
-    config:
-      # 2.x writes no JSD or CHANCE metric against the input, so the axes are
-      # the two fingerprint readings against a uniform library.
-      x_col: elbow_point
-      y_col: synthetic_js_distance
-      label_col: sample
-      size_col: x_intercept
-      # A colour and a legend per library: point labels piled up on the replicates.
-      color_col: sample
-      x_title: Genome at background (share of bins)
-      y_title: Jensen-Shannon distance to a uniform coverage
-      min_size: 8
-      max_size: 26
-      opacity: 0.85
-      marker_outline: true
-      top_n_labels: 0
-      legend_pos: right
-      selection_enabled: true
-      selection_column: sample
+    use: deeptools/fingerprint_metrics
+    visu_type: bar
+    mode: code
+    code_content: |-
+      # One bar per library, the least concentrated on top. Left, the area under its coverage curve over that of a uniform library: red past 0.95 (no better than uniform), amber from 0.85, cyan below. Right, its Jensen-Shannon distance to a uniform library, coloured the same way.
+      names = {'auc_ratio': 'Coverage area over uniform', 'synthetic_js_distance': 'Distance to uniform (JS)'}
+      d = df.filter(pl.col('auc_ratio').is_not_null()).with_columns(pl.when(pl.col('auc_ratio') > 0.95).then(pl.lit('Flat')).when(pl.col('auc_ratio') > 0.85).then(pl.lit('Borderline')).otherwise(pl.lit('Concentrated')).alias('verdict')).sort(['auc_ratio', 'sample'], descending=[True, True])
+      long = d.select(['sample', 'verdict', 'auc_ratio', 'synthetic_js_distance']).unpivot(index=['sample', 'verdict'], variable_name='metric', value_name='value').with_columns(pl.col('metric').replace(names))
+      fig = px.bar(long.to_pandas(), x='value', y='sample', color='verdict', color_discrete_map={'Concentrated': '#15aabf', 'Borderline': '#f59f00', 'Flat': '#e03131'}, facet_col='metric', orientation='h', custom_data=['sample'], category_orders={'sample': d.get_column('sample').to_list(), 'metric': list(names.values()), 'verdict': ['Concentrated', 'Borderline', 'Flat']}, labels={'value': '', 'sample': '', 'verdict': ''})
+      fig.update_traces(hovertemplate='<b>%{customdata[0]}</b><br>%{x:.3f}<extra></extra>')
+      fig.update_xaxes(matches=None, showticklabels=True)
+      fig.update_yaxes(automargin=True)
+      fig.update_xaxes(range=[0, 1], col=1)
+      fig.for_each_annotation(lambda a: a.update(text=a.text.split('=')[-1]))
+      fig.add_vrect(x0=0.85, x1=0.95, fillcolor='rgba(245,159,0,0.15)', line_width=0, layer='below', col=1)
+      fig.add_vrect(x0=0.95, x1=1, fillcolor='rgba(224,49,49,0.15)', line_width=0, layer='below', col=1)
+      fig.update_layout(margin=dict(t=30), legend=dict(orientation='h', y=-0.12))
+    selection_enabled: true
+    selection_column: sample
     section: Coverage concentration
     tag: cs-sig-fingerprint
     index: sig-fingerprint
     title: Coverage concentration per library
-    description: Background share of the genome against distance from a uniform coverage; size is the share of bins with no read, colour the library. Click a point to select it.
+    description: One bar per library, the least concentrated on top. deepTools plotFingerprint ranks the genome's bins by read count and compares the cumulative share of reads with that of a library whose reads are spread evenly. Left, the area under the library's curve over that of the even one, 1 for an even spread and lower as the reads pile into few bins, as in an enriched ChIP; the amber band (0.85 to 0.95) is a weak concentration and the red band (from 0.95) is no better than an even library, like an input or a failed IP. Both cut-offs are rules of thumb of the catalog's fingerprint module, not values deepTools publishes; right, the Jensen-Shannon distance to the even library, bars coloured by the same verdict. Click a bar to select the library.
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: advanced_viz
     workflow_tag: chipseq
@@ -987,7 +985,7 @@ tabs:
     tag: cs-sig-metagene
     index: sig-metagene
     title: Metagene signal profile
-    description: Mean signal of every library along a scaled gene with 3 kb flanks, the start site marked and the gene body shaded.
+    description: Mean signal of every library along a scaled gene with 3 kb flanks, the line at bin 300 is the transcription start site, where the 3 kb upstream flank ends, and the shaded bins 300 to 400 are the gene body, scaled to one length.
     layout: {x: 0, y: 0, w: 8, h: 6}
 # ============================================================================
 # Peak calls
@@ -1011,10 +1009,10 @@ tabs:
     icon: mdi:counter
     color: indigo
     description: How many calls the libraries made, how wide, how enriched and how significant
-  - name: Significance along the genome
-    icon: mdi:chart-scatter-plot
+  - name: Calls along the genome
+    icon: mdi:chart-timeline-variant
     color: indigo
-    description: Every call at its summit, as high as its q-value
+    description: Calls per megabase of each library, chromosome by chromosome
   - name: Peak width
     icon: mdi:ruler
     color: indigo
@@ -1034,8 +1032,8 @@ tabs:
     body: >
       [MACS3](https://github.com/macs3-project/MACS) peaks, one row per peak and ChIP,
       each called against its input control, narrow around a summit or broad. The cards
-      count the calls and sum up their width, enrichment and significance. A lasso on the
-      genome-wide panel narrows the tab and, through the peak links, the HOMER annotation.
+      count the calls and sum up their width, enrichment and significance. The
+      genome-wide panel shows where each library calls its peaks.
     tag: cs-pk-intro
     index: pk-intro
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -1180,44 +1178,83 @@ tabs:
     title: Median -log10 q
     description: Median significance of the calls, as -log10 of the MACS3 q-value; by default every call already passes q 0.05 (1.3).
     layout: {x: 6, y: 0, w: 2, h: 2}
-  - component_type: advanced_viz
-    workflow_tag: chipseq
-    data_collection_tag: macs2_peaks
-    use: macs2/peak_significance
-    config:
-      feature_col: peak_id
-      score_kind: -log10(q)
-      color_by_columns: [sample]
-      default_color_by: sample
-      selection_enabled: true
-      selection_column: peak_id
-      # Peak ids say nothing as point labels; they piled up over the tallest calls.
-      top_n_labels: 0
-    section: Significance along the genome
-    tag: cs-pk-manhattan
-    index: pk-manhattan
-    title: Peak significance along the genome
-    description: Every call at its summit, the centre of a broad call; height is -log10 of the MACS3 q-value, colour is the library.
-    layout: {x: 0, y: 0, w: 8, h: 6}
-  # Log x: peak width is a long tail. On a linear axis the widest call sets the
-  # range and the panel reads as a single spike.
+  # Calls per 1 Mb window, one row per library: where each library calls its peaks and whether
+  # replicates agree. The significance of a call is no contrast (every call already passes the
+  # caller's cut-off), so it is not drawn.
   - component_type: figure
     workflow_tag: chipseq
     data_collection_tag: macs2_peaks
     use: macs2/peaks
-    visu_type: histogram
-    dict_kwargs:
-      x: width
-      color: sample
-      nbins: 60
-      log_x: true
-      labels: {width: Peak width (bp), sample: Library}
+    visu_type: heatmap
+    mode: code
+    code_content: |-
+      # Peak calls per 1 Mb window, one row per library, chromosomes in karyotype order: where each library calls peaks, and whether replicates agree.
+      c = pl.col('chr').str.replace('^chr', '')
+      rk = pl.when(c.str.contains('^[0-9]+$')).then(c.cast(pl.Int64, strict=False)).when(c == 'X').then(1001).when(c == 'Y').then(1002).when(c.is_in(['M', 'MT'])).then(1003).otherwise(2000)
+      d = df.with_columns(rk.alias('rk'), (((pl.col('start') + pl.col('end')) // 2) // 1000000).alias('win'))
+      spans = d.group_by(['rk', 'chr']).agg(pl.col('win').max().alias('nwin')).sort('nwin', descending=True).head(60).sort(['rk', 'chr'])
+      chroms = spans.get_column('chr').to_list()
+      sizes = [n + 1 for n in spans.get_column('nwin').to_list()]
+      grid = pl.DataFrame({'chr': [ch for ch, n in zip(chroms, sizes) for k in range(n)], 'win': [w for n in sizes for w in range(n)]}).with_row_index('idx').with_columns((pl.col('chr') + ':' + pl.col('win').cast(pl.Utf8) + ' Mb').alias('lab'))
+      samples = sorted(d.get_column('sample').unique().to_list())
+      counts = d.group_by(['sample', 'chr', 'win']).agg(pl.len().cast(pl.Int64).alias('n'))
+      full = grid.join(pl.DataFrame({'sample': samples}), how='cross').join(counts, on=['sample', 'chr', 'win'], how='left').with_columns(pl.col('n').fill_null(0)).sort(['sample', 'idx'])
+      z = full.get_column('n').to_numpy().reshape(len(samples), grid.height)
+      labs = grid.get_column('lab').to_list()
+      ticks = []
+      texts = []
+      off = 0
+      for i, (ch, n) in enumerate(zip(chroms, sizes)):
+          ticks.append(labs[off + n // 2])
+          texts.append(('<br>' if i % 2 else '') + ch.replace('chr', ''))
+          off += n
+      marks = [0, 1, 3, 10, 30, 100, 300]
+      fig = go.Figure(go.Heatmap(z=np.log1p(z), x=labs, y=samples, customdata=z, colorscale='Viridis', zmin=0, colorbar=dict(title='Calls per Mb', tickmode='array', tickvals=[float(np.log1p(m)) for m in marks], ticktext=[str(m) for m in marks]), hovertemplate='<b>%{y}</b><br>%{x}<br>%{customdata} calls<extra></extra>'))
+      off = 0
+      for n in sizes[:-1]:
+          off += n
+          fig.add_vline(x=off - 0.5, line_width=1, line_color='rgba(255,255,255,0.55)')
+      fig.update_xaxes(type='category', tickmode='array', tickvals=ticks, ticktext=texts, showgrid=False, tickangle=0, title='')
+      fig.update_yaxes(autorange='reversed', automargin=True, title='')
+      fig.update_layout(margin=dict(t=10))
+    section: Calls along the genome
+    tag: cs-pk-density
+    index: pk-density
+    title: Peak calls along the genome
+    description: Calls per megabase, one row per library, chromosomes in karyotype order; a band shared by replicates is a region that binds reproducibly, and white vertical lines mark the chromosome boundaries.
+    layout: {x: 0, y: 0, w: 8, h: 5}
+  # Log x: peak width is a long tail. On a linear axis the widest call sets the
+  # range. One box per library from precomputed quartiles, so a run of 60k calls
+  # per library sends 5 numbers, not the calls.
+  - component_type: figure
+    workflow_tag: chipseq
+    data_collection_tag: macs2_peaks
+    use: macs2/peaks
+    visu_type: box
+    mode: code
+    code_content: |-
+      # Peak width per library, the widest median on top, on a log axis. The box is the middle half of the calls, the line inside it the median, the whiskers 1.5 times the interquartile range. A box wears the colour of its group, the library name without its replicate suffix, as on the other tabs.
+      q = df.group_by('sample').agg(pl.col('width').quantile(0.25).alias('q1'), pl.col('width').median().alias('med'), pl.col('width').quantile(0.75).alias('q3'), pl.col('width').min().alias('lo'), pl.col('width').max().alias('hi'), pl.len().alias('n')).sort(['med', 'sample'], descending=[True, True])
+      q = q.with_columns((pl.col('q1') - 1.5 * (pl.col('q3') - pl.col('q1'))).clip(lower_bound=pl.col('lo')).alias('wlo'), (pl.col('q3') + 1.5 * (pl.col('q3') - pl.col('q1'))).clip(upper_bound=pl.col('hi')).alias('whi'))
+      q = q.with_columns(pl.col('sample').str.replace(r'_R(EP)?\d+$', '').alias('grp'))
+      colors = depictio_category_colors.get('condition') or {}
+      traces = []
+      for g in q.get_column('grp').unique(maintain_order=True).to_list():
+          s = q.filter(pl.col('grp') == g)
+          c = colors.get(g)
+          traces.append(go.Box(name=g, y=s.get_column('sample').to_list(), q1=s.get_column('q1').to_list(), median=s.get_column('med').to_list(), q3=s.get_column('q3').to_list(), lowerfence=s.get_column('wlo').to_list(), upperfence=s.get_column('whi').to_list(), orientation='h', marker_color=c, line=dict(color=c, width=1.5), customdata=s.get_column('n').to_list(), hovertemplate='<b>%{y}</b><br>median %{median:,.0f} bp<br>middle half %{q1:,.0f} to %{q3:,.0f} bp<extra></extra>'))
+      fig = go.Figure(data=traces)
+      lo, hi = q.get_column('wlo').min(), q.get_column('whi').max()
+      tv = [v for v in (20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000, 100000) if lo / 1.5 <= v <= hi * 1.5]
+      fig.update_xaxes(type='log', title='Peak width (bp)', tickmode='array', tickvals=tv, ticktext=[f'{v:,}' for v in tv])
+      fig.update_yaxes(autorange='reversed', automargin=True, title='', categoryorder='array', categoryarray=q.get_column('sample').to_list())
+      fig.update_layout(margin=dict(t=10), boxmode='overlay', legend=dict(title_text='', orientation='h', y=-0.2))
     section: Peak width
     tag: cs-pk-width
     index: pk-width
-    title: Peak width distribution
-    description: How wide the calls are, per library, on a log axis. A sharp factor gives a tight band; a broad mark spreads.
-    layout: {x: 0, y: 0, w: 8, h: 4}
+    title: Peak width per library
+    description: The middle half of each library's calls, widest median on top, on a log axis, coloured by group. A sharp factor gives a narrow box; a broad mark spreads.
+    layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: advanced_viz
     workflow_tag: chipseq
     data_collection_tag: macs2_summit_profile
@@ -1235,7 +1272,7 @@ tabs:
     tag: cs-pk-summit-concordance
     index: pk-summit-concordance
     title: Other libraries' summits around each summit
-    description: Summits called in the other libraries, per anchor summit and per kb, on a log axis. Replicates of a sharp factor pile their summits onto each other.
+    description: Summits called in the other libraries, per anchor summit and per kb, on a log axis. Replicates of a sharp factor pile their summits onto each other. The vertical line at 0 is the anchor summit, the position MACS3 calls as the strongest signal of its peak.
     layout: {x: 0, y: 0, w: 4, h: 6}
   - component_type: advanced_viz
     workflow_tag: chipseq
@@ -1253,7 +1290,7 @@ tabs:
     tag: cs-pk-summit-footprint
     index: pk-summit-footprint
     title: Average peak footprint
-    description: The share of each library's calls still open at every offset from their own summit; where a curve crosses one half is the median half-width.
+    description: The share of each library's calls still open at every offset from their own summit; where a curve crosses one half is the median half-width. The vertical line at 0 is the summit the offsets are measured from.
     layout: {x: 4, y: 0, w: 4, h: 6}
   - component_type: table
     workflow_tag: chipseq
@@ -1419,23 +1456,30 @@ tabs:
     title: Peak score
     description: Median score the peak caller gave the annotated peaks.
     layout: {x: 6, y: 0, w: 2, h: 2}
-  # A share per library, not a count, so libraries of different depth compare.
-  - component_type: figure
+  - component_type: advanced_viz
     workflow_tag: chipseq
-    data_collection_tag: homer_annotated_peaks
-    use: homer/annotated_peaks
-    visu_type: histogram
-    dict_kwargs:
-      x: sample
-      color: annotation_class
-      barnorm: percent
-      labels: {sample: '', annotation_class: Feature class}
+    data_collection_tag: homer_feature_classes
+    viz_kind: stacked_taxonomy
+    config:
+      viz_kind: stacked_taxonomy
+      sample_id_col: sample
+      taxon_col: annotation_class
+      rank_col: rank
+      abundance_col: peak_count
+      top_n: 12
+      sort_by: abundance
+      normalise_to_one: true
+      sample_sort: name
+      orientation: h
+      value_title: Share of the library's peaks
+      x_title: ''
+      hidden_controls: [rank, top_n]
     section: Feature classes
     tag: cs-anno-classes
     index: anno-classes
     title: Feature classes per library
-    description: The share of each library's peaks in each feature class, as a percentage.
-    layout: {x: 0, y: 0, w: 8, h: 4}
+    description: The share of each library's peaks in each HOMER feature class; switch to counts, sort the libraries or hide a class from the controls.
+    layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: advanced_viz
     workflow_tag: chipseq
     data_collection_tag: homer_tss_distance_profile
@@ -1452,7 +1496,7 @@ tabs:
     tag: cs-anno-tss-distance
     index: anno-tss-distance
     title: Peaks around the nearest TSS
-    description: Peaks counted in 250 bp bins across a 20 kb window; the band is the 1 kb promoter window either side.
+    description: Peaks counted in 250 bp bins across a 20 kb window; the line at 0 is the transcription start site and the band is the promoter window, 1 kb either side of it.
     layout: {x: 0, y: 0, w: 8, h: 6}
   # Master and detail: a picked row is the selection the record card follows.
   - component_type: table
@@ -1492,11 +1536,11 @@ tabs:
 # The locus section: three collections on one genomic region. The navigator
 # (macs2/peak_genome_view on macs2_peaks) opens on its default_region and emits
 # the chromosome and position filters; the two region links in template.yaml
-# rename them onto the consensus intervals and the HOMER annotation, so every
-# track clamps to the same window. A tab of its own: a region filter narrows
-# every tile of its collection on the tab. The axis comes from GENOME, empty by
-# default, which lays it out from the contigs of the calls (2.x runs on any
-# reference); the HOMER track stands in for a gene lane.
+# rename them onto the consensus intervals and the HOMER annotation, so the
+# consensus lanes and the cards clamp to the same window. A tab of its own: a
+# region filter narrows every tile of its collection on the tab. The axis comes
+# from GENOME, empty by default, which lays it out from the contigs of the calls
+# (2.x runs on any reference).
 - title: Locus
   subtitle: What do the libraries call at one genomic region?
   tab_group: Peak calls
@@ -1519,15 +1563,15 @@ tabs:
   - name: Peaks on one axis
     icon: mdi:dna
     color: teal
-    description: The calls per library, then the tracks that follow their region
+    description: The calls per library, then the consensus lanes that follow their region
   components:
   - component_type: text
     order: 1
     body: >
-      The calls of every ChIP, the consensus intervals per antibody and the HOMER
-      annotation on one genome axis. The tab opens on the first contig the calls carry;
-      type a locus in the navigator's header or brush its axis, and the tracks and cards
-      follow.
+      The calls of every ChIP and the consensus intervals per antibody on one genome
+      axis, with the HOMER annotation counted in the cards. The tab opens on the first
+      contig the calls carry; type a locus in the navigator's header or brush its axis,
+      and the lanes and cards follow.
     tag: cs-loc-intro
     index: loc-intro
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -1667,12 +1711,16 @@ tabs:
     data_collection_tag: macs2_peaks
     use: macs2/peak_genome_view
     config:
-      mark: rect
+      mark: bar
       facet_by_sample: true
+      lane_height: 56
       max_facets: 8
+      # Per lane: the weaker antibodies would draw flat on a shared ruler.
+      facet_y_scale: independent
       score_title: -log10(q)
       opacity: 0.85
       assembly: '{GENOME}'
+      interaction_mode: select
       default_region: first
       region_filter_enabled: true
       selection_enabled: true
@@ -1681,8 +1729,8 @@ tabs:
     tag: cs-loc-navigator
     index: loc-navigator
     title: Calls per library
-    description: Every MACS3 call on the region, one lane per library, as high as its significance. The locus field and a brush on this axis move every track below.
-    layout: {x: 0, y: 0, w: 8, h: 6}
+    description: Each lane is a library and each bar a MACS3 call, as high as its -log10(q). Look for bars at the same place in the replicates of an antibody, which is reproducible binding, and for bars present under one antibody or condition only. It opens on the first chromosome of the calls; drag on the axis to pick a region, or type a locus.
+    layout: {x: 0, y: 0, w: 8, h: 8}
   # A coverage track, faceted by consensus set: chipseq builds one consensus
   # set per antibody, and a lane per set keeps them apart.
   - component_type: advanced_viz
@@ -1708,32 +1756,7 @@ tabs:
     index: loc-consensus
     title: Consensus intervals per antibody
     description: The merged intervals of each consensus set on the same region, each as high as the number of libraries calling a peak there.
-    layout: {x: 0, y: 6, w: 8, h: 3}
-  - component_type: advanced_viz
-    workflow_tag: chipseq
-    data_collection_tag: homer_annotated_peaks
-    viz_kind: genome_view
-    config:
-      viz_kind: genome_view
-      chr_col: chr
-      pos_col: start
-      end_col: end
-      score_col: peak_score
-      feature_col: gene_name
-      category_col: annotation_class
-      mark: rect
-      score_title: HOMER peak score
-      assembly: '{GENOME}'
-      region_filter_enabled: false
-      follow_region_filter: true
-      selection_enabled: true
-      selection_column: peak_id
-    section: Peaks on one axis
-    tag: cs-loc-genes
-    index: loc-genes
-    title: Nearest gene of every call
-    description: The same calls as HOMER annotated them, coloured by feature class; hover a call for its nearest gene.
-    layout: {x: 0, y: 9, w: 8, h: 3}
+    layout: {x: 0, y: 8, w: 8, h: 3}
 # ============================================================================
 # Comparison
 # ============================================================================
@@ -1779,8 +1802,9 @@ tabs:
     order: 1
     body: >
       The per-ChIP calls merged into one set of intervals per antibody: an interval every
-      replicate calls is reproducible binding. Pick one consensus set on the left first,
-      since the libraries of two sets never meet. The UpSet shows which libraries agree,
+      replicate calls is reproducible binding. Pick one consensus set in the Consensus
+      filters first (the Antibody filter of the panel does not reach this tab), since the
+      libraries of two sets never meet. The UpSet shows which libraries agree,
       and the [DESeq2](https://bioconductor.org/packages/DESeq2) QC whether they group by
       condition on the counts.
     tag: cs-cons-intro
@@ -1928,7 +1952,7 @@ tabs:
     index: cons-upset
     title: Consensus peak overlap
     description: Intersections of the libraries calling each consensus interval, largest first.
-    layout: {x: 0, y: 0, w: 8, h: 5}
+    layout: {x: 0, y: 0, w: 8, h: 8}
   - component_type: advanced_viz
     workflow_tag: chipseq
     data_collection_tag: macs2_consensus_fc
@@ -1947,7 +1971,7 @@ tabs:
     description: Log-scaled fold enrichment per library at the strongest intervals; a zero cell is a library that called no peak there.
     layout: {x: 0, y: 0, w: 8, h: 5}
   # One PCA per antibody: a component only compares libraries inside its own
-  # count matrix, so the antibody filter narrows it to one set. Coloured by the
+  # count matrix, so the Consensus set filter narrows it to one set. Coloured by the
   # condition the 2.1.0 recipe joins from the hub, the question 2.x has left
   # without its differential test; the set stays one switch away.
   - component_type: advanced_viz
@@ -1963,7 +1987,6 @@ tabs:
       marker_outline: true
       axis_prefix: PC
       legend_pos: right
-      plot_style: grid
       selection_enabled: true
       selection_column: sample_id
     section: Sample space

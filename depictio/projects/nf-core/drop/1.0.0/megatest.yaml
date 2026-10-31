@@ -1,0 +1,74 @@
+# Megatest manifest for nf-core/drop 1.0.0 (read by scripts/nfcore_megatest.py).
+#
+# The AWS megatest bucket publishes NO result tables for drop: s3://nf-core-awsmegatests/drop/
+# holds input/ (BAMs, exported gene counts), refs/ and results-dev/, and results-dev/ carries
+# only pipeline_info/ (params, an empty execution trace, DAG and execution reports). There is
+# no release results folder, so `results_sha` is null and the shared fetch has nothing to
+# download beyond the provenance. The template was built on the real DROP result tables of
+# the pipeline's own chr21 test run, published in the nf-core/test-datasets `drop` branch
+# (OUTRIDER_results.tsv, FRASER results.tsv, MAE tables, gene_name_mapping), and on the
+# small chr21 BAMs and VCFs of the same run (the Locus tab's tracks). download_test_data.sh
+# fetches exactly those files from GitHub into the layout nf-core/drop writes under its
+# outdir, and the megatest params and exported gene counts from the bucket when `aws` is
+# available.
+#
+#   bash download_test_data.sh [DIR]
+#
+# The OUTRIDER and FRASER tables of that run were written with cut-offs that admit every
+# row (every tested gene and junction, no significant call), so they stand in for a full
+# run: the volcanoes get a cloud, the triage list a ranking. A default run writes only the
+# significant rows; see docs/dashboards.md for the cut-off flags that give the full tables.
+#
+# The sample sheet is not an output of the pipeline: it is vendored under input/ and copied
+# to DATA_ROOT/input/ (the SAMPLESHEET variable default).
+pipeline: drop
+version: "1.0.0"
+results_sha: null
+run_root: ""
+multiqc:
+  version: null
+  parquet: null
+  reprocess: false
+keys:
+  # Pipeline params of the megatest runs (the only published result files).
+  - pipeline_info/params_*.json
+  # Deliberately NOT fetched:
+  #   input/*.bam (about 25.8 GiB over 10 BAMs) and refs/ (about 5 GB): inputs, not results.
+  #   pipeline_info/execution_report_*.html (2.8 MiB each): not read by any recipe.
+prefix_keys: []
+renames: {}
+post_fetch_help: |
+  === Quick test commands ===
+
+  # 1. Dry run (validates the template against the data, no ingestion)
+  depictio-cli ingest --template nf-core/drop/1.0.0 --data-root {dest} --dry-run
+
+  # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
+  depictio-cli ingest --template nf-core/drop/1.0.0 --data-root {dest}
+# Test-run facts that must never appear in a dashboard text (lint rule e,
+# depictio/tests/models/test_template_conventions.py): sample ids, the cohort, the
+# assembly and annotation, the organism, and genes seen in the run.
+forbidden_terms:
+  - HG00096
+  - HG00103
+  - HG00106
+  - HG00111
+  - HG00116
+  - HG00126
+  - HG00132
+  - HG00149
+  - HG00150
+  - HG00176
+  - SRR197627
+  - SRR19762
+  - chr21
+  - GRCh38
+  - hg38
+  - Homo sapiens
+  - 1000 Genomes
+  - megatest
+  - ncbi
+  - v29
+  - v44
+  - demo
+  - full_test

@@ -99,6 +99,12 @@ SNAPSHOT_DERIVED_FIELDS: frozenset[str] = frozenset(
     }
 )
 
+#: Where a dashboard came from, not what it shows. The template import stamps
+#: ``template_origin`` (template id, revision, date) on every import, so hashing it
+#: would turn a re-import of unchanged content into a fake version. Restore and
+#: preview leave it live.
+SNAPSHOT_PROVENANCE_FIELDS: frozenset[str] = frozenset({"template_origin"})
+
 #: ``MongoModel`` bookkeeping every model inherits (``id`` is ``_id``). No
 #: dashboard route writes the other three.
 SNAPSHOT_BASE_MODEL_FIELDS: frozenset[str] = frozenset(
@@ -113,6 +119,7 @@ SNAPSHOT_EXCLUDED_FIELDS: frozenset[str] = (
     | SNAPSHOT_FORBIDDEN_FIELDS
     | SNAPSHOT_VOLATILE_FIELDS
     | SNAPSHOT_DERIVED_FIELDS
+    | SNAPSHOT_PROVENANCE_FIELDS
     | SNAPSHOT_BASE_MODEL_FIELDS
 )
 
@@ -129,7 +136,7 @@ _LOGO_CACHE_BUSTER = re.compile(r"\?v=\d+$")
 #: ``image`` is Delta-backed for its *manifest* of image paths; the image
 #: blobs themselves live at a user-supplied prefix with no content
 #: addressing, which is recorded as an explicit gap rather than glossed over.
-_DELTA_TYPES = frozenset({"table", "image"})
+_DELTA_TYPES = frozenset({"table", "image", "genomic_tracks"})
 _MANIFEST_TYPES = frozenset({"multiqc", "jbrowse2"})
 _ASSET_TYPES = frozenset({"geojson", "phylogeny"})
 
@@ -412,6 +419,10 @@ def build_dc_stamps(tabs: list[TabSnapshot]) -> list[DataCollectionStamp]:
         # live under a user-supplied prefix with no content addressing.
         if dc_type.lower() == "image":
             stamp.unversioned_parts = ["image_pixels"]
+        # Likewise a track manifest: its rows are versioned, the track files
+        # they name (read in place, or uploaded under the DC's prefix) are not.
+        elif dc_type.lower() == "genomic_tracks":
+            stamp.unversioned_parts = ["track_files"]
 
         try:
             dt_doc = deltatables_collection.find_one({"data_collection_id": ObjectId(dc_id)})

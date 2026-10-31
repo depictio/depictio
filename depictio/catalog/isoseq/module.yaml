@@ -9,6 +9,7 @@
 # per sample when a run is chunked.
 id: isoseq
 name: Iso-Seq refine
+version: "1.0.0"
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/isoseq/refine
 homepage: https://isoseq.how
 source_url: https://github.com/PacificBiosciences/IsoSeq

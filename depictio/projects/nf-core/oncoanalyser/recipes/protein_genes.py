@@ -5,8 +5,7 @@ driver catalog (``purple_drivers``), and folds them to one row per tumor and
 gene, the unit the protein views show one at a time:
 
 * ``entity``: the gene symbol, the same column name and values as the protein
-  changes, so a point picked on the scatter narrows the lollipop and moves the
-  3D structure to that gene;
+  changes, so a point picked on the scatter narrows the needles to that gene;
 * ``changes``: protein changes on the gene in that tumor; ``hotspots``: how
   many of them sit at a known hotspot;
 * ``max_af``: the highest purity-adjusted allele frequency among them (near the

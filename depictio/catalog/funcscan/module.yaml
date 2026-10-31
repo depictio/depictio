@@ -6,6 +6,7 @@
 # them, so `source_url` points at the pipeline instead of `nf_core_url`.
 id: funcscan
 name: nf-core/funcscan
+version: "1.0.0"
 description: >-
   Run-level joins across the four nf-core/funcscan screens: a per-sample
   screening hub (ARG, AMP, BGC and CAZyme headline counts), a per-contig

@@ -174,7 +174,7 @@ jobs:
               ! -path "depictio/tests/*" 2>/dev/null | sort | xargs cat 2>/dev/null | sha256sum | cut -c1-12)
           CONFIG_HASH=$(cat \
               pyproject.toml uv.lock \
-              pnpm-lock.yaml pnpm-workspace.yaml \
+              pnpm-lock.yaml pnpm-workspace.yaml patches/* \
               docker-images/Dockerfile.api \
               docker-images/Dockerfile.worker \
               docker-images/Dockerfile.viewer \
@@ -537,10 +537,17 @@ jobs:
   # A stack started with `depictio local up` hands over to Docker Compose: same
   # dashboards, same table data in S3, and the CLI token still valid (same keys).
   # Runs on this commit's images: the export is only meant for the same release.
+  #
+  # ubuntu-22.04, not 24.04: the 24.04 runner this job got ran a Linux kernel
+  # >= 6.19, on which the mongo container exits at startup ("MongoDB cannot start: Linux
+  # kernel versions 6.19 and newer ...", SERVER-121912, tcmalloc vs rseq), so
+  # `docker compose up` reports mongo unhealthy. No mongo release fixes it; the
+  # 22.04 jobs above run the same image fine. `local-up (ubuntu-24.04)` still
+  # covers the 24.04 platform with the native mongod.
   local-to-compose:
     needs: [check-quality-cache, docker-build]
     if: always() && needs.docker-build.result == 'success'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-22.04
     timeout-minutes: 30
     permissions:
       contents: read
@@ -2868,11 +2875,13 @@ jobs:
     runs-on: ubuntu-22.04
     # No job in this workflow had one, so the only backstop was GitHub's 6h
     # default — and a leg of this job has run for 3h. Sized for the full catalog
-    # walk (main, nightly, ci:full-catalog), ~60min a leg with ~550 renders each;
-    # a PR's representative walk finishes a leg in ~10. Sized so Playwright
-    # always reaches its own end-of-run summary: a job the runner kills here
-    # skips every `if: always()` step, report included.
-    timeout-minutes: 120
+    # walk (main, nightly, ci:full-catalog), ~770 renders a leg: about 70min on
+    # a fast runner, but 115min and more on the slower image GitHub also hands
+    # out, where 120 cut legs off a run short of their last chunk. A PR's
+    # representative walk finishes a leg in ~10. Sized so Playwright always
+    # reaches its own end-of-run summary: a job the runner kills here skips
+    # every `if: always()` step, report included.
+    timeout-minutes: 150
     permissions:
       contents: read
       packages: read

@@ -28,6 +28,7 @@ import {
 import { usePlotAnnotationLayer } from '../annotations/usePlotAnnotationLayer';
 import { supportsAdvancedVizAnnotation } from '../../annotations/plotDecorate';
 import { COLOUR_SCALES, type ColourScale } from './colourScales';
+import { plotlyColorscale } from '../../utils/colorScale';
 import { dotSizeKey, dotSizes, type DotSizeKeyEntry } from './dotSizes';
 import { splitFigureByGroups } from './groupSplit';
 import type { GroupRenderState } from '../../selectionGroups';
@@ -452,7 +453,7 @@ const DotPlotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
             marker: {
               size: sizes,
               color: meanVals,
-              colorscale: sequentialScale(colourScale, isDark),
+              colorscale: plotlyColorscale(sequentialScale(colourScale, isDark)),
               reversescale: reverseScale,
               showscale: true,
               colorbar: {
@@ -663,7 +664,7 @@ const DotPlotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
           marker: {
             size: sizes,
             color: colourValues,
-            colorscale: colorscale,
+            colorscale: Array.isArray(colorscale) ? colorscale : plotlyColorscale(colorscale),
             reversescale: reverseScale,
             showscale: true,
             // Discrete two-bucket palette needs an explicit min/max so the

@@ -213,9 +213,9 @@ const VIZ_KIND: Readonly<Record<string, VizKindLabel>> = {
     'Ancient-DNA damage: substitution frequency by position from the read end',
   ),
   genome_view: label(
-    'Genome',
+    'Overview',
     'tabler:dna-2',
-    'Scores along the chromosomes on a zoomable genome axis, with a region brush',
+    'Calls of every sample along the chromosomes: brush a region to drive the browser',
   ),
   group_compare: label(
     'Compare',
@@ -237,10 +237,40 @@ const VIZ_KIND: Readonly<Record<string, VizKindLabel>> = {
     'tabler:circle-dotted',
     'Links between genomic loci, drawn as chords on a chromosome ring',
   ),
+  ideogram: label(
+    'Karyotype',
+    'tabler:align-left',
+    'One bar per chromosome scaled to its length, with the features on it',
+  ),
   parallel_coordinates: label(
     'Parallel',
     'tabler:chart-line',
     'One line per sample across several metric axes, each one brushable',
+  ),
+  ranked_distribution: label(
+    'Ranked',
+    'tabler:chart-candle',
+    'Top features ranked by a score, each with its distribution across samples',
+  ),
+  spatial_cells: label(
+    'Cells',
+    'tabler:microscope',
+    'Segmented cells where they sit in the image, coloured by a marker or a cell type',
+  ),
+  allele_grid: label(
+    'Alleles',
+    'tabler:layout-columns',
+    'Genotype per sample and locus, one half per haplotype, coloured by allele group',
+  ),
+  pedigree: label(
+    'Pedigree',
+    'mdi:family-tree',
+    'Family tree with the standard symbols: sex as the shape, affected status as the fill',
+  ),
+  ranked_table: label(
+    'Top',
+    'mdi:podium',
+    'Leaderboard of candidates ordered by a score: medals, badges, bars and a hover popover',
   ),
   // `record_card` is a card of fields, not a figure: no label.
 };

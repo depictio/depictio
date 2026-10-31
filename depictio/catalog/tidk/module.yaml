@@ -1,0 +1,18 @@
+# tidk: telomeric repeats along an assembly. `tidk explore` ranks the short
+# repeat units found in long tandem runs (the candidate telomere), and
+# `tidk search` counts one unit, forward and reverse, in fixed windows along
+# every sequence. The search table is read here: a telomere-to-telomere
+# chromosome carries a pile of repeats in its first and last windows. The last
+# window of a sequence ends at its length, so the same table gives the length of
+# every sequence of the assembly, which a karyotype needs on a genome that has
+# no assembly table (catalog busco and nf-core/genomeqc read it that way).
+id: tidk
+name: tidk
+version: "1.0.0"
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/tidk/search
+homepage: https://github.com/tolkit/telomeric-identifier
+biotools_url: null
+description: >-
+  Telomeric repeat identification toolkit: finds the candidate telomeric repeat
+  unit of an assembly and counts it in windows along every sequence.
+stage: qc

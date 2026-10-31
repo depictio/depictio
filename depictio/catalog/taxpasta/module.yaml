@@ -1,5 +1,6 @@
 id: taxpasta
 name: taxpasta
+version: "1.0.0"
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/taxpasta/merge
 description: TAXonomic Profile Aggregation and STAndardisation.
 homepage: https://taxpasta.readthedocs.io/

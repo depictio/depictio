@@ -69,7 +69,9 @@ def test_optional_roles_cover_intervals_lanes_and_colour():
 def test_config_defaults_are_a_plain_point_track():
     config = GenomeViewConfig()
     assert config.viz_kind == KIND
-    assert config.mark == "point"
+    assert config.mark == "rect"
+    assert config.default_view == "chromosome"
+    assert config.lane_height is None
     assert config.annotation == "none"
     assert config.facet_by_sample is False
     # The brush is on by default: a region filter is unambiguous, unlike a
@@ -78,6 +80,12 @@ def test_config_defaults_are_a_plain_point_track():
     assert config.follow_region_filter is False
     assert config.selection_enabled is False
     assert config.selection_column is None
+    # A plain pointer, and nothing that moves a browser or the tile's height
+    # unless the dashboard asks.
+    assert config.interaction_mode is None
+    assert config.drag_mode is None
+    assert config.publish_view_window is False
+    assert config.auto_height is False
 
 
 def test_union_discriminates_on_the_new_kind():
@@ -117,12 +125,13 @@ def test_line_is_not_a_mark_because_genomespy_has_none():
 
 
 def test_annotation_falls_back_to_none_without_a_shipped_gene_table():
-    for assembly in ("hg38", "mm10"):
+    for assembly in ("hg38", "hg19", "mm10"):
         assert GenomeViewConfig(annotation=assembly).annotation == assembly  # type: ignore[arg-type]
     # A run's genome is a template variable, so an assembly without a shipped
     # gene table degrades to no gene lane rather than failing the import.
-    assert GenomeViewConfig(annotation="hg19").annotation == "none"  # type: ignore[arg-type]
+    assert GenomeViewConfig(annotation="TAIR10").annotation == "none"  # type: ignore[arg-type]
     assert GenomeViewConfig(annotation="GRCh38").annotation == "hg38"  # type: ignore[arg-type]
+    assert GenomeViewConfig(annotation="GRCh37").annotation == "hg19"  # type: ignore[arg-type]
 
 
 def test_max_facets_is_bounded_so_lanes_stay_readable():
@@ -196,3 +205,65 @@ def test_default_region_takes_the_first_contig_keyword(region: str):
     # the first one the data carries (resolved in the viewer, defaultRegion.ts).
     config = GenomeViewConfig(chr_col="chr", pos_col="pos", default_region=region)
     assert config.default_region == region
+
+
+def test_lane_height_bounds() -> None:
+    assert GenomeViewConfig(lane_height=64).lane_height == 64
+    for bad in (8, 500):
+        with pytest.raises(ValidationError):
+            GenomeViewConfig(lane_height=bad)
+
+
+@pytest.mark.parametrize("mode", ["pointer", "pan", "select"])
+def test_interaction_mode_takes_the_three_tools(mode: str) -> None:
+    assert GenomeViewConfig(interaction_mode=mode).interaction_mode == mode
+    with pytest.raises(ValidationError):
+        GenomeViewConfig(interaction_mode="lasso")
+
+
+def test_the_older_drag_mode_is_still_accepted() -> None:
+    """Dashboards written before the mode switch keep validating; the viewer
+    reads it as the opening mode when ``interaction_mode`` is unset."""
+    assert GenomeViewConfig(drag_mode="pan").drag_mode == "pan"
+    assert GenomeViewConfig(drag_mode="select").drag_mode == "select"
+    with pytest.raises(ValidationError):
+        GenomeViewConfig(drag_mode="pointer")
+
+
+def test_auto_height_and_the_window_publish_are_opt_in() -> None:
+    config = GenomeViewConfig(auto_height=True, publish_view_window=True)
+    assert config.auto_height is True and config.publish_view_window is True
+
+
+def test_the_axis_follows_the_browser_only_on_request_and_keys_its_colours_by_default() -> None:
+    assert GenomeViewConfig().follow_view_window is False
+    assert GenomeViewConfig(follow_view_window=True).follow_view_window is True
+    assert GenomeViewConfig().show_legend is True
+    assert GenomeViewConfig(show_legend=False).show_legend is False
+
+
+def test_a_browser_names_and_colours_its_variants_with_the_new_fields() -> None:
+    from depictio.models.components.lite import JBrowseVariantColor, JBrowseVariantLabel
+
+    label = JBrowseVariantLabel(info_field="CSQ", part=3, score_field="RankScore")
+    assert label.score_field == "RankScore"
+    assert JBrowseVariantLabel().score_field is None
+    with pytest.raises(ValidationError):
+        JBrowseVariantLabel(score_field="Rank Score")
+    color = JBrowseVariantColor(
+        column="genetic_model", fallback_color="#adb5bd", fallback_label="None"
+    )
+    assert (color.fallback_color, color.fallback_label) == ("#adb5bd", "None")
+    assert JBrowseVariantColor(column="x").fallback_color is None
+
+
+def test_color_scale_is_optional_and_validated():
+    assert GenomeViewConfig().color_scale is None
+    config = GenomeViewConfig(color_scale={"column": "sample", "order_by": "day"})
+    assert config.color_scale is not None
+    assert config.color_scale.scheme == "viridis"
+    assert config.color_scale.order_by == "day"
+    with pytest.raises(ValidationError):
+        GenomeViewConfig(color_scale={"column": "sample", "scheme": "jet"})
+    with pytest.raises(ValidationError):
+        GenomeViewConfig(color_scale={"order_by": "day"})

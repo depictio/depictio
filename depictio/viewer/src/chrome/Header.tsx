@@ -10,6 +10,7 @@ import {
 import { Icon } from '@iconify/react';
 
 import type { BrandTheme, DashboardData, DashboardSummary } from 'depictio-react-core';
+import { paletteVar } from 'depictio-react-core';
 import PoweredBy from './PoweredBy';
 import { useFeedbackLink } from '../feedback';
 import { searchShortcutLabel } from '../spotlight/shortcut';
@@ -194,13 +195,9 @@ export function useHeaderModel({
   //     light / `#e9ecef` dark) so it stays readable in both schemes.
   //     `dark.6` is near-black and would be invisible on the dark page.
   //   - any other named color → shade 6 in light, shade 4 in dark.
-  const titleColor = !resolvedColor
-    ? undefined
-    : resolvedColor === 'dark'
-      ? 'var(--mantine-color-text)'
-      : theme === 'dark'
-        ? `var(--mantine-color-${resolvedColor}-4)`
-        : `var(--mantine-color-${resolvedColor}-6)`;
+  const titleColor = resolvedColor
+    ? paletteVar(resolvedColor, theme === 'dark' ? 4 : 6)
+    : undefined;
 
   // Breadcrumb format: `<dashboard name> / <active tab label>` for every tab.
   // - prefix is the parent dashboard's `title` (e.g. "nf-core/ampliseq")
@@ -254,12 +251,7 @@ export function useHeaderModel({
       className="dc-header-tab-icon"
       style={{
         flexShrink: 0,
-        color:
-          tabIconColor === 'dark'
-            ? 'var(--mantine-color-text)'
-            : theme === 'dark'
-              ? `var(--mantine-color-${tabIconColor}-4)`
-              : `var(--mantine-color-${tabIconColor}-6)`,
+        color: paletteVar(tabIconColor, theme === 'dark' ? 4 : 6),
       }}
     />
   ) : null;

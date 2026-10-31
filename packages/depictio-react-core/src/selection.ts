@@ -178,6 +178,10 @@ export function advancedVizSelectionColumn(metadata: StoredMetadata): string | u
       return named;
     case 'profile':
       return named ?? configColumn('series_col');
+    case 'spatial_cells':
+      // A lassoed cell is its id; the coordinates are numeric and the
+      // category is a grouping, so neither names the cells that were caught.
+      return named ?? configColumn('cell_id_col') ?? 'cell_id';
     case 'scatter_xy':
       // The label column, because that is what identifies a point: the axes are
       // numeric by definition and the colour column is a grouping, so filtering
@@ -210,6 +214,20 @@ export function advancedVizSelectionColumn(metadata: StoredMetadata): string | u
       // identifies it, as a chord's is for a link. `selection_column` names a
       // per-hit key when several hits share a label.
       return named ?? configColumn('label_col') ?? 'label';
+    case 'allele_grid':
+      // A click on a half picks the allele it holds: the allele column is what
+      // a peptide-by-allele prediction table (epitopeprediction) joins on. A
+      // click on a sample label picks the sample instead, on `sample_id_col`
+      // (the renderer names it): the same filter key, so the last gesture
+      // wins.
+      return named ?? configColumn('allele_col') ?? 'allele';
+    case 'pedigree':
+      // A symbol is one individual: the column a sample-keyed table joins on.
+      return named ?? configColumn('individual_col') ?? 'individual';
+    case 'ranked_table':
+      // A row is one candidate: its key when it has one (a variant id, since a
+      // gene repeats), else the title column.
+      return named ?? configColumn('title_col') ?? 'title';
     case 'msa':
       // A row click picks one sequence of the alignment.
       return configColumn('seq_id_col') ?? 'seq_id';
@@ -218,13 +236,23 @@ export function advancedVizSelectionColumn(metadata: StoredMetadata): string | u
       // when one is bound; otherwise the pick is the position, whose feature
       // half travels in the `residue_selection` pair like the protein kinds.
       return named ?? configColumn('label_col') ?? configColumn('position_col') ?? 'position';
+    case 'ranked_distribution':
+      // A box and its lollipop are one feature, and its id is what the other
+      // tiles join on; the display label may repeat across features.
+      return named ?? configColumn('feature_id_col') ?? 'feature_id';
     default:
+      // `ideogram` lands here on purpose: a karyotype emits a region, not a
+      // value selection. A click on a chromosome or a drag along it publishes
+      // the `genome_selection` pair (`genomeRegionFilters` below), gated by
+      // its own `region_filter_enabled`; a single mark is too small to pick.
       return undefined;
   }
 }
 
 /** Kinds that read their drawn selection back out of the filter list. */
-const CHROME_RESET_KINDS = new Set(['upset_plot']);
+// The allele grid repaints its picked alleles from the filter list too, so a
+// Reset from the chrome clears the highlight with the filter.
+const CHROME_RESET_KINDS = new Set(['upset_plot', 'allele_grid', 'pedigree', 'ranked_table']);
 
 /**
  * Whether the tile's chrome offers "Reset selection" for an advanced_viz.
@@ -811,6 +839,29 @@ export function clearedSelectionFilters(
  * arrays). ``selectionColumnIndex`` is the offset within each customdata row
  * that holds the value to filter on.
  */
+/**
+ * Figure types whose click carries one row's identity in `customdata`, so the
+ * figure can be a cross-filter source: scatter clouds (lasso, box and click)
+ * and the types whose marks are one row each when the builder puts the key
+ * in `customdata` (a bar per variant, a heatmap cell per pair). Histograms,
+ * boxes and pies aggregate rows into one mark, so a click there names no row
+ * and stays inert. Only the scatter types also get a lasso by default: a lasso
+ * on bars is not the gesture, and it would take the drag from pan and zoom.
+ */
+export function supportsPointSelection(visuType: unknown): boolean {
+  return (
+    visuType === 'scatter' ||
+    visuType === 'scatter_3d' ||
+    visuType === 'bar' ||
+    visuType === 'heatmap'
+  );
+}
+
+/** Figure types that default to a lasso / box drag when selection is on. */
+export function selectsByDrag(visuType: unknown): boolean {
+  return visuType === 'scatter' || visuType === 'scatter_3d';
+}
+
 export function extractScatterSelection(
   eventData: { points?: Array<{ customdata?: unknown }> } | null | undefined,
   selectionColumnIndex: number,
@@ -1080,6 +1131,8 @@ export function supportsSelectionGrouping(
       return Boolean(metadata.image_column);
     case 'advanced_viz':
       return advancedVizSelectionColumn(metadata) !== undefined;
+    case 'jbrowse':
+      return Boolean(metadata.selection_enabled);
     default:
       return false;
   }

@@ -12,7 +12,10 @@ import {
   familyOrder,
   figureDrawsGroups,
   foldableSectionsOf,
+  genomeConfigOf,
+  genomeTabsOf,
   groupDisplaysOf,
+  jbrowseRank,
   pickFilterDemo,
   pickFromFamily,
   pinnedDemoSections,
@@ -457,5 +460,129 @@ describe('actionsTileRank', () => {
     const besides = actionsTileRank('advanced_viz', { secondTo: embedding });
     expect(besides(view('pcoa-2', 'embedding'))).toBe(1);
     expect(besides(view('upset', 'upset_plot'))).toBe(0);
+  });
+});
+
+describe('the genome browser', () => {
+  const browser = (index: string, extra: Partial<StoredMetadata> = {}) =>
+    meta({ index, component_type: 'jbrowse', ...extra });
+  const plain = browser('plain');
+  const selecting = browser('selecting', { selection_enabled: true, selection_column: 'sample_id' });
+  const following = browser('following', {
+    locus_from: { data_collection_tag: 'variants', chrom_column: 'chrom', start_column: 'pos' },
+  });
+
+  it('ranks the browser with most to say first, and ignores other tiles', () => {
+    expect(jbrowseRank(following)).toBe(0);
+    expect(jbrowseRank(selecting)).toBe(1);
+    expect(jbrowseRank(plain)).toBe(2);
+    expect(jbrowseRank(meta({ index: 'f', component_type: 'figure' }))).toBeNull();
+  });
+
+  it('prefers a browser in the grid to one that floats', () => {
+    const floating = browser('floating', { placement: 'floating' });
+    expect(jbrowseRank(floating)).toBe(5);
+    expect(jbrowseRank(floating)!).toBeGreaterThan(jbrowseRank(plain)!);
+    expect(
+      jbrowseRank(browser('floating-following', { ...following, placement: 'floating' })),
+    ).toBe(3);
+  });
+
+  it('reads the config through the open fields of the metadata', () => {
+    expect(genomeConfigOf(plain)).toEqual({
+      assembly: null,
+      locusFromDc: null,
+      selects: false,
+      selectionColumn: null,
+      selectionMode: 'feature_click',
+      ucscTracks: [],
+      maxTracks: null,
+    });
+    expect(
+      genomeConfigOf(
+        browser('full', {
+          assembly: 'hg19',
+          selection_enabled: true,
+          selection_column: 'sample_id',
+          selection_mode: 'visible_tracks',
+          ucsc_tracks: ['clinvarMain', ''],
+          max_tracks: 8,
+          locus_from: { data_collection_tag: 'variants' },
+        }),
+      ),
+    ).toEqual({
+      assembly: 'hg19',
+      locusFromDc: 'variants',
+      selects: true,
+      selectionColumn: 'sample_id',
+      selectionMode: 'visible_tracks',
+      ucscTracks: ['clinvarMain'],
+      maxTracks: 8,
+    });
+  });
+
+  it('a column alone does not select: the tile must have selection on', () => {
+    expect(genomeConfigOf(browser('c', { selection_column: 'sample_id' })).selects).toBe(false);
+  });
+
+  it("takes the open tab's browser before a sibling's, whatever the sibling has", () => {
+    const docs: Record<string, GuideFamilyDoc | null | undefined> = {
+      here: { stored_metadata: [plain] },
+      main: { stored_metadata: [following] },
+    };
+    expect(pickFromFamily(['here', 'main'], (id) => docs[id], jbrowseRank)).toMatchObject({
+      status: 'found',
+      dashboardId: 'here',
+      metadata: { index: 'plain' },
+    });
+  });
+
+  it('falls on to the siblings in order, asking for a tab not fetched yet', () => {
+    const docs: Record<string, GuideFamilyDoc | null | undefined> = {
+      here: { stored_metadata: [meta({ index: 'f', component_type: 'figure' })] },
+      a: null,
+      c: { stored_metadata: [selecting, following] },
+    };
+    expect(pickFromFamily(['here', 'a', 'c'], (id) => docs[id], jbrowseRank)).toMatchObject({
+      status: 'found',
+      dashboardId: 'c',
+      metadata: { index: 'following' },
+    });
+    expect(pickFromFamily(['here', 'b'], (id) => docs[id], jbrowseRank)).toEqual({
+      status: 'pending',
+      need: 'b',
+    });
+  });
+
+  it('lists the tabs that hold one, with each section\'s own description', () => {
+    const docs: Record<string, GuideSectionsDoc | null | undefined> = {
+      here: {
+        stored_metadata: [
+          meta({ index: 't', component_type: 'table' }),
+          browser('b1', { section: 'Reads' }),
+          browser('b2', { section: 'Reads' }),
+          browser('b3'),
+        ],
+        grid_sections: [{ name: 'Reads', description: 'The reads behind each call.' }],
+      },
+      empty: { stored_metadata: [meta({ index: 't', component_type: 'table' })] },
+      failed: null,
+      main: {
+        stored_metadata: [browser('b4', { section: 'Locus' })],
+        grid_sections: [{ name: 'Locus' }],
+      },
+    };
+    const { tabs, pending } = genomeTabsOf(
+      ['here', 'empty', 'failed', 'main', 'later'],
+      (id) => docs[id],
+    );
+    expect(pending).toEqual(['later']);
+    expect(tabs.map((t) => t.dashboardId)).toEqual(['here', 'main']);
+    expect(tabs[0].tiles.map((t) => t.index)).toEqual(['b1', 'b2', 'b3']);
+    expect(tabs[0].sections).toEqual([
+      { name: 'Reads', description: 'The reads behind each call.' },
+      { name: null, description: null },
+    ]);
+    expect(tabs[1].sections).toEqual([{ name: 'Locus', description: null }]);
   });
 });

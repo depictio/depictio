@@ -6,6 +6,7 @@
 # with no match writes nothing, so an empty file is a normal output.
 id: interproscan
 name: InterProScan
+version: "1.0.0"
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/interproscan
 homepage: https://interproscan-docs.readthedocs.io/
 biotools_url: null  # bio.tools lists only the EBI web services, not the standalone scanner

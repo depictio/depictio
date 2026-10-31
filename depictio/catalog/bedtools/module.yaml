@@ -1,0 +1,27 @@
+# bedtools genomecov: per-base coverage of a BAM as a bedGraph. Catalogued for
+# the strand-split pair a nascent-transcription pipeline publishes
+# (`bedtools genomecov -bg -strand +` and `-strand -`, written as
+# `<sample>.plus.bedGraph` and `<sample>.minus.bedGraph` by nf-core/nascent).
+# Each is 4 to 10 million intervals per library on a human genome, far too dense
+# for a table, so both outputs here stream the files through
+# `depictio/recipes/lib/strand_coverage.py` and keep what a dashboard draws:
+# read bases in 250 kb windows per strand, and the per-library totals behind
+# them (strand balance, mitochondrial share, how much of the signal a few
+# hotspot windows hold).
+#
+# The same coverage, as bigWig, is what a genome view range-reads directly (an
+# `indexed_file` collection); these outputs are the genome-wide summary that a
+# browser cannot compute from a window in view.
+id: bedtools
+name: bedtools genomecov
+version: "1.0.0"
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/bedtools/genomecov
+homepage: https://bedtools.readthedocs.io/en/latest/content/tools/genomecov.html
+description: >-
+  A set of tools for genomic analysis tasks, specifically enabling genome
+  arithmetic (merge, count, complement) on various file types. Here, genomecov
+  computes the per-base coverage of a set of alignments, one strand at a time.
+biotools_url: https://bio.tools/bedtools
+edam_topics:
+  - http://edamontology.org/topic_0622 # Genomics
+stage: alignment

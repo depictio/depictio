@@ -84,7 +84,7 @@ import ProjectIngestionHistoryPanel from './ProjectIngestionHistoryPanel';
 import ProjectIngestionTrigger from './ProjectIngestionTrigger';
 import { DeltaVersionHistory } from './DeltaVersionHistory';
 import ProjectSettingsModal from './ProjectSettingsModal';
-import { parseTemplate, TemplateChip, templateDocsUrl } from '../template';
+import { parseTemplate, TemplateChip, TemplateRevisionBadge, templateDocsUrl } from '../template';
 import {
   DcTypeBadges,
   DcTypeIcon,
@@ -161,8 +161,9 @@ function formatBytes(bytes?: number | null): string {
   return `${value.toFixed(value >= 100 || i === 0 ? 0 : 1)} ${units[i]}`;
 }
 
-/** Pick the right storage size for a DC. Tables come from the delta-table
- *  size field; MultiQC DCs come from one of the file-size aliases. */
+/** Pick the right storage size for a DC. Tables (and genomic_tracks
+ *  manifests, which are Delta tables too) come from the delta-table size
+ *  field; MultiQC DCs come from one of the file-size aliases. */
 function getDcSizeBytes(dc: DataCollectionShape): number {
   const flex = dc.flexible_metadata || {};
   const type = (dc.config?.type as string | undefined)?.toLowerCase();
@@ -175,6 +176,27 @@ function getDcSizeBytes(dc: DataCollectionShape): number {
     );
   }
   return (flex.deltatable_size_bytes as number | undefined) ?? 0;
+}
+
+/** The genomic_tracks settings the DC viewer lists. The assembly is a preset
+ *  name or a custom-assembly object named by `name`. */
+function readTracksProps(props: Record<string, unknown> | undefined): {
+  assembly: string;
+  uriColumn: string;
+  sampleColumn: string;
+} {
+  const assembly = props?.assembly;
+  const assemblyName =
+    typeof assembly === 'string'
+      ? assembly
+      : assembly && typeof assembly === 'object'
+        ? `${String((assembly as { name?: unknown }).name ?? 'custom')} (custom)`
+        : 'hg38';
+  return {
+    assembly: assemblyName,
+    uriColumn: (props?.uri_column as string | undefined) || 'uri',
+    sampleColumn: (props?.sample_column as string | undefined) || '—',
+  };
 }
 
 /** Pick the right "where is this data stored" string for a DC. */
@@ -2248,6 +2270,7 @@ const ProjectHeader: React.FC<{
                 Template
               </Text>
               <TemplateChip parsed={tmpl} verbose plain />
+              <TemplateRevisionBadge origin={(project as Record<string, unknown>).template_origin} />
               <Anchor href={templateDocsUrl(tmpl)} target="_blank" rel="noreferrer" size="sm" fw={600}>
                 Documentation
               </Anchor>
@@ -2309,6 +2332,7 @@ const ProjectHeader: React.FC<{
               Template:
             </Text>
             <TemplateChip parsed={tmpl} verbose />
+            <TemplateRevisionBadge origin={(project as Record<string, unknown>).template_origin} />
             <Anchor
               href={templateDocsUrl(tmpl)}
               target="_blank"
@@ -3197,6 +3221,12 @@ const DataCollectionViewer: React.FC<{
     (dc.config?.dc_specific_properties?.format as string | undefined) || null;
   const isMultiQC = type.toLowerCase() === 'multiqc';
   const isTable = type.toLowerCase() === 'table';
+  // A genomic_tracks DC is a track manifest stored as a Delta table: it previews
+  // like a table, but isn't scored for advanced viz.
+  const isTracks = type.toLowerCase() === 'genomic_tracks';
+  const tracksProps = isTracks
+    ? readTracksProps(dc.config?.dc_specific_properties as Record<string, unknown> | undefined)
+    : null;
   const isCoordTable = dcHasCoordinates(dc);
   const deltaVersion = getDcDeltaVersion(dc);
 
@@ -3289,6 +3319,13 @@ const DataCollectionViewer: React.FC<{
                   label="Metatype"
                   badge={<DcMetatypeBadge dc={dc} projectType={projectType} />}
                 />
+              )}
+              {tracksProps && (
+                <>
+                  <DetailRow label="Assembly" value={tracksProps.assembly} mono />
+                  <DetailRow label="Track URI column" value={tracksProps.uriColumn} mono />
+                  <DetailRow label="Sample column" value={tracksProps.sampleColumn} mono />
+                </>
               )}
               {isCoordTable && (
                 <>
@@ -3421,10 +3458,11 @@ const DataCollectionViewer: React.FC<{
           </Stack>
         </Card>
 
-        {/* Tabular preview only makes sense for table-type DCs. MultiQC has
-         *  its own per-module preview elsewhere; image and JBrowse types
-         *  don't fit a row/column grid. */}
-        {!isMultiQC && type === 'table' && (
+        {/* Tabular preview only makes sense for Delta-backed DCs (tables and
+         *  genomic_tracks manifests). MultiQC has its own per-module preview
+         *  elsewhere; image and legacy JBrowse2 types don't fit a row/column
+         *  grid. */}
+        {!isMultiQC && (isTable || isTracks) && (
           <>
             <Card withBorder radius="md" p="md">
               <Group gap="xs" mb="md">

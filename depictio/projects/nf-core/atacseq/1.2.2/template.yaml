@@ -55,6 +55,13 @@
 # collects the tool versions from the tab-separated `software_versions.csv` and
 # nothing else, and no template variable is auto-set from pipeline parameters.
 #
+# GENOME TRACKS. The run's bigWig, broadPeak and BAM files are not part of the
+# tables-only megatest subset. Pass `--var TRACKS_URI=<results folder>` to read
+# them in place (see the variable below); without it the `tracks` collection
+# uploads whichever of them DATA_ROOT holds. The manifest is keyed on the
+# merged-library spelling (`<sample>.mLb.clN`), like the peak calls, and lists
+# the merged-library level only.
+#
 # SAMPLE NAMING. atacseq names the merged, filtered library `<sample>.mLb.clN`
 # and MACS2 stamps that string into every peak name, so the peak calls, the
 # HOMER annotation and the consensus matrix all speak `GM12878_FAST_R1.mLb.clN`
@@ -64,7 +71,7 @@
 template:
   template_id: "nf-core/atacseq/1.2.2"
   description: "nf-core/atacseq template: ataqv library quality, MACS2 broad peaks, HOMER peak annotation, the consensus peak set and DESeq2 differential accessibility, on top of the reprocessed MultiQC report."
-  version: "1.0.0"
+  version: "2.0.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory containing atacseq output (bwa/, fastqc/, trim_galore/, multiqc/, pipeline_info/) plus the reprocessed multiqc/multiqc_data/multiqc.parquet."
@@ -73,6 +80,9 @@ template:
       description: "UCSC assembly the run was aligned to (hg38, hg19, mm10, ...). Sets the genome axis of the Locus tab; pass --var GENOME=<assembly> for a run on another build."
       required: false
       default: "hg38"
+    - name: "TRACKS_URI"
+      description: "s3:// or https:// folder holding the run's results, to read the genome-browser tracks (bigWig, broadPeak, BAM) in place instead of uploading them from DATA_ROOT. Without it the `tracks` collection uploads whichever of those files DATA_ROOT holds."
+      required: false
   # The bundled reference dataset: the design sheet is part of the run's own
   # pipeline_info/ output, and the megatest was aligned to hg19.
   reference:
@@ -95,6 +105,15 @@ template:
         key_patterns: ["*"]
   dashboards:
     - "dashboards/base.yaml"
+  conditional:
+    # Genome tracks: read in place when TRACKS_URI names the results folder,
+    # uploaded from DATA_ROOT otherwise (the `tracks` recipe keeps only the
+    # files it finds there).
+    - if_var_present: "TRACKS_URI"
+      override_dcs:
+        - data_collection_tag: "tracks"
+          dc_properties:
+            remote_base_uri: "{TRACKS_URI}"
 
 # ============================================================================
 # PROJECT CONFIGURATION
@@ -159,6 +178,55 @@ workflows:
               "sample_id": "Library identifier (<group>_R<replicate>_T<technical replicate>)"
               "fastq_1": "Read 1 FASTQ"
               "fastq_2": "Read 2 FASTQ, empty for single-end libraries"
+
+      # ----------------------------------------------------------------
+      # Genome tracks. A manifest of the run's track files (bigWig signal,
+      # MACS2 broad peak calls, filtered BAM of every merged library) that the
+      # genome browser reads by range, through the API. One row per file,
+      # keyed on the merged-library name like the peak calls, so a picked
+      # peak opens the tracks of the library it was called in.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "tracks"
+        description: "Genome-browser tracks of the run: bigWig signal, MACS2 peak calls and the filtered BAM of every merged library, one row per file"
+        config:
+          type: "genomic_tracks"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/atacseq/tracks.py"
+          dc_specific_properties:
+            format: "TSV"
+            uri_column: "uri"
+            track_id_column: "track_id"
+            sample_column: "sample_id"
+            format_column: "format"
+            name_column: "name"
+            color_column: "color"
+            category_column: "category"
+            order_column: "order"
+            assembly: "{GENOME}"
+            display_defaults:
+              bigwig:
+                displays:
+                  - type: "LinearWiggleDisplay"
+                    height: 60
+                    autoscale: "local"
+              broadpeak:
+                displays:
+                  - type: "LinearBasicDisplay"
+                    height: 30
+              narrowpeak:
+                displays:
+                  - type: "LinearBasicDisplay"
+                    height: 30
+            columns_description:
+              "track_id": "<merged_library>.<kind>, unique per file"
+              "sample_id": "Merged library (<sample>.mLb.clN), the spelling the peak calls use"
+              "sample": "Canonical sample name (<group>_R<replicate>)"
+              "group": "Design group the library belongs to"
+              "kind": "signal, peaks or alignments"
+              "format": "Track file format"
+              "uri": "Path relative to the results folder"
 
       # ----------------------------------------------------------------
       # MultiQC. Reprocessed with MultiQC 1.35: the anchors below are the
@@ -555,6 +623,22 @@ workflows:
               "gene_name": "Symbol of the nearest gene"
               "gene_type": "Biotype of the nearest gene; empty when the run annotated against a plain GTF"
 
+      - data_collection_tag: "homer_feature_classes"
+        description: "Peaks per library and HOMER feature class, the long form the feature-class composition reads"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/atacseq/feature_classes.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Library the peaks were called in"
+              "annotation_class": "Coarse HOMER feature class; unclassified peaks are counted as Unclassified"
+              "peak_count": "Peaks of that library in that feature class"
+              "rank": "Constant label of the one level (Feature class) the composition tile reads"
+
       - data_collection_tag: "homer_tss_distance_profile"
         description: "Where each sample's peaks sit relative to the nearest TSS, counted in 250 bp bins across a 20 kb window"
         config:
@@ -735,6 +819,39 @@ links:
       resolver: "sample_mapping"
       target_field: "sample_name"
     description: "Filter the read-level MultiQC panels by the sequencing libraries picked in the left panel"
+    enabled: true
+
+  # Hub <-> genome tracks, on the merged-library spelling the manifest and the
+  # peak calls share: picking samples opens their tracks, a track picked in the
+  # browser picks its sample back, and a picked peak opens its library's tracks.
+  - source_dc_tag: "sample_design"
+    source_column: "merged_library"
+    target_dc_tag: "tracks"
+    target_type: "genomic_tracks"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Show the genome tracks of the samples picked on the design sheet"
+    enabled: true
+
+  - source_dc_tag: "tracks"
+    source_column: "sample_id"
+    target_dc_tag: "sample_design"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "merged_library"
+    description: "Filter the dashboard by the samples whose tracks are picked in the genome browser"
+    enabled: true
+
+  - source_dc_tag: "macs2_broad_peaks"
+    source_column: "sample"
+    target_dc_tag: "tracks"
+    target_type: "genomic_tracks"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Open the genome tracks of the library a picked peak was called in"
     enabled: true
 
   # Hub -> the collections that speak the short sample name.
@@ -953,6 +1070,26 @@ links:
       resolver: "direct"
       target_field: "sample"
     description: "Filter the TSS distance profiles by the samples picked on the design sheet"
+    enabled: true
+
+  - source_dc_tag: "sample_design"
+    source_column: "merged_library"
+    target_dc_tag: "homer_feature_classes"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the feature-class composition by the samples picked in the left rail"
+    enabled: true
+
+  - source_dc_tag: "homer_annotated_peaks"
+    source_column: "annotation_class"
+    target_dc_tag: "homer_feature_classes"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "annotation_class"
+    description: "A feature class picked on the annotation narrows the feature-class composition"
     enabled: true
 
   # The two DESeq2 QC collections are the only sample-keyed rows on the

@@ -13,27 +13,89 @@
   border-left: 1px solid var(--mantine-color-default-border);
 }
 
-/* Above the plot the controls run as a row: each control keeps its label, the
-   descriptions (which the column has room for) give way. */
+/* Above the plot the controls are one line (DockedControls): the controls
+   that fit, then "More options" and the placement picker at its end. No
+   title, no group captions, no descriptions. */
 .dpx-viz-dock--top {
   flex: 0 0 auto;
   max-height: 45%;
-  padding: 0 30px 8px 2px;
+  padding: 0 30px 6px 2px;
   margin-bottom: 6px;
   border-bottom: 1px solid var(--mantine-color-default-border);
 }
+.dpx-viz-dock__line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 12px;
+  row-gap: 4px;
+  min-width: 0;
+}
+.dpx-viz-dock--top .dpx-viz-dock__lead {
+  flex: 0 0 auto;
+}
+.dpx-viz-dock--top .dpx-viz-dock__controls {
+  flex: 1 1 0;
+  min-width: min(140px, 100%);
+}
+.dpx-viz-dock__end {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  flex: none;
+  margin-left: auto;
+}
+.dpx-viz-dock__action {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* The line's controls are flex items at their own widths, a group's too (a
+   group on the line is `display: contents`). */
+.dpx-viz-row > *,
+.dpx-viz-row > [data-viz-group] > [data-viz-group-body] > * {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+/* A renderer that hands its controls over in one bare stack: a row here. */
+.dpx-viz-row > .mantine-Stack-root {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 12px;
+  row-gap: 4px;
+}
+/* A raw Mantine input (not a Viz* wrapper) titled above its box: the title
+   beside it instead, so it does not make the line two lines tall. */
+.dpx-viz-row .mantine-InputWrapper-root:has(> .mantine-InputWrapper-label) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.dpx-viz-row .mantine-InputWrapper-root > .mantine-InputWrapper-label {
+  margin: 0;
+  white-space: nowrap;
+  font-size: var(--mantine-font-size-xs);
+}
+.dpx-viz-row .mantine-InputWrapper-root:has(> .mantine-InputWrapper-label) > .mantine-Input-wrapper {
+  flex: 0 0 auto;
+  width: 120px;
+}
+.dpx-viz-dock--top .mantine-InputWrapper-description,
+.dpx-viz-dock--top .mantine-Switch-description,
+.dpx-viz-dock--top .mantine-Checkbox-description {
+  display: none;
+}
 
 /* The panel's title, small and quiet: it names the panel, it is not a heading
-   of the figure. Above the plot, "More options" sits at its end. */
+   of the figure. Beside the plot only; the line above it has none. */
 .dpx-viz-dock__head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
   margin-bottom: 6px;
-}
-.dpx-viz-dock--top .dpx-viz-dock__head {
-  margin-bottom: 2px;
 }
 .dpx-viz-dock__head-end {
   display: inline-flex;
@@ -105,10 +167,16 @@
   display: none;
 }
 
-/* Only the first few controls until "More options" is opened, inside groups
-   as well as at the top level. Important: some controls lay themselves out
-   with an inline display (a switch row is an inline flex box). */
-.dpx-viz-dock:not(.is-expanded) .dpx-viz-dock__controls [data-dock-extra] {
+/* Only the controls picked until "More options" is opened, inside groups as
+   well as at the top level. Important: some controls lay themselves out with
+   an inline display (a switch row is an inline flex box). Shown while the
+   line measures its controls. */
+.dpx-viz-dock:not(.is-expanded):not([data-measuring]) .dpx-viz-dock__controls [data-dock-extra] {
+  display: none !important;
+}
+/* The "More options" popover of the line: what the line already shows is
+   not repeated. */
+.dpx-viz-dock-overflow [data-dock-inline] {
   display: none !important;
 }
 .dpx-viz-dock__more {
@@ -119,7 +187,8 @@
   font-size: var(--mantine-font-size-xs);
   color: var(--mantine-color-dimmed);
 }
-.dpx-viz-dock__more:hover {
+.dpx-viz-dock__more:hover,
+.dpx-viz-dock--top .dpx-viz-dock__more[aria-expanded='true'] {
   color: var(--mantine-color-text);
 }
 .dpx-viz-dock--top .dpx-viz-dock__more {

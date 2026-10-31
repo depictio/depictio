@@ -10,11 +10,10 @@ version: 1
 # collection by the tumor or DNA sample id.
 #
 # oncoanalyser writes no MultiQC report parquet, so the family has no MultiQC
-# tab. The Protein changes tab binds the gene scatter, the 3D structure and the
-# lollipop to the protein changes of one gene: a point picked on the scatter
-# moves the other two, and a residue picked in one is marked in the others. The
-# structure is resolved from the gene symbol and needs the server's structure
-# resolver (DEPICTIO_STRUCTURE_RESOLVER_ENABLED); without it the tile says so.
+# tab. The Protein changes tab binds the gene scatter and the needle plot to the
+# protein changes of one gene: a point picked on the scatter moves the needles.
+# It draws no 3D structure: that tile needs the server's structure resolver
+# (off by default) and said so above the figures that matter.
 #
 # Routes: CUPPA, SIGS, CHORD, LILAC, TEAL, Neo and QSEE can be excluded with
 # --processes_exclude, and a targeted (panel) run skips several of them. Their
@@ -91,6 +90,25 @@ main_dashboard:
       INFRAME: '#0ca678'
       SKIPPED_EXONS: '#f59f00'
       OUT_OF_FRAME: '#868e96'
+    # The event LINX resolves an SV cluster to: the chords and the bar beside them wear it.
+    resolved_type: auto
+    # The browsers colour a track by the kind of file it is.
+    kind:
+      somatic: '#e8590c'
+      sv: '#f59f00'
+      germline: '#1c7ed6'
+      sv_germline: '#74c0fc'
+      tumor_reads: '#c2255c'
+      normal_reads: '#868e96'
+    # The proposed cause of a COSMIC signature, as the signature bar groups them.
+    signature_cause:
+      '*': auto
+      APOBEC: '#e8590c'
+      HR deficiency: '#c2255c'
+      Clock-like (ageing): '#1c7ed6'
+      Mismatch repair: '#7048e8'
+      Unexplained: '#adb5bd'
+      Unknown cause: '#ced4da'
   # Persistent: drawn in every tab's filter panel, picks kept across tabs. All
   # three are bound to the samplesheet, the source of every sample link.
   filter_sections:
@@ -257,19 +275,20 @@ main_dashboard:
     aggregation: median
     column_name: purity
     column_type: float64
-    secondary_layout: gauge
-    coverage_max: 1
+    secondary_layout: threshold
+    threshold_value: 0.2
+    threshold_direction: min
     display:
       icon_name: mdi:gauge
       icon_color: blue
-      caption: median, of a pure tumor
+      caption: median; QSEE fails a fit under 20%
       link: tab:Tumor profile
       format: percent
     section: Key figures
     tag: oa-ov-kf-purity
     index: ov-kf-purity
     title: Tumor purity
-    description: Share of tumor cells in the sample, from PURPLE's fit, median over the tumors in view.
+    description: Share of tumor cells in the sample, from PURPLE's fit, median over the tumors in view. Below 20% the fit is too uncertain to trust the copy numbers.
     layout: {x: 2, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: oncoanalyser
@@ -313,7 +332,7 @@ main_dashboard:
     tag: oa-ov-kf-coverage
     index: ov-kf-coverage
     title: Mean coverage
-    description: Mean read depth of each DNA sample, tumor and normal alike. The box shows how it spreads across the samples.
+    description: Mean read depth of each DNA sample, tumor and normal alike, which is why a tumor sequenced deeper than its normal spreads the box.
     layout: {x: 6, y: 0, w: 2, h: 2}
   # Findings filter bar: the group, then the sample.
   - component_type: interactive
@@ -376,7 +395,7 @@ main_dashboard:
     section: Findings
     source_tab: Tumor profile
     source_component: tp-signature-bar
-    caption: Share of each tumor's SNVs that a COSMIC signature explains; MISALLOC is the share none explains.
+    caption: Share of the SNVs that each COSMIC signature explains, largest first and coloured by its proposed cause; MISALLOC is the share none explains.
     hide_legend: true
     tag: oa-ov-hl-sig
     index: ov-hl-sig
@@ -599,14 +618,14 @@ tabs:
     secondary_layout: box_plot
     display:
       icon_name: mdi:layers-outline
-      icon_color: orange
+      icon_color: orange.4
       caption: median per DNA sample, with its spread
       decimals: 0
     section: QC at a glance
     tag: oa-qc-card-coverage
     index: qc-card-coverage
     title: Mean coverage
-    description: Mean read depth of each DNA sample, median over the samples in view.
+    description: Mean read depth of each DNA sample, tumor and normal alike, median over the samples in view. A tumor is sequenced deeper than its normal, so the box spreads by design.
     layout: {x: 0, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: oncoanalyser
@@ -619,7 +638,7 @@ tabs:
     secondary_layout: box_plot
     display:
       icon_name: mdi:counter
-      icon_color: blue
+      icon_color: orange.6
       caption: median per DNA sample, with its spread
       format: si
     section: QC at a glance
@@ -635,38 +654,40 @@ tabs:
     aggregation: max
     column_name: duplicate_frac
     column_type: float64
-    secondary_layout: gauge
-    coverage_max: 1
+    secondary_layout: threshold
+    threshold_value: 0.3
+    threshold_direction: max
     display:
       icon_name: mdi:content-duplicate
-      icon_color: grape
-      caption: highest of any DNA sample, of all bases
+      icon_color: orange.8
+      caption: highest of any DNA sample; QSEE fails above 30%
       format: percent
     section: QC at a glance
     tag: oa-qc-card-duplicates
     index: qc-card-duplicates
     title: Highest duplicate share
-    description: Share of bases lost to duplicate reads in the worst DNA sample.
+    description: Share of reads marked as duplicates in the worst DNA sample. QSEE fails a sample above 30%; a high share means a low-complexity library whose depth overstates the evidence.
     layout: {x: 4, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: oncoanalyser
     data_collection_tag: hmf_bamtools_summary
     use: hmf_bamtools/summary
     aggregation: min
-    column_name: frac_ge_30x
+    column_name: frac_ge_10x
     column_type: float64
-    secondary_layout: gauge
-    coverage_max: 1
+    secondary_layout: threshold
+    threshold_value: 0.9
+    threshold_direction: min
     display:
       icon_name: mdi:percent-outline
-      icon_color: teal
-      caption: lowest of any DNA sample, of all bases
+      icon_color: orange.9
+      caption: lowest of any DNA sample; QSEE fails under 90%
       format: percent
     section: QC at a glance
     tag: oa-qc-card-breadth
     index: qc-card-breadth
-    title: Lowest share at 30x or more
-    description: Share of bases covered at least 30 times in the shallowest DNA sample.
+    title: Lowest share at 10x or more
+    description: Share of bases covered at least 10 times in the shallowest DNA sample. QSEE fails a tumor or a normal under 90% at this depth, so a variant caller has too little to work with there.
     layout: {x: 6, y: 0, w: 2, h: 2}
   - component_type: advanced_viz
     workflow_tag: oncoanalyser
@@ -784,10 +805,6 @@ tabs:
     icon: mdi:waves
     color: blue
     description: COSMIC signatures and homologous recombination deficiency
-  - name: Purity and ploidy
-    icon: mdi:chart-scatter-plot
-    color: blue
-    description: PURPLE's chosen fit, one point per tumor
   - name: Tumor detail
     icon: mdi:table
     color: gray
@@ -853,18 +870,19 @@ tabs:
     aggregation: median
     column_name: purity
     column_type: float64
-    secondary_layout: gauge
-    coverage_max: 1
+    secondary_layout: threshold
+    threshold_value: 0.2
+    threshold_direction: min
     display:
       icon_name: mdi:gauge
-      icon_color: blue
-      caption: median, of a pure tumor
+      icon_color: blue.4
+      caption: median; QSEE fails a fit under 20%
       format: percent
     section: Tumor at a glance
     tag: oa-tp-card-purity
     index: tp-card-purity
     title: Tumor purity
-    description: Share of tumor cells in the sample, from PURPLE's fit, median over the tumors in view.
+    description: Share of tumor cells in the sample, from PURPLE's fit, median over the tumors in view. Below 20% the fit is too uncertain to trust the copy numbers.
     layout: {x: 0, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: oncoanalyser
@@ -873,18 +891,18 @@ tabs:
     aggregation: median
     column_name: ploidy
     column_type: float64
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
+    secondary_layout: composition
+    breakdown_col: fit_status
     display:
       icon_name: mdi:content-duplicate
-      icon_color: grape
-      caption: median, with its spread
+      icon_color: blue.6
+      caption: median, by PURPLE fit status
       decimals: 1
     section: Tumor at a glance
     tag: oa-tp-card-ploidy
     index: tp-card-ploidy
     title: Ploidy
-    description: Average copy number of the tumor genome, median over the tumors in view.
+    description: Average copy number of the tumor genome, median over the tumors in view. 2 is a diploid genome; a value near 3 or more says the genome doubled. The bar shows how PURPLE rates the fit.
     layout: {x: 2, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: oncoanalyser
@@ -893,18 +911,19 @@ tabs:
     aggregation: median
     column_name: tmb_per_mb
     column_type: float64
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
+    secondary_layout: threshold
+    threshold_value: 10
+    threshold_direction: max
     display:
       icon_name: mdi:chart-bell-curve
-      icon_color: orange
-      caption: median, with its spread
+      icon_color: blue.8
+      caption: median; PURPLE calls HIGH above 10
       decimals: 1
     section: Tumor at a glance
     tag: oa-tp-card-tmb
     index: tp-card-tmb
     title: Mutations per Mb
-    description: Somatic variants per megabase of the genome, median over the tumors in view.
+    description: Somatic variants per megabase of the genome, median over the tumors in view. PURPLE calls the burden HIGH above 10 per megabase, the range where immune checkpoint treatment is considered.
     layout: {x: 4, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: oncoanalyser
@@ -913,18 +932,19 @@ tabs:
     aggregation: median
     column_name: ms_indels_per_mb
     column_type: float64
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
+    secondary_layout: threshold
+    threshold_value: 4
+    threshold_direction: max
     display:
       icon_name: mdi:waves
-      icon_color: teal
-      caption: median, with its spread
+      icon_color: blue.9
+      caption: median; PURPLE calls MSI above 4
       decimals: 2
     section: Tumor at a glance
     tag: oa-tp-card-msi
     index: tp-card-msi
     title: Microsatellite indels per Mb
-    description: Indels at microsatellites per megabase, the signal behind PURPLE's MSI call.
+    description: Indels at microsatellites per megabase, the signal behind PURPLE's MSI call. Above 4 per megabase the tumor is microsatellite unstable (MSI), otherwise stable (MSS).
     layout: {x: 6, y: 0, w: 2, h: 2}
   - component_type: advanced_viz
     workflow_tag: oncoanalyser
@@ -944,12 +964,19 @@ tabs:
     data_collection_tag: sigs_allocation
     use: sigs/allocation
     visu_type: bar
-    dict_kwargs: {x: signature, y: percent, color: sample, barmode: group, labels: '{"signature": "Signature", "percent": "Share of SNVs (%)", "sample": "Tumor"}'}
+    mode: code
+    code_content: |-
+      # SNVs per COSMIC signature, largest first, in the colour of the signature's proposed cause (COSMIC v2); the cause is in the hover. Mean over the tumors in view.
+      cause = {'Sig1': 'Clock-like (ageing)', 'Sig5': 'Clock-like (ageing)', 'Sig2': 'APOBEC', 'Sig13': 'APOBEC', 'Sig3': 'HR deficiency', 'Sig4': 'Smoking', 'Sig29': 'Smoking', 'Sig6': 'Mismatch repair', 'Sig15': 'Mismatch repair', 'Sig20': 'Mismatch repair', 'Sig21': 'Mismatch repair', 'Sig26': 'Mismatch repair', 'Sig7': 'UV light', 'Sig9': 'Polymerase eta', 'Sig10': 'POLE', 'Sig14': 'POLE', 'Sig11': 'Alkylating agents', 'Sig22': 'Aristolochic acid', 'Sig24': 'Aflatoxin', 'MISALLOC': 'Unexplained'}
+      d = df.group_by('signature').agg(pl.col('percent').mean().alias('percent'), pl.col('sample').n_unique().alias('tumors')).with_columns(pl.col('signature').replace_strict(cause, default='Unknown cause', return_dtype=pl.Utf8).alias('cause')).sort('percent', descending=True)
+      fig = px.bar(d.to_pandas(), x='percent', y='signature', color='cause', orientation='h', color_discrete_map=depictio_category_colors.get('signature_cause') or {}, category_orders={'signature': d['signature'].to_list()}, hover_data={'cause': True, 'tumors': True}, labels={'percent': 'Share of SNVs (%)', 'signature': '', 'cause': 'Proposed cause', 'tumors': 'Tumors'})
+      fig.update_yaxes(autorange='reversed')
+      fig.update_layout(margin=dict(t=10), legend=dict(orientation='h', y=-0.2))
     section: Mutational processes
     tag: oa-tp-fig-signatures
     index: tp-signature-bar
     title: Share of SNVs per mutational signature
-    description: SIGS' allocation of each tumor's SNVs to COSMIC signatures; MISALLOC is the share no signature explains.
+    description: SIGS' allocation of the SNVs to COSMIC signatures, largest first and coloured by the proposed cause of each (APOBEC, HR deficiency, ageing, mismatch repair); hover a bar for the cause. MISALLOC is the share no signature explains.
     layout: {x: 0, y: 0, w: 5, h: 4}
   - component_type: card
     workflow_tag: oncoanalyser
@@ -958,18 +985,19 @@ tabs:
     aggregation: max
     column_name: p_hrd
     column_type: float64
-    secondary_layout: gauge
-    coverage_max: 1
+    secondary_layout: threshold
+    threshold_value: 0.5
+    threshold_direction: max
     display:
       icon_name: mdi:alert-circle-outline
-      icon_color: red
-      caption: highest, of certain deficiency
+      icon_color: blue.6
+      caption: highest; CHORD calls HRD from 50%
       format: percent
     section: Mutational processes
     tag: oa-tp-card-hrd
     index: tp-card-hrd
     title: HRD probability
-    description: CHORD's probability of homologous recombination deficiency, highest over the tumors in view.
+    description: CHORD's probability of homologous recombination deficiency (the cell cannot repair double-strand breaks accurately), highest over the tumors in view. From 50% CHORD calls the tumor HR deficient.
     layout: {x: 5, y: 0, w: 3, h: 2}
   - component_type: card
     workflow_tag: oncoanalyser
@@ -983,7 +1011,7 @@ tabs:
     top_n_count: 3
     display:
       icon_name: mdi:fingerprint
-      icon_color: violet
+      icon_color: blue.8
       caption: SNVs, by leading signature
       format: si
     section: Mutational processes
@@ -992,23 +1020,6 @@ tabs:
     title: SNVs allocated
     description: SNVs that SIGS allocates to signatures. The bars rank the signatures that take the most.
     layout: {x: 5, y: 2, w: 3, h: 2}
-  - component_type: advanced_viz
-    workflow_tag: oncoanalyser
-    data_collection_tag: purple_purity
-    use: purple/purity_ploidy_scatter
-    config:
-      x_title: Ploidy
-      y_title: Tumor purity
-      marker_size: 12
-      legend_pos: bottom
-      selection_enabled: true
-      selection_column: sample
-    section: Purity and ploidy
-    tag: oa-tp-av-purity-ploidy
-    index: tp-purity-ploidy
-    title: Purity against ploidy, one point per tumor
-    description: PURPLE's chosen fit for every tumor, coloured by fit status. A tumor low on the purity axis has little tumor signal behind every call.
-    layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: table
     workflow_tag: oncoanalyser
     data_collection_tag: purple_purity
@@ -1090,9 +1101,9 @@ tabs:
     color: indigo
     description: Segment copy number and B-allele frequency along the genome
   - name: Gene copy number
-    icon: mdi:chart-scatter-plot
+    icon: mdi:chart-bar
     color: indigo
-    description: Lowest against highest copy number per gene, by event
+    description: How many genes each copy-number call holds
   - name: Gene detail
     icon: mdi:table
     color: gray
@@ -1155,7 +1166,7 @@ tabs:
     top_n_count: 3
     display:
       icon_name: mdi:vector-line
-      icon_color: indigo
+      icon_color: indigo.4
       caption: segments, by commonest copy number
     section: Copy number at a glance
     tag: oa-cn-card-segments
@@ -1174,7 +1185,7 @@ tabs:
     secondary_layout: box_plot
     display:
       icon_name: mdi:content-duplicate
-      icon_color: grape
+      icon_color: indigo.6
       caption: median per segment, with its spread
       decimals: 0
     section: Copy number at a glance
@@ -1195,7 +1206,7 @@ tabs:
     top_n_count: 3
     display:
       icon_name: mdi:swap-vertical
-      icon_color: red
+      icon_color: indigo.8
       caption: genes, by event
     section: Copy number at a glance
     tag: oa-cn-card-genes
@@ -1214,7 +1225,7 @@ tabs:
     secondary_layout: box_plot
     display:
       icon_name: mdi:trending-down
-      icon_color: teal
+      icon_color: indigo.9
       caption: median per tumor, with its spread
       format: percent
     section: Copy number at a glance
@@ -1230,33 +1241,36 @@ tabs:
     config:
       minor_copy_number_col: minor_copy_number
       annotation: '{GENOME}'
-      views: [plotly, locus]
+      views: [plotly]
       show_baf: true
       facet_by_sample: true
     section: Copy-number profile
     tag: oa-cn-av-profile
     index: cn-profile
     title: Copy-number profile along the genome
-    description: PURPLE's fitted segments as log2 of copy number over 2, with the B-allele frequency underneath. Hover a segment for its major and minor allele copy number.
+    description: PURPLE's fitted segments as log2 of copy number over 2, with the B-allele frequency underneath. Hover a segment for its major and minor allele copy number. Open in genome browser shows the reads and breakpoints at the region.
     layout: {x: 0, y: 0, w: 8, h: 6}
-  - component_type: advanced_viz
+  - component_type: figure
     workflow_tag: oncoanalyser
     data_collection_tag: purple_gene_copy_number
-    use: purple/gene_cn_scatter
-    config:
-      top_n_labels: 10
-      reference_line: diagonal
-      x_title: Lowest copy number in the gene
-      y_title: Highest copy number in the gene
-      legend_pos: bottom
-      selection_enabled: true
-      selection_column: gene
+    visu_type: bar
+    mode: code
+    code_content: |-
+      # Genes under each copy-number call, largest first, on a log axis: loss of heterozygosity holds most of the genome's genes, which would flatten every gain and loss on a linear one. NEUTRAL genes are left out, and so is any call with no gene.
+      order = ['AMP', 'PARTIAL_AMP', 'DEL', 'PARTIAL_DEL', 'LOH']
+      colors = depictio_category_colors.get('cn_event') or {}
+      d = df.filter(pl.col('cn_event').is_in(order)).group_by('cn_event').agg(pl.len().alias('genes'), pl.col('sample').n_unique().alias('tumors'), pl.col('gene').n_unique().alias('distinct'))
+      fig = px.bar(d.to_pandas(), x='genes', y='cn_event', color='cn_event', orientation='h', color_discrete_map=colors, category_orders={'cn_event': order}, text='genes', hover_data={'tumors': True, 'distinct': True, 'genes': False}, labels={'genes': 'Genes (one per tumor and gene)', 'cn_event': '', 'tumors': 'Tumors', 'distinct': 'Distinct genes'})
+      fig.update_traces(textposition='outside', cliponaxis=False)
+      fig.update_yaxes(categoryorder='total ascending', automargin=True)
+      fig.update_xaxes(type='log')
+      fig.update_layout(margin=dict(t=10), showlegend=False)
     section: Gene copy number
-    tag: oa-cn-av-gene-scatter
-    index: cn-gene-scatter
-    title: Lowest against highest copy number per gene
-    description: One point per gene and tumor, coloured by its call. Points off the diagonal carry a copy-number breakpoint inside the gene.
-    layout: {x: 0, y: 0, w: 8, h: 6}
+    tag: oa-cn-fig-gene-events
+    index: cn-gene-events
+    title: Genes per copy-number call
+    description: Genes gained, lost or with a lost allele (LOH), one per tumor and gene, under the event and chromosome filters, on a log axis because LOH holds most genes. The share of the genome in LOH is in the card above. Pick a gene in the table below to read its record.
+    layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: table
     workflow_tag: oncoanalyser
     data_collection_tag: purple_gene_copy_number
@@ -1313,6 +1327,11 @@ tabs:
     icon: mdi:chart-donut
     color: violet
     description: Breakend pairs around the genome and the events they resolve to
+  - name: Reads at the breakends
+    icon: mdi:dna
+    color: violet
+    description: PURPLE's SV calls and the reads at the first breakend of the rearrangement picked above
+    collapsed: true
   - name: Fusion structure
     icon: mdi:relation-many-to-many
     color: violet
@@ -1398,7 +1417,7 @@ tabs:
     top_n_count: 3
     display:
       icon_name: mdi:vector-link
-      icon_color: violet
+      icon_color: violet.4
       caption: SVs, by commonest type
     section: Structural variants at a glance
     tag: oa-sx-card-svs
@@ -1418,7 +1437,7 @@ tabs:
     top_n_count: 3
     display:
       icon_name: mdi:family-tree
-      icon_color: indigo
+      icon_color: violet.6
       caption: clusters, by commonest category
     section: Structural variants at a glance
     tag: oa-sx-card-clusters
@@ -1437,7 +1456,7 @@ tabs:
     secondary_layout: box_plot
     display:
       icon_name: mdi:content-duplicate
-      icon_color: grape
+      icon_color: violet.8
       caption: median per SV, with its spread
       decimals: 1
     section: Structural variants at a glance
@@ -1453,17 +1472,18 @@ tabs:
     aggregation: count
     column_name: fusion_id
     column_type: object
-    secondary_layout: composition
-    breakdown_col: phased
+    secondary_layout: top_n
+    breakdown_col: gene_up
+    top_n_count: 3
     display:
       icon_name: mdi:call-split
-      icon_color: pink
-      caption: candidates, by reading frame
+      icon_color: violet.9
+      caption: candidates, by commonest 5' partner
     section: Structural variants at a glance
     tag: oa-sx-card-fusions
     index: sx-card-fusions
     title: Candidate fusions
-    description: Gene fusions LINX finds in the SV chains. The bar splits them by reading frame.
+    description: Gene fusions LINX finds in the SV chains. The bars rank the genes most often at the 5' end; the reading frames are on the Fusion structure bar.
     layout: {x: 6, y: 0, w: 2, h: 2}
   - component_type: advanced_viz
     workflow_tag: oncoanalyser
@@ -1488,13 +1508,56 @@ tabs:
     data_collection_tag: linx_svs
     use: linx/svs
     visu_type: bar
-    dict_kwargs: {x: resolved_type, color: type, labels: '{"resolved_type": "Resolved event", "type": "SV type"}'}
+    dict_kwargs: {x: resolved_type, color: resolved_type, labels: '{"resolved_type": "Resolved event"}'}
     section: Rearrangement landscape
     tag: oa-sx-fig-resolved
     index: sx-resolved-bar
     title: SVs per resolved event
-    description: Structural variants by the event LINX resolved their cluster to, split by SV type.
+    description: Structural variants by the event LINX resolved their cluster to, in the colour the chords beside it give that event.
     layout: {x: 4, y: 0, w: 4, h: 6}
+  # An SV picked in the chord diagram or the table narrows linx_svs to one row:
+  # the view jumps to its first breakend. Unpicked, it opens on the SV with the
+  # highest junction copy number; the stepper walks the others, and the
+  # Breakpoint view links the two breakends by their split reads and pairs.
+  - component_type: jbrowse
+    workflow_tag: oncoanalyser
+    data_collection_tag: tracks
+    section: Reads at the breakends
+    # Opens on the first tumor's VCFs and its tumor and normal reads: the reads
+    # are what the section is named for.
+    initial_tracks: 6
+    max_tracks: 9
+    color_by: kind
+    show_overview: false
+    selection_enabled: true
+    selection_column: sample_id
+    read_pairs_display: arcs
+    views: [breakpoint, circular]
+    # Reads coloured by pair orientation: the inverted and everted pairs that
+    # support a breakend stand out from the concordant ones.
+    display:
+      color_scheme: pairOrientation
+    circular_categories: [Structural variants]
+    locus_from:
+      data_collection_tag: linx_svs
+      chrom_column: chrom_a
+      start_column: pos_a
+      padding: 500
+      max_rows: 20
+      sort_by: junction_copy_number
+      descending: true
+      label_column: label
+      # The stepper names a breakend by its type, length and genes, not by "DUP #0".
+      columns: [type, length, genes_a, genes_b]
+      search_columns: [genes_a, genes_b]
+      mate:
+        chrom_column: chrom_b
+        start_column: pos_b
+    tag: oa-sx-browser
+    index: sx-reads-browser
+    title: Genome browser
+    description: PURPLE's SV calls with the tumor and normal reads, framed on the picked breakend. Opens on the SV with the highest junction copy number; the stepper lists up to 20, each with its type, length and genes.
+    layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: advanced_viz
     workflow_tag: oncoanalyser
     data_collection_tag: linx_fusion_structure
@@ -1691,7 +1754,7 @@ tabs:
     top_n_count: 3
     display:
       icon_name: mdi:target
-      icon_color: red
+      icon_color: red.4
       caption: entries, by commonest driver type
     section: Drivers at a glance
     tag: oa-dr-card-entries
@@ -1710,7 +1773,7 @@ tabs:
     breakdown_col: category
     display:
       icon_name: mdi:dna
-      icon_color: grape
+      icon_color: red.6
       caption: entries, by gene role
     section: Drivers at a glance
     tag: oa-dr-card-roles
@@ -1731,7 +1794,7 @@ tabs:
     top_n_count: 2
     display:
       icon_name: mdi:content-duplicate
-      icon_color: orange
+      icon_color: red.8
       caption: biallelic entries, by origin
     section: Drivers at a glance
     tag: oa-dr-card-biallelic
@@ -1750,7 +1813,7 @@ tabs:
     secondary_layout: box_plot
     display:
       icon_name: mdi:scale-balance
-      icon_color: blue
+      icon_color: red.9
       caption: median per entry, with its spread
       decimals: 2
     section: Drivers at a glance
@@ -1769,7 +1832,7 @@ tabs:
     tag: oa-dr-av-oncoplot
     index: dr-oncoplot
     title: Driver genes by tumor and driver type
-    description: One column per tumor and one row per driver gene, coloured by driver type. It opens on the reported drivers.
+    description: One column per tumor and one row per driver gene, coloured by driver type. It opens on the reported drivers. With a single tumor it is one column; the bars beside it count the same entries.
     layout: {x: 0, y: 0, w: 5, h: 6}
   - component_type: figure
     workflow_tag: oncoanalyser
@@ -1852,10 +1915,12 @@ tabs:
     icon: mdi:chart-bell-curve
     color: cyan
     description: How clonal the calls are and on how many copies they sit
-  - name: Along the genome
-    icon: mdi:chart-scatter-plot
+  - name: Calls and reads on one axis
+    icon: mdi:dna
     color: cyan
-    description: Purity-adjusted allele frequency of every call by position
+    description: Brush the calls and the browser follows; its window shows as a band on the calls
+    # One screen: the calls and the browser they drive, as on atacseq.
+    display: linked
   - name: Variant detail
     icon: mdi:table
     color: gray
@@ -1933,7 +1998,7 @@ tabs:
     top_n_count: 3
     display:
       icon_name: mdi:dna
-      icon_color: cyan
+      icon_color: cyan.4
       caption: calls, by variant type
     section: Variants at a glance
     tag: oa-sv-card-calls
@@ -1953,7 +2018,7 @@ tabs:
     breakdown_col: coding_effect
     display:
       icon_name: mdi:molecule
-      icon_color: orange
+      icon_color: cyan.6
       caption: coding calls, by effect
     section: Variants at a glance
     tag: oa-sv-card-coding
@@ -1971,7 +2036,7 @@ tabs:
     secondary_layout: histogram
     display:
       icon_name: mdi:percent-outline
-      icon_color: lime
+      icon_color: cyan.8
       caption: median, with its distribution
       decimals: 2
     section: Variants at a glance
@@ -1991,7 +2056,7 @@ tabs:
     secondary_layout: box_plot
     display:
       icon_name: mdi:content-duplicate
-      icon_color: grape
+      icon_color: cyan.9
       caption: median, with its spread
       decimals: 1
     section: Variants at a glance
@@ -2034,14 +2099,90 @@ tabs:
       annotation: '{GENOME}'
       score_title: purity-adjusted allele frequency
       point_size: 4
+      # Coloured by coding effect, as the calls in the browser below.
+      category_col: coding_effect
       region_filter_enabled: true
       follow_region_filter: true
-    section: Along the genome
+    section: Calls and reads on one axis
     tag: oa-sv-av-genome
     index: sv-genome
     title: Somatic calls along the genome
-    description: One point per call at its position, raised by its purity-adjusted allele frequency and coloured by variant type. Zoom into a region to see its genes.
-    layout: {x: 0, y: 0, w: 8, h: 6}
+    description: One point per call at its position, raised by its purity-adjusted allele frequency and coloured by coding effect, as in the browser below. Zoom into a region to see its genes.
+    layout: {x: 0, y: 0, w: 8, h: 5}
+  # A call picked in the table, or few calls in the plot's region (a zoomed
+  # region), narrows purple_somatic_variants: the view then frames them.
+  # Unpicked, it opens on a reported driver call, and the stepper walks the
+  # others. The tumor and normal reads are among the opening tracks.
+  - component_type: jbrowse
+    workflow_tag: oncoanalyser
+    data_collection_tag: tracks
+    section: Calls and reads on one axis
+    # Opens on the first tumor's VCFs and its tumor and normal reads, with dbSNP
+    # and ClinVar under them.
+    initial_tracks: 6
+    max_tracks: 9
+    color_by: kind
+    ucsc_tracks: [dbSnp155Common, clinvarMain]
+    follow_window: true
+    show_overview: false
+    # The calls above already say where the browser is: its locus bar only
+    # costs height here, and the tile's menu brings it back.
+    show_header: false
+    selection_enabled: true
+    selection_column: sample_id
+    # Three omics layers of the same tumors: small variants (primary: they
+    # frame the view on a filter), LINX SV breakends and PURPLE copy-number
+    # segments. Next / previous steps through all three along the genome; the
+    # density strip has one row per layer, or per tumor sample.
+    locus_from:
+      - data_collection_tag: purple_somatic_variants
+        name: Small variants
+        color: blue
+        chrom_column: chrom
+        start_column: pos
+        padding: 150
+        max_rows: 20
+        # Reported drivers first; the rest keep the order of the file. The highest allele
+        # frequency is usually a clonal passenger.
+        sort_by: reported
+        descending: true
+        label_column: gene
+        sample_column: sample
+        columns: [coding_effect, hgvs_p]
+        search_columns: [hgvs_p]
+      - data_collection_tag: linx_svs
+        name: SV breakends
+        color: grape
+        chrom_column: chrom_a
+        start_column: pos_a
+        padding: 500
+        sort_by: junction_copy_number
+        descending: true
+        label_column: label
+        sample_column: sample
+        columns: [type, resolved_type]
+        search_columns: [genes_a, genes_b]
+      - data_collection_tag: purple_cnv_segments
+        name: CN segments
+        color: orange
+        chrom_column: chrom
+        start_column: start
+        end_column: end
+        padding: 0
+        sort_by: copy_number
+        descending: true
+        label_column: label
+        sample_column: sample
+        columns: [copy_number, baf]
+    # Calls take the colour of their coding effect, as in the figures.
+    variant_color_by:
+      column: coding_effect
+      info_field: IMPACT
+    tag: oa-sv-browser
+    index: sv-reads-browser
+    title: Genome browser
+    description: PURPLE's somatic and germline calls with the tumor and normal reads and the dbSNP and ClinVar tracks, framed on the picked call; it opens on a reported driver call when there is one.
+    layout: {x: 0, y: 5, w: 8, h: 7}
   - component_type: table
     workflow_tag: oncoanalyser
     data_collection_tag: purple_somatic_variants
@@ -2078,7 +2219,7 @@ tabs:
     description: The selected call's impact, allele frequency, copy number and sequence context.
     layout: {x: 5, y: 0, w: 3, h: 6}
 - title: Protein changes
-  subtitle: Which proteins change, and where on the protein and its structure?
+  subtitle: Which proteins change, and where on the protein?
   tab_group: Variants
   tab_order: 7
   tab_icon: mdi:molecule
@@ -2090,7 +2231,7 @@ tabs:
   - name: Protein scope
     icon: mdi:tune
     color: grape
-    description: Pick the protein to show and the coding effects to keep
+    description: Pick the protein to show, the coding effects to keep and the gene role (opens on the driver panel)
   grid_sections:
   - name: Protein changes at a glance
     icon: mdi:counter
@@ -2099,7 +2240,7 @@ tabs:
   - name: Protein view
     icon: mdi:shape-outline
     color: grape
-    description: Pick a gene, then read its changes on the structure and the sequence
+    description: Pick a gene on the scatter, then read its changes along the sequence
   - name: Protein change detail
     icon: mdi:table
     color: gray
@@ -2138,14 +2279,29 @@ tabs:
     index: pr-effect-filter
     title: Coding effect
     layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: oncoanalyser
+    data_collection_tag: purple_protein_genes
+    interactive_component_type: MultiSelect
+    column_name: gene_role
+    column_type: object
+    default_value: [ONCO, TSG]
+    display:
+      icon_name: mdi:target
+      custom_color: orange
+    placement: left
+    section: Protein scope
+    group: Protein
+    tag: oa-pr-filter-role
+    index: pr-role-filter
+    title: Gene role
+    layout: {x: 0, y: 6, w: 1, h: 3}
   - component_type: text
     order: 1
     body: >
-      Click a gene on the scatter to load its predicted structure, its written sequence and its
-      lollipop, and click a residue to mark it in all three. The structure is fetched by gene
-      symbol and needs the server's structure resolver, which an administrator turns on with
-      `DEPICTIO_STRUCTURE_RESOLVER_ENABLED`; when it is off the tile says so and the lollipop
-      keeps working. Without a pick, the views open on the protein with the most changes.
+      Click a gene on the scatter to draw its changes along the sequence, and click a needle to mark
+      that residue in the table below. Without a pick, the needles open on the protein with the most
+      changes.
     tag: oa-pr-intro
     index: pr-intro
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -2160,7 +2316,7 @@ tabs:
     breakdown_col: category
     display:
       icon_name: mdi:molecule
-      icon_color: grape
+      icon_color: grape.4
       caption: changes, by coding effect
     section: Protein changes at a glance
     tag: oa-pr-card-changes
@@ -2178,7 +2334,7 @@ tabs:
     breakdown_col: worst_effect
     display:
       icon_name: mdi:shape-outline
-      icon_color: violet
+      icon_color: grape.6
       caption: proteins, by worst effect
     section: Protein changes at a glance
     tag: oa-pr-card-proteins
@@ -2197,7 +2353,7 @@ tabs:
     top_n_count: 3
     display:
       icon_name: mdi:target-arrow
-      icon_color: red
+      icon_color: grape.8
       caption: hotspot changes, by gene role
     section: Protein changes at a glance
     tag: oa-pr-card-hotspots
@@ -2216,7 +2372,7 @@ tabs:
     secondary_layout: box_plot
     display:
       icon_name: mdi:percent-outline
-      icon_color: lime
+      icon_color: grape.9
       caption: median, with its spread
       decimals: 2
     section: Protein changes at a glance
@@ -2235,12 +2391,10 @@ tabs:
       y_col: driver_likelihood
       label_col: entity
       color_col: worst_effect
-      size_col: changes
-      min_size: 6
-      max_size: 16
+      marker_size: 13
       x_title: Highest purity-adjusted allele frequency
       y_title: Driver likelihood
-      top_n_labels: 0
+      top_n_labels: 8
       legend_pos: bottom
       selection_enabled: true
       selection_column: entity
@@ -2248,30 +2402,8 @@ tabs:
     tag: oa-pr-av-gene-scatter
     index: pr-gene-scatter
     title: Genes with a protein change
-    description: One point per tumor and gene, sized by its number of changes and coloured by its worst effect. Clonal driver candidates sit top right.
-    layout: {x: 0, y: 0, w: 4, h: 5}
-  - component_type: advanced_viz
-    workflow_tag: oncoanalyser
-    data_collection_tag: purple_protein_changes
-    use: purple/protein_change_structure
-    config:
-      structure_source: resolve
-      gene_col: entity
-      entity_col: entity
-      color_mode: plddt
-      representations: [cartoon]
-      show_variants: true
-      show_labels: false
-      highlight_site: true
-      layout: structure_text
-      selection_enabled: true
-      follow_selection: true
-    section: Protein view
-    tag: oa-pr-av-structure
-    index: pr-structure
-    title: Protein changes on the predicted structure
-    description: The picked gene's predicted structure over its written sequence, coloured by prediction confidence, with a sphere on every changed residue and the picked one in red.
-    layout: {x: 4, y: 0, w: 4, h: 5}
+    description: One point per tumor and gene of the driver panel, coloured by its worst effect; the eight with the highest driver likelihood are named. Clonal driver candidates sit top right. Clear the Gene role filter to add the genes outside the panel, which all sit at a likelihood of 0.
+    layout: {x: 0, y: 0, w: 3, h: 6}
   - component_type: advanced_viz
     workflow_tag: oncoanalyser
     data_collection_tag: purple_protein_changes
@@ -2287,7 +2419,7 @@ tabs:
     index: pr-needles
     title: Protein changes along the sequence
     description: One needle per changed residue, coloured by coding effect. Without a picked gene, it opens on the gene with the most changes.
-    layout: {x: 0, y: 5, w: 8, h: 5}
+    layout: {x: 3, y: 0, w: 5, h: 6}
   - component_type: table
     workflow_tag: oncoanalyser
     data_collection_tag: purple_protein_changes
@@ -2415,7 +2547,7 @@ tabs:
     breakdown_col: gene
     display:
       icon_name: mdi:shield-check-outline
-      icon_color: pink
+      icon_color: pink.4
       caption: alleles, by HLA gene
     section: Immune context at a glance
     tag: oa-im-card-alleles
@@ -2434,7 +2566,7 @@ tabs:
     breakdown_col: variant_type
     display:
       icon_name: mdi:molecule
-      icon_color: grape
+      icon_color: pink.6
       caption: candidates, by source event
     section: Immune context at a glance
     tag: oa-im-card-neoepitopes
@@ -2453,7 +2585,7 @@ tabs:
     secondary_layout: box_plot
     display:
       icon_name: mdi:chart-bell-curve
-      icon_color: orange
+      icon_color: pink.8
       caption: median TPM, with its spread
       decimals: 1
     section: Immune context at a glance
@@ -2469,12 +2601,13 @@ tabs:
     aggregation: median
     column_name: finalTelomereLength
     column_type: float64
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
+    secondary_layout: top_n
+    breakdown_col: type
+    top_n_count: 2
     display:
       icon_name: mdi:ruler
-      icon_color: teal
-      caption: median bp, with its spread
+      icon_color: pink.9
+      caption: median bp, by sample type
       decimals: 0
     section: Immune context at a glance
     tag: oa-im-card-telomeres
@@ -2499,12 +2632,21 @@ tabs:
     data_collection_tag: teal_telomere_length
     use: teal/telomere_length
     visu_type: bar
-    dict_kwargs: {x: sampleId, y: finalTelomereLength, color: type, labels: '{"sampleId": "Sample", "finalTelomereLength": "Telomere length (bp)", "type": "Sample type"}'}
+    mode: code
+    code_content: |-
+      # Telomere length per DNA sample (the normal is TEAL's reference), with the tumor to normal ratio under the bars.
+      d = df.select('sampleId', 'type', 'finalTelomereLength').sort('type')
+      fig = px.bar(d.to_pandas(), x='sampleId', y='finalTelomereLength', color='type', labels={'sampleId': 'Sample', 'finalTelomereLength': 'Telomere length (bp)', 'type': 'Sample type'})
+      tum = d.filter(pl.col('type') == 'tumor')['finalTelomereLength'].mean()
+      ref = d.filter(pl.col('type') == 'ref')['finalTelomereLength'].mean()
+      if tum is not None and ref:
+          fig.add_annotation(x=0.5, y=1.08, xref='paper', yref='paper', showarrow=False, text='tumor / normal: ' + str(round(tum / ref, 2)))
+      fig.update_layout(margin=dict(t=40))
     section: HLA and telomeres
     tag: oa-im-fig-telomeres
     index: im-telomere-bar
     title: Telomere length per sample
-    description: TEAL's purity and ploidy adjusted telomere length of the tumor and its normal.
+    description: TEAL's purity and ploidy adjusted telomere length of the tumor and its normal, with their ratio on top. A ratio under 1 means the tumor telomeres are shorter than the normal's; above 1 they are longer, which points to a telomere maintenance mechanism.
     layout: {x: 4, y: 0, w: 4, h: 5}
   - component_type: advanced_viz
     workflow_tag: oncoanalyser
@@ -2528,12 +2670,12 @@ tabs:
     data_collection_tag: neo_neoepitopes
     use: neo/neoepitopes
     visu_type: bar
-    dict_kwargs: {x: variant_type, color: sample, labels: '{"variant_type": "Source event", "sample": "Tumor"}'}
+    dict_kwargs: {x: variant_type, color: variant_type, labels: '{"variant_type": "Source event"}'}
     section: Neoepitopes
     tag: oa-im-fig-neo-source
     index: im-neo-source-bar
     title: Neoepitopes per source event
-    description: Candidate neoepitopes by the event that creates them, missense, frameshift or fusion.
+    description: Candidate neoepitopes by the event that creates them (missense, frameshift or fusion), one colour per event.
     layout: {x: 5, y: 0, w: 3, h: 6}
   - component_type: table
     workflow_tag: oncoanalyser

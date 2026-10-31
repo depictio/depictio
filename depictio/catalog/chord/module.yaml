@@ -4,6 +4,7 @@
 # its own sample column.
 id: chord
 name: CHORD
+version: "1.0.0"
 description: >-
   Random-forest classifier of homologous recombination deficiency from SNV, indel and SV contexts.
 homepage: https://github.com/hartwigmedical/hmftools/tree/master/chord

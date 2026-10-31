@@ -1,0 +1,27 @@
+ASHLAR:
+  ashlar: 1.18.0
+BACKSUB:
+  backsub: 0.4.1
+BASICPY:
+  basicpy: 1.2.0
+BFTOOLS_SHOWINF:
+  showinf: 8.0.0
+CELLPOSE:
+  cellpose: 3.0.1
+DEEPCELL_MESMER:
+  deepcell_mesmer: 0.4.1
+MCQUANT:
+  mcquant: 1.5.4
+PRELUDE_MULTI_MATRIX_SUMMARY:
+  summary_xml: Python 3.12.3
+PRELUDE_MULTI_SUMMARY:
+  multi_summary: Python 3.12.3
+PRELUDE_SUMMARY_MARKERSHEET:
+  summary_markersheet: Python 3.12.3
+PRELUDE_SUMMARY_SAMPLESHEET:
+  summary_samplesheet: Python 3.12.3
+PRELUDE_SUMMARY_XML:
+  summary_xml: Python 3.12.3
+Workflow:
+    nf-core/mcmicro: v2.0.0-gf440000
+    Nextflow: 26.04.4

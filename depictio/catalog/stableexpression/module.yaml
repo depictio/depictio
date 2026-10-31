@@ -1,0 +1,25 @@
+# nf-core/stableexpression's own tables. The pipeline downloads the public
+# expression datasets of one species (Expression Atlas, optionally GEO), maps
+# their gene ids to Ensembl with g:Profiler, filters out samples with too many
+# zeros or missing values, normalises each dataset (TPM or CPM, then a quantile
+# normalisation to a uniform distribution), merges them into one gene by sample
+# matrix and scores the candidates of each expression section with Normfinder,
+# geNorm and two coefficients of variation. Every step is a pipeline-local
+# process (bin/*.py), so there is no nf-core module behind these outputs; the
+# parsing lives in depictio/recipes/lib/stable_expression.py.
+id: stableexpression
+name: nf-core/stableexpression
+version: "1.0.0"
+description: >-
+  Gene expression stability across public datasets, from nf-core/stableexpression:
+  the stability score of every candidate gene and the measures behind it, the
+  spread of the most stable genes' normalised expression over every sample, the
+  expression statistics of every gene, and what each downloaded dataset went
+  through (platform, gene ID mapping, sample filters, merge).
+homepage: https://nf-co.re/stableexpression
+biotools_url: null  # no bio.tools entry for this pipeline's own tables
+source_url: https://github.com/nf-core/stableexpression/tree/1.1.0/bin
+edam_topics:
+  - http://edamontology.org/topic_0203 # Gene expression
+  - http://edamontology.org/topic_3308 # Transcriptomics
+stage: quantification

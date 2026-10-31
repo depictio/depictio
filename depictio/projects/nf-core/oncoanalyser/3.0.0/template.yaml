@@ -26,10 +26,16 @@
 # OPTIONAL TOOLS. CUPPA, SIGS, CHORD, LILAC, TEAL, Neo and QSEE can be excluded
 # with --processes_exclude, and a targeted (panel) run skips several of them, so
 # their collections are optional: a run without them drops those tiles.
+#
+# GENOME TRACKS. PURPLE's VCFs and the REDUX BAMs (80 to 170 GB each on a WGS
+# run) are not part of the tables-only megatest subset. Pass
+# `--var TRACKS_URI=<outdir>` to read them in place (see the variable below);
+# without it the `tracks` collection uploads whichever of them DATA_ROOT holds,
+# with their index.
 template:
   template_id: "nf-core/oncoanalyser/3.0.0"
   description: "nf-core/oncoanalyser cancer genomics template (WiGiTS): tumor purity, ploidy and QC, allele-specific copy number, the driver catalog, somatic small variants and their protein changes, structural variants and fusions, tissue of origin, mutational signatures, homologous recombination deficiency, HLA typing and neoepitopes."
-  version: "1.0.0"
+  version: "2.0.0"
   variables:
     - name: "DATA_ROOT"
       description: "oncoanalyser output directory (one <group_id>/ sub-directory per tumor, plus pipeline_info/)."
@@ -54,6 +60,9 @@ template:
       description: "Genome build of the run (UCSC name): hg38 for GRCh38_hmf, hg19 for GRCh37_hmf. Sets the chromosome ring, the locus views and their gene lane."
       required: false
       default: "hg38"
+    - name: "TRACKS_URI"
+      description: "s3:// or https:// folder holding the run's outdir (the one with a <group_id>/ sub-directory per tumor), to read the genome-browser tracks (PURPLE's VCFs and the BAMs) in place instead of uploading them from DATA_ROOT. Without it the `tracks` collection uploads whichever of those files DATA_ROOT holds."
+      required: false
   reference:
     vars:
       METADATA_FILE: "{DATA_ROOT}/input/samplesheet.csv"
@@ -102,6 +111,15 @@ template:
       - "umi_type"
   dashboards:
     - "dashboards/base.yaml"
+  conditional:
+    # Genome tracks: read in place when TRACKS_URI names the outdir, uploaded
+    # from DATA_ROOT otherwise (the `tracks` recipe keeps only the files it
+    # finds there).
+    - if_var_present: "TRACKS_URI"
+      override_dcs:
+        - data_collection_tag: "tracks"
+          dc_properties:
+            remote_base_uri: "{TRACKS_URI}"
 
 # ============================================================================
 # PROJECT CONFIGURATION
@@ -149,6 +167,57 @@ workflows:
               "sample_class": "sample_type and sequence_type joined, the role the sample plays in the run"
               "input_files": "Number of samplesheet rows (lanes or files) behind the sample"
               "filetypes": "Input file types of the sample (fastq, bam, cram)"
+
+      # ----------------------------------------------------------------
+      # Genome tracks. A manifest of the run's track files (PURPLE's somatic
+      # and germline VCFs, the tumor and normal alignments) that the genome
+      # browser reads by range, through the API. One row per file, keyed on the
+      # group's tumor sample like every other collection; the recipe spells it
+      # out from the same samplesheet. The first group opens with its VCFs and
+      # the tumor and normal reads under them; the other groups' BAMs, the
+      # largest files of the run, come last.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "tracks"
+        description: "Genome-browser tracks of the run: PURPLE's somatic and germline VCFs and the tumor and normal alignments of every analysis group, one row per file"
+        config:
+          type: "genomic_tracks"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/oncoanalyser/tracks.py"
+            source_overrides:
+              samplesheet:
+                path: "{METADATA_FILE}"
+          dc_specific_properties:
+            format: "TSV"
+            uri_column: "uri"
+            track_id_column: "track_id"
+            sample_column: "sample_id"
+            format_column: "format"
+            name_column: "name"
+            category_column: "category"
+            order_column: "order"
+            assembly: "{GENOME}"
+            display_defaults:
+              bam:
+                displays:
+                  - type: "LinearPileupDisplay"
+                    height: 80
+              vcf:
+                displays:
+                  - type: "LinearVariantDisplay"
+                    height: 40
+            columns_description:
+              "track_id": "<sample_id>.<kind>, unique per file"
+              "sample_id": "The group's tumor DNA sample, the key every collection links on"
+              "group_id": "Analysis group the file is published under"
+              "source_sample": "Sample the file belongs to (the normal's own id on its alignment)"
+              "kind": "somatic, sv, germline, sv_germline, tumor_reads or normal_reads; the browsers colour a track by it"
+              "format": "Track file format"
+              "uri": "Path relative to the outdir"
+              "name": "Track label shown in the browser"
+              "category": "Track-selector folder"
+              "order": "Row order the browser opens with"
 
       # ----------------------------------------------------------------
       # PURPLE: purity, ploidy, copy number, drivers, somatic variants
@@ -357,8 +426,8 @@ workflows:
               "reported": "True when the variant is in the driver catalog"
 
       # One row per tumor and gene with a protein change: the Protein changes
-      # tab's scatter, whose click emits `entity` and so moves the lollipop and
-      # the 3D structure to that gene.
+      # tab's scatter, whose click emits `entity` and so moves the needles
+      # to that gene.
       - data_collection_tag: "purple_protein_genes"
         description: "One row per tumor and gene with a protein change: how many changes, their highest allele frequency and worst effect, and PURPLE's driver likelihood for the gene"
         config:
@@ -922,4 +991,45 @@ links:
     target_type: "table"
     link_config: {resolver: "direct", target_field: "gene"}
     description: "Filter the driver catalog by the selected genes"
+    enabled: true
+
+  # ----------------------------------------------------------------
+  # Genome tracks. Every row of a group is keyed on the group's tumor sample,
+  # so a sample pick, or a call, copy-number segment or SV of that tumor, opens
+  # the tumor's tracks; clicking a track in the browser picks the sample back.
+  # ----------------------------------------------------------------
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "tracks"
+    target_type: "genomic_tracks"
+    link_config: {resolver: "direct", target_field: "sample_id"}
+    description: "Show the genome tracks of the samples picked in the left panel"
+    enabled: true
+  - source_dc_tag: "tracks"
+    source_column: "sample_id"
+    target_dc_tag: "samples"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample_id"}
+    description: "Filter the dashboard by the samples whose tracks are picked in the genome browser"
+    enabled: true
+  - source_dc_tag: "purple_somatic_variants"
+    source_column: "sample"
+    target_dc_tag: "tracks"
+    target_type: "genomic_tracks"
+    link_config: {resolver: "direct", target_field: "sample_id"}
+    description: "Open the genome tracks of the tumor a picked call was made in"
+    enabled: true
+  - source_dc_tag: "purple_cnv_segments"
+    source_column: "sample"
+    target_dc_tag: "tracks"
+    target_type: "genomic_tracks"
+    link_config: {resolver: "direct", target_field: "sample_id"}
+    description: "Open the genome tracks of the tumor a picked copy-number segment belongs to"
+    enabled: true
+  - source_dc_tag: "linx_svs"
+    source_column: "sample"
+    target_dc_tag: "tracks"
+    target_type: "genomic_tracks"
+    link_config: {resolver: "direct", target_field: "sample_id"}
+    description: "Open the genome tracks of the tumor a picked structural variant was called in"
     enabled: true

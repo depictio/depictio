@@ -999,6 +999,22 @@ def test_stamp_falls_back_to_the_project_for_the_type(store) -> None:
     assert stamp.reason is None
 
 
+def test_stamp_pins_a_track_manifest_not_its_files(store) -> None:
+    """A genome browser's manifest is a Delta table, so a version pins it.
+
+    Left unclassified it stamped ``none``, and a version preview opened the
+    browser on today's tracks under a past label.
+    """
+    dc_id = PyObjectId()
+    _seed_delta(store, dc_id, versions=[(1, 0, 32), (2, 1, 24)])
+
+    (stamp,) = _stamps_for(store, [_dc_component(dc_id, dc_type="genomic_tracks")])
+
+    assert stamp.version_kind == "delta"
+    assert stamp.delta_version == 1
+    assert stamp.unversioned_parts == ["track_files"]
+
+
 def test_stamp_without_type_anywhere_explains_itself(store) -> None:
     """No type in the component and no project row: say so, don't imply coverage."""
     dc_id = PyObjectId()

@@ -6,7 +6,7 @@
 template:
   template_id: "nf-core/variantbenchmarking/1.4.0/categories/indel"
   description: "nf-core/variantbenchmarking — somatic indel benchmarking: som.py precision/recall/F1 per caller, allele-fraction stratification + the indel MultiQC report."
-  version: "1.0.0"
+  version: "1.0.1"
   variables:
     - name: "DATA_ROOT"
       description: "Root containing indel/ (somatic benchmark tables) and multiqc/multiqc_data/multiqc.parquet."

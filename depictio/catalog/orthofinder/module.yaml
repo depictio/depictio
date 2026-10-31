@@ -1,0 +1,22 @@
+# OrthoFinder: orthogroups, orthologues and a rooted species tree from the
+# proteomes of several genomes. Three of its summary tables are read: the
+# per-species statistics (genes placed in orthogroups, species-specific
+# orthogroups), the orthogroup gene counts (which genomes each orthogroup
+# reaches, the input of an UpSet), and the one-to-one orthologue counts between
+# every pair of species. The per-orthogroup sequences, alignments and gene trees
+# (tens of thousands of files in WorkingDirectory/, Orthogroup_Sequences/,
+# MultipleSequenceAlignments/) are never read.
+id: orthofinder
+name: OrthoFinder
+version: "1.0.0"
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/orthofinder
+homepage: https://github.com/davidemms/OrthoFinder
+biotools_url: https://bio.tools/orthofinder
+description: >-
+  Phylogenetic orthology inference for comparative genomics: groups the genes of
+  several species into orthogroups, infers orthologues and the rooted species
+  tree.
+edam_topics:
+  - http://edamontology.org/topic_0084 # Phylogeny
+  - http://edamontology.org/topic_0797 # Comparative genomics
+stage: annotation

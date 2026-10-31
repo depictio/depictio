@@ -3,6 +3,7 @@
 # effect count table. All three are read here.
 id: snpeff
 name: SnpEff
+version: "1.0.0"
 description: >-
   Functional annotation of variant calls: the consequence, the impact class,
   the gene and the protein change of every call, plus the run-level summaries

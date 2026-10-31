@@ -64,3 +64,28 @@
   box-shadow: 0 0 0 3px rgba(255, 152, 0, 0.85),
               0 0 12px 3px rgba(255, 193, 7, 0.5) !important;
 }
+
+/**
+ * Rows another tile's hover refers to (a genome browser's feature, a plot's
+ * point). Theme colour through Mantine's variable, ``!important`` for the same
+ * reason as the pinned tint: the Alpine row backgrounds out-specify a bare class.
+ */
+.ag-theme-alpine .ag-row.depictio-row-linked,
+.ag-theme-alpine-dark .ag-row.depictio-row-linked {
+  background-color: var(--mantine-primary-color-light) !important;
+}
+
+/**
+ * Rows a genome browser points at (the pick, else its best call), and the rows
+ * picked in the table itself, which a browser frames. The browser paints their
+ * features in the primary colour with an outline; the row wears the same
+ * colour as a bar on its left edge over the light tint.
+ */
+.ag-theme-alpine .ag-row.depictio-row-picked,
+.ag-theme-alpine-dark .ag-row.depictio-row-picked,
+.ag-theme-alpine .ag-row.ag-row-selected,
+.ag-theme-alpine-dark .ag-row.ag-row-selected {
+  background-color: var(--mantine-primary-color-light) !important;
+  box-shadow: inset 4px 0 0 var(--mantine-primary-color-filled);
+  font-weight: 600;
+}

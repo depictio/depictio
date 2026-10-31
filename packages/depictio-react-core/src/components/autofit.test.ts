@@ -286,6 +286,59 @@ describe('fitLayoutHeights with a phylogeny', () => {
   });
 });
 
+describe('fitLayoutHeights with a genome view or a browser that sizes to its content', () => {
+  const genome = { index: 'g', component_type: 'advanced_viz', viz_kind: 'genome_view' };
+  const browser = { index: 'b', component_type: 'jbrowse' };
+  const layouts = (i: string, h: number) => [{ i, y: 0, h }];
+
+  it('does nothing unless the tile opts in', () => {
+    // A genome view only grows (an advanced viz), a browser keeps its height.
+    expect(fitLayoutHeights([genome], layouts('g', 9), { g: 380 })[0].h).toBe(9);
+    expect(fitLayoutHeights([browser], layouts('b', 9), { b: 380 })[0].h).toBe(9);
+    expect(isAutofitted(genome)).toBe(true);
+    expect(isAutofitted(browser)).toBe(false);
+  });
+
+  it('follows the content both ways once a genome view opts in', () => {
+    const opted = [{ ...genome, config: { auto_height: true } }];
+    expect(fitLayoutHeights(opted, layouts('g', 9), { g: 380 })[0].h).toBe(rowsForHeight(380));
+    expect(fitLayoutHeights(opted, layouts('g', 3), { g: 900 })[0].h).toBe(rowsForHeight(900));
+  });
+
+  it('follows the tracks both ways once a browser opts in', () => {
+    const opted = [{ ...browser, auto_height: true }];
+    expect(isAutofitted(opted[0])).toBe(true);
+    expect(fitLayoutHeights(opted, layouts('b', 12), { b: 520 })[0].h).toBe(rowsForHeight(520));
+    expect(fitLayoutHeights(opted, layouts('b', 3), { b: 1100 })[0].h).toBe(rowsForHeight(1100));
+  });
+
+  it('holds the cap of sixteen rows and the floor of three', () => {
+    const opted = [{ ...browser, auto_height: true }];
+    expect(fitLayoutHeights(opted, layouts('b', 5), { b: 9000 })[0].h).toBe(16);
+    expect(fitLayoutHeights(opted, layouts('b', 9), { b: 40 })[0].h).toBe(3);
+  });
+
+  it('keeps the stored height until the tile has measured, and for one the user fixed', () => {
+    const opted = [{ ...browser, auto_height: true }];
+    expect(fitLayoutHeights(opted, layouts('b', 9), {})[0].h).toBe(9);
+    const fixed = [{ ...opted[0], fit: 'fixed' as const }];
+    expect(fitLayoutHeights(fixed, layouts('b', 9), { b: 380 })[0].h).toBe(9);
+  });
+
+  it('levels a linked pair on one row to the taller answer', () => {
+    const members = [
+      { ...genome, config: { auto_height: true } },
+      { ...browser, auto_height: true },
+    ];
+    const row = [
+      { i: 'g', y: 0, h: 6 },
+      { i: 'b', y: 0, h: 6 },
+    ];
+    const fitted = fitLayoutHeights(members, row, { g: 300, b: 700 });
+    expect(fitted.map((l) => l.h)).toEqual([rowsForHeight(700), rowsForHeight(700)]);
+  });
+});
+
 describe('fitLayoutHeights with a complex heatmap', () => {
   const heatmap = (config?: { max_rows?: number }) => [
     { index: 'hm', component_type: 'advanced_viz', viz_kind: 'complex_heatmap', config },
@@ -309,6 +362,30 @@ describe('fitLayoutHeights with a complex heatmap', () => {
   it('keeps a taller authored height whatever max_rows says', () => {
     const cfg = heatmap({ max_rows: 5 });
     expect(fitLayoutHeights(cfg, [{ i: 'hm', y: 0, h: 9 }], { hm: heightForRows(14) })[0].h).toBe(9);
+  });
+});
+
+describe('fitLayoutHeights with a ranked table', () => {
+  const table = { index: 'rt', component_type: 'advanced_viz', viz_kind: 'ranked_table' };
+  const other = { index: 'ot', component_type: 'advanced_viz', viz_kind: 'volcano' };
+
+  it('shrinks to the rows it shows, where other advanced viz only grow', () => {
+    // 8 candidates: ~366 px, 4 rows, in a tile stored at 6.
+    const layouts = (i: string) => [{ i, y: 0, h: 6 }];
+    expect(fitLayoutHeights([table], layouts('rt'), { rt: 366 })[0].h).toBe(rowsForHeight(366));
+    expect(fitLayoutHeights([other], layouts('ot'), { ot: 366 })[0].h).toBe(6);
+  });
+
+  it('grows to a longer list and keeps the stored height until it publishes', () => {
+    expect(fitLayoutHeights([table], [{ i: 'rt', y: 0, h: 4 }], { rt: 700 })[0].h).toBe(
+      rowsForHeight(700),
+    );
+    expect(fitLayoutHeights([table], [{ i: 'rt', y: 0, h: 6 }], {})[0].h).toBe(6);
+  });
+
+  it('leaves a table the user fixed alone', () => {
+    const fixed = [{ ...table, fit: 'fixed' as const }];
+    expect(fitLayoutHeights(fixed, [{ i: 'rt', y: 0, h: 6 }], { rt: 366 })[0].h).toBe(6);
   });
 });
 

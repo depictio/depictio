@@ -24,6 +24,26 @@ def _regions(paths: list[str]) -> pl.DataFrame:
     )
 
 
+def test_regions_read_the_depth_after_a_named_capture_bed(tmp_path: Path) -> None:
+    # A capture bed with a name column makes mosdepth write `chrom start end name
+    # depth`: the four declared columns put the gene names in `coverage` and the
+    # depth in a fifth. Read as coverage, every window of a real exome came out 0.
+    named = pl.DataFrame(
+        [
+            ("T.recal.regions.bed.gz", "chr1", "0", "100", "ref|DDX11L1", "72.0"),
+            ("T.recal.regions.bed.gz", "chr1", "200", "500", "ref|WASH7P", "40.0"),
+        ],
+        schema=["source_path", "chrom", "start", "end", "coverage", "column_5"],
+        orient="row",
+    )
+    plain = _regions(["N.recal.regions.bed.gz"])
+    frame = pl.concat([named, plain], how="diagonal")
+    out = execute_recipe("mosdepth/regions.py", tmp_path, extra_sources={"regions": frame})
+    depth = dict(zip(out["sample"], out["value"], strict=True))
+    assert depth["T"] == pytest.approx((100 * 72.0 + 300 * 40.0) / 400)
+    assert depth["N"] == pytest.approx(30.0)
+
+
 def _summary(paths: list[str]) -> pl.DataFrame:
     rows = [(p, "chr1", "1000", "30000", "30.0", "0", "60") for p in paths]
     return pl.DataFrame(

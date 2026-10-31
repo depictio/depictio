@@ -520,7 +520,8 @@ export function buildGuideModel<T extends DashboardSummary>(
   for (const f of floating) {
     const m = f.metadata;
     // Only the map panel selects values that filter. A floating structure's
-    // residue pick is a place to look, not a subset.
+    // residue pick is a place to look, not a subset, and a floating genome
+    // browser's open tracks are a view setting.
     if (m.component_type !== 'map') continue;
     if (seen.has(m.index) || !isMapSelectionEnabled(m, true)) continue;
     seen.add(m.index);

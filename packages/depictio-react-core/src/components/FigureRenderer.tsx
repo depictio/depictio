@@ -22,13 +22,16 @@ import type { GroupRenderState } from '../selectionGroups';
 import { useDataVersionRequest } from '../dataVersions';
 import { renderDefinitionKey } from '../renderKey';
 import { enqueueFetch, isStaleFetch } from '../fetchQueue';
-import { extractScatterSelection } from '../selection';
+import { extractScatterSelection, selectsByDrag, supportsPointSelection } from '../selection';
 import { useInView } from '../hooks/useInView';
 import { useNewItemIds } from '../hooks/useNewItemIds';
 import { useTransientFlag } from '../hooks/useTransientFlag';
 import { ActiveHighlight } from '../highlight';
 import { asNumberArray, extractCustomdataIds } from '../plotlyData';
+import { markSelectedPoints, standingSelectionValues } from '../standingSelection';
 import { adaptGlTraces, PlotlyTrace, useWebglSlot } from '../webglBudget';
+import { tintSingleSeries } from '../figureTint';
+import { useTabHue } from '../tabColor';
 import { useUiScale } from '../uiScale';
 import { applyChromePlotly } from '../chrome/plotlyPatch';
 import { useChromeStyle } from '../chrome/chromeStyle';
@@ -133,17 +136,15 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
   const renderDashboardId = renderSource?.dashboardId ?? dashboardId;
   const renderComponentId = renderSource?.componentId ?? metadata.index;
 
-  // Cross-filtering only fires meaningful events on scatter-like traces —
-  // histograms / bars / pies aggregate input rows into bins, so Plotly's
-  // `onSelected` would emit per-bin envelopes (no per-row identity) and the
-  // downstream filter would point at nothing useful. Builders hide the
-  // toggle for non-scatter visus; the renderer hardens the same gate so
-  // legacy metadata with `selection_enabled: true` on (say) a histogram is
-  // silently no-op'd instead of producing junk filters.
-  const isScatterLikeForSelection =
-    metadata.visu_type === 'scatter' || metadata.visu_type === 'scatter_3d';
+  // Cross-filtering needs a mark that names one row. Scatter traces do, and so
+  // do bars and heatmap cells whose builder put the key in `customdata` (a
+  // bar per variant); histograms / boxes / pies aggregate input rows into
+  // bins, so a click there names nothing and legacy metadata with
+  // `selection_enabled: true` on one is silently no-op'd. This gate is not the
+  // scatter-only machinery below (point cap, GL slot, new-item halo): a bar
+  // click is a selection and nothing else.
   const selectionEnabled =
-    Boolean(metadata.selection_enabled) && !!onFilterChange && isScatterLikeForSelection;
+    Boolean(metadata.selection_enabled) && !!onFilterChange && supportsPointSelection(metadata.visu_type);
   const selectionColumn =
     typeof metadata.selection_column === 'string'
       ? (metadata.selection_column as string)
@@ -433,16 +434,36 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
   // histogram) never do and don't take a slot — see webglBudget.
   const glGranted = useWebglSlot(isScatterLike);
 
+  // A figure that colours by no data column (one series, the template's
+  // default colour) is drawn in the tab's hue; see figureTint.
+  const tabHue = useTabHue();
+  const tinted = useMemo(
+    () => tintSingleSeries(figure?.data, figure?.layout, tabHue),
+    [figure, tabHue],
+  );
+
+  const standingSelection = useMemo(
+    () =>
+      standingSelectionValues(filters, {
+        index: String(metadata.index),
+        dcId: typeof metadata.dc_id === 'string' ? metadata.dc_id : undefined,
+        column: selectionColumn ?? null,
+      }),
+    [filters, metadata.index, metadata.dc_id, selectionColumn],
+  );
+
   const figureData = useMemo<unknown[]>(() => {
-    const base = adaptGlTraces(((figure?.data as PlotlyTrace[]) || []), glGranted);
+    let traces = (tinted.data as PlotlyTrace[]) || [];
+    if (standingSelection) traces = markSelectedPoints(traces, standingSelection, selectionColumnIndex);
+    const base = adaptGlTraces(traces, glGranted);
     return overlayTrace ? [...base, overlayTrace] : base;
-  }, [figure, overlayTrace, glGranted]);
+  }, [tinted, overlayTrace, glGranted, standingSelection, selectionColumnIndex]);
 
   const baseLayout = useMemo<Record<string, unknown>>(() => {
     // The chrome style's Plotly patch (fonts, backgrounds, grid) lands over the
     // server template, under everything this renderer decides below.
     const srcLayout = applyChromePlotly(
-      (figure?.layout as Record<string, unknown>) || {},
+      tinted.layout,
       theme,
       chromeStyle,
     );
@@ -467,7 +488,7 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
       const serverSize = typeof serverFont.size === 'number' ? serverFont.size : 12;
       base.font = { ...serverFont, size: serverSize * effectiveFontScale };
     }
-    if (selectionEnabled && !base.dragmode) {
+    if (selectionEnabled && !base.dragmode && selectsByDrag(metadata.visu_type)) {
       const mode =
         typeof metadata.selection_mode === 'string' ? metadata.selection_mode : 'lasso';
       base.dragmode = mode;
@@ -483,7 +504,7 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
     return base;
     // uirevision above stays tied to refreshTick only: entering or leaving
     // annotate mode, or adding an annotation, must not reset the user's zoom.
-  }, [figure, selectionEnabled, metadata.selection_mode, refreshTick, effectiveFontScale, theme, chromeStyle]);
+  }, [tinted, selectionEnabled, metadata.visu_type, metadata.selection_mode, refreshTick, effectiveFontScale, theme, chromeStyle]);
 
   // ── Annotation layer ──────────────────────────────────────────────────────
   // Datawrapper-style annotations (ranges, reference lines, marked points,

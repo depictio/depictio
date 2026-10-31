@@ -1,0 +1,29 @@
+id: ivar_variants_tsv
+name: Raw iVar variant calls
+mode: variants
+description: >-
+  One row per variant from the raw iVar variants table, one table per sample
+  and reference: position, alleles, allele depths and frequency, Fisher's
+  p-value, iVar's PASS verdict and, with a GFF, the amino acid change. Minor
+  variants under the consensus threshold are kept, so the table reads
+  intra-host diversity as well as the consensus changes.
+find:
+  path_glob: "**/variants/ivar/**/*.tsv"
+recipe: ivar/variants_tsv.py
+fixture: variants_tsv.tsv
+renders_as:
+  - { id: variant_genome_view, component: advanced_viz, kind: genome_view,
+      roles: {chr: chrom, pos: pos, score: af, feature: variant_key, sample: genome_id, category: variant_type} }
+  # Allele frequency against depth: fixed calls stack at 1, minor ones spread
+  # low, and the low-depth corner is where a frequency means little.
+  - id: af_vs_depth
+    component: advanced_viz
+    kind: scatter_xy
+    roles: { x: total_dp, y: af, label: variant_key, color: frequency_class }
+  - { id: pass_variants, component: card, column: variant_key, aggregation: count,
+      secondary_layout: composition, breakdown_col: variant_type, headline: true }
+  - { id: frequency_classes, component: card, column: variant_key, aggregation: count,
+      secondary_layout: donut, breakdown_col: frequency_class }
+  - { component: figure, visu_type: histogram, dict_kwargs: {x: af, color: frequency_class} }
+  - { component: interactive, interactive_type: MultiSelect, column_name: filter }
+  - { component: table, row_selection_enabled: true, row_selection_column: genome_id }

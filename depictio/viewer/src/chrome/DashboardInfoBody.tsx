@@ -23,7 +23,13 @@ import {
 import { Icon } from '@iconify/react';
 
 import type { DashboardData } from 'depictio-react-core';
-import { fetchProject, Z_LAYERS } from 'depictio-react-core';
+import {
+  describeRevisionMismatch,
+  fetchProject,
+  readTemplateRevision,
+  templateRevisionMismatch,
+  Z_LAYERS,
+} from 'depictio-react-core';
 import {
   parseTemplateOrigin,
   TemplateChip,
@@ -223,7 +229,15 @@ const DashboardInfoBody: React.FC<DashboardInfoBodyProps> = ({ dashboard, active
             icon="mdi:source-branch"
             color="green"
             label="Template"
-            value={<TemplateChip parsed={parsedTemplate} verbose />}
+            value={
+              <Stack gap={4}>
+                <TemplateChip parsed={parsedTemplate} verbose />
+                <TemplateRevisionNote
+                  dashboardOrigin={dashboard?.template_origin}
+                  projectOrigin={projectTemplateOrigin}
+                />
+              </Stack>
+            }
           />
         )}
         {projectId && (
@@ -303,6 +317,52 @@ const DashboardInfoBody: React.FC<DashboardInfoBodyProps> = ({ dashboard, active
 
       {(dashboardId || projectId) && (
         <IdentifiersBlock dashboardId={dashboardId} projectId={projectId} />
+      )}
+    </Stack>
+  );
+};
+
+/**
+ * Which revision of its template the dashboard comes from, under the template
+ * chip: "Template revision v1.2.0 · imported <date>", and a warning when the
+ * project was ingested with another revision than the one the dashboard was
+ * imported from. A dashboard with no stamp (built in the viewer, or imported
+ * before stamps existed) falls back to the project's revision, so the line
+ * still says which revision the project runs.
+ */
+const TemplateRevisionNote: React.FC<{
+  dashboardOrigin: unknown;
+  projectOrigin: unknown;
+}> = ({ dashboardOrigin, projectOrigin }) => {
+  const dashboard = readTemplateRevision(dashboardOrigin);
+  const project = readTemplateRevision(projectOrigin);
+  const mismatch = templateRevisionMismatch(dashboardOrigin, projectOrigin);
+  if (!dashboard && !project) return null;
+  return (
+    <Stack gap={4} data-testid="template-revision">
+      {dashboard ? (
+        <Text size="xs" c="dimmed">
+          Template revision <b>v{dashboard.version}</b>
+          {dashboard.at ? ` · imported ${formatTimestamp(dashboard.at)}` : ''}
+        </Text>
+      ) : project ? (
+        <Text size="xs" c="dimmed">
+          Template revision <b>v{project.version}</b> (project)
+        </Text>
+      ) : null}
+      {mismatch && (
+        <Alert
+          color="yellow"
+          variant="light"
+          p="xs"
+          icon={<Icon icon="mdi:alert-outline" width={16} />}
+          data-testid="template-revision-mismatch"
+        >
+          <Text size="xs">
+            {describeRevisionMismatch(mismatch)} Ingest again with --reset-dashboards to bring it up
+            to date; edits made in the viewer are lost.
+          </Text>
+        </Alert>
       )}
     </Stack>
   );

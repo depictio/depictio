@@ -8,6 +8,7 @@
 # module to derive identity from, the same documented exception as mhcquant.
 id: proteinannotator
 name: nf-core/proteinannotator
+version: "1.0.0"
 description: >-
   Protein annotation summaries of nf-core/proteinannotator: domains from every
   searched database in one table, per-residue secondary structure and domain

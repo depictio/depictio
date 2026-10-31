@@ -1,0 +1,23 @@
+id: epitopeprediction_predictor_summary
+name: Binder calls per tool
+mode: epitope/tools
+description: >-
+  One row per sample and prediction tool: the peptides it scored, could not
+  score (allele or length unsupported) and calls a binder of at least one
+  allele, the binder share, the alleles it scored and its median IC50. Wild-type
+  peptides are left out, as in the pipeline's MultiQC statistics, so the two
+  agree.
+find:
+  path_glob: "**/predictions/*.tsv"
+recipe: epitopeprediction/predictor_summary.py
+fixture: predictor_summary.tsv
+renders_as:
+  - id: binder_rate_bar
+    component: figure
+    visu_type: bar
+    dict_kwargs: { x: sample, y: binder_rate, color: predictor, barmode: group }
+  - { id: tool_binders, component: card, column: binders, aggregation: sum, secondary_layout: donut, breakdown_col: predictor }
+  - { id: tool_unsupported, component: card, column: unsupported, aggregation: sum, secondary_layout: composition, breakdown_col: predictor }
+  - { component: card, column: binder_rate, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: interactive, interactive_type: MultiSelect, column_name: predictor }
+  - { component: table, row_selection_enabled: true, row_selection_column: summary_key }

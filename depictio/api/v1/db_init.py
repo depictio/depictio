@@ -197,6 +197,8 @@ def _dataset_of_dashboard(name: str) -> str:
         return "viralrecon"
     if name.startswith("catalog_conformance"):
         return "catalog_conformance"
+    if name.startswith("genome_tracks"):
+        return "genome_tracks_examples"
     return name
 
 
@@ -239,6 +241,7 @@ async def create_initial_dashboards(
             "advanced_viz_showcase",
             "viralrecon",
             "catalog_conformance",
+            "genome_tracks_examples",
         )
     }
 
@@ -442,16 +445,36 @@ async def create_initial_dashboards(
                 "transcript_structure",
                 "cnv_profile",
                 "genome_chord",
+                "ideogram",
                 "record_card",
                 "parallel_coordinates",
+                "ranked_distribution",
                 "locus_section",
                 "protein_structure",
                 "protein_families",
                 "protein_quality",
+                "spatial_cells",
+                "allele_grid",
+                "pedigree",
+                "ranked_table",
                 "benchmark_pr",
                 "benchmark_confusion",
                 "benchmark_ci",
             )
+        ),
+        # Genome tracks showcase: Strand-seq (main tab) + SARS-CoV-2.
+        *(
+            {
+                "name": f"genome_tracks_{slug}",
+                "json_path": os.path.join(
+                    projects_base,
+                    rel_paths["genome_tracks_examples"],
+                    ".db_seeds",
+                    f"dashboard_{slug}.json",
+                ),
+                "static_dc_id": None,
+            }
+            for slug in ("strandseq", "sarscov2")
         ),
         # nf-core/viralrecon multi-tab dashboard. Seed JSONs are snapshotted
         # from a local CLI ingest of viralrecon test_illumina output — see
@@ -478,6 +501,8 @@ async def create_initial_dashboards(
                 "coverage_depth",
                 "lineage_clustering",
                 "variants",
+                "gene",
+                "sample",
                 "sample_qc",
             )
         ),

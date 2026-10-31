@@ -81,3 +81,111 @@ export function pickEssentials(live: readonly boolean[], max = DOCK_ESSENTIALS):
     return true;
   });
 }
+
+/**
+ * The top dock is one line: as many controls as fit beside the placement
+ * picker, the rest behind "More options". Five at most, so a wide tile still
+ * reads as a toolbar and not a form.
+ */
+export const DOCK_TOP_MAX = 5;
+
+export interface FitInlineOptions {
+  /** Space between two inline controls, px. */
+  gap?: number;
+  /** Room the "More options" button takes (with its gap) once anything is
+   *  folded, px. Not reserved when every control fits. */
+  reserve?: number;
+  /** Most controls shown inline, whatever the width. */
+  max?: number;
+}
+
+/**
+ * Which of a panel's controls fit on the top dock's single line.
+ *
+ * The same order and the same rule as `pickEssentials` (only controls that do
+ * something now, most important first), but bounded by width instead of a
+ * count: `widths` are the controls' own widths, measured with every one of
+ * them shown, and `available` is the line's width. Stops at the first control
+ * that does not fit rather than skipping to a narrower one further down, so a
+ * less important control never jumps ahead of a more important one. The first
+ * live control is always kept, even alone too wide for the line: a panel with
+ * nothing inline but "More options" is a popover with extra steps.
+ */
+export function fitInline(
+  widths: readonly number[],
+  live: readonly boolean[],
+  available: number,
+  { gap = 0, reserve = 0, max = Number.POSITIVE_INFINITY }: FitInlineOptions = {},
+): boolean[] {
+  const pick = (budget: number): boolean[] => {
+    let used = 0;
+    let shown = 0;
+    let stopped = false;
+    return live.map((ok, i) => {
+      if (!ok || stopped || shown >= max) return false;
+      const w = Math.max(0, Number.isFinite(widths[i]) ? widths[i] : 0);
+      const next = used + (shown > 0 ? gap : 0) + w;
+      if (shown > 0 && next > budget) {
+        stopped = true;
+        return false;
+      }
+      used = next;
+      shown++;
+      return true;
+    });
+  };
+  const all = pick(available);
+  // Everything inline: no "More options" button, so no room to keep for it.
+  if (all.every(Boolean)) return all;
+  return pick(available - reserve);
+}
+
+/**
+ * Width of an inline control on the top dock's line, from the width it takes
+ * in a column: about two thirds, enough for a number box's digits or a short
+ * dropdown value, never under 56 px. Content-sized controls stay so.
+ */
+export function rowControlWidth(width: number | 'auto' | 'fill'): number | 'auto' {
+  if (width === 'auto' || width === 'fill') return 'auto';
+  return Math.max(56, Math.round(width * 0.65));
+}
+
+export interface GroupPlan {
+  /** The caption drawn over the group, or null for none. */
+  caption: string | null;
+  /** The group's only control is unlabelled and takes the group's title as
+   *  its own label (on the single line, where captions are not drawn). */
+  adoptTitle: boolean;
+}
+
+function sameLabel(a: string | null | undefined, b: string): boolean {
+  return (a ?? '').trim().toLowerCase() === b.trim().toLowerCase();
+}
+
+/**
+ * How a titled group of controls (`VizControlGroup`) is labelled.
+ *
+ * On the top dock's single line (`row`) groups are not drawn at all: their
+ * controls join the line, each under its own label, which is what keeps the
+ * line one line. A group of one unlabelled control lends it its title, so it
+ * is not left unnamed. Stacked (`stack`: the column, the strip, the popover),
+ * the caption is dropped only where it would repeat: a "Legend" group holding
+ * nothing but a "Legend" dropdown said "Legend" twice.
+ *
+ * `labels` are the group's controls' own labels, null for one without a text
+ * label.
+ */
+export function planGroup(
+  title: string,
+  labels: readonly (string | null | undefined)[],
+  layout: 'row' | 'stack',
+): GroupPlan {
+  const single = labels.length === 1;
+  if (layout === 'row') {
+    return { caption: null, adoptTitle: single && !(labels[0] ?? '').trim() };
+  }
+  return {
+    caption: single && sameLabel(labels[0], title) ? null : title,
+    adoptTitle: false,
+  };
+}

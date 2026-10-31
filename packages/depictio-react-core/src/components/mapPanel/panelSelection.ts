@@ -8,13 +8,17 @@ import type { FloatingPanelKind } from './panelKinds';
  * A map's selection is the values it filters on (`map_selection`). A
  * structure's is its residue pick, whose entries (entity, position range and,
  * on a complex, chain) read back as one selection through `ownSelection`: the
- * count there is 0 or 1 for a single-entity pick, never a residue count.
+ * count there is 0 or 1 for a single-entity pick, never a residue count. A
+ * genome browser's selection (`jbrowse_selection`, the tracks it has open) is
+ * a view setting that travels with the tile, not a subset worth a badge on the
+ * header, so a genome panel counts none and has nothing to clear.
  */
 export function selectionCount(
   kind: FloatingPanelKind,
   filters: InteractiveFilter[],
   index: string,
 ): number {
+  if (kind === 'genome') return 0;
   return kind === 'map'
     ? mapSelectionValues(filters, index).length
     : ownSelection(filters, index).count;
@@ -30,6 +34,7 @@ export function clearSelectionFilters(
   filters: InteractiveFilter[],
   index: string,
 ): InteractiveFilter[] {
+  if (kind === 'genome') return [];
   if (kind === 'map') {
     return mapSelectionValues(filters, index).length === 0
       ? []

@@ -15,6 +15,29 @@ describe('vizKindTag', () => {
     expect(vizKindTag('ramachandran')).toBe('Rama');
   });
 
+  it('tags spatial cells apart from the embedding drawn beside them', () => {
+    expect(vizKindTag('spatial_cells')).toBe('Cells');
+    expect(vizKindTag('spatial_cells')).not.toBe(vizKindTag('embedding'));
+    expect(vizKindLabel('spatial_cells')?.icon).toBe('tabler:microscope');
+  });
+
+  it('names the allele grid by what its cells hold', () => {
+    expect(vizKindLabel('allele_grid')).toMatchObject({
+      tag: 'Alleles',
+      icon: 'tabler:layout-columns',
+    });
+    expect(vizKindLabel('allele_grid')?.description).toMatch(/haplotype/);
+  });
+
+  it('names the pedigree by its icon in the picker', () => {
+    expect(vizKindLabel('pedigree')).toMatchObject({ tag: 'Pedigree', icon: 'mdi:family-tree' });
+  });
+
+  it('tags the ranked table apart from the ranked distribution', () => {
+    expect(vizKindLabel('ranked_table')).toMatchObject({ tag: 'Top', icon: 'mdi:podium' });
+    expect(vizKindTag('ranked_table')).not.toBe(vizKindTag('ranked_distribution'));
+  });
+
   it('gives a legacy alias the tag of the kind it became', () => {
     expect(vizKindTag('ancombc_differentials')).toBe(vizKindTag('da_barplot'));
     expect(vizKindLabel('ancombc_differentials')).toEqual(vizKindLabel('da_barplot'));

@@ -2,6 +2,7 @@
 # nf-core/oncoanalyser publishes <group_id>/teal/<sample_id>.teal.*.
 id: teal
 name: TEAL
+version: "1.0.0"
 description: >-
   Telomere length and telomeric rearrangements from whole-genome sequencing.
 homepage: https://github.com/hartwigmedical/hmftools/tree/master/teal

@@ -1,0 +1,506 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8e70"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8e70"
+  },
+  "version": 1,
+  "stored_metadata": [
+    {
+      "index": "spatial-cells-text",
+      "component_type": "text",
+      "title": "Two readings of one cell table",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_align": "left",
+      "section": "Cells in the image",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "One mcquant table (nf-core/mcmicro) of two tonsil images: per cell, eight marker intensities, the centroid in image pixels and the segmentation morphology. On the left, spatial_cells draws each cell in its image's own frame (y down from the top-left, one image at a time), at the size of its area, coloured by cell type or by a marker picked from the panel, with the colour clipped to the 1st and 99th percentiles. On the right, an embedding of X_centroid and Y_centroid: the same cells, upside down (its y axis runs up), both images stacked in one frame, every cell one fixed-size dot. Pick a sample on the left to compare like with like; a lasso in either tile marks its cells in the other.\n",
+      "surface": "none",
+      "accent": null,
+      "logo": null,
+      "logo_dark": null,
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "spatial-cells-tissue",
+      "component_type": "advanced_viz",
+      "title": "Cells in the image (spatial_cells)",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "spatial_cells_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8e71"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "mcquant single-cell table of two tonsil images (about 3,900 cells each): eight marker intensities, centroids in image pixels, regionprops morphology and a called cell type",
+        "data_collection_tag": "spatial_cells_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8e71"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "Each cell at its centroid in its own image, sized by its area, coloured by cell type or by the marker picked. One image at a time; the colour range is clipped to percentiles of the image shown.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Cells in the image",
+      "viz_kind": "spatial_cells",
+      "config": {
+        "controls_placement": "popover",
+        "viz_kind": "spatial_cells",
+        "cell_id_col": "cell_id",
+        "x_col": "X_centroid",
+        "y_col": "Y_centroid",
+        "value_col": "CD20",
+        "category_col": "cell_type",
+        "sample_col": "sample",
+        "area_col": "Area",
+        "value_columns": [
+          "DNA_1",
+          "CD3",
+          "CD20",
+          "CD45",
+          "PanCK",
+          "Ki67",
+          "CD68",
+          "aSMA"
+        ],
+        "value_columns_pattern": null,
+        "color_by": "category",
+        "sample_display": "select",
+        "default_sample": null,
+        "max_facets": 4,
+        "y_axis": "image",
+        "colour_scale": "Viridis",
+        "reverse_scale": false,
+        "transform": "none",
+        "asinh_cofactor": 150.0,
+        "clip_low_pct": 1.0,
+        "clip_high_pct": 99.0,
+        "size_by_area": true,
+        "point_size": 4.0,
+        "max_point_size": 40.0,
+        "opacity": 0.9,
+        "legend_pos": "bottom",
+        "hover_cols": [],
+        "max_cells": 100000,
+        "background_wf_id": null,
+        "background_dc_id": null,
+        "background_dc_tag": null,
+        "background_image_col": null,
+        "background_sample_col": "sample",
+        "background_width_col": "width",
+        "background_height_col": "height",
+        "background_url": null,
+        "background_width": null,
+        "background_height": null,
+        "background_image_scale": 1.0,
+        "background_opacity": 0.7,
+        "show_background": true,
+        "selection_enabled": true,
+        "selection_column": null
+      },
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "spatial-cells-embedding",
+      "component_type": "advanced_viz",
+      "title": "The same cells as an embedding",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "spatial_cells_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8e71"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "mcquant single-cell table of two tonsil images (about 3,900 cells each): eight marker intensities, centroids in image pixels, regionprops morphology and a called cell type",
+        "data_collection_tag": "spatial_cells_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8e71"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "An embedding bound to X_centroid and Y_centroid: equal aspect and a Colour-by menu, but its y axis runs upwards, both images share one frame and every cell is the same dot.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Cells in the image",
+      "viz_kind": "embedding",
+      "config": {
+        "controls_placement": "popover",
+        "viz_kind": "embedding",
+        "sample_id_col": "cell_id",
+        "dim_1_col": "X_centroid",
+        "dim_2_col": "Y_centroid",
+        "dim_3_col": null,
+        "cluster_col": "cell_type",
+        "color_col": "cell_type",
+        "category_palette": null,
+        "compute_method": null,
+        "umap_n_neighbors": 15,
+        "umap_min_dist": 0.1,
+        "tsne_perplexity": 30.0,
+        "tsne_n_iter": 1000,
+        "pcoa_distance": "bray_curtis",
+        "axis_prefix": "Centroid ",
+        "show_density": false,
+        "point_size": 3,
+        "marker_outline_width": 1.5,
+        "plot_style": "default",
+        "default_color_by": "cell_type",
+        "show_centroids": false,
+        "marker_outline": false,
+        "legend_pos": "bottom",
+        "ncontours": 14,
+        "density_opacity": 0.45,
+        "view_3d": false,
+        "reverse_scale": true,
+        "hover_cols": [],
+        "selection_enabled": true,
+        "selection_column": null
+      },
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "spatial-cells-f-sample",
+      "component_type": "interactive",
+      "title": "Image",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "spatial_cells_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8e71"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "mcquant single-cell table of two tonsil images (about 3,900 cells each): eight marker intensities, centroids in image pixels, regionprops morphology and a called cell type",
+        "data_collection_tag": "spatial_cells_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8e71"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Cell scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "sample",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Cell filters",
+      "timescale": null,
+      "show_marks": null,
+      "show_mark_labels": null,
+      "show_histogram": null,
+      "slider_mode": null,
+      "icon_name": "tabler:photo",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "spatial-cells-f-type",
+      "component_type": "interactive",
+      "title": "Cell type",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "spatial_cells_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8e71"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "mcquant single-cell table of two tonsil images (about 3,900 cells each): eight marker intensities, centroids in image pixels, regionprops morphology and a called cell type",
+        "data_collection_tag": "spatial_cells_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8e71"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Cell scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "cell_type",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Cell filters",
+      "timescale": null,
+      "show_marks": null,
+      "show_mark_labels": null,
+      "show_histogram": null,
+      "slider_mode": null,
+      "icon_name": "tabler:microscope",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "spatial-cells-f-area",
+      "component_type": "interactive",
+      "title": "Cell area (px)",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "spatial_cells_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8e71"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "mcquant single-cell table of two tonsil images (about 3,900 cells each): eight marker intensities, centroids in image pixels, regionprops morphology and a called cell type",
+        "data_collection_tag": "spatial_cells_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8e71"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Cell scope",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "Area",
+      "column_type": "int64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Cell filters",
+      "timescale": null,
+      "show_marks": null,
+      "show_mark_labels": null,
+      "show_histogram": true,
+      "slider_mode": null,
+      "icon_name": "mdi:chart-bell-curve",
+      "wf_tag": "python/advanced_viz_demo"
+    }
+  ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-spatial-cells-f-sample",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-spatial-cells-f-type",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-spatial-cells-f-area",
+      "x": 0,
+      "y": 6,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-spatial-cells-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 3,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-spatial-cells-tissue",
+      "x": 0,
+      "y": 3,
+      "w": 4,
+      "h": 6,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-spatial-cells-embedding",
+      "x": 4,
+      "y": 3,
+      "w": 4,
+      "h": 6,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "Spatial cells",
+  "subtitle": "Segmented cells of two tonsil images drawn where they sit, beside the same cells as an embedding of their centroids: which of the two reads as tissue?",
+  "icon": "tabler:microscope",
+  "icon_color": "grape",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-12 00:00:00",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "tab_order": 51,
+  "main_tab_name": null,
+  "tab_icon": "tabler:microscope",
+  "tab_icon_color": "grape",
+  "tab_group": null,
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Cell scope",
+      "icon": "mdi:filter-variant",
+      "color": "grape",
+      "description": "Restricts which cells both tiles draw",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Cells in the image",
+      "icon": "mdi:microscope",
+      "color": "grape",
+      "description": "The same cells drawn by spatial_cells and by an embedding of their centroids",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null,
+  "category_colors": {
+    "cell_type": {
+      "B cell": "#1c7ed6",
+      "Germinal centre B": "#7048e8",
+      "T cell": "#e8590c",
+      "Epithelial": "#2f9e44",
+      "Macrophage": "#c2255c",
+      "Stromal": "#868e96"
+    }
+  },
+  "filter_panel_default": "open",
+  "content_width_default": "full",
+  "show_tab_header": true,
+  "show_guide": true,
+  "guide_intro": "",
+  "advanced_viz_controls": "popover",
+  "autofit": true
+}

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Icon } from '@iconify/react';
 import { useMantineColorScheme } from '@mantine/core';
+import { paletteVar } from '../paletteColor';
 
 /**
  * One icon value, drawn the way a tab draws it.
@@ -42,11 +43,10 @@ export function themedIconSrc(path: string, isDark: boolean, onFilled = false): 
  */
 export function glyphColorVar(color?: string | null): string {
   if (!color) return 'var(--mantine-color-dimmed)';
-  if (/^(#|rgb|hsl|var\()/.test(color)) return color;
   // "Dark" is ink, not a hue (the MultiQC tabs are forced to it): its shade 6
-  // is near-black in both schemes and vanished on a dark page.
-  if (color === 'dark' || color === 'black') return 'var(--mantine-color-text)';
-  return `var(--mantine-color-${color}-6)`;
+  // is near-black in both schemes and vanished on a dark page. `paletteVar`
+  // handles that, and the `blue.4` / `blue-4` shade spellings.
+  return paletteVar(color) ?? 'var(--mantine-color-dimmed)';
 }
 
 export const Glyph: React.FC<{

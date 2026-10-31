@@ -3,6 +3,7 @@
 # Pfam domains of the fused proteins unpivoted into one row per domain).
 id: fusioninspector
 name: FusionInspector
+version: "1.0.0"
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/fusioninspector
 description: >-
   Validates and characterises fusion transcript predictions by aligning reads

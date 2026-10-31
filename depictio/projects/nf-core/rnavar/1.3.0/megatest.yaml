@@ -1,0 +1,116 @@
+# Megatest manifest for nf-core/rnavar 1.3.0 (read by scripts/nfcore_megatest.py).
+#
+# Which AWS megatest run this template was validated against and the tables-only
+# subset of it that the template recipes and MultiQC need. Fetch it with:
+#
+#   python scripts/nfcore_megatest.py fetch --pipeline rnavar --version 1.3.0 [--dest DIR]
+#   bash download_test_data.sh [DIR]      # same thing, plus the vendored design table
+#
+# Keys are fnmatch globs relative to the prefix root (run_root is empty) and are
+# mirrored 1:1 below the destination, which becomes the template DATA_ROOT.
+#
+# WHY THIS PREFIX AND NOT THE 1.3.0 RELEASE TAG
+# ---------------------------------------------
+# `results-5e72bcb5520e00422750c978d4153b38f1fd7312` is not a release tag sha,
+# so `nfcore_megatest.py` prints a "not the 1.3.0 release sha ... keeping the pin"
+# warning when it fetches. That is expected (same precedent as mag 5.5.0). The
+# prefix is a complete `test_full` run of the 1.x line: its software_versions.yml
+# reads `nf-core/rnavar: v1.3.0dev`, Nextflow 26.04.3, written 2026-06-01, two
+# weeks before the 1.3.0 release run. Survey of the bucket (2026-10-19):
+#
+#   * `a0e46414...` (the 1.3.0 release tag sha) is a TRUNCATED SYNC: 148 objects,
+#     preprocessing/ BAMs for 6 of 8 samples, the per-sample reports, three
+#     restarted pipeline_info sets, and no variant_calling/ and no MultiQC report.
+#   * `5e72bcb5...` (pinned) has every stage: 235 objects / 136 GB, 8 BAMs with
+#     their indices (135.7 GB, never fetched), STAR / Picard / samtools / FastQC
+#     reports for 8 samples, the 16 HaplotypeCaller VCFs (raw and filtered) with
+#     their 16 .tbi (36 MB), and reports/multiqc/multiqc_data/multiqc.parquet
+#     (MultiQC 1.35).
+#   * `59e2f912...`, `9db02826...`, `ea2c7b62...`, `2cbf0469...` stop before
+#     variant calling or publish BAMs only; `3cc083d3...` and `85b98d51...` hold
+#     pipeline_info only.
+#
+# WHAT 5e72bcb5 DOES NOT HAVE
+# ---------------------------
+#   * No annotation/: params.json has no `tools` key (rnavar 1.3.0 annotates only
+#     with --tools snpeff,vep,merge, and test_full sets none), so no snpEff or
+#     VEP output and no reports/snpeff/. The annotation keys below match nothing
+#     here and stay for a run that annotated; the Annotation tab is validated on
+#     the same subworkflow's snpEff files from the sarek 3.10.0 megatest
+#     (VALIDATION_REPORT.md, RV-D3).
+#   * No bcftools stats and no mosdepth: rnavar runs mosdepth only on a CRAM
+#     input. Callset numbers come from the VCF rows, coverage from samtools.
+#   * No FastQC section in the MultiQC report, although the FastQC zips are
+#     published (fetched for provenance, 7 MB).
+#   * No samplesheet and no design: input/sample_metadata.tsv is vendored next to
+#     this file (cell line and replicate of the 8 samples of
+#     test-datasets/rnavar/samplesheet/v1.2/samplesheet_full.csv).
+#
+# Not fetched on purpose: preprocessing/ (the BAMs, 13.5 to 20.7 GB each),
+# every HTML report and the MultiQC plot exports. SJ.out.tab is fetched
+# (12 to 15 MB each, 110 MB in all): it is the junction table nothing else holds.
+pipeline: rnavar
+version: "1.3.0"
+# s3://nf-core-awsmegatests/rnavar/results-<results_sha>/ (not the release tag_sha, see above).
+results_sha: "5e72bcb5520e00422750c978d4153b38f1fd7312"
+run_root: ""
+multiqc:
+  version: "1.35"
+  parquet: reports/multiqc/multiqc_data/multiqc.parquet
+  reprocess: false
+keys:
+  # Pipeline params, software versions and the trace.
+  - pipeline_info/params_*.json
+  - pipeline_info/*software*versions*.yml
+  - pipeline_info/execution_trace_*.txt
+  # MultiQC 1.35 parquet + the per-module tables exported next to it.
+  - reports/multiqc/multiqc_data/multiqc.parquet
+  - reports/multiqc/multiqc_data/*.txt
+  - reports/multiqc/multiqc_data/*.json
+  - reports/multiqc/multiqc_data/*.log
+  # --- alignment QC: STAR read fate and junctions, MarkDuplicates, samtools ---
+  - reports/star/*/*.Log.final.out
+  - reports/star/*/*.SJ.out.tab
+  - reports/picard/*/*.md.metrics.txt
+  - reports/samtools/*/*.stats
+  - reports/samtools/*/*.flagstat
+  - reports/samtools/*/*.idxstats
+  - reports/fastqc/*/*_fastqc.zip
+  # --- the calls, before and after VariantFiltration, each with its tabix
+  # index (the genome browser's tracks read them in place).
+  - variant_calling/*/*.haplotypecaller.vcf.gz
+  - variant_calling/*/*.haplotypecaller.vcf.gz.tbi
+  - variant_calling/*/*.haplotypecaller.filtered.vcf.gz
+  - variant_calling/*/*.haplotypecaller.filtered.vcf.gz.tbi
+  # --- annotation, --tools snpeff only (absent from this run, see above) ----
+  - annotation/*/*_snpEff.ann.vcf.gz
+  - annotation/*/*_snpEff.ann.vcf.gz.tbi
+  - reports/snpeff/*/*_snpEff.csv
+  - reports/snpeff/*/*_snpEff.genes.txt
+prefix_keys: []
+renames: {}
+post_fetch_help: |
+  === Quick test commands ===
+
+  # The design table is vendored, not published: copy it next to the data
+  # (download_test_data.sh does this for you).
+  mkdir -p {dest}/input && cp depictio/projects/nf-core/rnavar/1.3.0/input/sample_metadata.tsv {dest}/input/
+
+  # 1. Dry run (validates the template against the data, no ingestion)
+  depictio-cli ingest --template nf-core/rnavar/1.3.0 --data-root {dest} --dry-run
+
+  # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml). Add
+  #    --var TRACKS_URI=s3://nf-core-awsmegatests/rnavar/results-5e72bcb5520e00422750c978d4153b38f1fd7312
+  #    to open the VCFs and the 136 GB of BAMs in the genome browser in place.
+  depictio-cli ingest --template nf-core/rnavar/1.3.0 --data-root {dest} \
+    --var METADATA_FILE={dest}/input/sample_metadata.tsv
+# Run-specific values the dashboard texts must not quote (lint rule e,
+# test_template_conventions.py): the megatest's cell lines and their source.
+forbidden_terms:
+  - GM12878
+  - K562
+  - MCF7
+  - H1
+  - ENCODE
+  - REP1
+  - REP2

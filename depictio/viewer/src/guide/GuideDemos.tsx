@@ -19,6 +19,7 @@ import {
 import { Icon } from '@iconify/react';
 import { UI_SCALE_STEPS, useBrandAccent, useBranding } from 'depictio-react-core';
 import type { GuideModel } from 'depictio-react-core';
+import { paletteVar } from 'depictio-react-core';
 
 type GuideTab = GuideModel['tabs']['groups'][number]['tabs'][number];
 
@@ -71,7 +72,7 @@ const TabIcon: React.FC<{ tab: GuideTab; color: string; isDark: boolean }> = ({
       height={18}
       style={{
         flexShrink: 0,
-        color: tab.isCurrent ? 'var(--mantine-color-white)' : `var(--mantine-color-${color}-6)`,
+        color: tab.isCurrent ? 'var(--mantine-color-white)' : paletteVar(color),
       }}
     />
   );
@@ -167,7 +168,7 @@ export const TabPillsDemo: React.FC<{
               icon={resolveTabIcon(pointed.tab, pointed.isMain)}
               width={18}
               height={18}
-              style={{ flexShrink: 0, color: `var(--mantine-color-${pointedColor}-6)` }}
+              style={{ flexShrink: 0, color: paletteVar(pointedColor) }}
             />
             <Text size="sm" fw={600}>
               {pointed.label}

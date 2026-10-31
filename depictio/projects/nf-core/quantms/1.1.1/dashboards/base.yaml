@@ -1,0 +1,1738 @@
+version: 1
+# nf-core/quantms 1.1.1 (DIA, DIA-NN), on the family rules of depictio/projects/nf-core/RULES.md
+# (ampliseq/2.18.0 is the reference implementation).
+#
+# Funnel: how the runs were acquired and what they identified (Data & QC) ->
+# which proteins were quantified, how completely, and how well the runs of a
+# condition agree and the conditions separate -> which proteins change between
+# conditions (Quantification). The design (`samples`) is what every filter
+# starts from: its links carry a pick to every run-level table by run_id and to
+# the per-condition tables by the condition column.
+#
+# There is no MultiQC tab: quantms 1.1.1 reports through pmultiqc custom
+# content, with no MultiQC module and no multiqc.parquet to read. Its plots are
+# rebuilt here from the result tables. The run is the DIA-NN route only; the DDA
+# and isobaric routes write other tables.
+main_dashboard:
+  title: nf-core/quantms
+  subtitle: Label-free DIA proteomics, from the spectra to the proteins that change
+  project_tag: quantms DIA Proteomics
+  main_tab_name: Overview
+  tab_icon: mdi:compass-outline
+  tab_icon_color: brandPrimary
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_panel_default: collapsed
+  content_width_default: compact
+  show_tab_header: false
+  # Declared once here, read by every tab of the family.
+  category_colors:
+    '{GROUP_COL}': auto
+    direction:
+      Up: '#e03131'
+      Down: '#1c7ed6'
+      Not significant: '#adb5bd'
+    modification_state:
+      Unmodified: '#868e96'
+      Modified: '#f76707'
+    detection:
+      All runs: '#0ca678'
+      Some runs: '#f59f00'
+      One run: '#e03131'
+    peptide_support:
+      1 peptide: '#e03131'
+      2 to 3 peptides: '#f59f00'
+      4 or more peptides: '#0ca678'
+    charge_state: auto
+    specificity:
+      Proteotypic: '#1c7ed6'
+      Shared: '#adb5bd'
+    pair: auto
+    contrast: auto
+    p_region:
+      p below 0.05: '#e8590c'
+      p of 0.05 or more: '#adb5bd'
+  # Persistent: drawn in every tab's filter panel, picks kept across tabs. Both
+  # are bound to the design, the source of every run link.
+  filter_sections:
+  - name: Sample filters
+    icon: mdi:filter-variant
+    color: teal
+    description: Applies to every tab
+    persistent: true
+    pin: top
+  grid_sections:
+  - name: Key figures
+    icon: mdi:counter
+    color: gray
+    appearance: plain
+    card_variant: headline
+    filter_bar: true
+    visible_filters: 2
+    description: The run in four numbers. The filters here narrow these four only.
+  - name: Findings
+    icon: mdi:star-outline
+    color: gray
+    appearance: plain
+    figure_style: minimal
+    filter_bar: true
+    visible_filters: 2
+    description: What the data says, each with the tab that shows it, then the figures behind it.
+  - name: How to read this dashboard
+    icon: mdi:information-outline
+    color: gray
+    appearance: plain
+    description: The tabs by group, each with the question it answers.
+  # Declared on the main tab, which no route removes.
+  - name: Sample sheet
+    icon: mdi:table-account
+    color: gray
+    description: The design behind every tab, narrowed by the sample filters
+    collapsed: true
+    persistent: true
+    pin: bottom
+    exclude_tabs:
+    - Overview
+  - name: Reference tables
+    icon: mdi:table
+    color: gray
+    description: The per-run summary behind the tiles
+    collapsed: true
+    persistent: true
+    pin: bottom
+    exclude_tabs:
+    - Overview
+  components:
+  - component_type: interactive
+    workflow_tag: quantms
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: '{GROUP_COL}'
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: violet
+      strip_label: '{GROUP_COL_DISPLAY}'
+    section: Key figures
+    tag: qm-ov-kf-group
+    index: ov-kf-group
+    title: '{GROUP_COL_DISPLAY}'
+    layout: {x: 0, y: 0, w: 2, h: 1}
+  - component_type: interactive
+    workflow_tag: quantms
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: run_id
+    column_type: object
+    display:
+      icon_name: mdi:flask-outline
+      custom_color: teal
+      strip_label: Run
+    section: Key figures
+    tag: qm-ov-kf-run
+    index: ov-kf-run
+    title: Run
+    layout: {x: 2, y: 0, w: 2, h: 1}
+  - component_type: text
+    title: nf-core/quantms
+    logo: https://raw.githubusercontent.com/nf-core/quantms/master/docs/images/nf-core-quantms_logo_light.png
+    logo_dark: https://raw.githubusercontent.com/nf-core/quantms/master/docs/images/nf-core-quantms_logo_dark.png
+    order: 1
+    body: >
+      Mass-spectrometry proteomics turned into protein quantities: how the runs were
+      acquired, what DIA-NN identified in them, how well the replicates agree and which
+      proteins differ between conditions. [Run parameters](params:)
+    tag: qm-ov-hero
+    index: ov-hero
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: text
+    surface: card
+    body: |
+      ### About this dashboard
+      nf-core/quantms converts the raw files, searches every run against a spectral library with DIA-NN and quantifies the protein groups, then tests the conditions against each other with MSstats. This page sums up one run; each tab behind it answers one question, in the order of the steps below.
+
+      The sample filters in the left panel apply to every tab: narrow the runs once and the whole dashboard follows. A bar above a section narrows that section only.
+    tag: qm-ov-about
+    index: ov-about
+    layout: {x: 0, y: 1, w: 5, h: 3}
+  # The run's own settings, read from its params.json: a key the run did not
+  # set prints a dash.
+  - component_type: text
+    surface: card
+    values:
+      runs: {dc: samples, column: run_id, aggregation: nunique, format: integer}
+      conds: {dc: samples, column: '{GROUP_COL}', aggregation: nunique, format: integer}
+    body: |
+      ### The run
+      - ![](icon:mdi:flask-outline) **Runs** {{runs}}, in {{conds}} conditions
+      - ![](icon:mdi:radar) **Acquisition** {{param:acquisition_method}}
+      - ![](icon:mdi:magnify-scan) **Enzyme** {{param:enzyme}}
+      - ![](icon:mdi:ruler) **Tolerances** {{param:precursor_mass_tolerance}}, {{param:fragment_mass_tolerance}}
+      - ![](icon:mdi:molecule) **Database** {{param:database}}
+    tag: qm-ov-run
+    index: ov-run
+    layout: {x: 5, y: 1, w: 3, h: 3}
+  # The marks take the family's colour (the header's), not the theme's blue.
+  - component_type: text
+    surface: card
+    accent: green
+    body: |
+      ### Five steps from spectra to protein changes
+      Each step names its settings and the tab that shows its result.
+
+      ::: steps
+      1. ![](icon:mdi:waveform) **Acquire** Spectra of every run · [Settings](params:acquisition) · [Acquisition](tab:Acquisition)
+      2. ![](icon:mdi:magnify-scan) **Identify** DIA-NN matches spectra to a library · [Settings](params:diann) · [Identification](tab:Identification)
+      3. ![](icon:mdi:molecule) **Quantify** Protein groups per run · [Settings](params:quantif) · [Proteins](tab:Proteins)
+      4. ![](icon:mdi:set-merge) **Compare runs** Replicates and conditions · [Reproducibility](tab:Reproducibility)
+      5. ![](icon:mdi:chart-scatter-plot) **Test** MSstats contrasts · [Settings](params:msstats) · [Differential abundance](tab:Differential abundance)
+      :::
+    tag: qm-ov-steps
+    index: ov-steps
+    layout: {x: 0, y: 4, w: 8, h: 3}
+  - component_type: card
+    workflow_tag: quantms
+    data_collection_tag: samples
+    aggregation: nunique
+    column_name: run_id
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: '{GROUP_COL}'
+    display:
+      icon_name: mdi:flask-outline
+      icon_color: orange
+      caption: 'in the design, by {GROUP_COL_DISPLAY}'
+      link: tab:Acquisition
+    section: Key figures
+    tag: qm-ov-kf-runs
+    index: ov-kf-runs
+    title: Runs
+    description: 'Runs in the design, one raw file each. The bar splits them by {GROUP_COL_DISPLAY}.'
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: quantms
+    data_collection_tag: quantms_run_summary
+    aggregation: median
+    column_name: protein_groups
+    column_type: int64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:molecule
+      icon_color: violet
+      caption: 'per run, with its spread'
+      link: tab:Proteins
+      decimals: 0
+    section: Key figures
+    tag: qm-ov-kf-proteins
+    index: ov-kf-proteins
+    title: Protein groups
+    description: 'Protein groups quantified in a run, the median over the runs in view. The box shows the spread between runs.'
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: quantms
+    data_collection_tag: quantms_protein_conditions
+    aggregation: median
+    column_name: cv_pct
+    column_type: float64
+    secondary_layout: threshold
+    threshold_value: 20
+    threshold_direction: max
+    threshold_warn: 30
+    display:
+      icon_name: mdi:chart-bell-curve
+      icon_color: teal
+      caption: 'median CV %; the strip, groups at 20 or less'
+      link: tab:Reproducibility
+      decimals: 1
+    section: Key figures
+    tag: qm-ov-kf-cv
+    index: ov-kf-cv
+    title: Variation
+    description: 'Coefficient of variation of a protein group between the runs of its condition, in percent: the median over proteins and conditions. Under 20 is tight for label-free quantification, over 30 is noisy; the strip counts the protein groups at 20 or less.'
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: quantms
+    data_collection_tag: quantms_comparisons
+    aggregation: count
+    column_name: protein
+    column_type: object
+    filter_expr: "col('direction') != 'Not significant'"
+    secondary_layout: composition
+    breakdown_col: direction
+    display:
+      icon_name: mdi:flash
+      icon_color: pink
+      caption: 'significant calls, by direction'
+      link: tab:Differential abundance
+    section: Key figures
+    tag: qm-ov-kf-significant
+    index: ov-kf-significant
+    title: Significant proteins
+    description: 'Proteins with an adjusted p-value below 0.05 and a two-fold change or more, over every tested contrast. The bar splits them by direction.'
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: interactive
+    workflow_tag: quantms
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: '{GROUP_COL}'
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: violet
+      strip_label: '{GROUP_COL_DISPLAY}'
+    section: Findings
+    tag: qm-ov-findings-group
+    index: ov-findings-group
+    title: '{GROUP_COL_DISPLAY}'
+    layout: {x: 0, y: 0, w: 2, h: 1}
+  - component_type: interactive
+    workflow_tag: quantms
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: run_id
+    column_type: object
+    display:
+      icon_name: mdi:flask-outline
+      custom_color: teal
+      strip_label: Run
+    section: Findings
+    tag: qm-ov-findings-run
+    index: ov-findings-run
+    title: Run
+    layout: {x: 2, y: 0, w: 2, h: 1}
+  # One result row per finding, each citing one data collection, so the import
+  # removes a row with its data.
+  - component_type: text
+    surface: card
+    values:
+      n_prec: {dc: quantms_precursors, column: peptidoform, aggregation: nunique, format: integer}
+      n_prot: {dc: quantms_proteins, column: protein_group, aggregation: nunique, format: integer}
+      n_full: {dc: quantms_protein_summary, column: protein_group, aggregation: count, format: integer,
+        filter_expr: "col('detection') == 'All runs'"}
+      cv: {dc: quantms_protein_conditions, column: cv_pct, aggregation: median, format: 'decimals:1'}
+      n_sig: {dc: quantms_comparisons, column: protein, aggregation: count, format: integer,
+        filter_expr: "col('direction') != 'Not significant'"}
+      n_test: {dc: quantms_comparisons, column: protein, aggregation: count, format: integer}
+    body: |
+      - **{{n_prec}}** distinct precursors identified – at 1% FDR [Identification](tab:Identification)
+      - **{{n_prot}}** protein groups quantified – over the runs in view [Proteins](tab:Proteins)
+      - **{{n_full}}** protein groups quantified in every run – the complete core [Proteins](tab:Proteins)
+      - **{{cv}} %** median variation between replicates – per protein and condition, under 20 % is tight [Reproducibility](tab:Reproducibility)
+      - **{{n_sig}}** of {{n_test}} tested proteins change significantly – adjusted p below 0.05, two-fold or more [Differential abundance](tab:Differential abundance)
+    section: Findings
+    tag: qm-ov-findings
+    index: ov-findings
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: highlight
+    section: Findings
+    source_tab: Reproducibility
+    source_component: rep-pca
+    caption: 'One point per run, placed by its protein quantities: the runs of a condition should sit together and the conditions apart. A run beside another condition is an injection to check.'
+    tag: qm-ov-hl-projection
+    index: ov-hl-projection
+    layout: {x: 0, y: 2, w: 4, h: 4}
+  - component_type: highlight
+    section: Findings
+    source_tab: Proteins
+    source_component: prot-cv-intensity
+    caption: 'Variation between runs against abundance, one point per protein group: precision usually falls toward the faint end. The dashed line is a CV of 20 %, under which quantification is tight; the most variable groups above it are labelled.'
+    tag: qm-ov-hl-variation
+    index: ov-hl-variation
+    layout: {x: 4, y: 2, w: 4, h: 4}
+  - component_type: highlight
+    section: Findings
+    source_tab: Differential abundance
+    source_component: da-volcano
+    caption: 'Adjusted p-value against log2 fold change for every tested protein, the strongest labelled by gene; the dashed lines are the cut-offs, an adjusted p of 0.05 and a twofold change either way. Nothing beyond them means no protein changed enough to call.'
+    tag: qm-ov-hl-volcano
+    index: ov-hl-volcano
+    layout: {x: 0, y: 6, w: 4, h: 4}
+  - component_type: highlight
+    section: Findings
+    source_tab: Differential abundance
+    source_component: da-pvalue-histogram
+    caption: 'Raw p-values of the tested proteins. The orange bin holds the proteins below 0.05; a bar above the dashed level (what to expect if none changed) is the excess that marks real changes, a flat histogram a test with nothing to find.'
+    tag: qm-ov-hl-pvalues
+    index: ov-hl-pvalues
+    layout: {x: 4, y: 6, w: 4, h: 4}
+  # Link-only tab tiles: each tile prints its tab's subtitle, the question the
+  # tab answers.
+  - component_type: text
+    body: |
+      ### Data & QC
+      - [Acquisition](tab:Acquisition)
+      - [Identification](tab:Identification)
+
+      ### Quantification
+      - [Proteins](tab:Proteins)
+      - [Reproducibility](tab:Reproducibility)
+      - [Differential abundance](tab:Differential abundance)
+    section: How to read this dashboard
+    tag: qm-ov-how-to-read
+    index: ov-how-to-read
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: interactive
+    workflow_tag: quantms
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: '{GROUP_COL}'
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: violet
+    section: Sample filters
+    group: Sample scope
+    tag: qm-filter-group
+    index: sample-filters-group
+    title: '{GROUP_COL_DISPLAY}'
+    layout: {x: 0, y: 0, w: 1, h: 2}
+  - component_type: interactive
+    workflow_tag: quantms
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: run_id
+    column_type: object
+    display:
+      icon_name: mdi:file-document-outline
+      custom_color: cyan
+    section: Sample filters
+    group: Sample scope
+    tag: qm-filter-run
+    index: sample-filters-run
+    title: Run
+    layout: {x: 0, y: 2, w: 1, h: 3}
+  - component_type: table
+    workflow_tag: quantms
+    data_collection_tag: samples
+    row_selection_enabled: true
+    row_selection_column: run_id
+    section: Sample sheet
+    tag: qm-sample-sheet
+    index: sample-sheet
+    title: Design
+    description: 'One row per run, with its sample, condition, replicate and acquisition settings.'
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: quantms
+    data_collection_tag: quantms_run_summary
+    row_selection_enabled: true
+    row_selection_column: run_id
+    section: Reference tables
+    tag: qm-ref-run-summary
+    index: ref-run-summary
+    title: Run summary
+    description: 'Identifications, yield, modified and missed-cleavage shares and retention-time agreement, one row per run.'
+    layout: {x: 0, y: 0, w: 8, h: 6}
+tabs:
+# ============================================================================
+# Data & QC
+# ============================================================================
+- title: Acquisition
+  subtitle: Were the runs acquired alike?
+  tab_group: Data & QC
+  tab_order: 1
+  tab_icon: mdi:waveform
+  tab_icon_color: blue
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Gradient filters
+    icon: mdi:filter-variant
+    color: blue
+    description: Narrows the gradient profiles to a window of retention time
+  grid_sections:
+  - name: Acquisition at a glance
+    icon: mdi:counter
+    color: blue
+    description: 'Spectra, gradient and peak counts of the runs'
+  - name: Gradient
+    icon: mdi:chart-line
+    color: blue
+    description: 'Spectra and signal per minute, one curve per run'
+  - name: Spectrum content
+    icon: mdi:chart-bar
+    color: blue
+    description: 'How many peaks the MS2 spectra hold'
+  - name: Acquisition table
+    icon: mdi:table
+    color: gray
+    description: 'The spectra summary of every run'
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      quantms converts every raw file to mzML and counts its spectra. Runs of one experiment
+      should have the same gradient, the same MS2 rate and spectra of similar content, each within
+      about 5% of the median of the runs. A run whose curve leaves the bundle, or whose spectra are emptier than its neighbours', was
+      acquired differently from the rest.
+    tag: qm-acq-intro
+    index: acq-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: interactive
+    workflow_tag: quantms
+    data_collection_tag: quantms_acquisition_profile
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: rt_min
+    column_type: float64
+    display:
+      icon_name: mdi:clock-outline
+      custom_color: yellow
+    section: Gradient filters
+    group: Gradient
+    tag: qm-acq-filter-rt
+    index: acq-rt-range
+    title: Retention time (min)
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: quantms
+    data_collection_tag: quantms_acquisition
+    aggregation: sum
+    column_name: ms2_spectra
+    column_type: int64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:waveform
+      icon_color: blue.4
+      caption: 'per run, with its spread'
+      format: si
+    section: Acquisition at a glance
+    tag: qm-acq-card-ms2
+    index: acq-card-ms2
+    title: MS2 spectra
+    description: 'MS2 spectra acquired, summed over the runs in view. The box shows how many each run holds.'
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: quantms
+    data_collection_tag: quantms_acquisition
+    aggregation: median
+    column_name: gradient_min
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:timer-outline
+      icon_color: blue.6
+      caption: 'minutes, with its spread'
+      decimals: 0
+    section: Acquisition at a glance
+    tag: qm-acq-card-gradient
+    index: acq-card-gradient
+    title: Gradient
+    description: 'Span between the first and the last spectrum of a run, in minutes: the median over the runs in view. Runs of one experiment sit within 5% of it.'
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: quantms
+    data_collection_tag: quantms_acquisition
+    aggregation: median
+    column_name: median_ms2_peaks
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:chart-histogram
+      icon_color: blue.8
+      caption: 'median per run, with its spread'
+      decimals: 0
+    section: Acquisition at a glance
+    tag: qm-acq-card-peaks
+    index: acq-card-peaks
+    title: Peaks per MS2
+    description: 'Number of peaks in a typical MS2 spectrum (the median of a run), then the median over the runs in view. Runs within 5% of each other were acquired alike.'
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: quantms
+    data_collection_tag: quantms_acquisition
+    aggregation: median
+    column_name: ms2_per_min
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:speedometer
+      icon_color: blue.9
+      caption: 'spectra per minute, with its spread'
+      decimals: 0
+    section: Acquisition at a glance
+    tag: qm-acq-card-rate
+    index: acq-card-rate
+    title: MS2 rate
+    description: 'MS2 spectra acquired per minute of the gradient: the median over the runs in view. Runs of one experiment sit within 5% of it.'
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    workflow_tag: quantms
+    data_collection_tag: quantms_acquisition_profile
+    viz_kind: profile
+    config:
+      viz_kind: profile
+      series_col: run_id
+      x_col: rt_min
+      y_col: ms2_spectra
+      line_width: 1.5
+      x_title: Retention time (min)
+      y_title: MS2 spectra per minute
+      legend_pos: none
+    section: Gradient
+    tag: qm-acq-av-ms2
+    index: acq-ms2-profile
+    title: MS2 spectra over the gradient
+    description: 'MS2 spectra per minute of retention time, one curve per run. Hover names the run.'
+    layout: {x: 0, y: 0, w: 4, h: 5}
+  - component_type: advanced_viz
+    workflow_tag: quantms
+    data_collection_tag: quantms_acquisition_profile
+    viz_kind: profile
+    config:
+      viz_kind: profile
+      series_col: run_id
+      x_col: rt_min
+      y_col: median_base_peak_intensity
+      line_width: 1.5
+      log_y: true
+      x_title: Retention time (min)
+      y_title: Median MS2 base-peak intensity
+      legend_pos: none
+    section: Gradient
+    tag: qm-acq-av-bpc
+    index: acq-bpc-profile
+    title: MS2 signal over the gradient
+    description: 'Median base-peak intensity of the MS2 spectra per minute: a base-peak trace of the run, one curve per run.'
+    layout: {x: 4, y: 0, w: 4, h: 5}
+  - component_type: advanced_viz
+    workflow_tag: quantms
+    data_collection_tag: quantms_ms2_peak_bins
+    viz_kind: profile
+    config:
+      viz_kind: profile
+      series_col: run_id
+      x_col: bin_start
+      y_col: fraction
+      line_width: 1.5
+      log_y: true
+      x_title: Peaks in an MS2 spectrum (start of the bin of 100)
+      y_title: Share of MS2 spectra
+      legend_pos: none
+    section: Spectrum content
+    tag: qm-acq-av-peaks
+    index: acq-peaks-profile
+    title: Peaks per MS2 spectrum
+    description: 'Share of a run''s MS2 spectra by the number of peaks they hold, bins of 100; the last bin is 1000 or more.'
+    layout: {x: 0, y: 0, w: 8, h: 5}
+  - component_type: table
+    workflow_tag: quantms
+    data_collection_tag: quantms_acquisition
+    row_selection_enabled: true
+    row_selection_column: run_id
+    section: Acquisition table
+    tag: qm-acq-table
+    index: acq-table
+    title: Spectra per run
+    description: 'MS1 and MS2 counts, peaks, base-peak intensity and gradient of every run.'
+    layout: {x: 0, y: 0, w: 8, h: 6}
+- title: Identification
+  subtitle: How many precursors did each run identify, and how clean are they?
+  tab_group: Data & QC
+  tab_order: 2
+  tab_icon: mdi:magnify-scan
+  tab_icon_color: indigo
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Precursor filters
+    icon: mdi:filter-variant
+    color: indigo
+    description: Narrows the precursors by modification, charge and length
+  grid_sections:
+  - name: Identification at a glance
+    icon: mdi:counter
+    color: indigo
+    description: 'Precursors, peptides and proteins identified at 1% FDR'
+  - name: Run quality
+    icon: mdi:chart-bar
+    color: indigo
+    description: 'Yield, modifications and missed cleavages of every run, weakest first'
+  - name: Retention time
+    icon: mdi:chart-timeline-variant
+    color: indigo
+    description: 'Gap between observed and library-predicted retention time'
+  - name: Peptide properties
+    icon: mdi:dna
+    color: indigo
+    description: 'Length and identification confidence of the precursors'
+  - name: Identification tables
+    icon: mdi:table
+    color: gray
+    description: 'Every identified precursor'
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      DIA-NN matches the spectra of every run to a spectral library and keeps the precursors it
+      identifies at 1% FDR. Runs of one experiment should identify similar numbers, with similar
+      shares of modified and missed-cleavage peptides, and observed retention times that follow
+      the library's prediction.
+    tag: qm-id-intro
+    index: id-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: interactive
+    workflow_tag: quantms
+    data_collection_tag: quantms_precursors
+    interactive_component_type: MultiSelect
+    column_name: modification_state
+    column_type: object
+    display:
+      icon_name: mdi:atom
+      custom_color: orange
+    section: Precursor filters
+    group: Precursors
+    tag: qm-id-filter-mod
+    index: id-mod-filter
+    title: Modification
+    layout: {x: 0, y: 0, w: 1, h: 2}
+  - component_type: interactive
+    workflow_tag: quantms
+    data_collection_tag: quantms_precursors
+    interactive_component_type: MultiSelect
+    column_name: charge_state
+    column_type: object
+    display:
+      icon_name: mdi:flash
+      custom_color: pink
+    section: Precursor filters
+    group: Precursors
+    tag: qm-id-filter-charge
+    index: id-charge-filter
+    title: Charge
+    layout: {x: 0, y: 2, w: 1, h: 2}
+  - component_type: interactive
+    workflow_tag: quantms
+    data_collection_tag: quantms_precursors
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: length
+    column_type: int64
+    display:
+      icon_name: mdi:ruler
+      custom_color: indigo
+    section: Precursor filters
+    group: Precursors
+    tag: qm-id-filter-length
+    index: id-length-range
+    title: Peptide length
+    layout: {x: 0, y: 4, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: quantms
+    data_collection_tag: quantms_precursors
+    aggregation: count
+    column_name: peptidoform
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: charge_state
+    display:
+      icon_name: mdi:magnify-scan
+      icon_color: indigo.4
+      caption: 'identifications, by charge'
+      format: si
+    section: Identification at a glance
+    tag: qm-id-card-precursors
+    index: id-card-precursors
+    title: Precursors
+    description: 'Precursors identified, counted once per run they were identified in. The bar splits them by charge.'
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: quantms
+    data_collection_tag: quantms_precursors
+    aggregation: nunique
+    column_name: peptide
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: modification_state
+    display:
+      icon_name: mdi:dna
+      icon_color: indigo.6
+      caption: 'distinct sequences, by modification'
+      format: si
+    section: Identification at a glance
+    tag: qm-id-card-peptides
+    index: id-card-peptides
+    title: Peptides
+    description: 'Distinct peptide sequences over the runs in view. The bar splits them by modification.'
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: quantms
+    data_collection_tag: quantms_run_summary
+    aggregation: median
+    column_name: protein_groups
+    column_type: int64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:molecule
+      icon_color: indigo.8
+      caption: 'per run, with its spread'
+      decimals: 0
+    section: Identification at a glance
+    tag: qm-id-card-proteins
+    index: id-card-proteins
+    title: Protein groups
+    description: 'Protein groups quantified in a run, the median over the runs in view.'
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: quantms
+    data_collection_tag: quantms_run_summary
+    aggregation: median
+    column_name: precursors_per_1000_ms2
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:target
+      icon_color: indigo.9
+      caption: 'per 1000 MS2, with its spread'
+      decimals: 1
+    section: Identification at a glance
+    tag: qm-id-card-yield
+    index: id-card-yield
+    title: Yield
+    description: 'Precursors identified per thousand MS2 spectra acquired: the median over the runs in view.'
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  # One view of the per-run quality measures, the weakest run on top: the three
+  # readings sit on their own axes, each with the median of the runs as a guide.
+  - component_type: figure
+    workflow_tag: quantms
+    data_collection_tag: quantms_run_summary
+    visu_type: bar
+    mode: code
+    code_content: |-
+      grp = depictio_group_by[0] if depictio_group_by else "{GROUP_COL}"
+      colors = depictio_group_kwargs.get('color_discrete_map') or depictio_category_colors.get("{GROUP_COL}") or {}
+      measures = {'precursors': 'Precursors', 'precursors_per_1000_ms2': 'Precursors per 1000 MS2', 'modified_pct': 'Modified (%)', 'missed_cleavage_pct': 'Missed cleavage (%)'}
+      measures = {c: t for c, t in measures.items() if c in df.columns and df[c].null_count() < df.height}
+      lab = 'run_label' if 'run_label' in df.columns else 'run_id'
+      rank = 'precursors_per_1000_ms2' if 'precursors_per_1000_ms2' in measures else 'precursors'
+      dev = df.with_columns([((pl.col(c) / pl.col(c).median() - 1) * 100).alias(c) for c in measures])
+      order = dev.sort(rank, nulls_last=True)[lab].to_list()
+      keep = [lab] + ([grp] if grp in df.columns else [])
+      long = dev.select(keep + list(measures)).unpivot(index=keep, variable_name='measure', value_name='value').with_columns(pl.col('measure').replace(measures)).drop_nulls('value')
+      lim = max(15.0, float(long['value'].abs().max() or 0) * 1.1)
+      fig = px.bar(long.to_pandas(), y=lab, x='value', color=grp if grp in df.columns else None, facet_col='measure', orientation='h', color_discrete_map=colors, category_orders={lab: order, 'measure': list(measures.values())}, labels={lab: '', 'value': '', 'measure': ''})
+      fig.update_xaxes(range=[-lim, lim], ticksuffix='%', zeroline=True)
+      fig.update_yaxes(automargin=True)
+      fig.add_vrect(x0=-10, x1=10, fillcolor='rgba(134,142,150,0.2)', line_width=0, layer='below', row='all', col='all')
+      fig.add_trace(go.Scatter(x=[None], y=[None], mode='markers', marker=dict(symbol='square', size=12, color='rgba(134,142,150,0.45)'), name='Grey band: within 10% of the median', showlegend=True))
+      fig.for_each_annotation(lambda a: a.update(text=a.text.split('=')[-1]))
+      fig.add_annotation(text='Deviation from the median of the runs in view', xref='paper', yref='paper', x=0.5, y=-0.1, showarrow=False)
+      fig.update_layout(margin=dict(t=30, b=70), legend_title_text='')
+    section: Run quality
+    tag: qm-id-fig-runqc
+    index: id-run-qc
+    title: Run quality, weakest run first
+    description: 'The grey band in each panel is the range within 10% either side of the median of the runs in view; a bar that leaves it is a run to check. The 10% is a rule of thumb of this dashboard for runs of one experiment, not a published cut-off. Each bar is how far a run sits from that median, in percent, for precursors, yield per thousand MS2 spectra, modified share and missed-cleavage share; runs are sorted by yield, weakest on top, and coloured by condition.'
+    layout: {x: 0, y: 0, w: 8, h: 5}
+  - component_type: advanced_viz
+    workflow_tag: quantms
+    data_collection_tag: quantms_precursors
+    viz_kind: scatter_xy
+    config:
+      viz_kind: scatter_xy
+      x_col: predicted_rt_min
+      y_col: rt_error_min
+      color_col: '{GROUP_COL}'
+      label_col: peptidoform
+      x_title: Library-predicted retention time (min)
+      y_title: Observed minus predicted retention time (min)
+      reference_line: horizontal
+      reference_value: 0
+      density_threshold: 30000
+      opacity: 0.4
+      marker_size: 3
+      legend_pos: bottom
+    section: Retention time
+    tag: qm-id-av-rt
+    index: id-rt-residual
+    title: Retention-time gap along the gradient
+    description: 'One point per precursor, coloured by {GROUP_COL_DISPLAY}. A cloud flat on zero says the library predicts the run; a slope or a condition lifted off the others is a drift to check.'
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: figure
+    workflow_tag: quantms
+    data_collection_tag: quantms_precursors
+    visu_type: histogram
+    mode: code
+    code_content: |-
+      fig = px.histogram(df.to_pandas(), x='length', color='modification_state', barmode='group', histnorm='percent', color_discrete_map=depictio_category_colors.get('modification_state') or {}, labels={'length': 'Peptide length (residues)', 'modification_state': ''})
+      fig.update_yaxes(title='Share of precursors (%)')
+      fig.update_layout(margin=dict(t=10), legend_title_text='')
+    section: Peptide properties
+    tag: qm-id-fig-length
+    index: id-length-histogram
+    title: Peptide length
+    description: 'Share of the unmodified and of the modified precursors at each peptide length; each series sums to 100, so a shift between them is not hidden by their sizes.'
+    layout: {x: 0, y: 0, w: 4, h: 5}
+  - component_type: figure
+    workflow_tag: quantms
+    data_collection_tag: quantms_precursors
+    visu_type: violin
+    mode: code
+    code_content: |-
+      grp = depictio_group_by[0] if depictio_group_by else "{GROUP_COL}"
+      colors = depictio_group_kwargs.get('color_discrete_map') or depictio_category_colors.get("{GROUP_COL}") or {}
+      order = df.group_by('run_id').agg(pl.col('evidence').median().alias('m')).sort('m')['run_id'].to_list()
+      fig = px.violin(df.to_pandas(), y='run_id', x='evidence', color=grp if grp in df.columns else None, orientation='h', box=True, points=False, color_discrete_map=colors, category_orders={'run_id': order}, labels={'run_id': '', 'evidence': 'DIA-NN evidence score'})
+      fig.update_yaxes(automargin=True)
+      fig.update_layout(margin=dict(t=10), legend_title_text='', violinmode='overlay')
+    section: Peptide properties
+    tag: qm-id-fig-score
+    index: id-score-violin
+    title: Identification confidence per run
+    description: 'DIA-NN evidence score of the precursors of each run, weakest median on top. A run shifted to lower scores was identified less confidently than the others.'
+    layout: {x: 4, y: 0, w: 4, h: 5}
+  - component_type: table
+    workflow_tag: quantms
+    data_collection_tag: quantms_precursors
+    row_selection_enabled: true
+    row_selection_column: peptidoform
+    section: Identification tables
+    tag: qm-id-table-precursors
+    index: id-table-precursors
+    title: Precursors
+    description: 'Every identified precursor with its protein group, scores, retention time and quantity.'
+    layout: {x: 0, y: 0, w: 8, h: 6}
+# ============================================================================
+# Quantification
+# ============================================================================
+- title: Proteins
+  subtitle: Which protein groups were quantified, and how completely?
+  tab_group: Quantification
+  tab_order: 3
+  tab_icon: mdi:molecule
+  tab_icon_color: violet
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Protein filters
+    icon: mdi:filter-variant
+    color: violet
+    description: Narrows the protein groups by detection, peptide support and variation
+  grid_sections:
+  - name: Proteins at a glance
+    icon: mdi:counter
+    color: violet
+    description: 'Protein groups, their completeness and support'
+  - name: Detection across runs
+    icon: mdi:set-merge
+    color: violet
+    description: 'How many runs quantified each protein group, and how abundant they are'
+    collapsed: true
+  - name: Quantification precision
+    icon: mdi:chart-bell-curve
+    color: violet
+    description: 'Variation between runs against abundance, per protein group'
+  - name: Protein detail
+    icon: mdi:table
+    color: gray
+    description: 'Every protein group, with the one picked in the table'
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      DIA-NN quantifies a protein group from the precursors that support it. A good run quantifies
+      most protein groups in every run, with several peptides each; groups seen in one run only,
+      or on a single peptide, are the ones to trust least.
+    tag: qm-prot-intro
+    index: prot-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: interactive
+    workflow_tag: quantms
+    data_collection_tag: quantms_protein_summary
+    interactive_component_type: MultiSelect
+    column_name: detection
+    column_type: object
+    display:
+      icon_name: mdi:set-merge
+      custom_color: teal
+    section: Protein filters
+    group: Proteins
+    tag: qm-prot-filter-detection
+    index: prot-detection-filter
+    title: Detection
+    layout: {x: 0, y: 0, w: 1, h: 2}
+  - component_type: interactive
+    workflow_tag: quantms
+    data_collection_tag: quantms_protein_summary
+    interactive_component_type: MultiSelect
+    column_name: peptide_support
+    column_type: object
+    display:
+      icon_name: mdi:dna
+      custom_color: violet
+    section: Protein filters
+    group: Proteins
+    tag: qm-prot-filter-support
+    index: prot-support-filter
+    title: Peptide support
+    layout: {x: 0, y: 2, w: 1, h: 2}
+  - component_type: interactive
+    workflow_tag: quantms
+    data_collection_tag: quantms_protein_summary
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: cv_pct
+    column_type: float64
+    display:
+      icon_name: mdi:chart-bell-curve
+      custom_color: yellow
+    section: Protein filters
+    group: Proteins
+    tag: qm-prot-filter-cv
+    index: prot-cv-range
+    title: Variation between runs (%)
+    layout: {x: 0, y: 4, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: quantms
+    data_collection_tag: quantms_protein_summary
+    aggregation: median
+    column_name: detected_pct
+    column_type: float64
+    secondary_layout: threshold
+    threshold_value: 100
+    threshold_direction: min
+    threshold_warn: 80
+    display:
+      icon_name: mdi:molecule
+      icon_color: violet.4
+      caption: 'median % of runs; the strip, groups in every run'
+      decimals: 0
+    section: Proteins at a glance
+    tag: qm-prot-card-groups
+    index: prot-card-groups
+    title: Completeness
+    description: 'Share of the runs that quantified a protein group, the median over the groups in view. The strip counts the groups quantified in every run; a complete experiment keeps it near all of them, and the groups it leaves out are the ones to trust least.'
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: quantms
+    data_collection_tag: quantms_protein_summary
+    aggregation: count
+    column_name: protein_group
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: peptide_support
+    display:
+      icon_name: mdi:dna
+      icon_color: violet.6
+      caption: 'protein groups, by peptides'
+    section: Proteins at a glance
+    tag: qm-prot-card-support
+    index: prot-card-support
+    title: Peptide support
+    description: 'Protein groups by the number of peptides that support them.'
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: quantms
+    data_collection_tag: quantms_protein_summary
+    aggregation: median
+    column_name: peptides
+    column_type: int64
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:counter
+      icon_color: violet.8
+      caption: 'median, with its distribution'
+      decimals: 0
+    section: Proteins at a glance
+    tag: qm-prot-card-peptides
+    index: prot-card-peptides
+    title: Peptides per group
+    description: 'Distinct peptides identified for a protein group, the median over the groups in view.'
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: quantms
+    data_collection_tag: quantms_protein_summary
+    aggregation: median
+    column_name: mean_log2_intensity
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:chart-bell-curve
+      icon_color: violet.9
+      caption: 'median log2 quantity, with its spread'
+      decimals: 1
+    section: Proteins at a glance
+    tag: qm-prot-card-cv
+    index: prot-card-cv
+    title: Abundance
+    description: 'Mean log2 quantity of a protein group over the runs that quantified it, the median over the groups in view. The box shows how far the groups spread across the range.'
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: figure
+    workflow_tag: quantms
+    data_collection_tag: quantms_protein_summary
+    visu_type: bar
+    mode: code
+    code_content: |-
+      # The protein groups quantified in only some of the runs, by how many runs saw them, stacked by peptide support. The groups seen in every run are the bulk of a good experiment, so they sit in the note and the rest reads on a plain count axis.
+      n_runs = int(df['runs_total'].max() or df['runs_detected'].max() or 1)
+      total = df.height
+      full = int((df['runs_detected'] >= n_runs).sum())
+      part = df.filter(pl.col('runs_detected') < n_runs)
+      part = part if part.height else df
+      d = part.group_by('runs_detected', 'peptide_support').len().rename({'len': 'groups'})
+      tot = part.group_by('runs_detected').len().sort('runs_detected')
+      colors = depictio_category_colors.get('peptide_support') or {}
+      fig = go.Figure(layout=go.Layout(barmode='stack', bargap=0.2, margin=dict(t=50), xaxis=dict(title='Runs that quantified the protein group', dtick=1, range=[0.4, int(part['runs_detected'].max()) + 0.6]), yaxis=dict(title='Protein groups', range=[0, float(tot['len'].max()) * 1.2])))
+      for ps in ['1 peptide', '2 to 3 peptides', '4 or more peptides']:
+          s = d.filter(pl.col('peptide_support') == ps).sort('runs_detected')
+          fig.add_bar(x=s['runs_detected'].to_list(), y=s['groups'].to_list(), name=ps, marker_color=colors.get(ps), hovertemplate='%{y} protein groups on ' + ps + '<extra></extra>')
+      fig.add_scatter(x=tot['runs_detected'].to_list(), y=tot['len'].to_list(), mode='text', text=[str(v) for v in tot['len'].to_list()], textposition='top center', showlegend=False, hoverinfo='skip')
+      fig.add_annotation(text='%d of %d protein groups (%d%%) were quantified in all %d runs<br>and are not drawn here' % (full, total, round(100 * full / max(total, 1)), n_runs), xref='paper', yref='paper', x=0, y=1.02, xanchor='left', yanchor='bottom', showarrow=False, align='left')
+      fig.update_layout(legend=dict(orientation='h', y=-0.3, title_text='', traceorder='normal'))
+    section: Detection across runs
+    tag: qm-prot-fig-detection
+    index: prot-detection
+    title: Protein groups missed in some runs
+    description: 'Protein groups quantified in some runs but not all, by how many runs quantified them; the note counts the groups seen in every run.'
+    layout: {x: 0, y: 0, w: 4, h: 5}
+  - component_type: figure
+    workflow_tag: quantms
+    data_collection_tag: quantms_protein_summary
+    visu_type: box
+    mode: code
+    code_content: |-
+      d = df.with_columns(pl.col('runs_detected').cast(pl.Utf8).alias('n_runs'))
+      order = [str(n) for n in sorted(df['runs_detected'].unique().to_list())]
+      fig = px.box(d.to_pandas(), x='n_runs', y='mean_log2_intensity', color='detection', color_discrete_map=depictio_category_colors.get('detection') or {}, category_orders={'n_runs': order, 'detection': ['All runs', 'Some runs', 'One run']}, points='outliers', labels={'n_runs': 'Runs that quantified the protein group', 'mean_log2_intensity': 'Mean log2 quantity', 'detection': ''})
+      fig.update_layout(margin=dict(t=10), legend_title_text='', boxmode='overlay')
+    section: Detection across runs
+    tag: qm-prot-fig-detect-abundance
+    index: prot-detection-abundance
+    title: Abundance of incomplete protein groups
+    description: 'Mean log2 quantity by the number of runs that quantified the group; groups missed in some runs usually sit at the low end of the range.'
+    layout: {x: 4, y: 0, w: 4, h: 5}
+  - component_type: advanced_viz
+    workflow_tag: quantms
+    data_collection_tag: quantms_protein_summary
+    viz_kind: scatter_xy
+    config:
+      viz_kind: scatter_xy
+      x_col: mean_log2_intensity
+      y_col: cv_pct
+      label_col: genes
+      x_title: Mean log2 quantity
+      y_title: Variation between runs (CV, %)
+      reference_line: horizontal
+      reference_value: 20
+      reference_label: 20 % CV
+      reference_highlight: above
+      top_n_labels: 8
+      density_threshold: 2000
+      opacity: 0.5
+      marker_size: 4
+      legend_pos: none
+    section: Quantification precision
+    tag: qm-prot-av-rank
+    index: prot-cv-intensity
+    title: Variation against abundance
+    description: 'One point per protein group. The dashed line is a coefficient of variation of 20 %, under which label-free quantification is tight (the threshold of the Variation card); points under it are dimmed and the eight most variable groups above it are labelled by gene. Precision usually falls toward the faint end. A cloud of 2000 protein groups or more is drawn as a density.'
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: quantms
+    data_collection_tag: quantms_protein_summary
+    row_selection_enabled: true
+    row_selection_column: protein_group
+    section: Protein detail
+    tag: qm-prot-table-summary
+    index: prot-table-summary
+    title: Protein groups
+    description: 'Every protein group with its peptides, detection, abundance and variation.'
+    layout: {x: 0, y: 0, w: 5, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: quantms
+    data_collection_tag: quantms_protein_summary
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      id_col: protein_group
+      title_col: genes
+      selection_source: any
+      linked_component: qm-prot-table-summary
+      sections: {Protein: [protein_group, protein_name, genes, description], Support: [peptides, peptide_support], Detection: [detection, runs_detected, runs_total], Abundance: [mean_log2_intensity, cv_pct, abundance_rank]}
+      link_templates: {protein_group: 'https://www.uniprot.org/uniprotkb/{value}'}
+    section: Protein detail
+    tag: qm-prot-record
+    index: prot-record
+    title: Protein record
+    description: 'The protein group picked in the table or a figure. UniProt resolves the accession of a single-protein group.'
+    layout: {x: 5, y: 0, w: 3, h: 6}
+- title: Reproducibility
+  subtitle: Do the runs of a condition agree, and do the conditions separate?
+  tab_group: Quantification
+  tab_order: 4
+  tab_icon: mdi:set-merge
+  tab_icon_color: cyan
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Replicate filters
+    icon: mdi:filter-variant
+    color: cyan
+    description: Narrows the replicate pairs and the per-condition variation
+  grid_sections:
+  - name: Reproducibility at a glance
+    icon: mdi:counter
+    color: cyan
+    description: 'Variation within conditions and what separates the runs'
+  - name: Sample relationships
+    icon: mdi:chart-scatter-plot
+    color: cyan
+    description: 'How the runs group by their protein quantities'
+  - name: Run-to-run correlation
+    icon: mdi:chart-scatter-plot
+    color: cyan
+    description: 'Pearson correlation of every pair of runs, clustered'
+    collapsed: true
+  - name: Replicate agreement
+    icon: mdi:chart-scatter-plot
+    color: cyan
+    description: 'The difference between two runs of a condition, against their mean'
+  - name: Variation within conditions
+    icon: mdi:chart-bell-curve
+    color: cyan
+    description: 'Coefficient of variation per protein and condition'
+  - name: Condition table
+    icon: mdi:table
+    color: gray
+    description: 'Mean and variation of every protein group per condition'
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      Runs of one condition are replicates: they should quantify the same proteins at similar
+      levels, and the runs of different conditions should separate in the projection. A pair that
+      leaves the grey band around no difference, or a run that sits with another condition, points at one injection to check.
+    tag: qm-rep-intro
+    index: rep-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: interactive
+    workflow_tag: quantms
+    data_collection_tag: quantms_replicate_pairs
+    interactive_component_type: MultiSelect
+    column_name: pair
+    column_type: object
+    display:
+      icon_name: mdi:vector-link
+      custom_color: green
+    section: Replicate filters
+    group: Replicates
+    tag: qm-rep-filter-pair
+    index: rep-pair-filter
+    title: Replicate pair
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: quantms
+    data_collection_tag: quantms_protein_conditions
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: cv_pct
+    column_type: float64
+    display:
+      icon_name: mdi:chart-bell-curve
+      custom_color: yellow
+    section: Replicate filters
+    group: Replicates
+    tag: qm-rep-filter-cv
+    index: rep-cv-range
+    title: Variation within condition (%)
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: quantms
+    data_collection_tag: quantms_protein_conditions
+    aggregation: count
+    column_name: protein_group
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: '{GROUP_COL}'
+    display:
+      icon_name: mdi:molecule
+      icon_color: cyan.4
+      caption: 'per condition, by {GROUP_COL_DISPLAY}'
+      format: si
+    section: Reproducibility at a glance
+    tag: qm-rep-card-groups
+    index: rep-card-groups
+    title: Protein quantities
+    description: 'Protein groups quantified in a condition, counted once per condition. The bar splits them by {GROUP_COL_DISPLAY}.'
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: quantms
+    data_collection_tag: quantms_protein_conditions
+    aggregation: median
+    column_name: cv_pct
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:chart-bell-curve
+      icon_color: cyan.6
+      caption: 'median CV %, with its spread'
+      decimals: 1
+    section: Reproducibility at a glance
+    tag: qm-rep-card-cv
+    index: rep-card-cv
+    title: Variation
+    description: 'Coefficient of variation of a protein group within a condition, in percent: the median over groups and conditions. Under 20 is tight for label-free quantification, over 30 is noisy.'
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: quantms
+    data_collection_tag: quantms_sample_embedding
+    aggregation: median
+    column_name: explained_1
+    column_type: float64
+    display:
+      icon_name: mdi:chart-scatter-plot
+      icon_color: cyan.8
+      caption: 'of the variance, percent'
+      decimals: 0
+    section: Reproducibility at a glance
+    tag: qm-rep-card-pc1
+    index: rep-card-pc1
+    title: First component
+    description: 'Share of the variance between runs that the first principal component explains, in percent. It is high when the first axis is the condition and the runs of a condition sit together in the projection; a low share says the runs differ in other ways.'
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: quantms
+    data_collection_tag: quantms_replicate_pairs
+    aggregation: count
+    column_name: protein_group
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: pair
+    display:
+      icon_name: mdi:vector-link
+      icon_color: cyan.9
+      caption: 'protein groups, by pair'
+      format: si
+    section: Reproducibility at a glance
+    tag: qm-rep-card-pairs
+    index: rep-card-pairs
+    title: Paired quantities
+    description: 'Protein groups quantified in both runs of a pair, counted once per pair. The bar splits them by pair.'
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    workflow_tag: quantms
+    data_collection_tag: quantms_sample_embedding
+    viz_kind: embedding
+    config:
+      viz_kind: embedding
+      sample_id_col: run_id
+      dim_1_col: dim_1
+      dim_2_col: dim_2
+      color_col: '{GROUP_COL}'
+      default_color_by: '{GROUP_COL}'
+      axis_prefix: PC
+      show_centroids: false
+      legend_pos: right
+      selection_enabled: true
+      selection_column: run_id
+    section: Sample relationships
+    tag: qm-rep-av-pca
+    index: rep-pca
+    title: Run projection
+    description: 'One point per run, from the protein groups quantified in every run, coloured by {GROUP_COL_DISPLAY}. A lasso filters the linked panels.'
+    layout: {x: 0, y: 0, w: 8, h: 5}
+  - component_type: advanced_viz
+    workflow_tag: quantms
+    data_collection_tag: quantms_sample_correlation
+    viz_kind: complex_heatmap
+    config:
+      viz_kind: complex_heatmap
+      index_column: run_id
+      row_annotation_cols: ['{GROUP_COL}']
+      cluster_rows: true
+      cluster_cols: true
+      cluster_method: average
+      normalize: none
+      colorscale: Blues
+      max_rows: 9
+    section: Run-to-run correlation
+    tag: qm-rep-av-corr
+    index: rep-correlation
+    title: Run-to-run correlation
+    description: 'Each cell is the Pearson correlation of the protein quantities of two runs; the dendrograms group the runs that behave alike. Replicate runs correlate above 0.95, so the colours differ little.'
+    layout: {x: 0, y: 0, w: 8, h: 7}
+  - component_type: figure
+    workflow_tag: quantms
+    data_collection_tag: quantms_replicate_pairs
+    visu_type: scatter
+    mode: code
+    code_content: |-
+      # Difference against mean of the log2 quantities of two runs, one point per protein group and pair; the dotted line is no difference and the grey band is within one log2 unit (a twofold change).
+      grp = depictio_group_by[0] if depictio_group_by else '{GROUP_COL}'
+      colors = depictio_group_kwargs.get('color_discrete_map') or depictio_category_colors.get('{GROUP_COL}') or {}
+      d = df if grp in df.columns else df.with_columns(pl.lit('All runs').alias(grp))
+      d = d.filter(pl.col('log2_x').is_not_null() & pl.col('log2_y').is_not_null()).with_columns(((pl.col('log2_x') + pl.col('log2_y')) / 2).alias('mean_log2'), (pl.col('log2_y') - pl.col('log2_x')).alias('diff_log2'))
+      fig = px.scatter(d.to_pandas(), x='mean_log2', y='diff_log2', color=grp, color_discrete_map=colors, opacity=0.45, hover_name='genes', hover_data=['pair', 'run_x', 'run_y'], labels={'mean_log2': 'Mean log2 quantity of the two runs', 'diff_log2': 'Difference between the runs (log2)', grp: ''})
+      fig.update_traces(marker=dict(size=4))
+      fig.add_hrect(y0=-1, y1=1, fillcolor='rgba(134,142,150,0.2)', line_width=0, layer='below')
+      fig.add_hline(y=0, line_dash='dot', line_width=1, opacity=0.6)
+      fig.add_annotation(text='twofold difference either way', xref='paper', yref='y', x=1, y=1, xanchor='right', yanchor='bottom', showarrow=False)
+      fig.add_annotation(text='no difference', xref='paper', yref='y', x=1, y=0, xanchor='right', yanchor='bottom', showarrow=False)
+      fig.update_yaxes(automargin=True, zeroline=False)
+      fig.update_layout(margin=dict(t=10), legend=dict(orientation='h', y=-0.2))
+    section: Replicate agreement
+    tag: qm-rep-av-pairs
+    index: rep-pairs-scatter
+    title: Run against run, difference over mean
+    description: One point per protein group quantified in both runs of a pair, coloured by condition. The dotted line is no difference between the two runs (a log2 difference of 0). The grey band is one log2 unit either side of it, a twofold difference, the same twofold the differential abundance calls use; it is a reading guide, not a quality cut-off. A reproducible pair stays inside the band at every level, and a tilt or a fan marks a pair to check.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: figure
+    workflow_tag: quantms
+    data_collection_tag: quantms_protein_conditions
+    visu_type: violin
+    dict_kwargs: {x: '{GROUP_COL}', y: cv_pct, color: '{GROUP_COL}', box: true, points: false, labels: {cv_pct: Coefficient of variation (%)}}
+    section: Variation within conditions
+    tag: qm-rep-fig-cv-box
+    index: rep-cv-box
+    title: Variation by condition
+    description: 'Coefficient of variation of the protein groups within each {GROUP_COL_DISPLAY}, the shape of the violin with its box inside; a condition with a higher mass has noisier replicates, and under 20 is tight.'
+    layout: {x: 0, y: 0, w: 8, h: 5}
+  - component_type: table
+    workflow_tag: quantms
+    data_collection_tag: quantms_protein_conditions
+    row_selection_enabled: true
+    row_selection_column: protein_group
+    section: Condition table
+    tag: qm-rep-table-conditions
+    index: rep-table-conditions
+    title: Protein groups per condition
+    description: 'Mean log2 quantity, standard deviation and variation of every protein group in every condition.'
+    layout: {x: 0, y: 0, w: 8, h: 6}
+- title: Differential abundance
+  subtitle: Which proteins change between conditions, and can the test tell?
+  tab_group: Quantification
+  tab_order: 5
+  tab_icon: mdi:chart-scatter-plot
+  tab_icon_color: pink
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Call filters
+    icon: mdi:filter-variant
+    color: pink
+    description: Narrows the calls by contrast, direction, effect size and missing values
+  grid_sections:
+  - name: Calls at a glance
+    icon: mdi:counter
+    color: pink
+    description: 'How many proteins were tested and how many changed'
+  - name: Calls per contrast
+    icon: mdi:chart-bar
+    color: pink
+    description: 'Proteins that go up or down in each contrast'
+  - name: Volcano, MA and QQ
+    icon: mdi:chart-scatter-plot
+    color: pink
+    description: 'Effect size against significance, and the p-values against the null'
+  - name: Calibration
+    icon: mdi:chart-bell-curve
+    color: pink
+    description: 'Whether the test behaves: p-values and effect sizes'
+  - name: Protein detail
+    icon: mdi:table
+    color: gray
+    description: 'Every tested protein, with the one picked in the table'
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      MSstats fits every protein group and tests it between conditions. A protein is called when its
+      adjusted p-value is below 0.05 and its fold change is two-fold or more; with few replicates
+      the test has little power, so read the p-value histogram before the list of calls.
+    tag: qm-da-intro
+    index: da-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: interactive
+    workflow_tag: quantms
+    data_collection_tag: quantms_comparisons
+    interactive_component_type: MultiSelect
+    column_name: contrast
+    column_type: object
+    display:
+      icon_name: mdi:vector-link
+      custom_color: pink
+    section: Call filters
+    group: Calls
+    tag: qm-da-filter-contrast
+    index: da-contrast-filter
+    title: Contrast
+    layout: {x: 0, y: 0, w: 1, h: 2}
+  - component_type: interactive
+    workflow_tag: quantms
+    data_collection_tag: quantms_comparisons
+    interactive_component_type: MultiSelect
+    column_name: direction
+    column_type: object
+    display:
+      icon_name: mdi:swap-vertical
+      custom_color: red
+    section: Call filters
+    group: Calls
+    tag: qm-da-filter-direction
+    index: da-direction-filter
+    title: Direction
+    layout: {x: 0, y: 2, w: 1, h: 2}
+  - component_type: interactive
+    workflow_tag: quantms
+    data_collection_tag: quantms_comparisons
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: abs_log2fc
+    column_type: float64
+    display:
+      icon_name: mdi:ruler
+      custom_color: indigo
+    section: Call filters
+    group: Calls
+    tag: qm-da-filter-effect
+    index: da-effect-range
+    title: Absolute log2 fold change
+    layout: {x: 0, y: 4, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: quantms
+    data_collection_tag: quantms_comparisons
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: missing_pct
+    column_type: float64
+    display:
+      icon_name: mdi:alert-circle-outline
+      custom_color: yellow
+    section: Call filters
+    group: Calls
+    tag: qm-da-filter-missing
+    index: da-missing-range
+    title: Missing values (%)
+    layout: {x: 0, y: 7, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: quantms
+    data_collection_tag: quantms_comparisons
+    aggregation: median
+    column_name: abs_log2fc
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:ruler
+      icon_color: pink.4
+      caption: 'median |log2 FC|, with its spread'
+      decimals: 2
+    section: Calls at a glance
+    tag: qm-da-card-effect
+    index: da-card-effect
+    title: Effect size
+    description: 'Absolute log2 fold change of a tested protein, the median over the proteins in view.'
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: quantms
+    data_collection_tag: quantms_comparisons
+    aggregation: min
+    column_name: adj_p_value
+    column_type: float64
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:sigma
+      icon_color: pink.6
+      caption: 'lowest, with the distribution'
+      decimals: 2
+    section: Calls at a glance
+    tag: qm-da-card-padj
+    index: da-card-padj
+    title: Smallest adjusted p
+    description: 'Lowest Benjamini-Hochberg adjusted p-value among the proteins in view. The histogram shows all of them.'
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: quantms
+    data_collection_tag: quantms_comparisons
+    aggregation: median
+    column_name: se
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:chart-bell-curve
+      icon_color: pink.8
+      caption: 'median, with its spread'
+      decimals: 2
+    section: Calls at a glance
+    tag: qm-da-card-se
+    index: da-card-se
+    title: Standard error
+    description: 'Standard error of the log fold change, the median over the proteins in view: the noise a call has to beat.'
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: quantms
+    data_collection_tag: quantms_comparisons
+    aggregation: count
+    column_name: protein
+    column_type: object
+    filter_expr: "col('direction') != 'Not significant'"
+    secondary_layout: composition
+    breakdown_col: direction
+    display:
+      icon_name: mdi:flash
+      icon_color: pink.9
+      caption: 'significant calls, by direction'
+    section: Calls at a glance
+    tag: qm-da-card-calls
+    index: da-card-calls
+    title: Significant proteins
+    description: 'Proteins with an adjusted p-value below 0.05 and a two-fold change or more. The bar splits them by direction.'
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: figure
+    workflow_tag: quantms
+    data_collection_tag: quantms_comparisons
+    visu_type: bar
+    mode: code
+    code_content: |-
+      # Proteins called Up and Down in each contrast, with the number tested; a contrast that calls nothing still shows its two empty bars.
+      d = df.filter(pl.col('p_value').is_not_null())
+      tested = d.group_by('contrast').agg(pl.col('protein').n_unique().alias('tested')).sort('contrast')
+      names = {c: '%s (%d tested)' % (c, t) for c, t in zip(tested['contrast'].to_list(), tested['tested'].to_list())}
+      rows = [{'contrast': names[c], 'direction': dr, 'proteins': d.filter((pl.col('contrast') == c) & (pl.col('direction') == dr)).height} for c in tested['contrast'].to_list() for dr in ['Up', 'Down']]
+      calls = pl.DataFrame(rows, schema={'contrast': pl.Utf8, 'direction': pl.Utf8, 'proteins': pl.Int64})
+      order = calls.group_by('contrast').agg(pl.col('proteins').sum().alias('n')).sort(['n', 'contrast'], descending=[False, True])['contrast'].to_list()
+      fig = px.bar(calls.to_pandas(), y='contrast', x='proteins', color='direction', barmode='group', orientation='h', text='proteins', color_discrete_map=depictio_category_colors.get('direction') or {}, category_orders={'direction': ['Up', 'Down'], 'contrast': order}, labels={'contrast': '', 'proteins': 'Proteins called', 'direction': ''})
+      fig.update_traces(textposition='outside', cliponaxis=False)
+      fig.update_yaxes(automargin=True)
+      fig.update_xaxes(dtick=1 if calls['proteins'].max() <= 8 else None, rangemode='tozero')
+      fig.update_layout(margin=dict(t=10, r=30), legend_title_text='', legend=dict(orientation='h', y=-0.3))
+    section: Calls per contrast
+    tag: qm-da-fig-contrast-calls
+    index: da-contrast-calls
+    title: Proteins called in each contrast
+    description: 'Each bar is the number of proteins called Up (higher in the first condition of the contrast) or Down (lower), at an adjusted p-value below 0.05 and a twofold change or more, with the number of proteins tested in brackets. A contrast with two empty bars was tested and found nothing to call.'
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: advanced_viz
+    workflow_tag: quantms
+    data_collection_tag: quantms_comparisons
+    viz_kind: volcano
+    config:
+      viz_kind: volcano
+      feature_id_col: protein_group
+      effect_size_col: log2fc
+      significance_col: adj_p_value
+      label_col: genes
+      category_col: direction
+      significance_threshold: 0.05
+      effect_threshold: 1.0
+      fold_change_threshold: 1.0
+      top_n_labels: 8
+      show_labels: true
+      effect_label: log2 fold change
+      significance_label: adjusted p-value
+      avg_log_intensity_col: avg_log2_intensity
+      log2_fold_change_col: log2fc
+      p_value_col: p_value
+      view: volcano
+      views: [volcano, ma, qq]
+      show_ci: true
+      show_identity: true
+    section: Volcano, MA and QQ
+    tag: qm-da-av-volcano
+    index: da-volcano
+    title: Volcano, MA and QQ
+    description: 'Each point is a protein group in a contrast: -log10(adjusted p) against log2 fold change. The horizontal dashed line is an adjusted p-value of 0.05, the usual significance level for Benjamini-Hochberg adjusted p-values; the two vertical dashed lines are at log2 fold changes of -1 and 1, a twofold change either way, the usual minimum effect for label-free proteomics. A protein beyond both is called Up or Down; the cut-offs are this dashboard''s, MSstats reports the adjusted p-value only. The View switch puts the fold change against mean abundance (MA) or the raw p-values against the null (QQ). With several contrasts the points of all are drawn together, so pick one in the Contrast filter.'
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: figure
+    workflow_tag: quantms
+    data_collection_tag: quantms_comparisons
+    visu_type: bar
+    mode: code
+    code_content: |-
+      # Raw p-values in 20 bins of 0.05, so the first bin is exactly the p < 0.05 cut-off; with several contrasts the bars are stacked and coloured by contrast, with one the first bin is orange. The dashed line is the level a bin would hold if no protein changed: the share of unchanged proteins (pi0, Storey with lambda = 0.5, from the flat right half) times the bin average.
+      d = df.filter(pl.col('p_value').is_not_null())
+      n = d.height
+      cut = 0.05
+      counts, edges = np.histogram(d['p_value'].to_numpy(), bins=20, range=(0, 1))
+      mid = (edges[:-1] + edges[1:]) / 2
+      pi0 = min(1.0, float((d['p_value'] > 0.5).sum()) / (0.5 * max(n, 1)))
+      level = pi0 * n / 20
+      lo, hi = 'p below 0.05', 'p of 0.05 or more'
+      colors = depictio_category_colors.get('p_region') or {}
+      below = mid < cut
+      contrasts = sorted(d['contrast'].unique().to_list()) if 'contrast' in d.columns else []
+      if len(contrasts) > 1:
+          cc = depictio_category_colors.get('contrast') or {}
+          bars = []
+          for c in contrasts:
+              cnt, edge = np.histogram(d.filter(pl.col('contrast') == c)['p_value'].to_numpy(), bins=20, range=(0, 1))
+              bars.append(go.Bar(x=mid.tolist(), y=cnt.tolist(), width=0.047, name=c, marker_color=cc.get(c), hovertemplate='p from %{customdata[0]:.2f} to %{customdata[1]:.2f}<br>%{y} proteins<extra></extra>', customdata=np.column_stack([edges[:-1], edges[1:]])))
+          fig = go.Figure(bars)
+          fig.update_layout(barmode='stack')
+      else:
+          fig = go.Figure([go.Bar(x=mid[keep].tolist(), y=counts[keep].tolist(), width=0.047, name=name, marker_color=colors.get(name), hovertemplate='p from %{customdata[0]:.2f} to %{customdata[1]:.2f}<br>%{y} proteins<extra></extra>', customdata=np.column_stack([edges[:-1][keep], edges[1:][keep]])) for name, keep in ((lo, below), (hi, ~below))])
+      fig.add_scatter(x=[0, 1], y=[level, level], mode='lines', name='level if none changed', line=dict(dash='dash', width=1.5, color='gray'), hoverinfo='skip')
+      fig.add_vline(x=cut, line_dash='dot', line_width=1, line_color='gray')
+      n_low = int(counts[below].sum())
+      chance = level * int(below.sum())
+      fig.add_annotation(text='%d of %d proteins below %s<br>about %d expected if none changed<br>unchanged share (pi0): %d%%' % (n_low, n, cut, round(chance), round(pi0 * 100)), xref='paper', yref='paper', x=0.98, y=0.98, xanchor='right', yanchor='top', showarrow=False, align='right')
+      fig.update_xaxes(title='Raw p-value', range=[0, 1])
+      fig.update_yaxes(title='Proteins', rangemode='tozero')
+      fig.update_layout(margin=dict(t=10), bargap=0, legend=dict(orientation='h', y=-0.3, title_text=''))
+    section: Calibration
+    tag: qm-da-fig-pvalue
+    index: da-pvalue-histogram
+    title: p-value histogram
+    description: 'Raw p-values of the tested proteins. The dashed line is the level a bin would hold if no protein changed (the estimated share of unchanged proteins times the bin average) and the dotted line is p = 0.05. With one contrast the first bin is coloured as the proteins below 0.05; with several, the bars are stacked and coloured by contrast.'
+    layout: {x: 0, y: 0, w: 4, h: 5}
+  - component_type: figure
+    workflow_tag: quantms
+    data_collection_tag: quantms_comparisons
+    visu_type: histogram
+    dict_kwargs: {x: log2fc, color: direction, barmode: stack, labels: {log2fc: log2 fold change, direction: ''}}
+    section: Calibration
+    tag: qm-da-fig-effect
+    index: da-effect-histogram
+    title: Fold changes
+    description: 'log2 fold change of the tested proteins, split by call; a distribution centred on zero says the runs are normalised alike.'
+    layout: {x: 4, y: 0, w: 4, h: 5}
+  - component_type: table
+    workflow_tag: quantms
+    data_collection_tag: quantms_comparisons
+    row_selection_enabled: true
+    row_selection_column: protein_group
+    section: Protein detail
+    tag: qm-da-table-comparisons
+    index: da-table-comparisons
+    title: MSstats results
+    description: 'Every tested protein group in every contrast, with its fold change, p-values and call.'
+    layout: {x: 0, y: 0, w: 5, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: quantms
+    data_collection_tag: quantms_comparisons
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      id_col: protein_group
+      title_col: genes
+      selection_source: any
+      linked_component: qm-da-table-comparisons
+      sections: {Protein: [protein_group, protein, genes], Test: [contrast, direction, log2fc, adj_p_value, p_value], Support: [missing_pct, imputed_pct, avg_log2_intensity]}
+      link_templates: {protein_group: 'https://www.uniprot.org/uniprotkb/{value}'}
+    section: Protein detail
+    tag: qm-da-record
+    index: da-record
+    title: Protein record
+    description: 'The protein group picked in the table or a figure, one card per contrast it was tested in.'
+    layout: {x: 5, y: 0, w: 3, h: 6}

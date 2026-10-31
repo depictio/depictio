@@ -1,0 +1,19 @@
+id: agat_statistics
+name: Annotation statistics
+mode: sp-statistics/long
+description: >-
+  Every number of AGAT's sp_statistics report, one row per assembly, feature
+  type (mRNA, lncRNA, tRNA...), isoform view and metric, in the order AGAT
+  prints them. The longest-isoform view keeps one transcript per gene, so it is
+  the one to compare annotations that kept different numbers of isoforms.
+find:
+  path_glob: "**/*.stats.txt"
+  path_glob_alt:
+    - "**/stats/*.stats.txt"
+recipe: agat/statistics.py
+fixture: statistics.tsv
+renders_as:
+  - { component: figure, visu_type: bar,
+      dict_kwargs: {x: genome, y: value, color: isoforms, barmode: group, title: One AGAT metric per annotation} }
+  - { component: interactive, interactive_type: MultiSelect, column_name: feature_type }
+  - { component: table }

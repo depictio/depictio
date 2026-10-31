@@ -331,6 +331,17 @@ def test_an_image_collection_pins_its_manifest_not_its_pixels():
     )
 
 
+def test_a_track_collection_pins_its_manifest_not_its_files():
+    entries = collection_statuses(
+        DataVersionPins(pins={DC_A: 1}), [DC_A], {DC_A: {"dc_type": "genomic_tracks"}}
+    )
+
+    assert (entries[0]["status"], entries[0]["reason"]) == (
+        "pinned",
+        "track_files_not_versioned",
+    )
+
+
 def test_pins_are_inert_by_default():
     assert not DataVersionPins().active
 

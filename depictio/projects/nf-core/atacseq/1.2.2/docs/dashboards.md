@@ -53,9 +53,9 @@ The landing page, at compact width with the filter panel collapsed:
   median fold enrichment of the peaks, the most common HOMER feature class and its share,
   the consensus intervals called by more than one library, and the interval tests DESeq2
   calls significant (one test per interval and contrast). Below them, four figures in two
-  rows: the peak significance along the genome beside the peaks around the nearest start
+  rows: the peak calls along the genome beside the peaks around the nearest start
   site, then a summary of the consensus beside the volcano. The summary counts the consensus
-  intervals by how many libraries call them and links to the Consensus tab: the UpSet there
+  intervals by how many replicates of each group call them, one colour per group and links to the Consensus tab: the UpSet there
   draws one set per library, too many for a third of the row. Peak and interval ids are not
   drawn as point labels, and the two per-library highlights hide their legends. The bar of
   this section filters by group and chromosome.
@@ -83,40 +83,35 @@ library.
 
 **ATAC quality.** Strip: TSS enrichment (box plot), the lowest share of reads in peaks
 (threshold at 20%), the mitochondrial fraction (box plot) and the duplicate fraction
-(distribution). Then the coverage around start sites beside the signal against specificity
+(distribution). Then the coverage around start sites (a dotted vertical line at 0 marks the start site the profiles are centred on) beside the signal against specificity
 scatter (a lasso selects libraries), the fragment ladder with its own four cards (fragment
 length, reads by nucleosome window, the sub- to mononucleosomal ratio, properly paired
 reads as a box plot), the fragment ladder curve with the nucleosome-free (NFR) and
-mono-nucleosome windows shaded, and the reads per fragment class, and the read
-distribution matrix over the reference sequences. The ataqv table is collapsed. Filters:
+mono-nucleosome windows shaded (up to 100 bp and 150 to 324 bp, ataqv's own windows), and the reads per fragment class, and the reads per reference sequence (each library's share of reads per chromosome against the median share of the libraries in view, on a log2 scale, chromosomes in karyotype order; one library alone in view falls back to a plain share). The ataqv table is collapsed. Filters:
 fragment class, fragment length and reference sequence.
 
 **Signal.** Strip: coverage concentration (the fingerprint area ratio, box plot), the
 divergence from a uniform library (distribution), the distinct fragments preseq expects at a
-billion reads (box plot) and the metagene signal at the start site (distribution). Then the
-fingerprint scatter (the legend names the libraries; no point labels), the preseq
-complexity curves with their 95% band and the deepTools metagene profile with the start site
-marked and the gene body shaded. Filters: coverage concentration and extrapolated depth.
+billion reads (box plot) and the metagene signal at the start site (distribution). Then the fingerprint bars (the coverage area over a uniform library, beside the distance to uniform; one bar per library coloured by verdict, the least concentrated on top. The amber zone, 0.85 to 0.95, is a weak concentration and the red zone, from 0.95, no better than a uniform library; both cut-offs are rules of thumb of the catalog's fingerprint module, not values deepTools publishes), the preseq
+complexity curves with their 95% band and the deepTools metagene profile with the start site marked (bin 300, where the 3 kb upstream flank ends) and the gene body shaded (bins 300 to 400). Filters: coverage concentration and extrapolated depth.
 
 **Peaks.** Strip: peaks in view (the chromosomes with the most), peak width (box plot), fold
 enrichment (distribution) and the median -log10 q-value (threshold at 1.3, q 0.05). Then the
-genome-wide significance panel, without point labels, and the width distribution on a log
-axis. The MACS2 table is
-collapsed. Filters: significance, width and chromosome.
+the genome-wide panel (a heatmap of calls per megabase, one row per library, chromosomes in karyotype order, white lines between them, the colour on a log scale) and the peak widths as one box per library on a log axis, the widest median on top, each box in the colour of its group (the library name without its merge and replicate suffix, the hub's `group`). The panel has no Open in genome browser action; the Locus tab sets its own locus. The MACS2 table is collapsed. Filters: significance,
+width and chromosome.
 
 **Annotation.** Strip: annotated peaks (a ring by feature class), genes reached (by feature
 class), the distance to the nearest start site (box plot) and the peak score. Then the
-feature classes per library as 100% bars and the peaks around the nearest start site, with
-the promoter window shaded. The collapsed `Peak annotation` holds the HOMER table with the
+feature classes per library as 100% bars (an advanced `stacked_taxonomy` tile on the `homer_feature_classes` collection, written by a recipe from the HOMER peak table, with the share or count, sort and legend controls; the distance filter does not reach it) and the peaks around the nearest start site, with
+the promoter window shaded (1 kb either side of the start site at 0). The collapsed `Peak annotation` holds the HOMER table with the
 peak record card beside it: the card waits for a picked row. Filters: feature class and
 distance to the start site.
 
-**Locus.** Three collections on one genome axis. Strip: calls in the region (split by
-library), libraries per consensus interval, feature classes and nearest genes; the
-cards follow the region like the tracks. Then the navigator, a `genome_view` on the broad
-calls with one lane per library and `assembly: {GENOME}`, and two follower tracks: the
-consensus intervals as high as their support, and the HOMER annotation coloured by feature
-class (it stands in for a gene lane, which is bundled for hg38 and mm10 only). Filters:
+**Locus.** The broad calls and the run's own files on one genome axis, and the only genome
+browser of the template. Strip: calls in the region (split by library), libraries per
+consensus interval, feature classes and nearest genes; the cards follow the region. Then
+the navigator, a `genome_view` on the broad calls (bars rising from the baseline to the -log10 q-value) with one lane per library on its own scale at a fixed lane height, up to 8 lanes, and `assembly: {GENOME}`, and under it, at full width, a genome browser that opens on the most
+significant peak and follows the navigator's brush without filtering. The navigator sets no default region: it opens on the chromosome the browser shows (`open_on_view_window`), follows the browser's window as it steps (`follow_view_window`) and brushes a region with a drag (`interaction_mode: select`). Grouping the lanes by group needs a group column on the calls, which `macs2_broad_peaks` does not carry. Filters:
 significance, libraries per interval and feature class.
 
 **Consensus.** Strip: consensus intervals (by chromosome), libraries per interval (box
@@ -129,12 +124,24 @@ merged and support.
 **Differential accessibility.** Pick a contrast first. Strip: intervals tested (one test per
 interval and contrast, split by outcome), significant calls (a ring by direction), the
 effect size of the calls (box plot) and the strongest significance (threshold at 1.3). Then
-the volcano, without point labels (the ids are interval ids), whose View switch reads the
+the volcano, without point labels (the ids are interval ids), whose guide lines are the cut-offs that make an interval significant (padj 0.05 and a log2 fold change of 1, the nf-core DESeq2 defaults) and whose View switch reads the
 same rows as an MA plot (`log2_base_mean`) or a QQ plot of the raw p-values, the ten largest
 effects per contrast beside the calls per contrast, and the sample space: the pipeline's PCA on the
 consensus counts beside the library distance heatmap (`ward`, `Blues`). The three tables
 are collapsed. The `Contrast` filter is a single `Select`: the interval ids repeat in every
 contrast, so a row is an interval only together with its contrast.
+
+## Genome tracks
+
+The `tracks` collection lists the merged-library files the run published under
+`bwa/mergedLibrary/`: the bigWig signal, the MACS2 peak calls (`macs/broadPeak/`, or
+`macs/narrowPeak/` on a narrow run) and the filtered BAM, one row per file, keyed on the
+`<sample>.mLb.clN` spelling the peak calls use. Rows are ordered signal first (replicate 1
+of every group before replicate 2), then peaks, then BAMs. The bigWig, peak and BAM files are
+not in the tables-only megatest subset: pass `--var TRACKS_URI=<results folder>` at ingest to
+read them in place, or leave them under `DATA_ROOT` and the CLI uploads the ones it finds.
+The merged-replicate level (`bwa/mergedReplicate/`) is not listed. The design notes are in
+`docs/design/jbrowse/atacseq.md`.
 
 ## Routes and pruning
 
@@ -147,6 +154,10 @@ optional:
 
 The import re-packs a grid after a drop, so a lone tile takes the full row.
 
+## Derived collection
+
+`homer_feature_classes` is computed by a recipe (`nf-core/atacseq/feature_classes.py`) from the HOMER peak table: one row per library and feature class, with the peak count and a constant `rank` column that the stacked-taxonomy tile expects. Peaks without a class are counted as `Unclassified`. A project ingested before this collection existed needs a re-ingest to draw the Annotation bars.
+
 ## Colours
 
 `category_colors` is declared once, on the Overview, and read by every tab: the `group`
@@ -157,9 +168,8 @@ when it has some.
 
 ## Cross-selection
 
-Tables select rows; the signal against specificity scatter, the fingerprint scatter, the
-complexity and metagene curves select libraries; the genome-wide panel and the Locus tracks
-select peaks. A pick becomes a dashboard filter that narrows the other tiles of the same
+Tables select rows; the signal against specificity scatter, the fingerprint bars, the
+complexity and metagene curves select libraries; the Locus tracks select peaks. A pick becomes a dashboard filter that narrows the other tiles of the same
 collection and, through the project links, the collections downstream of it. The design
 hub carries both spellings of a library (`sample` and `<sample>.mLb.clN`), so one sample
 pick reaches the MultiQC panels, the ataqv, deepTools and preseq tables, the peak calls, the
@@ -168,9 +178,9 @@ consensus matrices have the libraries as columns, so the sample filters do not n
 
 The value link from the broad calls to the HOMER annotation on `peak_id` is disabled in
 `template.yaml`: a range filter on the calls resolves through it as a handful of ids and
-empties the HOMER tiles. A lasso on the Peaks tab therefore narrows the MACS2 tiles only;
+empties the HOMER tiles. A range filter on the Peaks tab therefore narrows the MACS2 tiles only;
 the reverse link (HOMER to MACS2) still works. On the Locus tab, two region links rename
-the navigator's chromosome and position filters onto the consensus and HOMER tracks, and
+the navigator's chromosome and position filters onto the consensus intervals and the HOMER annotation cards, and
 the navigator's own read is capped at about 10k rows ranked by q-value.
 
 ## Controls

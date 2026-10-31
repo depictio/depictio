@@ -1,10 +1,31 @@
 import React from 'react';
-import { Badge, Box, Code, Collapse, Divider, Group, Stack, Text, Tooltip, UnstyledButton, ActionIcon } from '@mantine/core';
+import {
+  ActionIcon,
+  Badge,
+  Box,
+  Code,
+  Collapse,
+  CopyButton,
+  Divider,
+  Group,
+  Stack,
+  Text,
+  Tooltip,
+  UnstyledButton,
+} from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import { StoredMetadata } from '../../api';
 import { componentTypeVisual } from '../../componentTypeMeta';
+import { paletteVar } from '../../paletteColor';
+import { useGenomeTracks } from '../jbrowse/genomeTracksStore';
+import {
+  buildGenomeTracksSummary,
+  type GenomeSection,
+  type SummaryItem,
+} from '../jbrowse/genomeTracksSummary';
 import CatalogOrigin from './CatalogOrigin';
+import { useTileStats } from './tileStats';
 
 interface MetadataBodyProps {
   metadata: StoredMetadata;
@@ -70,6 +91,11 @@ function summaryRows(m: StoredMetadata): Row[] {
       push('Alignment', g.alignment);
       push('Order', g.order);
       break;
+    case 'jbrowse':
+      push('Max tracks', g.max_tracks);
+      push('Initial tracks', g.initial_tracks);
+      push('Selection column', g.selection_column);
+      break;
     case 'advanced_viz': {
       push('Kind', g.viz_kind);
       const cfg = (g.config as Record<string, unknown>) || {};
@@ -95,7 +121,7 @@ const SectionTitle: React.FC<{ icon: string; children: React.ReactNode; color?: 
   color = 'dimmed',
 }) => (
   <Group gap={6} mb={6} wrap="nowrap">
-    <Icon icon={icon} width={13} color={`var(--mantine-color-${color === 'dimmed' ? 'gray-6' : `${color}-6`})`} />
+    <Icon icon={icon} width={13} color={color === 'dimmed' ? 'var(--mantine-color-gray-6)' : paletteVar(color)} />
     <Text size="xs" fw={700} c={color} tt="uppercase">
       {children}
     </Text>
@@ -121,6 +147,111 @@ const KeyValue: React.FC<{ label: string; children: React.ReactNode; mono?: bool
   </Group>
 );
 
+/** A URI on one truncated mono line: full text on hover, one-click copy. */
+const UriLine: React.FC<{ value: string }> = ({ value }) => (
+  <Group gap={4} wrap="nowrap" style={{ minWidth: 0 }}>
+    <Tooltip label={value} multiline maw={420} withArrow openDelay={300} style={{ wordBreak: 'break-all' }}>
+      <Code
+        fz={11}
+        style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}
+      >
+        {value}
+      </Code>
+    </Tooltip>
+    <CopyButton value={value} timeout={1500}>
+      {({ copied, copy }) => (
+        <Tooltip label={copied ? 'Copied' : 'Copy'} withArrow>
+          <ActionIcon
+            size="xs"
+            variant="subtle"
+            color={copied ? 'teal' : 'gray'}
+            onClick={copy}
+            aria-label="Copy location"
+          >
+            <Icon icon={copied ? 'mdi:check' : 'mdi:content-copy'} width={12} />
+          </ActionIcon>
+        </Tooltip>
+      )}
+    </CopyButton>
+  </Group>
+);
+
+const GenomeRow: React.FC<{ row: SummaryItem }> = ({ row }) => (
+  <KeyValue label={row.label}>
+    {row.uri ? <UriLine value={row.value} /> : row.value}
+  </KeyValue>
+);
+
+const GenomeSectionView: React.FC<{ section: GenomeSection }> = ({ section }) => (
+  <Box>
+    <Text size="xs" fw={600} mb={3}>
+      {section.title}
+    </Text>
+    <Stack gap={3}>
+      {section.rows.map((r, i) => (
+        <GenomeRow key={`${r.label}-${i}`} row={r} />
+      ))}
+      {section.groups?.map((group) => (
+        <Box key={group.category}>
+          <Text size="xs" c="dimmed" tt="uppercase" fw={600} mt={2}>
+            {group.category}
+          </Text>
+          {group.tracks.map((t, i) => (
+            <Box key={`${t.name}-${i}`} mb={3}>
+              <Text size="xs" style={{ wordBreak: 'break-word' }}>
+                {t.name}
+                {t.detail && (
+                  <Text span size="xs" c="dimmed">
+                    {' '}
+                    · {t.detail}
+                  </Text>
+                )}
+              </Text>
+              {t.origin && <UriLine value={t.origin} />}
+              {t.index && <UriLine value={t.index} />}
+            </Box>
+          ))}
+        </Box>
+      ))}
+      {section.more ? (
+        <Text size="xs" c="dimmed">
+          +{section.more} more
+        </Text>
+      ) : null}
+    </Stack>
+  </Box>
+);
+
+/** The genome browser's assembly, location, tracks and data, as last rendered
+ *  by the tile (see `genomeTracksStore`); its static config before that. */
+const GenomeTracksSection: React.FC<{ metadata: StoredMetadata }> = ({ metadata }) => {
+  const entry = useGenomeTracks(String(metadata.index));
+  const summary = React.useMemo(
+    () =>
+      buildGenomeTracksSummary(
+        metadata as Record<string, unknown>,
+        entry?.payload ?? null,
+        entry?.locus ?? null,
+      ),
+    [metadata, entry],
+  );
+  return (
+    <Box>
+      <SectionTitle icon="mdi:dna">Genome tracks</SectionTitle>
+      <Stack gap="xs">
+        {!summary.loaded && (
+          <Text size="xs" c="dimmed">
+            Scroll the browser into view to load its tracks.
+          </Text>
+        )}
+        {summary.sections.map((s) => (
+          <GenomeSectionView key={s.id} section={s} />
+        ))}
+      </Stack>
+    </Box>
+  );
+};
+
 /**
  * The component-metadata view, without the surface it is shown on.
  *
@@ -134,6 +265,26 @@ const KeyValue: React.FC<{ label: string; children: React.ReactNode; mono?: bool
  * when the component was added from the tools catalog, and the raw
  * stored_metadata tucked into a collapsible "Advanced" block.
  */
+/** What the tile last drew (rows, lanes, renderer), when it published that. */
+function RenderedSection({ index }: { index: string }) {
+  const stats = useTileStats(index);
+  const entries = Object.entries(stats ?? {});
+  if (!entries.length) return null;
+  const label = (k: string) => k.charAt(0).toUpperCase() + k.slice(1);
+  return (
+    <Box>
+      <SectionTitle icon="mdi:chart-box-outline">Rendered</SectionTitle>
+      <Stack gap={3}>
+        {entries.map(([k, v]) => (
+          <KeyValue key={k} label={label(k)}>
+            {typeof v === 'number' ? v.toLocaleString('en-US') : v}
+          </KeyValue>
+        ))}
+      </Stack>
+    </Box>
+  );
+}
+
 const MetadataBody: React.FC<MetadataBodyProps> = ({ metadata }) => {
   const [rawOpen, setRawOpen] = React.useState(false);
   const json = React.useMemo(() => JSON.stringify(metadata, null, 2), [metadata]);
@@ -187,6 +338,10 @@ const MetadataBody: React.FC<MetadataBodyProps> = ({ metadata }) => {
           </Stack>
         </Box>
       )}
+
+      {metadata.component_type === 'jbrowse' && <GenomeTracksSection metadata={metadata} />}
+
+      <RenderedSection index={String(metadata.index ?? '')} />
 
       {/* Data source */}
       {(metadata.dc_id || metadata.wf_id) && (

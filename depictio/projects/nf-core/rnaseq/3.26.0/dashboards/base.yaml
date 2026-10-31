@@ -4,7 +4,8 @@ version: 1
 #
 # Funnel: MultiQC (did the steps work?) -> Library QC (which library stands
 # apart?) -> Sample Space (do replicates sit together?) -> Variable Genes
-# (which genes vary most?) -> Gene Explorer (where does one gene sit?).
+# (which genes vary most?) -> Gene Explorer (where does one gene sit, and what do
+# its reads look like in the genome browser?).
 #
 # The condition is read off the <condition>_REP<n> sample names by the
 # samplesheet recipe: the pipeline's sheet has no design column, so there is
@@ -165,7 +166,7 @@ main_dashboard:
       3. ![](icon:mdi:shield-check-outline) **Check** RSeQC, Qualimap and dupRadar · [Settings](params:rseqc) · [Library QC](tab:Library QC)
       4. ![](icon:mdi:chart-scatter-plot) **Relate** DESeq2 QC on the counts · [Settings](params:deseq2) · [Sample Space](tab:Sample Space)
       5. ![](icon:mdi:counter) **Quantify** Salmon, merged into gene TPMs · [Settings](params:salmon) · [Variable Genes](tab:Variable Genes)
-      6. ![](icon:mdi:tag-text-outline) **Annotate** Gene symbols from the GTF · [Settings](params:gtf) · [Gene Explorer](tab:Gene Explorer)
+      6. ![](icon:mdi:tag-text-outline) **Annotate** Gene symbols from the GTF, reads in the genome browser · [Settings](params:gtf) · [Gene Explorer](tab:Gene Explorer)
       :::
     tag: rna-ov-steps
     index: ov-steps
@@ -213,14 +214,17 @@ main_dashboard:
     description: Median number of genes a library expresses at 1 TPM or more. The box shows how it spreads.
     layout: {x: 2, y: 0, w: 2, h: 2}
   # No differential test runs in nf-core/rnaseq: the result is a ranking, a
-  # gene whose mean in its top condition is two-fold that of the others.
+  # gene whose mean log2(TPM + 1) in its top condition is at least two above the
+  # others (about four-fold) and that reaches 10 TPM in some library. One
+  # log2 with no floor kept two thirds of the genes of a run with two
+  # replicates per condition, which ranks nothing.
   - component_type: card
     workflow_tag: rnaseq
     data_collection_tag: gene_summary
     aggregation: count
     column_name: gene_id
     column_type: object
-    filter_expr: col('log2fc_top_vs_rest') >= 1
+    filter_expr: (col('log2fc_top_vs_rest') >= 2) & (col('max_tpm') >= 10)
     secondary_layout: composition
     breakdown_col: top_condition
     display:
@@ -231,8 +235,8 @@ main_dashboard:
     section: Key figures
     tag: rna-ov-kf-biased
     index: ov-kf-biased
-    title: Two-fold in one condition
-    description: Genes whose mean log2(TPM + 1) in one condition is at least one above the others. A ranking, not a test.
+    title: Four-fold in one condition
+    description: Genes at 10 TPM or more whose mean log2(TPM + 1) in one condition is at least two above the others. A ranking, not a test.
     layout: {x: 4, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: rnaseq
@@ -292,9 +296,9 @@ main_dashboard:
   - component_type: text
     surface: card
     values:
-      n_biased: {dc: gene_summary, column: gene_id, aggregation: count, filter_expr: "col('log2fc_top_vs_rest') >= 1",
+      n_biased: {dc: gene_summary, column: gene_id, aggregation: count, filter_expr: "(col('log2fc_top_vs_rest') >= 2) & (col('max_tpm') >= 10)",
         format: integer}
-      top_cond: {dc: gene_summary, column: top_condition, aggregation: top, filter_expr: "col('log2fc_top_vs_rest') >= 1"}
+      top_cond: {dc: gene_summary, column: top_condition, aggregation: top, filter_expr: "(col('log2fc_top_vs_rest') >= 2) & (col('max_tpm') >= 10)"}
       pc1: {dc: deseq2_qc_pca, column: dim_1_percent, aggregation: max, format: 'decimals:0'}
       n_genes: {dc: gene_summary, column: gene_id, aggregation: nunique, format: integer}
       # 'Feature' rows split the region classes finer; the filter keeps the five
@@ -304,30 +308,30 @@ main_dashboard:
       region_share: {dc: rseqc_read_distribution, column: taxon, aggregation: top_share, weight: tag_count,
         filter_expr: "col('rank') != 'Feature'", format: percent}
     body: |
-      - **{{n_biased}}** genes are two-fold higher in one condition, most often {{top_cond}} – a ranking, not a test [Variable Genes](tab:Variable Genes)
+      - **{{n_biased}}** genes at 10 TPM or more are four-fold higher in one condition, most often {{top_cond}} – a ranking, not a test [Variable Genes](tab:Variable Genes)
       - **{{pc1}}%** of the variance lies on the first principal component – DESeq2 QC, all libraries [Sample Space](tab:Sample Space)
-      - **{{n_genes}}** genes are expressed – at 1 TPM or more in at least one library [Gene Explorer](tab:Gene Explorer)
+      - **{{n_genes}}** genes are expressed – at 1 TPM or more in at least one library; pick one to see its reads in the genome browser [Gene Explorer](tab:Gene Explorer)
       - **{{region_share}}** of the tags fall in {{region}} regions – RSeQC, the largest region class [Library QC](tab:Library QC)
     section: Findings
     tag: rna-ov-findings
     index: ov-findings
     layout: {x: 0, y: 0, w: 8, h: 2}
-  # One figure per tab, in the order of the rows above. The DESeq2 distances
-  # stand for the Sample Space tab rather than its PCA: the PCA file carries no
-  # condition to colour the points by, the clustered matrix reads without one.
+  # One figure per tab, in the order of the rows above. The Sample Space tab is
+  # stood for by its PCA: the distance matrix labels both axes with library ids
+  # and renders blank at w4 (RULES section 8).
   - component_type: highlight
     section: Findings
     source_tab: Variable Genes
     source_component: rna-var-box
-    caption: The most variable genes in view, one box per condition, one point per library.
+    caption: The most variable genes in view, one dot per library, a bar at each condition's mean.
     tag: rna-ov-hl-box
     index: ov-hl-box
     layout: {x: 0, y: 2, w: 4, h: 5}
   - component_type: highlight
     section: Findings
     source_tab: Sample Space
-    source_component: rna-space-distances
-    caption: Distances between libraries, clustered; replicates of one condition form a dark block.
+    source_component: rna-space-pca
+    caption: One point per library on the first two principal components of the counts; replicates of one condition should sit together.
     tag: rna-ov-hl-distances
     index: ov-hl-distances
     layout: {x: 4, y: 2, w: 4, h: 5}
@@ -651,7 +655,7 @@ tabs:
   - name: Library QC profile
     icon: mdi:chart-timeline-variant
     color: blue
-    description: Eleven MultiQC metrics per library, one line each, coloured by condition
+    description: Six MultiQC metrics per library, one line each, coloured by condition
   - name: Read distribution
     icon: mdi:chart-bar
     color: blue
@@ -661,11 +665,12 @@ tabs:
   - component_type: text
     order: 1
     body: >
-      Eleven [MultiQC](https://multiqc.info) general statistics per library, from STAR,
-      Salmon, Picard, Qualimap, dupRadar and samtools, and where its reads landed according
-      to [RSeQC](https://rseqc.sourceforge.net) read_distribution. In the profile each
-      library is one line: one that bends away from its replicates on several axes is the
-      odd one out, and dragging along an axis keeps the libraries in that range.
+      Six general statistics per library from STAR, Salmon, Picard and Qualimap, the rest
+      of the [MultiQC](tab:MultiQC) general statistics being on its tab, and where each
+      library's reads landed according to [RSeQC](https://rseqc.sourceforge.net)
+      read_distribution. In the profile each library is one line: one that bends away from
+      its replicates on several axes is the odd one out, and dragging along an axis keeps
+      the libraries in that range.
     tag: rna-libqc-intro
     index: libqc-intro
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -710,7 +715,7 @@ tabs:
     top_n_count: 4
     display:
       icon_name: mdi:counter
-      icon_color: blue
+      icon_color: blue.4
       caption: reads, by condition
       decimals: 1
     section: QC at a glance
@@ -730,7 +735,7 @@ tabs:
     coverage_max: 100
     display:
       icon_name: mdi:target
-      icon_color: teal
+      icon_color: blue.6
       caption: median, of 100%
       decimals: 1
     section: QC at a glance
@@ -750,14 +755,14 @@ tabs:
     secondary_layout: box_plot
     display:
       icon_name: mdi:content-duplicate
-      icon_color: orange
+      icon_color: blue.8
       caption: median per library, with its spread
       decimals: 1
     section: QC at a glance
     tag: rna-libqc-card-duplication
     index: libqc-card-duplication
     title: Duplication (%)
-    description: Median share of reads Picard marked duplicate. Highly expressed genes duplicate naturally.
+    description: Median share of reads Picard marked duplicate. Highly expressed genes duplicate naturally, so judge a library against its replicates, not an absolute line.
     layout: {x: 4, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: rnaseq
@@ -769,7 +774,7 @@ tabs:
     secondary_layout: histogram
     display:
       icon_name: mdi:dna
-      icon_color: grape
+      icon_color: blue.9
       caption: median, with its distribution
       decimals: 1
     section: QC at a glance
@@ -787,22 +792,22 @@ tabs:
       sample_col: sample
       group_col: condition
       scale: minmax
+      # Six axes every library fills: depth, the two mapping rates, duplication,
+      # the exonic share and the 5' to 3' bias. The other five metrics the
+      # recipe writes (trimmed share, GC, dupRadar intercept, error rate, insert
+      # size) are in MultiQC's general statistics.
       metric_cols:
       - total_reads_m
-      - pct_trimmed
-      - pct_gc
       - pct_uniquely_mapped
       - pct_salmon_mapped
       - pct_duplication
-      - dupradar_intercept
       - pct_exonic
       - bias_5_3
-      - error_rate
-      - insert_size
     section: Library QC profile
     tag: rna-libqc-profile
     index: rna-libqc-profile
     title: Per-library QC profile
+    description: Higher is better for reads, uniquely mapped, Salmon mapped and exonic; lower for duplication; close to 1 for the 5' to 3' bias. Each axis spans the libraries in view.
     layout: {x: 0, y: 0, w: 8, h: 6}
   # RSeQC publishes its upstream and downstream bands nested inside each
   # other; the recipe differences them into disjoint rings and adds the
@@ -845,7 +850,7 @@ tabs:
   - name: Sample relationships
     icon: mdi:chart-scatter-plot
     color: cyan
-    description: The pipeline's DESeq2 QC PCA beside the distances it clusters on
+    description: The pipeline's DESeq2 QC PCA above the distances it clusters on
   - name: Library summary
     icon: mdi:table
     color: gray
@@ -905,7 +910,7 @@ tabs:
     breakdown_col: group
     display:
       icon_name: mdi:flask-outline
-      icon_color: violet
+      icon_color: cyan.4
       caption: one per library, by condition
     section: Libraries at a glance
     tag: rna-space-card-libraries
@@ -924,7 +929,7 @@ tabs:
     secondary_layout: box_plot
     display:
       icon_name: mdi:dna
-      icon_color: teal
+      icon_color: cyan.6
       caption: median per library, with its spread
       decimals: 0
     section: Libraries at a glance
@@ -943,7 +948,7 @@ tabs:
     secondary_layout: histogram
     display:
       icon_name: mdi:magnify-scan
-      icon_color: cyan
+      icon_color: cyan.8
       caption: median per library, with its distribution
       decimals: 0
     section: Libraries at a glance
@@ -965,7 +970,7 @@ tabs:
     top_n_count: 4
     display:
       icon_name: mdi:chart-bell-curve
-      icon_color: orange
+      icon_color: cyan.9
       caption: median per condition, highest first
       decimals: 2
     section: Libraries at a glance
@@ -992,7 +997,7 @@ tabs:
     tag: rna-space-pca
     index: rna-space-pca
     title: DESeq2 QC PCA
-    layout: {x: 0, y: 0, w: 4, h: 6}
+    layout: {x: 0, y: 0, w: 8, h: 6}
   # The same square Euclidean distance matrix MultiQC draws as an image,
   # clustered in the browser and narrowed on both axes by a sample pick.
   - component_type: advanced_viz
@@ -1010,7 +1015,7 @@ tabs:
     tag: rna-space-distances
     index: rna-space-distances
     title: Sample distances (DESeq2 QC)
-    layout: {x: 4, y: 0, w: 4, h: 6}
+    layout: {x: 0, y: 6, w: 8, h: 5}
   - component_type: table
     workflow_tag: rnaseq
     data_collection_tag: sample_overview
@@ -1066,7 +1071,7 @@ tabs:
   - name: Expression by condition
     icon: mdi:chart-bell-curve
     color: grape
-    description: The most variable genes in view, one box per condition
+    description: The most variable genes in view, one dot per library, a bar per condition
   - name: Matrix rows
     icon: mdi:database-outline
     color: gray
@@ -1079,14 +1084,14 @@ tabs:
     body: >
       The genes whose log2(TPM + 1) varies most across the libraries, from the merged
       [Salmon](https://combine-lab.github.io/salmon/) matrix: the heatmap clusters the 500
-      most variable, the box plot draws the 12 most variable in view per condition.
+      most variable, the dot plot draws the 12 most variable in view per condition.
       nf-core/rnaseq runs no differential test, so variance ranks these genes, not
-      significance. Pick top variable genes in the left panel to put them in the box plot.
+      significance. Pick top variable genes in the left panel to put them in the dot plot.
     tag: rna-var-intro
     index: var-intro
     layout: {x: 0, y: 0, w: 8, h: 2}
   # Lists the 500 genes of the heatmap. A filter narrows every collection with
-  # a column of the same name, so the box plot and the cards follow the pick.
+  # a column of the same name, so the dot plot and the cards follow the pick.
   - component_type: interactive
     workflow_tag: rnaseq
     data_collection_tag: expression_heatmap
@@ -1130,7 +1135,7 @@ tabs:
     top_n_count: 4
     display:
       icon_name: mdi:dna
-      icon_color: teal
+      icon_color: grape.4
       caption: at 1 TPM or more, by condition
     section: Genes at a glance
     tag: rna-var-card-genes
@@ -1149,7 +1154,7 @@ tabs:
     secondary_layout: box_plot
     display:
       icon_name: mdi:chart-bell-curve
-      icon_color: orange
+      icon_color: grape.6
       caption: median over genes and libraries, with its spread
       decimals: 2
     section: Genes at a glance
@@ -1164,39 +1169,40 @@ tabs:
     aggregation: count
     column_name: gene_id
     column_type: object
-    filter_expr: col('log2fc_top_vs_rest') >= 1
+    filter_expr: (col('log2fc_top_vs_rest') >= 2) & (col('max_tpm') >= 10)
     secondary_layout: composition
     breakdown_col: top_condition
     display:
       icon_name: mdi:arrow-up-bold-outline
-      icon_color: pink
+      icon_color: grape.8
       caption: genes, by the condition they peak in
     section: Genes at a glance
     tag: rna-var-card-biased
     index: var-card-biased
-    title: Two-fold in one condition
-    description: Genes whose mean log2(TPM + 1) in one condition is at least one above the others. A ranking, not a test.
+    title: Four-fold in one condition
+    description: Genes at 10 TPM or more whose mean log2(TPM + 1) in one condition is at least two above the others. A ranking, not a test.
     layout: {x: 4, y: 0, w: 2, h: 2}
+  # Ranks the genes the conditions separate. It replaced a ranking by peak TPM,
+  # which lists the same housekeeping transcripts on every run.
   - component_type: card
     workflow_tag: rnaseq
-    data_collection_tag: gene_expression
-    use: salmon/gene_expression
+    data_collection_tag: gene_summary
     aggregation: max
-    column_name: tpm
+    column_name: sd_log2_tpm
     column_type: float64
     secondary_layout: top_n
     breakdown_col: gene_name
     top_n_count: 4
     display:
       icon_name: mdi:trending-up
-      icon_color: red
-      caption: the most expressed genes in view
-      decimals: 0
+      icon_color: grape.9
+      caption: the genes that vary most across libraries
+      decimals: 2
     section: Genes at a glance
     tag: rna-var-card-peak
     index: var-card-peak
-    title: Highest TPM
-    description: The highest TPM any gene reaches in a library in view, and the genes that reach it.
+    title: Most variable gene
+    description: The largest spread of log2(TPM + 1) any gene shows over the libraries in view, and the genes that reach it.
     layout: {x: 6, y: 0, w: 2, h: 2}
   - component_type: advanced_viz
     workflow_tag: rnaseq
@@ -1222,26 +1228,50 @@ tabs:
     workflow_tag: rnaseq
     data_collection_tag: gene_expression
     use: salmon/gene_expression
-    visu_type: box
+    visu_type: scatter
     mode: code
     code_content: |-
       # The 12 genes with the largest spread across the libraries in view (the
-      # highest-TPM genes are housekeeping transcripts that separate nothing),
-      # one box per group. Name genes in the left panel to draw those instead.
+      # highest-TPM genes are housekeeping transcripts that separate nothing). A group
+      # holds two or three libraries, too few for a box: one dot per library and a bar
+      # at the group's mean. Name genes in the left panel to draw those instead.
       grp = depictio_group_by[0] if depictio_group_by and depictio_group_by[0] in df.columns else 'group'
       colors = depictio_group_kwargs.get('color_discrete_map') or depictio_category_colors.get(grp) or depictio_category_colors.get('group') or {}
       top = df.group_by('gene_name').agg(pl.col('log2_tpm').std().fill_null(0).alias('sd')).sort('sd', descending=True).head(12)['gene_name'].to_list()
-      d = df.filter(pl.col('gene_name').is_in(top)).sort(['gene_name', grp])
-      fig = px.box(d.to_pandas(), x='gene_name', y='log2_tpm', color=grp, color_discrete_map=colors, category_orders=depictio_group_kwargs.get('category_orders') or {}, points='all', hover_name='sample', custom_data=['gene_name'], labels={'gene_name': 'Gene', 'log2_tpm': 'log2(TPM + 1)', grp: ''})
-      fig.update_layout(boxmode='group', margin=dict(t=10))
-      fig.update_xaxes(tickangle=-40, automargin=True)
+      d = df.filter(pl.col('gene_name').is_in(top)).sort(['gene_name', 'sample'])
+      order = (depictio_group_kwargs.get('category_orders') or {}).get(grp) or sorted(d[grp].unique().to_list())
+      order = [g for g in order if g in d[grp].unique().to_list()]
+      slot = 0.7 / len(order)
+      traces = []
+      for k, g in enumerate(order):
+          off = -0.35 + (k + 0.5) * slot
+          xs, ys, names, genes, mx, my, mg = [], [], [], [], [], [], []
+          for i, gene in enumerate(top):
+              cell = d.filter((pl.col('gene_name') == gene) & (pl.col(grp) == g))
+              vals = cell['log2_tpm'].to_list()
+              for j, (v, s) in enumerate(zip(vals, cell['sample'].to_list())):
+                  xs.append(i + off + (j - (len(vals) - 1) / 2) * slot * 0.4)
+                  ys.append(v)
+                  names.append(gene + ' / ' + s)
+                  genes.append([gene])
+              if vals:
+                  mx.append(i + off)
+                  my.append(sum(vals) / len(vals))
+                  mg.append([gene])
+          col = colors.get(g)
+          traces.append(go.Scatter(x=xs, y=ys, mode='markers', name=str(g), text=names, customdata=genes, hovertemplate='%{text}<br>log2(TPM + 1): %{y:.2f}<extra>' + str(g) + '</extra>', marker=dict(size=9, opacity=0.85, color=col)))
+          traces.append(go.Scatter(x=mx, y=my, mode='markers', showlegend=False, hoverinfo='skip', customdata=mg, marker=dict(symbol='line-ew', size=18, color=col, line=dict(width=3, color=col))))
+      fig = go.Figure(data=traces)
+      fig.update_xaxes(tickmode='array', tickvals=list(range(len(top))), ticktext=top, tickangle=-40, automargin=True, title='Gene')
+      fig.update_yaxes(title='log2(TPM + 1)', automargin=True)
+      fig.update_layout(margin=dict(t=10))
     selection_enabled: true
     selection_column: gene_name
     section: Expression by condition
     tag: rna-var-box
     index: rna-var-box
     title: Expression by condition
-    description: The 12 most variable genes in view, one box per condition. Select points to keep those genes.
+    description: The 12 most variable genes in view, one dot per library and a bar at each condition's mean. Select points to keep those genes.
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: table
     workflow_tag: rnaseq
@@ -1254,7 +1284,7 @@ tabs:
     title: Top variable gene matrix
     layout: {x: 0, y: 0, w: 8, h: 6}
 - title: Gene Explorer
-  subtitle: Where does a gene sit, and which condition does it peak in?
+  subtitle: Where does a gene peak, and what do its reads look like?
   tab_group: Expression
   tab_order: 5
   tab_icon: mdi:dna
@@ -1272,10 +1302,10 @@ tabs:
     icon: mdi:counter
     color: green
     description: The expressed genes, their level and spread, and where they peak
-  - name: Mean-variance plane
+  - name: Gene detail
     icon: mdi:chart-scatter-plot
     color: green
-    description: Pick a gene on the plane and read its record beside it
+    description: Pick a gene on the plane, its record beside it, its coverage in the browser
   - name: Gene rows
     icon: mdi:table
     color: gray
@@ -1294,8 +1324,10 @@ tabs:
       Every gene expressed at 1 TPM or more in at least one library, placed by its mean
       log2(TPM + 1) against its spread across the libraries and coloured by the condition it
       peaks in. Genes that set the conditions apart sit high on the plane; click one to
-      open its record and narrow the rows below to it, its id linked to
-      [Ensembl](https://www.ensembl.org).
+      open its record, its id linked to [Ensembl](https://www.ensembl.org), and to see its
+      strand-specific coverage and alignments in the genome browser below. The browser
+      frames a gene on its StringTie coordinates, opens on the gene that leads most in one
+      condition, and next and previous walk the others.
     tag: rna-gene-intro
     index: gene-intro
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -1339,7 +1371,7 @@ tabs:
     breakdown_col: top_condition
     display:
       icon_name: mdi:dna
-      icon_color: green
+      icon_color: green.4
       caption: by the condition each peaks in
     section: Expression at a glance
     tag: rna-gene-card-genes
@@ -1356,7 +1388,7 @@ tabs:
     secondary_layout: histogram
     display:
       icon_name: mdi:chart-histogram
-      icon_color: cyan
+      icon_color: green.6
       caption: median per gene, with its distribution
       decimals: 2
     section: Expression at a glance
@@ -1375,7 +1407,7 @@ tabs:
     secondary_layout: box_plot
     display:
       icon_name: mdi:chart-bell-curve
-      icon_color: grape
+      icon_color: green.8
       caption: median per gene, with its spread
       decimals: 2
     section: Expression at a glance
@@ -1384,7 +1416,7 @@ tabs:
     title: Spread across libraries
     description: Median standard deviation of a gene's log2(TPM + 1) over the libraries, the plane's y axis.
     layout: {x: 4, y: 0, w: 2, h: 2}
-  # The lead of each gene's top condition over the others, split at two-fold.
+  # The lead of each gene's top condition over the others, split at four-fold.
   # It replaced a ranking of peak libraries whose names a card cuts short.
   - component_type: card
     workflow_tag: rnaseq
@@ -1392,19 +1424,20 @@ tabs:
     aggregation: median
     column_name: log2fc_top_vs_rest
     column_type: float64
+    filter_expr: col('max_tpm') >= 10
     secondary_layout: threshold
-    threshold_value: 1
+    threshold_value: 2
     threshold_direction: min
     display:
       icon_name: mdi:arrow-up-bold-outline
-      icon_color: orange
-      caption: median; at or above 1, two-fold over the rest
+      icon_color: green.9
+      caption: median; at or above 2, four-fold over the rest
       decimals: 2
     section: Expression at a glance
     tag: rna-gene-card-lead
     index: gene-card-lead
     title: Lead of the top condition
-    description: Median lead of a gene's top condition over the others, in log2(TPM + 1). The bar counts the genes two-fold or more ahead.
+    description: Median lead of a gene's top condition over the others, in log2(TPM + 1), for genes at 10 TPM or more. The bar counts the genes four-fold or more ahead.
     layout: {x: 6, y: 0, w: 2, h: 2}
   - component_type: advanced_viz
     workflow_tag: rnaseq
@@ -1423,7 +1456,7 @@ tabs:
       marker_outline: false
       # No point labels: the most variable genes sit within a few pixels of
       # each other at the top, so their names pile up. The hover, the record
-      # and the Variable Genes box plot name them.
+      # and the Variable Genes dot plot name them.
       top_n_labels: 0
       # Tens of thousands of expressed genes: keep the points (a click needs a
       # point) rather than the binned view the renderer switches to above 3,000
@@ -1432,10 +1465,11 @@ tabs:
       selection_enabled: true
       selection_column: gene_id
       legend_pos: bottom
-    section: Mean-variance plane
+    section: Gene detail
     tag: rna-gene-plane
     index: rna-gene-plane
     title: Mean-variance plane
+    description: Each gene sits by its average expression (left to right) and by how much it changes between libraries (bottom to top). Genes high on the plane set the conditions apart.
     layout: {x: 0, y: 0, w: 5, h: 6}
   - component_type: advanced_viz
     workflow_tag: rnaseq
@@ -1453,11 +1487,53 @@ tabs:
         Where it peaks: [top_condition, top_sample, log2fc_top_vs_rest]
       link_templates:
         gene_id: https://www.ensembl.org/id/{value}
-    section: Mean-variance plane
+    section: Gene detail
     tag: rna-gene-record
     index: rna-gene-record
     title: Gene record
     layout: {x: 5, y: 0, w: 3, h: 6}
+  # The run's own files on the gene picked above: the plane's pick narrows
+  # gene_summary to one gene, whose StringTie span the view frames (a
+  # --skip_stringtie run has none: the view then opens on the first region that
+  # holds data). Unpicked it opens on the gene whose top condition leads most, and
+  # the stepper walks the others. Per library: both strands of coverage, then its
+  # BAM, and the first replicate of every condition comes first, so 12 opening
+  # tracks cover four conditions with their reads and splice arcs. The colour is the condition's, from category_colors (the manifest
+  # writes none, it would win over it); the gene track is the assembly's own
+  # (show_annotation), no UCSC gene track of this assembly is a file JBrowse
+  # reads. The sample scope of the left panel picks which libraries are open, and
+  # a click on a track picks its sample back for every tab. A --skip_alignment
+  # run has no tracks, and the route conditional drops the collection with this
+  # tile.
+  - component_type: jbrowse
+    workflow_tag: rnaseq
+    data_collection_tag: tracks
+    section: Gene detail
+    initial_tracks: 12
+    max_tracks: 24
+    show_overview: false
+    show_junctions: true
+    show_annotation: true
+    color_by: condition
+    selection_enabled: true
+    selection_column: sample
+    locus_from:
+      data_collection_tag: gene_summary
+      chrom_column: chrom
+      start_column: start
+      end_column: end
+      padding: 2000
+      max_rows: 20
+      sort_by: log2fc_top_vs_rest
+      descending: true
+      label_column: gene_name
+      columns: [top_condition, log2fc_top_vs_rest]
+      search_columns: [gene_id]
+    tag: rna-gene-browser
+    index: gene-browser
+    title: Genome browser
+    description: The coverage of each strand and the reads, with their splice arcs, of the libraries in scope, on the gene picked on the plane.
+    layout: {x: 0, y: 6, w: 8, h: 8}
   - component_type: table
     workflow_tag: rnaseq
     data_collection_tag: gene_expression

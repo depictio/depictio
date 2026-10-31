@@ -1,0 +1,21 @@
+id: vcf_substitution_spectrum
+name: Substitution spectrum
+mode: per-callset/spectrum
+description: >-
+  The PASS SNVs of each callset folded onto the six pyrimidine substitution
+  classes, counted and as a share of the callset. On RNA, A-to-I editing reads
+  as A to G and folds onto T to C, so an RNA callset carries a T to C excess a
+  DNA callset of the same individual does not.
+find:
+  path_glob: "**/variant_calling/**/*.vcf.gz"
+  path_glob_alt:
+    - "**/variant_calling/*/*/*.vcf.gz"
+    - "**/*.filtered.vcf.gz"
+recipe: vcf/substitution_spectrum.py
+fixture: substitution_spectrum.tsv
+renders_as:
+  - { id: spectrum_bars, component: figure, visu_type: bar,
+      dict_kwargs: {x: substitution_class, y: fraction, color: sample, barmode: group} }
+  - { id: transition_share, component: card, column: count, aggregation: sum,
+      secondary_layout: composition, breakdown_col: mutation_class }
+  - { component: table }

@@ -22,8 +22,8 @@
 #
 # Output:
 #   - depictio/projects/nf-core/viralrecon/3.0.0/.db_seeds/dashboard_*.json
-#     for the 6 viralrecon dashboards (overview + multiqc + coverage_depth +
-#     lineage_clustering + variants + sample_qc).
+#     for the 8 viralrecon dashboards (overview + multiqc + coverage_depth +
+#     lineage_clustering + variants + gene + sample + sample_qc).
 set -euo pipefail
 
 DATA_ROOT="${1:-${HOME}/Data/viralrecon/viralrecon-testdata}"
@@ -43,6 +43,10 @@ CLI_CONFIG="${DEPICTIO_CLI_CONFIG:-${HOME}/.depictio/CLI.yaml}"
 # id of the project step 1 created. The remap pins every id back to the static
 # ones either way.
 PROJECT_ID="${DEPICTIO_SEED_PROJECT_ID:-746b0f3c1e4a2d7f8e5b9ca2}"
+# Optional: ingest into a project of this name instead of the template's own, so a
+# stack that already holds a viralrecon project (another run) keeps its data. The
+# project is then looked up by name after the ingest and its id replaces PROJECT_ID.
+PROJECT_NAME="${DEPICTIO_SEED_PROJECT_NAME:-}"
 
 if [ ! -d "$DATA_ROOT" ]; then
     echo "ERROR: viralrecon test-data not found at $DATA_ROOT" >&2
@@ -56,6 +60,14 @@ mkdir -p "$SEEDS_DIR"
 #    `python -m depictio.cli` so the rich-display / polars monkey-patch is
 #    applied; see CLAUDE.md note on cli_rich_info_monkeypatch).
 cd "$REPO_ROOT"
+INGEST_EXTRA=()
+if [ -n "$PROJECT_NAME" ]; then
+    INGEST_EXTRA=(--project "$PROJECT_NAME")
+fi
+# `--continue-on-error`: the `tracks` collection reads the run's MultiQC summary CSV and
+# its VCF/BAM files, which the committed reference data (canonical TSVs) does not hold,
+# so it fails here. The dashboards bind it by tag all the same; the seed keeps the tile
+# and the remap pins its id (STATIC_IDS), and a fresh deploy drops the collection.
 # `--reset-dashboards` is required on any re-run: without it the ingest keeps
 # the family the project already has, and step 2 exports yesterday's dashboards.
 python -m depictio.cli ingest \
@@ -64,9 +76,12 @@ python -m depictio.cli ingest \
     --data-root "$DATA_ROOT" \
     --update-config \
     --overwrite \
-    --reset-dashboards
+    --reset-dashboards \
+    --continue-on-error \
+    ${INGEST_EXTRA[@]+"${INGEST_EXTRA[@]}"} \
+    || echo "WARNING: the ingest reported issues (the tracks collection, see above); the export below fails if a dashboard is missing." >&2
 
-# 2. Export the 6 viralrecon dashboards from Mongo into .db_seeds/. The
+# 2. Export the 8 viralrecon dashboards from Mongo into .db_seeds/. The
 #    dashboard_ids below come from db_init_reference_datasets.STATIC_IDS
 #    and ``dashboards/base.yaml``.
 
@@ -84,6 +99,8 @@ MultiQC	dashboard_multiqc.json
 Coverage & Depth	dashboard_coverage_depth.json
 Lineage & Clustering	dashboard_lineage_clustering.json
 Variants	dashboard_variants.json
+Gene	dashboard_gene.json
+Sample	dashboard_sample.json
 Sample QC	dashboard_sample_qc.json
 "
 
@@ -108,6 +125,16 @@ resolve_mongo_url() {
     echo "mongodb://localhost:${port:-27018}/depictioDB"
 }
 MONGO_URL="$(resolve_mongo_url)"
+
+if [ -n "$PROJECT_NAME" ]; then
+    name_json=$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$PROJECT_NAME")
+    PROJECT_ID=$(mongosh --quiet "$MONGO_URL" --eval "const p = db.projects.findOne({name: ${name_json}}); print(p ? p._id.toString() : '')" | tail -1)
+    if [ -z "$PROJECT_ID" ]; then
+        echo "ERROR: project ${PROJECT_NAME} not found in Mongo after the ingest" >&2
+        exit 1
+    fi
+    echo "Exporting from project ${PROJECT_NAME} (${PROJECT_ID})"
+fi
 
 printf '%s\n' "$DASH_FILES" | while IFS=$'\t' read -r title file; do
     [ -n "$title" ] || continue
@@ -158,5 +185,5 @@ DEPICTIO_CONTEXT=cli python "$SCRIPT_DIR/remap_seeds_to_static_ids.py"
 
 echo ""
 echo "Seeds exported + remapped in $SEEDS_DIR"
-echo "The 6 viralrecon dashboards are already registered in"
+echo "The 8 viralrecon dashboards are already registered in"
 echo "  depictio/api/v1/db_init.py (dashboards_config) — no further wiring needed."

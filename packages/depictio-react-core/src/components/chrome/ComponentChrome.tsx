@@ -4,6 +4,7 @@ import { Icon } from '@iconify/react';
 
 import { StoredMetadata } from '../../api';
 import CatalogButton from './CatalogButton';
+import { useEscapeClear } from './escapeClear';
 import MetadataPopover from './MetadataPopover';
 import FullscreenButton from './FullscreenButton';
 import InspectButton from './InspectButton';
@@ -91,6 +92,7 @@ export function orientationFor(componentType: string): 'horizontal' | 'vertical'
     case 'multiqc':
     case 'map':
     case 'advanced_viz':
+    case 'jbrowse':
       return 'vertical';
     default:
       return 'horizontal';
@@ -233,6 +235,12 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
    */
   const showClear =
     sourceFilterActive && Boolean(onResetFilter) && componentType !== 'interactive';
+  // Escape over the tile (or with the focus in it) does what the button does.
+  const escapeHandlers = useEscapeClear(
+    fullscreenRef as React.RefObject<HTMLElement | null>,
+    showClear ? onResetFilter : undefined,
+    componentType === 'advanced_viz' || componentType === 'jbrowse' ? String(metadata.index) : undefined,
+  );
   const vertical = orientationFor(componentType) === 'vertical';
 
   const renderAction = (action: ChromeAction) => {
@@ -414,10 +422,13 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
   return (
     <div
       ref={fullscreenRef as React.RefObject<HTMLDivElement>}
+      {...escapeHandlers}
       // Finds the component on the page by its index, wherever it is drawn —
       // a grid tile, the filter panel, a filter bar, a section pinned from
       // another tab. The dashboard search scrolls to and rings what this marks.
       data-component-index={metadata.index}
+      // Its title, for a tile that names this one (a linked genome view).
+      data-component-title={typeof metadata.title === 'string' ? metadata.title : undefined}
       // What the tile holds, so a chrome style can frame each kind its own way.
       data-component-type={componentType}
       className={

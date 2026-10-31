@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  describeRevisionMismatch,
   matchesTemplateFilter,
   parseTemplateOrigin,
+  readTemplateRevision,
   templateFilterValues,
+  templateRevisionMismatch,
 } from './templateFilter';
 
 const RNASEQ = { template_id: 'nf-core/rnaseq/3.26.0' };
@@ -102,5 +105,93 @@ describe('matchesTemplateFilter', () => {
   it('excludes projects with no template once a selection exists', () => {
     expect(matchesTemplateFilter(null, ['nf-core'])).toBe(false);
     expect(matchesTemplateFilter({}, ['nf-core'])).toBe(false);
+  });
+});
+
+describe('readTemplateRevision', () => {
+  it('reads a dashboard stamp', () => {
+    expect(
+      readTemplateRevision({
+        template_id: 'nf-core/nascent/2.3.0',
+        template_version: '1.2.0',
+        imported_at: '2026-10-29 10:14:00',
+      }),
+    ).toEqual({
+      templateId: 'nf-core/nascent/2.3.0',
+      version: '1.2.0',
+      at: '2026-10-29 10:14:00',
+    });
+  });
+
+  it('reads a project origin, whose date is applied_at', () => {
+    expect(
+      readTemplateRevision({
+        template_id: 'nf-core/nascent/2.3.0',
+        template_version: 'v1.0.0',
+        applied_at: '2026-10-01 08:00:00',
+      }),
+    ).toEqual({
+      templateId: 'nf-core/nascent/2.3.0',
+      version: '1.0.0',
+      at: '2026-10-01 08:00:00',
+    });
+  });
+
+  it('is null without a revision', () => {
+    expect(readTemplateRevision(null)).toBeNull();
+    expect(readTemplateRevision('nf-core/rnaseq/3.26.0')).toBeNull();
+    expect(readTemplateRevision({ template_id: 'nf-core/rnaseq/3.26.0' })).toBeNull();
+    expect(readTemplateRevision({ template_id: 'x', template_version: '  ' })).toBeNull();
+  });
+});
+
+describe('templateRevisionMismatch', () => {
+  const project = { template_id: 'nf-core/nascent/2.3.0', template_version: '1.1.0' };
+  const dashboard = (version: string, id = 'nf-core/nascent/2.3.0') => ({
+    template_id: id,
+    template_version: version,
+    imported_at: '2026-10-29 10:14:00',
+  });
+
+  it('is null when both sides name the same revision', () => {
+    expect(templateRevisionMismatch(dashboard('1.1.0'), project)).toBeNull();
+  });
+
+  it('reports a dashboard imported from another revision', () => {
+    const mismatch = templateRevisionMismatch(dashboard('1.0.0'), project);
+    expect(mismatch?.dashboard.version).toBe('1.0.0');
+    expect(mismatch?.project.version).toBe('1.1.0');
+  });
+
+  it('reports a dashboard imported from another template of the family', () => {
+    expect(templateRevisionMismatch(dashboard('1.1.0', 'nf-core/nascent/2.2.0'), project)).not.toBeNull();
+  });
+
+  it('has nothing to compare when either side records no revision', () => {
+    expect(templateRevisionMismatch(null, project)).toBeNull();
+    expect(templateRevisionMismatch(dashboard('1.0.0'), null)).toBeNull();
+    expect(templateRevisionMismatch(dashboard('1.0.0'), { template_id: 'nf-core/nascent/2.3.0' })).toBeNull();
+  });
+});
+
+describe('describeRevisionMismatch', () => {
+  const rev = (templateId: string, version: string) => ({ templateId, version, at: null });
+
+  it('names the two versions when the template is the same', () => {
+    const id = 'nf-core/nascent/2.3.0';
+    expect(describeRevisionMismatch({ dashboard: rev(id, '1.0.0'), project: rev(id, '1.1.0') })).toBe(
+      'Dashboard imported from v1.0.0, project ingested with v1.1.0.',
+    );
+  });
+
+  it('names the templates when they differ', () => {
+    expect(
+      describeRevisionMismatch({
+        dashboard: rev('nf-core/nascent/2.2.0', '1.0.0'),
+        project: rev('nf-core/nascent/2.3.0', '1.0.0'),
+      }),
+    ).toBe(
+      'Dashboard imported from nf-core/nascent/2.2.0 v1.0.0, project ingested with nf-core/nascent/2.3.0 v1.0.0.',
+    );
   });
 });

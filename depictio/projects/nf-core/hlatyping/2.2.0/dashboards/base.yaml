@@ -1,0 +1,1386 @@
+version: 1
+# nf-core/hlatyping 2.2.0, on the family rules of depictio/projects/nf-core/RULES.md
+# (ampliseq/2.18.0 is the reference implementation).
+#
+# Funnel: the MultiQC report and the reads behind the typing (Data & QC) ->
+# each sample's HLA class I genotype, both haplotypes per locus (Genotypes) ->
+# how often each allele occurs across the samples (Alleles) -> how well the
+# reads support each genotype (Typing quality). The samplesheet (`samples`) is
+# what every filter starts from: its links carry a pick to every collection by
+# sample.
+#
+# Alleles are normalised to HLA-A*02:01, the spelling of the epitopeprediction
+# template, so an allele read here is the string its allele filters take. The
+# two templates are separate projects, so no link crosses between them; the
+# per-sample table gives each genotype as the ;-separated list an
+# epitopeprediction samplesheet takes (docs/dashboards.md, "Cross-selection").
+#
+# No conditional route: every collection is written by every hlatyping 2.2.0
+# run that reaches MultiQC.
+main_dashboard:
+  title: nf-core/hlatyping
+  subtitle: HLA class I typing with OptiType, from the reads to the genotypes
+  project_tag: hlatyping HLA Typing
+  main_tab_name: Overview
+  tab_icon: mdi:compass-outline
+  tab_icon_color: brandPrimary
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_panel_default: collapsed
+  content_width_default: compact
+  show_tab_header: false
+  # Declared once here, read by every tab of the family.
+  category_colors:
+    '{GROUP_COL}': auto
+    zygosity:
+      Homozygous: '#e8590c'
+      Heterozygous: '#1c7ed6'
+      One allele typed: '#adb5bd'
+    fastqc_status:
+      Pass: '#2f9e44'
+      Warn: '#f59f00'
+      Fail: '#e03131'
+    hla_class:
+      Class I: '#1c7ed6'
+      Class II: '#ae3ec9'
+    locus: auto
+    read: auto
+    input_format: auto
+    homozygous_class: auto
+  # Persistent: drawn in every tab's filter panel, picks kept across tabs. All
+  # three are bound to the samplesheet, the source of every sample link.
+  filter_sections:
+  - name: Sample filters
+    icon: mdi:filter-variant
+    color: teal
+    description: Applies to every tab
+    persistent: true
+    pin: top
+  grid_sections:
+  - name: Key figures
+    icon: mdi:counter
+    color: gray
+    appearance: plain
+    card_variant: headline
+    filter_bar: true
+    visible_filters: 2
+    description: The run in four numbers. The filters here narrow these four only.
+  - name: Findings
+    icon: mdi:star-outline
+    color: gray
+    appearance: plain
+    figure_style: minimal
+    filter_bar: true
+    visible_filters: 2
+    description: What the data says, each with the tab that shows it, then the figures behind it.
+  - name: How to read this dashboard
+    icon: mdi:information-outline
+    color: gray
+    appearance: plain
+    description: The tabs by group, each with the question it answers.
+  # Declared on the main tab, which no route removes.
+  - name: Sample sheet
+    icon: mdi:table-account
+    color: gray
+    description: The samplesheet behind every tab, narrowed by the sample filters
+    collapsed: true
+    persistent: true
+    pin: bottom
+    exclude_tabs:
+    - Overview
+  components:
+  # First in component order on purpose: the Guide demos the first categorical
+  # filter that shares a data collection with the first card (Samples, below).
+  - component_type: interactive
+    workflow_tag: hlatyping
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: '{GROUP_COL}'
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: violet
+      strip_label: '{GROUP_COL_DISPLAY}'
+    section: Key figures
+    tag: ht-ov-kf-group
+    index: ov-kf-group
+    title: '{GROUP_COL_DISPLAY}'
+    layout: {x: 0, y: 0, w: 2, h: 1}
+  - component_type: interactive
+    workflow_tag: hlatyping
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: sample
+    column_type: object
+    display:
+      icon_name: mdi:flask-outline
+      custom_color: teal
+      strip_label: Sample
+    section: Key figures
+    tag: ht-ov-kf-sample
+    index: ov-kf-sample
+    title: Sample
+    layout: {x: 2, y: 0, w: 2, h: 1}
+  # The pipeline's wordmark, read from its repository; where it cannot load (no
+  # internet), the title is drawn as text.
+  - component_type: text
+    title: nf-core/hlatyping
+    logo: https://raw.githubusercontent.com/nf-core/hlatyping/master/docs/images/nf-core-hlatyping_logo_light.png
+    logo_dark: https://raw.githubusercontent.com/nf-core/hlatyping/master/docs/images/nf-core-hlatyping_logo_dark.png
+    order: 1
+    body: >
+      Exome, genome or RNA reads typed at the HLA class I loci by OptiType: each sample's
+      genotype with both haplotypes, how often each allele occurs, and how well the reads
+      support each call. [Run parameters](params:)
+    tag: ht-ov-hero
+    index: ov-hero
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: text
+    surface: card
+    body: |
+      ### About this dashboard
+      nf-core/hlatyping maps each sample's reads to the HLA reference with yara and lets OptiType pick the HLA-A, -B and -C alleles that explain them best. This page sums up one run; each tab behind it answers one question, in the order of the steps below.
+
+      The sample filters in the left panel apply to every tab: narrow the samples once and the whole dashboard follows. A bar above a section narrows that section only.
+    tag: ht-ov-about
+    index: ov-about
+    layout: {x: 0, y: 1, w: 5, h: 3}
+  # The run's own settings, read from its params.json: a key the run did not
+  # set prints a dash.
+  - component_type: text
+    surface: card
+    values:
+      samples: {dc: samples, column: sample, aggregation: nunique, format: integer}
+      alleles: {dc: optitype_genotypes, column: allele, aggregation: nunique, format: integer}
+    body: |
+      ### The run
+      - ![](icon:mdi:flask-outline) **Samples** {{samples}}
+      - ![](icon:mdi:dna) **Alleles** {{alleles}} distinct
+      - ![](icon:mdi:tools) **Tools** {{param:tools}}
+      - ![](icon:mdi:calculator-variant-outline) **Solver** {{param:solver}}
+      - ![](icon:mdi:format-list-numbered) **Solutions** {{param:enumerations}} per sample
+    tag: ht-ov-run
+    index: ov-run
+    layout: {x: 5, y: 1, w: 3, h: 3}
+  # The marks take the family's colour (the header's), not the theme's blue.
+  - component_type: text
+    surface: card
+    accent: green
+    body: |
+      ### Five steps from reads to genotypes
+      Each step names its settings and the tab that shows its result.
+
+      ::: steps
+      1. ![](icon:mdi:file-document-multiple-outline) **Reads** FASTQ runs merged, a BAM turned back into reads · [Settings](params:input) · [Reads](tab:Reads)
+      2. ![](icon:mdi:check-decagram-outline) **QC** FastQC on every read file · [Settings](params:multiqc) · [MultiQC](tab:MultiQC)
+      3. ![](icon:mdi:map-marker-path) **Map** yara aligns the reads to the DNA or RNA HLA reference · [Settings](params:genome) · [Reads](tab:Reads)
+      4. ![](icon:mdi:dna) **Type** OptiType solves for the alleles that explain the reads · [Settings](params:solver) · [Genotypes](tab:Genotypes)
+      5. ![](icon:mdi:scale-balance) **Score** Reads and objective behind each genotype · [Settings](params:enumerations) · [Typing quality](tab:Typing quality)
+      :::
+    tag: ht-ov-steps
+    index: ov-steps
+    layout: {x: 0, y: 4, w: 8, h: 3}
+  # Key figures: one card per stage of the funnel, each opening the tab that
+  # explains it.
+  - component_type: card
+    workflow_tag: hlatyping
+    data_collection_tag: samples
+    aggregation: nunique
+    column_name: sample
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: '{GROUP_COL}'
+    display:
+      icon_name: mdi:flask-outline
+      icon_color: orange
+      caption: in the samplesheet, by {GROUP_COL_DISPLAY}
+      link: tab:Reads
+    section: Key figures
+    tag: ht-ov-kf-samples
+    index: ov-kf-samples
+    title: Samples
+    description: Samples in the samplesheet, each typed once. The bar splits them by {GROUP_COL_DISPLAY}.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: hlatyping
+    data_collection_tag: optitype_genotypes
+    use: optitype/allele_count
+    aggregation: nunique
+    column_name: allele
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: locus
+    top_n_count: 3
+    display:
+      icon_name: mdi:dna
+      icon_color: blue
+      caption: alleles, ranked by locus
+      link: tab:Alleles
+    section: Key figures
+    tag: ht-ov-kf-alleles
+    index: ov-kf-alleles
+    title: Distinct alleles
+    description: Distinct two-field alleles over the samples in view. The bars rank the loci by how many they hold.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: hlatyping
+    data_collection_tag: optitype_genotypes
+    use: optitype/homozygous_loci
+    aggregation: count
+    column_name: call_id
+    column_type: object
+    filter_expr: (col('zygosity') == 'Homozygous') & (col('haplotype') == 1)
+    secondary_layout: composition
+    breakdown_col: locus
+    display:
+      icon_name: mdi:equal-box
+      icon_color: grape
+      caption: one allele on both haplotypes, by locus
+      link: tab:Genotypes
+    section: Key figures
+    tag: ht-ov-kf-homozygous
+    index: ov-kf-homozygous
+    title: Homozygous loci
+    description: Loci where OptiType calls the same allele on both haplotypes, summed over the samples.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: hlatyping
+    data_collection_tag: optitype_summary
+    use: optitype/typing_reads
+    aggregation: median
+    column_name: reads
+    column_type: int64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:counter
+      icon_color: teal
+      caption: median per sample, with its spread
+      link: tab:Typing quality
+      format: integer
+    section: Key figures
+    tag: ht-ov-kf-reads
+    index: ov-kf-reads
+    title: Median reads
+    description: Reads the genotype of a sample explains, the median over the samples in view.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  # Findings filter bar: the group, then the allele.
+  - component_type: interactive
+    workflow_tag: hlatyping
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: '{GROUP_COL}'
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: violet
+      strip_label: '{GROUP_COL_DISPLAY}'
+    section: Findings
+    tag: ht-ov-findings-group
+    index: ov-findings-group
+    title: '{GROUP_COL_DISPLAY}'
+    layout: {x: 0, y: 0, w: 2, h: 1}
+  - component_type: interactive
+    workflow_tag: hlatyping
+    data_collection_tag: optitype_genotypes
+    interactive_component_type: MultiSelect
+    column_name: allele
+    column_type: object
+    display:
+      icon_name: mdi:dna
+      custom_color: blue
+      strip_label: Allele
+    section: Findings
+    tag: ht-ov-findings-allele
+    index: ov-findings-allele
+    title: Allele
+    layout: {x: 2, y: 0, w: 2, h: 1}
+  # One result row per finding, each citing one data collection.
+  - component_type: text
+    surface: card
+    values:
+      top_allele: {dc: optitype_genotypes, column: allele, aggregation: top}
+      top_share: {dc: optitype_genotypes, column: allele, aggregation: top_share, format: percent}
+      n_hom: {dc: optitype_genotypes, column: call_id, aggregation: count, filter_expr: "(col('zygosity') == 'Homozygous') & (col('haplotype') == 1)", format: integer}
+      reads: {dc: optitype_summary, column: reads, aggregation: median, format: integer}
+      hla_share: {dc: read_qc, column: typing_share, aggregation: median, filter_expr: "col('read') != 'Read 2'", format: percent}
+    body: |
+      - **{{top_allele}}** is the commonest allele – {{top_share}} of all class I allele calls [Alleles](tab:Alleles)
+      - **{{n_hom}}** loci are homozygous – one allele on both haplotypes [Genotypes](tab:Genotypes)
+      - **{{reads}}** reads support the median genotype – the reads OptiType's solution explains [Typing quality](tab:Typing quality)
+      - **{{hla_share}}** of a sample's read pairs are explained by its genotype – the rest map elsewhere or fit no single allele [Reads](tab:Reads)
+    section: Findings
+    tag: ht-ov-findings
+    index: ov-findings
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  # One highlight per tab with a figure. The tiles of a row share a stored
+  # height.
+  - component_type: highlight
+    section: Findings
+    source_tab: Genotypes
+    source_component: gt-grid
+    caption: One row per sample, one column per locus, each cell split into its two haplotypes.
+    tag: ht-ov-hl-grid
+    index: ov-hl-grid
+    layout: {x: 0, y: 2, w: 4, h: 5}
+  - component_type: highlight
+    section: Findings
+    source_tab: Alleles
+    source_component: al-frequency
+    caption: Each allele's share of the calls at its locus; colour is the locus.
+    hide_legend: true
+    tag: ht-ov-hl-frequency
+    index: ov-hl-frequency
+    layout: {x: 4, y: 2, w: 4, h: 5}
+  - component_type: highlight
+    section: Findings
+    source_tab: Typing quality
+    source_component: tq-reads-objective
+    caption: One point per sample, the reads its genotype explains against the objective.
+    hide_legend: true
+    tag: ht-ov-hl-quality
+    index: ov-hl-quality
+    layout: {x: 0, y: 7, w: 4, h: 4}
+  - component_type: highlight
+    section: Findings
+    source_tab: Reads
+    source_component: rd-depth
+    caption: Reads per sample and read file, as FastQC counts them.
+    hide_legend: true
+    tag: ht-ov-hl-reads
+    index: ov-hl-reads
+    layout: {x: 4, y: 7, w: 4, h: 4}
+  # Link-only tab tiles: each tile prints its tab's subtitle, the question the
+  # tab answers.
+  - component_type: text
+    body: |
+      ### Data & QC
+      - [MultiQC](tab:MultiQC)
+      - [Reads](tab:Reads)
+
+      ### HLA
+      - [Genotypes](tab:Genotypes)
+      - [Alleles](tab:Alleles)
+      - [Typing quality](tab:Typing quality)
+    section: How to read this dashboard
+    tag: ht-ov-how-to-read
+    index: ov-how-to-read
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  # Persistent sample filters, the group first.
+  - component_type: interactive
+    workflow_tag: hlatyping
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: '{GROUP_COL}'
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: violet
+    section: Sample filters
+    group: Sample scope
+    tag: ht-filter-group
+    index: sample-filters-group
+    title: '{GROUP_COL_DISPLAY}'
+    layout: {x: 0, y: 0, w: 1, h: 2}
+  - component_type: interactive
+    workflow_tag: hlatyping
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: sample
+    column_type: object
+    display:
+      icon_name: mdi:flask-outline
+      custom_color: teal
+    section: Sample filters
+    group: Sample scope
+    tag: ht-filter-sample
+    index: sample-filters-sample
+    title: Sample
+    layout: {x: 0, y: 2, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: hlatyping
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: input_format
+    column_type: object
+    display:
+      icon_name: mdi:file-document-outline
+      custom_color: indigo
+    section: Sample filters
+    group: Sample scope
+    tag: ht-filter-input-format
+    index: sample-filters-input-format
+    title: Input format
+    layout: {x: 0, y: 5, w: 1, h: 2}
+  # Row selection feeds the Analysis panel.
+  - component_type: table
+    workflow_tag: hlatyping
+    data_collection_tag: samples
+    row_selection_enabled: true
+    row_selection_column: sample
+    section: Sample sheet
+    tag: ht-sample-sheet
+    index: sample-sheet
+    title: Samplesheet
+    description: One row per sample, with its sequencing type, input format, read layout, runs and files.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+tabs:
+# ============================================================================
+# Data & QC
+# ============================================================================
+- title: MultiQC
+  subtitle: Are the reads clean enough to type?
+  tab_group: Data & QC
+  tab_order: 1
+  tab_icon: /assets/images/logos/multiqc_icon_color.svg
+  tab_icon_color: orange
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  grid_sections:
+  - name: Read quality
+    icon: mdi:chart-box-outline
+    color: orange
+    description: FastQC per read file, a BAM input read back as FASTQ first
+  - name: HLA typing
+    icon: mdi:dna
+    color: orange
+    description: OptiType's allele calls, counted by locus and haplotype
+  - name: More FastQC
+    icon: mdi:file-document-outline
+    color: gray
+    description: Per-base N content, overrepresented sequences, adapters and module status
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      [MultiQC](https://multiqc.info) gathers FastQC on every read file and OptiType's allele
+      calls. FastQC judges GC content against a whole-genome model, so exome, RNA or HLA-enriched
+      reads often fail that module without harm; read the counts and the quality first.
+    tag: ht-mqc-intro
+    index: mqc-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: multiqc
+    workflow_tag: hlatyping
+    data_collection_tag: multiqc_data
+    use: multiqc/general_stats
+    selected_module: general_stats
+    selected_plot: general_stats
+    section: Read quality
+    tag: ht-mqc-general-stats
+    title: General statistics
+    description: One row per read file and per typed sample, FastQC and OptiType columns side by side.
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: multiqc
+    workflow_tag: hlatyping
+    data_collection_tag: multiqc_data
+    use: multiqc/fastqc
+    selected_module: fastqc
+    selected_plot: Sequence Counts
+    section: Read quality
+    tag: ht-mqc-counts
+    title: Sequence counts
+    description: Reads per read file, unique and duplicate.
+    layout: {x: 0, y: 4, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: hlatyping
+    data_collection_tag: multiqc_data
+    use: multiqc/fastqc
+    selected_module: fastqc
+    selected_plot: Sequence Quality Histograms
+    section: Read quality
+    tag: ht-mqc-quality
+    title: Mean quality along the read
+    description: Mean base quality by position, per read file.
+    layout: {x: 4, y: 4, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: hlatyping
+    data_collection_tag: multiqc_data
+    use: multiqc/fastqc
+    selected_module: fastqc
+    selected_plot: Per Sequence GC Content
+    section: Read quality
+    tag: ht-mqc-gc
+    title: GC content
+    description: GC content of the reads against FastQC's whole-genome expectation.
+    layout: {x: 0, y: 8, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: hlatyping
+    data_collection_tag: multiqc_data
+    use: multiqc/fastqc
+    selected_module: fastqc
+    selected_plot: Sequence Duplication Levels
+    section: Read quality
+    tag: ht-mqc-duplication
+    title: Duplication levels
+    description: How many times each read sequence occurs, per read file.
+    layout: {x: 4, y: 8, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: hlatyping
+    data_collection_tag: multiqc_data
+    selected_module: optitype
+    selected_plot: Summary of alleles
+    section: HLA typing
+    tag: ht-mqc-optitype
+    title: Allele calls by locus
+    description: How many samples carry each allele, at each locus and haplotype.
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: multiqc
+    workflow_tag: hlatyping
+    data_collection_tag: multiqc_data
+    use: multiqc/fastqc
+    selected_module: fastqc
+    selected_plot: Status Checks
+    section: More FastQC
+    tag: ht-mqc-status
+    title: FastQC status checks
+    description: Pass, warn or fail for each FastQC module and read file.
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: multiqc
+    workflow_tag: hlatyping
+    data_collection_tag: multiqc_data
+    use: multiqc/fastqc
+    selected_module: fastqc
+    selected_plot: Adapter Content
+    section: More FastQC
+    tag: ht-mqc-adapters
+    title: Adapter content
+    description: Share of the reads carrying an adapter, by position.
+    layout: {x: 0, y: 4, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: hlatyping
+    data_collection_tag: multiqc_data
+    use: multiqc/fastqc
+    selected_module: fastqc
+    selected_plot: Overrepresented sequences by sample
+    section: More FastQC
+    tag: ht-mqc-overrepresented
+    title: Overrepresented sequences
+    description: Share of each read file taken by overrepresented sequences.
+    layout: {x: 4, y: 4, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: hlatyping
+    data_collection_tag: multiqc_data
+    use: multiqc/fastqc
+    selected_module: fastqc
+    selected_plot: Per Base N Content
+    section: More FastQC
+    tag: ht-mqc-n-content
+    title: N content
+    description: Share of uncalled bases by position.
+    layout: {x: 0, y: 8, w: 8, h: 4}
+- title: Reads
+  subtitle: How many reads did each sample give, and how many typed it?
+  tab_group: Data & QC
+  tab_order: 2
+  tab_icon: mdi:file-document-multiple-outline
+  tab_icon_color: teal
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Read filters
+    icon: mdi:filter-variant
+    color: teal
+    description: Narrow by read of the pair or by FastQC status
+  grid_sections:
+  - name: Reads at a glance
+    icon: mdi:counter
+    color: teal
+    description: Read files, reads per file, the share the typing uses and duplicates
+  - name: Read depth
+    icon: mdi:chart-bar
+    color: teal
+    description: Reads per sample and the reads its genotype explains
+  - name: Read composition
+    icon: mdi:chart-box-outline
+    color: teal
+    description: GC content and duplicates per read file
+  - name: Read file table
+    icon: mdi:table
+    color: gray
+    description: FastQC numbers and the typing reads, one row per read file
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      [FastQC](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/) counts the reads of
+      every file before yara maps them to the HLA reference; the mapping itself publishes no
+      statistics, so the reads behind the typing are OptiType's own count. A sample whose
+      genotype explains few of its reads, or few reads at all, is the one to check.
+    tag: ht-rd-intro
+    index: rd-intro
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: interactive
+    workflow_tag: hlatyping
+    data_collection_tag: read_qc
+    interactive_component_type: MultiSelect
+    column_name: read
+    column_type: object
+    display:
+      icon_name: mdi:swap-horizontal
+      custom_color: cyan
+    section: Read filters
+    group: Read files
+    tag: ht-rd-filter-read
+    index: rd-filter-read
+    title: Read
+    layout: {x: 0, y: 0, w: 1, h: 2}
+  - component_type: interactive
+    workflow_tag: hlatyping
+    data_collection_tag: read_qc
+    interactive_component_type: MultiSelect
+    column_name: fastqc_status
+    column_type: object
+    display:
+      icon_name: mdi:check-decagram-outline
+      custom_color: orange
+    section: Read filters
+    group: Read files
+    tag: ht-rd-filter-status
+    index: rd-filter-status
+    title: FastQC status
+    layout: {x: 0, y: 2, w: 1, h: 2}
+  - component_type: card
+    workflow_tag: hlatyping
+    data_collection_tag: read_qc
+    aggregation: count
+    column_name: read_key
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: fastqc_status
+    display:
+      icon_name: mdi:file-multiple-outline
+      icon_color: teal
+      caption: read files, by their worst FastQC module
+    section: Reads at a glance
+    tag: ht-rd-card-files
+    index: rd-card-files
+    title: Read files
+    description: FastQC reports, one per read file; the ring splits them by the worst module's status.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: hlatyping
+    data_collection_tag: read_qc
+    aggregation: median
+    column_name: total_sequences
+    column_type: int64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:counter
+      icon_color: blue
+      caption: median per read file, with its spread
+      format: si
+    section: Reads at a glance
+    tag: ht-rd-card-reads
+    index: rd-card-reads
+    title: Reads per file
+    description: Reads FastQC counts in a file, the median over the files in view.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: hlatyping
+    data_collection_tag: read_qc
+    aggregation: median
+    column_name: typing_share
+    column_type: float64
+    filter_expr: col('read') != 'Read 2'
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:target
+      icon_color: grape
+      caption: per sample, its distribution
+      format: percent
+    section: Reads at a glance
+    tag: ht-rd-card-typing-share
+    index: rd-card-typing-share
+    title: Reads used for typing
+    description: Reads OptiType's genotype explains over the sample's read pairs, the median over the samples.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: hlatyping
+    data_collection_tag: read_qc
+    aggregation: max
+    column_name: pct_duplicates
+    column_type: float64
+    secondary_layout: threshold
+    threshold_value: 20
+    threshold_direction: max
+    threshold_warn: 50
+    display:
+      icon_name: mdi:content-duplicate
+      icon_color: orange
+      caption: highest, files against FastQC's 20% and 50% lines
+      decimals: 1
+    section: Reads at a glance
+    tag: ht-rd-card-duplicates
+    index: rd-card-duplicates
+    title: Duplicate reads
+    description: The highest duplicate share of a read file, in percent; FastQC warns past 20% and fails past 50%.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: figure
+    workflow_tag: hlatyping
+    data_collection_tag: read_qc
+    visu_type: bar
+    dict_kwargs:
+      x: sample
+      y: total_sequences
+      color: read
+      barmode: group
+      labels: {sample: '', total_sequences: Reads, read: ''}
+    section: Read depth
+    tag: ht-rd-fig-depth
+    index: rd-depth
+    title: Reads per sample
+    description: Reads in each read file of a sample, side by side for the two reads of a pair.
+    layout: {x: 0, y: 0, w: 4, h: 4}
+  - component_type: advanced_viz
+    workflow_tag: hlatyping
+    data_collection_tag: read_qc
+    viz_kind: scatter_xy
+    config:
+      viz_kind: scatter_xy
+      x_col: total_sequences
+      y_col: typing_reads
+      label_col: sample
+      color_col: '{GROUP_COL}'
+      x_title: Reads in the file
+      y_title: Reads the genotype explains
+      log_x: true
+      log_y: true
+      legend_pos: bottom
+      selection_enabled: true
+      selection_column: sample
+    section: Read depth
+    tag: ht-rd-av-typing
+    index: rd-typing-reads
+    title: Reads against typing reads
+    description: One point per read file; the higher above the others, the larger its share used for typing.
+    layout: {x: 4, y: 0, w: 4, h: 4}
+  - component_type: figure
+    workflow_tag: hlatyping
+    data_collection_tag: read_qc
+    visu_type: box
+    dict_kwargs:
+      x: '{GROUP_COL}'
+      y: pct_gc
+      color: '{GROUP_COL}'
+      points: all
+      labels: {pct_gc: GC content (%), '{GROUP_COL}': ''}
+    section: Read composition
+    tag: ht-rd-fig-gc
+    index: rd-gc
+    title: GC content by {GROUP_COL_DISPLAY}
+    description: GC content of each read file, one box per group; a file far from its group stands out.
+    layout: {x: 0, y: 0, w: 4, h: 4, fit: auto}
+  - component_type: figure
+    workflow_tag: hlatyping
+    data_collection_tag: read_qc
+    visu_type: bar
+    dict_kwargs:
+      x: sample
+      y: pct_duplicates
+      color: read
+      barmode: group
+      labels: {sample: '', pct_duplicates: Duplicate reads (%), read: ''}
+    section: Read composition
+    tag: ht-rd-fig-duplicates
+    index: rd-duplicates
+    title: Duplicate reads per sample
+    description: Duplicate share of each read file, in percent.
+    layout: {x: 4, y: 0, w: 4, h: 4}
+  - component_type: table
+    workflow_tag: hlatyping
+    data_collection_tag: read_qc
+    row_selection_enabled: true
+    row_selection_column: read_key
+    section: Read file table
+    tag: ht-rd-table
+    index: rd-table
+    title: Read files
+    description: Reads, GC, duplicates, FastQC status and the typing reads, one row per read file.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+# ============================================================================
+# HLA
+# ============================================================================
+- title: Genotypes
+  subtitle: Which HLA class I alleles does each sample carry?
+  tab_group: HLA
+  tab_order: 3
+  tab_icon: mdi:dna
+  tab_icon_color: blue
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Genotype filters
+    icon: mdi:filter-variant
+    color: blue
+    description: Narrow by locus, allele or zygosity
+  grid_sections:
+  - name: Genotypes at a glance
+    icon: mdi:counter
+    color: blue
+    description: Samples typed, alleles per sample, homozygous loci and allele groups
+  - name: Genotype grid
+    icon: mdi:dna
+    color: blue
+    description: Each sample's two alleles at HLA-A, -B and -C
+  - name: Genotype table
+    icon: mdi:table
+    color: gray
+    description: One row per sample, with its alleles ready for an epitopeprediction samplesheet
+    collapsed: true
+  - name: Allele calls
+    icon: mdi:table
+    color: gray
+    description: Every call, one row per sample, locus and haplotype
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      [OptiType](https://github.com/FRED-2/OptiType) picks, by integer linear programming, the
+      pair of alleles at each class I locus that explains the most reads. In the grid each cell
+      holds a locus's two haplotypes, one allele group per colour family; a merged cell is a
+      homozygous locus. Click an allele to narrow the dashboard to the samples that carry it.
+    tag: ht-gt-intro
+    index: gt-intro
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: interactive
+    workflow_tag: hlatyping
+    data_collection_tag: optitype_genotypes
+    interactive_component_type: MultiSelect
+    column_name: locus
+    column_type: object
+    display:
+      icon_name: mdi:map-marker-outline
+      custom_color: cyan
+    section: Genotype filters
+    group: Genotypes
+    tag: ht-gt-filter-locus
+    index: gt-filter-locus
+    title: Locus
+    layout: {x: 0, y: 0, w: 1, h: 2}
+  - component_type: interactive
+    workflow_tag: hlatyping
+    data_collection_tag: optitype_genotypes
+    interactive_component_type: MultiSelect
+    column_name: allele
+    column_type: object
+    display:
+      icon_name: mdi:dna
+      custom_color: blue
+    section: Genotype filters
+    group: Genotypes
+    tag: ht-gt-filter-allele
+    index: gt-filter-allele
+    title: Allele
+    layout: {x: 0, y: 2, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: hlatyping
+    data_collection_tag: optitype_genotypes
+    interactive_component_type: MultiSelect
+    column_name: zygosity
+    column_type: object
+    display:
+      icon_name: mdi:equal-box
+      custom_color: grape
+    section: Genotype filters
+    group: Genotypes
+    tag: ht-gt-filter-zygosity
+    index: gt-filter-zygosity
+    title: Zygosity
+    layout: {x: 0, y: 5, w: 1, h: 2}
+  - component_type: card
+    workflow_tag: hlatyping
+    data_collection_tag: optitype_summary
+    aggregation: count
+    column_name: typed_loci
+    column_type: int64
+    secondary_layout: threshold
+    threshold_value: 3
+    threshold_direction: min
+    display:
+      icon_name: mdi:account-check-outline
+      icon_color: teal
+      caption: samples, against all three loci typed
+    section: Genotypes at a glance
+    tag: ht-gt-card-samples
+    index: gt-card-samples
+    title: Samples typed
+    description: Samples with a genotype; the strip counts those typed at all three class I loci.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: hlatyping
+    data_collection_tag: optitype_summary
+    aggregation: median
+    column_name: distinct_alleles
+    column_type: int64
+    secondary_layout: gauge
+    coverage_max: 6
+    display:
+      icon_name: mdi:dna
+      icon_color: blue
+      caption: median per sample, of six possible
+    section: Genotypes at a glance
+    tag: ht-gt-card-alleles
+    index: gt-card-alleles
+    title: Alleles per sample
+    description: Distinct alleles in a genotype; six when every locus is heterozygous.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: hlatyping
+    data_collection_tag: optitype_genotypes
+    use: optitype/homozygous_loci
+    aggregation: count
+    column_name: call_id
+    column_type: object
+    filter_expr: (col('zygosity') == 'Homozygous') & (col('haplotype') == 1)
+    secondary_layout: composition
+    breakdown_col: locus
+    display:
+      icon_name: mdi:equal-box
+      icon_color: grape
+      caption: one allele on both haplotypes, by locus
+    section: Genotypes at a glance
+    tag: ht-gt-card-homozygous
+    index: gt-card-homozygous
+    title: Homozygous loci
+    description: Loci carrying one allele twice, summed over the samples; the bar splits them by locus.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: hlatyping
+    data_collection_tag: optitype_genotypes
+    aggregation: nunique
+    column_name: allele_group
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: locus
+    top_n_count: 3
+    display:
+      icon_name: mdi:shape-plus-outline
+      icon_color: orange
+      caption: allele groups, ranked by locus
+    section: Genotypes at a glance
+    tag: ht-gt-card-groups
+    index: gt-card-groups
+    title: Allele groups
+    description: Distinct first-field groups (HLA-A*02 and the like); the bars rank the loci by how many they hold.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    workflow_tag: hlatyping
+    data_collection_tag: optitype_genotypes
+    use: optitype/genotype_grid
+    viz_kind: allele_grid
+    config:
+      viz_kind: allele_grid
+      sample_id_col: sample_id
+      locus_col: locus
+      allele_col: allele
+      haplotype_col: haplotype
+      category_col: hla_class
+      value_col: objective
+      reads_col: reads
+      value_label: Objective
+      reads_label: Reads
+      resolution: 2
+      sample_order: alphabetical
+      show_labels: true
+      side_bars: [value, reads]
+      selection_enabled: true
+      selection_column: allele
+    section: Genotype grid
+    tag: ht-gt-av-grid
+    index: gt-grid
+    title: HLA class I genotypes
+    description: Each locus split into haplotype 1 and 2, coloured by allele group; the bars give the objective and reads.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: hlatyping
+    data_collection_tag: optitype_summary
+    use: optitype/summary
+    row_selection_enabled: true
+    row_selection_column: sample_id
+    section: Genotype table
+    tag: ht-gt-table-summary
+    index: gt-table-summary
+    title: Genotype per sample
+    description: The HLA-A, -B and -C pairs, the alleles as an epitopeprediction sheet lists them, reads and objective.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: hlatyping
+    data_collection_tag: optitype_genotypes
+    use: optitype/genotypes
+    row_selection_enabled: true
+    row_selection_column: call_id
+    section: Allele calls
+    tag: ht-gt-table-calls
+    index: gt-table-calls
+    title: Allele calls
+    description: One row per sample, locus and haplotype, with the allele group and zygosity.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+- title: Alleles
+  subtitle: How often does each allele occur across the samples?
+  tab_group: HLA
+  tab_order: 4
+  tab_icon: mdi:chart-bar
+  tab_icon_color: violet
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Allele filters
+    icon: mdi:filter-variant
+    color: violet
+    description: Narrow by locus or allele group
+  grid_sections:
+  - name: Alleles at a glance
+    icon: mdi:counter
+    color: violet
+    description: Distinct alleles, the commonest one, the calls and the allele groups
+  - name: Allele frequency
+    icon: mdi:chart-bar
+    color: violet
+    description: Each allele's share of the calls at its locus
+  - name: Calls per allele
+    icon: mdi:chart-bar
+    color: violet
+    description: How many calls each allele takes, homozygous ones apart
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      Each sample adds two calls per locus, one per haplotype, so a homozygous locus counts its
+      allele twice. An allele's frequency is its share of the calls at its locus, comparable to
+      the population tables of the [Allele Frequency Net Database](http://www.allelefrequencies.net).
+      On a handful of samples the frequencies are counts in disguise: read them as a census.
+    tag: ht-al-intro
+    index: al-intro
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: interactive
+    workflow_tag: hlatyping
+    data_collection_tag: optitype_genotypes
+    interactive_component_type: MultiSelect
+    column_name: locus
+    column_type: object
+    display:
+      icon_name: mdi:map-marker-outline
+      custom_color: cyan
+    section: Allele filters
+    group: Alleles
+    tag: ht-al-filter-locus
+    index: al-filter-locus
+    title: Locus
+    layout: {x: 0, y: 0, w: 1, h: 2}
+  - component_type: interactive
+    workflow_tag: hlatyping
+    data_collection_tag: optitype_genotypes
+    interactive_component_type: MultiSelect
+    column_name: allele_group
+    column_type: object
+    display:
+      icon_name: mdi:shape-plus-outline
+      custom_color: orange
+    section: Allele filters
+    group: Alleles
+    tag: ht-al-filter-group
+    index: al-filter-group
+    title: Allele group
+    layout: {x: 0, y: 2, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: hlatyping
+    data_collection_tag: optitype_genotypes
+    use: optitype/allele_count
+    aggregation: nunique
+    column_name: allele
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: locus
+    top_n_count: 3
+    display:
+      icon_name: mdi:dna
+      icon_color: blue
+      caption: alleles, ranked by locus
+    section: Alleles at a glance
+    tag: ht-al-card-alleles
+    index: al-card-alleles
+    title: Distinct alleles
+    description: Distinct two-field alleles; the bars rank the loci by how many they hold.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: hlatyping
+    data_collection_tag: optitype_genotypes
+    aggregation: mode
+    column_name: allele
+    column_type: object
+    secondary_layout: uniqueness
+    display:
+      icon_name: mdi:star-outline
+      icon_color: yellow
+      caption: the commonest; the bar, distinct alleles against repeats
+    section: Alleles at a glance
+    tag: ht-al-card-top
+    index: al-card-top
+    title: Commonest allele
+    description: The allele called most often over the samples in view, either haplotype.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: hlatyping
+    data_collection_tag: optitype_genotypes
+    use: optitype/allele_calls
+    aggregation: count
+    column_name: call_id
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: zygosity
+    display:
+      icon_name: mdi:format-list-numbered
+      icon_color: cyan
+      caption: calls, by the zygosity of their locus
+    section: Alleles at a glance
+    tag: ht-al-card-calls
+    index: al-card-calls
+    title: Allele calls
+    description: Two calls per sample and locus; the ring splits those on homozygous loci from the rest.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: hlatyping
+    data_collection_tag: optitype_genotypes
+    aggregation: count
+    column_name: call_id
+    column_type: object
+    secondary_layout: concentration
+    breakdown_col: allele_group
+    top_n_count: 3
+    display:
+      icon_name: mdi:shape-plus-outline
+      icon_color: orange
+      caption: calls; the share of the three largest allele groups
+    section: Alleles at a glance
+    tag: ht-al-card-groups
+    index: al-card-groups
+    title: Calls in the top groups
+    description: How much of the calls the three commonest allele groups take; high on a population of shared ancestry.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: figure
+    workflow_tag: hlatyping
+    data_collection_tag: optitype_genotypes
+    mode: code
+    code_content: |-
+      # Allele frequency within each locus: an allele's calls over the locus's calls.
+      colors = depictio_category_colors.get('locus') or {}
+      d = df.group_by(['locus', 'allele']).agg(pl.len().alias('calls'))
+      d = d.with_columns((100 * pl.col('calls') / pl.col('calls').sum().over('locus')).alias('freq'))
+      d = d.sort(['locus', 'freq', 'allele'], descending=[False, True, False])
+      fig = px.bar(d.to_pandas(), x='allele', y='freq', color='locus', color_discrete_map=colors, hover_data=['calls'], labels={'allele': '', 'freq': 'Frequency in its locus (%)', 'locus': 'Locus', 'calls': 'Calls'})
+      fig.update_layout(margin=dict(t=10), legend_title_text='')
+      fig.update_xaxes(categoryorder='array', categoryarray=d['allele'].to_list(), automargin=True)
+    section: Allele frequency
+    tag: ht-al-fig-frequency
+    index: al-frequency
+    title: Allele frequency by locus
+    description: Each allele's share of the calls at its locus, alleles ordered from commonest within each locus.
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: figure
+    workflow_tag: hlatyping
+    data_collection_tag: optitype_genotypes
+    visu_type: histogram
+    dict_kwargs:
+      x: allele_group
+      color: zygosity
+      barmode: stack
+      labels: {allele_group: '', zygosity: ''}
+    section: Calls per allele
+    tag: ht-al-fig-groups
+    index: al-group-calls
+    title: Calls per allele group, by zygosity
+    description: Calls of each first-field group, stacked by the zygosity of the locus they sit on.
+    layout: {x: 0, y: 0, w: 8, h: 4}
+- title: Typing quality
+  subtitle: How many reads does each genotype rest on?
+  tab_group: HLA
+  tab_order: 5
+  tab_icon: mdi:scale-balance
+  tab_icon_color: grape
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Quality filters
+    icon: mdi:filter-variant
+    color: grape
+    description: Narrow by the reads behind a genotype or its heterozygous loci
+  grid_sections:
+  - name: Quality at a glance
+    icon: mdi:counter
+    color: grape
+    description: The reads behind the genotypes and the objective per read
+  - name: Read support
+    icon: mdi:chart-scatter-plot
+    color: grape
+    description: The reads each genotype explains against the solver's objective
+  - name: Per sample
+    icon: mdi:chart-bar
+    color: grape
+    description: The reads each sample's genotype explains
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      OptiType maximises the reads its alleles explain, less `beta` times the reads for each
+      heterozygous locus, so the objective sits under the reads by the zygosity, not by the fit.
+      The support of a genotype is its reads: a genotype, or a homozygous call, on few reads is
+      the one to confirm, for instance by asking for more solutions (`enumerations`).
+    tag: ht-tq-intro
+    index: tq-intro
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: interactive
+    workflow_tag: hlatyping
+    data_collection_tag: optitype_summary
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: reads
+    column_type: int64
+    display:
+      icon_name: mdi:counter
+      custom_color: teal
+    section: Quality filters
+    group: Quality
+    tag: ht-tq-filter-reads
+    index: tq-filter-reads
+    title: Reads explained
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: hlatyping
+    data_collection_tag: optitype_summary
+    interactive_component_type: RangeSlider
+    column_name: heterozygous_loci
+    column_type: int64
+    display:
+      icon_name: mdi:call-split
+      custom_color: blue
+    section: Quality filters
+    group: Quality
+    tag: ht-tq-filter-heterozygous
+    index: tq-filter-heterozygous
+    title: Heterozygous loci
+    layout: {x: 0, y: 3, w: 1, h: 2}
+  - component_type: card
+    workflow_tag: hlatyping
+    data_collection_tag: optitype_summary
+    use: optitype/typing_reads
+    aggregation: median
+    column_name: reads
+    column_type: int64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:counter
+      icon_color: teal
+      caption: median per sample, with its spread
+      format: integer
+    section: Quality at a glance
+    tag: ht-tq-card-reads
+    index: tq-card-reads
+    title: Reads explained
+    description: Reads the genotype of a sample explains, the median over the samples in view.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: hlatyping
+    data_collection_tag: optitype_summary
+    aggregation: min
+    column_name: reads
+    column_type: int64
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:arrow-collapse-down
+      icon_color: red
+      caption: the least supported sample, then all of them
+      format: integer
+    section: Quality at a glance
+    tag: ht-tq-card-fewest
+    index: tq-card-fewest
+    title: Fewest reads
+    description: The smallest read support of a genotype in view; the histogram spreads every sample's.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: hlatyping
+    data_collection_tag: optitype_summary
+    use: optitype/heterozygous_loci
+    aggregation: median
+    column_name: heterozygous_loci
+    column_type: int64
+    secondary_layout: gauge
+    coverage_max: 3
+    display:
+      icon_name: mdi:call-split
+      icon_color: blue
+      caption: median per sample, of three loci
+    section: Quality at a glance
+    tag: ht-tq-card-heterozygous
+    index: tq-card-heterozygous
+    title: Heterozygous loci
+    description: Loci with two different alleles; each costs the objective beta times the reads.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: hlatyping
+    data_collection_tag: optitype_summary
+    use: optitype/objective_per_read
+    aggregation: median
+    column_name: objective_per_read
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:scale-balance
+      icon_color: grape
+      caption: median, about 1 minus beta per heterozygous locus
+      decimals: 4
+    section: Quality at a glance
+    tag: ht-tq-card-ratio
+    index: tq-card-ratio
+    title: Objective per read
+    description: The objective over the reads explained; it falls by beta for each heterozygous locus.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    workflow_tag: hlatyping
+    data_collection_tag: optitype_summary
+    use: optitype/reads_objective
+    viz_kind: scatter_xy
+    config:
+      viz_kind: scatter_xy
+      x_col: reads
+      y_col: objective
+      label_col: sample_id
+      color_col: homozygous_class
+      x_title: Reads the genotype explains
+      y_title: Objective
+      reference_line: diagonal
+      legend_pos: bottom
+      selection_enabled: true
+      selection_column: sample_id
+    section: Read support
+    tag: ht-tq-av-reads-objective
+    index: tq-reads-objective
+    title: Reads against objective
+    description: One point per sample, coloured by its homozygous loci; the diagonal is an objective equal to the reads.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: figure
+    workflow_tag: hlatyping
+    data_collection_tag: optitype_summary
+    visu_type: bar
+    dict_kwargs:
+      x: sample_id
+      y: reads
+      color: homozygous_class
+      labels: {sample_id: '', reads: Reads explained, homozygous_class: ''}
+    section: Per sample
+    tag: ht-tq-fig-reads
+    index: tq-reads
+    title: Reads explained per sample
+    description: The reads each sample's genotype explains, coloured by its homozygous loci.
+    layout: {x: 0, y: 0, w: 8, h: 4}

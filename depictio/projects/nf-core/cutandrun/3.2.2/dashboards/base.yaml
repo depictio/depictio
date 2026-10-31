@@ -2045,9 +2045,9 @@ tabs:
     title: Consensus intervals
     description: Coordinates, member peak count, replicate support and coverage for every merged interval.
     layout: {x: 0, y: 0, w: 8, h: 6}
-# One region, one x axis. The SEACR navigator drives the tracks under it
-# through the region links in template.yaml (seacr_peaks -> macs2_peaks,
-# seacr_consensus_peaks, seacr_frags_profile). A tab of its own because those
+# One region, one x axis. The SEACR navigator drives the cards and the fragment
+# pile-up under it through the region links in template.yaml (seacr_peaks ->
+# macs2_peaks, seacr_consensus_peaks, seacr_frags_profile). A tab of its own because those
 # region filters narrow every tile of their collections on the tab. The genome
 # axis comes from the `GENOME` template variable (default hg38).
 - title: Locus
@@ -2069,16 +2069,16 @@ tabs:
     icon: mdi:counter
     color: teal
     description: What the region in view holds, recounted on every brush or locus entry
-  - name: One region, four tracks
+  - name: One region, two tracks
     icon: mdi:dna
     color: teal
-    description: The SEACR navigator and the tracks that follow its region
+    description: The SEACR navigator and the fragment pile-up that follows its region
   components:
   - component_type: text
     order: 1
     body: >
-      The SEACR regions drive the navigator; the fragment pile-up, the MACS2 calls and the
-      consensus intervals follow its region on one genome axis. The tab opens on a default
+      The SEACR regions drive the navigator; the fragment pile-up follows its region on one
+      genome axis. The tab opens on a default
       region set in the navigator's config: type a locus in its header or brush its axis,
       and the tracks and the cards follow.
     tag: cr-loc-intro
@@ -2131,7 +2131,7 @@ tabs:
     index: cr-loc-support-filter
     title: Replicate support
     layout: {x: 0, y: 6, w: 1, h: 3}
-  # The four cards follow the navigator's region, as the tracks do.
+  # The four cards follow the navigator's region, as the pile-up does.
   - component_type: card
     workflow_tag: cutandrun
     data_collection_tag: seacr_peaks
@@ -2233,7 +2233,7 @@ tabs:
       region_filter_enabled: true
       selection_enabled: true
       selection_column: peak_id
-    section: One region, four tracks
+    section: One region, two tracks
     tag: cr-loc-av-track
     index: loc-seacr-track
     title: SEACR regions
@@ -2253,47 +2253,9 @@ tabs:
       show_annotation_lane: false
       locus_annotation: "{GENOME}"
       locus_assembly: "{GENOME}"
-    section: One region, four tracks
+    section: One region, two tracks
     tag: cr-loc-av-frags-track
     index: loc-frags-track
     title: Fragment pile-up
     description: Fragments per million in 100 bp bins around each sample's strongest regions; gaps are not measured.
     layout: {x: 0, y: 4, w: 8, h: 4}
-  - component_type: advanced_viz
-    workflow_tag: cutandrun
-    data_collection_tag: macs2_peaks
-    use: macs2/peak_genome_view
-    config:
-      mark: rect
-      score_title: -log10 q-value
-      category_col: sample
-      assembly: "{GENOME}"
-      region_filter_enabled: false
-      follow_region_filter: true
-      selection_enabled: true
-      selection_column: peak_id
-    section: One region, four tracks
-    tag: cr-loc-av-macs
-    index: loc-macs-track
-    title: MACS2 calls on the region
-    description: A SEACR region with no MACS2 call under it is one only the coverage threshold saw.
-    layout: {x: 0, y: 8, w: 8, h: 3}
-  - component_type: advanced_viz
-    workflow_tag: cutandrun
-    data_collection_tag: seacr_consensus_peaks
-    use: seacr/seacr_consensus_track
-    config:
-      mark: rect
-      score_title: max coverage
-      annotation: "{GENOME}"
-      assembly: "{GENOME}"
-      region_filter_enabled: false
-      follow_region_filter: true
-      selection_enabled: true
-      selection_column: peak_id
-    section: One region, four tracks
-    tag: cr-loc-av-consensus
-    index: loc-consensus-track
-    title: Consensus intervals and genes
-    description: The merged SEACR intervals per target over the gene lane; an interval here is one the replicates agree on.
-    layout: {x: 0, y: 11, w: 8, h: 4}

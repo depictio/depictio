@@ -56,6 +56,7 @@ import {
   readFiltersFromLocation,
   syncFiltersToLocation,
   sanitizeRestoredFilters,
+  filterComponentIndex,
   fetchDashboardFilterState,
   saveDashboardFilterState,
   FILTER_PANEL_RAIL_WIDTH,
@@ -71,6 +72,7 @@ import {
   buildGuideModel,
   resolveGuideSettings,
   CategoryColorsContext,
+  TabColorContext,
   barSectionNames,
   filtersInScope,
   hasSectionBar,
@@ -81,6 +83,7 @@ import {
   sectionFilterScopes,
   AdvancedVizPlacementDefaultProvider,
   HighlightProvider,
+  GenomeDebugPanel,
 } from 'depictio-react-core';
 import type {
   DashboardData,
@@ -121,6 +124,7 @@ import ShellHost from './chrome/shell/ShellHost';
 import type { FilterPanelOptions } from './chrome/shell/types';
 import { useChromeVariant } from './chrome/variants';
 import TabLinkProvider from './chrome/TabLinkProvider';
+import GenomeBrowserTargetProvider from './chrome/GenomeBrowserTargetProvider';
 import { useSidebarOpen } from './hooks/useSidebarOpen';
 import { useContentScaleStyle } from './hooks/useUiScalePref';
 import { setContentWidthScope, useContentMaxWidth } from './hooks/useContentWidthPref';
@@ -834,7 +838,8 @@ const App: React.FC = () => {
   }, [groupsApi.deactivateAllGroupFilters, dashboard?.stored_metadata]);
 
   // The dashboard-wide floating panels, one per kind of thing that can float:
-  // the family's floating maps, and its floating 3D structures. Each has its own
+  // the family's floating maps, its floating 3D structures and its floating
+  // genome browsers. Each has its own
   // hidden/floating/docked state, shared by its header control and the panel
   // itself.
   const floatingByKind = useMemo(() => partitionFloating(crossTab.floating), [crossTab.floating]);
@@ -849,6 +854,13 @@ const App: React.FC = () => {
   const structurePanel = useMapPanel({
     kind: 'structure',
     components: floatingByKind.structure,
+    familyId: crossTab.familyId,
+    filters,
+    onFilterChange: handleFilterChange,
+  });
+  const genomePanel = useMapPanel({
+    kind: 'genome',
+    components: floatingByKind.genome,
     familyId: crossTab.familyId,
     filters,
     onFilterChange: handleFilterChange,
@@ -916,7 +928,9 @@ const App: React.FC = () => {
     setFilters((prev) =>
       prev.filter(
         (f) =>
-          !restored.has(f.index) || hydratedIndicesRef.current?.has(f.index) || known.has(f.index),
+          !restored.has(f.index) ||
+          hydratedIndicesRef.current?.has(f.index) ||
+          known.has(filterComponentIndex(f.index)),
       ),
     );
   }, [dashboard, crossTab.resolved, summaryMetadata]);
@@ -1575,6 +1589,7 @@ const App: React.FC = () => {
           <>
             <MapPanelControl panel={mapPanel} />
             <MapPanelControl panel={structurePanel} />
+            <MapPanelControl panel={genomePanel} />
           </>
         }
         refreshTick={refreshTick}
@@ -1598,12 +1613,21 @@ const App: React.FC = () => {
                 filters={tabFilters}
                 onFilterChange={handleFilterChange}
                 refreshTick={refreshTick}
-                followedByDock={structurePanel.docked}
+                followedByDock={structurePanel.docked || genomePanel.docked}
               />
               <MapPanelDock
                 panel={structurePanel}
                 // A structure fetches its residue table like any tile, so it
                 // follows the settled filters the grid does, the tab's only.
+                filters={tabDeferredFilters}
+                onFilterChange={handleFilterChange}
+                refreshTick={refreshTick}
+                followedByDock={genomePanel.docked}
+              />
+              <MapPanelDock
+                panel={genomePanel}
+                // A genome browser follows the settled filters the grid does
+                // (its opening locus tracks them), the tab's only.
                 filters={tabDeferredFilters}
                 onFilterChange={handleFilterChange}
                 refreshTick={refreshTick}
@@ -1934,6 +1958,15 @@ const App: React.FC = () => {
             refreshTick={refreshTick}
           />
         )}
+        {dashboard && dashboardId && (
+          <MapPanelSurface
+            panel={genomePanel}
+            // The same settled, tab-wide filters the docked genome browser reads.
+            filters={tabDeferredFilters}
+            onFilterChange={handleFilterChange}
+            refreshTick={refreshTick}
+          />
+        )}
       </div>
       {guide.open && guideModel && dashboard && dashboardId && (
         <DashboardGuide
@@ -2032,7 +2065,9 @@ const App: React.FC = () => {
       {/* `category_colors` for the filter bar's chips and anything else that
           colours a category: one value, one colour, on every surface. */}
       <CategoryColorsContext.Provider value={dashboard}>
+      <TabColorContext.Provider value={typeof dashboard?.tab_icon_color === 'string' ? dashboard.tab_icon_color : null}>
       <TabLinkProvider tabs={tabSiblings}>
+      <GenomeBrowserTargetProvider dashboardId={dashboardId ?? null} dashboard={dashboard} tabs={tabSiblings}>
       {/* Only while the server's export API is on: otherwise the provider
           renders its children alone and no tile shows "Export / embed". */}
       <ComponentExportProvider
@@ -2128,12 +2163,16 @@ const App: React.FC = () => {
       />
       </CommentsProvider>
       </ComponentExportProvider>
+      </GenomeBrowserTargetProvider>
       </TabLinkProvider>
+      </TabColorContext.Provider>
       </CategoryColorsContext.Provider>
       </BrandScope>
       </SaveGroupContext.Provider>
       </AdvancedVizPlacementDefaultProvider>
       </InspectorProviders>
+      {/* Off unless `?debug=genome`: the trace of the genome tiles. */}
+      <GenomeDebugPanel />
       </HighlightProvider>
       </DashboardLoadingProvider>
     </AvailableFilterValuesProvider>

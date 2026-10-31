@@ -35,6 +35,8 @@
 
 import type { Contig, GenomeSpyThemeColors } from './genomeSpySpec';
 import { DATA_ASSEMBLY, GENOME_SCALE_NAME, BRUSH_PARAM, BUILTIN_ASSEMBLIES } from './genomeSpySpec';
+import { brushTrigger } from './interactionMode';
+import type { InteractionMode } from './interactionMode';
 
 /** Formats the `indexed_file` DC type accepts, mirroring the Pydantic Literal. */
 export type IndexedFileFormat = 'vcf' | 'bam' | 'bigwig' | 'bigbed' | 'gff3' | 'fasta' | 'tabix';
@@ -132,6 +134,9 @@ export interface BuildFileSpecInput {
   assembly?: string | null;
   /** Declare the region brush param on the root. */
   regionBrushEnabled?: boolean;
+  /** Which drag brushes (see `interactionMode.ts`). Unset keeps GenomeSpy's
+   *  own default on a zoomable axis, shift + drag. */
+  interactionMode?: InteractionMode;
 }
 
 export interface BuiltFileSpec {
@@ -148,6 +153,12 @@ export interface BuiltFileSpec {
 
 const LANE_HEIGHT = 70;
 const PILEUP_LANE_HEIGHT = 140;
+
+/** The least height a file-backed lane takes, which is also what a tile that
+ *  sizes itself to its content gives each (see `autoHeight.ts`). */
+export function fileLaneMinPx(format: IndexedFileFormat, bamView?: 'coverage' | 'pileup'): number {
+  return format === 'bam' && bamView === 'pileup' ? PILEUP_LANE_HEIGHT : LANE_HEIGHT;
+}
 
 /** True when `format` needs an index sidecar the manifest must supply. */
 export function needsIndexUrl(format: IndexedFileFormat): boolean {
@@ -224,6 +235,20 @@ export function infoFieldTransforms(fields: readonly string[] | null | undefined
   });
 }
 
+/**
+ * The colour of a sample's lane: the one the genome browser tracks of that
+ * sample wear (manifest colour, `color_by`, `color_scale`), else the colour of
+ * its group, else the palette's first hue. One library is one colour on both
+ * tiles.
+ */
+export function laneColour(entry: IndexedFileEntry, colors: GenomeSpyThemeColors): string {
+  return (
+    colors.laneColors?.[entry.sample] ??
+    colors.groupColors?.[entry.sample] ??
+    colors.palette[0]
+  );
+}
+
 function vcfLane(entry: IndexedFileEntry, options: FileTrackOptions, colors: GenomeSpyThemeColors) {
   const category = options.categoryField || null;
   const transforms: unknown[] = infoFieldTransforms(options.infoFields);
@@ -249,7 +274,7 @@ function vcfLane(entry: IndexedFileEntry, options: FileTrackOptions, colors: Gen
     // No category to rank by: one row of balls on a constant lane, which is
     // the plain "where are the variants" view.
     encoding.y = { datum: 1, type: 'quantitative', scale: { domain: [0, 2] }, axis: null };
-    encoding.color = { value: colors.palette[0] };
+    encoding.color = { value: laneColour(entry, colors) };
   }
 
   // The sticks run from each variant's band down to the bottom of the axis, so
@@ -306,7 +331,7 @@ function bigWigLane(entry: IndexedFileEntry, options: FileTrackOptions, colors: 
     },
     mark: {
       type: 'rect',
-      color: colors.palette[0],
+      color: laneColour(entry, colors),
       opacity: options.opacity ?? 0.85,
       // Sub-pixel bins would otherwise disappear between two ticks.
       minWidth: 0.5,
@@ -341,7 +366,7 @@ function intervalLane(
         scale: { zoom: false, reverse: true, domain: [0, 10], padding: 0.3 },
         axis: null,
       },
-      color: { value: colors.palette[0] },
+      color: { value: laneColour(entry, colors) },
     },
     mark: { type: 'rect', minWidth: 1, minOpacity: 1, opacity: options.opacity ?? 0.85 },
   };
@@ -432,7 +457,7 @@ function bamLane(entry: IndexedFileEntry, options: FileTrackOptions, colors: Gen
             scale: { zoom: false, reverse: true, domain: [0, 30], padding: 0.3 },
             axis: null,
           },
-          color: { value: colors.palette[0] },
+          color: { value: laneColour(entry, colors) },
         }
       : {
           x: { chrom: 'chrom', pos: 'start', type: 'locus', scale: { name: GENOME_SCALE_NAME } },
@@ -443,7 +468,7 @@ function bamLane(entry: IndexedFileEntry, options: FileTrackOptions, colors: Gen
             scale: { nice: true, zero: true },
             title: 'Coverage',
           },
-          color: { value: colors.palette[0] },
+          color: { value: laneColour(entry, colors) },
         },
     mark: {
       type: 'rect',
@@ -510,7 +535,7 @@ export function laneSpecFor(
  * reports rather than an empty canvas.
  */
 export function buildFileGenomeSpec(input: BuildFileSpecInput): BuiltFileSpec {
-  const { manifest, colors, assemblyContigs, regionBrushEnabled } = input;
+  const { manifest, colors, assemblyContigs, regionBrushEnabled, interactionMode } = input;
   const options = input.options ?? {};
   const format = manifest.format;
   const assembly = input.assembly || manifest.assembly || null;
@@ -540,10 +565,7 @@ export function buildFileGenomeSpec(input: BuildFileSpecInput): BuiltFileSpec {
   }
   // Each lane takes its share of the tile and never less than its floor, so a
   // taller tile, or the tile in fullscreen, draws taller lanes.
-  const laneHeight = {
-    grow: 1,
-    minPx: format === 'bam' && options.bamView === 'pileup' ? PILEUP_LANE_HEIGHT : LANE_HEIGHT,
-  };
+  const laneHeight = { grow: 1, minPx: fileLaneMinPx(format, options.bamView) };
 
   const spec: Record<string, unknown> = {
     config: {
@@ -574,7 +596,16 @@ export function buildFileGenomeSpec(input: BuildFileSpecInput): BuiltFileSpec {
     // Declared on the vconcat root, not per lane: GenomeSpy builds one
     // container-wide selection overlay for an interval param owned by a grid
     // view, so one drag brushes every lane at once.
-    spec.params = [{ name: BRUSH_PARAM, select: { type: 'interval', encodings: ['x'] } }];
+    spec.params = [
+      {
+        name: BRUSH_PARAM,
+        select: {
+          type: 'interval',
+          encodings: ['x'],
+          ...(interactionMode ? { on: brushTrigger(interactionMode) } : {}),
+        },
+      },
+    ];
   }
 
   return { spec, contigs, lanes: lanes.map((l) => l.sample), droppedLanes, format };

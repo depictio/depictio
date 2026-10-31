@@ -122,6 +122,8 @@ def _import(
     main_title=None,
     parent_source_key=None,
     existing=None,
+    template_id=None,
+    template_version=None,
 ):
     return asyncio.run(
         dash_routes.import_dashboard_from_yaml(
@@ -133,6 +135,8 @@ def _import(
             main_title=main_title,
             parent_source_key=parent_source_key,
             existing=existing,
+            template_id=template_id,
+            template_version=template_version,
             current_user=user,
         )
     )
@@ -1130,3 +1134,246 @@ class TestImportIsVersioned:
         versions = _versions(db)
         assert [v["kind"] for v in versions] == ["import"]
         assert versions[0]["family_id"] == result["dashboard_id"]
+
+
+TEMPLATE = "nf-core/rnaseq/3.26.0"
+
+
+def _stored(db, title):
+    return db["dashboards"].find_one({"title": title})
+
+
+class TestTemplateOrigin:
+    """The template import records which template revision a dashboard came from.
+
+    Provenance, not content: it is on the stored document only, a viewer save
+    cannot change it, and a re-import that moves nothing else records no version.
+    """
+
+    def test_a_dashboard_imported_from_a_template_records_its_revision(self, db, user, project_id):
+        _import(
+            _single("RNA-seq"),
+            user,
+            project_id,
+            source_key=KEY,
+            template_id=TEMPLATE,
+            template_version="1.2.0",
+        )
+
+        origin = _stored(db, "RNA-seq")["template_origin"]
+        assert origin["template_id"] == TEMPLATE
+        assert origin["template_version"] == "1.2.0"
+        assert origin["imported_at"]  # naive UTC "%Y-%m-%d %H:%M:%S"
+
+    def test_every_tab_of_a_multi_tab_import_records_it(self, db, user, project_id):
+        _import(
+            _multi("RNA-seq", ["QC", "Expression"]),
+            user,
+            project_id,
+            source_key=KEY,
+            template_id=TEMPLATE,
+            template_version="1.2.0",
+        )
+
+        docs = list(db["dashboards"].find())
+        assert len(docs) == 3
+        assert {d["template_origin"]["template_version"] for d in docs} == {"1.2.0"}
+
+    def test_a_child_tab_file_records_it(self, db, user, project_id):
+        _import(_single("Main"), user, project_id, source_key=KEY)
+        _import(
+            _child("Tab", "Main"),
+            user,
+            project_id,
+            source_key=KEY + "#tab",
+            parent_source_key=KEY,
+            template_id=TEMPLATE,
+            template_version="1.2.0",
+        )
+
+        assert _stored(db, "Tab")["template_origin"]["template_id"] == TEMPLATE
+        assert _stored(db, "Main")["template_origin"] is None
+
+    def test_a_plain_import_records_none(self, db, user, project_id):
+        _import(_single("RNA-seq"), user, project_id, source_key=KEY)
+
+        assert _stored(db, "RNA-seq")["template_origin"] is None
+
+    def test_template_id_and_version_go_together(self, db, user, project_id):
+        with pytest.raises(HTTPException) as excinfo:
+            _import(_single("RNA-seq"), user, project_id, template_id=TEMPLATE)
+        assert excinfo.value.status_code == 400
+
+        with pytest.raises(HTTPException) as excinfo:
+            _import(_single("RNA-seq"), user, project_id, template_version="1.0.0")
+        assert excinfo.value.status_code == 400
+        assert db["dashboards"].count_documents({}) == 0
+
+    def test_a_replace_takes_the_new_revision(self, db, user, project_id):
+        _import(
+            _single("RNA-seq"),
+            user,
+            project_id,
+            source_key=KEY,
+            template_id=TEMPLATE,
+            template_version="1.0.0",
+        )
+
+        _import(
+            _single("RNA-seq"),
+            user,
+            project_id,
+            source_key=KEY,
+            existing="replace",
+            template_id=TEMPLATE,
+            template_version="1.1.0",
+        )
+
+        assert _stored(db, "RNA-seq")["template_origin"]["template_version"] == "1.1.0"
+
+    def test_a_replace_by_a_plain_file_clears_it(self, db, user, project_id):
+        _import(
+            _single("RNA-seq"),
+            user,
+            project_id,
+            source_key=KEY,
+            template_id=TEMPLATE,
+            template_version="1.0.0",
+        )
+
+        _import(_single("RNA-seq"), user, project_id, source_key=KEY, existing="replace")
+
+        assert _stored(db, "RNA-seq")["template_origin"] is None
+
+    def test_a_kept_dashboard_keeps_the_revision_it_was_imported_from(self, db, user, project_id):
+        """Kept means not imported from the new revision, which is what lets the
+        viewer say the dashboard lags the project."""
+        _import(
+            _single("RNA-seq"),
+            user,
+            project_id,
+            source_key=KEY,
+            template_id=TEMPLATE,
+            template_version="1.0.0",
+        )
+
+        result = _import(
+            _single("RNA-seq"),
+            user,
+            project_id,
+            source_key=KEY,
+            existing="keep",
+            template_id=TEMPLATE,
+            template_version="1.1.0",
+        )
+
+        assert result["status"] == "kept"
+        assert _stored(db, "RNA-seq")["template_origin"]["template_version"] == "1.0.0"
+
+    def test_a_tab_a_kept_family_gains_records_the_new_revision(self, db, user, project_id):
+        _import(
+            _multi("RNA-seq", ["QC"]),
+            user,
+            project_id,
+            source_key=KEY,
+            template_id=TEMPLATE,
+            template_version="1.0.0",
+        )
+
+        _import(
+            _multi("RNA-seq", ["QC", "Expression"]),
+            user,
+            project_id,
+            source_key=KEY,
+            existing="keep",
+            template_id=TEMPLATE,
+            template_version="1.1.0",
+        )
+
+        assert _stored(db, "RNA-seq")["template_origin"]["template_version"] == "1.0.0"
+        assert _stored(db, "QC")["template_origin"]["template_version"] == "1.0.0"
+        assert _stored(db, "Expression")["template_origin"]["template_version"] == "1.1.0"
+
+    def test_a_reimport_from_another_revision_with_the_same_content_records_no_version(
+        self, db, user, project_id
+    ):
+        _import(
+            _single("RNA-seq"),
+            user,
+            project_id,
+            source_key=KEY,
+            template_id=TEMPLATE,
+            template_version="1.0.0",
+        )
+
+        _import(
+            _single("RNA-seq"),
+            user,
+            project_id,
+            source_key=KEY,
+            existing="replace",
+            template_id=TEMPLATE,
+            template_version="1.1.0",
+        )
+
+        assert _kinds(db) == ["import"]
+
+    def test_a_version_holds_no_template_origin(self, db, user, project_id):
+        _import(
+            _single("RNA-seq"),
+            user,
+            project_id,
+            source_key=KEY,
+            template_id=TEMPLATE,
+            template_version="1.0.0",
+        )
+
+        (version,) = _versions(db)
+        assert "template_origin" not in version["tabs"][0]
+
+    def test_export_does_not_carry_it(self, db, user, project_id):
+        _import(
+            _single("RNA-seq"),
+            user,
+            project_id,
+            source_key=KEY,
+            template_id=TEMPLATE,
+            template_version="1.0.0",
+        )
+
+        dashboard = DashboardData.from_mongo(_stored(db, "RNA-seq"))
+
+        assert dashboard.template_origin is not None
+        assert "template_origin" not in dashboard.to_yaml()
+
+    def test_a_save_from_the_viewer_neither_drops_nor_forges_it(self, db, user, project_id):
+        result = _import(
+            _single("RNA-seq"),
+            user,
+            project_id,
+            source_key=KEY,
+            template_id=TEMPLATE,
+            template_version="1.0.0",
+        )
+        dashboard_id = PyObjectId(result["dashboard_id"])
+
+        def save(**extra):
+            asyncio.run(
+                dash_routes.save_dashboard(
+                    dashboard_id=dashboard_id,
+                    data=DashboardData(
+                        dashboard_id=dashboard_id,
+                        title="Edited",
+                        project_id=project_id,
+                        permissions=Permission(owners=[user]),
+                        **extra,
+                    ),
+                    current_user=user,
+                )
+            )
+
+        save()  # a client that never loaded it
+        assert _stored(db, "Edited")["template_origin"]["template_version"] == "1.0.0"
+
+        save(template_origin={"template_id": "evil/template/9", "template_version": "9.9.9"})
+        assert _stored(db, "Edited")["template_origin"]["template_version"] == "1.0.0"

@@ -1,0 +1,20 @@
+id: orthofinder_species_stats
+name: Orthogroup assignment per species
+mode: comparative-statistics/per-species
+description: >-
+  One row per species from OrthoFinder's per-species statistics: genes in its
+  proteome, the share placed in orthogroups, the orthogroups it takes part in
+  and the ones it holds alone. A proteome whose genes stay unassigned far more
+  than its neighbours' carries fragmented or spurious gene models.
+find:
+  path_glob: "**/Comparative_Genomics_Statistics/Statistics_PerSpecies.tsv"
+recipe: orthofinder/species_stats.py
+fixture: species_stats.tsv
+renders_as:
+  - { id: assigned_share, component: card, column: genes_in_orthogroups_pct, aggregation: min,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: species_specific, component: card, column: species_specific_orthogroups, aggregation: sum,
+      secondary_layout: top_n, breakdown_col: genome, top_n_count: 4 }
+  - { component: figure, visu_type: bar,
+      dict_kwargs: {x: genome, y: genes_in_orthogroups_pct, title: Genes placed in orthogroups} }
+  - { component: table }

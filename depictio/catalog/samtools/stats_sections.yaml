@@ -16,6 +16,8 @@ find:
   path_glob_alt:
     - "**/samtools_stats/*.stats"
     - "**/samtools/*.stats"
+    # rnavar: reports/samtools/<sample>/<sample>.md.stats (and .aligned.stats)
+    - "**/samtools/*/*.md.stats"
 recipe: samtools/stats_sections.py
 fixture: stats_sections.tsv
 renders_as:

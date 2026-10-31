@@ -7,17 +7,30 @@ caller sees. The two catalog recipes key every ORF by its genomic stop codon
 (``orf_id``), which makes the calls comparable even when the callers chose
 different starts or transcripts.
 
-Membership columns (0/1, the UpSet sets):
+Membership columns (0/1, one per set):
     ribotish       reported by Ribo-TISH in at least one library
     ribocode       reported by RiboCode in at least one library
     annotated_cds  either caller classed it as the annotated CDS, so the
                    intersections separate known coding sequences from new ORFs
+
+``support_score`` orders the ORFs for the genome browser, which opens on the
+highest: the ORFs outside the annotated CDS that both callers report come first,
+then the new ORFs one caller reports, then the annotated CDSs both callers
+report, then the rest. Inside a tier, the more libraries report an ORF (summed
+over the two callers) the higher it ranks, and the longer protein breaks a tie. One
+number, since the browser sorts on a single column.
 
 Sources: the ``ribotish_orfs`` and ``ribocode_orfs`` data collections; either
 may be absent.
 
 Output: see ``OUTPUT_SCHEMA``. ``orf_class`` is RiboCode's class when
 RiboCode called the ORF, else Ribo-TISH's.
+
+Where the ORF sits (``chrom``, ``orf_start``, ``orf_end``): the key carries the
+contig and the stop-codon coordinate, and the protein length says how far the
+ORF reaches back from it (3 bases per amino acid, upstream of the stop on its
+strand). The span is approximate (an ORF split over exons covers more of the
+genome than that), which is what the genome browser needs to frame it.
 """
 
 from __future__ import annotations
@@ -66,12 +79,25 @@ OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "gene_type": pl.Utf8,
     "orf_class": pl.Utf8,
     "aa_length": pl.Int64,
+    "chrom": pl.Utf8,
+    "orf_start": pl.Int64,
+    "orf_end": pl.Int64,
     "ribotish": pl.Int64,
     "ribocode": pl.Int64,
     "annotated_cds": pl.Int64,
     "ribotish_libraries": pl.Int64,
     "ribocode_libraries": pl.Int64,
+    "support_score": pl.Int64,
 }
+
+#: Weights of the score's parts: a tier outweighs any library count, which outweighs a length.
+_TIER = 1_000_000_000
+_LIBRARIES = 100_000
+_MAX_LENGTH = 99_999
+
+# `<chrom>:<strand>:<stop>`, the key the two callers' recipes build. The contig
+# may itself hold a colon (an HLA allele), so it is everything before the last two.
+_ORF_KEY = r"^(?P<chrom>.+):(?P<strand>[+-]):(?P<stop>\d+)$"
 
 _KEEP = ["orf_id", "gene_id", "gene_name", "gene_type", "orf_class", "aa_length"]
 
@@ -96,6 +122,23 @@ def _pool(df: pl.DataFrame | None, name: str) -> pl.DataFrame:
     )
 
 
+def _locus(orf_id: pl.Expr, aa_length: pl.Expr) -> list[pl.Expr]:
+    """Contig and approximate genomic span of an ORF, from its key and protein length."""
+    key = orf_id.str.extract_groups(_ORF_KEY)
+    strand = key.struct.field("strand")
+    stop = key.struct.field("stop").cast(pl.Int64)
+    reach = aa_length.fill_null(0).cast(pl.Int64) * 3
+    return [
+        key.struct.field("chrom").alias("chrom"),
+        pl.when(strand == "+")
+        .then((stop - reach).clip(lower_bound=1))
+        .otherwise(stop)
+        .cast(pl.Int64)
+        .alias("orf_start"),
+        pl.when(strand == "+").then(stop).otherwise(stop + reach).cast(pl.Int64).alias("orf_end"),
+    ]
+
+
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     """Outer join of the two callers' ORF sets on the stop-codon key."""
     tish = _pool(sources.get("ribotish"), "ribotish")
@@ -116,5 +159,17 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         .alias("annotated_cds"),
         pl.col("ribotish_libraries").fill_null(0).cast(pl.Int64),
         pl.col("ribocode_libraries").fill_null(0).cast(pl.Int64),
+    )
+    both = (pl.col("ribotish") == 1) & (pl.col("ribocode") == 1)
+    new = pl.col("annotated_cds") == 0
+    tier = pl.when(new & both).then(3).when(new).then(2).when(both).then(1).otherwise(0)
+    out = out.with_columns(_locus(pl.col("orf_id"), pl.col("aa_length"))).with_columns(
+        (
+            tier.cast(pl.Int64) * _TIER
+            + (pl.col("ribotish_libraries") + pl.col("ribocode_libraries")) * _LIBRARIES
+            + pl.col("aa_length").fill_null(0).clip(upper_bound=_MAX_LENGTH)
+        )
+        .cast(pl.Int64)
+        .alias("support_score")
     )
     return out.sort("orf_id").select(list(OUTPUT_SCHEMA))

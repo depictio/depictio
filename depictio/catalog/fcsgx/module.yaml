@@ -1,0 +1,19 @@
+# FCS-GX: NCBI's Foreign Contamination Screen, genome cross-species aligner.
+# It screens every sequence of an assembly against a reference database and
+# reports the sequences, or the ranges of them, it would exclude, trim or fix
+# as foreign (bacteria, fungi, other eukaryotes, synthetic constructs). Its
+# `fcs_gx_report.txt` is read: one row per flagged range, plus one row per
+# screened assembly that had nothing flagged, so "clean" is a row and not an
+# absence. The per-sequence `taxonomy.rpt` is not read: it is a diagnostic of
+# the database hits, most of them below the call threshold.
+id: fcsgx
+name: FCS-GX
+version: "1.0.0"
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/fcsgx/rungx
+homepage: https://github.com/ncbi/fcs
+biotools_url: null
+description: >-
+  NCBI Foreign Contamination Screen, cross-species aligner: flags the sequences
+  and ranges of an assembly that come from another organism, with the action to
+  take (exclude, trim, fix).
+stage: qc
