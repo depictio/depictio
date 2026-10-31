@@ -33,7 +33,7 @@ import { collapsedSectionKeys, sectionComponents } from '../utils/groupInteracti
 import type { ComponentSection } from '../utils/groupInteractive';
 import { extractLayoutItems, stripBoxPrefix } from '../utils/leftPanelLayout';
 import { useCollapseState } from '../hooks/useCollapseState';
-import { useRevealComponent } from '../reveal';
+import { sameSectionName, useRevealComponent, useRevealSection } from '../reveal';
 import { resolveSectionColor, sectionColorVar } from './SectionIcon';
 import {
   applyAccordionValue,
@@ -579,6 +579,12 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
     const section = sections.find((s) => s.members.some((m) => m.index === index));
     if (!section?.sectionName) return;
     if (section.spec?.appearance === 'plain' || isStripSection(section.spec)) return;
+    if (!sectionCollapse.isOpen(section.key)) sectionCollapse.setAll([section.key], false);
+  });
+  // A text tile's `section:` link, the same opening by the section's name.
+  useRevealSection((name) => {
+    const section = sections.find((s) => sameSectionName(s.sectionName, name));
+    if (!section || section.spec?.appearance === 'plain' || isStripSection(section.spec)) return;
     if (!sectionCollapse.isOpen(section.key)) sectionCollapse.setAll([section.key], false);
   });
 
@@ -1529,6 +1535,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
               actions={sectionActions(section, kind)}
               plain={isPlain(section)}
               className={kind === 'linked' ? 'is-linked-view' : undefined}
+              name={section.sectionName}
             >
               <Accordion.Control>
                 {kind === 'grid' ? (

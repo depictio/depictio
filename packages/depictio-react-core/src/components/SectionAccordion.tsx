@@ -78,12 +78,15 @@ export const SectionAccordionItem: React.FC<{
    *  its tiles flatter and closer (sectionAccordion.css, glass.css). Appended to
    *  `is-plain` when both apply. */
   className?: string;
-}> = ({ value, color, actions, children, plain = false, className }) => {
+  /** The section's name, on the DOM for `section:` links to scroll to. */
+  name?: string | null;
+}> = ({ value, color, actions, children, plain = false, className, name }) => {
   const [control, panel] = React.Children.toArray(children);
   return (
     <SectionColorContext.Provider value={color ?? null}>
     <Accordion.Item
       value={value}
+      data-section-name={name ?? undefined}
       className={[plain ? 'is-plain' : null, className].filter(Boolean).join(' ') || undefined}
       style={
         color
