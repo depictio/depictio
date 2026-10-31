@@ -19,6 +19,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import polars as pl
+import pyarrow.acero  # noqa: F401  (see the comment above ``_code_figure_audit_hook``)
 from plotly.basedatatypes import BaseFigure, BasePlotlyType
 from RestrictedPython import compile_restricted
 from RestrictedPython.Guards import safe_builtins, safe_globals, safer_getattr
@@ -427,7 +428,9 @@ def _code_figure_audit_hook(event: str, args) -> None:
         top = (name or "").split(".")[0]
         # The plotting stack is fully imported at module load, so every lazy
         # import it makes resolves to a top-level already in ``sys.modules`` and
-        # is allowed. A top-level that is NOT yet loaded is a package the figure
+        # is allowed. pyarrow.acero is imported at the top for that reason: pandas 3
+        # runs some groupby reductions (px.sunburst) through it, and its first
+        # import pulls pyarrow.dataset and substrait in, which is a fresh package. A top-level that is NOT yet loaded is a package the figure
         # is trying to pull in fresh (e.g. ``pty``, ``ctypes.util``) — refused.
         # (User code cannot ``import`` at all: RestrictedPython has no
         # ``__import__``. This guards a library being coaxed into a new import.)

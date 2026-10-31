@@ -406,8 +406,12 @@ def merge_regions(df: pl.DataFrame, descending: bool = True) -> pl.DataFrame:
     new_region = previous_end.is_null() | (pl.col("start") > previous_end)
     base = base.with_columns(_g=new_region.cast(pl.Int64).cum_sum())
 
+    # The row index is the tie-break: `maintain_order` alone does not keep equal
+    # (or all-null) scores in row order on every Polars version, so the "first
+    # label" of a region without scores flipped to the last one on 1.33.
+    base = base.with_row_index("_i")
     best = (
-        base.sort("score", descending=descending, nulls_last=True, maintain_order=True)
+        base.sort(["score", "_i"], descending=[descending, False], nulls_last=True)
         .group_by("_g", maintain_order=True)
         .first()
     )
@@ -431,7 +435,7 @@ def merge_regions(df: pl.DataFrame, descending: bool = True) -> pl.DataFrame:
         run=pl.when(one_run).then(pl.col("_runs").list.first()).otherwise(None),
     )
     out = out.sort(["_r", "start", "_g"], nulls_last=True)
-    return _drop_internal(out, ["_c", "_r", "_g", "_lo", "_hi", "_samples", "_runs"])
+    return _drop_internal(out, ["_c", "_r", "_g", "_i", "_lo", "_hi", "_samples", "_runs"])
 
 
 # ---------------------------------------------------------------------------
