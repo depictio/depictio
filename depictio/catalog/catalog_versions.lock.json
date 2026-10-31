@@ -308,7 +308,7 @@
     },
     "mosdepth": {
       "version": "1.0.0",
-      "content_hash": "126feb79aba6f081aebe5b78c09bd2a489b2bd1b7605118e7e6376f1f70d91c6"
+      "content_hash": "c0c2dac40a3fa3655afe425969d9b08a8c936de771a7c874ea70e4885e6bfcc4"
     },
     "multiqc": {
       "version": "1.0.0",

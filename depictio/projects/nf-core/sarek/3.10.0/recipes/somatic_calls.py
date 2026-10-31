@@ -2,7 +2,7 @@
 
 Reads the raw VCF lines the ``vcf_calls_raw`` scan holds and keeps the calling units
 that are not germline (``depictio.recipes.lib.sarek_units``): a pair
-(``<tumour>_vs_<normal>``, called by Mutect2 and Strelka) and a single sample whose
+(``<tumour>_vs_<normal>``, called by Mutect2, Strelka and MuSE) and a single sample whose
 samplesheet status is 1 (a tumour with no matched normal). The germline units stay in
 ``vcf_variants`` alone, and these two never share it.
 
@@ -24,9 +24,9 @@ Output schema:
     patient : Utf8       the patient (from the hub)
     sample : Utf8        the tumour sample the call was made in
     normal : Utf8        the pair's normal sample; null for a tumour on its own
-    caller : Utf8        mutect2, strelka, ...
+    caller : Utf8        mutect2, strelka, muse, ...
     chrom, pos, ref, alt, variant_key, variant_type, qual, filter_status, is_pass
-    score : Float64      the caller's own confidence (Strelka SomaticEVS, Mutect2 TLOD, else QUAL)
+    score : Float64      the caller's own confidence (Strelka SomaticEVS, Mutect2 TLOD, else QUAL; MuSE has none)
     tumour_vaf, tumour_dp, normal_vaf, normal_dp : the allele fraction and depth in each sample
 """
 

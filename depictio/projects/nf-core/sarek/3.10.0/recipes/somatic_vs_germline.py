@@ -23,6 +23,7 @@ Output schema:
     caller, chrom, pos, ref, alt, variant_key, variant_type, filter_status, is_pass
     tumour_vaf, tumour_dp : the tumour's allele fraction and depth
     normal_vaf : Float64        the normal's allele fraction
+    normal_dp : Int64           the normal's read depth at the call (the paired call's own)
     normal_vaf_source : Utf8    "paired call" or "germline call"; null when neither has one
     germline_callers : Int64    callers with a PASS germline call of this variant in the normal
     in_germline : Boolean       true when germline_callers is above 0
@@ -50,6 +51,7 @@ SOURCES: list[RecipeSource] = [
             "variant_key": pl.Utf8,
             "tumour_vaf": pl.Float64,
             "normal_vaf": pl.Float64,
+            "normal_dp": pl.Int64,
         },
     ),
     RecipeSource(
@@ -88,6 +90,7 @@ OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "tumour_vaf": pl.Float64,
     "tumour_dp": pl.Int64,
     "normal_vaf": pl.Float64,
+    "normal_dp": pl.Int64,
     "normal_vaf_source": pl.Utf8,
     "germline_callers": pl.Int64,
     "in_germline": pl.Boolean,

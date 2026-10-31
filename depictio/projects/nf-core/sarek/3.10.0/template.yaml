@@ -1141,7 +1141,7 @@ workflows:
       # `unit_type` is a colour and a filter wherever they meet.
       # ----------------------------------------------------------------
       - data_collection_tag: "somatic_calls"
-        description: "One row per somatic call: a tumour/normal pair's (Mutect2, Strelka) and a tumour's called on its own, with the allele fraction and depth in the tumour and, for a pair, in the normal"
+        description: "One row per somatic call: a tumour/normal pair's (Mutect2, Strelka, MuSE) and a tumour's called on its own, with the allele fraction and depth in the tumour and, for a pair, in the normal"
         optional: true
         config:
           type: "Table"
@@ -1164,8 +1164,8 @@ workflows:
               "alt": "Alternate allele or alleles"
               "variant_key": "Contig, position and alleles joined, the key the germline calls use"
               "variant_type": "SNP, MNP, INDEL or SV, from the first alternate allele"
-              "qual": "Caller quality score; null when the caller wrote none (Mutect2 and Strelka write none)"
-              "score": "The caller's own confidence: Strelka SomaticEVS, Mutect2 TLOD, else QUAL. Not comparable between callers"
+              "qual": "Caller quality score; null when the caller wrote none (Mutect2, Strelka and MuSE write none)"
+              "score": "The caller's own confidence: Strelka SomaticEVS, Mutect2 TLOD, else QUAL (MuSE writes none). Not comparable between callers"
               "filter_status": "The call's FILTER field, verbatim"
               "is_pass": "True when the caller kept the call"
               "tumour_vaf": "Allele fraction of the call in the tumour"
@@ -1204,6 +1204,7 @@ workflows:
               "tumour_vaf": "Allele fraction in the tumour"
               "tumour_dp": "Read depth in the tumour"
               "normal_vaf": "Allele fraction in the normal: the paired call's own, else the matching germline call's"
+              "normal_dp": "Read depth in the normal at the call (the paired call's own)"
               "normal_vaf_source": "paired call or germline call: where normal_vaf comes from"
               "germline_callers": "Callers with a PASS germline call of the same variant in the normal"
               "in_germline": "True when a PASS germline call of the normal is the same variant, a likely inherited variant the somatic caller failed to subtract"
@@ -1224,6 +1225,141 @@ workflows:
               "patient": "Patient with a tumour/normal pair"
               "call_class": "Germline (normal) or Somatic (pair)"
               "variants": "Distinct PASS variants of that class; a variant several callers agree on counts once"
+
+      # The SnpEff-annotated VCFs of the pairs' calls. The germline raw scan above leaves
+      # them out (`_vs_`), so the pairs' genes and consequences come from here. SV callers
+      # and the consensus VCF (which holds Freebayes too) are not somatic SNV/indel calls.
+      - data_collection_tag: "somatic_ann_vcf_raw"
+        description: "Raw SnpEff-annotated VCF lines of the tumour/normal pairs' small-variant calls (input of somatic_variants)"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "^.*_vs_.*_snpEff\\.ann\\.vcf\\.gz$"
+              ignore:
+                - "*annotation/manta/*"
+                - "*annotation/tiddit/*"
+                - "*annotation/consensus/*"
+                - "*annotation/freebayes/*"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\u001e"
+              has_header: false
+              comment_prefix: "#"
+              new_columns: ["raw_line"]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "raw_line": "One full tab-separated annotated VCF data line, meta lines already stripped"
+              "source_path": "File the row came from; the pair and the caller are derived from its name"
+
+      # The callers merged: one row per distinct PASS somatic variant of a pair, with how
+      # many callers made it, the allele fractions, the substitution and, when annotated,
+      # the gene and its consequence.
+      - data_collection_tag: "somatic_variants"
+        description: "One row per distinct somatic variant of a tumour/normal pair (the callers that kept it merged): callers in agreement, allele fractions, substitution, overlap with the normal's germline calls, gene and impact"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/sarek/somatic_variants.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "unit": "<tumour>_vs_<normal>"
+              "patient": "Patient of the pair"
+              "sample": "Tumour sample; the sample filters narrow on it"
+              "normal": "Normal sample of the pair"
+              "chrom": "Contig"
+              "pos": "Position, 1-based"
+              "ref": "Reference allele"
+              "alt": "Alternate allele"
+              "variant_key": "Contig, position and alleles joined"
+              "variant_type": "SNP, MNP or INDEL"
+              "substitution": "Single-nucleotide change on the pyrimidine strand (C>A, C>G, C>T, T>A, T>C, T>G); null for an indel"
+              "callers": "The callers that kept the variant (FILTER PASS), joined with +"
+              "n_callers": "How many callers kept it"
+              "support": "n_callers as a label: 1 caller, 2 callers, 3 callers"
+              "consensus": "True when two callers or more kept the variant"
+              "tumour_vaf": "Allele fraction in the tumour, the median over the callers"
+              "tumour_dp": "Read depth in the tumour, the median over the callers"
+              "normal_vaf": "Allele fraction in the normal, the median over the callers"
+              "normal_dp": "Read depth in the normal, the median over the callers"
+              "normal_class": "Where the normal's allele fraction falls: Clean (under 0.03), Trace (0.03 to 0.10) or Germline-like (0.10 or more)"
+              "germline_callers": "Callers with a PASS germline call of the same variant in the normal"
+              "in_germline": "True when a PASS germline call of the normal is the same variant"
+              "origin": "in_germline as a label, for a colour"
+              "annotated": "True when SnpEff annotated the variant"
+              "gene": "Gene symbol of SnpEff's worst consequence for the variant"
+              "gene_id": "Ensembl gene id of that annotation"
+              "impact": "Impact class of that annotation: HIGH, MODERATE, LOW or MODIFIER"
+              "consequence": "Consequence term of that annotation"
+              "hgvs_p": "Protein change in HGVS notation, when the variant changes a codon"
+              "aa_pos": "Amino-acid position parsed from the protein change"
+              "priority": "Rank for a candidate list: impact class, then callers in agreement, then tumour allele fraction. Orders a list, is not a probability"
+
+      - data_collection_tag: "somatic_burden"
+        description: "Somatic variants per megabase of the capture target, per tumour/normal pair and set of variants counted (consensus, any caller, each caller)"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/sarek/somatic_burden.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "unit": "<tumour>_vs_<normal>"
+              "patient": "Patient of the pair"
+              "sample": "Tumour sample; the sample filters narrow on it"
+              "normal": "Normal sample of the pair"
+              "basis": "The variants counted: consensus (2+ callers), any caller, or one caller"
+              "basis_kind": "consensus, union or caller"
+              "variants": "Variants of the basis"
+              "snvs": "Single-nucleotide variants among them"
+              "indels": "Insertions and deletions among them"
+              "protein_altering": "Variants SnpEff ranks HIGH or MODERATE; null when the pair was not annotated"
+              "target_mb": "Capture target in megabases: the intervals the run was given, summed from the per-target depth table; null without it"
+              "per_mb": "variants divided by target_mb"
+              "protein_altering_per_mb": "protein_altering divided by target_mb"
+
+      # Needs a caller that genotypes the pair together (Freebayes on a pair): its records hold
+      # the tumour's and the normal's reads. A run without one has no table.
+      - data_collection_tag: "germline_het_sites"
+        description: "The normal's heterozygous germline SNVs read in the tumour: the tumour's allele fraction where the normal sits near 0.5, to see loss of heterozygosity along the genome"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/sarek/germline_het_sites.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "unit": "<tumour>_vs_<normal>"
+              "patient": "Patient of the pair"
+              "sample": "Tumour sample; the sample filters narrow on it"
+              "normal": "Normal sample of the pair"
+              "chrom": "Contig"
+              "chrom_rank": "1 to 22 for the autosomes, 23 X, 24 Y, 25 any other contig, for an axis"
+              "pos": "Position, 1-based"
+              "variant_key": "Contig, position and alleles joined"
+              "ref": "Reference allele"
+              "alt": "Alternate allele"
+              "normal_vaf": "Allele fraction in the normal, near 0.5 at a heterozygous site"
+              "normal_dp": "Read depth in the normal (at least 10)"
+              "tumour_vaf": "Allele fraction in the tumour at the same site"
+              "tumour_dp": "Read depth in the tumour (at least 10)"
+              "allele_state": "Balanced (0.35 to 0.65), Imbalanced (0.15 to 0.35 or 0.65 to 0.85) or LOH-like (under 0.15 or over 0.85)"
 
       # ----------------------------------------------------------------
       # Copy number. CNVkit publishes its files under
@@ -1906,6 +2042,36 @@ links:
       resolver: "direct"
       target_field: "sample"
     description: "Filter the pair-against-normal comparison by the tumours picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "somatic_variants"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the merged somatic variants by the tumours picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "somatic_burden"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the mutation burden by the tumours picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "germline_het_sites"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the normal's heterozygous sites by the tumours picked in the left panel"
     enabled: true
 
   - source_dc_tag: "samples"

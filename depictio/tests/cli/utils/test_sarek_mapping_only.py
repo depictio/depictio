@@ -97,9 +97,15 @@ SOMATIC_DCS = {
     "somatic_calls",
     "somatic_vs_germline",
     "patient_call_counts",
+    "somatic_variants",
+    "somatic_burden",
+    "germline_het_sites",
     "cnv_segments",
     "msi",
 }
+#: The collections built on the pairs' PASS variants: each recipe raises without a pair
+#: that has somatic calls (and ``germline_het_sites`` without a jointly genotyped one).
+PAIR_VARIANT_DCS = {"somatic_variants", "somatic_burden", "germline_het_sites"}
 #: The collections every run holds, whatever its tools.
 REQUIRED = {"samples", "tracks", "multiqc_data"}
 DC_ID = "646b0f3c1e4a2d7f8e5b8ca9"
@@ -238,17 +244,30 @@ def test_a_pair_whose_callers_found_nothing_keeps_only_the_copy_number_tab(tmp_p
         _tree(tmp_path, _CALLED_FILES, _SV_FILES, _PAIR_FILES, _COPY_NUMBER_FILES, called=True)
     )
     present -= {"somatic_calls", "somatic_vs_germline", "patient_call_counts", "sv_calls"}
+    present -= PAIR_VARIANT_DCS
     assert {"pairs", "cnv_segments", "msi"} <= present
     tabs = _surviving_tabs(present, monkeypatch)
     assert tabs == (ALL_TABS - {"Structural variants"}) | {"Copy number & MSI"}
     assert not tabs & {"Somatic calls", "Germline vs somatic"}
 
 
+def test_a_pair_without_a_jointly_genotyped_caller_keeps_both_somatic_tabs(tmp_path, monkeypatch):
+    # No Freebayes on the pair: `germline_het_sites` raises (no loss-of-heterozygosity
+    # section) and, with no capture target, `somatic_burden` may be absent too. The two
+    # tabs still stand on the variants and the call table.
+    present = _ok_tags(
+        _tree(tmp_path, _CALLED_FILES, _SV_FILES, _PAIR_FILES, _COPY_NUMBER_FILES, called=True)
+    )
+    present -= {"germline_het_sites", "somatic_burden"}
+    assert {"somatic_variants", "somatic_vs_germline"} <= present
+    assert {"Somatic calls", "Germline vs somatic"} <= _surviving_tabs(present, monkeypatch)
+
+
 def test_a_tumour_called_on_its_own_has_no_comparison_with_a_normal(tmp_path, monkeypatch):
     # No pair on the sheet: `pairs` raises, and `somatic_vs_germline` and
     # `patient_call_counts` (both read it) with it. The tumour's own calls remain.
     present = _ok_tags(_tree(tmp_path, _CALLED_FILES, _SV_FILES, _COPY_NUMBER_FILES, called=True))
-    present -= {"pairs", "somatic_vs_germline", "patient_call_counts"}
+    present -= {"pairs", "somatic_vs_germline", "patient_call_counts"} | PAIR_VARIANT_DCS
     assert {"somatic_calls", "cnv_segments"} <= present
     tabs = _surviving_tabs(present, monkeypatch)
     assert {"Somatic calls", "Copy number & MSI"} <= tabs

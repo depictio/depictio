@@ -54,31 +54,39 @@ collection lists each tumour against each normal of a patient.
 
 The landing page, at compact width with the filter panel collapsed:
 
-- **Hero**: the sarek wordmark, what the run is, and a link to the run parameters.
-- **About this dashboard** and **The run**: two cards side by side. The first also says how samples of
-  different types mix: every sample is called on its own, a tumour with its matched normal is also
-  called as a pair named `<tumour>_vs_<normal>`, the Variant calls and Annotation tabs read the
-  normal samples called on their own, and the Somatic group appears when the run has pairs or
-  tumours to show (the Status and Design filters split tumour from normal and the paired patients
-  from the rest). The second lists the
-  samples and patients, the callsets and callers, the genome and the aligner, from the sample hub, the
-  bcftools summary and the run parameters. The `tools` parameter is not printed: a
-  comma-joined list has no space to wrap at.
-- **Pipeline**: six steps (map, cover, call, check, compare, annotate), each opening the
-  parameters that drive it and the tab that shows its output. A step past the depth cites a
-  count from its tab's collection, so the import drops the line with its data and a
-  mapping-only run keeps the first two steps.
+- **Hero**: the sarek wordmark, what the study and the run are, and a link to the run parameters.
+- **The study** and **The run**: two cards side by side, read live from the sample hub, the pairs
+  collection and the run's `params.json`. The study: patients (and their commonest design), samples
+  split into tumours and normals, tumour/normal pairs, the sequencing type (the `wes` flag) with the
+  capture intervals, and the samplesheet. The run: the pipeline and Nextflow versions, the run date
+  (the trace report's suffix), the reference, the aligner, the tools, the SnpEff database and VEP
+  version, the callsets and callers, and a link to all parameters and tool versions. A line whose
+  setting the run did not record prints a dash, and a line citing a collection the run lacks goes
+  with it (no pairs, no pairs line).
+- **Pipeline**: nine steps (map, cover, call, check, compare, annotate, somatic, copy number and the
+  normal-against-tumour comparison), each opening the parameters that drive it and the tab that shows
+  its output. A step past the depth cites a count from its tab's collection, so the import drops the
+  line with its data and a mapping-only run keeps the first two steps.
+- **About this dashboard**: how samples of different types mix (every sample is called on its own, a
+  tumour with its matched normal is also called as a pair named `<tumour>_vs_<normal>`, the Variant
+  calls and Annotation tabs read the normal samples called on their own, the Somatic tabs read the
+  pairs), which tabs appear when, and where the numbers come from (the run's own files).
 - **Key figures** (a mapping-only run keeps the patients and depth cards): the patients on
   the sheet ranked by design, the median depth over the intervals (with its spread), the variant calls
   summed over the callsets (split by caller) and the median Ts/Tv of the callsets with SNPs against a
   1.8 floor. A caller and a sample filter above them narrow these four only. The PASS-share card
   gave its slot to the patients card; the share is on Call quality.
+- **Study design**: the sample table (patient, sex, tumour or normal, design, callers run) and the
+  pairs table (`pairs`), whatever the sample filters keep.
 - **Findings**: result rows computed under the filters, each linking its tab: the median depth
   over the intervals, the median Ts/Tv, the share of a sample's PASS calls that two callers or
   more made (from the caller overlap collection), and the HIGH-impact calls with the genes
-  they hit. Below them, four figures in two rows: the substitution spectrum beside the FILTER
+  they hit, then, for a run with pairs, the distinct somatic variants kept by two callers or more,
+  the burden per megabase of the capture target and the heterozygous sites of the normal that the
+  tumour reads as one allele only. Below them, four figures in two rows: the substitution spectrum beside the FILTER
   partitions per caller, then the allele fraction per caller beside the impact classes per
-  caller. The bar of this section filters
+  caller, then the tumour allele fraction of the Somatic calls tab beside the genome-wide allele
+  fraction of the Germline vs somatic tab. The bar of this section filters
   by caller and sample.
 - **How to read this dashboard**: one tile per tab, by group, each showing its question.
 
@@ -164,18 +172,33 @@ leaves it out. Filters: type, caller and length. The tab appears only when the r
 structural variants (`--tools manta` or `tiddit`); the types keep one colour on every tile
 (`category_colors.svtype`).
 
-**Somatic calls.** Read from `somatic_calls`, one row per call of a pair or of a tumour called
-on its own (`recipes/somatic_calls.py`, parsers in `depictio/recipes/lib/vcf_somatic.py`). Only
-Mutect2 (the `.filtered` VCF of a pair) and Strelka (`somatic_snvs`, `somatic_indels`) have a paired
-parser, and a tumour-only VCF is read with the single-sample one; any other paired caller is left out
-rather than guessed at. Each caller writes its evidence under its own FORMAT keys, so the tumour
-(and normal) allele fraction and depth are computed per caller. Strip: the calls (a bar by calling
-design), the PASS calls (by caller), the median tumour allele fraction (ranked by design: a
-tumour-only callset is not pooled with a paired one) and the tumour depth (distribution). Then the
-tumour allele fraction in 20 bins, one panel per design and one colour per caller, and the calls per
-caller stacked by variant type, one panel per design. Collapsed: the call table, where a click
-centres the Locus browser. Filters: design, caller and variant type. No tumour mutation burden is
-shown: it needs the size of the sequenced target, which the run does not state per sample.
+**Somatic calls.** Seven sections, each opening with a text (**Look at / Expect / Worry if**) that
+says what to read, what is normal and what is worrying. The call-level collection `somatic_calls`
+(`recipes/somatic_calls.py`, parsers in `depictio/recipes/lib/vcf_somatic.py`) has one row per call of a
+pair or of a tumour called on its own, FILTER-failed calls included; Mutect2 (the `.filtered` VCF of a
+pair), Strelka (`somatic_snvs`, `somatic_indels`) and MuSE (`TUMOR`/`NORMAL` columns, `AD`) have a
+paired parser, a tumour-only VCF is read with the single-sample one, and any other paired caller is
+left out rather than guessed at. The variant-level tab reads `somatic_variants` instead
+(`recipes/somatic_variants.py`): one row per distinct PASS variant of a pair, the callers that kept it
+merged (`callers`, `n_callers`, `support`), `consensus` meaning PASS in two of the three somatic callers
+(Mutect2, Strelka, MuSE; Freebayes is not one, unlike sarek's own four-caller consensus VCF), the tumour
+and normal allele fractions and depths, the SnpEff annotation of the worst effect (when the run wrote
+`*_vs_*_snpEff.ann.vcf.gz`; `annotated` says which rows have one) and `priority`, which ranks by impact
+class, then callers, then allele fraction. A tumour called on its own has no pair, so it appears in the
+call-level sections only.
+
+Sections: a strip (distinct PASS variants, the consensus, the burden per megabase, the median allele
+fraction); who found them (a bar per caller and an overlap bar by the callers that agree); the tumour
+allele fraction (20 bins, stacked by number of callers, with the 0.5 line and the consensus median) beside
+the normal's (the share of variants clean, trace or germline-like in the normal, cut-offs 0.03 and 0.10);
+the substitution spectrum (six classes, a pyrimidine on the reference strand, one panel per caller; a
+96-trinucleotide spectrum is not drawn because it needs the reference genome); impact on genes (a ranked
+table of the HIGH and MODERATE variants, the variants that change a protein, the genes hit, the
+consequences); mutation burden (variants per megabase of the capture target for the consensus, the union
+and each caller). The target size is the summed length of `mosdepth_targets` over the primary contigs for
+the tumour (`somatic_burden.target_mb`), the padded intervals including the UTRs here, so a burden is
+comparable only to another exome counted the same way. Collapsed: the variant table and the call table
+(a click centres the Locus browser). Filters: design, caller, variant type, number of callers, impact.
 
 **Copy number & MSI.** A short text says how to read the tab (what a log2 ratio is, the 0.3 and -0.3
 cut-offs, what MSI measures). Strip, two rows of four cards: the fraction of the genome altered,
@@ -193,16 +216,23 @@ called without a normal has no MSI score. `cnv_segments` prefers the pair's `.so
 sample's `.germline.call.cns`, then a plain `.call.cns`; `call_source` says which. Collapsed: the MSI
 summary and the segment and bin tables. Filters: contig and design.
 
-**Germline vs somatic.** Pairs only. A somatic caller subtracts the patient's variants with the
-normal; a somatic call that is also a PASS germline call of the normal is probably inherited and
-slipped through. Strip: the distinct PASS variants of the normals and of the pairs (by class), the
-somatic calls (a bar by whether the normal's germline calls hold the same variant), and the allele
-fraction in the normal and in the tumour (box plots). Then the distinct PASS variants per patient
-(germline of the normal beside somatic of the pair, a variant several callers agree on counted
-once) and a scatter of each somatic call by its allele fraction in the normal against the tumour,
-with the diagonal and a colour for the overlap. The normal's fraction is the paired caller's own
-when it wrote one, else that of the matching germline call (`normal_vaf_source`). Collapsed: the
-comparison table. Filters: overlap and caller. The tab exists only when a pair has somatic calls.
+**Germline vs somatic.** Pairs only. Two questions, each with a **Look at / Expect / Worry if** text.
+Is it really somatic: a somatic caller subtracts the patient's variants with the normal, so a somatic
+call that is also a PASS germline call of the normal is probably inherited and slipped through. Strip:
+the distinct PASS variants of the normals and of the pairs (by class), the somatic variants by their
+allele fraction in the normal (`normal_class`: clean under 0.03, trace to 0.10, germline-like above), the
+inherited look-alikes (by number of callers) and the normal's heterozygous sites (by what the tumour
+kept). Then a scatter of each somatic variant by its allele fraction in the normal against the tumour
+(zones at 0.03 and 0.10, a colour for the overlap), the normal's fraction as a log-scale histogram, and
+a ranked table of the variants the normal carries. What the tumour lost: `germline_het_sites`
+(`recipes/germline_het_sites.py`) holds the normal's heterozygous SNVs (depth 10 or more in both samples)
+read in the tumour, so the tumour's allele fraction along the genome shows loss of heterozygosity
+(`allele_state`: balanced 0.35 to 0.65, imbalanced, LOH-like under 0.15 or over 0.85) and a bar gives
+the LOH-like share per chromosome. The sites need a caller that genotypes the pair jointly (Freebayes on
+a pair); without one the section is skipped. The normal's fraction in the call table is the paired
+caller's own when it wrote one, else that of the matching germline call (`normal_vaf_source`); the
+`normal_dp` column is the matching depth. Collapsed: the comparison table. Filters: overlap, caller, the
+normal's class and the allele state. The tab exists only when a pair has somatic calls.
 
 **Consequences.** Strip: the annotated calls (a ring by impact class), the HIGH-impact calls
 (split by variant type), the genes with a HIGH or MODERATE call (the callers that hit most)
@@ -318,10 +348,10 @@ needs no caller, the Variant calls group needs a caller, the Annotation group ne
 | `manta`, `tiddit` (structural variants) | The Structural variants tab, and the same tabs as extra callsets (Ts/Tv cards keep `ts_tv > 0`). In the Locus browser the structural-variant track opens by default and the circular view draws them | `sv_calls`, `tracks` rows of kind `sv` |
 | `snpeff` | Consequences, Genes, Protein, the shared-calls UpSet and the HIGH-impact rows of the Overview, the SnpEff panels of MultiQC | `snpeff_*`, `protein_genes`, `snpeff_vcf_files` |
 | `vep` | The VEP panels of the MultiQC tab only; the annotation tabs read SnpEff output, so VEP alone adds no tab | `multiqc_data` |
-| `mutect2`, `strelka` on a tumour/normal pair, or on a tumour alone | Somatic calls; Germline vs somatic when the pair also has a germline callset for the normal | `somatic_calls`, `pairs`, `somatic_vs_germline`, `patient_call_counts`, `tracks` rows of kind `somatic` |
+| `mutect2`, `strelka`, `muse` on a tumour/normal pair, or on a tumour alone | Somatic calls; Germline vs somatic when the pair also has a germline callset for the normal (the LOH section also needs `freebayes` on the pair) | `somatic_calls`, `pairs`, `somatic_vs_germline`, `patient_call_counts`, `somatic_variants`, `somatic_burden` (needs `mosdepth_targets` for the per-megabase burden), `germline_het_sites`, `tracks` rows of kind `somatic`; `somatic_ann_vcf_raw` (the `*_vs_*_snpEff.ann.vcf.gz` of a pair) adds the gene and impact of each variant |
 | `cnvkit` | Copy number & MSI (the profile and cards) | `cnv_segments` (from `cnvkit_segments_raw`, `cnvkit_bins_raw`), `cnv_summary` (from `cnv_segments`) |
 | `msisensorpro` (needs a pair) | Copy number & MSI (the MSI card and table) | `msi` (from `msisensorpro_raw`) |
-| `ascat`, `ngscheckmate` | No tab yet; the collections are ingested when present | `ascat_segments`, `ngscheckmate_matches` |
+| `ascat`, `ngscheckmate` | No tab yet; the collections are ingested when present (the NGSCheckMate SNP-panel VCFs under `reports/` are not read as a caller's calls) | `ascat_segments`, `ngscheckmate_matches` |
 
 The germline demo data is the AWS megatest `test_full_germline_ncbench_agilent`, run with
 `--tools deepvariant,freebayes,haplotypecaller,manta,strelka,snpeff,vep`, so it shows every tab
@@ -352,7 +382,8 @@ mapping_only`) with the files such a run holds, and
 pinned off the palette slots the first samples take, so a caller never shares a colour with a
 sample in the same section; any other caller takes a free slot. The impact classes, variant types,
 mutation and indel classes, inferred sex, mosdepth scope, status, patient design, unit type, call
-class, overlap with the normal and copy-number state are written out, and the
+class, overlap with the normal, copy-number state, the number of somatic callers (`support`), the
+normal's class, the substitution class and the allele state are written out, and the
 FILTER values take `auto:n_variants` (the commonest eight of the run take the palette) with
 PASS pinned green. The impact figure reads the same map.
 
