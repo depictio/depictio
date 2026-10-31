@@ -600,6 +600,18 @@
         "vcftools": "1.0.0"
       }
     },
+    "nf-core/sarek/3.11.0": {
+      "version": "2.0.0",
+      "content_hash": "d1275202ed8772c6e8767715b6dabe8039641d60097e72c586ac047b143e767c",
+      "catalog": {
+        "bcftools": "1.0.0",
+        "mosdepth": "1.0.0",
+        "multiqc": "1.0.0",
+        "snpeff": "1.0.0",
+        "vcf": "1.0.0",
+        "vcftools": "1.0.0"
+      }
+    },
     "nf-core/scrnaseq/4.2.0": {
       "version": "1.0.0",
       "content_hash": "73a38918f6c449a1fb20a0f9ec51932dd7f530cb592ffb3af611a5fee524fdec",
