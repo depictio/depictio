@@ -3994,6 +3994,10 @@ tabs:
       sort_by: cardinality
       sort_order: descending
       min_size: 5
+      # The sets are callers: their pinned colours, as on every other tab. Named
+      # here, as `sample_id` pins every value too and the lookup by value is moot.
+      set_category_column: caller
+      color_intersections_by: set
     section: Genes the callers share
     tag: sk-gn-av-gene-upset
     index: gn-gene-upset
