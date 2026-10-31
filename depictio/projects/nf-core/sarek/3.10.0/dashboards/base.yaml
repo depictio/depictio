@@ -539,17 +539,7 @@ main_dashboard:
     tag: sk-ov-hl-loh
     index: ov-hl-loh
     layout: {x: 4, y: 13, w: 4, h: 5}
-  # The design in two tables: every sample, and the pairs the somatic tabs read.
-  - component_type: table
-    workflow_tag: sarek
-    data_collection_tag: samples
-    columns: [sample_id, patient, sex, status_label, design, n_callers]
-    section: Study design
-    tag: sk-ov-table-samples
-    index: ov-table-samples
-    title: Samples
-    description: One row per sample of the sheet, with its patient, sex, tumour or normal status, the patient's design and the number of callers run on it.
-    layout: {x: 0, y: 0, w: 8, h: 4}
+  # The pairs the somatic tabs read; the samples are the pinned sample sheet.
   - component_type: table
     workflow_tag: sarek
     data_collection_tag: pairs
@@ -559,7 +549,7 @@ main_dashboard:
     index: ov-table-pairs
     title: Tumour/normal pairs
     description: Each tumour with the normal of its patient. Sarek calls the pair as `<tumour>_vs_<normal>`, and the Somatic tabs read these calls.
-    layout: {x: 0, y: 4, w: 8, h: 3}
+    layout: {x: 0, y: 0, w: 8, h: 3}
   # Link-only tab tiles: each prints its tab's subtitle. A tab the run does not
   # have is left out, and a heading whose tabs are all missing is hidden.
   - component_type: text
@@ -2262,12 +2252,11 @@ tabs:
     order: 1
     body: >
       Somatic callers read a tumour against its matched normal and keep what the normal does not
-      carry. This tab merges the calls that passed each caller's filters into one list of distinct
-      variants, then asks, in order: who agrees on them, how much of the tumour's reads carry them,
-      what kind of change they are, which genes they hit and how many there are per megabase.
-      A tumour called without a normal has nothing subtracted and appears only in the call-level
-      figure and table. [Germline vs somatic](tab:Germline vs somatic) checks the calls against the
-      normal.
+      carry; this tab merges the calls that passed each caller's filters into one list of distinct
+      variants. It then asks, in order: who agrees on them, how much of the tumour's reads carry
+      them, what kind of change they are, which genes they hit and how many there are per megabase.
+      A tumour called without a normal appears only in the call-level figure and table, and
+      [Germline vs somatic](tab:Germline vs somatic) checks the calls against the normal.
     tag: sk-som-intro
     index: som-intro
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -2560,11 +2549,12 @@ tabs:
     layout: {x: 0, y: 2, w: 8, h: 4}
   # Impact on genes
   - component_type: text
-    body: >
+    body: |
       **Look at** the variants that change a protein: HIGH impact (a stop gained, a frameshift, a
       splice site) and MODERATE (a missense or an in-frame indel), ranked by impact, then by the callers
       in agreement, then by allele fraction. **Expect** a few percent of the variants to be
       protein-altering, mostly missense; most fall in introns, untranslated regions and between genes.
+
       **Worry if** the top of the list is backed by one caller, sits at a very low allele fraction or has
       reads in the normal: look at it in the genome browser before reporting it. Passengers
       outnumber drivers, so a long list is no evidence for one gene.
@@ -2667,18 +2657,20 @@ tabs:
   - component_type: text
     values:
       mb: {dc: somatic_burden, column: target_mb, aggregation: median, format: 'decimals:1'}
-    body: >
+    body: |
       **Look at** the variants per megabase of the capture target. The denominator is the summed length of
       the intervals the run was given, {{mb}} Mb here, so the burden of an exome is not comparable to a
       per-genome count. **Expect** a few per megabase in most solid tumours and well under one in
       some; about 10 per megabase is the usual line for a high burden, and mismatch-repair deficient or
-      hypermutated tumours go far above it. **Worry if** the callers disagree widely: the consensus bar
+      hypermutated tumours go far above it.
+
+      **Worry if** the callers disagree widely: the consensus bar
       is the figure to quote, and a gap between it and one caller is that caller's false positives or
       its sensitivity.
     section: Mutation burden
     tag: sk-som-text-burden
     index: som-text-burden
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: figure
     workflow_tag: sarek
     data_collection_tag: somatic_burden
@@ -2704,7 +2696,7 @@ tabs:
     index: som-burden-bar
     title: Burden by set of calls
     description: Variants per megabase for the consensus, for the union of the callers and for each caller alone, the median over the pairs in view. The dotted line is the usual 10 per megabase line for a high burden.
-    layout: {x: 0, y: 1, w: 5, h: 4}
+    layout: {x: 0, y: 2, w: 5, h: 4}
   - component_type: text
     surface: card
     values:
@@ -2721,7 +2713,7 @@ tabs:
     section: Mutation burden
     tag: sk-som-text-burden-sum
     index: som-burden-sum
-    layout: {x: 5, y: 1, w: 3, h: 4}
+    layout: {x: 5, y: 2, w: 3, h: 4}
   # Tables
   - component_type: table
     workflow_tag: sarek
@@ -3209,16 +3201,18 @@ tabs:
   components:
   - component_type: text
     order: 1
-    body: >
+    body: |
       The normal is the reference a somatic caller subtracts, so the two must be read together. First
       the check that matters most: a true somatic variant has reads in the tumour and none in the
       normal. Then the reverse question, on the normal's own variants: the sites where the patient is
-      heterozygous show, in the tumour, which parental copy of a region was lost. Pick a patient in the
+      heterozygous show, in the tumour, which parental copy of a region was lost.
+
+      Pick a patient in the
       sample filters to see one pair, and click a row of the table to see the tumour and the normal
       together in the Locus tab.
     tag: sk-gs-intro
     index: gs-intro
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: interactive
     workflow_tag: sarek
     data_collection_tag: somatic_vs_germline
@@ -3355,10 +3349,12 @@ tabs:
     layout: {x: 6, y: 0, w: 2, h: 2}
   # Is it really somatic
   - component_type: text
-    body: >
+    body: |
       **Look at** each somatic variant by its allele fraction in the normal (left to right) and in the
       tumour (bottom to top). **Expect** nearly all points at the far left, in the upper-left zone:
-      reads in the tumour and none in the normal. **Worry if** points sit right of the vertical line
+      reads in the tumour and none in the normal.
+
+      **Worry if** points sit right of the vertical line
       (0.03): a variant that the normal carries is either inherited (orange, also in the normal's germline
       calls, and near 0.5 in both samples) or a sign of tumour cells in the normal, which shows as a
       diffuse fan of low normal fractions growing with the tumour's. A caller that subtracts the
@@ -3366,7 +3362,7 @@ tabs:
     section: Is it really somatic
     tag: sk-gs-text-somatic
     index: gs-text-somatic
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: advanced_viz
     workflow_tag: sarek
     data_collection_tag: somatic_variants
@@ -3393,7 +3389,7 @@ tabs:
     index: gs-vaf-scatter
     title: Tumour against normal allele fraction
     description: Each point is a distinct somatic variant. Upper left, 0.03 or less in the normal and above 0.10 in the tumour, is where a true somatic variant sits; right of the vertical line the normal carries it. The colour says whether the normal's germline calls hold the same variant, and the diagonal is equal fractions.
-    layout: {x: 0, y: 1, w: 5, h: 6}
+    layout: {x: 0, y: 2, w: 5, h: 6}
   - component_type: figure
     workflow_tag: sarek
     data_collection_tag: somatic_variants
@@ -3414,7 +3410,7 @@ tabs:
     index: gs-normal-hist
     title: Allele fraction in the normal
     description: Distinct somatic variants per normal allele fraction, log scale. A true somatic callset is a tall bar at 0 and a short, flat tail; a second bump near 0.5 is inherited variants.
-    layout: {x: 5, y: 1, w: 3, h: 6}
+    layout: {x: 5, y: 2, w: 3, h: 6}
   - component_type: advanced_viz
     workflow_tag: sarek
     data_collection_tag: somatic_variants
@@ -3444,15 +3440,17 @@ tabs:
     index: gs-doubt-ranked
     title: Somatic calls the normal also carries
     description: The somatic variants with the highest allele fraction in the normal, the worst first. A variant the normal's germline calls also hold (orange) is inherited; one with a modest normal fraction and no germline call points at contamination.
-    layout: {x: 0, y: 7, w: 8, h: 7}
+    layout: {x: 0, y: 8, w: 8, h: 7}
   # What the tumour lost
   - component_type: text
-    body: >
+    body: |
       **Look at** the tumour's allele fraction at the sites where the normal is heterozygous (a fraction
       near 0.5 in the normal). **Expect** a flat band at 0.5 on chromosomes where the tumour kept both
       copies; where it lost one parental copy (loss of heterozygosity, LOH) the band splits into two,
       near 0 and near 1, and a gained copy splits it near 0.33 and 0.67. A tumour that is not fully
-      pure keeps the split bands off 0 and 1. **Worry if** the loss is on every chromosome of a sample
+      pure keeps the split bands off 0 and 1.
+
+      **Worry if** the loss is on every chromosome of a sample
       whose copy-number profile is flat: a tumour and a normal that do not come from the same person
       read like that, so check the sample match in the MultiQC tab. Compare with
       [Copy number & MSI](tab:Copy number & MSI): a deletion explains LOH with a loss, otherwise it is
