@@ -99,8 +99,6 @@ main_dashboard:
     collapsed: true
     persistent: true
     pin: bottom
-    exclude_tabs:
-    - Overview
   components:
   # First in component order on purpose: the Guide demos the first categorical
   # filter that shares a data collection with the first card (Libraries, below).
@@ -145,31 +143,36 @@ main_dashboard:
     tag: ns-ov-hero
     index: ov-hero
     layout: {x: 0, y: 0, w: 8, h: 1}
-  - component_type: text
-    surface: card
-    body: |
-      ### About this dashboard
-      nf-core/nanoseq takes Nanopore reads through quality control and alignment, counts them per gene and transcript with Bambu, and tests what differs between conditions, gene by gene and isoform by isoform. This page sums up one run; each tab behind it answers one question, in the order of the steps below.
-
-      A library is named `<condition>_R<replicate>` by the pipeline, so its name reads as its condition and replicate; the Libraries card below splits them by condition. The sample filters in the left panel apply to every tab with a sample column: narrow the libraries once and those tabs follow. A bar above a section narrows that section only.
-    tag: ns-ov-about
-    index: ov-about
-    layout: {x: 0, y: 1, w: 5, h: 3}
-  # The run's facts, read from its data: it ships no params.json, so no
-  # {{param:...}} line would print anything but a dash.
+  # The study: the libraries and the design they were prepared under, from the sample hub
+  # and the design table. The preparation line cites the design table, so it goes with it.
   - component_type: text
     surface: card
     values:
       libs: {dc: samples, column: sample_id, aggregation: nunique, format: integer}
       conds: {dc: samples, column: condition, aggregation: nunique, format: integer}
+      reps: {dc: samples, column: replicate, aggregation: max, format: integer}
       preps: {dc: design, column: protocol, aggregation: nunique, format: integer}
+    body: |
+      ### The study
+      - ![](icon:mdi:test-tube) **Libraries** {{libs}} in {{conds}} conditions
+      - ![](icon:mdi:content-copy) **Replicates** up to {{reps}} a condition
+      - ![](icon:mdi:flask-outline) **Preparations** {{preps}} library protocols
+      - ![](icon:mdi:file-table-outline) **Samplesheet** [one row per library](section:Sample sheet), its path in [the run parameters](params:input)
+    tag: ns-ov-study
+    index: ov-study
+    layout: {x: 0, y: 1, w: 5, h: 3}
+  # The run's facts, read from its data and its software versions. A tool version
+  # shares its line with a count, so the line goes with its data.
+  - component_type: text
+    surface: card
+    values:
       reads: {dc: nanostats, column: n_reads, aggregation: sum, format: si}
+      genes: {dc: bambu_counts_gene_long, column: gene_id, aggregation: nunique, format: si}
     body: |
       ### The run
-      - ![](icon:mdi:test-tube) **Libraries** {{libs}}
-      - ![](icon:mdi:shape-outline) **Conditions** {{conds}}
-      - ![](icon:mdi:flask-outline) **Preparations** {{preps}}
-      - ![](icon:mdi:counter) **Reads** {{reads}}
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/nanoseq 3.0.0 on Nextflow {{param:Workflow.Nextflow}}
+      - ![](icon:mdi:counter) **Reads** {{reads}}, NanoPlot {{param:NANOPLOT.nanoplot}}
+      - ![](icon:mdi:dna) **Counting** {{genes}} genes, Bambu {{param:BAMBU.bioconductor-bambu}}
     tag: ns-ov-run
     index: ov-run
     layout: {x: 5, y: 1, w: 3, h: 3}
@@ -193,6 +196,16 @@ main_dashboard:
     tag: ns-ov-steps
     index: ov-steps
     layout: {x: 0, y: 4, w: 8, h: 3}
+  - component_type: text
+    surface: card
+    body: |
+      ### About this dashboard
+      nf-core/nanoseq takes Nanopore reads through quality control and alignment, counts them per gene and transcript with Bambu, and tests what differs between conditions, gene by gene and isoform by isoform. This page sums up one run; each tab behind it answers one question, in the order of the steps above.
+
+      A library is named `<condition>_R<replicate>` by the pipeline, so its name reads as its condition and replicate; the Libraries card below splits them by condition. The sample filters in the left panel apply to every tab with a sample column: narrow the libraries once and those tabs follow. A bar above a section narrows that section only.
+    tag: ns-ov-about
+    index: ov-about
+    layout: {x: 0, y: 7, w: 8, h: 3}
   # Key figures: one card per stage of the funnel, each opening the tab that
   # explains it. The icon colour is that tab's colour. Every route writes all
   # four collections.

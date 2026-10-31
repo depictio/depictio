@@ -98,7 +98,6 @@ main_dashboard:
     # Run health reads lanes, which no library link reaches: a pick here would
     # narrow nothing there, so the sheet is kept off it with the sample filters.
     exclude_tabs:
-    - Overview
     - Run health
   components:
   # First in component order on purpose: the Guide demos the first categorical
@@ -146,28 +145,34 @@ main_dashboard:
     tag: dm-ov-hero
     index: ov-hero
     layout: {x: 0, y: 0, w: 8, h: 1}
-  - component_type: text
-    surface: card
-    body: |
-      ### About this dashboard
-      nf-core/demultiplex turns a run folder into one set of reads per library with bcl2fastq or BCL Convert, reads every library with fastp and Falco, and holds the run to instrument limits with CheckQC. This page sums up one run; each tab behind it answers one question, in the order of the steps below.
-
-      The sample filters in the left panel apply to every library tab: narrow the libraries once and the dashboard follows. A bar above a section narrows that section only.
-    tag: dm-ov-about
-    index: ov-about
-    layout: {x: 0, y: 1, w: 5, h: 3}
-  # The run's own numbers: the demultiplexer from params.json, the rest read
-  # from the library hub and the lane summary.
+  # The study: the libraries split out of the run, from the library hub. Each
+  # line cites that one collection, so a line goes with its data.
   - component_type: text
     surface: card
     values:
       libs: {dc: libraries, column: sample, aggregation: nunique, format: integer}
+      n_fc: {dc: libraries, column: flowcell, aggregation: nunique, format: integer}
+      n_reads: {dc: libraries, column: reads, aggregation: sum, format: si}
+    body: |
+      ### The study
+      - ![](icon:mdi:test-tube) **Libraries** {{libs}} demultiplexed from the sample sheet
+      - ![](icon:mdi:view-grid-outline) **Flowcells** {{n_fc}} read
+      - ![](icon:mdi:dna) **Reads** {{n_reads}} assigned to a library
+      - ![](icon:mdi:file-table-outline) **Samplesheet** [one row per library](section:Sample sheet), its path in [the run parameters](params:input)
+    tag: dm-ov-study
+    index: ov-study
+    layout: {x: 0, y: 1, w: 5, h: 3}
+  # The run's own numbers: the demultiplexer from params.json, the rest read
+  # from the lane summary.
+  - component_type: text
+    surface: card
+    values:
       lanes: {dc: lane_summary, column: lane_label, aggregation: nunique, format: integer}
       yield_gb: {dc: lane_summary, column: yield_gb, aggregation: sum, format: 'decimals:1'}
     body: |
       ### The run
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/demultiplex 1.8.0 on Nextflow {{param:Workflow.Nextflow}}
       - ![](icon:mdi:barcode) **Demultiplexer** {{param:demultiplexer}}
-      - ![](icon:mdi:test-tube) **Libraries** {{libs}}
       - ![](icon:mdi:view-dashboard-outline) **Lanes** {{lanes}}
       - ![](icon:mdi:database-outline) **Yield** {{yield_gb}} Gb
     tag: dm-ov-run
@@ -191,6 +196,16 @@ main_dashboard:
     tag: dm-ov-steps
     index: ov-steps
     layout: {x: 0, y: 4, w: 8, h: 3}
+  - component_type: text
+    surface: card
+    body: |
+      ### About this dashboard
+      nf-core/demultiplex turns a run folder into one set of reads per library with bcl2fastq or BCL Convert, reads every library with fastp and Falco, and holds the run to instrument limits with CheckQC. This page sums up one run; each tab behind it answers one question, in the order of the steps below.
+
+      The sample filters in the left panel apply to every library tab: narrow the libraries once and the dashboard follows. A bar above a section narrows that section only.
+    tag: dm-ov-about
+    index: ov-about
+    layout: {x: 0, y: 7, w: 8, h: 3}
   # Key figures: one card per stage of the funnel, each opening the tab that
   # explains it. The icon colour is that tab's colour. Percentages are read on
   # the worst lane or library, never averaged.

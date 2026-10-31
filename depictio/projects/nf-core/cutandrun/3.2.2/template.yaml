@@ -53,7 +53,8 @@
 # HPC runs), so the run's parameters survive only in `execution_report.html`.
 # Provenance therefore collects the tool versions from
 # `pipeline_info/software_versions.yml` and `local_versions.yml` and nothing
-# else, and no template variable is auto-set from pipeline parameters.
+# else, and no template variable is auto-set from pipeline parameters. The
+# `params` source stays declared for a run that does write one.
 #
 # LAYOUT NOTE. The run publishes numbered stage directories (01_prealign/,
 # 02_alignment/, 03_peak_calling/, 04_reporting/). Data collection scans and
@@ -90,8 +91,14 @@ template:
   # in 'Other'.
   provenance:
     sources:
+      - name: "params"
+        glob: "pipeline_info/params*.json"
+        format: "json"
+        pick: "latest"
+        exclude_keys:
+          - "hook_url" # nf-core runs put a live Slack webhook here
       - name: "software_versions"
-        glob: "pipeline_info/software_versions.yml"
+        glob: "pipeline_info/*software*versions*.yml"
         format: "yaml"
         pick: "latest"
         group: "Software versions"
@@ -101,7 +108,9 @@ template:
         pick: "latest"
         group: "Software versions"
     groups:
-      - group: "Software versions"
+      # Only the params source reaches these rules: the software versions sources
+      # name their own group.
+      - group: "Parameters"
         key_patterns: ["*"]
   dashboards:
     - "dashboards/base.yaml"

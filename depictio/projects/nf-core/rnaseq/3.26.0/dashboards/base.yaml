@@ -81,8 +81,6 @@ main_dashboard:
     collapsed: true
     persistent: true
     pin: bottom
-    exclude_tabs:
-    - Overview
   components:
   # First in component order on purpose: the Guide demos the first categorical
   # filter that shares a data collection with the first card (Samples, below).
@@ -128,34 +126,50 @@ main_dashboard:
     tag: rna-ov-hero
     index: ov-hero
     layout: {x: 0, y: 0, w: 8, h: 1}
+  # The study: who was sequenced, from the sample sheet. Each line cites the sheet, and
+  # the strandedness column a sheet may lack has a line of its own.
   - component_type: text
     surface: card
+    values:
+      samples: {dc: samplesheet, column: sample, aggregation: nunique, format: integer}
+      groups: {dc: samplesheet, column: condition, aggregation: nunique, format: integer}
+      reps: {dc: samplesheet, column: replicate, aggregation: max, format: integer}
+      rtype: {dc: samplesheet, column: read_type, aggregation: top}
+      strand: {dc: samplesheet, column: strandedness, aggregation: top}
     body: |
-      ### About this dashboard
-      nf-core/rnaseq trims bulk RNA-seq reads, aligns them with STAR, quantifies transcripts with Salmon and merges the estimates into gene-level TPM and count matrices. This page sums up one run; each tab behind it answers one question, in the order of the steps below.
-
-      The sample filters in the left panel apply to every tab: narrow the samples once and the whole dashboard follows. A bar above a section narrows that section only.
-    tag: rna-ov-about
-    index: ov-about
+      ### The study
+      - ![](icon:mdi:flask-outline) **Samples** {{samples}} in {{groups}} conditions
+      - ![](icon:mdi:content-copy) **Replicates** up to {{reps}} a condition
+      - ![](icon:mdi:dna) **Reads** {{rtype}}
+      - ![](icon:mdi:swap-horizontal) **Strandedness** {{strand}}
+      - ![](icon:mdi:file-table-outline) **Samplesheet** [one row per sample](section:Sample sheet), its path in [the run parameters](params:input)
+    tag: rna-ov-study
+    index: ov-study
     layout: {x: 0, y: 1, w: 5, h: 3}
   # The run's own settings, read from its params.json: a key the run did not
   # set prints a dash.
   - component_type: text
     surface: card
-    values:
-      samples: {dc: samplesheet, column: sample, aggregation: nunique, format: integer}
     body: |
       ### The run
-      - ![](icon:mdi:flask-outline) **Samples** {{samples}}
-      - ![](icon:mdi:dna) **Genome** {{param:genome}}
-      - ![](icon:mdi:source-branch) **Aligner** {{param:aligner}}
-      - ![](icon:mdi:content-cut) **Trimmer** {{param:trimmer}}
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/rnaseq 3.26.0 on Nextflow {{param:Workflow.Nextflow}}
+      - ![](icon:mdi:map-marker-outline) **Genome** {{param:genome}}
+      - ![](icon:mdi:content-cut) **Aligner** {{param:aligner}}
+      - ![](icon:mdi:scissors-cutting) **Trimmer** {{param:trimmer}}
     tag: rna-ov-run
     index: ov-run
     layout: {x: 5, y: 1, w: 3, h: 3}
+  # A step whose tab can be pruned cites a count from that tab's collections, so the
+  # import takes the line out with its data: a run without a MultiQC report keeps
+  # no MultiQC step, and one without merged matrices ends at the library checks.
   - component_type: text
     surface: card
     accent: green
+    values:
+      n_libs: {dc: general_stats, column: sample, aggregation: count, format: integer}
+      n_expr: {dc: sample_overview, column: genes_expressed, aggregation: median, format: si}
+      n_genes: {dc: gene_summary, column: gene_id, aggregation: count, format: si}
+      n_named: {dc: gene_summary, column: gene_name, aggregation: nunique, format: si}
     body: |
       ### Six steps from reads to genes
       Each step names its settings and the tab that shows its result.
@@ -163,14 +177,26 @@ main_dashboard:
       ::: steps
       1. ![](icon:mdi:content-cut) **Trim** Adapters cut by {{param:trimmer}} · [Settings](params:trim) · [MultiQC](tab:MultiQC)
       2. ![](icon:mdi:dna) **Align** STAR on {{param:genome}} · [Settings](params:star) · [MultiQC](tab:MultiQC)
-      3. ![](icon:mdi:shield-check-outline) **Check** RSeQC, Qualimap and dupRadar · [Settings](params:rseqc) · [Library QC](tab:Library QC)
-      4. ![](icon:mdi:chart-scatter-plot) **Relate** DESeq2 QC on the counts · [Settings](params:deseq2) · [Sample Space](tab:Sample Space)
-      5. ![](icon:mdi:counter) **Quantify** Salmon, merged into gene TPMs · [Settings](params:salmon) · [Variable Genes](tab:Variable Genes)
-      6. ![](icon:mdi:tag-text-outline) **Annotate** Gene symbols from the GTF, reads in the genome browser · [Settings](params:gtf) · [Gene Explorer](tab:Gene Explorer)
+      3. ![](icon:mdi:shield-check-outline) **Check** RSeQC, Qualimap and dupRadar on {{n_libs}} libraries · [Settings](params:rseqc) · [Library QC](tab:Library QC)
+      4. ![](icon:mdi:chart-scatter-plot) **Relate** DESeq2 QC on the counts, {{n_expr}} genes expressed per library · [Settings](params:deseq2) · [Sample Space](tab:Sample Space)
+      5. ![](icon:mdi:counter) **Quantify** Salmon, merged into TPMs for {{n_genes}} genes · [Settings](params:salmon) · [Variable Genes](tab:Variable Genes)
+      6. ![](icon:mdi:tag-text-outline) **Annotate** {{n_named}} gene symbols from the GTF, reads in the genome browser · [Settings](params:gtf) · [Gene Explorer](tab:Gene Explorer)
       :::
     tag: rna-ov-steps
     index: ov-steps
     layout: {x: 0, y: 4, w: 8, h: 3}
+  - component_type: text
+    surface: card
+    body: |
+      ### About this dashboard
+      nf-core/rnaseq trims bulk RNA-seq reads, aligns them with STAR, quantifies transcripts with Salmon and merges the estimates into gene-level TPM and count matrices. This page sums up one run; each tab behind it answers one question, in the order of the steps above.
+
+      The sample filters in the left panel apply to every tab: narrow the samples once and the whole dashboard follows. A bar above a section narrows that section only.
+
+      Provenance: every setting and tool version on this page is read from the run's own `params.json` and software-versions report, and every number from the files the run wrote.
+    tag: rna-ov-about
+    index: ov-about
+    layout: {x: 0, y: 7, w: 8, h: 3}
   # Key figures: one card per stage of the funnel, each opening the tab that
   # explains it. The icon colour is that tab's colour.
   - component_type: card

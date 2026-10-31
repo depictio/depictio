@@ -120,8 +120,6 @@ main_dashboard:
     collapsed: true
     persistent: true
     pin: bottom
-    exclude_tabs:
-    - Overview
   - name: Database sheet
     icon: mdi:database-outline
     color: gray
@@ -175,6 +173,64 @@ main_dashboard:
     tag: tp-ov-hero
     index: ov-hero
     layout: {x: 0, y: 0, w: 8, h: 1}
+  # The study: the samples profiled and how they were sequenced, from the optional
+  # samplesheet. The sample count comes from the taxpasta summary every route writes, so
+  # the card keeps a line without a sheet; the sequencing lines go with the sheet.
+  - component_type: text
+    surface: card
+    values:
+      samples: {dc: taxpasta_sample_summary, column: sample, aggregation: nunique, format: integer}
+      platforms: {dc: samplesheet, column: instrument_platform, aggregation: nunique, format: integer}
+      top_platform: {dc: samplesheet, column: instrument_platform, aggregation: top}
+      runs: {dc: samplesheet, column: run_accession, aggregation: nunique, format: integer}
+    body: |
+      ### The study
+      - ![](icon:mdi:flask-outline) **Samples** {{samples}} profiled
+      - ![](icon:mdi:chip) **Platform** {{platforms}} sequencing platforms, mostly {{top_platform}}
+      - ![](icon:mdi:file-table-outline) **Samplesheet** [{{runs}} rows, one per sequencing run](section:Sample sheet), its path in [the run parameters](params:input)
+    tag: tp-ov-study
+    index: ov-study
+    layout: {x: 0, y: 1, w: 5, h: 3}
+  # The run's own settings, read from its params.json: a key the run did not
+  # set prints a dash.
+  - component_type: text
+    surface: card
+    values:
+      classifiers: {dc: taxpasta_sample_summary, column: profiler, aggregation: nunique, format: integer}
+      databases: {dc: taxpasta_sample_summary, column: database, aggregation: nunique, format: integer}
+    body: |
+      ### The run
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/taxprofiler 2.0.1 on Nextflow {{param:Workflow.Nextflow}}
+      - ![](icon:mdi:bacteria-outline) **Classifiers** {{classifiers}}
+      - ![](icon:mdi:database-outline) **Databases** {{databases}}
+      - ![](icon:mdi:content-cut) **Read QC** {{param:shortread_qc_tool}} · {{param:longread_filter_tool}}
+    tag: tp-ov-run
+    index: ov-run
+    layout: {x: 5, y: 1, w: 3, h: 3}
+  # The marks take the family's colour (the header's), not the theme's blue. The Depth and
+  # Confirm steps cite a value from their tab's collections: a run without Nonpareil or
+  # sylph drops them with their data.
+  - component_type: text
+    surface: card
+    accent: green
+    values:
+      n_depth: {dc: nonpareil_summary, column: sample, aggregation: nunique, format: integer}
+      n_genomes: {dc: sylph_ani, column: genome, aggregation: nunique, format: si}
+    body: |
+      ### Six steps from reads to agreed taxa
+      Each step names its settings and the tab that shows its result. A step the run skipped drops out.
+
+      ::: steps
+      1. ![](icon:mdi:content-cut) **Clean** Trim, filter, remove host · [Settings](params:qc) · [MultiQC](tab:MultiQC)
+      2. ![](icon:mdi:waves) **Depth** Nonpareil coverage of {{n_depth}} samples · [Settings](params:redundancy) · [Depth](tab:Sequencing depth)
+      3. ![](icon:mdi:tag-outline) **Profile** Every classifier, every database · [Settings](params:run_) · [Profiles](tab:Profiles)
+      4. ![](icon:mdi:sigma) **Standardise** taxpasta merges the profiles · [Settings](params:taxpasta) · [Diversity](tab:Diversity)
+      5. ![](icon:mdi:set-merge) **Compare** The classifiers side by side · [Settings](params:standardisation) · [Concordance](tab:Concordance)
+      6. ![](icon:mdi:target) **Confirm** sylph checks the identity of {{n_genomes}} genomes · [Settings](params:sylph) · [Confidence](tab:Confidence)
+      :::
+    tag: tp-ov-steps
+    index: ov-steps
+    layout: {x: 0, y: 4, w: 8, h: 3}
   - component_type: text
     surface: card
     body: |
@@ -184,43 +240,7 @@ main_dashboard:
       The sample filters in the left panel apply to every tab: narrow the samples once and the whole dashboard follows. A bar above a section narrows that section only.
     tag: tp-ov-about
     index: ov-about
-    layout: {x: 0, y: 1, w: 5, h: 3}
-  # The run's own settings, read from its params.json: a key the run did not
-  # set prints a dash.
-  - component_type: text
-    surface: card
-    values:
-      samples: {dc: taxpasta_sample_summary, column: sample, aggregation: nunique, format: integer}
-      classifiers: {dc: taxpasta_sample_summary, column: profiler, aggregation: nunique, format: integer}
-      databases: {dc: taxpasta_sample_summary, column: database, aggregation: nunique, format: integer}
-    body: |
-      ### The run
-      - ![](icon:mdi:flask-outline) **Samples** {{samples}}
-      - ![](icon:mdi:bacteria-outline) **Classifiers** {{classifiers}}
-      - ![](icon:mdi:database-outline) **Databases** {{databases}}
-      - ![](icon:mdi:content-cut) **Read QC** {{param:shortread_qc_tool}} · {{param:longread_filter_tool}}
-    tag: tp-ov-run
-    index: ov-run
-    layout: {x: 5, y: 1, w: 3, h: 3}
-  # The marks take the family's colour (the header's), not the theme's blue.
-  - component_type: text
-    surface: card
-    accent: green
-    body: |
-      ### Six steps from reads to agreed taxa
-      Each step names its settings and the tab that shows its result.
-
-      ::: steps
-      1. ![](icon:mdi:content-cut) **Clean** Trim, filter, remove host · [Settings](params:qc) · [MultiQC](tab:MultiQC)
-      2. ![](icon:mdi:waves) **Depth** Nonpareil coverage · [Settings](params:redundancy) · [Depth](tab:Sequencing depth)
-      3. ![](icon:mdi:tag-outline) **Profile** Every classifier, every database · [Settings](params:run_) · [Profiles](tab:Profiles)
-      4. ![](icon:mdi:sigma) **Standardise** taxpasta merges the profiles · [Settings](params:taxpasta) · [Diversity](tab:Diversity)
-      5. ![](icon:mdi:set-merge) **Compare** The classifiers side by side · [Settings](params:standardisation) · [Concordance](tab:Concordance)
-      6. ![](icon:mdi:target) **Confirm** sylph checks genome identity · [Settings](params:sylph) · [Confidence](tab:Confidence)
-      :::
-    tag: tp-ov-steps
-    index: ov-steps
-    layout: {x: 0, y: 4, w: 8, h: 3}
+    layout: {x: 0, y: 7, w: 8, h: 3}
   # Key figures: one card per stage of the funnel, each opening the tab that
   # explains it, all on the taxpasta collections every route writes. The icon
   # colour is that tab's colour.

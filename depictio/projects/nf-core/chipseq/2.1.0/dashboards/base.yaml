@@ -100,8 +100,6 @@ main_dashboard:
     collapsed: true
     persistent: true
     pin: bottom
-    exclude_tabs:
-    - Overview
   - name: Reference tables
     icon: mdi:table
     color: gray
@@ -158,38 +156,45 @@ main_dashboard:
     tag: cs-ov-hero
     index: ov-hero
     layout: {x: 0, y: 0, w: 8, h: 1}
-  - component_type: text
-    surface: card
-    body: |
-      ### About this dashboard
-      nf-core/chipseq aligns ChIP-seq reads, calls the peaks of each ChIP against its input control with MACS3 and merges them into one consensus set per antibody. This page sums up one run; each tab behind it answers one question, in the order of the steps below.
-
-      The sample filters in the left panel apply to every tab: narrow the libraries once and the whole dashboard follows. A bar above a section narrows that section only.
-    tag: cs-ov-about
-    index: ov-about
-    layout: {x: 0, y: 1, w: 5, h: 3}
-  # The counts come from the run's own tables (`values:`), the aligner and the
-  # read length from its params.json (`{{param:...}}`). No genome line: 2.x runs
-  # often name no iGenomes key (a custom FASTA), which would print a dash.
+  # Who was sequenced, from the design table: every line cites it, so a line goes
+  # with its data.
   - component_type: text
     surface: card
     values:
       libraries: {dc: design, column: sample_id, aggregation: nunique, format: integer}
       chips: {dc: design, column: sample_id, aggregation: nunique, filter_expr: col('role') == 'ChIP', format: integer}
+      inputs: {dc: design, column: sample_id, aggregation: nunique, filter_expr: col('role') != 'ChIP', format: integer}
       antibodies: {dc: design, column: antibody, aggregation: nunique, filter_expr: col('role') == 'ChIP',
         format: integer}
       conditions: {dc: design, column: condition, aggregation: nunique, format: integer}
+      reps: {dc: design, column: replicate, aggregation: nunique, format: integer}
+    body: |
+      ### The study
+      - ![](icon:mdi:test-tube) **Libraries** {{libraries}}: {{chips}} ChIP and {{inputs}} input control
+      - ![](icon:mdi:molecule) **Antibodies** {{antibodies}}, each with its own consensus set
+      - ![](icon:mdi:shape-outline) **Conditions** {{conditions}}
+      - ![](icon:mdi:content-copy) **Replicates** up to {{reps}} biological per condition
+      - ![](icon:mdi:file-table-outline) **Samplesheet** [one row per library](section:Sample sheet), its path in [the run parameters](params:input)
+    tag: cs-ov-study
+    index: ov-study
+    layout: {x: 0, y: 1, w: 5, h: 6}
+  # The aligner and the read length come from the run's params.json
+  # (`{{param:...}}`). No genome line: 2.x runs often name no iGenomes key (a
+  # custom FASTA), which would print a dash.
+  - component_type: text
+    surface: card
+    values:
       peaks: {dc: macs2_peak_summary, column: num_peaks, aggregation: sum, format: si}
       ptype: {dc: macs2_peaks, column: peak_type, aggregation: top}
     body: |
       ### The run
-      - ![](icon:mdi:test-tube) **Libraries** {{libraries}}, {{chips}} of them ChIPs
-      - ![](icon:mdi:molecule) **Antibodies** {{antibodies}} in {{conditions}} conditions
-      - ![](icon:mdi:source-branch) **Aligner** {{param:aligner}}, {{param:read_length}} bp reads
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/chipseq 2.1.0 on Nextflow {{param:Workflow.Nextflow}}
+      - ![](icon:mdi:content-cut) **Aligner** {{param:aligner}}, {{param:read_length}} bp reads
       - ![](icon:mdi:chart-scatter-plot) **Peaks** {{peaks}} {{ptype}} calls
+      - ![](icon:mdi:tune) [All parameters and tool versions](params:)
     tag: cs-ov-run
     index: ov-run
-    layout: {x: 5, y: 1, w: 3, h: 3}
+    layout: {x: 5, y: 1, w: 3, h: 6}
   # The marks take the family's colour (the header's), not the theme's blue.
   # A `params:` link searches the software versions the run recorded.
   - component_type: text
@@ -208,7 +213,17 @@ main_dashboard:
       :::
     tag: cs-ov-steps
     index: ov-steps
-    layout: {x: 0, y: 4, w: 8, h: 3}
+    layout: {x: 0, y: 7, w: 8, h: 3}
+  - component_type: text
+    surface: card
+    body: |
+      ### About this dashboard
+      nf-core/chipseq aligns ChIP-seq reads, calls the peaks of each ChIP against its input control with MACS3 and merges them into one consensus set per antibody. This page sums up one run; each tab behind it answers one question, in the order of the steps below.
+
+      The sample filters in the left panel apply to every tab: narrow the libraries once and the whole dashboard follows. A bar above a section narrows that section only.
+    tag: cs-ov-about
+    index: ov-about
+    layout: {x: 0, y: 10, w: 8, h: 3}
   # Key figures: one card per stage of the funnel, each opening the tab that
   # explains it.
   - component_type: card

@@ -110,8 +110,6 @@ main_dashboard:
     collapsed: true
     persistent: true
     pin: bottom
-    exclude_tabs:
-    - Overview
   components:
   # First in component order on purpose: the Guide demos the first categorical
   # filter that shares a data collection with the first card (Cells called).
@@ -156,26 +154,31 @@ main_dashboard:
     tag: sc-ov-hero
     index: ov-hero
     layout: {x: 0, y: 0, w: 8, h: 1}
+  # The study: the samples and what the sheet says about their loading. The expected cells
+  # a sheet may leave blank have a line of their own.
   - component_type: text
     surface: card
+    values:
+      samples: {dc: samples, column: sample_id, aggregation: nunique, format: integer}
+      lanes: {dc: samples, column: n_lanes, aggregation: sum, format: integer}
+      cells: {dc: samples, column: expected_cells, aggregation: sum, format: si}
     body: |
-      ### About this dashboard
-      nf-core/scrnaseq quantifies droplet single-cell RNA-seq with Cell Ranger (and, on request, simpleaf or kallisto), then CellBender removes the ambient RNA. This page sums up one run; each tab behind it answers one question, in the order of the steps below.
-
-      The sample filter in the left panel applies to every tab: narrow the samples once and the whole dashboard follows. A bar above a section narrows that section only.
-    tag: sc-ov-about
-    index: ov-about
+      ### The study
+      - ![](icon:mdi:flask-outline) **Samples** {{samples}}, one Cell Ranger library each
+      - ![](icon:mdi:view-parallel-outline) **Lanes** {{lanes}} FASTQ lanes, merged per sample
+      - ![](icon:mdi:blur) **Expected cells** {{cells}} in all, as the sheet states them
+      - ![](icon:mdi:file-table-outline) **Samplesheet** [one row per sample](section:Sample sheet), its path in [the run parameters](params:input)
+    tag: sc-ov-study
+    index: ov-study
     layout: {x: 0, y: 1, w: 5, h: 3}
   # The run's own settings, read from its params.json: a key the run did not
   # set prints a dash.
   - component_type: text
     surface: card
-    values:
-      samples: {dc: samples, column: sample_id, aggregation: nunique, format: integer}
     body: |
       ### The run
-      - ![](icon:mdi:flask-outline) **Samples** {{samples}}
-      - ![](icon:mdi:source-branch) **Aligner** {{param:aligner}}
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/scrnaseq 4.2.0 on Nextflow {{param:Workflow.Nextflow}}
+      - ![](icon:mdi:dna) **Aligner** {{param:aligner}}
       - ![](icon:mdi:barcode) **Protocol** {{param:protocol}}
       - ![](icon:mdi:book-open-variant) **Genome** {{param:genome}}
     tag: sc-ov-run
@@ -199,6 +202,18 @@ main_dashboard:
     tag: sc-ov-steps
     index: ov-steps
     layout: {x: 0, y: 4, w: 8, h: 3}
+  - component_type: text
+    surface: card
+    body: |
+      ### About this dashboard
+      nf-core/scrnaseq quantifies droplet single-cell RNA-seq with Cell Ranger (and, on request, simpleaf or kallisto), then CellBender removes the ambient RNA. This page sums up one run; each tab behind it answers one question, in the order of the steps above.
+
+      The sample filter in the left panel applies to every tab: narrow the samples once and the whole dashboard follows. A bar above a section narrows that section only.
+
+      Provenance: every setting and tool version on this page is read from the run's own `params.json` and software-versions report, and every number from the files the run wrote.
+    tag: sc-ov-about
+    index: ov-about
+    layout: {x: 0, y: 7, w: 8, h: 3}
   # Key figures: one card per stage of the funnel, each opening the tab that
   # explains it. The icon colour is that tab's colour. All four read Cell
   # Ranger collections, which every run writes.

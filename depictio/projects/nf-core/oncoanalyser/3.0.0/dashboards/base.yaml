@@ -147,7 +147,6 @@ main_dashboard:
     collapsed: true
     persistent: true
     pin: bottom
-    exclude_tabs: [Overview]
     description: The samplesheet behind every tab, narrowed by the sample filters
   components:
   # First in component order on purpose: the Guide demos the first categorical
@@ -196,35 +195,42 @@ main_dashboard:
     tag: oa-ov-hero
     index: ov-hero
     layout: {x: 0, y: 0, w: 8, h: 1}
+  # The study: who was sequenced, from the samplesheet. Each line cites the sample
+  # hub, so a line goes with its data.
   - component_type: text
     surface: card
+    values:
+      subjects: {dc: samples, column: subject_id, aggregation: nunique, format: integer}
+      n_groups: {dc: samples, column: group_id, aggregation: nunique, format: integer}
+      samples: {dc: samples, column: sample_id, aggregation: nunique, format: integer}
+      tumours: {dc: samples, column: sample_id, aggregation: nunique, filter_expr: "col('sample_type') == 'tumor'", format: integer}
+      normals: {dc: samples, column: sample_id, aggregation: nunique, filter_expr: "col('sample_type') == 'normal'", format: integer}
+      n_dna: {dc: samples, column: sample_id, aggregation: nunique, filter_expr: "col('sequence_type') == 'dna'", format: integer}
+      n_rna: {dc: samples, column: sample_id, aggregation: nunique, filter_expr: "col('sequence_type') == 'rna'", format: integer}
     body: |
-      ### About this dashboard
-      nf-core/oncoanalyser runs the WiGiTS toolkit of the Hartwig Medical Foundation on tumor and normal DNA and on tumor RNA. This page sums up one run; each tab behind it answers one question, in the order of the steps below.
-
-      The sample filters in the left panel apply to every tab: narrow the samples once and the whole dashboard follows. A bar above a section narrows that section only.
-    tag: oa-ov-about
-    index: ov-about
-    layout: {x: 0, y: 1, w: 5, h: 3}
+      ### The study
+      - ![](icon:mdi:account-group-outline) **Patients** {{subjects}}, in {{n_groups}} analysis groups
+      - ![](icon:mdi:test-tube) **Samples** {{samples}}: {{tumours}} tumor and {{normals}} normal
+      - ![](icon:mdi:dna) **Sequencing** {{n_dna}} DNA samples
+      - ![](icon:mdi:rna) **Transcriptome** {{n_rna}} RNA samples
+      - ![](icon:mdi:file-table-outline) **Samplesheet** [one row per sample](section:Sample sheet), its path in [the run parameters](params:input)
+    tag: oa-ov-study
+    index: ov-study
+    layout: {x: 0, y: 1, w: 5, h: 4}
   # The run's own settings, read from its params.json: a key the run did not
   # set prints a dash.
   - component_type: text
     surface: card
-    values:
-      samples: {dc: samples, column: sample_id, aggregation: nunique, format: integer}
-      n_groups: {dc: samples, column: group_id, aggregation: nunique, format: integer}
     body: |
       ### The run
-      - ![](icon:mdi:test-tube) **Samples** {{samples}} in {{n_groups}} analysis groups
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/oncoanalyser 3.0.0 on Nextflow {{param:Workflow.Nextflow}}
       - ![](icon:mdi:cog-outline) **Mode** {{param:mode}}
       - ![](icon:mdi:dna) **Genome** {{param:genome}}
       - ![](icon:mdi:gauge) **Purity fit** {{param:purity_estimate_mode}}
       - ![](icon:mdi:target) **Driver genes** {{param:driver_gene_panel}}
     tag: oa-ov-run
     index: ov-run
-    layout: {x: 5, y: 1, w: 3, h: 3}
-  # The marks take the family's colour (the header's), not the theme's blue. A
-  # step citing a value goes with its collection when the run skipped the tool.
+    layout: {x: 5, y: 1, w: 3, h: 4}
   - component_type: text
     surface: card
     accent: green
@@ -246,7 +252,19 @@ main_dashboard:
       :::
     tag: oa-ov-steps
     index: ov-steps
-    layout: {x: 0, y: 4, w: 8, h: 3}
+    layout: {x: 0, y: 5, w: 8, h: 3}
+  - component_type: text
+    surface: card
+    body: |
+      ### About this dashboard
+      nf-core/oncoanalyser runs the WiGiTS toolkit of the Hartwig Medical Foundation on tumor and normal DNA and on tumor RNA. This page sums up one run; each tab behind it answers one question, in the order of the steps below.
+
+      The sample filters in the left panel apply to every tab: narrow the samples once and the whole dashboard follows. A bar above a section narrows that section only.
+
+      Provenance: every setting and tool version on this page is read from the run's own `params.json` and software-versions report, and every number from the files the run wrote.
+    tag: oa-ov-about
+    index: ov-about
+    layout: {x: 0, y: 8, w: 8, h: 3}
   # Key figures: one card per stage of the funnel, each opening the tab that
   # explains it. All four read collections every route writes.
   - component_type: card

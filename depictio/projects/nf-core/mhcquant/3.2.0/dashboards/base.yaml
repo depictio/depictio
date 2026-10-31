@@ -88,8 +88,6 @@ main_dashboard:
     collapsed: true
     persistent: true
     pin: bottom
-    exclude_tabs:
-    - Overview
   - name: Reference tables
     icon: mdi:table
     color: gray
@@ -146,26 +144,31 @@ main_dashboard:
     tag: mq-ov-hero
     index: ov-hero
     layout: {x: 0, y: 0, w: 8, h: 1}
-  - component_type: text
-    surface: card
-    body: |
-      ### About this dashboard
-      nf-core/mhcquant searches immunopeptidomics spectra with Comet, rescores the matches with predicted retention times and spectra, and keeps the peptides that pass an FDR filter. This page sums up one run; each tab behind it answers one question, in the order of the steps below.
-
-      The sample filters in the left panel apply to every tab: narrow the samples once and the whole dashboard follows. A bar above a section narrows that section only.
-    tag: mq-ov-about
-    index: ov-about
-    layout: {x: 0, y: 1, w: 5, h: 3}
-  # The run's own settings, read from its params.json: a key the run did not
-  # set prints a dash.
+  # The study: the samplesheet's samples, the conditions they compare and the injections
+  # each was measured in.
   - component_type: text
     surface: card
     values:
       samples: {dc: samples, column: sample_id, aggregation: nunique, format: integer}
       raw_files: {dc: samples, column: run_id, aggregation: nunique, format: integer}
+      conditions: {dc: samples, column: Condition, aggregation: nunique, format: integer}
+      replicates: {dc: samples, column: replicate, aggregation: max, format: integer}
+    body: |
+      ### The study
+      - ![](icon:mdi:flask-outline) **Samples** {{samples}} from {{raw_files}} raw files
+      - ![](icon:mdi:shape-outline) **Conditions** {{conditions}}
+      - ![](icon:mdi:layers-outline) **Replicates** up to {{replicates}} injections of one sample
+      - ![](icon:mdi:file-table-outline) **Samplesheet** [one row per raw file](section:Sample sheet), its path in [the run parameters](params:input)
+    tag: mq-ov-study
+    index: ov-study
+    layout: {x: 0, y: 1, w: 5, h: 3}
+  # The run's own settings, read from its params.json: a key the run did not
+  # set prints a dash.
+  - component_type: text
+    surface: card
     body: |
       ### The run
-      - ![](icon:mdi:flask-outline) **Samples** {{samples}}, {{raw_files}} raw files
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/mhcquant 3.2.0 on Nextflow {{param:Workflow.Nextflow}}
       - ![](icon:mdi:magnify-scan) **Enzyme** {{param:enzyme}}
       - ![](icon:mdi:filter-outline) **FDR** {{param:fdr_threshold}}
       - ![](icon:mdi:ruler) **Lengths** {{param:peptide_min_length}} to {{param:peptide_max_length}}
@@ -173,27 +176,39 @@ main_dashboard:
     tag: mq-ov-run
     index: ov-run
     layout: {x: 5, y: 1, w: 3, h: 3}
-  # The marks take the family's colour (the header's), not the theme's blue.
-  # An unresolved tab link (Reproducibility, pruned without --quantify) is
-  # drawn as plain text.
+  # The marks take the family's colour (the header's), not the theme's blue. The
+  # Quantify step cites a count from the Reproducibility tab's collections, so a run
+  # without --quantify drops the line with its data.
   - component_type: text
     surface: card
     accent: green
+    values:
+      n_tracked: {dc: mhcquant_replicate_detection, column: peptide, aggregation: nunique, format: si}
     body: |
       ### Six steps from spectra to presented peptides
-      Each step names its settings and the tab that shows its result.
+      Each step names its settings and the tab that shows its result. A step the run skipped drops out.
 
       ::: steps
       1. ![](icon:mdi:magnify-scan) **Search** Comet matches spectra to the database · [Settings](params:precursor) · [Identification](tab:Identification)
       2. ![](icon:mdi:molecule) **Rescore** {{param:rescoring_engine}} with predicted features · [Settings](params:feature) · [Physico-chemical](tab:Physico-chemical checks)
       3. ![](icon:mdi:filter-outline) **Filter** Peptides kept at the set FDR · [Settings](params:fdr) · [Identification](tab:Identification)
-      4. ![](icon:mdi:set-merge) **Quantify** Replicate injections aligned · [Settings](params:quantif) · [Reproducibility](tab:Reproducibility)
+      4. ![](icon:mdi:set-merge) **Quantify** {{n_tracked}} peptides followed across the replicate injections · [Settings](params:quantif) · [Reproducibility](tab:Reproducibility)
       5. ![](icon:mdi:ruler) **Profile** Lengths and anchor motifs · [Settings](params:peptide) · [MHC signature](tab:MHC signature)
       6. ![](icon:mdi:relation-many-to-many) **Compare** Conditions and source proteins · [Peptides](tab:Peptides and proteins)
       :::
     tag: mq-ov-steps
     index: ov-steps
     layout: {x: 0, y: 4, w: 8, h: 3}
+  - component_type: text
+    surface: card
+    body: |
+      ### About this dashboard
+      nf-core/mhcquant searches immunopeptidomics spectra with Comet, rescores the matches with predicted retention times and spectra, and keeps the peptides that pass an FDR filter. This page sums up one run; each tab behind it answers one question, in the order of the steps above.
+
+      The sample filters in the left panel apply to every tab: narrow the samples once and the whole dashboard follows. A bar above a section narrows that section only.
+    tag: mq-ov-about
+    index: ov-about
+    layout: {x: 0, y: 7, w: 8, h: 3}
   # Key figures: one card per stage of the funnel, each opening the tab that
   # explains it. All four read collections every route writes.
   - component_type: card

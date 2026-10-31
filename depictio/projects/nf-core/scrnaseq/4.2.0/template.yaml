@@ -108,9 +108,11 @@ template:
         group: "Software versions"
       - name: "params"
         glob: "pipeline_info/params*.json"
-        format: "yaml" # params.json parses fine as YAML (JSON is a YAML subset)
+        format: "json"
         pick: "latest"
         group: "Pipeline parameters"
+        exclude_keys:
+          - "hook_url" # nf-core runs put a live Slack webhook here
     groups:
       - group: "Software versions"
         key_patterns: ["*"]

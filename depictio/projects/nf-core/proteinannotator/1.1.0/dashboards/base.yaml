@@ -103,8 +103,6 @@ main_dashboard:
     collapsed: true
     persistent: true
     pin: bottom
-    exclude_tabs:
-    - Overview
   components:
   # First in component order on purpose: the Guide demos the first categorical
   # filter that shares a data collection with the first card (Samples, below).
@@ -152,26 +150,33 @@ main_dashboard:
     tag: pa-ov-hero
     index: pa-ov-hero
     layout: {x: 0, y: 0, w: 8, h: 1}
+  # The study: what was annotated, from the per-sample summary. Each line cites
+  # the one collection, so a line goes with its data.
   - component_type: text
     surface: card
+    values:
+      samples: {dc: samples, column: sample_id, aggregation: nunique, format: integer}
+      n_in: {dc: samples, column: input_sequences, aggregation: sum, format: si}
+      n_kept: {dc: samples, column: kept_sequences, aggregation: sum, format: si}
+      n_ann: {dc: samples, column: annotated_proteins, aggregation: sum, format: si}
     body: |
-      ### About this dashboard
-      nf-core/proteinannotator filters protein FASTA files, annotates them with hmmsearch and InterProScan and predicts their secondary structure. This page sums up one run; each tab behind it answers one question.
-
-      The sample filters in the left panel apply to every tab. A bar above a section narrows that section only.
-    tag: pa-ov-about
-    index: pa-ov-about
+      ### The study
+      - ![](icon:mdi:test-tube) **Samples** {{samples}}, one protein FASTA each
+      - ![](icon:mdi:shape-outline) **Sequences** {{n_in}} given, {{n_kept}} kept by the length and duplicate filter
+      - ![](icon:mdi:puzzle-outline) **Annotated** {{n_ann}} proteins with at least one domain
+      - ![](icon:mdi:file-table-outline) **Samplesheet** [one row per sample](section:Sample sheet), its path in [the run parameters](params:input)
+    tag: pa-ov-study
+    index: pa-ov-study
     layout: {x: 0, y: 1, w: 5, h: 3}
   # The run's own settings, read from its params.json: a key the run did not
   # set prints a dash.
   - component_type: text
     surface: card
     values:
-      samples: {dc: samples, column: sample_id, aggregation: nunique, format: integer}
       n_prot: {dc: proteinannotator_proteins, column: entity, aggregation: nunique, format: integer}
     body: |
       ### The run
-      - ![](icon:mdi:test-tube) **Samples** {{samples}}
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/proteinannotator 1.1.0 on Nextflow {{param:Workflow.Nextflow}}
       - ![](icon:mdi:shape-outline) **Proteins** {{n_prot}}
       - ![](icon:mdi:ruler) **Length** {{param:min_seq_length}} to {{param:max_seq_length}}
       - ![](icon:mdi:check-decagram) **E-value** {{param:hmmsearch_evalue_cutoff}}
@@ -201,6 +206,16 @@ main_dashboard:
     tag: pa-ov-steps
     index: pa-ov-steps
     layout: {x: 0, y: 4, w: 8, h: 3}
+  - component_type: text
+    surface: card
+    body: |
+      ### About this dashboard
+      nf-core/proteinannotator filters protein FASTA files, annotates them with hmmsearch and InterProScan and predicts their secondary structure. This page sums up one run; each tab behind it answers one question.
+
+      The sample filters in the left panel apply to every tab. A bar above a section narrows that section only.
+    tag: pa-ov-about
+    index: pa-ov-about
+    layout: {x: 0, y: 7, w: 8, h: 3}
   # Key figures: one card per stage of the funnel, each opening the tab that
   # explains it. The icon colour is that tab's colour.
   - component_type: card

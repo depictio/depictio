@@ -121,8 +121,6 @@ main_dashboard:
     collapsed: true
     persistent: true
     pin: bottom
-    exclude_tabs:
-    - Overview
   components:
   # First in component order on purpose: the Guide demos the first categorical
   # filter that shares a data collection with the first card (Libraries, below).
@@ -171,34 +169,40 @@ main_dashboard:
     tag: nc-ov-hero
     index: nc-ov-hero
     layout: {x: 0, y: 0, w: 8, h: 1}
-  - component_type: text
-    surface: card
-    body: |
-      ### About this dashboard
-      nf-core/nascent aligns each run-on library, counts its reads over every gene body and writes its coverage strand by strand. Each tab behind this page answers one question about the time course, against the earliest time point as the baseline.
-
-      The sample filters in the left panel apply to every tab. A bar above a section narrows that section only. A library id is the sample name and its time point; the sheet of libraries, with their QC, is at the bottom of every tab.
-    tag: nc-ov-about
-    index: nc-ov-about
-    layout: {x: 0, y: 1, w: 5, h: 3}
-  # The run's own settings, read from its params.json: a key the run did not
-  # set prints a dash.
+  # Who was sequenced, from the sample hub: each line cites it, so a line goes with
+  # its data. The hub always holds the group column (the design's, else the phases of
+  # the time course).
   - component_type: text
     surface: card
     values:
       libs: {dc: samples, column: sample, aggregation: nunique, format: integer}
       points: {dc: samples, column: time_point, aggregation: nunique, format: integer}
+      last: {dc: samples, column: time_h, aggregation: max, format: "decimals:1"}
+      groups: {dc: samples, column: '{GROUP_COL}', aggregation: nunique, format: integer}
+    body: |
+      ### The study
+      - ![](icon:mdi:test-tube) **Libraries** {{libs}} of run-on RNA
+      - ![](icon:mdi:chart-timeline-variant) **Time points** {{points}}, the baseline to {{last}} h
+      - ![](icon:mdi:shape-outline) **Groups** {{groups}} to compare the time points by
+      - ![](icon:mdi:file-table-outline) **Samplesheet** [one row per library](section:Sample sheet), its path in [the run parameters](params:input)
+    tag: nc-ov-study
+    index: nc-ov-study
+    layout: {x: 0, y: 1, w: 5, h: 5}
+  # The run's own settings, read from its params.json: a key the run did not
+  # set prints a dash.
+  - component_type: text
+    surface: card
     body: |
       ### The run
-      - ![](icon:mdi:test-tube) **Libraries** {{libs}}
-      - ![](icon:mdi:chart-timeline-variant) **Time points** {{points}}
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/nascent 2.3.0 on Nextflow {{param:Workflow.Nextflow}}
       - ![](icon:mdi:flask-outline) **Assay** {{param:assay_type}}
       - ![](icon:mdi:dna) **Genome** {{param:genome}}
       - ![](icon:mdi:sort-variant) **Aligner** {{param:aligner}}
       - ![](icon:mdi:barcode) **UMIs** {{param:with_umi}}
+      - ![](icon:mdi:tune) [All parameters and tool versions](params:)
     tag: nc-ov-run
     index: nc-ov-run
-    layout: {x: 5, y: 1, w: 3, h: 3}
+    layout: {x: 5, y: 1, w: 3, h: 5}
   # A step citing a value goes with its collection when the run lacks it.
   - component_type: text
     surface: card
@@ -207,6 +211,7 @@ main_dashboard:
       n_libs: {dc: samples, column: sample, aggregation: nunique, format: integer}
       n_genes: {dc: gene_dynamics, column: gene_id, aggregation: nunique, format: integer}
       n_windows: {dc: signal_window_dynamics, column: window_id, aggregation: nunique, format: integer}
+      n_chrom: {dc: chromosome_signal, column: chromosome, aggregation: nunique, format: integer}
       n_points: {dc: samples, column: time_point, aggregation: nunique, format: integer}
     body: |
       ### Five steps from run-on reads to the time course
@@ -216,12 +221,22 @@ main_dashboard:
       1. ![](icon:mdi:filter-variant) **Prepare** Trim and check {{n_libs}} libraries with fastp and FastQC · [Settings](params:skip_trimming) · [Library QC](tab:Library QC)
       2. ![](icon:mdi:sort-variant) **Align** Each library to {{param:genome}} with {{param:aligner}} · [Settings](params:aligner) · [Library QC](tab:Library QC)
       3. ![](icon:mdi:counter) **Count** Reads over every gene body, {{n_genes}} genes expressed · [Gene dynamics](tab:Gene dynamics)
-      4. ![](icon:mdi:waves) **Cover** Strand coverage, binned into {{n_windows}} comparable windows · [Settings](params:genome) · [Genome signal](tab:Genome signal) · [Signal dynamics](tab:Signal dynamics)
+      4. ![](icon:mdi:waves) **Cover** Strand coverage of {{n_chrom}} chromosomes, binned into {{n_windows}} comparable windows · [Settings](params:genome) · [Genome signal](tab:Genome signal) · [Signal dynamics](tab:Signal dynamics)
       5. ![](icon:mdi:chart-timeline-variant) **Compare** {{n_points}} time points against the baseline · [Sample similarity](tab:Sample similarity)
       :::
     tag: nc-ov-steps
     index: nc-ov-steps
-    layout: {x: 0, y: 4, w: 8, h: 3}
+    layout: {x: 0, y: 6, w: 8, h: 3}
+  - component_type: text
+    surface: card
+    body: |
+      ### About this dashboard
+      nf-core/nascent aligns each run-on library, counts its reads over every gene body and writes its coverage strand by strand. Each tab behind this page answers one question about the time course, against the earliest time point as the baseline.
+
+      The sample filters in the left panel apply to every tab. A bar above a section narrows that section only. A library id is the sample name and its time point; the sheet of libraries, with their QC, is at the bottom of every tab.
+    tag: nc-ov-about
+    index: nc-ov-about
+    layout: {x: 0, y: 9, w: 8, h: 3}
   # Key figures: one card per stage of the funnel, each opening the tab that
   # explains it. The icon colour is that tab's colour.
   - component_type: card

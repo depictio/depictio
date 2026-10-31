@@ -137,6 +137,7 @@ main_dashboard:
       genomes: {dc: genomes, column: genome, aggregation: nunique, format: integer}
     body: |
       ### The run
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/pairgenomealign 3.0.4 on Nextflow {{param:Workflow.Nextflow}}
       - ![](icon:mdi:dna) **Genomes** {{genomes}} aligned to {{param:targetName}}
       - ![](icon:mdi:magnify-scan) **Seeds** {{param:seed}}, soft-masked by {{param:softmask}}
       - ![](icon:mdi:swap-horizontal) **Strand** {{param:strand}}
@@ -154,6 +155,7 @@ main_dashboard:
     values:
       n_asm: {dc: assemblyscan_stats, column: genome, aggregation: nunique, format: integer}
       n_links: {dc: last_synteny_links, column: label, aggregation: count, format: si}
+      n_pairs: {dc: last_split_matrix, column: pair, aggregation: nunique, format: integer}
     body: |
       ### Six steps from genomes to alignments
       Each step names its settings and the tab that shows its result.
@@ -162,7 +164,7 @@ main_dashboard:
       1. ![](icon:mdi:ruler) **Check** assembly-scan and seqtk profile {{n_asm}} query assemblies · [Settings](params:skip_assembly_qc) · [Assemblies](tab:Assemblies)
       2. ![](icon:mdi:tune) **Train** last-train fits the scoring parameters of every pair · [Settings](params:seed) · [Alignment](tab:Alignment)
       3. ![](icon:mdi:relation-many-to-many) **Align** lastal aligns each query, last-split keeps the one-to-one alignment · [Settings](params:lastal) · [Alignment](tab:Alignment)
-      4. ![](icon:mdi:scale-balance) **Compare** substitutions of the aligned columns give each pair its distance · [Settings](params:last_split) · [Divergence](tab:Divergence)
+      4. ![](icon:mdi:scale-balance) **Compare** substitutions of the aligned columns give {{n_pairs}} pairs their distance · [Settings](params:last_split) · [Divergence](tab:Divergence)
       5. ![](icon:mdi:vector-link) **Link** the PSL export puts {{n_links}} long alignments on a ring · [Settings](params:export_aln_to) · [Synteny](tab:Synteny)
       6. ![](icon:mdi:file-document-outline) **Report** MultiQC gathers the identity and parameter tables · [Settings](params:multiqc) · [MultiQC](tab:MultiQC)
       :::

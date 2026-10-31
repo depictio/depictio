@@ -73,6 +73,8 @@
 # NO params.json. The run publishes `pipeline_info/samplesheet.valid.csv` and
 # `pipeline_info/software_versions.yml` but no params JSON, so provenance is the
 # tool versions and no template variable is auto-set from pipeline parameters.
+# The `params` source stays declared for a run that does write one; the run card
+# cites no parameter, since this megatest would print a dash for each.
 #
 # SAMPLE NAMING. The validated samplesheet names a library
 # `<group>_REP<replicate>_T<technical replicate>`. Merged, it becomes
@@ -104,13 +106,21 @@ template:
   # in 'Other'.
   provenance:
     sources:
+      - name: "params"
+        glob: "pipeline_info/params*.json"
+        format: "json"
+        pick: "latest"
+        exclude_keys:
+          - "hook_url" # nf-core runs put a live Slack webhook here
       - name: "software_versions"
-        glob: "pipeline_info/software_versions.yml"
+        glob: "pipeline_info/*software*versions*.yml"
         format: "yaml"
         pick: "latest"
         group: "Software versions"
     groups:
-      - group: "Software versions"
+      # Only the params source reaches these rules: the software versions source
+      # names its own group.
+      - group: "Parameters"
         key_patterns: ["*"]
   dashboards:
     - "dashboards/base.yaml"

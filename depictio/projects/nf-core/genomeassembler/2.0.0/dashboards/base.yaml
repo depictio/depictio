@@ -102,8 +102,6 @@ main_dashboard:
     collapsed: true
     persistent: true
     pin: bottom
-    exclude_tabs:
-    - Overview
   components:
   # First in component order on purpose: the Guide demos the first categorical
   # filter that shares a data collection with the first card (Samples, below).
@@ -148,26 +146,34 @@ main_dashboard:
     tag: ga-ov-hero
     index: ov-hero
     layout: {x: 0, y: 0, w: 8, h: 1}
+  # The study: who was assembled, from the samplesheet. Each line cites one column, so a
+  # line goes with its column when the sheet has none.
   - component_type: text
     surface: card
+    values:
+      samples: {dc: samplesheet, column: sample, aggregation: nunique, format: integer}
+      n_strat: {dc: samplesheet, column: strategy, aggregation: nunique, format: integer}
+      top_strat: {dc: samplesheet, column: strategy, aggregation: top}
+      n_asm: {dc: samplesheet, column: assembler, aggregation: nunique, format: integer}
+      top_asm: {dc: samplesheet, column: assembler, aggregation: top}
     body: |
-      ### About this dashboard
-      nf-core/genomeassembler assembles each sample, polishes and scaffolds it, and scores every intermediate it writes: the raw assembly, each polishing step and each scaffolder. This page sums up one run; each tab behind it answers one question, in the order of the steps below.
-
-      The sample filters in the left panel apply to every tab: narrow the samples once and the whole dashboard follows. A bar above a section narrows that section only.
-    tag: ga-ov-about
-    index: ov-about
+      ### The study
+      - ![](icon:mdi:flask-outline) **Samples** {{samples}}, each assembled on its own row of the sheet
+      - ![](icon:mdi:shape-outline) **Strategy** {{n_strat}} kinds (single, hybrid, scaffold), most often {{top_strat}}
+      - ![](icon:mdi:family-tree) **Assemblers** {{n_asm}} named in the sheet, most often {{top_asm}}
+      - ![](icon:mdi:file-table-outline) **Samplesheet** [one row per sample](section:Sample sheet), its path in [the run parameters](params:input)
+    tag: ga-ov-study
+    index: ov-study
     layout: {x: 0, y: 1, w: 5, h: 3}
   # The run's own settings, read from its params.json: a key the run did not
   # set prints a dash.
   - component_type: text
     surface: card
     values:
-      samples: {dc: sample_status, column: sample, aggregation: nunique, format: integer}
       asms: {dc: assemblies, column: assembly_id, aggregation: nunique, format: integer}
     body: |
       ### The run
-      - ![](icon:mdi:flask-outline) **Samples** {{samples}}
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/genomeassembler 2.0.0 on Nextflow {{param:Workflow.Nextflow}}
       - ![](icon:mdi:family-tree) **Assemblies assessed** {{asms}}
       - ![](icon:mdi:shield-check-outline) **BUSCO lineage** {{param:busco_lineage}}
       - ![](icon:mdi:dna) **K-mer size** {{param:meryl_k}}
@@ -177,21 +183,34 @@ main_dashboard:
   - component_type: text
     surface: card
     accent: indigo
+    values:
+      n_sets: {dc: genomescope_summary, column: read_set, aggregation: nunique, format: integer}
+      n_scored: {dc: merqury_assembly_qv, column: assembly_id, aggregation: nunique, format: integer}
     body: |
       ### Six steps from reads to a scored genome
       Each step names its settings and the tab that shows its result.
 
       ::: steps
-      1. ![](icon:mdi:chart-bell-curve) **Profile** K-mer spectrum of the reads · [Settings](params:jellyfish) · [Genome profile](tab:Genome profile)
+      1. ![](icon:mdi:chart-bell-curve) **Profile** K-mer spectrum of {{n_sets}} read sets · [Settings](params:jellyfish) · [Genome profile](tab:Genome profile)
       2. ![](icon:mdi:family-tree) **Assemble** Long reads into contigs · [Settings](params:assembler) · [Best assembly](tab:Best assembly)
       3. ![](icon:mdi:auto-fix) **Polish** Consensus corrected · [Settings](params:polish) · [Stages](tab:Stages)
       4. ![](icon:mdi:vector-link) **Scaffold** Contigs ordered and joined · [Settings](params:scaffold) · [Stages](tab:Stages)
       5. ![](icon:mdi:ruler) **Measure** Lengths, N50 and QUAST · [Settings](params:quast) · [Contiguity](tab:Contiguity)
-      6. ![](icon:mdi:check-decagram) **Score** Merqury QV, BUSCO genes · [Settings](params:busco) · [Accuracy](tab:Accuracy)
+      6. ![](icon:mdi:check-decagram) **Score** Merqury QV and BUSCO genes of {{n_scored}} assemblies · [Settings](params:busco) · [Accuracy](tab:Accuracy)
       :::
     tag: ga-ov-steps
     index: ov-steps
     layout: {x: 0, y: 4, w: 8, h: 3}
+  - component_type: text
+    surface: card
+    body: |
+      ### About this dashboard
+      nf-core/genomeassembler assembles each sample, polishes and scaffolds it, and scores every intermediate it writes: the raw assembly, each polishing step and each scaffolder. This page sums up one run; each tab behind it answers one question, in the order of the steps above.
+
+      The sample filters in the left panel apply to every tab: narrow the samples once and the whole dashboard follows. A bar above a section narrows that section only.
+    tag: ga-ov-about
+    index: ov-about
+    layout: {x: 0, y: 7, w: 8, h: 3}
   # Key figures: one card per stage of the funnel, each opening the tab that
   # explains it. The design card reads the samplesheet; the other three read
   # `assemblies`, which every route writes (a QC tool the run skipped leaves

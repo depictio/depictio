@@ -92,8 +92,6 @@ main_dashboard:
     collapsed: true
     persistent: true
     pin: bottom
-    exclude_tabs:
-    - Overview
   components:
   # First in component order on purpose: the Guide demos the first categorical
   # filter that shares a data collection with the first card (the sample
@@ -141,26 +139,30 @@ main_dashboard:
     tag: sr-ov-hero
     index: ov-hero
     layout: {x: 0, y: 0, w: 8, h: 1}
+  # The study: the libraries and, when a design table was given, the groups they fall in.
+  # The group line cites the design table, so it goes with it.
   - component_type: text
     surface: card
+    values:
+      samples: {dc: samples, column: sample, aggregation: nunique, format: integer}
+      groups: {dc: metadata, column: '{GROUP_COL}', aggregation: nunique, format: integer}
     body: |
-      ### About this dashboard
-      nf-core/smrnaseq trims small RNA reads, profiles each library with miRTrace, counts miRNAs and isomiRs with mirtop and predicts novel miRNAs with miRDeep2. This page sums up one run; each tab answers one question, in the order of the steps below.
-
-      The sample filters in the left panel apply to every tab. A bar above a section narrows that section only.
-    tag: sr-ov-about
-    index: ov-about
+      ### The study
+      - ![](icon:mdi:flask-outline) **Libraries** {{samples}} small RNA libraries
+      - ![](icon:mdi:shape-outline) **Groups** {{groups}} by {GROUP_COL_DISPLAY}, from the design table
+      - ![](icon:mdi:file-table-outline) **Samplesheet** [one row per sample](section:Sample sheet), its path in [the run parameters](params:input)
+    tag: sr-ov-study
+    index: ov-study
     layout: {x: 0, y: 1, w: 5, h: 3}
   # The run's own settings, read from its params.json: a key the run did not
   # set prints a dash.
   - component_type: text
     surface: card
     values:
-      samples: {dc: samples, column: sample, aggregation: nunique, format: integer}
       mirnas: {dc: mirtop_mirna_summary, column: mirna, aggregation: count, format: integer}
     body: |
       ### The run
-      - ![](icon:mdi:flask-outline) **Samples** {{samples}}
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/smrnaseq 2.4.1 on Nextflow {{param:Workflow.Nextflow}}
       - ![](icon:mdi:dna) **Genome** {{param:genome}}
       - ![](icon:mdi:tag-outline) **Species** {{param:mirtrace_species}}
       - ![](icon:mdi:ruler) **Reads** {{param:fastp_min_length}}–{{param:fastp_max_length}} nt
@@ -168,10 +170,15 @@ main_dashboard:
     tag: sr-ov-run
     index: ov-run
     layout: {x: 5, y: 1, w: 3, h: 3}
+  # A step whose tab can be pruned cites a count from that tab's collections, so the
+  # import takes the line out with its data: a run that skipped MultiQC or miRDeep2
+  # keeps neither step.
   # The marks take the family's colour (the header's), not the theme's blue.
   - component_type: text
     surface: card
     accent: green
+    values:
+      n_novel: {dc: mirdeep2_novel_precursors, column: precursor_id, aggregation: count, format: integer}
     body: |
       ### Six steps from reads to miRNAs
       Each step names its settings and the tab that shows its result.
@@ -182,11 +189,23 @@ main_dashboard:
       3. ![](icon:mdi:counter) **Count** mirtop counts each miRNA · [Settings](params:mature) · [Expression](tab:miRNA Expression)
       4. ![](icon:mdi:scale-balance) **Compare** Libraries by expression · [Settings](params:input) · [Comparison](tab:Group Comparison)
       5. ![](icon:mdi:shape-outline) **Annotate** mirtop names the isomiRs · [Settings](params:hairpin) · [isomiRs](tab:isomiRs)
-      6. ![](icon:mdi:star-outline) **Discover** miRDeep2 scores new hairpins · [Settings](params:mirdeep) · [Novel](tab:Novel miRNAs)
+      6. ![](icon:mdi:star-outline) **Discover** miRDeep2 scores {{n_novel}} new hairpins · [Settings](params:mirdeep) · [Novel](tab:Novel miRNAs)
       :::
     tag: sr-ov-steps
     index: ov-steps
     layout: {x: 0, y: 4, w: 8, h: 3}
+  - component_type: text
+    surface: card
+    body: |
+      ### About this dashboard
+      nf-core/smrnaseq trims small RNA reads, profiles each library with miRTrace, counts miRNAs and isomiRs with mirtop and predicts novel miRNAs with miRDeep2. This page sums up one run; each tab answers one question, in the order of the steps above.
+
+      The sample filters in the left panel apply to every tab. A bar above a section narrows that section only.
+
+      Provenance: every setting and tool version on this page is read from the run's own `params.json` and software-versions report, and every number from the files the run wrote.
+    tag: sr-ov-about
+    index: ov-about
+    layout: {x: 0, y: 7, w: 8, h: 3}
   # Key figures: one card per stage of the funnel, each opening the tab that
   # explains it. The icon colour is that tab's colour.
   - component_type: card
