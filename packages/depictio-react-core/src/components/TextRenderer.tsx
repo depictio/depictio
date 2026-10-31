@@ -28,6 +28,7 @@ import { CARD_FRAME, CARD_RULE, RESTING_ICON_OPACITY } from './cardFrame';
 import Glyph, { glyphColorVar } from './Glyph';
 import { parseInlineMarkdown } from './inlineMarkdown';
 import { openRunParameters } from '../utils/runParameters';
+import { revealSection } from '../reveal';
 import StepFlow from './StepFlow';
 import TabTiles from './TabTiles';
 import {
@@ -196,6 +197,25 @@ const renderInlineMarkdown = (
               style={{ display: 'inline-flex', alignItems: 'center', gap: 4, verticalAlign: 'bottom' }}
             >
               {target.icon ? <Glyph icon={target.icon} color={target.color} size={16} /> : null}
+              {fill(token.value)}
+            </Anchor>
+          );
+        }
+        if (token.href.startsWith('section:')) {
+          // A section of this tab, or one pinned from a sibling: unfolded and
+          // scrolled to, never navigated to.
+          const name = token.href.slice('section:'.length);
+          return (
+            <Anchor
+              key={idx}
+              component="button"
+              type="button"
+              inherit
+              fw={600}
+              onClick={() => void revealSection(name)}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 4, verticalAlign: 'bottom' }}
+            >
+              <Glyph icon="mdi:arrow-down-circle-outline" color="currentColor" size={16} />
               {fill(token.value)}
             </Anchor>
           );
