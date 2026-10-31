@@ -537,10 +537,17 @@ jobs:
   # A stack started with `depictio local up` hands over to Docker Compose: same
   # dashboards, same table data in S3, and the CLI token still valid (same keys).
   # Runs on this commit's images: the export is only meant for the same release.
+  #
+  # ubuntu-22.04, not 24.04: the 24.04 runner this job got ran a Linux kernel
+  # >= 6.19, on which the mongo container exits at startup ("MongoDB cannot start: Linux
+  # kernel versions 6.19 and newer ...", SERVER-121912, tcmalloc vs rseq), so
+  # `docker compose up` reports mongo unhealthy. No mongo release fixes it; the
+  # 22.04 jobs above run the same image fine. `local-up (ubuntu-24.04)` still
+  # covers the 24.04 platform with the native mongod.
   local-to-compose:
     needs: [check-quality-cache, docker-build]
     if: always() && needs.docker-build.result == 'success'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-22.04
     timeout-minutes: 30
     permissions:
       contents: read
