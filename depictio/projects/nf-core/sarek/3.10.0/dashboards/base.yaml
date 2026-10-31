@@ -191,8 +191,6 @@ main_dashboard:
     collapsed: true
     persistent: true
     pin: bottom
-    exclude_tabs:
-    - Overview
   components:
   # First in component order on purpose: the Guide demos the first categorical
   # filter that shares a data collection with the first card (Callsets).
@@ -269,7 +267,7 @@ main_dashboard:
       - ![](icon:mdi:link-variant) **Pairs** {{pairs}} tumour/normal, each tumour read against its own normal
       - ![](icon:mdi:dna) **Sequencing** whole exome (`wes` = {{param:wes}})
       - ![](icon:mdi:target) **Capture** {{param:intervals}}
-      - ![](icon:mdi:file-table-outline) **Samplesheet** [as given to the run](params:input)
+      - ![](icon:mdi:file-table-outline) **Samplesheet** [one row per sample](section:Sample sheet), its path in [the run parameters](params:input)
     tag: sk-ov-study
     index: ov-study
     layout: {x: 0, y: 1, w: 5, h: 6}
