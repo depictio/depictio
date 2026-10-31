@@ -5,6 +5,9 @@ when it finishes. The mechanism is a `workflow.onComplete` handler shipped as a
 drop-in config snippet, `depictio/cli/configs/nextflow/depictio.config`, which
 runs `depictio-cli ingest` on the pipeline's output directory.
 
+To ingest from inside a pipeline instead, as one of its processes, use the
+[`depictio/ingest` module](nextflow-module.md).
+
 ## What the handler does
 
 On completion, in this order:
