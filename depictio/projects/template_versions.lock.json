@@ -162,6 +162,14 @@
         "multiqc": "1.0.0"
       }
     },
+    "nf-core/airrflow/5.1.2": {
+      "version": "1.0.0",
+      "content_hash": "8dbc7684c19e9b58d9bcb1d52cc66c196b2f239dd88cf5feb5d20386f2b64363",
+      "catalog": {
+        "enchantr": "1.0.0",
+        "multiqc": "1.0.0"
+      }
+    },
     "nf-core/ampliseq/2.14.0": {
       "version": "1.2.0",
       "content_hash": "ffa75e49b80a34515a48e9b26d41cad94837685018988435d7352c800a0fa615",
@@ -360,6 +368,17 @@
     "nf-core/hic/2.0.0": {
       "version": "1.0.0",
       "content_hash": "4cadf14b9b126c4b553625c7608c4e775416731b012c98a679fb0b23c4711db2",
+      "catalog": {
+        "cooler": "1.0.0",
+        "cooltools": "1.0.0",
+        "hicexplorer": "1.0.0",
+        "hicpro": "1.0.0",
+        "multiqc": "1.0.0"
+      }
+    },
+    "nf-core/hic/2.1.0": {
+      "version": "1.0.0",
+      "content_hash": "7bfa5b6b4b01e88e837cc83ad08121e768ac1fbbfc49ecba22e173018b495c2b",
       "catalog": {
         "cooler": "1.0.0",
         "cooltools": "1.0.0",
