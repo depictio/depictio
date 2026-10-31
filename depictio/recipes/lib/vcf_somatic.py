@@ -526,7 +526,9 @@ def annotation_by_variant(raw: pl.DataFrame) -> pl.DataFrame:
             pl.col("info").str.extract(_ANN_FIELD_INFO_RE, 1).str.split(",").alias("_ann"),
         )
         .select("unit", "variant_key", "_ann")
-        .explode("_ann", empty_as_null=True)
+        # A record with no ANN explodes to a null row on polars < 2; dropped below
+        # (the CI polars has no `empty_as_null`).
+        .explode("_ann")
         .drop_nulls("_ann")
         .with_row_index("_order")
     )

@@ -448,8 +448,34 @@ def test_hook_blocks_fresh_import_when_armed():
     )
     assert name is not None, "no unloaded stdlib module available to probe"
     with _armed():
-        with pytest.raises(PermissionError):
+        with pytest.raises(ImportError, match="not allowed in a code figure"):
             __import__(name)
+
+
+def test_refused_import_reads_as_a_missing_optional_dependency():
+    """A library probing an optional dependency carries on without it.
+
+    A refusal raised as PermissionError escaped every ``except ImportError`` and
+    failed the whole figure; one such probe ('substrait') failed a shipped figure
+    in CI.
+    """
+    import importlib.util
+    import sys
+
+    candidates = ["ftplib", "imaplib", "smtplib", "wave", "mailbox"]
+    name = next(
+        (c for c in candidates if c not in sys.modules and importlib.util.find_spec(c)),
+        None,
+    )
+    assert name is not None, "no unloaded stdlib module available to probe"
+    with _armed():
+        try:
+            __import__(name)
+            probed = True
+        except ImportError:
+            probed = False
+    assert probed is False
+    assert name not in sys.modules
 
 
 def test_hook_is_inert_when_not_armed(tmp_path):
