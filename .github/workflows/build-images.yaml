@@ -29,6 +29,7 @@ on:
       - "docker-images/Dockerfile.worker"
       - "docker-images/Dockerfile.viewer"
       - "docker-images/Dockerfile.cli"
+      - "docker-images/allinone/**"
       - "docker-images/nginx.conf.template"
       - "docker-images/run_fastapi.sh"
       - "docker-images/run_celery_worker.sh"
@@ -227,6 +228,75 @@ jobs:
           print('multiqc', multiqc.__version__)
           print('templates', locate_template('nf-core/ampliseq/latest'))
           "
+
+  allinone-image-check:
+    # The all-in-one image (docker-images/allinone/) runs the whole single-user
+    # stack on one /data folder, to reopen the depictio/ folder the Nextflow
+    # module publishes. Not published yet: this only builds it and proves the
+    # life cycle a user goes through, on the runner's kernel (Linux 6.19+ needs
+    # GLIBC_TUNABLES for mongod, which the image sets).
+    name: All-in-one image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build the all-in-one image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: docker-images/allinone/Dockerfile
+          platforms: linux/amd64
+          load: true
+          tags: depictio-allinone:ci
+          cache-from: type=gha,scope=depictio-allinone-amd64
+          cache-to: type=gha,scope=depictio-allinone-amd64,mode=max
+
+      - name: First run on an empty folder, then reopen it
+        env:
+          DATA: ${{ runner.temp }}/depictio-data
+        run: |
+          set -euo pipefail
+          mkdir -p "$DATA"
+          docker image ls depictio-allinone:ci
+
+          wait_healthy() {
+            for _ in $(seq 1 120); do
+              status=$(docker inspect --format '{{.State.Health.Status}}' depictio)
+              [ "$status" = healthy ] && return 0
+              [ "$(docker inspect --format '{{.State.Running}}' depictio)" = true ] || break
+              sleep 5
+            done
+            echo "The stack never became healthy"; docker logs depictio || true
+            return 1
+          }
+
+          for run in first reopen; do
+            echo "::group::$run run"
+            docker run -d --name depictio -p 127.0.0.1:8058:8058 \
+              -e DEPICTIO_TELEMETRY_ENABLED=false -v "$DATA:/data" depictio-allinone:ci
+            wait_healthy
+            curl -fsS -o /dev/null -w "dashboards: %{http_code}\n" http://127.0.0.1:8058/dashboards
+            docker stop -t 60 depictio
+            # A clean stop: the entrypoint exits 0 and mongod leaves no lock behind.
+            test "$(docker inspect --format '{{.State.ExitCode}}' depictio)" = 0
+            docker logs depictio | tail -20
+            docker rm depictio
+            test ! -s "$DATA/mongo/mongod.lock"
+            echo "::endgroup::"
+          done
+
+          # Everything under /data belongs to the folder's owner, not root.
+          if find "$DATA" ! -user "$(id -u)" | grep -q .; then
+            echo "Files not owned by the runner user:"; find "$DATA" ! -user "$(id -u)" | head
+            exit 1
+          fi
 
   merge:
     name: Merge ${{ matrix.image }} manifest
