@@ -67,13 +67,14 @@ module does not cover the need, and name the module it overrides in the recipe's
 
 ## 3. The Overview
 
-At most **24 grid rows** at compact width, in this order:
+At most **28 grid rows** at compact width, in this order:
 
 | Block | Section | Content | Size |
 |---|---|---|---|
 | Hero | none | one text: `title: nf-core/<pipeline>`, its wordmark as `logo:` and `logo_dark:` (the pipeline's `docs/images/nf-core-<pipeline>_logo_light.png` and `_logo_dark.png` on `raw.githubusercontent.com/nf-core/<pipeline>/master/`; a logo that cannot load gives way to the title as text), one sentence on what the run is, a `[Run parameters](params:)` link | w8 h1 |
-| About | none | two `surface: card` texts side by side: `### About this dashboard` (what it shows, how to use it) and `### The run` (an icon list of run facts from `{{param:…}}` and `values:`) | w5 h3 + w3 h3 |
+| Study and run | none | two `surface: card` texts side by side, the same `h`: `### The study` (who or what was analysed, from the sample sheet) and `### The run` (an icon list of run facts from `{{param:…}}` and `values:`) | w5 + w3 |
 | Pipeline | none | a `surface: card` text with `accent: <colour>`: a `###` heading, one intro line, then a `::: steps` flow of 4 to 6 icon-led steps, each with `params:` and `tab:` links | w8 h3 |
+| About | none | a `surface: card` text: `### About this dashboard` (what it shows, how to use it, where the values come from) | w8 h3 |
 | Key figures | `appearance: plain`, `card_variant: headline`, `filter_bar: true`, `visible_filters: 2` | at least 2 filters (the group, then the sample), then 4 cards, each with `caption`, `link: tab:<Tab>` and a `description` | 4 × w2 h2 |
 | Findings | `appearance: plain`, `figure_style: minimal`, `filter_bar: true`, `visible_filters: 2` | a findings text with live `values:` (w8 h2, `surface: card`), then 4 figures, one per analysis tab, in 2 rows that each fill the width | text w8, then w4 + w4 twice |
 | How to read | `appearance: plain` | one text: a `###` heading per tab group, then a `-` list of tab tiles `[Tab](tab:Tab): question` | w8 h2 |
@@ -95,7 +96,7 @@ main_dashboard:
        icon: mdi:star-outline, color: gray, description: "What the data says, each with the tab that shows it."}
     - {name: How to read this dashboard, appearance: plain, icon: mdi:information-outline, color: gray}
     - {name: Sample sheet, persistent: true, pin: bottom, collapsed: true,
-       exclude_tabs: [Overview], icon: mdi:table-account, color: gray}
+       icon: mdi:table-account, color: gray}
   filter_sections:
     - {name: Sample filters, persistent: true, pin: top, icon: mdi:filter-variant, color: teal}
 ```
@@ -103,6 +104,35 @@ main_dashboard:
 - **Two filter levels on the Overview, on purpose.** The filter bar of a section narrows that
   section only (its description says so). The persistent `Sample filters` in the left panel
   narrow every tab; the panel starts collapsed on the Overview.
+- **The study** says who or what the run looked at, one icon line per fact, each line citing
+  a `values:` entry of the sample collection (counts of samples, patients, groups, the top
+  design or condition), so the import removes a line with its data (section 13). Its last
+  line opens the sample sheet:
+  ```yaml
+  - component_type: text
+    surface: card
+    values:
+      samples: {dc: samples, column: sample, aggregation: nunique, format: integer}
+      groups: {dc: samples, column: condition, aggregation: nunique, format: integer}
+    body: |
+      ### The study
+      - ![](icon:mdi:test-tube) **Samples** {{samples}} in {{groups}} conditions
+      - ![](icon:mdi:file-table-outline) **Samplesheet** [one row per sample](section:Sample sheet), its path in [the run parameters](params:input)
+  ```
+  - It needs at least two study-level columns (patient, condition, group, sex, replicate,
+    design, tissue, time point) or, where the unit is not a sample (assemblies, targets,
+    libraries), two facts about that unit, named as such ("Assemblies", "Targets"). A
+    template with neither has no study card, and its run card takes the full width.
+  - A column a sample sheet may lack goes in a line of its own, citing it, so the line goes
+    when the column does.
+  - The `Sample sheet` section is pinned to the Overview too (no `exclude_tabs: [Overview]`),
+    so the `section:` link has a target. If the Overview shows its own samples table, link
+    that section instead and keep the exclusion.
+- **The run** opens with the pipeline and its version, written out (`nf-core/rnaseq 3.26.0`):
+  the `Workflow.nf-core/<pipeline>` key holds a `/` and cannot be a `{{param:}}`. A line that
+  prints only parameters names ones every run writes (`genome`, `aligner`, `input`); a tool
+  version (`{{param:SALMON_QUANT.salmon}}`) shares its line with a count from the collection
+  that tool feeds, so the line goes with its data instead of printing "–".
 - **Key figures**: one card per stage of the funnel (samples, the core measure, the main
   result, a QC rate). Pick secondaries that say something about the number:
   `composition` by a categorical column, `box_plot` for a per-sample measure, `coverage`
@@ -396,7 +426,14 @@ values:
   variable syntax `{UPPER}` must never match them.
 - `aggregation` takes the card aggregations plus `top` (the category with the largest summed
   `weight`, or the most rows) and `top_share` (its share of the total, a fraction).
-- `{{param:<key>}}` prints a pipeline parameter of the run (`{{param:dada_ref_taxonomy}}`).
+- `{{param:<key>}}` prints a pipeline parameter of the run (`{{param:dada_ref_taxonomy}}`), or
+  a tool version from the software versions report (`{{param:<PROCESS>.<tool>}}`,
+  `{{param:Workflow.Nextflow}}`).
+- `template.yaml`'s `provenance.sources` lists both a `params` source
+  (`pipeline_info/params*.json`) and a `software_versions` source
+  (`pipeline_info/*software*versions*.yml`). A block without the `params` source gets no
+  parameters at all, and every `{{param:}}` prints "–".
+- A `{{param:}}` line is never pruned: only `values:` lines go with their data collection.
 - Values follow the tab's filters, like cards. An unavailable value prints "–".
 - Each value line must survive alone: at import, a line whose value's data collection is
   missing is removed.
@@ -429,7 +466,7 @@ viz to their content. Never write `fit: fixed`.
 
 ## 11. Height budget
 
-- The Overview: at most 24 rows.
+- The Overview: at most 28 rows.
 - A child tab: at most **20 rows of sections open by default**. Everything else is in sections
   that start collapsed: details, tables, alternate routes, the sample sheet.
 
@@ -463,7 +500,10 @@ step). Text, highlights and links bind no data of their own, so:
 - a step that leads to a route's tab cites a value from that route's collection
   (`{{n_callsets}} callsets scored by hap.py`): the import prunes the line with its data, so a
   run shows only the routes it took. A `tab:` link alone stays and prints a bare label once its
-  tab is pruned.
+  tab is pruned. The lint checks it (`steps_cite_prunable_tabs`): a step linking a tab whose
+  collections are all `optional` or removed by a `conditional` cites a value from one of them.
+  Where a tab has route alternates, cite the collection both routes write. The MultiQC tab is
+  exempt: a MultiQC collection gives no value to cite.
 
 ## 14. Prose
 
