@@ -19,16 +19,33 @@ Several sessions can run it in parallel: each claims its issue with a label firs
 | Label | Meaning | Set by |
 |---|---|---|
 | `autopilot` | small and clear enough to hand to an agent | Thomas |
-| `autopilot:wip` | claimed by a running session; see its issue comment for the branch | the tick |
-| `needs-thomas` | blocked on a decision; the question is in the last issue comment | the tick |
+| `autopilot:wip` | claimed by a running session (Thomas's own issues only) | the tick |
+| `needs-thomas` | blocked on a decision; the question is in the last issue comment (Thomas's own issues only) | the tick |
 
 Use `gh` when it is available, otherwise the GitHub MCP tools (`mcp__github__*`).
 
+## Other people's issues: no public trace
+
+Everything the tick posts goes out under Thomas's account. On an issue Thomas did not
+open (author is not `weber8thomas`):
+
+- **no comment and no label** on the issue: no claim comment, no `autopilot:wip`, no
+  `needs-thomas`, no audit or question. The claim is the branch alone (§2), and a
+  question goes to Thomas in the session (§5);
+- the only public trace is the fix PR itself, written as a normal contribution:
+  `Closes #N`, what changed, how it was tested;
+- never write "autopilot", "agent", "tick", "needs-thomas" or "Thomas decided" in
+  anything public that someone other than Thomas reads: issue comments, PR titles and
+  bodies, commit messages;
+- never cite such an issue from an unrelated PR or issue (tooling PRs, follow-ups) unless
+  Thomas asks.
+
 ## 0. Pick
 
-- With `#N`: take that issue.
+- With `#N`: take that issue. This is the way to hand over someone else's issue
+  without putting a label on it.
 - Otherwise: the **oldest** open issue labelled `autopilot`, without `autopilot:wip` or
-  `needs-thomas`, and with no open PR that closes it.
+  `needs-thomas`, with no open PR that closes it and no remote `autopilot/<N>-*` branch.
 - Nothing ready: print the report line (§6) with `status=nothing-ready` and stop. Under
   `/loop`, that also ends the loop.
 
@@ -57,10 +74,12 @@ and list it under **Assumed** in the PR body.
 
 ## 2. Claim and branch
 
-1. Add `autopilot:wip` to the issue (create the label if it is missing).
-2. Branch: the session's designated branch if it has one, otherwise
-   `autopilot/<N>-<short-slug>` from a fresh `origin/main`.
-3. Comment once on the issue: `Autopilot is on this, branch <branch>.`
+1. Branch: the session's designated branch if it has one, otherwise
+   `autopilot/<N>-<short-slug>` from a fresh `origin/main`. Before starting, check that
+   no remote branch `autopilot/<N>-*` and no open PR for the issue exists: either one
+   means another session holds it.
+2. Only on Thomas's own issues: add `autopilot:wip` and comment once
+   `Autopilot is on this, branch <branch>.`
 
 ## 3. Fix, test first
 
@@ -108,12 +127,17 @@ create, or skip, weaken or delete a test to get green.
 Whenever the tick stops on a decision (gate in §1, a design fork found while coding,
 a CI failure that is not this PR's and has no fix):
 
-1. Comment on the issue: what you found (with `file:line`), the question, 2–3 options,
-   your recommendation, and what is already done (branch, PR) if anything.
-2. Add `needs-thomas`, remove `autopilot:wip`.
+1. Write up what you found (with `file:line`), the question, 2–3 options, your
+   recommendation, and what is already done (branch, PR) if anything.
+2. Where it goes:
+   - Thomas's own issue: as an issue comment, then add `needs-thomas` and remove
+     `autopilot:wip`;
+   - anyone else's issue: **only in the session**, as the final message. Nothing on
+     GitHub (see "Other people's issues").
 3. Stop this tick. Under `/loop`, the next tick moves to the next issue.
 
-When Thomas answers in a comment and removes `needs-thomas`, the issue is ready again.
+When Thomas answers (in the issue or the session) and removes `needs-thomas`, the issue
+is ready again.
 
 ## 6. Report (always, last)
 
