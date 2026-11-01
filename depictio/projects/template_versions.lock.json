@@ -601,8 +601,8 @@
       }
     },
     "nf-core/sarek/3.11.0": {
-      "version": "2.0.0",
-      "content_hash": "95a74ae01232ed7ab63dfa1378008b946e4ee8a6075d89ad70ec58585613cce9",
+      "version": "2.0.1",
+      "content_hash": "375b3b297890421ddbeb27ce524192618593ba663808092952d93b0fceb9f9f0",
       "catalog": {
         "bcftools": "1.0.0",
         "mosdepth": "1.0.0",

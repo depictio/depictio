@@ -473,7 +473,7 @@ main_dashboard:
       n_het: {dc: germline_het_sites, column: variant_key, aggregation: count, format: integer}
       top_gene: {dc: somatic_variants, column: gene, aggregation: top, weight: priority, filter_expr: "col('impact').is_in(['HIGH', 'MODERATE']) & (col('gene') != '')"}
     body: |
-      - **{{depth}}x median depth over the intervals – one value per sample [Coverage](tab:Coverage)
+      - **{{depth}}x** median depth over the intervals – one value per sample [Coverage](tab:Coverage)
       - **{{tstv}}** median Ts/Tv of the callsets with SNPs – transitions over transversions [Quality](tab:Call quality)
       - **{{shared}}%** of a sample's PASS calls are made by two callers or more – agreement is not truth [Concordance](tab:Caller concordance)
       - **{{n_high}}** HIGH-impact calls on {{n_hgenes}} genes – SnpEff's most severe class [Consequences](tab:Consequences)
