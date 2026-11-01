@@ -122,8 +122,6 @@ main_dashboard:
     collapsed: true
     persistent: true
     pin: bottom
-    exclude_tabs:
-    - Overview
   components:
   # First in component order on purpose: the Guide demos the first categorical
   # filter that shares a data collection with a card (Samples, below).
@@ -171,29 +169,35 @@ main_dashboard:
     tag: se-ov-hero
     index: ov-hero
     layout: {x: 0, y: 0, w: 8, h: 1}
+  # The study: the public datasets the run merged, from the sample hub. The run has no
+  # samplesheet of its own (it takes a species), so the sheet line names no input.
   - component_type: text
     surface: card
+    values:
+      datasets: {dc: samples, column: dataset, aggregation: nunique, format: integer}
+      samples: {dc: samples, column: sample, aggregation: count, filter_expr: "col('status') == 'Analysed'", format: si}
+      platforms: {dc: samples, column: platform, aggregation: nunique, format: integer}
+      top_platform: {dc: samples, column: platform, aggregation: top}
+      conditions: {dc: samples, column: condition, aggregation: nunique, format: integer}
     body: |
-      ### About this dashboard
-      nf-core/stableexpression downloads the public RNA-seq and microarray datasets of a species, maps their gene ids to Ensembl, filters and normalises every dataset, merges them and scores the steadiest genes of each expression section. This page sums up one run; each tab behind it answers one question, in the order of the steps below.
-
-      The sample filters in the left panel narrow the dataset tabs and the per-sample values. Scores are statistics of the whole cohort, so the gene tabs filter by section, level and score instead.
-    tag: se-ov-about
-    index: ov-about
+      ### The study
+      - ![](icon:mdi:database-outline) **Datasets** {{datasets}} merged, {{samples}} samples analysed
+      - ![](icon:mdi:chip) **Platforms** {{platforms}}, mostly {{top_platform}}
+      - ![](icon:mdi:shape-outline) **Conditions** {{conditions}} across the datasets
+      - ![](icon:mdi:file-table-outline) **Sample sheet** [one row per public sample](section:Sample sheet)
+    tag: se-ov-study
+    index: ov-study
     layout: {x: 0, y: 1, w: 5, h: 3}
   # The run's own settings, read from its params.json: a key the run did not
   # set prints a dash.
   - component_type: text
     surface: card
     values:
-      datasets: {dc: samples, column: dataset, aggregation: nunique, format: integer}
-      samples: {dc: samples, column: sample, aggregation: count, filter_expr: "col('status') == 'Analysed'", format: si}
       genes: {dc: stableexpression_gene_statistics, column: gene_id, aggregation: count, format: si}
     body: |
       ### The run
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/stableexpression 1.1.0 on Nextflow {{param:Workflow.Nextflow}}
       - ![](icon:mdi:earth) **Species** {{param:species}}
-      - ![](icon:mdi:database-outline) **Datasets** {{datasets}} merged
-      - ![](icon:mdi:flask-outline) **Samples** {{samples}}
       - ![](icon:mdi:dna) **Genes** {{genes}} in the matrix
       - ![](icon:mdi:layers-outline) **Sections** {{param:nb_sections}}, {{param:nb_candidates_per_section}} candidates each
     tag: se-ov-run
@@ -222,6 +226,16 @@ main_dashboard:
     tag: se-ov-steps
     index: ov-steps
     layout: {x: 0, y: 4, w: 8, h: 3}
+  - component_type: text
+    surface: card
+    body: |
+      ### About this dashboard
+      nf-core/stableexpression downloads the public RNA-seq and microarray datasets of a species, maps their gene ids to Ensembl, filters and normalises every dataset, merges them and scores the steadiest genes of each expression section. This page sums up one run; each tab behind it answers one question, in the order of the steps above.
+
+      The sample filters in the left panel narrow the dataset tabs and the per-sample values. Scores are statistics of the whole cohort, so the gene tabs filter by section, level and score instead.
+    tag: se-ov-about
+    index: ov-about
+    layout: {x: 0, y: 7, w: 8, h: 3}
   # Key figures: one card per stage of the funnel, each opening the tab that
   # explains it. All four read collections every route writes.
   - component_type: card

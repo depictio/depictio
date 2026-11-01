@@ -102,8 +102,6 @@ main_dashboard:
     collapsed: true
     persistent: true
     pin: bottom
-    exclude_tabs:
-    - Overview
   components:
   # First in component order on purpose: the Guide demos the first categorical
   # filter that shares a data collection with the first card (Genomes, below).
@@ -150,25 +148,31 @@ main_dashboard:
     tag: gq-ov-hero
     index: ov-hero
     layout: {x: 0, y: 0, w: 8, h: 1}
+  # The study: the assemblies compared, from the genome hub (one row per assembly, written
+  # by every route). The design table is optional, so no line reads its columns.
   - component_type: text
     surface: card
+    values:
+      n_genomes: {dc: genomes, column: genome, aggregation: nunique, format: integer}
+      n_bp: {dc: genomes, column: total_length, aggregation: sum, format: si}
+      n_seq: {dc: genomes, column: n_contigs, aggregation: sum, format: si}
+      n_annot: {dc: genomes, column: genome, aggregation: count, filter_expr: "col('genes') > 0", format: integer}
     body: |
-      ### About this dashboard
-      nf-core/genomeqc compares several genome assemblies, and their annotations when it has them: contiguity with QUAST, foreign sequence with FCS-GX and Tiara, repeats with RepeatMasker, conserved genes with BUSCO, gene models with AGAT and shared genes with OrthoFinder. Each assembly is one row of every table, so the genomes compare side by side. This page sums up one run; each tab behind it answers one question, in the order of the steps below.
-
-      The sample filters in the left panel apply to every tab: narrow the genomes once and the whole dashboard follows. A bar above a section narrows that section only.
-    tag: gq-ov-about
-    index: ov-about
+      ### The study
+      - ![](icon:mdi:dna) **Assemblies** {{n_genomes}} compared, one row each
+      - ![](icon:mdi:ruler) **Size** {{n_bp}} bases in {{n_seq}} sequences
+      - ![](icon:mdi:file-tree-outline) **Annotated** {{n_annot}} assemblies with gene models
+      - ![](icon:mdi:file-table-outline) **Samplesheet** [one row per assembly](section:Sample sheet), its path in [the run parameters](params:input)
+    tag: gq-ov-study
+    index: ov-study
     layout: {x: 0, y: 1, w: 5, h: 3}
   # The run's own settings, read from its params.json: a key the run did not
   # set prints a dash.
   - component_type: text
     surface: card
-    values:
-      n_genomes: {dc: genomes, column: genome, aggregation: nunique, format: integer}
     body: |
       ### The run
-      - ![](icon:mdi:dna) **Genomes** {{n_genomes}} assemblies compared
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/genomeqc 1.0.1 on Nextflow {{param:Workflow.Nextflow}}
       - ![](icon:mdi:check-decagram-outline) **BUSCO** lineage {{param:busco_lineage}}
       - ![](icon:mdi:file-tree-outline) **Annotation** validated with {{param:val_tool}}
       - ![](icon:mdi:family-tree) **OrthoFinder** version {{param:ortho_version}}
@@ -204,6 +208,16 @@ main_dashboard:
     tag: gq-ov-steps
     index: ov-steps
     layout: {x: 0, y: 4, w: 8, h: 3}
+  - component_type: text
+    surface: card
+    body: |
+      ### About this dashboard
+      nf-core/genomeqc compares several genome assemblies, and their annotations when it has them: contiguity with QUAST, foreign sequence with FCS-GX and Tiara, repeats with RepeatMasker, conserved genes with BUSCO, gene models with AGAT and shared genes with OrthoFinder. Each assembly is one row of every table, so the genomes compare side by side. This page sums up one run; each tab behind it answers one question, in the order of the steps above.
+
+      The sample filters in the left panel apply to every tab: narrow the genomes once and the whole dashboard follows. A bar above a section narrows that section only.
+    tag: gq-ov-about
+    index: ov-about
+    layout: {x: 0, y: 7, w: 8, h: 3}
   # Key figures: one card per stage of the funnel, each opening the tab that
   # explains it. All four read the genome hub, which every route writes.
   - component_type: card

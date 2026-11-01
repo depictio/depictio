@@ -157,6 +157,11 @@ template:
         exclude_keys:
           - "genomes"    # the whole iGenomes catalogue
           - "hook_url"   # nf-core runs may put a live webhook here
+      - name: "software_versions"
+        glob: "pipeline_info/*software*versions*.yml"
+        format: "yaml"
+        pick: "latest"
+        group: "Software versions"
     groups:
       - group: "Aberrant expression"
         key_patterns: ["ae_*"]

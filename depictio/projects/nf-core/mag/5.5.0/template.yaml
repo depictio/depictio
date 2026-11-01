@@ -63,7 +63,7 @@ template:
   provenance:
     sources:
       - name: "software_versions"
-        glob: "pipeline_info/software_versions.yml"
+        glob: "pipeline_info/*software*versions*.yml"
         format: "yaml"
         pick: "latest"
         group: "Software versions"
@@ -72,6 +72,8 @@ template:
         format: "json"
         pick: "latest"
         group: "Pipeline parameters"
+        exclude_keys:
+          - "hook_url"
     groups:
       - group: "Software versions"
         key_patterns: ["*"]

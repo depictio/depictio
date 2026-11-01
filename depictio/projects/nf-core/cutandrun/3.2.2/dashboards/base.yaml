@@ -97,8 +97,6 @@ main_dashboard:
     collapsed: true
     persistent: true
     pin: bottom
-    exclude_tabs:
-    - Overview
   components:
   # First in component order on purpose: the Guide demos the first categorical
   # filter that shares a data collection with the first card (Samples, below).
@@ -144,18 +142,8 @@ main_dashboard:
     tag: cr-ov-hero
     index: ov-hero
     layout: {x: 0, y: 0, w: 8, h: 1}
-  - component_type: text
-    surface: card
-    body: |
-      ### About this dashboard
-      nf-core/cutandrun turns CUT&RUN and CUT&Tag reads into fragments, calls the regions where each target rises above its IgG control and keeps the peaks a target's replicates reproduce. This page sums up one run; each tab behind it answers one question, in the order of the steps below.
-
-      The sample filters in the left panel apply to every tab: narrow the samples once and the whole dashboard follows. A bar above a section narrows that section only.
-    tag: cr-ov-about
-    index: ov-about
-    layout: {x: 0, y: 1, w: 5, h: 3}
-  # The run's facts, read from its data: it ships no params.json, so no
-  # {{param:...}} line would print anything but a dash.
+  # Who was sequenced, from the sample hub: each line cites it, so a line goes with
+  # its data.
   - component_type: text
     surface: card
     values:
@@ -164,16 +152,33 @@ main_dashboard:
         filter_expr: "col('role') != 'IgG control'", format: integer}
       igg: {dc: samples, column: sample_id, aggregation: count,
         filter_expr: "col('role') == 'IgG control'", format: integer}
+      reps: {dc: samples, column: replicate, aggregation: max, format: integer}
+      libraries: {dc: samples, column: n_libraries, aggregation: sum, format: integer}
+    body: |
+      ### The study
+      - ![](icon:mdi:test-tube) **Samples** {{samples}} from {{libraries}} libraries
+      - ![](icon:mdi:shape-outline) **Targets** {{targets}}, histone marks or factors
+      - ![](icon:mdi:content-copy) **Replicates** up to {{reps}} per target
+      - ![](icon:mdi:shield-check-outline) **IgG controls** {{igg}}, each target replicate called against its own
+      - ![](icon:mdi:file-table-outline) **Samplesheet** [one row per sample](section:Sample sheet), its path in [the run parameters](params:input)
+    tag: cr-ov-study
+    index: ov-study
+    layout: {x: 0, y: 1, w: 5, h: 6}
+  # The pipeline, its version and the callers the run compared. Parameters come
+  # from the run's params.json where it writes one; the tool versions from the
+  # software versions report.
+  - component_type: text
+    surface: card
+    values:
       callers: {dc: caller_agreement, column: caller, aggregation: nunique, format: integer}
     body: |
       ### The run
-      - ![](icon:mdi:test-tube) **Samples** {{samples}}
-      - ![](icon:mdi:shape-outline) **Targets** {{targets}}
-      - ![](icon:mdi:shield-check-outline) **IgG controls** {{igg}}
-      - ![](icon:mdi:chart-bell-curve) **Peak callers** {{callers}}
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/cutandrun 3.2.2 on Nextflow {{param:Workflow.Nextflow}}
+      - ![](icon:mdi:chart-bell-curve) **Peak callers** {{callers}} against the IgG control
+      - ![](icon:mdi:tune) [All parameters and tool versions](params:)
     tag: cr-ov-run
     index: ov-run
-    layout: {x: 5, y: 1, w: 3, h: 3}
+    layout: {x: 5, y: 1, w: 3, h: 6}
   # The marks take the family's colour (the header's), not the theme's blue.
   # The run has no params.json, so each step's link searches the software
   # versions for its tool.
@@ -194,7 +199,17 @@ main_dashboard:
       :::
     tag: cr-ov-steps
     index: ov-steps
-    layout: {x: 0, y: 4, w: 8, h: 3}
+    layout: {x: 0, y: 7, w: 8, h: 3}
+  - component_type: text
+    surface: card
+    body: |
+      ### About this dashboard
+      nf-core/cutandrun turns CUT&RUN and CUT&Tag reads into fragments, calls the regions where each target rises above its IgG control and keeps the peaks a target's replicates reproduce. This page sums up one run; each tab behind it answers one question, in the order of the steps below.
+
+      The sample filters in the left panel apply to every tab: narrow the samples once and the whole dashboard follows. A bar above a section narrows that section only.
+    tag: cr-ov-about
+    index: ov-about
+    layout: {x: 0, y: 10, w: 8, h: 3}
   # Key figures: one card per stage of the funnel, each opening the tab that
   # explains it. The icon colour is that tab's colour.
   - component_type: card

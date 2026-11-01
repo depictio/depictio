@@ -195,6 +195,7 @@ main_dashboard:
       samples: {dc: summary_metrics, column: sample, aggregation: nunique, format: integer}
     body: |
       ### The run
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/viralrecon 3.0.0 on Nextflow {{param:Workflow.Nextflow}}
       - ![](icon:mdi:flask-outline) **Samples** {{samples}}
       - ![](icon:mdi:chip) **Platform** {{param:platform}} · {{param:protocol}}
       - ![](icon:mdi:virus-outline) **Reference** {{param:genome}}
@@ -204,9 +205,16 @@ main_dashboard:
     index: ov-run
     layout: {x: 5, y: 1, w: 3, h: 3}
   # The marks take the family's colour (the header's), not the theme's blue.
+  # A step past the alignment cites a count from its tab's collection, so the
+  # import takes the line out with its data: a run without Pangolin output
+  # keeps the first five steps.
   - component_type: text
     surface: card
     accent: green
+    values:
+      n_cov: {dc: mosdepth_genome_coverage, column: sample, aggregation: nunique, format: integer}
+      n_calls: {dc: variants_long, column: POS, aggregation: count, format: si}
+      n_lin: {dc: pangolin_lineages, column: lineage, aggregation: nunique, format: integer}
     body: |
       ### Six steps from reads to lineages
       Each step names its settings and the tab that shows its result.
@@ -214,10 +222,10 @@ main_dashboard:
       ::: steps
       1. ![](icon:mdi:content-cut) **Trim** Adapters cut by fastp · [Settings](params:fastp) · [MultiQC](tab:MultiQC)
       2. ![](icon:mdi:target) **Align** Bowtie 2, primers clipped by iVar · [Settings](params:ivar_trim) · [Sample QC](tab:Sample QC)
-      3. ![](icon:mdi:chart-areaspline) **Cover** Depth by mosdepth · [Settings](params:mosdepth) · [Coverage](tab:Coverage & Depth)
-      4. ![](icon:mdi:dna) **Call** Variants by {{param:variant_caller}}, effects by snpEff · [Settings](params:variant) · [Variants](tab:Variants) · [Gene](tab:Gene)
+      3. ![](icon:mdi:chart-areaspline) **Cover** Depth of {{n_cov}} samples by mosdepth · [Settings](params:mosdepth) · [Coverage](tab:Coverage & Depth)
+      4. ![](icon:mdi:dna) **Call** {{n_calls}} variants by {{param:variant_caller}}, effects by snpEff · [Settings](params:variant) · [Variants](tab:Variants) · [Gene](tab:Gene)
       5. ![](icon:mdi:source-merge) **Consensus** One genome per sample · [Settings](params:consensus) · [Sample QC](tab:Sample QC) · [Sample](tab:Sample)
-      6. ![](icon:mdi:virus) **Type** Pangolin lineage, Nextclade clade · [Settings](params:nextclade) · [Lineages](tab:Lineage & Clustering)
+      6. ![](icon:mdi:virus) **Type** {{n_lin}} Pangolin lineages, Nextclade clades · [Settings](params:nextclade) · [Lineages](tab:Lineage & Clustering)
       :::
     tag: vr-ov-steps
     index: ov-steps

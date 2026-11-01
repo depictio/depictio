@@ -29,7 +29,8 @@
 # `plots` below are the 1.35 names.
 #
 # NO params.json. As with cutandrun, this run predates the nf-core params
-# dump; provenance collects only pipeline_info/software_versions.yml.
+# dump; provenance collects only pipeline_info/software_versions.yml (the
+# `params` source stays declared for a run that writes one).
 #
 # DESIGN IS A VARIABLE.
 # The validated samplesheet keeps only the sample name the pipeline builds as
@@ -118,12 +119,21 @@ template:
       GENOME: "hg19"
   provenance:
     sources:
+      - name: "params"
+        glob: "pipeline_info/params*.json"
+        format: "json"
+        pick: "latest"
+        group: "Pipeline parameters"
+        exclude_keys:
+          - "hook_url" # nf-core runs put a live Slack webhook here
       - name: "software_versions"
         glob: "pipeline_info/software_versions.yml"
         format: "yaml"
         pick: "latest"
         group: "Software versions"
     groups:
+      - group: "Pipeline parameters"
+        key_patterns: ["*"]
       - group: "Software versions"
         key_patterns: ["*"]
   dashboards:

@@ -84,8 +84,6 @@ main_dashboard:
     collapsed: true
     persistent: true
     pin: bottom
-    exclude_tabs:
-    - Overview
   components:
   # First in component order on purpose: the Guide demos the first categorical
   # filter that shares a data collection with the first card (targets, below).
@@ -133,31 +131,37 @@ main_dashboard:
     tag: pf-ov-hero
     index: ov-hero
     layout: {x: 0, y: 0, w: 8, h: 1}
+  # The study: the targets folded, from the samplesheet. A target is a sequence,
+  # one chain or several; each line cites the one collection, so a line goes
+  # with its data.
   - component_type: text
     surface: card
+    values:
+      n_targets: {dc: targets, column: target, aggregation: nunique, format: integer}
+      n_complex: {dc: targets, column: target, aggregation: nunique, filter_expr: "col('assembly') == 'complex'", format: integer}
+      n_chains: {dc: targets, column: n_chains, aggregation: sum, format: integer}
+      n_residues: {dc: targets, column: n_residues, aggregation: sum, format: si}
     body: |
-      ### About this dashboard
-      nf-core/proteinfold folds every target of the samplesheet with each engine it was asked for and keeps the top-ranked model of each. This page sums up one run; each tab behind it answers one question, in the order of the steps below.
-
-      The target filters in the left panel apply to every tab: narrow the targets once and the whole dashboard follows. A bar above a section narrows that section only.
-    tag: pf-ov-about
-    index: ov-about
+      ### The study
+      - ![](icon:mdi:test-tube) **Targets** {{n_targets}}, each folded by every engine of the run
+      - ![](icon:mdi:link-variant) **Complexes** {{n_complex}} targets of more than one chain
+      - ![](icon:mdi:dna) **Residues** {{n_residues}} over {{n_chains}} chains
+      - ![](icon:mdi:file-table-outline) **Samplesheet** [one row per target](section:Sample sheet), its path in [the run parameters](params:input)
+    tag: pf-ov-study
+    index: ov-study
     layout: {x: 0, y: 1, w: 5, h: 3}
   # The run's own facts: counted from the data, so each line survives alone, and
   # the requested mode read from the run's parameters.
   - component_type: text
     surface: card
     values:
-      n_targets: {dc: targets, column: target, aggregation: nunique, format: integer}
       n_engines: {dc: proteinfold_models, column: engine, aggregation: nunique, format: integer}
       n_models: {dc: proteinfold_models, column: model_id, aggregation: count, format: integer}
-      n_residues: {dc: targets, column: n_residues, aggregation: sum, format: si}
     body: |
       ### The run
-      - ![](icon:mdi:test-tube) **Targets** {{n_targets}}
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/proteinfold 2.1.0 on Nextflow {{param:Workflow.Nextflow}}
       - ![](icon:mdi:tools) **Engines** {{n_engines}}
       - ![](icon:mdi:molecule) **Models** {{n_models}}
-      - ![](icon:mdi:dna) **Residues** {{n_residues}}
       - ![](icon:mdi:cog-outline) **Mode** {{param:mode}}
     tag: pf-ov-run
     index: ov-run
@@ -183,6 +187,16 @@ main_dashboard:
     tag: pf-ov-steps
     index: ov-steps
     layout: {x: 0, y: 4, w: 8, h: 3}
+  - component_type: text
+    surface: card
+    body: |
+      ### About this dashboard
+      nf-core/proteinfold folds every target of the samplesheet with each engine it was asked for and keeps the top-ranked model of each. This page sums up one run; each tab behind it answers one question, in the order of the steps below.
+
+      The target filters in the left panel apply to every tab: narrow the targets once and the whole dashboard follows. A bar above a section narrows that section only.
+    tag: pf-ov-about
+    index: ov-about
+    layout: {x: 0, y: 7, w: 8, h: 3}
   # Key figures: one card per stage of the funnel, each opening the tab that
   # explains it. All four read collections that every run writes.
   - component_type: card

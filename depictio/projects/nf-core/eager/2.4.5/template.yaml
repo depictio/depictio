@@ -75,6 +75,12 @@ template:
     vars: {}
   provenance:
     sources:
+      - name: "params"
+        glob: "pipeline_info/params*.json"
+        format: "json"
+        pick: "latest"
+        exclude_keys:
+          - "hook_url"
       - name: "software_versions"
         glob: "pipeline_info/software_versions.csv"
         format: "tsv"

@@ -90,8 +90,6 @@ main_dashboard:
     collapsed: true
     persistent: true
     pin: bottom
-    exclude_tabs:
-    - Overview
   components:
   # First in component order on purpose: the group filter leads the Key figures
   # bar, which is what the Guide demos. The contrast filter narrows the two
@@ -138,15 +136,22 @@ main_dashboard:
     tag: da-ov-hero
     index: ov-hero
     layout: {x: 0, y: 0, w: 8, h: 1}
+  # The study: the sheet's samples and the factors they vary by. The second factor is always
+  # published by the sample hub, as "none" when the sheet has no such column.
   - component_type: text
     surface: card
+    values:
+      samples: {dc: samples, column: sample_id, aggregation: nunique, format: integer}
+      groups: {dc: samples, column: group, aggregation: nunique, format: integer}
+      factor_2: {dc: samples, column: factor_2_name, aggregation: top}
+      levels_2: {dc: samples, column: factor_2, aggregation: nunique, format: integer}
     body: |
-      ### About this dashboard
-      nf-core/differentialabundance tests every gene for a change in abundance between the two sides of each contrast, here with DESeq2, and can run GSEA on the result. This page sums up one run; each tab behind it answers one question, in the order of the steps below.
-
-      The sample filters in the left panel narrow the Samples tab and the sample sheet; the contrast filter narrows the three analysis tabs. A bar above a section narrows that section only.
-    tag: da-ov-about
-    index: ov-about
+      ### The study
+      - ![](icon:mdi:flask-outline) **Samples** {{samples}} in {{groups}} groups
+      - ![](icon:mdi:layers-outline) **Second factor** {{factor_2}}, {{levels_2}} levels
+      - ![](icon:mdi:file-table-outline) **Samplesheet** [one row per sample](section:Sample sheet), its path in [the run parameters](params:input)
+    tag: da-ov-study
+    index: ov-study
     layout: {x: 0, y: 1, w: 5, h: 3}
   # The run's own settings, read from its params.json: a key the run did not
   # set prints a dash. The gene-set line counts the sets GSEA scored instead of
@@ -155,12 +160,11 @@ main_dashboard:
   - component_type: text
     surface: card
     values:
-      samples: {dc: samples, column: sample_id, aggregation: nunique, format: integer}
       contrasts: {dc: deseq2_results, column: contrast, aggregation: nunique, format: integer}
       gene_sets: {dc: gsea_report, column: term, aggregation: nunique, format: integer}
     body: |
       ### The run
-      - ![](icon:mdi:flask-outline) **Samples** {{samples}}
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/differentialabundance 2.0.0 on Nextflow {{param:Workflow.Nextflow}}
       - ![](icon:mdi:compare-horizontal) **Contrasts** {{contrasts}}
       - ![](icon:mdi:scale-balance) **Test** {{param:differential_method}} · {{param:deseq2_test}}
       - ![](icon:mdi:filter-outline) **Cut-offs** q {{param:differential_max_qval}} · fold {{param:differential_min_fold_change}}
@@ -168,24 +172,38 @@ main_dashboard:
     tag: da-ov-run
     index: ov-run
     layout: {x: 5, y: 1, w: 3, h: 3}
-  # The marks take the family's colour (the header's), not the theme's blue.
+  # The marks take the family's colour (the header's), not the theme's blue. The last two
+  # steps cite a value from their tab's collection: a run without a GTF or GSEA drops them.
   - component_type: text
     surface: card
     accent: green
+    values:
+      n_placed: {dc: deseq2_results_annotated, column: gene_id, aggregation: nunique, format: si}
+      n_sets: {dc: gsea_report, column: term, aggregation: nunique, format: si}
     body: |
       ### Five steps from counts to gene sets
-      Each step names its settings and the tab that shows its result.
+      Each step names its settings and the tab that shows its result. A step the run skipped drops out.
 
       ::: steps
       1. ![](icon:mdi:table-account) **Sheet** Samples, their factors and DESeq2 size factors · [Settings](params:observations) · [Samples](tab:Samples)
       2. ![](icon:mdi:chart-scatter-plot) **Explore** Variance-stabilised counts, PCA and distances · [Settings](params:exploratory) · [Samples](tab:Samples)
       3. ![](icon:mdi:scale-balance) **Test** DESeq2 per contrast · [Settings](params:deseq2) · [Differential expression](tab:Differential expression)
-      4. ![](icon:mdi:map-marker-outline) **Place** Calls joined to the GTF · [Settings](params:gtf) · [Genome view](tab:Genome view)
-      5. ![](icon:mdi:set-merge) **Enrich** GSEA on each contrast's ranking · [Settings](params:gsea) · [Enrichment](tab:Enrichment)
+      4. ![](icon:mdi:map-marker-outline) **Place** {{n_placed}} genes joined to the GTF · [Settings](params:gtf) · [Genome view](tab:Genome view)
+      5. ![](icon:mdi:set-merge) **Enrich** GSEA scores {{n_sets}} gene sets on each contrast's ranking · [Settings](params:gsea) · [Enrichment](tab:Enrichment)
       :::
     tag: da-ov-steps
     index: ov-steps
     layout: {x: 0, y: 4, w: 8, h: 3}
+  - component_type: text
+    surface: card
+    body: |
+      ### About this dashboard
+      nf-core/differentialabundance tests every gene for a change in abundance between the two sides of each contrast, here with DESeq2, and can run GSEA on the result. This page sums up one run; each tab behind it answers one question, in the order of the steps above.
+
+      The sample filters in the left panel narrow the Samples tab and the sample sheet; the contrast filter narrows the three analysis tabs. A bar above a section narrows that section only.
+    tag: da-ov-about
+    index: ov-about
+    layout: {x: 0, y: 7, w: 8, h: 3}
   # Key figures: the sheet, then the test, each card opening the tab that
   # explains it, its icon in that tab's colour. All four read collections every
   # route writes, so the row stays four wide without a GTF or GSEA; the placed

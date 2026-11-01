@@ -116,8 +116,6 @@ main_dashboard:
     collapsed: true
     persistent: true
     pin: bottom
-    exclude_tabs:
-    - Overview
   components:
   # First in component order on purpose: the Guide demos the first categorical
   # filter that shares a data collection with the first card (Bins, below).
@@ -177,27 +175,34 @@ main_dashboard:
     tag: mg-ov-hero
     index: ov-hero
     layout: {x: 0, y: 0, w: 8, h: 1}
+  # The study: who was sequenced, from the sample sheet. A column the sheet may lack has a
+  # line of its own, so the line goes with the column.
   - component_type: text
     surface: card
+    values:
+      samples: {dc: samples, column: sample_id, aggregation: nunique, format: integer}
+      groups: {dc: samples, column: group, aggregation: nunique, format: integer}
+      n_long: {dc: samples, column: sample_id, aggregation: count, filter_expr: "col('has_long_reads') == True", format: integer}
+      platform: {dc: samples, column: short_reads_platform, aggregation: top}
     body: |
-      ### About this dashboard
-      nf-core/mag assembles metagenome reads, bins the contigs into genomes, then scores, names and annotates each bin. The unit is the bin, not the sample: every assembler meets every binner on every sample, and the tabs follow the bins from their assemblies to their genes.
-
-      The filters in the left panel apply to every tab: narrow the assembler, the binner or the samples once and the whole dashboard follows. A bar above a section narrows that section only.
-    tag: mg-ov-about
-    index: ov-about
+      ### The study
+      - ![](icon:mdi:flask-outline) **Samples** {{samples}}, each with a short-read pair from {{platform}}
+      - ![](icon:mdi:account-group-outline) **Co-assembly** {{groups}} groups, the samples of one group assembled together
+      - ![](icon:mdi:dna) **Long reads** {{n_long}} samples also carry a long-read run, for a hybrid assembly
+      - ![](icon:mdi:file-table-outline) **Samplesheet** [one row per sample](section:Sample sheet), its path in [the run parameters](params:input)
+    tag: mg-ov-study
+    index: ov-study
     layout: {x: 0, y: 1, w: 5, h: 3}
   # The run's own settings, read from its params.json: a key the run did not
   # set prints a dash.
   - component_type: text
     surface: card
     values:
-      samples: {dc: samples, column: sample_id, aggregation: nunique, format: integer}
       assemblies: {dc: assembly_report, column: assembly_id, aggregation: nunique, format: integer}
       bins: {dc: bin_summary, column: bin_id, aggregation: count, format: integer}
     body: |
       ### The run
-      - ![](icon:mdi:flask-outline) **Samples** {{samples}}
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/mag 5.5.0 on Nextflow {{param:Workflow.Nextflow}}
       - ![](icon:mdi:dna) **Assemblies** {{assemblies}}
       - ![](icon:mdi:bacteria-outline) **Bins** {{bins}}
       - ![](icon:mdi:ruler) **Shortest binned contig** {{param:min_contig_size}} bp
@@ -208,21 +213,37 @@ main_dashboard:
   - component_type: text
     surface: card
     accent: green
+    values:
+      n_asm: {dc: assembly_report, column: assembly_id, aggregation: nunique, format: integer}
+      n_depths: {dc: contig_depths, column: contig_id, aggregation: count, format: si}
+      n_scored: {dc: checkm2_quality_report, column: bin_id, aggregation: count, format: integer}
+      n_named: {dc: gtdbtk_summary, column: bin_id, aggregation: count, format: integer}
+      n_annot: {dc: prokka_summary, column: bin_id, aggregation: count, format: integer}
     body: |
       ### Six steps from reads to genomes
       Each step names its settings and the tab that shows its result.
 
       ::: steps
       1. ![](icon:mdi:content-cut) **Clean** fastp trims, Bowtie 2 removes host · [Settings](params:host) · [MultiQC](tab:MultiQC)
-      2. ![](icon:mdi:dna) **Assemble** Per sample or per group · [Settings](params:assembl) · [Assembly](tab:Assembly)
-      3. ![](icon:mdi:waves) **Map back** Reads give each contig a depth · [Settings](params:binning_map) · [Contigs](tab:Contigs)
-      4. ![](icon:mdi:bacteria-outline) **Bin** Contigs grouped, scored by CheckM2 · [Settings](params:bin) · [Bins](tab:Bins)
-      5. ![](icon:mdi:family-tree) **Classify** GTDB-Tk names the bins · [Settings](params:gtdbtk) · [Taxonomy](tab:Taxonomy)
-      6. ![](icon:mdi:file-document-outline) **Annotate** Prokka finds the genes · [Settings](params:prokka) · [Annotation](tab:Annotation)
+      2. ![](icon:mdi:dna) **Assemble** {{n_asm}} assemblies, per sample or per group · [Settings](params:assembl) · [Assembly](tab:Assembly)
+      3. ![](icon:mdi:waves) **Map back** Reads give {{n_depths}} contig depths, one per sample · [Settings](params:binning_map) · [Contigs](tab:Contigs)
+      4. ![](icon:mdi:bacteria-outline) **Bin** Contigs grouped, {{n_scored}} bins scored by CheckM2 · [Settings](params:bin) · [Bins](tab:Bins)
+      5. ![](icon:mdi:family-tree) **Classify** GTDB-Tk names {{n_named}} bins · [Settings](params:gtdbtk) · [Taxonomy](tab:Taxonomy)
+      6. ![](icon:mdi:file-document-outline) **Annotate** Prokka finds the genes of {{n_annot}} bins · [Settings](params:prokka) · [Annotation](tab:Annotation)
       :::
     tag: mg-ov-steps
     index: ov-steps
     layout: {x: 0, y: 4, w: 8, h: 3}
+  - component_type: text
+    surface: card
+    body: |
+      ### About this dashboard
+      nf-core/mag assembles metagenome reads, bins the contigs into genomes, then scores, names and annotates each bin. The unit is the bin, not the sample: every assembler meets every binner on every sample, and the tabs follow the bins from their assemblies to their genes.
+
+      The filters in the left panel apply to every tab: narrow the assembler, the binner or the samples once and the whole dashboard follows. A bar above a section narrows that section only.
+    tag: mg-ov-about
+    index: ov-about
+    layout: {x: 0, y: 7, w: 8, h: 3}
   # Key figures: one card per stage of the funnel, each opening the tab that
   # explains it. The icon colour is that tab's colour.
   - component_type: card

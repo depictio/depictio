@@ -124,8 +124,6 @@ main_dashboard:
     collapsed: true
     persistent: true
     pin: bottom
-    exclude_tabs:
-    - Overview
   components:
   # First in component order on purpose: the Guide demos the first categorical
   # filter that shares a data collection with the first card (Samples, below).
@@ -172,25 +170,31 @@ main_dashboard:
     tag: vm-ov-hero
     index: ov-hero
     layout: {x: 0, y: 0, w: 8, h: 1}
-  - component_type: text
-    surface: card
-    body: |
-      ### About this dashboard
-      nf-core/viralmetagenome cleans the reads of each sample, removes the host, assembles the rest and clusters the contigs into the genomes it can rebuild. Each cluster is refined into a consensus by mapping the reads back, and the reads are also mapped to the references of the constraint sheet. This page sums up one run; each tab behind it answers one question, in the order of the steps below.
-
-      The sample filters in the left panel apply to every tab: narrow the samples once and the whole dashboard follows. A bar above a section narrows that section only.
-    tag: vm-ov-about
-    index: ov-about
-    layout: {x: 0, y: 1, w: 5, h: 3}
-  # The run's own settings, read from its params.json: a key the run did not
-  # set prints a dash.
+  # The study: the samples sequenced, from the sample sheet and the optional design table.
+  # The design line cites the group column, so it reads a dash where the run has none.
   - component_type: text
     surface: card
     values:
       n_samples: {dc: samples, column: sample, aggregation: nunique, format: integer}
+      n_raw: {dc: samples, column: raw_read_pairs, aggregation: sum, format: si}
+      groups: {dc: samples, column: '{GROUP_COL}', aggregation: nunique, format: integer}
+      top_group: {dc: samples, column: '{GROUP_COL}', aggregation: top}
+    body: |
+      ### The study
+      - ![](icon:mdi:test-tube) **Samples** {{n_samples}}, {{n_raw}} read pairs before trimming
+      - ![](icon:mdi:shape-outline) **{GROUP_COL_DISPLAY}** {{groups}} groups, most often {{top_group}}
+      - ![](icon:mdi:file-table-outline) **Samplesheet** [one row per sample](section:Sample sheet), its path in [the run parameters](params:input)
+    tag: vm-ov-study
+    index: ov-study
+    layout: {x: 0, y: 1, w: 5, h: 4}
+  # The run's own settings, read from its params.json: a key the run did not
+  # set prints a dash.
+  - component_type: text
+    surface: card
     body: |
       ### The run
-      - ![](icon:mdi:test-tube) **Samples** {{n_samples}}, host removed with {{param:host_k2_db}}
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/viralmetagenome 1.2.0 on Nextflow {{param:Workflow.Nextflow}}
+      - ![](icon:mdi:filter-variant) **Host removal** {{param:host_k2_db}}
       - ![](icon:mdi:content-cut) **Trimming** {{param:trim_tool}}
       - ![](icon:mdi:puzzle-outline) **Assemblers** {{param:assemblers}}
       - ![](icon:mdi:set-merge) **Clustering** {{param:cluster_method}} at {{param:identity_threshold}} identity
@@ -198,7 +202,7 @@ main_dashboard:
       - ![](icon:mdi:dna) **Variants** {{param:variant_caller}}
     tag: vm-ov-run
     index: ov-run
-    layout: {x: 5, y: 1, w: 3, h: 3}
+    layout: {x: 5, y: 1, w: 3, h: 4}
   # The marks take the accent colour, not the theme's blue. The steps that lead
   # to a route's tab cite a value from that route's collection: the import
   # removes the line with its data, so a run shows only the steps it took.
@@ -226,7 +230,17 @@ main_dashboard:
       :::
     tag: vm-ov-steps
     index: ov-steps
-    layout: {x: 0, y: 4, w: 8, h: 3}
+    layout: {x: 0, y: 5, w: 8, h: 3}
+  - component_type: text
+    surface: card
+    body: |
+      ### About this dashboard
+      nf-core/viralmetagenome cleans the reads of each sample, removes the host, assembles the rest and clusters the contigs into the genomes it can rebuild. Each cluster is refined into a consensus by mapping the reads back, and the reads are also mapped to the references of the constraint sheet. This page sums up one run; each tab behind it answers one question, in the order of the steps above.
+
+      The sample filters in the left panel apply to every tab: narrow the samples once and the whole dashboard follows. A bar above a section narrows that section only.
+    tag: vm-ov-about
+    index: ov-about
+    layout: {x: 0, y: 8, w: 8, h: 3}
   # Key figures: one card per stage of the funnel, each opening the tab that
   # explains it. All four read collections every route writes.
   - component_type: card

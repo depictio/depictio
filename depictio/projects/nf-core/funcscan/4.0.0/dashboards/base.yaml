@@ -181,6 +181,7 @@ main_dashboard:
       screens: {dc: screening_summary, column: screens, aggregation: max, format: integer}
     body: |
       ### The run
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/funcscan 4.0.0 on Nextflow {{param:Workflow.Nextflow}}
       - ![](icon:mdi:flask-outline) **Assemblies** {{samples}}
       - ![](icon:mdi:magnify) **Screens** {{screens}} of 4
       - ![](icon:mdi:dna) **Gene caller** {{param:annotation_tool}}
@@ -191,16 +192,22 @@ main_dashboard:
   - component_type: text
     surface: card
     accent: green
+    values:
+      n_contigs: {dc: contig_annotation, column: contig, aggregation: count, format: si}
+      n_args: {dc: hamronization_report, column: hits, aggregation: sum, format: si}
+      n_amps: {dc: ampcombi_summary, column: cds_id, aggregation: count, format: si}
+      n_bgcs: {dc: combgc_summary, column: regions, aggregation: sum, format: integer}
+      n_cazymes: {dc: dbcan_overview, column: genes, aggregation: sum, format: si}
     body: |
       ### Five steps from contigs to functions
       Each step names its settings and the tab that shows its result.
 
       ::: steps
-      1. ![](icon:mdi:dna) **Annotate** Genes called on every contig · [Settings](params:annotation) · [Contigs](tab:Contigs)
-      2. ![](icon:mdi:bacteria-outline) **Resistance** Five ARG tools, harmonised · [Settings](params:arg_) · [Resistome](tab:Resistome)
-      3. ![](icon:mdi:atom) **Peptides** Predictors merged by AMPcombi · [Settings](params:amp_) · [AMPs](tab:AMPs)
-      4. ![](icon:mdi:graph-outline) **Clusters** antiSMASH, DeepBGC, GECCO · [Settings](params:bgc_) · [BGCs](tab:BGCs)
-      5. ![](icon:mdi:leaf) **CAZymes** run_dbCAN on every protein · [Settings](params:cazyme) · [CAZymes](tab:CAZymes)
+      1. ![](icon:mdi:dna) **Annotate** Genes called on every contig, {{n_contigs}} of them carry a feature · [Settings](params:annotation) · [Contigs](tab:Contigs)
+      2. ![](icon:mdi:bacteria-outline) **Resistance** Five ARG tools, harmonised into {{n_args}} hits · [Settings](params:arg_) · [Resistome](tab:Resistome)
+      3. ![](icon:mdi:atom) **Peptides** Predictors merged by AMPcombi into {{n_amps}} candidates · [Settings](params:amp_) · [AMPs](tab:AMPs)
+      4. ![](icon:mdi:graph-outline) **Clusters** antiSMASH, DeepBGC and GECCO predict {{n_bgcs}} regions · [Settings](params:bgc_) · [BGCs](tab:BGCs)
+      5. ![](icon:mdi:leaf) **CAZymes** run_dbCAN on every protein finds {{n_cazymes}} CAZyme genes · [Settings](params:cazyme) · [CAZymes](tab:CAZymes)
       :::
     tag: fs-ov-steps
     index: ov-steps

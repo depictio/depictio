@@ -48,7 +48,7 @@ template:
           - "genomes.*"   # bundled genome catalog, identical every run
           - "hook_url"    # nf-core runs put a live Slack webhook here
       - name: "software_versions"
-        glob: "pipeline_info/*software*versions.yml"
+        glob: "pipeline_info/*software*versions*.yml"
         format: "yaml"
         pick: "latest"
         group: "Software versions"

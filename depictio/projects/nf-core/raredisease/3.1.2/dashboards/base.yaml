@@ -151,7 +151,6 @@ main_dashboard:
     collapsed: true
     persistent: true
     pin: bottom
-    exclude_tabs: [Overview]
   components:
   - component_type: interactive
     workflow_tag: raredisease
@@ -194,27 +193,33 @@ main_dashboard:
     tag: rd-ov-hero
     index: ov-hero
     layout: {x: 0, y: 0, w: 8, h: 1}
-  - component_type: text
-    surface: card
-    body: |
-      ### About this dashboard
-      nf-core/raredisease aligns the reads of a family, calls small variants, annotates them with VEP and ranks them with GENMOD against the pedigree. Mitochondrial, repeat expansion and mobile element calls follow their own branches. This page sums up one run; each tab behind it answers one question, in the order of the steps below.
-
-      The sample filters in the left panel apply to every tab: narrow the samples, the role or the family once and the whole dashboard follows. A bar above a section narrows that section only.
-
-      The pedigree and the family findings below name each individual of the run by its role (the proband is the affected child the family is analysed for), with its sex and whether it is affected.
-    tag: rd-ov-about
-    index: ov-about
-    layout: {x: 0, y: 1, w: 5, h: 4}
+  # The study: the pedigree the run was started on. Each line cites the sample hub,
+  # so a line goes with its data.
   - component_type: text
     surface: card
     values:
+      n_fam: {dc: samples, column: family_id, aggregation: nunique, format: integer}
       n_samples: {dc: samples, column: sample, aggregation: nunique, format: integer}
-      n_family: {dc: samples, column: family_id, aggregation: nunique, format: integer}
+      n_aff: {dc: samples, column: sample, aggregation: nunique, filter_expr: "col('status') == 'Affected'", format: integer}
+      n_trios: {dc: samples, column: sample, aggregation: nunique, filter_expr: "(col('role') == 'Proband') & col('father').is_not_null() & col('mother').is_not_null()", format: integer}
+      n_female: {dc: samples, column: sample, aggregation: nunique, filter_expr: "col('sex') == 'Female'", format: integer}
+      n_male: {dc: samples, column: sample, aggregation: nunique, filter_expr: "col('sex') == 'Male'", format: integer}
+    body: |
+      ### The study
+      - ![](icon:mdi:family-tree) **Families** {{n_fam}}, each analysed against its pedigree
+      - ![](icon:mdi:test-tube) **Samples** {{n_samples}} sequenced, {{n_aff}} of them affected
+      - ![](icon:mdi:account-multiple-outline) **Trios** {{n_trios}} probands with both parents in the run
+      - ![](icon:mdi:gender-male-female) **Sex** {{n_female}} female and {{n_male}} male, as the pedigree declares
+      - ![](icon:mdi:file-table-outline) **Samplesheet** [one row per sample](section:Sample sheet), its path in [the run parameters](params:input)
+    tag: rd-ov-study
+    index: ov-study
+    layout: {x: 0, y: 1, w: 5, h: 4}
+  - component_type: text
+    surface: card
     body: |
       ### The run
-      - ![](icon:mdi:test-tube) **Samples** {{n_samples}} on {{param:genome}}
-      - ![](icon:mdi:family-tree) **Families** {{n_family}}, {{param:analysis_type}}
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/raredisease 3.1.2 on Nextflow {{param:Workflow.Nextflow}}
+      - ![](icon:mdi:dna) **Reference** {{param:genome}}, {{param:analysis_type}}
       - ![](icon:mdi:align-horizontal-left) **Aligner** {{param:aligner}}
       - ![](icon:mdi:magnify-scan) **Calling** {{param:variant_caller}}
       - ![](icon:mdi:tag-outline) **VEP cache** {{param:vep_cache_version}}
@@ -246,6 +251,20 @@ main_dashboard:
     tag: rd-ov-steps
     index: ov-steps
     layout: {x: 0, y: 5, w: 8, h: 2}
+  - component_type: text
+    surface: card
+    body: |
+      ### About this dashboard
+      nf-core/raredisease aligns the reads of a family, calls small variants, annotates them with VEP and ranks them with GENMOD against the pedigree. Mitochondrial, repeat expansion and mobile element calls follow their own branches. This page sums up one run; each tab behind it answers one question, in the order of the steps below.
+
+      The sample filters in the left panel apply to every tab: narrow the samples, the role or the family once and the whole dashboard follows. A bar above a section narrows that section only.
+
+      The pedigree and the family findings below name each individual by its role (the proband is the affected child the family is analysed for), with its sex and whether it is affected.
+
+      Provenance: every setting and tool version on this page is read from the run's own `params.json` and software-versions report, and every number from the files the run wrote.
+    tag: rd-ov-about
+    index: ov-about
+    layout: {x: 0, y: 7, w: 8, h: 3}
   - component_type: card
     workflow_tag: raredisease
     data_collection_tag: samples

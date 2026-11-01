@@ -81,8 +81,6 @@ main_dashboard:
     collapsed: true
     persistent: true
     pin: bottom
-    exclude_tabs:
-    - Overview
   components:
   # First in component order on purpose: the Guide demos the first categorical
   # filter that shares a data collection with the first card (Samples, below).
@@ -127,51 +125,78 @@ main_dashboard:
     tag: airr-ov-hero
     index: ov-hero
     layout: {x: 0, y: 0, w: 8, h: 1}
-  - component_type: text
-    surface: card
-    body: |
-      ### About this dashboard
-      nf-core/airrflow builds adaptive immune receptor repertoires from B or T cell receptor sequencing: it assembles and annotates the reads, groups the sequences into clones and compares the repertoires. This page sums up one run; each tab behind it answers one question, in the order of the steps below.
-
-      The sample filters in the left panel apply to every tab: narrow the samples once and the whole dashboard follows. A bar above a section narrows that section only.
-    tag: airr-ov-about
-    index: ov-about
-    layout: {x: 0, y: 1, w: 5, h: 3}
-  # The run's own settings, read from its params.json: a key the run did not
-  # set prints a dash.
+  # The study: who was sequenced, from the sample sheet. Each line cites one value, so a
+  # column the sheet lacks takes its line with it.
   - component_type: text
     surface: card
     values:
       samples: {dc: samplesheet, column: sample_id, aggregation: nunique, format: integer}
       subjects: {dc: samplesheet, column: subject_id, aggregation: nunique, format: integer}
+      species: {dc: samplesheet, column: species, aggregation: top}
+      tissue: {dc: samplesheet, column: tissue, aggregation: top}
+      sex: {dc: samplesheet, column: sex, aggregation: top}
+      groups: {dc: samplesheet, column: '{GROUP_COL}', aggregation: nunique, format: integer}
+    body: |
+      ### The study
+      - ![](icon:mdi:flask-outline) **Samples** {{samples}} from {{subjects}} subjects
+      - ![](icon:mdi:paw) **Species** most often {{species}}
+      - ![](icon:mdi:heart-pulse) **Tissue** most often {{tissue}}
+      - ![](icon:mdi:gender-male-female) **Sex** most often {{sex}}
+      - ![](icon:mdi:shape-outline) **{GROUP_COL_DISPLAY}** {{groups}} groups
+      - ![](icon:mdi:file-table-outline) **Samplesheet** [one row per sample](section:Sample sheet), its path in [the run parameters](params:input)
+    tag: airr-ov-study
+    index: ov-study
+    layout: {x: 0, y: 1, w: 5, h: 4}
+  # The run's own settings, read from its params.json: a key the run did not
+  # set prints a dash.
+  - component_type: text
+    surface: card
     body: |
       ### The run
-      - ![](icon:mdi:flask-outline) **Samples** {{samples}} from {{subjects}} subjects
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/airrflow 5.1.2 on Nextflow {{param:Workflow.Nextflow}}
       - ![](icon:mdi:barcode) **Library** {{param:library_generation_method}}
       - ![](icon:mdi:sitemap) **Clone threshold** {{param:clonal_threshold}}
       - ![](icon:mdi:import) **Input** {{param:mode}}
     tag: airr-ov-run
     index: ov-run
-    layout: {x: 5, y: 1, w: 3, h: 3}
-  # The marks take the family's colour (the header's), not the theme's blue.
+    layout: {x: 5, y: 1, w: 3, h: 4}
+  # A step past the trimming cites a value from its tab's collections, so the import takes
+  # the line out with its data: a run that skipped the report keeps the first steps only.
   - component_type: text
     surface: card
     accent: green
+    values:
+      n_reads: {dc: sequence_counts, column: sequences, aggregation: sum, format: si}
+      n_vgenes: {dc: v_gene_usage, column: taxon, aggregation: nunique, filter_expr: "col('rank') == 'V gene'", format: integer}
+      n_cdr3: {dc: cdr3_spectratype, column: sequences, aggregation: sum, format: si}
+      n_clones: {dc: repertoire_summary, column: number_of_clones, aggregation: sum, format: si}
+      n_sized: {dc: clone_sizes, column: clone_id, aggregation: count, format: si}
+      n_shared: {dc: clone_sets, column: clone, aggregation: count, filter_expr: "col('n_samples') > 1", format: si}
     body: |
       ### Six steps from reads to clones
-      Each step names its settings and the tab that shows its result.
+      Each step names its settings and the tab that shows its result. A step the run skipped drops out.
 
       ::: steps
       1. ![](icon:mdi:content-cut) **Trim** fastp and FastQC on the reads · [Settings](params:trim) · [MultiQC](tab:MultiQC)
-      2. ![](icon:mdi:layers-outline) **Assemble** pRESTO pairs mates into UMI consensus · [Settings](params:umi) · [Processing](tab:Sequence Processing)
-      3. ![](icon:mdi:dna) **Annotate** IgBLAST assigns the V, D and J genes · [Settings](params:reference) · [V genes](tab:V Gene Usage)
-      4. ![](icon:mdi:ruler) **Translate** CDR3 lengths and V-J pairs · [Settings](params:productive) · [CDR3](tab:CDR3 & Pairing)
-      5. ![](icon:mdi:sitemap) **Clone** Sequences grouped into clones · [Settings](params:clonal) · [Diversity](tab:Clonal Diversity)
-      6. ![](icon:mdi:set-merge) **Compare** Expansion and sharing · [Settings](params:crossby) · [Expansion](tab:Clonal Expansion) · [Sharing](tab:Clone Sharing)
+      2. ![](icon:mdi:layers-outline) **Assemble** pRESTO pairs {{n_reads}} read pairs into UMI consensus · [Settings](params:umi) · [Processing](tab:Sequence Processing)
+      3. ![](icon:mdi:dna) **Annotate** IgBLAST assigns the V, D and J genes, {{n_vgenes}} V genes in all · [Settings](params:reference) · [V genes](tab:V Gene Usage)
+      4. ![](icon:mdi:ruler) **Translate** CDR3 lengths of {{n_cdr3}} sequences and their V-J pairs · [Settings](params:productive) · [CDR3](tab:CDR3 & Pairing)
+      5. ![](icon:mdi:sitemap) **Clone** {{n_clones}} clones grouped from the sequences · [Settings](params:clonal) · [Diversity](tab:Clonal Diversity)
+      6. ![](icon:mdi:set-merge) **Compare** how {{n_sized}} clones expand and which {{n_shared}} several samples share · [Settings](params:crossby) · [Expansion](tab:Clonal Expansion) · [Sharing](tab:Clone Sharing)
       :::
     tag: airr-ov-steps
     index: ov-steps
-    layout: {x: 0, y: 4, w: 8, h: 3}
+    layout: {x: 0, y: 5, w: 8, h: 3}
+  - component_type: text
+    surface: card
+    body: |
+      ### About this dashboard
+      nf-core/airrflow builds adaptive immune receptor repertoires from B or T cell receptor sequencing: it assembles and annotates the reads, groups the sequences into clones and compares the repertoires. This page sums up one run; each tab behind it answers one question, in the order of the steps above.
+
+      The sample filters in the left panel apply to every tab: narrow the samples once and the whole dashboard follows. A bar above a section narrows that section only.
+    tag: airr-ov-about
+    index: ov-about
+    layout: {x: 0, y: 8, w: 8, h: 3}
   # Key figures: one card per stage of the funnel, each opening the tab that
   # explains it. The icon colour is that tab's colour; a route alternate keeps
   # the colour of the slot it fills, so no route repeats one.

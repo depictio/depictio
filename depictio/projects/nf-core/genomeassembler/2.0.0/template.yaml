@@ -68,6 +68,8 @@ template:
         glob: "pipeline_info/params*.json"
         format: "json"
         pick: "latest"
+        exclude_keys:
+          - "hook_url"
       - name: "software_versions"
         glob: "pipeline_info/*software*versions*.yml"
         format: "yaml"

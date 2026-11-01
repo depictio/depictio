@@ -116,8 +116,6 @@ main_dashboard:
     collapsed: true
     persistent: true
     pin: bottom
-    exclude_tabs:
-    - Overview
   components:
   # First in component order on purpose: the Guide demos the first categorical
   # filter that shares a data collection with the first card (Samples, below).
@@ -164,25 +162,36 @@ main_dashboard:
     tag: rv-ov-hero
     index: ov-hero
     layout: {x: 0, y: 0, w: 8, h: 1}
+  # The study: the samples and, when the run was given a design table, how they
+  # group. Each design fact is a line of its own citing the design's collections, so
+  # a run without a design table keeps the first line and drops the rest.
   - component_type: text
     surface: card
+    values:
+      n_samples: {dc: samples, column: sample, aggregation: nunique, format: integer}
+      n_reads: {dc: samples, column: input_reads, aggregation: sum, format: si}
+      n_groups: {dc: metadata, column: '{GROUP_COL}', aggregation: nunique, format: integer}
+      max_reps: {dc: replicate_sharing, column: samples, aggregation: max, format: integer}
+      sites: {dc: replicate_sharing, column: sites, aggregation: sum, format: si}
+      shared: {dc: replicate_sharing, column: shared_sites, aggregation: sum, format: si}
     body: |
-      ### About this dashboard
-      nf-core/rnavar aligns RNA-seq reads with STAR, marks duplicates, splits the spliced reads and calls germline variants with GATK HaplotypeCaller, then hard-filters them. Only expressed genes are covered, so a call set reads differently from an exome: depth follows expression, and RNA editing adds A to G changes no DNA carries. This page sums up one run; each tab behind it answers one question, in the order of the steps below.
-
-      The sample filters in the left panel apply to every tab: narrow the samples once and the whole dashboard follows. A bar above a section narrows that section only.
-    tag: rv-ov-about
-    index: ov-about
+      ### The study
+      - ![](icon:mdi:test-tube) **Samples** {{n_samples}}, {{n_reads}} reads given to STAR
+      - ![](icon:mdi:account-group-outline) **Design** {{n_groups}} groups from the design table
+      - ![](icon:mdi:content-copy) **Replicates** up to {{max_reps}} samples in a group
+      - ![](icon:mdi:set-merge) **Shared sites** {{shared}} of {{sites}} PASS sites called in every sample of their group
+      - ![](icon:mdi:file-table-outline) **Samplesheet** [one row per sample](section:Sample sheet), its path in [the run parameters](params:input)
+    tag: rv-ov-study
+    index: ov-study
     layout: {x: 0, y: 1, w: 5, h: 3}
   # The run's own settings, read from its params.json: a key the run did not
   # set prints a dash.
   - component_type: text
     surface: card
-    values:
-      n_samples: {dc: samples, column: sample, aggregation: nunique, format: integer}
     body: |
       ### The run
-      - ![](icon:mdi:test-tube) **Samples** {{n_samples}} on {{param:genome}}
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/rnavar 1.3.0 on Nextflow {{param:Workflow.Nextflow}}
+      - ![](icon:mdi:dna) **Genome** {{param:genome}}
       - ![](icon:mdi:align-horizontal-left) **Aligner** {{param:aligner}}, two-pass {{param:star_twopass}}
       - ![](icon:mdi:magnify-scan) **Calling** confidence {{param:gatk_hc_call_conf}}
       - ![](icon:mdi:filter-outline) **Filters** FS above {{param:gatk_vf_fs_filter}}, QD below {{param:gatk_vf_qd_filter}}
@@ -215,6 +224,18 @@ main_dashboard:
     tag: rv-ov-steps
     index: ov-steps
     layout: {x: 0, y: 4, w: 8, h: 3}
+  - component_type: text
+    surface: card
+    body: |
+      ### About this dashboard
+      nf-core/rnavar aligns RNA-seq reads with STAR, marks duplicates, splits the spliced reads and calls germline variants with GATK HaplotypeCaller, then hard-filters them. Only expressed genes are covered, so a call set reads differently from an exome: depth follows expression, and RNA editing adds A to G changes no DNA carries. This page sums up one run; each tab behind it answers one question, in the order of the steps below.
+
+      The sample filters in the left panel apply to every tab: narrow the samples once and the whole dashboard follows. A bar above a section narrows that section only.
+
+      Provenance: every setting and tool version on this page is read from the run's own `params.json` and software-versions report, and every number from the files the run wrote.
+    tag: rv-ov-about
+    index: ov-about
+    layout: {x: 0, y: 7, w: 8, h: 3}
   # Key figures: four readings of the callset, each opening the tab that
   # explains it. The failed-calls card reads the sample hub, which every route
   # writes, and comes first in the file so the Guide demos the group filter on

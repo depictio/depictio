@@ -92,8 +92,6 @@ main_dashboard:
     collapsed: true
     persistent: true
     pin: bottom
-    exclude_tabs:
-    - Overview
   components:
   # First in component order on purpose: the Guide demos the first categorical
   # filter that shares a data collection with the first card (Images, below).
@@ -141,26 +139,32 @@ main_dashboard:
     tag: mm-ov-hero
     index: ov-hero
     layout: {x: 0, y: 0, w: 8, h: 1}
+  # The study: what was imaged, from the samplesheet. Each line cites the one
+  # collection, so a line goes with its data.
   - component_type: text
     surface: card
+    values:
+      images: {dc: samples, column: sample, aggregation: nunique, format: integer}
+      cycles: {dc: samples, column: cycle_count, aggregation: sum, format: integer}
+      tiles: {dc: samples, column: image_files, aggregation: sum, format: integer}
     body: |
-      ### About this dashboard
-      nf-core/mcmicro stitches and registers the cycles of each tissue image, segments the cells and measures every cell in every channel of the marker panel. This page sums up one run; each tab behind it answers one question, in the order of the steps below.
-
-      The sample filters in the left panel apply to every tab: narrow the images once and the whole dashboard follows. A bar above a section narrows that section only.
-    tag: mm-ov-about
-    index: ov-about
+      ### The study
+      - ![](icon:mdi:image-multiple-outline) **Images** {{images}}, each registered from its cycles
+      - ![](icon:mdi:layers-triple-outline) **Cycles** {{cycles}} imaged over all the images
+      - ![](icon:mdi:grid) **Tiles** {{tiles}} files listed in the samplesheet
+      - ![](icon:mdi:file-table-outline) **Samplesheet** [one row per image](section:Sample sheet)
+    tag: mm-ov-study
+    index: ov-study
     layout: {x: 0, y: 1, w: 5, h: 3}
   # The run's own settings, read from its params.json: a key the run did not
   # set prints a dash.
   - component_type: text
     surface: card
     values:
-      images: {dc: samples, column: sample, aggregation: nunique, format: integer}
       channels: {dc: markers, column: marker_name, aggregation: count, filter_expr: col('quantified') == 1, format: integer}
     body: |
       ### The run
-      - ![](icon:mdi:image-multiple-outline) **Images** {{images}}
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/mcmicro 2.0.0 on Nextflow {{param:Workflow.Nextflow}}
       - ![](icon:mdi:palette-outline) **Channels** {{channels}} quantified
       - ![](icon:mdi:shape-outline) **Segmentation** {{param:segmentation}}
       - ![](icon:mdi:lightbulb-on-outline) **Illumination** {{param:illumination}}
@@ -188,6 +192,16 @@ main_dashboard:
     tag: mm-ov-steps
     index: ov-steps
     layout: {x: 0, y: 4, w: 8, h: 3}
+  - component_type: text
+    surface: card
+    body: |
+      ### About this dashboard
+      nf-core/mcmicro stitches and registers the cycles of each tissue image, segments the cells and measures every cell in every channel of the marker panel. This page sums up one run; each tab behind it answers one question, in the order of the steps below.
+
+      The sample filters in the left panel apply to every tab: narrow the images once and the whole dashboard follows. A bar above a section narrows that section only.
+    tag: mm-ov-about
+    index: ov-about
+    layout: {x: 0, y: 7, w: 8, h: 3}
   # Key figures: one card per stage of the funnel, each opening the tab that
   # explains it. All four read collections every route writes.
   - component_type: card

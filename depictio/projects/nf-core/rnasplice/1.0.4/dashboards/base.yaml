@@ -96,8 +96,6 @@ main_dashboard:
     collapsed: true
     persistent: true
     pin: bottom
-    exclude_tabs:
-    - Overview
   components:
   # First in component order on purpose: the Guide demos the first categorical
   # filter that shares a data collection with the first card (Samples, below).
@@ -143,35 +141,47 @@ main_dashboard:
     tag: rs-ov-hero
     index: ov-hero
     layout: {x: 0, y: 0, w: 8, h: 1}
+  # The study: who was sequenced and what the run compared, from the sample hub and the
+  # contrasts sheet. The strandedness column a sheet may lack has a line of its own.
   - component_type: text
     surface: card
+    values:
+      samples: {dc: samples, column: sample, aggregation: nunique, format: integer}
+      groups: {dc: samples, column: condition, aggregation: nunique, format: integer}
+      contrasts: {dc: contrasts, column: contrast, aggregation: nunique, format: integer}
+      rtype: {dc: samples, column: read_type, aggregation: top}
+      strand: {dc: samples, column: strandedness, aggregation: top}
     body: |
-      ### About this dashboard
-      nf-core/rnasplice aligns bulk RNA-seq reads with STAR, quantifies transcripts with Salmon, then tests each contrast for differential exon usage, transcript usage and splicing events. This page sums up one run; each tab behind it answers one question, in the order of the steps below.
-
-      The sample filters in the left panel apply to every tab, the contrast and gene filters to every splicing tab. A bar above a section narrows that section only.
-    tag: rs-ov-about
-    index: ov-about
+      ### The study
+      - ![](icon:mdi:flask-outline) **Samples** {{samples}} in {{groups}} conditions
+      - ![](icon:mdi:scale-balance) **Contrasts** {{contrasts}} compared, a treatment against a control
+      - ![](icon:mdi:dna) **Reads** {{rtype}}
+      - ![](icon:mdi:swap-horizontal) **Strandedness** {{strand}}
+      - ![](icon:mdi:file-table-outline) **Samplesheet** [one row per sample](section:Sample sheet), its path in [the run parameters](params:input)
+    tag: rs-ov-study
+    index: ov-study
     layout: {x: 0, y: 1, w: 5, h: 3}
   # The run's own settings, read from its params.json: a key the run did not
   # set prints a dash.
   - component_type: text
     surface: card
-    values:
-      samples: {dc: samples, column: sample, aggregation: nunique, format: integer}
-      contrasts: {dc: contrasts, column: contrast, aggregation: nunique, format: integer}
     body: |
       ### The run
-      - ![](icon:mdi:flask-outline) **Samples** {{samples}}
-      - ![](icon:mdi:scale-balance) **Contrasts** {{contrasts}}
-      - ![](icon:mdi:dna) **Genome** {{param:genome}}
-      - ![](icon:mdi:source-branch) **Aligner** {{param:aligner}}
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/rnasplice 1.0.4 on Nextflow {{param:Workflow.Nextflow}}
+      - ![](icon:mdi:map-marker-outline) **Genome** {{param:genome}}
+      - ![](icon:mdi:content-cut) **Aligner** {{param:aligner}}
     tag: rs-ov-run
     index: ov-run
     layout: {x: 5, y: 1, w: 3, h: 3}
+  # A step whose tab can be pruned cites a count from that tab's collections, so the
+  # import takes the line out with its data: a run without DEXSeq transcript usage
+  # keeps no Transcripts step.
   - component_type: text
     surface: card
     accent: green
+    values:
+      n_exon: {dc: dexseq_exon_genes, column: gene_id, aggregation: nunique, format: si}
+      n_dtu: {dc: dexseq_dtu, column: gene_id, aggregation: nunique, format: si}
     body: |
       ### Six steps from reads to splicing calls
       Each step names its settings and the tab that shows its result.
@@ -179,14 +189,26 @@ main_dashboard:
       ::: steps
       1. ![](icon:mdi:content-cut) **Trim** Trim Galore on the raw reads · [Settings](params:trim) · [MultiQC](tab:MultiQC)
       2. ![](icon:mdi:dna) **Align** STAR on {{param:genome}}, Salmon on transcripts · [Settings](params:star) · [Sample Space](tab:Sample Space)
-      3. ![](icon:mdi:content-cut) **Exons** DEXSeq and edgeR on exon counts · [Settings](params:exon) · [Exon Usage](tab:Exon Usage)
-      4. ![](icon:mdi:swap-vertical) **Transcripts** DEXSeq on transcript usage · [Settings](params:dtu) · [Transcript Usage](tab:Transcript Usage)
+      3. ![](icon:mdi:content-cut) **Exons** DEXSeq and edgeR on exon counts, {{n_exon}} genes tested · [Settings](params:exon) · [Exon Usage](tab:Exon Usage)
+      4. ![](icon:mdi:swap-vertical) **Transcripts** DEXSeq on transcript usage of {{n_dtu}} genes · [Settings](params:dtu) · [Transcript Usage](tab:Transcript Usage)
       5. ![](icon:mdi:shape-outline) **Events** rMATS and SUPPA2 on local events · [Settings](params:rmats) · [Splicing Events](tab:Splicing Events)
       6. ![](icon:mdi:set-merge) **Compare** The calls joined per gene · [Settings](params:contrasts) · [Tool Agreement](tab:Tool Agreement)
       :::
     tag: rs-ov-steps
     index: ov-steps
     layout: {x: 0, y: 4, w: 8, h: 3}
+  - component_type: text
+    surface: card
+    body: |
+      ### About this dashboard
+      nf-core/rnasplice aligns bulk RNA-seq reads with STAR, quantifies transcripts with Salmon, then tests each contrast for differential exon usage, transcript usage and splicing events. This page sums up one run; each tab behind it answers one question, in the order of the steps above.
+
+      The sample filters in the left panel apply to every tab, the contrast and gene filters to every splicing tab. A bar above a section narrows that section only.
+
+      Provenance: every setting and tool version on this page is read from the run's own `params.json` and software-versions report, and every number from the files the run wrote.
+    tag: rs-ov-about
+    index: ov-about
+    layout: {x: 0, y: 7, w: 8, h: 3}
   # Key figures: one card per stage of the funnel, each opening the tab that
   # explains it. The icon colour is that tab's colour.
   - component_type: card

@@ -81,8 +81,6 @@ main_dashboard:
     collapsed: true
     persistent: true
     pin: bottom
-    exclude_tabs:
-    - Overview
   - name: Reference tables
     icon: mdi:table
     color: gray
@@ -138,25 +136,31 @@ main_dashboard:
     tag: pf-ov-hero
     index: ov-hero
     layout: {x: 0, y: 0, w: 8, h: 1}
+  # The study: what the run started from, from the samplesheet. Each line cites
+  # one collection, so a line goes with its data.
   - component_type: text
     surface: card
+    values:
+      samples: {dc: samples, column: sample, aggregation: nunique, format: integer}
+      n_create: {dc: samples, column: sample, aggregation: nunique, filter_expr: "col('mode') == 'create'", format: integer}
+      n_update: {dc: samples, column: sample, aggregation: nunique, filter_expr: "col('mode') == 'update'", format: integer}
+      n_seq: {dc: sequence_stats, column: sequences, aggregation: sum, filter_expr: "col('stage') == 'before'", format: si}
     body: |
-      ### About this dashboard
-      nf-core/proteinfamilies clusters protein sequences, aligns each cluster, builds a profile HMM from it and recruits the sequences the model matches. The result is a set of families, each with its members, an alignment and a model. This page sums up one run; each tab behind it answers one question, in the order of the steps below.
-
-      The sample filters in the left panel apply to every tab: narrow the samples once and the whole dashboard follows. A bar above a section narrows that section only.
-    tag: pf-ov-about
-    index: ov-about
+      ### The study
+      - ![](icon:mdi:flask-outline) **Samples** {{samples}}, one protein FASTA each
+      - ![](icon:mdi:shape-plus-outline) **Mode** {{n_create}} build new families, {{n_update}} extend existing ones
+      - ![](icon:mdi:dna) **Sequences** {{n_seq}} before the length and duplicate filters
+      - ![](icon:mdi:file-table-outline) **Samplesheet** [one row per sample](section:Sample sheet), its path in [the run parameters](params:input)
+    tag: pf-ov-study
+    index: ov-study
     layout: {x: 0, y: 1, w: 5, h: 3}
   # The run's own settings, read from its params.json: a key the run did not
   # set prints a dash.
   - component_type: text
     surface: card
-    values:
-      samples: {dc: samples, column: sample, aggregation: nunique, format: integer}
     body: |
       ### The run
-      - ![](icon:mdi:flask-outline) **Samples** {{samples}}
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/proteinfamilies 2.5.0 on Nextflow {{param:Workflow.Nextflow}}
       - ![](icon:mdi:set-merge) **Clustering** {{param:clustering_tool}} at {{param:cluster_seq_identity}} identity
       - ![](icon:mdi:dna) **Aligner** {{param:alignment_tool}}
       - ![](icon:mdi:filter-outline) **Seed clusters** from {{param:cluster_size_threshold}} sequences
@@ -182,6 +186,16 @@ main_dashboard:
     tag: pf-ov-steps
     index: ov-steps
     layout: {x: 0, y: 4, w: 8, h: 3}
+  - component_type: text
+    surface: card
+    body: |
+      ### About this dashboard
+      nf-core/proteinfamilies clusters protein sequences, aligns each cluster, builds a profile HMM from it and recruits the sequences the model matches. The result is a set of families, each with its members, an alignment and a model. This page sums up one run; each tab behind it answers one question, in the order of the steps below.
+
+      The sample filters in the left panel apply to every tab: narrow the samples once and the whole dashboard follows. A bar above a section narrows that section only.
+    tag: pf-ov-about
+    index: ov-about
+    layout: {x: 0, y: 7, w: 8, h: 3}
   # Key figures: one card per stage of the funnel, each opening the tab that
   # explains it. All four read collections every route writes.
   - component_type: card

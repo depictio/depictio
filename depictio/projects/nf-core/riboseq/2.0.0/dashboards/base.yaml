@@ -107,8 +107,6 @@ main_dashboard:
     collapsed: true
     persistent: true
     pin: bottom
-    exclude_tabs:
-    - Overview
   components:
   # First in component order on purpose: the group filter leads the Key figures
   # bar, and the library filter shares the sample sheet with the first card,
@@ -155,6 +153,71 @@ main_dashboard:
     tag: rb-ov-hero
     index: ov-hero
     layout: {x: 0, y: 0, w: 8, h: 1}
+  # Who was sequenced, from the sample sheet: each line cites it, so a line goes with
+  # its data. The groups line cites the design table and goes without one;
+  # strandedness is a column a sheet may lack, so it has a line of its own.
+  - component_type: text
+    surface: card
+    values:
+      libraries: {dc: samples, column: sample, aggregation: nunique, format: integer}
+      ribo: {dc: samples, column: sample, aggregation: nunique, filter_expr: "col('type') == 'riboseq'", format: integer}
+      rna: {dc: samples, column: sample, aggregation: nunique, filter_expr: "col('type') == 'rnaseq'", format: integer}
+      reads: {dc: samples, column: read_type, aggregation: top}
+      strand: {dc: samples, column: strandedness, aggregation: top}
+      groups: {dc: metadata, column: '{GROUP_COL}', aggregation: nunique, format: integer}
+    body: |
+      ### The study
+      - ![](icon:mdi:flask-outline) **Libraries** {{libraries}}: {{ribo}} footprints and {{rna}} total mRNA
+      - ![](icon:mdi:shape-outline) **Groups** {{groups}} in the design table
+      - ![](icon:mdi:swap-horizontal) **Reads** {{reads}}
+      - ![](icon:mdi:arrow-split-vertical) **Strandedness** {{strand}}
+      - ![](icon:mdi:file-table-outline) **Samplesheet** [one row per library](section:Sample sheet), its path in [the run parameters](params:input)
+    tag: rb-ov-study
+    index: ov-study
+    layout: {x: 0, y: 1, w: 5, h: 6}
+  # The run's own settings, read from its params.json: a key the run did not
+  # set prints a dash. The contrasts line goes with the anota2seq tables.
+  - component_type: text
+    surface: card
+    values:
+      contrasts: {dc: anota2seq_regulation, column: contrast, aggregation: nunique, format: integer}
+    body: |
+      ### The run
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/riboseq 2.0.0 on Nextflow {{param:Workflow.Nextflow}}
+      - ![](icon:mdi:compare-horizontal) **Contrasts** {{contrasts}}
+      - ![](icon:mdi:filter-remove-outline) **rRNA removal** {{param:ribo_removal_tool}}
+      - ![](icon:mdi:dna) **Aligners** {{param:aligner}} · {{param:pseudo_aligner}}
+      - ![](icon:mdi:scale-balance) **Efficiency** {{param:translational_efficiency_method}}
+      - ![](icon:mdi:tune) [All parameters and tool versions](params:)
+    tag: rb-ov-run
+    index: ov-run
+    layout: {x: 5, y: 1, w: 3, h: 6}
+  # The marks take the family's colour (the header's), not the theme's blue.
+  # A step past the quantification cites a count from its tab's collections, so the
+  # import takes the line out with its data: a run that skipped a stage keeps the rest.
+  - component_type: text
+    surface: card
+    accent: green
+    values:
+      n_psites: {dc: ribowaltz_summary, column: psites, aggregation: sum, format: si}
+      n_te: {dc: translational_efficiency, column: gene_id, aggregation: count, format: si}
+      n_contr: {dc: anota2seq_regulation, column: contrast, aggregation: nunique, format: integer}
+      n_orfs: {dc: orf_overlap, column: orf_id, aggregation: count, format: si}
+    body: |
+      ### Six steps from footprints to ORFs
+      Each step names its settings and the tab that shows its result.
+
+      ::: steps
+      1. ![](icon:mdi:filter-remove-outline) **Clean** Adapters trimmed, rRNA removed by {{param:ribo_removal_tool}} · [Settings](params:ribo_removal) · [MultiQC](tab:MultiQC)
+      2. ![](icon:mdi:waves) **P-sites** riboWaltz offsets and periodicity of {{n_psites}} P-sites · [Settings](params:ribowaltz) · [Ribo-seq QC](tab:Ribo-seq QC)
+      3. ![](icon:mdi:dna) **Quantify** Salmon per gene, both assays · [Settings](params:pseudo_aligner) · [Sample space](tab:Sample space)
+      4. ![](icon:mdi:scale-balance) **Efficiency** Footprints over mRNA for {{n_te}} genes · [Settings](params:te_) · [Efficiency](tab:Translational efficiency)
+      5. ![](icon:mdi:compare-horizontal) **Regulation** anota2seq on {{n_contr}} contrasts · [Settings](params:translational_efficiency) · [Regulation](tab:Translational regulation)
+      6. ![](icon:mdi:set-merge) **ORFs** {{n_orfs}} ORFs called by Ribo-TISH and RiboCode · [Settings](params:orf) · [ORF discovery](tab:ORF discovery) · [Locus](tab:Locus)
+      :::
+    tag: rb-ov-steps
+    index: ov-steps
+    layout: {x: 0, y: 7, w: 8, h: 3}
   - component_type: text
     surface: card
     body: |
@@ -164,43 +227,7 @@ main_dashboard:
       The sample filters in the left panel apply to every tab that reads per-library data: narrow the libraries once and those tabs follow. A bar above a section narrows that section only.
     tag: rb-ov-about
     index: ov-about
-    layout: {x: 0, y: 1, w: 5, h: 3}
-  # The run's own settings, read from its params.json: a key the run did not
-  # set prints a dash. The contrasts line goes with the anota2seq tables.
-  - component_type: text
-    surface: card
-    values:
-      libraries: {dc: samples, column: sample, aggregation: nunique, format: integer}
-      contrasts: {dc: anota2seq_regulation, column: contrast, aggregation: nunique, format: integer}
-    body: |
-      ### The run
-      - ![](icon:mdi:flask-outline) **Libraries** {{libraries}}
-      - ![](icon:mdi:compare-horizontal) **Contrasts** {{contrasts}}
-      - ![](icon:mdi:filter-remove-outline) **rRNA removal** {{param:ribo_removal_tool}}
-      - ![](icon:mdi:dna) **Aligners** {{param:aligner}} · {{param:pseudo_aligner}}
-      - ![](icon:mdi:scale-balance) **Efficiency** {{param:translational_efficiency_method}}
-    tag: rb-ov-run
-    index: ov-run
-    layout: {x: 5, y: 1, w: 3, h: 3}
-  # The marks take the family's colour (the header's), not the theme's blue.
-  - component_type: text
-    surface: card
-    accent: green
-    body: |
-      ### Six steps from footprints to ORFs
-      Each step names its settings and the tab that shows its result.
-
-      ::: steps
-      1. ![](icon:mdi:filter-remove-outline) **Clean** Adapters trimmed, rRNA removed by {{param:ribo_removal_tool}} · [Settings](params:ribo_removal) · [MultiQC](tab:MultiQC)
-      2. ![](icon:mdi:waves) **P-sites** riboWaltz offsets and periodicity · [Settings](params:ribowaltz) · [Ribo-seq QC](tab:Ribo-seq QC)
-      3. ![](icon:mdi:dna) **Quantify** Salmon per gene, both assays · [Settings](params:pseudo_aligner) · [Sample space](tab:Sample space)
-      4. ![](icon:mdi:scale-balance) **Efficiency** Footprints over mRNA, per gene · [Settings](params:te_) · [Efficiency](tab:Translational efficiency)
-      5. ![](icon:mdi:compare-horizontal) **Regulation** anota2seq per contrast · [Settings](params:translational_efficiency) · [Regulation](tab:Translational regulation)
-      6. ![](icon:mdi:set-merge) **ORFs** Ribo-TISH and RiboCode · [Settings](params:orf) · [ORF discovery](tab:ORF discovery) · [Locus](tab:Locus)
-      :::
-    tag: rb-ov-steps
-    index: ov-steps
-    layout: {x: 0, y: 4, w: 8, h: 3}
+    layout: {x: 0, y: 10, w: 8, h: 3}
   # Key figures: one card per Data & QC or ORF tab, in tab order, each opening
   # the tab that explains it; the icon colour is that tab's colour. Libraries is
   # a count over the sheet (one row per library), so its bar holds parts of a
