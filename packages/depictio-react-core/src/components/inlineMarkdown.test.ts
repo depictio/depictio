@@ -102,6 +102,20 @@ describe('section links', () => {
   });
 });
 
+describe('locus links', () => {
+  it('reads a gene, a locus and a live value', () => {
+    for (const href of ['locus:BRCA2', 'locus:chr13:32,315,474-32,400,266', 'locus:{{top_gene}}']) {
+      expect(parseInlineMarkdown(`[in the browser](${href})`)[0]).toMatchObject({ type: 'link', href });
+    }
+  });
+
+  it('keeps a locus with a space or a script as text', () => {
+    for (const href of ['locus:a b', 'locus:javascript(1)']) {
+      expect(parseInlineMarkdown(`[x](${href})`).some((t) => t.type === 'link')).toBe(false);
+    }
+  });
+});
+
 describe('inline icons', () => {
   it('reads an icon in image syntax', () => {
     expect(parseInlineMarkdown('![](icon:mdi:dna) Pipeline')).toEqual([

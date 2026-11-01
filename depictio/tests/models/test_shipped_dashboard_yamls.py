@@ -769,8 +769,9 @@ def test_one_jbrowse_per_dashboard_family():
 
 @pytest.mark.no_db
 def test_genome_view_is_a_navigator_or_has_lanes():
-    """A GenomeSpy `genome_view` tile either brushes the region (the navigator) or
-    stacks one lane per sample.
+    """A GenomeSpy `genome_view` tile either brushes the region (the navigator),
+    stacks one lane per sample, or opens the browser on a click (an Overview
+    summary, `click_opens_browser`).
 
     A tile that does neither only redraws what a `coverage_track` follows through
     `follow_region_filter`, or what the browser shows at the locus, for a GPU cost
@@ -790,13 +791,18 @@ def test_genome_view_is_a_navigator_or_has_lanes():
             for kind, tag, comp in _advanced_viz_tiles(tab):
                 if kind != "genome_view":
                     continue
-                if _is_navigator(comp) or _viz_option(comp, "facet_by_sample", False):
+                if (
+                    _is_navigator(comp)
+                    or _viz_option(comp, "facet_by_sample", False)
+                    or _viz_option(comp, "click_opens_browser", False)
+                ):
                     continue
                 offenders.append(f"{_rel(path)} {label} '{tag}'")
     assert not offenders, (
         "genome_view tiles with region_filter_enabled: false and no facet_by_sample "
         "(a follower that only redraws a navigator or the browser; remove it, or make "
-        "it the navigator, or give it per-sample lanes):\n" + "\n".join(offenders)
+        "it the navigator, give it per-sample lanes, or make a click open the browser):\n"
+        + "\n".join(offenders)
     )
 
 

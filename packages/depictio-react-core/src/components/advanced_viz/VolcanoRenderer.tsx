@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Badge,
   Box,
@@ -54,7 +54,17 @@ import {
   type DeView,
 } from './deViews';
 import { usePlotAnnotationLayer } from '../annotations/usePlotAnnotationLayer';
+import { extractScatterSelection } from '../../selection';
+import { useGestureGuardedSelection } from './selectionGesture';
+import { applyHighlight, highlightLayout } from './highlight/highlightTraces';
+import { isAdditiveClick, selectionFromClick } from './highlight/highlightModel';
+import { useHighlightRingColor, useTileHighlight } from './highlight/useTileHighlight';
+import HighlightBadge from './highlight/HighlightBadge';
 import { supportsAdvancedVizAnnotation } from '../../annotations/plotDecorate';
+
+/** `customdata` slot of the volcano and MA points that holds the feature id
+ *  (slot 0 is the label, which may differ). The QQ view keeps the id at slot 0. */
+const FEATURE_ID_SLOT = 4;
 
 /** Point labels and the axes' text: 10 read as fine print next to the tile's title. */
 const LABEL_FONT_SIZE = 13;
@@ -837,6 +847,38 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
     () => (groupedFigure ? applyLayoutTheme(groupedFigure.layout as any, isDark, theme) : null),
     [groupedFigure, isDark, theme],
   );
+  // Points picked in the plot (a click, a box or lasso) and rows ticked in the
+  // floating data table are one highlight, keyed on the feature id. It is a view
+  // state: it dims the other points and rings the picked ones, and writes no
+  // dashboard filter. Without a feature id column there is nothing to join on.
+  const highlightColumn = maFromTable
+    ? MA_TABLE_COLUMNS.featureId
+    : config.feature_id_col || undefined;
+  const highlightSlot = activeView === 'qq' ? 0 : FEATURE_ID_SLOT;
+  const highlight = useTileHighlight(String(metadata.index));
+  const ringColor = useHighlightRingColor();
+  // A row hovered in the floating table rings its point; a hovered point is
+  // Plotly's own to show, and only marks its row in the table.
+  const tableHover = highlight.hoverSource === 'table' ? highlight.hover : null;
+  const highlightedData = useMemo(
+    () =>
+      highlightColumn && plotData
+        ? (applyHighlight(plotData, highlight.keys, {
+            slot: highlightSlot,
+            ringColor,
+            hoverKey: tableHover,
+          }) as unknown[])
+        : plotData,
+    [plotData, highlightColumn, highlight.keys, highlightSlot, ringColor, tableHover],
+  );
+  const highlightedLayout = useMemo(
+    () =>
+      highlightColumn && plotLayout
+        ? highlightLayout(plotLayout, highlight.revision, `${activeView}|${maFromTable}`)
+        : plotLayout,
+    [plotLayout, highlightColumn, highlight.revision, activeView, maFromTable],
+  );
+
   // Chart annotations. Slot 0 of `customdata` is what marked points are keyed
   // on: the label (the feature id when there is no label column) in the
   // volcano and MA views, the feature id in the QQ view (only set when the
@@ -845,8 +887,10 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
   const annotations = usePlotAnnotationLayer({
     componentIndex: String(metadata.index),
     enabled: supportsAdvancedVizAnnotation(metadata),
-    data: plotData,
-    layout: plotLayout,
+    data: highlightedData,
+    layout: highlightedLayout,
+    // Marked points are matched against the figure without the highlight ring.
+    sourceData: plotData,
     pointIdIndex: 0,
     pointIdColumn:
       (maFromTable
@@ -856,6 +900,47 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
           : config.label_col || config.feature_id_col) || undefined,
     variant: offered.length > 1 ? activeView : undefined,
   });
+
+  const { select: selectHighlight, clear: clearHighlight, keys: pickedKeys } = highlight;
+  const guardedSelection = useGestureGuardedSelection(
+    highlightColumn
+      ? (event: any) => selectHighlight(extractScatterSelection(event, highlightSlot), 'plot-select')
+      : undefined,
+  );
+  const handleClick = useCallback(
+    (event: any) => {
+      // In a box or lasso mode the click is also a selection, which
+      // `onSelected` already took; handling it twice would toggle it off again.
+      const mode = (annotations.gdRef.current as { _fullLayout?: { dragmode?: string } } | null)
+        ?._fullLayout?.dragmode;
+      if (mode === 'select' || mode === 'lasso') return;
+      const key = extractScatterSelection(event, highlightSlot)[0];
+      if (key === undefined) return;
+      selectHighlight(selectionFromClick(pickedKeys, key, isAdditiveClick(event)), 'plot-click');
+    },
+    [annotations.gdRef, highlightSlot, selectHighlight, pickedKeys],
+  );
+  const handleDeselect = useCallback(() => clearHighlight('plot-select'), [clearHighlight]);
+  const { hoverKey } = highlight;
+  const handleHover = useCallback(
+    (event: any) => hoverKey(extractScatterSelection(event, highlightSlot)[0] ?? null, 'plot'),
+    [hoverKey, highlightSlot],
+  );
+  const handleUnhover = useCallback(() => hoverKey(null, 'plot'), [hoverKey]);
+  const badges = useMemo(
+    () =>
+      pickedKeys.length > 0
+        ? [
+            ...annotations.badges,
+            <HighlightBadge
+              key="highlight"
+              count={pickedKeys.length}
+              onClear={() => clearHighlight('external')}
+            />,
+          ]
+        : annotations.badges,
+    [annotations.badges, pickedKeys.length, clearHighlight],
+  );
 
   // The rows behind the figure on screen, for the frame's data view.
   const shownRows = maFromTable ? maRows : rows;
@@ -878,7 +963,8 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
       dataColumns={maFromTable ? maColumns : requiredCols}
       counts={figure?.counts}
       tierAnnotation={tierAnnotation}
-      badges={annotations.badges}
+      badges={badges}
+      highlightColumn={highlightColumn}
       reduction={
         reduction && (reduction.sampled || fullLoad)
           ? {
@@ -908,7 +994,18 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
             useResizeHandler
             style={{ width: '100%', height: '100%' }}
             config={{ displaylogo: false, responsive: true } as any}
-            {...annotations.plotProps()}
+            {...annotations.plotProps(
+              highlightColumn
+                ? {
+                    onSelecting: guardedSelection.onSelecting,
+                    onSelected: guardedSelection.onSelected,
+                    onClick: handleClick,
+                    onDeselect: handleDeselect,
+                    onHover: handleHover,
+                    onUnhover: handleUnhover,
+                  }
+                : undefined,
+            )}
           />
           {annotations.toolbar}
         </div>
@@ -1086,6 +1183,8 @@ function buildVolcano(input: {
             sigRaw[i] ?? null,
             tiers[i],
             hovers ? String(hovers[i] ?? '') : '',
+            // The feature id: what the highlight joins on (slot 0 is the label).
+            String(ids[i] ?? ''),
           ]),
           hovertemplate:
             `<b>%{customdata[0]}</b>  <span style="opacity:0.7">[%{customdata[2]}]</span>` +
@@ -1206,6 +1305,8 @@ function buildMa(input: {
             hasSig ? sigRaw[i] ?? null : null,
             tiers[i],
             hovers ? String(hovers[i] ?? '') : '',
+            // The feature id: what the highlight joins on (slot 0 is the label).
+            String(ids[i] ?? ''),
           ]),
           hovertemplate:
             `<b>%{customdata[0]}</b>  <span style="opacity:0.7">[%{customdata[2]}]</span>` +

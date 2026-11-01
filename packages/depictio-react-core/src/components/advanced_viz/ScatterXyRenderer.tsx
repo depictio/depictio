@@ -46,6 +46,10 @@ import {
 import { usePersistedVizControl } from './usePersistedVizControl';
 import { highlightPredicate, ReferenceHighlight, ReferenceLine } from './scatterReference';
 import { useGestureGuardedSelection, useSelectionRevision } from './selectionGesture';
+import { applyHighlight, highlightLayout } from './highlight/highlightTraces';
+import { isAdditiveClick, selectionFromClick } from './highlight/highlightModel';
+import { useHighlightRingColor, useTileHighlight } from './highlight/useTileHighlight';
+import HighlightBadge from './highlight/HighlightBadge';
 import { splitFigureByGroups } from './groupSplit';
 import type { GroupRenderState } from '../../selectionGroups';
 import { useReportGroupColouring } from '../../groupReach';
@@ -418,6 +422,23 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
   // `Plotly.react` would then report an empty selection and clear whatever the
   // reader had filtered on. Selection is a point-view capability.
   const selectionActive = selectionEnabled && !densityView;
+
+  // Picked points are also a highlight shared with the floating data table (see
+  // highlight/): a view state that rings the points and dims the rest, and
+  // writes no filter. It joins on the column the points are keyed by, which is
+  // the selection column when there is one and the label column otherwise. The
+  // binned density view has no points to pick.
+  const highlightColumn = densityView ? undefined : (selectionColumn ?? (config.label_col || undefined));
+  const highlight = useTileHighlight(String(metadata.index));
+  const ringColor = useHighlightRingColor();
+  // The dashboard dropping this tile's selection from outside (the chrome's
+  // clear, the filter summary) clears the highlight with it.
+  const wasOwnActive = React.useRef(ownSelectionActive);
+  useEffect(() => {
+    if (wasOwnActive.current && !ownSelectionActive) highlight.clear('external');
+    wasOwnActive.current = ownSelectionActive;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ownSelectionActive]);
   const densityOffered = densityAllowed;
 
   const figure = useMemo(() => {
@@ -840,21 +861,35 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
     },
     [onFilterChange, selectionColumn, metadata],
   );
+  const { select: selectHighlight, clear: clearHighlight, keys: pickedKeys } = highlight;
   const handleSelected = useCallback(
     (event: any) => {
       setOwnByClick(false);
-      emitSelection(extractScatterSelection(event, 0));
+      const keys = extractScatterSelection(event, 0);
+      emitSelection(keys);
+      selectHighlight(keys, 'plot-select');
     },
-    [emitSelection],
+    [emitSelection, selectHighlight],
   );
   const handleClick = useCallback(
     (event: any) => {
-      setOwnByClick(true);
-      emitSelection(extractScatterSelection(event, 0));
+      const keys = extractScatterSelection(event, 0);
+      if (selectionActive) {
+        setOwnByClick(true);
+        emitSelection(keys);
+        // In a box mode the click is also a selection `handleSelected` took.
+        selectHighlight(keys, 'plot-click');
+      } else if (keys[0] !== undefined) {
+        // No filter to emit: a click toggles the point in the highlight alone.
+        selectHighlight(selectionFromClick(pickedKeys, keys[0], isAdditiveClick(event)), 'plot-click');
+      }
     },
-    [emitSelection],
+    [emitSelection, selectionActive, selectHighlight, pickedKeys],
   );
-  const handleDeselect = useCallback(() => emitSelection([]), [emitSelection]);
+  const handleDeselect = useCallback(() => {
+    emitSelection([]);
+    clearHighlight('plot-select');
+  }, [emitSelection, clearHighlight]);
   // Only a gesture may empty the selection (see selectionGesture). Guarded
   // here rather than inside the plot so annotate mode detaches both halves.
   const guardedSelection = useGestureGuardedSelection(selectionActive ? handleSelected : undefined);
@@ -1061,14 +1096,57 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
   // Chart annotations. `customdata` holds each point's key: the selection
   // column's value when the component selects, else the label column's.
   // Without either, marked points are stored as coordinates.
+  // A row hovered in the floating table rings its point; a hovered point is
+  // Plotly's own to show, and only marks its row in the table.
+  const tableHover = highlight.hoverSource === 'table' ? highlight.hover : null;
+  const highlightedData = useMemo(
+    () =>
+      highlightColumn && plotData
+        ? (applyHighlight(plotData, pickedKeys, { slot: 0, ringColor, hoverKey: tableHover }) as unknown[])
+        : plotData,
+    [plotData, highlightColumn, pickedKeys, ringColor, tableHover],
+  );
+  const { hoverKey } = highlight;
+  const handleHover = useCallback(
+    (event: any) => hoverKey(extractScatterSelection(event, 0)[0] ?? null, 'plot'),
+    [hoverKey],
+  );
+  const handleUnhover = useCallback(() => hoverKey(null, 'plot'), [hoverKey]);
+  const highlightedLayout = useMemo(
+    () =>
+      highlightColumn && plotLayout
+        ? highlightLayout(
+            plotLayout,
+            highlight.revision,
+            `${config.x_col}|${config.y_col}|${logX}|${logY}`,
+          )
+        : plotLayout,
+    [plotLayout, highlightColumn, highlight.revision, config.x_col, config.y_col, logX, logY],
+  );
   const annotations = usePlotAnnotationLayer({
     componentIndex: String(metadata.index),
     enabled: supportsAdvancedVizAnnotation(metadata),
-    data: plotData,
-    layout: plotLayout,
+    data: highlightedData,
+    layout: highlightedLayout,
+    sourceData: plotData,
     pointIdIndex: 0,
     pointIdColumn: selectionColumn ?? (config.label_col || undefined),
   });
+
+  const badges = useMemo(
+    () =>
+      pickedKeys.length > 0 && highlightColumn
+        ? [
+            ...annotations.badges,
+            <HighlightBadge
+              key="highlight"
+              count={pickedKeys.length}
+              onClear={() => clearHighlight('external')}
+            />,
+          ]
+        : annotations.badges,
+    [annotations.badges, pickedKeys.length, highlightColumn, clearHighlight],
+  );
 
   return (
     <AdvancedVizFrame
@@ -1083,7 +1161,8 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
       emptyMessage={points && points.length === 0 ? 'No points' : undefined}
       dataRows={rows ?? undefined}
       dataColumns={requiredCols}
-      badges={annotations.badges}
+      badges={badges}
+      highlightColumn={highlightColumn}
     >
       {groupedFigure ? (
         <>
@@ -1094,8 +1173,10 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
             {...annotations.plotProps({
               onSelecting: guardedSelection.onSelecting,
               onSelected: guardedSelection.onSelected,
-              onClick: selectionActive ? handleClick : undefined,
+              onClick: highlightColumn || selectionActive ? handleClick : undefined,
               onDeselect: selectionActive ? handleDeselect : undefined,
+              onHover: highlightColumn ? handleHover : undefined,
+              onUnhover: highlightColumn ? handleUnhover : undefined,
             })}
           />
           {annotations.toolbar}

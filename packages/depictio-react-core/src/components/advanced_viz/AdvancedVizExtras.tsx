@@ -8,7 +8,7 @@ import { Icon } from '@iconify/react';
 // dashboard that never opens a table. Mantine unmounts a closed dropdown, so it
 // resolves on first open and never otherwise.
 const DataGridBody = lazy(() => import('../data/DataGridBody'));
-import type { TierAnnotation } from '../data/DataGridBody';
+import type { DataGridSelection, TierAnnotation } from '../data/DataGridBody';
 import DataGridModal from '../data/DataGridModal';
 import type { LoadAllState } from '../chrome/LoadAllButton';
 import { useFullscreenPortalTarget } from '../chrome/useFullscreenPortalTarget';
@@ -63,6 +63,9 @@ export interface AdvancedVizExtrasPayload {
     columns?: string[];
     tierAnnotation?: TierAnnotation;
   };
+  /** Column of `data.rows` identifying a drawn point, when the tile's plot and
+   *  table share a highlight (see `highlight/`). */
+  highlightColumn?: string;
   /** The frame shows the controls docked beside or above the plot, so the
    *  chrome row offers a toggle for them rather than a popover. */
   docked?: boolean;
@@ -244,6 +247,13 @@ interface DataPopoverProps {
   dataRows: Record<string, unknown[]>;
   dataColumns?: string[];
   tierAnnotation?: TierAnnotation;
+  /** Ticks the rows of the highlighted points; see `highlight/`. */
+  selection?: DataGridSelection;
+  /** Whether the table is floating (`FloatingDataTable`) right now. While it is,
+   *  the icon stands for it: filled, and a click puts the table away. */
+  floating?: boolean;
+  /** Present when the tile can float its table: adds the button that does. */
+  onFloatingChange?: (open: boolean) => void;
 }
 
 /** The columns actually rendered, in order. Shared so the popover can decide
@@ -270,6 +280,9 @@ export const AdvancedVizDataPopover: React.FC<DataPopoverProps> = ({
   dataRows,
   dataColumns,
   tierAnnotation,
+  selection,
+  floating = false,
+  onFloatingChange,
 }) => {
   // Controlled so the table's own close button can reach it; Mantine only
   // attaches its toggle to the target while uncontrolled, hence the onClick.
@@ -292,9 +305,18 @@ export const AdvancedVizDataPopover: React.FC<DataPopoverProps> = ({
         dataRows={dataRows}
         dataColumns={dataColumns}
         tierAnnotation={tierAnnotation}
+        selection={selection}
         onClose={close}
         expanded={expanded}
         onToggleExpand={() => setExpanded((v) => !v)}
+        onDetach={
+          onFloatingChange
+            ? () => {
+                close();
+                onFloatingChange(true);
+              }
+            : undefined
+        }
       />
     </Suspense>
   );
@@ -307,19 +329,19 @@ export const AdvancedVizDataPopover: React.FC<DataPopoverProps> = ({
         withArrow
         closeOnClickOutside={false}
         closeOnEscape
-        opened={opened && !expanded}
+        opened={opened && !expanded && !floating}
         onChange={setOpened}
         portalProps={{ target: portalTarget }}
       >
         <Popover.Target>
           <ActionIcon
-            variant={opened ? 'filled' : 'subtle'}
+            variant={opened || floating ? 'filled' : 'subtle'}
             color={TILE_ACTION_STYLE.data.color}
             size="sm"
-            aria-label="Show underlying data"
-            title={TILE_ACTION_STYLE.data.label}
+            aria-label={floating ? 'Close the floating data table' : 'Show underlying data'}
+            title={floating ? 'Close the floating data table' : TILE_ACTION_STYLE.data.label}
             data-tile-action="data"
-            onClick={() => setOpened((v) => !v)}
+            onClick={() => (floating ? onFloatingChange?.(false) : setOpened((v) => !v))}
           >
             <Icon icon={TILE_ACTION_STYLE.data.icon} width={16} height={16} />
           </ActionIcon>

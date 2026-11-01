@@ -188,6 +188,8 @@ interface TableRendererProps {
 
 const MAX_BLOCKS_IN_CACHE = 10;
 const DEFAULT_PAGE_SIZE = 100;
+/** The selection checkbox and its gap, which column auto-size leaves out. */
+const SELECTION_CHECKBOX_PX = 32;
 /** Pages the full set must span before the chrome offers "load all rows".
  *  Tied to the author's own page size rather than an absolute row count: a
  *  dashboard that deliberately shows 15 rows at a time has said the table is a
@@ -1063,6 +1065,14 @@ const TableRenderer: React.FC<TableRendererProps> = ({
 
   const fitColumns = (api: GridApi) => {
     api.autoSizeAllColumns(false);
+    // Auto-size measures the values, not the selection checkbox the first
+    // column carries: without its width the sample names were cut to "HG00...".
+    const boxed = (api.getColumns() ?? []).filter((c) => c.getColDef().checkboxSelection === true);
+    if (boxed.length) {
+      api.setColumnWidths(
+        boxed.map((c) => ({ key: c, newWidth: c.getActualWidth() + SELECTION_CHECKBOX_PX })),
+      );
+    }
     const { left, right } = api.getHorizontalPixelRange();
     const viewport = right - left;
     const used = (api.getColumns() ?? []).reduce((sum, c) => sum + c.getActualWidth(), 0);
