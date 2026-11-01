@@ -28,6 +28,7 @@ FROM --platform=$BUILDPLATFORM node:20-slim@sha256:2cf067cfed83d5ea958367df9f966
 WORKDIR /build
 RUN corepack enable && corepack prepare pnpm@10 --activate
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY patches ./patches/
 COPY packages/depictio-components/package.json ./packages/depictio-components/
 COPY packages/depictio-react-core/package.json ./packages/depictio-react-core/
 COPY depictio/viewer/package.json ./depictio/viewer/
