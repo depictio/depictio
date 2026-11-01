@@ -172,7 +172,7 @@ main_dashboard:
     surface: card
     body: |
       ### The run
-      - ![](icon:mdi:source-branch) **Pipeline** nf-core/genomeqc 1.0.1 on Nextflow {{param:Workflow.Nextflow}}
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/genomeqc 1.0.1
       - ![](icon:mdi:check-decagram-outline) **BUSCO** lineage {{param:busco_lineage}}
       - ![](icon:mdi:file-tree-outline) **Annotation** validated with {{param:val_tool}}
       - ![](icon:mdi:family-tree) **OrthoFinder** version {{param:ortho_version}}

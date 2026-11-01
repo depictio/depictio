@@ -29,6 +29,8 @@ import Glyph, { glyphColorVar } from './Glyph';
 import { parseInlineMarkdown } from './inlineMarkdown';
 import { openRunParameters } from '../utils/runParameters';
 import { revealSection } from '../reveal';
+import { useGenomeBrowserTarget } from './jbrowse/browserTarget';
+import { OPEN_IN_BROWSER_ACTION, openInGenomeBrowser } from './jbrowse/openAction';
 import StepFlow from './StepFlow';
 import TabTiles from './TabTiles';
 import {
@@ -57,7 +59,9 @@ interface TextRendererProps {
 }
 
 /** Draws a run of plain text, its live values filled in (see textValues.ts). */
-type Fill = (text: string) => React.ReactNode;
+/** Fills a text's placeholders as nodes; `text` fills them as a plain string
+ *  (a link's target), null while a value is loading or missing. */
+type Fill = ((text: string) => React.ReactNode) & { text?: (text: string) => string | null };
 const plainFill: Fill = (text) => text;
 
 /**
@@ -103,7 +107,7 @@ function makeFill(
   loading: boolean,
   chips: boolean,
 ): Fill {
-  return (text) => {
+  const fill: Fill = (text) => {
     if (!text.includes('{{')) return text;
     const parts = splitPlaceholders(text);
     if (!parts.some((p) => p.type === 'value')) return text;
@@ -117,7 +121,44 @@ function makeFill(
       return <LiveValue key={i} text={shown} loading={loading} />;
     });
   };
+  fill.text = (text) => {
+    if (!text.includes('{{')) return text;
+    let missing = false;
+    const out = splitPlaceholders(text)
+      .map((part) => {
+        if (part.type === 'text') return part.value;
+        const v = live?.[part.key];
+        if (v === null || v === undefined || v === '') missing = true;
+        return missing ? '' : formatTextValue(v, specs?.[part.key]?.format);
+      })
+      .join('');
+    return missing ? null : out;
+  };
+  return fill;
 }
+
+/** A `locus:` link: the family's genome browser, on its own tab, at the gene or
+ *  region. Plain text without a browser to go to or a locus to go with. */
+const LocusLink: React.FC<{ locus: string | null; children: React.ReactNode }> = ({
+  locus,
+  children,
+}) => {
+  const target = useGenomeBrowserTarget();
+  if (!target || !locus) return <>{children}</>;
+  return (
+    <Anchor
+      component="button"
+      type="button"
+      inherit
+      fw={600}
+      onClick={() => openInGenomeBrowser(target, locus)}
+      style={{ display: 'inline-flex', alignItems: 'center', gap: 4, verticalAlign: 'bottom' }}
+    >
+      <Glyph icon={OPEN_IN_BROWSER_ACTION.icon} color="currentColor" size={16} />
+      {children}
+    </Anchor>
+  );
+};
 
 /**
  * Maps the body's inline-markdown tokens to React nodes. The grammar itself
@@ -199,6 +240,14 @@ const renderInlineMarkdown = (
               {target.icon ? <Glyph icon={target.icon} color={target.color} size={16} /> : null}
               {fill(token.value)}
             </Anchor>
+          );
+        }
+        if (token.href.startsWith('locus:')) {
+          const raw = token.href.slice('locus:'.length);
+          return (
+            <LocusLink key={idx} locus={fill.text ? fill.text(raw) : raw.includes('{{') ? null : raw}>
+              {fill(token.value)}
+            </LocusLink>
           );
         }
         if (token.href.startsWith('section:')) {
@@ -354,7 +403,7 @@ const BODY_TEXT_STYLE: React.CSSProperties = {
 /**
  * Prose stops at a reading measure. A full-width tile on a wide screen ran
  * paragraphs to ~180 characters a line, where the eye loses the next line's
- * start. Tables, tiles and strips keep the tile's width.
+ * start. Lists, tables, tiles and strips keep the tile's width.
  */
 const PROSE_MEASURE = '80ch';
 function proseWidth(alignment: 'left' | 'center' | 'right'): React.CSSProperties {
@@ -745,11 +794,13 @@ const MarkdownBody: React.FC<{
                 // sizes to its text instead of the tile: long items ran past
                 // the edge and were clipped. Inline flow wraps them.
                 styles={{ itemWrapper: { display: 'inline' }, itemLabel: { display: 'inline' } }}
+                // No reading measure: an item is one finding and its tab
+                // link, and a capped list pushed the link alone onto a
+                // second line beside free space.
                 style={{
                   lineHeight: 1.45,
                   textAlign: 'left',
                   paddingRight: 4,
-                  ...proseWidth(alignment),
                 }}
               >
                 {block.items.map((item, i) => (

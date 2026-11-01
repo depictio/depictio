@@ -171,7 +171,7 @@ main_dashboard:
       yield_gb: {dc: lane_summary, column: yield_gb, aggregation: sum, format: 'decimals:1'}
     body: |
       ### The run
-      - ![](icon:mdi:source-branch) **Pipeline** nf-core/demultiplex 1.8.0 on Nextflow {{param:Workflow.Nextflow}}
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/demultiplex 1.8.0
       - ![](icon:mdi:barcode) **Demultiplexer** {{param:demultiplexer}}
       - ![](icon:mdi:view-dashboard-outline) **Lanes** {{lanes}}
       - ![](icon:mdi:database-outline) **Yield** {{yield_gb}} Gb

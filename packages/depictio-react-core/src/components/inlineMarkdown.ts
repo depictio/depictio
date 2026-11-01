@@ -31,14 +31,17 @@ export type InlineToken =
 
 // The href half is a scheme allowlist, not a catch-all: dashboard bodies are
 // authored content, and a permissive matcher would accept `javascript:`. Only
-// absolute http(s) URLs, site-relative paths, `tab:` and `section:` names and
-// `params:` (the run's parameters, optionally searched: `params:dada2`) become anchors;
+// absolute http(s) URLs, site-relative paths, `tab:` and `section:` names,
+// `params:` (the run's parameters, optionally searched: `params:dada2`) and
+// `locus:` (a gene or `chr:start-end` for the genome browser, live values
+// allowed: `locus:{{top_gene}}`) become anchors;
 // anything else stays literal text, visibly wrong rather than silently
 // dangerous. A tab or section name may hold spaces and one level of parentheses
 // ("Environment (CTD)"), since that is how tabs get named.
 const TAB_TARGET = String.raw`(?:tab|section):(?:[^()\n]|\([^()\n]*\))+`;
 const PARAMS_TARGET = String.raw`params:[A-Za-z0-9_.-]*`;
-const LINK_HREF = String.raw`(?:https?:\/\/[^)\s]+|\/[^)\s]*|${TAB_TARGET}|${PARAMS_TARGET})`;
+const LOCUS_TARGET = String.raw`locus:[A-Za-z0-9_.:,{}-]+`;
+const LINK_HREF = String.raw`(?:https?:\/\/[^)\s]+|\/[^)\s]*|${TAB_TARGET}|${PARAMS_TARGET}|${LOCUS_TARGET})`;
 // An Iconify id: `prefix:name`, lower-case letters, digits and dashes only.
 const ICON_NAME = String.raw`[a-z0-9-]+:[a-z0-9-]+`;
 const ICON = new RegExp(String.raw`^!\[[^\]\n]*\]\(icon:(${ICON_NAME})\)$`);

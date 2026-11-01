@@ -121,6 +121,13 @@ interface AdvancedVizFrameProps {
   dataRows?: Record<string, unknown[]>;
   /** Column ordering for the data popover. */
   dataColumns?: string[];
+  /**
+   * The column of `dataRows` that identifies a drawn point (the volcano's
+   * feature id). Set by a tile whose plot and table share a highlight (see
+   * `highlight/`): the data views then tick the rows of the highlighted points
+   * and report ticked rows back to the plot.
+   */
+  highlightColumn?: string;
   /** The tile takes part in zoom sync: its row offers the switch. */
   zoomSync?: boolean;
   /** A genomic tile says where it is looking, for the "Open in genome
@@ -243,6 +250,7 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
   emptyMessage,
   dataRows,
   dataColumns,
+  highlightColumn,
   zoomSync = false,
   openLocus,
   tierAnnotation,
@@ -392,6 +400,7 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
     if (hasOpenLocus) payload.openLocus = stableOpenLocus;
     if (dataRows) {
       payload.data = { rows: dataRows, columns: dataColumns, tierAnnotation };
+      if (highlightColumn) payload.highlightColumn = highlightColumn;
     }
     if (redPresent && showReduction) {
       payload.reduction = {
@@ -412,6 +421,7 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
     stableOpenLocus,
     dataRows,
     dataColumns,
+    highlightColumn,
     tierAnnotation,
     redPresent,
     redFull,

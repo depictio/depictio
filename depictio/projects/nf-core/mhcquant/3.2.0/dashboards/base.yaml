@@ -168,7 +168,7 @@ main_dashboard:
     surface: card
     body: |
       ### The run
-      - ![](icon:mdi:source-branch) **Pipeline** nf-core/mhcquant 3.2.0 on Nextflow {{param:Workflow.Nextflow}}
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/mhcquant 3.2.0
       - ![](icon:mdi:magnify-scan) **Enzyme** {{param:enzyme}}
       - ![](icon:mdi:filter-outline) **FDR** {{param:fdr_threshold}}
       - ![](icon:mdi:ruler) **Lengths** {{param:peptide_min_length}} to {{param:peptide_max_length}}

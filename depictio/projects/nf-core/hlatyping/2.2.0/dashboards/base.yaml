@@ -164,7 +164,7 @@ main_dashboard:
       alleles: {dc: optitype_genotypes, column: allele, aggregation: nunique, format: integer}
     body: |
       ### The run
-      - ![](icon:mdi:source-branch) **Pipeline** nf-core/hlatyping 2.2.0 on Nextflow {{param:Workflow.Nextflow}}
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/hlatyping 2.2.0
       - ![](icon:mdi:dna) **Alleles** {{alleles}} distinct
       - ![](icon:mdi:tools) **Tools** {{param:tools}}
       - ![](icon:mdi:calculator-variant-outline) **Solver** {{param:solver}}

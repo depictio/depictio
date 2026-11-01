@@ -28,12 +28,16 @@ import {
 } from '../../selection';
 import { useWebglSlot } from '../../webglBudget';
 import { useHighlight, usePublishHighlight } from '../../highlight/bus';
-import { hoverInterval } from '../../highlight/genomicHover';
+import { hoverInterval, locusOfInterval } from '../../highlight/genomicHover';
+import { renameToContigs } from './genomespy/contigNames';
+import { dataExtentView } from './genomespy/dataExtent';
 import { useViewWindow } from '../../highlight/viewWindow';
 import { useAutofitValue, useTileChrome } from '../autofit';
 import type { GroupRenderState } from '../../selectionGroups';
 import type { GenomePoint, OpenLocusReader } from '../jbrowse/locusForAction';
 import ColourKey from '../jbrowse/ColourKey';
+import { useGenomeBrowserTarget } from '../jbrowse/browserTarget';
+import { openInGenomeBrowser } from '../jbrowse/openAction';
 import {
   useTrackColourKey,
   useTrackGroupColours,
@@ -642,18 +646,27 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
   const neutralColor = isDark ? theme.colors.gray[5] : theme.colors.gray[6];
 
   // The rows as GenomeSpy reads them, from the *current* fetch: they feed the
-  // dataset swap below and the row count the chrome reports.
+  // dataset swap below and the row count the chrome reports. Contigs take the
+  // built-in assembly's spelling (`20` -> `chr20`).
+  const assemblyContigNames = useMemo(
+    () => (builtinAssembly && assemblyContigs ? assemblyContigs.map((c) => c.name) : null),
+    [builtinAssembly, assemblyContigs],
+  );
   const liveData = useMemo(
     () =>
       rows
         ? (() => {
-            const objs = rowsToObjects(rows, requiredCols, effectiveConfig.chr_col, effectiveConfig.pos_col);
+            const objs = renameToContigs(
+              rowsToObjects(rows, requiredCols, effectiveConfig.chr_col, effectiveConfig.pos_col),
+              effectiveConfig.chr_col,
+              assemblyContigNames,
+            );
             return drawsTopStars(effectiveConfig)
               ? markTopStars(objs, effectiveConfig.score_col, effectiveConfig.top_stars ?? 0)
               : objs;
           })()
         : null,
-    [rows, requiredCols, effectiveConfig],
+    [rows, requiredCols, effectiveConfig, assemblyContigNames],
   );
   const rowCount = liveData?.length ?? 0;
 
@@ -794,18 +807,40 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
   // window is not offered: the brushed region (read off the filters by the
   // action) is what the tile's address bar shows.
   const lastPointRef = useRef<GenomePoint | null>(null);
+  const browserTarget = useGenomeBrowserTarget();
+  const clickOpens = config.click_opens_browser === true;
   const handlePick = useCallback(
     (datum: Readonly<Record<string, unknown>>) => {
       const chrom = datum[config.chr_col];
       const pos = Number(datum[config.pos_col]);
       if (chrom != null && chrom !== '' && Number.isFinite(pos)) {
         lastPointRef.current = { chrom: String(chrom), pos };
+        // `click_opens_browser`: the feature, start to end, in the family's
+        // browser, on its own tab.
+        if (clickOpens && browserTarget) {
+          const end = config.end_col ? Number(datum[config.end_col]) : NaN;
+          const locus = locusOfInterval({
+            refName: String(chrom),
+            start: pos,
+            end: Number.isFinite(end) && end >= pos ? end : pos,
+          });
+          if (locus) openInGenomeBrowser(browserTarget, locus);
+          return;
+        }
       }
       if (!selectionColumn) return;
       const v = datum[selectionColumn];
       emitSelection(v === null || v === undefined ? [] : [String(v)]);
     },
-    [emitSelection, selectionColumn, config.chr_col, config.pos_col],
+    [
+      emitSelection,
+      selectionColumn,
+      config.chr_col,
+      config.pos_col,
+      config.end_col,
+      clickOpens,
+      browserTarget,
+    ],
   );
   const openLocus = useCallback<OpenLocusReader>(
     () => ({ point: lastPointRef.current }),
@@ -1121,6 +1156,34 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
     void zoomFromCode(incomingRegion);
   }, [api, followRegion, incomingRegion, zoomFromCode, restoredView]);
 
+  // `open_on_data`: a summary opens on the chromosome or the region its rows
+  // cover, once per embed, unless a region or a restored view got there first.
+  const openedOnDataRef = useRef<typeof api>(null);
+  useEffect(() => {
+    if (!api || !config.open_on_data || openedOnDataRef.current === api) return;
+    if (restoredView || incomingRegion || !liveData?.length) return;
+    openedOnDataRef.current = api;
+    const target = dataExtentView(
+      liveData,
+      { chr: config.chr_col, pos: config.pos_col, end: config.end_col },
+      contigs,
+    );
+    traceGenome(String(metadata.index), 'open on the data', target ?? 'several chromosomes: whole genome');
+    if (target) void zoomFromCode(target, true);
+  }, [
+    api,
+    metadata.index,
+    config.open_on_data,
+    config.chr_col,
+    config.pos_col,
+    config.end_col,
+    restoredView,
+    incomingRegion,
+    liveData,
+    contigs,
+    zoomFromCode,
+  ]);
+
   // ---- The axis → the genome browsers ----------------------------------------
   // The reader's own pans and zooms go out on the view-window store, so a
   // browser that follows the other genome tiles pans with this axis. The
@@ -1394,6 +1457,9 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
   const noRows = fileMode
     ? Boolean(manifest) && (builtFile?.lanes.length ?? 0) === 0
     : Boolean(rows) && rowCount === 0;
+  // Rows came back but none carries a contig and a position (a run without
+  // the annotation that places them): said so, rather than "No rows".
+  const unplacedRows = fileMode ? 0 : (rows?.[effectiveConfig.chr_col]?.length ?? 0);
 
   // ---- Height that follows the content (`auto_height`) -----------------------
   // The lanes at a comfortable pitch, the axis and the gene lane, plus what the
@@ -1706,7 +1772,13 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
       loading={loading && !rows && !manifest}
       error={fetchError ?? fileSpecError ?? embedError}
       emptyMessage={
-        noRows && !spec ? (fileMode ? 'No indexed file to draw' : 'No rows') : undefined
+        noRows && !spec
+          ? fileMode
+            ? 'No indexed file to draw'
+            : unplacedRows
+              ? `None of the ${unplacedRows.toLocaleString()} rows has a position on the genome in this run`
+              : 'No rows'
+          : undefined
       }
       dataRows={rows ?? undefined}
       dataColumns={requiredCols}

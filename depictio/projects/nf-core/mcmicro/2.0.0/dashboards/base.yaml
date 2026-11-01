@@ -164,7 +164,7 @@ main_dashboard:
       channels: {dc: markers, column: marker_name, aggregation: count, filter_expr: col('quantified') == 1, format: integer}
     body: |
       ### The run
-      - ![](icon:mdi:source-branch) **Pipeline** nf-core/mcmicro 2.0.0 on Nextflow {{param:Workflow.Nextflow}}
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/mcmicro 2.0.0
       - ![](icon:mdi:palette-outline) **Channels** {{channels}} quantified
       - ![](icon:mdi:shape-outline) **Segmentation** {{param:segmentation}}
       - ![](icon:mdi:lightbulb-on-outline) **Illumination** {{param:illumination}}

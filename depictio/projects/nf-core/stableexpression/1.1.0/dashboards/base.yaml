@@ -196,7 +196,7 @@ main_dashboard:
       genes: {dc: stableexpression_gene_statistics, column: gene_id, aggregation: count, format: si}
     body: |
       ### The run
-      - ![](icon:mdi:source-branch) **Pipeline** nf-core/stableexpression 1.1.0 on Nextflow {{param:Workflow.Nextflow}}
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/stableexpression 1.1.0
       - ![](icon:mdi:earth) **Species** {{param:species}}
       - ![](icon:mdi:dna) **Genes** {{genes}} in the matrix
       - ![](icon:mdi:layers-outline) **Sections** {{param:nb_sections}}, {{param:nb_candidates_per_section}} candidates each

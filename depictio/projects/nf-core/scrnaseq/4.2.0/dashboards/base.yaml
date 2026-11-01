@@ -177,7 +177,7 @@ main_dashboard:
     surface: card
     body: |
       ### The run
-      - ![](icon:mdi:source-branch) **Pipeline** nf-core/scrnaseq 4.2.0 on Nextflow {{param:Workflow.Nextflow}}
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/scrnaseq 4.2.0
       - ![](icon:mdi:dna) **Aligner** {{param:aligner}}
       - ![](icon:mdi:barcode) **Protocol** {{param:protocol}}
       - ![](icon:mdi:book-open-variant) **Genome** {{param:genome}}

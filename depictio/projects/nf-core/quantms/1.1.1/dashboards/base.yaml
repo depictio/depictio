@@ -172,7 +172,7 @@ main_dashboard:
     surface: card
     body: |
       ### The run
-      - ![](icon:mdi:source-branch) **Pipeline** nf-core/quantms 1.1.1 on Nextflow {{param:Workflow.Nextflow}}
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/quantms 1.1.1
       - ![](icon:mdi:radar) **Acquisition** {{param:acquisition_method}}
       - ![](icon:mdi:magnify-scan) **Enzyme** {{param:enzyme}}
       - ![](icon:mdi:ruler) **Tolerances** {{param:precursor_mass_tolerance}}, {{param:fragment_mass_tolerance}}

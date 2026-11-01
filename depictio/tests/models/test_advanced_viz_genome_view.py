@@ -267,3 +267,9 @@ def test_color_scale_is_optional_and_validated():
         GenomeViewConfig(color_scale={"column": "sample", "scheme": "jet"})
     with pytest.raises(ValidationError):
         GenomeViewConfig(color_scale={"order_by": "day"})
+
+
+def test_click_opens_browser_is_opt_in():
+    # On a tab a click selects; only an Overview summary hands it to the browser.
+    assert GenomeViewConfig().click_opens_browser is False
+    assert GenomeViewConfig(click_opens_browser=True).click_opens_browser is True

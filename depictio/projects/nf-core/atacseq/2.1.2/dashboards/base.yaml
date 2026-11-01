@@ -200,7 +200,7 @@ main_dashboard:
       peaks: {dc: macs2_peak_summary, column: num_peaks, aggregation: sum, format: si}
     body: |
       ### The run
-      - ![](icon:mdi:source-branch) **Pipeline** nf-core/atacseq 2.1.2 on Nextflow {{param:Workflow.Nextflow}}
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/atacseq 2.1.2
       - ![](icon:mdi:dna) **Genome** {GENOME}
       - ![](icon:mdi:chart-scatter-plot) **Peaks** {{peaks}} broad calls
       - ![](icon:mdi:tune) [All parameters and tool versions](params:)

@@ -164,7 +164,7 @@ main_dashboard:
       gene_sets: {dc: gsea_report, column: term, aggregation: nunique, format: integer}
     body: |
       ### The run
-      - ![](icon:mdi:source-branch) **Pipeline** nf-core/differentialabundance 2.0.0 on Nextflow {{param:Workflow.Nextflow}}
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/differentialabundance 2.0.0
       - ![](icon:mdi:compare-horizontal) **Contrasts** {{contrasts}}
       - ![](icon:mdi:scale-balance) **Test** {{param:differential_method}} · {{param:deseq2_test}}
       - ![](icon:mdi:filter-outline) **Cut-offs** q {{param:differential_max_qval}} · fold {{param:differential_min_fold_change}}

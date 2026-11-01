@@ -343,7 +343,6 @@ main_dashboard:
     surface: card
     values:
       n_ae: {dc: expression_outliers, column: call_id, aggregation: nunique, filter_expr: "col('significant')", format: integer}
-      s_ae: {dc: expression_outliers, column: sample, aggregation: nunique, filter_expr: "col('significant')", format: integer}
       n_as: {dc: splicing_outliers, column: gene_name, aggregation: nunique, filter_expr: "col('significant')", format: integer}
       n_mae: {dc: mae_variants, column: call_id, aggregation: nunique, filter_expr: "col('mono_allelic')", format: integer}
       n_multi: {dc: outlier_genes, column: call_id, aggregation: nunique, filter_expr: "col('n_analyses') >= 2", format: integer}
@@ -351,12 +350,14 @@ main_dashboard:
       nom_as: {dc: splicing_outliers, column: call_id, aggregation: nunique, filter_expr: "col('nominal')", format: integer}
       nom_multi: {dc: outlier_genes, column: call_id, aggregation: nunique, filter_expr: "col('n_nominal') >= 2", format: integer}
       cohort: {dc: samples, column: group_size, aggregation: max, format: integer}
+      top_gene: {dc: outlier_genes, column: gene_name, aggregation: top, weight: significance}
     body: |
-      - **{{n_ae}}** expression outliers in **{{s_ae}}** samples (adjusted p {AE_PADJ} or less), **{{nom_ae}}** at the raw p-value – genes far from the count the cohort predicts [Expression](tab:Expression)
-      - **{{n_as}}** genes with a splicing outlier (gene adjusted p {AS_PADJ} or less, delta PSI {AS_MIN_DPSI} or more), **{{nom_as}}** at the raw p-value – a junction used far more or less than in the cohort [Splicing](tab:Splicing)
-      - **{{n_mae}}** mono-allelic variants (adjusted p {MAE_PADJ} or less, {MAE_MIN_RATIO} of the reads on one allele) – one allele carries nearly all the RNA reads [Mono-allelic](tab:Mono-allelic)
-      - **{{n_multi}}** genes called by two or more analyses in a sample, **{{nom_multi}}** at the raw p-value – the strongest leads [Candidates](tab:Candidates)
-      - A cohort of **{{cohort}}** samples in the largest group: OUTRIDER and FRASER recommend at least 30, because their adjusted p-values need that many samples to pass. Below it zero calls is the expected answer, and the raw-p hits (a share {NOMINAL_P} of tests passes by chance) are leads to check, not findings.
+      - A cohort of **{{cohort}}** samples in the largest group: OUTRIDER and FRASER recommend at least 30, because their adjusted p-values need that many samples to pass. Below it no call is the expected answer, and the raw-p hits (a share {NOMINAL_P} of tests passes by chance) are leads to check, not findings.
+      - Expression: **{{nom_ae}}** genes at the raw p-value, **{{n_ae}}** called (adjusted p {AE_PADJ} or less) – far from the count the cohort predicts [Expression](tab:Expression)
+      - Splicing: **{{nom_as}}** genes at the raw p-value, **{{n_as}}** called (gene adjusted p {AS_PADJ} or less, delta PSI {AS_MIN_DPSI} or more) – a junction used far more or less than in the cohort [Splicing](tab:Splicing)
+      - Mono-allelic: **{{n_mae}}** variants (adjusted p {MAE_PADJ} or less, {MAE_MIN_RATIO} of the reads on one allele) – one allele carries nearly all the RNA reads [Mono-allelic](tab:Mono-allelic)
+      - Candidates: **{{nom_multi}}** genes hit by two or more analyses in a sample at the raw p-value, **{{n_multi}}** called – the strongest leads [Candidates](tab:Candidates)
+      - The best-supported gene is [{{top_gene}}](locus:{{top_gene}}): its reads and genotypes in the genome browser
     section: Findings
     tag: dr-ov-findings
     index: ov-findings
@@ -380,7 +381,7 @@ main_dashboard:
     index: ov-burden
     title: Hits per sample
     description: Genes at a raw p-value of {NOMINAL_P} or less (expression, splicing) and mono-allelic calls, per sample. A share {NOMINAL_P} of the tests passes by chance, so look for a sample far above the others; that is usually a quality or batch problem, not a patient.
-    layout: {x: 0, y: 3, w: 4, h: 5}
+    layout: {x: 0, y: 3, w: 4, h: 4}
   - component_type: highlight
     section: Findings
     source_tab: Expression
@@ -389,7 +390,7 @@ main_dashboard:
     caption: One point per sample and gene; right of the line the gene is expressed above its expected count, left of it below.
     tag: dr-ov-hl-expression
     index: ov-hl-expression
-    layout: {x: 4, y: 3, w: 4, h: 5}
+    layout: {x: 4, y: 3, w: 4, h: 4}
   - component_type: highlight
     section: Findings
     source_tab: Splicing
@@ -398,7 +399,7 @@ main_dashboard:
     caption: One point per sample and gene, at its most significant junction; right of the line the junction is used more than in the cohort.
     tag: dr-ov-hl-splicing
     index: ov-hl-splicing
-    layout: {x: 0, y: 8, w: 4, h: 5}
+    layout: {x: 0, y: 7, w: 4, h: 4}
   - component_type: highlight
     section: Findings
     source_tab: Mono-allelic
@@ -407,7 +408,36 @@ main_dashboard:
     caption: One point per heterozygous variant; far left or right of the line, one allele carries most of the reads.
     tag: dr-ov-hl-mae
     index: ov-hl-mae
-    layout: {x: 4, y: 8, w: 4, h: 5}
+    layout: {x: 4, y: 7, w: 4, h: 4}
+  # The triage genes on the genome, opened on the chromosome or region they cover:
+  # a click opens the Locus tab's browser on the gene, so the Overview needs no
+  # browser of its own.
+  - component_type: advanced_viz
+    workflow_tag: drop
+    data_collection_tag: outlier_genes
+    viz_kind: genome_view
+    config:
+      viz_kind: genome_view
+      chr_col: chrom
+      pos_col: start
+      end_col: end
+      score_col: significance
+      feature_col: gene_name
+      category_col: '{GROUP_COL}'
+      mark: point
+      point_size: 9
+      score_title: Summed -log10 p-value
+      assembly: '{GENOME}'
+      region_filter_enabled: false
+      click_opens_browser: true
+      open_on_data: true
+    section: Findings
+    tag: dr-ov-genome
+    index: ov-genome
+    title: Leads along the genome
+    link: tab:Locus
+    description: Each dot is a gene of a sample's triage list, its height the summed -log10 p-value of the analyses and its colour the sample's group. Click a dot to open the gene in the genome browser.
+    layout: {x: 0, y: 11, w: 8, h: 4}
   # Link-only tab tiles: each tile prints its tab's subtitle. A tab the run does
   # not have is left out, and a heading whose tabs are all missing is hidden.
   - component_type: text

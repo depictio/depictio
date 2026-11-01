@@ -194,7 +194,7 @@ main_dashboard:
     surface: card
     body: |
       ### The run
-      - ![](icon:mdi:source-branch) **Pipeline** nf-core/nascent 2.3.0 on Nextflow {{param:Workflow.Nextflow}}
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/nascent 2.3.0
       - ![](icon:mdi:flask-outline) **Assay** {{param:assay_type}}
       - ![](icon:mdi:dna) **Genome** {{param:genome}}
       - ![](icon:mdi:sort-variant) **Aligner** {{param:aligner}}
@@ -365,11 +365,13 @@ main_dashboard:
       top_chr: {dc: chromosome_signal, column: chromosome, aggregation: top, weight: abs_log2_ratio}
       n_rise: {dc: signal_window_dynamics, column: window_id, aggregation: count, filter_expr: "col('trend') == 'Rising'", format: integer}
       n_fall: {dc: signal_window_dynamics, column: window_id, aggregation: count, filter_expr: "col('trend') == 'Falling'", format: integer}
+      top_gene: {dc: gene_dynamics, column: gene_id, aggregation: top, weight: abs_peak_log2fc}
     body: |
       - **{{n_up}}** genes induced and **{{n_down}}** repressed – a log2 fold change of 1 against the baseline at two time points or more [Gene dynamics](tab:Gene dynamics)
       - **{{pc1_var}}%** of the variance between libraries lies on the first component – in a time course, usually the time axis itself [Sample similarity](tab:Sample similarity)
       - **{{top_chr}}** moves its share of the nascent signal most over the time course – a chromosome that gains or loses share against its baseline carries a large response or a hotspot [Genome signal](tab:Genome signal)
       - **{{n_rise}}** windows rise and **{{n_fall}}** fall – the same rule on the strand coverage, without a gene annotation [Signal dynamics](tab:Signal dynamics)
+      - The most responsive gene is [{{top_gene}}](locus:{{top_gene}}): its nascent signal along the time course in the genome browser
     section: Findings
     tag: nc-ov-findings
     index: nc-ov-findings
@@ -384,7 +386,7 @@ main_dashboard:
     hide_legend: true
     tag: nc-ov-hl-response
     index: nc-ov-hl-response
-    layout: {x: 0, y: 2, w: 4, h: 5}
+    layout: {x: 0, y: 2, w: 4, h: 4}
   - component_type: highlight
     section: Findings
     source_tab: Sample similarity
@@ -393,7 +395,7 @@ main_dashboard:
     hide_legend: true
     tag: nc-ov-hl-embedding
     index: nc-ov-hl-embedding
-    layout: {x: 4, y: 2, w: 4, h: 5}
+    layout: {x: 4, y: 2, w: 4, h: 4}
   - component_type: highlight
     section: Findings
     source_tab: Genome signal
@@ -401,7 +403,7 @@ main_dashboard:
     caption: Each chromosome's share of the signal against its own baseline share, per time point; red rows gain share, blue rows lose it, and a row that moves carries a response or a hotspot.
     tag: nc-ov-hl-chromosomes
     index: nc-ov-hl-chromosomes
-    layout: {x: 0, y: 7, w: 4, h: 5}
+    layout: {x: 0, y: 6, w: 4, h: 4}
   - component_type: highlight
     section: Findings
     source_tab: Signal dynamics
@@ -410,7 +412,36 @@ main_dashboard:
     hide_legend: true
     tag: nc-ov-hl-trends
     index: nc-ov-hl-trends
-    layout: {x: 4, y: 7, w: 4, h: 5}
+    layout: {x: 4, y: 6, w: 4, h: 4}
+  # The expressed genes along the genome, opened on the chromosome or region they
+  # cover: a click opens the Genome signal tab's browser on the gene, so the
+  # Overview needs no browser of its own.
+  - component_type: advanced_viz
+    workflow_tag: nascent
+    data_collection_tag: gene_dynamics
+    viz_kind: genome_view
+    config:
+      viz_kind: genome_view
+      chr_col: chromosome
+      pos_col: start
+      end_col: end
+      score_col: abs_peak_log2fc
+      feature_col: gene_id
+      category_col: direction
+      mark: point
+      point_size: 9
+      score_title: Peak change (absolute log2 fold change)
+      assembly: '{GENOME}'
+      region_filter_enabled: false
+      click_opens_browser: true
+      open_on_data: true
+    section: Findings
+    tag: nc-ov-genome
+    index: ov-genome
+    title: Responsive genes along the genome
+    link: tab:Genome signal
+    description: Each dot is an expressed gene, its height the largest change of its transcription against the baseline and its colour whether it is induced, repressed or stable. Click a dot to open the gene in the genome browser.
+    layout: {x: 0, y: 10, w: 8, h: 4}
   # Link-only tab tiles: each tile prints its tab's subtitle, the question the
   # tab answers.
   - component_type: text

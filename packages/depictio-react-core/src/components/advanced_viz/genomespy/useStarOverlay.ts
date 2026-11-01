@@ -123,12 +123,14 @@ export function useStarOverlay({
       if (!isGenomeSpyLive(api)) return;
       const canvas = el.querySelector('canvas');
       if (!canvas) return;
-      // Layout bounds are in the canvas' own coordinates; the SVG is placed on
-      // the container.
-      const c = canvas.getBoundingClientRect();
-      const host = el.getBoundingClientRect();
-      const dx = c.left - host.left;
-      const dy = c.top - host.top;
+      // Layout bounds are in the canvas' own coordinates. The SVG sits in the
+      // canvas' wrapper and is offset by layout, not by screen boxes: GenomeSpy
+      // fades the canvas in from scale(0.95), and an offset read mid-animation
+      // stayed on every star.
+      const wrapper = canvas.parentElement ?? el;
+      if (svg.parentElement !== wrapper) wrapper.appendChild(svg);
+      const dx = canvas.offsetParent === wrapper ? canvas.offsetLeft : 0;
+      const dy = canvas.offsetParent === wrapper ? canvas.offsetTop : 0;
       const xDomain = domainOf(api, GENOME_SCALE_NAME);
       const viewport = boundsOf(api, LANES_VIEW);
       const parts: string[] = [];

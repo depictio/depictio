@@ -188,7 +188,7 @@ main_dashboard:
       ptype: {dc: macs2_peaks, column: peak_type, aggregation: top}
     body: |
       ### The run
-      - ![](icon:mdi:source-branch) **Pipeline** nf-core/chipseq 2.1.0 on Nextflow {{param:Workflow.Nextflow}}
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/chipseq 2.1.0
       - ![](icon:mdi:content-cut) **Aligner** {{param:aligner}}, {{param:read_length}} bp reads
       - ![](icon:mdi:chart-scatter-plot) **Peaks** {{peaks}} {{ptype}} calls
       - ![](icon:mdi:tune) [All parameters and tool versions](params:)

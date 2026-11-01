@@ -61,6 +61,9 @@ import {
   AdvancedVizZoomSyncToggle,
 } from './AdvancedVizExtras';
 import OpenInGenomeBrowserButton from './OpenInGenomeBrowserButton';
+import FloatingDataTable from './highlight/FloatingDataTable';
+import { useTileHighlight } from './highlight/useTileHighlight';
+import type { DataGridSelection } from '../data/DataGridBody';
 import { vizKindLabel } from './vizKindTag';
 import { AdvancedVizKindContext } from './VizKindBadge';
 import { useDensity } from '../density';
@@ -371,6 +374,36 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
   // its title. The dispatch is the only place that sees the dashboard filters.
   const regionEcho = React.useMemo(() => genomeRegionEcho(filters), [filters]);
 
+  // The data table, floated over the dashboard (viewer-only state, never saved).
+  // Its rows are the ones the tile draws: the same payload the popover reads.
+  // A tile whose plot and table share a highlight (`published.highlightColumn`)
+  // ticks the rows of the highlighted points and reports ticked rows back.
+  const [tableFloating, setTableFloating] = React.useState(false);
+  const highlight = useTileHighlight(String(metadata.index));
+  const highlightColumn = published?.highlightColumn;
+  const { keys: highlightKeys, reveal: highlightReveal, hoverKey } = highlight;
+  const selectHighlight = highlight.select;
+  // The row of a point hovered in the plot; a row hovered in the table is
+  // already under the reader's pointer.
+  const plotHover = highlight.hoverSource === 'plot' ? highlight.hover : null;
+  const tableSelection = React.useMemo<DataGridSelection | undefined>(
+    () =>
+      highlightColumn
+        ? {
+            column: highlightColumn,
+            selected: highlightKeys,
+            onChange: (values) => selectHighlight(values, 'table'),
+            reveal: highlightReveal,
+            hovered: plotHover,
+            onHover: (value) => hoverKey(value, 'table'),
+          }
+        : undefined,
+    [highlightColumn, highlightKeys, highlightReveal, selectHighlight, plotHover, hoverKey],
+  );
+  // The payload goes away with the data (a kind switch, a failed refetch): the
+  // card has nothing to show then, and comes back with the next one.
+  const floatingData = tableFloating && published?.data ? published.data : null;
+
   // Rebuild the popovers from the payload — byte-for-byte what the frame used
   // to publish ready-made, minus whatever the tile now draws inline.
   const popovers = React.useMemo<React.ReactNode>(() => {
@@ -414,6 +447,9 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
           dataRows={published.data.rows}
           dataColumns={published.data.columns}
           tierAnnotation={published.data.tierAnnotation}
+          selection={tableSelection}
+          floating={tableFloating}
+          onFloatingChange={setTableFloating}
         />,
       );
     }
@@ -425,7 +461,16 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
     // controls live is picked in the header of the controls block itself
     // (popover, strip or rail), not from a separate chrome icon.
     return nodes.length ? <>{nodes}</> : null;
-  }, [published, placement, placementState, folded, toggleFolded, metadata.index]);
+  }, [
+    published,
+    placement,
+    placementState,
+    folded,
+    toggleFolded,
+    metadata.index,
+    tableSelection,
+    tableFloating,
+  ]);
 
   const vizKind = (metadata.viz_kind as string) || '';
   const kindLabel = vizKindLabel(vizKind);
@@ -641,6 +686,17 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
     metadata,
     undefined,
     <AdvancedVizExtrasProvider onChange={setPublished}>
+      {floatingData ? (
+        <FloatingDataTable
+          index={String(metadata.index)}
+          title={metadata.title || kindLabel?.tag || 'Advanced viz'}
+          dataRows={floatingData.rows}
+          dataColumns={floatingData.columns}
+          tierAnnotation={floatingData.tierAnnotation}
+          selection={tableSelection}
+          onClose={() => setTableFloating(false)}
+        />
+      ) : null}
       <ComponentIndexContext.Provider value={metadata.index}>
         <GroupStatusBadgeContext.Provider value={groupBadge}>
           <GroupColouringReportContext.Provider value={reportColouring}>

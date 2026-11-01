@@ -38,6 +38,7 @@ import {
 import { sortNaturalOrDuration } from '../../../durationOrder';
 import { brushTrigger, laneCursor, specInteractionMode } from './interactionMode';
 import type { InteractionMode } from './interactionMode';
+import { renameToContigs } from './contigNames';
 
 
 /** Share of the score span added at both ends of a point lane's domain. */
@@ -94,6 +95,8 @@ export interface GenomeViewConfig {
   /** Point mark: the N best scores (at most 3) drawn as a large gold, silver
    *  and bronze star instead of a point, the medals of the browser's stars. */
   top_stars?: number;
+  /** A click on a mark opens the family's genome browser on it. */
+  click_opens_browser?: boolean;
   opacity?: number;
   region_filter_enabled?: boolean;
   /** What the pointer does on the axis (see `interactionMode.ts`). The
@@ -120,6 +123,7 @@ export interface GenomeViewConfig {
   default_view?: 'chromosome' | 'region';
   /** On opening: the chromosome the genome browser shows, not the whole genome. */
   open_on_view_window?: boolean;
+  open_on_data?: boolean;
   /** The axis keeps the genome browser's window in the middle of its view. */
   follow_view_window?: boolean;
   follow_context_bp?: number | null;
@@ -1235,13 +1239,17 @@ export function buildGenomeSpySpec({
     config,
     config.selection_enabled && config.selection_column ? config.selection_column : undefined,
   );
-  const data = rowsToObjects(rows, columns, config.chr_col, config.pos_col);
-  if (drawsTopStars(config)) markTopStars(data, config.score_col, config.top_stars ?? 0);
-  const mark = effectiveMark(config);
-
   const builtin =
     config.assembly && BUILTIN_ASSEMBLIES.includes(config.assembly) ? config.assembly : null;
   const useBuiltinContigs = Boolean(builtin && assemblyContigs && assemblyContigs.length);
+  const data = renameToContigs(
+    rowsToObjects(rows, columns, config.chr_col, config.pos_col),
+    config.chr_col,
+    useBuiltinContigs ? (assemblyContigs as readonly Contig[]).map((c) => c.name) : null,
+  );
+  if (drawsTopStars(config)) markTopStars(data, config.score_col, config.top_stars ?? 0);
+  const mark = effectiveMark(config);
+
   const assembly = builtin ?? DATA_ASSEMBLY;
   const contigs: Contig[] = useBuiltinContigs
     ? Array.from(assemblyContigs as readonly Contig[])

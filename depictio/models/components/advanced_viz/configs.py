@@ -2943,6 +2943,15 @@ class GenomeViewConfig(_BaseVizConfig):
         ),
     )
     opacity: float = Field(default=0.85, ge=0.05, le=1.0)
+    click_opens_browser: bool = Field(
+        default=False,
+        description=(
+            "A click on a mark opens the genome browser of the tab family on that "
+            "feature (its start to ``end_col``), on the browser's own tab. For a "
+            "genome-wide summary on the Overview, where the click has nothing else "
+            "to do; off by default, since on a tab the click selects."
+        ),
+    )
 
     # --- Region brush as a cross-filter ------------------------------------
     region_filter_enabled: bool = Field(
@@ -3029,6 +3038,16 @@ class GenomeViewConfig(_BaseVizConfig):
             "the whole chromosome, with the region framed in it, so the reader "
             "sees where it sits; ``region`` zooms onto the region itself. Later "
             "regions (a locus typed, a brush) always zoom onto the region."
+        ),
+    )
+    open_on_data: bool = Field(
+        default=False,
+        description=(
+            "Open on what the rows cover rather than on the whole genome: the "
+            "chromosome when they sit on one and spread over half of it or more, "
+            "else the region they span; rows on several chromosomes keep the "
+            "whole genome. For a summary on the Overview of a run on one "
+            "chromosome or a targeted panel. Only on opening."
         ),
     )
     open_on_view_window: bool = Field(

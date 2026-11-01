@@ -201,7 +201,7 @@ main_dashboard:
       n_mapped: {dc: endorspy_endogenous, column: sample, aggregation: nunique, format: integer}
     body: |
       ### The run
-      - ![](icon:mdi:source-branch) **Pipeline** nf-core/eager 2.4.5 on Nextflow {{param:Nextflow}}
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/eager 2.4.5
       - ![](icon:mdi:content-cut) **Reads** {{reads}}, trimmed with AdapterRemoval {{param:AdapterRemoval}}
       - ![](icon:mdi:waves) **Mapping** BWA {{param:BWA}}, {{n_mapped}} libraries
     tag: ea-ov-run

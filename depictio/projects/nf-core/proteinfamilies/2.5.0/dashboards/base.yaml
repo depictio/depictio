@@ -160,7 +160,7 @@ main_dashboard:
     surface: card
     body: |
       ### The run
-      - ![](icon:mdi:source-branch) **Pipeline** nf-core/proteinfamilies 2.5.0 on Nextflow {{param:Workflow.Nextflow}}
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/proteinfamilies 2.5.0
       - ![](icon:mdi:set-merge) **Clustering** {{param:clustering_tool}} at {{param:cluster_seq_identity}} identity
       - ![](icon:mdi:dna) **Aligner** {{param:alignment_tool}}
       - ![](icon:mdi:filter-outline) **Seed clusters** from {{param:cluster_size_threshold}} sequences

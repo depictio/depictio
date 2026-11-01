@@ -164,7 +164,7 @@
     },
     "nf-core/airrflow/5.1.2": {
       "version": "1.0.0",
-      "content_hash": "12bc8326f9176dec4d52028f1fbafe8608e9b3ceca87ddb5356e12d42da3819a",
+      "content_hash": "91f20c1f9c9bd4e65f5d717ee8b08219a1643319919a56675dc5192b9f77d5ce",
       "catalog": {
         "enchantr": "1.0.0",
         "multiqc": "1.0.0"
@@ -189,7 +189,7 @@
     },
     "nf-core/ampliseq/2.18.0": {
       "version": "1.2.0",
-      "content_hash": "c7fbc09d4faf3438084137b59cbc2d0ba1234449551be03dc3626bf36b973c7c",
+      "content_hash": "a23e3ffa9581729800ebdd90982341ddac180aa783ae882e209a8d6111a8f935",
       "catalog": {
         "multiqc": "1.0.0",
         "qiime2": "2.0.0",
@@ -212,7 +212,7 @@
     },
     "nf-core/atacseq/2.1.2": {
       "version": "2.0.0",
-      "content_hash": "787b310c01833989db172bb47c7db676f96ccd481073e9783656e4d896210668",
+      "content_hash": "135b3c021c5e2e13a614a1098fd06f1db64668d5f1e5162c0997a1cc7b5f1c9e",
       "catalog": {
         "ataqv": "1.0.0",
         "deeptools": "1.0.0",
@@ -238,7 +238,7 @@
     },
     "nf-core/chipseq/2.1.0": {
       "version": "3.0.0",
-      "content_hash": "8b1aa6d3096a93be1d06b01a5c5e2745fe7a29b656fd1db79d740729b9dcc96c",
+      "content_hash": "91457245e01bcb5ef1b2d4e524c907fad3c241e5daf4db68149936cd4d58baf4",
       "catalog": {
         "deeptools": "1.0.0",
         "deseq2": "1.0.0",
@@ -251,7 +251,7 @@
     },
     "nf-core/crisprseq/2.3.0": {
       "version": "1.0.0",
-      "content_hash": "2810047a49dce358ee72cce29175aa5c01249e97c1b6dfb1903b402212e52807",
+      "content_hash": "baef5168c4fd90e081694e462964fe3f845e312e872e44d4576d47fe826e2378",
       "catalog": {
         "crisprseq": "1.0.0"
       }
@@ -271,7 +271,7 @@
     },
     "nf-core/cutandrun/3.2.2": {
       "version": "1.1.0",
-      "content_hash": "f84731174124206f85422539e60896cbc7217ec1b81d262355747aef24484a1e",
+      "content_hash": "e3f1a3150db293d334f57e6f942704056471d5d5ec7bfe87d10f0fdaf0de27ff",
       "catalog": {
         "bowtie2": "1.0.0",
         "cutandrun": "1.0.0",
@@ -284,7 +284,7 @@
     },
     "nf-core/demultiplex/1.8.0": {
       "version": "1.0.0",
-      "content_hash": "4e7cd4484228f1a355ed4772aaa1d2674013865523b5554bfea4e3d658f5f882",
+      "content_hash": "d8c8d442b8110fd12d5672bbcb5331e296b7f0b61f45fa687dee29ace4d59d73",
       "catalog": {
         "bcl2fastq": "1.0.0",
         "bclconvert": "1.0.0",
@@ -294,7 +294,7 @@
     },
     "nf-core/differentialabundance/2.0.0": {
       "version": "1.0.0",
-      "content_hash": "3c8eb1bb19fd007289953697d47e1bd7b8b721c2b79a561062ec7ba11c338403",
+      "content_hash": "db1bcb49157e9c62ed9d849799dcbe6b9a7e07d60742875b118a75a808643688",
       "catalog": {
         "deseq2": "1.0.0",
         "gsea": "1.0.0"
@@ -302,11 +302,11 @@
     },
     "nf-core/drop/1.0.0": {
       "version": "1.0.0",
-      "content_hash": "25096d451f848098396ea3a8bd94ab82224246691813db074ea545bf2cce5c17"
+      "content_hash": "e637f4e45f8d30840b3e518fe90b791c6fa40288af21d690e4def48f54301c65"
     },
     "nf-core/eager/2.4.5": {
       "version": "1.2.0",
-      "content_hash": "522f42b3a1214c2a0b38caad5a70f35e016c58fc27ec6bb4fd6794314082f2c5",
+      "content_hash": "1813ea9122f44018cfb79e286e0f19790e8dfd5153115c9bba05b7aeed925e28",
       "catalog": {
         "adapterremoval": "1.0.0",
         "bcftools": "1.0.0",
@@ -321,7 +321,7 @@
     },
     "nf-core/epitopeprediction/3.2.0": {
       "version": "1.0.0",
-      "content_hash": "e31e3c4c273f37502b630e53c09fa8741e9acd1a24f370aa6a8b1a8a0191c7fa",
+      "content_hash": "542431d012a931a83501d20fa0236a564b4fb20f9db58ac0848725d3c26cee66",
       "catalog": {
         "epitopeprediction": "1.0.0",
         "multiqc": "1.0.0"
@@ -329,7 +329,7 @@
     },
     "nf-core/funcscan/4.0.0": {
       "version": "1.0.0",
-      "content_hash": "22a14e8536956de4c762682176e5db02cc43a90edf91dc0c9174adae6bca4af3",
+      "content_hash": "4d94c3116f0c47d9dd1c6104f4db80ee3b7f48d79105a9995b4f422979cd899d",
       "catalog": {
         "ampcombi": "1.0.0",
         "combgc": "1.0.0",
@@ -340,7 +340,7 @@
     },
     "nf-core/genomeassembler/2.0.0": {
       "version": "1.1.0",
-      "content_hash": "ac4fe1c25ae9073b385d4c97802bb907d692a765df738472f52d9ea1b212def1",
+      "content_hash": "973b3a686a84c6f587feb1ccec2888f1e663ec5994d6acaca67309450e146fe4",
       "catalog": {
         "busco": "2.0.0",
         "genomescope": "1.0.0",
@@ -351,7 +351,7 @@
     },
     "nf-core/genomeqc/1.0.1": {
       "version": "1.0.0",
-      "content_hash": "4e8355ecf505b1fb9af3fe2f976b72a64d4d1a5fc945645ae0f244ed255dbfc7",
+      "content_hash": "58fb511967e1cc11547a2f13e040c63ad604045f15218a1bfdf4c35e1ff6dfad",
       "catalog": {
         "agat": "1.0.0",
         "busco": "2.0.0",
@@ -389,7 +389,7 @@
     },
     "nf-core/hlatyping/2.2.0": {
       "version": "1.0.0",
-      "content_hash": "97e7de5dd5f26847a63e32928ed03acfdaaf51c156fcd89ad152163bf5af1669",
+      "content_hash": "535f2d17d7cc12e81fa19138457b9edb13dd816426cce4243386d2fead9ed1c0",
       "catalog": {
         "multiqc": "1.0.0",
         "optitype": "1.0.0"
@@ -407,7 +407,7 @@
     },
     "nf-core/mag/5.5.0": {
       "version": "1.0.0",
-      "content_hash": "588f906edce22e006c0e7151419f879fe854111c5a17fe3d2ae8f187734da368",
+      "content_hash": "58b6bfd7b0f82a4b5fb81e9bfffba95b80c2ee8a5e809d99536a89126af71067",
       "catalog": {
         "checkm2": "1.0.0",
         "gtdbtk": "1.0.0",
@@ -419,14 +419,14 @@
     },
     "nf-core/mcmicro/2.0.0": {
       "version": "1.0.0",
-      "content_hash": "40145a54e7d09442b1fb1c3c32211848ebc48ba3d5f8f59d3a9e3a438d373867",
+      "content_hash": "9cbbd408c93e3fa53eee41d1c7eba2344cc337d6316d8abdfe21b3182a5d1725",
       "catalog": {
         "mcquant": "1.0.0"
       }
     },
     "nf-core/methylseq/2.3.0": {
       "version": "1.2.0",
-      "content_hash": "ba169ba5ed4ac693595dd4c0d7630ffd8113cbd7c5b7fe7d390ef9ec79236c51",
+      "content_hash": "8118168a4b482339b503af8e1a87a6e3b5731f5c178d4a17c5e2394c7a9f0088",
       "catalog": {
         "bismark": "1.0.0",
         "multiqc": "1.0.0",
@@ -435,7 +435,7 @@
     },
     "nf-core/mhcquant/3.2.0": {
       "version": "1.0.0",
-      "content_hash": "79f23684e7d6ebe15b4df523a948430416f7e49417b396d4fd4cd7b11c4bb5be",
+      "content_hash": "c7ca030f170689ee68106f855c6fe203c3f142d58cb204fcbf757497823b93fa",
       "catalog": {
         "mhcquant": "1.0.0",
         "multiqc": "1.0.0",
@@ -444,7 +444,7 @@
     },
     "nf-core/nanoseq/3.0.0": {
       "version": "2.0.0",
-      "content_hash": "42aefdb26ac6bc291f82e209f097033f6812856799f5f9e7b6fbfb44e9233c18",
+      "content_hash": "bb2d8e7365db09422dc77dd036dafcbb63fe2edf16da01af5fe844373a21818b",
       "catalog": {
         "bambu": "1.0.0",
         "deseq2": "1.0.0",
@@ -457,7 +457,7 @@
     },
     "nf-core/nascent/2.3.0": {
       "version": "1.0.0",
-      "content_hash": "3d5dd3627c05c1a7df0abc85048c537058df88eddbc8c2f3bfb389e43847df87",
+      "content_hash": "e377dc22cdcf0b0efe66cf8685efae2f284b27fa1841724c8b7b2cc5825df81b",
       "catalog": {
         "bedtools": "1.0.0",
         "subread": "1.0.0"
@@ -465,7 +465,7 @@
     },
     "nf-core/oncoanalyser/3.0.0": {
       "version": "2.0.0",
-      "content_hash": "cdde513e31c6917dfb6332a930867ca6030d1f43a9234c215884c1cd234e3d98",
+      "content_hash": "3361fb31de1167b8d265ea8af40b0a7d1bd0c112aed9a17a0d402de7f06c03cc",
       "catalog": {
         "chord": "1.0.0",
         "cuppa": "1.0.0",
@@ -481,7 +481,7 @@
     },
     "nf-core/pairgenomealign/3.0.4": {
       "version": "1.0.0",
-      "content_hash": "c21d64047920f379f67d081f2c9963f25d23dc594a2f2a39a22b0c94ee457ed4",
+      "content_hash": "90aab38c3ef14f966b19f97ee36137e5e67834b74dbee2045e18fc60d752c59d",
       "catalog": {
         "assemblyscan": "1.0.0",
         "last": "1.0.0",
@@ -490,7 +490,7 @@
     },
     "nf-core/proteinannotator/1.1.0": {
       "version": "1.0.0",
-      "content_hash": "ed4b69d3ffdceaf4c083aa8d38a66b8e6dfb14e459a90aa74815074d758957a7",
+      "content_hash": "869647fd381e492341abd2b80af2c0913f4b4916e2709afbb8af946e872bb70e",
       "catalog": {
         "hmmer": "1.0.0",
         "interproscan": "1.0.0",
@@ -502,7 +502,7 @@
     },
     "nf-core/proteinfamilies/2.5.0": {
       "version": "1.0.0",
-      "content_hash": "dc40cb8a4f133e7232b3826130c13e37420614b69d4ecb4cb6529d7293143eee",
+      "content_hash": "860b3d575edbe8285af675ae088102fdfb824f19e0e441739ae41e9ffe3101cd",
       "catalog": {
         "famsa": "1.0.0",
         "hmmer": "1.0.0",
@@ -512,18 +512,18 @@
     },
     "nf-core/proteinfold/2.1.0": {
       "version": "1.0.0",
-      "content_hash": "a1f12e1866e329fc8344ecb2676f62d2eb124d40493011a83957f3d7b4b81151",
+      "content_hash": "ac3221d425aea86c729734854e339d2486c6319cfab9c37e81adaf4f94101052",
       "catalog": {
         "proteinfold": "1.0.0"
       }
     },
     "nf-core/quantms/1.1.1": {
       "version": "1.0.0",
-      "content_hash": "f982cf85738f55ad450312ec9e5e6e6339c38c549fd688e5b22d3c5bbfcef470"
+      "content_hash": "49442511b0bd990de9f15d6289ca9019b5c949be77faa7f3dd0890d9fb18178e"
     },
     "nf-core/raredisease/3.1.2": {
       "version": "1.0.0",
-      "content_hash": "d3d1e720640daae23f87884578f741ae7d3e516b91ac62205004bf2bef8862b3",
+      "content_hash": "b0eede4a9f03316011fa82b6076bb0436d8b877670dbba1fe143ba2ecb93e7c7",
       "catalog": {
         "multiqc": "1.0.0",
         "vcf": "1.0.0"
@@ -531,7 +531,7 @@
     },
     "nf-core/riboseq/2.0.0": {
       "version": "2.0.0",
-      "content_hash": "cecc43edabbaa0d2ec630a7f30b6f340df3a4ec4b2b5b068b77487d2b492dae7",
+      "content_hash": "eb86497222c980e89046ee1908e8376b2dd5a15f48c70ed9ab58e5a2ee56b1f4",
       "catalog": {
         "anota2seq": "1.0.0",
         "multiqc": "1.0.0",
@@ -543,7 +543,7 @@
     },
     "nf-core/rnafusion/4.1.3": {
       "version": "2.0.0",
-      "content_hash": "a99db0107daa4d541d9e914e68e8e2450f4a40a8e89201c3414e0e6d6cd65e3b",
+      "content_hash": "c48977f4fb9ffe528eced51c865203740efdf40fb7a594a423d3f18aad51feb8",
       "catalog": {
         "arriba": "1.0.0",
         "ctatsplicing": "1.0.0",
@@ -556,7 +556,7 @@
     },
     "nf-core/rnaseq/3.26.0": {
       "version": "2.0.0",
-      "content_hash": "886b552b433b70303b13d9cc4235a5b11fd46339152bf7d7ae39a331a8f6838f",
+      "content_hash": "a3ec6c0a9b6198cba642261f706bf481a6ef603e1dea4107768c08326000cd3b",
       "catalog": {
         "deseq2": "1.0.0",
         "multiqc": "1.0.0",
@@ -566,7 +566,7 @@
     },
     "nf-core/rnasplice/1.0.4": {
       "version": "2.0.0",
-      "content_hash": "5f31cdd09e030e92ad1130682915d8d8978059b9b6cdfdda5cb4dfb139929f1c",
+      "content_hash": "c4a8a3c0e10dd68fd63148ad96e11165fbde740fb86a05c072b9bcaaa0e2ee61",
       "catalog": {
         "dexseq": "1.0.0",
         "edger": "1.0.0",
@@ -578,7 +578,7 @@
     },
     "nf-core/rnavar/1.3.0": {
       "version": "1.0.0",
-      "content_hash": "401d330d2d0751ddf1e2315e527230d8ad7228f60445c76f87c1e2b400b0c591",
+      "content_hash": "ca5e7f075e1d47081dd12e0c7af77e6640d45e962c10c11a0b951d55baf72516",
       "catalog": {
         "multiqc": "1.0.0",
         "picard": "1.1.0",
@@ -590,7 +590,7 @@
     },
     "nf-core/sarek/3.10.0": {
       "version": "2.0.0",
-      "content_hash": "ddd30b19645db72e9647309511bb65c95226b3a14427092390881fa6aeecb2d9",
+      "content_hash": "b16bb64fac2a4a44ed8c4feb2db8a33c7565e55146598a0096199be62642ba43",
       "catalog": {
         "bcftools": "1.0.0",
         "mosdepth": "1.0.0",
@@ -602,7 +602,7 @@
     },
     "nf-core/sarek/3.11.0": {
       "version": "2.0.0",
-      "content_hash": "0944a4be7aa5326a1dfc05d40faea12df7f21941925bd7fe33897fc4db92efb4",
+      "content_hash": "95a74ae01232ed7ab63dfa1378008b946e4ee8a6075d89ad70ec58585613cce9",
       "catalog": {
         "bcftools": "1.0.0",
         "mosdepth": "1.0.0",
@@ -614,7 +614,7 @@
     },
     "nf-core/scrnaseq/4.2.0": {
       "version": "1.0.0",
-      "content_hash": "722a7805cf2996d48d725d69c9dc87f3204416e24794023759c746642b7ccdbd",
+      "content_hash": "bc4c5e77a11f4953587a6fbade4d4abc4792759edd92a8880d62c656b6ac0361",
       "catalog": {
         "cellbender": "1.0.0",
         "cellranger": "1.0.0",
@@ -626,7 +626,7 @@
     },
     "nf-core/smrnaseq/2.4.1": {
       "version": "1.0.0",
-      "content_hash": "460010385c7460c23d50e785202f2df623dd0ca5caa3035d9bcc9e6e0af88f9c",
+      "content_hash": "8cf6924ba1f2ab615a95b0f79f2a88a59f194c0f69a8b20257e083165d477cc7",
       "catalog": {
         "mirdeep2": "1.0.0",
         "mirtop": "1.0.0",
@@ -635,14 +635,14 @@
     },
     "nf-core/stableexpression/1.1.0": {
       "version": "1.0.0",
-      "content_hash": "a8d5e572aa08b747ffa0bda932a677bfa1a2fb2ffae1cad2c7b68a188b3e67cb",
+      "content_hash": "168eac73d70d68f446602048a3cafc543e45efaadf14169476c15ad7041d9cba",
       "catalog": {
         "stableexpression": "1.0.0"
       }
     },
     "nf-core/taxprofiler/2.0.1": {
       "version": "1.0.0",
-      "content_hash": "e0bb8c1497f1585b25d8010ee4f6cf8a3914fdbb2949629587dfbabd1775d9c3",
+      "content_hash": "4d1b8e30abf63bfe2d970509486949c624c7cc21a9be8198404212774e6d44d1",
       "catalog": {
         "melon": "1.0.0",
         "multiqc": "1.0.0",
@@ -690,7 +690,7 @@
     },
     "nf-core/viralmetagenome/1.2.0": {
       "version": "1.0.0",
-      "content_hash": "b5d0e6c878f7a58bf5a7399a5781f58e484b342e098831f6f3287eff0e8ffbd2",
+      "content_hash": "80508f5f2c3161cf77262051552ec94baf83bb45e4391fb4f5a6d54c5403721f",
       "catalog": {
         "checkv": "1.0.0",
         "ivar": "1.0.0",
@@ -701,7 +701,7 @@
     },
     "nf-core/viralrecon/3.0.0": {
       "version": "2.0.0",
-      "content_hash": "8009b407d64e81fa7c33efcbf1cb673d1ea154ad4b3de6c5af57c889b9654f42",
+      "content_hash": "c3cc1a54f1e4b49b96d83a77d8345298a33564f470dd7faabdf4d0a73a22b2fa",
       "catalog": {
         "ivar": "1.0.0",
         "mosdepth": "1.0.0",

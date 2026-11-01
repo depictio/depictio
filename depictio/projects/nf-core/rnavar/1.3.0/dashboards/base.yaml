@@ -190,7 +190,7 @@ main_dashboard:
     surface: card
     body: |
       ### The run
-      - ![](icon:mdi:source-branch) **Pipeline** nf-core/rnavar 1.3.0 on Nextflow {{param:Workflow.Nextflow}}
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/rnavar 1.3.0
       - ![](icon:mdi:dna) **Genome** {{param:genome}}
       - ![](icon:mdi:align-horizontal-left) **Aligner** {{param:aligner}}, two-pass {{param:star_twopass}}
       - ![](icon:mdi:magnify-scan) **Calling** confidence {{param:gatk_hc_call_conf}}
@@ -389,15 +389,17 @@ main_dashboard:
       t_to_c: {dc: vcf_substitution_spectrum, column: fraction, aggregation: median, filter_expr: "col('substitution_class') == 'T to C'", format: percent}
       unique: {dc: star_log_final, column: uniquely_mapped_pct, aggregation: median, format: 'decimals:1'}
       dup: {dc: picard_markduplicates_metrics, column: percent_duplication, aggregation: median, format: percent}
+      top_gene: {dc: snpeff_ann_variants, column: gene, aggregation: top, weight: dp, filter_expr: "col('is_pass') == True"}
     body: |
       - **{{n_var}}** distinct PASS variants across the samples – {{failed}}% of all calls fail a filter at the median [Callset](tab:Callset)
       - **{{shared}}%** of a group's PASS sites are called in every replicate at the median – the rest sit where one replicate was too shallow [Callset](tab:Callset)
       - **{{t_to_c}}** of the PASS SNVs are T to C at the median, the change A-to-I editing leaves – read it against the other classes [Callset](tab:Callset)
       - **{{unique}}%** of the reads map to a single locus at the median – read the {{dup}} duplicates beside it, since they follow expression [Alignment](tab:Alignment)
+      - The PASS calls with the deepest reads sit in [{{top_gene}}](locus:{{top_gene}}): its calls and their alignments in the genome browser
     section: Findings
     tag: rv-ov-findings
     index: ov-findings
-    layout: {x: 0, y: 0, w: 8, h: 2}
+    layout: {x: 0, y: 0, w: 8, h: 3}
   # Three figures: the alignment's two QC axes per sample, the substitution
   # classes, and the genotype concordance on its own row (a matrix labelled
   # with sample ids needs the full width).
@@ -408,7 +410,7 @@ main_dashboard:
     caption: Uniquely mapped and duplicate reads of each sample; red and amber mark the ranges worth a look.
     tag: rv-ov-hl-alignment
     index: ov-hl-alignment
-    layout: {x: 0, y: 2, w: 4, h: 4}
+    layout: {x: 0, y: 3, w: 4, h: 4}
   - component_type: highlight
     section: Findings
     source_tab: Callset
@@ -416,7 +418,7 @@ main_dashboard:
     caption: Each sample's PASS SNVs over the six substitution classes; T to C carries the editing signal.
     tag: rv-ov-hl-spectrum
     index: ov-hl-spectrum
-    layout: {x: 4, y: 2, w: 4, h: 4}
+    layout: {x: 4, y: 3, w: 4, h: 4}
   - component_type: highlight
     section: Findings
     source_tab: Callset
@@ -424,7 +426,35 @@ main_dashboard:
     caption: Share of PASS genotype calls two samples have in common; replicates of one group should cluster.
     tag: rv-ov-hl-concordance
     index: ov-hl-concordance
-    layout: {x: 0, y: 6, w: 8, h: 8}
+    layout: {x: 0, y: 7, w: 8, h: 4}
+  # The PASS sites on the genome, opened on the region they cover: a click opens
+  # the Genome tab's browser on the site, so the Overview needs no browser of its own.
+  - component_type: advanced_viz
+    workflow_tag: rnavar
+    data_collection_tag: shared_variants
+    viz_kind: genome_view
+    config:
+      viz_kind: genome_view
+      chr_col: chrom
+      pos_col: pos
+      end_col: end
+      score_col: min_dp
+      feature_col: variant_key
+      category_col: sharing
+      mark: point
+      point_size: 9
+      score_title: Reads at the weakest call
+      assembly: '{GENOME}'
+      region_filter_enabled: false
+      click_opens_browser: true
+      open_on_data: true
+    section: Findings
+    tag: rv-ov-genome
+    index: ov-genome
+    title: PASS sites along the genome
+    link: tab:Genome
+    description: Each dot is a PASS site of a group, its height the read depth at the call in the replicate that read it least and its colour how many replicates call it. Click a dot to open the site in the genome browser.
+    layout: {x: 0, y: 11, w: 8, h: 4}
   # Link-only tab tiles: each tile prints its tab's subtitle, the question the
   # tab answers. A tile whose tab a route pruned draws nothing.
   - component_type: text

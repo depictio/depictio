@@ -159,7 +159,7 @@ main_dashboard:
       n_models: {dc: proteinfold_models, column: model_id, aggregation: count, format: integer}
     body: |
       ### The run
-      - ![](icon:mdi:source-branch) **Pipeline** nf-core/proteinfold 2.1.0 on Nextflow {{param:Workflow.Nextflow}}
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/proteinfold 2.1.0
       - ![](icon:mdi:tools) **Engines** {{n_engines}}
       - ![](icon:mdi:molecule) **Models** {{n_models}}
       - ![](icon:mdi:cog-outline) **Mode** {{param:mode}}

@@ -153,7 +153,7 @@ main_dashboard:
     surface: card
     body: |
       ### The run
-      - ![](icon:mdi:source-branch) **Pipeline** nf-core/airrflow 5.1.2 on Nextflow {{param:Workflow.Nextflow}}
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/airrflow 5.1.2
       - ![](icon:mdi:barcode) **Library** {{param:library_generation_method}}
       - ![](icon:mdi:sitemap) **Clone threshold** {{param:clonal_threshold}}
       - ![](icon:mdi:import) **Input** {{param:mode}}
