@@ -374,6 +374,11 @@ jobs:
     permissions:
       contents: read
       packages: read
+    env:
+      # The shipped docker-compose.yaml has telemetry on and reads this from the shell
+      # (not from a file, so "compose file alone" below still holds). CI=true does not
+      # reach the containers: without it every release files a `server_install`.
+      DEPICTIO_TELEMETRY_ENABLED: "false"
     strategy:
       fail-fast: false
       matrix:

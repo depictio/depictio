@@ -37,6 +37,11 @@ jobs:
   cross-version-restore:
     runs-on: ubuntu-22.04
     timeout-minutes: 45
+    env:
+      # docker-compose.yaml ships telemetry on and reads this from the shell. CI=true
+      # stays on the runner and never reaches the containers, so without it each run
+      # files a `server_install` under a fresh anonymous ID (both phases boot a new DB).
+      DEPICTIO_TELEMETRY_ENABLED: "false"
     steps:
       - uses: actions/checkout@v6
         with:
