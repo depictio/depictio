@@ -35,7 +35,7 @@
 template:
   template_id: "nf-core/oncoanalyser/3.0.0"
   description: "nf-core/oncoanalyser cancer genomics template (WiGiTS): tumor purity, ploidy and QC, allele-specific copy number, the driver catalog, somatic small variants and their protein changes, structural variants and fusions, tissue of origin, mutational signatures, homologous recombination deficiency, HLA typing and neoepitopes."
-  version: "2.0.0"
+  version: "2.1.0"
   variables:
     - name: "DATA_ROOT"
       description: "oncoanalyser output directory (one <group_id>/ sub-directory per tumor, plus pipeline_info/)."

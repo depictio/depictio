@@ -38,7 +38,7 @@
 template:
   template_id: "nf-core/mcmicro/2.0.0"
   description: "nf-core/mcmicro template: segmented cells of multiplexed tissue images drawn where they sit, their marker intensities and morphology, how two segmentation methods compare on the same image, PNG previews of the registered images and masks, and the input image checks."
-  version: "1.0.0"
+  version: "1.1.0"
   variables:
     - name: "DATA_ROOT"
       description: "mcmicro output directory (registration/, backsub/, segmentation/, quantification/mcquant/, prelude/, multiqc/, pipeline_info/)."

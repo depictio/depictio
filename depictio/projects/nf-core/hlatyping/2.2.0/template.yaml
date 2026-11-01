@@ -36,7 +36,7 @@
 template:
   template_id: "nf-core/hlatyping/2.2.0"
   description: "nf-core/hlatyping template: HLA class I genotypes typed by OptiType (HLA-A, -B and -C, two-field alleles), sample by locus with both haplotypes, allele frequencies across the samples, the reads and the objective behind each genotype, and the FastQC read quality, with alleles spelled as nf-core/epitopeprediction spells them."
-  version: "1.0.0"
+  version: "1.1.0"
   variables:
     - name: "DATA_ROOT"
       description: "hlatyping output directory (optitype/, yara/, multiqc/, pipeline_info/ and the FastQC files)."

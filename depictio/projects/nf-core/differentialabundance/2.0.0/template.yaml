@@ -26,7 +26,7 @@
 template:
   template_id: "nf-core/differentialabundance/2.0.0"
   description: "nf-core/differentialabundance template: DESeq2 differential expression: per-contrast statistics, gene annotation and the variance-stabilised sample space."
-  version: "1.0.0"
+  version: "1.1.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory containing differentialabundance output (tables/, other/, pipeline_info/)."

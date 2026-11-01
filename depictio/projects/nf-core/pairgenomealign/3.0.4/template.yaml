@@ -41,7 +41,7 @@
 template:
   template_id: "nf-core/pairgenomealign/3.0.4"
   description: "nf-core/pairgenomealign template for pairwise genome alignment: how much of the target each query genome aligns to and at what identity, divergence and the substitution spectrum, assembly contiguity and gaps of the queries, and synteny with the target."
-  version: "1.0.0"
+  version: "1.1.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory of one pairgenomealign run (alignment/, assemblyscan/, cutn/, multiqc/, pipeline_info/)."

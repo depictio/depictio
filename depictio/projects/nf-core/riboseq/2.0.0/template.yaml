@@ -31,7 +31,7 @@
 template:
   template_id: "nf-core/riboseq/2.0.0"
   description: "nf-core/riboseq template: MultiQC funnel, Ribo-seq periodicity QC, sample space, anota2seq translational regulation, translational efficiency and ORF discovery"
-  version: "2.0.0"
+  version: "2.1.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory containing riboseq pipeline output (multiqc/, psites/, quantification/, translational_efficiency/, orf_predictions/)"

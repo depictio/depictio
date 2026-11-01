@@ -40,7 +40,7 @@
 template:
   template_id: "nf-core/crisprseq/2.3.0"
   description: "nf-core/crisprseq targeted gene editing template: read accounting, edit outcome composition per library and per guide, frameshift and template-based repair rates, the indel size and position signature around the cut site, per-position substitution rates, and the clonality call."
-  version: "1.0.0"
+  version: "1.1.0"
   variables:
     - name: "DATA_ROOT"
       description: "crisprseq output directory (cigar/, clonality/, pipeline_info/)."

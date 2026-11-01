@@ -29,7 +29,7 @@
 template:
   template_id: "nf-core/rnafusion/4.1.3"
   description: "nf-core/rnafusion gene-fusion template: caller consensus, per-caller evidence, in-silico validation and splice-junction analysis"
-  version: "2.0.0"
+  version: "2.1.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory containing rnafusion pipeline output (multiqc/, fusionreport/, arriba/, starfusion/, fusioncatcher/, fusioninspector/, ctatsplicing/)"

@@ -53,7 +53,7 @@
 template:
   template_id: "nf-core/mag/5.5.0"
   description: "nf-core/mag template: the bin funnel from reads to metagenome-assembled genomes. Read QC and host removal, assembly statistics and the contig-length ladder, per-contig differential coverage, CheckM2 completeness against contamination for every bin of every binner, the GTDB-Tk lineage of the ones that passed, Prokka gene and RNA content, and a per-bin locus map."
-  version: "1.0.0"
+  version: "1.1.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory containing mag output (Assembly/, GenomeBinning/, Taxonomy/, Annotation/, QC_shortreads/, QC_longreads/, pipeline_info/) plus input/samplesheet.full.v4.csv and the reprocessed multiqc/multiqc_data/multiqc.parquet."

@@ -89,7 +89,7 @@
 template:
   template_id: "nf-core/scrnaseq/4.2.0"
   description: "nf-core/scrnaseq template: per-cell QC and MAD-based flagging, graph-based clusters and their marker genes, UMAP/t-SNE/PCA embeddings and CellBender's ambient-RNA removal on the Cell Ranger route, on top of the MultiQC report, plus an optional aligner-concordance comparison against simpleaf/alevin-fry and kallisto|bustools."
-  version: "1.0.0"
+  version: "1.1.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory of the megatest results: one subdirectory per --aligner route (aligner_cellranger/ required; aligner_simpleaf/, aligner_kallisto/ optional, feed the Aligner concordance tab) plus aligner_cellranger/multiqc/multiqc_data/multiqc.parquet."
