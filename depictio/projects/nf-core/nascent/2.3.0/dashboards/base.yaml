@@ -1482,11 +1482,9 @@ tabs:
     workflow_tag: nascent
     data_collection_tag: tracks
     section: Binned signal and the bigWigs
-    # Both strands of the first, a middle and the last time point: the manifest lists
-    # those six first, then the other plus strands in time order, then the other minus
-    # strands, so a gene on either strand shows signal on open and the track selector
-    # offers the rest.
-    initial_tracks: 6
+    # Every bigWig open, in the manifest's time order (each library's plus strand above
+    # its minus strand), so the time course reads down the tile.
+    initial_tracks: 24
     max_tracks: 24
     # Opens on the gene whose nascent transcription changes most over the time
     # course, not on a whole chromosome where the bigWigs read as a few spikes.
@@ -1515,14 +1513,19 @@ tabs:
     follow_window: true
     # The tile is as tall as the tracks it has open.
     auto_height: true
+    # Each track on its mean plus three standard deviations of what is in view:
+    # a few hot bins no longer flatten the transcribed genes around them. Zoomed out, a
+    # pixel draws the mean of its bins: their maximum tops that scale nearly everywhere
+    # on a whole chromosome and fills each track to the top.
     display:
-      y_scale: shared
+      autoscale: localsd
+      summary: avg
     selection_enabled: true
     selection_column: sample
     tag: nc-gs-browser
     index: gs-browser
     title: Strand coverage from the bigWigs
-    description: The plus (+) and minus (-) strand bigWig of the first, a middle and the last time point, on one signal scale and coloured along the time course; the other libraries are in the track selector.
+    description: The plus (+) and minus (-) strand bigWig of every library in time order, each on its own scale and coloured along the time course.
     layout: {x: 0, y: 7, w: 8, h: 9}
   - component_type: figure
     workflow_tag: nascent

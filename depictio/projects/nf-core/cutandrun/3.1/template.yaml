@@ -48,7 +48,7 @@
 template:
   template_id: "nf-core/cutandrun/3.1"
   description: "nf-core/cutandrun template: SEACR and MACS2 peak calls side by side, their per-sample agreement, the consensus peak set per target and the fragment-length distribution, on top of the reprocessed MultiQC report."
-  version: "2.0.0"
+  version: "2.1.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory containing cutandrun output (01_prealign/, 02_alignment/, 03_peak_calling/, 04_reporting/, pipeline_info/) plus the reprocessed multiqc/multiqc_data/multiqc.parquet."

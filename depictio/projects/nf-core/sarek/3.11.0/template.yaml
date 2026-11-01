@@ -54,7 +54,7 @@
 template:
   template_id: "nf-core/sarek/3.11.0"
   description: "nf-core/sarek template: variant calling compared caller by caller, from coverage and bcftools statistics down to the annotated variant, on top of the native MultiQC report."
-  version: "2.1.0"
+  version: "2.1.1"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory of the sarek output (csv/, reports/, variant_calling/, annotation/, multiqc/, pipeline_info/)."
