@@ -23,6 +23,7 @@
 export * from '../../../../packages/depictio-react-core/src/api';
 
 import type {
+  DashboardSummary,
   InteractiveFilter,
 } from '../../../../packages/depictio-react-core/src/api';
 
@@ -70,6 +71,8 @@ export interface EmbedGlobal {
   component: Record<string, unknown>;
   title: string;
   data: OfflineData;
+  /** A text tile's tab family, for the icons and colours of its `tab:` links. */
+  tabs?: DashboardSummary[];
 }
 
 declare global {

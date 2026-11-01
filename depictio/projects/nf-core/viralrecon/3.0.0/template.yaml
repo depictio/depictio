@@ -16,7 +16,7 @@
 template:
   template_id: "nf-core/viralrecon/3.0.0"
   description: "nf-core/viralrecon viral genome analysis template for amplicon sequencing (ivar variant caller)"
-  version: "2.0.0"
+  version: "2.1.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory containing viralrecon pipeline output (multiqc/, variants/)"

@@ -54,7 +54,7 @@
 template:
   template_id: "nf-core/viralmetagenome/1.2.0"
   description: "nf-core/viralmetagenome template for viral genome reconstruction from metagenomic reads: read preprocessing and host removal, de novo contigs with their taxonomic call and cluster, consensus genomes from de novo refinement and constraint references with their closest reference, ambiguous bases and CheckV call, mapping depth and breadth, and the iVar variant calls."
-  version: "1.0.0"
+  version: "1.1.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory of one viralmetagenome run (overview-tables/, preprocessing/, assembly/, consensus/, variants/, multiqc/, pipeline_info/)."

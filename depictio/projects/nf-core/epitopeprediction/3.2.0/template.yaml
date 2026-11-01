@@ -36,7 +36,7 @@
 template:
   template_id: "nf-core/epitopeprediction/3.2.0"
   description: "nf-core/epitopeprediction template: MHC binding predictions of peptides from variants, proteins or peptide lists, by allele, by sample and by tool, the peptides that bind with their source variant or protein, mutant against wild-type affinity, and how far the tools agree."
-  version: "1.0.0"
+  version: "1.1.0"
   variables:
     - name: "DATA_ROOT"
       description: "epitopeprediction output directory (predictions/, variant_peptides/, variant_fasta/, the per-tool directories, multiqc/, pipeline_info/)."

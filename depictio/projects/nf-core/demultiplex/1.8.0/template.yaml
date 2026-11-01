@@ -30,7 +30,7 @@
 template:
   template_id: "nf-core/demultiplex/1.8.0"
   description: "nf-core/demultiplex template for sequencing-facility run QC: run health per lane and read, demultiplexing balance, undetermined reads and index swaps, per-library read QC"
-  version: "1.0.0"
+  version: "1.1.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory of one nf-core/demultiplex run (the flowcell folders, multiqc/, pipeline_info/)"

@@ -21,7 +21,7 @@
 template:
   template_id: "nf-core/funcscan/4.0.0"
   description: "nf-core/funcscan template for screening assemblies for AMR genes, antimicrobial peptides, biosynthetic gene clusters and CAZymes"
-  version: "1.0.0"
+  version: "1.1.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory containing funcscan pipeline output (reports/, cazyme/, multiqc/)"

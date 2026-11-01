@@ -37,7 +37,7 @@
 template:
   template_id: "nf-core/proteinfamilies/2.5.0"
   description: "nf-core/proteinfamilies protein family template: how the input sequences clustered, the families built or extended with their seed, model and alignment statistics, each family's alignment, residue conservation and predicted structure, and the members with their identity to the representative."
-  version: "1.0.0"
+  version: "1.1.0"
   variables:
     - name: "DATA_ROOT"
       description: "proteinfamilies output directory (qc/, mmseqs/, family_reps/, full_msa/, hmm/, update_families/, pipeline_info/)."

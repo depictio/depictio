@@ -22,7 +22,7 @@
 template:
   template_id: "nf-core/airrflow/5.1.2"
   description: "nf-core/airrflow adaptive immune receptor repertoire template: sequence processing, repertoire composition and clonal analysis"
-  version: "1.0.0"
+  version: "1.1.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory containing airrflow pipeline output (multiqc/, clonal_analysis/, repertoire_comparison/, parsed_logs/)"

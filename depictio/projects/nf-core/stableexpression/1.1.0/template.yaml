@@ -59,7 +59,7 @@
 template:
   template_id: "nf-core/stableexpression/1.1.0"
   description: "nf-core/stableexpression template: the most stable candidate genes of each expression section, ranked by stability score with the spread of their normalised expression across every public sample, the four measures behind the score, how stability varies with expression level, and what each downloaded dataset went through (platform, gene ID mapping, sample filters)."
-  version: "1.0.0"
+  version: "1.1.0"
   variables:
     - name: "DATA_ROOT"
       description: "stableexpression output directory (reporting/, merged_data/, datasets/, statistics/, errors/, warnings/, id_mapping/, pipeline_info/)."
