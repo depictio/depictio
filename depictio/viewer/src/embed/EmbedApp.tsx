@@ -33,9 +33,15 @@
  */
 import React from 'react';
 import { Alert, Box } from '@mantine/core';
-import { ComponentRenderer } from 'depictio-react-core';
-import type { StoredMetadata } from 'depictio-react-core';
+import { ComponentRenderer, TabLinkContext, tabLinkKey, useBranding } from 'depictio-react-core';
+import type {
+  InteractiveFilter,
+  StoredMetadata,
+  TabLinkResolver,
+  TabLinkTarget,
+} from 'depictio-react-core';
 
+import { resolveTabColor, resolveTabIcon } from '../chrome/Sidebar';
 import type { EmbedGlobal } from '../offline/mockApi';
 
 /** Keeps a renderer crash inside the frame instead of blanking the host page. */
@@ -71,8 +77,14 @@ const MESSAGE_SOURCE = 'depictio-embed';
 const EmbedApp: React.FC<Props> = ({ payload }) => {
   const metadata = payload.component as unknown as StoredMetadata;
 
+  // The control is driven by its filter entry, so keep the frame's own
+  // selection here; without it a pick is posted but never shown.
+  const [filters, setFilters] = React.useState<InteractiveFilter[]>([]);
+
   const publishFilter = React.useCallback(
     (filter: unknown) => {
+      const entry = filter as InteractiveFilter;
+      setFilters((prev) => [...prev.filter((f) => f.index !== entry?.index), entry]);
       if (typeof window === 'undefined' || window.parent === window) return;
       window.parent.postMessage(
         {
@@ -103,6 +115,30 @@ const EmbedApp: React.FC<Props> = ({ payload }) => {
     );
   }, [metadata]);
 
+  // A text tile's `tab:` links wear the tab's icon and colour, as the sidebar
+  // shows them. The export hands the tile its tab family (`tabs`); the links
+  // render as in the dashboard but lead nowhere, the other tabs not being here.
+  const brand = useBranding();
+  const resolveTab = React.useMemo<TabLinkResolver | null>(() => {
+    if (!payload.tabs?.length) return null;
+    const byKey = new Map<string, TabLinkTarget>();
+    for (const tab of payload.tabs) {
+      const isParent = !tab.parent_dashboard_id;
+      const label = (isParent ? tab.main_tab_name || tab.title : tab.title) || '';
+      const target: TabLinkTarget = {
+        href: '#',
+        label,
+        icon: resolveTabIcon(tab, isParent),
+        color: resolveTabColor(tab, isParent, brand),
+      };
+      for (const name of [label, tab.title]) {
+        const key = name ? tabLinkKey(name) : '';
+        if (key && !byKey.has(key)) byKey.set(key, target);
+      }
+    }
+    return (name: string) => byKey.get(tabLinkKey(name)) ?? null;
+  }, [payload.tabs, brand]);
+
   if (!metadata || !metadata.component_type) {
     return (
       <Alert color="red" variant="light" title="Nothing to render">
@@ -124,9 +160,10 @@ const EmbedApp: React.FC<Props> = ({ payload }) => {
       }}
     >
       <EmbedBoundary>
+        <TabLinkContext.Provider value={resolveTab}>
         <ComponentRenderer
           metadata={metadata}
-          filters={[]}
+          filters={filters}
           onFilterChange={publishFilter}
           dashboardId="embed"
           cardValue={
@@ -142,6 +179,7 @@ const EmbedApp: React.FC<Props> = ({ payload }) => {
             )?.[String(metadata.index)]
           }
         />
+        </TabLinkContext.Provider>
       </EmbedBoundary>
     </Box>
   );
