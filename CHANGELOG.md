@@ -3,6 +3,59 @@
 ### Docker Images 🐳
 
 ```plaintext
+ghcr.io/depictio/depictio:1.20.0
+ghcr.io/depictio/depictio:latest
+ghcr.io/depictio/depictio:stable
+ghcr.io/depictio/depictio:edge
+```
+
+
+<details>
+<summary>Click to expand the changelog for 1.20.0</summary>
+
+### Changes 📜
+
+#### New Features ✨
+
+* feat: Overview genome views, locus links and a floating data table ([#1308](https://github.com/depictio/depictio/pull/1308)) [e6ce8403b]
+
+#### Bug Fixes 🐛
+
+* fix: flaky quality-job failures and the somatic ANN explode ([#1304](https://github.com/depictio/depictio/pull/1304)) [c38853826]
+
+#### Chores 🧹
+
+* ci: disable telemetry for containers started in workflows ([#1295](https://github.com/depictio/depictio/pull/1295)) [43b7e7207]
+* ci: run local-to-compose on ubuntu-22.04 ([#1296](https://github.com/depictio/depictio/pull/1296)) [d7140bc61]
+
+#### Other Changes 📝
+
+* Bump version: 1.19.3 → 1.20.0 [30bed985e]
+* fix(genome-view): peak navigators open on the whole chromosome; nascent tracks in time order ([#1311](https://github.com/depictio/depictio/pull/1311)) [fa2b0edf4]
+* fix(export): embedded filters show their selection, text tab links keep their icons ([#1313](https://github.com/depictio/depictio/pull/1313)) [23515b1e8]
+* chore(nf-core): bump the templates the Overview rework changed ([#1312](https://github.com/depictio/depictio/pull/1312)) [906e0d6fd]
+* fix(allinone): copy the pnpm patches before the install ([#1310](https://github.com/depictio/depictio/pull/1310)) [78dddbfb9]
+* feat(nf-core): Overview study cards, run version line, steps lint ([#1306](https://github.com/depictio/depictio/pull/1306)) [9d15235b8]
+* feat(nf-core): sarek 3.11.0, caller colours on the gene UpSet, section links ([#1302](https://github.com/depictio/depictio/pull/1302)) [ed6dae678]
+* feat(docker): all-in-one image to reopen a depictio/ folder ([#1300](https://github.com/depictio/depictio/pull/1300)) [38ad26feb]
+* feat(nextflow): add a depictio/ingest nf-core module ([#1290](https://github.com/depictio/depictio/pull/1290)) [6ecbc1b72]
+* fix(compose): start mongo on Linux 6.19+ kernels (glibc owns rseq, image 8.0.34) ([#1297](https://github.com/depictio/depictio/pull/1297)) [8431647fa]
+* feat(jbrowse): embedded genome browser with genomic_tracks collections and two-way cross-filtering ([#1123](https://github.com/depictio/depictio/pull/1123)) [cf95c85bb]
+* fix(nf-core): compare the manifest's keys, not only recipe sources, in the monitor ([#1301](https://github.com/depictio/depictio/pull/1301)) [b69ba36fe]
+* feat(nf-core): one verdict per release and one draft PR per wave ([#1299](https://github.com/depictio/depictio/pull/1299)) [d5caf14cc]
+* feat(nf-core): bump airrflow to 5.1.2 and hic to 2.1.0 ([#1294](https://github.com/depictio/depictio/pull/1294)) [65de5e54e]
+* Update CHANGELOG.md for v1.19.3 [b49af8b95]
+
+
+</details>
+
+### Documentation 📖
+
+For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
+
+### Docker Images 🐳
+
+```plaintext
 ghcr.io/depictio/depictio:1.19.3
 ghcr.io/depictio/depictio:latest
 ghcr.io/depictio/depictio:stable
