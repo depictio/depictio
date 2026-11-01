@@ -27,7 +27,7 @@
 template:
   template_id: "nf-core/mhcquant/3.2.0"
   description: "nf-core/mhcquant immunopeptidomics template: identification yield and FDR, the MHC length and anchor-motif signature, replicate reproducibility, peptides shared between conditions with their source proteins, and retention-time and mass checks."
-  version: "1.0.0"
+  version: "1.1.0"
   variables:
     - name: "DATA_ROOT"
       description: "mhcquant output directory (the per-sample <sample>.tsv tables, intermediate_results/, multiqc/, pipeline_info/)."

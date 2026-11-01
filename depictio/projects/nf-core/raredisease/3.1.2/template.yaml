@@ -41,7 +41,7 @@
 template:
   template_id: "nf-core/raredisease/3.1.2"
   description: "nf-core/raredisease template for rare disease analysis on a family: alignment and coverage QC, pedigree and relatedness checks, the callset, the GENMOD-ranked variants with their inheritance models, mitochondrial heteroplasmy, repeat expansions and mobile elements, and a genome browser over the ranked VCFs and alignments."
-  version: "1.0.0"
+  version: "1.1.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory of one raredisease run (alignment/, call_snv/, rank_and_filter/, qc_bam/, pedigree/, pipeline_info/)."

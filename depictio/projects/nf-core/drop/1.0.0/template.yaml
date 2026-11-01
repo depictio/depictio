@@ -80,7 +80,7 @@
 template:
   template_id: "nf-core/drop/1.0.0"
   description: "nf-core/drop template: outlier burden per sample, genes called by several analyses ranked per sample, OUTRIDER expression outliers, FRASER splicing outliers, mono-allelic expression, and a genome browser on the called genes"
-  version: "1.0.0"
+  version: "1.1.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory of one DROP run (the outdir: processed_results/, pipeline_info/ ...)"

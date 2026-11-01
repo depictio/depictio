@@ -57,7 +57,7 @@
 template:
   template_id: "nf-core/methylseq/2.3.0"
   description: "nf-core/methylseq template: Bismark bisulfite alignment, deduplication and per-context methylation extraction (with M-bias curves), on top of the reprocessed MultiQC report and Qualimap coverage."
-  version: "1.2.0"
+  version: "1.3.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory containing methylseq Bismark-route output (bismark/, fastqc/, trimgalore/, qualimap/, pipeline_info/, input/) plus the reprocessed multiqc/multiqc_data/multiqc.parquet."

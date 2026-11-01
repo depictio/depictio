@@ -46,7 +46,7 @@
 template:
   template_id: "nf-core/proteinannotator/1.1.0"
   description: "nf-core/proteinannotator template: input filtering, domains from Pfam, FunFam, NMPFamsDB, MetagRoot and InterProScan in one table, database agreement per protein, secondary structure per residue, and a predicted 3D structure coloured by domain"
-  version: "1.0.0"
+  version: "1.1.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory of one proteinannotator run (qc/, domain_annotation/, functional_annotation/, s4pred/, pipeline_info/)"

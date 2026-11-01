@@ -34,7 +34,7 @@
 template:
   template_id: "nf-core/proteinfold/2.1.0"
   description: "nf-core/proteinfold structure prediction template: per-model confidence across engines (pLDDT, pTM, ipTM), each top-ranked structure in 3D with its per-residue confidence and the alignment it was folded from, predicted aligned error, and model agreement per engine."
-  version: "1.0.0"
+  version: "1.1.0"
   variables:
     - name: "DATA_ROOT"
       description: "proteinfold output directory (one directory per engine, e.g. alphafold2/, colabfold/, esmfold/, plus multiqc/ and pipeline_info/)."

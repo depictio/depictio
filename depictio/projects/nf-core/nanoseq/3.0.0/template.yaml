@@ -80,7 +80,7 @@
 template:
   template_id: "nf-core/nanoseq/3.0.0"
   description: "nf-core/nanoseq template: Nanopore long-read QC (NanoStat, FastQC, samtools stats), minimap2 alignment distributions, Bambu gene/transcript quantification with sample structure, and the DESeq2 / DEXSeq differential expression and usage results computed on top of it."
-  version: "2.0.0"
+  version: "2.1.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory containing nanoseq output (bambu/, fastqc/, minimap2/, nanoplot/, pipeline_info/) plus the reprocessed multiqc/multiqc_data/multiqc.parquet."

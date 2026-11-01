@@ -33,7 +33,7 @@
 template:
   template_id: "nf-core/smrnaseq/2.4.1"
   description: "nf-core/smrnaseq template for small RNA sequencing: MultiQC funnel, library QC, miRNA expression and two-group comparison, isomiRs, novel miRNAs"
-  version: "1.0.0"
+  version: "1.1.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory of one smrnaseq run (multiqc/, mirna_quant/, the miRDeep2 result_*.csv tables, pipeline_info/)"

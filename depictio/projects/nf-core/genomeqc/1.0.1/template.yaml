@@ -58,7 +58,7 @@
 template:
   template_id: "nf-core/genomeqc/1.0.1"
   description: "nf-core/genomeqc template for genome assembly and annotation quality: QUAST contiguity, BUSCO completeness of the assembly and its proteins, a karyotype of the BUSCO genes and telomeric repeats, AGAT gene models, OrthoFinder orthogroups shared between genomes, FCS-GX and Tiara contamination, and RepeatMasker repeat content."
-  version: "1.0.0"
+  version: "1.1.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory of one genomeqc run (quast/, busco/, tidk/, agat/, orthofinder/, decontamination/, multiqc/, pipeline_info/)."

@@ -35,7 +35,7 @@
 template:
   template_id: "nf-core/genomeassembler/2.0.0"
   description: "nf-core/genomeassembler template: contiguity, k-mer accuracy and completeness, and BUSCO gene completeness of every assembly, polishing and scaffolding stage, compared across assembly strategies, with the read-based genome profile as the yardstick."
-  version: "1.1.0"
+  version: "1.2.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory containing genomeassembler output: one directory per sample (and per read group) with assembly/, polish/, scaffold/, QC/ and reads/, plus pipeline_info/."

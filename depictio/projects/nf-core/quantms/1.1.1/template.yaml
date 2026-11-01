@@ -36,7 +36,7 @@
 template:
   template_id: "nf-core/quantms/1.1.1"
   description: "nf-core/quantms DIA proteomics template: acquisition QC from the mzML statistics, identification yield and peptide quality from DIA-NN, protein quantification with detection, completeness and run-to-run agreement, and the MSstats differential abundance between conditions."
-  version: "1.0.0"
+  version: "1.1.0"
   variables:
     - name: "DATA_ROOT"
       description: "quantms output directory of one mode (the folder holding diannsummary/, msstats/, mzmlstatistics/, sdrfparsing/ and pipeline_info/). For the megatest this is the mode_dia/ folder."
