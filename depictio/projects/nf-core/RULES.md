@@ -41,7 +41,18 @@ imported from, and the viewer warns when they differ. `depictio/projects/templat
 holds the version and content hash of every template; `test_template_lock.py` and the
 `check-template-versions` pre-commit hook fail on a template that changed with the same version.
 After bumping, run `python scripts/update_template_lock.py --write`. A recipe shared by several
-versions of a pipeline moves the hash of all of them: bump each one.
+versions of a pipeline moves the hash of all of them: bump each one. Never use `--force` to make
+the lock pass on a content change: it records the new hash under the old version.
+
+Never write "template version" for the pipeline version, in code, comments or docs. Users see
+both numbers on each template's docs page: the picker at the top selects the **pipeline
+version** (one generated partial per version directory) and shows the **template version**
+beside it, read from the partial that `depictio/dev_scripts/gen_template_docs.py` writes
+(`data-template-version`, plus the Pipeline and Template badges atop the reference). After a
+bump, run `python -m depictio.dev_scripts.gen_template_docs --docs-root <depictio-docs>` and
+commit the refreshed partials in depictio-docs. A new version directory also needs its
+`<option>` in the page's picker. The Templates landing page ("Pipeline version and template
+version") explains to users what each bump asks of them.
 
 Catalog modules are versioned too (`version` in `depictio/catalog/<module>/module.yaml`, held by
 `depictio/catalog/catalog_versions.lock.json`). Changing a module's reader, recipe or render
