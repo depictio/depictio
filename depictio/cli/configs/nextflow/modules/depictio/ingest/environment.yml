@@ -7,4 +7,4 @@ dependencies:
   - conda-forge::pip
   - pip:
       # [local]: MultiQC for the templates, and `depictio local up` for the artifact's stack.
-      - depictio[local]==1.19.3
+      - depictio[local]==1.20.0
