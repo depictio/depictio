@@ -63,6 +63,36 @@ class TestKeyingContract:
         # Not a dc-keyed type, so no rewrite.
         assert payload["component"]["dc_id"] == "507f1f77bcf86cd799439055"
         assert payload["data"] == _empty_data()
+        assert "tabs" not in payload
+
+    @pytest.mark.asyncio
+    async def test_a_text_with_tab_links_carries_its_tab_family(self) -> None:
+        family = [
+            {"dashboard_id": "d1", "title": "Run", "main_tab_name": "Overview"},
+            {
+                "dashboard_id": "d2",
+                "parent_dashboard_id": "d1",
+                "title": "QC",
+                "tab_icon": "mdi:check",
+            },
+        ]
+        with patch(
+            "depictio.api.v1.endpoints.dashboards_endpoints.routes._resolve_tab_family",
+            return_value=("d1", family),
+        ):
+            payload = await _build(_component("text", body="See [QC](tab:QC)."))
+        assert payload["tabs"] == family
+
+    @pytest.mark.asyncio
+    async def test_a_tab_family_the_caller_may_not_read_is_left_out(self) -> None:
+        from fastapi import HTTPException
+
+        with patch(
+            "depictio.api.v1.endpoints.dashboards_endpoints.routes._resolve_tab_family",
+            side_effect=HTTPException(status_code=403),
+        ):
+            payload = await _build(_component("text", body="See [QC](tab:QC)."))
+        assert "tabs" not in payload
 
     @pytest.mark.asyncio
     async def test_advanced_viz_dc_id_is_rewritten_and_data_matches(self) -> None:
