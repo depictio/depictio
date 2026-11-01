@@ -50,7 +50,7 @@
 template:
   template_id: "nf-core/nascent/2.3.0"
   description: "nf-core/nascent template for nascent transcription time courses (GRO-seq, PRO-seq): per-gene transcription trajectories and response classes, library similarity over time, and the strand-specific coverage along the genome, binned genome-wide and range-read from the bigWigs."
-  version: "1.0.0"
+  version: "2.0.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory of one nascent run (quantification/, coverage_graphs/, pipeline_info/)."

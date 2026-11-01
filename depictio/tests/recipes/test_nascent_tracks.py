@@ -1,7 +1,7 @@
 """nascent's genome-track manifest: the strand bigWigs of every library, with its time point.
 
-The manifest lists the plus and minus bigWig of each library of the hub, opening on both
-strands of the first, a middle and the last time point, and carries the time point and its rank so the browser can colour
+The manifest lists the plus and minus bigWig of each library of the hub in time order, each
+plus strand above its minus strand, and carries the time point and its rank so the browser can colour
 the tracks along a ramp (``color_scale``), the binned lanes of the Genome signal tab
 wearing the same colours. Nothing here reads a real bigWig.
 """
@@ -48,8 +48,7 @@ def test_tracks_follow_the_time_course_and_carry_the_time_point(tmp_path: Path) 
     for s in HUB["sample"]:
         _touch(tmp_path, f"coverage_graphs/{s}.plus.bigWig", f"coverage_graphs/{s}.minus.bigWig")
     df = _run(tmp_path)
-    # The browser opens on both strands of the first, a middle and the last time point,
-    # in time order (12 h after 2 h, whatever the labels sort like).
+    # In time order (12 h after 2 h, whatever the labels sort like), plus above minus.
     assert df["track_id"].to_list() == [
         "L_0h.plus",
         "L_0h.minus",
@@ -64,30 +63,21 @@ def test_tracks_follow_the_time_course_and_carry_the_time_point(tmp_path: Path) 
     assert df["format"].unique().to_list() == ["bigwig"]
 
 
-def test_opening_tracks_are_both_strands_of_three_time_points(tmp_path: Path) -> None:
+def test_every_library_reads_down_in_time_order(tmp_path: Path) -> None:
     hub = pl.DataFrame(
         {
-            "sample": [f"L_{h}h" for h in (0, 1, 2, 4, 8)],
-            "time_point": [f"{h} h" for h in (0, 1, 2, 4, 8)],
-            "time_order": [1, 2, 3, 4, 5],
+            "sample": [f"L_{h}h" for h in (8, 0, 4, 1, 2)],
+            "time_point": [f"{h} h" for h in (8, 0, 4, 1, 2)],
+            "time_order": [5, 1, 4, 2, 3],
         },
         schema_overrides={"time_order": pl.Int64},
     )
     for s in hub["sample"]:
         _touch(tmp_path, f"coverage_graphs/{s}.plus.bigWig", f"coverage_graphs/{s}.minus.bigWig")
     df = execute_recipe("nf-core/nascent/tracks.py", tmp_path, extra_sources={"samples": hub})
-    ids = df["track_id"].to_list()
-    # The first, the middle and the last time point, both strands each.
-    assert ids[:6] == [
-        "L_0h.plus",
-        "L_0h.minus",
-        "L_2h.plus",
-        "L_2h.minus",
-        "L_8h.plus",
-        "L_8h.minus",
+    assert df["track_id"].to_list() == [
+        f"L_{h}h.{strand}" for h in (0, 1, 2, 4, 8) for strand in ("plus", "minus")
     ]
-    # The rest: plus strands in time order, then minus strands.
-    assert ids[6:] == ["L_1h.plus", "L_4h.plus", "L_1h.minus", "L_4h.minus"]
 
 
 def test_read_in_place_lists_both_strands_of_every_library(tmp_path: Path) -> None:
@@ -96,14 +86,12 @@ def test_read_in_place_lists_both_strands_of_every_library(tmp_path: Path) -> No
     assert df["uri"].to_list()[0] == "coverage_graphs/L_0h.plus.bigWig"
 
 
-def test_browser_opens_on_both_strands_of_three_time_points() -> None:
+def test_browser_opens_on_every_track() -> None:
     dash = yaml.safe_load(DASHBOARD.read_text())
     tab = next(t for t in dash["tabs"] if t["title"] == "Genome signal")
     browser = next(c for c in tab["components"] if c["component_type"] == "jbrowse")
-    # Both strands of the first, a middle and the last time point open it; the other
-    # libraries are in the track selector.
-    assert browser["initial_tracks"] == 6
-    assert browser["max_tracks"] >= 2 * 11
+    # Every bigWig open, the time course reading down the tile.
+    assert browser["initial_tracks"] == browser["max_tracks"] >= 2 * 11
 
 
 def _template(variables: dict[str, str]) -> dict:
@@ -137,7 +125,7 @@ def test_browser_colours_the_tracks_along_the_time_course() -> None:
     assert "color_by" not in browser
 
 
-def test_a_time_point_with_replicates_opens_once_before_its_replicates(tmp_path: Path) -> None:
+def test_replicates_of_a_time_point_sit_together_by_name(tmp_path: Path) -> None:
     hub = pl.DataFrame(
         {
             "sample": ["L_0h_b", "L_0h_a", "L_2h_a", "L_2h_b"],
@@ -149,16 +137,13 @@ def test_a_time_point_with_replicates_opens_once_before_its_replicates(tmp_path:
     for s in hub["sample"]:
         _touch(tmp_path, f"coverage_graphs/{s}.plus.bigWig", f"coverage_graphs/{s}.minus.bigWig")
     df = execute_recipe("nf-core/nascent/tracks.py", tmp_path, extra_sources={"samples": hub})
-    plus = df.filter(pl.col("track_id").str.ends_with(".plus"))["sample"].to_list()
-    # Both strands of the first by name open each time point, then the replicates.
-    assert plus == ["L_0h_a", "L_2h_a", "L_0h_b", "L_2h_b"]
     assert df["track_id"].to_list() == [
         "L_0h_a.plus",
         "L_0h_a.minus",
+        "L_0h_b.plus",
+        "L_0h_b.minus",
         "L_2h_a.plus",
         "L_2h_a.minus",
-        "L_0h_b.plus",
         "L_2h_b.plus",
-        "L_0h_b.minus",
         "L_2h_b.minus",
     ]

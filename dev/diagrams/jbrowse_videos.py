@@ -31,7 +31,6 @@ import argparse
 import asyncio
 import base64
 import math
-import re
 import shutil
 import subprocess
 import sys
@@ -273,6 +272,12 @@ async def _open(page, base: str, dashboard_id: str) -> None:
         timeout=120_000,
     )
     await page.wait_for_timeout(1500)
+    # A local run can miss a collection the template marks required (a MultiQC
+    # report, say): its ingestion banner says nothing about the browser.
+    dismiss = page.get_by_role("button", name="Dismiss")
+    if await dismiss.count():
+        await dismiss.first.click()
+        await page.wait_for_timeout(400)
 
 
 async def _scroll_to(page, locator, offset: int = 90, smooth: bool = False, ms: int = 1300) -> None:
@@ -456,60 +461,81 @@ async def browser_to_dashboard(page, hand: Hand, rec: Recorder, ids: dict[str, s
 
 
 async def genomespy_jbrowse(page, hand: Hand, rec: Recorder, ids: dict[str, str]) -> None:
-    """nf-core/nascent Genome signal: frame a gene's neighbourhood on the GenomeSpy
-    lanes, brush its middle, then read the peaks in the browser below."""
+    """nf-core/nascent Genome signal: pick a chromosome on the GenomeSpy lanes, zoom
+    on the transcribed genes, brush them; the browser below opens on the brush
+    (Local SD, the tile's default), then read down through every track."""
     await _open(page, BASE, ids["nascent"])
     tile = await _browser(page)
     await _close_filters(page)
-    lanes = (
+    lanes = _lanes(page)
+    await _scroll_to(page, lanes, offset=10)
+    await _settle(page, 5000)
+    await _arrive(page, rec, lanes)
+    await _beat(page, 2500)
+    await hand.caption("One lane per library along the genome, coloured by time point", hold=900)
+    await hand.caption("Pick a chromosome", hold=300)
+    await hand.click(lanes.get_by_placeholder("Chromosome"))
+    await page.wait_for_timeout(500)
+    await hand.click(page.get_by_role("option", name=LANES_CHROM, exact=True))
+    await _beat(page, 2500)
+    await hand.caption("Zoom on the transcribed genes, then brush them", hold=300)
+    await _select_mode(hand, lanes)
+    canvas = lanes.locator("canvas").first
+    cb = await canvas.bounding_box()
+    left, width = cb["x"] + LANES_PLOT[0], cb["width"] - LANES_PLOT[0] - LANES_PLOT[1]
+    start, end = LANES_REGION
+    centre = (start + end) / 2
+    anchor = left + width * centre / LANES_CHROM_SIZE
+    y = cb["y"] + cb["height"] * 0.5
+    await _wheel_zoom(page, hand, anchor, y, LANES_NOTCHES)
+    # The wheel keeps the point under the cursor: only the scale changed.
+    per_bp = width / (LANES_CHROM_SIZE / WHEEL_FACTOR**LANES_NOTCHES)
+    await hand.drag(
+        anchor + (start - centre) * per_bp, y, anchor + (end - centre) * per_bp, y, steps=30
+    )
+    await _beat(page, 3000)
+    await hand.caption("The browser below opens on it, each track on its own Local SD scale")
+    await _scroll_to(page, tile, offset=60, smooth=True, ms=1400)
+    # No camera zoom here: the browser measures its width while 22 tracks load,
+    # and a scaled page leaves it drawing only part of the region.
+    await _settle(page, 8000)
+    await _beat(page, 2500)
+    await hand.caption("Every library, strand by strand, in the colours of the lanes", hold=300)
+    tracks = tile.locator('[data-testid^="trackRenderingContainer"]')
+    for i in range(await tracks.count()):
+        track = tracks.nth(i)
+        await _scroll_to(page, track, offset=260, smooth=True, ms=700)
+        await page.wait_for_timeout(250)
+    await _beat(page, 1500)
+    await _scroll_to(page, tile, offset=60, smooth=True, ms=1600)
+    await hand.caption(None)
+
+
+def _lanes(page):
+    """The GenomeSpy lanes tile of the tab (the one with an interaction-mode switch)."""
+    return (
         page.locator(".react-grid-item")
         .filter(has=page.locator('[data-testid="genome-view-interaction-mode"]'))
         .first
     )
-    # The lanes on top, the browser under them: both stay in the frame.
-    await _scroll_to(page, lanes, offset=10)
-    await _settle(page, 5000)
-    canvas = lanes.locator("canvas").first
-    await _arrive(page, rec, lanes)
-    # Scrolled back in, the lanes lay out again: let them, quickly.
-    await _beat(page, 2500)
-    await hand.caption("One lane per library, the time course from purple to yellow", hold=900)
-    await hand.caption("Frame a responsive gene's neighbourhood on chr15", hold=300)
-    await hand.type(lanes.get_by_label("Locus or gene"), LANES_LOCUS)
-    await _beat(page, 2500)
-    await hand.caption("Switch the lanes to Select and brush the middle", hold=600)
+
+
+async def _select_mode(hand: Hand, lanes) -> None:
+    """The lanes' Select mode: a drag brushes a region, Ctrl + wheel still zooms."""
     await hand.click(lanes.locator('[data-testid="genome-view-interaction-mode"] label').nth(2))
-    cb = await canvas.bounding_box()
-    y = cb["y"] + cb["height"] * 0.45
-    await hand.drag(
-        cb["x"] + cb["width"] * BRUSH[0], y, cb["x"] + cb["width"] * BRUSH[1], y, steps=30
-    )
-    await hand.caption("The browser opens on the brushed window, strand by strand")
-    await _beat(page, 3500)
-    await _scroll_to(page, tile, offset=60, smooth=True, ms=1200)
-    await hand.caption("Autoscale Local SD: each track scaled to its own peaks", hold=300)
-    settings = await _tile_button(page, tile, None, "Viz settings")
-    await hand.click(settings)
-    autoscale = page.locator('[data-testid="jbrowse-display-autoscale"]').first
-    await autoscale.wait_for(timeout=10_000)
-    await hand.click(autoscale.get_by_text("Local SD", exact=True))
-    await page.wait_for_timeout(500)
-    await page.keyboard.press("Escape")
-    await _beat(page, 2000)
-    await hand.zoom(tile, scale=1.2, hold=1400)
-    await hand.caption("Then read along: drag the tracks, zoom on a peak")
-    track = tile.locator('[data-testid^="trackRenderingContainer"]').nth(2)
-    tb = await track.bounding_box()
-    ty = tb["y"] + tb["height"] / 2
-    await hand.drag(tb["x"] + tb["width"] * 0.7, ty, tb["x"] + tb["width"] * 0.35, ty, steps=40)
-    await _beat(page, 1500)
-    zoom_in = tile.locator('[data-testid="zoom_in"]').first
-    if await zoom_in.count():
-        for _ in range(2):
-            await hand.click(zoom_in)
-            await _beat(page, 1200)
-    await hand.zoom(tile, scale=1.2, hold=1600)
-    await hand.caption(None)
+    await hand.page.wait_for_timeout(1200)
+
+
+async def _wheel_zoom(page, hand: Hand, x: float, y: float, notches: int) -> None:
+    """Ctrl + wheel on the lanes at (x, y), one notch at a time so the zoom reads."""
+    await hand.glide(x, y)
+    await page.wait_for_timeout(400)
+    await page.keyboard.down("Control")
+    for _ in range(notches):
+        await page.mouse.wheel(0, -WHEEL_DELTA)
+        await page.wait_for_timeout(110)
+    await page.keyboard.up("Control")
+    await page.wait_for_timeout(1500)
 
 
 async def _zoom_in(page, hand: Hand, tile, times: int) -> None:
@@ -531,17 +557,6 @@ async def _local_sd(page, hand: Hand, tile) -> None:
     await page.wait_for_timeout(500)
     await page.keyboard.press("Escape")
     await _beat(page, 1500)
-
-
-async def _browser_locus(lanes) -> tuple[str, int] | None:
-    """Chromosome and centre of the browser's window, read off the lanes' link chip
-    ("Browser view chr14:38.014-38.019 Mb")."""
-    text = await lanes.inner_text()
-    m = re.search(r"Browser view\s+([^:\s]+):([\d.]+)-([\d.]+)\s*Mb", text)
-    if not m:
-        return None
-    lo, hi = float(m.group(2)), float(m.group(3))
-    return m.group(1), int((lo + hi) / 2 * 1_000_000)
 
 
 async def _band_x(page, canvas) -> float | None:
@@ -571,49 +586,61 @@ async def _band_x(page, canvas) -> float | None:
     return b["x"] + best_x / sx
 
 
+async def _call_x(page, canvas, near: float | None = None) -> float | None:
+    """Page x of a call drawn on the lanes: the column with the most dark-blue bar
+    pixels (calls stack across the replicates), the one nearest ``near`` on a tie."""
+    import io
+
+    from PIL import Image
+
+    b = await canvas.bounding_box()
+    if not b:
+        return None
+    png = await page.screenshot(clip=b)
+    img = Image.open(io.BytesIO(png)).convert("RGB")
+    sx = img.width / b["width"]
+    scores: list[tuple[int, float]] = []
+    for px in range(int(img.width * 0.06), int(img.width * 0.97)):
+        n = 0
+        for py in range(0, img.height, 2):
+            r, g, bl = img.getpixel((px, py))
+            if bl > 140 and r < 90 and bl - g > 40:
+                n += 1
+        # A column blue down every lane is the region's frame, not a call.
+        if n and n < img.height / 2 * 0.5:
+            scores.append((n, b["x"] + px / sx))
+    if not scores:
+        return None
+    best = max(n for n, _ in scores)
+    tops = [x for n, x in scores if n >= best * 0.6]
+    ref = near if near is not None else b["x"] + b["width"] / 2
+    return min(tops, key=lambda x: abs(x - ref))
+
+
 async def peak_brush(page, hand: Hand, rec: Recorder, ids: dict[str, str], name: str) -> None:
-    """A Locus tab of a peak pipeline: widen the lanes around the browser's best
-    call, brush the peak in their middle, then read it in the browser."""
+    """A Locus tab of a peak pipeline: the lanes open on the browser's chromosome,
+    zoom on the browser's window, brush the call under it, read it in the browser."""
     await _open(page, BASE, ids[name])
     tile = await _browser(page)
     await _close_filters(page)
-    lanes = (
-        page.locator(".react-grid-item")
-        .filter(has=page.locator('[data-testid="genome-view-interaction-mode"]'))
-        .first
-    )
+    lanes = _lanes(page)
     await _scroll_to(page, lanes, offset=10)
     await _settle(page, 5000)
-    where = await _browser_locus(lanes)
-    assert where, "no browser location"
-    chrom, centre = where
     canvas = lanes.locator("canvas").first
     await _arrive(page, rec, lanes)
     await _beat(page, 2000)
-    await hand.caption("One lane per library, on the browser's window: widen it", hold=600)
-    field_ = lanes.get_by_label("Locus or gene")
-    if await field_.count():
-        span = PEAK_LANES_SPAN
-        await hand.type(field_, f"{chrom}:{max(centre - span, 1):,}-{centre + span:,}")
-    else:
-        # No locus field: zoom the lanes on the browser's band with Ctrl + wheel.
-        bb = await canvas.bounding_box()
-        x = await _band_x(page, canvas) or bb["x"] + bb["width"] / 2
-        await hand.glide(x, bb["y"] + bb["height"] * 0.5)
-        await page.keyboard.down("Control")
-        for _ in range(8):
-            await page.mouse.wheel(0, -400)
-            await page.wait_for_timeout(150)
-        await page.keyboard.up("Control")
-    await _beat(page, 2500)
-    await hand.caption("The calls around the browser's peak, lane by lane", hold=900)
-    await hand.caption("Select, and brush the peak in the middle", hold=500)
-    await hand.click(lanes.locator('[data-testid="genome-view-interaction-mode"] label').nth(2))
+    await hand.caption("One lane per library along the browser's chromosome", hold=900)
+    await hand.caption("The dashed line is the browser's window: zoom on it", hold=300)
+    await _select_mode(hand, lanes)
     cb = await canvas.bounding_box()
     y = cb["y"] + cb["height"] * 0.5
-    # Centred on the browser's band: the zoom keeps it under the cursor, not mid-lanes.
-    half = cb["width"] * (PEAK_BRUSH[1] - PEAK_BRUSH[0]) / 2
-    bx = await _band_x(page, canvas) or cb["x"] + cb["width"] / 2
+    anchor = await _band_x(page, canvas) or cb["x"] + cb["width"] / 2
+    await _wheel_zoom(page, hand, anchor, y, PEAK_NOTCHES)
+    await _beat(page, 2000)
+    await hand.caption("The calls under the browser's window, lane by lane", hold=900)
+    await hand.caption("Brush the peak", hold=300)
+    half = cb["width"] * PEAK_BRUSH_HALF
+    bx = await _call_x(page, canvas, anchor) or anchor
     await hand.drag(bx - half, y, bx + half, y, steps=25)
     await hand.caption("The browser opens on the brushed window")
     await _beat(page, 3000)
@@ -991,14 +1018,22 @@ CLIP_OPTIONS: dict[str, dict[str, float]] = {
 }
 
 BASE = "http://127.0.0.1:8058"
-# The nascent lanes are framed on a responsive gene's neighbourhood (CHAC1 on
-# chr15), then brushed from one fraction of their width to the other.
-LANES_LOCUS = "chr15:36,000,000-46,000,000"
-BRUSH = (0.35, 0.65)
-# Peak pipelines: the lanes widened this far on both sides of the browser's
-# best call, then brushed over this middle fraction of their width.
-PEAK_LANES_SPAN = 1_500_000
-PEAK_BRUSH = (0.47, 0.53)
+# The nascent region brushed on the lanes: several transcribed genes on chr4.
+LANES_CHROM = "chr4"
+LANES_CHROM_SIZE = 190_214_555  # hg38
+LANES_REGION = (84_739_529, 89_439_405)
+# Left and right margins (px) of the nascent lanes' plot inside their canvas: the
+# y axis on the left, the lane scrollbar on the right.
+LANES_PLOT = (30.5, 39.5)
+LANES_NOTCHES = 13
+# One Ctrl + wheel notch of WHEEL_DELTA px zooms GenomeSpy by WHEEL_FACTOR (measured).
+WHEEL_DELTA = 100
+WHEEL_FACTOR = 1.2595
+# Peak pipelines: notches from the whole chromosome to a megabase or two around the
+# browser's window (its neighbouring calls in view), then a brush this fraction of
+# the lanes' width on each side of a call.
+PEAK_NOTCHES = 18
+PEAK_BRUSH_HALF = 0.02
 
 
 async def run(out: Path, ids: dict[str, str], only: set[str] | None, args) -> None:

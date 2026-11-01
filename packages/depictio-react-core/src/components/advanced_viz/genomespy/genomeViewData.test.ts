@@ -13,6 +13,7 @@ import {
   filtersForGenomeViewFetch,
   loadGenomeViewRows,
   mergeWindowRows,
+  rowsOnKnownContigs,
   navigatorWindow,
   navigatorWindowFilters,
   ownRegion,
@@ -312,5 +313,21 @@ describe('mergeWindowRows', () => {
   it('falls back to the window read when the genome read has no chromosome column', () => {
     const window = { chr: ['chr6'], pos: [1] };
     expect(mergeWindowRows({ pos: [9] }, window, 'chr', 'chr6')).toBe(window);
+  });
+});
+
+describe('rowsOnKnownContigs', () => {
+  it('drops the rows on contigs the assembly does not name', () => {
+    const rows = { chr: ['chr1', 'chr1_KI270706v1_random', 'chr2'], pos: [1, 2, 3] };
+    expect(rowsOnKnownContigs(rows, 'chr', new Set(['chr1', 'chr2']))).toEqual({
+      chr: ['chr1', 'chr2'],
+      pos: [1, 3],
+    });
+  });
+
+  it('leaves the rows alone without an assembly or when every contig is known', () => {
+    const rows = { chr: ['chr1'], pos: [1] };
+    expect(rowsOnKnownContigs(rows, 'chr', null)).toBe(rows);
+    expect(rowsOnKnownContigs(rows, 'chr', new Set(['chr1']))).toBe(rows);
   });
 });

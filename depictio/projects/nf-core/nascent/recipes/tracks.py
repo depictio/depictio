@@ -2,12 +2,9 @@
 
 nf-core/nascent writes two bigWigs per library under ``coverage_graphs/``
 (deepTools bamCoverage): ``<S>.plus.bigWig`` and ``<S>.minus.bigWig``, the
-reads of each strand. The manifest keeps both, ordered so the browser opens on the whole time course and on
-both strands: the plus and the minus bigWig of the first, a middle and the last time point
-(the dashboard's ``initial_tracks`` takes those six), then every other library's plus strand
-in time order, then every other library's minus strand, which the track selector offers on
-request. Within a strand one library of each time point comes first, so a time point with
-replicates still opens once.
+reads of each strand. The manifest keeps both, in time order so the time course reads
+down the browser: each library's plus strand, then its minus strand, the libraries of
+one time point by name.
 
 No colour column: the tile colours the tracks along a sequential ramp by the
 library's time point (``color_scale``: ``time_point`` in the order of
@@ -27,9 +24,8 @@ Output schema:
     uri : Utf8          path relative to the results folder
     name : Utf8         track label shown in the browser
     category : Utf8     track-selector folder
-    order : Int64       row order the browser opens with (``order_column``): both strands of
-                        the first, a middle and the last time point, then the other plus
-                        strands in time order, then the other minus strands
+    order : Int64       row order the browser opens with (``order_column``): libraries in
+                        time order, the plus strand of each before its minus strand
 """
 
 from __future__ import annotations
@@ -97,21 +93,9 @@ def transform(sources: dict[str, pl.DataFrame | None], context=None) -> pl.DataF
         order = times.get(sample, (None, None))[1]
         return (order is None, order or 0, sample)
 
-    # One representative library per time point (the first by name) opens the list, so
-    # the first rows cover the whole time course even when a time point has replicates.
-    representative: dict[str, str] = {}
-    for sample in sorted({s for s, _ in found}, key=time_key):
-        representative.setdefault(times.get(sample, (None, None))[0] or sample, sample)
-    reps = list(representative.values())
-    # Both strands of the first, a middle and the last time point open the browser.
-    picks = list(dict.fromkeys(reps[i] for i in (0, len(reps) // 2, len(reps) - 1))) if reps else []
-    opening = [(s, strand) for s in picks for strand in _STRANDS if (s, strand) in found]
-    # The rest: the plus strands (a representative library of each time point before its
-    # replicates) in time order, then the minus strands.
-    rest = sorted(
-        found - set(opening),
-        key=lambda k: (_STRANDS.index(k[1]), k[0] not in reps, *time_key(k[0])),
-    )
+    # The time course reads down the browser: libraries in time order, each library's
+    # plus strand above its minus strand.
+    ordered = sorted(found, key=lambda k: (*time_key(k[0]), _STRANDS.index(k[1])))
     rows = [
         {
             "track_id": f"{sample}.{strand}",
@@ -123,7 +107,7 @@ def transform(sources: dict[str, pl.DataFrame | None], context=None) -> pl.DataF
             "name": f"{sample} {'+' if strand == 'plus' else '-'}",
             "category": "Strand coverage",
         }
-        for sample, strand in [*opening, *rest]
+        for sample, strand in ordered
     ]
     for i, row in enumerate(rows, start=1):
         row["order"] = i

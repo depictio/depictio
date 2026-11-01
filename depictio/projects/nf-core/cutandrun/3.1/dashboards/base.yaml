@@ -2055,8 +2055,8 @@ tabs:
     order: 1
     body: >
       The SEACR regions of every sample on one genome axis, with the run's own signal and
-      calls in a genome browser under them. The tab opens on a default region set in the
-      navigator's config: type a locus in its header or brush its axis, and the browser and
+      calls in a genome browser under them. The axis opens on the chromosome the browser
+      shows, its window as a band: zoom on the regions, brush one, and the browser and
       cards follow.
     tag: cr-loc-intro
     index: loc-intro
@@ -2196,9 +2196,11 @@ tabs:
     use: seacr/seacr_peak_track
     config:
       assembly: "{GENOME}"
-      # `rect` needs an end column, which the role binding supplies: a SEACR
-      # call is an interval, not a point at its summit.
-      mark: rect
+      # Bars, not level rects: a rect is a 2 px segment at the score and
+      # vanishes at chromosome scale, a bar rises from the baseline and keeps
+      # a minimum width.
+      mark: bar
+      lane_height: 56
       score_title: log10 total coverage
       opacity: 0.8
       # One lane per sample, each on its own ruler, as the other peak
@@ -2207,9 +2209,11 @@ tabs:
       facet_by_sample: true
       max_facets: 6
       facet_y_scale: independent
-      # The assembly lets the navigator fetch only the chromosome of its
-      # region, so calls on alt and unplaced contigs stay out until visited.
-      default_region: "chr9:130,850,000-131,350,000"
+      # No default_region: the browser opens on its own locus, and the axis on
+      # the whole chromosome it shows, its window drawn as a band, so the
+      # reader sees where the regions are before brushing one.
+      open_on_view_window: true
+      interaction_mode: select
       region_filter_enabled: true
       selection_enabled: true
       selection_column: peak_id

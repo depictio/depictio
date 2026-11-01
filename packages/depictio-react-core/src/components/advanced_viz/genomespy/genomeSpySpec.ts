@@ -872,10 +872,11 @@ function markFor(
   config: GenomeViewConfig,
 ): Record<string, unknown> {
   if (mark === 'point') return { type: 'point', size: (config.point_size ?? 5) ** 2 };
-  // A bar has to stay visible when a whole chromosome is a handful of pixels
-  // wide, hence the clamped minimum width and the opacity floor that keeps the
+  // A bar has to stay visible when a call is a fraction of a pixel wide (a
+  // narrow peak on a chromosome, or on a megabase), hence the clamped minimum
+  // width, wide enough to read as a tick, and the opacity floor that keeps the
   // clamping from fading it away entirely.
-  if (mark === 'bar') return { type: 'rect', minWidth: 1, minOpacity: 0.4 };
+  if (mark === 'bar') return { type: 'rect', minWidth: 3, minOpacity: 0.4 };
   // An interval is drawn as a level segment at its score (see `y2` in
   // `unitLayer`), so it needs a floor on its height as well as its width.
   return { type: 'rect', minWidth: 0.5, minHeight: 2, minOpacity: 0.4 };

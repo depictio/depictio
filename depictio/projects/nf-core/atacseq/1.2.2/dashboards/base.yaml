@@ -2004,11 +2004,12 @@ tabs:
     description: Distinct genes named as the nearest gene of a call on the region.
     layout: {x: 6, y: 0, w: 2, h: 2}
   # A navigator that drives a browser sets no default_region: the browser opens on
-  # its own locus, and the axis opens on the chromosome it shows (open_on_view_window),
-  # its window drawn as a band, and keeps that window in view as the browser steps
-  # (follow_view_window). Bars, not level rects: a rect is a 2 px segment at the
-  # score and vanishes at chromosome scale, a bar rises from the baseline and keeps
-  # a minimum width. A drag brushes a region (interaction_mode: select), which is
+  # its own locus, and the axis opens on the whole chromosome it shows
+  # (open_on_view_window), its window drawn as a band. The axis does not follow
+  # that window: on a few kilobases it would open on empty lanes, where the
+  # chromosome shows where the calls are to zoom and brush. Bars, not level rects:
+  # a rect is a 2 px segment at the score and vanishes at chromosome scale, a bar
+  # rises from the baseline and keeps a minimum width. A drag brushes a region (interaction_mode: select), which is
   # what the tile is for.
   - component_type: advanced_viz
     workflow_tag: atacseq
@@ -2033,7 +2034,6 @@ tabs:
       opacity: 0.8
       assembly: '{GENOME}'
       open_on_view_window: true
-      follow_view_window: true
       interaction_mode: select
       region_filter_enabled: true
       selection_enabled: true

@@ -161,6 +161,27 @@ export async function loadGenomeViewRows(
 }
 
 /**
+ * The rows on contigs the assembly names: an alt or unplaced contig has no
+ * place on the axis, and GenomeSpy throws on it. Unchanged without a
+ * `known` set (no built-in assembly) or a chromosome column.
+ * Column-oriented.
+ */
+export function rowsOnKnownContigs(
+  rows: Record<string, unknown[]>,
+  chrColumn: string,
+  known?: ReadonlySet<string> | null,
+): Record<string, unknown[]> {
+  const chr = rows[chrColumn];
+  if (!known || !chr) return rows;
+  const keep: number[] = [];
+  for (let i = 0; i < chr.length; i++) if (known.has(String(chr[i]))) keep.push(i);
+  if (keep.length === chr.length) return rows;
+  const out: Record<string, unknown[]> = {};
+  for (const [c, values] of Object.entries(rows)) out[c] = keep.map((i) => values[i]);
+  return out;
+}
+
+/**
  * The rows a navigator draws while its fetch is narrowed to a window: the
  * whole-genome read (sampled by the server) everywhere but the window's
  * chromosome, and the window's own read, whole, on it. So a region never

@@ -72,6 +72,7 @@ import {
   filtersForGenomeViewFetch,
   loadGenomeViewRows,
   mergeWindowRows,
+  rowsOnKnownContigs,
   navigatorWindow,
   navigatorWindowFilters,
   ownRegion,
@@ -438,7 +439,20 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
     () => ownRegion(filters, metadata.index, config.chr_col, config.pos_col),
     [filters, metadata.index, config.chr_col, config.pos_col],
   );
-  const fetchWindowChrom = builtinAssembly && assemblyContigs?.length ? (ownRegionNow?.chrom ?? null) : null;
+  // A navigator that opens on (or follows) a genome browser and has no region
+  // of its own reads the browser's chromosome whole too: the genome-wide read
+  // is sampled, and could drop the very calls under the browser's window.
+  const browserWindow = useViewWindow(String(metadata.index));
+  const followsBrowser = Boolean(config.open_on_view_window || config.follow_view_window);
+  const browserChrom = useMemo(
+    () =>
+      followsBrowser && assemblyContigs?.length
+        ? (buildWindowRows(browserWindow, assemblyContigs.map((c) => c.name))[0]?.chrom ?? null)
+        : null,
+    [followsBrowser, browserWindow, assemblyContigs],
+  );
+  const fetchWindowChrom =
+    builtinAssembly && assemblyContigs?.length ? (ownRegionNow?.chrom ?? browserChrom) : null;
   const fetchWindow = useMemo(
     () => (fetchWindowChrom ? navigatorWindow({ chrom: fetchWindowChrom, start: 0, end: Infinity }) : null),
     [fetchWindowChrom],
@@ -544,9 +558,14 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
     () => (assemblyContigs ? new Set(assemblyContigs.map((c) => c.name)) : null),
     [assemblyContigs],
   );
+  // On a built-in assembly the rows wait for its contig list: a row on a
+  // contig it does not name (alt, unplaced) would reach GenomeSpy unfiltered.
+  const contigsPending = builtinAssembly && !knownContigs;
   const rows = useMemo(
     () =>
-      fetchedRows && fetchedChrom && genomeRows
+      contigsPending
+        ? null
+        : fetchedRows && fetchedChrom && genomeRows
         ? mergeWindowRows(
             genomeRows,
             fetchedRows,
@@ -554,8 +573,8 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
             fetchedChrom,
             knownContigs,
           )
-        : fetchedRows,
-    [fetchedRows, fetchedChrom, genomeRows, effectiveConfig.chr_col, knownContigs],
+        : fetchedRows && rowsOnKnownContigs(fetchedRows, effectiveConfig.chr_col, knownContigs),
+    [contigsPending, fetchedRows, fetchedChrom, genomeRows, effectiveConfig.chr_col, knownContigs],
   );
 
   const [geneAnnotation, setGeneAnnotation] = useState<GeneAnnotation | null>(null);
