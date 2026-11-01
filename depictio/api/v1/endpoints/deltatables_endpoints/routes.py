@@ -44,6 +44,7 @@ from depictio.models.models.deltatables import (
     latest_complete_aggregation,
 )
 from depictio.models.models.users import User
+from depictio.models.s3_utils import delete_keys
 
 deltatables_endpoint_router = APIRouter()
 
@@ -1847,17 +1848,16 @@ async def delete_deltatable(
 
     s3_client = boto3.client(
         "s3",
-        endpoint_url=settings.s3.endpoint,  # type: ignore[possibly-unbound-attribute]
-        aws_access_key_id=settings.s3.access_key,  # type: ignore[possibly-unbound-attribute]
-        aws_secret_access_key=settings.s3.secret_key,  # type: ignore[possibly-unbound-attribute]
+        endpoint_url=settings.s3.endpoint_url,
+        aws_access_key_id=settings.s3.aws_access_key_id,
+        aws_secret_access_key=settings.s3.aws_secret_access_key,
         region_name="us-east-1",
     )
 
     try:
         response = s3_client.list_objects_v2(Bucket=bucket_name, Prefix=deltatable_location)
         if "Contents" in response:
-            objects_to_delete = [{"Key": obj["Key"]} for obj in response["Contents"]]
-            s3_client.delete_objects(Bucket=bucket_name, Delete={"Objects": objects_to_delete})
+            delete_keys(s3_client, bucket_name, (obj["Key"] for obj in response["Contents"]))
     except ClientError as e:
         logger.error(f"Failed to delete S3 objects: {e}")
         raise HTTPException(status_code=500, detail="Failed to delete S3 objects.")

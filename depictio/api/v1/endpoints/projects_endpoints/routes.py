@@ -125,6 +125,7 @@ from depictio.models.project_merge import (
     merge_project_data_collections,
     merge_project_workflows,
 )
+from depictio.models.s3_utils import delete_keys
 from depictio.models.timestamps import preserved_creation_time, utc_now_str
 
 projects_endpoint_router = APIRouter()
@@ -193,11 +194,11 @@ def _cascade_delete_project(project_id: PyObjectId, project_name: str) -> None:
                     for page in paginator.paginate(
                         Bucket=settings.s3.bucket, Prefix=prefix.strip("/")
                     ):
-                        keys = [{"Key": obj["Key"]} for obj in page.get("Contents", [])]
-                        if keys:
-                            s3_client.delete_objects(
-                                Bucket=settings.s3.bucket, Delete={"Objects": keys}
-                            )
+                        delete_keys(
+                            s3_client,
+                            settings.s3.bucket,
+                            (obj["Key"] for obj in page.get("Contents", [])),
+                        )
                 logger.info(f"Deleted S3 objects for project {project_id}: {s3_paths}")
         except Exception as exc:
             logger.warning(f"S3 cleanup failed for project {project_id} (non-fatal): {exc}")

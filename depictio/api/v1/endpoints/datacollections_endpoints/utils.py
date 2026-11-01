@@ -14,6 +14,7 @@ from depictio.api.v1.db import projects_collection, tokens_collection
 from depictio.api.v1.permissions import build_access_query, get_user_group_ids, has_permission
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 from depictio.models.s3_access import ProjectS3Config
+from depictio.models.s3_utils import delete_keys
 
 
 def generate_join_dict(workflow: dict, project: dict | None = None) -> dict[str, dict[str, dict]]:
@@ -434,7 +435,7 @@ async def _cleanup_s3_delta_table(data_collection_id: str) -> None:
         if "Contents" in response:
             objects_to_delete = [{"Key": obj["Key"]} for obj in response["Contents"]]
             if objects_to_delete:
-                s3_client.delete_objects(Bucket=bucket_name, Delete={"Objects": objects_to_delete})
+                delete_keys(s3_client, bucket_name, (o["Key"] for o in objects_to_delete))
                 logger.info(
                     f"Deleted {len(objects_to_delete)} Delta table objects for data collection {data_collection_id}"
                 )
