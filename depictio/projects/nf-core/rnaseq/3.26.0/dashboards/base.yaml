@@ -152,7 +152,7 @@ main_dashboard:
     surface: card
     body: |
       ### The run
-      - ![](icon:mdi:source-branch) **Pipeline** nf-core/rnaseq 3.26.0 on Nextflow {{param:Workflow.Nextflow}}
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/rnaseq 3.26.0
       - ![](icon:mdi:map-marker-outline) **Genome** {{param:genome}}
       - ![](icon:mdi:content-cut) **Aligner** {{param:aligner}}
       - ![](icon:mdi:scissors-cutting) **Trimmer** {{param:trimmer}}
@@ -333,15 +333,18 @@ main_dashboard:
         filter_expr: "col('rank') != 'Feature'"}
       region_share: {dc: rseqc_read_distribution, column: taxon, aggregation: top_share, weight: tag_count,
         filter_expr: "col('rank') != 'Feature'", format: percent}
+      top_gene: {dc: gene_summary, column: gene_name, aggregation: top, weight: log2fc_top_vs_rest,
+        filter_expr: "(col('log2fc_top_vs_rest') >= 2) & (col('max_tpm') >= 10)"}
     body: |
       - **{{n_biased}}** genes at 10 TPM or more are four-fold higher in one condition, most often {{top_cond}} – a ranking, not a test [Variable Genes](tab:Variable Genes)
       - **{{pc1}}%** of the variance lies on the first principal component – DESeq2 QC, all libraries [Sample Space](tab:Sample Space)
       - **{{n_genes}}** genes are expressed – at 1 TPM or more in at least one library; pick one to see its reads in the genome browser [Gene Explorer](tab:Gene Explorer)
       - **{{region_share}}** of the tags fall in {{region}} regions – RSeQC, the largest region class [Library QC](tab:Library QC)
+      - The most condition-specific gene is [{{top_gene}}](locus:{{top_gene}}): its coverage and reads in the genome browser
     section: Findings
     tag: rna-ov-findings
     index: ov-findings
-    layout: {x: 0, y: 0, w: 8, h: 2}
+    layout: {x: 0, y: 0, w: 8, h: 3}
   # One figure per tab, in the order of the rows above. The Sample Space tab is
   # stood for by its PCA: the distance matrix labels both axes with library ids
   # and renders blank at w4 (RULES section 8).
@@ -352,7 +355,7 @@ main_dashboard:
     caption: The most variable genes in view, one dot per library, a bar at each condition's mean.
     tag: rna-ov-hl-box
     index: ov-hl-box
-    layout: {x: 0, y: 2, w: 4, h: 5}
+    layout: {x: 0, y: 3, w: 4, h: 4}
   - component_type: highlight
     section: Findings
     source_tab: Sample Space
@@ -360,7 +363,7 @@ main_dashboard:
     caption: One point per library on the first two principal components of the counts; replicates of one condition should sit together.
     tag: rna-ov-hl-distances
     index: ov-hl-distances
-    layout: {x: 4, y: 2, w: 4, h: 5}
+    layout: {x: 4, y: 3, w: 4, h: 4}
   - component_type: highlight
     section: Findings
     source_tab: Gene Explorer
@@ -368,7 +371,7 @@ main_dashboard:
     caption: One point per gene, mean against spread, coloured by the condition it peaks in.
     tag: rna-ov-hl-plane
     index: ov-hl-plane
-    layout: {x: 0, y: 7, w: 4, h: 5}
+    layout: {x: 0, y: 7, w: 4, h: 4}
   - component_type: highlight
     section: Findings
     source_tab: Library QC
@@ -376,7 +379,35 @@ main_dashboard:
     caption: Where each library's tags landed on the annotation, by RSeQC region class.
     tag: rna-ov-hl-distribution
     index: ov-hl-distribution
-    layout: {x: 4, y: 7, w: 4, h: 5}
+    layout: {x: 4, y: 7, w: 4, h: 4}
+  # The genes on the genome, opened on the chromosome or region they cover: a
+  # click opens the Gene Explorer's browser on the gene, so the Overview needs no
+  # browser of its own. A --skip_stringtie run has no gene loci, so no dots.
+  - component_type: advanced_viz
+    workflow_tag: rnaseq
+    data_collection_tag: gene_summary
+    viz_kind: genome_view
+    config:
+      viz_kind: genome_view
+      chr_col: chrom
+      pos_col: start
+      end_col: end
+      score_col: log2fc_top_vs_rest
+      feature_col: gene_name
+      category_col: top_condition
+      mark: point
+      point_size: 9
+      score_title: log2 fold change, top condition vs the rest
+      region_filter_enabled: false
+      click_opens_browser: true
+      open_on_data: true
+    section: Findings
+    tag: rna-ov-genome
+    index: ov-genome
+    title: Condition-specific genes along the genome
+    link: tab:Gene Explorer
+    description: Each dot is an expressed gene, its height how far its top condition leads the others (log2) and its colour that condition. Click a dot to open the gene in the genome browser.
+    layout: {x: 0, y: 11, w: 8, h: 4}
   # Link-only tab tiles: each tile prints its tab's subtitle. A tab the run does
   # not have is left out, and a heading whose tabs are all missing is hidden.
   - component_type: text

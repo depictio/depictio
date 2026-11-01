@@ -148,7 +148,7 @@ main_dashboard:
     surface: card
     body: |
       ### The run
-      - ![](icon:mdi:source-branch) **Pipeline** nf-core/ampliseq 2.18.0 on Nextflow {{param:Workflow.Nextflow}}
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/ampliseq 2.18.0
       - ![](icon:mdi:dna) **Primers** {{param:FW_primer}} · {{param:RV_primer}}
       - ![](icon:mdi:tag-outline) **Taxonomy** {{param:dada_ref_taxonomy}}
       - ![](icon:mdi:filter-remove-outline) **Removed** {{param:exclude_taxa}}

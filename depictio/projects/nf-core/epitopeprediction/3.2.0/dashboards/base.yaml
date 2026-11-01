@@ -187,7 +187,7 @@ main_dashboard:
     surface: card
     body: |
       ### The run
-      - ![](icon:mdi:source-branch) **Pipeline** nf-core/epitopeprediction 3.2.0 on Nextflow {{param:Workflow.Nextflow}}
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/epitopeprediction 3.2.0
       - ![](icon:mdi:tools) **Tools** {{param:tools}}
       - ![](icon:mdi:ruler) **Class I lengths** {{param:min_peptide_length_classI}} to {{param:max_peptide_length_classI}}
       - ![](icon:mdi:ruler) **Class II lengths** {{param:min_peptide_length_classII}} to {{param:max_peptide_length_classII}}

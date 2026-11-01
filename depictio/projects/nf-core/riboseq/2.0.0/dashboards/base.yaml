@@ -183,7 +183,7 @@ main_dashboard:
       contrasts: {dc: anota2seq_regulation, column: contrast, aggregation: nunique, format: integer}
     body: |
       ### The run
-      - ![](icon:mdi:source-branch) **Pipeline** nf-core/riboseq 2.0.0 on Nextflow {{param:Workflow.Nextflow}}
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/riboseq 2.0.0
       - ![](icon:mdi:compare-horizontal) **Contrasts** {{contrasts}}
       - ![](icon:mdi:filter-remove-outline) **rRNA removal** {{param:ribo_removal_tool}}
       - ![](icon:mdi:dna) **Aligners** {{param:aligner}} · {{param:pseudo_aligner}}
@@ -363,15 +363,17 @@ main_dashboard:
         format: integer}
       n_new: {dc: orf_overlap, column: orf_id, aggregation: nunique, filter_expr: "(col('annotated_cds') == 0) & (col('ribotish') == 1) & (col('ribocode') == 1)",
         format: integer}
+      top_gene: {dc: orf_overlap, column: gene_name, aggregation: top, weight: support_score}
     body: |
       - **{{frame0}}%** of CDS P-sites sit in the annotated frame – median per Ribo-seq library [Ribo-seq QC](tab:Ribo-seq QC)
       - **{{te_high}}** of {{te_genes}} genes have a translational efficiency of 2 or more – pooled over the run [Efficiency](tab:Translational efficiency)
       - **{{n_transl}}** genes change translation beyond their mRNA level, of **{{n_regulated}}** regulated in any mode – anota2seq, contrasts in view [Regulation](tab:Translational regulation)
       - **{{n_new}}** ORFs outside the annotated CDS are called by both Ribo-TISH and RiboCode – the best supported; the genome browser opens on the top-ranked one [ORFs](tab:ORF discovery) · [Locus](tab:Locus)
+      - The best-supported gene is [{{top_gene}}](locus:{{top_gene}}): its footprints and P-sites in the genome browser
     section: Findings
     tag: rb-ov-findings
     index: ov-findings
-    layout: {x: 0, y: 0, w: 8, h: 2}
+    layout: {x: 0, y: 0, w: 8, h: 3}
   # One highlight per Translation or ORF tab, in the order of the rows above. The
   # Ribo-seq QC result (the phasing) is the first Findings row and the frame-0
   # card; its metagene profile stays on its own tab.
@@ -382,7 +384,7 @@ main_dashboard:
     caption: One point per gene; above the diagonal, more footprints than its mRNA level predicts.
     tag: rb-ov-hl-te-plane
     index: ov-hl-te-plane
-    layout: {x: 0, y: 2, w: 4, h: 4}
+    layout: {x: 0, y: 3, w: 4, h: 4}
   - component_type: highlight
     section: Findings
     source_tab: Translational regulation
@@ -390,7 +392,7 @@ main_dashboard:
     caption: One point per gene and contrast, coloured by mode; off the diagonal, translation changes on its own.
     tag: rb-ov-hl-fold-change
     index: ov-hl-fold-change
-    layout: {x: 4, y: 2, w: 4, h: 4}
+    layout: {x: 4, y: 3, w: 4, h: 4}
   - component_type: highlight
     section: Findings
     source_tab: ORF discovery
@@ -398,7 +400,35 @@ main_dashboard:
     caption: ORFs by the callers that report them, split into the annotated CDS and new ORFs; compare the share of new ORFs when both callers agree with each caller alone.
     tag: rb-ov-hl-orf-upset
     index: ov-hl-orf-upset
-    layout: {x: 0, y: 6, w: 8, h: 4}
+    layout: {x: 0, y: 7, w: 8, h: 4}
+  # The ORFs on the genome, opened on the region they cover: a click opens the
+  # Locus tab's browser on the gene, so the Overview needs no browser of its own.
+  - component_type: advanced_viz
+    workflow_tag: riboseq
+    data_collection_tag: orf_overlap
+    viz_kind: genome_view
+    config:
+      viz_kind: genome_view
+      chr_col: chrom
+      pos_col: orf_start
+      end_col: orf_end
+      score_col: aa_length
+      feature_col: gene_name
+      category_col: orf_class
+      mark: point
+      point_size: 9
+      score_title: Protein length (aa)
+      assembly: '{GENOME}'
+      region_filter_enabled: false
+      click_opens_browser: true
+      open_on_data: true
+    section: Findings
+    tag: rb-ov-genome
+    index: ov-genome
+    title: ORFs along the genome
+    link: tab:Locus
+    description: Each dot is an ORF, its height the protein length it encodes and its colour the ORF class; short upstream ORFs sit low. Click a dot to open the gene in the genome browser.
+    layout: {x: 0, y: 11, w: 8, h: 4}
   # Link-only tab tiles: each tile prints its tab's subtitle, the question the
   # tab answers. A tab the run does not have is left out, and a heading whose
   # tabs are all missing is hidden.

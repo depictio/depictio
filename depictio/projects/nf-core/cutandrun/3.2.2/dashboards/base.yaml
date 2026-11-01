@@ -173,7 +173,7 @@ main_dashboard:
       callers: {dc: caller_agreement, column: caller, aggregation: nunique, format: integer}
     body: |
       ### The run
-      - ![](icon:mdi:source-branch) **Pipeline** nf-core/cutandrun 3.2.2 on Nextflow {{param:Workflow.Nextflow}}
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/cutandrun 3.2.2
       - ![](icon:mdi:chart-bell-curve) **Peak callers** {{callers}} against the IgG control
       - ![](icon:mdi:tune) [All parameters and tool versions](params:)
     tag: cr-ov-run

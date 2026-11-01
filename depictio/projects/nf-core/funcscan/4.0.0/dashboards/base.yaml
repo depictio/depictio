@@ -181,7 +181,7 @@ main_dashboard:
       screens: {dc: screening_summary, column: screens, aggregation: max, format: integer}
     body: |
       ### The run
-      - ![](icon:mdi:source-branch) **Pipeline** nf-core/funcscan 4.0.0 on Nextflow {{param:Workflow.Nextflow}}
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/funcscan 4.0.0
       - ![](icon:mdi:flask-outline) **Assemblies** {{samples}}
       - ![](icon:mdi:magnify) **Screens** {{screens}} of 4
       - ![](icon:mdi:dna) **Gene caller** {{param:annotation_tool}}

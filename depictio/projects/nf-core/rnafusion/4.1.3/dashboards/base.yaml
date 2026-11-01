@@ -182,7 +182,7 @@ main_dashboard:
       samples: {dc: samplesheet, column: sample, aggregation: nunique, format: integer}
     body: |
       ### The run
-      - ![](icon:mdi:source-branch) **Pipeline** nf-core/rnafusion 4.1.3 on Nextflow {{param:Workflow.Nextflow}}
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/rnafusion 4.1.3
       - ![](icon:mdi:flask-outline) **Samples** {{samples}}
       - ![](icon:mdi:dna) **Genome** {{param:genome}} · GENCODE {{param:genome_gencode_version}}
       - ![](icon:mdi:tools) **Callers** {{param:tools}}
@@ -347,15 +347,17 @@ main_dashboard:
       n_cut: {dc: fusion_protein_domains, column: domain, aggregation: count, filter_expr: "col('domain').str.ends_with('-PARTIAL')",
         format: integer}
       n_dom: {dc: fusion_protein_domains, column: domain, aggregation: count, format: integer}
+      top_gene: {dc: fusion_consensus, column: gene_5p, aggregation: top, weight: fii}
     body: |
       - **{{n_multi}}** of {{n_fusions}} fusions are found by two callers or more – caller agreement [Agreement](tab:Caller Agreement)
       - **{{n_trans}}** Arriba calls join two chromosomes – translocations; click one to read its reads in the genome browser [Breakpoints](tab:Breakpoints)
       - **{{n_inframe}}** of {{n_valid}} validated fusions keep the reading frame – FusionInspector [Validation](tab:Validation)
       - **{{n_cut}}** of {{n_dom}} Pfam domain hits are cut by the breakpoint – partner domains [Domains](tab:Protein Domains)
+      - The best-supported 5' partner is [{{top_gene}}](locus:{{top_gene}}): the reads at its breakpoints in the genome browser
     section: Findings
     tag: rf-ov-findings
     index: ov-findings
-    layout: {x: 0, y: 0, w: 8, h: 2}
+    layout: {x: 0, y: 0, w: 8, h: 3}
   # One highlight per analysis tab, in the order of the rows above. The import
   # drops a highlight whose source is gone and re-packs the grid.
   - component_type: highlight
@@ -365,7 +367,7 @@ main_dashboard:
     caption: Each bar counts the fusions found by exactly that combination of callers; the darker, the more callers agree.
     tag: rf-ov-hl-upset
     index: ov-hl-upset
-    layout: {x: 0, y: 2, w: 4, h: 5}
+    layout: {x: 0, y: 3, w: 4, h: 5}
   - component_type: highlight
     section: Findings
     source_tab: Breakpoints
@@ -373,7 +375,7 @@ main_dashboard:
     caption: Each chord joins the two breakpoints of an Arriba call, coloured by event class.
     tag: rf-ov-hl-chord
     index: ov-hl-chord
-    layout: {x: 4, y: 2, w: 4, h: 5}
+    layout: {x: 4, y: 3, w: 4, h: 5}
   - component_type: highlight
     section: Findings
     source_tab: Validation
@@ -381,7 +383,7 @@ main_dashboard:
     caption: One bar per validated breakpoint, the balance of its 5' and 3' allelic ratios; a bar inside the grey band is supported evenly on both sides.
     tag: rf-ov-hl-far
     index: ov-hl-far
-    layout: {x: 0, y: 7, w: 4, h: 5}
+    layout: {x: 0, y: 8, w: 4, h: 5}
   - component_type: highlight
     section: Findings
     source_tab: Protein Domains
@@ -389,7 +391,35 @@ main_dashboard:
     caption: The fusions with the most Pfam domains, each drawn as its two partners end to end.
     tag: rf-ov-hl-structure
     index: ov-hl-structure
-    layout: {x: 4, y: 7, w: 4, h: 5}
+    layout: {x: 4, y: 8, w: 4, h: 5}
+  # The Arriba breakpoints on the genome, opened on the chromosome or region they
+  # cover: a click opens the Breakpoints tab's browser on the locus, so the
+  # Overview needs no browser of its own.
+  - component_type: advanced_viz
+    workflow_tag: rnafusion
+    data_collection_tag: arriba_fusion_links
+    viz_kind: genome_view
+    config:
+      viz_kind: genome_view
+      chr_col: chrom_a
+      pos_col: pos_a
+      score_col: weight
+      feature_col: label
+      category_col: category
+      mark: point
+      point_size: 9
+      score_title: Supporting reads
+      assembly: '{GENOME}'
+      region_filter_enabled: false
+      click_opens_browser: true
+      open_on_data: true
+    section: Findings
+    tag: rf-ov-genome
+    index: ov-genome
+    title: Breakpoints along the genome
+    link: tab:Breakpoints
+    description: Each dot is the 5' breakpoint of an Arriba call, its height the reads that support it and its colour the event class. Click a dot to open the locus in the genome browser.
+    layout: {x: 0, y: 13, w: 8, h: 4}
   # Link-only tab tiles: each tile prints its tab's subtitle, the question the
   # tab answers. A tab the run does not have is left out, and a heading whose
   # tabs are all missing is hidden.

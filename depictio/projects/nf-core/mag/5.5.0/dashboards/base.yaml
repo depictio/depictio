@@ -202,7 +202,7 @@ main_dashboard:
       bins: {dc: bin_summary, column: bin_id, aggregation: count, format: integer}
     body: |
       ### The run
-      - ![](icon:mdi:source-branch) **Pipeline** nf-core/mag 5.5.0 on Nextflow {{param:Workflow.Nextflow}}
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/mag 5.5.0
       - ![](icon:mdi:dna) **Assemblies** {{assemblies}}
       - ![](icon:mdi:bacteria-outline) **Bins** {{bins}}
       - ![](icon:mdi:ruler) **Shortest binned contig** {{param:min_contig_size}} bp

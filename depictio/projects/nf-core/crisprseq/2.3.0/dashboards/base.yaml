@@ -193,7 +193,7 @@ main_dashboard:
     surface: card
     body: |
       ### The run
-      - ![](icon:mdi:source-branch) **Pipeline** nf-core/crisprseq 2.3.0 on Nextflow {{param:Workflow.Nextflow}}
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/crisprseq 2.3.0
       - ![](icon:mdi:target) **Analysis** {{param:analysis}}
       - ![](icon:mdi:sort-variant) **Aligner** {{param:aligner}}
       - ![](icon:mdi:link-variant) **UMI clustering** {{param:umi_clustering}}

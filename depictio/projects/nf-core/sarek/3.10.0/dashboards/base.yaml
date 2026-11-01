@@ -281,7 +281,7 @@ main_dashboard:
       pairs: {dc: pairs, column: pair_id, aggregation: count, format: integer}
     body: |
       ### The run
-      - ![](icon:mdi:source-branch) **Pipeline** nf-core/sarek 3.10.0 on Nextflow {{param:Workflow.Nextflow}}
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/sarek 3.10.0
       - ![](icon:mdi:calendar-clock) **Run date** {{param:trace_report_suffix}}
       - ![](icon:mdi:map-marker-outline) **Reference** {{param:genome}}
       - ![](icon:mdi:content-cut) **Aligner** {{param:aligner}}

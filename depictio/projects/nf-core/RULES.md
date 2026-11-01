@@ -129,7 +129,8 @@ main_dashboard:
     so the `section:` link has a target. If the Overview shows its own samples table, link
     that section instead and keep the exclusion.
 - **The run** opens with the pipeline and its version, written out (`nf-core/rnaseq 3.26.0`):
-  the `Workflow.nf-core/<pipeline>` key holds a `/` and cannot be a `{{param:}}`. A line that
+  the `Workflow.nf-core/<pipeline>` key holds a `/` and cannot be a `{{param:}}`. The
+  Nextflow version stays out of the card (it wrapped the line); the run parameters list it. A line that
   prints only parameters names ones every run writes (`genome`, `aligner`, `input`); a tool
   version (`{{param:SALMON_QUANT.salmon}}`) shares its line with a count from the collection
   that tool feeds, so the line goes with its data instead of printing "–".

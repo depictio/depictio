@@ -167,7 +167,7 @@ main_dashboard:
     surface: card
     body: |
       ### The run
-      - ![](icon:mdi:source-branch) **Pipeline** nf-core/rnasplice 1.0.4 on Nextflow {{param:Workflow.Nextflow}}
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/rnasplice 1.0.4
       - ![](icon:mdi:map-marker-outline) **Genome** {{param:genome}}
       - ![](icon:mdi:content-cut) **Aligner** {{param:aligner}}
     tag: rs-ov-run
@@ -338,15 +338,17 @@ main_dashboard:
       dtu_n: {dc: dexseq_dtu, column: gene_id, aggregation: nunique, filter_expr: "col('gene_significant')", format: integer}
       top_event: {dc: rmats_events, column: event_type, aggregation: top, filter_expr: "col('significant')"}
       ev_share: {dc: rmats_events, column: event_type, aggregation: top_share, filter_expr: "col('significant')", format: percent}
+      top_gene: {dc: rmats_events, column: gene_name, aggregation: top, weight: abs_dpsi, filter_expr: "col('significant')"}
     body: |
       - **{{n_agree}}** genes are called by two tools or more, of {{n_called}} called by any – over the contrasts in view [Tool Agreement](tab:Tool Agreement)
       - **{{dex_n}}** genes change exon usage – DEXSeq, gene q-value under the cut-off [Exon Usage](tab:Exon Usage)
       - **{{dtu_n}}** genes switch transcript usage – DEXSeq DTU, gene q-value under the cut-off [Transcript Usage](tab:Transcript Usage)
       - **{{ev_share}}** of the rMATS calls are {{top_event}} events – the most frequent type [Splicing Events](tab:Splicing Events)
+      - The gene with the largest called inclusion changes is [{{top_gene}}](locus:{{top_gene}}): its coverage and junction reads in the genome browser
     section: Findings
     tag: rs-ov-findings
     index: ov-findings
-    layout: {x: 0, y: 0, w: 8, h: 2}
+    layout: {x: 0, y: 0, w: 8, h: 3}
   # One figure per analysis tab, in the order of the rows above, two even
   # halves per row (a volcano reads poorly at a third of the row). The two
   # volcanoes answer different questions, so their titles name the level:
@@ -360,7 +362,7 @@ main_dashboard:
     caption: Genes each tool calls, darker where more tools agree; the lightest segment is the calls a tool makes alone.
     tag: rs-ov-hl-tools
     index: ov-hl-tools
-    layout: {x: 0, y: 2, w: 4, h: 5}
+    layout: {x: 0, y: 3, w: 4, h: 4}
   - component_type: highlight
     section: Findings
     source_tab: Exon Usage
@@ -369,7 +371,7 @@ main_dashboard:
     caption: One point per gene, at its most significant exonic bin; right of the line, the bin gains usage in the treatment.
     tag: rs-ov-hl-dexseq
     index: ov-hl-dexseq
-    layout: {x: 4, y: 2, w: 4, h: 5}
+    layout: {x: 4, y: 3, w: 4, h: 4}
   - component_type: highlight
     section: Findings
     source_tab: Transcript Usage
@@ -378,7 +380,7 @@ main_dashboard:
     caption: One point per transcript; right of the line, the transcript takes a larger share of its gene in the treatment.
     tag: rs-ov-hl-dtu
     index: ov-hl-dtu
-    layout: {x: 0, y: 7, w: 4, h: 5}
+    layout: {x: 0, y: 7, w: 4, h: 4}
   - component_type: highlight
     section: Findings
     source_tab: Splicing Events
@@ -387,7 +389,36 @@ main_dashboard:
     caption: Called rMATS events per type, split by whether inclusion rises or falls in the treatment.
     tag: rs-ov-hl-event-types
     index: ov-hl-event-types
-    layout: {x: 4, y: 7, w: 4, h: 5}
+    layout: {x: 4, y: 7, w: 4, h: 4}
+  # The rMATS events on the genome, opened on the chromosome or region they cover:
+  # a click opens the Splicing Events tab's browser on the event, so the Overview
+  # needs no browser of its own.
+  - component_type: advanced_viz
+    workflow_tag: rnasplice
+    data_collection_tag: rmats_events
+    viz_kind: genome_view
+    config:
+      viz_kind: genome_view
+      chr_col: chrom
+      pos_col: start
+      end_col: end
+      score_col: abs_dpsi
+      feature_col: gene_name
+      category_col: direction
+      mark: point
+      point_size: 9
+      score_title: Absolute PSI change
+      assembly: '{GENOME}'
+      region_filter_enabled: false
+      click_opens_browser: true
+      open_on_data: true
+    section: Findings
+    tag: rs-ov-genome
+    index: ov-genome
+    title: Splicing events along the genome
+    link: tab:Splicing Events
+    description: Each dot is an rMATS event, its height the absolute PSI change between treatment and control and its colour whether inclusion rises, falls or is not called. Click a dot to open the gene in the genome browser.
+    layout: {x: 0, y: 11, w: 8, h: 4}
   # Link-only tab tiles: each tile prints its tab's subtitle. A tab the run does
   # not have is left out, and a heading whose tabs are all missing is hidden.
   - component_type: text

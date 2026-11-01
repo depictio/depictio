@@ -195,7 +195,7 @@ main_dashboard:
       samples: {dc: summary_metrics, column: sample, aggregation: nunique, format: integer}
     body: |
       ### The run
-      - ![](icon:mdi:source-branch) **Pipeline** nf-core/viralrecon 3.0.0 on Nextflow {{param:Workflow.Nextflow}}
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/viralrecon 3.0.0
       - ![](icon:mdi:flask-outline) **Samples** {{samples}}
       - ![](icon:mdi:chip) **Platform** {{param:platform}} · {{param:protocol}}
       - ![](icon:mdi:virus-outline) **Reference** {{param:genome}}
@@ -379,15 +379,17 @@ main_dashboard:
       top: {dc: pangolin_lineages, column: lineage, aggregation: top, filter_expr: "col('lineage') != 'Unassigned'"}
       top_share: {dc: pangolin_lineages, column: lineage, aggregation: top_share, filter_expr: "col('lineage') != 'Unassigned'",
         format: percent}
+      top_orf: {dc: variants_long, column: GENE, aggregation: top, filter_expr: "col('GENE').str.starts_with('ORF')"}
     body: |
       - **{{n_good}}** of {{n_cons}} consensus genomes rated good by Nextclade – the rest are mediocre or bad [Sample QC](tab:Sample QC)
       - **{{n_low}}** of {{n_amp}} amplicons fall under 10x in at least one sample – that stretch of its consensus is masked [Coverage](tab:Coverage & Depth)
       - **{{n_mis}}** of {{n_calls}} variant calls change an amino acid – missense, by snpEff [Variants](tab:Variants)
       - **{{top_share}}** of the assigned samples are {{top}} – the most common Pangolin lineage [Lineages](tab:Lineage & Clustering)
+      - The open reading frame with the most calls is [{{top_orf}}](locus:{{top_orf}}): its variants and reads in the genome browser
     section: Findings
     tag: vr-ov-findings
     index: ov-findings
-    layout: {x: 0, y: 0, w: 8, h: 2}
+    layout: {x: 0, y: 0, w: 8, h: 3}
   # Four figures, one per question of the rows above: coverage, consensus quality,
   # variants by position and by gene. The tiles of a row share a stored height.
   - component_type: highlight
@@ -398,7 +400,7 @@ main_dashboard:
     hide_legend: true
     tag: vr-ov-hl-depth-breadth
     index: ov-hl-depth-breadth
-    layout: {x: 0, y: 2, w: 4, h: 5}
+    layout: {x: 0, y: 3, w: 4, h: 5}
   # Typing's figure: the consensus quality the lineages were called from. Beside
   # the depth-breadth scatter it shows what coverage alone does not (a sample can
   # pass there and still be rated bad by Nextclade).
@@ -410,17 +412,7 @@ main_dashboard:
     hide_legend: true
     tag: vr-ov-hl-qc-score
     index: ov-hl-qc-score
-    layout: {x: 4, y: 2, w: 4, h: 5}
-  # The navigator names no point: mutation labels would pile up over the dots.
-  - component_type: highlight
-    section: Findings
-    source_tab: Variants
-    source_component: var-navigator
-    caption: One dot per call along the genome, as high as its allele frequency, coloured by effect; above the line, it enters the consensus.
-    hide_legend: true
-    tag: vr-ov-hl-manhattan
-    index: ov-hl-manhattan
-    layout: {x: 0, y: 7, w: 4, h: 5}
+    layout: {x: 4, y: 3, w: 4, h: 5}
   - component_type: highlight
     section: Findings
     source_tab: Variants
@@ -428,7 +420,35 @@ main_dashboard:
     caption: Calls per gene, the busiest first, by functional class; a gene dense in calls is the one to open in the Gene tab.
     tag: vr-ov-hl-genes
     index: ov-hl-genes
-    layout: {x: 4, y: 7, w: 4, h: 5}
+    layout: {x: 4, y: 8, w: 4, h: 5}
+  # Every call on the genome, opened on the region it covers: a click opens the
+  # Variants tab's browser on the variant, so the Overview needs no browser of its own.
+  - component_type: advanced_viz
+    workflow_tag: viralrecon
+    data_collection_tag: variants_long
+    viz_kind: genome_view
+    config:
+      viz_kind: genome_view
+      chr_col: CHROM
+      pos_col: POS
+      score_col: AF
+      feature_col: mutation_label
+      category_col: EFFECT
+      mark: point
+      point_size: 9
+      score_title: Allele frequency
+      score_threshold: 0.75
+      hover_cols: [sample, GENE, AA, EFFECT, DP]
+      region_filter_enabled: false
+      click_opens_browser: true
+      open_on_data: true
+    section: Findings
+    tag: vr-ov-genome
+    index: ov-genome
+    title: Variant calls along the genome
+    link: tab:Variants
+    description: Each dot is a variant call of a sample, its height the allele frequency and its colour the snpEff effect. Click a dot to open the variant in the genome browser.
+    layout: {x: 0, y: 8, w: 4, h: 5}
   # Link-only tab tiles: each tile prints its tab's subtitle, the question the
   # tab answers. A tab the run does not have is left out, and a heading whose
   # tabs are all missing is hidden.

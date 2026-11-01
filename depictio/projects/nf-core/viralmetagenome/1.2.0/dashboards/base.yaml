@@ -193,7 +193,7 @@ main_dashboard:
     surface: card
     body: |
       ### The run
-      - ![](icon:mdi:source-branch) **Pipeline** nf-core/viralmetagenome 1.2.0 on Nextflow {{param:Workflow.Nextflow}}
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/viralmetagenome 1.2.0
       - ![](icon:mdi:filter-variant) **Host removal** {{param:host_k2_db}}
       - ![](icon:mdi:content-cut) **Trimming** {{param:trim_tool}}
       - ![](icon:mdi:puzzle-outline) **Assemblers** {{param:assemblers}}

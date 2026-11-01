@@ -218,7 +218,7 @@ main_dashboard:
     surface: card
     body: |
       ### The run
-      - ![](icon:mdi:source-branch) **Pipeline** nf-core/raredisease 3.1.2 on Nextflow {{param:Workflow.Nextflow}}
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/raredisease 3.1.2
       - ![](icon:mdi:dna) **Reference** {{param:genome}}, {{param:analysis_type}}
       - ![](icon:mdi:align-horizontal-left) **Aligner** {{param:aligner}}
       - ![](icon:mdi:magnify-scan) **Calling** {{param:variant_caller}}
@@ -380,6 +380,7 @@ main_dashboard:
     surface: card
     values:
       top_label: {dc: ranked_variants, column: call_label, aggregation: top, weight: rank_score}
+      top_gene: {dc: ranked_variants, column: gene, aggregation: top, weight: rank_score}
       top_score: {dc: ranked_variants, column: rank_score, aggregation: max, format: 'decimals:0'}
       score_max: {dc: ranked_variants, column: rank_score_max, aggregation: max, format: 'decimals:0'}
       n_fit: {dc: ranked_variants, column: variant_key, aggregation: count, filter_expr: col('model_class')
@@ -393,6 +394,7 @@ main_dashboard:
       tstv: {dc: samples, column: ts_tv, aggregation: median, format: 'decimals:2'}
     body: |
       - **{{top_label}}** leads the ranking with a rank score of {{top_score}} out of {{score_max}} – the table below lists the next ones [Ranked](tab:Ranked)
+      - The best-ranked gene is [{{top_gene}}](locus:{{top_gene}}): its variants and the family's reads in the genome browser
       - **{{n_fit}}** ranked variants fit an inheritance model – the clinical set holds {{n_clin}} [Ranked](tab:Ranked)
       - **{{ibs0}}%** of the shared sites are opposite homozygous between parent and child at the median – a low value fits the pedigree [Family](tab:Family)
       - **{{n_pass}}** PASS calls per sample at the median – Ts/Tv {{tstv}} (about 2.0 to 2.1 is expected for a genome, 2.8 to 3.0 for an exome), {{cov}}x median mean coverage [Callset](tab:Callset)
@@ -407,7 +409,7 @@ main_dashboard:
     caption: The genotype each individual has at the 20 best-scoring variants, coloured by zygosity; grey is homozygous reference.
     tag: rd-ov-hl-genotypes
     index: ov-hl-genotypes
-    layout: {x: 4, y: 7, w: 4, h: 5}
+    layout: {x: 4, y: 6, w: 4, h: 4}
   - component_type: highlight
     section: Findings
     source_tab: Family
@@ -415,7 +417,37 @@ main_dashboard:
     caption: The family as the sample sheet states it; squares are males, circles females, filled marks affected.
     tag: rd-ov-hl-family
     index: ov-hl-family
-    layout: {x: 0, y: 7, w: 4, h: 5}
+    layout: {x: 0, y: 6, w: 4, h: 4}
+  # The ranked variants along the genome, opened on the position they sit at: a
+  # click opens the Locus tab's browser on the variant, so the Overview needs no
+  # browser of its own.
+  - component_type: advanced_viz
+    workflow_tag: raredisease
+    data_collection_tag: ranked_variants
+    viz_kind: genome_view
+    config:
+      viz_kind: genome_view
+      chr_col: chrom
+      pos_col: pos
+      score_col: rank_score
+      feature_col: gene
+      category_col: model_class
+      mark: point
+      point_size: 9
+      top_stars: 3
+      hover_cols: [ref, alt, consequence, hgvs_p, gnomad_af, cadd, carriers]
+      score_title: Rank score
+      assembly: '{GENOME}'
+      region_filter_enabled: false
+      click_opens_browser: true
+      open_on_data: true
+    section: Findings
+    tag: rd-ov-genome
+    index: ov-genome
+    title: Ranked variants along the genome
+    link: tab:Locus
+    description: Each dot is a ranked variant, its height the rank score and its colour the inheritance model it fits; stars mark the three best. Click a dot to open the variant in the genome browser.
+    layout: {x: 0, y: 10, w: 8, h: 4}
   - component_type: advanced_viz
     workflow_tag: raredisease
     data_collection_tag: ranked_variants
@@ -471,7 +503,7 @@ main_dashboard:
       the family's pedigree allows (GENMOD scores are signed, a negative one is evidence against the variant),
       and the number reads score / highest possible. Hover a row for its annotation; the Ranked tab holds the
       full list, why each one ranks and the record of a picked variant.
-    layout: {x: 0, y: 2, w: 8, h: 5}
+    layout: {x: 0, y: 2, w: 8, h: 4}
   - component_type: text
     body: |
       ### Data & QC

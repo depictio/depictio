@@ -176,7 +176,7 @@ main_dashboard:
       n_prot: {dc: proteinannotator_proteins, column: entity, aggregation: nunique, format: integer}
     body: |
       ### The run
-      - ![](icon:mdi:source-branch) **Pipeline** nf-core/proteinannotator 1.1.0 on Nextflow {{param:Workflow.Nextflow}}
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/proteinannotator 1.1.0
       - ![](icon:mdi:shape-outline) **Proteins** {{n_prot}}
       - ![](icon:mdi:ruler) **Length** {{param:min_seq_length}} to {{param:max_seq_length}}
       - ![](icon:mdi:check-decagram) **E-value** {{param:hmmsearch_evalue_cutoff}}

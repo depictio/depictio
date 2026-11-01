@@ -223,7 +223,7 @@ main_dashboard:
     surface: card
     body: |
       ### The run
-      - ![](icon:mdi:source-branch) **Pipeline** nf-core/oncoanalyser 3.0.0 on Nextflow {{param:Workflow.Nextflow}}
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/oncoanalyser 3.0.0
       - ![](icon:mdi:cog-outline) **Mode** {{param:mode}}
       - ![](icon:mdi:dna) **Genome** {{param:genome}}
       - ![](icon:mdi:gauge) **Purity fit** {{param:purity_estimate_mode}}
@@ -398,11 +398,13 @@ main_dashboard:
       ev_share: {dc: linx_svs, column: resolved_type, aggregation: top_share, format: percent}
       n_calls: {dc: purple_somatic_variants, column: variant_key, aggregation: count, format: integer}
       tmb: {dc: purple_purity, column: tmb_per_mb, aggregation: median, format: decimals:1}
+      top_gene: {dc: purple_somatic_variants, column: gene, aggregation: top, weight: purple_af, filter_expr: "col('reported') == True"}
     body: |
       - **{{sig_share}}** of SNVs go to {{top_sig}} – the leading COSMIC signature [Tumor profile](tab:Tumor profile)
       - **{{n_loss}}** genes lost and **{{n_gain}}** gained – whole or partial, at PURPLE's cut-offs [Copy number](tab:Copy number)
       - **{{n_sv}}** structural variants, **{{ev_share}}** of them {{top_event}} – the commonest resolved event [Structural variants](tab:Structural variants)
       - **{{n_calls}}** somatic small variants at **{{tmb}}** per megabase – PASS calls of the PURPLE VCF [Small variants](tab:Small variants)
+      - The best-supported driver call is in [{{top_gene}}](locus:{{top_gene}}): its variants and the tumor and normal reads in the genome browser
     section: Findings
     tag: oa-ov-findings
     index: ov-findings
@@ -417,7 +419,7 @@ main_dashboard:
     hide_legend: true
     tag: oa-ov-hl-sig
     index: ov-hl-sig
-    layout: {x: 0, y: 2, w: 4, h: 5}
+    layout: {x: 0, y: 2, w: 4, h: 4}
   - component_type: highlight
     section: Findings
     source_tab: Copy number
@@ -426,7 +428,7 @@ main_dashboard:
     hide_legend: true
     tag: oa-ov-hl-cn
     index: ov-hl-cn
-    layout: {x: 4, y: 2, w: 4, h: 5}
+    layout: {x: 4, y: 2, w: 4, h: 4}
   - component_type: highlight
     section: Findings
     source_tab: Structural variants
@@ -435,7 +437,7 @@ main_dashboard:
     hide_legend: true
     tag: oa-ov-hl-sv
     index: ov-hl-sv
-    layout: {x: 0, y: 7, w: 4, h: 5}
+    layout: {x: 0, y: 6, w: 4, h: 4}
   - component_type: highlight
     section: Findings
     source_tab: Small variants
@@ -444,7 +446,35 @@ main_dashboard:
     hide_legend: true
     tag: oa-ov-hl-af
     index: ov-hl-af
-    layout: {x: 4, y: 7, w: 4, h: 5}
+    layout: {x: 4, y: 6, w: 4, h: 4}
+  # The somatic calls along the genome, opened on the position they sit at: a
+  # click opens the Small variants tab's browser on the call, so the Overview
+  # needs no browser of its own.
+  - component_type: advanced_viz
+    workflow_tag: oncoanalyser
+    data_collection_tag: purple_somatic_variants
+    viz_kind: genome_view
+    config:
+      viz_kind: genome_view
+      chr_col: chrom
+      pos_col: pos
+      score_col: purple_af
+      feature_col: gene
+      category_col: coding_effect
+      mark: point
+      point_size: 9
+      score_title: Purity-adjusted allele frequency
+      assembly: '{GENOME}'
+      region_filter_enabled: false
+      click_opens_browser: true
+      open_on_data: true
+    section: Findings
+    tag: oa-ov-genome
+    index: ov-genome
+    title: Somatic calls along the genome
+    link: tab:Small variants
+    description: Each dot is a somatic call at its position, its height the purity-adjusted allele frequency and its colour its coding effect. Click a dot to open the call in the genome browser.
+    layout: {x: 0, y: 10, w: 8, h: 4}
   # Link-only tab tiles: each tile prints its tab's subtitle, the question the
   # tab answers. A tab the run does not have is left out.
   - component_type: text

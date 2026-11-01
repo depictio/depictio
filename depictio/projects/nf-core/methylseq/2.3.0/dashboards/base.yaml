@@ -161,7 +161,7 @@ main_dashboard:
       cpg_calls: {dc: bismark_summary_report, column: cpgs_called, aggregation: sum, format: si}
     body: |
       ### The run
-      - ![](icon:mdi:source-branch) **Pipeline** nf-core/methylseq 2.3.0 on Nextflow {{param:Workflow.Nextflow}}
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/methylseq 2.3.0
       - ![](icon:mdi:counter) **Read pairs** {{pairs}}
       - ![](icon:mdi:check-decagram) **Aligned** {{aligned}}
       - ![](icon:mdi:chart-bell-curve) **CpG calls** {{cpg_calls}}

@@ -173,7 +173,7 @@ main_dashboard:
       asms: {dc: assemblies, column: assembly_id, aggregation: nunique, format: integer}
     body: |
       ### The run
-      - ![](icon:mdi:source-branch) **Pipeline** nf-core/genomeassembler 2.0.0 on Nextflow {{param:Workflow.Nextflow}}
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/genomeassembler 2.0.0
       - ![](icon:mdi:family-tree) **Assemblies assessed** {{asms}}
       - ![](icon:mdi:shield-check-outline) **BUSCO lineage** {{param:busco_lineage}}
       - ![](icon:mdi:dna) **K-mer size** {{param:meryl_k}}

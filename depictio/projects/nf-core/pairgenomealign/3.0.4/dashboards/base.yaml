@@ -137,7 +137,7 @@ main_dashboard:
       genomes: {dc: genomes, column: genome, aggregation: nunique, format: integer}
     body: |
       ### The run
-      - ![](icon:mdi:source-branch) **Pipeline** nf-core/pairgenomealign 3.0.4 on Nextflow {{param:Workflow.Nextflow}}
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/pairgenomealign 3.0.4
       - ![](icon:mdi:dna) **Genomes** {{genomes}} aligned to {{param:targetName}}
       - ![](icon:mdi:magnify-scan) **Seeds** {{param:seed}}, soft-masked by {{param:softmask}}
       - ![](icon:mdi:swap-horizontal) **Strand** {{param:strand}}

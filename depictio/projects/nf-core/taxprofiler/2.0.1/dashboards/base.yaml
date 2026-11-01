@@ -200,7 +200,7 @@ main_dashboard:
       databases: {dc: taxpasta_sample_summary, column: database, aggregation: nunique, format: integer}
     body: |
       ### The run
-      - ![](icon:mdi:source-branch) **Pipeline** nf-core/taxprofiler 2.0.1 on Nextflow {{param:Workflow.Nextflow}}
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/taxprofiler 2.0.1
       - ![](icon:mdi:bacteria-outline) **Classifiers** {{classifiers}}
       - ![](icon:mdi:database-outline) **Databases** {{databases}}
       - ![](icon:mdi:content-cut) **Read QC** {{param:shortread_qc_tool}} · {{param:longread_filter_tool}}

@@ -281,7 +281,7 @@ main_dashboard:
       pairs: {dc: pairs, column: pair_id, aggregation: count, format: integer}
     body: |
       ### The run
-      - ![](icon:mdi:source-branch) **Pipeline** nf-core/sarek 3.11.0 on Nextflow {{param:Workflow.Nextflow}}
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/sarek 3.11.0
       - ![](icon:mdi:calendar-clock) **Run date** {{param:trace_report_suffix}}
       - ![](icon:mdi:map-marker-outline) **Reference** {{param:genome}}
       - ![](icon:mdi:content-cut) **Aligner** {{param:aligner}}
@@ -471,14 +471,16 @@ main_dashboard:
       burden: {dc: somatic_burden, column: per_mb, aggregation: median, filter_expr: "col('basis_kind') == 'consensus'", format: 'decimals:1'}
       n_loh: {dc: germline_het_sites, column: variant_key, aggregation: count, filter_expr: "col('allele_state') == 'LOH-like'", format: integer}
       n_het: {dc: germline_het_sites, column: variant_key, aggregation: count, format: integer}
+      top_gene: {dc: somatic_variants, column: gene, aggregation: top, weight: priority, filter_expr: "col('impact').is_in(['HIGH', 'MODERATE']) & (col('gene') != '')"}
     body: |
-      - **{{depth}}x** median depth over the intervals – one value per sample [Coverage](tab:Coverage)
+      - **{{depth}}x median depth over the intervals – one value per sample [Coverage](tab:Coverage)
       - **{{tstv}}** median Ts/Tv of the callsets with SNPs – transitions over transversions [Quality](tab:Call quality)
       - **{{shared}}%** of a sample's PASS calls are made by two callers or more – agreement is not truth [Concordance](tab:Caller concordance)
       - **{{n_high}}** HIGH-impact calls on {{n_hgenes}} genes – SnpEff's most severe class [Consequences](tab:Consequences)
       - **{{n_cons}}** somatic variants kept by two callers or more – the set to quote, a variant counted once [Somatic calls](tab:Somatic calls)
       - **{{burden}}** somatic variants per megabase of the capture target – about 10 is the usual line for a high burden [Somatic calls](tab:Somatic calls)
       - **{{n_loh}}** of the normal's {{n_het}} heterozygous sites read as one parental allele only in the tumour – loss of heterozygosity [Germline vs somatic](tab:Germline vs somatic)
+      - The best-supported protein-altering somatic gene is [{{top_gene}}](locus:{{top_gene}}): its tumour reads and somatic calls in the genome browser
     section: Findings
     tag: sk-ov-findings
     index: ov-findings
@@ -494,7 +496,7 @@ main_dashboard:
     caption: One bar per caller, its SNVs over the six substitution classes averaged over the samples; C>T and T>C are the transitions.
     tag: sk-ov-hl-spectrum
     index: ov-hl-spectrum
-    layout: {x: 0, y: 3, w: 4, h: 5}
+    layout: {x: 0, y: 3, w: 4, h: 4}
   - component_type: highlight
     section: Findings
     source_tab: Call quality
@@ -503,7 +505,7 @@ main_dashboard:
     caption: Calls per caller by FILTER value; the green slice is PASS, the rest is what the caller set aside.
     tag: sk-ov-hl-filter
     index: ov-hl-filter
-    layout: {x: 4, y: 3, w: 4, h: 5}
+    layout: {x: 4, y: 3, w: 4, h: 4}
   - component_type: highlight
     section: Findings
     source_tab: Caller concordance
@@ -511,7 +513,7 @@ main_dashboard:
     caption: Share of each caller's calls per allele fraction; a clean diploid callset peaks near 0.5 (heterozygous) and near 1 (homozygous alternate).
     tag: sk-ov-hl-vaf
     index: ov-hl-vaf
-    layout: {x: 0, y: 8, w: 4, h: 5}
+    layout: {x: 0, y: 7, w: 4, h: 4}
   - component_type: highlight
     section: Findings
     source_tab: Consequences
@@ -520,7 +522,7 @@ main_dashboard:
     caption: Each caller's coding calls by impact class (red HIGH, orange MODERATE, blue LOW), as shares.
     tag: sk-ov-hl-impact
     index: ov-hl-impact
-    layout: {x: 4, y: 8, w: 4, h: 5}
+    layout: {x: 4, y: 7, w: 4, h: 4}
   - component_type: highlight
     section: Findings
     source_tab: Somatic calls
@@ -528,7 +530,7 @@ main_dashboard:
     caption: The tumour allele fraction of every distinct somatic variant, stacked by the number of callers that kept it; a clonal variant of a diploid, pure tumour sits near 0.5.
     tag: sk-ov-hl-somatic
     index: ov-hl-somatic
-    layout: {x: 0, y: 13, w: 4, h: 5}
+    layout: {x: 0, y: 11, w: 4, h: 4}
   - component_type: highlight
     section: Findings
     source_tab: Germline vs somatic
@@ -536,7 +538,35 @@ main_dashboard:
     caption: The tumour allele fraction at the normal's heterozygous sites along the genome; where the band at 0.5 splits towards 0 and 1 the tumour lost a parental copy.
     tag: sk-ov-hl-loh
     index: ov-hl-loh
-    layout: {x: 4, y: 13, w: 4, h: 5}
+    layout: {x: 4, y: 11, w: 4, h: 4}
+  # The somatic variants on the genome, opened on the chromosome or region they cover:
+  # a click opens the Locus tab's browser on the variant, so the Overview needs no
+  # browser of its own.
+  - component_type: advanced_viz
+    workflow_tag: sarek
+    data_collection_tag: somatic_variants
+    viz_kind: genome_view
+    config:
+      viz_kind: genome_view
+      chr_col: chrom
+      pos_col: pos
+      score_col: priority
+      feature_col: gene
+      category_col: impact
+      mark: point
+      point_size: 9
+      score_title: Priority (impact, callers, allele fraction)
+      assembly: '{GENOME}'
+      region_filter_enabled: false
+      click_opens_browser: true
+      open_on_data: true
+    section: Findings
+    tag: sk-ov-genome
+    index: ov-genome
+    title: Somatic variants along the genome
+    link: tab:Locus
+    description: Each dot is a distinct somatic variant of a tumour/normal pair, its height the priority that ranks it (impact class, then callers in agreement, then tumour allele fraction) and its colour the SnpEff impact. Click a dot to open the gene in the genome browser.
+    layout: {x: 0, y: 15, w: 8, h: 4}
   # The pairs the somatic tabs read; the samples are the pinned sample sheet.
   - component_type: table
     workflow_tag: sarek

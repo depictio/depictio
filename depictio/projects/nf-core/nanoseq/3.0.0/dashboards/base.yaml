@@ -170,7 +170,7 @@ main_dashboard:
       genes: {dc: bambu_counts_gene_long, column: gene_id, aggregation: nunique, format: si}
     body: |
       ### The run
-      - ![](icon:mdi:source-branch) **Pipeline** nf-core/nanoseq 3.0.0 on Nextflow {{param:Workflow.Nextflow}}
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/nanoseq 3.0.0
       - ![](icon:mdi:counter) **Reads** {{reads}}, NanoPlot {{param:NANOPLOT.nanoplot}}
       - ![](icon:mdi:dna) **Counting** {{genes}} genes, Bambu {{param:BAMBU.bioconductor-bambu}}
     tag: ns-ov-run
@@ -348,11 +348,13 @@ main_dashboard:
       n_dtu: {dc: dexseq_results, column: feature_id, aggregation: nunique, filter_expr: "col('significant') == True",
         format: integer}
       n_tx: {dc: dexseq_results, column: feature_id, aggregation: nunique, format: integer}
+      top_gene: {dc: isoform_loci, column: gene_name, aggregation: top, weight: rank_score}
     body: |
       - **{{q7}}%** of a library's reads reach Q7, the basecaller's pass floor – the median over the libraries [Reads](tab:Reads)
       - **{{pc1}}%** of the expression variance lies on the first principal component – log CPM of the most variable genes [Quantification](tab:Quantification)
       - **{{n_up}}** genes up and **{{n_down}}** down between the conditions – DESeq2, 5% FDR and a two-fold change [Genes](tab:Gene expression)
       - **{{n_dtu}}** of {{n_tx}} transcripts shift their share of their gene – DEXSeq, gene-level 5% FDR; pick one to read its splice arcs in the genome browser [Locus](tab:Locus)
+      - The strongest shift of usage is in [{{top_gene}}](locus:{{top_gene}}): its reads and splice arcs in the genome browser
     section: Findings
     tag: ns-ov-findings
     index: ov-findings
@@ -368,7 +370,7 @@ main_dashboard:
     hide_legend: true
     tag: ns-ov-hl-quality-ladder
     index: ov-hl-quality-ladder
-    layout: {x: 0, y: 2, w: 4, h: 5}
+    layout: {x: 0, y: 2, w: 4, h: 4}
   # The highlights take a short title: the source's is cut at half width.
   - component_type: highlight
     section: Findings
@@ -378,7 +380,7 @@ main_dashboard:
     caption: One point per library on the first two components of log CPM, coloured by condition; replicates should sit together.
     tag: ns-ov-hl-pca
     index: ov-hl-pca
-    layout: {x: 4, y: 2, w: 4, h: 5}
+    layout: {x: 4, y: 2, w: 4, h: 4}
   # show_labels is off on both volcano sources: Ensembl and transcript ids pile
   # up over the points.
   - component_type: highlight
@@ -389,7 +391,7 @@ main_dashboard:
     caption: One point per tested annotation entry, effect against significance; the coloured calls clear a 5% FDR and a two-fold change.
     tag: ns-ov-hl-de-volcano
     index: ov-hl-de-volcano
-    layout: {x: 0, y: 7, w: 4, h: 5}
+    layout: {x: 0, y: 6, w: 4, h: 4}
   - component_type: highlight
     section: Findings
     source_tab: Isoform usage
@@ -397,7 +399,35 @@ main_dashboard:
     caption: One point per transcript, its change in usage against the gene-level q-value; the coloured ones shift their share of the gene.
     tag: ns-ov-hl-iso-volcano
     index: ov-hl-iso-volcano
-    layout: {x: 4, y: 7, w: 4, h: 5}
+    layout: {x: 4, y: 6, w: 4, h: 4}
+  # The transcripts DEXSeq tested along the genome, opened on the region they
+  # cover: a click opens the Locus tab's browser on the gene, so the Overview
+  # needs no browser of its own.
+  - component_type: advanced_viz
+    workflow_tag: nanoseq
+    data_collection_tag: isoform_loci
+    viz_kind: genome_view
+    config:
+      viz_kind: genome_view
+      chr_col: chrom
+      pos_col: start
+      end_col: end
+      score_col: rank_score
+      feature_col: gene_name
+      mark: point
+      point_size: 9
+      score_title: Usage shift (-log10 q-value)
+      assembly: '{GENOME}'
+      region_filter_enabled: false
+      click_opens_browser: true
+      open_on_data: true
+    section: Findings
+    tag: ns-ov-genome
+    index: ov-genome
+    title: Isoform shifts along the genome
+    link: tab:Locus
+    description: Each dot is a transcript DEXSeq tested, its height the -log10 gene-level q-value of its usage shift. Click a dot to open the gene in the genome browser.
+    layout: {x: 0, y: 10, w: 8, h: 4}
   # Link-only tab tiles: each tile prints its tab's subtitle, the question the
   # tab answers.
   - component_type: text
