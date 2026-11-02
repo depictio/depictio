@@ -2060,11 +2060,14 @@ tabs:
     title: Consensus intervals
     description: Coordinates, member peak count, replicate support and coverage for every merged interval.
     layout: {x: 0, y: 0, w: 8, h: 6}
-# One region, one x axis. The SEACR navigator drives the cards and the fragment
-# pile-up under it through the region links in template.yaml (seacr_peaks ->
-# macs2_peaks, seacr_consensus_peaks, seacr_frags_profile). A tab of its own because those
-# region filters narrow every tile of their collections on the tab. The genome
-# axis comes from the `GENOME` template variable (default hg38).
+# One region, one x axis. The SEACR navigator drives the cards through the
+# region links in template.yaml (seacr_peaks -> macs2_peaks,
+# seacr_consensus_peaks), and the genome browser under it follows its brush:
+# the browser's bigWigs carry the signal at the region, so no fragment pile-up
+# track repeats it here (the Fragments tab keeps the pile-up). A tab of its own
+# because those region filters narrow every tile of their collections on the
+# tab. The genome axis comes from the `GENOME` template variable (default
+# hg38). This is the only browser of the template.
 - title: Locus
   subtitle: Do the callers and the replicates agree on one region?
   tab_group: Agreement
@@ -2084,18 +2087,20 @@ tabs:
     icon: mdi:counter
     color: teal
     description: What the region in view holds, recounted on every brush or locus entry
-  - name: One region, two tracks
+  - name: Regions on one axis
     icon: mdi:dna
     color: teal
-    description: The SEACR navigator and the fragment pile-up that follows its region
+    description: The lanes drive the browser below. A brush or a locus on the lanes moves it, and its view comes back on the lanes as a dashed band, in the colour of the two tiles' link tags.
+    # One screen: the lanes and the browser they drive.
+    display: linked
   components:
   - component_type: text
     order: 1
     body: >
-      The SEACR regions drive the navigator; the fragment pile-up follows its region on one
-      genome axis. The tab opens on a default
-      region set in the navigator's config: type a locus in its header or brush its axis,
-      and the tracks and the cards follow.
+      The SEACR regions of every sample on one genome axis, with the run's own signal and
+      calls in a genome browser under them. The axis opens on the chromosome the browser
+      shows, its window as a band: zoom on the regions, brush one, and the browser and
+      cards follow.
     tag: cr-loc-intro
     index: loc-intro
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -2146,7 +2151,7 @@ tabs:
     index: cr-loc-support-filter
     title: Replicate support
     layout: {x: 0, y: 6, w: 1, h: 3}
-  # The four cards follow the navigator's region, as the pile-up does.
+  # The four cards follow the navigator's region, as the tracks do.
   - component_type: card
     workflow_tag: cutandrun
     data_collection_tag: seacr_peaks
@@ -2234,43 +2239,80 @@ tabs:
     use: seacr/seacr_peak_track
     config:
       assembly: "{GENOME}"
-      # `rect` needs an end column, which the role binding supplies: a SEACR
-      # call is an interval, not a point at its summit.
-      mark: rect
+      # Bars, not level rects: a rect is a 2 px segment at the score and
+      # vanishes at chromosome scale, a bar rises from the baseline and keeps
+      # a minimum width.
+      mark: bar
+      lane_height: 56
       score_title: log10 total coverage
       opacity: 0.8
-      category_col: sample
-      # The assembly lets the navigator fetch only the chromosome of its
-      # region, so calls on alt and unplaced contigs stay out until visited.
-      # `first` opens on the first contig the calls sit on, so a run aligned
-      # to part of the genome (the small validation profile) opens on data.
-      default_region: first
+      # One lane per sample, each on its own ruler, as the other peak
+      # templates: the targets differ by orders of magnitude in coverage.
+      sample_col: sample
+      facet_by_sample: true
+      max_facets: 6
+      facet_y_scale: independent
+      # No default_region: the browser opens on its own locus, and the axis on
+      # the whole chromosome it shows, its window drawn as a band, so the
+      # reader sees where the regions are before brushing one.
+      open_on_view_window: true
+      interaction_mode: select
       region_filter_enabled: true
       selection_enabled: true
       selection_column: peak_id
-    section: One region, two tracks
+    section: Regions on one axis
     tag: cr-loc-av-track
     index: loc-seacr-track
-    title: SEACR regions
-    description: Every SEACR region as the interval it is; height is log10 of the total coverage. Brush to move every track.
-    layout: {x: 0, y: 0, w: 8, h: 4}
-  - component_type: advanced_viz
+    title: SEACR regions per sample
+    description: Every SEACR region as the interval it is, one lane per sample; height is log10 of the total coverage. Brush to move the browser below.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  # The run's own files in a genome browser: bigWig signal per sample, the SEACR
+  # and MACS2 calls of the targets and the BAMs. The sample filter of the left
+  # panel (persistent across tabs) picks which tracks are open; clicking a
+  # signal track picks its sample back for every other tab.
+  - component_type: jbrowse
+    tag: cr-loc-browser
+    index: loc-browser
+    section: Regions on one axis
     workflow_tag: cutandrun
-    data_collection_tag: seacr_frags_profile
-    use: seacr/frags_pileup_track
-    config:
-      view: track
-      views: [track, locus]
-      mark: rect
-      color_by: sample
-      facet_by_sample: true
-      smoothing_window: 0
-      show_annotation_lane: false
-      locus_annotation: "{GENOME}"
-      locus_assembly: "{GENOME}"
-    section: One region, two tracks
-    tag: cr-loc-av-frags-track
-    index: loc-frags-track
-    title: Fragment pile-up
-    description: Fragments per million in 100 bp bins around each sample's strongest regions; gaps are not measured.
-    layout: {x: 0, y: 4, w: 8, h: 4}
+    data_collection_tag: tracks
+    title: Genome browser
+    max_tracks: 16
+    initial_tracks: 6
+    show_overview: false
+    # The lanes above already say where the browser is: its locus bar only
+    # costs height here, and the tile's menu brings it back.
+    show_header: false
+    # ENCODE candidate cis-regulatory elements from UCSC, next to the marks.
+    ucsc_tracks: [encodeCcreCombined]
+    # No selection write-back: a picked track would narrow the regions to one
+    # sample and reframe the view. Two sources: the per-sample SEACR regions
+    # (one density row per sample) and the consensus intervals per target. A
+    # region picked elsewhere narrows seacr_peaks to a handful of rows and the
+    # view moves onto it; a brush on the navigator moves it without filtering.
+    locus_from:
+      - data_collection_tag: seacr_peaks
+        name: SEACR
+        color: teal
+        chrom_column: chr
+        start_column: start
+        end_column: end
+        padding: 2000
+        max_rows: 5
+        sort_by: max_signal
+        descending: true
+        label_column: peak_id
+        sample_column: sample
+        columns: [total_signal, width]
+      - data_collection_tag: seacr_consensus_peaks
+        name: Consensus
+        color: grape
+        chrom_column: chr
+        start_column: start
+        end_column: end
+        padding: 2000
+        sort_by: num_samples
+        descending: true
+        label_column: peak_id
+        columns: [num_samples, target]
+    layout: {x: 0, y: 6, w: 8, h: 7}

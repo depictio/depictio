@@ -11,7 +11,7 @@
 #                    with linear duplicate removal and mitochondrial filtering on
 # (scripts/nfcore_validation_hpc.py, keys cutandrun322-full, cutandrun322-small)
 # The template itself is the v2 rebuild of the 3.1 one (Overview, tab groups,
-# 22 collections) with the 3.2.2 changes below on top.
+# 22 collections) with the 3.2.2 changes below on top, plus the `tracks` collection of the Locus tab.
 # ============================================================================
 #
 # SCOPE
@@ -64,10 +64,17 @@
 # numbered one: the MultiQC location above, the SEACR scan, which skips `igv/`
 # because 04_reporting/igv/ holds byte-identical copies of every SEACR bed for
 # the IGV session, and the flagstat scan, which keeps `markdup/` only.
+#
+# GENOME TRACKS. The `tracks` collection lists the run's bigWig signal, SEACR
+# and MACS2 calls and marked-duplicate BAMs for the Locus tab's genome browser.
+# Either DATA_ROOT holds those files and the CLI uploads the ones it finds, or
+# TRACKS_URI names the run's results folder (s3:// or https://) and the browser
+# reads every expected file there in place, by range. BAMs are big: read them in
+# place.
 template:
   template_id: "nf-core/cutandrun/3.2.2"
   description: "nf-core/cutandrun template: SEACR and MACS2 peak calls side by side, their per-sample agreement, the consensus peak set per target and the fragment-length distribution, on top of the run's MultiQC report."
-  version: "1.2.0"
+  version: "2.0.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory containing cutandrun output, the pipeline's --outdir (01_prealign/, 02_alignment/, 03_peak_calling/, 04_reporting/, pipeline_info/)."
@@ -79,6 +86,9 @@ template:
       description: "UCSC assembly the run was aligned to (hg38, hg19, mm10, ...). Sets the genome axis of the Locus tab; pass --var GENOME=ASSEMBLY for a run on another build."
       required: false
       default: "hg38"
+    - name: "TRACKS_URI"
+      description: "s3:// or https:// folder holding the run's results, to read the genome-browser tracks (bigWig, peaks, BAM) in place instead of uploading them from DATA_ROOT. Without it the tracks the run holds under DATA_ROOT are uploaded at ingestion."
+      required: false
   # The bundled reference dataset: the samplesheet is part of the run's own
   # pipeline_info/ output, and both validation runs were aligned to hg38. A
   # reference built from a reprocessed tree would also need MULTIQC_REPROCESSED
@@ -126,6 +136,14 @@ template:
       override_dcs:
         - data_collection_tag: "multiqc_data"
           scan_pattern: ".+/multiqc/multiqc_data/multiqc\\.parquet$"
+    # Genome tracks: read in place when TRACKS_URI names the results folder,
+    # uploaded from DATA_ROOT otherwise (the `tracks` recipe keeps only the files
+    # it finds there).
+    - if_var_present: "TRACKS_URI"
+      override_dcs:
+        - data_collection_tag: "tracks"
+          dc_properties:
+            remote_base_uri: "{TRACKS_URI}"
 
 # ============================================================================
 # PROJECT CONFIGURATION
@@ -178,6 +196,52 @@ workflows:
               "n_libraries": "Sequencing libraries merged into the sample"
               "library_ids": "Those libraries' samplesheet ids"
               "single_end": "True when the libraries are single-end"
+
+      # ----------------------------------------------------------------
+      # Genome tracks. A manifest of the run's track files (bigWig signal,
+      # SEACR / MACS2 peaks, BAM) that the genome browser reads by range,
+      # through the API. One row per file, keyed on sample_id like the hub.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "tracks"
+        description: "Genome-browser tracks of the run: bigWig signal, SEACR and MACS2 peaks and the marked-duplicate BAM, one row per file"
+        config:
+          type: "genomic_tracks"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/cutandrun/tracks.py"
+          dc_specific_properties:
+            format: "TSV"
+            uri_column: "uri"
+            track_id_column: "track_id"
+            sample_column: "sample_id"
+            format_column: "format"
+            name_column: "name"
+            color_column: "color"
+            category_column: "category"
+            order_column: "order"
+            assembly: "{GENOME}"
+            display_defaults:
+              bigwig:
+                displays:
+                  - type: "LinearWiggleDisplay"
+                    height: 60
+                    autoscale: "local"
+              bed:
+                displays:
+                  - type: "LinearBasicDisplay"
+                    height: 30
+              narrowpeak:
+                displays:
+                  - type: "LinearBasicDisplay"
+                    height: 30
+            columns_description:
+              "track_id": "SAMPLE.KIND, unique per file"
+              "sample_id": "Sample the file belongs to"
+              "target": "Histone mark or IgG control"
+              "kind": "signal, peaks_seacr, peaks_macs2 or alignments"
+              "format": "Track file format"
+              "uri": "Path relative to the results folder"
 
       - data_collection_tag: "samplesheet"
         description: "The samplesheet the pipeline validated, one row per sequencing library with its FASTQ pair and its control"
@@ -807,6 +871,38 @@ workflows:
               "cpm": "Fragments overlapping the bin per million fragments of the sample"
 
 links:
+  # Hub <-> genome tracks: picking samples opens their tracks, and clicking a
+  # peak or a signal track in the browser picks its sample back.
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "tracks"
+    target_type: "genomic_tracks"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Show the genome tracks of the samples picked in the left panel"
+    enabled: true
+  - source_dc_tag: "tracks"
+    source_column: "sample_id"
+    target_dc_tag: "samples"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Filter the dashboard by the samples whose tracks are picked in the genome browser"
+    enabled: true
+  # A SEACR region picked on the Locus tab opens its sample's tracks; the
+  # browser's locus_from moves the view onto it.
+  - source_dc_tag: "seacr_peaks"
+    source_column: "sample"
+    target_dc_tag: "tracks"
+    target_type: "genomic_tracks"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Open the genome tracks of the sample a picked SEACR region was called in"
+    enabled: true
+
   # Hub -> everything keyed on the sample name.
   - source_dc_tag: "samples"
     source_column: "sample_id"
