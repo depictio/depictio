@@ -765,7 +765,7 @@ def _get_delta_location(
     token: str | None,
 ) -> str:
     """
-    Get Delta table location from init_data or via API call (legacy).
+    Get Delta table location from init_data, the deltatables collection, or an API call (legacy).
 
     Args:
         data_collection_id_str: String ID of the data collection.
@@ -781,6 +781,16 @@ def _get_delta_location(
     """
     if init_data and data_collection_id_str in init_data:
         file_id = init_data[data_collection_id_str]["delta_location"]
+        return file_id
+
+    # The deltatables collection is the same source the endpoint below answers
+    # from, and needs no bearer: a reader with none (an anonymous visitor on a
+    # public dashboard) would be refused by the HTTP call with a 401 and fail
+    # the whole read as "Error loading deltatable".
+    from depictio.api.v1.services.export.delta_location import delta_location_for
+
+    file_id = delta_location_for(data_collection_id_str)
+    if file_id:
         return file_id
 
     # Legacy API path with deprecation warning
