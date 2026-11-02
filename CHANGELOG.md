@@ -3,6 +3,34 @@
 ### Docker Images 🐳
 
 ```plaintext
+ghcr.io/depictio/depictio:1.20.2
+ghcr.io/depictio/depictio:latest
+ghcr.io/depictio/depictio:stable
+ghcr.io/depictio/depictio:edge
+```
+
+
+<details>
+<summary>Click to expand the changelog for 1.20.2</summary>
+
+### Changes 📜
+
+#### Other Changes 📝
+
+* Bump version: 1.20.1 → 1.20.2 [840a77189]
+* fix(deltatables): read a Delta location from the collection when no token or hint is given ([#1323](https://github.com/depictio/depictio/pull/1323)) [8defa5d69]
+* Update CHANGELOG.md for v1.20.1 [89739f7d1]
+
+
+</details>
+
+### Documentation 📖
+
+For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
+
+### Docker Images 🐳
+
+```plaintext
 ghcr.io/depictio/depictio:1.20.1
 ghcr.io/depictio/depictio:latest
 ghcr.io/depictio/depictio:stable
