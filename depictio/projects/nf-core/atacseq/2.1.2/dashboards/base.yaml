@@ -1910,14 +1910,14 @@ tabs:
     title: Peak record
     description: The call picked in the table beside it, with the feature and gene HOMER assigned to it.
     layout: {x: 5, y: 0, w: 3, h: 5}
-# The locus section: the broad calls on one genomic region. The navigator (a
-# genome_view on macs2_broad_peaks) opens on its default_region and emits the
-# chromosome and position filters; the two region links in template.yaml
-# rename them onto the consensus intervals and the HOMER annotation, so the
-# cards clamp to the same window. A tab of its own: a region filter narrows
-# every tile of its collection on the tab. The axis comes from GENOME; the
-# navigator opens on the first chromosome the calls carry, whatever the
-# organism.
+# The locus section: the broad calls and the run's own files on one genomic
+# region. The navigator (a genome_view on macs2_broad_peaks) opens on the
+# chromosome the browser shows and emits the chromosome and position filters; the
+# two region links in template.yaml rename them onto the consensus intervals and
+# the HOMER annotation, so the cards clamp to the same window, and the genome
+# browser under the navigator follows its brush. A tab of its own: a region
+# filter narrows every tile of its collection on the tab. The axis comes from
+# GENOME. This is the only browser of the template.
 - title: Locus
   subtitle: What do the libraries call at one genomic region?
   tab_group: Peak calls
@@ -1940,14 +1940,15 @@ tabs:
   - name: Peaks on one axis
     icon: mdi:dna
     color: teal
-    description: The broad calls per library, as high as their significance
+    description: The lanes drive the browser below. A brush or a locus on the lanes moves it, and its view comes back on the lanes as a dashed band, in the colour of the two tiles' link tags.
   components:
   - component_type: text
     order: 1
     body: >
-      The broad calls of every library on one genome axis. The tab opens on the first
-      chromosome of the calls; type a locus in the navigator's header or brush its axis,
-      and the cards follow.
+      The broad calls of every library on one genome axis, with the signal and reads of the
+      libraries in a genome browser under them. The tab opens where the browser does, on
+      the strongest call; drag on the navigator's axis or type a locus in its header, and
+      the browser and cards follow.
     tag: at-loc-intro
     index: loc-intro
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -2080,8 +2081,14 @@ tabs:
     title: Nearest genes
     description: Distinct genes named as the nearest gene of a call on the region.
     layout: {x: 6, y: 0, w: 2, h: 2}
-  # Default region: the first contig the calls carry. The test profiles span a
-  # human and a yeast genome, so no contig name holds for every run.
+  # A navigator that drives a browser sets no default_region: the browser opens on
+  # its own locus, and the axis opens on the whole chromosome it shows
+  # (open_on_view_window), its window drawn as a band. The axis does not follow
+  # that window: on a few kilobases it would open on empty lanes, where the
+  # chromosome shows where the calls are to zoom and brush. Bars, not level rects:
+  # a rect is a 2 px segment at the score and vanishes at chromosome scale, a bar
+  # rises from the baseline and keeps a minimum width. A drag brushes a region
+  # (interaction_mode: select), which is what the tile is for.
   - component_type: advanced_viz
     workflow_tag: atacseq
     data_collection_tag: macs2_broad_peaks
@@ -2104,8 +2111,8 @@ tabs:
       score_title: -log10(q-value)
       opacity: 0.8
       assembly: '{GENOME}'
+      open_on_view_window: true
       interaction_mode: select
-      default_region: first
       region_filter_enabled: true
       selection_enabled: true
       selection_column: peak_id
@@ -2113,8 +2120,55 @@ tabs:
     tag: at-loc-navigator
     index: loc-navigator
     title: Broad calls per library
-    description: Each lane is a library and each bar a MACS2 broad call, spanning its start to its end and as high as its -log10(q). Look for regions called in every replicate of a group, and for regions called in one group only. It opens on the first chromosome of the calls; drag on the axis to pick a region, or type a locus.
+    description: Each lane is a library and each bar a MACS2 broad call, spanning its start to its end and as high as its -log10(q). Look for regions called in every replicate of a group, and for regions called in one group only. It opens on the chromosome of the genome browser with the browser's window as a band; drag on the axis to pick a region, or type a locus.
     layout: {x: 0, y: 0, w: 8, h: 7}
+  # No fixed location: the browser opens on the most significant peak, and a
+  # brush on the navigator moves it without filtering. No selection write-back
+  # here: a picked track would narrow the peaks to one library and reframe the
+  # view.
+  - component_type: jbrowse
+    workflow_tag: atacseq
+    data_collection_tag: tracks
+    section: Peaks on one axis
+    initial_tracks: 6
+    max_tracks: 18
+    show_overview: false
+    # Two sources: the per-library peaks (one density row per library; next /
+    # previous stop once on peaks several libraries share) and the consensus
+    # intervals the DESeq2 QC counts. The first frames the view on a filter.
+    locus_from:
+      - data_collection_tag: macs2_broad_peaks
+        name: Peaks
+        color: teal
+        chrom_column: chr
+        start_column: start
+        end_column: end
+        padding: 500
+        max_rows: 2000
+        sort_by: neg_log10_qvalue
+        descending: true
+        label_column: peak_id
+        sample_column: sample
+        columns: [fold_enrichment, width]
+      - data_collection_tag: macs2_consensus_boolean
+        name: Consensus
+        color: grape
+        chrom_column: chr
+        start_column: start
+        end_column: end
+        padding: 500
+        sort_by: num_samples
+        descending: true
+        label_column: peak_id
+        columns: [num_samples, consensus_set]
+    tag: at-loc-browser
+    index: loc-browser
+    # The lanes above already say where the browser is: its locus bar only
+    # costs height here, and the tile's menu brings it back.
+    show_header: false
+    title: Genome browser
+    description: The signal of every library in view on the region of the lanes above, replicate 1 of each group first.
+    layout: {x: 0, y: 7, w: 8, h: 10}
 # ============================================================================
 # Comparison
 # ============================================================================

@@ -211,8 +211,8 @@
       }
     },
     "nf-core/atacseq/2.1.2": {
-      "version": "2.1.0",
-      "content_hash": "06461ceeea49b38565a72e1121fd5fb6bff269d8a493368cc68c5ab203cd1169",
+      "version": "3.0.0",
+      "content_hash": "d875c4ef816258851f972c3bcb176dcfde809ad2aef69693ee27fe275ff971d6",
       "catalog": {
         "ataqv": "1.0.0",
         "deeptools": "1.0.0",
