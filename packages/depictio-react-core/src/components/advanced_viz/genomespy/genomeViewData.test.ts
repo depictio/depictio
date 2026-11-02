@@ -310,6 +310,14 @@ describe('mergeWindowRows', () => {
       pos: [10, 21],
     });
   });
+  it('reads a contig spelled without the assembly\'s prefix as the same contig', () => {
+    const genome = { chr: ['20', '21', '22'], pos: [10, 20, 30] };
+    const window = { chr: ['21'], pos: [21] };
+    expect(mergeWindowRows(genome, window, 'chr', 'chr21', new Set(['chr20', 'chr21', 'chr22']))).toEqual({
+      chr: ['20', '22', '21'],
+      pos: [10, 30, 21],
+    });
+  });
   it('falls back to the window read when the genome read has no chromosome column', () => {
     const window = { chr: ['chr6'], pos: [1] };
     expect(mergeWindowRows({ pos: [9] }, window, 'chr', 'chr6')).toBe(window);
@@ -321,6 +329,14 @@ describe('rowsOnKnownContigs', () => {
     const rows = { chr: ['chr1', 'chr1_KI270706v1_random', 'chr2'], pos: [1, 2, 3] };
     expect(rowsOnKnownContigs(rows, 'chr', new Set(['chr1', 'chr2']))).toEqual({
       chr: ['chr1', 'chr2'],
+      pos: [1, 3],
+    });
+  });
+
+  it('keeps the rows whose contigs the assembly spells with a prefix', () => {
+    const rows = { chr: ['21', 'KI270711.1', 'chrX'], pos: [1, 2, 3] };
+    expect(rowsOnKnownContigs(rows, 'chr', new Set(['chr21', 'chrX']))).toEqual({
+      chr: ['21', 'chrX'],
       pos: [1, 3],
     });
   });
