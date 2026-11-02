@@ -3,6 +3,35 @@
 ### Docker Images 🐳
 
 ```plaintext
+ghcr.io/depictio/depictio:1.20.1
+ghcr.io/depictio/depictio:latest
+ghcr.io/depictio/depictio:stable
+ghcr.io/depictio/depictio:edge
+```
+
+
+<details>
+<summary>Click to expand the changelog for 1.20.1</summary>
+
+### Changes 📜
+
+#### Other Changes 📝
+
+* Bump version: 1.20.0 → 1.20.1 [5c9079c35]
+* fix(genome_view): read a contig under the assembly's spelling before dropping its rows ([#1322](https://github.com/depictio/depictio/pull/1322)) [96332a570]
+* Update CHANGELOG.md for v1.20.0 [611f27f49]
+* fix(claude): /autopilot leaves no public trace on other people's issues [83ddf44fc]
+
+
+</details>
+
+### Documentation 📖
+
+For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
+
+### Docker Images 🐳
+
+```plaintext
 ghcr.io/depictio/depictio:1.20.0
 ghcr.io/depictio/depictio:latest
 ghcr.io/depictio/depictio:stable
