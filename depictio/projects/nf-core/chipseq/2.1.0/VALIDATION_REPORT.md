@@ -346,6 +346,56 @@ by condition) and the six child tabs (MultiQC, Signal, Peaks, Annotation, Locus,
 render with values. After the pattern link, picking one library in the left panel moves the
 Signal tab's Duplicate reads card from the 3.4% median to that library's 4.8%.
 
+## Genome browser in the Locus tab, 2026-11-02
+
+Template version 3.1.0 to 4.0.0 (a collection and a variable were added): the Locus tab of
+`chipseq/1.2.0` has its genome browser here too, on the 2.x layout.
+
+### What changed
+
+- `template.yaml`: the `tracks` collection (`genomic_tracks`, `assembly: "{GENOME}"`), after the
+  `design` hub it reads; the `TRACKS_URI` variable and the conditional that turns it into
+  `remote_base_uri`; a second conditional that removes `tracks` when `GENOME` is not given
+  (CS2-D21); three links (hub to tracks and back on `sample_id`, `macs2_peaks.sample` to
+  tracks). `GENOME` keeps its empty default.
+- `recipes/tracks.py` (new, template-local): one row per file, spelled out from the `design`
+  hub (CS2-D22).
+- `dashboards/base.yaml`, Locus tab: the `jbrowse` tile under the navigator (`locus_from` the
+  peak calls, then the consensus intervals), the navigator opens on the browser's chromosome
+  (`open_on_view_window`) instead of `default_region: first`; the consensus coverage lane
+  stays, below the browser. The JASPAR motif track of 1.2.0 (`ucsc_tracks`) is not carried
+  over: it is specific to two assemblies and this template serves any reference.
+- `docs/dashboards.md`: the Locus paragraph, a Genome browser paragraph, two pruning routes and
+  the reproduce command.
+- `tests/recipes/test_chipseq_2_1_0_tracks.py`: the manifest (missing files dropped, every row
+  kept in place, aligner and peak type read off the tree, colours, order) and the template
+  (valid `genomic_tracks` configuration, gate, links).
+
+### Checks
+
+Run `test` (bwa, `--narrow_peak`, the `chipseq-2.1.0-test` showcases source) ingested into a
+fresh local stack with `--var GENOME=<assembly>`: 8/8, the track files uploaded from DATA_ROOT.
+In the headless browser, on all seven tabs: no HTTP error and no empty tile; the Locus tab
+loads the bigWig and BAM by range (206) and draws signal, peak and read lanes; the browser opens
+on the strongest call; next and previous step through the calls; a brush on the navigator moves
+the browser and recounts the cards; picking a library on the left opens its tracks. A second
+ingest with `--var TRACKS_URI=<https folder on the allow-listed host>` keeps every expected row
+and uploads none (the folder is not a real run, so no file was read back this way). A third
+without `GENOME` has no `tracks` collection and no browser tile; the navigator opens on the
+whole genome.
+
+### Not validated
+
+- **Reading a real run in place.** The in-place path was checked for its manifest and its
+  override only; the local object store refused a second bucket.
+- **broadPeak and other aligners with real files.** The recipe is unit-tested for them; the
+  bowtie2, chromap and star runs were not ingested with tracks.
+- **Console error on the Locus tab.** In a headless Chromium the GenomeSpy navigator logs
+  `Layout did not settle: canvas size kept changing` on most loads of the tab once the browser
+  tile is present (none without it), then `WebGL renderer resources were disposed while loading
+  a font`. The tab draws and works; a load that logged it can leave a stored navigator filter on
+  the first contig, so the next load opens there. Platform side, not a template setting.
+
 ## Discrepancies and decisions
 
 ### CS2-D1: every 1.x path moved; two catalog recipes need overrides
@@ -537,7 +587,8 @@ absent, so one of the two shows. The scan pattern is the 1.x layout-agnostic one
 
 `GENOME` defaults to empty: the test runs use a non-UCSC reference, and an empty assembly
 lays the Locus axis out from the contigs of the calls. A UCSC run sets `--var GENOME=hg38`.
-The genome views open on `default_region: first`, the first contig.
+The genome views open on `default_region: first`, the first contig (the Locus navigator since
+opens on the browser's chromosome instead, CS2-D21).
 
 ### CS2-D19: consensus panels read the replicate columns
 
@@ -558,3 +609,32 @@ ingest` in the help text. Skipped: `deseq2_results_raw` / `deseq2_results` and t
 `reference.vars.GENOME` (no 2.x reference design table; the test data is not on a UCSC
 assembly). Catalog changes since September only renamed the schema constants, which
 `recipes/peaks.py` follows.
+
+### CS2-D21: the browser needs the assembly, so `GENOME` gates it
+
+The browser lays its tracks on a reference, and a `genomic_tracks` collection with an empty
+assembly makes the tile fail with a 400. `GENOME` stays empty by default (CS2-D18), so a
+conditional on its absence removes the `tracks` collection, its links and the browser tile; the
+Locus tab then keeps the lanes, which are laid out from the contigs of the calls, and opens on
+the whole genome. A run on a UCSC assembly passes `--var GENOME=<assembly>` and gets the
+browser; the contig spelling of the calls (`I` against `chrI`) is matched to the assembly. A
+project updated in place with `--update-config` keeps a `tracks` collection it already holds.
+
+### CS2-D22: the manifest follows the hub, not a glob
+
+`recipes/tracks.py` reads the `design` hub (CS2-D12) rather than the sheet or the file tree, so
+the ids are the merged-library ids MACS3 stamps into the peak names and a picked peak opens its
+own tracks. Layout: `<aligner>/merged_library/bigwig/<id>.mLb.clN.bigWig`,
+`<aligner>/merged_library/macs3/<narrow_peak|broad_peak>/<id>_peaks.<type>`,
+`<aligner>/merged_library/<id>.mLb.clN.sorted.bam`. The aligner and the peak folder are read off
+the peak calls, bigWigs and BAMs DATA_ROOT holds, then off `pipeline_info/params_*.json`, then
+default to bwa and both peak folders; the first existing path wins, so a tables-only tree whose
+peak calls are present still resolves in place. Input controls get their bigWig as a row of
+their own. Order: one block per antibody, ChIP bigWigs, peaks, input bigWigs, then the BAMs;
+replicate 1 of every condition first. ChIP tracks are coloured by antibody, or by condition when
+the run has a single antibody, the inputs grey.
+
+### CS2-D23: version 4.0.0
+
+A collection and a variable were added, so the project has to be ingested again (RULES.md,
+Template versioning): major, 3.1.0 to 4.0.0.
