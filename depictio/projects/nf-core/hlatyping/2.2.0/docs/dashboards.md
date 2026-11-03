@@ -32,7 +32,7 @@ and to the MultiQC panels by sample mapping (FastQC names its rows `<sample>_1` 
 | --- | --- | --- |
 | `samples` | the samplesheet (`METADATA_FILE`, default `input/samplesheet.csv`), plus every sample of `optitype/` | sample |
 | `multiqc_data` | `multiqc/multiqc_data/multiqc.parquet` | MultiQC sample (read file, typed sample) |
-| `optitype_genotypes` | `optitype/<sample>/<sample>_result.tsv` (catalog `optitype/genotypes`) | sample, locus and haplotype |
+| `optitype_genotypes` | `optitype/<sample>/<sample>_result.tsv` (the catalog `optitype/genotypes` rows, with the samplesheet columns of `samples` joined on the sample by `nf-core/hlatyping/genotypes.py`) | sample, locus and haplotype |
 | `optitype_summary` | the same (catalog `optitype/summary`) | sample |
 | `read_qc` | `multiqc/multiqc_data/multiqc_fastqc.txt`, with `samples` and `optitype_summary` | read file |
 
@@ -73,7 +73,7 @@ The landing page, at compact width with the filter panel collapsed:
   commonest allele and its share of the calls, the homozygous loci, the reads behind the median
   genotype and the share of a sample's read pairs its genotype explains. Below them, four
   figures in two rows: the genotype grid beside the allele frequency by locus, then the reads
-  against the objective beside the reads per sample. The bar of this section filters by
+  each genotype explains against the reads it needs beside the reads per read file. The bar of this section filters by
   sequencing type and allele.
 - **How to read this dashboard**: one tile per tab, by group, each showing its question.
 
@@ -96,38 +96,62 @@ that module without harm. The pinned sample filters narrow the FastQC panels.
 **Reads.** Strip: the read files (a ring by their worst FastQC module), the median reads per
 file, the share of a sample's read pairs its genotype explains (OptiType's reads over the
 larger read file of the pair) and the highest duplicate share against FastQC's 20% and 50%
-lines. Then the reads per sample and read, the reads of each file against the reads its
-sample's genotype explains (log axes, coloured by the group), the GC content by group and the
-duplicate share per sample. Collapsed: the read file table. Filters: read of the pair and
-FastQC status.
+lines. Then the reads of each read file (a bar per file, the two reads of a pair side by side,
+the count printed on it) and the share of each sample's read pairs its genotype explains (a bar
+per sample, coloured by the group, both counts printed; no cut-off applies, because exome and
+RNA reads are mostly not HLA). Collapsed: the GC content and the duplicate share of each read
+file side by side, against the human genome's GC and FastQC's 20% and 50% duplicate lines, and
+the read file table. Filters: read of the pair and FastQC status. A scatter of read file
+against typing reads was dropped: a handful of points, two per sample, says less than a bar.
 
 **Genotypes.** Strip: the samples typed (against all three loci), the distinct alleles per
 sample (of six), the homozygous loci (by locus) and the allele groups (ranked by locus). Then
 the allele grid: one row per sample, one column per locus, each cell split into its two
-haplotypes and coloured by allele group, a homozygous locus merged into one cell, with the
-objective and the reads as side bars. A click on an allele narrows the dashboard to the samples
-that carry it. Collapsed: the genotype per sample (the allele pairs, and the alleles as an
+haplotypes (left half haplotype 1, right half haplotype 2), a homozygous locus merged into one
+cell with a dot, with the objective and the reads as side bars. The hue is the allele group and
+the shade the allele inside it; the tile's key and legend say so under the grid. Its controls
+colour the cells by allele group or by zygosity, and group the rows by the samplesheet column
+the dashboard groups by (`GROUP_COL`). There is no colour by sample on purpose: the samples are
+the rows and already carry their label, and a hue per row would break the one-hue-per-allele-
+family reading. A click on an allele narrows the dashboard to the samples that carry it, a click
+on a sample name keeps that sample. Below the grid, the calls of each allele group at each
+locus, with their counts, in the group colours of the grid, follow the same filters and picks. Collapsed: the genotype per sample (the allele pairs, and the alleles as an
 epitopeprediction samplesheet lists them) and every allele call. Filters: locus, allele and
 zygosity.
 
 **Alleles.** Strip: the distinct alleles (ranked by locus), the commonest allele (with the
 share of distinct alleles against repeats), the allele calls (a ring by zygosity) and the share
 of the calls the three largest allele groups take. Then the allele frequency by locus (an
-allele's calls over its locus's calls, two per sample, commonest first) and the calls per
-allele group stacked by zygosity. Filters: locus and allele group.
+allele's calls over its locus's calls, two per sample, commonest first, coloured by allele
+group), the alleles carried by each sample (a marker per sample and allele, one panel per
+locus, larger for two copies; it follows the sample filters, so a handful of samples reads
+one by one). Collapsed: the calls per allele group stacked by zygosity. The frequencies are
+aggregated over every sample in view: on a few samples they are counts in disguise. Filters:
+locus and allele group.
 
 **Typing quality.** Strip: the median reads behind a genotype, the fewest reads of any sample,
-the median heterozygous loci (of three) and the median objective per read. Then the reads
-against the objective, one point per sample coloured by its homozygous loci, and the reads per
-sample. Filters: a reads range and a heterozygous-loci range.
+the median heterozygous loci (of three) and the median objective per read. Then the question
+of the tab, which samples can be trusted: a bar per sample with the reads its genotype explains per distinct allele, the weakest first,
+against the median of the cohort. OptiType publishes no minimum number of reads, so no pass mark is
+drawn; a call is flagged only when OptiType itself reports a tie with the runner-up solution, which
+needs `--enumerations` above 1. Below it, the objective per read of each sample against one guide per number of
+heterozygous loci (`1 - beta x loci`, with the default beta): a dot belongs on its guide, and
+one off it means the run used another beta. Reads against objective is not drawn, because the
+objective follows from the reads and the zygosity and the points would fall on one line.
+Filters: a reads range and a heterozygous-loci range.
 
 ## Colours
 
 `category_colors` is declared once, on the Overview, and read by every tab: the group column is
 coloured `auto`; zygosity, the FastQC status and the HLA class are written out; loci, reads of
-the pair, input formats and the homozygous-loci label are coloured `auto`. Alleles take no
-pinned colour: the allele grid colours them by allele group (one hue family per first field,
-one shade per allele), the same in every tile that draws it.
+the pair, input formats and the homozygous-loci label are coloured `auto`. Allele groups
+(`HLA-A*02` and so on) are coloured `auto:reads`, the groups with the most reads first: the
+allele grid draws a group in that colour and shades its alleles lighter or darker, and the group
+bars, the allele frequency and the carrier matrix use the colour as it is, so one group is one
+colour in every tile. The alleles themselves are not declared: `auto` hands each value an
+unrelated palette slot (eight at most, then none), which would break the one-family-per-group
+reading, and an allele list is only known from the data. Beyond the groups that get a colour
+(eight at most), the grid keeps its own hue families and the bars use the brand colorway.
 
 ## Cross-selection
 

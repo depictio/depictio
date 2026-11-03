@@ -542,6 +542,27 @@ step). Text, highlights and links bind no data of their own, so:
 - Icons come from the bundled sets (`mdi:` mostly); section icons and colours from
   `depictio/viewer/src/components/sections/sectionIcons.ts`.
 
+### Chart descriptions (the info popover)
+
+The `description` of a figure, advanced viz or table opens in the tile's info popover, which
+splits it into sections. Every chart tile has one, and the reading guide is the point of it:
+a tile that only says what it plots has not explained how to use it.
+
+- First paragraph: the lead, in one or two sentences: what each mark is and the question the
+  chart answers.
+- `How to read:` what a good result and a bad one look like on this chart, and what to do next
+  (which tile, filter or sample to open).
+- `Lines and annotations:` (or `Annotations:`, `Reference lines:`) every mark drawn by the
+  figure: reference lines, bands, zones, labels, outlier flags. Each with its value and its
+  source (section 17). Omit the paragraph when the figure draws none.
+- `Source:` or `Sources:` the paper, manual or standard behind a cut-off, as a URL or doi.
+- `Note:` or `Warning:` a limit of the data or the tool (an amber callout), only when there is
+  one a reader could trip on.
+- Paragraphs are separated by a blank line; a folded `>-` scalar turns it into one newline, which
+  the popover reads as a break. `**bold**` for the few keywords, `[Reads](tab:Reads)` to link a tab.
+- No dataset values (sample names, counts from the megatest), no em dashes, at most 3 sentences
+  per paragraph, as everywhere in this section.
+
 ### Scatters and small-n figures
 
 A figure earns its tile when a reader can say what to do after looking at it.
@@ -710,3 +731,26 @@ beside the tiles that point at a locus. The per-workflow pages are in
   to read alignments, and enlarged it hides the tiles that drive it.
 - A recipe test builds a fake run tree and validates the substituted collection with
   `DCGenomicTracksConfig`.
+
+## 17. Thresholds, cut-offs and reference lines
+
+A line, a band, a flag or a "pass / check" verdict on a plot says how to read the data, so it
+rests on a rule the community already uses, never on a number we picked.
+
+- Every threshold has a **source**: the tool's own documented default or cut-off (read from the
+  run's `params.json` when the run sets it), or a published consensus rule (a guideline, a
+  benchmark paper, the tool's manual). Name the rule in the tile description and in the code
+  comment, with the value and where it comes from (for example the 500 nM and 50 nM IC50 lines,
+  or the NetMHCpan percentile ranks 0.5 and 2).
+- No source, no threshold. Then draw no pass mark and no verdict. Use a reference the data
+  defines itself (the cohort median, the run's own default, a quantile) and call it that, or
+  show the measure alone. Wording such as "rule of thumb", "our own", "roughly" or "about
+  right" in a description means the number has no source: remove the line or find the source.
+- A hard-coded reference (a textbook range, a fixed window) is allowed when it is the
+  established one; say it is a fixed reference and not read from the run, and cite it.
+- Where a tool publishes no cut-off (OptiType gives no minimum number of reads, for example),
+  say so in the description instead of filling the gap.
+- A value a user could reasonably change is a template variable or a documented constant at the
+  top of the figure code, with its source beside it, never a bare number inside an expression.
+- Review: when a tile gets a new line or flag, the PR names its source. An existing line without
+  one is a bug to fix, not a style choice.

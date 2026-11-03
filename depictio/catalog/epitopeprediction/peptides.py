@@ -8,7 +8,8 @@ and UniProt accession pVACseq gave it, for protein input the protein records it
 was cut from, for peptide input its id. ``call`` is ``Binder`` when at least one
 tool calls the peptide a binder of at least one allele, ``Unsupported`` when no
 tool could score it (allele or length not supported) and ``Non-binder``
-otherwise.
+otherwise. ``mhc_class`` is ``Class I`` or ``Class II``, read from the alleles
+that scored the peptide, else from those of its sample.
 """
 
 from __future__ import annotations
@@ -46,6 +47,7 @@ OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "peptide_id": pl.Utf8,
     "length": pl.Int64,
     "length_class": pl.Utf8,
+    "mhc_class": pl.Utf8,
     "origin": pl.Utf8,
     "call": pl.Utf8,
     "binder": pl.Int64,
@@ -79,10 +81,18 @@ _ALLELE_LIST_MAX = 10
 
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     df = load(sources)
-    info_cols = ["id", "length", "length_class", "origin", *VARIANT_COLUMNS]
+    info_cols = ["id", "length", "length_class", "mhc_class", "origin", *VARIANT_COLUMNS]
     info_cols += ["protein_ids", "counts", "wildtype"]
     peptides = df.group_by(_KEY, maintain_order=True).agg(
         [pl.col(c).drop_nulls().first().alias(c) for c in info_cols]
+    )
+    # A peptide no tool scored has no allele to read its class from; a sample is
+    # predicted for one class (one row of the samplesheet), so it takes the class
+    # of the peptides that were scored.
+    peptides = peptides.with_columns(
+        pl.col("mhc_class")
+        .fill_null(pl.col("mhc_class").drop_nulls().first().over("sample"))
+        .fill_null(pl.lit("Unknown"))
     )
 
     hits = with_wildtype(scored(df))

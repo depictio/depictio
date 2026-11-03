@@ -7,7 +7,7 @@ description: >-
   tool calls it a binder of, whether it binds, does not, or could not be scored,
   and its source: gene, transcript, consequence, protein change, genomic anchor
   and UniProt accession for variant input, the protein records for protein
-  input, the peptide id for peptide input.
+  input, the peptide id for peptide input, and the MHC class it was scored for.
 find:
   path_glob: "**/predictions/*.tsv"
 recipe: epitopeprediction/peptides.py
@@ -17,10 +17,10 @@ renders_as:
   - { id: binder_count, component: card, column: peptide_key, aggregation: count, filter_expr: "col('binder') == 1", secondary_layout: composition, breakdown_col: length_class, headline: true }
   - { id: binding_alleles, component: card, column: binding_alleles, aggregation: median, filter_expr: "col('binder') == 1", secondary_layout: histogram }
   - { id: peptide_length, component: card, column: length, aggregation: median, secondary_layout: histogram }
-  - id: length_histogram
+  - id: length_by_class
     component: figure
-    visu_type: histogram
-    dict_kwargs: { x: length, color: call, barmode: stack }
+    visu_type: bar
+    dict_kwargs: { x: length_class, color: call, facet_col: mhc_class, barmode: stack }
   - { component: figure, visu_type: bar, dict_kwargs: { x: sample, color: call } }
   - { component: interactive, interactive_type: MultiSelect, column_name: call }
   - { component: interactive, interactive_type: MultiSelect, column_name: length_class }

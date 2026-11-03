@@ -44,7 +44,9 @@ reads). The genotypes repeat by design, which is what a pipeline-function test c
 | `depictio dashboard validate --offline dashboards/base.yaml` | pass |
 | `test_template_conventions.py`, `test_shipped_dashboard_yamls.py`, `test_template_dc_order.py` with `-k hlatyping` | 22 passed |
 | `test_advanced_viz_config_alignment.py`, `test_advanced_viz_allele_grid.py` | pass |
-| `depictio/tests/recipes/test_hlatyping_recipes.py` (catalog `optitype`) and `test_hlatyping_project_recipes.py` (`samples`, `read_qc`) | 17 passed |
+| `depictio/tests/recipes/test_hlatyping_recipes.py` (catalog `optitype`) and `test_hlatyping_project_recipes.py` (`samples`, `genotypes`, `read_qc`) | 19 passed |
+| `test_advanced_viz_allele_grid.py` (`color_by`, `group_cols`, `group_by`, `allele_group_col`, `zygosity_col`; defaults leave existing dashboards unchanged) and `alleleGridLayout.test.ts` (zygosity, locus classes, group shades, row grouping) | pass |
+| The three code figures added or recoloured on Genotypes and Alleles (allele groups by locus, allele frequency, carrier matrix), run on synthetic genotypes joined to a hub | each draws; the group colours come from `depictio_category_colors['allele_group']` |
 | `depictio dev catalog validate`, `depictio/tests/models/test_catalog.py` | pass, 106 passed |
 | `depictio/tests/catalog/` | `test_conformance_project.py` fails 4 tests until the conformance project is regenerated for the new `optitype` outputs (shared files; the same 4 already fail for the other wave 4 modules) |
 | Every recipe over the megatest (`execute_recipe`, input and output schemas) | pass, 5 collections |
@@ -79,12 +81,12 @@ lists the typed samples, so the hub never empties.
 
 | Tab | Open rows | Open sections |
 | --- | --- | --- |
-| Overview | 22 of 24 | hero 1, about 3, pipeline 3, key figures 2, findings 11 (text 2, grid and frequency 5, quality and reads 4), how to read 2 |
+| Overview | 23 of 24 | hero 1, about 3, pipeline 3, key figures 2, findings 12 (text 2, grid and frequency 5, quality and reads 5), how to read 2 |
 | MultiQC | 17 | 2 (read quality 12, HLA typing 4; more FastQC collapsed) |
-| Reads | 12 | 3 (strip 2, read depth 4, read composition 4; table collapsed) |
-| Genotypes | 10 | 2 (strip 2, genotype grid 6; two tables collapsed) |
-| Alleles | 12 | 3 (strip 2, allele frequency 4, calls per allele 4) |
-| Typing quality | 14 | 3 (strip 2, read support 6, per sample 4) |
+| Reads | 16 | 3 (intro 2, strip 2, read depth 12; read composition and the table collapsed) |
+| Genotypes | 16 | 2 (intro 2, strip 2, genotype grid 6 and allele groups by locus 6; two tables collapsed) |
+| Alleles | 16 | 3 (intro 2, strip 2, allele frequency 6, alleles by sample 6; calls per allele collapsed) |
+| Typing quality | 16 | 3 (intro 2, strip 2, read support 6, objective 6) |
 
 ## Findings
 
@@ -99,7 +101,11 @@ lists the typed samples, so the hub never empties.
 - **Objective.** The objective per read is 0.982 for the DNA samples and 0.973 for the RNA
   ones, exactly `1 - 0.009 x 2` and `1 - 0.009 x 3`: OptiType's objective subtracts `beta` per
   heterozygous locus (FRED-2/OptiType `model.py`, `read_cov`). The template says so on the
-  Typing quality tab rather than presenting the ratio as a fit score.
+  Typing quality tab rather than presenting the ratio as a fit score. For that reason the
+  Typing quality tab does not draw reads against objective: with five samples the points fall
+  on one line and three of them overlap. It draws the reads each genotype explains against the
+  reads per distinct allele against the cohort median (a bar per sample) and the objective per read against the guide
+  of its heterozygous loci.
 - **FastQC.** Every read file fails or warns on per-sequence GC content (the HLA-enriched reads
   against FastQC's whole-genome model) and nothing else fails; duplicates stay between 9.6% and
   14.5%.
@@ -111,16 +117,18 @@ None of these could be checked without a running stack; each is pending a live c
 | Item | Status |
 | --- | --- |
 | The Overview fits in about two screens, values fill in, highlights draw, `tab:` links open | pending live check |
-| Controls dock right on full-width viz and on top of narrower ones | pending live check (allele grid w8, scatters w8 and w4) |
+| Controls dock right on full-width viz and on top of narrower ones | pending live check (allele grid w8, bars and dot plots w8) |
 | No tile shows an empty band or a cut body; no tick label cut, no legend scrolling over tick labels | pending live check (the allele frequency x axis names every allele) |
 | The map draws its tiles and points | not applicable (no map) |
-| Each dock shows a few controls and "More options"; every view switch draws | pending live check (allele grid, scatters) |
+| Each dock shows a few controls and "More options"; every view switch draws | pending live check (allele grid) |
 | The group has the same colour on figures, advanced viz and filter chips | pending live check |
 | Every child tab opens on its intro; every KPI card draws its secondary and caption, no bar reads about 1%, each icon in its own colour | pending live check |
 | The Guide's demos are not empty | pending live check |
 | Each conditional route renders without a broken highlight or a stray `{VAR}` | not applicable (no route); pending live check of the no-sheet hub |
 | A sample picked in the left panel moves every card of a child tab | pending live check (the OptiType MultiQC rows are not narrowed, see open issues) |
 | The allele grid draws both haplotypes, merges the homozygous HLA-A cells and an allele click narrows the per-sample tables | pending live check (the kind is INCUBATING; this is its first template binding) |
+| The grid's Colour by (allele group, zygosity) and Group samples by controls redraw, the key and legend sit under the grid, and a group has the grid's hue in the bars beside it and in the Alleles tab | pending live check |
+| The carrier matrix draws one panel per locus with only that locus's alleles, and follows the sample filters | pending live check |
 | The Locus tab opens on data | not applicable (no locus tab) |
 
 ## Scenarios

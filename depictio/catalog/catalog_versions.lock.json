@@ -159,8 +159,8 @@
       "content_hash": "7a09eefe5b02898e25cce465a9f741eed7ce1f9c03b3822a2ef20eefb811cce5"
     },
     "epitopeprediction": {
-      "version": "1.0.0",
-      "content_hash": "eff2a7167d46578ace163baae2a6d79b3535d0765539895bf1ced22bc9bedbee"
+      "version": "2.0.0",
+      "content_hash": "f9195330966b2add5fbcccf48a23672c7511052b1df09e6235062be72aea883a"
     },
     "famsa": {
       "version": "1.0.0",

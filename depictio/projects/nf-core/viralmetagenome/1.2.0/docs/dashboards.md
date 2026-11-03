@@ -84,25 +84,22 @@ sample sheet sit in the left panel and at the bottom of every other tab.
 2. **Samples.** *How many reads of each sample reach assembly?* Four cards: the read funnel
    (raw read pairs, then kept after trimming and after host removal), the host share, Q30 bases
    against Illumina's 80 % floor, and FastQC's duplicate share. The read pairs of every sample at
-   each stage, and a sample plane (raw read pairs against the share retained, coloured by the
-   group). The per-stage table is collapsed.
+   each stage, and a sample plane (raw read pairs against the share retained, coloured by the group, with a 90 % line and the samples that lose most named). The per-stage table is collapsed.
 
 **Assembly**
 
 3. **Contigs.** *Which contigs did the assembly build, and what are they?* Four cards: contigs by
    taxonomic call, assembled bases by length band, reads on contigs by cluster role and clusters
-   refined or filtered out. Every contig by length and the reads that map back to it (log axes,
-   coloured by its call), and the read depth share of the clusters per sample. Contig and cluster
+   refined or filtered out. Every contig by length and the reads that map back to it (log axes, coloured by its call and sized by its read share, with a 1 kb line and the largest contigs named), and the read depth share of the clusters per sample. Contig and cluster
    tables are collapsed. The tab exists only on the de novo route.
 4. **Consensus.** *How close to a reference and how complete is each genome?* Four cards:
    genomes by route, ambiguous bases (5 % N passes, 20 % warns), identity to the closest
-   reference and the CheckV tier. Every genome by its ambiguous bases and identity, coloured by
-   route, with the record of the picked one; the ambiguous bases of each de novo consensus along
-   its refinement (scaffold, mapping iterations, variant-calling round). The genome and CheckV
-   tables are collapsed.
+   reference and the CheckV tier. Every genome by its ambiguous bases and identity, coloured by route, with the trust zone cut at 5 % N and 95 % identity, the genomes furthest from a reference named and the record of the picked one; the ambiguous bases of each de novo consensus along
+   its refinement (scaffold, mapping iterations, variant-calling round), a code figure with markers on every step, a 5 % N line and a log axis floored at 0.1 %, since the share of N can be exactly 0. A line that ends before the others is labelled "no later step recorded": the pipeline's table holds no later iteration for that genome. A late rise in the share of N is expected, because the variant-calling round masks
+   the positions too shallow to call. The genome and CheckV tables are collapsed.
 5. **Mapping.** *How deep and how evenly do the reads cover each genome?* Four cards: reads
    mapped, mean depth, breadth at 10X (90 % passes, 50 % warns) and duplicate pairs. The depth
-   along each genome in bins (log), then depth against breadth per genome beside the cumulative
+   along each genome in bins (a code figure on a log axis with a 10X line and the stretches under it shaded), then depth against breadth per genome (cut at 10X and 90 %, the thinnest genomes named) beside the cumulative
    coverage curves. The mapping table is collapsed.
 
 **Variants**
@@ -110,8 +107,8 @@ sample sheet sit in the left panel and at the bottom of every other tab.
 6. **Variants.** *Which variants does each genome carry, and how fixed are they?* Four cards:
    passing calls by allele frequency band (fixed at 0.9 or more, major from 0.5, minor below),
    minor calls kept or filtered, call depth and the genomes carrying a passing call. Every call on
-   a genome view, one lane per genome (opening on the first reference), and allele frequency
-   against depth. The call table is collapsed.
+   a genome view, one lane per genome (up to 12, opening on every reference at once), and allele
+   frequency against depth (cut at 10 reads and half frequency, with smaller points because the calls overlap). The call table is collapsed.
 
 ## Notes
 
@@ -120,9 +117,17 @@ sample sheet sit in the left panel and at the bottom of every other tab.
   own index and an `indexed_file` collection cannot range-read them. Its references are viral
   genomes no bundled assembly covers, so the genome view derives its axis from the rows; with
   several references in one run the axis lists each of them, and a lane shows its calls on its
-  own reference. The base.yaml carries a `TODO(jbrowse)` for the JBrowse2 swap.
-- The depth along each genome is a profile over the position, not a coverage track: the genomes
-  of a run sit on different references, and a profile overlays them from their first base.
+  own reference. The view does not open on a given reference: the axis order is the natural
+  order of the reference names and the lane order that of the genome ids, neither of which a
+  recipe can set, so no default region names the reference carrying the most calls. Brush a
+  reference to zoom on it. The base.yaml carries a `TODO(jbrowse)` for the JBrowse2 swap;
+  coupling the view to a JBrowse tile, as nf-core/viralrecon 3.0.0 does, is a follow-up.
+- The depth along each genome is a line figure over the position, not a coverage track: the genomes
+  of a run sit on different references, and lines overlay them from their first base. It is a code
+  figure because the profile kind has no horizontal reference line, and the 10X line is what the
+  tile is read against. The refinement figure is a code figure for the same reason.
+- The scatters leave the corner of the good verdict without a quadrant label, because the points
+  of a healthy run crowd that corner and a label would sit on them; the tile description names it.
 - CheckV on the megatest ran on the minimal test database, which holds no complete genome: every
   consensus reads `Not-determined` and completeness is null. With a full database the tiers and
   the completeness fill in.

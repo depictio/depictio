@@ -7,8 +7,8 @@
       "content_hash": "369ff13f44f44a779cb07e3f46149b97861d9b659b4b1aebde3af1d40c51695c"
     },
     "init/catalog_conformance": {
-      "version": "1.0.0",
-      "content_hash": "1c8d83a70c28ef6ae2eb26748737bd841a7465e2c09bd057567db22c6a740361",
+      "version": "2.0.0",
+      "content_hash": "66261ac886767eca815998df0eabb21d0bf319812802e9df6f552b084636cb59",
       "catalog": {
         "adapterremoval": "1.0.0",
         "agat": "1.0.0",
@@ -48,7 +48,7 @@
         "edger": "1.0.0",
         "enchantr": "1.0.0",
         "endorspy": "1.0.0",
-        "epitopeprediction": "1.0.0",
+        "epitopeprediction": "2.0.0",
         "famsa": "1.0.0",
         "fcsadaptor": "1.0.0",
         "fcsgx": "1.0.0",
@@ -320,10 +320,10 @@
       }
     },
     "nf-core/epitopeprediction/3.2.0": {
-      "version": "1.1.0",
-      "content_hash": "4d66803274ee2108fbb0127ce696701bf31db200280d4596f69106616fe2e6ca",
+      "version": "2.0.0",
+      "content_hash": "8c5444d455416cc8900f2a26d3aaab4dabfdbecff0db74f1fea3556d81e2e50a",
       "catalog": {
-        "epitopeprediction": "1.0.0",
+        "epitopeprediction": "2.0.0",
         "multiqc": "1.0.0"
       }
     },
@@ -350,8 +350,8 @@
       }
     },
     "nf-core/genomeqc/1.0.1": {
-      "version": "1.1.0",
-      "content_hash": "946f3c9c481b58d5867d24a3374932202f446f1179e6f1bdc6e4e6842bfc6f6e",
+      "version": "2.0.0",
+      "content_hash": "a24f659e16cc9366bc2177180e50ee349bdad4b1a8f4253484558e65315406e9",
       "catalog": {
         "agat": "1.0.0",
         "busco": "2.0.0",
@@ -388,8 +388,8 @@
       }
     },
     "nf-core/hlatyping/2.2.0": {
-      "version": "1.1.0",
-      "content_hash": "904b4e06cdc481774b8f63756ad738d71f2343d17a0618db717fd72235341447",
+      "version": "2.0.0",
+      "content_hash": "08f5bae74d49a5d1a1649569aa66baa2c5b9ed6ef0b589be3c7bb385018109ad",
       "catalog": {
         "multiqc": "1.0.0",
         "optitype": "1.0.0"
@@ -634,8 +634,8 @@
       }
     },
     "nf-core/stableexpression/1.1.0": {
-      "version": "1.1.0",
-      "content_hash": "0c0f5f2f4629b5fc618a44798ad796d8eeba640c99e4ef834e472e0a18b804f6",
+      "version": "1.2.0",
+      "content_hash": "8b410e2e6400d6bebc96642f09a2347f2048bf7920ca4bddb8fb6915a05c5430",
       "catalog": {
         "stableexpression": "1.0.0"
       }
@@ -689,8 +689,8 @@
       }
     },
     "nf-core/viralmetagenome/1.2.0": {
-      "version": "1.1.0",
-      "content_hash": "b869bfefb554b193df756299aca8b8dcc67c3a13d8e38dc83894659bdad6c836",
+      "version": "1.2.0",
+      "content_hash": "117da80f859e9f479dd438d00530bfd6b01b3a6053751cd7861ebce80632c537",
       "catalog": {
         "checkv": "1.0.0",
         "ivar": "1.0.0",

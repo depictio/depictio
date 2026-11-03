@@ -82,8 +82,8 @@ The landing page, at compact width with the filter panel collapsed:
   allele called the binder of the most peptides and its share of the binder calls, the share
   of peptides that bind an allele, the mutant peptides that bind where their wild type does
   not, and the share of peptides two tools scored that get the same call from both. Below
-  them, four figures in two rows: the allele by sample dot plot beside the length histogram
-  stacked by call, then IC50 against percentile rank beside one tool's IC50 against the
+  them, four figures in two rows: the allele by sample heat map beside the length bars (one
+  panel per MHC class, stacked by call), then IC50 against percentile rank beside one tool's IC50 against the
   other's. The bar of this section filters by input type and allele.
 - **How to read this dashboard**: one tile per tab, by group, each showing its question.
 
@@ -107,20 +107,27 @@ filters narrow its panels.
 
 **Predictions.** Strip: the predictions (split by IC50 band), the binder calls (split by
 peptide length), the alleles scored (ranked by locus) and the median IC50 against the 500 nM
-binder line. Then the allele by sample dot plot (thirty alleles, those whose median affinity
-differs most between samples, every allele on demand; dot size is the binder share, colour
-the median affinity score), the log10 IC50
-histogram by tool and the predictions per sample stacked by IC50 band. Collapsed: the
+binder line. Then the allele by sample heat map (thirty alleles, each sample's best-scored first, every
+allele on demand; colour and the printed figure are the binder share, the hover has the peptide
+counts), the IC50 distribution by tool (a share of each tool's predictions, on a log axis, with
+the 500 nM binder line and its binder side shaded) and, per sample, the share of predictions at
+500 nM or stronger, split into strong and binder on a 0-based axis (the weak and non-binding
+bands are left out, so the minority is not squeezed into a near-full stack). Collapsed: the
 per-allele table and every prediction. Filters: allele, HLA locus, tool and a log10 IC50
 range; the allele pick reaches the allele summary, the agreement and the mutant / wild-type
 pairs through the project links.
 
 **Peptides.** Strip: the peptides (split by binder call), the predicted binders (split by the
 IC50 band of their best prediction), alleles per binder (its distribution) and the median
-best IC50 against the 500 nM line. Then the peptides by length stacked by call, and the
-mutant against wild-type IC50 of every missense mutant whose wild type was predicted (below
-the diagonal the mutation strengthens binding; colour is the outcome, a mutant binder whose
-wild type does not bind first). Collapsed: the candidate peptides cut from the variants (by
+best IC50 against the 500 nM line. Then the peptides by length, one panel per MHC class on its own
+count axis, stacked by call, with the binder share over each bar and the usual length window of
+the class shaded (closed class I groove, 8 to 11 residues; open class II groove, 12 to 25; a
+bar per length, so a length nobody has stays an empty slot; the class comes from the alleles
+that scored the peptide, else from its sample), and the mutant against wild-type IC50 of every
+missense mutant whose wild type was predicted (the 500 nM lines cut the plane into four
+outcomes and the diagonal marks no change; below it the mutation strengthens binding; colour is
+the outcome, a mutant binder whose wild type does not bind first; the peptides with the lowest
+mutant to wild-type ratio are labelled). Collapsed: the candidate peptides cut from the variants (by
 consequence and length, and their table), and the peptide table with its record card (best
 prediction, source variant or protein, wild type). Filters: binder call, peptide length and
 origin; the length pick reaches the predictions and the variant peptides.
@@ -128,9 +135,12 @@ origin; the length pick reaches the predictions and the variant peptides.
 **Predictors.** Strip, read from the per-tool summary (the numbers of the MultiQC statistics
 table): binders per tool (a ring by tool), the binder share per sample and tool (its spread),
 the peptides a tool could not score (by tool) and the most alleles a tool scored in one
-sample. Then the binder share per sample and tool, IC50 against percentile rank for every
-prediction (one colour per tool, a line at 500 nM), and one tool's IC50 against the other's
-for the peptides both scored against the same allele (colour is who calls a binder).
+sample. Then the binder share per sample and tool (horizontal bars with the binder and scored counts
+printed, and a dashed line at 2 %, the share the MHCflurry rank cut-off lets through by chance),
+IC50 against percentile rank for every prediction (one colour per tool, dashed lines at 500 nM
+and at a rank of 2 %), and one tool's IC50 against the other's for the peptides both scored
+against the same allele (colour is who calls a binder, dashed lines at 500 nM). The scatters
+use markers of at least 12 px with an outline and label the strongest peptides.
 Collapsed: the per-tool table and the paired predictions. Filters: tool and agreement.
 
 ## Routes and pruning
@@ -193,6 +203,6 @@ tools, HLA loci and peptide lengths are coloured `auto`.
   heterodimer keeps both chains, `HLA-DPA1*01:03/DPB1*02:01`); a non-HLA allele is kept as
   written. `hla_locus` groups the class II chains by locus (`HLA-DR`, `HLA-DQ`, `HLA-DP`).
 - **Screens.** A sample run against every supported allele (`HLA-all`) contributes thousands
-  of alleles, each seen in that sample only: the dot plot's cap keeps the alleles whose
-  affinity varies most between samples, so alleles shared by several samples come first, and
+  of alleles, each seen in that sample only: the heat map's cap keeps the alleles scored in the most
+  samples, so alleles shared by several samples come first, and
   the binder calls and allele counts of such a run are dominated by that sample.

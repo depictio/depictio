@@ -155,3 +155,33 @@ def test_attach_keeps_an_unknown_name() -> None:
     attach = load_recipe("nf-core/hlatyping/read_qc.py").attach
     assert attach("OTHER_1", {"S1"}) == ("OTHER", "Read 1")
     assert attach("OTHER", {"S1"}) == ("OTHER", "Single-end")
+
+
+def test_genotypes_carry_the_samples_design_columns(run_dir: Path) -> None:
+    """The allele grid groups its rows by a samplesheet column, so the rows hold it."""
+    samples = execute_recipe("nf-core/hlatyping/samples.py", run_dir)
+    out = execute_recipe(
+        "nf-core/hlatyping/genotypes.py", run_dir, extra_sources={"samples": samples}
+    )
+    catalog = execute_recipe("optitype/genotypes.py", run_dir)
+    # Same rows and columns as the catalog recipe, then the hub's design columns.
+    assert out.height == catalog.height == 4 * 6
+    assert out.columns[: len(catalog.columns)] == catalog.columns
+    assert {"seq_type", "input_format", "read_layout", "runs"} <= set(out.columns)
+    assert "sample" not in out.columns and "input_files" not in out.columns
+    seq = dict(zip(out["sample_id"], out["seq_type"], strict=True))
+    assert seq["RNA1"] == "RNA" and seq["DNA1"] == "DNA"
+    assert out.filter(pl.col("sample_id") == "DNA1_CAT")["runs"].unique().to_list() == [2]
+
+
+def test_genotypes_of_a_sample_missing_from_the_sheet_keep_their_rows(run_dir: Path) -> None:
+    _typed(run_dir, "EXTRA")
+    samples = execute_recipe("nf-core/hlatyping/samples.py", run_dir)
+    out = execute_recipe(
+        "nf-core/hlatyping/genotypes.py", run_dir, extra_sources={"samples": samples}
+    )
+    assert out.filter(pl.col("sample_id") == "EXTRA").height == 6
+    # The hub lists every typed sample, as Not stated when the sheet does not.
+    assert out.filter(pl.col("sample_id") == "EXTRA")["seq_type"].unique().to_list() == [
+        "Not stated"
+    ]
