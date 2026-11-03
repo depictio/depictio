@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { legendEntries } from './textLegend';
+import { legendColumnOf, legendEntries } from './textLegend';
 
 describe('legendEntries', () => {
   const source = {
@@ -20,5 +20,18 @@ describe('legendEntries', () => {
     expect(legendEntries(source, 'size')).toEqual([]);
     expect(legendEntries(null, 'genome')).toEqual([]);
     expect(legendEntries(source, null)).toEqual([]);
+  });
+});
+
+describe('legendColumnOf', () => {
+  it('reads the column of a legend placeholder', () => {
+    expect(legendColumnOf('{{legend:genome}}')).toBe('genome');
+    expect(legendColumnOf('  {{legend:busco_class}}  ')).toBe('busco_class');
+  });
+
+  it('leaves any other value alone', () => {
+    expect(legendColumnOf('3 genomes')).toBeNull();
+    expect(legendColumnOf('{{n_genomes}}')).toBeNull();
+    expect(legendColumnOf('{{legend:}}')).toBeNull();
   });
 });

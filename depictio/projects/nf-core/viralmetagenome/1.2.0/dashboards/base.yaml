@@ -189,8 +189,7 @@ main_dashboard:
       - ![](icon:mdi:test-tube) **Samples** {{n_samples}}, {{n_raw}} read pairs before trimming
       - ![](icon:mdi:shape-outline) **{GROUP_COL_DISPLAY}** {{groups}} groups, most often {{top_group}}
       - ![](icon:mdi:file-table-outline) **Samplesheet** [one row per sample](section:Sample sheet), its path in [the run parameters](params:input)
-      - ![](icon:mdi:palette-outline) **Color code** {{legend}}
-    legend: genome_id
+      - ![](icon:mdi:palette-outline) **Genome** {{legend:genome_id}}
     tag: vm-ov-study
     index: ov-study
     layout: {x: 0, y: 1, w: 5, h: 4}

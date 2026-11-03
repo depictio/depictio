@@ -1095,6 +1095,8 @@ TEXT_VALUE_AGGREGATIONS: tuple[str, ...] = (
 # content between `{{` and `}}`, with no space anywhere.
 TEXT_VALUE_NAME = re.compile(r"^[a-z][a-z0-9_]{0,11}$")
 TEXT_PARAM_PLACEHOLDER = re.compile(r"^param:[A-Za-z0-9_.-]+$")
+# `{{legend:column}}`: a fact line's colour key for a column the dashboard colours.
+TEXT_LEGEND_PLACEHOLDER = re.compile(r"^legend:[A-Za-z0-9_.-]+$")
 # Anything between double braces is meant as a placeholder. The viewer prints
 # one of neither form as is, braces included, so validation refuses it.
 TEXT_PLACEHOLDER = re.compile(r"\{\{([^{}]*)\}\}")
@@ -1251,14 +1253,6 @@ class TextLiteComponent(BaseLiteComponent):
         description="The logo for a dark page. Unset, a dark page draws the title as "
         "text: a wordmark in dark ink would vanish on it.",
     )
-    legend: str | None = Field(
-        default=None,
-        description="A column the dashboard gives colours to (`category_colors`): the tile "
-        "draws a key, a coloured dot and the value for each colour pinned to that "
-        "column, one per line, as the value of the fact line written `{{legend}}` (at "
-        "the end of the tile without one). Unset or a column without pinned colours, "
-        "no key.",
-    )
 
     @field_validator("logo", "logo_dark")
     @classmethod
@@ -1288,13 +1282,14 @@ class TextLiteComponent(BaseLiteComponent):
         for content in text_placeholders(self.title, self.body):
             if TEXT_PARAM_PLACEHOLDER.match(content):
                 continue
-            if content == "legend" and self.legend and "legend" not in declared:
+            if TEXT_LEGEND_PLACEHOLDER.match(content):
                 continue
             if not TEXT_VALUE_NAME.match(content):
                 raise ValueError(
                     f"{{{{{content}}}}} is not a placeholder the viewer prints: write "
-                    "{{name}} (a declared value) or {{param:KEY}} (a run parameter, KEY "
-                    "of letters, digits, `_`, `.`, `-`), with no space inside the braces"
+                    "{{name}} (a declared value), {{param:KEY}} (a run parameter, KEY "
+                    "of letters, digits, `_`, `.`, `-`) or {{legend:column}} (the colour key "
+                    "of a column), with no space inside the braces"
                 )
             if content not in declared:
                 raise ValueError(

@@ -161,8 +161,7 @@ main_dashboard:
       - ![](icon:mdi:file-document-multiple-outline) **Input** {{n_fastq}} FASTQ and {{n_bam}} BAM samples, {{n_paired}} paired-end
       - ![](icon:mdi:merge) **Runs** {{n_runs}} sheet rows, the runs of a sample merged before typing
       - ![](icon:mdi:file-table-outline) **Samplesheet** [one row per sample](section:Sample sheet), its path in [the run parameters](params:input)
-      - ![](icon:mdi:palette-outline) **Color code** {{legend}}
-    legend: zygosity
+      - ![](icon:mdi:palette-outline) **Zygosity** {{legend:zygosity}}
     tag: ht-ov-study
     index: ov-study
     layout: {x: 0, y: 1, w: 5, h: 4}
