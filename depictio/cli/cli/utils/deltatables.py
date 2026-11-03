@@ -38,6 +38,7 @@ from depictio.cli.cli.utils.delta_versioning import (
 )
 from depictio.cli.cli.utils.ingest_timing import record, timed
 from depictio.cli.cli.utils.multiqc_processor import process_multiqc_data_collection
+from depictio.cli.cli.utils.record_sheets import is_record_sheet, read_record_sheet
 from depictio.cli.cli.utils.rich_utils import rich_print_checked_statement
 from depictio.cli.cli.utils.telemetry import cli_version
 from depictio.cli.cli_logging import logger
@@ -227,6 +228,17 @@ def _delimited_kwargs(file_path: str, file_format: str, polars_kwargs: dict) -> 
     return effective_kwargs
 
 
+def _reads_as_records(location: str, polars_kwargs: dict) -> bool:
+    """Whether a CSV/TSV-declared ``location`` is a YAML/JSON samplesheet to read as records.
+
+    The extension says so, unless the collection tells the CSV reader how to
+    split the file: the raw-JSON collections (bcl2fastq ``Stats.json``,
+    simpleaf ``map_info.json``...) read their report one line per row with a
+    ``separator`` it cannot contain, and keep that read.
+    """
+    return is_record_sheet(location) and "separator" not in polars_kwargs
+
+
 def _lazy_scan_path(
     file_path: str, file_format: str, polars_kwargs: dict, *, confine: bool = True
 ) -> pl.LazyFrame:
@@ -246,6 +258,9 @@ def _lazy_scan_path(
                 "local_path_outside",
             )
     if file_format in ["csv", "tsv", "txt"]:
+        if _reads_as_records(file_path, polars_kwargs):
+            with open(file_path, "rb") as handle:
+                return read_record_sheet(handle.read(), str(file_path)).lazy()
         return pl.scan_csv(file_path, **_delimited_kwargs(file_path, file_format, polars_kwargs))
     elif file_format == "parquet":
         return pl.scan_parquet(file_path, **polars_kwargs)
@@ -323,6 +338,15 @@ def _read_remote_file_lazy(
         # object-store wants the scheme in lower case; the key stays verbatim.
         url = "s3://" + url[5:]
         target = s3_read_target_in_region(url, CLI_config)
+        if file_format != "parquet" and _reads_as_records(url, polars_kwargs):
+            # A YAML/JSON samplesheet has no scanner: one GetObject, parsed whole.
+            try:
+                body = target.client().get_object(Bucket=target.bucket, Key=target.key)
+                data = body["Body"].read()
+            except Exception as exc:
+                logger.debug(f"S3 read of {url} failed: {exc}")
+                raise S3AccessFailed.from_exception(exc, target) from exc
+            return read_record_sheet(data, url).lazy()
         storage_options = target.polars_options()
         if file_format == "parquet":
             lf = pl.scan_parquet(url, storage_options=storage_options, **polars_kwargs)
