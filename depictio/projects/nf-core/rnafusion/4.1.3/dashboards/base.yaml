@@ -117,8 +117,6 @@ main_dashboard:
     collapsed: true
     persistent: true
     pin: bottom
-    exclude_tabs:
-    - Overview
   components:
   # First in component order on purpose: the Guide demos the first categorical
   # filter that shares a data collection with the first card (Fusion calls, below),
@@ -164,26 +162,29 @@ main_dashboard:
     tag: rf-ov-hero
     index: ov-hero
     layout: {x: 0, y: 0, w: 8, h: 1}
+  # The study: what was typed, from the samplesheet and the pooled calls. Each line
+  # cites its data collection, so a line goes with its data.
   - component_type: text
     surface: card
+    values:
+      samples: {dc: samplesheet, column: sample, aggregation: nunique, format: integer}
+      n_fusions: {dc: fusion_consensus, column: fusion, aggregation: count, format: integer}
     body: |
-      ### About this dashboard
-      nf-core/rnafusion searches RNA-seq reads for gene fusions with three callers, pools their calls with fusion-report and re-quantifies the survivors with FusionInspector. This page sums up one run; each tab behind it answers one question, in the order of the steps below.
-
-      The filters in the left panel apply to every tab they reach: narrow once and the dashboard follows. A bar above a section narrows that section only.
-    tag: rf-ov-about
-    index: ov-about
+      ### The study
+      - ![](icon:mdi:flask-outline) **Samples** {{samples}}, each searched for fusions by every caller
+      - ![](icon:mdi:set-merge) **Fusion calls** {{n_fusions}} pooled across the samples
+      - ![](icon:mdi:file-table-outline) **Samplesheet** [one row per sample](section:Sample sheet), its path in [the run parameters](params:input)
+      - ![](icon:mdi:palette-outline) **Caller** {{legend:caller}}
+    tag: rf-ov-study
+    index: ov-study
     layout: {x: 0, y: 1, w: 5, h: 3}
   # The run's own settings, read from its params.json: a key the run did not
   # set prints a dash.
   - component_type: text
     surface: card
-    values:
-      samples: {dc: samplesheet, column: sample, aggregation: nunique, format: integer}
     body: |
       ### The run
       - ![](icon:mdi:source-branch) **Pipeline** nf-core/rnafusion 4.1.3
-      - ![](icon:mdi:flask-outline) **Samples** {{samples}}
       - ![](icon:mdi:dna) **Genome** {{param:genome}} · GENCODE {{param:genome_gencode_version}}
       - ![](icon:mdi:tools) **Callers** {{param:tools}}
       - ![](icon:mdi:set-merge) **Caller cut-off** {{param:tools_cutoff}}
@@ -215,6 +216,16 @@ main_dashboard:
     tag: rf-ov-steps
     index: ov-steps
     layout: {x: 0, y: 4, w: 8, h: 3}
+  - component_type: text
+    surface: card
+    body: |
+      ### About this dashboard
+      nf-core/rnafusion searches RNA-seq reads for gene fusions with three callers, pools their calls with fusion-report and re-quantifies the survivors with FusionInspector. This page sums up one run; each tab behind it answers one question, in the order of the steps below.
+
+      The filters in the left panel apply to every tab they reach: narrow once and the dashboard follows. A bar above a section narrows that section only.
+    tag: rf-ov-about
+    index: ov-about
+    layout: {x: 0, y: 7, w: 8, h: 3}
   # Key figures: one card per stage of the funnel, each opening the tab that
   # explains it. The icon colour is that tab's colour.
   - component_type: card
@@ -418,7 +429,20 @@ main_dashboard:
     index: ov-genome
     title: Breakpoints along the genome
     link: tab:Breakpoints
-    description: Each dot is the 5' breakpoint of an Arriba call, its height the reads that support it and its colour the event class. Click a dot to open the locus in the genome browser.
+    description: >-
+      Where on the genome do the fusion breakpoints sit? Each dot is the 5' breakpoint of an Arriba call at
+      its position, its height is the reads that support it (split reads on both sides plus discordant
+      mates) and its colour is the event class.
+
+      How to read: tall dots are the calls with the most reads behind them, and a cluster of dots at one
+      locus is a region that rearranges in several calls or samples. Click a dot to open the locus in the
+      genome browser of [Breakpoints](tab:Breakpoints), where the reads can be read.
+
+      Lines and annotations: no reference line or cut-off is drawn. The colours are Arriba's event classes
+      (translocation, inversion, duplication, deletion and deletion/read-through).
+
+      Note: the height counts reads and is not a measure of confidence. Arriba's own confidence (low,
+      medium, high) is on the Breakpoints tab.
     layout: {x: 0, y: 13, w: 8, h: 4}
   # Link-only tab tiles: each tile prints its tab's subtitle, the question the
   # tab answers. A tab the run does not have is left out, and a heading whose
@@ -499,7 +523,12 @@ main_dashboard:
     tag: rf-sample-sheet
     index: sample-sheet
     title: Sample sheet
-    layout: {x: 0, y: 0, w: 8, h: 6}
+    description: >-
+      Which samples did the run read? One row per entry of the sample sheet the pipeline was given, with
+      its declared strandedness.
+
+      How to read: check the samples here before reading the fusion tabs, since a sample missing from the
+      sheet has no fusion table. Pick rows to narrow every tab to those samples.
 
 tabs:
 - title: MultiQC
@@ -864,7 +893,24 @@ tabs:
     tag: rf-agree-upset
     index: agree-upset
     title: Fusions per combination of callers
-    layout: {x: 0, y: 0, w: 8, h: 5}
+    description: >-
+      Which callers found the same fusions? Each bar is one combination of callers, its height the number
+      of fusions that exactly this combination reported, with the dots below showing which callers are in
+      it and the bars on the left the total each caller found. Combinations are sorted by size and coloured
+      by the number of callers in them.
+
+      How to read: a tall bar on the combination of all callers is the set of fusions to trust first, and a
+      tall bar on one caller alone is a set that only that caller sees, which needs other evidence before
+      it is believed. Open [Caller Evidence](tab:Caller Evidence) for the reads behind each caller.
+
+      Lines and annotations: no reference line or cut-off is drawn, and every combination with at least
+      one fusion is shown.
+
+      Source: fusion-report scoring, https://github.com/Clinical-Genomics/fusion-report/blob/master/docs/score.md
+
+      Note: agreement between callers raises confidence but does not prove a fusion, since callers share
+      the same alignments and can share the same artefacts. fusion-report itself says only biological
+      validation verifies a fusion. {x: 0, y: 0, w: 8, h: 5}
   # The ranking as bars, the fusion names on the axis. The lollipop it
   # replaced drew one fusion per lane, so past six fusions it showed a single
   # stem behind a fusion picker. Read from the evidence rows (they carry the
@@ -894,7 +940,24 @@ tabs:
     tag: rf-agree-ranked
     index: agree-ranked
     title: Fusions by the index, highest first
-    description: The 30 highest-ranked fusions, coloured by how many callers agree; fusions tied on the index follow by supporting reads. Select bars to filter the dashboard.
+    description: >-
+      Which fusions does fusion-report rank highest? One bar per fusion, the 30 highest first, its height
+      the fusion's best Fusion Indication Index over the samples in view and its colour how many callers
+      agree. Fusions tied on the index follow by their supporting reads.
+
+      How to read: bars in the darkest shade, with all callers agreeing, are the first fusions to look at,
+      and a tall bar in the lightest grey is a high score carried by one caller alone. Open
+      [Caller Evidence](tab:Caller Evidence) to see which caller brings the reads. Select bars to filter
+      the dashboard.
+
+      Lines and annotations: no reference line or cut-off is drawn, and the fusion-report scoring page
+      names none for the index. The index combines the callers that found the fusion, weighted equally by
+      default, with the knowledge bases that list it, so a high value is a ranking and not a verdict.
+
+      Source: fusion-report scoring, https://github.com/Clinical-Genomics/fusion-report/blob/master/docs/score.md
+
+      Note: many fusions tie at the top on a small run, so the order among them follows the reads and
+      carries little weight.
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: table
     workflow_tag: rnafusion
@@ -906,7 +969,13 @@ tabs:
     tag: rf-agree-table
     index: agree-table
     title: fusion-report consensus
-    layout: {x: 0, y: 0, w: 8, h: 6}
+    description: >-
+      What does fusion-report know about each fusion? One row per fusion and sample, with its two partner
+      genes, the knowledge bases that list it, its Fusion Indication Index, its rank in the sample and a
+      0 or 1 flag for each caller that found it.
+
+      How to read: sort by rank to see the top calls, and read the caller flags and the number of
+      knowledge bases beside the index. Pick a row to narrow the other tabs to that fusion. {x: 0, y: 0, w: 8, h: 6}
 
 - title: Caller Evidence
   subtitle: How much read support did each caller find for each fusion?
@@ -1093,7 +1162,21 @@ tabs:
     tag: rf-evid-dotplot
     index: evid-dotplot
     title: Read support per fusion and caller
-    layout: {x: 0, y: 0, w: 8, h: 6}
+    description: >-
+      How much read support does each caller find for each fusion? Each dot is a fusion (row) reported by
+      a caller (column), coloured by the caller's supporting reads on a log10(reads + 1) scale (Viridis)
+      and sized by the caller's share of the fusion's total support. At most 30 fusions are drawn, ordered
+      by their mean support.
+
+      How to read: a fusion with dots in every column, bright and large, is backed by every caller. An
+      empty cell is a fusion the caller never reported, and a small dot beside a large one means that
+      caller adds little to the support. Compare with [Caller Agreement](tab:Caller Agreement) for the
+      ranking.
+
+      Lines and annotations: no reference line or cut-off is drawn.
+
+      Note: each caller counts reads its own way, and the recipe sums the read counts of each caller's
+      evidence into one figure, so the callers compare on one scale but are not identical measures. {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: rnafusion
     data_collection_tag: caller_evidence
@@ -1104,7 +1187,13 @@ tabs:
     tag: rf-evid-table-evidence
     index: evid-table-evidence
     title: Per-caller evidence
-    layout: {x: 0, y: 0, w: 8, h: 6}
+    description: >-
+      What does each caller report for each fusion? One row per fusion and caller, with the breakpoints
+      that caller gave, its supporting reads summed into one figure, that caller's share of the fusion's
+      support and the fusion's Fusion Indication Index.
+
+      How to read: sort by supporting reads to see which caller brings most of the evidence, and open the
+      detail column for the caller's own fields. Pick a row to narrow the other tabs to that fusion. {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: rnafusion
     data_collection_tag: arriba_fusions
@@ -1115,7 +1204,16 @@ tabs:
     tag: rf-evid-table-arriba
     index: evid-table-arriba
     title: Arriba calls
-    layout: {x: 0, y: 6, w: 8, h: 6}
+    description: >-
+      What did Arriba retain? One row per fusion call, with its two partner genes and breakpoints, the
+      event class, the transcript feature each breakpoint fell in, the reading frame, the split reads,
+      discordant mates and local coverage, and Arriba's confidence.
+
+      How to read: Arriba grades each call low, medium or high, and the high calls usually carry many
+      supporting reads. Treat low-confidence calls with caution, and pick a row to narrow the other tabs
+      to that fusion.
+
+      Source: Arriba, confidence scoring, https://arriba.readthedocs.io/en/latest/interpretation-of-results/ {x: 0, y: 6, w: 8, h: 6}
   - component_type: table
     workflow_tag: rnafusion
     data_collection_tag: starfusion_fusions
@@ -1126,7 +1224,13 @@ tabs:
     tag: rf-evid-table-starfusion
     index: evid-table-starfusion
     title: STAR-Fusion calls
-    layout: {x: 0, y: 12, w: 8, h: 6}
+    description: >-
+      What did STAR-Fusion predict? One row per call from its abridged table, with the two partner genes,
+      the junction reads and spanning fragments summed into one evidence count, the fusion fragments per
+      million (FFPM) and the share of the evidence that crosses the junction itself.
+
+      How to read: a call carried mostly by junction reads is more direct evidence than one held up by
+      spanning fragments alone. Pick a row to narrow the other tabs to that fusion. {x: 0, y: 12, w: 8, h: 6}
   - component_type: table
     workflow_tag: rnafusion
     data_collection_tag: fusioncatcher_fusions
@@ -1137,7 +1241,13 @@ tabs:
     tag: rf-evid-table-fusioncatcher
     index: evid-table-fusioncatcher
     title: FusionCatcher calls
-    layout: {x: 0, y: 18, w: 8, h: 6}
+    description: >-
+      What did FusionCatcher find? One row per candidate fusion, with both partner genes, the annotation
+      labels the pair matched, the read evidence supporting it and its predicted effect on the coding
+      sequence.
+
+      How to read: read the labels and the effect beside the read counts, since FusionCatcher lists
+      candidates that other callers may not report. Pick a row to narrow the other tabs to that fusion. {x: 0, y: 18, w: 8, h: 6}
 
 - title: Breakpoints
   subtitle: Where do the fusion partners sit, and what do the reads show?
@@ -1333,7 +1443,19 @@ tabs:
     tag: rf-bp-sankey
     index: bp-sankey
     title: Partner contigs, 5' to 3'
-    layout: {x: 0, y: 0, w: 8, h: 5}
+    description: >-
+      Which contigs do the fusion partners come from? A flow from the contig of the 5' partner (left) to
+      that of the 3' partner (right), each link as wide as the supporting reads of the Arriba calls it
+      carries and coloured by its source contig.
+
+      How to read: a link that joins the same contig on both sides is a local rearrangement, and one that
+      crosses to another contig is a translocation. A wide link is a pair of contigs with many reads, and
+      many narrow links from one contig point at a region that fuses with several partners. Open the ring
+      beside it to see the individual calls.
+
+      Lines and annotations: no reference line or cut-off is drawn.
+
+      Note: the width adds read counts over calls, so one very well covered call can dominate a link. {x: 0, y: 0, w: 8, h: 5}
   - component_type: advanced_viz
     workflow_tag: rnafusion
     data_collection_tag: arriba_fusion_links
@@ -1353,7 +1475,20 @@ tabs:
     tag: rf-bp-chord
     index: bp-chord
     title: Breakpoints on the genome
-    description: Each call between its two breakpoints; click one to read it in the browser.
+    description: >-
+      Where are the two breakpoints of each call? Each link of the ring joins the 5' and 3' breakpoints of
+      one Arriba call on the genome, wide in proportion to its supporting reads and coloured by its event
+      class. At most 200 links are drawn, and links within one chromosome are included.
+
+      How to read: links that cross the ring are translocations and short links near one position are
+      local events such as deletions or duplications. Many links meeting at one locus mark a hot spot.
+      Click a link to read the call in the record beside it and its reads in the browser below.
+
+      Lines and annotations: no reference line or cut-off is drawn. The colours are Arriba's event
+      classes (translocation, inversion, duplication, deletion and deletion/read-through).
+
+      Note: the width is the sum of split reads on both sides and discordant mates, a read count and not a
+      confidence.
     layout: {x: 0, y: 0, w: 4, h: 5}
   - component_type: advanced_viz
     workflow_tag: rnafusion
@@ -1374,7 +1509,13 @@ tabs:
     tag: rf-bp-record
     index: bp-record
     title: Call record
-    description: The call picked on the ring, its two breakpoints and the reads that support it.
+    description: >-
+      What is the call picked on the ring? Its label, sample, event class and Arriba confidence, the
+      chromosome and position of its 5' and 3' breakpoints, its Fusion Indication Index and the supporting
+      reads.
+
+      How to read: click a link on the ring, then read the confidence and the reads here before opening
+      the alignments in the browser below.
     layout: {x: 4, y: 0, w: 4, h: 5}
   - component_type: figure
     workflow_tag: rnafusion
@@ -1390,7 +1531,22 @@ tabs:
     tag: rf-bp-type-bars
     index: bp-type-bars
     title: Read support by event class
-    description: Read support summed per structural class, split by Arriba's confidence.
+    description: >-
+      What kind of events does Arriba report, and how well supported are they? One bar per event class
+      (translocation, inversion, duplication, deletion and deletion/read-through), its height the supporting
+      reads of all the calls of that class, split by Arriba's confidence.
+
+      How to read: a class whose bar is mostly high confidence is well supported, and a class that is
+      mostly low confidence is a set of calls to treat with caution. Open the ring above to see where the
+      calls of a class sit.
+
+      Lines and annotations: no reference line or cut-off is drawn. The colours are Arriba's low, medium
+      and high confidence.
+
+      Source: Arriba, confidence scoring, https://arriba.readthedocs.io/en/latest/interpretation-of-results/
+
+      Note: the height adds read counts over calls, so a class with many calls looks taller without being
+      better supported.
     layout: {x: 0, y: 0, w: 4, h: 4, fit: auto}
   - component_type: figure
     workflow_tag: rnafusion
@@ -1406,7 +1562,19 @@ tabs:
     tag: rf-bp-site-bars
     index: bp-site-bars
     title: Read support by breakpoint site
-    description: Per transcript feature of the 5' breakpoint, split by the 3' one; two splice sites is the clean case.
+    description: >-
+      Which parts of the transcripts do the breakpoints fall in? One bar per transcript feature of the 5'
+      breakpoint (splice site, exon, intron and so on), its height the supporting reads of the calls, split
+      by the feature of the 3' breakpoint.
+
+      How to read: a fusion transcript is joined at exon boundaries, so calls with a splice site on both
+      sides are the clean case. Breakpoints inside an intron or an untranslated region are worth a look at
+      the reads in the browser before they are believed.
+
+      Lines and annotations: no reference line or cut-off is drawn.
+
+      Note: the height adds read counts over calls, so a feature with many calls looks taller without being
+      better supported.
     layout: {x: 4, y: 0, w: 4, h: 4, fit: auto}
   # The reads behind a call: a link clicked on the ring, or a fusion picked in
   # the left panel, narrows arriba_fusion_links to its call, and the view frames the 5'
@@ -1450,7 +1618,19 @@ tabs:
     tag: rf-bp-browser
     index: bp-browser
     title: Genome browser
-    description: The reads of the call's sample around its 5' breakpoint, both sides in the Breakpoint view, opening on the highest-ranked call.
+    description: >-
+      What do the reads of the picked call look like? The alignments of the call's own sample around its
+      5' breakpoint, with the 3' side in the Breakpoint view, over the assembly's gene track and the MANE
+      Select transcripts. It opens on the call fusion-report ranks highest.
+
+      How to read: a real fusion shows split reads that continue on the other partner and read pairs
+      linking the two loci, drawn as arcs. A breakpoint backed by only a few reads is weak evidence on its
+      own. Click a link on the ring or pick a fusion in the left panel to move to another call.
+
+      Lines and annotations: the arcs join the two mates of a read pair, and the junction arcs join the
+      ends of a split read. No cut-off is drawn on the number of reads.
+
+      Note: only a few samples open at once, and the tracks come from the run's own alignments.
     layout: {x: 0, y: 5, w: 8, h: 8}
 
 - title: Validation
@@ -1626,7 +1806,22 @@ tabs:
     tag: rf-valid-dotplot
     index: valid-dotplot
     title: Abundance by predicted protein
-    layout: {x: 0, y: 0, w: 8, h: 6}
+    description: >-
+      How abundant is each validated fusion, and is its protein in frame? Each dot is a fusion (row) in
+      its predicted protein class (column: in frame, frameshift or unknown), coloured by its fusion
+      fragments per million (FFPM) on a log10(FFPM + 1) scale (Plasma) and sized by the share of its
+      support that crosses the junction itself. At most 30 fusions are drawn.
+
+      How to read: a large, bright dot in the in-frame column is a fusion that FusionInspector re-counted
+      with many reads on the junction and that keeps its reading frame. A small dot rests mostly on
+      spanning fragments, which are less direct evidence. Open [Protein Domains](tab:Protein Domains) to
+      see what the in-frame proteins keep.
+
+      Lines and annotations: no reference line or cut-off is drawn, and FusionInspector publishes none for
+      FFPM.
+
+      Source: FusionInspector outputs described,
+      https://github.com/FusionInspector/FusionInspector/wiki/FusionInspector-Outputs-Described {x: 0, y: 0, w: 8, h: 6}
   # A scatter of the two ratios would hold a handful of points. What it showed
   # is the imbalance between the sides, so the bars draw that: log2 of the 5'
   # ratio over the 3' one, one bar per validated breakpoint.
@@ -1656,7 +1851,25 @@ tabs:
     tag: rf-valid-far-bars
     index: valid-far-bars
     title: Allelic ratio balance per fusion
-    description: One bar per validated breakpoint, sorted by the imbalance between its 5' and 3' sides; a fusion seen at several breakpoints is named by its coordinates. Pick one to read it beside.
+    description: >-
+      Is a validated fusion supported evenly on both partners? One bar per validated breakpoint, its
+      length log2 of the 5' fusion allelic ratio over the 3' one, in the colour of its predicted protein
+      class, sorted by that imbalance. A fusion seen at several breakpoints is named by its coordinates.
+
+      How to read: a bar near zero is a fusion whose two sides are supported alike, and a bar far to the
+      right or left rests on one partner more than the other. FusionInspector notes that known
+      cancer-relevant fusions tend to show a higher ratio on the 3' partner than on the 5' one, which
+      reads here as a bar to the left. Pick a bar to read the call in the record beside it.
+
+      Lines and annotations: the grey band between -1 and 1 marks a two-fold balance between the sides,
+      and the thin line at 0 marks equal ratios. The band is a display aid and not a validated cut-off,
+      since FusionInspector publishes none for the ratio. A ratio of 0 is raised to 0.01 first so the
+      logarithm exists.
+
+      Source: FusionInspector wiki, https://github.com/FusionInspector/FusionInspector/wiki
+
+      Note: the allelic ratio is a proxy for the proportion of fusion evidence against the unfused allele
+      of each partner, and is not a probability that the fusion is real.
     layout: {x: 0, y: 0, w: 5, h: 5}
   - component_type: advanced_viz
     workflow_tag: rnafusion
@@ -1677,7 +1890,14 @@ tabs:
     tag: rf-valid-record
     index: valid-record
     title: Validated call record
-    layout: {x: 5, y: 0, w: 3, h: 5}
+    description: >-
+      What did FusionInspector find for the picked fusion? Its partners and breakpoints, its junction and
+      spanning support, the FFPM, the allelic ratios on each side, and the predicted protein with its
+      Pfam domain counts.
+
+      How to read: pick a bar of the allelic ratio balance, then read the support and the predicted
+      protein class here. A frameshift or a fusion with few junction reads is weaker than an in-frame one
+      held by many. {x: 5, y: 0, w: 3, h: 5}
   - component_type: table
     workflow_tag: rnafusion
     data_collection_tag: fusioninspector_fusions
@@ -1688,7 +1908,13 @@ tabs:
     tag: rf-valid-table
     index: valid-table
     title: FusionInspector validation
-    layout: {x: 0, y: 0, w: 8, h: 6}
+    description: >-
+      Which calls survived re-alignment, and with what support? One row per fusion transcript pair that
+      FusionInspector kept, with its junction reads, spanning fragments, FFPM, fusion allelic ratios and
+      predicted protein.
+
+      How to read: sort by supporting reads or FFPM to find the best supported fusions, and read the
+      protein class for the consequence. Pick a row to narrow the other tabs to that fusion. {x: 0, y: 0, w: 8, h: 6}
 
 - title: Protein Domains
   subtitle: Which protein domains would each fusion protein keep?
@@ -1857,7 +2083,20 @@ tabs:
     tag: rf-dom-structure
     index: dom-structure
     title: Fusion protein structure
-    layout: {x: 0, y: 0, w: 8, h: 6}
+    description: >-
+      Which protein domains would each fusion protein keep? Each lane is a fusion, drawn as its 5' partner
+      (blue) and its 3' partner (pink) end to end, with the Pfam domains FusionInspector annotated placed
+      along the partner that contributes them. The six fusions with the most domains are shown.
+
+      How to read: compare the domains each partner keeps, since a domain flagged PARTIAL was cut through
+      by the breakpoint and is shorter than its whole version. A fusion that keeps whole domains on both
+      sides is the one to read most closely.
+
+      Lines and annotations: the breakpoint is marked where the two partners meet. No cut-off is drawn,
+      and no e-value filter is applied beyond what FusionInspector reports.
+
+      Note: the domains are annotated on the predicted fusion protein, so they describe what the protein
+      could carry and not that it is expressed or active. {x: 0, y: 0, w: 8, h: 6}
   - component_type: advanced_viz
     workflow_tag: rnafusion
     data_collection_tag: fusion_protein_domains
@@ -1872,7 +2111,20 @@ tabs:
     tag: rf-dom-lollipop
     index: dom-lollipop
     title: Domain starts per fusion
-    layout: {x: 0, y: 0, w: 8, h: 6}
+    description: >-
+      Where along each fusion protein do the domains start? One lane per fusion, each lollipop a Pfam
+      domain at its start position in the fusion protein, in the colour of the partner that contributes
+      it and sized by the strength of its hit (-log10 of the e-value).
+
+      How to read: a big lollipop is a confident domain hit, and a lane with domains from both colours is
+      a fusion that combines the two partners. The six biggest hits are labelled. Use the structure above
+      to read a handful of fusions closely.
+
+      Lines and annotations: the stem joins each domain to its lane. The e-value is capped at 300 on the
+      -log10 scale so a reported 0 does not become infinite. No e-value cut-off is drawn.
+
+      Note: a larger dot means a smaller e-value, which says the hit is unlikely by chance and does not say
+      the domain is functional in the fusion. {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: rnafusion
     data_collection_tag: fusion_protein_domains
@@ -1883,7 +2135,12 @@ tabs:
     tag: rf-dom-table
     index: dom-table
     title: Pfam domains
-    layout: {x: 0, y: 0, w: 8, h: 6}
+    description: >-
+      Which Pfam domains does each fusion protein carry? One row per domain, with the fusion, the partner
+      that contributes it, its amino-acid span in the fusion protein, its length and its e-value.
+
+      How to read: a domain whose name ends in PARTIAL was cut by the breakpoint. Pick a row to narrow the
+      other tabs to that fusion. {x: 0, y: 0, w: 8, h: 6}
 
 - title: Splice Junctions
   subtitle: Which splice junctions do the reads support, and how strongly?
@@ -2055,7 +2312,20 @@ tabs:
     tag: rf-splice-manhattan
     index: splice-manhattan
     title: Junction support along the genome
-    layout: {x: 0, y: 0, w: 8, h: 6}
+    description: >-
+      Where along the genome do the splice junctions sit, and how strongly are they supported? Each point
+      is a junction CTAT-splicing scored, placed at its position, its height the reads that map to it
+      uniquely, and its colour its chromosome. The ten highest junctions carry their gene's name.
+
+      How to read: most junctions are low, and the tall points are the heavily used junctions of highly
+      expressed genes. A tall point at an unexpected gene is worth opening in the arcs below. Click a
+      point to narrow the tab to its gene.
+
+      Lines and annotations: no threshold line is drawn, and CTAT-splicing publishes no cut-off for the
+      read count. Points are not dimmed by any rule.
+
+      Note: a junction count depends on how deeply the gene is expressed, so compare junctions of the same
+      gene and not across genes. {x: 0, y: 0, w: 8, h: 6}
   - component_type: advanced_viz
     workflow_tag: rnafusion
     data_collection_tag: splice_junctions
@@ -2083,7 +2353,21 @@ tabs:
     tag: rf-splice-arcs
     index: splice-arcs
     title: Junction arcs over the busiest loci
-    description: One arc per junction, its width the uniquely mapped fragments STAR counted across it (CTAT-splicing's uniq_mapped), a read pair counted once. The browser below counts every aligned read instead, so its arcs read about a fifth higher on these paired-end data.
+    description: >-
+      How are the busiest loci spliced? One arc per junction, from donor to acceptor, its width the log10
+      of the uniquely mapped fragments STAR counted across it (CTAT-splicing's uniq_mapped), a read pair
+      counted once, in the colour of its chromosome on the Manhattan. One lane per sample is drawn over the
+      inferred exon model and the hg38 gene lane.
+
+      How to read: a thick arc is a heavily used junction, and a gene with several arcs from one donor
+      shows alternative splicing there. The reads behind the arcs are in the browser below, which follows
+      this tile's locus. A header switch shows the same arcs as a Plotly panel.
+
+      Lines and annotations: junctions with fewer than 2 unique fragments are hidden and at most the 40
+      strongest arcs are kept. These are display limits of the tile and not validated cut-offs.
+
+      Note: the browser below counts every aligned read, both mates of a pair and multi-mapped reads
+      included, so its arcs run higher than the unique fragments here.
     layout: {x: 0, y: 0, w: 8, h: 6}
   # The reads behind the arcs above, for the same locus: STAR coverage, the
   # alignments and the splice-junction arcs drawn from them (JBrowse's own sashimi
@@ -2104,7 +2388,20 @@ tabs:
     tag: rf-splice-reads
     index: splice-reads
     title: Reads at the locus
-    description: STAR coverage, alignments and splice-junction arcs of the samples in view, following the locus of the arcs above. Its arc counts are aligned reads, both mates of a pair and multi-mapped reads included, so they run higher than the unique fragments of the sashimi above.
+    description: >-
+      What do the reads behind the junction arcs look like? STAR coverage, alignments and splice-junction
+      arcs of the samples in view, over the assembly's gene track and the MANE Select transcripts. It
+      follows the locus and the zoom of the arcs above.
+
+      How to read: coverage that steps up or down at a junction marks an exon boundary, and an arc between
+      two exons shows reads that skip the sequence between. Pick another locus in the arcs above to move
+      here.
+
+      Lines and annotations: the arcs join the two ends of a splice junction spanned by reads. No cut-off
+      is drawn on coverage or on the number of reads behind an arc.
+
+      Note: the arc counts are aligned reads, both mates of a pair and multi-mapped reads included, so they
+      run higher than the unique fragments of the arcs above.
     layout: {x: 0, y: 6, w: 8, h: 8}
   - component_type: table
     workflow_tag: rnafusion
@@ -2116,4 +2413,9 @@ tabs:
     tag: rf-splice-table
     index: splice-table
     title: Splice junctions
-    layout: {x: 0, y: 0, w: 8, h: 6}
+    description: >-
+      Which splice junctions did CTAT-splicing score? One row per junction, with its chromosome and
+      position, the gene it falls in, and the uniquely mapped and multi-mapped reads that support it.
+
+      How to read: sort by unique reads to find the busiest junctions, and compare unique with total
+      reads to see how much of the support is ambiguous. Pick a row to narrow the tab to its gene.

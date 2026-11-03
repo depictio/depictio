@@ -158,6 +158,8 @@ main_dashboard:
       - ![](icon:mdi:content-copy) **Replicates** up to {{reps}} a condition
       - ![](icon:mdi:flask-outline) **Preparations** {{preps}} library protocols
       - ![](icon:mdi:file-table-outline) **Samplesheet** [one row per library](section:Sample sheet), its path in [the run parameters](params:input)
+      - ![](icon:mdi:palette-outline) **Condition** {{legend:condition}}
+      - ![](icon:mdi:palette-outline) **Protocol** {{legend:protocol}}
     tag: ns-ov-study
     index: ov-study
     layout: {x: 0, y: 1, w: 5, h: 3}
@@ -426,7 +428,22 @@ main_dashboard:
     index: ov-genome
     title: Isoform shifts along the genome
     link: tab:Locus
-    description: Each dot is a transcript DEXSeq tested, its height the -log10 gene-level q-value of its usage shift. Click a dot to open the gene in the genome browser.
+    description: >-
+      Where along the genome do transcripts change their usage? Each dot is one transcript DEXSeq tested,
+      placed at its position on the reference. Its height is -log10 of the gene-level adjusted q-value,
+      with a thousandth of the effect size added so the transcripts of one gene do not overlap.
+
+      How to read: a tall dot is a strong shift in how a gene uses its isoforms, and most dots sit low. A
+      cluster of tall dots on one chromosome is a region worth opening. Click a dot to open its gene in
+      the genome browser of the [Locus](tab:Locus) tab.
+
+      Lines and annotations: no line or cut-off is drawn, the height only ranks the transcripts. On this
+      axis the 5% gene-level q-value that this template uses to call a shift sits at 1.3.
+
+      Source: DEXSeq, Anders, Reyes and Huber 2012, doi:10.1101/gr.133744.111
+
+      Note: positions come from the annotation Bambu extended. A run without that file gives the
+      transcripts no coordinates, so none can be drawn.
     layout: {x: 0, y: 10, w: 8, h: 4}
   # Link-only tab tiles: each tile prints its tab's subtitle, the question the
   # tab answers.
@@ -535,6 +552,15 @@ main_dashboard:
     tag: ns-sample-sheet
     index: sample-sheet
     title: Library design
+    description: >-
+      The library design behind every tab: one row per library with its condition, replicate and
+      reference, and the preparation, source replicate and flow-cell run when a design table was given.
+
+      How to read: check that the condition does not line up with the preparation or the run. When it
+      does, a difference between conditions cannot be told from a batch effect. Rows picked here feed the
+      Analysis panel.
+
+      Note: without a design table the preparation, source replicate and run read as unknown.
     layout: {x: 0, y: 0, w: 8, h: 6}
 tabs:
 - title: MultiQC
@@ -890,7 +916,26 @@ tabs:
     tag: ns-rd-length-quality
     index: rd-length-quality
     title: Length, quality and yield per library
-    description: Libraries sorted by mean quality, the best on top, coloured by condition. The solid line is Q7, the basecaller's pass floor (Guppy and Dorado sort reads at it); the dashed one is Q10, the usual mark of good quality. Click a library to read its summary.
+    description: >-
+      How long, how good and how big is each library? One bar per library in three panels, mean read
+      length in bases, mean read quality on the Phred scale and yield in gigabases. Libraries are sorted
+      by mean quality, the best on top, and coloured by condition.
+
+      How to read: a library with a short bar in the quality panel, or one whose bar ends short of the Q7
+      line, holds reads that are noisy for any analysis that needs accurate bases. A short mean length
+      with a normal yield means many short reads, so check its Nx curve on this tab before trusting it for
+      isoform work. Click a bar to open the library's NanoStat summary beside it.
+
+      Lines and annotations: on the quality panel only, a solid vertical line at Q7 (labelled Q7 pass) and
+      a dashed one at Q10 (labelled Q10 good). Q is the Phred scale, so Q10 is one expected error in ten
+      bases. Q7 is the pass quality pycoQC uses by default; Q10 is a display aid with no source.
+
+      Source: pycoQC, option min_pass_qual (default 7),
+      https://raw.githubusercontent.com/a-slide/pycoQC/master/pycoQC/pycoQC.py
+
+      Note: neither line is a validated cut-off. A basecaller sets its own pass filter by version and
+      model, and Dorado applies none unless --min-qscore is set
+      (https://software-docs.nanoporetech.com/dorado/latest/basecaller/simplex/).
     layout: {x: 0, y: 0, w: 5, h: 6}
   - component_type: advanced_viz
     workflow_tag: nanoseq
@@ -922,7 +967,13 @@ tabs:
     tag: ns-rd-library-record
     index: rd-library-record
     title: Library record
-    description: The picked library's NanoStat summary.
+    description: >-
+      The NanoStat summary of the library picked on the bars: its yield, its read length statistics and
+      its read quality.
+
+      How to read: compare the mean and the median length. A mean far above the median means a few very
+      long reads pull it up, and the N50 says where half of the bases lie. Pick another bar, or a row of
+      the table below, to switch library.
     layout: {x: 5, y: 0, w: 3, h: 6}
   # The Nx ladder replaces an N50 bar: N50 is its marked rung, and the rest of
   # the ladder is what a single bar hides.
@@ -946,7 +997,22 @@ tabs:
     tag: ns-rd-nx-ladder
     index: rd-nx-ladder
     title: Nx ladder per library
-    description: The shortest read inside the longest x% of the bases. The marker is N50, the length at which half the bases lie in reads that long or longer.
+    description: >-
+      How is each library's yield spread over read lengths? One curve per library: for each share x of the
+      bases, from 1% to 99%, the read length L such that reads of L or longer hold x% of the bases. The
+      length axis is logarithmic.
+
+      How to read: a long, flat top is a library whose yield sits in a few very long reads, and a steep
+      drop is one whose reads are all about the same length. Two libraries with the same N50 can have very
+      different curves, which a bar of N50 values hides. Click a curve to pick its library.
+
+      Lines and annotations: the dotted vertical line at 50% is the N50, the length at which half of the
+      bases lie in reads that long or longer. It is the definition of N50 and not a quality cut-off.
+
+      Source: samtools stats, RL section, http://www.htslib.org/doc/samtools-stats.html
+
+      Note: the ladder is rebuilt from the samtools stats read-length histogram, which covers every
+      primary read of the alignment file, mapped or not. It describes the library handed to the aligner.
     layout: {x: 0, y: 0, w: 4, h: 6}
   - component_type: advanced_viz
     workflow_tag: nanoseq
@@ -964,7 +1030,23 @@ tabs:
     tag: ns-rd-quality-ladder
     index: rd-quality-ladder
     title: Reads above each quality floor
-    description: Where a curve falls off is the quality floor that library can afford. The marker is Q7, the basecaller's pass floor.
+    description: >-
+      How much of each library survives a quality floor? One curve per library: the share of its reads
+      whose mean quality is above each Phred cut-off that NanoStat reports. A mean quality hides whether a
+      library is tight around it or bimodal, and this curve does not.
+
+      How to read: a curve that stays high up to Q10 is a library of mostly good reads, and one that falls
+      early loses much of its yield at the floor an analysis wants to impose. Pick the floor the
+      downstream step needs and read the share that remains. Click a curve to pick its library.
+
+      Lines and annotations: the dotted vertical line at Q7 (labelled Q7 pass) is the pass quality pycoQC
+      uses by default. The curves are drawn at the cut-offs NanoStat prints and no other.
+
+      Source: pycoQC, option min_pass_qual (default 7),
+      https://raw.githubusercontent.com/a-slide/pycoQC/master/pycoQC/pycoQC.py
+
+      Note: Q7 is a reference and not a verdict. The pass filter of a basecaller depends on its version
+      and model, and Dorado applies none unless --min-qscore is set.
     layout: {x: 4, y: 0, w: 4, h: 6}
   - component_type: table
     workflow_tag: nanoseq
@@ -976,6 +1058,11 @@ tabs:
     tag: ns-rd-table-nanostats
     index: rd-table-nanostats
     title: NanoStat summary
+    description: >-
+      NanoStat's summary, one row per library: reads, bases, read length statistics and read quality.
+
+      How to read: sort by mean quality or by N50 to find the weakest libraries, then pick a row to move
+      the record above. The same numbers sit behind the bars, which show them side by side.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: nanoseq
@@ -987,6 +1074,11 @@ tabs:
     tag: ns-rd-table-ladder
     index: rd-table-ladder
     title: Yield per quality floor
+    description: >-
+      The numbers behind the quality curves: reads, share of reads and megabases above each quality
+      cut-off, one row per library and cut-off.
+
+      How to read: filter on a cut-off to compare the megabases that survive it between libraries.
     layout: {x: 0, y: 6, w: 8, h: 6}
 - title: Alignment
   subtitle: How much of each library aligned, and how accurately?
@@ -1144,7 +1236,21 @@ tabs:
     tag: ns-al-coverage
     index: al-coverage
     title: Coverage depth distribution
-    description: One curve per library; the last bin pools everything at 1000x and above.
+    description: >-
+      How evenly is the reference covered? One curve per library: the number of reference positions
+      covered at each depth, from 1x upward, on logarithmic axes.
+
+      How to read: a peak at low depth with a short tail is a thinly covered reference. For a
+      transcriptome library depth follows expression, so a long tail towards high depth is a few abundant
+      genes, and a curve shifted to the right is a deeper library. Click a curve to pick its library.
+
+      Lines and annotations: no line is drawn. The last point pools every position at 1000x and above,
+      because samtools stats reports depths up to 1000 by default and one final bin beyond it.
+
+      Source: samtools stats, COV section, http://www.htslib.org/doc/samtools-stats.html
+
+      Note: only positions with at least one read are counted, so the curve says nothing about the share
+      of the reference left uncovered.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: advanced_viz
     workflow_tag: nanoseq
@@ -1164,7 +1270,17 @@ tabs:
     tag: ns-al-indels
     index: al-indels
     title: Indel length spectrum
-    description: Insertions and deletions per library, by length; hover a curve for its name.
+    description: >-
+      What is the long-read error mode? Two curves per library, insertions and deletions, giving the
+      number of events at each indel length, on logarithmic axes. Hover a curve for its library.
+
+      How to read: events fall steeply with length,. A library whose curves sit above the others carries
+      more indel events at the same length, as a noisier basecaller or a poorer match to the reference
+      does.
+
+      Source: samtools stats, ID section, http://www.htslib.org/doc/samtools-stats.html
+
+      Note: the curves count events and not rates, so a deeper library has more of them at every length.
     layout: {x: 0, y: 0, w: 4, h: 6}
   - component_type: advanced_viz
     workflow_tag: nanoseq
@@ -1181,7 +1297,18 @@ tabs:
     tag: ns-al-read-length
     index: al-read-length
     title: Aligned read lengths
-    description: The samtools read-length histogram, one curve per library.
+    description: >-
+      How long are the reads in the alignment file? One curve per library: the number of reads at each
+      read length, from the samtools stats read-length histogram, on logarithmic axes.
+
+      How to read: a single sharp peak is a library of reads that are all about one length, and a long
+      shoulder to the right is a mix. Libraries prepared the same way should have curves of the same
+      shape. Click a curve to pick its library, and read the yield by length on the Nx curves of the
+      [Reads](tab:Reads) tab.
+
+      Source: samtools stats, RL section, http://www.htslib.org/doc/samtools-stats.html
+
+      Note: this counts reads and not bases, so the long reads that hold much of the yield look rare here.
     layout: {x: 4, y: 0, w: 4, h: 6}
   - component_type: table
     workflow_tag: nanoseq
@@ -1193,6 +1320,12 @@ tabs:
     tag: ns-al-table
     index: al-table
     title: Alignment distributions
+    description: >-
+      Every point of the samtools stats distributions behind the three curves of this tab, one row per
+      library, section and bin, plus one summary row per library.
+
+      How to read: filter on a section (read length, coverage or indel) to list the exact values of one
+      curve. The summary rows carry the placement, identity and split-read numbers of the cards above.
     layout: {x: 0, y: 0, w: 8, h: 6}
 - title: Quantification
   subtitle: Do the libraries group by condition, or by preparation?
@@ -1380,7 +1513,24 @@ tabs:
     tag: ns-qt-pca
     index: qt-pca
     title: Libraries on log-CPM gene expression (PCA)
-    description: A first component that follows the preparation or the run, not the condition, is a confounder.
+    description: >-
+      Do the libraries group by condition? Each point is one library placed on the first two principal
+      components of its log2(CPM + 1) gene expression, computed on the 500 most variable genes and
+      coloured by condition. Hover a point for its depth, genes detected and top-50 share.
+
+      How to read: replicates of one condition should sit together and the conditions apart along the
+      first component, and a first component that follows the preparation or the run is a confounder. A
+      library that sits away from its replicates is the one to check on the correlation heatmap of this
+      tab. Click a point to pick its library.
+
+      Lines and annotations: no line, ellipse or centroid is drawn, so each point stands for one library
+      only. The 500 genes follow the default of the DESeq2 plotPCA function.
+
+      Source: DESeq2 plotPCA, argument ntop (default 500),
+      https://sources.debian.org/src/r-bioc-deseq2/1.46.0%2Bdfsg-2/man/plotPCA.Rd
+
+      Note: with only a few libraries per condition the components are unstable, so read the grouping and
+      not the exact distances.
     layout: {x: 0, y: 0, w: 8, h: 6}
   # Library ids on both axes: full width, and 40 px cells, or the heatmap draws as
   # a strip (the viewer sizes it from its rows at 12 px a cell by default).
@@ -1403,7 +1553,20 @@ tabs:
     tag: ns-qt-correlation
     index: qt-correlation
     title: Library correlation (Spearman, log CPM)
-    description: Each cell is the Spearman correlation of two libraries on log CPM; the libraries are clustered, and replicates should sit next to each other.
+    description: >-
+      How alike are the libraries? Each cell is the Spearman correlation of two libraries on log2(CPM +
+      1), over the genes with at least one read in the run. Libraries are clustered by Ward linkage on
+      both axes, and a bar beside the heatmap gives each library's condition.
+
+      How to read: replicates should form the darkest blocks, next to each other in the tree. A library
+      that correlates better with the other condition than with its own replicates is a swapped label or a
+      replicate that did not replicate. Whole-transcriptome correlations are high between any two
+      libraries, so read the contrast between cells and not the absolute value.
+
+      Lines and annotations: no cut-off is drawn. The Blues scale darkens with the correlation, and the
+      legend gives its range.
+
+      Note: Spearman uses ranks, so a few very highly expressed genes cannot set the coefficient.
     layout: {x: 0, y: 0, w: 8, h: 10}
   - component_type: advanced_viz
     workflow_tag: nanoseq
@@ -1422,7 +1585,20 @@ tabs:
     tag: ns-qt-variable-genes
     index: qt-variable-genes
     title: The 100 most variable genes
-    description: Row-standardised log CPM; the column dendrogram should repeat the split of the PCA.
+    description: >-
+      Which genes separate the libraries? One row per gene, for the 100 genes with the highest variance of
+      log2(CPM + 1) among those with at least 10 reads in the run, and one column per library. Each row is
+      standardised, so a cell shows the library against the gene's own mean.
+
+      How to read: the tree over the columns should repeat the split of the PCA. Blocks of genes high in
+      one condition and low in the other are the expression signature of the contrast. A gene that departs
+      in a single library is an outlier to check in the counts table.
+
+      Lines and annotations: a diverging scale centred on the gene's mean, with rows and columns
+      clustered, and a bar giving each gene's biotype. No cut-off is drawn.
+
+      Note: ranking by variance on CPM and not on raw counts is what keeps the list from being a
+      library-size ranking.
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: card
     workflow_tag: nanoseq
@@ -1477,7 +1653,20 @@ tabs:
     tag: ns-qt-distribution
     index: qt-distribution
     title: Gene expression per library
-    description: After CPM normalisation the boxes should line up; a shifted one differs in composition.
+    description: >-
+      Are the libraries comparable after normalisation? One box per library of log2(CPM + 1) over the
+      genes with at least one read in that library, coloured by condition.
+
+      How to read: after CPM normalisation the boxes should line up. A shifted or squeezed box is a
+      library whose composition differs, for example one dominated by a few genes or one detecting many
+      low-count genes. Such a library is worth a look on the PCA and the correlation before it enters a
+      comparison.
+
+      Lines and annotations: the line in each box is the median and the box spans the quartiles. The
+      whiskers reach 1.5 times the interquartile range and the dots beyond are outliers, as the Plotly box
+      plot draws them.
+
+      Note: genes with no read are left out, so a deeper library detects more genes and its box shifts.
     layout: {x: 0, y: 2, w: 8, h: 4}
   - component_type: table
     workflow_tag: nanoseq
@@ -1489,6 +1678,12 @@ tabs:
     tag: ns-qt-table-pca
     index: qt-table-pca
     title: Per-library readings
+    description: >-
+      Per-library readings: reads Bambu assigned, genes detected, share of the reads on protein-coding
+      genes, share on the 50 most expressed genes, and the PCA coordinates.
+
+      How to read: a high top-50 share means a few genes take most of the library, which is the plainest
+      reading of low complexity. A protein-coding share that differs between replicates is worth a look.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: nanoseq
@@ -1500,6 +1695,12 @@ tabs:
     tag: ns-qt-table-correlation
     index: qt-table-correlation
     title: Correlation matrix
+    description: >-
+      The correlation matrix of the heatmap as numbers: one row per library, one column per library, and
+      the library's mean correlation.
+
+      How to read: sort by the mean correlation to find the library that agrees least with the rest. A
+      value far below those of its replicates is a library to check before any comparison.
     layout: {x: 0, y: 6, w: 8, h: 6}
   - component_type: table
     workflow_tag: nanoseq
@@ -1509,6 +1710,15 @@ tabs:
     tag: ns-qt-table-counts
     index: qt-table-counts
     title: Gene counts per library
+    description: >-
+      Bambu's gene counts, one row per library and gene, with the count, its CPM and log2(CPM + 1), the
+      gene's biotype and the library's condition.
+
+      How to read: filter on a gene or a biotype to see its counts in every library, or on a library to
+      list its most expressed genes. The gene and sample filters of the tab narrow it.
+
+      Note: annotation entries that share an Ensembl gene id are summed into one gene, and genes with no
+      read in the run are left out.
     layout: {x: 0, y: 12, w: 8, h: 6}
 - title: Gene expression
   subtitle: Which genes differ between the two conditions?
@@ -1734,7 +1944,29 @@ tabs:
     tag: ns-de-volcano
     index: de-volcano
     title: Effect size against significance
-    description: One point per tested annotation entry. The dotted lines are the call, DESeq2's 0.05 adjusted p-value (a 5% false discovery rate) and a log2 fold change of 1 either way (two-fold, this template's cut-off); the View switch reads the same rows as an MA plot or a QQ plot.
+    description: >-
+      Which genes change between the conditions, and by how much? Each point is one annotation entry
+      DESeq2 tested, placed by its log2 fold change (x) and by -log10 of its adjusted p-value (y), and
+      coloured by the direction of the call.
+
+      How to read: points far to the left or right and high up are strong, significant changes, and the
+      first condition of the contrast is the one a positive fold change is higher in. A tall column near
+      zero is significant but small, which is why a fold-change cut-off is added. Switch the view to MA to
+      see whether the calls sit only at low expression, and to QQ to read the inflation: a lambda near 1
+      means the p-values follow what chance gives, and a high one means more small p-values than chance,
+      from a wide real response or a confounder.
+
+      Lines and annotations: on the volcano, two dotted vertical lines at log2 fold change -1 and +1
+      (two-fold) and one dotted horizontal line at an adjusted p-value of 0.05 (a 5% false discovery
+      rate). On the MA view, two dotted horizontal lines at log2 fold change -1 and +1. On the QQ view, a
+      dashed diagonal where observed equals expected, and the lambda badge.
+
+      Source: DESeq2 vignette,
+      https://bioconductor.org/packages/release/bioc/vignettes/DESeq2/inst/doc/DESeq2.html
+
+      Note: the 0.05 and the two-fold lines are this template's call and not DESeq2's, whose own alpha
+      default is 0.1. They are not validated cut-offs. A point is an annotation entry and not a gene, so
+      entries that share a gene are separate points.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: advanced_viz
     workflow_tag: nanoseq
@@ -1751,7 +1983,21 @@ tabs:
     tag: ns-de-barplot
     index: de-barplot
     title: The twenty largest fold changes
-    description: Signed, the ones clearing the 0.05 adjusted p-value cut-off (DESeq2's 5% false discovery rate) highlighted.
+    description: >-
+      Which entries have the largest fold changes? The twenty annotation entries with the largest absolute
+      log2 fold change among those DESeq2 tested, as signed bars labelled by gene, coloured by direction.
+
+      How to read: a solid bar cleared the adjusted p-value cut-off, and a hatched one did not. Solid bars
+      at both ends are the candidates to follow up on the volcano. A large hatched bar is a big change
+      measured on little evidence, often a lowly expressed entry.
+
+      Lines and annotations: the vertical axis line at 0 is no change. The solid or hatched fill switches
+      at an adjusted p-value of 0.05 (a 5% false discovery rate), and an entry that DESeq2 gave no
+      adjusted p-value counts as not significant.
+
+      Note: the entries are ranked on effect size alone, and the 0.05 is this template's choice and not a
+      validated cut-off. DESeq2's own alpha default is 0.1
+      (https://bioconductor.org/packages/release/bioc/vignettes/DESeq2/inst/doc/DESeq2.html).
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: table
     workflow_tag: nanoseq
@@ -1761,6 +2007,15 @@ tabs:
     tag: ns-de-table-top
     index: de-table-top
     title: Best-measured DESeq2 rows
+    description: >-
+      The 200 DESeq2 rows with the highest mean normalised count, the best-measured entries of the run,
+      with their log2 fold change, p-value and adjusted p-value.
+
+      How to read: use it to check a number seen on a plot against the table. Sort by adjusted p-value or
+      by fold change to list the entries that matter among the well-measured ones.
+
+      Note: this is a slice of the results. The volcano, the MA view, the QQ view and the bars read the
+      full table.
     layout: {x: 0, y: 0, w: 8, h: 6}
 - title: Isoform usage
   subtitle: Which transcripts change their share, and what do their reads show?
@@ -1972,7 +2227,25 @@ tabs:
     tag: ns-is-volcano
     index: iso-volcano
     title: Change in usage against significance
-    description: One point per transcript. The dotted horizontal line is the call, DEXSeq's 0.05 gene-level q-value (a 5% false discovery rate); the vertical line is no change in usage, since the q-value alone decides the call. The View switch reads the raw p-values as a QQ plot.
+    description: >-
+      Which transcripts change their share of their gene? Each point is one transcript DEXSeq tested,
+      placed by the log2 fold change of its usage (x) and by -log10 of its gene-level adjusted q-value
+      (y), coloured by the direction of the call.
+
+      How to read: a high point is a gene whose isoform use changed between the conditions, and the sign
+      says in which condition the transcript gains share. The q-value belongs to the gene, so the
+      transcripts of one gene sit at the same height. Switch the view to QQ to read the raw p-values
+      against what chance gives, and open the [Locus](tab:Locus) tab to see the reads of a transcript.
+
+      Lines and annotations: the dotted horizontal line is a gene-level q-value of 0.05 (a 5% false
+      discovery rate). The vertical line at 0 is no change in usage, and no fold-change cut-off is applied
+      since the q-value alone decides the call. On the QQ view, a dashed diagonal where observed equals
+      expected, and the lambda badge.
+
+      Source: DEXSeq, Anders, Reyes and Huber 2012, doi:10.1101/gr.133744.111
+
+      Note: the 0.05 is this template's call and not a validated cut-off. As the q-value is shared by all
+      the transcripts of a gene, the points above the line overstate the number of genes affected.
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: figure
     workflow_tag: nanoseq
@@ -1997,7 +2270,22 @@ tabs:
     tag: ns-is-usage
     index: is-usage
     title: Transcript usage per library, chosen genes
-    description: The six best DEXSeq genes, or the genes picked in the Gene filter. Each bar sums to 100% of its gene's reads; hover a segment for its transcript.
+    description: >-
+      How is each gene's reads split across its transcripts in each library? One panel per gene, its
+      gene-level DEXSeq q-value in the title, with one stacked bar per library. Each segment is a
+      transcript and each bar sums to 100% of the gene's reads.
+
+      How to read: a segment that grows in the libraries of one condition and shrinks in the other is the
+      switch DEXSeq called. Bars that look alike across all libraries mean that the gene's q-value rests
+      on a small change or on a single library. The tile opens on the six genes with the best q-value, or
+      on the genes picked in the Gene filter, up to twelve of the best forty.
+
+      Lines and annotations: no line or cut-off is drawn. The q-value in each panel title is DEXSeq's
+      result for the gene and not a threshold. Hover a segment for its transcript, since no legend is
+      drawn.
+
+      Note: the shares are recomputed from the Bambu transcript counts DEXSeq ran on, so they follow the
+      test but are not DEXSeq's own normalised counts.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: figure
     workflow_tag: nanoseq
@@ -2016,7 +2304,21 @@ tabs:
     tag: ns-is-distribution
     index: is-distribution
     title: Transcript expression per library
-    description: The transcript-level twin of the gene distribution, on the same CPM scale.
+    description: >-
+      Are the libraries comparable at the transcript level? One box per library of log2(CPM + 1) over the
+      transcripts with at least one read in that library, coloured by condition. It is the
+      transcript-level twin of the gene distribution, on the same CPM scale.
+
+      How to read: the boxes should line up after CPM normalisation. A shifted or squeezed box is a
+      library of different composition or depth, which weakens a comparison of transcript usage with the
+      others.
+
+      Lines and annotations: the line in each box is the median and the box spans the quartiles. The
+      whiskers reach 1.5 times the interquartile range and the dots beyond are outliers, as the Plotly box
+      plot draws them.
+
+      Note: transcripts with no read are left out, so a deeper library detects more of them and its box
+      shifts.
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: table
     workflow_tag: nanoseq
@@ -2026,6 +2328,12 @@ tabs:
     tag: ns-is-table-counts
     index: is-table-counts
     title: Transcript counts per library
+    description: >-
+      Bambu's transcript counts, one row per library and transcript, with the count, its CPM and log2(CPM
+      + 1), the gene's biotype and the library's condition.
+
+      How to read: filter on a transcript to see its counts in every library, and compare the libraries of
+      one condition. The sample, biotype and expression filters of the tab narrow it.
     layout: {x: 0, y: 0, w: 8, h: 6}
 # The transcripts DEXSeq tested, picked in a table: its record, its structure and
 # its reads follow the pick. The table is the browser's picker (`isoform_loci` is
@@ -2202,7 +2510,14 @@ tabs:
     tag: ns-loc-table-dexseq
     index: loc-table-dexseq
     title: DEXSeq usage results
-    description: One row per transcript tested; a picked row opens its record and moves the browser below.
+    description: >-
+      Which transcript shifts its usage? One row per transcript DEXSeq tested, with its gene, the log2
+      fold change of its usage, the gene-level adjusted q-value and the call.
+
+      How to read: sort by the q-value to list the strongest shifts and pick one row. The record opens and
+      the genome browser below frames the transcript. One row is picked at a time.
+
+      Note: the q-value is the gene's, so the transcripts of one gene share it.
     layout: {x: 0, y: 0, w: 5, h: 5}
   - component_type: advanced_viz
     workflow_tag: nanoseq
@@ -2224,7 +2539,13 @@ tabs:
     tag: ns-loc-record
     index: loc-record
     title: Transcript record
-    description: The transcript picked in the table and the gene-level call DEXSeq made on it.
+    description: >-
+      The transcript picked in the table and the call DEXSeq made on it: its gene (linked to Ensembl), the
+      log2 fold change of its usage and the gene-level q-value, p-value and verdict.
+
+      How to read: the q-value and the call belong to the gene, and the fold change to the transcript. A
+      large fold change with a weak q-value is a transcript that moved but a gene that DEXSeq could not
+      call.
     layout: {x: 5, y: 0, w: 3, h: 5}
   # The reads behind the isoform. The browser takes its calls from `isoform_loci`
   # (a collection written on every run): one per transcript DEXSeq tested, spanned
@@ -2265,7 +2586,19 @@ tabs:
     tag: ns-loc-browser
     index: loc-browser
     title: Genome browser
-    description: The reads and coverage of the libraries in view, with their splice arcs. It opens on the strongest shift of usage and frames the transcript picked in the table.
+    description: >-
+      What do the reads of a transcript's locus show? The aligned reads and coverage of the libraries in
+      view, coloured by condition, with the splice arcs of the split reads and the assembly's gene track.
+
+      How to read: it opens on the strongest shift in usage, the header steps to the next ones, and a
+      transcript picked in the table frames its whole gene. Look for an exon or an intron that reads of
+      one condition use and the others skip, and for coverage that steps at an exon boundary. Use the
+      sample filters to choose the libraries drawn.
+
+      Lines and annotations: the arcs join the donor and the acceptor of each split read.
+
+      Note: without the annotation Bambu extended, the transcripts have no coordinates. The tile then
+      frames them by gene symbol where it can, else it opens on the first region its tracks hold.
     layout: {x: 0, y: 5, w: 8, h: 9}
   # Needs bambu/extended_annotations.gtf, which only a run that lets Bambu
   # extend the annotation writes; without it the import drops the tile.
@@ -2280,7 +2613,16 @@ tabs:
     tag: ns-loc-structures
     index: loc-structures
     title: Isoform structures
-    description: One lane per transcript, exons on a base-pair axis; the table's pick narrows it to that transcript.
+    description: >-
+      Which exons does each transcript have? One lane per transcript, up to 25, with its exons on a
+      base-pair axis, coloured by the novelty class the annotation gives it. The table's pick narrows it
+      to that transcript.
+
+      How to read: compare the exon chains of the transcripts of one gene to see which exon is skipped or
+      extended. A transcript in a novel class is an isoform Bambu found beyond the reference annotation.
+
+      Note: the tile needs the annotation Bambu extended, which only a run that lets Bambu extend it
+      writes.
     layout: {x: 0, y: 0, w: 4, h: 6}
   # The introns of the picked transcript, one lane per condition, each arc as
   # high as the reads Bambu assigned to the transcript there: the same
@@ -2307,5 +2649,18 @@ tabs:
     tag: ns-loc-sashimi
     index: loc-sashimi
     title: Weighted introns of the transcript
-    description: Reads per library the transcript holds in each condition, on each of its introns.
+    description: >-
+      How heavily is each intron of the picked transcript used in each condition? One lane per condition,
+      an arc for each intron from its donor to its acceptor, as high as the reads Bambu assigned to the
+      transcript in that condition, averaged over the condition's libraries. Unpicked, it opens on the
+      busiest cluster of introns.
+
+      How to read: the same arc taller in one lane means the transcript is used more in that condition,
+      which is the isoform switch seen from its introns. A transcript with a single exon has no intron and
+      draws nothing.
+
+      Lines and annotations: arcs only, no cut-off. Up to 25 introns are shown.
+
+      Note: all the introns of one transcript share its height, since the weight is the transcript's reads
+      and not the reads crossing a junction. Read the junction counts in the genome browser.
     layout: {x: 4, y: 0, w: 4, h: 6}

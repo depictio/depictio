@@ -189,6 +189,7 @@ main_dashboard:
       - ![](icon:mdi:test-tube) **UDG treatment** {{udg}}, most libraries
       - ![](icon:mdi:layers-outline) **Lanes** {{n_lanes}} sequencing lanes, merged into their library
       - ![](icon:mdi:file-table-outline) **Samplesheet** [one row per library](section:Sample sheet), its path in [the run parameters](params:input)
+      - ![](icon:mdi:palette-outline) **UDG treatment colours** {{legend:udg_treatment}}
     tag: ea-ov-study
     index: ov-study
     layout: {x: 0, y: 1, w: 5, h: 3}
@@ -540,7 +541,14 @@ main_dashboard:
     tag: ea-sample-sheet
     index: sample-sheet
     title: Library hub
-    description: One row per library, with its sample, organism, UDG treatment and lane count.
+    description: >-
+      One row per library, as the samplesheet describes it: its biological sample, organism, UDG
+      treatment and the number of lanes eager merged into it. Every sample filter and every tab starts
+      from this table.
+
+      How to read: check that the libraries, their sample and their UDG treatment are the ones you
+      meant to run before reading the other tabs. A library absent here cannot be picked in the sample
+      filters.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: eager
@@ -552,7 +560,15 @@ main_dashboard:
     tag: ea-ref-table-qualimap
     index: ref-bamqc
     title: BamQC summary
-    description: Mean coverage, mapping quality, error rate and duplication per library.
+    description: >-
+      One row per library from Qualimap BamQC: mean coverage, mean mapping quality, error rate, GC
+      content and the duplication rate Qualimap reports. The Mean coverage and Duplication rate
+      sliders of the QC thresholds panel read this table.
+
+      How to read: a low mean coverage or a high error rate marks the library to look at first. Moving
+      a slider keeps only the libraries inside its range on every tab.
+
+      Source: Qualimap 2 paper (Bioinformatics 2016), doi:10.1093/bioinformatics/btv566
     layout: {x: 0, y: 0, w: 8, h: 6}
 tabs:
 # ============================================================================
@@ -902,7 +918,26 @@ tabs:
     tag: ea-hub-av-pcoords
     index: lib-pcoords
     title: Per-library QC profile
-    description: One line per library across seven metrics from four tools; read the ticks before a gap.
+    description: >-
+      Which libraries stand out across several tools at once? Each line is one library, drawn across
+      seven axes: endogenous DNA (endorS.py), clonality (Picard), mean coverage, error rate and GC
+      content (Qualimap), C to T at the first 5 prime base and mean fragment length (DamageProfiler).
+      Each axis is rescaled from the lowest to the highest library in view, and its ticks keep the
+      column's own units.
+
+      How to read: a line that is high on endogenous DNA, low on clonality, high on damage and low on
+      fragment length is a good ancient-DNA library with material left to sequence. A line that is
+      extreme on one axis points at that tool; one that is extreme on several is the library to open
+      in the pooled table below. Brush an axis to keep only the libraries inside its range.
+
+      Note: positions are relative to the other libraries in view, so a line near the top of an axis
+      is high for this run, not necessarily high in absolute terms. No reference line or cut-off is
+      drawn.
+
+      Sources: endorS.py, https://github.com/aidaanva/endorS.py; Picard DuplicationMetrics
+      definitions, https://broadinstitute.github.io/picard/picard-metric-definitions.html; Qualimap 2
+      paper (Bioinformatics 2016), doi:10.1093/bioinformatics/btv566; DamageProfiler paper
+      (Bioinformatics 2021), doi:10.1093/bioinformatics/btab190
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: eager
@@ -913,7 +948,13 @@ tabs:
     tag: ea-hub-profile-table
     index: lib-table-profile
     title: Library QC, pooled
-    description: The numbers behind the profile, one row per library. Select a row to read it in the record beside it.
+    description: >-
+      The numbers behind the profile, one row per library: endogenous DNA before and after filtering,
+      clonality, mean coverage, mapping quality, error rate, GC content, terminal C to T and mean
+      fragment length. Select a row to read it in the record beside it.
+
+      How to read: sort a column to rank the libraries on one measure. A blank cell means the tool
+      behind that column has no result for the library.
     layout: {x: 0, y: 0, w: 5, h: 6}
   - component_type: advanced_viz
     workflow_tag: eager
@@ -943,7 +984,13 @@ tabs:
     tag: ea-hub-av-record
     index: lib-record
     title: Library record
-    description: The library selected in the pooled table, grouped by the question each number answers.
+    description: >-
+      The library selected in the pooled table, its numbers grouped by the question each answers:
+      endogenous content, alignment and authenticity. Each label carries its unit.
+
+      How to read: pick a row in the pooled table beside it to read one library. Read the three groups
+      in order: how much of the library is the organism, how well it aligned, and whether the DNA is
+      ancient.
     layout: {x: 5, y: 0, w: 3, h: 6}
   - component_type: table
     workflow_tag: eager
@@ -954,7 +1001,16 @@ tabs:
     tag: ea-hub-table-lanes
     index: lib-table-lanes
     title: Per-lane trimming and collapsing
-    description: One row per lane, with the library it was merged into and what AdapterRemoval returned.
+    description: >-
+      One row per sequencing lane, with the library eager merged it into and what AdapterRemoval
+      returned: reads given, reads discarded, pairs collapsed, sequences retained, their mean length
+      and the collapse and discard rates.
+
+      How to read: lanes of one library should look alike, so a lane with a much higher discard rate
+      or a shorter retained length than its siblings is the one to inspect. The retained sequences of
+      a library's lanes are what the mapper received.
+
+      Source: AdapterRemoval, https://github.com/MikkelSchubert/adapterremoval
     layout: {x: 0, y: 0, w: 8, h: 6}
 - title: Read fate
   subtitle: Where does every sequenced read stop?
@@ -1128,7 +1184,26 @@ tabs:
     tag: ea-fate-av-sankey
     index: fate-sankey
     title: Read fate, sequencing to deduplication
-    description: Every sequenced read, followed to where it stopped; collapsing merges two reads into one.
+    description: >-
+      Where does every sequenced read stop? Each column is a stage (sequencing, trimming and
+      collapsing, mapping, the mapping-quality filter, deduplication), each band is the reads that
+      took that path, and its width is their number.
+
+      How to read: a wide unmapped band is common in ancient extracts, where most DNA is not the
+      organism. A wide band below the quality filter means ambiguous placements were dropped, and a
+      wide PCR duplicate band means a library of low complexity; open [Complexity](tab:Complexity) for
+      the second. Pick a library in the left panel to read one flow at a time.
+
+      Lines and annotations: no reference line or cut-off is drawn. Each node is labelled with its
+      fate and each band takes the colour of the node it ends at.
+
+      Note: collapsing is drawn as an outflow of the trimming step, because the reports do not say
+      which of the surviving sequences were merged. Two mates merged into one sequence count as one
+      read from there on, so the flow narrows at that step.
+
+      Sources: AdapterRemoval, https://github.com/MikkelSchubert/adapterremoval; samtools flagstat
+      manual, http://www.htslib.org/doc/samtools-flagstat.html; Picard DuplicationMetrics definitions,
+      https://broadinstitute.github.io/picard/picard-metric-definitions.html
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: figure
     workflow_tag: eager
@@ -1143,7 +1218,15 @@ tabs:
     tag: ea-hub-fig-retained
     index: fate-lane-retained
     title: Reads kept for mapping, per lane
-    description: Sequences AdapterRemoval wrote out, exactly what the mapper was given.
+    description: >-
+      Did every lane give the mapper enough reads? One bar per lane: the sequences AdapterRemoval
+      wrote out, exactly what the mapper was given, coloured by the library the lane was merged into.
+
+      How to read: bars of one colour are the lanes of one library, and they add up to that library's
+      input to the mapper. A bar far shorter than its siblings is a lane that lost reads in trimming;
+      open the discard tile beside it and the collapse tile below.
+
+      Source: AdapterRemoval, https://github.com/MikkelSchubert/adapterremoval
     layout: {x: 0, y: 0, w: 4, h: 4}
   - component_type: figure
     workflow_tag: eager
@@ -1158,7 +1241,19 @@ tabs:
     tag: ea-hub-fig-discard
     index: fate-lane-discard
     title: Reads discarded, per lane
-    description: Reads AdapterRemoval dropped on quality or length, as a share of the lane.
+    description: >-
+      Which lanes lost the most reads to trimming? One bar per lane: the share of its reads
+      AdapterRemoval discarded, coloured by the library.
+
+      How to read: a low bar is the good result. Lanes of one library should discard alike, so a lane
+      far above its siblings is the one to check against the per-base quality and adapter content on
+      [MultiQC](tab:MultiQC).
+
+      Note: a read counts as discarded when it fails on quality or falls below the minimum length
+      AdapterRemoval was given, so a library rich in very short fragments can discard more without any
+      sequencing fault.
+
+      Source: AdapterRemoval, https://github.com/MikkelSchubert/adapterremoval
     layout: {x: 4, y: 0, w: 4, h: 4}
   # Lane ids label nothing a reader looks up: the legend names the libraries.
   - component_type: advanced_viz
@@ -1180,7 +1275,19 @@ tabs:
     tag: ea-hub-av-collapse
     index: fate-collapse-length
     title: Collapse rate against retained length
-    description: Short inserts collapse more pairs, so the two move together within a library.
+    description: >-
+      Does collapsing follow fragment length? Each point is a lane: the mean length of its retained
+      sequences on x, the share of its read pairs AdapterRemoval merged into one sequence on y, marker
+      size the sequences retained, colour the library.
+
+      How to read: overlapping mates merge, and shorter fragments overlap more, so the shorter the
+      retained length the higher the collapse rate. Lanes of one library should sit together; a lane
+      off the trend of its siblings was trimmed or sequenced differently.
+
+      Lines and annotations: no reference line or cut-off is drawn, and the points carry no labels;
+      the legend names the libraries.
+
+      Source: AdapterRemoval, https://github.com/MikkelSchubert/adapterremoval
     layout: {x: 0, y: 4, w: 8, h: 6}
   - component_type: table
     workflow_tag: eager
@@ -1191,7 +1298,13 @@ tabs:
     tag: ea-fate-table
     index: fate-table
     title: Read fate, as counts
-    description: One row per library and path through the five stages, with the reads that took it.
+    description: >-
+      The counts behind the read-fate flow: one row per library and path through the five stages, with
+      the reads that took it.
+
+      How to read: sort by reads to see the most common path of each library, and use the Final fate
+      filter to list where one kind of read stopped. The rows of one library are the paths of its flow
+      above.
     layout: {x: 0, y: 0, w: 8, h: 6}
 # ============================================================================
 # Ancient DNA
@@ -1360,7 +1473,21 @@ tabs:
     tag: ea-endo-av-prepost
     index: endo-pre-post
     title: Endogenous DNA, before against after filtering
-    description: Distance below the diagonal is the on-target signal lost to filtering and deduplication.
+    description: >-
+      How much on-target signal does filtering lose? Each point is a library: endogenous DNA before
+      the quality filter and deduplication on x, after them on y, both in percent.
+
+      How to read: a point on the dashed diagonal lost nothing to filtering, and the further below it,
+      the more on-target signal the filter and deduplication removed. A low share overall is common
+      for ancient extracts, where most DNA is environmental; open [Complexity](tab:Complexity) for a
+      library far below the line.
+
+      Lines and annotations: the dashed diagonal, labelled x = y, is the identity line over the range
+      of the data. It is a geometric reference where before equals after, not a quality cut-off, and
+      no threshold is drawn.
+
+      Sources: endorS.py, https://github.com/aidaanva/endorS.py; nf-core/eager 2.4.5 output
+      documentation, https://nf-co.re/eager/2.4.5/docs/output
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: figure
     workflow_tag: eager
@@ -1377,7 +1504,18 @@ tabs:
     tag: ea-map-fig-bar
     index: endo-mapped-bar
     title: Mapped reads before and after the filter
-    description: Reads flagged mapped by samtools flagstat, per library and filter stage.
+    description: >-
+      How many reads place, and how many survive the mapping-quality filter? One group of bars per
+      library: the reads samtools flagstat flags as mapped, before the filter and after it.
+
+      How to read: the gap between the two bars of a library is what the mapping-quality filter
+      removed, and a small gap means the reads placed unambiguously. Compare the gaps rather than the
+      heights, since a deeper library has taller bars.
+
+      Lines and annotations: no reference line or cut-off is drawn; the two colours are the pre-filter
+      and post-filter stages.
+
+      Source: samtools flagstat manual, http://www.htslib.org/doc/samtools-flagstat.html
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: table
     workflow_tag: eager
@@ -1387,7 +1525,15 @@ tabs:
     tag: ea-meta-table-maltextract
     index: endo-table-maltextract
     title: MaltExtract authentication overview
-    description: The HOPS summary per taxon and library, with the evidence levels MaltExtract assigned.
+    description: >-
+      The HOPS summary per taxon and library, with the evidence levels MaltExtract assigned. It is
+      present only when the run enabled the metagenomic screen.
+
+      How to read: a taxon with a high evidence level in a library is a lead on what the extract
+      holds, not a verdict. Confirm it against the damage and fragment length of the reads assigned to
+      that taxon.
+
+      Source: HOPS paper (Genome Biology 2019), doi:10.1186/s13059-019-1903-0
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: eager
@@ -1397,7 +1543,14 @@ tabs:
     tag: ea-meta-table-kraken
     index: endo-table-kraken
     title: Kraken classification
-    description: The merged Kraken report, one row per taxon with the reads assigned in each library.
+    description: >-
+      The merged Kraken report: one row per taxon, with the reads assigned to it in each library. It
+      is present only when the run enabled the Kraken screen.
+
+      How to read: sort a library's column to see which taxa dominate its reads. A classification is a
+      lead, not a verdict, since Kraken assigns reads by exact k-mer matches to a database.
+
+      Source: Kraken paper (Genome Biology 2014), doi:10.1186/gb-2014-15-3-r46
     layout: {x: 0, y: 6, w: 8, h: 6}
   - component_type: table
     workflow_tag: eager
@@ -1409,7 +1562,16 @@ tabs:
     tag: ea-endo-table
     index: endo-table
     title: Endogenous DNA per library
-    description: Before and after filtering, the drop between them, and the off-target remainder.
+    description: >-
+      Endogenous DNA per library as endorS.py reports it: before filtering, after the quality filter
+      and deduplication, the drop between them in percentage points, and the off-target remainder.
+
+      How to read: a high value before and after is the good result, and a large drop means filtering
+      removed much of the on-target signal. The off-target share is 100 minus the value before
+      filtering, the part a metagenomic screen would work on.
+
+      Sources: endorS.py, https://github.com/aidaanva/endorS.py; nf-core/eager 2.4.5 output
+      documentation, https://nf-co.re/eager/2.4.5/docs/output
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: eager
@@ -1421,7 +1583,15 @@ tabs:
     tag: ea-map-table
     index: endo-table-flagstat
     title: Flagstat, pre- and post-filter
-    description: One row per library and stage, with total, mapped, duplicate and properly-paired counts.
+    description: >-
+      One row per library and filter stage (pre-filter and post-filter) from samtools flagstat, with
+      total, mapped, duplicate and properly-paired counts.
+
+      How to read: compare the two rows of a library to see what the mapping-quality filter removed.
+      The mapped share of the pre-filter row is the on-target fraction of the reads given to the
+      mapper.
+
+      Source: samtools flagstat manual, http://www.htslib.org/doc/samtools-flagstat.html
     layout: {x: 0, y: 6, w: 8, h: 6}
 - title: Complexity
   subtitle: How many distinct molecules does each library hold?
@@ -1580,7 +1750,22 @@ tabs:
     tag: ea-dup-av-endo-clonality
     index: cx-screening-plane
     title: Endogenous DNA against clonality
-    description: Worth sequencing deeper is high and left; marker size is the depth already reached.
+    description: >-
+      Which libraries are worth sequencing deeper? Each point is a library: clonality, the share of
+      reads Picard flags as PCR duplicates, on x and endogenous DNA on y, with marker size the mean
+      coverage already reached.
+
+      How to read: high and to the left is the good picture, since much of the library is the organism
+      and few reads are copies, so more sequencing buys new molecules. To the right, copies dominate
+      and more sequencing returns the same molecules; low down, most of the extract is not the
+      organism. The complexity curve below shows how much a library would still yield.
+
+      Lines and annotations: no zone, line or cut-off is drawn. High, low, left and right are relative
+      to the other libraries in view, not validated limits.
+
+      Sources: Picard DuplicationMetrics definitions,
+      https://broadinstitute.github.io/picard/picard-metric-definitions.html; endorS.py,
+      https://github.com/aidaanva/endorS.py
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: advanced_viz
     workflow_tag: eager
@@ -1597,7 +1782,19 @@ tabs:
     tag: ea-dup-av-scatter
     index: cx-dup-depth
     title: Duplication against what survived it
-    description: A library high on this plane paid for its depth in PCR copies, not molecules.
+    description: >-
+      How much of the depth is PCR copies? Each point is a library: the unique reads kept after
+      deduplication on x, the Picard duplication rate on y, marker size the duplicates removed.
+
+      How to read: low and to the right is the good picture, many unique reads with few copies. A
+      library high on this plane paid for its depth in PCR copies, not molecules, and the complexity
+      curve beside it shows what more sequencing would add.
+
+      Lines and annotations: no zone or cut-off is drawn; positions are relative to the other
+      libraries in view.
+
+      Source: Picard DuplicationMetrics definitions,
+      https://broadinstitute.github.io/picard/picard-metric-definitions.html
     layout: {x: 0, y: 0, w: 4, h: 6}
   - component_type: advanced_viz
     workflow_tag: eager
@@ -1615,7 +1812,24 @@ tabs:
     tag: ea-complex-av-curve
     index: cx-complexity-curve
     title: Library complexity curve
-    description: Distinct molecules against total reads, extrapolated per library by preseq.
+    description: >-
+      Would more sequencing find new molecules? One curve per library: the number of distinct
+      molecules preseq expects at each sequencing depth, extrapolated from the depth already
+      sequenced.
+
+      How to read: a curve still rising steeply means more sequencing would find new molecules. A
+      curve that has flattened means the extract, not the sequencing, is the limit and more reads
+      would return copies; at the same depth, the higher curve is the library with more distinct
+      molecules.
+
+      Lines and annotations: no confidence band, reference line or cut-off is drawn. preseq can report
+      a confidence interval, but eager's run writes the expected count only.
+
+      Note: the right-hand part of a curve is a prediction beyond the sequenced depth, not a
+      measurement.
+
+      Sources: preseq paper (Nature Methods 2013), doi:10.1038/nmeth.2375; preseq,
+      http://smithlabresearch.org/software/preseq/
     layout: {x: 4, y: 0, w: 4, h: 6}
   - component_type: table
     workflow_tag: eager
@@ -1627,7 +1841,16 @@ tabs:
     tag: ea-dup-table
     index: cx-table
     title: Duplication metrics per library
-    description: Reads examined, duplicates flagged and what is left, from Picard MarkDuplicates.
+    description: >-
+      Duplication metrics per library from Picard MarkDuplicates: reads examined, duplicates flagged
+      and what is left after removal.
+
+      How to read: a high duplication rate with few reads left means a library of low complexity;
+      compare it with its curve on this tab. The Picard duplication slider in the filter panel narrows
+      the libraries by the rate in this table.
+
+      Source: Picard DuplicationMetrics definitions,
+      https://broadinstitute.github.io/picard/picard-metric-definitions.html
     layout: {x: 0, y: 0, w: 8, h: 6}
 - title: Authentication
   subtitle: Is the DNA damaged and short, as ancient DNA is?
@@ -1831,7 +2054,22 @@ tabs:
     tag: ea-auth-av-plane
     index: auth-plane
     title: The ancient-DNA plane
-    description: Short and damaged is ancient; marker size is the fragments each library gave.
+    description: >-
+      Is the DNA both short and damaged, as ancient DNA is? Each point is a library: mean fragment
+      length on x, C to T deamination at the first 5 prime base on y, marker size the fragments
+      counted.
+
+      How to read: short and damaged (left and up) is the ancient-DNA picture. Long and undamaged is a
+      modern contaminant, and short but undamaged is usually over-sheared modern DNA; neither signal
+      is conclusive alone. Compare libraries of the same UDG treatment, since the treatment reduces
+      the damage.
+
+      Lines and annotations: no zone, line or cut-off is drawn, so the plane shows each library
+      relative to the others, not a verdict.
+
+      Sources: DamageProfiler paper (Bioinformatics 2021), doi:10.1093/bioinformatics/btab190; Briggs
+      and colleagues (PNAS 2007), doi:10.1073/pnas.0704665104; nf-core/eager 2.4.5 output
+      documentation, https://nf-co.re/eager/2.4.5/docs/output
     layout: {x: 0, y: 0, w: 4, h: 6}
   - component_type: advanced_viz
     workflow_tag: eager
@@ -1846,7 +2084,16 @@ tabs:
     tag: ea-len-av-profile
     index: auth-length-profile
     title: Fragment length distribution
-    description: One curve per library and strand, normalised so libraries of any depth compare.
+    description: >-
+      How long are the fragments? One curve per library and strand: the share of the library's reads
+      at each fragment length, normalised so libraries of any depth compare.
+
+      How to read: ancient DNA is fragmented, so a curve that peaks at short lengths is the expected
+      picture, and a curve weighted to long fragments looks like a modern library. Read it with the
+      ancient-DNA plane beside it, since long fragments with no damage point at contamination.
+
+      Sources: DamageProfiler paper (Bioinformatics 2021), doi:10.1093/bioinformatics/btab190; Briggs
+      and colleagues (PNAS 2007), doi:10.1073/pnas.0704665104
     layout: {x: 4, y: 0, w: 4, h: 6}
   - component_type: advanced_viz
     workflow_tag: eager
@@ -1857,7 +2104,22 @@ tabs:
     tag: ea-dmg-av-profile
     index: auth-misincorporation
     title: Misincorporation profile, both read ends
-    description: C to T and G to A by position from the read end, against every other substitution.
+    description: >-
+      Does the damage sit at the read ends? Two panels, the 5 prime and the 3 prime end of the reads,
+      show the frequency of each substitution by distance from the read end, one line per library and
+      substitution.
+
+      How to read: deamination shows as C to T rising toward the 5 prime end and, on double-stranded
+      libraries, G to A rising toward the 3 prime end, while the other substitutions stay flat. Flat C
+      to T and G to A curves mean no damage, as in a modern library; a UDG-treated library keeps its
+      damage at the terminal base only.
+
+      Lines and annotations: C to T and G to A are drawn as thick solid lines and every other
+      substitution as a thin dotted grey line, so the background reads as the baseline. No reference
+      line or cut-off is drawn.
+
+      Sources: DamageProfiler paper (Bioinformatics 2021), doi:10.1093/bioinformatics/btab190; Briggs
+      and colleagues (PNAS 2007), doi:10.1073/pnas.0704665104
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: eager
@@ -1867,7 +2129,15 @@ tabs:
     tag: ea-contam-table-nuclear
     index: auth-table-nuclear
     title: Nuclear contamination (ANGSD)
-    description: X-chromosome contamination per library, by two estimators with their errors; male individuals only.
+    description: >-
+      X-chromosome contamination per library from ANGSD, by two estimators with their errors. It
+      applies to male individuals only and is present only when the run enabled it.
+
+      How to read: a low estimate with a small error is the good result; read each estimate against
+      its own error before judging a library. No pass limit is applied here.
+
+      Sources: ANGSD paper (BMC Bioinformatics 2014), doi:10.1186/s12859-014-0356-4; nf-core/eager
+      2.4.5 output documentation, https://nf-co.re/eager/2.4.5/docs/output
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: eager
@@ -1877,7 +2147,17 @@ tabs:
     tag: ea-contam-table-mtnuc
     index: auth-table-mtnuc
     title: Mitochondrial to nuclear ratio
-    description: MTNucRatio per library. A ratio far above the rest of the run hints at a contaminant.
+    description: >-
+      The mitochondrial to nuclear read ratio per library from MTNucRatio. It is present only when the
+      run enabled it.
+
+      How to read: compare the libraries within the run; one far above the others is a lead to check,
+      not a verdict.
+
+      Note: no threshold is applied here, and the ratio alone does not say whether a library is
+      contaminated.
+
+      Source: MTNucRatio, https://github.com/apeltzer/MTNucRatioCalculator
     layout: {x: 0, y: 6, w: 8, h: 6}
   - component_type: table
     workflow_tag: eager
@@ -1889,7 +2169,20 @@ tabs:
     tag: ea-auth-table
     index: auth-table
     title: Authenticity summary per library
-    description: Terminal deamination at both ends against the background, next to the fragment lengths.
+    description: >-
+      The authenticity summary per library from DamageProfiler: C to T at the first 5 prime base, G to
+      A at the first 3 prime base, the background rate of every other substitution at those positions,
+      and the fragment lengths.
+
+      How to read: terminal damage clearly above the background, with short fragments, is the
+      ancient-DNA picture; the ancient-DNA plane above draws the same two signals. The short-fragment
+      column counts the fragments below the short-fragment cut-off set when the template is added (70
+      bp by default).
+
+      Note: that cut-off is a display choice of this dashboard, not a validated limit.
+
+      Sources: DamageProfiler paper (Bioinformatics 2021), doi:10.1093/bioinformatics/btab190; Briggs
+      and colleagues (PNAS 2007), doi:10.1073/pnas.0704665104
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: eager
@@ -1901,7 +2194,15 @@ tabs:
     tag: ea-dmg-table
     index: auth-table-misincorporation
     title: Misincorporation table
-    description: One row per library, read end, position and substitution class.
+    description: >-
+      The misincorporation profile as a table: one row per library, read end, position and
+      substitution class, with its frequency.
+
+      How to read: filter on the read end and the distance from it to list the positions the profile
+      above draws. The C to T and G to A rows near the 5 prime and 3 prime ends carry the damage
+      signal.
+
+      Source: DamageProfiler paper (Bioinformatics 2021), doi:10.1093/bioinformatics/btab190
     layout: {x: 0, y: 6, w: 8, h: 6}
   - component_type: table
     workflow_tag: eager
@@ -1913,7 +2214,14 @@ tabs:
     tag: ea-len-table
     index: auth-table-length
     title: Fragment length table
-    description: One row per library, strand and length, with the reads at that length and their share.
+    description: >-
+      The fragment length curves as a table: one row per library, strand and length, with the reads at
+      that length and their share.
+
+      How to read: filter on the strand or the length range to list the fragments the curve draws. The
+      share column is what makes libraries of different depth comparable.
+
+      Source: DamageProfiler paper (Bioinformatics 2021), doi:10.1093/bioinformatics/btab190
     layout: {x: 0, y: 12, w: 8, h: 6}
 # ============================================================================
 # Genome
@@ -2100,7 +2408,25 @@ tabs:
     tag: ea-sex-av-contig
     index: cov-contig-scatter
     title: Relative depth against contig length
-    description: Long chromosomes cluster on 1; short contigs scatter, an organelle sits far above.
+    description: >-
+      Which sequences are deeper or shallower than their library's average? Each point is one
+      reference sequence of one library: its length on x and its depth relative to the library's mean
+      depth on y, both on log scales, with marker size the bases mapped to it.
+
+      How to read: long chromosomes cluster on 1, short contigs scatter, and an organelle sits far
+      above. A sex chromosome present once in an individual whose autosomes are present twice sits
+      near 0.5, which is the basis of a coverage-ratio sex call; the Sex.DetERRmine table below gives
+      the call when the run enabled it.
+
+      Lines and annotations: the dashed horizontal line at 1, labelled y = 1, marks a sequence whose
+      depth equals its library's mean. It follows from how the y value is defined (sequence depth
+      divided by library mean depth), not from a cut-off.
+
+      Note: both axes are logarithmic, so a sequence with no mapped reads has no position and is not
+      drawn.
+
+      Sources: Qualimap 2 paper (Bioinformatics 2016), doi:10.1093/bioinformatics/btv566; Skoglund and
+      colleagues (J Archaeol Sci 2013), doi:10.1016/j.jas.2013.07.004
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: advanced_viz
     workflow_tag: eager
@@ -2114,7 +2440,16 @@ tabs:
     tag: ea-dist-av-hist
     index: cov-depth-histogram
     title: Depth histogram
-    description: Share of the reference at each depth, per library, on a log scale.
+    description: >-
+      How is the depth spread over the reference? One curve per library: the share of the reference at
+      each read depth, on a logarithmic share axis.
+
+      How to read: a shallow library peaks at the lowest depths and a deeper one shifts to the right.
+      A narrow peak means even coverage, and a long right tail means parts of the reference piled up
+      with reads; the genome fraction curve beside it reads how much of the reference passes a given
+      depth.
+
+      Source: Qualimap 2 paper (Bioinformatics 2016), doi:10.1093/bioinformatics/btv566
     layout: {x: 0, y: 0, w: 4, h: 6}
   - component_type: advanced_viz
     workflow_tag: eager
@@ -2132,7 +2467,15 @@ tabs:
     tag: ea-dist-av-fraction
     index: cov-genome-fraction
     title: Share of the reference covered at least X deep
-    description: Where this curve meets 1X is how much of the genome was seen at all.
+    description: >-
+      How much of the reference is covered at least X deep? One curve per library: the share of the
+      reference covered at each depth threshold, on a logarithmic threshold axis.
+
+      How to read: where a curve meets 1X is the share of the genome seen at all. A curve that stays
+      high as the threshold grows belongs to an even library, and one that falls at once covers the
+      genome thinly or piles its reads on a fraction of it.
+
+      Source: Qualimap 2 paper (Bioinformatics 2016), doi:10.1093/bioinformatics/btv566
     layout: {x: 4, y: 0, w: 4, h: 6}
   - component_type: table
     workflow_tag: eager
@@ -2142,7 +2485,19 @@ tabs:
     tag: ea-sex-table-sexdet
     index: cov-table-sexdet
     title: Sex.DetERRmine
-    description: Relative X and Y coverage per library, with their errors, as Sex.DetERRmine reports them.
+    description: >-
+      Relative X and Y coverage per library with their errors, as Sex.DetERRmine reports them: the
+      depth on each sex chromosome divided by the depth on the autosomes. It is present only when the
+      run enabled it.
+
+      How to read: compare the X and Y rates with their error bars; the table gives the rates and the
+      call is left to the reader. A rate with a large error rests on little data.
+
+      Note: Sex.DetERRmine estimates the rates from the depth at a given set of SNPs, so a library
+      with few reads on that set has wide errors.
+
+      Sources: Sex.DetERRmine, https://github.com/TCLamnidis/Sex.DetERRmine; Skoglund and colleagues
+      (J Archaeol Sci 2013), doi:10.1016/j.jas.2013.07.004
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: eager
@@ -2154,7 +2509,15 @@ tabs:
     tag: ea-sex-table
     index: cov-table-contig
     title: Coverage per contig
-    description: One row per library and reference sequence, with its length, mapped bases and depth.
+    description: >-
+      One row per library and reference sequence, with its length, mapped bases, depth and depth
+      relative to the library mean.
+
+      How to read: sort by relative depth to list the sequences far from 1. The relative depth and
+      contig length sliders of the filter panel narrow the rows, and the scatter above draws the same
+      table.
+
+      Source: Qualimap 2 paper (Bioinformatics 2016), doi:10.1093/bioinformatics/btv566
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: eager
@@ -2166,7 +2529,13 @@ tabs:
     tag: ea-dist-table
     index: cov-table-fraction
     title: Genome fraction by depth threshold
-    description: One row per library and depth threshold, with the share of the reference reaching it.
+    description: >-
+      One row per library and depth threshold, with the share of the reference reaching it.
+
+      How to read: the table behind the genome fraction curve. Read the 1X row of a library for the
+      share of the genome seen at all.
+
+      Source: Qualimap 2 paper (Bioinformatics 2016), doi:10.1093/bioinformatics/btv566
     layout: {x: 0, y: 6, w: 8, h: 6}
 - title: Locus
   subtitle: How deep and how well mapped is one region?
@@ -2331,7 +2700,18 @@ tabs:
     tag: ea-cov-av-genomeview
     index: locus-genome-view
     title: Locus navigator, depth per window
-    description: One lane per library on the contig axis; its locus field and brush move the tab.
+    description: >-
+      Where along the reference is a library deep or shallow? One lane per library on the contig axis,
+      each point the mean depth of one Qualimap window.
+
+      How to read: dips and gaps are regions the reads did not reach, and peaks are regions where
+      reads pile up. Read a dip against the mapping-quality lane below, since a dip in mapping quality
+      under a depth dip marks repeats the mapper could not place. Type a contig or range in the locus
+      field, or brush the axis, to move every tile of the tab to that region.
+
+      Lines and annotations: no depth threshold or reference line is drawn.
+
+      Source: Qualimap 2 paper (Bioinformatics 2016), doi:10.1093/bioinformatics/btv566
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: advanced_viz
     workflow_tag: eager
@@ -2353,7 +2733,17 @@ tabs:
     tag: ea-cov-av-mapq
     index: locus-mapq-track
     title: Mapping quality along the region
-    description: Mean MAPQ per window, one lane per library, clamped to the navigator's region.
+    description: >-
+      How well are the reads placed along the region? One lane per library: the mean mapping quality
+      of each Qualimap window, clamped to the region picked in the navigator above.
+
+      How to read: steady high mapping quality means the reads placed unambiguously, and a dip under a
+      depth dip marks repeats the mapper could not place with confidence. Compare it with the depth
+      lanes above at the same positions.
+
+      Lines and annotations: no reference line or cut-off is drawn.
+
+      Source: Qualimap 2 paper (Bioinformatics 2016), doi:10.1093/bioinformatics/btv566
     layout: {x: 0, y: 5, w: 8, h: 5}
   - component_type: table
     workflow_tag: eager
@@ -2365,7 +2755,13 @@ tabs:
     tag: ea-cov-table-track
     index: locus-table
     title: Windowed depth
-    description: One row per library and window of the region, with its contig and position.
+    description: >-
+      One row per library and window of the region, with its contig, position and mean depth.
+
+      How to read: the table follows the region picked in the navigator, so it lists the windows the
+      tracks above draw. Sort by depth to find the deepest and the shallowest windows.
+
+      Source: Qualimap 2 paper (Bioinformatics 2016), doi:10.1093/bioinformatics/btv566
     layout: {x: 0, y: 0, w: 8, h: 6}
 - title: Genotypes
   subtitle: How many variants did each sample yield, and how clean?
@@ -2512,7 +2908,16 @@ tabs:
     tag: ea-geno-fig-snps
     index: geno-snps-bar
     title: SNPs called per sample
-    description: SNPs per biological sample, one bar per variant caller.
+    description: >-
+      How many SNPs did each sample yield? One group of bars per biological sample, one bar per
+      variant caller, from bcftools stats.
+
+      How to read: compare the callers within a sample; a caller far below the others found less,
+      whether by its filters or by the depth available. A shallow, damaged library calls fewer
+      confident variants than its read count suggests, so open [Coverage](tab:Coverage) to check the
+      depth behind a low bar.
+
+      Source: bcftools manual, https://samtools.github.io/bcftools/bcftools.html
     layout: {x: 0, y: 0, w: 4, h: 4}
   - component_type: figure
     workflow_tag: eager
@@ -2529,7 +2934,18 @@ tabs:
     tag: ea-geno-fig-tstv
     index: geno-tstv-bar
     title: Ts to Tv ratio per sample
-    description: The transition to transversion ratio per sample, one bar per variant caller.
+    description: >-
+      How clean are the calls? One group of bars per biological sample, one bar per variant caller:
+      the transition to transversion (Ts/Tv) ratio of its SNPs, from bcftools stats.
+
+      How to read: compare the bars of a caller across samples; one that sits above its peers may
+      carry deamination read as variation, since C to T and G to A are transitions. A caller with too
+      few SNPs to score shows a ratio of 0.
+
+      Lines and annotations: no reference line is drawn, because the expected ratio depends on the
+      organism and on the call set.
+
+      Source: bcftools manual, https://samtools.github.io/bcftools/bcftools.html
     layout: {x: 4, y: 0, w: 4, h: 4}
   - component_type: table
     workflow_tag: eager
@@ -2541,7 +2957,14 @@ tabs:
     tag: ea-geno-table-summary
     index: geno-table-summary
     title: Variant counts per sample and caller
-    description: Records, SNPs, indels and multiallelic sites, straight out of the bcftools stats SN block.
+    description: >-
+      Records, SNPs, indels and multiallelic sites per sample and caller, straight from the summary
+      numbers block of bcftools stats.
+
+      How to read: the counts behind the SNP bars above. Many multiallelic sites on a haploid or
+      shallow sample point at noise in the calls.
+
+      Source: bcftools manual, https://samtools.github.io/bcftools/bcftools.html
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: eager
@@ -2553,5 +2976,12 @@ tabs:
     tag: ea-geno-table-tstv
     index: geno-table-tstv
     title: Transition and transversion counts
-    description: The TSTV block of the same reports, with the ratio on all alleles and on the first alternate.
+    description: >-
+      The transition and transversion counts of the same reports, with the ratio on all alleles and on
+      the first alternate allele.
+
+      How to read: the counts behind the Ts/Tv bars above. A ratio built on few SNPs moves a lot with
+      a handful of calls, so read it with the SNP count of the same sample.
+
+      Source: bcftools manual, https://samtools.github.io/bcftools/bcftools.html
     layout: {x: 0, y: 6, w: 8, h: 6}

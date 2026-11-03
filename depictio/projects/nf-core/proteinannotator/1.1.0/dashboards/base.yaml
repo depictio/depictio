@@ -165,6 +165,7 @@ main_dashboard:
       - ![](icon:mdi:shape-outline) **Sequences** {{n_in}} given, {{n_kept}} kept by the length and duplicate filter
       - ![](icon:mdi:puzzle-outline) **Annotated** {{n_ann}} proteins with at least one domain
       - ![](icon:mdi:file-table-outline) **Samplesheet** [one row per sample](section:Sample sheet), its path in [the run parameters](params:input)
+      - ![](icon:mdi:palette-outline) **{GROUP_COL_DISPLAY}** {{legend:{GROUP_COL}}}
     tag: pa-ov-study
     index: pa-ov-study
     layout: {x: 0, y: 1, w: 5, h: 3}
@@ -455,7 +456,12 @@ main_dashboard:
     tag: pa-sheet-design
     index: pa-sheet-design
     title: Design table
-    description: One row per sample as the design file declares it. Ticking rows narrows every tab to those samples.
+    description: >-
+      One row per sample as the design file declares it, with the columns the dashboard filters and groups
+      on.
+
+      How to read: tick rows to narrow every tab to those samples, and clear the ticks to see the whole
+      run. Check here that the groups are the ones you meant to compare before reading the other tabs.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: proteinannotator
@@ -467,7 +473,14 @@ main_dashboard:
     tag: pa-sheet-samples
     index: pa-sheet-samples
     title: Sample summary
-    description: One row per sample with what the filter kept and how much of it the databases annotated.
+    description: >-
+      One row per sample: the sequences it gave and kept after the length and duplicate filter, the
+      residues kept, the mean length and N50, and, once annotated, the proteins with a domain, the domain
+      hits and the median share of a protein a domain covers.
+
+      How to read: a large number of removed sequences means the filter cut much of the input, and a low
+      share of annotated proteins means the databases describe few of the kept ones. Tick rows to narrow
+      every tab to those samples.
     layout: {x: 0, y: 6, w: 8, h: 6}
 
 tabs:
@@ -663,7 +676,17 @@ tabs:
     tag: pa-in-fig-yield
     index: pa-in-fig-yield
     title: Sequences before and after the filter
-    description: Sequence count per sample in the input FASTA and in the filtered FASTA the searches ran on.
+    description: >-
+      Does the length and duplicate filter keep most of each input? Each pair of bars is one sample: the
+      number of sequences in its input FASTA next to the number in the filtered FASTA the searches ran on,
+      as counted by SeqFu.
+
+      How to read: two bars of about the same height mean the filter removed little. A filtered bar far
+      below its input means most sequences were too short, too long or duplicates, and a sample left with
+      very few sequences has little to annotate in the later tabs.
+
+      Source: nf-core/proteinannotator output documentation, SeqKit preprocessing filters by length and
+      removes duplicate sequences, https://nf-co.re/proteinannotator/1.1.0/docs/output
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: advanced_viz
     workflow_tag: proteinannotator
@@ -679,7 +702,19 @@ tabs:
     tag: pa-in-av-length-cover
     index: pa-in-av-length-cover
     title: Length against annotated share
-    description: One point per protein, coloured by the database of its best domain. Low points are mostly outside any known family.
+    description: >-
+      Which proteins does no database describe? One point per protein: its length in residues against the
+      percent of its residues covered by at least one domain of any database, coloured by the database of
+      its best domain (the one with the lowest E-value).
+
+      How to read: points near the top are proteins the databases describe almost entirely, and points
+      near 0 are proteins, or long stretches of them, outside any known family. A long protein with a low
+      share carries regions no database describes, which makes it a candidate for a closer look. Click a
+      point to read that protein's record.
+
+      Note: a residue counts once even where several domains overlap it, and only the databases the run
+      searched contribute, so a skipped database leaves its proteins looking unannotated. No reference
+      line is drawn.
     layout: {x: 0, y: 0, w: 5, h: 6}
   - component_type: advanced_viz
     workflow_tag: proteinannotator
@@ -699,7 +734,18 @@ tabs:
     tag: pa-in-av-record
     index: pa-in-av-record
     title: Protein record
-    description: The picked protein, with its best domain and its hits per database.
+    description: >-
+      The protein picked on the plot or in the table, as a card: its sample, length, description and
+      annotation status, its domain hits, best domain and annotated share, its hits per database and its
+      predicted helix, strand and coil shares.
+
+      How to read: the annotation status says whether any database gave the protein a domain, and the best
+      domain is the one with the lowest E-value. The hits per database show which sources carry the
+      protein, so one database alone means the annotation rests on a single source. Pick another protein
+      to compare.
+
+      Note: the helix, strand and coil shares are S4PRED predictions from the sequence alone, not measured
+      structure.
     layout: {x: 5, y: 0, w: 3, h: 6}
   - component_type: table
     workflow_tag: proteinannotator
@@ -711,7 +757,13 @@ tabs:
     tag: pa-in-table-proteins
     index: pa-in-table-proteins
     title: Proteins
-    description: One row per protein with its domain hits per database, annotated share and secondary structure.
+    description: >-
+      One row per protein of the filtered FASTA with its domain hits per database, annotated share, best
+      domain and predicted secondary structure shares. A protein no database annotated keeps its row.
+
+      How to read: sort on the annotated share to put the poorly described proteins first, or filter on
+      the annotation status to list the unannotated ones. Tick rows to pick those proteins and open their
+      records.
     layout: {x: 0, y: 0, w: 8, h: 6}
 
 # =========================================================================
@@ -952,7 +1004,28 @@ tabs:
     tag: pa-dom-av-architecture
     index: pa-dom-av-architecture
     title: Domain architecture of each protein
-    description: One backbone per protein on a shared scale, its domains coloured by database. A zigzag edge marks a partial match of the HMM. The View control groups proteins by architecture.
+    description: >-
+      Which domains does each protein carry, and in which order? One backbone per protein on a shared
+      length scale, with each domain drawn as a box on its span and coloured by the database that reports
+      it.
+
+      How to read: proteins with the same row of boxes share an architecture, and a long backbone with few
+      boxes has stretches no database describes. Boxes of different colours over the same stretch show
+      databases agreeing on it. Switch the View control to group the proteins by architecture and count
+      each one, and pick a domain to read its record.
+
+      Lines and annotations: a zigzag edge on a domain means the HMM alignment covers only part of the
+      family model, on the left when it starts after the model's first state and on the right when it ends
+      before its last. A dashed outline marks a domain whose HMM coverage is below 0.9 where the side is
+      not known; 0.9 is this tile's `partial_coverage` setting, a display aid and not a published cut-off.
+      InterProScan matches have no HMM span and are drawn as complete.
+
+      Source: HMMER hmmsearch manual, the default per-domain inclusion E-value is 0.01,
+      https://github.com/EddyRivasLab/hmmer/blob/master/documentation/man/hmmsearch.man.in
+
+      Note: hmmsearch domains are drawn only when their independent E-value is 0.01 or lower, HMMER's
+      default inclusion value (HMMER applies it to the conditional E-value); InterProScan matches are
+      drawn as reported.
     layout: {x: 0, y: 0, w: 5, h: 6}
   - component_type: advanced_viz
     workflow_tag: proteinannotator
@@ -973,7 +1046,16 @@ tabs:
     tag: pa-dom-av-domain-record
     index: pa-dom-av-domain-record
     title: Domain record
-    description: The domain picked on the architecture, with a link to its family entry.
+    description: >-
+      The domain picked on the architecture, as a card: its family label, accession, description, database
+      and source, its place on the protein, and its evidence (E-value, score and the HMM span it aligns
+      to). The accession links to its InterPro entry search.
+
+      How to read: a small E-value together with an HMM coverage near 1 is a confident, full-length match
+      to the family, and a low coverage means a fragment of it. Follow the accession link to read what the
+      family is before naming the protein after it.
+
+      Note: the score and the HMM columns are empty for InterProScan domains, which carry no HMM span.
     layout: {x: 5, y: 0, w: 3, h: 6}
   - component_type: advanced_viz
     workflow_tag: proteinannotator
@@ -989,7 +1071,17 @@ tabs:
     tag: pa-dom-av-coverage
     index: pa-dom-av-coverage
     title: Share of each protein each database annotates
-    description: One row per protein, one column per database, the colour the fraction of residues its domains cover.
+    description: >-
+      Which databases describe which proteins, and how completely? One row per protein and one column per
+      database, the colour giving the fraction of that protein's residues covered by the database's
+      domains, from 0 (pale) to 1 (dark blue).
+
+      How to read: rows are ordered by hierarchical clustering (Ward linkage), so proteins with the same
+      pattern of databases sit together. A row dark in one column and pale elsewhere rests on a single
+      database, a row dark across columns is a well-known family, and a row pale everywhere is an
+      unannotated protein. Columns keep the database order.
+
+      Note: a database the run skipped appears as a column of zeros. No reference line is drawn.
     layout: {x: 0, y: 6, w: 4, h: 5}
   - component_type: advanced_viz
     workflow_tag: proteinannotator
@@ -1003,7 +1095,14 @@ tabs:
     tag: pa-dom-av-upset
     index: pa-dom-av-upset
     title: Databases that agree on a protein
-    description: Proteins per combination of databases annotating them.
+    description: >-
+      Which databases annotate the same proteins? Each bar counts the proteins annotated by exactly one
+      combination of databases, the dots under it say which, and the bar at the side gives the number of
+      proteins each database annotates on its own.
+
+      How to read: a tall bar for a single database is a set of proteins only that database reaches, where
+      the annotation rests on one source. A bar over every database is the well-known families they all
+      describe. A protein no database annotates belongs to no bar.
     layout: {x: 4, y: 6, w: 4, h: 5}
   - component_type: advanced_viz
     workflow_tag: proteinannotator
@@ -1019,7 +1118,20 @@ tabs:
     tag: pa-dom-av-significance
     index: pa-dom-av-significance
     title: Significance against span
-    description: One point per domain, coloured by database. Long confident spans are whole-protein families, short confident ones motifs, and low points borderline calls.
+    description: >-
+      How confident is each domain call, and how long is the domain? One point per domain, its span in
+      residues against the significance of the call (-log10 of the E-value, so higher is stronger),
+      coloured by database.
+
+      How to read: long, confident spans are whole-protein families, and short, confident ones are motifs.
+      Low points of any length are borderline calls worth checking in a second database. Click a point to
+      read the domain's record.
+
+      Source: HMMER hmmsearch manual, the default per-domain inclusion E-value is 0.01,
+      https://github.com/EddyRivasLab/hmmer/blob/master/documentation/man/hmmsearch.man.in
+
+      Note: the weakest hmmsearch domains sit at 2 on the y axis, the 0.01 inclusion value applied by the
+      recipe; InterProScan matches are plotted as reported. No reference line is drawn.
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: table
     workflow_tag: proteinannotator
@@ -1031,7 +1143,18 @@ tabs:
     tag: pa-dom-table-domains
     index: pa-dom-table-domains
     title: Domains
-    description: One row per domain with its protein, database, span, HMM span and E-value.
+    description: >-
+      One row per domain with its protein, database, span, HMM span and E-value, from the four HMM
+      libraries and InterProScan.
+
+      How to read: sort on the E-value to list the strongest calls first, or filter on the database to see
+      what one source adds. Tick rows to pick domains and open their records.
+
+      Note: hmmsearch domains are listed when their independent E-value is 0.01 or lower, HMMER's default
+      inclusion value; InterProScan matches are listed as reported.
+
+      Source: HMMER hmmsearch manual,
+      https://github.com/EddyRivasLab/hmmer/blob/master/documentation/man/hmmsearch.man.in
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: advanced_viz
     workflow_tag: proteinannotator
@@ -1045,7 +1168,18 @@ tabs:
     tag: pa-dom-av-hmmer
     index: pa-dom-av-hmmer
     title: Bit score against HMM coverage
-    description: Every reported domain, below the inclusion threshold too. Hits that cover little of the HMM with a low score are fragments.
+    description: >-
+      Which hmmsearch hits cover the family model, and how well do they score? One point per reported
+      domain, the share of the HMM's states its alignment covers against its bit score, coloured by HMM
+      library. It includes the hits below the inclusion threshold that the Domains table leaves out.
+
+      How to read: points to the right and high are full-length, high-scoring family hits. Points to the
+      left are fragments that touch only a few states of the model, and a fragment with a low score is the
+      least trustworthy kind of hit. Compare scores within one library, since a bit score depends on the
+      model.
+
+      Note: no cut-off is drawn. Hits below HMMER's inclusion E-value are plotted too, so a low point is a
+      candidate to ignore and not a verdict.
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: table
     workflow_tag: proteinannotator
@@ -1055,7 +1189,17 @@ tabs:
     tag: pa-dom-table-hmmer
     index: pa-dom-table-hmmer
     title: hmmsearch domain table
-    description: Every domain line hmmsearch wrote, with its conditional and independent E-values and HMM, alignment and envelope spans.
+    description: >-
+      Every domain line hmmsearch wrote, with its conditional and independent E-values and its HMM,
+      alignment and envelope spans, before any inclusion threshold.
+
+      How to read: the independent E-value is the one the Domains list filters on. A hit with a small
+      E-value and an HMM span covering most of the model is a family match, and one with a short HMM span
+      is a fragment. Use it to see what the inclusion threshold removed.
+
+      Source: HMMER hmmsearch manual, the default per-domain inclusion E-value is 0.01 and it applies to
+      the conditional E-value,
+      https://github.com/EddyRivasLab/hmmer/blob/master/documentation/man/hmmsearch.man.in
     layout: {x: 0, y: 5, w: 8, h: 6}
 
 - title: Secondary structure
@@ -1264,7 +1408,24 @@ tabs:
     tag: pa-ss-av-ribbon
     index: pa-ss-av-ribbon
     title: Secondary structure of the protein
-    description: Helices, strands and coil along the chain, shaded by confidence, over the probability of each state. Brush a stretch to select it.
+    description: >-
+      Where are the helices, strands and coils of the picked protein, and how sure is the prediction? The
+      chain runs left to right as a ribbon, with a helix drawn as a helix, a strand as an arrow and coil
+      as a line, shaded by the confidence of the called state, over the probability of each of the three
+      states.
+
+      How to read: saturated stretches are confident calls and pale ones are uncertain, where two states
+      have similar probability. The segment list names each helix and strand with its length and mean
+      probability, and the badges give the share of each state. Brush a stretch to select it.
+
+      Lines and annotations: the shade follows the probability of the called state on a continuous scale.
+      No threshold separates a confident call from an uncertain one.
+
+      Source: S4PRED, Moffat and Jones 2021, Bioinformatics 37(21):3744-3751,
+      doi:10.1093/bioinformatics/btab491
+
+      Note: S4PRED predicts from the single sequence, and its authors report a three-state accuracy (Q3)
+      of 75.3% on the CB513 benchmark, so treat the ribbon as a guide.
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: advanced_viz
     workflow_tag: proteinannotator
@@ -1287,7 +1448,15 @@ tabs:
     tag: pa-ss-av-track
     index: pa-ss-av-track
     title: Sequence, predicted state and domains
-    description: The same protein along its chain, with the predicted state, its probability and every domain span.
+    description: >-
+      The picked protein along its chain: its residues, the predicted state of each, the probability of
+      that state and one lane for every domain span from the domain table.
+
+      How to read: a dip in the probability lane marks an uncertain stretch. A domain span over a stretch
+      predicted as coil with low probability is a call to double-check against the Domains tab.
+
+      Source: S4PRED, Moffat and Jones 2021, Bioinformatics 37(21):3744-3751,
+      doi:10.1093/bioinformatics/btab491
     layout: {x: 0, y: 5, w: 8, h: 4}
   - component_type: figure
     workflow_tag: proteinannotator
@@ -1303,7 +1472,16 @@ tabs:
     tag: pa-ss-fig-composition
     index: pa-ss-fig-composition
     title: Predicted states per protein
-    description: Share of each protein's residues called helix, strand or coil.
+    description: >-
+      How much of each protein is predicted helix, strand or coil? One horizontal bar per protein, split
+      into the three predicted states as a percentage of its residues.
+
+      How to read: helix- and strand-rich proteins have a regular fold by this prediction, and mostly coil
+      proteins have little regular structure, which suits loops and linkers. A coil share is not a
+      disorder call.
+
+      Source: S4PRED, Moffat and Jones 2021, Bioinformatics 37(21):3744-3751,
+      doi:10.1093/bioinformatics/btab491
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: table
     workflow_tag: proteinannotator
@@ -1313,7 +1491,14 @@ tabs:
     tag: pa-ss-table-residues
     index: pa-ss-table-residues
     title: Residues
-    description: One row per residue with its called state and the three state probabilities.
+    description: >-
+      One row per residue with its called state and the probability of each of the three states.
+
+      How to read: sort a protein's rows on the state probability to find the least certain residues, or
+      filter on the state to list its helix or strand residues.
+
+      Source: S4PRED, Moffat and Jones 2021, Bioinformatics 37(21):3744-3751,
+      doi:10.1093/bioinformatics/btab491
     layout: {x: 0, y: 0, w: 8, h: 6}
 
 - title: Structure
@@ -1533,7 +1718,13 @@ tabs:
     tag: pa-st-table-proteins
     index: pa-st-table-proteins
     title: Protein
-    description: The picked protein with its length, annotated share, best domain and domain hits per database.
+    description: >-
+      The picked protein with its sample, length, annotated share, best domain and database, domain hits
+      and annotation status.
+
+      How to read: the annotated share says how much of the chain a domain covers, and the best domain is
+      the one with the lowest E-value. A protein with no domain hits has an annotation status of
+      unannotated.
     layout: {x: 0, y: 0, w: 8, h: 3}
   - component_type: advanced_viz
     workflow_tag: proteinannotator
@@ -1556,7 +1747,20 @@ tabs:
     tag: pa-st-av-structure
     index: pa-st-av-structure
     title: Predicted structure
-    description: An ESMFold prediction made from the picked protein's sequence alone, not an experimental structure, coloured by domain (grey outside any domain) with the picked residue in red. Folding sends the sequence to the public ESM Atlas service.
+    description: >-
+      What does the picked protein look like, and where do its domains sit in the fold? A 3D cartoon of an
+      ESMFold prediction made from the protein's sequence alone, coloured by domain, with grey outside any
+      domain and the picked residue in red.
+
+      How to read: domains that form compact, separate units in the model support the architecture drawn
+      in the Domains tab. Stretches outside any domain are grey and are where the databases have nothing
+      to say. Pick a residue to see where it sits.
+
+      Source: ESMFold, Lin et al. 2023, Science 379(6637):1123-1130, doi:10.1126/science.ade2574
+
+      Warning: this is a prediction, not an experimental structure, and the view does not show its
+      per-residue confidence. Folding sends the protein sequence to the public ESM Atlas service, and
+      stays off unless an administrator enables it.
     layout: {x: 0, y: 0, w: 3, h: 9}
   - component_type: advanced_viz
     workflow_tag: proteinannotator
@@ -1579,7 +1783,15 @@ tabs:
     tag: pa-st-av-sequence
     index: pa-st-av-sequence
     title: Sequence, secondary structure and domains
-    description: The same protein along its chain, with the predicted state, its probability and every domain span.
+    description: >-
+      The picked protein along its chain: its residues, the predicted state of each, the probability of
+      that state and one lane for every domain span.
+
+      How to read: the lanes line up with the predicted structure, so a domain span can be read against
+      the secondary structure under it. A dip in the probability lane marks an uncertain stretch.
+
+      Source: S4PRED, Moffat and Jones 2021, Bioinformatics 37(21):3744-3751,
+      doi:10.1093/bioinformatics/btab491
     layout: {x: 3, y: 0, w: 5, h: 9}
   - component_type: table
     workflow_tag: proteinannotator
@@ -1589,5 +1801,11 @@ tabs:
     tag: pa-st-table-residues
     index: pa-st-table-residues
     title: Residues
-    description: One row per residue with its state, probability, best covering domain and the number of domains overlapping it.
+    description: >-
+      One row per residue with its predicted state, its probability, the best domain covering it and the
+      number of domains that overlap it.
+
+      How to read: a residue with several overlapping domains sits where databases disagree or nest their
+      calls, and one with none lies outside every domain. Sort on the probability to find the least
+      certain calls.
     layout: {x: 0, y: 0, w: 8, h: 6}

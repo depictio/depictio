@@ -143,6 +143,7 @@ main_dashboard:
       - ![](icon:mdi:dna) **Reads** {{rtype}}
       - ![](icon:mdi:swap-horizontal) **Strandedness** {{strand}}
       - ![](icon:mdi:file-table-outline) **Samplesheet** [one row per sample](section:Sample sheet), its path in [the run parameters](params:input)
+      - ![](icon:mdi:palette-outline) **Condition** {{legend:condition}}
     tag: rna-ov-study
     index: ov-study
     layout: {x: 0, y: 1, w: 5, h: 3}
@@ -406,7 +407,18 @@ main_dashboard:
     index: ov-genome
     title: Condition-specific genes along the genome
     link: tab:Gene Explorer
-    description: Each dot is an expressed gene, its height how far its top condition leads the others (log2) and its colour that condition. Click a dot to open the gene in the genome browser.
+    description: >-
+      Where along the genome do the conditions differ? Each dot is an expressed gene at its position, its
+      height is how far the top condition's mean log2(TPM + 1) leads the mean of the other conditions, and
+      its colour is that top condition.
+
+      How to read: dots near the floor are genes the conditions share, and high dots are genes that peak in
+      one condition. A run of high dots of one colour in the same region is a locus worth opening. Click a
+      dot to open the gene in the genome browser of [Gene Explorer](tab:Gene Explorer).
+
+      Note: the height is a difference of means, a ranking and not a test, since the pipeline runs no
+      differential analysis, and no cut-off is drawn. The loci come from StringTie, so a run that skipped
+      StringTie has no dots.
     layout: {x: 0, y: 11, w: 8, h: 4}
   # Link-only tab tiles: each tile prints its tab's subtitle. A tab the run does
   # not have is left out, and a heading whose tabs are all missing is hidden.
@@ -480,8 +492,15 @@ main_dashboard:
     section: Sample sheet
     tag: rna-sample-sheet
     index: sample-sheet
-    title: Sample sheet
     layout: {x: 0, y: 0, w: 8, h: 6}
+    title: Sample sheet
+    description: >-
+      Which libraries did the run read, and in which condition? One row per entry of the sample sheet the
+      pipeline was given, with the condition read off the sample name.
+
+      How to read: check that every library sits in the condition you expect before reading any other tab,
+      since the colours and groups of the dashboard come from it. Pick rows to narrow the Analysis panel
+      to those libraries.
 tabs:
 - title: MultiQC
   subtitle: Did trimming, alignment and quantification work for every library?
@@ -864,7 +883,24 @@ tabs:
     tag: rna-libqc-profile
     index: rna-libqc-profile
     title: Per-library QC profile
-    description: Higher is better for reads, uniquely mapped, Salmon mapped and exonic; lower for duplication; close to 1 for the 5' to 3' bias. Each axis spans the libraries in view.
+    description: >-
+      Does any library stand apart on the QC metrics? Each line is one library, coloured by its condition,
+      crossing six axes: reads after trimming, uniquely mapped, Salmon mapped, duplication, exonic share and
+      the 5' to 3' coverage bias.
+
+      How to read: higher is better for reads, uniquely mapped, Salmon mapped and exonic; lower is better
+      for duplication; the bias reads best close to 1, which is even coverage along the transcript. A line
+      that departs from its replicates on several axes at once is the library to open in
+      [MultiQC](tab:MultiQC). Brush an axis to keep only the libraries inside the range.
+
+      Lines and annotations: no reference line or cut-off is drawn. Each axis is stretched between the
+      lowest and the highest library in view, so its ends are the extremes of this run and not limits of
+      the metric; the tick labels keep the metric's own units.
+
+      Source: nf-core/rnaseq output documentation, https://nf-co.re/rnaseq/3.26.0/docs/output
+
+      Note: highly expressed genes duplicate naturally, so judge duplication against the replicates of the
+      same condition and not against an absolute value.
     layout: {x: 0, y: 0, w: 8, h: 6}
   # RSeQC publishes its upstream and downstream bands nested inside each
   # other; the recipe differences them into disjoint rings and adds the
@@ -884,6 +920,25 @@ tabs:
     tag: rna-libqc-distribution
     index: rna-libqc-distribution
     title: Where the reads landed on the annotation
+    description: >-
+      Where do the reads of each library land on the annotation? One stacked bar per library, each segment
+      the share of its RSeQC tags in a region class (exonic, intronic, promoter, downstream or other), so
+      every bar sums to one. The rank switch changes the segments to the individual RSeQC features.
+
+      How to read: for most RNA-seq libraries the exonic share dominates and the replicates of a condition
+      look alike. A library with a much larger intronic or intergenic share than its replicates deserves a
+      look at the library preparation, since a high intronic fraction can point at DNA contamination, or be
+      expected for total RNA. Compare with the exonic share in [MultiQC](tab:MultiQC).
+
+      Lines and annotations: no reference line or cut-off is drawn, and RSeQC publishes none for these
+      shares.
+
+      Sources: RSeQC, Wang et al. 2012, https://doi.org/10.1093/bioinformatics/bts356; nf-core/rnaseq
+      output documentation, https://nf-co.re/rnaseq/3.26.0/docs/output
+
+      Note: RSeQC reports its upstream and downstream bands nested inside each other, so they are
+      differenced into separate rings here. Tags that fall in no feature are shown as their own
+      intergenic segment.
     layout: {x: 0, y: 0, w: 8, h: 5}
 - title: Sample Space
   subtitle: Do the replicates of each condition sit together?
@@ -1054,6 +1109,22 @@ tabs:
     tag: rna-space-pca
     index: rna-space-pca
     title: DESeq2 QC PCA
+    description: >-
+      Do the replicates of each condition sit together? Each point is a library placed on the first two
+      principal components of the PCA the pipeline's DESeq2 QC step computed on the count matrix, read from
+      the file it publishes. The variance each component explains is in the hover.
+
+      How to read: replicates of one condition should cluster and the conditions should separate along the
+      components that explain the most variance. A library far from its replicates, or a separation only on
+      a component that explains little, points at a swap, a batch or an outlier. Check the distances below,
+      then click or lasso a point to open its record and narrow the tabs.
+
+      Lines and annotations: no ellipse, reference line or cut-off is drawn.
+
+      Source: nf-core/rnaseq output documentation, https://nf-co.re/rnaseq/3.26.0/docs/output
+
+      Note: the pipeline transforms the counts blind to the design (variance-stabilising by default), so a
+      separation by condition here is not forced by the condition labels.
     layout: {x: 0, y: 0, w: 8, h: 6}
   # The same square Euclidean distance matrix MultiQC draws as an image,
   # clustered in the browser and narrowed on both axes by a sample pick.
@@ -1071,8 +1142,21 @@ tabs:
     section: Sample relationships
     tag: rna-space-distances
     index: rna-space-distances
-    title: Sample distances (DESeq2 QC)
     layout: {x: 0, y: 6, w: 8, h: 5}
+    title: Sample distances (DESeq2 QC)
+    description: >-
+      Which libraries resemble each other most? Each cell is the Euclidean distance between two libraries
+      in the pipeline's DESeq2 QC step, read from the matrix it publishes. Rows and columns are clustered
+      (Ward linkage on the distances) and the diagonal is zero.
+
+      How to read: replicates of a condition should fall next to each other in the same cluster, with
+      small distances between them. A library that clusters with another condition, or sits at a large
+      distance from every other one, is the one to check in [MultiQC](tab:MultiQC) or on the PCA above.
+
+      Lines and annotations: the tree beside the matrix is the Ward clustering of the libraries, and its
+      branch heights are the merge distances. No cut-off is drawn, and the colour bar gives the scale.
+
+      Source: nf-core/rnaseq output documentation, https://nf-co.re/rnaseq/3.26.0/docs/output {x: 0, y: 6, w: 8, h: 5}
   - component_type: table
     workflow_tag: rnaseq
     data_collection_tag: sample_overview
@@ -1082,8 +1166,18 @@ tabs:
     section: Library summary
     tag: rna-space-table
     index: space-table-libraries
-    title: Library summary
     layout: {x: 0, y: 0, w: 5, h: 6}
+    title: Library summary
+    description: >-
+      How many genes does each library reach? One row per library with the genes it detects (TPM above
+      zero), the genes it expresses (TPM of 1 or more), the median TPM of the detected genes, its group and
+      its position on the first three components of a PCA of the log2(TPM + 1) matrix.
+
+      How to read: a library far below its replicates in genes expressed was probably sequenced shallower
+      or is degraded. Pick a row to read its record beside the table.
+
+      Note: the 1 TPM floor and the 500 most variable genes of the PCA are fixed settings of the recipe,
+      not validated cut-offs.
   - component_type: advanced_viz
     workflow_tag: rnaseq
     data_collection_tag: sample_overview
@@ -1100,8 +1194,14 @@ tabs:
     section: Library summary
     tag: rna-space-record
     index: rna-space-record
-    title: Library record
     layout: {x: 5, y: 0, w: 3, h: 6}
+    title: Library record
+    description: >-
+      What do we know about the library picked in the table? Its group, the genes it detects and expresses,
+      its median TPM and its position on the first three PCA components.
+
+      How to read: pick a row in the library summary table, or a point on a plot, and compare its values
+      with the other libraries of the same group. {x: 5, y: 0, w: 3, h: 6}
 - title: Variable Genes
   subtitle: Which genes vary most between the libraries and conditions?
   tab_group: Expression
@@ -1276,8 +1376,25 @@ tabs:
     section: Top variable genes
     tag: rna-var-heatmap
     index: rna-var-heatmap
-    title: Top 500 variable genes
     layout: {x: 0, y: 0, w: 8, h: 5}
+    title: Top 500 variable genes
+    description: >-
+      Which genes drive the differences between libraries? Each row is one of the 500 genes with the
+      highest variance of log2(TPM + 1) across the libraries, each column a library, and each cell the
+      gene's expression in that library as a z-score within its row. The strips above the columns show the
+      condition, replicate, read type and strandedness of each library when they vary.
+
+      How to read: blocks of red and blue that follow the condition strip are genes that mark a condition,
+      and replicates should cluster together. A library that clusters away from its condition, or a block
+      that follows a strip other than the condition (replicate, strandedness), points at a batch or a
+      technical effect. Open [Gene Explorer](tab:Gene Explorer) for the genes of a block.
+
+      Lines and annotations: the tree above the columns is the clustering of the libraries. No cut-off is
+      drawn, and the 500 genes are the fixed size of the recipe, not a validated number. Red is above and
+      blue below the gene's own mean across the libraries in view.
+
+      Note: a z-score per row shows the pattern of a gene and hides its level, so a faint gene and a
+      strongly expressed one look alike. Read the levels in the table below. {x: 0, y: 0, w: 8, h: 5}
   # Colours by its own group axis, so it takes the pieces of the group kwargs
   # rather than spreading them: Analysis mode's groups when it has some, else
   # the condition, in the condition's colours.
@@ -1328,7 +1445,20 @@ tabs:
     tag: rna-var-box
     index: rna-var-box
     title: Expression by condition
-    description: The 12 most variable genes in view, one dot per library and a bar at each condition's mean. Select points to keep those genes.
+    description: >-
+      How does the expression of the most variable genes split by condition? The 12 genes with the largest
+      standard deviation of log2(TPM + 1) over the libraries in view, one dot per library in the colour of
+      its condition, and a short bar across the dots of each condition at their mean.
+
+      How to read: a gene whose dots form separate groups by condition is a candidate marker of that
+      condition, and one whose dots spread inside a condition varies between replicates. Name genes in the
+      left panel to draw those instead of the top 12. Select points to keep those genes in the other tiles.
+
+      Lines and annotations: the bar is the mean of the libraries of a condition, drawn because a condition
+      holds only two or three libraries, too few for a box. No cut-off is drawn.
+
+      Note: no test backs the groups, since the pipeline runs no differential analysis. A gene ranked by
+      spread can vary because of one library.
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: table
     workflow_tag: rnaseq
@@ -1338,8 +1468,14 @@ tabs:
     section: Matrix rows
     tag: rna-var-table-matrix
     index: var-table-matrix
-    title: Top variable gene matrix
     layout: {x: 0, y: 0, w: 8, h: 6}
+    title: Top variable gene matrix
+    description: >-
+      What are the values behind the heatmap? One row per gene of the 500 most variable, with its
+      log2(TPM + 1) in every library.
+
+      How to read: sort a column to find the genes highest in a library, or search a gene symbol to read
+      its levels across the libraries. The heatmap above shows the same rows as z-scores. {x: 0, y: 0, w: 8, h: 6}
 - title: Gene Explorer
   subtitle: Where does a gene peak, and what do its reads look like?
   tab_group: Expression
@@ -1526,7 +1662,19 @@ tabs:
     tag: rna-gene-plane
     index: rna-gene-plane
     title: Mean-variance plane
-    description: Each gene sits by its average expression (left to right) and by how much it changes between libraries (bottom to top). Genes high on the plane set the conditions apart.
+    description: >-
+      Which genes change most between libraries, and at what level? Each point is an expressed gene placed
+      by its mean log2(TPM + 1) over the libraries (x) and the standard deviation of log2(TPM + 1) over
+      them (y), in the colour of the condition where it peaks.
+
+      How to read: genes high on the plane vary the most between libraries, and a colour that dominates the
+      top points marks the condition those genes peak in. Genes at the left have a low level, where a
+      change is easily noise. Click a point to open its record and to frame the browser below on the gene.
+
+      Lines and annotations: no reference line, cut-off or point label is drawn, since the top points sit
+      too close for names to read. Use the hover for the gene name.
+
+      Note: the spread is a ranking and not a test, since the pipeline runs no differential analysis.
     layout: {x: 0, y: 0, w: 5, h: 6}
   - component_type: advanced_viz
     workflow_tag: rnaseq
@@ -1547,8 +1695,15 @@ tabs:
     section: Gene detail
     tag: rna-gene-record
     index: rna-gene-record
-    title: Gene record
     layout: {x: 5, y: 0, w: 3, h: 6}
+    title: Gene record
+    description: >-
+      What do we know about the picked gene? Its symbol and Ensembl id (a link to Ensembl), the mean and
+      spread of its expression, the highest TPM it reached, the libraries where it is detected, and the
+      condition and library where it peaks.
+
+      How to read: pick a point on the plane, then compare its top condition and its lead over the other
+      conditions with the browser below. {x: 5, y: 0, w: 3, h: 6}
   # The run's own files on the gene picked above: the plane's pick narrows
   # gene_summary to one gene, whose StringTie span the view frames (a
   # --skip_stringtie run has none: the view then opens on the first region that
@@ -1589,7 +1744,21 @@ tabs:
     tag: rna-gene-browser
     index: gene-browser
     title: Genome browser
-    description: The coverage of each strand and the reads, with their splice arcs, of the libraries in scope, on the gene picked on the plane.
+    description: >-
+      What do the reads of the picked gene look like? The run's own files at the gene's locus, for the
+      libraries in scope: the coverage of each strand, then the reads with their splice arcs, over the
+      assembly's gene track, each library in the colour of its condition. The first replicate of every
+      condition opens first.
+
+      How to read: a gene that peaks in one condition should show deeper coverage in that condition's
+      tracks. Reads that skip an exon show as arcs, and an arc present in one condition only is a splice
+      difference worth a look. Pick libraries in the left panel to open their tracks, and use the locus
+      list to walk through the genes ranked by their lead.
+
+      Lines and annotations: the arcs join the two ends of a splice junction spanned by reads. No cut-off
+      is drawn on coverage or on the number of reads behind an arc.
+
+      Note: a run with the alignment skipped has no tracks, and the tile is left out.
     layout: {x: 0, y: 6, w: 8, h: 8}
   - component_type: table
     workflow_tag: rnaseq
@@ -1601,8 +1770,15 @@ tabs:
     section: Gene rows
     tag: rna-gene-table
     index: gene-table-expression
-    title: Gene expression
     layout: {x: 0, y: 0, w: 8, h: 6}
+    title: Gene expression
+    description: >-
+      What is the expression of a gene in every library? One row per gene and library, restricted to the
+      genes at 1 TPM or more in at least one library, with the TPM, its log2(TPM + 1) and the library's
+      group.
+
+      How to read: search a gene symbol to read its level library by library, or pick rows to keep those
+      genes in the other tiles. {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: rnaseq
     data_collection_tag: gene_counts
@@ -1611,5 +1787,11 @@ tabs:
     section: Count matrix
     tag: rna-gene-table-counts
     index: gene-table-counts
-    title: Merged gene counts
     layout: {x: 0, y: 0, w: 8, h: 6}
+    title: Merged gene counts
+    description: >-
+      What counts would a differential test receive? The raw merged gene-level count matrix tximport
+      writes, one row per gene and one estimated count column per library.
+
+      How to read: use it to look up a gene, not to compare libraries, since counts are not scaled for
+      sequencing depth or gene length. {x: 0, y: 0, w: 8, h: 6}

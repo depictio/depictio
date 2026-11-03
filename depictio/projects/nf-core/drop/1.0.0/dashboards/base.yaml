@@ -172,6 +172,7 @@ main_dashboard:
       - ![](icon:mdi:dna) **Genotyped** {{n_dna}} samples with a DNA sample alongside
       - ![](icon:mdi:tag-text-outline) **Phenotyped** {{n_hpo}} samples with HPO terms
       - ![](icon:mdi:file-table-outline) **Samplesheet** [one row per sample](section:Sample sheet), its path in [the run parameters](params:input)
+      - ![](icon:mdi:palette-outline) **{GROUP_COL_DISPLAY}** {{legend:{GROUP_COL}}}
     tag: dr-ov-study
     index: ov-study
     layout: {x: 0, y: 1, w: 5, h: 4}
@@ -380,7 +381,19 @@ main_dashboard:
     tag: dr-ov-burden
     index: ov-burden
     title: Hits per sample
-    description: Genes at a raw p-value of {NOMINAL_P} or less (expression, splicing) and mono-allelic calls, per sample. A share {NOMINAL_P} of the tests passes by chance, so look for a sample far above the others; that is usually a quality or batch problem, not a patient.
+    description: >-
+      Does one sample carry far more hits than the others? Each bar is one of the 15 samples with the most
+      hits, split into genes at a raw p-value of {NOMINAL_P} or less in expression (blue) and in splicing
+      (orange), plus mono-allelic calls (green). The longest bar is on top.
+
+      How to read: a sample far above the rest is usually a quality or batch problem, not a patient, so look
+      at it before its genes. Bars that all look alike mean no sample stands out, since a share {NOMINAL_P}
+      of the tests passes by chance. Open [Candidates](tab:Candidates) for the genes of one sample, or the
+      Expression and Splicing tabs for the hits behind each colour.
+
+      Note: expression and splicing counts are raw p-value hits, calls included, while mono-allelic counts are
+      calls at the adjusted p-value, so a bar is a screening count and not a number of confirmed outliers. The
+      {NOMINAL_P} level is this dashboard's setting, not a cut-off of OUTRIDER or FRASER.
     layout: {x: 0, y: 3, w: 4, h: 4}
   - component_type: highlight
     section: Findings
@@ -436,7 +449,18 @@ main_dashboard:
     index: ov-genome
     title: Leads along the genome
     link: tab:Locus
-    description: Each dot is a gene of a sample's triage list, its height the summed -log10 p-value of the analyses and its colour the sample's group. Click a dot to open the gene in the genome browser.
+    description: >-
+      Where on the genome do the leads sit? Each dot is a gene of a sample's triage list, at its start, its
+      height the summed -log10 p-value of the analyses that tested it and its colour the sample's group. Click
+      a dot to open the gene in the genome browser of the [Locus](tab:Locus) tab.
+
+      How to read: tall dots are the best-supported genes, and a tall dot of a gene called by several analyses
+      is the strongest lead. Dots of one group piling up on one locus point at a technical effect more than at
+      a diagnosis. Open [Candidates](tab:Candidates) to rank the genes of one sample.
+
+      Note: the height adds up the -log10 p-values of the analyses that tested the gene, so a gene tested by
+      three analyses can stand taller than one tested by one; it is a ranking, not a p-value. No reference line
+      is drawn.
     layout: {x: 0, y: 11, w: 8, h: 4}
   # Link-only tab tiles: each tile prints its tab's subtitle. A tab the run does
   # not have is left out, and a heading whose tabs are all missing is hidden.
@@ -511,7 +535,15 @@ main_dashboard:
     tag: dr-sheet-samples
     index: sheet-samples
     title: Samples
-    description: One row per sample, with its groups, counting set-up and phenotype terms.
+    description: >-
+      Who is in the run? One row per sample, with its groups, its counting set-up and its phenotype terms.
+
+      How to read: check here that the groups are the ones you meant and that each group is large enough for
+      the cohort to learn what is normal, before reading any outlier. A sample without a DNA genotype takes no
+      part in the mono-allelic analysis.
+
+      Source: DROP asks for at least 10 samples per expression or splicing group,
+      https://gagneurlab-drop.readthedocs.io/en/latest/prepare.html
     layout: {x: 0, y: 0, w: 8, h: 6}
 tabs:
 # ============================================================================
@@ -705,7 +737,27 @@ tabs:
     tag: dr-cand-ranked
     index: cand-ranked-genes
     title: Genes ranked per sample
-    description: The best-supported genes first, with the analyses that call each one. The -log10 p bar adds up the raw p-values of the analyses that tested the gene (2 is p = 0.01 for one analysis), so a longer bar is more or stronger evidence. Hover a row for its statistics; the record beside it opens on the first row (the highest bar of the genes in view) and follows a click on another.
+    description: >-
+      Which genes stand out in a sample, and how many analyses agree? Each row is a gene in a sample, with
+      badges for the analyses that call it, the support and the phenotype match, and a bar for the summed
+      -log10 p-value of the analyses that tested it. The best-supported genes come first.
+
+      How to read: a gene called by two or three analyses at once is the strongest lead, and a phenotype match
+      makes it a first one to follow. A row marked not called is a lead from the raw p-value, not a call. Hover
+      a row for its statistics; the record beside it opens on the first row and follows a click on another.
+
+      Lines and annotations: the gold, silver and bronze cells and the stripe mark the first three rows. The
+      Support badge counts the analyses that call the gene (not called, 1, 2 or 3 analyses). The bar adds up the
+      -log10 p-values of the analyses that tested the gene (2 is p = 0.01 for one analysis), and no cut-off is
+      drawn on it.
+
+      Sources: calls follow the run's own cut-offs (OUTRIDER adjusted p {AE_PADJ} with an absolute z-score of
+      {AE_MIN_Z} or more, FRASER gene-level adjusted p {AS_PADJ} with a delta PSI of {AS_MIN_DPSI} or more,
+      allelic adjusted p {MAE_PADJ} with {MAE_MIN_RATIO} of the reads on one allele), whose defaults are those
+      of DROP. DROP documentation, https://gagneurlab-drop.readthedocs.io/en/latest/prepare.html
+
+      Note: a run too small to pass the adjusted cut-offs calls nothing, and the list then holds each sample's
+      best genes by raw p-value.
     layout: {x: 0, y: 0, w: 5, h: 7}
   - component_type: advanced_viz
     workflow_tag: drop
@@ -732,6 +784,16 @@ tabs:
     tag: dr-cand-record
     index: dr-cand-record
     title: Gene record
+    description: >-
+      What do the analyses say of the gene picked in the list? The record shows the call (sample, analyses,
+      phenotype, rank), the OUTRIDER z-score, fold change and adjusted p-value, the FRASER delta PSI and
+      adjusted p-value, the allelic share and adjusted p-value, and the locus. The gene symbol opens GeneCards
+      and the locus the UCSC genome browser.
+
+      How to read: it opens on the first row of the list and follows a click on another. A blank field means
+      the analysis did not test the gene in this sample, not a normal value. A positive z-score is a count
+      above the expected one and a negative one a count below it; compare each adjusted p-value with the run's
+      cut-offs ({AE_PADJ}, {AS_PADJ}, {MAE_PADJ}) to see which analyses call the gene.
     layout: {x: 5, y: 0, w: 3, h: 7}
   - component_type: advanced_viz
     workflow_tag: drop
@@ -748,7 +810,17 @@ tabs:
     tag: dr-cand-grid
     index: dr-cand-grid
     title: Strongest evidence per gene and analysis
-    description: The strongest -log10 p-value each analysis gave the gene in any sample. A gene lit in several columns is supported by several analyses.
+    description: >-
+      Which analyses support each gene? Each row is one of the cohort's best-supported genes and each column an
+      analysis (expression, splicing, mono-allelic); the colour of a cell is the strongest raw -log10 p-value
+      the analysis gave the gene in any sample.
+
+      How to read: a gene lit in several columns is supported by several analyses, the good picture for a lead,
+      and a gene lit in one column rests on one kind of evidence. Rows run from the strongest support down, with
+      no clustering. Look the gene up in the ranked list above to see in which samples it is called.
+
+      Note: a cell holds the best value over all samples, so one sample is enough to light it, and a zero cell
+      means the analysis gave the gene no evidence or did not test it. No reference line or cut-off is drawn.
     layout: {x: 0, y: 0, w: 8, h: 6}
 # ============================================================================
 # Analyses
@@ -937,7 +1009,32 @@ tabs:
     tag: dr-ae-volcano
     index: dr-ae-volcano
     title: 'OUTRIDER: p-value against fold change'
-    description: The raw p-value, since a small run has no adjusted one under the cut-off. The horizontal dashed line is p = 0.05, the default raw p-value at or below which a row counts as a nominal hit. The two vertical dotted lines are at log2 fold changes of -0.5 and 0.5 (a 1.4-fold change either way), a reading guide of this dashboard and not a cut-off of OUTRIDER, whose calls rest on the adjusted p-value and the z-score ({AE_MIN_Z} or more here). A red point is a call (adjusted p), an orange one a nominal hit that corrected testing does not support. Each point is a gene in a sample.
+    description: >-
+      Which genes are far from the count the cohort predicts? Each point is a gene in a sample: the log2 fold
+      change of the observed count against the expected one on x, and the raw p-value as -log10 on y. The view
+      switch swaps to an MA view, with the average abundance on x and the fold change on y.
+
+      How to read: the healthy picture is a grey cloud with few outlined triangles, high up and far from the
+      centre. Many triangles in one sample point at that sample's quality, so check Samples with the most hits
+      below. Hover a point for its gene, sample and values; the full row is in the table of the Gene detail
+      section.
+
+      Lines and annotations: the horizontal dotted line is at a raw p-value of 0.05, fixed in the tile and equal
+      to this dashboard's nominal level, and the two vertical dotted lines are at log2 fold changes of -0.5 and
+      0.5 (a 1.4-fold change either way), both display aids of this dashboard and not OUTRIDER cut-offs. A point
+      past the horizontal line and one of the vertical lines is an outlined triangle (pink up, blue down), any
+      other a grey dot, and the 8 strongest points carry their gene symbol. In the MA view the dotted lines sit
+      at fold changes of -0.5 and 0.5.
+
+      Sources: OUTRIDER calls a gene on the adjusted p-value and the absolute z-score (this run's are {AE_PADJ}
+      and {AE_MIN_Z}; DROP defaults are 0.05 and 0), which the plot does not draw. Brechtmann et al. 2018,
+      https://doi.org/10.1016/j.ajhg.2018.10.025; DROP documentation,
+      https://gagneurlab-drop.readthedocs.io/en/latest/prepare.html
+
+      Note: the markers are raw p-value hits, not calls; the calls (adjusted p) are on the Outlier calls card and
+      in the table. There is no QQ view, since the table keeps the called rows and the most significant rows of
+      each sample, which is not a fair sample of the tests. Without the background rows (pipeline run with
+      --ae_padj_cutoff 1 --ae_z_score_cutoff 0) the cloud is missing and only the hits show.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: figure
     workflow_tag: drop
@@ -963,7 +1060,21 @@ tabs:
     tag: dr-ae-per-sample
     index: ae-per-sample
     title: Samples with the most hits
-    description: 'Genes at a raw p-value of {NOMINAL_P} or less per sample, split by the direction of the change; the number at the end of a bar is its total, with the calls that pass the adjusted p-value.'
+    description: >-
+      Which samples carry the most expression hits? Each bar is one of the 15 samples with the most genes at a
+      raw p-value of {NOMINAL_P} or less, split into over-expressed (red) and under-expressed (blue) genes. The
+      label at its end gives the total and, when any gene passes the adjusted p-value, how many are called.
+
+      How to read: a sample far above the others is usually a quality or batch problem, not a patient, so check
+      it before reading its genes. Samples that sit together have no more hits than chance gives, since a share
+      {NOMINAL_P} of the tests passes by chance. Open the table of the Gene detail section for the genes of one
+      sample.
+
+      Lines and annotations: no reference line is drawn; the text at the end of each bar is its total, with the
+      number called in brackets.
+
+      Note: hits are at the raw p-value, calls included, and {NOMINAL_P} is this dashboard's nominal level, not
+      an OUTRIDER cut-off.
     layout: {x: 0, y: 0, w: 4, h: 4}
   - component_type: figure
     workflow_tag: drop
@@ -986,7 +1097,21 @@ tabs:
     tag: dr-ae-recurrent
     index: ae-recurrent-genes
     title: Strongest genes, and how many samples share them
-    description: 'The genes with the best raw p-value, coloured by direction and labelled with the samples that hit them; a gene hit in many samples is more often a technical artefact than a diagnosis.'
+    description: >-
+      Which genes are hit most often? Each bar is one of the 15 genes with the most samples at a raw p-value of
+      {NOMINAL_P} or less, its length the strongest -log10 p-value of the gene in any sample and its colour the
+      direction of that hit. The label at its end gives the number of samples that share the gene, and genes are
+      ranked by that count first.
+
+      How to read: a gene hit in many samples is more often a technical artefact than a diagnosis, so a bar
+      with many samples is a reason to doubt it. A long bar with one sample is the profile of a lead specific to
+      that sample; follow it in [Candidates](tab:Candidates) to see whether splicing or an allele agrees.
+
+      Lines and annotations: no reference line is drawn; the label at the end of a bar is the number of samples
+      with a hit on the gene.
+
+      Note: the bar is a raw p-value, not corrected for the number of genes tested, so it is a lead and not a
+      call.
     layout: {x: 4, y: 0, w: 4, h: 4}
   - component_type: table
     workflow_tag: drop
@@ -997,7 +1122,14 @@ tabs:
     tag: dr-ae-table
     index: ae-table-calls
     title: OUTRIDER results, strongest first
-    description: One row per sample and gene, the calls and the nominal hits first, sorted by raw p-value.
+    description: >-
+      What are the numbers behind the volcano? One row per sample and gene, the calls and the raw p-value hits
+      first, sorted by raw p-value, with the z-score, fold change, p-values and counts.
+
+      How to read: a row is a call when its adjusted p-value is at or below {AE_PADJ} with an absolute z-score
+      of {AE_MIN_Z} or more; a row short of that but at a raw p-value of {NOMINAL_P} or less is a lead. Compare
+      the observed and expected counts to see how far the gene sits from the fit, and pick a row to open its
+      record beside the table.
     layout: {x: 0, y: 0, w: 5, h: 6}
   - component_type: advanced_viz
     workflow_tag: drop
@@ -1022,6 +1154,15 @@ tabs:
     tag: dr-ae-record
     index: dr-ae-record
     title: Call record
+    description: >-
+      What does OUTRIDER say of this gene in this sample? The record of the row picked in the table shows the
+      call (gene, sample, direction, group), the evidence (z-score, fold change, adjusted and raw p-value), the
+      counts (observed, expected and the group mean), the phenotype match and the locus. The gene symbol opens
+      GeneCards and the locus the UCSC genome browser.
+
+      How to read: a count far from the expected one with a small adjusted p-value is a call, and the group mean
+      tells whether the sample or the gene is the unusual one. A phenotype match means the gene fits a phenotype
+      (HPO) term of the sample, a reason to follow it first.
     layout: {x: 5, y: 0, w: 3, h: 6}
 - title: Splicing
   subtitle: Which junctions are used far more or less than in the cohort?
@@ -1217,7 +1358,34 @@ tabs:
     tag: dr-as-volcano
     index: dr-as-volcano
     title: 'FRASER: p-value against delta PSI'
-    description: The raw p-value of each junction, since a small run has no adjusted one under the cut-off. The horizontal dashed line is p = 0.05, the default raw p-value at or below which a row counts as a nominal hit. The two vertical dotted lines are at delta PSI of -0.1 and 0.1, a shift of 10 percentage points in the usage of the junction, a reading guide of this dashboard and below the {AS_MIN_DPSI} that a FRASER call here requires (together with a gene-level adjusted p of {AS_PADJ} or less). A red point is a call (adjusted p), an orange one a nominal hit that corrected testing does not support. Each point is a gene in a sample, at its most significant junction.
+    description: >-
+      Which junctions are used far more or less than in the cohort? Each point is a gene in a sample, at its
+      most significant junction: the change in junction usage (delta PSI, the sample's usage minus the
+      cohort's) on x, and the raw p-value as -log10 on y. The view switch swaps to an MA view, with the average
+      read abundance on x and delta PSI on y.
+
+      How to read: the healthy picture is a grey cloud with few outlined triangles, high up and far from the
+      centre. Many triangles in one sample point at that sample's quality, so check Samples with the most hits
+      below. Hover a point for its gene, sample and values; the full row is in the table of the Junction detail
+      section.
+
+      Lines and annotations: the horizontal dotted line is at a raw p-value of 0.05, fixed in the tile and equal
+      to this dashboard's nominal level, and the two vertical dotted lines are at delta PSI of -0.1 and 0.1 (a
+      shift of 10 percentage points in the usage of the junction), both display aids of this dashboard and not
+      FRASER cut-offs. A point past the horizontal line and one of the vertical lines is an outlined triangle
+      (pink more usage, blue less usage), any other a grey dot, and the 8 strongest points carry their gene
+      symbol. In the MA view the dotted lines sit at delta PSI of -0.1 and 0.1.
+
+      Sources: FRASER calls a gene on a gene-level adjusted p-value and a delta PSI (this run's are {AS_PADJ}
+      and {AS_MIN_DPSI}; DROP defaults are 0.1 and 0.3, and it advises 0.1 for delta PSI with FRASER 2), which
+      the plot does not draw. Mertes et al. 2021, https://doi.org/10.1038/s41467-020-20573-7; DROP
+      documentation, https://gagneurlab-drop.readthedocs.io/en/latest/prepare.html
+
+      Note: the markers are raw p-value hits, not calls, and the vertical lines are fixed in the tile, so they
+      do not follow the delta PSI of {AS_MIN_DPSI} a call needs here. The calls are on the Outlier genes card
+      and in the table. There is no QQ view, since the
+      table keeps the called rows and the most significant rows of each sample, which is not a fair sample of
+      the tests.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: figure
     workflow_tag: drop
@@ -1243,7 +1411,22 @@ tabs:
     tag: dr-as-per-sample
     index: as-per-sample
     title: Samples with the most hits
-    description: 'Genes at a raw p-value of {NOMINAL_P} or less per sample, split by the direction of the change; the number at the end of a bar is its total, with the calls that pass the adjusted p-value.'
+    description: >-
+      Which samples carry the most splicing hits? Each bar is one of the 15 samples with the most genes that
+      have a junction at a raw p-value of {NOMINAL_P} or less, split into more usage (red) and less usage
+      (blue). The label at its end gives the total and, when any gene passes the adjusted cut-offs, how many
+      are called.
+
+      How to read: a sample far above the others is usually a quality or batch problem, not a patient, so check
+      it before reading its junctions. Samples that sit together have no more hits than chance gives, since a
+      share {NOMINAL_P} of the tests passes by chance. Open the table of the Junction detail section for the
+      genes of one sample.
+
+      Lines and annotations: no reference line is drawn; the text at the end of each bar is its total, with the
+      number called in brackets.
+
+      Note: hits are at the raw p-value, calls included, and {NOMINAL_P} is this dashboard's nominal level, not
+      a FRASER cut-off.
     layout: {x: 0, y: 0, w: 4, h: 4}
   - component_type: figure
     workflow_tag: drop
@@ -1272,7 +1455,22 @@ tabs:
     tag: dr-as-impact
     index: as-impact
     title: What the hit junctions do
-    description: 'FRASER''s reading of each hit junction against the transcript annotation: an annotated intron used less or more than in the cohort, or an exon extended or shortened. Two panels on one scale: the left counts only the calls, genes whose gene-level adjusted p is {AS_PADJ} or less with a delta PSI of {AS_MIN_DPSI} or more; the right counts every hit at the raw p-value of {NOMINAL_P} or less, the calls included, split into called and nominal only. A small run has no call, so the left panel is empty and the right one is the only reading; a nominal hit is a lead, since a share {NOMINAL_P} of the tests passes by chance.'
+    description: >-
+      What do the hit junctions do to the transcript? Each bar counts genes by FRASER's reading of the effect of
+      their most significant junction against the annotation, such as an annotated intron used less or more
+      than in the cohort or an exon extended or shortened. The left panel counts the calls (red), the right one
+      every hit at the raw p-value, split into called (red) and nominal p only (amber).
+
+      How to read: hits piled on one or two effects are easier to follow than a spread over all of them. Open
+      the table of the Junction detail section for the position of a hit, and its record for the frame effect
+      and the read counts. A nominal hit is a lead, since a share {NOMINAL_P} of the tests passes by chance.
+
+      Lines and annotations: no reference line is drawn. When no gene passes the adjusted cut-offs the left
+      panel is empty and says so on the plot. A call needs a gene-level adjusted p of {AS_PADJ} or less with a
+      delta PSI of {AS_MIN_DPSI} or more, and the right panel counts hits at a raw p-value of {NOMINAL_P} or less.
+
+      Note: genes whose junction has no effect reading from FRASER are left out of both panels, and {NOMINAL_P}
+      is this dashboard's nominal level, not a FRASER cut-off.
     layout: {x: 4, y: 0, w: 4, h: 4}
   - component_type: table
     workflow_tag: drop
@@ -1283,7 +1481,14 @@ tabs:
     tag: dr-as-table
     index: as-table-calls
     title: FRASER results, strongest first
-    description: One row per sample and gene at its most significant junction, sorted by raw p-value.
+    description: >-
+      What are the numbers behind the volcano? One row per sample and gene at its most significant junction,
+      sorted by raw p-value, with the usage, delta PSI, p-values and read counts.
+
+      How to read: a row is a call when its gene-level adjusted p-value is at or below {AS_PADJ} and its
+      absolute delta PSI at {AS_MIN_DPSI} or more; a row short of that but at a raw p-value of {NOMINAL_P} or
+      less is a lead. Compare the split and total reads before trusting a usage, and pick a row to open its
+      record beside the table.
     layout: {x: 0, y: 0, w: 5, h: 6}
   - component_type: advanced_viz
     workflow_tag: drop
@@ -1308,6 +1513,16 @@ tabs:
     tag: dr-as-record
     index: dr-as-record
     title: Junction record
+    description: >-
+      What does FRASER say of this junction in this sample? The record of the row picked in the table shows the
+      call (gene, sample, direction, group), the junction (locus, strand, splicing metric, annotation), the
+      usage (value, delta PSI, split and total reads), the test (p-value, junction and gene-level adjusted
+      p-values) and the effect (impact, frame, phenotype match). The gene symbol opens GeneCards and the locus
+      the UCSC genome browser.
+
+      How to read: delta PSI is the sample's usage minus the cohort's, so a large value in either direction
+      marks a junction used unlike the others. The call rests on the gene-level adjusted p-value, not on the
+      junction's own, and a usage built on a handful of reads is weak.
     layout: {x: 5, y: 0, w: 3, h: 6}
 - title: Mono-allelic
   subtitle: Which variants are read from one allele only?
@@ -1483,7 +1698,30 @@ tabs:
     tag: dr-mae-volcano
     index: dr-mae-volcano
     title: 'MAE: p-value against allelic ratio'
-    description: The raw p-value of each heterozygous variant, since a small run shares one adjusted p-value among most of them. The horizontal dashed line is p = 0.05, the usual raw significance level. The vertical dotted lines are at log2 of -2 and 2, where one allele is read four times as often as the other, an 80% share of the reads, the default for a call (this run requires {MAE_MIN_RATIO}, together with an adjusted p of {MAE_PADJ} or less). A red point leans to the alternative allele, a blue one to the reference.
+    description: >-
+      Which heterozygous variants are read from one allele more than the other? Each point is a variant in a
+      sample: the log2 of the alternative over the reference read count on x, and the raw p-value of the
+      allelic test as -log10 on y. The view switch adds an MA view, with the read depth on x, and a QQ view of
+      the p-values.
+
+      How to read: a balanced variant sits near the centre, the normal picture for a heterozygous site. A point
+      far left or right and high up leans to one allele, which may mark a silenced or imprinted copy. Check the
+      read depth in the variant record, since thin coverage makes a lean weak.
+
+      Lines and annotations: the horizontal dotted line is at a raw p-value of 0.05, fixed in the tile, and the
+      two vertical dotted lines are at log2 ratios of -2 and 2, where one allele is read four times as often as
+      the other, an 80% share of the reads. A point past the horizontal line and one of the vertical lines is
+      an outlined triangle (pink toward the alternative allele, blue toward the reference), any other a grey
+      dot, and the 6 strongest points carry their gene symbol. The QQ view colours the points by call, draws a
+      dashed identity line and prints the inflation factor lambda in the corner.
+
+      Sources: the 80% share is the default allelic ratio of a DROP call, together with an adjusted p-value of
+      0.05 (this run's are {MAE_MIN_RATIO} and {MAE_PADJ}), but the lines are fixed in the tile and do not
+      follow the run. DROP documentation, https://gagneurlab-drop.readthedocs.io/en/latest/prepare.html;
+      Kremer et al. 2017, https://doi.org/10.1038/ncomms15824
+
+      Note: the markers are raw p-value hits of a test against balanced expression, not calls, since a call
+      also needs the adjusted p-value. Only samples with a DNA genotype take part.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: drop
@@ -1494,6 +1732,13 @@ tabs:
     tag: dr-mae-table
     index: mae-table-variants
     title: Heterozygous variants
+    description: >-
+      What are the numbers behind the volcano? One row per sample and heterozygous variant, with its gene,
+      locus, the reference and alternative read counts, the test and the call.
+
+      How to read: a row is a mono-allelic call when its adjusted p-value is at or below {MAE_PADJ} and one
+      allele carries {MAE_MIN_RATIO} or more of the reads. Check the total read count before trusting a ratio,
+      and pick a row to open its record beside the table.
     layout: {x: 0, y: 0, w: 5, h: 6}
   - component_type: advanced_viz
     workflow_tag: drop
@@ -1517,6 +1762,16 @@ tabs:
     tag: dr-mae-record
     index: dr-mae-record
     title: Variant record
+    description: >-
+      What do the RNA reads say of this variant? The record of the row picked in the table shows the variant
+      (gene, sample, locus, id, alleles), the reads (reference, alternative, total and the alternative share),
+      the test (p-value, adjusted p-value, log2 ratio, call) and the frequency (rare, allele frequency, highest
+      population frequency, share of the cohort that carries it). The gene symbol opens GeneCards and the locus
+      the UCSC genome browser.
+
+      How to read: a share near one half is balanced expression, and a share near 0 or 1 with a small adjusted
+      p-value is a mono-allelic call. A variant that is rare and carried by few samples of the cohort is the
+      more interesting one.
     layout: {x: 5, y: 0, w: 3, h: 6}
 # The navigator and the browser it drives share one screen. The axis carries the genes
 # of every sample's triage list on one axis, the browser shows the alignments and
@@ -1721,7 +1976,21 @@ tabs:
     tag: dr-loc-navigator
     index: loc-navigator
     title: Genes on the genome
-    description: Each dot is a gene of a sample's triage list, at its start. Its height is the summed -log10 p-value of the analyses that test it (higher is stronger evidence) and its colour the sample's analysis group, as in the browser below. The axis opens on the window around the best-supported gene; look for tall dots, and for dots of one group that sit together on a locus, which a technical effect makes more likely than a diagnosis. Zoom out to see the chromosome (Cmd or Ctrl and the wheel, or the pan mode in the header); the locus field and a brush move the browser.
+    description: >-
+      Where do the genes of the triage lists sit, and which are strongest? Each dot is a gene of a sample's
+      triage list, at its start, its height the summed -log10 p-value of the analyses that test it (higher is
+      stronger evidence) and its colour the sample's analysis group, as in the browser below. The axis opens on
+      the window around the best-supported gene.
+
+      How to read: look for tall dots, and for dots of one group that sit together on a locus, which a
+      technical effect makes more likely than a diagnosis. Zoom out to see the chromosome (Cmd or Ctrl and the
+      wheel, or the pan mode in the header); the locus field and a brush move the browser.
+
+      Lines and annotations: the dashed band is the view of the genome browser below, which comes back on the
+      axis as it moves. No reference line or cut-off is drawn.
+
+      Note: the height adds up the -log10 p-values of the analyses that tested the gene, so it ranks the
+      evidence and is not itself a p-value.
     layout: {x: 0, y: 0, w: 8, h: 6}
   # No fixed location: the browser opens on the best-supported gene, and a brush on
   # the navigator moves it without filtering. No selection write-back here: a picked
@@ -1762,5 +2031,21 @@ tabs:
     # height here, and the tile's menu brings it back.
     show_header: false
     title: Genome browser
-    description: The reads (with splice-junction arcs) and genotypes of the samples in view on the region of the axis above, opening on the sample of the strongest gene; common dbSNP sites and ClinVar come from UCSC.
+    description: >-
+      What do the reads and genotypes show at the locus? The tracks are the RNA alignments with their coverage
+      and splice-junction arcs, the DNA genotypes of the samples in view, and two annotation tracks from UCSC
+      (common dbSNP sites and ClinVar), on the region of the axis above. It opens on the sample of the
+      strongest gene, then one sample of each other group.
+
+      How to read: coverage far below that of the other samples across a gene fits under-expression, and an arc
+      that only the picked sample shows fits an unusual junction. At a heterozygous genotype, reads that carry
+      mostly one allele fit a mono-allelic call. Compare with the samples of the other groups before concluding.
+
+      Lines and annotations: the arcs join the two ends of a split read across an intron. The dbSNP track marks
+      common variants, those with a minor allele frequency of 1% or more in at least one population study, and the
+      ClinVar track the variants reported to ClinVar. Both come from UCSC for the assembly of the run and are
+      not read from it.
+
+      Sources: the track descriptions of the UCSC Genome Browser (https://genome.ucsc.edu) for the dbSNP 155
+      common track and the ClinVar track
     layout: {x: 0, y: 6, w: 8, h: 7}

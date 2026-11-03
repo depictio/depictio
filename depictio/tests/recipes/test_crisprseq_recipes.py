@@ -178,6 +178,17 @@ def test_samples_without_reference_column(tmp_path: Path) -> None:
     out = execute_recipe("nf-core/crisprseq/samples.py", tmp_path)
     assert "amplicon_length" not in out.columns
     assert out["has_template"].to_list() == ["no", "yes"]
+    assert out["template_length"].to_list() == [None, 4]
+
+
+def test_samples_without_any_donor_have_no_template_length(tmp_path: Path) -> None:
+    (tmp_path / "input").mkdir()
+    (tmp_path / "input" / "samplesheet.csv").write_text(
+        "sample,protospacer,template\nL1,GGG,\nL2,CCC,\n"
+    )
+    out = execute_recipe("nf-core/crisprseq/samples.py", tmp_path)
+    assert "template_length" not in out.columns
+    assert out["has_template"].to_list() == ["no", "no"]
 
 
 def test_guide_tables(run_dir: Path) -> None:

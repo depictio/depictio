@@ -214,6 +214,8 @@ main_dashboard:
       - ![](icon:mdi:dna) **Sequencing** {{n_dna}} DNA samples
       - ![](icon:mdi:rna) **Transcriptome** {{n_rna}} RNA samples
       - ![](icon:mdi:file-table-outline) **Samplesheet** [one row per sample](section:Sample sheet), its path in [the run parameters](params:input)
+      - ![](icon:mdi:shape-outline) **{GROUP_COL_DISPLAY}** {{legend:{GROUP_COL}}}
+      - ![](icon:mdi:palette-outline) **QC status** {{legend:qc_status}}
     tag: oa-ov-study
     index: ov-study
     layout: {x: 0, y: 1, w: 5, h: 4}
@@ -473,7 +475,18 @@ main_dashboard:
     index: ov-genome
     title: Somatic calls along the genome
     link: tab:Small variants
-    description: Each dot is a somatic call at its position, its height the purity-adjusted allele frequency and its colour its coding effect. Click a dot to open the call in the genome browser.
+    description: >-
+      Where on the genome do the somatic small variants sit, and how clonal are they? Each dot is one PASS
+      somatic call at its position, its height the purity-adjusted allele frequency and its colour its coding
+      effect.
+
+      How to read: a row of dots at one height is a group of calls carried by the same share of the tumor
+      cells, and calls well below it are subclone candidates. Click a dot to open the call in the genome
+      browser, or open [Small variants](tab:Small variants) for the variant copy number that corrects the
+      frequency for the copy number at the locus.
+
+      Note: no cut-off or reference line is drawn, and the frequency alone does not say whether a call is
+      clonal.
     layout: {x: 0, y: 10, w: 8, h: 4}
   # Link-only tab tiles: each tile prints its tab's subtitle, the question the
   # tab answers. A tab the run does not have is left out.
@@ -552,7 +565,12 @@ main_dashboard:
     tag: oa-sample-sheet
     index: sample-sheet
     title: Samplesheet
-    description: One row per sample, with its analysis group, subject, role and sequence type.
+    description: >-
+      Which samples does the run hold? One row per sample: its analysis group, subject, role (tumor or
+      normal) and sequence type (DNA or RNA).
+
+      How to read: check here that every sample sits in the intended group and role before reading any tab,
+      since the sample filters in the left panel act on these columns.
     layout: {x: 0, y: 0, w: 8, h: 6}
 tabs:
 # ===========================================================================
@@ -749,7 +767,22 @@ tabs:
     tag: oa-qc-av-coverage-curve
     index: qc-av-coverage-curve
     title: Cumulative coverage per sample
-    description: The share of the genome covered at each depth or more. The tumor curve should reach further right than the normal one.
+    description: >-
+      Is each DNA sample sequenced deep enough? Each line is one sample: for every read depth on the x axis,
+      the share of the genome covered at that depth or more, from BamTools' per-depth base counts.
+
+      How to read: a curve that holds high and reaches far to the right is deep, even coverage, and one that
+      drops early is a sample too shallow for the somatic callers. A tumor is usually sequenced deeper than
+      its normal, so its curve is expected to reach further right. Open the QSEE checks table at the bottom
+      of the tab for the verdict on each depth.
+
+      Lines and annotations: no reference line is drawn. QSEE rates the share of bases at 10x, 20x, 30x, 60x
+      and 100x against its own thresholds, which differ between tumor and normal samples and are listed in the
+      fail condition column of the QSEE checks table.
+
+      Source: QSEE documentation, https://github.com/hartwigmedical/hmftools/tree/master/qsee
+
+      Note: BamTools caps the depth it counts (250 by default), so the curve stops there.
     layout: {x: 0, y: 0, w: 4, h: 6}
   - component_type: advanced_viz
     workflow_tag: oncoanalyser
@@ -763,7 +796,17 @@ tabs:
     tag: oa-qc-av-fragment-length
     index: qc-av-fragment-length
     title: Insert size distribution per sample
-    description: Read-pair insert size from BamTools. A second peak or a shifted mode points at a library preparation difference.
+    description: >-
+      Were the libraries prepared alike? Each line is one DNA sample: the share of its read pairs at each
+      insert size, grouped into equal windows and normalised to the sample so libraries of different depth
+      overlay.
+
+      How to read: libraries prepared the same way give curves with the same peak, close together. A second
+      peak, or a mode shifted from the other samples, points at a difference in fragmentation or size
+      selection during library preparation. Check whether the shifted sample is also flagged in the QSEE
+      checks table.
+
+      Note: no expected insert size is drawn, since it depends on the library kit.
     layout: {x: 4, y: 0, w: 4, h: 6}
   - component_type: figure
     workflow_tag: oncoanalyser
@@ -775,7 +818,18 @@ tabs:
     tag: oa-qc-fig-status
     index: qc-status-bar
     title: QC verdicts per tool
-    description: QSEE checks per source tool, stacked by PASS, WARN and FAIL.
+    description: >-
+      Does the run pass its QC? One bar per source tool of the QSEE report, stacked by the verdict of each of
+      its checks (PASS, WARN or FAIL).
+
+      How to read: a bar made only of PASS is a clean tool. Any FAIL, and any WARN, is worth a look in the
+      QSEE checks table below, which gives the metric, its value and the condition that fails it.
+
+      Lines and annotations: the stack colours are the verdicts. They rest on QSEE's default threshold for
+      each feature, which the run may override, and the condition is printed in the fail condition column of
+      the table.
+
+      Source: QSEE documentation, https://github.com/hartwigmedical/hmftools/tree/master/qsee
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: table
     workflow_tag: oncoanalyser
@@ -787,7 +841,13 @@ tabs:
     tag: oa-qc-table-bam
     index: qc-table-bam
     title: BamTools summary per sample
-    description: Reads, duplicates, coverage statistics and breadth thresholds of every DNA sample. Select a row to open its record.
+    description: >-
+      What does BamTools measure per DNA sample? One row per sample: reads, duplicates, coverage statistics
+      and the share of bases covered at 10x to 100x. Select a row to open its record.
+
+      How to read: compare the tumor with its normal. The tumor is usually sequenced deeper, duplicates stay
+      low and the share of bases at 30x stays high. The verdict on each measure is in the QSEE checks
+      table.
     layout: {x: 0, y: 0, w: 5, h: 6}
   - component_type: advanced_viz
     workflow_tag: oncoanalyser
@@ -808,7 +868,12 @@ tabs:
     tag: oa-qc-av-library-record
     index: qc-av-library-record
     title: Library record
-    description: The selected sample's reads, coverage, breadth and the bases BamTools filtered out.
+    description: >-
+      The selected sample's reads, coverage, breadth and the bases BamTools filtered out.
+
+      How to read: pick a sample in the table on the left. The breadth fractions say how much of the genome
+      has enough depth, and the filtered-base shares say how much sequencing was lost to low mapping
+      quality, low base quality, overlapping reads or the coverage cap.
     layout: {x: 5, y: 0, w: 3, h: 6}
   - component_type: table
     workflow_tag: oncoanalyser
@@ -821,7 +886,17 @@ tabs:
     tag: oa-qc-table-qsee
     index: qc-table-qsee
     title: QSEE checks
-    description: Every checked metric with its value, verdict and the condition that fails it.
+    description: >-
+      Which checks did the run fail? One row per sample and feature QSEE checked: the source tool, the
+      measured value, the verdict and the condition that fails it.
+
+      How to read: filter on FAIL or WARN with the verdict filter, then read the condition to see how far the
+      value sits from its threshold.
+
+      Source: QSEE documentation, https://github.com/hartwigmedical/hmftools/tree/master/qsee
+
+      Note: the thresholds are QSEE's defaults, which depend on the sample type and on whether the run was
+      targeted, and the run may override them.
     layout: {x: 0, y: 0, w: 8, h: 6}
 # ===========================================================================
 # Genome
@@ -1005,7 +1080,22 @@ tabs:
     tag: oa-tp-av-cuppa-heatmap
     index: tp-cuppa-heatmap
     title: Cancer-type probability per classifier
-    description: One row per cancer type and one column per CUPPA classifier. The combined column is the final call; the DNA and RNA columns show which evidence drives it.
+    description: >-
+      Which cancer type does the tumor resemble, and on what evidence? One row per cancer type and one
+      column per CUPPA classifier, coloured by the probability that classifier gives that type.
+
+      How to read: the combined column is the final call, followed by the DNA combined column, the feature
+      classifiers on mutation contexts, genomic positions and events, and the RNA combined column with the
+      expression and splice-junction classifiers. A row that is high across the columns is a call several
+      independent kinds of evidence agree on, while a type that is high in a single column rests on that one
+      kind. Without RNA the RNA columns stay empty.
+
+      Lines and annotations: the colour is the probability, and no cut-off is drawn. CUPPA's documentation
+      names 0.8 as the threshold for a diagnosis, which this heatmap does not mark.
+
+      Source: CUPPA documentation, https://github.com/hartwigmedical/hmftools/tree/master/cuppa
+
+      Note: CUPPA states that its logistic regressions tend to output under-confident probabilities.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: figure
     workflow_tag: oncoanalyser
@@ -1024,7 +1114,26 @@ tabs:
     tag: oa-tp-fig-signatures
     index: tp-signature-bar
     title: Share of SNVs per mutational signature
-    description: SIGS' allocation of the SNVs to COSMIC signatures, largest first and coloured by the proposed cause of each (APOBEC, HR deficiency, ageing, mismatch repair); hover a bar for the cause. MISALLOC is the share no signature explains.
+    description: >-
+      Which mutational processes shaped the SNVs? One bar per COSMIC signature, its length the mean share of
+      the SNVs in view that SIGS allocates to it, largest first, in the colour of the signature's proposed
+      cause. Hover a bar for the cause and the number of tumors.
+
+      How to read: a few long bars on the clock-like (ageing) signatures is the usual background. A long bar
+      on APOBEC, mismatch repair, smoking or UV light points at that process, and one on HR deficiency is
+      worth comparing with the CHORD prediction in the table below. A long MISALLOC bar is the residual that
+      no signature takes, so read the other bars with that in mind.
+
+      Lines and annotations: the colours group the signatures by their proposed cause in COSMIC version 2:
+      ageing (1, 5), APOBEC (2, 13), HR deficiency (3), smoking (4, 29), mismatch repair (6, 15, 20, 21, 26),
+      UV light (7), polymerase eta (9), POLE (10, 14), alkylating agents (11), aristolochic acid (22) and
+      aflatoxin (24). Signatures outside this list are coloured as an unknown cause.
+
+      Sources: COSMIC mutational signatures v2, https://cancer.sanger.ac.uk/signatures/signatures_v2/ ; SIGS
+      documentation, https://github.com/hartwigmedical/hmftools/tree/master/sigs
+
+      Note: COSMIC version 2 lists the cause of signatures 5, 14 and 21 as unknown or only probable, so the
+      colours of those three are a grouping and not a finding.
     layout: {x: 0, y: 0, w: 5, h: 4}
   - component_type: card
     workflow_tag: oncoanalyser
@@ -1078,7 +1187,16 @@ tabs:
     tag: oa-tp-table-fit
     index: tp-table-fit
     title: PURPLE fit per tumor
-    description: Purity, ploidy, fit, mutational load, microsatellite status and QC of every tumor. Select a row to open its record.
+    description: >-
+      How well did PURPLE fit each tumor? One row per tumor: purity, ploidy, fit status and method, mutational
+      load, microsatellite status and QC. Select a row to open its record.
+
+      How to read: start with the fit and QC status, since every copy number and allele frequency downstream
+      is read against this fit. PURPLE fails the QC when it measures tumor contamination above 10%, tumor in
+      normal contamination of 25% or more, or finds no evidence of a tumor. It rates the tumor mutational
+      burden HIGH above 10 PASS variants per megabase.
+
+      Source: PURPLE documentation, https://github.com/hartwigmedical/hmftools/tree/master/purple
     layout: {x: 0, y: 0, w: 5, h: 6}
   - component_type: advanced_viz
     workflow_tag: oncoanalyser
@@ -1099,7 +1217,12 @@ tabs:
     tag: oa-tp-av-tumor-record
     index: tp-tumor-record
     title: Tumor record
-    description: The selected tumor's PURPLE fit, genome state, mutational load and QC.
+    description: >-
+      The selected tumor's PURPLE fit, genome state, mutational load and QC.
+
+      How to read: pick a tumor in the table on the left. The Fit section gives purity and ploidy with the
+      range PURPLE considered, the Genome section whether the genome doubled and how much of it lost one
+      parental copy, and the QC section the contamination and tumor-in-normal checks.
     layout: {x: 5, y: 0, w: 3, h: 6}
   - component_type: table
     workflow_tag: oncoanalyser
@@ -1111,7 +1234,14 @@ tabs:
     tag: oa-tp-table-cuppa
     index: tp-table-cuppa
     title: CUPPA probabilities
-    description: Probability and rank of every cancer type under every classifier.
+    description: >-
+      The numbers behind the heatmap: the probability of every cancer type under every CUPPA classifier, with
+      the rank of the type inside that classifier.
+
+      How to read: filter on the combined classifier, where the first-ranked type is CUPPA's prediction. The
+      other classifiers show what that call rests on.
+
+      Source: CUPPA documentation, https://github.com/hartwigmedical/hmftools/tree/master/cuppa
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: oncoanalyser
@@ -1123,7 +1253,14 @@ tabs:
     tag: oa-tp-table-chord
     index: tp-table-chord
     title: CHORD prediction
-    description: Probability of each deficiency type, HR status and HRD type per tumor.
+    description: >-
+      Is homologous recombination deficient in the tumor? One row per tumor: CHORD's probability of each of
+      its two deficiency types, their sum as the HRD probability, and the HR status with its subtype.
+
+      How to read: CHORD calls a tumor HR deficient when the HRD probability is at least 0.5, and names the
+      subtype whose probability is higher. A status of cannot be determined comes with remarks that say why.
+
+      Source: Nguyen et al., Nature Communications 2020, doi:10.1038/s41467-020-19406-4
     layout: {x: 0, y: 6, w: 8, h: 6}
 - title: Copy number
   subtitle: Which regions are gained or lost, and in which genes?
@@ -1296,7 +1433,25 @@ tabs:
     tag: oa-cn-av-profile
     index: cn-profile
     title: Copy-number profile along the genome
-    description: PURPLE's fitted segments as log2 of copy number over 2, with the B-allele frequency underneath. Hover a segment for its major and minor allele copy number. Open in genome browser shows the reads and breakpoints at the region.
+    description: >-
+      Where is the genome gained or lost, and where is one parental copy lost? Each thick stroke is a
+      copy-number segment PURPLE fitted, at log2 of its absolute copy number over 2, with the B-allele
+      frequency of the segment in the panel underneath, one profile per tumor.
+
+      How to read: a segment on the 0 line has two copies, above it is a gain and below it a loss. Because the
+      baseline is two copies, a tumor with a doubled genome shows most segments as gains, so read the ploidy
+      in [Tumor profile](tab:Tumor profile) first. In the lower panel a frequency of 0.5 is balanced, and a
+      segment pulled away from 0.5 while its log2 stays near 0 has lost one parental copy without changing
+      the total.
+
+      Lines and annotations: segments are coloured as gain above a log2 of +0.3, loss below -0.3 and neutral
+      between, and the two dotted horizontal lines in the upper panel mark +0.3 and -0.3. The dotted line at
+      0.5 in the lower panel marks balanced heterozygosity, and thin vertical lines separate the chromosomes.
+      Hover a segment for its major and minor allele copy number, or use Open in genome browser for the reads
+      at a region.
+
+      Note: the +0.3 and -0.3 lines are the profile view's default display thresholds, not a PURPLE call or a
+      validated cut-off. For a diploid baseline one extra copy is a log2 of 0.58 and one lost copy is -1.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: figure
     workflow_tag: oncoanalyser
@@ -1317,7 +1472,26 @@ tabs:
     tag: oa-cn-fig-gene-events
     index: cn-gene-events
     title: Genes per copy-number call
-    description: Genes gained, lost or with a lost allele (LOH), one per tumor and gene, under the event and chromosome filters, on a log axis because LOH holds most genes. The share of the genome in LOH is in the card above. Pick a gene in the table below to read its record.
+    description: >-
+      How many genes carry each copy-number call? One bar per call (amplification, partial amplification,
+      deletion, partial deletion, loss of heterozygosity), counting a gene once per tumor, under the event and
+      chromosome filters, on a log axis. The number at the end of a bar is its gene count, and hovering gives
+      the tumors and distinct genes.
+
+      How to read: loss of heterozygosity holds most genes of a genome and would flatten every gain and loss
+      on a linear axis, so compare the bars by order of magnitude. Long amplification and deletion bars point
+      at focal events, and a gene can be picked in the table below to read its record. Neutral genes are left
+      out.
+
+      Lines and annotations: the calls follow PURPLE's driver cut-offs. A gene is amplified when its whole
+      length is above 3 times the sample ploidy and deleted when it is below 0.5 copies, and the partial forms
+      mean only part of the gene crosses that line. Loss of heterozygosity is this dashboard's own call, a
+      minimum minor-allele copy number below 0.5 on a gene that is not deleted.
+
+      Source: PURPLE documentation, https://github.com/hartwigmedical/hmftools/tree/master/purple
+
+      Note: PURPLE documents the amplification and deletion cut-offs but gives no gene-level cut-off for
+      loss of heterozygosity, so the 0.5 for that call is not a validated threshold.
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: table
     workflow_tag: oncoanalyser
@@ -1330,7 +1504,14 @@ tabs:
     tag: oa-cn-table-genes
     index: cn-table-genes
     title: Copy number per gene
-    description: Copy-number range, minor-allele copy number, event and driver status of every gene. Select a row to open its record.
+    description: >-
+      What is the copy number of each gene? One row per tumor and gene: its minimum and maximum copy number,
+      its minimum minor-allele copy number, the call and the driver status. Select a row to open its record.
+
+      How to read: sort on the call to find amplified or deleted genes. The relative minimum copy number is the
+      minimum over the sample ploidy, and an amplification needs it above 3.
+
+      Source: PURPLE documentation, https://github.com/hartwigmedical/hmftools/tree/master/purple
     layout: {x: 0, y: 0, w: 5, h: 6}
   - component_type: advanced_viz
     workflow_tag: oncoanalyser
@@ -1350,7 +1531,12 @@ tabs:
     tag: oa-cn-av-gene-record
     index: cn-gene-record
     title: Gene record
-    description: The selected gene's copy-number range and call, one card per tumor.
+    description: >-
+      The selected gene's copy-number range and call, one card per tumor.
+
+      How to read: a wide gap between the minimum and maximum copy number means only part of the gene is
+      altered. A minimum minor-allele copy number near 0 beside a total of one or more is a lost parental copy,
+      and the reported status and driver type say whether PURPLE keeps the gene in its driver catalog.
     layout: {x: 5, y: 0, w: 3, h: 6}
 - title: Structural variants
   subtitle: Which rearrangements shaped the genome, and which fusions follow?
@@ -1549,7 +1735,20 @@ tabs:
     tag: oa-sx-av-chords
     index: sx-chords
     title: Structural variants around the genome
-    description: One chord per SV between its two breakends, coloured by the event its cluster resolves to. Single breakends have no partner and are left out.
+    description: >-
+      Which chromosomes are rearranged together? Each chord joins the two breakends of one structural
+      variant on the genome ring, coloured by the event LINX resolved its cluster to and wider for a higher
+      junction copy number.
+
+      How to read: a few chords of one colour are isolated simple events. Many chords of the complex colour
+      between the same few chromosomes are clusters of three or more variants that LINX chains into one
+      event, and a click on a chord picks that SV for the genome browser and the tables.
+
+      Lines and annotations: chord width follows the log of the junction copy number. An SV inside one
+      chromosome is drawn as an arc on that chromosome, and at most 2000 chords are drawn. Single breakends
+      have no partner and are left out.
+
+      Source: LINX documentation, https://github.com/hartwigmedical/hmftools/tree/master/linx
     layout: {x: 0, y: 0, w: 4, h: 6}
   - component_type: figure
     workflow_tag: oncoanalyser
@@ -1561,7 +1760,15 @@ tabs:
     tag: oa-sx-fig-resolved
     index: sx-resolved-bar
     title: SVs per resolved event
-    description: Structural variants by the event LINX resolved their cluster to, in the colour the chords beside it give that event.
+    description: >-
+      What kinds of events make up the rearrangements? One bar per event LINX resolved the SV's cluster to
+      (for example a simple deletion or duplication, a reciprocal translocation, a LINE insertion or a complex
+      event), in the colour the chords beside it give that event.
+
+      How to read: mostly simple events is a quieter genome. A large complex bar means most SVs belong to
+      clusters of three or more variants, which are worth following in the genome browser below.
+
+      Source: LINX documentation, https://github.com/hartwigmedical/hmftools/tree/master/linx
     layout: {x: 4, y: 0, w: 4, h: 6}
   # An SV picked in the chord diagram or the table narrows linx_svs to one row:
   # the view jumps to its first breakend. Unpicked, it opens on the SV with the
@@ -1604,7 +1811,19 @@ tabs:
     tag: oa-sx-browser
     index: sx-reads-browser
     title: Genome browser
-    description: PURPLE's SV calls with the tumor and normal reads, framed on the picked breakend. Opens on the SV with the highest junction copy number; the stepper lists up to 20, each with its type, length and genes.
+    description: >-
+      What do the reads say at a breakend? The browser shows PURPLE's SV calls with the tumor and normal
+      reads, framed on the picked breakend, with read pairs drawn as arcs and coloured by pair orientation.
+
+      How to read: a real breakend shows split reads and inverted or everted pairs in the tumor and none in
+      the normal, and the same pairs in both point at a germline event or a mapping artefact. Pick a chord or a
+      table row to move the view, or step through the list, where each entry names its type, length and genes.
+
+      Lines and annotations: the breakpoint view links the two breakends of the picked SV, and the circular
+      view draws the SV calls as links between loci. The stepper lists up to 20 SVs ordered by junction copy
+      number, highest first, and opens on the first.
+
+      Note: that order is a display choice and not a ranking by evidence.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: advanced_viz
     workflow_tag: oncoanalyser
@@ -1617,7 +1836,18 @@ tabs:
     tag: oa-sx-av-fusion-exons
     index: sx-fusion-exons
     title: Kept and lost exons per fusion
-    description: One panel per candidate fusion, 5' partner then 3' partner along the fused transcript in exon units. Reported and in-frame fusions come first.
+    description: >-
+      Which exons does each fusion keep? One panel per candidate fusion (the first six), with the 5' partner
+      then the 3' partner along the fused transcript in exon units. A solid bar is a kept exon span, a hollow
+      one a lost span, and the breakpoint sits between the partners.
+
+      How to read: a fusion that joins the 5' partner's first exons in frame to the 3' partner's later exons
+      can make a chimeric protein. Reported fusions come first, then in-frame ones, then the shorter chain,
+      and the fusion table below lists the protein domains each one keeps and loses.
+
+      Note: the axis is the exon rank, because LINX publishes no residue coordinates per fusion.
+
+      Source: LINX documentation, https://github.com/hartwigmedical/hmftools/tree/master/linx
     layout: {x: 0, y: 0, w: 5, h: 6}
   - component_type: figure
     workflow_tag: oncoanalyser
@@ -1629,7 +1859,15 @@ tabs:
     tag: oa-sx-fig-phase
     index: sx-phase-bar
     title: Fusions per reading frame
-    description: Candidate fusions by phase; in-frame fusions can make a chimeric protein.
+    description: >-
+      Which reading frame do the candidate fusions keep? One bar per phase (in frame, skipped exons or out of
+      frame), counting the candidates.
+
+      How to read: in-frame fusions can make a chimeric protein, so open the fusion table for the reported
+      ones. A long out-of-frame bar is not a problem by itself, since LINX reports out-of-frame fusions only
+      for known fusions.
+
+      Source: LINX documentation, https://github.com/hartwigmedical/hmftools/tree/master/linx
     layout: {x: 5, y: 0, w: 3, h: 6}
   - component_type: table
     workflow_tag: oncoanalyser
@@ -1642,7 +1880,15 @@ tabs:
     tag: oa-sx-table-fusions
     index: sx-table-fusions
     title: Candidate fusions
-    description: Partners, phase, fused exons, chain and protein domains of every candidate fusion. Select a row to open its record.
+    description: >-
+      Which fusions did LINX find? One row per candidate fusion: its partners, phase, fused exons, the SV
+      chain behind it and the protein domains kept and lost. Select a row to open its record.
+
+      How to read: start with the reported fusions, which LINX marks as likely viable and pathogenic, then the
+      in-frame ones. The chain length is 0 for a simple fusion and grows with the segments chained between the
+      two partners.
+
+      Source: LINX documentation, https://github.com/hartwigmedical/hmftools/tree/master/linx
     layout: {x: 0, y: 0, w: 5, h: 6}
   - component_type: advanced_viz
     workflow_tag: oncoanalyser
@@ -1663,7 +1909,12 @@ tabs:
     tag: oa-sx-av-fusion-record
     index: sx-fusion-record
     title: Fusion record
-    description: The selected fusion's partners, breakends, fused exons and protein domains.
+    description: >-
+      The selected fusion's partners, breakends, fused exons and protein domains.
+
+      How to read: pick a fusion in the table on the left. The 5' and 3' sections give each partner's
+      transcript, region and fused exon against its exon count, and the last section the chain and the domains
+      kept and lost.
     layout: {x: 5, y: 0, w: 3, h: 6}
   - component_type: table
     workflow_tag: oncoanalyser
@@ -1676,7 +1927,15 @@ tabs:
     tag: oa-sx-table-svs
     index: sx-table-svs
     title: Structural variants
-    description: Breakends, orientation, length, junction copy number, cluster and genes of every SV.
+    description: >-
+      Which structural variants are there? One row per SV: its type, the event its cluster resolves to, both
+      breakends with their orientation, length, junction copy number and genes. Select a row to move the genome
+      browser to it.
+
+      How to read: junction copy number is LINX's number of absolute copies of the rearrangement junction, so
+      sort on it to find high-copy junctions. Rows that share a cluster id are SVs LINX chains together.
+
+      Source: LINX documentation, https://github.com/hartwigmedical/hmftools/tree/master/linx
     layout: {x: 0, y: 0, w: 8, h: 6}
 # ===========================================================================
 # Variants
@@ -1880,7 +2139,19 @@ tabs:
     tag: oa-dr-av-oncoplot
     index: dr-oncoplot
     title: Driver genes by tumor and driver type
-    description: One column per tumor and one row per driver gene, coloured by driver type. It opens on the reported drivers. With a single tumor it is one column; the bars beside it count the same entries.
+    description: >-
+      Which genes drive each tumor, and by which mechanism? One column per tumor and one row per driver gene,
+      each cell coloured by the driver type PURPLE or LINX assigns (point mutation, amplification, deletion,
+      loss of heterozygosity, disruption or germline variant). It opens on the reported drivers.
+
+      How to read: genes are sorted by how many tumors carry them. A gene with several colours in one tumor
+      has more than one hit, and the driver table says whether PURPLE calls it biallelic.
+
+      Lines and annotations: the bars above the grid count the entries of each tumor and the bars at the
+      side count the entries of each gene, and the legend lists the driver types. With a single tumor the
+      grid is one column.
+
+      Source: PURPLE documentation, https://github.com/hartwigmedical/hmftools/tree/master/purple
     layout: {x: 0, y: 0, w: 5, h: 6}
   - component_type: figure
     workflow_tag: oncoanalyser
@@ -1892,7 +2163,15 @@ tabs:
     tag: oa-dr-fig-types
     index: dr-type-bar
     title: Entries per gene role and driver type
-    description: Driver catalog entries for oncogenes and tumor suppressors, split by driver type.
+    description: >-
+      By which mechanisms are oncogenes and tumor suppressors hit? One bar per gene role in PURPLE's driver
+      catalog (oncogene or tumor suppressor), stacked by driver type.
+
+      How to read: oncogenes are typically activated by amplification or hotspot mutation, and tumor
+      suppressors inactivated by deletion, loss of heterozygosity or truncating mutation. The mix of colours
+      within a role says which mechanism dominates in the tumors in view.
+
+      Source: PURPLE documentation, https://github.com/hartwigmedical/hmftools/tree/master/purple
     layout: {x: 5, y: 0, w: 3, h: 6}
   - component_type: figure
     workflow_tag: oncoanalyser
@@ -1904,7 +2183,19 @@ tabs:
     tag: oa-dr-fig-likelihood
     index: dr-likelihood-box
     title: Driver likelihood per driver type
-    description: Amplifications and deletions are scored at 1; the likelihood of a point mutation grows with its recurrence.
+    description: >-
+      How confident is PURPLE that each driver type drives the tumor? One box per driver type and gene role,
+      showing the spread of PURPLE's driver likelihood, from 0 to 1, over the catalog entries in view.
+
+      How to read: a box squeezed against 1 is a type PURPLE is sure of. A box spread below 1 is made of
+      point mutations, whose likelihood PURPLE calculates for the genes of its panel, so low entries are the
+      ones to check against the supporting variants in the driver table.
+
+      Lines and annotations: the middle line of a box is the median and the box spans the quartiles. Whiskers
+      reach the furthest point within 1.5 times the interquartile range, and points beyond are drawn singly.
+      PURPLE assigns a likelihood of 1 to significant amplifications and to hotspot mutations.
+
+      Source: PURPLE documentation, https://github.com/hartwigmedical/hmftools/tree/master/purple
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: table
     workflow_tag: oncoanalyser
@@ -1917,7 +2208,14 @@ tabs:
     tag: oa-dr-table-drivers
     index: dr-table-drivers
     title: Driver catalog
-    description: Gene, driver type, origin, likelihood, variant counts and copy-number range of every catalog entry. Select a row to open its record.
+    description: >-
+      What does the driver catalog hold? One row per tumor, gene and driver type: its origin (somatic or
+      germline), role, likelihood, variant counts and copy-number range. Select a row to open its record.
+
+      How to read: sort on the driver likelihood and keep the reported entries. Biallelic is true when any
+      variant of the gene is biallelic, which PURPLE derives from loss of heterozygosity.
+
+      Source: PURPLE documentation, https://github.com/hartwigmedical/hmftools/tree/master/purple
     layout: {x: 0, y: 0, w: 5, h: 6}
   - component_type: advanced_viz
     workflow_tag: oncoanalyser
@@ -1938,7 +2236,12 @@ tabs:
     tag: oa-dr-av-driver-record
     index: dr-driver-record
     title: Driver record
-    description: The selected catalog entry's driver type, likelihood, supporting variants and locus.
+    description: >-
+      The selected catalog entry's driver type, likelihood, supporting variants and locus.
+
+      How to read: pick an entry in the table on the left. The likelihood method says how PURPLE scored it,
+      and the variants section counts the missense, nonsense, splice, in-frame and frameshift calls behind a
+      mutation driver.
     layout: {x: 5, y: 0, w: 3, h: 6}
 - title: Small variants
   subtitle: How many somatic variants are there, and how clonal?
@@ -2123,7 +2426,18 @@ tabs:
     tag: oa-sv-fig-af
     index: sv-af-histogram
     title: Purity-adjusted allele frequency
-    description: Clonal heterozygous calls pile up at one frequency once purity is accounted for; a shoulder below it is a subclone.
+    description: >-
+      How clonal are the somatic calls? Each bar counts the PASS calls in a window of purity-adjusted allele
+      frequency, stacked by variant type.
+
+      How to read: calls shared by the same share of the tumor cells pile up in one tall peak, and a shoulder
+      at a lower frequency is a subclone candidate. The frequency also depends on the copy number at the
+      locus, so read it with the variant copy number histogram beside it.
+
+      Lines and annotations: no clonality cut-off is drawn. PURPLE marks a peak as subclonal when its variant
+      copy number is below 0.85, and gives each call a subclonal likelihood in the variant record.
+
+      Source: PURPLE documentation, https://github.com/hartwigmedical/hmftools/tree/master/purple
     layout: {x: 0, y: 0, w: 4, h: 4}
   - component_type: figure
     workflow_tag: oncoanalyser
@@ -2135,7 +2449,17 @@ tabs:
     tag: oa-sv-fig-vcn
     index: sv-vcn-histogram
     title: Variant copy number
-    description: Copies of the variant allele; peaks above 1 mark calls on amplified or duplicated regions.
+    description: >-
+      On how many copies does each variant sit? Each bar counts the PASS calls in a window of variant copy
+      number, the purity-adjusted number of copies of the variant allele, stacked by variant type.
+
+      How to read: a peak at 1 is calls on a single copy, and peaks above 1 mark calls on amplified or
+      duplicated regions. A peak below 1 is a subclone candidate.
+
+      Lines and annotations: no cut-off is drawn. PURPLE marks a peak as subclonal when its variant copy
+      number is below 0.85.
+
+      Source: PURPLE documentation, https://github.com/hartwigmedical/hmftools/tree/master/purple
     layout: {x: 4, y: 0, w: 4, h: 4}
   - component_type: advanced_viz
     workflow_tag: oncoanalyser
@@ -2155,7 +2479,17 @@ tabs:
     tag: oa-sv-av-genome
     index: sv-genome
     title: Somatic calls along the genome
-    description: One point per call at its position, raised by its purity-adjusted allele frequency and coloured by coding effect, as in the browser below. Zoom into a region to see its genes.
+    description: >-
+      Where on the genome do the PASS somatic calls sit? Each point is one call at its position, raised by its
+      purity-adjusted allele frequency and coloured by coding effect, as in the browser below.
+
+      How to read: points at one height share a frequency, and a dense local cluster of calls may be
+      kataegis, which the variant record flags. Brush a region to filter the dashboard and move the browser,
+      and zoom in to see the genes of the region.
+
+      Lines and annotations: the band is the window of the genome browser below, and it follows the
+      region selected here. No cut-off is drawn, and the genes under the calls come from the reference
+      annotation of the run's genome.
     layout: {x: 0, y: 0, w: 8, h: 5}
   # A call picked in the table, or few calls in the plot's region (a zoomed
   # region), narrows purple_somatic_variants: the view then frames them.
@@ -2229,7 +2563,18 @@ tabs:
     tag: oa-sv-browser
     index: sv-reads-browser
     title: Genome browser
-    description: PURPLE's somatic and germline calls with the tumor and normal reads and the dbSNP and ClinVar tracks, framed on the picked call; it opens on a reported driver call when there is one.
+    description: >-
+      What do the reads say at a call? The browser shows PURPLE's somatic and germline calls with the tumor
+      and normal reads and the dbSNP and ClinVar tracks, framed on the picked call. It opens on a reported
+      driver call when there is one.
+
+      How to read: a somatic call has alternate-allele reads in the tumor and none in the normal, and a call
+      the normal shares is germline or an artefact. Calls take the colour of their coding effect, and the next
+      and previous buttons step through the small variants, the SV breakends and the copy-number segments of
+      the same tumors.
+
+      Lines and annotations: the dbSNP (common variants) and ClinVar tracks are UCSC annotations of the
+      genome, not data of the run.
     layout: {x: 0, y: 5, w: 8, h: 7}
   - component_type: table
     workflow_tag: oncoanalyser
@@ -2242,7 +2587,15 @@ tabs:
     tag: oa-sv-table-variants
     index: sv-table-variants
     title: Somatic small variants
-    description: Gene, protein change, coding effect, allele frequency, copy number and locus of every PASS call. Select a row to open its record.
+    description: >-
+      Which somatic small variants were called? One row per PASS call: its gene, protein change, coding
+      effect, purity-adjusted allele frequency, variant copy number and locus. Select a row to open its
+      record.
+
+      How to read: filter on the reported and hotspot flags to find the calls PURPLE keeps in its driver
+      catalog. A biallelic call has no wild-type copy left.
+
+      Source: PURPLE documentation, https://github.com/hartwigmedical/hmftools/tree/master/purple
     layout: {x: 0, y: 0, w: 5, h: 6}
   - component_type: advanced_viz
     workflow_tag: oncoanalyser
@@ -2264,7 +2617,12 @@ tabs:
     tag: oa-sv-av-variant-record
     index: sv-variant-record
     title: Variant record
-    description: The selected call's impact, allele frequency, copy number and sequence context.
+    description: >-
+      The selected call's impact, allele frequency, copy number and sequence context.
+
+      How to read: pick a call in the table on the left. The impact section gives the effect on the canonical
+      transcript, the allele frequency section the raw and purity-adjusted frequencies with PURPLE's
+      subclonal likelihood, and the copy number section whether the call is biallelic.
     layout: {x: 5, y: 0, w: 3, h: 6}
 - title: Protein changes
   subtitle: Which proteins change, and where on the protein?
@@ -2450,7 +2808,21 @@ tabs:
     tag: oa-pr-av-gene-scatter
     index: pr-gene-scatter
     title: Genes with a protein change
-    description: One point per tumor and gene of the driver panel, coloured by its worst effect; the eight with the highest driver likelihood are named. Clonal driver candidates sit top right. Clear the Gene role filter to add the genes outside the panel, which all sit at a likelihood of 0.
+    description: >-
+      Which genes carry a change that is both frequent and likely to drive? Each point is one gene in one
+      tumor: x is the highest purity-adjusted allele frequency among its protein changes, y is PURPLE's driver
+      likelihood for the gene's somatic point mutations, and the colour is the worst coding effect.
+
+      How to read: clonal driver candidates sit top right. Eight points, the ones with the highest driver
+      likelihood, are named, and picking a point moves the needle plot to that gene.
+
+      Lines and annotations: no line is drawn. A likelihood of 0 means the gene is outside PURPLE's driver
+      panel or its changes do not qualify, so clearing the Gene role filter adds the genes outside the panel
+      along the bottom edge.
+
+      Source: PURPLE documentation, https://github.com/hartwigmedical/hmftools/tree/master/purple
+
+      Note: the allele frequency alone does not say whether a change is clonal.
     layout: {x: 0, y: 0, w: 3, h: 6}
   - component_type: advanced_viz
     workflow_tag: oncoanalyser
@@ -2466,7 +2838,17 @@ tabs:
     tag: oa-pr-av-needles
     index: pr-needles
     title: Protein changes along the sequence
-    description: One needle per changed residue, coloured by coding effect. Without a picked gene, it opens on the gene with the most changes.
+    description: >-
+      Where on the protein does the gene change? One needle per changed residue along the protein sequence,
+      its height the purity-adjusted allele frequency of the call and its colour the coding effect, one panel
+      per gene. Without a picked gene it opens on the gene with the most changes.
+
+      How to read: several needles at one residue are a recurrent change, and a run of needles along a short
+      stretch of the sequence is a region worth checking against the protein's domains. Five needles per
+      panel are named, and a click picks the residue.
+
+      Lines and annotations: the horizontal baseline of each panel is zero frequency. No protein domains or
+      cut-offs are drawn.
     layout: {x: 3, y: 0, w: 5, h: 6}
   - component_type: table
     workflow_tag: oncoanalyser
@@ -2479,7 +2861,13 @@ tabs:
     tag: oa-pr-table-changes
     index: pr-table-changes
     title: Protein changes
-    description: Protein, residue, amino-acid change, coding effect, HGVS notation and allele frequency of every change. Select a row to open its record.
+    description: >-
+      Which protein changes were called? One row per somatic call whose protein change names a residue: the
+      protein, the residue, the amino-acid change, the coding effect, the HGVS notation and the allele
+      frequency. Select a row to open its record.
+
+      How to read: filter on the hotspot and reported flags to keep the changes PURPLE ties to its driver
+      catalog. Calls with no residue, such as splice-site calls, are not in this table.
     layout: {x: 0, y: 0, w: 5, h: 6}
   - component_type: advanced_viz
     workflow_tag: oncoanalyser
@@ -2499,7 +2887,12 @@ tabs:
     tag: oa-pr-av-change-record
     index: pr-change-record
     title: Protein change record
-    description: The selected change on the protein and the somatic call behind it.
+    description: >-
+      The selected change on the protein and the somatic call behind it.
+
+      How to read: pick a change in the table on the left. The change section gives the residue and the
+      amino-acid substitution, the transcript section the HGVS coding change, and the call section the locus,
+      variant copy number and the biallelic, hotspot and reported flags.
     layout: {x: 5, y: 0, w: 3, h: 6}
 - title: Immune context
   subtitle: Which HLA alleles does the tumor keep, and what could they present?
@@ -2673,7 +3066,20 @@ tabs:
     tag: oa-im-fig-allele-cn
     index: im-allele-cn-bar
     title: Tumor copy number per HLA allele
-    description: LILAC's copy number of each allele in the tumor; an allele near zero is lost, which hides its neoepitopes from T cells.
+    description: >-
+      Does the tumor keep each HLA allele? One bar per called allele (two per HLA gene), its height the
+      allele's copy number in the tumor as LILAC reports it, coloured by HLA gene.
+
+      How to read: in a region with two copies each allele sits near 1. A bar near zero is an allele the
+      tumor lost, and that allele can no longer present neoepitopes to T cells. The alleles table lists the
+      supporting fragments behind each bar.
+
+      Lines and annotations: no reference line is drawn. The lost flag of the alleles table is set below 0.5
+      copies, a rule of this dashboard.
+
+      Note: LILAC documents no cut-off for a lost allele, so 0.5 is not a validated threshold.
+
+      Source: LILAC documentation, https://github.com/hartwigmedical/hmftools/tree/master/lilac
     layout: {x: 0, y: 0, w: 4, h: 5}
   - component_type: figure
     workflow_tag: oncoanalyser
@@ -2694,7 +3100,22 @@ tabs:
     tag: oa-im-fig-telomeres
     index: im-telomere-bar
     title: Telomere length per sample
-    description: TEAL's purity and ploidy adjusted telomere length of the tumor and its normal, with their ratio on top. A ratio under 1 means the tumor telomeres are shorter than the normal's; above 1 they are longer, which points to a telomere maintenance mechanism.
+    description: >-
+      Is the tumor's telomere longer or shorter than the normal's? One bar per DNA sample, the telomere length
+      in base pairs that TEAL estimates, adjusted for purity and ploidy in the tumor, coloured by sample type.
+      The normal is TEAL's reference.
+
+      How to read: the ratio printed above the bars compares the tumor with its normal. Below 1 the tumor
+      telomeres are shorter, and above 1 they are longer. TEAL publishes no cut-off for the ratio, so read it
+      as a direction, and compare it with the other tumors of the cohort.
+
+      Lines and annotations: the text above the plot is the mean length of the tumor samples in view over the
+      mean length of the normal samples in view, and it is left out when one of the two is missing.
+
+      Source: TEAL documentation, https://github.com/hartwigmedical/hmftools/tree/master/teal
+
+      Note: TEAL assumes the non-tumor cells of the tumor sample have the telomere length of the reference
+      sample.
     layout: {x: 4, y: 0, w: 4, h: 5}
   - component_type: advanced_viz
     workflow_tag: oncoanalyser
@@ -2711,7 +3132,22 @@ tabs:
     tag: oa-im-av-neo-scatter
     index: im-neo-scatter
     title: Expression against variant copy number
-    description: One point per candidate neoepitope; points high on the expression axis are expressed and supported by RNA fragments.
+    description: >-
+      Which neoepitope candidates are expressed? Each point is one candidate: x is the copies of the variant
+      behind it, y its effective expression in TPM, and the colour the event that creates it.
+
+      How to read: high on the y axis means the candidate is expressed, and to the right means the variant
+      sits on more copies. Candidates at the top right are the best supported, and eight points are named.
+      Picking a point opens its record.
+
+      Lines and annotations: no line is drawn, because Neo sets no cut-off for a candidate to count as
+      expressed or presented. Its documentation only notes that the chance of presentation rises with TPM,
+      from under 1% below a TPM of 1 to over 20% above 1000.
+
+      Source: Neo documentation, https://github.com/hartwigmedical/hmftools/tree/master/neo
+
+      Note: without RNA the effective expression is set to the expected expression, which is a prediction and
+      not a measurement.
     layout: {x: 0, y: 0, w: 5, h: 6}
   - component_type: figure
     workflow_tag: oncoanalyser
@@ -2723,7 +3159,12 @@ tabs:
     tag: oa-im-fig-neo-source
     index: im-neo-source-bar
     title: Neoepitopes per source event
-    description: Candidate neoepitopes by the event that creates them (missense, frameshift or fusion), one colour per event.
+    description: >-
+      Which events create the neoepitope candidates? One bar per source event (missense, frameshift or
+      fusion, among others), counting the candidates Neo scores, one colour per event.
+
+      How to read: the tallest bar is the event that supplies most candidates. A frameshift or fusion
+      candidate carries a longer novel sequence than a missense one, which the table below shows.
     layout: {x: 5, y: 0, w: 3, h: 6}
   - component_type: table
     workflow_tag: oncoanalyser
@@ -2735,7 +3176,14 @@ tabs:
     tag: oa-im-table-neo
     index: im-table-neo
     title: Candidate neoepitopes
-    description: Source event, gene, novel amino acids, peptides, RNA support and expression of every candidate. Select a row to open its record.
+    description: >-
+      Which candidates did Neo score? One row per candidate: its source event, gene, novel amino acids,
+      peptides, RNA support and expression. Select a row to open its record.
+
+      How to read: sort on the effective TPM and check the RNA fragments behind it. Neo defines effective
+      expression as a combined estimate from direct fragment counts and transcript expression.
+
+      Source: Neo documentation, https://github.com/hartwigmedical/hmftools/tree/master/neo
     layout: {x: 0, y: 0, w: 5, h: 6}
   - component_type: advanced_viz
     workflow_tag: oncoanalyser
@@ -2756,7 +3204,12 @@ tabs:
     tag: oa-im-av-neo-record
     index: im-neo-record
     title: Neoepitope record
-    description: The selected candidate's source event, novel sequence, RNA support and clonality.
+    description: >-
+      The selected candidate's source event, novel sequence, RNA support and clonality.
+
+      How to read: pick a candidate in the table on the left. The sequence section shows the novel amino acids
+      between their flanks and the peptides they yield, the expression section the RNA fragments and depth, and
+      the copy number section the copies of the variant against the total copy number at its locus.
     layout: {x: 5, y: 0, w: 3, h: 6}
   - component_type: table
     workflow_tag: oncoanalyser
@@ -2769,7 +3222,15 @@ tabs:
     tag: oa-im-table-alleles
     index: im-table-alleles
     title: HLA alleles
-    description: Supporting fragments, tumor copy number and somatic variants of every called allele.
+    description: >-
+      Which HLA alleles were called? One row per tumor and allele: the fragments that support it in the
+      reference, the tumor and the RNA, its tumor copy number and the somatic variants inside it.
+
+      How to read: an allele with a tumor copy number near zero is lost, and an allele that carries somatic
+      variants may no longer present what it would. The lost flag is set below 0.5 copies, a rule of this
+      dashboard, since LILAC documents no cut-off.
+
+      Source: LILAC documentation, https://github.com/hartwigmedical/hmftools/tree/master/lilac
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: oncoanalyser
@@ -2782,5 +3243,13 @@ tabs:
     tag: oa-im-table-telomeres
     index: im-table-telomeres
     title: Telomere length
-    description: Raw and adjusted telomere length, telomeric reads and depth per sample.
+    description: >-
+      How was each telomere length estimated? One row per DNA sample: the raw and the purity and ploidy
+      adjusted telomere length, the telomeric fragments and reads behind it, and the purity, ploidy and depth
+      used to normalise it.
+
+      How to read: trust a length less when few telomeric fragments or little depth stand behind it. For a
+      tumor, the final length differs from the raw one by the purity and ploidy adjustment.
+
+      Source: TEAL documentation, https://github.com/hartwigmedical/hmftools/tree/master/teal
     layout: {x: 0, y: 6, w: 8, h: 6}

@@ -12,7 +12,9 @@ targeted input schema has ``sample``, ``fastq_1``, ``fastq_2``, ``reference``
   gets a single ``run protospacer`` guide;
 * ``has_template``: ``yes`` when the library has an HDR donor template;
 * ``amplicon_length``: length of the reference amplicon, only when the sheet
-  has a ``reference`` column (a column of nulls would only take table width).
+  has a ``reference`` column (a column of nulls would only take table width);
+* ``template_length``: length of the HDR donor, only when at least one library
+  gives one, so a text line citing it goes with the donors a run does not have.
 
 The ``reference`` and ``template`` sequences and the FASTQ paths are dropped:
 they are long, and nothing in the dashboards reads them.
@@ -47,8 +49,12 @@ OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "guide": pl.Utf8,
     "has_template": pl.Utf8,
 }
-# Only when the sheet carries the ``reference`` amplicon sequences.
-OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {"amplicon_length": pl.Int64}
+# Only when the sheet carries the ``reference`` amplicon sequences, and when a
+# library gives a donor ``template``.
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
+    "amplicon_length": pl.Int64,
+    "template_length": pl.Int64,
+}
 
 RUN_GUIDE = "run protospacer"
 _DROP = {"fastq_1", "fastq_2", "reference", "template"}
@@ -88,6 +94,10 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     if "reference" in sheet.columns:
         out = out.with_columns(
             _text("reference", sheet).str.len_chars().cast(pl.Int64).alias("amplicon_length")
+        )
+    if sheet.select(_text("template", sheet).is_not_null().any()).item():
+        out = out.with_columns(
+            _text("template", sheet).str.len_chars().cast(pl.Int64).alias("template_length")
         )
     # A library sequenced on several lanes has one sheet row per FASTQ pair.
     out = out.filter(pl.col("sample").is_not_null()).unique(

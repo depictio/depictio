@@ -162,6 +162,7 @@ main_dashboard:
       - ![](icon:mdi:shape-outline) **Strategy** {{n_strat}} kinds (single, hybrid, scaffold), most often {{top_strat}}
       - ![](icon:mdi:family-tree) **Assemblers** {{n_asm}} named in the sheet, most often {{top_asm}}
       - ![](icon:mdi:file-table-outline) **Samplesheet** [one row per sample](section:Sample sheet), its path in [the run parameters](params:input)
+      - ![](icon:mdi:palette-outline) **{GROUP_COL_DISPLAY}** {{legend:{GROUP_COL}}}
     tag: ga-ov-study
     index: ov-study
     layout: {x: 0, y: 1, w: 5, h: 3}
@@ -450,6 +451,14 @@ main_dashboard:
     tag: ga-sample-sheet
     index: sample-sheet
     title: Samples and their assembly QC
+    description: >-
+      One row per samplesheet sample with its design (assembler and scaffolders), how many of its stages
+      were assessed, its best QV, best BUSCO complete share and best N50 over those stages, and whether
+      any assembly QC was published for it.
+
+      How to read: a row marked as having no assembly QC never reached the assessment, so it is missing
+      from every figure of the other tabs. Compare the best values across samples to see which assemblies
+      to open first. Tick rows to narrow every tab to those samples.
     layout: {x: 0, y: 0, w: 8, h: 6}
 tabs:
 - title: Samples
@@ -622,7 +631,16 @@ tabs:
     tag: ga-smp-stages
     index: smp-stages
     title: Assessed stages per sample
-    description: One block per assessed assembly, coloured by stage.
+    description: >-
+      Which stages of each sample were assessed? One block per assessed assembly, stacked per sample and
+      coloured by stage, so the height of a column is the number of assessed assemblies of that sample.
+
+      How to read: a sample with a single block has only its raw assembly assessed, so it has no polishing
+      or scaffolding step to compare in [Stages](tab:Stages). A tall column is a sample assessed after
+      each polisher and scaffolder.
+
+      Source: nf-core/genomeassembler output documentation, the QC outputs are named per assembly stage as
+      `<sample>_<stage>`, https://nf-co.re/genomeassembler/2.0.0/docs/output
     layout: {x: 0, y: 0, w: 8, h: 4}
 - title: Genome profile
   subtitle: What genome do the reads describe, before any assembly?
@@ -769,7 +787,22 @@ tabs:
     tag: ga-gp-spectrum
     index: gp-spectrum
     title: Read k-mer spectrum
-    description: The main peak is the k-mer depth; a shoulder at half of it is the heterozygous share.
+    description: >-
+      What does the read k-mer spectrum say about depth, heterozygosity and errors? One line per read set:
+      how many distinct k-mers were seen at each multiplicity, on a logarithmic count axis, as counted by
+      Jellyfish.
+
+      How to read: the main peak sits at the k-mer depth of the sequencing. A second peak at about half
+      that depth is the heterozygous share of the genome, and a long right tail is repeats. A tall spike
+      at the far left is sequencing errors, and a curve with no clear peak gives GenomeScope little to
+      fit.
+
+      Source: GenomeScope 2.0 fits this spectrum, the heterozygous peak sits at half the homozygous one,
+      Ranallo-Benavidez, Jaron and Schatz 2020, Nature Communications 11:1432,
+      doi:10.1038/s41467-020-14998-3
+
+      Note: the recipe keeps the curve up to four times the main peak, a display choice and not a QC
+      cut-off, so the repeat tail is cut. No reference line is drawn.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: genomeassembler
@@ -781,6 +814,18 @@ tabs:
     tag: ga-gp-table
     index: gp-table
     title: GenomeScope estimates
+    description: >-
+      GenomeScope's fit to the read k-mer spectrum: the haploid genome length, the share of repeats, the
+      heterozygosity and the read error rate, each as a minimum to maximum range, with the model fit.
+
+      How to read: the haploid length is the size an assembly should approach. A high heterozygosity warns
+      that a collapsed assembly will carry duplicated haplotigs, and a poor model fit means the other
+      estimates should not be trusted. Tick a row to narrow the tab to that read set.
+
+      Source: GenomeScope 2.0, Ranallo-Benavidez, Jaron and Schatz 2020, Nature Communications 11:1432,
+      doi:10.1038/s41467-020-14998-3
+
+      Note: GenomeScope reports the model fit as a number, and this dashboard sets no pass level for it.
     layout: {x: 0, y: 0, w: 8, h: 6}
 - title: Best assembly
   subtitle: Which assembly is best across contiguity, accuracy and genes?
@@ -957,7 +1002,17 @@ tabs:
     tag: ga-ba-parallel
     index: ba-parallel
     title: Every assembly across the QC axes
-    description: One line per assembly, coloured by {GROUP_COL_DISPLAY}; BUSCO stays on its own tab, as an assembly missing an axis drops out.
+    description: >-
+      How does each assembly compare across the QC axes? One line per assembly through five axes: N50,
+      number of sequences, total length, Merqury QV and k-mer completeness, coloured by the sample group.
+
+      How to read: a line high on N50 and QV and low on the number of sequences is a contiguous, accurate
+      assembly. Lines that cross between two axes trade one quality for another, for example length for
+      accuracy. An assembly missing one of the axes drops out, and BUSCO stays on its own tab.
+
+      Lines and annotations: every axis is rescaled between the lowest and highest value in view
+      (min-max), while its ticks keep the metric's own units. A position is therefore a rank within this
+      set and not a quality level, and no threshold is drawn.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: advanced_viz
     workflow_tag: genomeassembler
@@ -980,7 +1035,17 @@ tabs:
     tag: ga-ba-n50-qv
     index: ba-n50-qv
     title: Contiguity against accuracy
-    description: Coloured by assembler, sized by assembled length; top right is long and accurate.
+    description: >-
+      Which assemblies are both contiguous and accurate? One point per assessed assembly: its N50 on a
+      logarithmic axis against its Merqury consensus QV, coloured by assembler and sized by assembled
+      length.
+
+      How to read: the top right is long and accurate. A point far right and low is contiguous but carries
+      errors, which polishing can fix, and one at the top left is accurate but fragmented, which
+      scaffolding can join. Click a point to read its record.
+
+      Note: no cut-off is drawn on this plot, so the position says how assemblies compare with each other
+      and not whether any of them passes.
     layout: {x: 0, y: 0, w: 5, h: 6}
   - component_type: advanced_viz
     workflow_tag: genomeassembler
@@ -1003,7 +1068,13 @@ tabs:
     tag: ga-ba-record
     index: ba-record
     title: Assembly record
-    description: The assembly picked in the scatter or the table, every metric the QC tools reported.
+    description: >-
+      The assembly picked on the scatter or in the table, as a card: its design, its contiguity, its
+      accuracy, its gene completeness, its figures against a reference and the QC tools that assessed it.
+
+      How to read: the contiguity block says how the sequence is split, the accuracy block how many errors
+      it carries, and the gene block how many conserved genes it keeps. A block left empty means the tool
+      that fills it did not run on this assembly, as listed under the QC tools.
     layout: {x: 5, y: 0, w: 3, h: 6}
   - component_type: table
     workflow_tag: genomeassembler
@@ -1015,6 +1086,12 @@ tabs:
     tag: ga-ba-table
     index: ba-table
     title: Assessed assemblies
+    description: >-
+      One row per assessed assembly with every metric the QC tools reported: contiguity, Merqury accuracy,
+      BUSCO classes and, when the run had a reference, the QUAST reference figures.
+
+      How to read: sort on N50 or QV to rank assemblies on one axis, or filter on the stage to compare
+      only the raw assemblies. Tick rows to pick assemblies and open their records.
     layout: {x: 0, y: 0, w: 8, h: 6}
 - title: Stages
   subtitle: What does each polishing and scaffolding step add?
@@ -1185,7 +1262,17 @@ tabs:
     tag: ga-stg-qv
     index: stg-qv-profile
     title: QV along each route
-    description: Merqury QV at every assessed step; scaffolding should leave the line flat.
+    description: >-
+      What does each stage do to the accuracy of an assembly? One line per route, a sample followed to its
+      final stage, with the Merqury consensus QV at every assessed step: 0 for the raw assembly, 1 and 2
+      for the polishing steps, 3 for the scaffold.
+
+      How to read: a line that rises after a polishing step means polishing fixed errors, and a flat one
+      means it found nothing to fix. Scaffolding joins sequences without rewriting bases, so the line
+      should stay flat at step 3. A drop at any step means that step introduced errors.
+
+      Note: no cut-off is drawn, and each route is read against its own raw assembly. See
+      [Accuracy](tab:Accuracy) for the QV of each assembly against completeness.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: advanced_viz
     workflow_tag: genomeassembler
@@ -1205,7 +1292,17 @@ tabs:
     tag: ga-stg-n50
     index: stg-n50-profile
     title: N50 gain along each route
-    description: N50 of every step over the raw assembly's; polishing should leave it at one.
+    description: >-
+      What does each stage do to the contiguity of an assembly? One line per route, a sample followed to
+      its final stage, with the N50 of every step divided by the N50 of its raw assembly: 0 for the raw
+      assembly, 1 and 2 for polishing, 3 for the scaffold.
+
+      How to read: polishing rewrites bases and should leave the value at one. Scaffolding joins sequences
+      and lifts it above one, and the higher the value, the more it joined. A value below one means a step
+      split sequences.
+
+      Note: no line marks one, but every route starts at one by construction, since the raw assembly is
+      the reference of its own route.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: advanced_viz
     workflow_tag: genomeassembler
@@ -1223,7 +1320,25 @@ tabs:
     tag: ga-stg-compare
     index: stg-compare
     title: Raw assemblies against scaffolds
-    description: Every metric compared between two stage classes; with few assemblies, a screen only.
+    description: >-
+      Which QC metrics differ between two stage classes? Every metric of the assessed assemblies is
+      compared between two groups, here the raw assemblies and the scaffolds, with a rank-sum test per
+      metric, and shown as a volcano of the effect size against the significance.
+
+      How to read: points beyond the effect-size lines and above the significance line are metrics that
+      differ between the two classes, for example N50 rising after scaffolding. With only a few assemblies
+      per group no test can reach a small p-value, so read the result as a screen and open the table for
+      the values. Pick the two groups with the controls of the tile.
+
+      Lines and annotations: the horizontal line is the significance level of 0.05 on the
+      Benjamini-Hochberg adjusted p-value, and the two vertical lines are an absolute log2 fold change of
+      1. Both are the tile's defaults for any comparison, not cut-offs validated for assembly QC. The fold
+      change is the log2 ratio of the two group means with 1 added to each, on every metric's own scale.
+
+      Source: Benjamini and Hochberg 1995, J R Stat Soc B 57(1):289-300,
+      doi:10.1111/j.2517-6161.1995.tb02031.x
+
+      Note: a group needs at least two assemblies for the test to run.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: genomeassembler
@@ -1235,6 +1350,13 @@ tabs:
     tag: ga-stg-table
     index: stg-table
     title: Stage routes
+    description: >-
+      One row per step of every route, with the metrics that change along it (QV, N50, total length, k-mer
+      completeness, BUSCO complete) and their change from the raw assembly of the sample.
+
+      How to read: sort on the QV gain or the N50 fold to find the step that changed an assembly most. A
+      scaffolder alternative gets its own route, so two scaffolders of one sample are two rows at the last
+      step. Tick rows to pick routes.
     layout: {x: 0, y: 0, w: 8, h: 6}
 - title: Contiguity
   subtitle: How long and how fragmented is each assembly?
@@ -1407,7 +1529,21 @@ tabs:
     tag: ga-ctg-nx
     index: ctg-nx-curve
     title: Nx curve per assembly
-    description: For every x, the length of the sequence at which the longest reach x percent.
+    description: >-
+      How is the assembly length spread over its sequences? One line per assembly: for every x from 0 to
+      100, the length of the sequence at which the longest sequences together reach x percent of the
+      assembly, on a logarithmic length axis.
+
+      How to read: a curve that stays high and runs far right is an assembly held in a few long sequences.
+      A curve that drops at once is a drift of short ones. Scaffolding moves the curve right, polishing
+      leaves it where it was, and two assemblers are best compared along the whole curve and not at its
+      midpoint.
+
+      Lines and annotations: the vertical line at 50 percent, labelled N50, marks where the curve is read
+      for the N50, the length of the sequence such that sequences at least that long cover half of the
+      assembly. It is the definition of N50, not a cut-off.
+
+      Source: QUAST, definition of N50, https://github.com/ablab/quast
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: advanced_viz
     workflow_tag: genomeassembler
@@ -1419,7 +1555,15 @@ tabs:
     tag: ga-ctg-quast-n50
     index: ctg-quast-n50
     title: N50 against assembled length
-    description: One point per QUAST report, sized by contig count.
+    description: >-
+      How contiguous is each assembly for its size? One point per QUAST report: its assembled length
+      against its N50 on a logarithmic axis, sized by the number of contigs.
+
+      How to read: up and to the right is a large assembly held in long contigs. Two points of similar
+      length with very different N50 are the same amount of sequence cut in different ways, and a large
+      point low on the axis is a fragmented one. Click a point to read it in the table.
+
+      Source: QUAST, definition of N50, https://github.com/ablab/quast
     layout: {x: 0, y: 0, w: 4, h: 6}
   - component_type: advanced_viz
     workflow_tag: genomeassembler
@@ -1430,7 +1574,16 @@ tabs:
     tag: ga-ctg-quast-ladder
     index: ctg-quast-ladder
     title: Length kept above each contig length
-    description: The assembled bases that survive each minimum contig length.
+    description: >-
+      How much of each assembly sits in long contigs? One line per assembly: the bases held in contigs at
+      least as long as each minimum length.
+
+      How to read: a curve that holds its height out to long minimum lengths is an assembly whose bases
+      are in long contigs. A curve that falls early is a drift of short fragments. The gap between two
+      assemblies at a given length is the sequence one keeps and the other leaves in short pieces.
+
+      Note: the x positions are the contig-length thresholds QUAST was run with, so the curve joins a few
+      measured points and not a continuous Nx curve. No reference line is drawn.
     layout: {x: 4, y: 0, w: 4, h: 6}
   - component_type: advanced_viz
     workflow_tag: genomeassembler
@@ -1442,7 +1595,20 @@ tabs:
     tag: ga-ctg-quast-ref
     index: ctg-quast-ref
     title: Reference coverage against misassemblies
-    description: Bottom right covers the reference with few breaks; points are sized by NGA50.
+    description: >-
+      Does the assembly cover a reference without breaking it? One point per QUAST report against a
+      reference: the percent of the reference covered against the number of misassemblies, sized by NGA50.
+
+      How to read: the bottom right covers the reference with few breaks, and a large point there is also
+      contiguous after cutting at the breaks. A point high on the axis has joins the reference does not
+      support. An NGA50 far below the N50 of the same assembly means the contiguity was bought with such
+      joins.
+
+      Source: QUAST, genome fraction and NGA50 are computed against the reference,
+      https://github.com/ablab/quast
+
+      Note: the figure exists only when the run gave QUAST a reference, and it is as good as that
+      reference is for the sample.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: genomeassembler
@@ -1454,6 +1620,14 @@ tabs:
     tag: ga-ctg-quast-table
     index: ctg-quast-table
     title: QUAST reference-free statistics
+    description: >-
+      QUAST's reference-free statistics per assembly: contig counts, N50, assembled length, largest contig
+      and GC content.
+
+      How to read: sort on N50 to rank assemblies by contiguity, and compare the assembled length with the
+      GenomeScope estimate to see whether the assembly is the size expected. Tick rows to pick assemblies.
+
+      Source: QUAST, definition of N50, https://github.com/ablab/quast
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: genomeassembler
@@ -1465,6 +1639,16 @@ tabs:
     tag: ga-ctg-quast-ref-table
     index: ctg-quast-ref-table
     title: QUAST against the reference
+    description: >-
+      QUAST's figures against a reference per assembly: the share of the reference covered, the
+      misassemblies, the mismatch and indel rates and the NGA50.
+
+      How to read: a high genome fraction with few misassemblies and an NGA50 close to the N50 is an
+      assembly that agrees with the reference. Tick rows to pick assemblies. The table is filled only when
+      the run gave QUAST a reference.
+
+      Source: QUAST, NGA50 is the N50 of the blocks left after cutting at misassemblies,
+      https://github.com/ablab/quast
     layout: {x: 0, y: 6, w: 8, h: 6}
 - title: Accuracy
   subtitle: How accurate is each assembly against the read k-mers?
@@ -1630,7 +1814,24 @@ tabs:
     tag: ga-acc-qv
     index: acc-qv-completeness
     title: QV against k-mer completeness
-    description: One point per assessed assembly, sized by its k-mer count; points under the Q40 line are dimmed.
+    description: >-
+      Are the assemblies accurate and complete? One point per assessed assembly: the percent of solid read
+      k-mers it recovers against its Merqury consensus QV, sized by its k-mer count.
+
+      How to read: the top right is accurate and complete. A point far right and low recovered the
+      sequence but kept errors and wants polishing, and one high and far left is accurate but has lost
+      sequence. Click a point to read its record.
+
+      Lines and annotations: the horizontal line at QV 40 is one error per 10,000 bases. Points on or
+      under it are dimmed, and points above it keep their colour. It is the error rate of the Earth
+      BioGenome Project's reference standard, not a pass mark set by Merqury or nf-core/genomeassembler,
+      and no line is drawn for the k-mer completeness.
+
+      Source: Earth BioGenome Project, Report on Assembly Standards, a reference genome has an error rate
+      below 1 in 10,000 (Q40), https://www.earthbiogenome.org/report-on-assembly-standards
+
+      Note: QV is logarithmic, so QV 50 is ten times fewer errors than QV 40. Merqury, Rhie et al. 2020,
+      Genome Biology, doi:10.1186/s13059-020-02134-9, https://github.com/marbl/merqury
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: advanced_viz
     workflow_tag: genomeassembler
@@ -1645,7 +1846,17 @@ tabs:
     tag: ga-acc-copy
     index: acc-copy-number
     title: Copy number of the read k-mers in each assembly
-    description: Absent is lost sequence; two copies on a collapsed assembly is duplicated sequence.
+    description: >-
+      Where did the solid read k-mers end up in each assembly? One bar per assembly, split by how many
+      times the k-mer occurs in it: absent, once, twice, three times, four times or more.
+
+      How to read: on a haploid or collapsed assembly almost all k-mers should occur once. A large absent
+      share is sequence the assembly lost, and a large two-copy share is duplicated sequence such as
+      retained haplotigs. On a phased assembly that keeps both haplotypes, two copies is expected.
+
+      Note: read k-mers at or below the error trough of the read spectrum are left out, so sequencing
+      errors do not count as absent sequence. The trough is found per file by the recipe. Merqury, Rhie et
+      al. 2020, Genome Biology, doi:10.1186/s13059-020-02134-9, https://github.com/marbl/merqury
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: advanced_viz
     workflow_tag: genomeassembler
@@ -1657,7 +1868,17 @@ tabs:
     tag: ga-acc-seq-qv
     index: acc-sequence-qv
     title: Per-sequence QV against sequence length
-    description: One point per sequence; error-free sequences have no finite QV and sit in the card.
+    description: >-
+      Which sequences carry the errors? One point per contig or scaffold: its k-mer count, which tracks
+      its length, on a logarithmic axis against its Merqury QV, coloured by assembly.
+
+      How to read: errors are rarely spread evenly, and a few short, low-QV sequences often carry most of
+      an assembly's error k-mers. A short point low on the axis is a small piece to polish or drop, and a
+      long one is worth inspecting. Click a point to read it.
+
+      Note: a sequence with no error k-mer has no finite QV, so it is not plotted here and is counted in
+      the error-free card. No reference line is drawn. Merqury, Rhie et al. 2020, Genome Biology,
+      doi:10.1186/s13059-020-02134-9, https://github.com/marbl/merqury
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: genomeassembler
@@ -1669,6 +1890,17 @@ tabs:
     tag: ga-acc-table
     index: acc-table
     title: Merqury QV and completeness
+    description: >-
+      One row per assessed assembly with its Merqury consensus QV, the error k-mers behind it and its
+      k-mer completeness.
+
+      How to read: QV is logarithmic, with one error per 10,000 bases at QV 40 and one per 100,000 at QV
+      50. A completeness below what the read set allows points at lost sequence, and a completeness near
+      100 with a low QV at an assembly that kept everything but is not polished. Tick rows to pick
+      assemblies.
+
+      Source: Merqury, Rhie et al. 2020, Genome Biology, doi:10.1186/s13059-020-02134-9,
+      https://github.com/marbl/merqury
     layout: {x: 0, y: 0, w: 8, h: 6}
 - title: Gene completeness
   subtitle: How many conserved single-copy genes does each assembly hold?
@@ -1838,7 +2070,20 @@ tabs:
     tag: ga-gc-busco-bars
     index: gc-busco-classes
     title: BUSCO classes per assembly
-    description: The four BUSCO classes as a share of the lineage set, one bar per assembly.
+    description: >-
+      How many of the conserved genes does each assembly keep? One bar per assembly, split into the four
+      BUSCO classes as a share of the lineage set: complete single-copy, complete duplicated, fragmented
+      and missing.
+
+      How to read: a bar mostly complete single-copy is a good gene space. A large duplicated share points
+      at retained haplotigs or an uncollapsed assembly, a large fragmented share at errors that break gene
+      models, and a large missing share at genes the assembly lacks. Compare the bars of one sample across
+      stages to see what a polisher or scaffolder changed.
+
+      Source: BUSCO user guide, definitions of the complete, duplicated, fragmented and missing classes,
+      https://busco.ezlab.org/busco_userguide.html
+
+      Note: BUSCO recommends no pass level for these shares, so no cut-off is drawn.
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: advanced_viz
     workflow_tag: genomeassembler
@@ -1850,7 +2095,17 @@ tabs:
     tag: ga-gc-busco-scatter
     index: gc-busco-scatter
     title: Complete against duplicated BUSCOs
-    description: One point per assembly and lineage, sized by contig N50; high and left is duplicated.
+    description: >-
+      Is a high BUSCO score a real one? One point per assembly and lineage: the percent of complete BUSCOs
+      against the percent of duplicated BUSCOs, coloured by lineage and sized by contig N50.
+
+      How to read: the bottom right is complete with few duplicates. A point high on the axis is a
+      complete score that partly comes from duplicates, which suggests an assembly that is not collapsed.
+      Click a point to read it.
+
+      Note: duplicated BUSCOs are counted in the complete share, so a high duplication inflates the x
+      axis. BUSCO recommends no pass level, so no cut-off is drawn. Source: BUSCO user guide,
+      https://busco.ezlab.org/busco_userguide.html
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: genomeassembler
@@ -1862,4 +2117,14 @@ tabs:
     tag: ga-gc-table
     index: gc-table
     title: BUSCO batch summary
+    description: >-
+      BUSCO's batch summary, one row per assessed assembly and lineage: the complete, single-copy,
+      duplicated, fragmented and missing percentages against the lineage dataset, with the contiguity
+      BUSCO measures.
+
+      How to read: complete single-copy is the headline. A high duplicated share on a haploid target
+      points at retained haplotigs, and a high fragmented share at errors that break gene models. Tick
+      rows to pick assemblies.
+
+      Source: BUSCO user guide, https://busco.ezlab.org/busco_userguide.html
     layout: {x: 0, y: 0, w: 8, h: 6}

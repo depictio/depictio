@@ -151,6 +151,7 @@ main_dashboard:
       - ![](icon:mdi:shape-plus-outline) **Mode** {{n_create}} build new families, {{n_update}} extend existing ones
       - ![](icon:mdi:dna) **Sequences** {{n_seq}} before the length and duplicate filters
       - ![](icon:mdi:file-table-outline) **Samplesheet** [one row per sample](section:Sample sheet), its path in [the run parameters](params:input)
+      - ![](icon:mdi:palette-outline) **{GROUP_COL_DISPLAY}** {{legend:{GROUP_COL}}}
     tag: pf-ov-study
     index: ov-study
     layout: {x: 0, y: 1, w: 5, h: 3}
@@ -427,7 +428,16 @@ main_dashboard:
     tag: pf-sample-sheet
     index: sample-sheet
     title: Samplesheet
-    description: One row per sample, with its mode, input FASTA and the existing family archives an update extends.
+    description: >-
+      One row per sample of the run: its mode, the input FASTA and the existing family archives an update
+      extends. It is the table every sample filter starts from.
+
+      How to read: a sample whose mode is create builds families from its own sequences, and one whose
+      mode is update extends the families it names. Check here that each sample has the mode you intended
+      before reading the other tabs. A row picked here narrows the sample-level tiles to that sample.
+
+      Note: nf-core/proteinfamilies does not publish its samplesheet, so this table is read from the copy
+      given to the template and not from the run's outputs.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: proteinfamilies
@@ -439,7 +449,17 @@ main_dashboard:
     tag: pf-ref-families
     index: ref-families
     title: Protein families
-    description: Size, representative, seed and recruited members, HMM statistics and alignment summary, one row per family.
+    description: >-
+      One row per protein family of every sample: its size, representative, seed and recruited members,
+      HMM statistics and alignment summary. It is the reference table behind the family plots.
+
+      How to read: sort on the member count to find the large families, on mean conservation to find the
+      tight ones, and on mean identity or coverage to find families whose members are distant or
+      fragmentary. Members recruited are the members beyond the seed the HMM was built from. A family
+      picked here narrows the family-level tables and the alignment tiles to it.
+
+      Note: the alignment columns (identity, coverage, conservation) are blank for a family whose full
+      alignment was not published.
     layout: {x: 0, y: 0, w: 8, h: 6}
 tabs:
 # ============================================================================
@@ -601,7 +621,19 @@ tabs:
     tag: pf-inp-av-clusters
     index: inp-cluster-profile
     title: Initial cluster size distribution per sample
-    description: MMseqs2 clusters of the preprocessed sequences by size. Only clusters above the size threshold seed a family.
+    description: >-
+      How many MMseqs2 clusters of each size the preprocessed input sequences fell into. One curve per
+      sample, with the cluster size on the horizontal axis and the number of clusters of that size on the
+      vertical axis, both on log scales.
+
+      How to read: the tail of large clusters is what a run can turn into families, because only clusters
+      at or above the minimum cluster size (the run's cluster_size_threshold parameter, 25 by default)
+      seed a family. A curve with no tail, or one far below its neighbours, is a sample that will yield
+      few families. Open [Families](tab:Families) to see what was built.
+
+      Note: the minimum cluster size is a parameter of the run and is not marked on the plot.
+
+      Source: nf-core/proteinfamilies 2.5.0 parameters, https://nf-co.re/proteinfamilies/2.5.0/parameters
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: figure
     workflow_tag: proteinfamilies
@@ -618,7 +650,15 @@ tabs:
     tag: pf-inp-fig-sequences
     index: inp-fig-sequences
     title: Input sequences before and after preprocessing
-    description: A large drop points at a length range or duplicate content worth checking.
+    description: >-
+      How many sequences each sample has before and after preprocessing. Bars are grouped per sample, one
+      for each stage.
+
+      How to read: preprocessing removes gaps, validates sequences, filters by length and drops
+      duplicates. A large drop points at a length range that does not fit the data or at many duplicate
+      sequences, so check the length columns of the sequence statistics table below.
+
+      Source: nf-core/proteinfamilies 2.5.0 pipeline summary, https://nf-co.re/proteinfamilies/2.5.0
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: table
     workflow_tag: proteinfamilies
@@ -628,7 +668,15 @@ tabs:
     tag: pf-inp-table-sequences
     index: inp-table-sequences
     title: Input sequence statistics
-    description: Sequence count, total and mean length, N50 and extremes per sample, before and after preprocessing.
+    description: >-
+      SeqFu statistics of the input sequences, one row per sample and stage (before and after
+      preprocessing): count, total and mean length, N50, N75, N90, auN and the shortest and longest
+      sequence.
+
+      How to read: compare the two rows of a sample. After preprocessing the shortest and longest sequence
+      should sit inside the length range of the filter, and N50 (the length at which sequences of that
+      size or longer hold half of all residues) should stay close to its value before. A sample whose
+      count collapses has lost most of its input to the filters.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: proteinfamilies
@@ -638,7 +686,13 @@ tabs:
     tag: pf-inp-table-clusters
     index: inp-table-clusters
     title: Initial cluster sizes
-    description: Clusters of every size per sample, the sequences they hold and their share of the sample.
+    description: >-
+      The initial MMseqs2 clustering as a table: for every sample and cluster size, how many clusters have
+      that size, how many sequences they hold and their share of the sample.
+
+      How to read: the row for cluster size 1 holds the sequences that joined no cluster. A large share
+      there means little of the input can seed a family. Sort by cluster size to see how many sequences
+      sit in clusters large enough to seed one.
     layout: {x: 0, y: 6, w: 8, h: 6}
 # ============================================================================
 # Families
@@ -822,7 +876,20 @@ tabs:
     tag: pf-fam-av-landscape
     index: fam-landscape
     title: Family size against conservation
-    description: One point per family, sized by representative length. Click a family to open its record.
+    description: >-
+      One point per family: how many members it holds (horizontal, log scale) against the mean
+      conservation of its representative's residues (vertical). The point is sized by the representative's
+      length and coloured by origin, blue for a family the run built and amber for an existing family it
+      extended.
+
+      How to read: large families spread to the right, and a point low on the plot is a family whose
+      members agree on few residues, a candidate for a second look or a split. The names on the plot are
+      the families with the longest representatives, not the most conserved. Click a point to open its
+      record.
+
+      Note: conservation is the score described under the residue conservation tiles of the [Family
+      alignment](tab:Family alignment) tab, one minus the normalised entropy of each alignment column,
+      weighted by the share of members with a residue there. It is not a published index.
     layout: {x: 0, y: 0, w: 5, h: 7}
   - component_type: advanced_viz
     workflow_tag: proteinfamilies
@@ -843,7 +910,16 @@ tabs:
     tag: pf-fam-av-family-record
     index: fam-family-record
     title: Picked family
-    description: The family picked on the plot, with its seed, model and alignment statistics.
+    description: >-
+      The record of the family picked on the landscape: where it comes from, its model and its alignment
+      statistics, with the representative sequence at the end.
+
+      How to read: Family gives the origin and the size, Model gives the seed the HMM was built from, the
+      members recruited beyond it and the effective sequence number, and Alignment gives the identity,
+      coverage and conservation of the members to the representative. A seed much smaller than the family
+      means most members were recruited by the model and not clustered.
+
+      Note: nothing shows until a family is picked on the plot to its left.
     layout: {x: 5, y: 0, w: 3, h: 7}
   # The structure of the picked family as a floating 3D panel: lifted out of the
   # grid (no layout) into a card every tab shares, so the fold stays on screen
@@ -869,7 +945,26 @@ tabs:
     tag: pf-fam-av-structure-panel
     index: fam-structure-panel
     title: Predicted structure of the representative
-    description: Folded on demand from the picked family's representative and coloured by conservation class. Stays on screen across the tabs.
+    description: >-
+      The predicted fold of the picked family's representative, coloured by the conservation class of each
+      residue. It is a floating panel that stays on screen across the tabs and follows the family picked
+      on the landscape.
+
+      How to read: green patches are conserved residues, amber ones intermediate and grey ones variable.
+      Conserved residues that cluster on one surface often mark a functional site, and scattered ones
+      usually mean a conserved fold. Residue picks are shared with the sequence track and the alignment of
+      the tab on screen.
+
+      Lines and annotations: the colours are the three conservation classes the template assigns to the
+      score: conserved from 0.7 up (green), intermediate from 0.4 to 0.7 (amber) and variable below 0.4
+      (grey). No line is drawn at these values.
+
+      Note: the 0.7 and 0.4 class boundaries are a display aid of this template, not a published cut-off.
+      The fold is predicted from the representative's sequence alone (ESMFold through the structure
+      resolver, when the server enables it), not an experimental structure, and by default only sequences
+      up to 400 residues are folded.
+
+      Source: Lin et al. 2023, Science, https://doi.org/10.1126/science.ade2574
   - component_type: figure
     workflow_tag: proteinfamilies
     data_collection_tag: families
@@ -884,7 +979,18 @@ tabs:
     tag: pf-fam-fig-size
     index: fam-fig-size
     title: Family size per sample
-    description: Members per family, families the run built apart from existing families it extended.
+    description: >-
+      How many members each family has, per sample. One box per sample and origin, coloured blue for
+      families the run built and amber for existing families it extended.
+
+      How to read: a tall box means the sample's families differ a lot in size, and a median near the
+      bottom means most are small. Compare the two colours inside a sample to see whether extended
+      families are larger than new ones.
+
+      Lines and annotations: the box spans the quartiles with the median as the line inside it, and points
+      beyond the whiskers are drawn singly.
+
+      Source: Plotly box plots, https://plotly.com/python/box-plots/
     layout: {x: 0, y: 0, w: 8, h: 4}
 # ============================================================================
 # Members
@@ -1069,7 +1175,18 @@ tabs:
     tag: pf-mem-fig-identity
     index: mem-fig-identity
     title: Identity to the representative per family
-    description: A wide box is a family whose members range from near copies to distant homologues.
+    description: >-
+      How close the members of each family are to their family's representative. One box per family: the
+      distribution of the members' identity to the representative over the columns both share.
+
+      How to read: a box that sits high and narrow is a family of near copies, and a wide box is a family
+      whose members range from near copies to distant homologues. Open [Family alignment](tab:Family
+      alignment) to see where the members differ.
+
+      Lines and annotations: the box spans the quartiles with the median as the line inside it, and points
+      beyond the whiskers are drawn singly.
+
+      Source: Plotly box plots, https://plotly.com/python/box-plots/
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: advanced_viz
     workflow_tag: proteinfamilies
@@ -1085,7 +1202,16 @@ tabs:
     tag: pf-mem-av-scatter
     index: mem-scatter
     title: Member coverage against identity
-    description: One point per member, sized by length. Click a member to open its record.
+    description: >-
+      One point per member: how much of the representative it covers (horizontal) against its identity to
+      the representative (vertical). The point is sized by the member's length and coloured by origin.
+
+      How to read: members at the top right are complete and close to the representative. Fragments sit to
+      the left, with low coverage, and divergent members sit low, with low identity. Click a point to open
+      its record.
+
+      Note: identity is measured over the columns both sequences have a residue in, so a short fragment
+      can score high identity with low coverage.
     layout: {x: 0, y: 0, w: 5, h: 7}
   - component_type: advanced_viz
     workflow_tag: proteinfamilies
@@ -1104,7 +1230,14 @@ tabs:
     tag: pf-mem-av-member-record
     index: mem-member-record
     title: Picked member
-    description: The member picked on the plot, its family and how it aligns to the representative.
+    description: >-
+      The record of the member picked on the scatter: its family and sample, whether it is the
+      representative, and how it aligns to the representative.
+
+      How to read: Alignment gives its identity, coverage and length. A member that is not a row of the
+      family's full alignment (In alignment is false) has no identity or coverage.
+
+      Note: nothing shows until a member is picked on the plot to its left.
     layout: {x: 5, y: 0, w: 3, h: 7}
   - component_type: table
     workflow_tag: proteinfamilies
@@ -1116,7 +1249,13 @@ tabs:
     tag: pf-mem-table-members
     index: mem-table-members
     title: Family members
-    description: Every member of every family with its identity, coverage and length.
+    description: >-
+      Every member of every family, with its sample, the family origin, whether it is the representative
+      and, from the full alignment, its identity to the representative, its coverage and its length.
+
+      How to read: sort on identity or coverage to list the most distant members and the fragments of a
+      family. Blank identity and coverage mean the member is not a row of the family's full alignment. A
+      member picked here opens its record in the tile above.
     layout: {x: 0, y: 0, w: 8, h: 6}
 # ============================================================================
 # Alignment
@@ -1272,7 +1411,21 @@ tabs:
     tag: pf-aln-fig-conservation
     index: aln-fig-conservation
     title: Residues by conservation score
-    description: Representative residues in scope, coloured by class.
+    description: >-
+      How conserved the representative's residues are in the families in scope. Each bar counts residues
+      in one band of conservation score, from 0 (a column as diverse as random sequence) to 1 (an
+      invariant column present in every member), stacked by class. The score is one minus the Shannon
+      entropy of the column over the 20 amino acids, scaled by the share of members with a residue there.
+
+      How to read: a mass near 1 is a family of well conserved residues, and a mass near 0 a family with
+      little signal. Pick a family in the section below to see where its conserved residues lie.
+
+      Lines and annotations: the colours are the three conservation classes the template assigns to the
+      score: conserved from 0.7 up (green), intermediate from 0.4 to 0.7 (amber) and variable below 0.4
+      (grey). No line is drawn at these values.
+
+      Note: the 0.7 and 0.4 class boundaries are a display aid of this template, not a validated or
+      published cut-off. Read the score itself for anything that matters.
     layout: {x: 0, y: 0, w: 4, h: 4}
   - component_type: figure
     workflow_tag: proteinfamilies
@@ -1287,7 +1440,22 @@ tabs:
     tag: pf-aln-fig-occupancy
     index: aln-fig-occupancy
     title: Residues by column occupancy
-    description: Low occupancy marks columns most members gap.
+    description: >-
+      How many members have a residue in each alignment column of the representative, for the families in
+      scope. Each bar counts residues in one band of column occupancy, stacked by the conservation class
+      of the residue.
+
+      How to read: a mass at 1 is columns every member fills. Low occupancy marks columns that most
+      members gap, such as insertions in the representative or ends that fragments lack, and such residues
+      score low on conservation by construction.
+
+      Lines and annotations: the colours are the three conservation classes the template assigns to the
+      score: conserved from 0.7 up (green), intermediate from 0.4 to 0.7 (amber) and variable below 0.4
+      (grey). No line is drawn at these values.
+
+      Note: the class of a residue depends on its conservation score, which includes occupancy, so
+      low-occupancy columns fall in the variable class. The 0.7 and 0.4 class boundaries are a display aid
+      of this template, not a validated or published cut-off.
     layout: {x: 4, y: 0, w: 4, h: 4}
   # The linked view holds the plot, the 3D tile, the track and the alignment on one
   # screen: a click on a family narrows the residue and alignment tables to it
@@ -1308,7 +1476,16 @@ tabs:
     tag: pf-aln-av-families
     index: aln-families
     title: Families by size and conservation
-    description: One point per family. Click one to open its structure, sequence and alignment.
+    description: >-
+      One point per family, as on the landscape of the [Families](tab:Families) tab: the member count
+      (horizontal, log scale) against the mean conservation of the representative (vertical), sized by the
+      representative's length and coloured by origin.
+
+      How to read: use it as a picker. A click on a point loads that family's structure, sequence track
+      and alignment in the tiles beside it. The names on the plot are the families with the longest
+      representatives.
+
+      Note: conservation is the template's entropy-based score, not a published index.
     layout: {x: 3, y: 0, w: 5, h: 4}
   - component_type: advanced_viz
     workflow_tag: proteinfamilies
@@ -1327,7 +1504,22 @@ tabs:
     tag: pf-aln-av-structure
     index: aln-structure
     title: Predicted structure of the representative
-    description: Folded on demand from the picked family's representative and coloured by residue conservation.
+    description: >-
+      The predicted fold of the picked family's representative, coloured by the conservation score of each
+      residue, with the written sequence below it.
+
+      How to read: the legend gives a gradient from the lowest to the highest score in view, so a
+      conserved patch reads as one end of the scale and a variable loop as the other. Click residues in
+      the written sequence to select them; the track and the alignment follow.
+
+      Lines and annotations: the colours are a continuous gradient of the 0 to 1 conservation score, with
+      no class boundaries. A selected residue is highlighted on the fold.
+
+      Note: the fold is predicted from the representative's sequence alone, on demand (ESMFold through the
+      structure resolver, when the server enables it), not an experimental structure. By default only
+      sequences up to 400 residues are folded.
+
+      Source: Lin et al. 2023, Science, https://doi.org/10.1126/science.ade2574
     layout: {x: 0, y: 0, w: 3, h: 9}
   - component_type: advanced_viz
     workflow_tag: proteinfamilies
@@ -1341,7 +1533,20 @@ tabs:
     tag: pf-aln-av-track
     index: aln-track
     title: Representative sequence with conservation
-    description: The representative's residues, a conservation lane and its conserved, intermediate or variable class.
+    description: >-
+      The representative sequence of the picked family, with its residue letters, a conservation lane (a
+      bar per residue) and a class strip.
+
+      How to read: tall bars mark conserved residues and short ones variable stretches. Runs of green are
+      conserved regions and grey runs are tolerant loops or ends. Brush a range to select the same
+      residues on the structure and in the alignment.
+
+      Lines and annotations: the colours are the three conservation classes the template assigns to the
+      score: conserved from 0.7 up (green), intermediate from 0.4 to 0.7 (amber) and variable below 0.4
+      (grey). No line is drawn at these values.
+
+      Note: the 0.7 and 0.4 class boundaries are a display aid of this template, not a validated or
+      published cut-off. Read the score itself for anything that matters.
     layout: {x: 3, y: 4, w: 5, h: 2}
   - component_type: advanced_viz
     workflow_tag: proteinfamilies
@@ -1361,7 +1566,22 @@ tabs:
     tag: pf-aln-av-msa
     index: aln-msa
     title: Family alignment
-    description: Brushing columns selects the same residues on the track and the structure.
+    description: >-
+      The full alignment of the picked family: the representative on the first row and the members below
+      it, up to 200 rows, with a consensus row and a conservation bar per column above.
+
+      How to read: colours follow the Clustal X residue classes, so a column of one colour is a column of
+      similar residues, and uncoloured cells are residues whose class is not held by half of the column.
+      The consensus row shows the most frequent residue and fades where few members share it. Brush
+      columns to select the same residues on the track and the structure.
+
+      Lines and annotations: the colours are the Clustal X classes as used by Jalview, simplified here to
+      colour a residue only where its class holds at least half of the column; glycine and proline are
+      always coloured. The conservation bars are the template's entropy score, the same as the track.
+
+      Note: only the first 200 rows are drawn; the Members tab lists every member.
+
+      Source: Jalview colour schemes, https://www.jalview.org/help/html/colourSchemes/clustal.html
     layout: {x: 3, y: 6, w: 5, h: 3}
   - component_type: table
     workflow_tag: proteinfamilies
@@ -1372,7 +1592,20 @@ tabs:
     tag: pf-aln-table-residues
     index: aln-table-residues
     title: Residue conservation
-    description: Every residue of the picked family's representative with its score and class, the column consensus and occupancy.
+    description: >-
+      One row per residue of the picked family's representative: its number, the amino acid, the
+      conservation score and class, the consensus residue of the column and its share, the column
+      occupancy and the number of members.
+
+      How to read: sort on the score to list the most conserved residues. A residue whose consensus
+      differs from the residue itself sits in a column where the representative is the odd one out. Rows
+      follow the family picked on the plot above.
+
+      Lines and annotations: the class column uses the three bands of the template: conserved from 0.7 up,
+      intermediate from 0.4 to 0.7 and variable below 0.4.
+
+      Note: the 0.7 and 0.4 class boundaries are a display aid of this template, not a validated or
+      published cut-off. Read the score itself for anything that matters.
     layout: {x: 0, y: 0, w: 8, h: 6}
 - title: Profile HMM
   subtitle: What does a family's profile model look like?
@@ -1556,7 +1789,28 @@ tabs:
     tag: pf-hmm-av-logo
     index: hmm-logo
     title: Profile HMM logo
-    description: Letter heights are relative entropy above background; the lanes show insert behaviour, occupancy and the members that matched each state.
+    description: >-
+      The sequence logo of the picked family's profile HMM. Each stack is one match state of the model,
+      with a letter's height set by how much more the model expects that residue than the background does,
+      and lanes below it for the consensus, insert behaviour, occupancy and the members that matched each
+      state.
+
+      How to read: tall stacks are strongly constrained states and flat ones are tolerant. A state with a
+      high insert probability or low occupancy is where members often gain or lose residues, and members
+      that stop short in the hits lane are fragments. Brush states to select the matching residues on the
+      structure, track and alignment.
+
+      Lines and annotations: letter heights are the relative entropy above background, in bits, so only
+      letters more likely than background get a height. The hits lane draws every member the alignment
+      placed on the model, up to 200, with no E-value filter because an alignment carries no search
+      statistics. Letters are coloured with the Clustal X residue classes.
+
+      Note: families an update run extended have no hmmalign alignment, so their logo is drawn but a pick
+      on it selects no residue and the hits lane has nothing to draw.
+
+      Sources: Wheeler, Clements and Finn 2014, BMC Bioinformatics,
+      https://doi.org/10.1186/1471-2105-15-7; HMMER hmmlogo manual,
+      https://dyn.manpages.debian.org/trixie/hmmer/hmmlogo.1
     layout: {x: 3, y: 0, w: 5, h: 4}
   # No family landscape here: the picker holds one family, so it would draw one
   # point. The Families and Family alignment tabs keep it, as a picker.
@@ -1577,7 +1831,24 @@ tabs:
     tag: pf-hmm-av-structure
     index: hmm-structure
     title: Predicted structure of the representative
-    description: Folded on demand from the family's representative and coloured by conservation class.
+    description: >-
+      The predicted fold of the picked family's representative, coloured by the conservation class of each
+      residue.
+
+      How to read: green patches are conserved residues, amber ones intermediate and grey ones variable.
+      States brushed on the logo are highlighted on the fold, so you can see where the strongly
+      constrained states sit in 3D.
+
+      Lines and annotations: the colours are the three conservation classes the template assigns to the
+      score: conserved from 0.7 up (green), intermediate from 0.4 to 0.7 (amber) and variable below 0.4
+      (grey). No line is drawn at these values.
+
+      Note: the 0.7 and 0.4 class boundaries are a display aid of this template, not a published cut-off.
+      The fold is predicted from the representative's sequence alone (ESMFold through the structure
+      resolver, when the server enables it), not an experimental structure, and by default only sequences
+      up to 400 residues are folded.
+
+      Source: Lin et al. 2023, Science, https://doi.org/10.1126/science.ade2574
     layout: {x: 0, y: 0, w: 3, h: 9}
   - component_type: advanced_viz
     workflow_tag: proteinfamilies
@@ -1591,7 +1862,19 @@ tabs:
     tag: pf-hmm-av-track
     index: hmm-track
     title: Representative sequence with conservation
-    description: States brushed on the logo are drawn red on the sequence.
+    description: >-
+      The representative sequence of the picked family with a conservation lane and a class strip, to put
+      the logo's states in sequence order.
+
+      How to read: states brushed on the logo are drawn red on the sequence, so you can see which residues
+      they are. Tall bars are conserved residues and short ones variable stretches.
+
+      Lines and annotations: the colours are the three conservation classes the template assigns to the
+      score: conserved from 0.7 up (green), intermediate from 0.4 to 0.7 (amber) and variable below 0.4
+      (grey). No line is drawn at these values.
+
+      Note: the 0.7 and 0.4 class boundaries are a display aid of this template, not a validated or
+      published cut-off. Read the score itself for anything that matters.
     layout: {x: 3, y: 4, w: 5, h: 2}
   - component_type: advanced_viz
     workflow_tag: proteinfamilies
@@ -1611,7 +1894,21 @@ tabs:
     tag: pf-hmm-av-msa
     index: hmm-msa
     title: Family alignment
-    description: The representative on the first row, the members below it.
+    description: >-
+      The full alignment of the picked family: the representative on the first row, the members below it,
+      with a consensus row and a conservation bar per column.
+
+      How to read: a brush over columns selects the same residues on the track, the structure and the
+      logo's states. Columns of one colour are similar residues, and uncoloured cells are residues whose
+      class is not held by half of the column.
+
+      Lines and annotations: Clustal X colours as in Jalview, simplified to colour a residue only where
+      its class holds at least half of the column, and the template's entropy score as the conservation
+      bars.
+
+      Note: only the first 200 rows are drawn.
+
+      Source: Jalview colour schemes, https://www.jalview.org/help/html/colourSchemes/clustal.html
     layout: {x: 3, y: 6, w: 5, h: 3}
   - component_type: table
     workflow_tag: proteinfamilies
@@ -1621,5 +1918,15 @@ tabs:
     tag: pf-hmm-table-hits
     index: hmm-table-hits
     title: Members on the model
-    description: The HMM states each member covers, from the hmmalign alignment.
+    description: >-
+      Which stretch of the family HMM each member covers, taken from the hmmalign alignment: the first and
+      last match state, the share of the model between them, and the member's residues at those states and
+      its length.
+
+      How to read: a member covering most of the model is full length, and a short stretch marks a
+      fragment or a partial domain. Sort on the model coverage to list the fragments.
+
+      Note: the table has no search statistics (E-value and score are empty), because it comes from an
+      alignment and not a search. Deletions inside the covered stretch are not subtracted from the
+      coverage.
     layout: {x: 0, y: 0, w: 8, h: 6}

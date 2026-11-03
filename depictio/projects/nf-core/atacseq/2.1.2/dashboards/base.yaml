@@ -188,6 +188,7 @@ main_dashboard:
       - ![](icon:mdi:swap-horizontal) **Reads** {{reads}}
       - ![](icon:mdi:shield-check-outline) **Controls** {{controls}} samples serve as the input control of another
       - ![](icon:mdi:file-table-outline) **Samplesheet** [one row per sample](section:Sample sheet), its path in [the run parameters](params:input)
+      - ![](icon:mdi:palette-outline) **Group** {{legend:group}}
     tag: at-ov-study
     index: ov-study
     layout: {x: 0, y: 1, w: 5, h: 6}
@@ -431,6 +432,18 @@ main_dashboard:
       fig.update_xaxes(dtick=1)
       fig.update_layout(margin=dict(t=10))
     title: Replicate agreement
+    description: >-
+      Do the replicates of a group call the same regions? One bar per group and per replicate count: the
+      number of consensus intervals on which that many replicates of the group call a peak, in the
+      group's colour. Intervals a group does not call at all are left out.
+
+      How to read: a group whose bars sit mostly at its full replicate count has peaks its replicates
+      reproduce, and bars piled at 1 are peaks only one replicate calls. Compare groups on their
+      right-hand bars, since a group with more replicates reaches further along the axis. Open
+      [Consensus](tab:Consensus) to see which libraries agree on an interval.
+
+      Note: the group is the library name with its merge suffix and replicate number removed, and no
+      cut-off is applied, so a group of a single replicate can only show a bar at 1.
     link: tab:Consensus
     caption: Consensus intervals by how many replicates of each group call a peak on them; the right-hand bars of a group are the intervals all its replicates agree on.
     section: Findings
@@ -562,7 +575,13 @@ main_dashboard:
     tag: at-sample-sheet
     index: sample-sheet
     title: Sample sheet
-    description: One row per sample, with its group, replicate, read type, role, control and merged-library name.
+    description: >-
+      One row per sample of the design: its group, replicate, read type, role, control and the
+      merged-library name the other tabs use.
+
+      How to read: check here that each sample sits in the group you expect and that a control is assigned
+      wherever the design has one, before reading a chart. The sample filters of the left panel narrow
+      this table like the rest of the dashboard.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: atacseq
@@ -574,7 +593,17 @@ main_dashboard:
     tag: at-ref-table-summary
     index: ref-peak-summary
     title: Peak QC summary
-    description: Peak count, FRiP score and the width, enrichment and significance spreads per library.
+    description: >-
+      One row per library: the number of peaks MACS2 called, the FRiP score, the spread of peak width
+      (median, mean, widest) and of fold enrichment (median, mean), and the median -log10 p-value and
+      q-value of its calls.
+
+      How to read: sort by FRiP score to find libraries with a weak signal-to-noise, and by peak count to
+      find a library that calls far fewer or far more peaks than its replicates. No cut-off is applied
+      here, so read each library against the others of its group.
+
+      Source: FRiP, the fraction of all mapped reads that fall into the called peak regions, as the ENCODE
+      data standards define it, https://www.encodeproject.org/data-standards/terms/
     layout: {x: 0, y: 0, w: 8, h: 6}
 tabs:
 # ============================================================================
@@ -627,6 +656,14 @@ tabs:
     section: Run summary
     tag: at-mqc-general-stats
     title: General statistics
+    description: >-
+      MultiQC's general statistics table: one row per library and one column for each headline number a
+      module contributed to the report, such as read counts, the mapped share, duplication and the median
+      insert size.
+
+      How to read: scan a column for the library that departs from the others of its group, then open the
+      plot of the module that owns the column to see why. The columns depend on the modules the run
+      carried, so a missing column means that tool did not run.
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: multiqc
     workflow_tag: atacseq
@@ -637,6 +674,19 @@ tabs:
     section: Reads and alignment
     tag: at-mqc-fastqc-counts
     title: Sequence counts
+    description: >-
+      How many reads does each library hold? One stacked bar per library of FastQC's sequence count, split
+      into unique and duplicate reads when FastQC reports them.
+
+      How to read: libraries sequenced to a similar depth have bars of a similar length, and a much
+      shorter bar is a library with little to work with. A large duplicate share in the raw reads is a
+      first sign of low complexity, to compare with the duplication measured after alignment.
+
+      Note: the duplicate share is an estimate. FastQC follows only the sequences first seen in the first
+      100,000 of each file, and compares reads over 75 bp on their first 50 bp.
+
+      Source: FastQC help, Duplicate Sequences,
+      https://www.bioinformatics.babraham.ac.uk/projects/fastqc/Help/3%20Analysis%20Modules/8%20Duplicate%20Sequences.html
     layout: {x: 0, y: 0, w: 4, h: 4}
   # samtools reports the merged libraries before filtering (mLb.mkD) and after
   # it (mLb.clN) on a reprocessed report, so the gap between the two series is
@@ -651,6 +701,18 @@ tabs:
     section: Reads and alignment
     tag: at-mqc-samtools-mapped
     title: Reads mapped, before and after filtering
+    description: >-
+      How well did each library align? One stacked bar per library from samtools stats: reads mapped with a
+      mapping quality above 0, reads mapped with quality 0, and unmapped reads. On a report reprocessed
+      from an older run each merged library has two bars, before and after filtering, and the gap between
+      them is what filtering removed.
+
+      How to read: a bar made mostly of the first class is a library that aligned well. A large unmapped
+      share can point to contamination, adapter sequence or poor read quality, and a large quality-0 share
+      to reads that map to several places, such as repeats.
+
+      Source: MultiQC samtools stats help text,
+      https://github.com/MultiQC/MultiQC/blob/main/multiqc/modules/samtools/stats.py
     layout: {x: 4, y: 0, w: 4, h: 4}
   - component_type: multiqc
     workflow_tag: atacseq
@@ -661,6 +723,24 @@ tabs:
     section: Enrichment
     tag: at-mqc-fingerprint
     title: deepTools fingerprint
+    description: >-
+      Is the signal concentrated, as accessible chromatin should make it? One curve per library from
+      deepTools plotFingerprint: genome bins ranked by read count (x, 0 to 1) against the cumulative read
+      count as a fraction of the bin with the highest coverage (y).
+
+      How to read: a library with evenly spread reads, such as an input, follows the diagonal. A library
+      with its reads concentrated in few bins stays low and rises steeply at the far right, and the further
+      it bends from the diagonal the stronger the enrichment. Compare libraries of one group, and open
+      [Signal](tab:Signal) to rank them on the area under this curve.
+
+      Lines and annotations: no reference line is drawn. The diagonal of a perfectly even library runs from
+      the bottom left to the top right corner of the plot.
+
+      Note: deepTools gives no numeric cut-off for a good or a bad curve, and notes that the plot is less
+      clear the broader the enrichments are expected to be.
+
+      Source: deepTools plotFingerprint documentation,
+      https://deeptools.readthedocs.io/en/latest/content/tools/plotFingerprint.html
     layout: {x: 0, y: 0, w: 4, h: 4}
   # Same slot: the pipeline's own report names the module mlib_deeptools, a
   # reprocessed one deepTools. One run carries one of the two.
@@ -673,6 +753,24 @@ tabs:
     section: Enrichment
     tag: at-mqc-fingerprint-mlib
     title: deepTools fingerprint
+    description: >-
+      Is the signal concentrated, as accessible chromatin should make it? One curve per library from
+      deepTools plotFingerprint: genome bins ranked by read count (x, 0 to 1) against the cumulative read
+      count as a fraction of the bin with the highest coverage (y).
+
+      How to read: a library with evenly spread reads, such as an input, follows the diagonal. A library
+      with its reads concentrated in few bins stays low and rises steeply at the far right, and the further
+      it bends from the diagonal the stronger the enrichment. Compare libraries of one group, and open
+      [Signal](tab:Signal) to rank them on the area under this curve.
+
+      Lines and annotations: no reference line is drawn. The diagonal of a perfectly even library runs from
+      the bottom left to the top right corner of the plot.
+
+      Note: deepTools gives no numeric cut-off for a good or a bad curve, and notes that the plot is less
+      clear the broader the enrichments are expected to be.
+
+      Source: deepTools plotFingerprint documentation,
+      https://deeptools.readthedocs.io/en/latest/content/tools/plotFingerprint.html
     layout: {x: 0, y: 0, w: 4, h: 4}
   - component_type: multiqc
     workflow_tag: atacseq
@@ -682,6 +780,18 @@ tabs:
     section: Enrichment
     tag: at-mqc-frip
     title: FRiP score
+    description: >-
+      What share of each library's reads falls inside its called peaks? One bar per merged library: its
+      FRiP score from 0 to 1, the fraction of all mapped reads that fall into the MACS2 called peak
+      regions. A read counts when it overlaps a peak by at least 20%.
+
+      How to read: a higher bar is a library with more of its reads in accessible regions, a better
+      signal-to-noise. Compare a library with the others of its group, and open [ATAC quality](tab:ATAC quality)
+      when one sits far below its replicates.
+
+      Sources: nf-core/atacseq merged-library FRiP score header,
+      https://github.com/nf-core/atacseq/blob/2.1.2/assets/multiqc/merged_library_frip_score_header.txt;
+      ENCODE data standards terms, https://www.encodeproject.org/data-standards/terms/
     layout: {x: 4, y: 0, w: 4, h: 4}
   - component_type: multiqc
     workflow_tag: atacseq
@@ -691,6 +801,17 @@ tabs:
     section: Enrichment
     tag: at-mqc-peakcount
     title: Peaks per library
+    description: >-
+      How many peaks did MACS2 call in each library? One bar per merged library: the total number of peaks
+      called.
+
+      How to read: replicates of a group should call peak numbers of the same order. The count depends on
+      sequencing depth and on the caller's settings, so read a low count together with the FRiP score
+      before calling a library a failure. On a default run these are broad calls, regions rather than
+      summits.
+
+      Source: nf-core/atacseq merged-library peak count header,
+      https://github.com/nf-core/atacseq/blob/2.1.2/assets/multiqc/merged_library_peak_count_header.txt
     layout: {x: 0, y: 4, w: 4, h: 4}
   - component_type: multiqc
     workflow_tag: atacseq
@@ -701,6 +822,17 @@ tabs:
     section: Enrichment
     tag: at-mqc-featurecounts
     title: Reads assigned to consensus peaks
+    description: >-
+      How many reads fall in the consensus peaks? One stacked bar per library from featureCounts: the
+      reads assigned to a consensus interval and the unassigned reads, each reason for not being assigned
+      in its own colour.
+
+      How to read: a larger assigned share means more of the library's reads sit inside the merged peak
+      set. Compare a library with the others of its group, since one with a much smaller assigned share has
+      reads outside the regions its peers share.
+
+      Note: this counts reads against the merged intervals, so it is not the FRiP score, which uses the
+      library's own peaks.
     layout: {x: 4, y: 4, w: 4, h: 4}
   - component_type: multiqc
     workflow_tag: atacseq
@@ -711,6 +843,22 @@ tabs:
     section: QC details
     tag: at-mqc-fastqc-quality
     title: Per-base sequence quality
+    description: >-
+      How good is the base calling along the reads? One line per library: the mean Phred quality at each
+      position of the read, as FastQC reports it.
+
+      How to read: a line that stays in the green band is high quality, and a dip into the orange band
+      towards the end of a read is common on most platforms. A line in the red band marks poor calls. The
+      line's own colour is FastQC's verdict for the library: green pass, orange warn, red fail.
+
+      Lines and annotations: the background has three bands on the Phred scale, green from 28 up, orange
+      from 20 to 28 and red below 20, drawn by MultiQC behind the FastQC plot. FastQC itself warns when the
+      lower quartile of any base is below 10 or its median below 25, and fails below 5 and 20, which the
+      mean line alone does not show.
+
+      Sources: FastQC help, Per Base Sequence Quality,
+      https://www.bioinformatics.babraham.ac.uk/projects/fastqc/Help/3%20Analysis%20Modules/2%20Per%20Base%20Sequence%20Quality.html;
+      MultiQC FastQC module, https://github.com/MultiQC/MultiQC/blob/main/multiqc/modules/fastqc/fastqc.py
     layout: {x: 0, y: 0, w: 4, h: 4}
   - component_type: multiqc
     workflow_tag: atacseq
@@ -721,6 +869,14 @@ tabs:
     section: QC details
     tag: at-mqc-cutadapt
     title: Reads kept after trimming
+    description: >-
+      Did trimming keep the reads? One stacked bar per library from Cutadapt, run by Trim Galore: the reads
+      (or pairs) passing the filters, and those removed as too short, too long, with too many N or for an
+      unexplained reason.
+
+      How to read: nearly the whole bar should be the passing class. A large share removed as too short
+      means many reads were left shorter than the minimum length once the adapter was cut, so compare it
+      with the others of its group.
     layout: {x: 4, y: 0, w: 4, h: 4}
   # The Picard insert sizes are the nucleosome ladder; the ATAC quality tab
   # draws the same ladder from ataqv, with its windows marked. A reprocessed
@@ -735,6 +891,18 @@ tabs:
     section: QC details
     tag: at-mqc-picard-insert
     title: Insert size distribution
+    description: >-
+      What fragment sizes did each library capture? One line per library from Picard's insert size
+      metrics: the number of reads at each insert size in bp, with the reads of all orientations summed.
+
+      How to read: an ATAC library shows a sharp peak of short fragments from open chromatin, then smaller
+      bumps at one and two nucleosome lengths, the nucleosome ladder. A library without the short peak, or
+      whose curve decays smoothly, has lost that pattern. Open [ATAC quality](tab:ATAC quality) to read the same
+      ladder with its windows marked.
+
+      Source: MultiQC ataqv help, which lists the nucleosome-free peak near 50-100 bp, the mono-nucleosome
+      peak near 180-247 bp and the di-nucleosome peak near 350-430 bp,
+      https://github.com/MultiQC/MultiQC/blob/main/multiqc/modules/ataqv/ataqv.py
     layout: {x: 0, y: 4, w: 4, h: 4}
   - component_type: multiqc
     workflow_tag: atacseq
@@ -745,6 +913,18 @@ tabs:
     section: QC details
     tag: at-mqc-picard-insert-1
     title: Insert size distribution
+    description: >-
+      What fragment sizes did each library capture? One line per library from Picard's insert size
+      metrics: the number of reads at each insert size in bp, with the reads of all orientations summed.
+
+      How to read: an ATAC library shows a sharp peak of short fragments from open chromatin, then smaller
+      bumps at one and two nucleosome lengths, the nucleosome ladder. A library without the short peak, or
+      whose curve decays smoothly, has lost that pattern. Open [ATAC quality](tab:ATAC quality) to read the same
+      ladder with its windows marked.
+
+      Source: MultiQC ataqv help, which lists the nucleosome-free peak near 50-100 bp, the mono-nucleosome
+      peak near 180-247 bp and the di-nucleosome peak near 350-430 bp,
+      https://github.com/MultiQC/MultiQC/blob/main/multiqc/modules/ataqv/ataqv.py
     layout: {x: 0, y: 4, w: 4, h: 4}
   - component_type: multiqc
     workflow_tag: atacseq
@@ -755,6 +935,16 @@ tabs:
     section: QC details
     tag: at-mqc-picard-dups
     title: Duplicate reads
+    description: >-
+      How many reads are copies of another? One stacked bar per library from Picard MarkDuplicates: unique
+      pairs, unique unpaired reads, duplicate pairs split into optical and non-optical, duplicate unpaired
+      reads and unmapped reads. Pair counts are doubled so that the bars add up to reads.
+
+      How to read: a bar made mostly of unique reads is a library that holds many distinct fragments. A
+      large duplicate share means the same molecules were read again, so deeper sequencing adds little.
+
+      Source: Picard metric definitions, DuplicationMetrics,
+      https://broadinstitute.github.io/picard/picard-metric-definitions.html
     layout: {x: 4, y: 4, w: 4, h: 4}
   - component_type: multiqc
     workflow_tag: atacseq
@@ -765,6 +955,19 @@ tabs:
     section: QC details
     tag: at-mqc-samtools-contig
     title: Mapped reads per contig
+    description: >-
+      Where do the mapped reads land? One line per library across the contigs, as a share of the library's
+      mapped reads, from samtools idxstats in MultiQC's default view.
+
+      How to read: libraries of one group should follow the same profile, and a contig that holds a much
+      larger share in one library than in its peers stands out. The mitochondrial contig is the usual
+      case in ATAC, since reads there do not count towards the usable autosomal alignments ataqv scores.
+
+      Note: MultiQC leaves out contigs that hold less than 0.1% of the aligned reads, its default cutoff
+      unless the report changed it.
+
+      Source: MultiQC samtools idxstats module,
+      https://github.com/MultiQC/MultiQC/blob/main/multiqc/modules/samtools/idxstats.py
     layout: {x: 0, y: 8, w: 4, h: 4}
   - component_type: multiqc
     workflow_tag: atacseq
@@ -775,6 +978,16 @@ tabs:
     section: QC details
     tag: at-mqc-ataqv-mapq
     title: Mapping quality distribution
+    description: >-
+      How confident are the alignments? One line per library from ataqv: the number of reads at each
+      mapping quality (MAPQ) score, on a log count axis by default.
+
+      How to read: most reads should sit at high MAPQ scores, which mark unique, confident alignments. A
+      mass of reads at MAPQ 0 means reads that map equally well to several places. Compare libraries of one
+      group, which should show the same shape.
+
+      Source: MultiQC ataqv module help,
+      https://github.com/MultiQC/MultiQC/blob/main/multiqc/modules/ataqv/ataqv.py
     layout: {x: 4, y: 8, w: 4, h: 4}
 - title: ATAC quality
   subtitle: Did transposition work, library by library?
@@ -970,7 +1183,20 @@ tabs:
     tag: at-aq-tss-coverage
     index: aq-tss-coverage
     title: Coverage around start sites
-    description: One curve per library. A sharp central spike is a well transposed library; a flat line is not. The dotted vertical line at 0 marks the start site the profiles are centred on.
+    description: >-
+      Does transposition concentrate at gene starts? One curve per library: the aggregate read coverage in
+      a window around every transcription start site, with the start site at 0 on the x axis. Curves are
+      coloured per library, or per group when Analysis mode groups the samples.
+
+      How to read: a sharp central spike over low flanks is a well transposed library, and the TSS
+      enrichment score ataqv reports summarises that height over the flanking background. A flat line is a
+      library without enrichment at start sites. Replicates of a group should share the shape.
+
+      Lines and annotations: the dotted grey vertical line at 0 marks the start site the profiles are
+      centred on. No cut-off is drawn.
+
+      Source: ataqv, which scores TSS enrichment according to the ENCODE data standards,
+      https://github.com/ParkerLab/ataqv
     layout: {x: 0, y: 0, w: 4, h: 4}
   - component_type: figure
     workflow_tag: atacseq
@@ -992,7 +1218,20 @@ tabs:
     tag: at-aq-quality-scatter
     index: aq-quality-scatter
     title: Signal against specificity
-    description: Each library at its TSS enrichment and share of reads inside peaks; point size is the peak count. Lasso to select libraries.
+    description: >-
+      Which libraries combine signal and specificity? One point per library: its TSS enrichment on the x
+      axis, the share of usable reads that fall inside peaks on the y axis (usable reads are ataqv's
+      high-quality autosomal alignments), and the peak count as the point size. Points are coloured per
+      library, or per group when Analysis mode groups the samples.
+
+      How to read: up and to the right is better, a library with both enrichment at start sites and a
+      large share of its reads inside peaks. A library low on either axis against its group is the one to
+      open in the ATAC quality table. Lasso or click points to select libraries.
+
+      Note: no reference line or zone is drawn, so the plot ranks libraries against each other and does
+      not pass or fail them.
+
+      Source: ataqv, https://github.com/ParkerLab/ataqv
     layout: {x: 4, y: 0, w: 4, h: 4}
   - component_type: card
     workflow_tag: atacseq
@@ -1093,7 +1332,26 @@ tabs:
     tag: at-aq-ladder
     index: aq-ladder
     title: Fragment length distribution
-    description: Fraction of reads at each fragment length, per library, from 0 to 800 bp; shaded, the nucleosome-free (NFR, up to 100 bp) and mono-nucleosome (150 to 324 bp) windows, as ataqv defines them.
+    description: >-
+      Do the fragments show a nucleosome ladder? One curve per library: the fraction of all reads at each
+      fragment length, from 0 to 800 bp. Curves are coloured per library, or per group when Analysis mode
+      groups the samples.
+
+      How to read: a working library shows a high peak of short fragments, the nucleosome-free window,
+      then smaller bumps near one and two nucleosome lengths. A curve without the short peak or without
+      the bumps has lost the nucleosome pattern. Replicates of a group should overlay.
+
+      Lines and annotations: two grey bands are shaded and labelled, NFR for fragments up to 100 bp and
+      mono-nucleosome for 150 to 324 bp. They are fixed display windows of the catalog's ataqv module, not
+      read from the run.
+
+      Note: the windows are not ataqv's own counting windows, since ataqv counts fragments of 50 to 100 bp
+      and of 150 to 200 bp for its short to mononucleosomal ratio. They are display aids, not validated
+      cut-offs.
+
+      Sources: MultiQC ataqv help, nucleosome-free peak near 50-100 bp and mono-nucleosome peak near
+      180-247 bp, https://github.com/MultiQC/MultiQC/blob/main/multiqc/modules/ataqv/ataqv.py;
+      ataqv counting windows, https://github.com/ParkerLab/ataqv/blob/master/src/cpp/Metrics.cpp
     layout: {x: 0, y: 2, w: 5, h: 4}
   - component_type: figure
     workflow_tag: atacseq
@@ -1109,7 +1367,22 @@ tabs:
     tag: at-aq-class-bar
     index: aq-class-bar
     title: Reads per fragment class
-    description: How each library splits across the four nucleosome windows.
+    description: >-
+      How does each library split across the nucleosome windows? One stacked bar per library: its reads in
+      four fragment windows, sub-nucleosomal (up to 100 bp), transitional (101 to 149 bp), mononucleosomal
+      (150 to 324 bp) and multi-nucleosomal (over 324 bp), each in its own colour.
+
+      How to read: replicates of a group should split alike. A library with a much smaller sub-nucleosomal
+      share than its peers lacks the short fragments that open chromatin gives. Bars are in read counts,
+      so compare the colour shares and read the bar length as depth.
+
+      Note: the window edges (100, 150 and 324 bp) are fixed display windows of the catalog's ataqv
+      module, not read from the run and not validated cut-offs. ataqv's own counts use 50 to 100 bp for
+      short and 150 to 200 bp for mononucleosomal fragments.
+
+      Sources: ataqv counting windows,
+      https://github.com/ParkerLab/ataqv/blob/master/src/cpp/Metrics.cpp; MultiQC ataqv help,
+      https://github.com/MultiQC/MultiQC/blob/main/multiqc/modules/ataqv/ataqv.py
     layout: {x: 5, y: 2, w: 3, h: 4}
   - component_type: figure
     workflow_tag: atacseq
@@ -1140,7 +1413,23 @@ tabs:
     tag: at-aq-read-distribution
     index: aq-read-distribution
     title: Reads per reference sequence
-    description: Each library's share of reads on every sequence, against the median library in view; red is a sequence it over-reads, blue one it under-reads.
+    description: >-
+      Does any library over-read a reference sequence? One cell per library and reference sequence: the
+      share of the library's reads on that sequence, shown against the median share of the libraries in
+      view on a log2 scale. Sequences run in karyotype order: numbered chromosomes, then X, Y and the
+      mitochondrial contig, then the others.
+
+      How to read: a red cell is a sequence the library over-reads against its peers, a blue cell one it
+      under-reads, and a pale cell is as expected. A library with a red cell where its replicates are pale
+      has its reads concentrated on a sequence they are not. Hover a cell for the library's plain share of
+      reads on it.
+
+      Lines and annotations: the colour scale is centred on 0, the median library in view, and clipped at
+      plus or minus 1, which is 2 times more or fewer reads than the median; the colour bar ticks mark 1.4
+      and 2 times. It is a display aid to compare libraries, not a cut-off. With a single library in view
+      the scale becomes its plain share of reads, in percent.
+
+      Note: a sequence a library does not report is drawn as a neutral cell.
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: table
     workflow_tag: atacseq
@@ -1152,7 +1441,16 @@ tabs:
     tag: at-aq-table
     index: aq-table-metrics
     title: ATAC quality metrics
-    description: One row per library, with TSS enrichment, usable-read and duplicate fractions, mitochondrial share and peak statistics.
+    description: >-
+      One row per library with the ataqv numbers the dashboard reads: TSS enrichment, the share of usable
+      reads inside peaks, the duplicate and mitochondrial fractions, fragment-length and mapping
+      statistics, and the peak statistics.
+
+      How to read: sort a column to find the library that departs from its group, then match it with the
+      charts above. Usable reads are ataqv's high-quality autosomal alignments. No cut-off is applied to
+      the table.
+
+      Source: ataqv, https://github.com/ParkerLab/ataqv
     layout: {x: 0, y: 0, w: 8, h: 6}
 - title: Signal
   subtitle: How enriched and how complex is each library?
@@ -1359,7 +1657,27 @@ tabs:
     tag: at-sig-fingerprint
     index: sig-fingerprint
     title: Coverage concentration per library
-    description: One bar per library, the least concentrated on top. deepTools plotFingerprint ranks the genome's bins by read count and compares the cumulative share of reads with that of a library whose reads are spread evenly. Left, the area under the library's curve over that of the even one, 1 for an even spread and lower as the reads pile into few bins, as in a successful ATAC library; the amber band (0.85 to 0.95) is a weak concentration and the red band (from 0.95) is no better than an even library, a failed library. Both cut-offs are rules of thumb of the catalog's fingerprint module, not values deepTools publishes; right, the Jensen-Shannon distance to the even library, bars coloured by the same verdict. Click a bar to select the library.
+    description: >-
+      Which libraries concentrate their reads, as accessible chromatin should? One bar per library, the
+      least concentrated on top. Left, the area under the library's fingerprint curve over that of an ideal
+      input of the same depth; right, its Jensen-Shannon distance to that ideal input. Both come from
+      deepTools plotFingerprint.
+
+      How to read: a short bar on the left is a library whose reads pile into few genome bins, the
+      signature of enrichment, and a bar near 1 reads like an input with no enrichment. The right panel
+      points the same way, a longer bar being further from an even library. Click a bar to select the
+      library.
+
+      Lines and annotations: the left panel is shaded amber from 0.85 to 0.95 and red from 0.95 to 1, and
+      each bar takes the colour of its verdict on that left value: cyan Concentrated up to 0.85, amber
+      Borderline above 0.85 up to 0.95, red Flat above 0.95. The right panel uses the same bar colours and
+      has no band. The cut-offs are fixed in the tile, not read from the run.
+
+      Note: 0.85 and 0.95 are display aids with no published source, since deepTools gives no numeric
+      cut-off for these metrics, so read the verdict colours as a ranking and not as a pass or fail.
+
+      Source: deepTools plotFingerprint QC metrics,
+      https://deeptools.readthedocs.io/en/latest/content/feature/plotFingerprint_QC_metrics.html
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: advanced_viz
     workflow_tag: atacseq
@@ -1377,7 +1695,20 @@ tabs:
     tag: at-sig-dup-depth
     index: sig-dup-depth
     title: Duplication against depth
-    description: Each library at the reads it keeps and the share it lost to duplicates; high on this plane, depth bought with copies.
+    description: >-
+      Did deeper sequencing still add new fragments? One point per library: the reads left after Picard
+      removes duplicates (x) against its duplication rate (y), with the point size following the duplicate
+      reads and the colour the library.
+
+      How to read: a point high and far to the left is a library with many copies and few reads left,
+      where depth was bought with duplicates. A point low and far to the right holds many distinct reads.
+      Replicates of a group should sit close together; click a point to select the library.
+
+      Note: no reference line or zone is drawn, so the plot ranks libraries against each other and does
+      not pass or fail them.
+
+      Source: Picard DuplicationMetrics, where PERCENT_DUPLICATION is the fraction of mapped sequence
+      marked as duplicate, https://broadinstitute.github.io/picard/picard-metric-definitions.html
     layout: {x: 0, y: 0, w: 4, h: 6}
   - component_type: advanced_viz
     workflow_tag: atacseq
@@ -1398,7 +1729,22 @@ tabs:
     tag: at-sig-metagene
     index: sig-metagene
     title: Metagene signal profile
-    description: Mean accessibility of every library along a scaled gene with 3 kb flanks, the line at bin 300 is the transcription start site, where the 3 kb upstream flank ends, and the shaded bins 300 to 400 are the gene body, scaled to one length.
+    description: >-
+      Where along a gene is the signal? One curve per library: the mean signal in the bins of a scaled
+      gene, from a 3 kb flank upstream, across the gene body stretched to one length, to a 3 kb flank
+      downstream. It reads the table deepTools plotProfile writes for the run.
+
+      How to read: a library with real accessibility rises towards the start site, and replicates of a
+      group should overlay. A flat curve has no preference for gene starts, and a curve far above or below
+      its group points to a difference in depth or quality. Click a curve to select the library.
+
+      Lines and annotations: the vertical line at bin 300, labelled TSS, is the transcription start site,
+      where the upstream flank ends. The shaded bins 300 to 400, labelled Gene body, run from the start to
+      the end of the scaled gene, so bin 400 is the end site. The x axis counts bins along the scaled
+      window, not base pairs.
+
+      Source: nf-core/atacseq 2.1.2 module configuration, computeMatrix scale-regions with a 1000 bp region
+      body and 3000 bp before and after, https://github.com/nf-core/atacseq/blob/2.1.2/conf/modules.config
     layout: {x: 4, y: 0, w: 4, h: 6}
   - component_type: advanced_viz
     workflow_tag: atacseq
@@ -1417,7 +1763,24 @@ tabs:
     tag: at-sig-complexity
     index: sig-complexity
     title: Library complexity
-    description: One curve per library, extrapolated by preseq; the band is the 95% interval on that extrapolation.
+    description: >-
+      How many distinct fragments would deeper sequencing give? One curve per library from preseq: the
+      distinct fragments expected (y) at each sequencing depth (x, log scale), extrapolated beyond the
+      depth sequenced, with a band for the 95% interval of the extrapolation.
+
+      How to read: a curve still climbing at the depth already sequenced means more sequencing would give
+      new fragments, and a curve that has flattened means the library is exhausted. A band that fans out
+      wide means the extrapolation itself is uncertain. Compare libraries of one group at the same depth.
+
+      Lines and annotations: no reference line is drawn. The shaded band around each curve is the 95%
+      interval preseq puts on its extrapolation.
+
+      Note: preseq is off by default in nf-core/atacseq, so this tile exists only for a run that switched
+      it on.
+
+      Sources: Daley and Smith, Predicting the molecular complexity of sequencing libraries, Nature
+      Methods 2013, doi:10.1038/nmeth.2375; nf-core/atacseq 2.1.2 parameters (skip_preseq),
+      https://github.com/nf-core/atacseq/blob/2.1.2/nextflow.config
     layout: {x: 0, y: 0, w: 8, h: 6}
 # ============================================================================
 # Peak calls
@@ -1635,7 +1998,20 @@ tabs:
     tag: at-pk-density
     index: pk-density
     title: Peak calls along the genome
-    description: Calls per megabase, one row per library, chromosomes in karyotype order; a band shared by replicates is a region that binds reproducibly, and white vertical lines mark the chromosome boundaries.
+    description: >-
+      Where does each library call its peaks? One row per library and one column per 1 Mb window of the
+      genome, chromosomes in karyotype order: the number of broad peak calls whose midpoint falls in the
+      window, on a colour scale where brighter is more calls.
+
+      How to read: a vertical band shared by the replicates of a group is a region called reproducibly,
+      and a band in one group only is accessibility specific to that group. A row much sparser than its
+      replicates belongs to a library that calls fewer peaks.
+
+      Lines and annotations: white vertical lines mark the chromosome boundaries. The colour bar is a log
+      scale with ticks at 0, 1, 3, 10, 30, 100 and 300 calls per Mb, a display scale and not a cut-off.
+
+      Note: at most the 60 sequences with the longest span are drawn, and a window is always 1 Mb whatever
+      the genome size.
     layout: {x: 0, y: 0, w: 8, h: 5}
   # Log x: peak width is a long tail. On a linear axis the widest call sets the
   # range. One box per library from precomputed quartiles, so a run of 60k calls
@@ -1667,7 +2043,24 @@ tabs:
     tag: at-pk-width
     index: pk-width
     title: Peak width per library
-    description: The middle half of each library's calls, widest median on top, on a log axis, coloured by group. Broad calling gives wider regions than a narrow-peak run.
+    description: >-
+      How wide are the broad calls of each library? One box per library on a log axis, the widest median
+      on top, coloured by group. The box spans the middle half of the library's calls and the line inside
+      it is the median.
+
+      How to read: replicates of a group should show boxes of similar width and position. A box far wider
+      or narrower than its group points to a difference in depth or in calling. Broad calls report a
+      region rather than a summit, so these widths are not comparable with a narrow-peak run.
+
+      Lines and annotations: the whiskers reach 1.5 times the interquartile range beyond the box, or the
+      narrowest and widest call of the library when that is closer. Calls beyond the whiskers are not
+      drawn as points, and the axis ticks are fixed values chosen to fit the range.
+
+      Source: the 1.5 interquartile range whisker convention of Tukey box plots,
+      https://en.wikipedia.org/wiki/Box_plot
+
+      Note: a Tukey whisker ends at the furthest call inside the fence, whereas this tile ends it at the
+      fence itself.
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: table
     workflow_tag: atacseq
@@ -1679,7 +2072,13 @@ tabs:
     tag: at-pk-table
     index: pk-table-peaks
     title: MACS2 broad peaks
-    description: Coordinates, width, fold enrichment and significance of every call.
+    description: >-
+      One row per broad peak call: its library, coordinates and width, the fold enrichment over the local
+      background, the -log10 p-value and q-value, and MACS2's integer score.
+
+      How to read: sort by -log10 q or by fold enrichment for the strongest calls, and narrow by
+      chromosome or width in the left panel. Every call here already passed the caller's cut-off, so
+      significance ranks the calls and does not accept or reject them.
     layout: {x: 0, y: 0, w: 8, h: 6}
 - title: Annotation
   subtitle: Where do the peaks fall relative to genes?
@@ -1855,7 +2254,17 @@ tabs:
     tag: at-anno-classes
     index: anno-classes
     title: Feature classes per library
-    description: The share of each library's peaks in each HOMER feature class; switch to counts, sort the libraries or hide a class from the controls.
+    description: >-
+      Where do the peaks of each library fall relative to genes? One stacked bar per library: the share of
+      its peaks in each HOMER feature class, such as promoter-TSS, exon, intron and Intergenic, each class
+      in its own colour.
+
+      How to read: libraries of one group should split alike, and accessible chromatin usually puts a
+      large share of its peaks in the promoter-TSS class. A library whose split differs from its replicates
+      deserves a look at its QC tiles. Switch to counts, sort the libraries or hide a class from the
+      controls.
+
+      Note: no cut-off is applied, and the class colours are the same everywhere in the dashboard.
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: advanced_viz
     workflow_tag: atacseq
@@ -1873,7 +2282,18 @@ tabs:
     tag: at-anno-tss-distance
     index: anno-tss-distance
     title: Peaks around the nearest TSS
-    description: Peaks counted in 250 bp bins across a 20 kb window; the line at 0 is the transcription start site and the band is the promoter window, 1 kb either side of it.
+    description: >-
+      Do the peaks sit at promoters? One curve per library: the share of its peaks (y) at each signed
+      distance from the nearest transcription start site (x, in bp), counted in 250 bp bins across a 20 kb
+      window centred on the site. Peaks further out are counted in the outermost bins.
+
+      How to read: a sharp central spike means the peaks are promoter-bound, and a flat curve means they
+      are spread over gene bodies and intergenic space. Replicates of a group should overlay, so a curve
+      that differs from its group is a library worth checking.
+
+      Lines and annotations: the vertical line at 0 marks the transcription start site. The shaded band
+      from -1000 to +1000 bp, labelled Promoter window, is a display aid fixed in the tile: 1 kb either
+      side of the start site, not read from the run and not a validated cut-off.
     layout: {x: 0, y: 0, w: 8, h: 6}
   # Master and detail: a picked row is the selection the record card follows.
   - component_type: table
@@ -1886,7 +2306,15 @@ tabs:
     tag: at-anno-table
     index: anno-table
     title: HOMER peak annotation
-    description: Feature class, distance to the nearest start site and the gene of every call.
+    description: >-
+      One row per annotated peak and library: its coordinates and the score the caller gave it, the HOMER
+      feature class and full annotation, the signed distance to the nearest start site, the nearest
+      promoter, and the name and type of the gene.
+
+      How to read: narrow by feature class or distance to the start site in the left panel, and sort by
+      score for the strongest peaks. The gene is the nearest one, not a proven target of the peak.
+
+      Note: the gene type is empty when the run annotated against a plain GTF.
     layout: {x: 0, y: 0, w: 5, h: 6}
   - component_type: advanced_viz
     workflow_tag: atacseq
@@ -1908,7 +2336,16 @@ tabs:
     tag: at-anno-record
     index: anno-record
     title: Peak record
-    description: The call picked in the table beside it, with the feature and gene HOMER assigned to it.
+    description: >-
+      What is this one peak? The record of the call picked in the table beside it, in two groups: Call
+      (library, chromosome, start, end, strand and score) and Annotation (feature class, full annotation,
+      distance to the start site, nearest promoter, gene name and type).
+
+      How to read: read the feature class together with the distance to the start site, and take the gene
+      as the nearest one, not a proven target. Pick a row of the table to fill the card.
+
+      Note: the strand is + on every row when the peaks come from MACS2, which calls peaks without a
+      strand.
     layout: {x: 5, y: 0, w: 3, h: 5}
 # The locus section: the broad calls and the run's own files on one genomic
 # region. The navigator (a genome_view on macs2_broad_peaks) opens on the
@@ -2120,7 +2557,21 @@ tabs:
     tag: at-loc-navigator
     index: loc-navigator
     title: Broad calls per library
-    description: Each lane is a library and each bar a MACS2 broad call, spanning its start to its end and as high as its -log10(q). Look for regions called in every replicate of a group, and for regions called in one group only. It opens on the chromosome of the genome browser with the browser's window as a band; drag on the axis to pick a region, or type a locus.
+    description: >-
+      Where does each library call peaks along the genome? Each lane is a library and each bar a MACS2
+      broad call, spanning its start to its end and as high as its -log10 q-value, on one shared genome
+      axis.
+
+      How to read: look for regions called in every replicate of a group and for regions called in one
+      group only. Each lane has its own height scale, so compare bar heights within a lane and not between
+      lanes. Drag on the axis to pick a region, or type a locus in the header, and the cards and tables of
+      the tab follow it.
+
+      Lines and annotations: the dashed band marks the window the genome browser shows, and the axis opens
+      on the whole chromosome of that window. No cut-off or reference line is drawn.
+
+      Note: at most 8 libraries get a lane, the first in genome order, and the tile says how many it
+      dropped.
     layout: {x: 0, y: 0, w: 8, h: 7}
   # No fixed location: the browser opens on the most significant peak, and a
   # brush on the navigator moves it without filtering. No selection write-back
@@ -2167,7 +2618,17 @@ tabs:
     # costs height here, and the tile's menu brings it back.
     show_header: false
     title: Genome browser
-    description: The signal of every library in view on the region of the lanes above, replicate 1 of each group first.
+    description: >-
+      What does the run's own data show at one locus? A genome browser with, for each library in view, its
+      read signal (bigWig), its MACS2 peak calls (broadPeak, or narrowPeak on a narrow-peak run) and its
+      filtered alignments (BAM), each library in the colour of its group. It opens on the strongest call
+      with the first six tracks, the signal of replicate 1 of every group first.
+
+      How to read: a real peak shows a pile-up of signal under the call in every replicate of a group,
+      with the peak track agreeing. Add tracks from the track selector, which groups them as Signal, Peaks
+      (MACS2) and Alignments, up to 18 at once. Alignments are the heaviest files and the slowest to open.
+
+      Note: a library whose file the run did not publish has no track.
     layout: {x: 0, y: 7, w: 8, h: 10}
 # ============================================================================
 # Comparison
@@ -2364,7 +2825,18 @@ tabs:
     tag: at-cons-upset
     index: cons-upset
     title: Consensus peak overlap
-    description: Intersections of the libraries calling each consensus interval, largest first.
+    description: >-
+      Which libraries agree on the same consensus intervals? Each column is one combination of libraries:
+      the bar above it counts the consensus intervals called by exactly that combination, the dots below
+      show which libraries are in it, and the bars on the left give each library's number of intervals.
+      The biggest counts come first and the count is printed above each bar.
+
+      How to read: a tall bar for all libraries, or for all replicates of a group, is a reproducible set,
+      and many tall bars with a single dot are intervals only one library calls. Bars are coloured by
+      degree, the number of libraries in the combination.
+
+      Source: Lex et al., UpSet: Visualization of Intersecting Sets, IEEE Transactions on Visualization
+      and Computer Graphics 2014, doi:10.1109/TVCG.2014.2346248
     layout: {x: 0, y: 0, w: 8, h: 8}
   - component_type: advanced_viz
     workflow_tag: atacseq
@@ -2381,7 +2853,18 @@ tabs:
     tag: at-cons-heatmap
     index: cons-heatmap
     title: Consensus signal heatmap
-    description: Log-scaled fold enrichment per library at the strongest intervals; a zero cell is a library that called no peak there.
+    description: >-
+      Which intervals are strongest, and in which libraries? Each row is one of the strongest consensus
+      intervals, the 250 with the largest summed fold enrichment, and each column a library; the colour is
+      the MACS2 fold enrichment of that library on the interval, as log(1 + value), on the Viridis scale.
+
+      How to read: blocks of bright cells shared by the replicates of a group are regions specific to that
+      group, and a column that differs from its replicates is a library to check. A zero cell, in the
+      darkest colour, is a library that called no peak on the interval. Rows and columns are clustered, so
+      similar intervals and libraries sit next to each other.
+
+      Lines and annotations: the strip at the right gives the number of libraries that call each interval,
+      its support, and the dendrograms show the clustering, Ward linkage on Euclidean distance.
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: table
     workflow_tag: atacseq
@@ -2393,7 +2876,13 @@ tabs:
     tag: at-cons-table-boolean
     index: cons-table-boolean
     title: Consensus intervals
-    description: Coordinates, how many peaks merged into the interval and which libraries called it.
+    description: >-
+      One row per consensus interval: its coordinates, how many per-library peaks merged into it, how many
+      libraries call it, and a 0/1 column for each library.
+
+      How to read: a 1 in a library's column means that library called a peak on the interval. Narrow by
+      libraries per interval in the left panel to keep the intervals several libraries agree on, or sort by
+      peaks merged.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: atacseq
@@ -2405,7 +2894,13 @@ tabs:
     tag: at-cons-table-fc
     index: cons-table-fc
     title: Consensus fold enrichment
-    description: Per-library fold enrichment at the strongest intervals of the merged set.
+    description: >-
+      The fold enrichment of the strongest consensus intervals, one column per library, with the number of
+      libraries that call each interval. The intervals are the 250 with the largest summed fold
+      enrichment, and an interval a library did not call is 0.
+
+      How to read: sort a library's column for its strongest intervals and compare across columns. A
+      value of 0 is a library with no peak on the interval, not a measured absence of signal.
     layout: {x: 0, y: 6, w: 8, h: 6}
   # Sample space: the DESeq2 QC the pipeline still runs on the consensus
   # counts. The tags keep their 1.2.2 names (at-diff-*), from the tab they
@@ -2428,7 +2923,20 @@ tabs:
     tag: at-diff-pca
     index: diff-pca
     title: Consensus count PCA
-    description: The principal components the pipeline computed on the consensus counts, one point per sample, coloured by group.
+    description: >-
+      How do the libraries sit on their consensus counts? One point per sample at its first two principal
+      components, coloured by group, as the pipeline's DESeq2 QC step computed them on the transformed
+      counts of the consensus intervals (a variance stabilising transformation by default).
+
+      How to read: replicates of a group should sit together and groups apart along a component. A sample
+      far from its replicates is an outlier or a batch effect to check in the QC tabs. Click or lasso
+      points to select samples.
+
+      Note: the pipeline runs this QC only when the design has replicated groups.
+
+      Sources: nf-core/atacseq deseq2_qc.r, prcomp on the centred transformed counts,
+      https://github.com/nf-core/atacseq/blob/2.1.2/bin/deseq2_qc.r; Love et al., Genome Biology 2014,
+      doi:10.1186/s13059-014-0550-8
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: advanced_viz
     workflow_tag: atacseq
@@ -2444,7 +2952,20 @@ tabs:
     tag: at-diff-dists
     index: diff-dists
     title: Library distances
-    description: Euclidean distance between every pair of libraries on the consensus counts, Ward-clustered.
+    description: >-
+      How similar are the libraries to each other? A square heatmap with the same libraries on both axes:
+      the Euclidean distance between each pair on the transformed consensus counts, which the pipeline's
+      DESeq2 QC step computes, clustered here by Ward linkage so that similar libraries sit together.
+
+      How to read: replicates of a group should form a block of small distances, and the groups should
+      separate. A library that clusters away from its replicates is an outlier. The diagonal is 0, the
+      distance of a library to itself.
+
+      Note: the pipeline runs this QC only when the design has replicated groups.
+
+      Sources: nf-core/atacseq deseq2_qc.r, dist on the transformed counts,
+      https://github.com/nf-core/atacseq/blob/2.1.2/bin/deseq2_qc.r; Love et al., Genome Biology 2014,
+      doi:10.1186/s13059-014-0550-8
     layout: {x: 0, y: 6, w: 8, h: 5}
   - component_type: table
     workflow_tag: atacseq
@@ -2456,7 +2977,14 @@ tabs:
     tag: at-diff-table-pca
     index: diff-table-pca
     title: Principal components
-    description: The two principal components of every library and the variance each one explains.
+    description: >-
+      The first two principal components of every library, with the share of variance each explains and,
+      when the run made several matrices, the matrix they come from.
+
+      How to read: the percentages say how much of the spread a component carries, and a component with a
+      small share says little about the groups. Sort a component to find the libraries at its extremes.
+
+      Source: nf-core/atacseq deseq2_qc.r, https://github.com/nf-core/atacseq/blob/2.1.2/bin/deseq2_qc.r
     layout: {x: 0, y: 12, w: 8, h: 6}
   - component_type: table
     workflow_tag: atacseq
@@ -2468,5 +2996,12 @@ tabs:
     tag: at-diff-table-dists
     index: diff-table-dists
     title: Library distance matrix
-    description: The square distance table behind the heatmap, one column per library of the run.
+    description: >-
+      The square matrix of Euclidean distances between libraries on the transformed consensus counts, one
+      row and one column per library.
+
+      How to read: a small value is a pair of similar libraries, and the diagonal is 0. Sort a column to
+      find the libraries nearest to the one it names.
+
+      Source: nf-core/atacseq deseq2_qc.r, https://github.com/nf-core/atacseq/blob/2.1.2/bin/deseq2_qc.r
     layout: {x: 0, y: 18, w: 8, h: 6}

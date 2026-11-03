@@ -158,6 +158,7 @@ main_dashboard:
       - ![](icon:mdi:dna) **Reads** {{rtype}}
       - ![](icon:mdi:swap-horizontal) **Strandedness** {{strand}}
       - ![](icon:mdi:file-table-outline) **Samplesheet** [one row per sample](section:Sample sheet), its path in [the run parameters](params:input)
+      - ![](icon:mdi:palette-outline) **{GROUP_COL_DISPLAY}** {{legend:{GROUP_COL}}}
     tag: rs-ov-study
     index: ov-study
     layout: {x: 0, y: 1, w: 5, h: 3}
@@ -417,7 +418,25 @@ main_dashboard:
     index: ov-genome
     title: Splicing events along the genome
     link: tab:Splicing Events
-    description: Each dot is an rMATS event, its height the absolute PSI change between treatment and control and its colour whether inclusion rises, falls or is not called. Click a dot to open the gene in the genome browser.
+    description: >-
+      Where along the genome does splicing change? Each dot is an rMATS event placed at its start coordinate,
+      its height is the absolute PSI change between treatment and control, and its colour says whether
+      inclusion rises, falls or is not called.
+
+      How to read: a cluster of tall coloured dots on one chromosome points at a region worth a look, while
+      tall grey dots are large changes that did not pass the test. Click a dot to open its gene in the genome
+      browser, or open [Splicing Events](tab:Splicing Events) for the volcanoes, the junction reads and the
+      event table.
+
+      Lines and annotations: no reference line is drawn; the colour carries the call. An event is called when
+      its FDR is under SPLICING_FDR (default 0.05) and its absolute PSI change is at least MIN_DPSI (default
+      0.1), both template variables read by the rMATS recipe.
+
+      Source: rMATS counts an event as significant at FDR 0.05 or lower by default,
+      https://github.com/Xinglab/rmats-turbo
+
+      Note: rMATS and SUPPA2 publish no recommended minimum PSI change, so the MIN_DPSI default of 0.1 is the
+      template's own choice and not a validated cut-off.
     layout: {x: 0, y: 11, w: 8, h: 4}
   # Link-only tab tiles: each tile prints its tab's subtitle. A tab the run does
   # not have is left out, and a heading whose tabs are all missing is hidden.
@@ -509,7 +528,13 @@ main_dashboard:
     tag: rs-sheet-samples
     index: sheet-samples
     title: Samples
-    description: One row per sample, sequencing runs merged, with the design columns.
+    description: >-
+      The samples the run read: one row per sample, sequencing runs merged, with the design columns (condition
+      and any factor added by the design table).
+
+      How to read: check that every sample sits in the group you expect and that each group has replicates,
+      since every splicing tool compares groups of replicates. Pick a row to narrow the tiles that read
+      per-sample tables.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: rnasplice
@@ -520,7 +545,12 @@ main_dashboard:
     tag: rs-sheet-contrasts
     index: sheet-contrasts
     title: Contrasts
-    description: Each contrast sets a treatment against a control; every effect is treatment minus control.
+    description: >-
+      The comparisons the run made: one row per contrast, setting a treatment group against a control group.
+      Every effect on the other tabs is treatment minus control.
+
+      How to read: a positive PSI change or fold change means more inclusion or usage in the treatment, a
+      negative one means more in the control. Pick a row to restrict the splicing tabs to that contrast.
     layout: {x: 0, y: 6, w: 8, h: 6}
 tabs:
 - title: MultiQC
@@ -869,6 +899,22 @@ tabs:
     tag: rs-space-pca
     index: rs-space-pca
     title: Sample PCA on Salmon TPMs
+    description: >-
+      Do the samples separate by condition? Each point is a sample, placed by the first two principal
+      components of its gene expression, and coloured by its group.
+
+      How to read: replicates of one group landing together, and apart from the other group, is the picture
+      that makes a splicing comparison believable. A sample far from its own group, or a group that overlaps
+      the other, is a batch effect, a swap or a weak contrast to check in [MultiQC](tab:MultiQC) first. Click
+      a point to open its record.
+
+      Lines and annotations: each group has a centroid marker at the mean position of its samples, labelled
+      with the group name. The components come from log2(TPM + 1) of the 500 most variable genes of the merged
+      Salmon matrix, not scaled; the count of 500 is a fixed setting of the salmon sample_pca recipe, not a
+      published cut-off.
+
+      Note: expression is not splicing, so a sample can sit with its group here and still splice differently,
+      and the reverse.
     layout: {x: 0, y: 0, w: 5, h: 6}
   - component_type: advanced_viz
     workflow_tag: rnasplice
@@ -888,6 +934,13 @@ tabs:
     tag: rs-space-record
     index: rs-space-record
     title: Sample record
+    description: >-
+      The record of the sample picked on the PCA: its group, how many genes it detects and expresses, its
+      median TPM and its position on the first two components.
+
+      How to read: a library that expresses far fewer genes than the others of its group is the usual sign of
+      an under-sequenced or degraded sample. Genes expressed are those at 1 TPM or more, a fixed setting of
+      the recipe; no published floor is applied to it.
     layout: {x: 5, y: 0, w: 3, h: 6}
   - component_type: advanced_viz
     workflow_tag: rnasplice
@@ -902,6 +955,19 @@ tabs:
     tag: rs-space-heatmap
     index: rs-space-heatmap
     title: Most variable genes
+    description: >-
+      Which genes drive the differences between samples? Each row is one of the most variable genes, each
+      column a sample, and each cell the gene's expression in that sample on the log2(TPM + 1) scale, shown as
+      a z-score across the row.
+
+      How to read: columns that cluster together share an expression profile, and design factors are drawn as
+      coloured bars above the columns to compare the clusters with the groups. A block of rows that switches
+      between two groups is a gene program of the contrast; rows and columns are clustered, so neighbours are
+      similar.
+
+      Lines and annotations: the dendrograms show the clustering of rows and columns, and the colour bar gives
+      the z-score, a diverging scale around the row mean. The 500 genes are the highest variance on the
+      log2(TPM + 1) scale, a fixed setting of the recipe.
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: table
     workflow_tag: rnasplice
@@ -913,6 +979,13 @@ tabs:
     tag: rs-space-table
     index: space-table-libraries
     title: Sample PCA and expression summary
+    description: >-
+      The numbers behind the sample PCA and the expression cards: one row per sample with its group, its
+      coordinates on the first components, the genes it detects (TPM above 0), the genes it expresses (TPM of
+      1 or more) and the median TPM of the genes it detects.
+
+      How to read: sort by genes expressed to find the libraries that reach fewer genes than their peers. Pick
+      a row to open its record.
     layout: {x: 0, y: 0, w: 8, h: 6}
 - title: Tool Agreement
   subtitle: Which genes does each tool call, and where do the tools agree?
@@ -1075,7 +1148,23 @@ tabs:
     tag: rs-agree-per-tool
     index: rs-agree-per-tool
     title: Genes each tool calls, by agreement
-    description: A gene counts once per contrast; a tool the run skipped draws no bar.
+    description: >-
+      How many genes does each splicing tool call, and how many of those do other tools call too? One bar per
+      tool, its length the genes the tool calls (a gene counts once per contrast), split into segments by the
+      number of tools that call the same gene.
+
+      How to read: a bar that is mostly the lightest segment (this tool alone) holds calls no other tool
+      backs, while darker segments are genes found by several tools with different methods. The tools see
+      different things (exon bins, exons, transcripts, local events), so agreement is evidence, but low
+      overlap does not by itself mean a tool is wrong. Open [Tool Agreement](tab:Tool Agreement) records to
+      see each tool's evidence for a gene.
+
+      Lines and annotations: no reference line is drawn. Each tool's call applies SPLICING_FDR (default 0.05)
+      to its own gene-level adjusted p-value, and for rMATS and SUPPA2 a gene is called when one of its events
+      passes, including the MIN_DPSI floor.
+
+      Note: a tool the run skipped draws no bar. The 0.05 and the 0.1 are template defaults, not validated
+      cut-offs.
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: advanced_viz
     workflow_tag: rnasplice
@@ -1093,7 +1182,21 @@ tabs:
     tag: rs-agree-upset
     index: rs-agree-upset
     title: Genes called per combination of tools
-    description: A tool the run skipped shows an empty set.
+    description: >-
+      Which combinations of tools call the same genes? Each column is one combination of tools (dots joined by
+      a line in the matrix), its bar the number of genes called by exactly those tools and no others, and the
+      bars on the left give each tool's total.
+
+      How to read: tall bars of single tools mean most calls are specific to one method, while a tall bar over
+      several joined dots is a robust core. Bars are sorted by size, and the colour follows the number of
+      tools in the combination. Pick a gene of a combination in the table of [Tool Agreement](tab:Tool
+      Agreement) to compare the evidence.
+
+      Lines and annotations: the calls are the same as in the per-tool bars, each tool at SPLICING_FDR
+      (default 0.05) and, for rMATS and SUPPA2, MIN_DPSI (default 0.1).
+
+      Note: a tool the run skipped shows an empty set. The default cut-offs are template choices, not
+      validated ones.
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: table
     workflow_tag: rnasplice
@@ -1104,6 +1207,12 @@ tabs:
     tag: rs-agree-table
     index: agree-table-genes
     title: Cross-tool calls per gene
+    description: >-
+      One row per contrast and gene, with a flag for each tool that calls it, how many tools tested and called
+      it, and each tool's strongest evidence.
+
+      How to read: sort by the number of tools that call the gene to start from the best backed ones. Pick a
+      row to read every tool's evidence in the gene record next to it.
     layout: {x: 0, y: 0, w: 5, h: 6}
   - component_type: advanced_viz
     workflow_tag: rnasplice
@@ -1128,6 +1237,13 @@ tabs:
     tag: rs-agree-record
     index: rs-agree-record
     title: Gene record
+    description: >-
+      The gene picked in the table, with the evidence of each tool side by side: the DEXSeq exon and
+      transcript q-values, the edgeR FDR, the rMATS and SUPPA2 events passing the test and their largest PSI
+      change.
+
+      How to read: a gene with several tools significant and the same direction of change is the clearest
+      case; a single tool with weak support is a candidate to verify. The gene id links out to Ensembl.
     layout: {x: 5, y: 0, w: 3, h: 6}
 - title: Exon Usage
   subtitle: Which genes use their exons differently, per DEXSeq and edgeR?
@@ -1302,6 +1418,28 @@ tabs:
     tag: rs-exon-dexseq-volcano
     index: rs-exon-dexseq-volcano
     title: 'DEXSeq: q-value against bin fold change'
+    description: >-
+      Which genes use their exons differently according to DEXSeq? Each point is a gene in a contrast: the x
+      axis is the log2 fold change of its most significant exonic bin (treatment over control) and the y axis
+      is -log10 of its gene-level q-value.
+
+      How to read: hits sit in the upper corners, far from zero and high up, a bin used much more or much less
+      in the treatment. Switch to the QQ view to see whether the p-value distribution departs from chance at
+      all, and open the DEXSeq table below for the gene rows.
+
+      Lines and annotations: dotted lines mark the significance cut-off (horizontal, at a q-value of 0.05) and
+      the effect cut-off (vertical, at a log2 fold change of -1 and +1), set in the tile and not read from the
+      run. Hits, beyond all three lines, are larger outlined triangles pointing the way of the change and the
+      rest are small grey circles. In the QQ view the dashed diagonal is the expectation under no effect, the
+      grey band its 95% null envelope and the label lambda, the genomic inflation factor.
+
+      Source: DEXSeq, Anders et al., Genome Research 2012, doi 10.1101/gr.133744.111; genomic inflation
+      factor, Devlin and Roeder, Biometrics 1999, doi 10.1111/j.0006-341X.1999.00997.x
+
+      Warning: the 0.05 and the log2 fold change of 1 are display cut-offs with no published rule behind them
+      for DEXSeq. The cards and the tool-agreement tiles call a gene on the q-value under SPLICING_FDR alone,
+      so the hits drawn here can be fewer than the called genes. Gene ids are not labelled, as DEXSeq joins
+      overlapping genes it cannot separate.
     layout: {x: 0, y: 0, w: 4, h: 6}
   - component_type: advanced_viz
     workflow_tag: rnasplice
@@ -1319,6 +1457,26 @@ tabs:
     tag: rs-exon-edger-volcano
     index: rs-exon-edger-volcano
     title: 'edgeR: FDR against exon fold change'
+    description: >-
+      Which genes use their exons differently according to edgeR? Each point is a gene in a contrast: the x
+      axis is the relative log2 fold change of its most significant exon against its gene (treatment over
+      control) and the y axis is -log10 of the gene-level F-test FDR.
+
+      How to read: hits sit in the upper corners, high up and far from zero. A gene high up with a small fold
+      change has a modest exon shift that is consistently measured; compare it with the DEXSeq volcano beside
+      it, as a gene far out on both is a robust exon-level call.
+
+      Lines and annotations: dotted lines mark the significance cut-off (horizontal, at an FDR of 0.05) and
+      the effect cut-off (vertical, at a log2 fold change of -1 and +1), set in the tile and not read from the
+      run. Hits, beyond all three lines, are larger outlined triangles pointing the way of the change and the
+      rest are small grey circles.
+
+      Source: edgeR diffSpliceDGE tests each exon against the rest of its gene and offers gene-level tests,
+      https://rdrr.io/bioc/edgeR/man/diffSpliceDGE.html
+
+      Warning: the 0.05 and the log2 fold change of 1 are display cut-offs with no published rule behind them
+      for edgeR. The cards call a gene on the F-test FDR under SPLICING_FDR alone, so the hits drawn here can
+      be fewer than the called genes.
     layout: {x: 4, y: 0, w: 4, h: 6}
   - component_type: table
     workflow_tag: rnasplice
@@ -1330,6 +1488,13 @@ tabs:
     tag: rs-exon-table-dexseq
     index: exon-table-dexseq
     title: DEXSeq exon usage per gene
+    description: >-
+      The rows behind the DEXSeq volcano: one row per contrast and gene with the gene-level q-value, the
+      exonic bins tested and called, and the fold change of the most significant bin.
+
+      How to read: sort by q-value, then check the fold change and the number of bins called; a gene called on
+      one bin with a small change is a weaker case than several bins moving the same way. Pick a row to carry
+      the gene to the other tools.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: rnasplice
@@ -1341,6 +1506,12 @@ tabs:
     tag: rs-exon-table-edger
     index: exon-table-edger
     title: edgeR diffSpliceDGE per gene
+    description: >-
+      The rows behind the edgeR volcano: one row per contrast and gene with the gene-level F-test and Simes
+      FDRs, the exons tested and called, and the relative fold change of the most significant exon.
+
+      How to read: the Simes FDR is the more sensitive call when a single exon carries the change, the F-test
+      when several exons do. Pick a row to carry the gene to the other tools.
     layout: {x: 0, y: 6, w: 8, h: 6}
 - title: Transcript Usage
   subtitle: Which transcripts change their share of the gene, per DEXSeq DTU?
@@ -1510,6 +1681,27 @@ tabs:
     tag: rs-tx-volcano
     index: rs-tx-volcano
     title: Transcript adjusted p-value against usage fold change
+    description: >-
+      Which transcripts change their share of the gene's expression? Each point is a transcript in a contrast:
+      the x axis is its usage log2 fold change (treatment over control) and the y axis is -log10 of its DEXSeq
+      adjusted p-value.
+
+      How to read: hits in the upper corners are transcripts that gain or lose share of their gene, a switch
+      that total gene expression would hide. Use the QQ view to check whether the p-values depart from chance,
+      and open the table below for the gene and transcript rows.
+
+      Lines and annotations: dotted lines mark the significance cut-off (horizontal, at an adjusted p-value of
+      0.05) and the effect cut-off (vertical, at a usage log2 fold change of -1 and +1), set in the tile and
+      not read from the run. Hits, beyond all three lines, are larger outlined triangles and the rest are
+      small grey circles. In the QQ view the dashed diagonal is the expectation under no effect, the grey band
+      its 95% null envelope and the label lambda, the genomic inflation factor.
+
+      Source: DEXSeq, Anders et al., Genome Research 2012, doi 10.1101/gr.133744.111; genomic inflation
+      factor, Devlin and Roeder, Biometrics 1999, doi 10.1111/j.0006-341X.1999.00997.x
+
+      Warning: the 0.05 and the log2 fold change of 1 are display cut-offs with no published rule behind them
+      here. The cards call a transcript on the adjusted p-value under SPLICING_FDR alone, so the hits drawn
+      here can be fewer than the called transcripts.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: rnasplice
@@ -1521,6 +1713,12 @@ tabs:
     tag: rs-tx-table
     index: tx-table
     title: DEXSeq transcript usage
+    description: >-
+      The rows behind the transcript volcano: one row per contrast and transcript with its usage log2 fold
+      change, p-value, adjusted p-value and the gene-level q-value.
+
+      How to read: a transcript with a low adjusted p-value inside a gene with a low q-value is the clearest
+      transcript switch. Pick a row to carry the gene to the other tools.
     layout: {x: 0, y: 0, w: 8, h: 6}
 - title: Splicing Events
   subtitle: Which event types change, and by how much inclusion?
@@ -1723,6 +1921,21 @@ tabs:
     tag: rs-ev-rmats-types
     index: rs-ev-rmats-types
     title: Called rMATS events per type
+    description: >-
+      Which kinds of splicing event does rMATS call? One bar per event type, its height the number of called
+      events, stacked by whether inclusion goes up or down in the treatment.
+
+      How to read: a type that is rare or missing may only reflect how few events of that type were testable.
+      A bar split unevenly between up and down says splicing shifts one way in the treatment. Filter the type
+      or the direction in the left panel to narrow the volcano and table.
+
+      Lines and annotations: no reference line is drawn. An event is called when its FDR is under SPLICING_FDR
+      (default 0.05) and its absolute PSI change is at least MIN_DPSI (default 0.1); bars are sorted by total.
+
+      Source: rMATS counts an event as significant at FDR 0.05 or lower by default,
+      https://github.com/Xinglab/rmats-turbo
+
+      Note: the MIN_DPSI default of 0.1 is the template's own choice, not a validated cut-off.
     layout: {x: 0, y: 0, w: 4, h: 4}
   - component_type: figure
     workflow_tag: rnasplice
@@ -1738,6 +1951,22 @@ tabs:
     tag: rs-ev-suppa-types
     index: rs-ev-suppa-types
     title: Called SUPPA2 events per type
+    description: >-
+      Which kinds of local splicing event does SUPPA2 call? One bar per event type, its height the number of
+      called events, stacked by whether the PSI goes up or down in the treatment.
+
+      How to read: compare it with the rMATS bars beside it, as the two tools use different event definitions
+      and the same type does not always look alike. A bar split unevenly between up and down says splicing
+      shifts one way in the treatment.
+
+      Lines and annotations: no reference line is drawn. An event is called when its p-value is under
+      SPLICING_FDR (default 0.05) and its absolute delta PSI is at least MIN_DPSI (default 0.1); bars are
+      sorted by total.
+
+      Source: local event types as defined by SUPPA, https://github.com/comprna/SUPPA
+
+      Note: SUPPA2 gives a p-value, not an FDR, and publishes no recommended minimum delta PSI; the 0.05 and
+      the 0.1 are template defaults, not validated cut-offs.
     layout: {x: 4, y: 0, w: 4, h: 4}
   - component_type: advanced_viz
     workflow_tag: rnasplice
@@ -1759,6 +1988,26 @@ tabs:
     tag: rs-ev-rmats-volcano
     index: rs-ev-rmats-volcano
     title: 'rMATS: FDR against inclusion difference'
+    description: >-
+      Which splicing events does rMATS find different? Each point is an event in a contrast: the x axis is the
+      PSI change between treatment and control (treatment minus control) and the y axis is -log10 of its FDR.
+
+      How to read: hits in the upper corners are events whose inclusion rises or falls with confidence and
+      with a large change. A tall point near zero is a precise but small shift. Find a labelled event in the
+      table to read its record.
+
+      Lines and annotations: dotted lines mark the significance cut-off (horizontal, at an FDR of 0.05) and
+      the PSI cut-off (vertical, at -0.1 and +0.1), set in the tile and read from neither the run nor
+      SPLICING_FDR. Hits are larger outlined triangles, the rest small grey circles, and up to six of the
+      strongest hits carry their gene symbol. In the QQ view the dashed diagonal is the expectation under no
+      effect, the grey band its 95% null envelope and the label lambda, the genomic inflation factor.
+
+      Source: rMATS counts an event as significant at FDR 0.05 or lower by default,
+      https://github.com/Xinglab/rmats-turbo; genomic inflation factor, Devlin and Roeder, Biometrics 1999,
+      doi 10.1111/j.0006-341X.1999.00997.x
+
+      Note: rMATS publishes no recommended minimum PSI change, so the 0.1 lines are the template's own choice,
+      not a validated cut-off.
     layout: {x: 0, y: 0, w: 4, h: 6}
   - component_type: advanced_viz
     workflow_tag: rnasplice
@@ -1778,6 +2027,26 @@ tabs:
     tag: rs-ev-suppa-volcano
     index: rs-ev-suppa-volcano
     title: 'SUPPA2: p-value against delta PSI'
+    description: >-
+      Which local splicing events does SUPPA2 find different? Each point is an event in a contrast: the x axis
+      is the delta PSI (treatment minus control) and the y axis is -log10 of its p-value.
+
+      How to read: hits in the upper corners are events with a large change and a low p-value; compare them
+      with the rMATS volcano beside it, as an event far out on both is a robust call. Genes are not labelled
+      because SUPPA2 joins the ids of overlapping genes.
+
+      Lines and annotations: dotted lines mark the significance cut-off (horizontal, at a p-value of 0.05) and
+      the delta PSI cut-off (vertical, at -0.1 and +0.1), set in the tile and not read from the run. Hits are
+      larger outlined triangles and the rest small grey circles. In the QQ view the dashed diagonal is the
+      expectation under no effect, the grey band its 95% null envelope and the label lambda, the genomic
+      inflation factor.
+
+      Source: SUPPA2, Trincado et al., Genome Biology 2018, doi 10.1186/s13059-018-1417-1; genomic inflation
+      factor, Devlin and Roeder, Biometrics 1999, doi 10.1111/j.0006-341X.1999.00997.x
+
+      Warning: the axis is SUPPA2's p-value, not an FDR as on the other volcanoes. SUPPA2 documents no
+      recommended p-value or delta PSI cut-off, so the 0.05 and 0.1 lines are template defaults, not validated
+      cut-offs.
     layout: {x: 4, y: 0, w: 4, h: 6}
   # Sashimi of the called rMATS events: STAR's junction reads (SJ.out.tab),
   # averaged over the replicates of each condition, one lane per condition and
@@ -1806,7 +2075,22 @@ tabs:
     tag: rs-ev-sashimi
     index: rs-ev-sashimi
     title: Junction reads around the called rMATS events
-    description: Mean reads per replicate on each junction that touches or spans a called event's region, one lane per condition.
+    description: >-
+      What do the reads say around a called event? Each lane is one condition and each arc a splice junction,
+      labelled with the mean number of uniquely mapped reads per replicate that cross it, for junctions that
+      touch or span the region of a called rMATS event.
+
+      How to read: pick a gene in the left panel to draw one locus. A junction that is thick in one lane and
+      thin in the other is the read-level evidence of the inclusion change; arcs of similar weight in both
+      lanes mean the call rests on something other than that junction. Open the genome browser below for the
+      alignments.
+
+      Lines and annotations: arcs take the colour of their lane, and the read count is printed on each arc.
+      Junctions under 2 mean reads are hidden and at most 25 junctions are drawn, two display settings of the
+      tile with no published basis.
+
+      Note: STAR runs in two-pass mode here, so its annotated flag no longer separates known from novel
+      junctions and none is marked.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: rnasplice
@@ -1818,6 +2102,13 @@ tabs:
     tag: rs-ev-table-rmats
     index: ev-table-rmats
     title: rMATS events
+    description: >-
+      One row per rMATS event and contrast: the gene, event type, locus, the inclusion level (PSI) in each
+      condition, the treatment-minus-control change, the reads behind each condition, the p-value, the FDR and
+      the call.
+
+      How to read: sort by FDR or by the absolute PSI change, and check the reads, as a large change on few
+      reads is fragile. Pick a row to open its record and to frame the genome browser on the event.
     layout: {x: 0, y: 0, w: 5, h: 6}
   - component_type: advanced_viz
     workflow_tag: rnasplice
@@ -1840,6 +2131,12 @@ tabs:
     tag: rs-ev-record
     index: rs-ev-record
     title: Event record
+    description: >-
+      The event picked in the table: gene, event type, locus, PSI in each condition, the supporting reads and
+      the test result.
+
+      How to read: the locus links to the UCSC genome browser and the gene to Ensembl. A call with a low FDR
+      but few reads is worth confirming in the junction lanes or the genome browser.
     layout: {x: 5, y: 0, w: 3, h: 6}
   # The reads behind the event picked above: the row narrows rmats_events to
   # one event, whose region the view frames. Unpicked, it opens on the event
@@ -1868,7 +2165,15 @@ tabs:
     tag: rs-ev-browser
     index: rs-ev-browser
     title: Genome browser
-    description: The coverage and reads of the samples in view, on the event picked in the table.
+    description: >-
+      The reads behind an event: the coverage and alignments of the samples in view, with splice junctions, on
+      the locus of the event picked in the table.
+
+      How to read: tracks are coloured by condition, so a difference in coverage or in junction reads between
+      the two colours at the event is the raw evidence for the call. Pick a different event in the table, or
+      step through the largest ones, to move the view.
+
+      Note: the tracks load only when the run's bigWig or BAM files are available to the dashboard.
     layout: {x: 0, y: 6, w: 8, h: 8}
   - component_type: table
     workflow_tag: rnasplice
@@ -1880,4 +2185,10 @@ tabs:
     tag: rs-ev-table-suppa
     index: ev-table-suppa
     title: SUPPA2 local events
+    description: >-
+      One row per contrast and SUPPA2 local event: the parsed event id (gene, type, chromosome, span, strand),
+      the delta PSI oriented treatment minus control, its p-value and the call.
+
+      How to read: sort by p-value or by the absolute delta PSI; the call needs both to pass. Pick a row to
+      carry the gene to the other tabs.
     layout: {x: 0, y: 0, w: 8, h: 6}
