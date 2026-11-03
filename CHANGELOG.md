@@ -3,6 +3,34 @@
 ### Docker Images 🐳
 
 ```plaintext
+ghcr.io/depictio/depictio:1.20.3
+ghcr.io/depictio/depictio:latest
+ghcr.io/depictio/depictio:stable
+ghcr.io/depictio/depictio:edge
+```
+
+
+<details>
+<summary>Click to expand the changelog for 1.20.3</summary>
+
+### Changes 📜
+
+#### Other Changes 📝
+
+* Bump version: 1.20.2 → 1.20.3 [349e7e461]
+* feat(nf-core): genome browser on the latest atacseq, chipseq and cutandrun templates ([#1324](https://github.com/depictio/depictio/pull/1324)) [04d49cb6d]
+* Update CHANGELOG.md for v1.20.2 [6129e8c58]
+
+
+</details>
+
+### Documentation 📖
+
+For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
+
+### Docker Images 🐳
+
+```plaintext
 ghcr.io/depictio/depictio:1.20.2
 ghcr.io/depictio/depictio:latest
 ghcr.io/depictio/depictio:stable
