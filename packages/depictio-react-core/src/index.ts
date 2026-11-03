@@ -1064,6 +1064,9 @@ export type {
   DashboardPermissions,
   DashboardPermissionsUser,
   ProjectListEntry,
+  ProjectProvenance,
+  ImportHop,
+  PublishedLock,
   CreateDashboardInput,
   EditDashboardInput,
   ImportDashboardOptions,
@@ -1239,6 +1242,9 @@ export {
   shortenHome,
 } from './runFolderPaths';
 export type { FolderSource } from './runFolderPaths';
+export { provenanceBadge } from './provenance';
+export type { ProvenanceBadgeInfo, ProvenanceState } from './provenance';
+export { bareVersion } from './versions';
 export {
   compareVersions,
   defaultVersionFor,

@@ -101,6 +101,7 @@ import {
 } from '../dcMetatype';
 import { usePageTitle } from '../../branding';
 import { UnrecognisedFilesPanel } from './UnrecognisedFilesPanel';
+import { ProvenanceBadge } from './ProvenanceBadge';
 
 interface DataCollectionShape {
   _id?: string;
@@ -2253,6 +2254,7 @@ const ProjectHeader: React.FC<{
               Type
             </Text>
             <ProjectTypeTag projectType={projectType} size="md" />
+            <ProvenanceBadge provenance={project.provenance} />
             <Text size="sm" c="dimmed" visibleFrom="sm">
               {projectType === 'advanced'
                 ? 'CLI-driven, with workflows and pipelines'
@@ -2309,6 +2311,7 @@ const ProjectHeader: React.FC<{
             >
               {projectType === 'advanced' ? 'Advanced' : 'Basic'}
             </Badge>
+            <ProvenanceBadge provenance={project.provenance} />
           </Group>
           <Text size="sm" c="dimmed">
             {projectType === 'advanced'

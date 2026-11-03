@@ -37,13 +37,17 @@ from depictio.api.v1.db import (
     users_collection,
 )
 from depictio.api.v1.endpoints.backup_endpoints.routes import _convert_complex_objects_to_strings
+from depictio.api.v1.endpoints.projects_endpoints.provenance import instance_label
 from depictio.api.v1.endpoints.user_endpoints.routes import (
     get_user_or_anonymous,
 )
 from depictio.api.v1.permissions import build_access_query, get_user_group_ids
 from depictio.models.models.data_collections_types.genomic_tracks import genomic_tracks_s3_prefix
 from depictio.models.models.data_collections_types.phylogeny import phylogeny_s3_key
+from depictio.models.models.migration import BUNDLE_FORMAT_VERSION
 from depictio.models.models.users import User
+from depictio.models.timestamps import utc_now_str
+from depictio.version import get_version
 
 migrate_endpoint_router = APIRouter()
 
@@ -522,10 +526,15 @@ async def export_project(
     bundle: dict[str, Any] = {
         "migrate_metadata": {
             "timestamp": datetime.now().isoformat(),
+            "exported_at": utc_now_str(),
             "project_id": str(project_id),
             "project_name": project.get("name"),
             "mode": mode,
-            "depictio_version": settings.version if hasattr(settings, "version") else "unknown",
+            "depictio_version": get_version(),
+            "bundle_format_version": BUNDLE_FORMAT_VERSION,
+            "source_instance": instance_label(),
+            "s3_bucket": settings.s3.bucket,
+            "s3_endpoint": _normalize_endpoint(settings.s3.endpoint_url or ""),
             "document_counts": doc_counts,
             "dry_run": request.dry_run,
         },

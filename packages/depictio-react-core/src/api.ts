@@ -4675,7 +4675,41 @@ export interface ProjectListEntry {
   data_management_platform_project_url?: string | null;
   permissions?: DashboardPermissions;
   workflows?: WorkflowEntry[];
+  /** Which Depictio version produced the project, and where it was imported from. */
+  provenance?: ProjectProvenance | null;
+  /** Set while a migration/admin has frozen the published dashboards. */
+  published_lock?: PublishedLock | null;
+  pending_owner_email?: string | null;
   [key: string]: unknown;
+}
+
+/** One import of a project bundle into an instance. */
+export interface ImportHop {
+  source_instance: string;
+  source_depictio_version: string | null;
+  bundle_format_version: number | null;
+  exported_at: string | null;
+  imported_at: string;
+  target_depictio_version: string;
+  bundle_sha256: string | null;
+  migration_request_id: string | null;
+  via: 'push' | 'cli' | 'zip';
+}
+
+export interface ProjectProvenance {
+  /** Null/absent on projects created before version tracking. */
+  created_with_version: string | null;
+  imported_from: ImportHop[];
+}
+
+export interface PublishedLock {
+  locked_at: string;
+  locked_by_id: string | null;
+  locked_by_email: string | null;
+  reason: string | null;
+  source: 'migration' | 'admin';
+  migration_request_id: string | null;
+  dashboard_ids: string[];
 }
 
 export async function listProjects(): Promise<ProjectListEntry[]> {

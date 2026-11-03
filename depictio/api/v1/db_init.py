@@ -779,7 +779,9 @@ def _ensure_ampliseq_base_project(admin_user: UserBeanie) -> None:
         "project_type": "basic",
         "registration_time": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
     }
-    projects_collection.insert_one(doc)
+    from depictio.api.v1.endpoints.projects_endpoints.provenance import stamp_new_project
+
+    projects_collection.insert_one(stamp_new_project(doc))
     logger.info(f"Created ampliseq-base shell project with id {base_project_id}")
 
 

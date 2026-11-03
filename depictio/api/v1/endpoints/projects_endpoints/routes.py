@@ -72,6 +72,10 @@ from depictio.api.v1.endpoints.projects_endpoints.manifest_ingest import (
     _ingest_manifest_into_project,
     _refresh_manifest_in_project,
 )
+from depictio.api.v1.endpoints.projects_endpoints.provenance import (
+    stamp_new_project,
+    strip_server_owned_fields,
+)
 from depictio.api.v1.endpoints.projects_endpoints.run_file_preview import (
     RunFilePreview,
     RunFilePreviewRequest,
@@ -1276,7 +1280,7 @@ async def create_project(project: Project, current_user=Depends(get_user_or_anon
     except HTTPException as e:
         return {"success": False, "message": str(e.detail), "status_code": e.status_code}
 
-    create_payload = project.mongo()
+    create_payload = stamp_new_project(project.mongo())
     create_payload["registration_time"] = utc_now_str()
     create_payload["last_modified"] = create_payload["registration_time"]
     try:
@@ -1332,6 +1336,9 @@ async def update_project(project: Project, current_user=Depends(get_current_user
     # client round-trips the whole project, so honouring its `permissions` here
     # would let a plain update rewrite who owns the project.
     update_payload.pop("permissions", None)
+    # Provenance, the published lock and a parked owner are server-written: the
+    # `$set` below leaves the stored values in place once they are dropped here.
+    strip_server_owned_fields(update_payload)
     # The browser appends workflows straight onto the stored document while the
     # client round-trips the whole project through here, so a plain `$set` lets
     # whoever saves last delete the other surface's work. Same reasoning as the

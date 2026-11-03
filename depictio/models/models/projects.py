@@ -11,6 +11,7 @@ from depictio.models.models.base import MongoModel
 from depictio.models.models.data_collections import DataCollection, DataCollectionResponse
 from depictio.models.models.joins import JoinDefinition
 from depictio.models.models.links import DCLink
+from depictio.models.models.migration import ProjectProvenance, PublishedLock
 from depictio.models.models.realtime import RealtimeConfig
 from depictio.models.models.templates import TemplateOrigin
 from depictio.models.models.users import Permission
@@ -43,6 +44,15 @@ class Project(MongoModel):
     project_type: Literal["basic", "advanced"] = "basic"
     realtime: RealtimeConfig | None = None  # Optional real-time event configuration
     template_origin: TemplateOrigin | None = None  # Tracks if project was created from a template
+    # Server-written only (never taken from a create/update payload): which
+    # Depictio created the project and the instances it was imported through.
+    provenance: ProjectProvenance | None = None
+    # Set when the project is published read-only: every content- or
+    # data-mutating route answers 409 (see projects_endpoints/publish_lock.py).
+    published_lock: PublishedLock | None = None
+    # Imported for a requester with no account here yet: they become owner at
+    # their first SSO login with this email (projects_endpoints/pending_owner.py).
+    pending_owner_email: str | None = None
 
     # What INVOKED the most recent ingestion, which is a different question from
     # what produced the data: `WorkflowConfig.engine_name` already reads
