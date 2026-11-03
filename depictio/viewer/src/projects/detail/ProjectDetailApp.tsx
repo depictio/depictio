@@ -102,6 +102,8 @@ import {
 import { usePageTitle } from '../../branding';
 import { UnrecognisedFilesPanel } from './UnrecognisedFilesPanel';
 import { ProvenanceBadge } from './ProvenanceBadge';
+import { PublishedLockBadge } from './PublishedLockBadge';
+import { PublishedLockControl } from './PublishedLockControl';
 
 interface DataCollectionShape {
   _id?: string;
@@ -386,6 +388,8 @@ const ProjectDetailApp: React.FC = () => {
   // backend's owner gate on /storage.
   const { canMutate, isOwner } = useMemo(() => {
     if (!user || !project) return { canMutate: false, isOwner: false };
+    // Published read-only: nobody mutates until an admin unlocks.
+    if (project.published_lock) return { canMutate: false, isOwner: false };
     if (user.is_admin) return { canMutate: true, isOwner: true };
     const matchUser = (list?: Array<{ _id?: string; id?: string }>) =>
       !!list?.some((u) => (u._id ?? u.id) === user.id);
@@ -566,6 +570,13 @@ const ProjectDetailApp: React.FC = () => {
           return (
             <Stack gap="lg">
               <ProjectHeader project={project} projectType={projectType} />
+              {user?.is_admin && projectId && (
+                <PublishedLockControl
+                  projectId={projectId}
+                  locked={!!project.published_lock}
+                  onChanged={refresh}
+                />
+              )}
               {workflowsPanel}
               {projectId ? (
                 <Tabs
@@ -2255,6 +2266,7 @@ const ProjectHeader: React.FC<{
             </Text>
             <ProjectTypeTag projectType={projectType} size="md" />
             <ProvenanceBadge provenance={project.provenance} />
+            <PublishedLockBadge lock={project.published_lock} />
             <Text size="sm" c="dimmed" visibleFrom="sm">
               {projectType === 'advanced'
                 ? 'CLI-driven, with workflows and pipelines'
@@ -2312,6 +2324,7 @@ const ProjectHeader: React.FC<{
               {projectType === 'advanced' ? 'Advanced' : 'Basic'}
             </Badge>
             <ProvenanceBadge provenance={project.provenance} />
+            <PublishedLockBadge lock={project.published_lock} />
           </Group>
           <Text size="sm" c="dimmed">
             {projectType === 'advanced'

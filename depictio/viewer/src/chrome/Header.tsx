@@ -12,6 +12,7 @@ import { Icon } from '@iconify/react';
 import type { BrandTheme, DashboardData, DashboardSummary } from 'depictio-react-core';
 import { paletteVar } from 'depictio-react-core';
 import PoweredBy from './PoweredBy';
+import { PublishedLockBadge } from '../projects/detail/PublishedLockBadge';
 import { useFeedbackLink } from '../feedback';
 import { searchShortcutLabel } from '../spotlight/shortcut';
 
@@ -438,7 +439,12 @@ export function useHeaderModel({
     titleText,
     tabIcon,
     titleColor,
-    titleExtras: titleExtras ?? (cardsLoading ? <Loader size="xs" /> : null),
+    titleExtras: (
+      <>
+        {dashboard?.published_lock && <PublishedLockBadge lock={dashboard.published_lock} />}
+        {titleExtras ?? (cardsLoading ? <Loader size="xs" /> : null)}
+      </>
+    ),
     burgers: {
       mobile: (
         <ChromeButton

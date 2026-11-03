@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ActionIcon, Menu } from '@mantine/core';
+import { ActionIcon, Menu, Tooltip } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { Icon } from '@iconify/react';
 
@@ -26,6 +26,16 @@ const ProjectActionsMenu: React.FC<ProjectActionsMenuProps> = ({
 }) => {
   const projectId = (project._id ?? project.id) as string;
   const [exporting, setExporting] = useState(false);
+  const locked = !!project.published_lock;
+  const mutable = canMutate && !locked;
+  const lockTip = (node: React.ReactElement) =>
+    locked ? (
+      <Tooltip label="Published (read-only)" position="left" withinPortal>
+        <div>{node}</div>
+      </Tooltip>
+    ) : (
+      node
+    );
 
   const handleExport = async () => {
     setExporting(true);
@@ -62,13 +72,15 @@ const ProjectActionsMenu: React.FC<ProjectActionsMenuProps> = ({
         </ActionIcon>
       </Menu.Target>
       <Menu.Dropdown>
-        <Menu.Item
+        {lockTip(
+          <Menu.Item
           leftSection={<Icon icon="mdi:pencil" width={14} />}
-          disabled={!canMutate}
+          disabled={!mutable}
           onClick={() => onEdit(project)}
         >
           Edit
         </Menu.Item>
+        )}
         <Menu.Item
           leftSection={<Icon icon="mdi:export" width={14} />}
           disabled={exporting}
@@ -77,14 +89,16 @@ const ProjectActionsMenu: React.FC<ProjectActionsMenuProps> = ({
           {exporting ? 'Exporting…' : 'Export'}
         </Menu.Item>
         <Menu.Divider />
-        <Menu.Item
+        {lockTip(
+          <Menu.Item
           color="red"
           leftSection={<Icon icon="tabler:trash" width={14} />}
-          disabled={!canMutate}
+          disabled={!mutable}
           onClick={() => onDelete(project)}
         >
           Delete
         </Menu.Item>
+        )}
       </Menu.Dropdown>
     </Menu>
   );

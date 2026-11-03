@@ -736,6 +736,8 @@ export interface FilterSectionSpec {
 export type CategoryColors = Record<string, Record<string, string>>;
 
 export interface DashboardData {
+  /** Set while the owning project is published read-only (no edits allowed). */
+  published_lock?: { locked_at: string; reason: string | null; source: 'migration' | 'admin' } | null;
   _id?: string;
   dashboard_id?: string;
   title?: string;
@@ -5673,6 +5675,32 @@ export async function deleteProject(projectId: string): Promise<void> {
     method: 'DELETE',
   });
   if (!res.ok) await throwHttpError(res, 'Failed to delete project');
+}
+
+/** Admin-only: freeze a project's dashboards (published read-only). */
+export async function lockProject(
+  projectId: string,
+  reason?: string,
+): Promise<{ success: boolean; published_lock: PublishedLock | null }> {
+  const res = await authFetch(`${API_BASE}/projects/${encodeURIComponent(projectId)}/lock`, {
+    method: 'POST',
+    body: JSON.stringify(reason ? { reason } : {}),
+  });
+  if (!res.ok) await throwHttpError(res, 'Failed to lock project');
+  return res.json();
+}
+
+/** Admin-only: lift the published read-only lock. */
+export async function unlockProject(
+  projectId: string,
+  reason?: string,
+): Promise<{ success: boolean; published_lock: null }> {
+  const res = await authFetch(`${API_BASE}/projects/${encodeURIComponent(projectId)}/unlock`, {
+    method: 'POST',
+    body: JSON.stringify(reason ? { reason } : {}),
+  });
+  if (!res.ok) await throwHttpError(res, 'Failed to unlock project');
+  return res.json();
 }
 
 export async function toggleProjectVisibility(

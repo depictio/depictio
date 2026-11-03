@@ -607,6 +607,16 @@ const EditorApp: React.FC = () => {
     if (!dashboard || !dashboardId) return;
     if (!isOwner) {
       window.location.replace(`/dashboard/${dashboardId}`);
+      return;
+    }
+    // Published read-only (#1303): the editor is closed to everyone.
+    if (dashboard.published_lock) {
+      notifications.show({
+        color: 'orange',
+        title: 'Published (read-only)',
+        message: 'This dashboard is published read-only. An administrator must unlock it to edit.',
+      });
+      window.location.replace(`/dashboard/${dashboardId}`);
     }
   }, [userLoading, dashboard, dashboardId, isOwner]);
 

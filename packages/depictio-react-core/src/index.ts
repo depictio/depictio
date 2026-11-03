@@ -618,6 +618,8 @@ export {
   listProjectTemplates,
   updateProject,
   deleteProject,
+  lockProject,
+  unlockProject,
   toggleProjectVisibility,
   updateProjectPermissions,
   getProjectStorage,
