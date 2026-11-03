@@ -287,6 +287,9 @@ function RenderedSection({ index }: { index: string }) {
 
 const MetadataBody: React.FC<MetadataBodyProps> = ({ metadata }) => {
   const [rawOpen, setRawOpen] = React.useState(false);
+  // The raw JSON stays exactly what is stored, `code_content` included. The code
+  // also gets its own block below, with real line breaks, to read it.
+  const codeText = typeof metadata.code_content === 'string' ? metadata.code_content : '';
   const json = React.useMemo(() => JSON.stringify(metadata, null, 2), [metadata]);
   const rows = React.useMemo(() => summaryRows(metadata), [metadata]);
   const src = metadata.catalog_source;
@@ -356,6 +359,37 @@ const MetadataBody: React.FC<MetadataBodyProps> = ({ metadata }) => {
 
       {/* Catalog origin */}
       {src && <CatalogOrigin source={src} />}
+
+      {/* Figure code, as written: real lines, a copy button */}
+      {codeText && (
+        <Box>
+          <Group justify="space-between" wrap="nowrap" mb={6}>
+            <SectionTitle icon="mdi:code-braces">Code</SectionTitle>
+            <CopyButton value={codeText} timeout={1500}>
+              {({ copied, copy }) => (
+                <Tooltip label={copied ? 'Copied' : 'Copy the code'} withArrow>
+                  <ActionIcon
+                    size="sm"
+                    variant="subtle"
+                    color={copied ? 'teal' : 'gray'}
+                    onClick={copy}
+                    aria-label="Copy the code"
+                  >
+                    <Icon icon={copied ? 'mdi:check' : 'mdi:content-copy'} width={14} />
+                  </ActionIcon>
+                </Tooltip>
+              )}
+            </CopyButton>
+          </Group>
+          <Code
+            block
+            data-testid="metadata-code"
+            style={{ fontSize: 11, lineHeight: 1.45, whiteSpace: 'pre', overflowX: 'auto', maxHeight: 320 }}
+          >
+            {codeText}
+          </Code>
+        </Box>
+      )}
 
       <Divider my={2} />
 

@@ -963,13 +963,11 @@ const CardRenderer: React.FC<{
     return base;
   })();
 
-  // The hover on the title: what the figure is (the author's description) and
-  // how it was computed — the line under the value says it as "(Median)", and
-  // when a caption takes that line the hover is the only place it is said.
-  const description =
-    typeof metadata.description === 'string' && metadata.description.trim()
-      ? metadata.description.trim()
-      : '';
+  // The hover on the title: how the value was computed. The line under the
+  // value says it as "(Median)", and when a caption takes that line, or the
+  // header is one compact line, the hover is the only place it is said. The
+  // author's description is not repeated here: the toolbar's info icon opens it
+  // (see ComponentInfo), so a card has one place for it.
   const how = [
     describeAggregation(metadata.aggregation, metadata.column_name),
     // What the visible line adds after its " · ": a top-N share, a % of total.
@@ -979,13 +977,7 @@ const CardRenderer: React.FC<{
     .filter(Boolean)
     .join(' · ');
   const howHidden = compactHeader || Boolean(caption);
-  const headerTooltip =
-    description || (howHidden && how) ? (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        {description ? <span>{description}</span> : null}
-        {howHidden && how ? <span style={{ opacity: description ? 0.75 : 1 }}>{how}</span> : null}
-      </div>
-    ) : undefined;
+  const headerTooltip = howHidden && how ? how : undefined;
 
   // Cards size the grid to themselves, the way text tiles size it to their
   // prose. The height an author picked is a guess made against the content the

@@ -31,6 +31,8 @@ import {
   tableGridKey,
 } from './tableVersionFollow';
 import { LoadAllState } from './chrome/LoadAllButton';
+import { TileSubtitle, TileTitleRow } from './chrome/ComponentInfo';
+import { titleCarriesDescription } from './chrome/descriptionText';
 import { visibleTableColumns } from './tableColumns';
 import { extractRowSelection } from '../selection';
 import { useInView } from '../hooks/useInView';
@@ -1157,6 +1159,11 @@ const TableRenderer: React.FC<TableRendererProps> = ({
         : `${total.toLocaleString()} rows`}
     </Badge>
   ) : null;
+  // The description rides the title row (the chrome leaves its toolbar icon out
+  // then, see `titleCarriesDescription`).
+  const infoDescription = titleCarriesDescription('table', metadata)
+    ? String(metadata.description).trim()
+    : '';
 
   return (
     <Paper
@@ -1173,7 +1180,19 @@ const TableRenderer: React.FC<TableRendererProps> = ({
         flexDirection: 'column',
       }}
     >
-      {(metadata.title || rowBadge) && (
+      {infoDescription ? (
+        // The title row and a one-line subtitle; the full description is one
+        // click away on the info icon (see ComponentInfo).
+        <Stack gap={2} mb="xs" className="dc-tile-head">
+          <TileTitleRow
+            title={metadata.title as string}
+            description={infoDescription}
+            badges={rowBadge}
+          />
+          <TileSubtitle description={infoDescription} />
+        </Stack>
+      ) : (
+        (metadata.title || rowBadge) && (
         // `dc-tile-head`: the title leads the row (a chrome style reads the
         // class instead of looking into the row with `:has()`).
         <Group gap="xs" mb="xs" wrap="nowrap" className={metadata.title ? 'dc-tile-head' : undefined}>
@@ -1184,6 +1203,7 @@ const TableRenderer: React.FC<TableRendererProps> = ({
           )}
           {rowBadge}
         </Group>
+        )
       )}
       {showInitialLoader && <ComponentSkeleton variant="table" />}
       {error && !ready && (
