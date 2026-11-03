@@ -54,6 +54,10 @@ server = [
   "depictio[multiqc]",
   "bcrypt==5.0.0",
   "celery==5.6.3",
+  # Celery lets kombu float. 5.7.0 (2026-11-03) needs redis-py >= 6.4, which the
+  # redis==5.2.1 hold below rules out, so a resolve outside uv.lock (the wheel
+  # install of `depictio local up`) ends in VersionMismatch at worker start.
+  "kombu>=5.6.2,<5.7",
   "cloudpickle==3.1.2",
   "cryptography==50.0.0",
   "fastapi==0.141.1",
