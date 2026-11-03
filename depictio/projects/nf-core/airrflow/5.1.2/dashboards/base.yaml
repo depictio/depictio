@@ -144,6 +144,7 @@ main_dashboard:
       - ![](icon:mdi:gender-male-female) **Sex** most often {{sex}}
       - ![](icon:mdi:shape-outline) **{GROUP_COL_DISPLAY}** {{groups}} groups
       - ![](icon:mdi:file-table-outline) **Samplesheet** [one row per sample](section:Sample sheet), its path in [the run parameters](params:input)
+      - ![](icon:mdi:palette-outline) **{GROUP_COL_DISPLAY} colours** {{legend:{GROUP_COL}}}
     tag: airr-ov-study
     index: ov-study
     layout: {x: 0, y: 1, w: 5, h: 4}
@@ -564,6 +565,14 @@ main_dashboard:
     tag: airr-sample-sheet
     index: sample-sheet
     title: Sample sheet
+    description: >-
+      Which samples does the run hold, and what does the submitter say about each? One row per sample of
+      the validated samplesheet the pipeline wrote, with its subject and the other metadata columns the
+      submitter filled in.
+
+      How to read: check that the design columns you filter and colour by, such as subject and condition,
+      are filled as you expect, since every tab groups on them. Selecting a row feeds the Analysis panel
+      with that sample.
     layout: {x: 0, y: 0, w: 8, h: 6}
 tabs:
 - title: MultiQC
@@ -833,7 +842,22 @@ tabs:
     tag: airr-seq-sankey
     index: seq-sankey
     title: Read fates through the pipeline
-    description: Weighted by reads. The depth control adds the Change-O steps after annotation.
+    description: >-
+      Where do the reads of the cohort go through the pre-processing funnel? Each column is a processing
+      step, each ribbon is the reads that pass from one step to the next, and the Lost lane collects the
+      reads that stop at a step. Ribbon width is the number of reads, and a ribbon takes the colour of the
+      step it flows into.
+
+      How to read: a funnel that narrows gently at the quality and pairing steps is the healthy picture.
+      Big drops at consensus and representative are expected on UMI libraries, because those steps merge
+      many reads into one sequence instead of discarding them; a large loss at quality or pairing is the
+      one to check. The depth control adds the Change-O steps after annotation (productive, collapsed).
+
+      Note: a step the pipeline did not run is labelled Not run and the reads flow straight through it.
+      A read pair counts as the mate that survived least, and a step that reports more than the one before
+      it is clamped, so no loss reads negative.
+
+      Source: pRESTO manual, https://presto.readthedocs.io/en/stable/
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: figure
     workflow_tag: airrflow
@@ -860,7 +884,19 @@ tabs:
     tag: airr-seq-fig-stages
     index: seq-stage-lines
     title: Sequences left at each step
-    description: Log scale, so a constant fold loss reads as a straight segment.
+    description: >-
+      Which sample loses its sequences at an unusual step? One line per sample through the pRESTO and
+      Change-O steps, one dot per step, coloured by subject (or by the Analysis groups when it has some).
+      The axis is logarithmic, so a constant fold loss reads as a straight segment.
+
+      How to read: lines that run in parallel lose sequences alike, which is the healthy picture. A line
+      that drops away at one step is the sample to open in the table below. A steep fall at consensus,
+      unique or representative is a merge of reads onto UMI groups and not a failure.
+
+      Note: steps the run did not report are left out, and a read pair counts as the mate that survived
+      least.
+
+      Source: pRESTO manual, https://presto.readthedocs.io/en/stable/
     layout: {x: 0, y: 0, w: 4, h: 4}
   - component_type: figure
     workflow_tag: airrflow
@@ -882,7 +918,17 @@ tabs:
     tag: airr-seq-fig-retention
     index: seq-retention-bars
     title: Sequences kept per 1,000 reads
-    description: Sequences at the last step for every 1,000 input reads. Many reads merge into one sequence, so this sits far below the reads that pass.
+    description: >-
+      Which samples keep the most sequences per read? One bar per sample, highest first: the sequences
+      left at the last step for every 1,000 input reads, coloured by subject (or by the Analysis groups
+      when it has some). Many reads merge into one sequence, so this is a ratio and sits far below the
+      reads that pass.
+
+      How to read: compare samples prepared the same way; a bar far shorter than its neighbours lost more
+      at some step, which the lines on the left show. Bars of one subject are expected to be alike.
+
+      Note: no cut-off is drawn, since airrflow and pRESTO publish no minimum retention. Consensus and
+      collapsing merge reads, so a low value is not a failure by itself.
     layout: {x: 4, y: 0, w: 4, h: 4}
   - component_type: table
     workflow_tag: airrflow
@@ -894,6 +940,13 @@ tabs:
     tag: airr-seq-table-counts
     index: seq-table-counts
     title: Sequence processing counts
+    description: >-
+      How many sequences does each sample hold after every step? One row per sample with the count left
+      after each pRESTO and Change-O step and its retention, the fraction of raw reads still represented at
+      the last step the run produced.
+
+      How to read: sort a step column to find the sample that loses most there, then compare it with the
+      lines above. Selecting a row feeds the Analysis panel with that sample.
     layout: {x: 0, y: 0, w: 8, h: 6}
 - title: V Gene Usage
   subtitle: Which V families and genes build each repertoire?
@@ -1059,7 +1112,14 @@ tabs:
     tag: airr-vg-composition
     index: vgene-composition
     title: V gene composition
-    description: Share of each sample's sequences per V family, the eight largest named.
+    description: >-
+      Which V families build each repertoire? Each bar is one sample, split into the share of its
+      sequences that use each V family (or each V gene when the rank is switched), the eight largest named
+      and the rest lumped into Other. The strip under the bars gives the subject of each sample.
+
+      How to read: samples of one subject are expected to carry similar stacks. A family much larger in
+      one sample than in its subject mates is a lead to an expanded clone or a difference in library
+      preparation, not a verdict; open the clonal tabs to check.
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: advanced_viz
     workflow_tag: airrflow
@@ -1076,7 +1136,19 @@ tabs:
     tag: airr-vg-heatmap
     index: vgene-heatmap
     title: V gene usage heatmap
-    description: Sample by V gene shares, standardised per gene so rare genes stay visible.
+    description: >-
+      Which samples use the same V genes? Each row is one sample and each column one V gene; the colour is
+      the gene's share of the sample's sequences, standardised per gene (z-score across samples) so rare
+      genes stay visible.
+
+      How to read: samples that sit together on the dendrogram have a similar V repertoire, and samples of
+      one subject should cluster. A column that is dark in one row only is a gene that sample uses far more
+      than the others. Because each gene is rescaled on its own, colour compares samples for one gene and
+      does not compare genes with each other.
+
+      Lines and annotations: the dendrograms on the rows and columns come from Ward linkage on correlation
+      distance, and the strip beside the rows gives the subject of each sample. They are the clustering
+      settings of this tile, not a quality rule.
     layout: {x: 0, y: 0, w: 8, h: 5}
 - title: CDR3 & Pairing
   subtitle: How long are CDR3 loops, and which V and J genes pair?
@@ -1208,7 +1280,20 @@ tabs:
     tag: airr-cdr3-fig-lines
     index: cdr3-spectratype-lines
     title: CDR3 spectratype
-    description: One line per sample. A spike above the bell is an expanded clone.
+    description: >-
+      How long are the CDR3 loops, and is one length over-represented? One line per sample: the share of
+      its productive sequences at each CDR3 length in amino acids, coloured by subject (or by the Analysis
+      groups when it has some). A run with several loci draws one dash style per locus.
+
+      How to read: a diverse repertoire gives a smooth bell, and samples of one subject should overlay. One
+      length towering over its neighbours points to an expanded clone; open the clonal tabs to confirm.
+      Each sample is scaled to its own total, so lines compare shape and not sequencing depth.
+
+      Note: the CDR3 length here is the junction without its two conserved anchor codons; out-of-frame
+      and non-productive sequences are left out. No cut-off is drawn, since no published rule says what
+      width of bell is normal.
+
+      Source: AIRR Community rearrangement schema, https://docs.airr-community.org/en/stable/datarep/rearrangements.html
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: advanced_viz
     workflow_tag: airrflow
@@ -1227,7 +1312,21 @@ tabs:
     tag: airr-cdr3-vj-heatmap
     index: cdr3-vj-heatmap
     title: V by J pairing
-    description: Rows cluster by pairing profile; J genes keep their genomic order.
+    description: >-
+      Which V and J genes pair most often in each subject? Each row is one V gene of one subject, each
+      column a J gene in genomic order, and the colour is the share of that subject's sequences using the
+      pair.
+
+      How to read: a few bright cells over a pale background mean a handful of pairings dominate, which
+      can reflect an expanded clone. An even, pale grid is a more diverse repertoire.
+      Rows cluster by pairing profile, so V genes that pair with the same J genes sit together; compare
+      subjects with the strip beside the rows.
+
+      Lines and annotations: the dendrogram on the rows is Ward linkage on Euclidean distance, and the
+      columns are not clustered. They are the settings of this tile, not a quality rule.
+
+      Note: pairing is counted per subject and not per sample, because clones are defined per subject.
+      A call with several genes is reduced to the first one listed.
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: figure
     workflow_tag: airrflow
@@ -1246,7 +1345,19 @@ tabs:
     tag: airr-cdr3-fig-facets
     index: cdr3-spectratype-facets
     title: Spectratype per sample
-    description: Share of each sample's productive sequences at each CDR3 length, one panel per sample.
+    description: >-
+      What does the CDR3 length distribution of one sample look like on its own? One panel per sample,
+      each bar the share of that sample's productive sequences at a CDR3 length in amino acids, coloured
+      by subject (or by the Analysis groups when it has some).
+
+      How to read: a smooth bell is a diverse repertoire, and one bar towering over its neighbours points
+      to an expanded clone. Use it when the lines of the Spectratype section overlap too much to tell samples apart.
+      Each panel is scaled to its own sample, so panels compare shape and not depth.
+
+      Note: the CDR3 length is the junction without its two conserved anchor codons, and non-productive
+      sequences are left out. No cut-off is drawn, since no published rule says what bell is normal.
+
+      Source: AIRR Community rearrangement schema, https://docs.airr-community.org/en/stable/datarep/rearrangements.html
     layout: {x: 0, y: 0, w: 8, h: 6}
 - title: Clonal Diversity
   subtitle: How many clones does each repertoire hold, and how diverse is it?
@@ -1392,7 +1503,23 @@ tabs:
     tag: airr-div-profile
     index: div-profile
     title: Diversity profile
-    description: Two samples whose bands overlap at an order are not distinguishable at it.
+    description: >-
+      How many effective clones does each repertoire hold, and how much do the largest weigh? One curve per
+      sample: the Hill diversity (in clones) at each order q, with a shaded band for its confidence
+      interval. At q = 0 every clone counts once (richness), at q = 1 it is the exponential of the Shannon
+      entropy, and at q = 2 the inverse Simpson index.
+
+      How to read: a curve that stays high is a repertoire spread over many clones, and one that falls
+      steeply is carried by a few expanded clones. Two samples whose bands overlap at an order are not
+      distinguishable at it. The Samples compared section below ranks the samples at one order.
+
+      Lines and annotations: the curve is the diversity estimate and the band is its confidence interval,
+      which alakazam derives from the standard deviation of its resampling realizations and sets to 95%
+      by default. No threshold is drawn, since diversity has no pass level.
+
+      Source: alakazam alphaDiversity, https://alakazam.readthedocs.io/en/stable/topics/alphaDiversity/
+
+      Note: a sample with too few sequences gets no profile and is absent from the plot.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: advanced_viz
     workflow_tag: airrflow
@@ -1406,7 +1533,21 @@ tabs:
     tag: airr-div-cibars
     index: div-ci-bars
     title: Diversity at one order, ranked
-    description: One Hill number per sample with its bootstrap interval, Shannon by default.
+    description: >-
+      Which samples hold the most effective clones at one diversity order? Each row is one sample: a dot at
+      its Hill number for the chosen order (Shannon by default), a whisker for its confidence interval, the
+      value printed above the dot, and the samples ranked from the highest at the top. The dot colour
+      follows the value.
+
+      How to read: a dot far to the left holds fewer effective clones than the rest. Whiskers that overlap
+      mean the two samples are not distinguishable at this order. Switch the order to see how much the
+      largest clones weigh: q = 0 counts every clone once (richness), q = 1 is the exponential Shannon and
+      q = 2 the inverse Simpson index.
+
+      Lines and annotations: the whisker is the 95% confidence interval from alakazam (the hover label says
+      so). No threshold is drawn, since diversity has no pass level.
+
+      Source: alakazam alphaDiversity, https://alakazam.readthedocs.io/en/stable/topics/alphaDiversity/
     layout: {x: 0, y: 0, w: 4, h: 6}
   - component_type: advanced_viz
     workflow_tag: airrflow
@@ -1423,7 +1564,17 @@ tabs:
     tag: airr-div-richness-evenness
     index: div-richness-evenness
     title: Richness against evenness
-    description: One point per sample, sized by its sequences. Large but uneven sits low and right.
+    description: >-
+      Is a large repertoire also an even one? One point per sample: rarefied richness in clones on a
+      logarithmic x axis against evenness on y, sized by its sequences and coloured by subject. Clicking a
+      point selects the sample.
+
+      How to read: a point high and to the right is large and evenly spread over its clones. Large but
+      uneven sits low and right, a repertoire carried by a few big clones. A big dot has more sequences
+      behind it, so a difference in richness between two small dots is the weaker claim.
+
+      Note: no line or zone is drawn, since no published rule says what richness or evenness is good.
+      Samples are compared with each other only.
     layout: {x: 4, y: 0, w: 4, h: 6}
   - component_type: figure
     workflow_tag: airrflow
@@ -1444,7 +1595,18 @@ tabs:
     tag: airr-div-fig-depth
     index: div-depth-scatter
     title: Clones against depth
-    description: Select points to narrow the rest of this tab to those samples.
+    description: >-
+      How many clones does a sample hold for the sequences it put into clonal assignment? One point per
+      sample on logarithmic axes: sequences that entered clonal assignment against clones, sized by the
+      mean clone size and coloured by subject (or by the Analysis groups when it has some). Select points
+      to narrow the rest of this tab to those samples.
+
+      How to read: clone count rises with depth, so compare samples of similar depth. At equal depth, a
+      big dot with fewer clones is a repertoire with larger clones, a lead to expansion. Use the
+      diversity plots above for a depth-corrected comparison.
+
+      Note: no trend line or cut-off is drawn, since no published rule says how many clones a depth should
+      give.
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: card
     workflow_tag: airrflow
@@ -1498,6 +1660,19 @@ tabs:
     tag: airr-div-table-threshold
     index: div-table-threshold
     title: Clonal distance threshold
+    description: >-
+      What distance did SHazaM fit to call two sequences clonally related? One row per subject with the
+      nearest-neighbour distance model it fitted, the threshold it chose, the sensitivity and specificity
+      that threshold achieves, and the mean threshold applied across subjects.
+
+      How to read: the threshold is fitted to each dataset and is not a quality verdict. A low sensitivity
+      means the fitted threshold would split true relatives, so check the subject before trusting its
+      clones. Selecting a row focuses that subject in the Analysis panel.
+
+      Source: SHazaM findThreshold, https://shazam.readthedocs.io/en/stable/topics/findThreshold/
+
+      Note: the table exists only when the run fitted the threshold itself (auto); an explicit threshold
+      writes no report.
     layout: {x: 0, y: 2, w: 8, h: 6}
   - component_type: table
     workflow_tag: airrflow
@@ -1509,6 +1684,15 @@ tabs:
     tag: airr-div-table-summary
     index: div-table-summary
     title: Repertoire summary
+    description: >-
+      How big and how diverse is each repertoire? One row per sample with the sequences that entered
+      clonal assignment, its clones, the smallest, median and largest clone size, and the rarefied Hill
+      numbers (richness, Shannon, Simpson) with their bounds and the evenness.
+
+      How to read: sort by clones or by a Hill number to rank samples, and read it against the sequences
+      column, since deeper samples hold more clones. Selecting a row feeds the Analysis panel with that sample.
+
+      Note: samples with too few sequences keep their clone counts and have empty Hill numbers.
     layout: {x: 0, y: 0, w: 8, h: 6}
 - title: Clonal Expansion
   subtitle: How strongly do the largest clones dominate each repertoire?
@@ -1661,7 +1845,22 @@ tabs:
     tag: airr-exp-abundance
     index: exp-abundance-ribbon
     title: Rank abundance
-    description: Where two curves overlap inside their bands, the difference in expansion is not supported.
+    description: >-
+      How strongly do the largest clones dominate each repertoire? One curve per sample: the relative
+      abundance of each clone against its rank within the sample, both axes logarithmic, with a shaded
+      band for the confidence interval. Clicking a curve selects the sample.
+
+      How to read: a flat head is a polyclonal repertoire and a steep one is carried by a few clones. Where
+      two curves overlap inside their bands, the difference in expansion is not supported. Open the
+      clonal homeostasis sunburst below to see which size classes hold the sequences.
+
+      Lines and annotations: the band is the confidence interval alakazam estimates by bootstrapping the
+      sample, 95% by default. No threshold is drawn, since no published rule says how dominant a clone must
+      be to count as expanded.
+
+      Source: alakazam estimateAbundance, https://alakazam.readthedocs.io/en/stable/topics/estimateAbundance/
+
+      Note: alakazam leaves out samples below its minimum size, 30 sequences by default.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: advanced_viz
     workflow_tag: airrflow
@@ -1677,7 +1876,23 @@ tabs:
     tag: airr-exp-sunburst
     index: exp-homeostasis
     title: Clonal homeostasis
-    description: Sequences per subject, sample and clone size class, from rare to hyperexpanded.
+    description: >-
+      How much of each repertoire sits in small clones and how much in expanded ones? A sunburst in three
+      rings, subject then sample then clone size class, with the angle proportional to the sequences and
+      the colour following the size class. The counts are printed on the slices.
+
+      How to read: a sample whose outer ring is mostly rare and small classes is polyclonal. A large share in
+      the large or hyperexpanded classes is a repertoire carried by a few big clones. Compare samples of one
+      subject first.
+
+      Lines and annotations: a clone is classed by its frequency within its sample, as Rare up to 0.001%,
+      Small up to 0.01%, Medium up to 0.1%, Large up to 1% and Hyperexpanded above 1%. These are the default
+      bins of immunarch's clonal-homeostasis analysis, fixed in the recipe and not read from the run. Slices
+      under 0.5% of the total are hidden, a display setting and not a cut-off.
+
+      Source: immunarch repClonality (homeo method), https://rdrr.io/cran/immunarch/man/repClonality.html
+
+      Note: the bins are a convention for reading repertoires and not a validated clinical cut-off.
     layout: {x: 0, y: 0, w: 8, h: 6}
 - title: Clone Sharing
   subtitle: Which clones do the samples of one subject share?
@@ -1797,7 +2012,17 @@ tabs:
     tag: airr-share-fig-bars
     index: share-by-samples
     title: Clones by samples holding them
-    description: The first bar is the private clones; log scale.
+    description: >-
+      How many clones does one sample hold alone, and how many are shared? Each bar counts the clones seen
+      in that many samples, with the count printed above it, on a logarithmic axis. The first bar is the
+      private clones and every bar to its right the shared ones.
+
+      How to read: the private bar dwarfs the others in most repertoires, hence the log scale. Bars to the
+      right show that the same clone was found in several samples of one subject. No shared clones means
+      the samples of a subject hold distinct populations.
+
+      Note: clones are defined within one subject, so a clone cannot span samples of different subjects.
+      A clone spans samples, so the bars are not split by group.
     layout: {x: 0, y: 0, w: 8, h: 4, fit: auto}
   - component_type: advanced_viz
     workflow_tag: airrflow
@@ -1814,7 +2039,21 @@ tabs:
     tag: airr-share-overlap
     index: share-overlap
     title: Shared clones per sample pair
-    description: The diagonal is zeroed so the colour scale spans the real sharing.
+    description: >-
+      Which pairs of samples share clones? Each cell is a pair of samples and its colour is the number of
+      clones found in both, with the samples clustered on their sharing profile and the strip beside the
+      rows giving the subject.
+
+      How to read: a dark cell is a pair that shares many clones, and a block of dark cells is a group of
+      samples drawn from the same clonal population. Pale cells between different subjects are expected,
+      since they read zero by construction. Open the UpSet below to see which exact sets of samples share.
+
+      Lines and annotations: the diagonal is zeroed so the colour scale spans the real sharing, and the
+      dendrogram is average linkage on the rows and columns. They are the settings of this tile, not a
+      quality rule.
+
+      Note: the colour is a count and not a fraction, so a pair of deep samples can look darker than a pair
+      of shallow ones that share more of their repertoire.
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: advanced_viz
     workflow_tag: airrflow
@@ -1832,7 +2071,17 @@ tabs:
     tag: airr-share-upset
     index: share-upset
     title: Clone set intersections
-    description: Each bar is a set of samples and the clones seen in exactly those.
+    description: >-
+      Which exact sets of samples share clones? Each bar is one set of samples and counts the clones seen in
+      exactly those samples, with the dots below marking the members of the set and the bars on the left
+      giving each sample's total.
+
+      How to read: a tall bar over a single dot is the private clones of that sample, and a tall bar over
+      several dots is a clone population shared by exactly that group. Intersections are sorted from the
+      most clones down and coloured by how many samples they join.
+
+      Lines and annotations: only intersections of at least 5 clones are drawn, a display setting of this
+      tile and not a statistical cut-off.
     layout: {x: 0, y: 5, w: 8, h: 5}
   - component_type: table
     workflow_tag: airrflow
@@ -1844,4 +2093,11 @@ tabs:
     tag: airr-share-table-overlap
     index: share-table-overlap
     title: Clonal overlap matrix
+    description: >-
+      How many clones does each pair of samples share? One row per sample and one column per sample, each
+      cell the number of clones found in both, with the subject alongside.
+
+      How to read: read a row to see which samples share clones with it. Different subjects always read
+      zero, because clones are defined within a subject, and the diagonal is zeroed. Selecting a row feeds
+      the Analysis panel with that sample.
     layout: {x: 0, y: 0, w: 8, h: 6}

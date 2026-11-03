@@ -163,6 +163,7 @@ main_dashboard:
       - ![](icon:mdi:filter-variant) **Fractions** {{fractions}} per sample
       - ![](icon:mdi:dna) **Organism** {{organism}}
       - ![](icon:mdi:file-table-outline) **Samplesheet** [one row per run](section:Sample sheet), its path in [the run parameters](params:input)
+      - ![](icon:mdi:palette-outline) **{GROUP_COL_DISPLAY}** {{legend:{GROUP_COL}}}
     tag: qm-ov-study
     index: ov-study
     layout: {x: 0, y: 1, w: 5, h: 4}
@@ -429,7 +430,13 @@ main_dashboard:
     tag: qm-sample-sheet
     index: sample-sheet
     title: Design
-    description: 'One row per run, with its sample, condition, replicate and acquisition settings.'
+    description: >-
+      One row per run, with its sample, condition, replicate and acquisition settings, as the sample
+      sheet (SDRF) states them.
+
+      How to read: check first that the design is the one you meant, since every comparison on the
+      other tabs rests on the condition and replicate columns. A condition with a single run has no
+      replicate pair and no variation to measure. A picked row narrows the dashboard to that run.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: quantms
@@ -440,7 +447,14 @@ main_dashboard:
     tag: qm-ref-run-summary
     index: ref-run-summary
     title: Run summary
-    description: 'Identifications, yield, modified and missed-cleavage shares and retention-time agreement, one row per run.'
+    description: >-
+      One row per run: precursors, peptides and protein groups identified, identification yield per
+      thousand MS2 spectra, modified and missed-cleavage shares, and the median retention-time gap.
+
+      How to read: compare the rows of one experiment. A run whose yield, modified share or
+      missed-cleavage share departs from the others is the one to open in
+      [Identification](tab:Identification); a high retention-time gap points at a gradient that
+      drifted. No value is rated here.
     layout: {x: 0, y: 0, w: 8, h: 6}
 tabs:
 # ============================================================================
@@ -598,7 +612,16 @@ tabs:
     tag: qm-acq-av-ms2
     index: acq-ms2-profile
     title: MS2 spectra over the gradient
-    description: 'MS2 spectra per minute of retention time, one curve per run. Hover names the run.'
+    description: >-
+      Each curve is a run: the number of MS2 spectra acquired per minute of retention time. The
+      question is whether the runs were acquired alike along the gradient.
+
+      How to read: curves that overlay say the instrument sampled the gradient the same way in every
+      run. A curve that is shifted in time, or flat where the others rise, is a run with a different
+      gradient or a stalled acquisition; open the Spectra per run table for its totals. Hover names
+      the run.
+
+      Lines and annotations: no reference line is drawn; read each run against the others.
     layout: {x: 0, y: 0, w: 4, h: 5}
   - component_type: advanced_viz
     workflow_tag: quantms
@@ -618,7 +641,17 @@ tabs:
     tag: qm-acq-av-bpc
     index: acq-bpc-profile
     title: MS2 signal over the gradient
-    description: 'Median base-peak intensity of the MS2 spectra per minute: a base-peak trace of the run, one curve per run.'
+    description: >-
+      Each curve is a run: the median base-peak intensity of its MS2 spectra per minute of retention
+      time, a base-peak trace on a log axis. The question is whether the signal along the gradient
+      is alike in every run.
+
+      How to read: curves that overlay say the runs carried similar material through the same
+      gradient. A curve far below the others is a run with a weaker signal, and one shifted in time
+      is a gradient that drifted. Open [Identification](tab:Identification) to see whether the run
+      also identified fewer precursors.
+
+      Lines and annotations: no reference line is drawn; read each run against the others.
     layout: {x: 4, y: 0, w: 4, h: 5}
   - component_type: advanced_viz
     workflow_tag: quantms
@@ -638,7 +671,16 @@ tabs:
     tag: qm-acq-av-peaks
     index: acq-peaks-profile
     title: Peaks per MS2 spectrum
-    description: 'Share of a run''s MS2 spectra by the number of peaks they hold, bins of 100; the last bin is 1000 or more.'
+    description: >-
+      Each curve is a run: the share of its MS2 spectra holding a given number of peaks, in bins of
+      100 peaks, on a log axis. The last bin holds 1000 peaks or more.
+
+      How to read: runs of one experiment acquired alike show similar shapes. A run shifted to few
+      peaks holds sparser spectra than the others, and one shifted to the right holds richer
+      spectra.
+
+      Lines and annotations: no reference line is drawn, because no published cut-off applies to the
+      number of peaks per spectrum.
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: table
     workflow_tag: quantms
@@ -649,7 +691,12 @@ tabs:
     tag: qm-acq-table
     index: acq-table
     title: Spectra per run
-    description: 'MS1 and MS2 counts, peaks, base-peak intensity and gradient of every run.'
+    description: >-
+      MS1 and MS2 counts, peaks, base-peak intensity and gradient length of every run.
+
+      How to read: the gradient and the spectra counts should match across the runs of an
+      experiment. A run that departs from the others on any of them is the one to open in the charts
+      above. A picked row narrows the dashboard to that run.
     layout: {x: 0, y: 0, w: 8, h: 6}
 - title: Identification
   subtitle: How many precursors did each run identify, and how clean are they?
@@ -851,7 +898,22 @@ tabs:
     tag: qm-id-fig-runqc
     index: id-run-qc
     title: Run quality, weakest run first
-    description: 'The grey band in each panel is the range within 10% either side of the median of the runs in view; a bar that leaves it is a run to check. The 10% is a rule of thumb of this dashboard for runs of one experiment, not a published cut-off. Each bar is how far a run sits from that median, in percent, for precursors, yield per thousand MS2 spectra, modified share and missed-cleavage share; runs are sorted by yield, weakest on top, and coloured by condition.'
+    description: >-
+      Each bar is a run, in four panels: the precursors identified, the yield in precursors per
+      thousand MS2 spectra, the share of modified precursors and the share with a missed cleavage. A
+      bar is how far the run sits from the median of the runs in view, in percent. Runs are sorted
+      by yield, weakest on top, and coloured by condition.
+
+      How to read: a bar inside the grey band is within the spread of its experiment, and one that
+      leaves it is a run to check. A weak run with a low yield points at the sample or the
+      acquisition; a high missed-cleavage share can point at the digestion. Open
+      [Acquisition](tab:Acquisition) for the spectra behind a weak run.
+
+      Lines and annotations: the grey band in each panel spans 10 percent either side of the median
+      of the runs in view, and the line at 0 is the median itself. The 10 percent is a display aid
+      of this dashboard, not read from the run and not a published cut-off.
+
+      Note: the median is taken over the runs in view, so a filter on a few runs moves the band.
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: advanced_viz
     workflow_tag: quantms
@@ -875,7 +937,18 @@ tabs:
     tag: qm-id-av-rt
     index: id-rt-residual
     title: Retention-time gap along the gradient
-    description: 'One point per precursor, coloured by {GROUP_COL_DISPLAY}. A cloud flat on zero says the library predicts the run; a slope or a condition lifted off the others is a drift to check.'
+    description: >-
+      Each point is an identified precursor, placed by its library-predicted retention time, with
+      its height the observed minus the predicted retention time, coloured by {GROUP_COL_DISPLAY}.
+      The question is whether the library predicts the runs.
+
+      How to read: a cloud flat on zero says the library predicts the run. A slope, or a condition
+      lifted off the others, is a drift to check in the gradient or the column; open
+      [Acquisition](tab:Acquisition) to compare the runs.
+
+      Lines and annotations: the horizontal line at 0 is no gap between observed and predicted. No
+      tolerance band is drawn, because no published cut-off applies. A cloud of 30000 precursors or
+      more is drawn as a density.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: figure
     workflow_tag: quantms
@@ -890,7 +963,14 @@ tabs:
     tag: qm-id-fig-length
     index: id-length-histogram
     title: Peptide length
-    description: 'Share of the unmodified and of the modified precursors at each peptide length; each series sums to 100, so a shift between them is not hidden by their sizes.'
+    description: >-
+      Each series is the unmodified or the modified precursors, as a share of that series at each
+      peptide length. Each series sums to 100, so a shift between them is not hidden by their sizes.
+
+      How to read: the two series should have similar shapes. Use the Precursor filters to narrow by
+      charge or modification.
+
+      Lines and annotations: no reference is drawn.
     layout: {x: 0, y: 0, w: 4, h: 5}
   - component_type: figure
     workflow_tag: quantms
@@ -908,7 +988,17 @@ tabs:
     tag: qm-id-fig-score
     index: id-score-violin
     title: Identification confidence per run
-    description: 'DIA-NN evidence score of the precursors of each run, weakest median on top. A run shifted to lower scores was identified less confidently than the others.'
+    description: >-
+      Each violin is a run: the DIA-NN evidence score of its precursors, with a box inside it. Runs
+      are sorted by median score, weakest on top, and coloured by condition.
+
+      How to read: a run shifted to lower scores was identified less confidently than the others and
+      may deserve a closer look together with its yield in the run quality chart. The box marks the
+      middle half of the scores and the line inside it the median.
+
+      Lines and annotations: no cut-off is drawn. DIA-NN keeps a precursor at the q-value it was
+      told to keep, 1 percent by default, so every precursor here has passed that filter and the
+      score ranks confidence among them.
     layout: {x: 4, y: 0, w: 4, h: 5}
   - component_type: table
     workflow_tag: quantms
@@ -919,7 +1009,13 @@ tabs:
     tag: qm-id-table-precursors
     index: id-table-precursors
     title: Precursors
-    description: 'Every identified precursor with its protein group, scores, retention time and quantity.'
+    description: >-
+      Every identified precursor with its protein group, charge, scores, retention time and
+      quantity.
+
+      How to read: sort by a score to find the least confident identifications of a protein group of
+      interest, or filter by modification, charge or length with the panel. A picked row narrows the
+      dashboard to that peptidoform.
     layout: {x: 0, y: 0, w: 8, h: 6}
 # ============================================================================
 # Quantification
@@ -1115,7 +1211,18 @@ tabs:
     tag: qm-prot-fig-detection
     index: prot-detection
     title: Protein groups missed in some runs
-    description: 'Protein groups quantified in some runs but not all, by how many runs quantified them; the note counts the groups seen in every run.'
+    description: >-
+      Each bar is the number of protein groups that were quantified in some runs but not in all, by
+      how many runs quantified them, stacked by the number of peptides that back the group (1, 2 to
+      3, 4 or more). The number above a bar is its total.
+
+      How to read: groups seen in every run are the bulk of a good experiment, so they are left out
+      and counted in the note at the top. A tall bar at few runs is a set of groups that are
+      patchily quantified, and a stack made of one-peptide groups is the weakest in support. Open
+      the next chart to see whether they are the faint ones.
+
+      Lines and annotations: the note counts the groups quantified in all runs and their share. No
+      cut-off is drawn.
     layout: {x: 0, y: 0, w: 4, h: 5}
   - component_type: figure
     workflow_tag: quantms
@@ -1131,7 +1238,16 @@ tabs:
     tag: qm-prot-fig-detect-abundance
     index: prot-detection-abundance
     title: Abundance of incomplete protein groups
-    description: 'Mean log2 quantity by the number of runs that quantified the group; groups missed in some runs usually sit at the low end of the range.'
+    description: >-
+      Each box is the mean log2 quantity of the protein groups quantified in a given number of runs,
+      coloured by whether the groups were seen in all runs, some runs or one run. Outliers are drawn
+      as points.
+
+      How to read: groups missed in some runs usually sit at the low end of the range, which says
+      the gaps follow abundance and not chance. A missed group that is abundant is the more
+      surprising one, and worth checking in the run it is missing from.
+
+      Lines and annotations: no reference line is drawn; read the boxes against each other.
     layout: {x: 4, y: 0, w: 4, h: 5}
   - component_type: advanced_viz
     workflow_tag: quantms
@@ -1157,7 +1273,20 @@ tabs:
     tag: qm-prot-av-rank
     index: prot-cv-intensity
     title: Variation against abundance
-    description: 'One point per protein group. The dashed line is a coefficient of variation of 20 %, under which label-free quantification is tight (the threshold of the Variation card); points under it are dimmed and the eight most variable groups above it are labelled by gene. Precision usually falls toward the faint end. A cloud of 2000 protein groups or more is drawn as a density.'
+    description: >-
+      Each point is a protein group, placed by its mean log2 quantity and its variation between
+      runs, the coefficient of variation (CV) in percent. The question is how precisely the groups
+      are quantified.
+
+      How to read: precision usually falls toward the faint end, so the high-CV groups sit at the
+      left. Points under the dashed line are dimmed, and the eight most variable groups above it are
+      labelled by gene. Open the Protein groups table to follow a labelled group.
+
+      Lines and annotations: the dashed line is a CV of 20 %, the cut-off of the Variation card. It
+      is a display setting of this dashboard, not read from the run, and has no published source. A
+      cloud of 2000 protein groups or more is drawn as a density.
+
+      Note: the 20 % line is a reading guide, not a validated quality cut-off.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: quantms
@@ -1168,7 +1297,12 @@ tabs:
     tag: qm-prot-table-summary
     index: prot-table-summary
     title: Protein groups
-    description: 'Every protein group with its peptides, detection, abundance and variation.'
+    description: >-
+      Every protein group with its peptides, detection across the runs, mean quantity, variation and
+      abundance rank.
+
+      How to read: sort by the number of runs detected or by the CV to find the groups that are
+      patchily or imprecisely quantified. A picked row opens its record beside the table.
     layout: {x: 0, y: 0, w: 5, h: 6}
   - component_type: advanced_viz
     workflow_tag: quantms
@@ -1186,7 +1320,13 @@ tabs:
     tag: qm-prot-record
     index: prot-record
     title: Protein record
-    description: 'The protein group picked in the table or a figure. UniProt resolves the accession of a single-protein group.'
+    description: >-
+      The protein group picked in the table or in a figure, in four groups: the protein, its peptide
+      support, its detection across the runs and its abundance.
+
+      How to read: no value is rated here. A group backed by one peptide, or detected in only some
+      of the runs, is weaker than one with several peptides seen in every run. The accession links
+      to UniProt for a single-protein group.
     layout: {x: 5, y: 0, w: 3, h: 6}
 - title: Reproducibility
   subtitle: Do the runs of a condition agree, and do the conditions separate?
@@ -1364,7 +1504,21 @@ tabs:
     tag: qm-rep-av-pca
     index: rep-pca
     title: Run projection
-    description: 'One point per run, from the protein groups quantified in every run, coloured by {GROUP_COL_DISPLAY}. A lasso filters the linked panels.'
+    description: >-
+      Each point is a run, placed by the first two principal components of the protein groups
+      quantified in every run, coloured by {GROUP_COL_DISPLAY}. The question is whether the runs of
+      a condition sit together and the conditions apart.
+
+      How to read: replicate runs that sit together and conditions that separate are the picture of
+      a good experiment. A run beside another condition is an injection to check in
+      [Acquisition](tab:Acquisition) and [Identification](tab:Identification). A lasso filters the
+      linked panels.
+
+      Lines and annotations: no line is drawn; the axes are the principal components. The groups are
+      centred on their mean over the runs and not scaled, and the sign of a component is arbitrary.
+
+      Note: only the protein groups quantified in every run are used, so a design with many missing
+      values has a short list to project from.
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: advanced_viz
     workflow_tag: quantms
@@ -1384,7 +1538,18 @@ tabs:
     tag: qm-rep-av-corr
     index: rep-correlation
     title: Run-to-run correlation
-    description: 'Each cell is the Pearson correlation of the protein quantities of two runs; the dendrograms group the runs that behave alike. Replicate runs correlate above 0.95, so the colours differ little.'
+    description: >-
+      Each cell is the Pearson correlation of the protein quantities of two runs, over the protein
+      groups both quantified, with the dendrograms grouping the runs that behave alike. The side
+      annotation names the condition.
+
+      How to read: runs of one condition should correlate more than runs of different conditions, so
+      the clusters should follow the annotation. A run that clusters with the wrong condition is the
+      one to check. When replicates correlate closely the colours differ little, so read the
+      clustering rather than the shade.
+
+      Lines and annotations: the colour scale runs from lighter for a lower to darker blue for a
+      higher correlation. No cut-off is drawn.
     layout: {x: 0, y: 0, w: 8, h: 7}
   - component_type: figure
     workflow_tag: quantms
@@ -1409,7 +1574,19 @@ tabs:
     tag: qm-rep-av-pairs
     index: rep-pairs-scatter
     title: Run against run, difference over mean
-    description: One point per protein group quantified in both runs of a pair, coloured by condition. The dotted line is no difference between the two runs (a log2 difference of 0). The grey band is one log2 unit either side of it, a twofold difference, the same twofold the differential abundance calls use; it is a reading guide, not a quality cut-off. A reproducible pair stays inside the band at every level, and a tilt or a fan marks a pair to check.
+    description: >-
+      Each point is a protein group quantified in both runs of a pair of one condition, placed by
+      the mean of its two log2 quantities, with its height the difference between the runs, coloured
+      by condition. The question is how well two replicates agree at every abundance level.
+
+      How to read: a reproducible pair stays inside the grey band at every level, and a tilt or a
+      fan marks a pair to check. A pair whose cloud sits off zero has a normalisation offset between
+      its runs. Open [Proteins](tab:Proteins) for the precision of each group.
+
+      Lines and annotations: the dotted line at 0 is no difference between the two runs. The grey
+      band is one log2 unit either side of it, a twofold difference, the same twofold the
+      differential abundance calls use. It is a reading guide of this dashboard, not a quality
+      cut-off.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: figure
     workflow_tag: quantms
@@ -1420,7 +1597,18 @@ tabs:
     tag: qm-rep-fig-cv-box
     index: rep-cv-box
     title: Variation by condition
-    description: 'Coefficient of variation of the protein groups within each {GROUP_COL_DISPLAY}, the shape of the violin with its box inside; a condition with a higher mass has noisier replicates, and under 20 is tight.'
+    description: >-
+      Each violin is a condition: the distribution of the coefficient of variation (CV, in percent)
+      of its protein groups across its runs, with a box inside it.
+
+      How to read: a condition with more of its mass at higher values has noisier replicates.
+      Compare the conditions with each other; a condition that stands out is the one to inspect in
+      the run projection and the run-to-run correlation.
+
+      Lines and annotations: no line is drawn. The 20 % used on the Variation chart of
+      [Proteins](tab:Proteins) is a display setting without a published source.
+
+      Note: the CV is null for a condition with a single run, which then has no violin.
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: table
     workflow_tag: quantms
@@ -1431,7 +1619,12 @@ tabs:
     tag: qm-rep-table-conditions
     index: rep-table-conditions
     title: Protein groups per condition
-    description: 'Mean log2 quantity, standard deviation and variation of every protein group in every condition.'
+    description: >-
+      Mean log2 quantity, standard deviation and variation of every protein group in every
+      condition.
+
+      How to read: sort by the CV to find the least reproducible groups of a condition, and compare
+      a group across conditions. A picked row narrows the dashboard to that protein group.
     layout: {x: 0, y: 0, w: 8, h: 6}
 - title: Differential abundance
   subtitle: Which proteins change between conditions, and can the test tell?
@@ -1638,7 +1831,24 @@ tabs:
     tag: qm-da-fig-contrast-calls
     index: da-contrast-calls
     title: Proteins called in each contrast
-    description: 'Each bar is the number of proteins called Up (higher in the first condition of the contrast) or Down (lower), at an adjusted p-value below 0.05 and a twofold change or more, with the number of proteins tested in brackets. A contrast with two empty bars was tested and found nothing to call.'
+    description: >-
+      Each pair of bars is a contrast: the number of proteins called Up (higher in the first
+      condition of the contrast) and Down (lower), with the number of proteins tested in brackets.
+      The question is how many proteins change in each comparison.
+
+      How to read: a contrast with two empty bars was tested and found nothing to call, which says
+      the conditions do not differ enough at this depth, not that they are identical. A contrast
+      with many calls is the one to open in the volcano below.
+
+      Lines and annotations: a call needs an adjusted p-value below 0.05 and a fold change of at
+      least twofold either way. The 0.05 is MSstats' own default significance level for adjusted
+      p-values in its result plots; MSstats applies no fold-change cut-off by default, so the
+      twofold is this dashboard's setting.
+
+      Source: MSstats, groupComparisonPlots,
+      https://rdrr.io/bioc/MSstats/man/groupComparisonPlots.html
+
+      Note: the twofold cut-off has no published source here.
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: advanced_viz
     workflow_tag: quantms
@@ -1669,7 +1879,26 @@ tabs:
     tag: qm-da-av-volcano
     index: da-volcano
     title: Volcano, MA and QQ
-    description: 'Each point is a protein group in a contrast: -log10(adjusted p) against log2 fold change. The horizontal dashed line is an adjusted p-value of 0.05, the usual significance level for Benjamini-Hochberg adjusted p-values; the two vertical dashed lines are at log2 fold changes of -1 and 1, a twofold change either way, the usual minimum effect for label-free proteomics. A protein beyond both is called Up or Down; the cut-offs are this dashboard''s, MSstats reports the adjusted p-value only. The View switch puts the fold change against mean abundance (MA) or the raw p-values against the null (QQ). With several contrasts the points of all are drawn together, so pick one in the Contrast filter.'
+    description: >-
+      Each point is a protein group in a contrast: the significance (-log10 of the adjusted p-value)
+      against the log2 fold change. The View switch puts the fold change against the mean abundance
+      (MA), or the raw p-values against the null (QQ).
+
+      How to read: the proteins far out on either side and high up are the strong changes. A protein
+      beyond both cut-offs is called Up or Down, and the eight strongest are labelled by gene. With
+      several contrasts the points of all are drawn together, so pick one in the Contrast filter.
+
+      Lines and annotations: the horizontal dashed line is an adjusted p-value of 0.05, and the two
+      vertical dashed lines are at log2 fold changes of -1 and 1, a twofold change either way. In
+      the QQ view the diagonal is the null (observed equals expected) and the shaded band is its 95%
+      confidence interval.
+
+      Source: MSstats, groupComparisonPlots,
+      https://rdrr.io/bioc/MSstats/man/groupComparisonPlots.html (the default significance level is
+      0.05, with no fold-change cut-off by default).
+
+      Note: the twofold cut-offs are this dashboard's own setting, not an MSstats default, and have
+      no published source here.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: figure
     workflow_tag: quantms
@@ -1711,7 +1940,25 @@ tabs:
     tag: qm-da-fig-pvalue
     index: da-pvalue-histogram
     title: p-value histogram
-    description: 'Raw p-values of the tested proteins. The dashed line is the level a bin would hold if no protein changed (the estimated share of unchanged proteins times the bin average) and the dotted line is p = 0.05. With one contrast the first bin is coloured as the proteins below 0.05; with several, the bars are stacked and coloured by contrast.'
+    description: >-
+      Each bar is a bin of 0.05 in the raw p-values of the tested proteins, so the first bin is
+      exactly the p below 0.05. With one contrast the first bin is coloured as the proteins below
+      0.05; with several, the bars are stacked and coloured by contrast.
+
+      How to read: a flat histogram says a test with nothing to find. A bar well above the dashed
+      level in the first bins is the excess that marks real changes. The note in the corner counts
+      the proteins below 0.05, the number expected if none changed, and the unchanged share.
+
+      Lines and annotations: the dashed line is the level a bin would hold if no protein changed,
+      the estimated share of unchanged proteins (pi0) times the bin average. The dotted line is p =
+      0.05. Pi0 is estimated as the share of p-values above 0.5 divided by 0.5, the estimator of
+      Storey and Tibshirani with its parameter lambda set to 0.5, which is this dashboard's choice.
+
+      Source: Storey and Tibshirani 2003, PNAS 100(16):9440-9445,
+      https://pmc.ncbi.nlm.nih.gov/articles/PMC170937
+
+      Note: the estimate assumes the right half of the histogram is flat, so a right half that is
+      not flat makes the dashed level unreliable.
     layout: {x: 0, y: 0, w: 4, h: 5}
   - component_type: figure
     workflow_tag: quantms
@@ -1722,7 +1969,16 @@ tabs:
     tag: qm-da-fig-effect
     index: da-effect-histogram
     title: Fold changes
-    description: 'log2 fold change of the tested proteins, split by call; a distribution centred on zero says the runs are normalised alike.'
+    description: >-
+      Each bar is a bin of the log2 fold change of the tested proteins, stacked by call (Up, Down or
+      Not significant).
+
+      How to read: a distribution centred on zero says the runs are normalised alike. A distribution
+      shifted to one side, with many calls in that direction, can come from a normalisation offset
+      and not from biology, so check it against the run projection. The tails are where the calls
+      sit.
+
+      Lines and annotations: no reference line is drawn.
     layout: {x: 4, y: 0, w: 4, h: 5}
   - component_type: table
     workflow_tag: quantms
@@ -1733,7 +1989,16 @@ tabs:
     tag: qm-da-table-comparisons
     index: da-table-comparisons
     title: MSstats results
-    description: 'Every tested protein group in every contrast, with its fold change, p-values and call.'
+    description: >-
+      Every tested protein group in every contrast, with its log2 fold change, standard error,
+      p-value, adjusted p-value, missing and imputed shares, and call.
+
+      How to read: sort by the adjusted p-value, then check the missing and imputed shares of the
+      proteins you care about, since a change that rests on imputed values is weaker. MSstats gives
+      an issue when it could not test a protein. A picked row opens its record beside the table.
+
+      Source: MSstats, groupComparison, https://rdrr.io/bioc/MSstats/man/groupComparison.html (tests
+      changes in protein abundance across conditions with linear mixed-effects models).
     layout: {x: 0, y: 0, w: 5, h: 6}
   - component_type: advanced_viz
     workflow_tag: quantms
@@ -1751,5 +2016,11 @@ tabs:
     tag: qm-da-record
     index: da-record
     title: Protein record
-    description: 'The protein group picked in the table or a figure, one card per contrast it was tested in.'
+    description: >-
+      The protein group picked in the table or in a figure, with one card per contrast it was tested
+      in: its test (direction, fold change, p-values) and its support (missing and imputed shares,
+      mean intensity).
+
+      How to read: a call with a small adjusted p-value but a high imputed share is weaker than one
+      measured in every run. The accession links to UniProt for a single-protein group.
     layout: {x: 5, y: 0, w: 3, h: 6}

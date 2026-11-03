@@ -147,6 +147,7 @@ main_dashboard:
       - ![](icon:mdi:link-variant) **Complexes** {{n_complex}} targets of more than one chain
       - ![](icon:mdi:dna) **Residues** {{n_residues}} over {{n_chains}} chains
       - ![](icon:mdi:file-table-outline) **Samplesheet** [one row per target](section:Sample sheet), its path in [the run parameters](params:input)
+      - ![](icon:mdi:palette-outline) **{GROUP_COL_DISPLAY}** {{legend:{GROUP_COL}}}
     tag: pf-ov-study
     index: ov-study
     layout: {x: 0, y: 1, w: 5, h: 3}
@@ -441,7 +442,12 @@ main_dashboard:
     tag: pf-sample-sheet
     index: sample-sheet
     title: Targets
-    description: Target, assembly, chains, residues, engines and the input FASTA of every target.
+    description: >-
+      Which targets did the run fold? One row per target: its assembly (single chain or complex), chains,
+      residues, the engines that folded it and the input FASTA.
+
+      How to read: use it to check that every target and engine you expect is present before reading any
+      score. Click a row to narrow the Analysis panel to that target.
     layout: {x: 0, y: 0, w: 8, h: 6}
 tabs:
 # ============================================================================
@@ -612,7 +618,19 @@ tabs:
     tag: pf-ms-av-plddt-ptm
     index: ms-plddt-ptm
     title: Mean pLDDT against pTM, one point per model
-    description: Models in the top right are confident residue by residue and as a fold. Engines that write no TM score are absent.
+    description: >-
+      Can each model be trusted, residue by residue and as a whole fold? Each point is one predicted
+      model, with its mean pLDDT on x and its pTM on y; colour is the engine and size is the number of
+      residues.
+
+      How to read: models in the top right are confident both ways. A high pLDDT with a low pTM is a set
+      of confident pieces placed loosely, so open [Predicted error](tab:Predicted error) to see which
+      domains are not placed relative to each other. Click a point to select the model.
+
+      Lines and annotations: the plot draws no cut-off line or zone, only the points and the axes. Engines
+      that write no pTM have no point.
+
+      Note: ESMFold and RoseTTAFold All-Atom write no pTM, so those engines can only be compared by pLDDT.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: figure
     workflow_tag: proteinfold
@@ -628,7 +646,17 @@ tabs:
     tag: pf-ms-fig-engine-box
     index: ms-engine-box
     title: Mean pLDDT of every model, per engine
-    description: One box per engine over its models of every target in scope.
+    description: >-
+      How spread out is the confidence of each engine? One box per engine over the mean pLDDT of all its
+      models for the targets in scope.
+
+      How to read: a high, narrow box is an engine that is confident on every target; a wide box means its
+      confidence depends strongly on the target. Compare boxes on [Engines comparison](tab:Engines
+      comparison) for one target at a time.
+
+      Lines and annotations: the box spans the first to the third quartile with the median as the line
+      inside, the whiskers reach the furthest value within 1.5 times the interquartile range (the Plotly
+      box default) and single dots beyond are outliers. No cut-off line is drawn.
     layout: {x: 0, y: 0, w: 8, h: 4, fit: auto}
 # ============================================================================
 # Structure
@@ -818,7 +846,16 @@ tabs:
     tag: pf-st-table-structures
     index: st-structures
     title: Structures of the target, one row per engine
-    description: Mean pLDDT, residues at 70 or more and under 50 (%) and pTM of each engine's top model. Click a row to open its structure.
+    description: >-
+      Which engine's structure is most confident for the picked target? One row per engine with the mean
+      pLDDT, the share of residues at pLDDT 70 or more, the share under 50 and the pTM of its top-ranked
+      model.
+
+      How to read: a row with a high mean pLDDT, a high confident share and a small very-low share is a
+      structure to trust. Click a row to open that structure in 3D, in the sequence lane, in the
+      Ramachandran plot and in the alignment; sort a column header to rank the engines.
+
+      Note: pTM is empty for engines that write none.
     layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: advanced_viz
     workflow_tag: proteinfold
@@ -838,7 +875,23 @@ tabs:
     tag: pf-st-av-structure
     index: st-structure
     title: Picked structure coloured by pLDDT
-    description: The structure picked in the table (the first in scope until then), over its written sequence. Picked residues are drawn red on both.
+    description: >-
+      Where in the fold is the model confident? The picked structure drawn as a cartoon in 3D, coloured
+      residue by residue by its pLDDT, over its written sequence with one letter per residue.
+
+      How to read: blue stretches are well predicted; yellow and orange stretches are loops, termini or
+      regions the engine could not place. Click a residue in 3D or on the sequence to select it in every
+      structure tile.
+
+      Lines and annotations: the colours are the four AlphaFold confidence colours: dark blue above 90
+      (very high), light blue 70 to 90 (confident), yellow 50 to 70 (low) and orange below 50 (very low).
+      Residues you picked are drawn red on both the structure and the sequence.
+
+      Source: AlphaFold confidence bands,
+      https://www.ebi.ac.uk/training/online/courses/alphafold/inputs-and-outputs/evaluating-alphafolds-predicted-structures-using-confidence-scores/plddt-understanding-local-confidence/
+
+      Note: pLDDT below 50 can mean a naturally flexible or disordered region as well as one the engine
+      could not predict.
     layout: {x: 0, y: 2, w: 3, h: 7}
   - component_type: advanced_viz
     workflow_tag: proteinfold
@@ -852,7 +905,20 @@ tabs:
     tag: pf-st-av-sequence
     index: st-sequence
     title: Sequence with its pLDDT lane
-    description: The picked structure's sequence, its pLDDT per residue and its confidence band. Brush a stretch to select it in 3D.
+    description: >-
+      Which stretches of the sequence are confident? The picked structure's sequence, with its pLDDT per
+      residue as a lane and its confidence band as a colour.
+
+      How to read: a lane that stays high along the whole sequence is a well-predicted chain; dips mark
+      loops, termini or uncertain domains. Brush a stretch to select it in 3D and in the other structure
+      tiles.
+
+      Lines and annotations: the lane colours are the four AlphaFold confidence colours: dark blue above
+      90 (very high), light blue 70 to 90 (confident), yellow 50 to 70 (low) and orange below 50 (very
+      low). No separate cut-off line is drawn.
+
+      Source: AlphaFold confidence bands,
+      https://www.ebi.ac.uk/training/online/courses/alphafold/inputs-and-outputs/evaluating-alphafolds-predicted-structures-using-confidence-scores/plddt-understanding-local-confidence/
     layout: {x: 3, y: 2, w: 5, h: 2}
   - component_type: advanced_viz
     workflow_tag: proteinfold
@@ -874,7 +940,24 @@ tabs:
     tag: pf-st-av-rama
     index: st-ramachandran
     title: Ramachandran plot of the picked structure
-    description: Backbone torsions of each residue, coloured by pLDDT; the regions are approximate. Select points to find them in 3D.
+    description: >-
+      Is the backbone geometry plausible? Each point is one residue of the picked structure at its
+      backbone torsion angles, phi on x and psi on y, computed in the browser from the PDB and coloured by
+      pLDDT.
+
+      How to read: points inside the shaded regions are in the usual helix, strand and left-handed helix
+      conformations; many points outside them, especially at high pLDDT, deserve a look in 3D. Select
+      points to find those residues on the structure.
+
+      Lines and annotations: the dotted outlines are the right-handed helix (alphaR), strand including
+      polyproline II (beta) and left-handed helix (alphaL) regions, with glycine and proline getting their
+      own outlines when the plot is filtered to them. They are hand-drawn approximations of the textbook
+      regions, not MolProbity contours, and the point colours are the four AlphaFold confidence colours:
+      dark blue above 90 (very high), light blue 70 to 90 (confident), yellow 50 to 70 (low) and orange
+      below 50 (very low). The axes cross at 0 degrees.
+
+      Note: the regions have no published source and are not a validation; use a validation tool such as
+      MolProbity for that.
     layout: {x: 3, y: 6, w: 5, h: 3}
   - component_type: advanced_viz
     workflow_tag: proteinfold
@@ -889,7 +972,16 @@ tabs:
     tag: pf-st-av-engine-profile
     index: st-engine-profile
     title: pLDDT per residue of every engine
-    description: One curve per engine, and per chain on a complex. Regions where the engines part are the least settled.
+    description: >-
+      Do the engines agree along the sequence? One curve per engine, and per chain on a complex: the pLDDT
+      of each residue of its top-ranked structure.
+
+      How to read: curves that run together are residues all engines place alike; where they part, the
+      engines disagree and the region is the least settled. Dips of every curve mark flexible loops or
+      termini. Hover a residue to see the same residue marked in the other structure tiles.
+
+      Lines and annotations: a vertical line follows the hovered residue. No cut-off line is drawn, and
+      profiles longer than 200 residues are averaged over equal windows.
     layout: {x: 3, y: 4, w: 5, h: 2}
   - component_type: advanced_viz
     workflow_tag: proteinfold
@@ -909,7 +1001,21 @@ tabs:
     tag: pf-st-av-msa
     index: st-msa
     title: Alignment the structure was folded from
-    description: The query first, then the hits by rank. ESMFold folds without one; a lone query row means no homologs were found.
+    description: >-
+      What evidence was the structure folded from? The alignment of the query (top row) with its
+      homologous hits, one row per aligned sequence, coloured by residue class.
+
+      How to read: columns where many rows agree with the query are conserved and tend to be predicted
+      confidently; a lone query row means no homologs were found, which usually lowers confidence. Brush
+      columns to select those residues on the structure.
+
+      Lines and annotations: the rows below the ruler are the consensus (the most frequent residue of each
+      column, fainter where fewer rows agree) and the conservation bars (one minus the Shannon entropy of
+      the column over log2(20), weighted by the share of non-gap rows). Residues are coloured with the
+      Clustal X classes, only where their class holds at least half of the column, and rows are ordered by
+      rank and capped at 200.
+
+      Note: ESMFold folds without an alignment, so its structure opens an empty tile.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: proteinfold
@@ -921,7 +1027,12 @@ tabs:
     tag: pf-st-table-residues
     index: st-table-residues
     title: Residues of the structures in scope
-    description: Chain, residue number, amino acid, pLDDT and confidence band, one row per residue and structure.
+    description: >-
+      Which residues are confident? One row per residue and structure with its chain, residue number,
+      amino acid, pLDDT and confidence band.
+
+      How to read: sort or filter by pLDDT to list the residues under 50 or the ones above 90, then click
+      a row to find the residue in 3D. It is the table behind the confidence tiles above.
     layout: {x: 0, y: 0, w: 8, h: 6}
 # ============================================================================
 # Predicted error
@@ -1097,7 +1208,23 @@ tabs:
     tag: pf-pe-av-matrix
     index: pe-matrix
     title: Predicted aligned error of the picked structure
-    description: Error of the scored residue (x) when the model is aligned on the aligned residue (y), with the pLDDT of each residue along the axes. Drag a square on the diagonal to select a domain.
+    description: >-
+      Does the model place its domains and chains relative to each other? Each square is the expected
+      position error, in angstroms, of the residue on x when the model is aligned on the residue on y,
+      with the pLDDT of each residue along the axes.
+
+      How to read: dark blocks on the diagonal are confident domains; dark blocks off the diagonal are
+      domains or chains placed confidently relative to each other, and light blocks off it are parts whose
+      relative position is uncertain. Drag a square along the diagonal to select that domain in 3D and on
+      the sequence.
+
+      Lines and annotations: the colour scale runs from 0 to the maximum the file declares, else the
+      largest value of the matrix, else 31.75 angstroms and the pLDDT strips use the four AlphaFold
+      confidence colours: dark blue above 90 (very high), light blue 70 to 90 (confident), yellow 50 to 70
+      (low) and orange below 50 (very low). On a complex, lines mark the chain boundaries.
+
+      Source: AlphaFold PAE plot,
+      https://www.ebi.ac.uk/training/online/courses/alphafold/inputs-and-outputs/evaluating-alphafolds-predicted-structures-using-confidence-scores/pae-a-measure-of-global-confidence-in-alphafold-predictions/
     layout: {x: 0, y: 0, w: 4, h: 6}
   - component_type: advanced_viz
     workflow_tag: proteinfold
@@ -1117,7 +1244,18 @@ tabs:
     tag: pf-pe-av-structure
     index: pe-structure
     title: Structure coloured by pLDDT
-    description: The same structure in 3D. The residues picked on the matrix are drawn red.
+    description: >-
+      Which part of the fold does the matrix describe? The same structure in 3D, coloured by pLDDT.
+
+      How to read: pick a domain on the matrix and it is drawn red here, so a confident block can be
+      checked against the fold; low-confidence stretches are yellow and orange.
+
+      Lines and annotations: the colours are the four AlphaFold confidence colours: dark blue above 90
+      (very high), light blue 70 to 90 (confident), yellow 50 to 70 (low) and orange below 50 (very low);
+      residues picked on the matrix are red.
+
+      Source: AlphaFold confidence bands,
+      https://www.ebi.ac.uk/training/online/courses/alphafold/inputs-and-outputs/evaluating-alphafolds-predicted-structures-using-confidence-scores/plddt-understanding-local-confidence/
     layout: {x: 4, y: 0, w: 4, h: 6}
   - component_type: advanced_viz
     workflow_tag: proteinfold
@@ -1131,7 +1269,19 @@ tabs:
     tag: pf-pe-av-sequence
     index: pe-sequence
     title: Sequence with its pLDDT lane
-    description: The picked structure's sequence and confidence. The domain picked on the matrix is shaded.
+    description: >-
+      Where along the sequence is the picked domain, and how confident is it? The sequence of the picked
+      structure with its pLDDT per residue as a lane.
+
+      How to read: the residues selected on the matrix are shaded, so you can see whether a confident
+      domain sits on a high stretch of the lane. A domain on low pLDDT is a placement worth checking.
+
+      Lines and annotations: the lane colours are the four AlphaFold confidence colours: dark blue above
+      90 (very high), light blue 70 to 90 (confident), yellow 50 to 70 (low) and orange below 50 (very
+      low). The shaded span is the matrix selection, not a cut-off.
+
+      Source: AlphaFold confidence bands,
+      https://www.ebi.ac.uk/training/online/courses/alphafold/inputs-and-outputs/evaluating-alphafolds-predicted-structures-using-confidence-scores/plddt-understanding-local-confidence/
     layout: {x: 0, y: 0, w: 8, h: 4}
 # ============================================================================
 # Engines comparison
@@ -1322,7 +1472,15 @@ tabs:
     tag: pf-en-fig-best
     index: en-best-bar
     title: Mean pLDDT of each engine's top-ranked model
-    description: The tallest bar is the engine whose top model is the most confident overall.
+    description: >-
+      Which engine's top-ranked model is the most confident for each target? One bar per engine and
+      target, the height being the mean pLDDT of that engine's first model.
+
+      How to read: within a target, the tallest bar is the engine whose best model is the most confident
+      overall; similar bars mean the engines agree. Open the [Structure](tab:Structure) tab to see where
+      along the sequence an engine is weaker.
+
+      Lines and annotations: the chart draws no cut-off line, only the bars; the colour is the engine.
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: figure
     workflow_tag: proteinfold
@@ -1341,7 +1499,16 @@ tabs:
     tag: pf-en-fig-rank
     index: en-rank-line
     title: Mean pLDDT by model rank, one line per engine
-    description: How an engine's confidence falls from its first model to its last. Engines that write one model show a single point.
+    description: >-
+      Did the ranking pick a clearly better model? One line per engine: the mean pLDDT of its models from
+      the first rank to the last.
+
+      How to read: a steep fall from the first model to the next means the ranking was decisive; a flat
+      line means the models are about equally confident. An engine that writes one model shows a single
+      point.
+
+      Lines and annotations: each line joins an engine's models by rank, and the markers are the models.
+      No cut-off line is drawn.
     layout: {x: 0, y: 0, w: 8, h: 4}
   # One curve per engine (the series is the entity, one per engine on the one
   # target the picker holds).
@@ -1364,7 +1531,18 @@ tabs:
     tag: pf-en-av-model-profile
     index: en-model-profile
     title: pLDDT per residue, one curve per engine, band over its models
-    description: The line is each engine's top-ranked model, the band runs from its lowest to its highest model at each residue. A wide band is where the models disagree, curves that part are where the engines do.
+    description: >-
+      Where do the engines, and the models of one engine, disagree along the sequence? One curve per
+      engine with the pLDDT of each residue of its top-ranked model, and a band from its lowest to its
+      highest model at that residue.
+
+      How to read: a wide band is where an engine's models disagree; curves that part are where the
+      engines do. Both mark the residues to treat with caution, so check them in 3D on the
+      [Structure](tab:Structure) tab.
+
+      Lines and annotations: the line is the top-ranked model and the shaded band is the minimum to the
+      maximum pLDDT over the engine's models, drawn at low opacity. Residues count from 1 over the chains
+      in order; no cut-off line is drawn.
     layout: {x: 0, y: 4, w: 8, h: 6}
   - component_type: table
     workflow_tag: proteinfold
@@ -1376,7 +1554,14 @@ tabs:
     tag: pf-en-table-models
     index: en-table-models
     title: Models
-    description: Rank, mean pLDDT, confident and disordered shares, pTM, ipTM and ipSAE of every model. Select a row to open its record.
+    description: >-
+      How does every model score? One row per model with its rank, mean pLDDT, the confident and
+      disordered shares, the pTM, the ipTM and the ipSAE.
+
+      How to read: sort by mean pLDDT or rank to compare models of one engine, then select a row to open
+      its record. ipTM and ipSAE exist only for complexes, so they are empty for single chains.
+
+      Note: engines that write no TM score leave pTM empty.
     layout: {x: 0, y: 0, w: 5, h: 6}
   - component_type: advanced_viz
     workflow_tag: proteinfold
@@ -1396,5 +1581,10 @@ tabs:
     tag: pf-en-av-model-record
     index: en-model-record
     title: Model record
-    description: The selected model with its confidence and scores.
+    description: >-
+      What are the details of one model? The record of the model picked in the table above: its structure,
+      engine, target, rank, confidence shares and scores.
+
+      How to read: select a row of the models table to fill it. Compare the confident share and the
+      very-low share with the mean pLDDT to see whether a mean hides a disordered tail.
     layout: {x: 5, y: 0, w: 3, h: 5}

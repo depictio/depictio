@@ -188,6 +188,7 @@ main_dashboard:
       - ![](icon:mdi:flask-outline) **Samples** {{samples}} profiled
       - ![](icon:mdi:chip) **Platform** {{platforms}} sequencing platforms, mostly {{top_platform}}
       - ![](icon:mdi:file-table-outline) **Samplesheet** [{{runs}} rows, one per sequencing run](section:Sample sheet), its path in [the run parameters](params:input)
+      - ![](icon:mdi:palette-outline) **Instrument platform** {{legend:instrument_platform}}
     tag: tp-ov-study
     index: ov-study
     layout: {x: 0, y: 1, w: 5, h: 3}
@@ -497,6 +498,17 @@ main_dashboard:
     tag: tp-sample-sheet
     index: sample-sheet
     title: Sample sheet
+    description: >-
+      The samplesheet the run was started with: one row per sequencing run of a sample, with its platform
+      and read files. It is the table every sample filter starts from.
+
+      How to read: a sample with several rows was sequenced more than once, and each run accession is
+      unique even within a sample. The platform sets the colour or symbol of a run in the plots. A row
+      picked here narrows the sample-level tiles to that sample.
+
+      Note: the sheet is optional; without it the sample filters and this table are absent.
+
+      Source: nf-core/taxprofiler usage, https://nf-co.re/taxprofiler/2.0.1/docs/usage
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: taxprofiler
@@ -505,6 +517,18 @@ main_dashboard:
     tag: tp-database-sheet
     index: database-sheet
     title: Database sheet
+    description: >-
+      The database sheet of the run: which database each classifier or profiler was run against, with its
+      parameters.
+
+      How to read: each row is one profiling setup, a tool and a database name. A classifier listed with
+      two databases gives two profiling runs per sample in the plots. Check here which database a run name
+      in the plots refers to.
+
+      Note: the sheet is an input of the pipeline and is not copied into the results, so this table is
+      read from the sheet given to the template.
+
+      Source: nf-core/taxprofiler usage, https://nf-co.re/taxprofiler/2.0.1/docs/usage
     layout: {x: 0, y: 0, w: 8, h: 6}
 tabs:
 - title: MultiQC
@@ -882,7 +906,25 @@ tabs:
     tag: tp-depth-curve
     index: depth-coverage-curve
     title: Coverage against sequencing effort
-    description: One curve per library. A curve still rising at the effort sequenced did not see the whole community.
+    description: >-
+      How much of each library's community the reads have already seen, as a function of sequencing
+      effort. One curve per sequencing library, with the effort in base pairs on a log axis and the
+      modelled coverage of the metagenome on the vertical axis.
+
+      How to read: a curve that has flattened near the top has seen almost all of its community, so more
+      depth would add little. A curve still rising at the effort sequenced did not see the whole
+      community, and the further it has to climb, the more depth it needs. Curves for more diverse
+      communities sit further to the right.
+
+      Lines and annotations: the figure draws only the curves, with no target line and no marker at the
+      effort actually sequenced. Nonpareil's near-complete target is 95% coverage, the default of its
+      Nonpareil.curve function (https://cran.r-project.org/web/packages/Nonpareil/refman/Nonpareil.html),
+      and it is not drawn here.
+
+      Note: the curve is rebuilt from the fitted model in Nonpareil's summary (a gamma model on the log of
+      the effort), not from the measured redundancy samples, which nf-core does not publish.
+
+      Source: Rodriguez-R et al. 2018, Nonpareil 3, mSystems, https://doi.org/10.1128/msystems.00039-18
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: figure
     workflow_tag: taxprofiler
@@ -902,7 +944,23 @@ tabs:
     tag: tp-depth-scatter
     index: depth-coverage-diversity
     title: Coverage against diversity
-    description: Point size is how many times deeper a library would have to go; big points bottom right are most short.
+    description: >-
+      Each point is one sequencing library: its Nonpareil diversity (horizontal) against the share of its
+      metagenome the reads already reach (vertical). The point is sized by how many times deeper the
+      library would have to go to reach 95% coverage and coloured by sample.
+
+      How to read: big points at the bottom right are the libraries most short of depth, a diverse
+      community that is still poorly covered. Small points at the top are covered, and a multiple of 1 or
+      less means the 95% target is reached.
+
+      Lines and annotations: the figure draws no line. Nonpareil's near-complete target is 95% coverage,
+      the default of its Nonpareil.curve function
+      (https://cran.r-project.org/web/packages/Nonpareil/refman/Nonpareil.html).
+
+      Note: Nonpareil diversity is on a natural-log scale of the sequencing effort (log base pairs); it is
+      a model index, not a species count.
+
+      Source: Rodriguez-R et al. 2018, Nonpareil 3, mSystems, https://doi.org/10.1128/msystems.00039-18
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: table
     workflow_tag: taxprofiler
@@ -914,6 +972,16 @@ tabs:
     tag: tp-depth-table
     index: depth-table
     title: Nonpareil per library
+    description: >-
+      Nonpareil's fitted numbers, one row per sequencing library: the coverage the reads reach, the effort
+      sequenced, the effort projected for 95% coverage, how many times deeper that is, the diversity index
+      and the model fit.
+
+      How to read: sort on the depth multiple to list the libraries that most need more sequencing. A
+      library with a multiple of 1 or less has reached the target. A weak model fit means the projection
+      is less reliable, and a row picked here selects that library in the plots.
+
+      Source: Rodriguez-R et al. 2018, Nonpareil 3, mSystems, https://doi.org/10.1128/msystems.00039-18
     layout: {x: 0, y: 0, w: 8, h: 6}
 - title: Profiles
   subtitle: What does each classifier say the community is made of?
@@ -1145,7 +1213,22 @@ tabs:
     tag: tp-prof-stacked
     index: prof-composition
     title: Community composition per profiling run
-    description: Each run's assigned reads at species, the eight largest and the rest as Other; the rank is in the settings.
+    description: >-
+      What each profiling run says the community is made of. One bar per profiling run, a classifier with
+      its database, pooling the samples in scope; each bar shows the eight largest taxa at the chosen rank
+      (species by default) and the rest as Other.
+
+      How to read: bars that match across classifiers agree on the community, and a taxon that is large in
+      one bar and missing in another is a disagreement worth checking in [Concordance](tab:Concordance).
+      The rank is a setting of the tile, and the same eight taxa keep their colour across the dashboard.
+
+      Lines and annotations: every bar is scaled to 100% of the reads placed at the shown rank, so reads a
+      classifier left unclassified or placed at a higher rank are not part of the bar. Other is grey.
+
+      Note: classifiers report different quantities (read counts, or the abundance of genomes), and each
+      uses its own database and naming, so bar heights compare shares and not read numbers. sylph and
+      melon are not supported by taxpasta in this release, so they are not part of the cross-classifier
+      tiles.
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: advanced_viz
     workflow_tag: taxprofiler
@@ -1165,7 +1248,21 @@ tabs:
     tag: tp-prof-krona
     index: prof-krona
     title: Krona rings per classifier
-    description: One wedge per classifier, then its domains, phyla and classes; the ring pickers move deeper.
+    description: >-
+      A Krona-style hierarchy of the profiles: one wedge per classifier, then its domains, phyla and
+      classes as rings outwards. The angle of a wedge is the summed relative abundance of the profiling
+      runs in scope.
+
+      How to read: compare the wedges of two classifiers to see where their lineages diverge. A phylum
+      keeps the same colour in every classifier, so a colour present in one wedge and missing in another
+      is a disagreement. The ring pickers move the view deeper than the fourth ring.
+
+      Lines and annotations: grey wedges are reads no classifier could place (unclassified) or taxa no
+      report named (unresolved), the latter for classifiers whose database uses identifiers the other
+      reports do not name. No wedge is hidden for being small.
+
+      Note: the lineages are recovered from the kraken-style reports of the run, so a taxon resolves only
+      when a report names its identifier. Sylph and melon are not part of this hierarchy.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: advanced_viz
     workflow_tag: taxprofiler
@@ -1180,7 +1277,18 @@ tabs:
     tag: tp-prof-sylph-stacked
     index: prof-sylph-composition
     title: sylph composition
-    description: Relative abundance from genome containment, the eight largest taxa and Other.
+    description: >-
+      The community as sylph sees it, from genome containment. One bar per sample, showing the eight
+      largest taxa at the chosen rank (genus by default) and the rest as Other.
+
+      How to read: a dominant taxon holds most of the abundance sylph assigned in that sample. The rank is
+      a setting of the tile; switch to species to compare with the other classifiers above.
+
+      Lines and annotations: every bar is scaled to 100% of the abundance reported at the shown rank.
+      Other is grey.
+
+      Note: sylph reports genome-based abundances, so a bar is not directly comparable with the read
+      shares of the other classifiers.
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: advanced_viz
     workflow_tag: taxprofiler
@@ -1196,7 +1304,19 @@ tabs:
     tag: tp-prof-melon-sunburst
     index: prof-melon-sunburst
     title: Melon genome-copy hierarchy
-    description: Ring size is the share of estimated genome copies, four ranks from the domain outwards.
+    description: >-
+      Melon's estimate of the community, as genome copies, in rings. The innermost ring is the domain and
+      the rings go outwards through phylum, class and order, and a ring picker moves deeper.
+
+      How to read: a wedge is a lineage and its angle is its share of the estimated genome copies. A
+      domain or phylum that dominates means most estimated genomes belong to it. Colours follow the
+      phylum.
+
+      Note: melon's sample is only known from its output path, so the rows are pooled across the long-read
+      samples, and a sample filter does not narrow this tile. Melon quantifies prokaryotic marker genes,
+      so eukaryotes and viruses are not represented.
+
+      Source: Melon, https://github.com/xinehc/melon
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: figure
     workflow_tag: taxprofiler
@@ -1213,7 +1333,17 @@ tabs:
     tag: tp-prof-melon-copies
     index: prof-melon-copies
     title: Estimated copies per species
-    description: The lineages melon estimated the most genome copies for.
+    description: >-
+      Melon's genome-copy estimate per species, one bar each, coloured by phylum. The horizontal axis is
+      the estimated number of genome copies.
+
+      How to read: long bars are the species melon estimated the most genome copies for, and a phylum with
+      many long bars dominates the community. Use the table below to read the lineage of a bar.
+
+      Note: the rows are pooled across the long-read samples, because melon's sample is only known from
+      its output path.
+
+      Source: Melon, https://github.com/xinehc/melon
     layout: {x: 0, y: 6, w: 8, h: 4}
   - component_type: table
     workflow_tag: taxprofiler
@@ -1225,6 +1355,18 @@ tabs:
     tag: tp-prof-melon-table
     index: prof-melon-table
     title: Melon lineages
+    description: >-
+      Melon's lineages, one row per full lineage from domain to species: the estimated genome copies, the
+      abundance, the mean read identity and the number of identical lineages pooled into the row.
+
+      How to read: sort on copies to list the dominant lineages, and on identity to find lineages matched
+      by divergent reads. Abundance is each lineage's copies divided by the total over all lineages. A row
+      picked here selects the species in the plots.
+
+      Note: the rows are pooled across the long-read samples, because melon's sample is only known from
+      its output path.
+
+      Source: Melon, https://github.com/xinehc/melon
     layout: {x: 0, y: 10, w: 8, h: 6}
   - component_type: table
     workflow_tag: taxprofiler
@@ -1236,6 +1378,19 @@ tabs:
     tag: tp-prof-table-profiles
     index: prof-table-profiles
     title: Cross-classifier abundances
+    description: >-
+      Every standardised taxonomic profile in one table: one row per classifier, database, sample and
+      taxon, with the taxon's rank, its count and its relative abundance.
+
+      How to read: the relative abundance is the taxon's share of the reads or genomes that profile
+      assigned, so the shares of one profiling run add up to one. Filter on a taxon name to see how each
+      classifier reports it. A row picked here selects the taxon in the plots.
+
+      Note: the count is what taxpasta standardised, which is a read count for most classifiers but an
+      abundance scaled to an integer for MetaPhlAn, so counts do not compare across classifiers; use the
+      relative abundance.
+
+      Source: nf-core/taxprofiler output, https://nf-co.re/taxprofiler/2.0.1/docs/output
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: taxprofiler
@@ -1247,6 +1402,16 @@ tabs:
     tag: tp-prof-table-lineage
     index: prof-table-lineage
     title: Cross-classifier lineages
+    description: >-
+      The same rows as the cross-classifier abundances, with the seven NCBI ranks widened into their own
+      columns so each taxon carries its lineage.
+
+      How to read: read a row left to right from domain to species. Reads no classifier placed read as
+      unclassified at every rank, and taxa that no report named read as unresolved. A rank missing inside
+      a known lineage carries its nearest known ancestor forward.
+
+      Note: the lineages are recovered from the kraken-style reports of the run, so a taxon resolves only
+      when a report names its identifier.
     layout: {x: 0, y: 6, w: 8, h: 6}
   - component_type: table
     workflow_tag: taxprofiler
@@ -1258,6 +1423,12 @@ tabs:
     tag: tp-prof-table-sylph
     index: prof-table-sylph
     title: sylph clade abundances
+    description: >-
+      sylph's merged taxonomic profile, one row per clade and sample: the full lineage, the leaf taxon,
+      its rank and its relative abundance.
+
+      How to read: every depth of the lineage is a row, so filter on the rank to compare like with like. A
+      row picked here selects the clade in the plots.
     layout: {x: 0, y: 12, w: 8, h: 6}
 - title: Diversity
   subtitle: How diverse is each profile, by each classifier?
@@ -1445,7 +1616,18 @@ tabs:
     tag: tp-div-scatter
     index: div-richness-shannon
     title: Richness against diversity
-    description: One point per profiling run. Classifiers that report a long tail move right without moving up.
+    description: >-
+      Each point is one profiling run, a classifier with its database on a sample: how many taxa it
+      reported (horizontal) against its Shannon diversity (vertical). The point is coloured by classifier
+      and its symbol is the sequencing platform.
+
+      How to read: classifiers that report a long tail of rare taxa move right without moving up, and
+      classifiers that spread reads evenly over many taxa move up as well. A run far from the others of
+      its sample is worth opening. Click a point to select the run.
+
+      Note: Shannon diversity uses the natural logarithm over the taxa with a positive abundance, and the
+      taxa counted are every row the classifier reports, at any rank. Classifiers are therefore compared
+      by how they report, not by the true richness.
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: advanced_viz
     workflow_tag: taxprofiler
@@ -1460,7 +1642,18 @@ tabs:
     tag: tp-div-dot-plot
     index: div-dot-plot
     title: Diversity by sample and run
-    description: Dot colour is Shannon diversity, dot size the share the run's top taxon holds.
+    description: >-
+      Diversity per sample and profiling run. Each row is a classifier with its database and each column a
+      sample; the dot colour is Shannon diversity and its size is the share the run's most abundant taxon
+      holds.
+
+      How to read: a small dot at the high end of the colour scale is a diverse profile with no dominant
+      taxon, and a large dot at the low end is a profile dominated by one taxon. Compare the rows of one
+      column to see classifier disagreement on one sample, and the dots along a row to see sample
+      differences. At most 20 rows are drawn.
+
+      Note: Shannon diversity uses the natural logarithm over every taxon the classifier reports, at any
+      rank.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: figure
     workflow_tag: taxprofiler
@@ -1490,7 +1683,20 @@ tabs:
     tag: tp-div-accumulation
     index: div-accumulation
     title: Rank-abundance accumulation
-    description: A curve that saturates early is a concentrated profile; one that keeps climbing has a long tail.
+    description: >-
+      How concentrated each profile is. Taxa are ranked from the most abundant, and the line adds up their
+      shares, one line per profiling run and sample, coloured by classifier.
+
+      How to read: a curve that saturates early is a concentrated profile, with a few taxa holding the
+      classified community. One that keeps climbing has a long tail. Lines of different classifiers on the
+      same sample show how differently they spread the same reads.
+
+      Lines and annotations: the figure draws only the curves. The unclassified row is left out and the
+      shares are renormalised over the classified rows, and only the 30 most abundant taxa of each run are
+      drawn, so a curve does not reach 1 when the tail is longer.
+
+      Note: taxa are counted at every rank a classifier reports, so a profile that mixes ranks accumulates
+      differently from one that reports only species.
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: table
     workflow_tag: taxprofiler
@@ -1502,6 +1708,16 @@ tabs:
     tag: tp-div-table
     index: div-table
     title: Per-run profile statistics
+    description: >-
+      One row per sample and profiling run (classifier and database): the number of taxa reported, the
+      reads assigned, the share of the most abundant taxon, its Shannon diversity and its Pielou evenness.
+
+      How to read: sort on taxa observed to list classifiers with long tails, and on the top taxon share
+      to list concentrated profiles. Evenness is Shannon diversity divided by the natural logarithm of the
+      number of taxa, so 1 is a perfectly even profile. A row picked here selects the run in the plots.
+
+      Note: taxa are counted at every rank a classifier reports, so richness compares how classifiers
+      report and not the true richness.
     layout: {x: 0, y: 0, w: 8, h: 6}
 - title: Concordance
   subtitle: Where do the classifiers agree, and where does each stand alone?
@@ -1716,7 +1932,16 @@ tabs:
     tag: tp-conc-pcoa
     index: conc-pcoa
     title: Profile ordination (PCoA, Bray-Curtis)
-    description: One point per sample and profiling run, coloured by classifier. A lasso selects its runs.
+    description: >-
+      How similar the profiling runs are to each other. Each point is one sample with one classifier and
+      database, placed by a principal coordinates analysis of the Bray-Curtis distances between their
+      relative abundances, and coloured by classifier.
+
+      How to read: runs that agree on the community land together, so the spread reads as classifier
+      disagreement more than as biological distance. Draw a lasso to select its runs in the other tiles.
+
+      Note: the distances use every taxon id of the profile, at any rank, and the axes carry no biological
+      unit.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: advanced_viz
     workflow_tag: taxprofiler
@@ -1736,7 +1961,20 @@ tabs:
     tag: tp-conc-upset
     index: conc-upset
     title: Classifier detection overlap
-    description: Taxa shared by each combination of classifiers; the tallest shared bar is the agreed core.
+    description: >-
+      Which taxa each combination of classifiers detects. The matrix at the bottom marks the classifiers
+      in a combination, the bar above it counts the taxa detected by exactly that combination, and the
+      horizontal bars give the taxa each classifier detects in total.
+
+      How to read: the tallest bar with all classifiers marked is the agreed core, and bars with a single
+      classifier are its private tail. Bars are coloured by the number of classifiers in the combination.
+      Sample filters narrow it to one community.
+
+      Lines and annotations: a taxon counts as detected by a classifier when its count is above zero, per
+      sample and taxonomy id. Combinations with fewer than 2 taxa are hidden.
+
+      Note: sylph and melon are not supported by taxpasta in this release, so they are not part of the
+      cross-classifier tiles.
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: advanced_viz
     workflow_tag: taxprofiler
@@ -1760,7 +1998,19 @@ tabs:
     tag: tp-conc-sankey
     index: conc-lineage-sankey
     title: Root to phylum flow
-    description: Band width is the share of the selected runs that followed a lineage; unplaced reads are their own band. The depth picker goes down to species.
+    description: >-
+      Where the reads flow in the taxonomy. The root fans out into domains and phyla, and the width of a
+      band is the share of the selected runs that followed that lineage.
+
+      How to read: a band that splits into many phyla is a diverse community, and a thick unplaced band is
+      reads the classifiers could not place. Colours follow the source node. The depth picker goes down to
+      species.
+
+      Lines and annotations: reads that no classifier placed are their own band, and no band is hidden for
+      being thin.
+
+      Note: sylph and melon are not supported by taxpasta in this release, so they are not part of the
+      cross-classifier tiles.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: advanced_viz
     workflow_tag: taxprofiler
@@ -1778,7 +2028,20 @@ tabs:
     tag: tp-conc-heatmap
     index: conc-heatmap
     title: Taxon by run heatmap
-    description: Top taxa clustered across every profiling run, row z-scores, the rank as a row annotation.
+    description: >-
+      The most abundant taxa across every profiling run. Each row is a taxon, each column a run, and the
+      colour is the row z-score of the relative abundance.
+
+      How to read: rows and columns are clustered, so runs that group together agree on the same taxa. A
+      taxon that lights up in one block of columns is reported only by those classifiers. The strips above
+      the columns name the classifier and the platform, and the strip beside the rows names the rank.
+
+      Lines and annotations: z-scores are computed within each taxon across runs, so colours compare runs
+      for one taxon and not taxa with one another. Rows and columns are clustered with Ward linkage on the
+      correlation distance. Only the 60 most abundant taxa, summed over all runs, are kept.
+
+      Note: sylph and melon are not supported by taxpasta in this release, so they are not part of the
+      cross-classifier tiles.
     layout: {x: 0, y: 0, w: 8, h: 5}
 - title: Confidence
   subtitle: How close are the reads to the genomes sylph matched?
@@ -1943,7 +2206,20 @@ tabs:
     tag: tp-conf-dot-plot
     index: conf-ani-dot
     title: ANI by genome and sample
-    description: Dot colour is the adjusted ANI, dot size the genome's abundance in the sample.
+    description: >-
+      How close the reads are to the genomes sylph matched. Each row is a reference genome and each column
+      a sample; the dot colour is the adjusted ANI of the containment match and its size the genome's
+      abundance in the sample.
+
+      How to read: a large dot at the high end of the colour scale is an abundant genome matched at high
+      identity, a confident call. A large dot at the low end is an abundant genome matched at low
+      identity, a confident-looking call that is really a divergent relative. At most 25 genomes are
+      drawn.
+
+      Note: adjusted ANI is coverage-adjusted only when the genome's coverage is below 3x, and otherwise
+      falls back to the unadjusted containment ANI.
+
+      Source: sylph output format, https://github.com/bluenote-1577/sylph/wiki/Output-format
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: figure
     workflow_tag: taxprofiler
@@ -1963,7 +2239,18 @@ tabs:
     tag: tp-fig-ani-scatter
     index: conf-ani-abundance
     title: ANI against abundance
-    description: Bottom right, a confident-looking abundance rests on a divergent match.
+    description: >-
+      One point per genome and sample that sylph detected: its taxonomic abundance (horizontal) against
+      its adjusted ANI (vertical). The point is sized by the effective coverage and coloured by sample.
+
+      How to read: points at the bottom right are confident-looking abundances that rest on a divergent
+      match, a relative of the reference. Points at the top right are abundant and close to their
+      reference. Click a point to open its record.
+
+      Note: the figure draws no cut-off line, so read the points relative to each other and not against a
+      threshold.
+
+      Source: sylph output format, https://github.com/bluenote-1577/sylph/wiki/Output-format
     layout: {x: 0, y: 0, w: 5, h: 5}
   - component_type: advanced_viz
     workflow_tag: taxprofiler
@@ -1997,6 +2284,18 @@ tabs:
     tag: tp-conf-record
     index: conf-record
     title: Picked genome
+    description: >-
+      The record of the genome picked on the scatter: its name and first contig, its identity measures,
+      its abundance and its coverage.
+
+      How to read: Identity gives the adjusted and the unadjusted containment ANI, the containment (k-mers
+      found in the sample over the genome's total) and the k-mers reassigned. Abundance gives the
+      taxonomic abundance (coverage-normalised) and the sequence abundance (read share). The adjusted ANI
+      differs from the unadjusted one where sylph corrected for coverage.
+
+      Note: nothing shows until a point is picked on the plot to its left.
+
+      Source: sylph output format, https://github.com/bluenote-1577/sylph/wiki/Output-format
     layout: {x: 5, y: 0, w: 3, h: 5}
   - component_type: table
     workflow_tag: taxprofiler
@@ -2008,4 +2307,12 @@ tabs:
     tag: tp-conf-table
     index: conf-table
     title: sylph containment table
+    description: >-
+      sylph's containment results, one row per genome and sample: the adjusted and naive ANI, the
+      containment, the abundances, the coverage and the k-mers reassigned.
+
+      How to read: sort on adjusted ANI to list the most divergent matches, and on effective coverage to
+      list the genomes seen only thinly. A row picked here selects the genome in the plots.
+
+      Source: sylph output format, https://github.com/bluenote-1577/sylph/wiki/Output-format
     layout: {x: 0, y: 0, w: 8, h: 6}

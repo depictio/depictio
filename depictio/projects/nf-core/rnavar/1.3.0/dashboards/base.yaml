@@ -181,6 +181,7 @@ main_dashboard:
       - ![](icon:mdi:content-copy) **Replicates** up to {{max_reps}} samples in a group
       - ![](icon:mdi:set-merge) **Shared sites** {{shared}} of {{sites}} PASS sites called in every sample of their group
       - ![](icon:mdi:file-table-outline) **Samplesheet** [one row per sample](section:Sample sheet), its path in [the run parameters](params:input)
+      - ![](icon:mdi:palette-outline) **{GROUP_COL_DISPLAY}** {{legend:{GROUP_COL}}}
     tag: rv-ov-study
     index: ov-study
     layout: {x: 0, y: 1, w: 5, h: 3}
@@ -453,7 +454,20 @@ main_dashboard:
     index: ov-genome
     title: PASS sites along the genome
     link: tab:Genome
-    description: Each dot is a PASS site of a group, its height the read depth at the call in the replicate that read it least and its colour how many replicates call it. Click a dot to open the site in the genome browser.
+    description: >-
+      Each dot is a PASS site of a group, placed along the genome by its position, with its height
+      the read depth at the call in the replicate that read it least and its colour how many
+      replicates call it. The question is where the callset is shared and well read.
+
+      How to read: a high dot called in every replicate is a well-supported site, and a low dot
+      called in one replicate only may be a call that the other replicate never reached the depth to
+      make. Click a dot to open the site in the genome browser of the [Genome](tab:Genome) tab.
+
+      Lines and annotations: no cut-off line is drawn. The colour classes are every replicate, some
+      of them, one replicate only, and a group of a single sample, which has nothing to share with.
+
+      Note: RNA calls follow expression, so a site missing from one replicate is not necessarily an
+      error.
     layout: {x: 0, y: 11, w: 8, h: 4}
   # Link-only tab tiles: each tile prints its tab's subtitle, the question the
   # tab answers. A tile whose tab a route pruned draws nothing.
@@ -513,7 +527,13 @@ main_dashboard:
     tag: rv-sample-sheet
     index: sample-sheet
     title: Samples
-    description: One row per sample, with its design columns, alignment, duplication, coverage and callset numbers.
+    description: >-
+      One row per sample, with its design columns, alignment, duplication, coverage and callset
+      numbers side by side.
+
+      How to read: compare the replicates of a group first; a sample that departs from its group on
+      unique mapping, duplication or calls is the one to open in [Alignment](tab:Alignment) or
+      [Callset](tab:Callset). A picked row narrows the dashboard to that sample.
     layout: {x: 0, y: 0, w: 8, h: 6}
 tabs:
 # ============================================================================
@@ -815,7 +835,26 @@ tabs:
     tag: rv-aln-fig-unique-dup
     index: aln-unique-vs-dup
     title: Unique mapping and duplication per sample
-    description: One dot per sample, the lowest unique mapping on top, with the median of the samples in view dashed. Red shades under 60% uniquely mapped, amber over 80% duplicates, where a few genes fill the library; both are working limits of this template, and duplication tracks expression in RNA-seq, so read it by group. A sample more than 3 scaled median absolute deviations from the median carries its name; a click opens its record.
+    description: >-
+      Each dot is a sample on two panels, the share of its reads that map uniquely and the share
+      that are duplicates, with the samples sorted by unique mapping and coloured by group. The
+      question is which libraries are too weak to call variants from.
+
+      How to read: a dot in the red zone of the left panel is a library with few uniquely mapped
+      reads, and a dot in the amber zone of the right panel is a library where a few genes fill most
+      of the reads. Duplication tracks expression in RNA-seq, so read it by group and not against a
+      fixed level. A click opens the record of the sample.
+
+      Lines and annotations: the dashed line in each panel is the median of the samples in view. The
+      red zone spans 0 to 60% uniquely mapped and the amber zone 80% to 100% duplicates. A sample
+      more than 3 scaled median absolute deviations (1.4826 times the MAD) from the median of its
+      panel carries its name.
+
+      Source: Leys et al. 2013, doi:10.1016/j.jesp.2013.03.013 (outlier detection by the median
+      absolute deviation, scaled by 1.4826).
+
+      Note: the 60% and 80% limits are working values of this template, not published cut-offs, and
+      the multiplier of 3 is this template's choice.
     layout: {x: 0, y: 0, w: 5, h: 6}
   - component_type: advanced_viz
     workflow_tag: rnavar
@@ -836,7 +875,14 @@ tabs:
     tag: rv-aln-av-sample-record
     index: aln-sample-record
     title: Picked sample
-    description: The sample picked on the plot, from its reads to its calls.
+    description: >-
+      The record of the sample picked on the plot, in four groups: Alignment, Splicing, Coverage and
+      Calls.
+
+      How to read: no value is rated here, so read a weak one against the other replicates of the
+      group. A low unique-mapping share or a high unmapped share points at the library, a high
+      novel-junction share at the annotation or at noise, and an odd Ts/Tv or het/hom ratio at the
+      callset. Open [Callset](tab:Callset) for the charts behind the call numbers.
     layout: {x: 5, y: 0, w: 3, h: 6}
   - component_type: advanced_viz
     workflow_tag: rnavar
@@ -860,7 +906,22 @@ tabs:
     tag: rv-aln-fig-junctions
     index: aln-novel-junctions
     title: Novel splice junctions per sample
-    description: Junctions by intron motif, the novel ones first (the level switch shows the annotated ones, nearly all GT/AG). Canonical novel junctions can be real; non-canonical ones rarely are. Normalise off shows the counts.
+    description: >-
+      Each bar is a sample: its splice junctions by intron motif (GT/AG, GC/AG, AT/AC or
+      non-canonical), as shares of the junctions of the chosen level, novel first. The level switch
+      shows the annotated junctions. Normalise off shows the counts.
+
+      How to read: a clean library spends nearly all its junctions on GT/AG. Novel junctions on a
+      canonical motif can be real splicing or an annotation that does not fit the sample, while a
+      large non-canonical share of novel junctions is more often alignment noise. Compare the
+      replicates of a group.
+
+      Lines and annotations: no cut-off is drawn. When the Zoom switch crops the value axis, the cut
+      is marked `//` on the axis.
+
+      Source: Burset et al. 2000, Nucleic Acids Research 28(21):4364-4375,
+      https://doi.org/10.1093/nar/28.21.4364 (GT/AG is the large majority of mammalian splice site
+      pairs, and many non-canonical pairs in annotation may be errors).
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: table
     workflow_tag: rnavar
@@ -872,7 +933,13 @@ tabs:
     tag: rv-aln-table-star
     index: aln-table-star
     title: STAR alignment summary per sample
-    description: Input reads, read fate, splices and the mismatch, deletion and insertion rates.
+    description: >-
+      Input reads, uniquely mapped, multi-mapped and unmapped reads, splices and the mismatch,
+      deletion and insertion rates of every sample, from the STAR log.
+
+      How to read: compare the replicates of a group. A low uniquely mapped share with a high
+      unmapped share points at the library or the reference; a high multi-mapped share can point at
+      repeats or rRNA. A picked row narrows the dashboard to the sample.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: rnavar
@@ -885,7 +952,13 @@ tabs:
     tag: rv-aln-table-dups
     index: aln-table-dups
     title: Duplication metrics per sample
-    description: Pairs and reads examined, duplicates flagged, optical duplicates and Picard's library-size estimate.
+    description: >-
+      Pairs and reads examined, duplicates flagged, optical duplicates, the duplication rate and
+      Picard's library-size estimate of every sample.
+
+      How to read: in RNA-seq a high duplication rate follows from highly expressed genes, so
+      compare it between the samples of one group and read it together with the library-size
+      estimate. A picked row narrows the dashboard to the sample.
     layout: {x: 0, y: 6, w: 8, h: 6}
 - title: Coverage
   subtitle: How deep do the reads cover the genome, and where?
@@ -1039,7 +1112,16 @@ tabs:
     tag: rv-cov-av-depth
     index: cov-depth-profile
     title: Reference bases at each read depth
-    description: One curve per sample. A curve that falls later covers more of its expressed genes deep enough to call.
+    description: >-
+      Each curve is a sample: the number of reference bases at each read depth, on log axes. The
+      question is how deeply the reads cover the genome.
+
+      How to read: a curve that falls later covers more of its expressed genes deeply enough to
+      call. Curves of one group should look alike; a curve far to the left is a shallow library, and
+      the callset for it will be thin.
+
+      Lines and annotations: no reference line is drawn, because no published cut-off applies to a
+      transcriptome.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: advanced_viz
     workflow_tag: rnavar
@@ -1062,7 +1144,16 @@ tabs:
     tag: rv-cov-fig-contigs
     index: cov-contig-classes
     title: Mapped reads by contig class per sample
-    description: Autosomes, X, Y, the mitochondrion and the alt and unplaced contigs, as shares of each sample's mapped reads. The autosomes fill most of every bar, so the axis starts near the smallest autosome share (the // marks the cut).
+    description: >-
+      Each bar is a sample: its mapped reads by contig class (autosomes, X, Y, the mitochondrion,
+      and alt and unplaced contigs), as shares of its mapped reads.
+
+      How to read: the autosomes fill most of every bar, so the axis starts near the smallest
+      autosome share. A mitochondrial share far above the other samples can point at the library
+      preparation, and the X and Y shares tell the sex of the sample. Compare the replicates of a
+      group.
+
+      Lines and annotations: no cut-off is drawn. The cut of the axis is marked `//`.
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: table
     workflow_tag: rnavar
@@ -1075,7 +1166,12 @@ tabs:
     tag: rv-cov-table-idxstats
     index: cov-table-idxstats
     title: Mapped reads per contig
-    description: Contig length, mapped reads, their share of the sample and reads per megabase.
+    description: >-
+      Contig length, mapped reads, their share of the sample and reads per megabase, for every
+      contig and sample, from samtools idxstats.
+
+      How to read: sort by reads per megabase to find the contigs that hold more reads than their
+      length suggests. A picked row narrows the dashboard to the contig.
     layout: {x: 0, y: 0, w: 8, h: 6}
 # ============================================================================
 # Variants
@@ -1292,7 +1388,24 @@ tabs:
     tag: rv-cs-fig-quality
     index: cs-quality-bars
     title: Ts/Tv and het/hom ratio per sample
-    description: One bar per sample, the lowest Ts/Tv on top, with a working range shaded in green on each panel. Ts/Tv 2.5 to 3 is where exonic callsets sit, since random errors fall evenly on transitions and transversions and pull the ratio down; het/hom 1.5 to 2 is the range outbred exomes report. A bar outside a band points at a different error profile or genotype mix, and a het/hom ratio below it is often allele-specific expression, which RNA shows and DNA does not, rather than a call error.
+    description: >-
+      Each bar is a sample on two panels, its Ts/Tv and its het/hom ratio, sorted by Ts/Tv and
+      coloured by group. The question is whether the callset looks like a real human callset.
+
+      How to read: a bar inside the green band is in the range exonic callsets sit in. A bar outside
+      points at a different error profile or genotype mix, and a het/hom ratio below the band can be
+      allele-specific expression, which RNA shows and DNA does not, rather than a call error. A
+      click narrows the dashboard to the sample.
+
+      Lines and annotations: the green band of the Ts/Tv panel spans 2.5 to 3, and the one of the
+      het/hom panel spans 1.5 to 2. Both are fixed references of this template, not read from the
+      run, and not pipeline thresholds.
+
+      Source: Wang et al. 2015, Bioinformatics 31(3):318-323, doi:10.1093/bioinformatics/btu668 (a
+      Ts/Tv of about 3.0 for human exome data, and a het to non-reference-hom ratio of 2.0 expected
+      under Hardy-Weinberg with medians from about 1.4 to about 2.0 across ancestry groups).
+
+      Note: the band edges (2.5 and 1.5) are display aids and have no published source.
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: figure
     workflow_tag: rnavar
@@ -1315,7 +1428,16 @@ tabs:
     tag: rv-cs-fig-types
     index: cs-calls-by-type
     title: PASS calls per sample, by variant type
-    description: Stacked SNVs and indels of each sample; the samples of one group sit together on the axis.
+    description: >-
+      Each bar is a sample: its PASS calls, stacked into SNVs and indels. The samples of one group
+      sit together on the axis.
+
+      How to read: the replicates of a group should give similar totals. A sample with far fewer
+      calls than its replicates is shallow or has lost its reads, and one with far more may carry
+      artefacts; open [Alignment](tab:Alignment) to check its depth.
+
+      Lines and annotations: no reference is drawn, because the number of calls depends on the
+      transcriptome expressed.
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: advanced_viz
     workflow_tag: rnavar
@@ -1337,7 +1459,18 @@ tabs:
     tag: rv-cs-av-concordance
     index: cs-concordance
     title: Genotype concordance between samples
-    description: Calls both samples make with the same genotype, over the calls either makes (percent), clustered. A replicate that leaves its group is a swap or a shallow library.
+    description: >-
+      Each cell is the concordance of two samples: the calls both make with the same genotype over
+      the calls either makes, in percent. The rows and columns are clustered, and the side
+      annotation names the group.
+
+      How to read: replicates of one group should cluster together and apart from the other groups.
+      A replicate that leaves its group is a swap or a shallow library; check it in
+      [Alignment](tab:Alignment). RNA calls follow expression, so no pair reaches 100 off the
+      diagonal; compare pairs with each other and not with a ceiling.
+
+      Lines and annotations: the colour scale (Blues) runs from lighter for a lower to darker for a
+      higher concordance. No cut-off is drawn.
     layout: {x: 0, y: 0, w: 8, h: 9}
   - component_type: figure
     workflow_tag: rnavar
@@ -1363,7 +1496,21 @@ tabs:
     tag: rv-cs-fig-spectrum
     index: cs-spectrum
     title: Substitution spectrum per sample
-    description: The six pyrimidine-folded classes as shares of each sample's PASS SNVs; T to C carries the editing signal.
+    description: >-
+      Each bar is a sample: its PASS SNVs over the six pyrimidine-folded substitution classes, as
+      shares of its SNVs, stacked.
+
+      How to read: the replicates of a group should show the same profile. T to C carries the A-to-I
+      editing signal, because inosine is read as guanosine, so an A-to-I edit appears as A to G (T
+      to C on the opposite strand). A sample with a larger T to C share than its replicates may have
+      more editing or more artefacts.
+
+      Lines and annotations: no reference is drawn, because no published cut-off applies to a
+      spectrum.
+
+      Source: George et al. 2011, J Interferon Cytokine Res 31(1):99-117,
+      https://pmc.ncbi.nlm.nih.gov/articles/PMC3034097 (inosine is recognised as guanosine by
+      ribosomes and RNA polymerases).
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: figure
     workflow_tag: rnavar
@@ -1393,7 +1540,22 @@ tabs:
     tag: rv-cs-fig-vaf
     index: cs-vaf-distribution
     title: Allele fraction per sample
-    description: Share of each sample's PASS calls in each 0.05 bin of allele fraction; only calls read at least 10 times count, below which one read moves the fraction by 0.1, and the depth and variant type filters on the left narrow it. A germline sample peaks in the green band, 0.3 to 0.7 around the 0.5 of a heterozygous call, and in the blue one, 0.9 to 1, of a homozygous-alternate call. A heterozygous peak off 0.5, or a broad shoulder of low fractions, flags contamination, allelic imbalance (in RNA, allele-specific expression) or artefacts.
+    description: >-
+      One panel per sample: the share of its PASS calls in each 0.05 bin of allele fraction,
+      coloured by group. Only calls read at least 10 times are counted, below which one read moves
+      the fraction by 0.1.
+
+      How to read: a germline sample peaks in the green band around 0.5 for heterozygous calls and
+      in the blue band near 1 for homozygous-alternate ones. A heterozygous peak off 0.5, or a broad
+      shoulder of low fractions, flags contamination, allelic imbalance (in RNA, allele-specific
+      expression) or artefacts. The depth and variant type filters narrow it.
+
+      Lines and annotations: the green band spans allele fractions of 0.3 to 0.7, and the blue band
+      0.9 to 1. Both bands and the depth floor of 10 reads are working values of this template, not
+      read from the run.
+
+      Note: the expected peaks (0.5 and 1) follow from a diploid germline sample, but the band edges
+      and the depth floor are not validated cut-offs and have no published source.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: rnavar
@@ -1406,7 +1568,12 @@ tabs:
     tag: rv-cs-table-summary
     index: cs-table-summary
     title: Callset summary per sample
-    description: Calls, PASS share, SNVs, indels, Ts/Tv, zygosity and the median quality, depth and allele fraction.
+    description: >-
+      Calls, PASS share, SNVs, indels, multiallelic sites, Ts/Tv, zygosity and the median quality,
+      depth and allele fraction of every sample.
+
+      How to read: compare the replicates of a group on the PASS share, the median depth and Ts/Tv,
+      as in the charts above. A picked row narrows the dashboard to the sample.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: rnavar
@@ -1419,7 +1586,13 @@ tabs:
     tag: rv-cs-table-filters
     index: cs-table-filters
     title: FILTER breakdown per sample
-    description: Each FILTER value with its calls, their share of the sample's callset and the SNVs and indels among them.
+    description: >-
+      Each FILTER value of a sample's callset with its calls, their share of the callset, and the
+      SNVs and indels among them.
+
+      How to read: PASS is what the rest of the dashboard counts. A large share under one other
+      FILTER value shows which filter removed most. A picked row narrows the dashboard to that
+      filter.
     layout: {x: 0, y: 6, w: 8, h: 6}
   - component_type: table
     workflow_tag: rnavar
@@ -1431,7 +1604,13 @@ tabs:
     tag: rv-cs-table-sharing
     index: cs-table-sharing
     title: Replicate agreement per group
-    description: PASS sites called in any sample of a group, those called in every one, and the share.
+    description: >-
+      Per group, the PASS sites called in any sample, those called in every sample, and the share. A
+      group of one sample has no replicate to agree with, so its share is empty.
+
+      How to read: a high share says the callset does not depend on coverage, and a low share points
+      at coverage, since RNA calls follow expression and a variant sits in one replicate when the
+      other never reached the depth to call it. Open [Genome](tab:Genome) to see the sites.
     layout: {x: 0, y: 12, w: 8, h: 6}
 # Every component below reads a snpeff_* collection, all optional: a run
 # without --tools snpeff has none of them, and the import drops the tab.
@@ -1610,7 +1789,21 @@ tabs:
     tag: rv-ann-fig-impact
     index: ann-impact-bars
     title: Impact classes per sample
-    description: HIGH, MODERATE, LOW and MODIFIER effects as shares of each sample's effects; the level switch shows snpEff's other breakdowns (effect, functional class, region). MODIFIER fills most of every bar, so the axis starts near its smallest share (the // marks the cut).
+    description: >-
+      Each bar is a sample: the snpEff effects of its calls as shares, split into HIGH, MODERATE,
+      LOW and MODIFIER impact. The level switch shows snpEff's other breakdowns (effect, functional
+      class, region).
+
+      How to read: MODIFIER fills most of every bar, so the axis starts near its smallest share. The
+      HIGH and MODERATE parts are the effects that change a protein; compare them between the
+      replicates of a group. Open the Annotated calls table for the variants behind them.
+
+      Lines and annotations: no cut-off is drawn. The cut of the axis is marked `//`. The impact
+      classes are snpEff's: HIGH is assumed disruptive to the protein, MODERATE a non-disruptive
+      change that might alter it, LOW mostly harmless, MODIFIER mostly non-coding.
+
+      Source: SnpEff, https://pcingola.github.io/SnpEff/snpeff/inputoutput/ (the classes simplify
+      filtering and do not predict which variant causes a phenotype).
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: figure
     workflow_tag: rnavar
@@ -1634,7 +1827,19 @@ tabs:
     tag: rv-ann-fig-effects
     index: ann-consequences
     title: Commonest consequence terms
-    description: The twelve consequence terms snpEff assigned most often, summed over the samples and coloured by the impact class snpEff gives each term. Most are MODIFIER (intron, UTR, up- and downstream); the few HIGH and MODERATE terms are the ones that change a protein.
+    description: >-
+      Each bar is one of the twelve consequence terms snpEff assigned most often, summed over the
+      samples in view and coloured by the impact class snpEff gives the term.
+
+      How to read: most terms are MODIFIER (intron, UTR, up- and downstream), and the few HIGH and
+      MODERATE terms are the ones that change a protein. A HIGH term with a visible count is worth
+      opening in the Annotated calls table.
+
+      Lines and annotations: no cut-off is drawn. The impact class of each term follows snpEff's
+      classes (loss of function HIGH, protein-changing MODERATE, silent or near-silent LOW, the rest
+      MODIFIER).
+
+      Source: SnpEff, https://pcingola.github.io/SnpEff/snpeff/inputoutput/
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: table
     workflow_tag: rnavar
@@ -1647,7 +1852,15 @@ tabs:
     tag: rv-ann-table-genes
     index: ann-table-genes
     title: Variants per gene and impact class
-    description: One row per gene and sample with its HIGH, MODERATE, LOW and MODIFIER counts.
+    description: >-
+      One row per gene and sample, with its HIGH, MODERATE, LOW and MODIFIER counts, its biotype and
+      the number of coding variants.
+
+      How to read: sort by the HIGH or MODERATE count to find the genes most hit. The impact classes
+      are snpEff's and rank the effect of a variant, not its role in a phenotype. A picked row
+      narrows the dashboard to the gene.
+
+      Source: SnpEff, https://pcingola.github.io/SnpEff/snpeff/inputoutput/
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: rnavar
@@ -1660,7 +1873,12 @@ tabs:
     tag: rv-ann-table-calls
     index: ann-table-calls
     title: Annotated calls
-    description: Locus, alleles, gene, impact, consequence and protein change of each call, with its genotype and depth.
+    description: >-
+      Locus, alleles, gene, impact, consequence and protein change of each call, with its genotype,
+      depth and allele fraction.
+
+      How to read: start from the HIGH and MODERATE calls, then check the depth and the allele
+      fraction before relying on a call. A picked row narrows the dashboard to the call.
     layout: {x: 0, y: 6, w: 8, h: 6}
 # How the tiles of this tab are connected. The navigator (a genome_view on
 # variant_windows, one lane per design group) brushes a region; the region link
@@ -1954,7 +2172,20 @@ tabs:
     tag: rv-gen-av-navigator
     index: gen-navigator
     title: Variant navigator, 1 Mb windows
-    description: Distinct PASS variants per megabase window, one lane per group. A locus or gene in the header, or a brush, moves the browser below, whose window comes back as a band.
+    description: >-
+      Each bar is a 1 Mb window holding at least one PASS call, with its height the number of
+      distinct PASS variants in it, drawn in one lane per group. The question is where along the
+      genome the calls sit.
+
+      How to read: RNA calls pile up on expressed genes, so the windows light up where the
+      transcriptome is dense and stay empty over gene deserts. Brush a region, or enter a locus or
+      gene in the header, and the browser below follows.
+
+      Lines and annotations: the band on the navigator is the window the browser shows. No cut-off
+      line is drawn.
+
+      Note: the height follows expression as much as the variant rate, so compare lanes rather than
+      reading it as a mutation density.
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: jbrowse
     workflow_tag: rnavar
@@ -1999,7 +2230,17 @@ tabs:
     tag: rv-gen-browser
     index: gen-browser
     title: Genome browser
-    description: The calls (coloured by FILTER) of the replicates of one line above their alignments, opening on the best supported shared variant; the stepper walks the next ones and the other lines are in the track menu.
+    description: >-
+      The calls (coloured by FILTER) of the replicates of one group above their alignments, with the
+      junction arcs over the coverage. It opens on the best supported shared variant, and the
+      stepper walks the next ones.
+
+      How to read: check that the reads carry the alternate allele in every replicate that calls the
+      site, and that the site is not at the edge of a read pile-up or a splice junction. The other
+      groups are in the track menu. A row picked in the shared-variants table frames its site.
+
+      Lines and annotations: the common dbSNP sites and ClinVar are UCSC tracks (dbSnp155Common,
+      clinvarMain). The samples of a group share a hue, as in the lanes of the navigator.
     layout: {x: 0, y: 4, w: 8, h: 9}
   # One row per group and PASS site, best supported first: pick one to frame it
   # in the browser above. The group column is the cell line, so a site shared by
@@ -2014,7 +2255,13 @@ tabs:
     tag: rv-gen-table-shared
     index: gen-table-shared
     title: Shared PASS variants
-    description: One row per group and PASS site with how many replicates call it and how deeply the weakest call was read; a click centres the browser.
+    description: >-
+      One row per group and PASS site, with how many replicates call it, the read depth of the
+      weakest call and the median allele fraction, best supported first.
+
+      How to read: sites called in every replicate come first, then those some replicates call, then
+      the rest, and inside a tier the deeper the weakest call the higher the row. A site shared by
+      two groups is two rows. A click centres the browser on the site.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: rnavar
@@ -2026,5 +2273,9 @@ tabs:
     tag: rv-gen-table-calls
     index: gen-table-calls
     title: Calls in the region
-    description: One row per call of the region in view, with its genotype, depth and allele fraction; a click centres the browser.
+    description: >-
+      One row per call of the region in view, with its genotype, depth, quality and allele fraction.
+
+      How to read: the table narrows as the navigator is brushed. Check the depth and the allele
+      fraction of a call before relying on it, and click a row to centre the browser on it.
     layout: {x: 0, y: 0, w: 8, h: 6}

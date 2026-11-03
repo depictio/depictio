@@ -175,7 +175,7 @@ main_dashboard:
     values:
       libs: {dc: samples, column: sample, aggregation: nunique, format: integer}
       guides: {dc: samples, column: guide, aggregation: nunique, format: integer}
-      donors: {dc: samples, column: sample, aggregation: count, filter_expr: "col('has_template') == 'yes'", format: integer}
+      donors: {dc: samples, column: sample, aggregation: count, filter_expr: "col('template_length') > 0", format: integer}
       amp_len: {dc: samples, column: amplicon_length, aggregation: median, format: integer}
     body: |
       ### The study

@@ -150,6 +150,7 @@ main_dashboard:
       - ![](icon:mdi:flask-outline) **Samples** {{samples}} in {{groups}} groups
       - ![](icon:mdi:layers-outline) **Second factor** {{factor_2}}, {{levels_2}} levels
       - ![](icon:mdi:file-table-outline) **Samplesheet** [one row per sample](section:Sample sheet), its path in [the run parameters](params:input)
+      - ![](icon:mdi:palette-outline) **Group** {{legend:group}}
     tag: da-ov-study
     index: ov-study
     layout: {x: 0, y: 1, w: 5, h: 3}
@@ -510,7 +511,13 @@ main_dashboard:
     tag: da-sample-sheet
     index: sample-sheet
     title: Sample sheet
-    description: Every column of the pipeline's input sheet, with the DESeq2 size factor joined on.
+    description: >-
+      Which samples were analysed, and how are they labelled? Every column of the pipeline's input sheet,
+      with the DESeq2 size factor joined on.
+
+      How to read: check that each sample carries the group and any blocking factor the contrasts rely on.
+      Click a row to narrow the Analysis panel to that sample; a size factor far from the others means the
+      library was sequenced to a different depth.
     layout: {x: 0, y: 0, w: 8, h: 6}
 tabs:
 - title: Samples
@@ -673,7 +680,22 @@ tabs:
     tag: da-sm-pca
     index: sm-pca
     title: Sample PCA
-    description: One point per sample, coloured by the sheet's leading factor; colour by any other sheet column, a blocking factor included, from the controls. A lasso filters the linked panels.
+    description: >-
+      Do the samples separate by the design? Each point is one sample on the first two principal
+      components of the variance-stabilised expression of its most variable features, coloured by the
+      sheet's leading factor.
+
+      How to read: replicates of a group should sit together and groups apart along PC1 or PC2. A sample
+      far from its group, or a split by a factor that is not the contrast (batch, sex), is an outlier or a
+      confounder to settle before reading the calls; recolour by another sheet column from the controls to
+      test that. A lasso filters the linked panels.
+
+      Lines and annotations: the plot draws no line or zone, only the points on the first two components.
+      The components are computed on the 500 most variable features without per-gene scaling, as DESeq2's
+      plotPCA does.
+
+      Source: nf-core/differentialabundance parameter exploratory_n_features (default 500),
+      https://nf-co.re/differentialabundance/2.0.0/parameters
     layout: {x: 0, y: 0, w: 8, h: 6}
   # Full width: sample ids label both axes, and at half width they leave the
   # matrix no room.
@@ -692,7 +714,21 @@ tabs:
     tag: da-sm-distance
     index: sm-distance
     title: Sample-to-sample distance
-    description: Euclidean distance over the most variable features; the dendrograms group replicates that behave alike.
+    description: >-
+      Which samples behave alike? A square heatmap of the Euclidean distance between every pair of samples
+      over the variance-stabilised expression of their most variable features, with dendrograms clustering
+      rows and columns.
+
+      How to read: light blocks along the diagonal, with replicates joined early in the dendrogram, are
+      the good picture. A sample that clusters away from its replicates, or a block that follows a factor
+      other than the contrast, is an outlier or a batch to check against the PCA.
+
+      Lines and annotations: the tree on each side is a Ward hierarchical clustering of the distances and
+      the Blues colour scale runs from light (small distance, the diagonal is zero) to dark (large
+      distance). The sheet's factors are drawn above the columns, and the 500-feature cut-off is the
+      nf-core default exploratory_n_features.
+
+      Source: https://nf-co.re/differentialabundance/2.0.0/parameters
     layout: {x: 0, y: 6, w: 8, h: 7}
   - component_type: advanced_viz
     workflow_tag: differentialabundance
@@ -712,7 +748,17 @@ tabs:
     tag: da-sm-distribution
     index: sm-distribution
     title: Expression distribution per sample
-    description: Density of the variance-stabilised values, binned on one grid shared by every sample. A curve away from the bundle is a library normalised differently from the rest.
+    description: >-
+      Are the libraries normalised alike? One density curve per sample of its variance-stabilised
+      expression values, binned on a single grid shared by all samples.
+
+      How to read: the curves should lie on top of one another. A curve shifted sideways or with a shorter
+      upper tail is a library normalised differently from the rest, and every contrast it enters inherits
+      that; compare it with the median and the floor share in the cards above.
+
+      Lines and annotations: each line is one sample, 60 bins wide. Features at the floor of the matrix
+      (not expressed) are left out of the density because their spike would flatten the rest, and are
+      reported as the share at the floor instead. No cut-off line is drawn.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: advanced_viz
     workflow_tag: differentialabundance
@@ -729,7 +775,20 @@ tabs:
     tag: da-sm-heatmap
     index: sm-top-variable-heatmap
     title: Top variable features
-    description: Row z-scored variance-stabilised expression of the most variable features, clustered on both axes, the sheet's factors above the columns.
+    description: >-
+      Which features drive the differences between samples? A heatmap of the 500 most variable features
+      (rows) across samples (columns), each row z-scored, clustered on both axes, with the sheet's factors
+      above the columns.
+
+      How to read: blocks of rows that are red in one group of columns and blue in another are expression
+      programmes that follow the design. Columns that cluster by a factor other than the contrast, or a
+      single sample that stands out, point at batch or outliers.
+
+      Lines and annotations: the colour is the row z-score (red above the feature's own mean, blue below,
+      a diverging RdBu scale) and the trees are Ward clusterings. The 500-feature cut-off is the nf-core
+      default exploratory_n_features.
+
+      Source: https://nf-co.re/differentialabundance/2.0.0/parameters
     layout: {x: 0, y: 0, w: 8, h: 5}
 - title: Differential expression
   subtitle: Which genes change in each contrast, and can the test be trusted?
@@ -970,7 +1029,29 @@ tabs:
     tag: da-de-volcano
     index: de-volcano
     title: Volcano, MA and QQ
-    description: -log10(padj) against log2 fold change; the View switch puts the fold change against mean expression (MA) or the raw p-values against the null (QQ). The dashed lines are the pipeline's cut-offs, padj 0.05 and a two-fold change.
+    description: >-
+      Which genes change, and by how much? Each point is one gene in one contrast: its log2 fold change on
+      x and -log10 of its adjusted p-value (padj) on y; hits are coloured by direction. The View switch
+      shows the same calls as an MA plot (fold change against mean expression) or a QQ plot (observed
+      against expected raw p-values).
+
+      How to read: hits sit in the top left (down) and top right (up) outside the dotted lines; the
+      farther up and out, the stronger the call. In the MA view a hit-rich band at low mean expression is
+      a noisy estimate, and in the QQ view points that leave the diagonal early show an effect, while a
+      curve above the band over the whole range signals inflation, so check the design.
+
+      Lines and annotations: the dotted horizontal line is padj 0.05 and the two dotted vertical lines are
+      log2 fold change -1 and +1 (a two-fold change); in the MA view the dotted lines are at log2 fold
+      change -1 and +1. A hit is a gene with padj under 0.05 and an absolute log2 fold change of at least
+      1, the nf-core differential_max_qval and differential_min_fold_change defaults (two-fold); the
+      template fixes them and does not read them from the run. In the QQ view the diagonal is the null
+      (observed equals expected), the grey band is its 95% envelope and the label gives the genomic
+      inflation factor lambda, the median-based ratio where 1 means no inflation.
+
+      Source: nf-core/differentialabundance parameters,
+      https://nf-co.re/differentialabundance/2.0.0/parameters
+
+      Note: a gene DESeq2 filters out as too lowly expressed has no padj and is not drawn on the volcano.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: figure
     workflow_tag: differentialabundance
@@ -982,7 +1063,20 @@ tabs:
     tag: da-de-pvalue-histogram
     index: de-pvalue-histogram
     title: Raw p-value distribution
-    description: One histogram per contrast, 40 bins over 0 to 1. Flat with a spike at zero is a sound test; a hump or a rise towards one is not.
+    description: >-
+      Do the p-values of the test behave? One histogram per contrast of the raw p-values of every gene, in
+      40 bins from 0 to 1.
+
+      How to read: a flat histogram with a spike in the first bin is a sound test, with a flat floor from
+      genes with no effect and a peak from the ones with one. A hump in the middle or a rise towards 1
+      points at a violated assumption, a wrong design or an outlier sample, so check the PCA before
+      trusting the calls.
+
+      Lines and annotations: the plot draws no line, only the bars. The shapes are read as described in
+      the cited paper, and no p-value cut-off applies here.
+
+      Source: Breheny, Stromberg and Lambert, p-value histograms: inference and diagnostics,
+      High-Throughput 2018, https://doi.org/10.3390/ht7030023
     layout: {x: 0, y: 0, w: 4, h: 5}
   - component_type: figure
     workflow_tag: differentialabundance
@@ -1041,7 +1135,23 @@ tabs:
     tag: da-de-contrast-pair
     index: de-contrast-pair
     title: Contrast against contrast
-    description: Effect sizes of the first two contrasts (by id) against each other, gene by gene; a single-contrast run shows its MA view instead. Select points to follow the genes into the annotated table.
+    description: >-
+      Do two contrasts agree gene by gene? Each point is one gene, with its log2 fold change in the first
+      contrast on x and in the second on y, coloured by the contrast or contrasts in which it is called. A
+      run with a single contrast shows its MA view instead (fold change against mean expression).
+
+      How to read: points along the rising diagonal change the same way in both contrasts, points along
+      the falling diagonal change oppositely, and points on one axis change in one contrast only. Select
+      points to follow those genes into the annotated table.
+
+      Lines and annotations: the two dotted lines are the axes at log2 fold change 0; no cut-off is drawn.
+      A gene is coloured as called when it passes padj under 0.05 and an absolute log2 fold change of at
+      least 1, the nf-core defaults, which the template fixes and does not read from the run.
+
+      Source: nf-core/differentialabundance parameters,
+      https://nf-co.re/differentialabundance/2.0.0/parameters
+
+      Note: only the first two contrasts, by id, are paired.
     layout: {x: 4, y: 0, w: 4, h: 5}
   - component_type: advanced_viz
     workflow_tag: differentialabundance
@@ -1055,7 +1165,20 @@ tabs:
     tag: da-de-bars
     index: de-strongest-bars
     title: Strongest calls per contrast
-    description: The 10 largest effect sizes in each contrast; an empty panel means the contrast called nothing.
+    description: >-
+      Which genes change most in each contrast? The ten genes with the largest absolute log2 fold change
+      per contrast, one bar each, ordered by effect; colour is the direction of change.
+
+      How to read: solid bars are significant calls and hatched bars are not, so a tall hatched bar is a
+      large but uncertain effect. An empty panel means the contrast called nothing. Click a gene on the
+      tables below for its record.
+
+      Lines and annotations: a bar is solid when its padj is at most 0.05, the nf-core
+      differential_max_qval default, which the tile fixes as a display setting rather than reading from
+      the run. There is no fold-change cut-off line; bars are simply ranked by absolute effect.
+
+      Source: nf-core/differentialabundance parameters,
+      https://nf-co.re/differentialabundance/2.0.0/parameters
     layout: {x: 0, y: 0, w: 4, h: 5}
   - component_type: figure
     workflow_tag: differentialabundance
@@ -1067,7 +1190,17 @@ tabs:
     tag: da-de-biotype-box
     index: de-biotype-box
     title: Effect size by biotype
-    description: log2 fold change within each biotype, split by call direction; a class that shifts as a whole stands apart from one with a few loud genes.
+    description: >-
+      Does a class of feature shift as a whole? The log2 fold change of the genes in each biotype, split
+      by call direction, as boxes.
+
+      How to read: a box whose median is away from 0 means the class moves together; a box that straddles
+      0 with a few far dots is a class with a few loud genes. Compare the calls with the not-significant
+      genes to see whether a biotype is over-represented.
+
+      Lines and annotations: the box spans the first to the third quartile with the median as the inner
+      line, the whiskers reach the furthest value within 1.5 times the interquartile range and dots beyond
+      are outliers. No cut-off line is drawn.
     layout: {x: 4, y: 0, w: 4, h: 5}
   - component_type: table
     workflow_tag: differentialabundance
@@ -1079,7 +1212,17 @@ tabs:
     tag: da-de-table-annotated
     index: de-table-annotated
     title: Annotated DESeq2 results
-    description: Statistics joined to the GTF; features the annotation did not cover are dropped, so this table is shorter than the full one.
+    description: >-
+      Which genes are called, and what are they? DESeq2 statistics joined to the GTF: symbol, chromosome,
+      coordinates, biotype, log2 fold change, adjusted p-value and the call.
+
+      How to read: sort by padj or by log2 fold change to list the strongest calls, then click a row to
+      open its gene record. Features the annotation did not cover are dropped, so this table is shorter
+      than the full results.
+
+      Note: a gene without a padj was left out of the test by DESeq2's independent filtering. See the
+      DESeq2 vignette at
+      https://bioconductor.org/packages/release/bioc/vignettes/DESeq2/inst/doc/DESeq2.html
     layout: {x: 0, y: 0, w: 5, h: 6}
   - component_type: advanced_viz
     workflow_tag: differentialabundance
@@ -1101,7 +1244,13 @@ tabs:
     tag: da-de-record
     index: de-record
     title: Gene record
-    description: The gene picked in the table or a figure, one card per contrast it was tested in. Ensembl resolves the stable identifier for any species.
+    description: >-
+      What do we know about one gene? The gene picked in the table or on a figure, with its identifiers,
+      location and, for each contrast it was tested in, its direction, log2 fold change and adjusted
+      p-value.
+
+      How to read: pick a gene on the volcano, the contrast pair or the table. The Ensembl link resolves
+      the stable identifier for any species.
     layout: {x: 5, y: 0, w: 3, h: 6}
   - component_type: table
     workflow_tag: differentialabundance
@@ -1113,7 +1262,15 @@ tabs:
     tag: da-de-table-results
     index: de-table-results
     title: DESeq2 results
-    description: Every gene in every contrast, with the significance call; a run without a GTF has only this table.
+    description: >-
+      How was every gene scored in every contrast? One row per gene and contrast with its base mean, log2
+      fold change, p-value, adjusted p-value and the call, including genes that were not annotated.
+
+      How to read: filter on direction or sort by padj to list the calls, then click a row to select the
+      gene. A run without a GTF has only this table.
+
+      Note: an empty padj means DESeq2's independent filtering left the gene out of the test, and one that
+      underflowed to zero is capped for display at -log10 300.
     layout: {x: 0, y: 0, w: 8, h: 6}
 # Needs the GTF the run was given: without it the annotated table is not
 # written and the tab goes with it.
@@ -1309,7 +1466,20 @@ tabs:
     tag: da-gv-manhattan
     index: gv-manhattan
     title: Significance along the genome
-    description: Height is -log10(padj) and the line sits at padj 0.05. Select genes to carry them onto the Differential expression tables.
+    description: >-
+      Where on the genome do the calls concentrate? Each point is one annotated gene at its start
+      coordinate on x and -log10 of its adjusted p-value on y, with alternating bands for the chromosomes.
+
+      How to read: a tight cluster of points above the line on one chromosome is a region that changes
+      together. Isolated peaks are single genes. Select genes to carry them onto the [Differential
+      expression](tab:Differential expression) tables.
+
+      Lines and annotations: the solid line is padj 0.05 (-log10 of 1.301); points below it are dimmed.
+      The line uses the nf-core differential_max_qval default and ignores the fold-change cut-off, so a
+      point above it is significant but not necessarily a call; the template fixes the value and does not
+      read it from the run.
+
+      Source: https://nf-co.re/differentialabundance/2.0.0/parameters
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: advanced_viz
     workflow_tag: differentialabundance
@@ -1336,7 +1506,19 @@ tabs:
     tag: da-gv-lollipop
     index: gv-lollipop
     title: Calls per gene
-    description: One lane per contrast, one head per gene at its start coordinate, coloured by direction and sized by significance. Pick a chromosome first, since coordinates from different contigs otherwise share one axis.
+    description: >-
+      Which genes are called along a chromosome? One lane per contrast, one head per gene at its start
+      coordinate, coloured by direction and sized by -log10 of its adjusted p-value.
+
+      How to read: large heads are the strongest calls, and heads of one colour that cluster are a region
+      moving together. Pick a chromosome on the left first, since coordinates from different contigs would
+      otherwise share one axis.
+
+      Lines and annotations: there are no stems and no cut-off line. A gene is up or down only when it
+      passes padj under 0.05 and an absolute log2 fold change of at least 1, the nf-core defaults, which
+      the template fixes and does not read from the run.
+
+      Source: https://nf-co.re/differentialabundance/2.0.0/parameters
     layout: {x: 0, y: 0, w: 8, h: 6}
 # GSEA runs pre-ranked over the DESeq2 statistics and publishes one report per
 # pole of each contrast, which is why the panels split on `phenotype` as well
@@ -1536,7 +1718,24 @@ tabs:
     tag: da-en-dotplot
     index: en-dotplot
     title: Enriched gene sets
-    description: Normalised enrichment score per set, sized by the genes found and coloured by significance. A set far from zero with a small dot is carried by a handful of genes.
+    description: >-
+      Which gene sets move, and at which end of the contrast? Each dot is one gene set placed on its
+      normalised enrichment score (NES), sized by the number of its genes found and coloured by -log10 of
+      its FDR.
+
+      How to read: sets far from 0 are strongly enriched at one pole (positive at one end of the contrast,
+      negative at the other), and a dark dot is a significant one. A far dot that is small is carried by a
+      handful of genes, so check it in the GSEA report table.
+
+      Lines and annotations: the vertical line is NES 0. Only sets with an FDR of at most 0.25 are drawn,
+      the 20 most significant first, which is the cut-off GSEA recommends for phenotype permutation, the
+      nf-core default.
+
+      Source: GSEA team on the FDR cut-off, https://groups.google.com/g/gsea-help/c/0RIVtr7aESQ ; nf-core
+      gsea_permute default, https://nf-co.re/differentialabundance/2.0.0/parameters
+
+      Note: with gene-set permutation the GSEA team advises a stricter 0.05, so read the 0.25 as an
+      exploratory display filter and not a verdict.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: advanced_viz
     workflow_tag: differentialabundance
@@ -1552,7 +1751,20 @@ tabs:
     tag: da-en-nes-bars
     index: en-nes-bars
     title: Enrichment score by contrast
-    description: The strongest sets of each contrast on their normalised score; a set that moves in one contrast and not the other shows as a gap.
+    description: >-
+      Do two contrasts move the same gene sets? The strongest 15 sets of each contrast as bars on their
+      normalised enrichment score, one panel per contrast.
+
+      How to read: a set that moves in one contrast and not the other shows as a gap. Solid bars are sets
+      within the FDR cut-off and hatched bars are not, so a long hatched bar is a large but unsupported
+      score.
+
+      Lines and annotations: a bar is solid when its FDR is at most 0.25, GSEA's cut-off for phenotype
+      permutation (the nf-core default); there is no other line. Bars are ranked by absolute score.
+
+      Source: GSEA team on the FDR cut-off, https://groups.google.com/g/gsea-help/c/0RIVtr7aESQ
+
+      Note: with gene-set permutation the GSEA team advises 0.05 instead.
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: table
     workflow_tag: differentialabundance
@@ -1564,5 +1776,11 @@ tabs:
     tag: da-en-table
     index: en-table
     title: GSEA report
-    description: One row per set and pole, with both error rates, the leading edge as GSEA wrote it and its share of the set.
+    description: >-
+      Which sets are reported, and how strong is the evidence? One row per gene set and pole with its
+      size, NES, nominal p-value, FDR q-value, family-wise error rate and the leading edge as GSEA wrote
+      it, with its share of the set.
+
+      How to read: sort by FDR to list the supported sets and by NES to rank the strongest. A low
+      leading-edge share means a handful of genes drive the set.
     layout: {x: 0, y: 0, w: 8, h: 6}

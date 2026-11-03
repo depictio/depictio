@@ -161,6 +161,7 @@ main_dashboard:
       - ![](icon:mdi:content-copy) **Replicates** up to {{reps}} per target
       - ![](icon:mdi:shield-check-outline) **IgG controls** {{igg}}, each target replicate called against its own
       - ![](icon:mdi:file-table-outline) **Samplesheet** [one row per sample](section:Sample sheet), its path in [the run parameters](params:input)
+      - ![](icon:mdi:palette-outline) **Target** {{legend:target}}
     tag: cr-ov-study
     index: ov-study
     layout: {x: 0, y: 1, w: 5, h: 6}
@@ -486,7 +487,13 @@ main_dashboard:
     tag: cr-sample-sheet
     index: sample-sheet
     title: Sample sheet
-    description: One row per sample, with its target, replicate, role and control.
+    description: >-
+      Which samples does the run hold? One row per sample, with its target, replicate, role (target or
+      IgG control) and the control it is called against.
+
+      How to read: check that every target has the replicates and the control you expect before reading
+      any other tab. The sample name (group, _R and the replicate number) is the key every other table
+      of the dashboard is linked on.
     layout: {x: 0, y: 0, w: 8, h: 6}
 tabs:
 # ============================================================================
@@ -583,6 +590,15 @@ tabs:
     section: QC overview
     tag: cr-mqc-general-stats
     title: General statistics
+    description: >-
+      Where does a sample depart from the others? The per-sample summary MultiQC assembles from every
+      module of the report: one row per sample, one column per headline metric a module contributed.
+
+      How to read: scan a column for the sample that sits apart from its replicates, then open the
+      module's own plot below to see why.
+
+      Note: the columns depend on the modules the report holds, and a sample a module did not see has an
+      empty cell.
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: multiqc
     workflow_tag: cutandrun
@@ -593,6 +609,19 @@ tabs:
     section: QC overview
     tag: cr-mqc-fastqc-counts
     title: Sequence counts
+    description: >-
+      How many reads did each FASTQ file hold? One stacked bar per file analysed by FastQC, split into
+      unique and duplicate reads.
+
+      How to read: a bar far shorter than its siblings is a library with few reads. A large duplicate
+      part says the library was sequenced past its diversity or started from little material; compare it
+      with the duplicate share counted on the aligned reads in [Libraries](tab:Libraries).
+
+      Note: FastQC follows duplication only for the sequences that first appear in the first 100,000 of
+      each file, and matches the first 50 bp of reads longer than 75 bp, so the split is an estimate.
+
+      Source: FastQC help, Duplicate Sequences,
+      https://www.bioinformatics.babraham.ac.uk/projects/fastqc/Help/3%20Analysis%20Modules/8%20Duplicate%20Sequences.html
     layout: {x: 0, y: 4, w: 4, h: 4}
   - component_type: multiqc
     workflow_tag: cutandrun
@@ -603,6 +632,14 @@ tabs:
     section: QC overview
     tag: cr-mqc-cutadapt
     title: Reads kept after trimming
+    description: >-
+      Did trimming keep the reads? One stacked bar per sample: the read pairs (reads, for single-end
+      data) passing the filters, and the ones Cutadapt removed as too short, too long, carrying too many
+      N, or for another reason.
+
+      How to read: nearly the whole bar should be the passing segment. A large removed part, mostly too
+      short, means many reads were left too short once trimmed, so check the sequence counts and the
+      alignment rates of that sample next.
     layout: {x: 4, y: 4, w: 4, h: 4}
   # The pipeline's report keeps the two Bowtie 2 runs apart: bowtie2 is the
   # target genome, bowtie2-1 the spike-in. A re-generated report pools both
@@ -618,7 +655,19 @@ tabs:
     section: Alignment and spike-in
     tag: cr-mqc-bowtie2
     title: Target genome alignments
-    description: Bowtie 2 against the target genome. A re-generated report draws the spike-in libraries here too, suffixed .spikein.
+    description: >-
+      How did each library's read pairs align to the target genome? One stacked bar per library, split
+      into pairs mapped uniquely, mapped discordantly, with one mate mapped, multimapped, and pairs where
+      neither mate aligned. A re-generated report draws the spike-in libraries here too, suffixed
+      .spikein.
+
+      How to read: a bar made mostly of uniquely mapped pairs is a clean alignment. A large multimapped
+      part points to repeats, and a large unaligned part to contamination, adapter sequence or low
+      sequencing quality, so compare it with the spike-in alignment and the trimming plot.
+
+      Note: MultiQC halves the single-mate counts so that they add up to pair counts.
+
+      Source: MultiQC Bowtie 2 module, https://github.com/MultiQC/MultiQC/blob/main/multiqc/modules/bowtie2/bowtie2.py
     layout: {x: 0, y: 0, w: 4, h: 4}
   - component_type: multiqc
     workflow_tag: cutandrun
@@ -629,7 +678,17 @@ tabs:
     section: Alignment and spike-in
     tag: cr-mqc-bowtie2-spikein
     title: Spike-in alignments
-    description: Bowtie 2 against the spike-in genome; the reads aligned here set each library's scale factor.
+    description: >-
+      How much carrier DNA did each library hold? The same Bowtie 2 split of the read pairs as the target
+      alignment, now against the spike-in genome. The pairs that aligned here set each library's scale
+      factor.
+
+      How to read: the share of pairs aligning to the spike-in genome is the carrier fraction of the
+      library, and it should be small and alike between replicates. The nf-core documentation puts the
+      usual share for target samples under 1%; a library far from its replicates will be scaled
+      differently from them.
+
+      Source: nf-core/cutandrun output documentation, https://nf-co.re/cutandrun/3.2.2/docs/output
     layout: {x: 4, y: 0, w: 4, h: 4}
   - component_type: multiqc
     workflow_tag: cutandrun
@@ -640,6 +699,21 @@ tabs:
     section: Enrichment over the control
     tag: cr-mqc-deeptools-fingerprint
     title: Fingerprint plot
+    description: >-
+      Is the signal concentrated in a few places? One curve per library: the genome bins sorted by their
+      coverage along the x axis (rank, 0 to 1), against the cumulative coverage up to that rank, as a
+      fraction of the highest value, on the y axis.
+
+      How to read: a library that spreads its reads evenly follows the diagonal from corner to corner,
+      as an IgG control should. A target that worked stays low and then rises steeply at the highest
+      ranks, because its reads pile into few bins, and the further it bends from the diagonal the
+      stronger the enrichment. Broad marks bend less clearly than sharp ones.
+
+      Lines and annotations: MultiQC draws no reference line, so the diagonal of an evenly covered
+      library has to be read from corner to corner.
+
+      Source: deepTools plotFingerprint documentation,
+      https://deeptools.readthedocs.io/en/latest/content/tools/plotFingerprint.html
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: multiqc
     workflow_tag: cutandrun
@@ -650,6 +724,23 @@ tabs:
     section: QC details
     tag: cr-mqc-fastqc-quality
     title: Per-base sequence quality
+    description: >-
+      How good are the base calls along the read? The mean Phred quality score at each position, one
+      line per FASTQ file.
+
+      How to read: calls usually degrade toward the read end. Lines that stay in the green band along
+      the whole read are good calls, while a line that falls into the orange or red band early or
+      sharply marks a file to look at before trusting its alignment.
+
+      Lines and annotations: three background bands, drawn by MultiQC at fixed scores: green from a
+      Phred score of 28 upward, orange from 20 to 28, and red below 20.
+
+      Note: FastQC's own pass, warn and fail verdicts rest on the lower quartile and the median of each
+      position, which this chart does not plot; it shows the mean only.
+
+      Sources: MultiQC FastQC module, https://github.com/MultiQC/MultiQC/blob/main/multiqc/modules/fastqc/fastqc.py;
+      FastQC help, Per Base Sequence Quality,
+      https://www.bioinformatics.babraham.ac.uk/projects/fastqc/Help/3%20Analysis%20Modules/2%20Per%20Base%20Sequence%20Quality.html
     layout: {x: 0, y: 0, w: 4, h: 4}
   - component_type: multiqc
     workflow_tag: cutandrun
@@ -660,6 +751,23 @@ tabs:
     section: QC details
     tag: cr-mqc-fastqc-gc
     title: GC content
+    description: >-
+      Do the reads have the expected base composition? The share of reads (or their count) at each
+      percent GC, one line per FASTQ file.
+
+      How to read: a normal library gives one smooth peak at the GC content of its genome. An unusually
+      shaped distribution can mean a contaminated or biased library, and a shifted peak a systematic
+      bias, although FastQC cannot tell whether the shift matches the genome.
+
+      Lines and annotations: a dashed black line, Theoretical GC Content, is drawn only when the report
+      was built with a theoretical GC file; without one no reference line is drawn.
+
+      Note: FastQC compares each file with a normal distribution built from the file's own modal GC
+      content. It warns when the deviations cover more than 15% of the reads and fails above 30%.
+
+      Sources: FastQC help, Per Sequence GC Content,
+      https://www.bioinformatics.babraham.ac.uk/projects/fastqc/Help/3%20Analysis%20Modules/5%20Per%20Sequence%20GC%20Content.html;
+      MultiQC FastQC module, https://github.com/MultiQC/MultiQC/blob/main/multiqc/modules/fastqc/fastqc.py
     layout: {x: 4, y: 0, w: 4, h: 4}
   # Percent mapped left the open alignment row for the spike-in tile, which
   # keeps the tab inside its 20 open rows.
@@ -672,6 +780,17 @@ tabs:
     section: QC details
     tag: cr-mqc-samtools-mapped
     title: Percent mapped
+    description: >-
+      How many reads of each library are mapped? One stacked bar per library from samtools stats,
+      split into reads mapped with a mapping quality above 0, reads mapped with quality 0 (MQ0) and
+      unmapped reads.
+
+      How to read: a bar made mostly of the mapped segment is a library that aligned. A large unmapped
+      part can mean contamination, adapter sequence or low sequencing quality, and MQ0 reads are
+      ambiguously placed, often in repeats, and are often filtered out downstream.
+
+      Source: MultiQC samtools module,
+      https://github.com/MultiQC/MultiQC/blob/main/multiqc/modules/samtools/stats.py
     layout: {x: 0, y: 4, w: 4, h: 4}
   - component_type: multiqc
     workflow_tag: cutandrun
@@ -682,6 +801,13 @@ tabs:
     section: QC details
     tag: cr-mqc-samtools-insert
     title: Insert size distribution
+    description: >-
+      How long are the fragments the read pairs span? The number of read pairs at each insert size in
+      bp, from samtools stats, one line per library.
+
+      How to read: in a CUT&RUN library the insert is the sequenced fragment, so the peaks of a curve
+      are its fragment-size classes; the same ladder is read from the pipeline's own histogram in
+      [Fragments](tab:Fragments). Libraries of one target should draw curves of the same shape.
     layout: {x: 4, y: 4, w: 4, h: 4}
   - component_type: multiqc
     workflow_tag: cutandrun
@@ -692,6 +818,20 @@ tabs:
     section: QC details
     tag: cr-mqc-samtools-contig
     title: Mapped reads per contig
+    description: >-
+      Where on the genome did the reads map? One line per library across the chromosomes and contigs of
+      the reference, from samtools idxstats, as the fraction of the library's mapped reads on each.
+      MultiQC also offers the observed over expected counts, which weigh each contig by its length, and
+      the raw counts.
+
+      How to read: libraries of one target should draw the same profile. A contig that takes far more
+      reads in one library than in its replicates, or a mitochondrial contig that dominates a library,
+      is the place to look next.
+
+      Note: MultiQC leaves out contigs that hold less than 0.1% of all mapped reads, its default
+      cut-off for this plot.
+
+      Source: MultiQC samtools module documentation, https://docs.seqera.io/multiqc/modules/samtools
     layout: {x: 0, y: 8, w: 8, h: 4}
 # The tables the pipeline published beside the report: the spike-in factors,
 # the flagstat counts and the three deepTools tables the MultiQC pictures are
@@ -871,7 +1011,22 @@ tabs:
     tag: cr-lib-fig-scale
     index: lib-fig-scale
     title: Spike-in scale factor per library
-    description: The factor each library's coverage was scaled by. A library with little carrier DNA gets a large one.
+    description: >-
+      How much was each library's coverage scaled? One bar per library: its spike-in scale factor, the
+      normalisation constant divided by the number of read pairs that aligned to the spike-in genome. A
+      library with few spike-in pairs, that is with little carrier DNA, gets a large factor.
+
+      How to read: replicates of one target should carry factors of the same size. A factor far from its
+      replicates means the library held a different amount of carrier per sequenced pair, and the
+      coverage compared between samples is scaled by it; a very large factor rests on few spike-in
+      pairs and is the least certain.
+
+      Note: the pipeline does not publish the factor, so it is recomputed from the Bowtie 2 logs with
+      the pipeline's default constant of 10000 (normalisation_c), not read from the run. A run that set
+      another constant has the same ordering with other absolute values.
+
+      Sources: nf-core/cutandrun parameters, https://nf-co.re/cutandrun/3.2.2/parameters; Meers et al.
+      2019, carry-over bacterial DNA calibrates CUT&RUN samples, https://elifesciences.org/articles/46314
     layout: {x: 0, y: 0, w: 4, h: 4}
   - component_type: figure
     workflow_tag: cutandrun
@@ -891,7 +1046,18 @@ tabs:
     tag: cr-lib-fig-dup
     index: lib-fig-dup
     title: Duplicate reads per library
-    description: Share of each library's reads flagged as duplicates; IgG controls hold the least material and duplicate most.
+    description: >-
+      How much of each library is duplicated? One bar per library: the share of its reads that Picard
+      flagged as duplicates in the marked-duplicate BAM, from samtools flagstat.
+
+      How to read: a high bar is a library whose fragments repeat, because it started from little
+      material or was sequenced deeper than its complexity; read it against the read count of the same
+      library. No cut-off is applied, so the bars rank the libraries and give no verdict.
+
+      Note: the pipeline marks duplicates but, by default, removes them from the IgG controls only, so
+      this share describes the target libraries as sequenced (--dedup_target_reads changes that).
+
+      Source: nf-core/cutandrun output documentation, https://nf-co.re/cutandrun/3.2.2/docs/output
     layout: {x: 4, y: 0, w: 4, h: 4}
   - component_type: advanced_viz
     workflow_tag: cutandrun
@@ -919,7 +1085,25 @@ tabs:
     tag: cr-lib-av-fingerprint
     index: lib-av-fingerprint
     title: Coverage concentration per library
-    description: The targets sit apart from the IgG controls, which look uniform. Point size is the share of the genome with no reads.
+    description: >-
+      Is each target more concentrated than its control? Each point is one library, in its own colour,
+      placed by the area under its observed coverage curve (x) and its Jensen-Shannon distance to a
+      perfect input of the same depth (y); the marker size is the share of the genome bins with no
+      reads.
+
+      How to read: a lower area means more focal enrichment and a larger distance means a coverage
+      profile further from an evenly covered library. An enriched target therefore sits to the upper
+      left, while an IgG control sits near an evenly covered library, and a target that lands with the
+      controls did not enrich. The enrichment of broad marks is less marked on both axes.
+
+      Annotations: the four most extreme libraries carry their name. No cut-off line is drawn.
+
+      Note: at low sequencing depth a normal-looking library can appear stronger or weaker than it is,
+      which is why deepTools reports synthetic values for a perfect input of the same depth.
+
+      Sources: deepTools plotFingerprint quality metrics,
+      https://deeptools.readthedocs.io/en/latest/content/feature/plotFingerprint_QC_metrics.html;
+      plotFingerprint, https://deeptools.readthedocs.io/en/latest/content/tools/plotFingerprint.html
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: advanced_viz
     workflow_tag: cutandrun
@@ -937,7 +1121,19 @@ tabs:
     tag: cr-lib-av-pca
     index: lib-av-pca
     title: Libraries on the first two components
-    description: Replicates of one target cluster; a library that lands with the controls did not enrich.
+    description: >-
+      Which libraries look alike? Each point is one library, in its own colour, placed on the first two
+      principal components of the genome-wide bin counts that deepTools plotPCA computed.
+
+      How to read: replicates of one target should sit close together, and the IgG controls should
+      group apart from the targets. A library that lands with the controls did not enrich, and one far
+      from its own replicates is an outlier or a possible swap; check it in the correlation matrix.
+
+      Annotations: no reference line or cut-off is drawn, and the axes are the two components with no
+      fixed scale.
+
+      Source: nf-core/cutandrun output documentation, which describes the PCA as a way to find batch
+      effects and outliers, https://nf-co.re/cutandrun/3.2.2/docs/output
     layout: {x: 0, y: 0, w: 4, h: 6}
   - component_type: advanced_viz
     workflow_tag: cutandrun
@@ -957,7 +1153,20 @@ tabs:
     tag: cr-lib-av-corr
     index: lib-av-corr
     title: Library correlation matrix
-    description: Correlation of the genome-wide bin counts; a block that spans two targets is a swap or a contamination.
+    description: >-
+      Which libraries agree over the genome? Each cell is the correlation of the genome-wide bin counts
+      of two libraries, from deepTools plotCorrelation, with the rows and columns ordered by clustering.
+
+      How to read: replicates of one target should form a block of high correlation, and the IgG
+      controls another. A block that spans two targets, or a library that clusters away from its own
+      replicates, can be a sample swap or cross-contamination worth checking against the sample sheet.
+
+      Lines and annotations: the dendrograms on both axes show the clustering, average linkage on a
+      correlation distance; the colour bar gives the correlation of each cell. No cut-off is drawn.
+
+      Source: nf-core/cutandrun output documentation, which describes the matrix as the overall
+      similarity between samples from read coverage in genomic regions,
+      https://nf-co.re/cutandrun/3.2.2/docs/output
     layout: {x: 4, y: 0, w: 4, h: 6}
   - component_type: figure
     workflow_tag: cutandrun
@@ -975,7 +1184,16 @@ tabs:
     tag: cr-lib-fig-depth
     index: lib-fig-depth
     title: Target depth against spike-in depth
-    description: The larger a library's spike-in share, the smaller its scale factor, which is why IgG controls sit low.
+    description: >-
+      How do the two alignments compare? Each point is one library, in its own colour: the read pairs
+      that aligned to the spike-in genome (x) against the read pairs that aligned to the target genome
+      (y).
+
+      How to read: a library that sits high for its spike-in depth carries more target signal per unit
+      of carrier DNA, and one that sits low carries less. The more spike-in pairs a library has, the
+      smaller its scale factor, so points to the right are scaled down more.
+
+      Annotations: no reference line or cut-off is drawn.
     layout: {x: 0, y: 0, w: 4, h: 4}
   - component_type: figure
     workflow_tag: cutandrun
@@ -996,7 +1214,17 @@ tabs:
     tag: cr-lib-fig-dup-depth
     index: lib-fig-dup-depth
     title: Duplication against depth
-    description: Each library's duplicate share against its read count; deep and highly duplicated means saturated.
+    description: >-
+      Was a library sequenced past its complexity? Each point is one library: the reads in its
+      marked-duplicate BAM (x) against the share of them flagged as duplicates (y).
+
+      How to read: a library that is both deep and highly duplicated gains few new fragments from more
+      sequencing, while a shallow library with many duplicates started from little material. Compare a
+      library with the others of its target to see which departs.
+
+      Annotations: no reference line or cut-off is drawn.
+
+      Note: the read count is that of the aligned BAM, so it is below the sequenced depth.
     layout: {x: 4, y: 0, w: 4, h: 4}
   - component_type: table
     workflow_tag: cutandrun
@@ -1008,7 +1236,13 @@ tabs:
     tag: cr-lib-table-spike
     index: lib-table-spike
     title: Spike-in factors
-    description: One row per library, with both alignment depths, both rates and the factor derived from them.
+    description: >-
+      The numbers behind the spike-in tiles. One row per library, with the read pairs that entered both
+      alignments, the pairs and the rate aligned to the target genome and to the spike-in genome, and
+      the scale factor derived from them.
+
+      How to read: sort by the scale factor or the spike-in rate to find the library that departs from
+      its replicates, then open its alignment in [MultiQC](tab:MultiQC).
     layout: {x: 0, y: 0, w: 8, h: 6}
 # ============================================================================
 # Chromatin signal
@@ -1197,7 +1431,21 @@ tabs:
     tag: cr-frag-fig-dist
     index: frag-length-dist
     title: Fragment length distribution
-    description: The share of each sample's fragments at every length; the bands are the sub-nucleosomal (sub) and mononucleosomal (mono) windows.
+    description: >-
+      Did the digestion cut around nucleosomes? One curve per sample: the share of its fragments at
+      every length from 25 to 800 bp, in the colour of its target.
+
+      How to read: a working experiment shows a sharp peak of short, sub-nucleosomal fragments beside a
+      mononucleosomal shoulder, and a sharp mark carries more of the short material than a broad one. A
+      flat curve with no ladder suggests a poor digestion; open [Peaks](tab:Peaks) to see whether the
+      library still produced regions.
+
+      Lines and annotations: two grey bands, labelled sub (below 120 bp) and mono (120 to 250 bp), mark
+      the first two nucleosome classes. The 120 bp edge is the size at or below which Skene and Henikoff
+      map transcription-factor-sized fragments separately from nucleosome-sized ones; the 250 bp edge is
+      a fixed class boundary of this template, not a published cut-off.
+
+      Source: Skene and Henikoff 2017, https://elifesciences.org/articles/21856
     layout: {x: 0, y: 0, w: 4, h: 4}
   - component_type: figure
     workflow_tag: cutandrun
@@ -1213,7 +1461,15 @@ tabs:
     tag: cr-frag-fig-cumulative
     index: frag-length-cumulative
     title: Cumulative fragment length
-    description: A curve that rises early is dominated by short, sub-nucleosomal fragments.
+    description: >-
+      How are the fragment lengths spread, cumulatively? One curve per sample, in its own colour: the
+      share of its fragments that are at most as long as the length on the x axis.
+
+      How to read: a curve that rises early is dominated by short, sub-nucleosomal fragments, and one
+      that rises late by long ones. Two samples are easy to compare here because their curves share the
+      same 0 to 1 scale whatever their depth, and a steep rise marks a frequent fragment length.
+
+      Annotations: no reference line or cut-off is drawn.
     layout: {x: 4, y: 0, w: 4, h: 4}
   - component_type: figure
     workflow_tag: cutandrun
@@ -1230,7 +1486,21 @@ tabs:
     tag: cr-frag-fig-classes
     index: frag-class-stack
     title: Nucleosome classes per sample
-    description: Each library split into the four classes, as a share of its own fragments.
+    description: >-
+      How nucleosomal is each library? One stacked bar per library: the share of its own fragments in
+      each of four length classes, sub-, mono-, di- and multi-nucleosomal, each in a colour kept across
+      the dashboard.
+
+      How to read: a sharp mark is expected to carry more sub-nucleosomal material than a broad one,
+      which is mononucleosome heavy. Replicates of one target should split alike; a bar that departs
+      from its replicates suggests a digestion that differed.
+
+      Lines and annotations: the class edges are below 120 bp (sub), 120 to 250 bp (mono), 251 to 450 bp
+      (di) and above 450 bp (multi), fixed class boundaries of this template and not read from the run.
+      Only the 120 bp edge has a published basis, the split of transcription-factor-sized from
+      nucleosome-sized fragments by Skene and Henikoff.
+
+      Source: Skene and Henikoff 2017, https://elifesciences.org/articles/21856
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: table
     workflow_tag: cutandrun
@@ -1242,7 +1512,13 @@ tabs:
     tag: cr-frag-table-classes
     index: frag-table-classes
     title: Nucleosome classes
-    description: Four rows per sample, with the fragments, the share and the median length of each class.
+    description: >-
+      The numbers behind the class bars. Four rows per sample, one per nucleosome class, with the
+      fragments in it, their share of the library, the median length inside the class and the sample's
+      mononucleosomal to sub-nucleosomal ratio.
+
+      How to read: sort by the ratio to rank the libraries from sharp to broad, and compare the
+      replicates of a target on the same column.
     layout: {x: 0, y: 0, w: 8, h: 6}
 - title: Peaks
   subtitle: What did each sample call, and how much signal do peaks hold?
@@ -1467,7 +1743,21 @@ tabs:
     tag: cr-pk-fig-width
     index: pk-width-hist
     title: SEACR region width
-    description: How wide the calls are, per sample, on a log axis.
+    description: >-
+      How wide are the regions SEACR called? A histogram of the region widths in bp on a log x axis, in
+      60 bins and one colour per sample, with the number of regions on the y axis.
+
+      How to read: a sharp mark gives narrow regions and a broad mark far wider ones, and replicates of
+      one target should draw the same shape. A sample whose widths sit apart from its replicates was
+      called differently, which its depth or its control can explain.
+
+      Annotations: no reference line or cut-off is drawn.
+
+      Note: the regions come from the SEACR mode the run used, stringent by default in the pipeline,
+      which sets how many and how wide they are.
+
+      Sources: SEACR documentation, https://github.com/FredHutch/SEACR; nf-core/cutandrun parameters,
+      https://nf-co.re/cutandrun/3.2.2/parameters
     layout: {x: 0, y: 0, w: 4, h: 4}
   # Colours by target, as the fragment ladder does: the pieces of the group
   # kwargs, never the spread, since the curves group by sample.
@@ -1493,7 +1783,22 @@ tabs:
     tag: cr-pk-fig-profile
     index: pk-pileup-profile
     title: Mean pile-up per sample
-    description: Replicates of one mark should overlap; the height gap between marks is the enrichment gap.
+    description: >-
+      How do fragments pile up on a typical peak? One curve per sample, in the colour of its target: the
+      mean fragments per million at each offset from the region summit, over the strongest SEACR
+      regions of the sample, in 100 bp bins across a 6 kb window.
+
+      How to read: a sample that worked rises to a peak at the summit and falls back to the flanks. The
+      replicates of one target should overlap, and the height gap between targets is the gap in
+      enrichment; a flat curve means the regions have no pile-up.
+
+      Lines and annotations: the dotted vertical line at offset 0 is the summit, the midpoint of the
+      sub-interval where SEACR's coverage reached its maximum in the region.
+
+      Note: only each sample's 500 strongest SEACR regions enter, keeping those more than a window apart,
+      so the curve describes the best calls and not all of them.
+
+      Source: SEACR documentation, https://github.com/FredHutch/SEACR
     layout: {x: 4, y: 0, w: 4, h: 4}
   - component_type: advanced_viz
     workflow_tag: cutandrun
@@ -1509,7 +1814,23 @@ tabs:
     tag: cr-pk-av-pileup-matrix
     index: pk-pileup-matrix
     title: Fragment pile-up around the SEACR summits
-    description: Regions down, offset across, fragments per million as colour, one panel per sample.
+    description: >-
+      Do the regions pile up the same way, one by one? One panel per sample: each row is one SEACR
+      region ordered by its signal, each column an offset from the summit, and the colour is the
+      fragments per million in that bin. A curve of the mean over the rows sits above each panel.
+
+      How to read: a vertical band of colour at the summit, across the rows, means the regions pile up
+      consistently. A panel with no band is a sample without a pile-up, and a band that thins along the
+      rows means the weaker regions pile up less.
+
+      Lines and annotations: the vertical line labelled summit marks offset 0, the midpoint of the
+      sub-interval where SEACR's coverage reached its maximum. The colour bar gives the fragments per
+      million.
+
+      Note: each panel holds at most the 500 strongest SEACR regions of its sample, so weaker calls do
+      not appear.
+
+      Source: SEACR documentation, https://github.com/FredHutch/SEACR
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: figure
     workflow_tag: cutandrun
@@ -1526,7 +1847,19 @@ tabs:
     tag: cr-pk-fig-frip
     index: pk-frip-bar
     title: Fragment coverage inside and outside peaks
-    description: A library whose peaks hold little of its coverage either failed or was called too strictly.
+    description: >-
+      How much of each library's signal is in its peaks? One stacked bar per library: the share of its
+      fragment coverage that falls inside its own SEACR regions (In peaks) and outside them (Outside
+      peaks), each in a colour kept across the dashboard.
+
+      How to read: a library whose peaks hold little of its coverage either failed or was called too
+      strictly, and the replicates of one target should split alike. Open [Fragments](tab:Fragments) and
+      the fingerprint to tell a weak library from a strict call.
+
+      Annotations: no reference line or cut-off is drawn.
+
+      Note: SEACR reports no read count, so the share is built in base pairs of coverage, with the peak
+      signal divided by the spike-in factor, and is not a read-based FRiP value.
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: table
     workflow_tag: cutandrun
@@ -1538,7 +1871,15 @@ tabs:
     tag: cr-pk-table-seacr
     index: pk-table-seacr
     title: SEACR regions
-    description: Coordinates, width and the two coverage measures for every SEACR call.
+    description: >-
+      Every region SEACR called. One row per region, with its coordinates, width, the SEACR mode it
+      came from, the total and maximum fragment coverage inside it, and the coverage per base.
+
+      How to read: sort by total signal to find the strongest regions, or by width to find the broadest.
+      Total signal is the summed fragment coverage over the region and max signal the highest coverage
+      reached inside it.
+
+      Source: SEACR documentation, https://github.com/FredHutch/SEACR
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: cutandrun
@@ -1550,7 +1891,16 @@ tabs:
     tag: cr-pk-table-macs
     index: pk-table-macs
     title: MACS2 peaks
-    description: Coordinates, summit, fold enrichment and significance for every MACS2 call.
+    description: >-
+      Every peak MACS2 called. One row per peak, with its coordinates, summit, width, the fold
+      enrichment at the summit over the control, and the p-value and q-value MACS2 reported, as
+      -log10 values.
+
+      How to read: sort by -log10 q-value or by fold enrichment to rank the peaks. The run keeps only
+      the peaks that pass its q-value cut-off, 0.01 by default in the pipeline, so no peak sits below
+      it.
+
+      Source: nf-core/cutandrun parameters (macs2_qvalue), https://nf-co.re/cutandrun/3.2.2/parameters
     layout: {x: 0, y: 6, w: 8, h: 6}
   - component_type: table
     workflow_tag: cutandrun
@@ -1562,7 +1912,13 @@ tabs:
     tag: cr-pk-table-summary
     index: pk-table-summary
     title: SEACR summary per sample
-    description: Region count, bases covered and the width and coverage spreads per sample.
+    description: >-
+      One row per sample, summarising its SEACR calls: the number of regions, the bases they cover, and
+      the median width, total signal, maximum signal and coverage per base across them.
+
+      How to read: compare the replicates of a target on the same column, and the targets with their IgG
+      control. A target that worked has far more coverage in its regions than a control taken through
+      the same thresholding.
     layout: {x: 0, y: 12, w: 8, h: 6}
   - component_type: table
     workflow_tag: cutandrun
@@ -1574,7 +1930,16 @@ tabs:
     tag: cr-pk-table-frip
     index: pk-table-frip
     title: Signal budget
-    description: Two rows per sample, with the coverage in base pairs, the fraction and the spike-in factor.
+    description: >-
+      How each library's fragment coverage splits into peaks and background. Two rows per sample, In
+      peaks and Outside peaks, with the coverage in base pairs, its fraction of the library, the
+      sample's fraction in peaks, and the spike-in factor divided out of the peak signal.
+
+      How to read: the fraction in peaks is repeated on both rows of a sample. A factor of exactly 1 is
+      the fallback used when no spike-in factor was available.
+
+      Note: SEACR reports no read count, so the fraction is built in base pairs of coverage and is not a
+      read-based FRiP value.
     layout: {x: 0, y: 18, w: 8, h: 6}
 # ============================================================================
 # Agreement
@@ -1769,7 +2134,22 @@ tabs:
     tag: cr-ca-fig-scatter
     index: ca-caller-scatter
     title: MACS2 against SEACR, per sample
-    description: Point size is the mean share of calls the two callers share.
+    description: >-
+      Do the two callers find as many peaks? Each point is one sample, in the colour of its target: the
+      peaks MACS2 called (x) against the regions SEACR called (y), with the marker size set by the mean
+      share of calls the two callers have in common.
+
+      How to read: a point on the dotted line means equal yields, and one far above it is a sample SEACR
+      sees as richer than MACS2. A point on the y axis is a sample with no MACS2 peaks, which is a
+      result rather than a gap. A large marker means the callers agree on where the calls are, a small
+      one that they call different places.
+
+      Lines and annotations: the dotted line is the diagonal x = y, from 0 to the larger of the two
+      largest counts. It is a display aid for equal yields, not a cut-off.
+
+      Note: a caller that called nothing counts as an agreement of 0, which lowers the mean share of the
+      sample. A call is shared when it overlaps at least one call of the other caller on the same
+      chromosome, so overlap is counted and not measured in bases.
     layout: {x: 0, y: 0, w: 4, h: 4}
   - component_type: figure
     workflow_tag: cutandrun
@@ -1786,7 +2166,22 @@ tabs:
     tag: cr-ca-fig-unique
     index: ca-unique-bar
     title: Calls the other caller did not make
-    description: How many of each caller's peaks the other one never called, per sample.
+    description: >-
+      What does each caller find that the other misses? Two bars per sample, one per caller, in the
+      caller's colour: the number of its peaks that overlap no peak of the other caller on the same
+      chromosome.
+
+      How to read: two similar bars mean the callers disagree equally often, and a tall bar for one
+      caller means it calls places the other never sees. When a caller called nothing for a sample, every
+      call of the other caller counts as unique.
+
+      Annotations: no reference line or cut-off is drawn.
+
+      Note: neither caller is a subset of the other, so a count of unique calls is a difference between
+      methods and not an error rate. SEACR thresholds the coverage against the IgG control, while MACS2
+      fits a background model.
+
+      Source: SEACR documentation, https://github.com/FredHutch/SEACR
     layout: {x: 4, y: 0, w: 4, h: 4}
   - component_type: advanced_viz
     workflow_tag: cutandrun
@@ -1805,7 +2200,20 @@ tabs:
     tag: cr-ca-av-macs-manhattan
     index: ca-macs-manhattan
     title: MACS2 significance along the genome
-    description: Height is -log10 of the q-value. A sample with no MACS2 peaks contributes nothing here.
+    description: >-
+      Where along the genome are the MACS2 peaks, and how significant? Each point is one MACS2 peak at
+      its summit, placed by chromosome and position (x) and by its -log10 q-value (y), in the colour of
+      its sample.
+
+      How to read: a tall point is a peak MACS2 is more confident about, and a stretch of a chromosome
+      with no point has no call. A sample with no MACS2 peaks contributes nothing here.
+
+      Annotations: no threshold line is drawn and no peak is labelled.
+
+      Note: MACS2 reports only peaks below its q-value cut-off, 0.01 by default in the pipeline, which is
+      -log10 q of 2, so no point sits under that height.
+
+      Source: nf-core/cutandrun parameters (macs2_qvalue), https://nf-co.re/cutandrun/3.2.2/parameters
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: cutandrun
@@ -1817,7 +2225,14 @@ tabs:
     tag: cr-ca-table
     index: ca-table
     title: Caller comparison
-    description: One row per sample and caller, with the peaks called, the overlap and the widths behind them.
+    description: >-
+      The numbers behind the caller tiles. One row per sample and caller, with the peaks called, the
+      bases they cover, the median and maximum width, the peaks shared with the other caller and the
+      peaks unique to it.
+
+      How to read: a caller that called nothing for a sample keeps a row with 0 peaks, so a null result
+      stays visible. Compare the shared fraction of the two callers on the same sample to see which one
+      the other reproduces.
     layout: {x: 0, y: 0, w: 8, h: 6}
 - title: Consensus
   subtitle: Which peaks do a target's replicates reproduce?
@@ -2008,7 +2423,22 @@ tabs:
     tag: cr-cons-av-upset
     index: cons-upset
     title: Consensus interval overlap
-    description: Intersections of the replicates calling each consensus interval, largest first.
+    description: >-
+      Which replicates call the same intervals? An UpSet plot: each column of dots is one combination of
+      replicates, its bar is the number of consensus intervals called by exactly that combination, and
+      the combinations are sorted from the largest down. The bars are coloured by the number of
+      replicates in the combination, and the set sizes at the side give the intervals each replicate
+      called.
+
+      How to read: a tall bar for the combination of all replicates of a target means the replicates
+      agree. Tall bars for single replicates mean the intervals are not reproduced, and a replicate
+      whose single bar dwarfs its overlaps is the one that disagrees.
+
+      Lines and annotations: the number at the top of each bar is its interval count. No cut-off is
+      drawn, and combinations with no interval are left out.
+
+      Source: nf-core/cutandrun output documentation, which merges the peaks of the replicates of a
+      group with bedtools merge to build the consensus set, https://nf-co.re/cutandrun/3.2.2/docs/output
     layout: {x: 0, y: 0, w: 8, h: 5}
   # Colours by replicate support, a column of its own, so it spreads no group
   # kwargs: the frame is per target, not per sample.
@@ -2029,7 +2459,23 @@ tabs:
     tag: cr-cons-fig-repro
     index: cons-repro-share
     title: Reproducible share per target
-    description: Each target's consensus set split by how many replicates called the interval.
+    description: >-
+      How reproducible is each target? One stacked bar per target: the share of its consensus intervals
+      called by one, two or more replicates, each support level in its own colour, with the interval
+      count printed on the segment.
+
+      How to read: the larger the segments for two or more replicates, the more of the target's peaks its
+      replicates reproduce. A bar made mostly of intervals called by a single replicate is a target whose
+      replicates disagree, or one with a single replicate.
+
+      Annotations: no reference line or cut-off is drawn.
+
+      Note: the pipeline keeps every merged interval by default, because its minimum replicate support is
+      1, so a single-replicate interval is not an error.
+
+      Sources: nf-core/cutandrun parameters (replicate_threshold),
+      https://nf-co.re/cutandrun/3.2.2/parameters; bedtools merge,
+      https://bedtools.readthedocs.io/en/latest/content/tools/merge.html
     layout: {x: 0, y: 0, w: 4, h: 4, fit: auto}
   - component_type: figure
     workflow_tag: cutandrun
@@ -2046,7 +2492,18 @@ tabs:
     tag: cr-cons-fig-width
     index: cons-width-hist
     title: Interval width by replicate support
-    description: Width of the consensus intervals on a log axis, coloured by how many replicates called them.
+    description: >-
+      Do widely supported intervals differ in width? A histogram of the consensus interval widths in bp
+      on a log x axis, in 60 bins, coloured by the number of replicates that called each interval.
+
+      How to read: a merged interval widens as the peaks of more replicates join it, so an interval
+      called by several replicates can be wider than a single-replicate one. A very wide interval can be
+      several neighbouring peaks merged into one.
+
+      Annotations: no reference line or cut-off is drawn.
+
+      Source: bedtools merge, which combines overlapping or book-ended features into one,
+      https://bedtools.readthedocs.io/en/latest/content/tools/merge.html
     layout: {x: 4, y: 0, w: 4, h: 4}
   - component_type: table
     workflow_tag: cutandrun
@@ -2058,7 +2515,16 @@ tabs:
     tag: cr-cons-table
     index: cons-table
     title: Consensus intervals
-    description: Coordinates, member peak count, replicate support and coverage for every merged interval.
+    description: >-
+      Every merged interval. One row per consensus interval, with its target, coordinates, width, the
+      number of member peaks merged into it, the replicates that called it (its support), and the
+      summed and maximum signal of its members.
+
+      How to read: sort by support to list the intervals every replicate found, or filter to a support
+      of 1 to see the ones a single replicate called. The member peak count can exceed the support when
+      one replicate contributed several peaks.
+
+      Source: bedtools merge, https://bedtools.readthedocs.io/en/latest/content/tools/merge.html
     layout: {x: 0, y: 0, w: 8, h: 6}
 # One region, one x axis. The SEACR navigator drives the cards through the
 # region links in template.yaml (seacr_peaks -> macs2_peaks,
@@ -2264,7 +2730,23 @@ tabs:
     tag: cr-loc-av-track
     index: loc-seacr-track
     title: SEACR regions per sample
-    description: Every SEACR region as the interval it is, one lane per sample; height is log10 of the total coverage. Brush to move the browser below.
+    description: >-
+      Where are the SEACR regions along the genome? Every region of a sample is drawn as a bar over the
+      interval it covers, in one lane per sample (at most six), each lane on its own height scale. The
+      height is the log10 of the region's total coverage.
+
+      How to read: the axis opens on the whole chromosome the genome browser shows. Zoom, or brush a
+      stretch to select its region, to see which samples have regions there. Regions shared by the
+      replicates of a target line up across lanes.
+
+      Annotations: the window of the genome browser is drawn as a band on the axis. No reference line
+      or cut-off is drawn, and the heights are not comparable between lanes because each lane has its
+      own scale.
+
+      Note: the coverage SEACR reads is already scaled by the pipeline's spike-in factor, so the heights
+      rank the regions within a lane.
+
+      Source: SEACR documentation, https://github.com/FredHutch/SEACR
     layout: {x: 0, y: 0, w: 8, h: 6}
   # The run's own files in a genome browser: bigWig signal per sample, the SEACR
   # and MACS2 calls of the targets and the BAMs. The sample filter of the left
@@ -2277,6 +2759,19 @@ tabs:
     workflow_tag: cutandrun
     data_collection_tag: tracks
     title: Genome browser
+    description: >-
+      What does the run's own signal look like at a locus? A JBrowse 2 view of the files the run
+      published: the bigWig signal of each sample, the SEACR and MACS2 peak calls of the targets, and
+      the marked-duplicate alignments, in the colour of each target. An ENCODE candidate cis-regulatory
+      elements track from UCSC sits beside them.
+
+      How to read: at a region called by SEACR the signal track of a target should rise over the
+      control's, with the peak tracks under it marking the calls. Pick the samples in the left panel to
+      choose which tracks open (at most 16, with 6 open at first), and brush a region on the lanes
+      above to move the view to it.
+
+      Note: the genome is the assembly set by the GENOME variable of the template, and a track the run
+      did not publish, such as the alignments, is missing from the list.
     max_tracks: 16
     initial_tracks: 6
     show_overview: false

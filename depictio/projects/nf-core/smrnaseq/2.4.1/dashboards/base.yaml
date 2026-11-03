@@ -151,6 +151,7 @@ main_dashboard:
       - ![](icon:mdi:flask-outline) **Libraries** {{samples}} small RNA libraries
       - ![](icon:mdi:shape-outline) **Groups** {{groups}} by {GROUP_COL_DISPLAY}, from the design table
       - ![](icon:mdi:file-table-outline) **Samplesheet** [one row per sample](section:Sample sheet), its path in [the run parameters](params:input)
+      - ![](icon:mdi:palette-outline) **{GROUP_COL_DISPLAY}** {{legend:{GROUP_COL}}}
     tag: sr-ov-study
     index: ov-study
     layout: {x: 0, y: 1, w: 5, h: 3}
@@ -441,7 +442,15 @@ main_dashboard:
     tag: sr-sheet-design
     index: sheet-design
     title: Design table
-    description: One row per sample as the design file declares it; absent on a run without one.
+    description: >-
+      How is the experiment laid out? One row per sample as the design file declares it, with the factors
+      the group colours, the comparisons and the filters use.
+
+      How to read: check the factor columns first, since the group colour, the library PCA and the
+      two-group test all read the design column chosen for this dashboard. Select a row to filter the
+      linked tiles on that sample.
+
+      Note: the table is absent on a run without a design file.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: smrnaseq
@@ -452,7 +461,15 @@ main_dashboard:
     tag: sr-sheet-samples
     index: sheet-samples
     title: Library summary
-    description: One row per library, with its miRNA depth, miRTrace composition and miRDeep2 calls.
+    description: >-
+      How deep and how clean is each library? One row per library: its miRNA depth, the miRTrace read
+      composition and the miRDeep2 calls.
+
+      How to read: a library with few miRNA reads or a low miRNA share stands out here before any
+      comparison is made. Open [Library QC](tab:Library QC) for the curves behind these numbers, and
+      select a row to filter the linked tiles on that library.
+
+      Note: the miRDeep2 columns are empty on a run that skips miRDeep2.
     layout: {x: 0, y: 6, w: 8, h: 6}
 
 tabs:
@@ -869,7 +886,21 @@ tabs:
     tag: sr-lib-length
     index: lib-length
     title: Read length distribution
-    description: One curve per library, as a share of its reads; the band is miRTrace's miRNA window.
+    description: >-
+      Is each library made of miRNA-sized reads? One curve per library: the share of its reads at each
+      length.
+
+      How to read: a clean miRNA library has its main peak inside the shaded band. A second peak beyond
+      the band, a broad smear towards longer reads, or a pile-up at the short end marks fragments or
+      adapter products rather than miRNAs. Click a curve to pick the library.
+
+      Lines and annotations: the shaded band labelled miRNA spans 18 to 26 nt, the miRNA length class that
+      the MultiQC miRTrace plot shades. It is a display aid, not a validated cut-off, and nothing is
+      filtered by it.
+
+      Sources: MultiQC miRTrace module,
+      https://github.com/MultiQC/MultiQC/blob/main/multiqc/modules/mirtrace/mirtrace.py; miRTrace, Kang et
+      al. 2018, Genome Biol 19:213, doi:10.1186/s13059-018-1588-9.
     layout: {x: 0, y: 0, w: 4, h: 6}
   - component_type: advanced_viz
     workflow_tag: smrnaseq
@@ -886,7 +917,15 @@ tabs:
     tag: sr-lib-complexity
     index: lib-complexity
     title: miRNA complexity curves
-    description: A curve still climbing at full depth was sequenced short of its complexity.
+    description: >-
+      Was each library sequenced deep enough to see its miRNAs? One curve per library: the distinct miRNAs
+      detected as more reads are sampled, on a log read axis.
+
+      How to read: a curve that has flattened says deeper sequencing would add few new miRNAs. One still
+      climbing at full depth was sequenced short of its complexity, and a library that flattens early and
+      low is dominated by a few miRNAs. Click a curve to pick the library.
+
+      Source: miRTrace, Kang et al. 2018, Genome Biol 19:213, doi:10.1186/s13059-018-1588-9.
     layout: {x: 4, y: 0, w: 4, h: 6}
   - component_type: advanced_viz
     workflow_tag: smrnaseq
@@ -902,7 +941,23 @@ tabs:
     tag: sr-lib-composition
     index: lib-composition
     title: Library composition
-    description: Stacked to 100 % per library. The Clade level counts detected miRNAs, not reads.
+    description: >-
+      What is each library made of? One stacked bar per library, normalised to 100%, which the controls
+      switch between the reads by RNA type, the reads by miRTrace QC outcome and the detected miRNAs by
+      organism clade.
+
+      How to read: by RNA type, a high miRNA share is the headline of a good library, and a large rRNA or
+      tRNA share points at degraded RNA or a size selection that let fragments in. By QC outcome, on reads
+      already trimmed upstream the adapter-not-detected class is the normal majority. By clade, nearly all
+      detected miRNAs should sit in the clade of the sequenced species, and miRNAs of another clade point
+      at contamination.
+
+      Lines and annotations: the grey segment labelled Other lumps the categories beyond the twelve
+      largest of the view. No threshold is drawn.
+
+      Source: miRTrace, Kang et al. 2018, Genome Biol 19:213, doi:10.1186/s13059-018-1588-9.
+
+      Note: the clade level counts detected miRNAs, not reads.
     layout: {x: 0, y: 0, w: 8, h: 5}
   # A row with a null axis draws no line, so the axes leave out the miRDeep2
   # counts (null with SKIP_MIRDEEP); the record card below still shows them.
@@ -926,7 +981,20 @@ tabs:
     tag: sr-lib-parcoords
     index: lib-parcoords
     title: Per-library profile
-    description: Each axis rescaled to its own range; brush an axis to keep the libraries inside it.
+    description: >-
+      How does each library compare across the main QC measures? One line per library across seven axes:
+      reads assigned to miRNAs, miRNAs detected, miRNAs at 10 CPM or more, and the miRNA, rRNA, tRNA and
+      reference-isoform shares.
+
+      How to read: each axis is rescaled to its own range, so a line is read against its peers, not
+      against a target. A library that runs against the others on several axes at once is worth opening in
+      the library record. Brush an axis to keep only the libraries inside it.
+
+      Lines and annotations: no reference line or band is drawn. The 10 CPM counting level of the third
+      axis is fixed in the dashboard's recipe and is not a published cut-off.
+
+      Note: because every axis is stretched from its lowest to its highest value, a tiny spread can look
+      large; read the values in the Library summary table.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: advanced_viz
     workflow_tag: smrnaseq
@@ -949,7 +1017,17 @@ tabs:
     tag: sr-lib-plane
     index: lib-plane
     title: miRNA depth and share per library
-    description: One point per library, coloured by the clade holding most of its miRNAs.
+    description: >-
+      Is a library both deep and miRNA-rich? Each point is one library, with the reads assigned to miRNAs
+      on x (log scale) and the miRNA share of its reads on y, coloured by the clade holding most of its
+      detected miRNAs.
+
+      How to read: the top right is deep and miRNA-rich. Points low on the plot spend their reads on rRNA,
+      tRNA or other RNA, and a point whose clade colour differs from its peers may be contaminated; check
+      it in the library composition at the clade level. Click a point to open its record.
+
+      Lines and annotations: no reference line or band is drawn, and the sample names are not printed on
+      the points.
     layout: {x: 0, y: 0, w: 5, h: 6}
   - component_type: advanced_viz
     workflow_tag: smrnaseq
@@ -968,7 +1046,16 @@ tabs:
     tag: sr-lib-record
     index: lib-record
     title: Library record
-    description: The picked library as a fact panel.
+    description: >-
+      What are the numbers behind the picked library? A fact panel with its miRNA depth, its miRTrace
+      composition and its miRDeep2 counts.
+
+      How to read: read the miRNA, rRNA and tRNA shares together with the miRNAs detected, and compare the
+      novel candidates with the known precursors recovered to see how much miRDeep2 proposes beyond
+      miRBase.
+
+      Note: the panel stays empty until a library is picked, and the miRDeep2 fields are empty on a run
+      that skips miRDeep2.
     layout: {x: 5, y: 0, w: 3, h: 6}
 
 - title: miRNA Expression
@@ -1158,7 +1245,21 @@ tabs:
     tag: sr-expr-heatmap
     index: expr-heatmap
     title: Top variable miRNAs
-    description: Row-scaled log2(CPM + 1); the strips above the columns are the design factors.
+    description: >-
+      Which miRNAs vary most across the libraries, and which libraries cluster? Rows are the most variable
+      miRNAs, columns are libraries, and the colour is the log2(CPM + 1) scaled within each row. The
+      strips above the columns are the design factors.
+
+      How to read: libraries of the same design group should form blocks of similar colour. A library that
+      clusters away from its group is worth checking against its depth in the library PCA, and a miRNA
+      that splits the groups is a candidate for the two-group test.
+
+      Lines and annotations: the diverging colour scale is centred on each miRNA's mean across libraries
+      (a z-score of 0), so the colour says above or below the miRNA's own average, not how high it is.
+      Rows and columns are clustered with Ward linkage, and no cut-off is drawn.
+
+      Note: only miRNAs with a mean CPM of at least 10 enter, and the top 100 by variance are kept; both
+      are fixed in the recipe and are not published cut-offs.
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: figure
     workflow_tag: smrnaseq
@@ -1196,7 +1297,16 @@ tabs:
     tag: sr-expr-box
     index: expr-box-by-group
     title: Expression of the top miRNAs by group
-    description: Every library is a dot beside its box. The miRNA filter or a pick on the plane redraws it.
+    description: >-
+      How do the leading miRNAs differ between groups? One box per miRNA and group, for the twelve miRNAs
+      with the highest mean CPM or the ones picked, each dot a library, on log2(CPM + 1).
+
+      How to read: boxes of two groups that do not overlap for a miRNA suggest a difference, and the
+      two-group test in [Group Comparison](tab:Group Comparison) puts a p-value on it. A box built from
+      very few dots is a weak statement.
+
+      Lines and annotations: each box spans the quartiles with the median inside it, and the whiskers
+      follow the Tukey convention. No threshold is drawn.
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: advanced_viz
     workflow_tag: smrnaseq
@@ -1217,7 +1327,17 @@ tabs:
     tag: sr-expr-plane
     index: expr-plane
     title: Mean-variance plane
-    description: Every miRNA with a read, coloured by precursor arm; well expressed and variable sits top right.
+    description: >-
+      Which miRNAs are both well expressed and variable? Each point is one miRNA with at least one read,
+      with the mean log2(CPM + 1) across libraries on x and its standard deviation on y, coloured by
+      precursor arm (5p or 3p) and sized by the share of libraries that detect it.
+
+      How to read: the top right is well expressed and variable, the candidates for a closer look. Points
+      at the bottom right are steadily expressed, and points at the left are lowly expressed. Click a
+      point to open the miRNA record.
+
+      Lines and annotations: no reference line is drawn and no point is labelled, since the best-detected
+      miRNAs are also the most expressed and their labels would pile up.
     layout: {x: 0, y: 0, w: 5, h: 6}
   - component_type: advanced_viz
     workflow_tag: smrnaseq
@@ -1239,7 +1359,14 @@ tabs:
     tag: sr-expr-record
     index: expr-record
     title: miRNA record
-    description: The picked miRNA as a fact panel, linked to its miRBase entry.
+    description: >-
+      What is known about the picked miRNA? A fact panel with its arm and expression rank, its expression,
+      how widely it is detected and its isomiR diversity.
+
+      How to read: a high detection with a low spread is a stable miRNA, and a low reference share means
+      most of its reads are isomiRs. The name links to its miRBase entry.
+
+      Note: the panel stays empty until a miRNA is picked.
     layout: {x: 5, y: 0, w: 3, h: 6}
   - component_type: table
     workflow_tag: smrnaseq
@@ -1251,6 +1378,13 @@ tabs:
     tag: sr-expr-table
     index: expr-table
     title: miRNA summary
+    description: >-
+      What does every miRNA look like in numbers? One row per miRNA: total reads, mean and median CPM, the
+      spread of log2(CPM + 1) across libraries, the libraries that detect it, its isomiR diversity and the
+      share of reads matching the reference sequence.
+
+      How to read: sort by mean CPM for the leading miRNAs or by spread for the most variable ones. Select
+      a row to open its record next to the mean-variance plot.
     layout: {x: 0, y: 0, w: 8, h: 6}
 
 - title: Group Comparison
@@ -1383,7 +1517,19 @@ tabs:
     tag: sr-cmp-pca
     index: cmp-pca
     title: Library PCA on miRNA expression
-    description: One point per library. One far from its group is worth checking against its depth.
+    description: >-
+      Which libraries look alike? Each point is one library placed by the principal components of log2(CPM
+      + 1) over its most variable expressed miRNAs, coloured by the design group.
+
+      How to read: libraries of one group should sit together. One far from its group is worth checking
+      against its depth, shown on hover as the reads assigned to miRNAs and the miRNAs detected, before it
+      is read as biology. Lasso a set of points to save it as a group.
+
+      Lines and annotations: no centroid, ellipse or density is drawn. The components are computed on
+      centred, unscaled values, so a miRNA weighs by how much it varies.
+
+      Note: only miRNAs with a mean CPM of at least 10 are used and the most variable 500 are kept; both
+      numbers are fixed in the recipe and are not published cut-offs.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: advanced_viz
     workflow_tag: smrnaseq
@@ -1404,7 +1550,24 @@ tabs:
     tag: sr-cmp-volcano
     index: cmp-volcano
     title: miRNAs that separate two groups
-    description: Log2 fold change of mean CPM against the adjusted p-value, group A over group B.
+    description: >-
+      Which miRNAs separate two groups of libraries? Each point is one expressed miRNA, with the log2 fold
+      change of the group means (CPM + 1), group A over group B, on x and minus log10 of the
+      Benjamini-Hochberg adjusted p-value of a Wilcoxon rank-sum test on y.
+
+      How to read: points above the horizontal line and beyond one of the vertical lines are called up in
+      A (right) or down in A (left); a positive fold change means higher in A. Confirm a hit in the box
+      plots of the top miRNAs, and prefer calls with a clear count gap between the groups.
+
+      Lines and annotations: the two dotted vertical lines sit at log2 fold change -1 and +1 and the
+      dotted horizontal line at an adjusted p-value of 0.05. These are the tile's default thresholds,
+      adjustable in its controls, not values read from the run or from a tool manual. The 15 strongest
+      points are labelled with the miRNA name.
+
+      Source: Benjamini and Hochberg 1995, J R Stat Soc B 57:289, doi:10.1111/j.2517-6161.1995.tb02031.x.
+
+      Note: the Wilcoxon test is coarse with few libraries per group; with three on each side the smallest
+      possible p-value is 0.1, so nothing can reach an FDR of 0.05.
     layout: {x: 0, y: 0, w: 8, h: 6}
 
 - title: isomiRs
@@ -1583,7 +1746,22 @@ tabs:
     tag: sr-iso-composition
     index: iso-composition
     title: isomiR composition per library
-    description: Stacked to 100 % of each library's miRNA reads; each level sums to them.
+    description: >-
+      How far do the reads stray from the reference sequence? One stacked bar per library, normalised to
+      100% of its miRNA reads, which the controls split four ways: by 3' end, by 5' end, by the added
+      nucleotide and by nucleotide change.
+
+      How to read: most miRNA reads are not an exact copy of the reference, so a share of isomiRs is
+      normal. A 5' shift moves the seed and with it the targets, so an unusual share of shifted 5' ends in
+      one library deserves a look; compare libraries of the same group.
+
+      Lines and annotations: the grey segment labelled Other lumps the categories beyond the eight largest
+      of the view. No threshold is drawn.
+
+      Source: mirtop, Desvignes et al. 2020, Bioinformatics 36:698, doi:10.1093/bioinformatics/btz675.
+
+      Note: mirtop cannot tell an editing event or a SNP from a sequencing error; a change seen in one
+      library only is most likely an error.
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: advanced_viz
     workflow_tag: smrnaseq
@@ -1597,7 +1775,21 @@ tabs:
     tag: sr-iso-landscape
     index: iso-landscape
     title: isomiR landscape of the most expressed miRNAs
-    description: Colour is the mean share of a miRNA's reads in the class; size, how often it holds 5 %.
+    description: >-
+      Which isomiR classes does each leading miRNA carry? Each row is one of the most expressed miRNAs and
+      each column an isomiR class; the colour is the mean share of the miRNA's reads in the class, and the
+      size is the share of libraries where the class holds at least 5% of them.
+
+      How to read: a large dark dot is a class that dominates the miRNA in most libraries, such as a miRNA
+      that is mostly 3' trimmed everywhere. A small dark dot is a class carried by few libraries, which
+      points at a library-specific event.
+
+      Lines and annotations: no line is drawn. The 5% level of the size and the 10-read minimum for a
+      library to count are fixed in the dashboard's recipe and are not published cut-offs.
+
+      Source: mirtop, Desvignes et al. 2020, Bioinformatics 36:698, doi:10.1093/bioinformatics/btz675.
+
+      Note: the classes are not exclusive, since a read can be 3' trimmed and also carry an addition.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: smrnaseq
@@ -1609,6 +1801,13 @@ tabs:
     tag: sr-iso-table
     index: iso-table
     title: isomiR landscape rows
+    description: >-
+      What are the numbers behind the isomiR landscape? One row per miRNA and isomiR class: the mean share
+      of the miRNA's reads in the class, the share of libraries where the class is a real part of them,
+      the reads in the class and the miRNA's rank by reads.
+
+      How to read: sort by class reads to find the classes carrying the most reads, or filter on a miRNA
+      to see all its classes. Select a row to filter the linked tiles on that miRNA.
     layout: {x: 0, y: 0, w: 8, h: 6}
 
 - title: Novel miRNAs
@@ -1793,7 +1992,20 @@ tabs:
     tag: sr-novel-snr
     index: novel-snr
     title: Signal-to-noise by score cutoff
-    description: One curve per library, real over permuted candidate counts.
+    description: >-
+      How well does the miRDeep2 score separate real novel candidates from chance? One curve per library:
+      the signal-to-noise ratio, the novel candidates reported on the real reads over those reported on
+      permuted structures, at each integer score cutoff.
+
+      How to read: a ratio near 1 means the run reports barely more candidates than permuted structures
+      do. Read it with the known-recovery curve beside it, and look for a cutoff where the ratio is high
+      while the recovery of known precursors has not yet fallen.
+
+      Sources: miRDeep2, Friedlaender et al. 2012, Nucleic Acids Res, doi:10.1093/nar/gkr688;
+      https://github.com/rajewsky-lab/mirdeep2.
+
+      Note: miRDeep2 gives no single cutoff to use; its display cutoff for novel candidates defaults to 0.
+      No line is drawn at any cutoff here.
     layout: {x: 0, y: 0, w: 4, h: 6}
   - component_type: advanced_viz
     workflow_tag: smrnaseq
@@ -1807,7 +2019,19 @@ tabs:
     tag: sr-novel-known
     index: novel-known
     title: Known precursors recovered by score cutoff
-    description: Share of the miRBase precursors with reads that miRDeep2 recovers at each cutoff.
+    description: >-
+      How many known precursors does each score cutoff keep? One curve per library: the share of the
+      miRBase precursors that have reads in the library and that miRDeep2 recovers at each integer score
+      cutoff.
+
+      How to read: the curve falls as the cutoff rises. A cutoff past the point where it drops steeply
+      loses known miRNAs, which the novel candidates would lose too; read it with the signal-to-noise
+      curve beside it.
+
+      Sources: miRDeep2, Friedlaender et al. 2012, Nucleic Acids Res, doi:10.1093/nar/gkr688;
+      https://github.com/rajewsky-lab/mirdeep2.
+
+      Note: no line is drawn at any cutoff, and miRDeep2 publishes no single value to choose.
     layout: {x: 4, y: 0, w: 4, h: 6}
   - component_type: advanced_viz
     workflow_tag: smrnaseq
@@ -1830,7 +2054,22 @@ tabs:
     tag: sr-novel-plane
     index: novel-plane
     title: Recurrence against the true-positive estimate
-    description: Size follows the reads summed over libraries; colour, whether any call had star-arm reads.
+    description: >-
+      Which novel hairpins are credible? Each point is one novel precursor merged across libraries, with
+      the number of libraries reporting it on x and its best estimated true-positive probability on y,
+      sized by the reads summed over libraries and coloured by whether any call had star-arm reads.
+
+      How to read: points to the right and high are recurrent and scored as probably real. Single-library
+      points at a low probability are the weakest. Click a point to open the record, which shows the
+      randfold test, any Rfam hit and the seed match.
+
+      Lines and annotations: no line is drawn, the points carry an outline, and none is labelled.
+
+      Sources: miRDeep2, Friedlaender et al. 2012, Nucleic Acids Res, doi:10.1093/nar/gkr688;
+      https://github.com/rajewsky-lab/mirdeep2.
+
+      Note: the true-positive estimate is miRDeep2's own, derived from permuted controls, and is not an
+      experimental validation.
     layout: {x: 0, y: 0, w: 5, h: 6}
   - component_type: advanced_viz
     workflow_tag: smrnaseq
@@ -1853,7 +2092,16 @@ tabs:
     tag: sr-novel-record
     index: novel-record
     title: Precursor record
-    description: The picked precursor, with its strongest call's sequences and a genome browser link.
+    description: >-
+      What supports the picked novel precursor? A fact panel with its locus, the libraries and scores
+      behind it, its reads on the mature, loop and star arms, its checks and the sequences of its
+      strongest call.
+
+      How to read: weigh the recurrence and the estimated true-positive probability against the checks. A
+      significant randfold share and reads on the star arm support the hairpin, while an Rfam alert names
+      a known small RNA family it matches. The position links to the UCSC genome browser.
+
+      Note: the panel stays empty until a precursor is picked.
     layout: {x: 5, y: 0, w: 3, h: 6}
   - component_type: table
     workflow_tag: smrnaseq
@@ -1865,6 +2113,16 @@ tabs:
     tag: sr-novel-table-precursors
     index: novel-table-precursors
     title: Novel precursors
+    description: >-
+      Which novel miRNAs does the run propose? One row per hairpin merged across libraries: how many
+      libraries report it, its best score and true-positive estimate, the reads on each arm, the share of
+      calls with a significant randfold test, any Rfam hit and the sequences of its strongest call.
+
+      How to read: sort by libraries reporting to start from the recurrent hairpins, and discard those
+      with an Rfam alert. Select a row to open its record.
+
+      Note: calls are merged when their precursor intervals overlap on the same chromosome and strand, so
+      one row can stand for several calls.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: smrnaseq
@@ -1875,5 +2133,14 @@ tabs:
     tag: sr-novel-table-calls
     index: novel-table-calls
     title: Every miRDeep2 call, per library
-    description: Novel and known precursors as miRDeep2 reported them, before merging across libraries.
+    description: >-
+      What did miRDeep2 report before merging? One row per library and candidate: the novel hairpins it
+      proposes and the known miRBase precursors it rediscovered, with the miRDeep2 score, the estimated
+      true-positive probability, the read stack on the mature, loop and star arms and the randfold test.
+
+      How to read: use it to follow a merged precursor back to the library calls behind it, or to filter
+      on the category to separate novel from known candidates.
+
+      Sources: miRDeep2, Friedlaender et al. 2012, Nucleic Acids Res, doi:10.1093/nar/gkr688;
+      https://github.com/rajewsky-lab/mirdeep2.
     layout: {x: 0, y: 6, w: 8, h: 6}

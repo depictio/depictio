@@ -159,6 +159,7 @@ main_dashboard:
       - ![](icon:mdi:shape-outline) **Conditions** {{conditions}}
       - ![](icon:mdi:layers-outline) **Replicates** up to {{replicates}} injections of one sample
       - ![](icon:mdi:file-table-outline) **Samplesheet** [one row per raw file](section:Sample sheet), its path in [the run parameters](params:input)
+      - ![](icon:mdi:palette-outline) **{GROUP_COL_DISPLAY}** {{legend:{GROUP_COL}}}
     tag: mq-ov-study
     index: ov-study
     layout: {x: 0, y: 1, w: 5, h: 3}
@@ -459,7 +460,13 @@ main_dashboard:
     tag: mq-sample-sheet
     index: sample-sheet
     title: Samplesheet
-    description: One row per raw file, with its sample, condition and search database.
+    description: >-
+      Which raw files went into the run, and how are they grouped? One row per raw file, with its sample,
+      its condition and the search database it was matched against.
+
+      How to read: check that every file sits in the intended sample and condition before reading the
+      other tabs, since the replicate and condition-sharing tiles group by these columns. Select a row to
+      filter the linked tiles on that sample.
     layout: {x: 0, y: 0, w: 8, h: 6}
   # Every column of the per-sample summary, the replicate correlations
   # included (empty on a run without --quantify).
@@ -473,7 +480,23 @@ main_dashboard:
     tag: mq-ref-summary
     index: ref-sample-summary
     title: Immunopeptidome summary per sample
-    description: Yield, length signature, score, retention-time error and replicate agreement, one row per sample.
+    description: >-
+      How did each sample do overall? One row per sample: PSMs, distinct peptides and peptidoforms, source
+      proteins, the modified share, the length signature (median length, 9-mer share, class I and class II
+      window shares), median score and retention-time error, and, for a quantified run, replicate
+      completeness and correlation.
+
+      How to read: compare rows on yield first, then on the length signature and the retention-time error.
+      A sample far from its peers on one of them is the one to open in
+      [Identification](tab:Identification), [Physico-chemical checks](tab:Physico-chemical checks) or [MHC
+      signature](tab:MHC signature).
+
+      Note: the replicate columns are empty on a run without --quantify. The class I and class II windows
+      are the 8 to 12 and 13 to 25 residue ranges drawn on the length profile of the MHC signature tab;
+      they are published ranges of eluted ligands, not filters.
+
+      Sources: Gfeller et al. 2018, J Immunol 201:3705, doi:10.4049/jimmunol.1800914; Chicz et al. 1992,
+      Nature 358:764, doi:10.1038/358764a0.
     layout: {x: 0, y: 0, w: 8, h: 6}
 tabs:
 # ============================================================================
@@ -775,7 +798,21 @@ tabs:
     tag: mq-rep-av-pairs
     index: rep-pairs-scatter
     title: Peptide intensity, replicate against replicate
-    description: One point per peptide quantified in both replicates of a pair. A tight cloud along the diagonal is a reproducible pair.
+    description: >-
+      How reproducible is the quantification between two injections of the same sample? Each point is one
+      peptide quantified in both replicates of a pair, with its log10 intensity in the first replicate on
+      x and in the second on y, coloured by pair.
+
+      How to read: a tight cloud along the diagonal is a reproducible pair. A wide cloud, or one shifted
+      off the diagonal, marks a replicate with a loading, spray or alignment problem. Compare with the
+      replicate correlation columns of the Immunopeptidome summary table.
+
+      Lines and annotations: the dashed line labelled x = y is the identity diagonal, drawn over the range
+      both axes share; a point on it has the same intensity in both replicates. It is a geometric
+      reference, not a cut-off, and no correlation threshold is drawn.
+
+      Note: only peptides quantified in both replicates appear, and a very dense cloud is drawn as a
+      density view instead of single points.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: advanced_viz
     workflow_tag: mhcquant
@@ -789,7 +826,18 @@ tabs:
     tag: mq-rep-av-upset
     index: rep-upset
     title: Peptides quantified per replicate combination
-    description: Replicate index within each sample, pooled over the selected samples. The leftmost bars should be the all-replicate core.
+    description: >-
+      How much of a sample is seen in every injection? Each bar counts the distinct peptidoforms
+      quantified in exactly the replicate combination marked by the dots under it, pooled over the
+      selected samples.
+
+      How to read: bars are sorted by size, so on a well reproduced run the all-replicate combination
+      comes first. Tall single-replicate bars are peptides that hang on one injection, so their
+      intensities rest on little evidence.
+
+      Note: replicate numbers count within each sample, so replicate 1 of one sample and replicate 1 of
+      another are different injections. A peptide absent from a replicate was not quantified there; it may
+      still be present below the detection limit.
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: table
     workflow_tag: mhcquant
@@ -801,7 +849,12 @@ tabs:
     tag: mq-rep-table-detection
     index: rep-table-detection
     title: Replicate membership per peptide
-    description: One 0/1 column per replicate index, per sample and peptidoform.
+    description: >-
+      Which replicates saw each peptide? One row per sample and peptidoform, with a 0/1 column for each
+      replicate index telling whether the peptide was quantified in that raw file.
+
+      How to read: filter a replicate column to 0 to list the peptides it missed, or sum the columns to
+      see who is seen everywhere. It holds the rows behind the bars of the replicate combination plot.
     layout: {x: 0, y: 0, w: 8, h: 6}
 # ============================================================================
 # Search
@@ -967,7 +1020,24 @@ tabs:
     tag: mq-id-av-fdr-curve
     index: id-fdr-curve
     title: Accepted PSMs against the FDR threshold, per raw file
-    description: Comet target-decoy competition on Xcorr before rescoring. A curve that rises late or flattens low marks a raw file with weaker spectra.
+    description: >-
+      How many spectra can the search identify at each confidence level? One curve per raw file: the
+      number of target PSMs accepted as the target-decoy q-value threshold on the raw Comet Xcorr is
+      relaxed from 0 to 10%.
+
+      How to read: a curve that rises early and keeps climbing is a file with good spectra. One that rises
+      late or flattens low has weaker spectra or a search-space problem; open the Comet search yield table
+      below for its identification rate and mass error.
+
+      Lines and annotations: the dotted vertical line labelled 1% FDR marks a q-value of 0.01. It is the
+      default fdr_threshold of nf-core/mhcquant, the level at which the final peptides are kept; it is a
+      fixed reference of this tile and does not read the value the run was given.
+
+      Sources: nf-core/mhcquant 3.2.0 parameters, https://nf-co.re/mhcquant/3.2.0/parameters; Elias and
+      Gygi 2007, Nat Methods, doi:10.1038/nmeth1019 for target-decoy FDR.
+
+      Note: the q-values come from target-decoy competition on Xcorr alone, before rescoring, so this is a
+      conservative first estimate and the rescored counts are higher.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: figure
     workflow_tag: mhcquant
@@ -982,7 +1052,17 @@ tabs:
     tag: mq-id-fig-score
     index: id-score-histogram
     title: Score of the accepted peptides
-    description: Best search score per accepted peptide precursor, by sample.
+    description: >-
+      What do the search scores of the accepted peptides look like? A histogram of the best score of each
+      accepted peptide precursor, one colour per sample.
+
+      How to read: samples whose histograms overlap are scored alike. A sample shifted towards weaker
+      scores, or with a long tail of borderline hits, was identified with less confidence than its peers.
+      Which end is better depends on the score type, named in the score_type column of the Identified
+      peptides table.
+
+      Note: every peptide here already passed the FDR filter of the run, so no pass line is drawn and none
+      of the bars is a rejected hit.
     layout: {x: 0, y: 6, w: 8, h: 4}
   - component_type: table
     workflow_tag: mhcquant
@@ -994,7 +1074,20 @@ tabs:
     tag: mq-id-table-comet
     index: id-table-comet
     title: Comet search yield per raw file
-    description: Spectra searched, target and decoy matches, PSMs at 1% and 5% FDR, score and mass-error medians.
+    description: >-
+      How productive was the search of each raw file, before rescoring? One row per raw file: spectra
+      searched, target and decoy matches, PSMs at 1% and 5% FDR, the identification rate, the median Xcorr
+      of targets and of decoys, and the median precursor mass error.
+
+      How to read: a raw file with few PSMs at 1% FDR next to its peers has an acquisition or search-space
+      problem, not a rescoring one. A target Xcorr median clearly above the decoy median is a clean
+      separation, and a median mass error far from zero ppm points at calibration.
+
+      Note: the FDR is estimated on the raw Comet Xcorr by target-decoy competition, so the counts are
+      lower than the rescored peptides. The 1% and 5% levels are reporting levels of this table, not run
+      settings.
+
+      Source: Elias and Gygi 2007, Nat Methods, doi:10.1038/nmeth1019.
     layout: {x: 0, y: 0, w: 8, h: 6}
 - title: Physico-chemical checks
   subtitle: Do the identified peptides elute and ionise as peptides should?
@@ -1166,7 +1259,20 @@ tabs:
     tag: mq-phys-av-rt-predicted
     index: phys-rt-predicted
     title: Observed against predicted retention time
-    description: DeepLC prediction on the x axis. Points far off the diagonal are identifications the chromatography does not support.
+    description: >-
+      Does each identified peptide elute when its sequence says it should? Each point is one accepted
+      peptide precursor, with DeepLC's predicted retention time on x and the observed one on y, coloured
+      by sample.
+
+      How to read: points on the diagonal elute as predicted. Points far off it are identifications the
+      chromatography does not support, so check them first; a whole sample shifted away from the diagonal
+      points at a gradient difference. Click a point to read the peptide in the record card next to it.
+
+      Lines and annotations: the dashed line labelled x = y is the identity diagonal over the range both
+      axes share. It is a geometric reference: no tolerance band is drawn and no retention-time cut-off is
+      applied.
+
+      Source: DeepLC, Bouwmeester et al. 2021, Nat Methods, doi:10.1038/s41592-021-01301-5.
     layout: {x: 0, y: 0, w: 5, h: 6}
   - component_type: advanced_viz
     workflow_tag: mhcquant
@@ -1189,7 +1295,15 @@ tabs:
     tag: mq-phys-av-rt-record
     index: phys-rt-record
     title: Picked peptide
-    description: The peptide picked on the retention-time plot, with its evidence and source.
+    description: >-
+      What is the peptide picked on the retention-time plot? A card with its sequence and sample, its
+      retention-time evidence, its search evidence and its source protein.
+
+      How to read: weigh the score and PSM support against the gap between observed and predicted
+      retention time; a large gap on a weakly supported peptide is a doubtful identification. The protein
+      accession links to UniProt.
+
+      Note: the card stays empty until a point is picked on the plot.
     layout: {x: 5, y: 0, w: 3, h: 6}
   - component_type: advanced_viz
     workflow_tag: mhcquant
@@ -1208,7 +1322,19 @@ tabs:
     tag: mq-phys-av-rt-gravy
     index: phys-rt-gravy
     title: Retention time against hydropathy
-    description: Kyte-Doolittle hydropathy of the sequence; hydrophobic peptides should elute later.
+    description: >-
+      Does retention time follow hydrophobicity? Each point is one accepted peptide precursor, with the
+      Kyte-Doolittle hydropathy of its sequence (GRAVY, the mean over its residues) on x and the observed
+      retention time on y, coloured by length.
+
+      How to read: on reversed-phase chromatography hydrophobic peptides elute later, so the cloud should
+      rise from left to right. A cloud that tilts differently from its peers, or is flat, points at a
+      gradient problem. Click a point to read the peptide.
+
+      Source: Kyte and Doolittle 1982, J Mol Biol, doi:10.1016/0022-2836(82)90515-0.
+
+      Note: no line is drawn, and the hydropathy is computed on the unmodified sequence, so modifications
+      are ignored. It is a trend, not a prediction; the prediction is the observed against predicted plot.
     layout: {x: 0, y: 0, w: 4, h: 6}
   - component_type: advanced_viz
     workflow_tag: mhcquant
@@ -1227,7 +1353,13 @@ tabs:
     tag: mq-phys-av-mz-rt
     index: phys-mz-rt
     title: Precursor m/z over the gradient, by charge
-    description: Each charge state forms its own band. Crowding at one end of the gradient shows where the acquisition saturated.
+    description: >-
+      Where do the precursors fall over the gradient? Each point is one accepted peptide precursor, with
+      its observed retention time on x and its precursor m/z on y, coloured by charge state.
+
+      How to read: each charge state forms its own band. Crowding at one end of the gradient shows where
+      the acquisition saturated, and an empty stretch is a part of the gradient that identified nothing.
+      Click a point to read the peptide.
     layout: {x: 4, y: 0, w: 4, h: 6}
   # The fragment-ion annotation is optional (--annotate_ions): its cards stay
   # out of the KPI strip so a run without it keeps four cards there.
@@ -1280,7 +1412,17 @@ tabs:
     tag: mq-phys-table-fragments
     index: phys-table-fragments
     title: Matched fragment ions per peptide
-    description: b, y and other matched ions and the median fragment mass error, per sample and peptidoform.
+    description: >-
+      How well is each spectrum explained? One row per sample and peptidoform: the number of matched
+      fragment ions (b, y and other series) and their median absolute mass error in ppm.
+
+      How to read: few matched ions, or a large error, mark an identification resting on a handful of
+      peaks. Sort by the error to find the spectra worth opening first.
+
+      Note: the table is only filled when the run sets --annotate_ions, the pipeline's ion annotation
+      option.
+
+      Source: nf-core/mhcquant 3.2.0 parameters, https://nf-co.re/mhcquant/3.2.0/parameters.
     layout: {x: 0, y: 2, w: 8, h: 6}
 # ============================================================================
 # Immunopeptidome
@@ -1454,7 +1596,25 @@ tabs:
     tag: mq-sig-av-length-profile
     index: sig-length-profile
     title: Peptide length distribution per sample
-    description: Share of each sample's distinct sequences at each length, with the class I and class II ranges shaded.
+    description: >-
+      Which MHC class do the peptide lengths point to? One line per sample: the share of its distinct
+      sequences at each length.
+
+      How to read: a sharp peak at 9 residues inside the class I band is the class I signature. A broad
+      shoulder of longer peptides, inside the class II band, marks class II or contamination by peptides
+      that were not presented. Read the anchor motifs below to see which alleles the samples present.
+
+      Lines and annotations: the two shaded bands mark the class I range, 8 to 12 residues, and the class
+      II range, 13 to 25 residues, each labelled above the plot. They are published length ranges of
+      eluted ligands, not cut-offs, and nothing is filtered by them.
+
+      Sources: class I, Gfeller et al. 2018, J Immunol 201:3705, doi:10.4049/jimmunol.1800914; class II,
+      Chicz et al. 1992, Nature 358:764, doi:10.1038/358764a0.
+
+      Note: nf-core/mhcquant keeps peptides of 8 to 12 residues by default (peptide_min_length 8,
+      peptide_max_length 12), so a run on defaults holds no class II length peptides; raise the maximum to
+      see them. Ranges vary between alleles (nf-core/mhcquant 3.2.0 parameters,
+      https://nf-co.re/mhcquant/3.2.0/parameters).
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: advanced_viz
     workflow_tag: mhcquant
@@ -1470,7 +1630,17 @@ tabs:
     tag: mq-sig-av-composition
     index: sig-composition
     title: Peptide composition per sample
-    description: Share of each sample's peptidoforms by length, switchable to precursor charge and modification.
+    description: >-
+      How is each sample's peptide set composed? One stacked bar per sample, normalised to 100%, splitting
+      its distinct peptidoforms by peptide length, by precursor charge or by modification state; the
+      controls switch between the three.
+
+      How to read: compare the splits between samples. A sample with a different mix of lengths or charges
+      from its peers was loaded or eluted differently, and a high modified share can be biology or sample
+      handling.
+
+      Lines and annotations: the grey segment labelled Other lumps the categories beyond the eight largest
+      of the view. No threshold is drawn.
     layout: {x: 0, y: 6, w: 8, h: 5}
   - component_type: advanced_viz
     workflow_tag: mhcquant
@@ -1490,7 +1660,22 @@ tabs:
     tag: mq-sig-av-motif
     index: sig-motif
     title: Amino-acid frequency by peptide position
-    description: Residue frequency per position, per sample and length; lengths under 20 sequences left out.
+    description: >-
+      Which residues anchor the presented peptides? Each row is one sample and peptide length at one
+      position (P1, P2 and so on), each column an amino acid, and the colour is how often that residue
+      sits at that position among the distinct sequences.
+
+      How to read: anchor positions stand out as columns dominated by a few residues, while middle
+      positions stay close to background; for class I 9-mers these are position 2 and the C-terminus. A
+      donor with several alleles shows a mixture of motifs, so compare with the length profile above.
+
+      Lines and annotations: the Blues colour scale runs from low to high frequency, the columns are
+      clustered (Ward linkage) so residues with similar profiles sit together, and the side bar marks each
+      row's length class. No cut-off is drawn.
+
+      Note: lengths supported by fewer than 20 distinct sequences in a sample are left out, a
+      data-sufficiency floor fixed in the recipe, because a position frequency over a handful of peptides
+      is not a motif.
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: table
     workflow_tag: mhcquant
@@ -1500,7 +1685,12 @@ tabs:
     tag: mq-sig-table-length
     index: sig-table-length
     title: Peptides per length and sample
-    description: Distinct sequences per length, as counts and as the share of the sample.
+    description: >-
+      How many peptides sit at each length? One row per sample and length: the distinct sequences as a
+      count and as the share of the sample.
+
+      How to read: look for the length with the largest share in each sample; a class I sample has a clear
+      mode at 9 residues. Filter on length class to compare one length across samples.
     layout: {x: 0, y: 0, w: 8, h: 6}
 - title: Peptides and proteins
   subtitle: Which peptides do conditions share, and which proteins do they come from?
@@ -1675,7 +1865,16 @@ tabs:
     tag: mq-pep-av-sharing-upset
     index: pep-sharing-upset
     title: Peptides per condition combination
-    description: Distinct sequences by the conditions they were identified in; the first bar is the shared core.
+    description: >-
+      Which peptides do the conditions share? Each bar counts the distinct sequences identified in exactly
+      the combination of conditions marked by the dots under it, with one set per samplesheet condition.
+
+      How to read: when the conditions resemble each other the first bar is the shared core. Tall
+      single-condition bars are peptides private to that condition, which is the result of interest when
+      the conditions differ by design.
+
+      Note: a peptide missing from a condition was not identified there; it may still be present below the
+      identification threshold.
     layout: {x: 0, y: 0, w: 8, h: 5}
   # Labels name the five proteins giving the most peptides, by their entry
   # name, so the Overview's highlight stays readable.
@@ -1696,7 +1895,21 @@ tabs:
     tag: mq-pep-av-protein-scatter
     index: pep-protein-scatter
     title: Peptides per source protein against their intensity
-    description: One point per protein and sample, sized by PSMs. Proteins far right are tiled by many peptides.
+    description: >-
+      Which proteins feed the presented peptides most? Each point is one source protein in one sample,
+      with the number of distinct peptides from it on x (log scale) and the log10 of their summed
+      intensity on y, sized by PSMs and coloured by sample.
+
+      How to read: proteins far to the right are tiled by many peptides. Points high and to the right are
+      both well sampled and abundant; a protein with a single peptide is sampled once, which may be
+      chance. Click a point to select the protein and open its record.
+
+      Lines and annotations: the three points with the most PSMs carry a text label, the protein's entry
+      name. No reference line is drawn, and labels are dropped when a very dense cloud switches to a
+      density view.
+
+      Note: a peptide that maps to several proteins is credited to each of them, so related proteins can
+      look better sampled than they are.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: mhcquant
@@ -1708,7 +1921,12 @@ tabs:
     tag: mq-pep-table-peptides
     index: pep-table-peptides
     title: Identified peptides
-    description: Every accepted precursor with score, support, retention time, charge and source proteins. Select a row to open its record.
+    description: >-
+      Which peptides were identified? One row per sample and precursor (peptidoform and charge) that
+      passed the FDR filter, with its score, PSM support, retention time, charge and source proteins.
+
+      How to read: sort by score or PSMs for the best supported peptides, or filter on length class to
+      isolate one length. Select a row to open its record next to the table.
     layout: {x: 0, y: 0, w: 5, h: 6}
   - component_type: advanced_viz
     workflow_tag: mhcquant
@@ -1732,7 +1950,16 @@ tabs:
     tag: mq-pep-av-peptide-record
     index: pep-peptide-record
     title: Peptide record
-    description: The selected peptide, one card per sample and precursor it was identified as.
+    description: >-
+      What is known about the selected peptide? One card per sample and precursor it was identified as,
+      with its sequence, evidence, chromatography, source protein and quantification.
+
+      How to read: weigh the evidence (score, PSMs, spectrum correlation, fragment error) against the
+      retention-time gap. The replicates quantified, out of the replicates the sample has, say how
+      reproducible its intensity is. The protein accession links to UniProt.
+
+      Note: the fragment-ion fields are filled only when the run sets --annotate_ions, and the
+      quantification fields only with --quantify.
     layout: {x: 5, y: 0, w: 3, h: 6}
   - component_type: table
     workflow_tag: mhcquant
@@ -1744,7 +1971,15 @@ tabs:
     tag: mq-pep-table-proteins
     index: pep-table-proteins
     title: Source proteins
-    description: Peptides, shared peptides, PSMs and summed intensity per protein and sample. Select a row to open its record.
+    description: >-
+      Which proteins do the peptides come from? One row per sample and source protein: distinct peptides,
+      shared peptides, PSMs, best score and summed intensity.
+
+      How to read: sort by peptides to see the proteins the sample presents most. A protein whose peptides
+      are mostly shared is a weaker call than one with many private peptides. Select a row to open its
+      record.
+
+      Note: shared peptides are credited to every protein they map to.
     layout: {x: 0, y: 0, w: 5, h: 6}
   - component_type: advanced_viz
     workflow_tag: mhcquant
@@ -1766,5 +2001,11 @@ tabs:
     tag: mq-pep-av-protein-record
     index: pep-protein-record
     title: Protein record
-    description: The selected protein, one card per sample it was seen in.
+    description: >-
+      What does the selected protein contribute? One card per sample it was seen in, with its peptide
+      count, shared peptides, PSMs, best score, summed intensity and the list of its peptides.
+
+      How to read: a protein with many distinct peptides and few shared ones is solidly supported as a
+      source, while one whose peptides are mostly shared may stand in for a family member. The accession
+      links to UniProt.
     layout: {x: 5, y: 0, w: 3, h: 6}

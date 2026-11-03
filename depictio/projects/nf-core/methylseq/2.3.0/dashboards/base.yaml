@@ -148,6 +148,7 @@ main_dashboard:
       - ![](icon:mdi:flask-outline) **Samples** {{samples}}, {{paired}} of them paired-end
       - ![](icon:mdi:shape-outline) **Groups** {{groups}} in the design table
       - ![](icon:mdi:file-table-outline) **Samplesheet** [one row per sample](section:Sample sheet), its path in [the run parameters](params:input)
+      - ![](icon:mdi:palette-outline) **{GROUP_COL_DISPLAY}** {{legend:{GROUP_COL}}}
     tag: ms-ov-study
     index: ov-study
     layout: {x: 0, y: 1, w: 5, h: 5}
@@ -352,6 +353,18 @@ main_dashboard:
       y_title: CpG methylation (%)
       legend_pos: none
     title: CpG methylation along the read
+    description: >-
+      Does the methylation call change along the read? Each curve is one library and read, showing the percent
+      of CpG calls that are methylated at each position of the read.
+
+      How to read: a flat curve means the calls do not depend on where in the read they sit. A curve that
+      bends at either end, usually the first or last bases, is a positional bias that calls for a trim before
+      extraction. Open [Bias and context](tab:Bias and context) to see every context and read.
+
+      Lines and annotations: no reference line is drawn, and the legend is hidden.
+
+      Source: Bismark methylation extractor, the M-bias plot and its --ignore option,
+      https://felixkrueger.github.io/Bismark/usage/methylation-extraction/
     link: tab:Bias and context
     caption: One curve per library and read; a curve that bends at either end calls for a trim before extraction.
     section: Findings
@@ -443,6 +456,11 @@ main_dashboard:
     tag: ms-sample-sheet
     index: sample-sheet
     title: Sample sheet
+    description: >-
+      The libraries of the run: one row per sample with the design columns.
+
+      How to read: check that every library sits in the group you expect, since the group comparison needs two
+      groups with replicates. Pick a row to narrow the tiles that read per-library tables.
     layout: {x: 0, y: 0, w: 8, h: 6}
 tabs:
 # ============================================================================
@@ -946,7 +964,23 @@ tabs:
     tag: ms-run-conversion-bar
     index: run-conversion-bar
     title: Bisulfite conversion per library
-    description: One bar per library, coloured by group, so a conversion gap that follows the design stands out.
+    description: >-
+      Did the bisulfite reaction convert the unmethylated cytosines? One bar per library, its height the
+      conversion efficiency read off the CHH calls (100 minus the percent of methylated CHH calls), coloured
+      by group.
+
+      How to read: bars of similar height are the good picture. A library clearly below the others, or a gap
+      that follows the groups, means its CpG calls carry more false methylation than the rest and may be best
+      left out of the comparison. The axis starts just under the lowest bar so small gaps show; read the
+      values, not the bar lengths.
+
+      Lines and annotations: no reference line is drawn.
+
+      Source: Bismark FAQ on conversion efficiency, which suggests reading it off the non-CpG methylation in
+      mammals, https://felixkrueger.github.io/Bismark/faq/conversion-efficiency/
+
+      Note: the estimate assumes CHH methylation is close to zero in the organism, which does not hold in
+      plants, and Bismark states no minimum conversion.
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: advanced_viz
     workflow_tag: methylseq
@@ -967,7 +1001,20 @@ tabs:
     tag: ms-run-parallel
     index: run-qc-profile
     title: Per-library QC profile
-    description: Crossing the others on conversion is a bisulfite problem; on alignment and duplication, a library preparation one.
+    description: >-
+      Which libraries stand apart in their QC? Each line is one library, crossing five axes: total reads,
+      percent aligned, percent duplicate, percent CpG methylation and conversion efficiency, coloured by
+      group.
+
+      How to read: lines that run together are consistent libraries. A line that departs from the others on
+      conversion points at the bisulfite step, and on alignment or duplication at the library preparation;
+      open [Methylation levels](tab:Methylation levels) or the tables below for the values.
+
+      Lines and annotations: each axis is rescaled from its lowest to its highest value across the libraries,
+      so the top and bottom of an axis are the run's own extremes and not a threshold.
+
+      Note: because every axis is stretched to the run's range, a tiny difference can look large; read the
+      values in the table.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: methylseq
@@ -979,6 +1026,12 @@ tabs:
     tag: ms-run-table-summary
     index: run-table-summary
     title: Bismark run summary
+    description: >-
+      Bismark's own run summary: one row per library with the reads, the alignment and duplication yields, the
+      methylation level in each cytosine context and the CpG calls that came out.
+
+      How to read: sort by a column to find the library at either end, and compare it with the conversion and
+      QC tiles above. Pick a row to carry the library to the other tiles.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: methylseq
@@ -990,6 +1043,12 @@ tabs:
     tag: ms-run-table-alignment
     index: run-table-alignment
     title: Alignment summary
+    description: >-
+      The Bismark alignment counts: one row per library with the pairs analysed, the unique best hits, the
+      mapping efficiency and the pairs that never aligned or aligned to several places.
+
+      How to read: a low mapping efficiency in one library points at its preparation, a low one everywhere at
+      the genome or the library type. Pick a row to carry the library to the other tiles.
     layout: {x: 0, y: 6, w: 8, h: 6}
   - component_type: table
     workflow_tag: methylseq
@@ -1001,6 +1060,15 @@ tabs:
     tag: ms-run-table-dedup
     index: run-table-dedup
     title: Deduplication summary
+    description: >-
+      The Bismark deduplication counts: one row per library with the alignments examined, the duplicates
+      removed and the sequences left for methylation extraction.
+
+      How to read: a duplication rate well above the other libraries is an over-sequenced or low-complexity
+      library. Pick a row to carry the library to the other tiles.
+
+      Source: Bismark deduplication, which is not recommended for RRBS, amplicon or other target-enrichment
+      libraries, https://felixkrueger.github.io/Bismark/usage/deduplication/
     layout: {x: 0, y: 12, w: 8, h: 6}
 # ============================================================================
 # Coverage
@@ -1176,7 +1244,16 @@ tabs:
     tag: ms-cov-track
     index: cov-track
     title: Read depth along the reference
-    description: One lane per library; a lane flat at zero over a whole contig is a contig the library never reached.
+    description: >-
+      Where do the reads land on the reference? One lane per library shows the read depth along each contig,
+      in the windows Qualimap BamQC reports.
+
+      How to read: an even lane means the reads are spread over the reference. A lane flat at zero over a
+      whole contig is a contig the library never reached, and a spike far above the rest may be a repeat or a
+      high-copy region. Compare the lanes: a library that is flat where the others are not has a coverage
+      problem, not a methylation one.
+
+      Lines and annotations: no reference line is drawn, and the depth is not smoothed.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: advanced_viz
     workflow_tag: methylseq
@@ -1193,7 +1270,15 @@ tabs:
     tag: ms-cov-histogram
     index: cov-depth-histogram
     title: Bases at each depth
-    description: One curve per library, log y, since the zero bucket holds most of the genome.
+    description: >-
+      How deep does the sequencing go, and how much of the reference is left out? One curve per library: the
+      share of the reference at each read depth, on a logarithmic y axis.
+
+      How to read: a curve that peaks at a depth well above zero is a library whose reads cover the reference
+      deeply; a large share at zero is reference with no data. The zero bucket can hold most of the reference,
+      so the log axis is what keeps the rest readable.
+
+      Lines and annotations: no reference line is drawn.
     layout: {x: 0, y: 0, w: 4, h: 6}
   - component_type: advanced_viz
     workflow_tag: methylseq
@@ -1209,7 +1294,15 @@ tabs:
     tag: ms-cov-fraction
     index: cov-genome-fraction
     title: Reference covered at least X deep
-    description: Where the curves part is where the libraries stop being comparable for a per-site call.
+    description: >-
+      How much of the reference is covered at least X deep? One curve per library: the percent of the
+      reference reached by at least X reads, for rising X.
+
+      How to read: curves that fall late and high cover much of the reference at depth. Where the curves part
+      is where the libraries stop being comparable for a per-site call, so use that depth as the floor when
+      you compare sites between libraries.
+
+      Lines and annotations: no reference line is drawn.
     layout: {x: 4, y: 0, w: 4, h: 6}
   - component_type: table
     workflow_tag: methylseq
@@ -1221,6 +1314,12 @@ tabs:
     tag: ms-cov-table-bamqc
     index: cov-table-bamqc
     title: Qualimap BamQC summary
+    description: >-
+      The Qualimap BamQC summary: one row per library with its mean depth and its standard deviation, mapping
+      quality, error rate and duplication.
+
+      How to read: a mean depth far below the others limits the sites that library can call. Pick a row to
+      carry the library to the other tiles.
     layout: {x: 0, y: 0, w: 8, h: 6}
 # ============================================================================
 # Bias and context
@@ -1421,7 +1520,19 @@ tabs:
     tag: ms-bias-mbias
     index: bias-mbias-profile
     title: M-bias by context and read
-    description: One curve per library and read; the bar above picks the context and the read.
+    description: >-
+      Does a cytosine context or read position carry a bias? One curve per library, read and context: the
+      percent of methylated calls at each position of the read, with the bar above picking the context and the
+      read.
+
+      How to read: in the CpG context a curve that is flat is the good picture, and one that bends at an end
+      calls for trimming that end before extraction. In the CHH context the curve should stay near the bottom,
+      and one that climbs at the 5' end says the first bases are not converting.
+
+      Lines and annotations: no reference line is drawn.
+
+      Source: Bismark methylation extractor, the M-bias plot and its --ignore option,
+      https://felixkrueger.github.io/Bismark/usage/methylation-extraction/
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: methylseq
@@ -1433,6 +1544,12 @@ tabs:
     tag: ms-bias-table-mbias
     index: bias-table-mbias
     title: M-bias, every context and read
+    description: >-
+      The numbers behind the M-bias curves: one row per library, read, context and position with the percent
+      of methylated calls and the coverage behind it.
+
+      How to read: filter to a context and a read, then look at the first and last positions; a position with
+      few calls gives a noisy value. Pick a row to carry the library to the other tiles.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: methylseq
@@ -1442,6 +1559,18 @@ tabs:
     tag: ms-bias-table-context
     index: bias-table-context
     title: Methylation by context
+    description: >-
+      The methylation level in each cytosine context: one row per library and context, after deduplication and
+      extraction.
+
+      How to read: CpG carries the signal in a mammalian methylome, while CHG and CHH sitting near zero is the
+      usual sanity check of the bisulfite conversion. A library with a high CHG or CHH value is converting
+      less than its peers.
+
+      Source: Bismark FAQ on conversion efficiency,
+      https://felixkrueger.github.io/Bismark/faq/conversion-efficiency/
+
+      Note: in plants non-CpG methylation is real, and then the check does not apply.
     layout: {x: 0, y: 6, w: 8, h: 6}
 # ============================================================================
 # Methylation levels
@@ -1614,7 +1743,18 @@ tabs:
     tag: ms-lvl-density
     index: lvl-density-profile
     title: Per-CpG methylation density
-    description: One curve per library in 2% buckets, log y, so the shoulders between the two peaks stay readable.
+    description: >-
+      How is methylation distributed over the CpGs of each library? One curve per library: the share of its
+      CpGs at each methylation level, in 2% buckets, on a logarithmic y axis.
+
+      How to read: a mammalian methylome is expected to be bimodal, a peak near 0% for unmethylated sites and
+      a taller one near 100% for the bulk. A curve that loses the two peaks, or whose 0% peak drifts up,
+      reports incomplete conversion or a depth too low for a site call; the log axis keeps the shoulders
+      between the peaks readable.
+
+      Lines and annotations: no reference line is drawn.
+
+      Note: the bimodal shape is a property of mammalian methylomes and need not hold for other organisms.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: figure
     workflow_tag: methylseq
@@ -1632,7 +1772,19 @@ tabs:
     tag: ms-lvl-density-class
     index: lvl-density-class
     title: Methylation by CpG-density class
-    description: Window methylation per tertile; the gap between the ends is what an island annotation would sharpen.
+    description: >-
+      Is methylation lower where CpGs are dense? One box per CpG-density class: the methylation of the 10 kb
+      windows in the class, with the classes being the sparsest, middle and densest third of windows by CpG
+      count.
+
+      How to read: the box is the middle half of the windows, the line inside is the median and single points
+      lie outside the whiskers. In a mammalian methylome the CpG-dense end is expected to sit lowest; the gap
+      between the ends is what an island annotation would sharpen.
+
+      Lines and annotations: no reference line is drawn. The thirds are tertiles of the CpG count over all
+      windows, a stand-in for a CpG-island annotation that nf-core/methylseq does not ship.
+
+      Note: the tertiles are data-defined, not a published definition of a CpG island.
     layout: {x: 0, y: 0, w: 8, h: 4, fit: auto}
 # ============================================================================
 # Cohort structure
@@ -1747,7 +1899,17 @@ tabs:
     tag: ms-coh-pca
     index: coh-pca
     title: Libraries on their binned methylome (PCA)
-    description: Coloured by {GROUP_COL_DISPLAY}; with few libraries the first component can carry depth as much as design.
+    description: >-
+      Do the libraries group by the design? Each point is a library, placed by the first two principal
+      components of its binned methylome (10 kb windows shared by all libraries) and coloured by group.
+
+      How to read: libraries of one group landing together and apart from the other group is the picture that
+      makes a group comparison believable. A library on the wrong side is a swap, a mislabelled sheet or a
+      conversion failure; with few libraries the first component can carry depth as much as design. Click a
+      point to pick the library.
+
+      Lines and annotations: a centroid marker sits at the mean position of each group. The windows are
+      standardised before the decomposition.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: advanced_viz
     workflow_tag: methylseq
@@ -1761,7 +1923,15 @@ tabs:
     tag: ms-coh-correlation
     index: coh-correlation
     title: Library correlation over the shared windows
-    description: Pearson correlation of the 10 kb window means, clustered on both axes.
+    description: >-
+      How alike are the libraries? A square heatmap with one row and one column per library: the Pearson
+      correlation of their methylation over the 10 kb windows they share.
+
+      How to read: replicates of a group correlate with each other and less with the rest, so blocks along the
+      diagonal match the design. A library that sits in the wrong block is a swap, a mislabelled sheet or a
+      conversion failure that flattened its methylome.
+
+      Lines and annotations: rows and columns are clustered, and the colour scale gives the correlation.
     layout: {x: 0, y: 6, w: 8, h: 6}
   - component_type: advanced_viz
     workflow_tag: methylseq
@@ -1780,7 +1950,19 @@ tabs:
     tag: ms-coh-variable
     index: coh-variable-windows
     title: The 150 windows that move most across the libraries
-    description: A ranking by variance, not a test; its blocks are where to read the group comparison first.
+    description: >-
+      Where does methylation move most across the libraries? Each row is one of the 150 windows with the
+      highest variance of methylation across the libraries, each column a library, and each cell the percent
+      methylation of the window.
+
+      How to read: blocks that switch between groups are the regions to read first in the group comparison;
+      the bar beside the rows gives the contig of each window. A block that follows a single library instead
+      of a group is a library effect.
+
+      Lines and annotations: rows and columns are clustered, and the 150 windows are a fixed setting of the
+      recipe.
+
+      Note: this is a ranking by variance, not a test, so significance belongs to the group comparison.
     layout: {x: 0, y: 0, w: 8, h: 5}
 # ============================================================================
 # Group comparison
@@ -1985,7 +2167,23 @@ tabs:
     tag: ms-cmp-manhattan
     index: cmp-manhattan
     title: Tested windows along the genome
-    description: A cluster of near-threshold windows on one contig is worth more than a lone hit.
+    description: >-
+      Which windows differ between the two groups, and where? Each point is a tested 10 kb window placed on
+      its contig, its height the -log10 of its adjusted p-value.
+
+      How to read: a cluster of near-threshold windows on one contig is worth more than a lone hit, since
+      neighbouring windows are not independent evidence of a region. Open the navigator below to follow a
+      region.
+
+      Lines and annotations: the horizontal line sits at 1.3 on the -log10 scale, an adjusted p-value of 0.05,
+      and points at or above it are larger. It is a significance line only; the 10-point difference used for
+      the calls is drawn on the volcano.
+
+      Source: Benjamini-Hochberg adjustment, Benjamini and Hochberg, Journal of the Royal Statistical Society
+      B 1995, doi 10.1111/j.2517-6161.1995.tb02031.x
+
+      Warning: the test is a window screen on library-level means, low-powered with few libraries a side, and
+      not a differential-methylation caller.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: advanced_viz
     workflow_tag: methylseq
@@ -2003,7 +2201,26 @@ tabs:
     tag: ms-cmp-volcano
     index: cmp-volcano
     title: Difference against significance
-    description: group_a minus group_b in points on x; the cut-offs drawn are padj 0.05 and ten points.
+    description: >-
+      How large and how significant are the differences? Each point is a tested window: the x axis is the
+      methylation difference in percentage points (first group minus second group) and the y axis is -log10 of
+      the adjusted p-value.
+
+      How to read: hits sit in the upper corners, windows that are far more or less methylated in the first
+      group. Use the QQ view to see whether the p-values depart from chance overall, and open the table below
+      for the window rows.
+
+      Lines and annotations: dotted lines mark an adjusted p-value of 0.05 (horizontal) and a difference of
+      -10 and +10 points (vertical), the same pair the recipe uses to call a window hyper or hypomethylated.
+      In the QQ view the dashed diagonal is the expectation under no effect, the grey band its 95% null
+      envelope and the label lambda, the genomic inflation factor, Devlin and Roeder, Biometrics 1999, doi
+      10.1111/j.0006-341X.1999.00997.x.
+
+      Source: Benjamini-Hochberg adjustment, Benjamini and Hochberg, Journal of the Royal Statistical Society
+      B 1995, doi 10.1111/j.2517-6161.1995.tb02031.x
+
+      Warning: the 10-point difference has no published rule behind it; the recipe chose it so that a small
+      shift is not called a difference.
     layout: {x: 0, y: 0, w: 4, h: 6}
   - component_type: figure
     workflow_tag: methylseq
@@ -2021,7 +2238,16 @@ tabs:
     tag: ms-cmp-histogram
     index: cmp-delta-histogram
     title: How the differences spread
-    description: One mode centred on zero is no systematic shift, whatever the top window says.
+    description: >-
+      Is there a systematic shift between the groups? A histogram of the per-window methylation difference
+      (first group minus second group, in percentage points), stacked by the call each window received.
+
+      How to read: one mode centred on zero is no systematic shift, whatever the top window says. A mode
+      displaced from zero says one group is more methylated overall, which can be real or a depth and
+      conversion effect.
+
+      Lines and annotations: no reference line is drawn; the colours are the call of each window
+      (hypermethylated, hypomethylated, not significant).
     layout: {x: 4, y: 0, w: 4, h: 6}
   - component_type: advanced_viz
     workflow_tag: methylseq
@@ -2048,7 +2274,21 @@ tabs:
     tag: ms-cmp-navigator
     index: cmp-locus-navigator
     title: Locus navigator, significance per window
-    description: The locus field and a brush on the axis move the lanes below.
+    description: >-
+      Where is the region to look at? Each rectangle is a tested window on the genome, scored by the -log10 of
+      its adjusted p-value and coloured by its call.
+
+      How to read: type a region in the locus field or brush the axis to move the per-library lanes below to
+      it. The view keeps every window above the line whole and samples the rest.
+
+      Lines and annotations: the horizontal line sits at 1.3 on the -log10 scale, an adjusted p-value of 0.05.
+      It is a significance line only, set in the tile.
+
+      Source: Benjamini-Hochberg adjustment, Benjamini and Hochberg, Journal of the Royal Statistical Society
+      B 1995, doi 10.1111/j.2517-6161.1995.tb02031.x
+
+      Note: the line is the conventional 0.05 with no further source, and the region it opens on is a
+      documented default of the template.
     layout: {x: 0, y: 0, w: 8, h: 3}
   - component_type: advanced_viz
     workflow_tag: methylseq
@@ -2066,7 +2306,17 @@ tabs:
     tag: ms-cmp-lanes
     index: cmp-locus-lanes
     title: Binned CpG methylation per library
-    description: One lane per library over the navigator's region, from the strided binned windows.
+    description: >-
+      What does methylation look like in the region? One lane per library (up to eight) shows the methylation
+      of the binned windows over the region picked in the navigator.
+
+      How to read: a block that is high in the lanes of one group and low in the other is the raw evidence for
+      a call. Lanes that disagree inside one group make the call weaker.
+
+      Lines and annotations: no reference line is drawn; the value of each window is its percent methylation.
+
+      Note: the windows are a drawing sample of the binned methylome, so a window of the comparison can be
+      missing from a lane.
     layout: {x: 0, y: 3, w: 8, h: 6}
   - component_type: table
     workflow_tag: methylseq
@@ -2078,4 +2328,10 @@ tabs:
     tag: ms-cmp-table
     index: cmp-table-windows
     title: Tested windows
+    description: >-
+      Every tested window: its position, the mean methylation of each group, the difference, the test
+      statistic, the adjusted p-value and its call.
+
+      How to read: sort by adjusted p-value, then check the difference and the CpG count behind the thinnest
+      library. Pick a row to carry the window to the other tiles.
     layout: {x: 0, y: 0, w: 8, h: 6}

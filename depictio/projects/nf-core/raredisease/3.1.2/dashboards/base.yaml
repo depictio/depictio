@@ -211,6 +211,8 @@ main_dashboard:
       - ![](icon:mdi:account-multiple-outline) **Trios** {{n_trios}} probands with both parents in the run
       - ![](icon:mdi:gender-male-female) **Sex** {{n_female}} female and {{n_male}} male, as the pedigree declares
       - ![](icon:mdi:file-table-outline) **Samplesheet** [one row per sample](section:Sample sheet), its path in [the run parameters](params:input)
+      - ![](icon:mdi:palette-outline) **Role** {{legend:role}}
+      - ![](icon:mdi:palette-outline) **Affected** {{legend:status}}
     tag: rd-ov-study
     index: ov-study
     layout: {x: 0, y: 1, w: 5, h: 4}
@@ -446,7 +448,25 @@ main_dashboard:
     index: ov-genome
     title: Ranked variants along the genome
     link: tab:Locus
-    description: Each dot is a ranked variant, its height the rank score and its colour the inheritance model it fits; stars mark the three best. Click a dot to open the variant in the genome browser.
+    description: >-
+      Each dot is a ranked variant, placed along the genome by its position, with its height the
+      rank score and its colour the inheritance model it fits. The three best variants carry a gold,
+      silver and bronze star.
+
+      How to read: the highest dots are the variants the family's rank model scores best, so start
+      from the stars and from a cluster of high dots at one locus. Click a dot to open the variant
+      in the genome browser of the [Locus](tab:Locus) tab, and open [Ranked](tab:Ranked) to see why
+      it ranks.
+
+      Lines and annotations: the stars mark the three highest rank scores. No cut-off line is drawn,
+      so read a score against the other variants of the same family. The colour classes are the
+      inheritance models GENMOD annotates (compound heterozygous, recessive, dominant, X-linked, or
+      no model that fits).
+
+      Source: GENMOD, https://github.com/Clinical-Genomics/genmod
+
+      Note: a rank score is relative to the scoring bounds of its own family, so it orders variants
+      within a run and is not a probability that a variant is causal.
     layout: {x: 0, y: 10, w: 8, h: 4}
   - component_type: advanced_viz
     workflow_tag: raredisease
@@ -499,10 +519,19 @@ main_dashboard:
     tag: rd-ov-top-candidates
     index: ov-top-candidates
     title: Top candidates
-    description: The eight best-ranked variants. The rank score bar runs from the lowest to the highest score
-      the family's pedigree allows (GENMOD scores are signed, a negative one is evidence against the variant),
-      and the number reads score / highest possible. Hover a row for its annotation; the Ranked tab holds the
-      full list, why each one ranks and the record of a picked variant.
+    description: >-
+      The eight best-ranked variants of the family, best first, each with its gene, protein change,
+      inheritance model, impact and a rank score bar. The first three wear a medal.
+
+      How to read: the bar runs from the lowest to the highest score the family's pedigree allows,
+      and the number reads score over highest possible. GENMOD scores are signed, so a negative one
+      is evidence against the variant. Hover a row for its annotation, and open [Ranked](tab:Ranked)
+      for the full list, the parts of each score and the record of a picked variant.
+
+      Lines and annotations: the ends of each bar are the family's own minimum and maximum rank
+      score, read from the run (RankScoreMinMax). No pass mark is drawn.
+
+      Source: GENMOD, https://github.com/Clinical-Genomics/genmod
     layout: {x: 0, y: 2, w: 8, h: 4}
   - component_type: text
     body: |
@@ -577,7 +606,17 @@ main_dashboard:
     tag: rd-sample-sheet
     index: sample-sheet
     title: Samples
-    description: One row per sample, with its pedigree, alignment, coverage and callset numbers.
+    description: >-
+      One row per sample, with its pedigree, alignment, coverage and callset numbers side by side.
+
+      How to read: use it first to check that every sample is the person the sample sheet says, with
+      the sex check and the parent check, before reading any variant. A Mismatch or a Check points
+      to [Family](tab:Family) for the pair behind it; low coverage or a high duplication rate points
+      to [Alignment](tab:Alignment). A picked row narrows the dashboard to that sample.
+
+      Note: the sex check compares the declared sex with one inferred from the relative depth of X
+      and Y (a Y at 10 percent of the autosomal depth or more reads as male). Those two cut-offs are
+      this template's own settings, not a published rule.
     layout: {x: 0, y: 0, w: 8, h: 6}
 tabs:
 - title: MultiQC
@@ -949,7 +988,14 @@ tabs:
     tag: rd-aln-sample-record
     index: aln-sample-record
     title: Picked sample
-    description: The sample picked in the table, from its reads to its calls.
+    description: >-
+      The record of the sample picked in the table beside it, from its reads to its calls, in four
+      groups: Alignment, Coverage, Duplication and Calls.
+
+      How to read: no value is rated here, so read a weak one against the other samples of the
+      family in the table. Low coverage or a low aligned share points at the library or the
+      alignment, while an odd Ts/Tv or het/hom ratio points at the callset. Open
+      [Callset](tab:Callset) for the charts behind the call numbers.
     layout: {x: 5, y: 0, w: 3, h: 6}
   - component_type: table
     workflow_tag: raredisease
@@ -961,7 +1007,13 @@ tabs:
     tag: rd-aln-table-qc
     index: aln-table-qc
     title: Alignment metrics per sample
-    description: Reads, alignment and duplication rates, depth and insert size; a picked row opens its record.
+    description: >-
+      Reads, aligned and duplicate shares, depth, insert size and mitochondrial to nuclear depth of
+      every sample, from the Picard and mosdepth reports.
+
+      How to read: compare the rows of one family, since samples sequenced together should look
+      alike. A row that departs from its relatives on aligned share, duplication or depth is the one
+      to open first. A picked row opens its record beside the table.
     layout: {x: 0, y: 0, w: 5, h: 6}
   - component_type: table
     workflow_tag: raredisease
@@ -973,8 +1025,14 @@ tabs:
     tag: rd-aln-table-contigs
     index: aln-table-contigs
     title: Depth per contig
-    description: Mean, minimum and maximum depth of each contig, and its depth relative to the nuclear
-      mean.
+    description: >-
+      Mean, minimum and maximum depth of every contig of every sample, and the depth of each contig
+      relative to the sample's autosomal mean.
+
+      How to read: an autosome sits at a relative depth of 1, X at 1 in a female and 0.5 in a male,
+      Y near 0 in a female, and the mitochondrion at far above 1 because it has many copies per
+      cell. A contig off its expected value is a lead for a sex mismatch, a deletion or a
+      duplication, to confirm in the genome browser.
     layout: {x: 0, y: 0, w: 8, h: 6}
 - title: Family
   subtitle: Are the samples the family the pedigree says they are?
@@ -1141,8 +1199,14 @@ tabs:
     tag: rd-fam-pedigree
     index: fam-pedigree
     title: Pedigree
-    description: Squares are males, circles females; a filled mark is an affected sample, an open one
-      unaffected. A click on a sample narrows the dashboard to it.
+    description: >-
+      The family as the sample sheet states it, one symbol per sample: squares are males, circles
+      females, a filled mark an affected sample and an open one an unaffected sample. The label is
+      the sample's role in the family, derived from the pedigree alone.
+
+      How to read: check that it matches the family you expect. The pedigree is the declared one,
+      not inferred from the genotypes; the pair checks beside it test whether the genotypes agree. A
+      click on a sample narrows the dashboard to it.
     layout: {x: 0, y: 0, w: 4, h: 6}
   - component_type: figure
     workflow_tag: raredisease
@@ -1160,8 +1224,27 @@ tabs:
     tag: rd-fam-pair-checks
     index: fam-pair-checks
     title: Opposite homozygous sites per pair
-    description: One bar per pair of samples, coloured by the verdict of its parent-child check. A parent
-      and child sit near zero.
+    description: >-
+      One bar per pair of samples: the share of the sites both are called at where one is homozygous
+      reference and the other homozygous alternate. The bar is coloured by the verdict of the
+      parent-child check.
+
+      How to read: a declared parent and child almost never differ that way, so their bar sits near
+      zero. A bar coloured Check is a parent-child pair above the limit, which points at a sample
+      swap or a wrong parent. Open the Pair checks table for the counts behind it, and
+      [Alignment](tab:Alignment) to see whether a shallow sample explains it.
+
+      Lines and annotations: no line is drawn, the colour is the verdict. Consistent is 1 percent of
+      shared sites or less, Check is above it, Too few sites is under 50 shared sites, and Not
+      checked is any other relation. These are the template's settings, not read from the run.
+
+      Source: peddy, Pedersen and Quinlan 2017, doi:10.1016/j.ajhg.2017.01.017,
+      https://pmc.ncbi.nlm.nih.gov/articles/PMC5339084 (it expects an IBS0 statistic close to zero
+      for a parent and child and uses an empirically derived cut-off of 0.012; the 1 percent here is
+      this template's own setting).
+
+      Note: the sites are those of the joint callset, which are variable sites and not a panel
+      chosen for the purpose, so a shallow callset can decide fewer pairs.
     layout: {x: 4, y: 0, w: 4, h: 6}
   - component_type: table
     workflow_tag: raredisease
@@ -1173,7 +1256,16 @@ tabs:
     tag: rd-fam-table-checks
     index: fam-table-checks
     title: Pair checks
-    description: Shared sites, opposite homozygous sites and relatedness for every pair, in both directions.
+    description: >-
+      Shared sites, opposite homozygous sites, identical genotypes and relatedness for every pair of
+      samples, in both directions so a filter on either sample finds it.
+
+      How to read: look at the check status of the parent-child rows first; Check means the share of
+      opposite homozygous sites is above the limit. The relatedness column is peddy's estimate
+      (about 0.5 for a parent and child or full siblings, about 0 for unrelated samples) and is not
+      judged. Rows of other relations read Not checked.
+
+      Source: peddy, Pedersen and Quinlan 2017, doi:10.1016/j.ajhg.2017.01.017
     layout: {x: 0, y: 0, w: 8, h: 6}
 - title: Callset
   subtitle: How many calls does each sample yield, and how clean are they?
@@ -1364,9 +1456,27 @@ tabs:
     tag: rd-cs-tstv-bar
     index: cs-tstv-bar
     title: Ts/Tv per sample
-    description: Transitions over transversions of the PASS SNVs, highest first and coloured by role. A human
-      genome sits near 2.0 to 2.1 and an exome near 2.8 to 3.0 (the green bands); a lower value points to false
-      positives. A click narrows the dashboard to the sample.
+    description: >-
+      Each bar is a sample: the transitions over transversions (Ts/Tv) of its PASS SNVs, highest
+      first and coloured by role. The question is whether the callset looks like a real human
+      callset or is diluted with false calls.
+
+      How to read: a bar inside a green band is in the usual range for that kind of sequencing, and
+      a bar well below it points to false positives. Compare the samples of one family, since they
+      share a kit and a caller. A click narrows the dashboard to the sample, and
+      [Alignment](tab:Alignment) shows its depth.
+
+      Lines and annotations: the left green band, labelled Genome, spans a Ts/Tv of 2.0 to 2.1 for a
+      whole-genome callset. The right one, labelled Exome, spans 2.8 to 3.0 for an exome. Both are
+      fixed references of this dashboard, not read from the run; use the band that matches the
+      sequencing kit.
+
+      Source: Wang et al. 2015, Bioinformatics 31(3):318-323, doi:10.1093/bioinformatics/btu668
+      (about 2.0 outside exome regions and about 3.0 for human exome data, with exonic medians of
+      2.79 to 2.84 across ancestry groups).
+
+      Note: Ts/Tv depends on the region sequenced and on ancestry, and the band edges are display
+      aids rounded from those values, not a validated pass level.
     layout: {x: 0, y: 0, w: 4, h: 5}
   - component_type: figure
     workflow_tag: raredisease
@@ -1390,9 +1500,25 @@ tabs:
     tag: rd-cs-hethom-bar
     index: cs-hethom-bar
     title: Het over hom-alt per sample
-    description: Heterozygous over homozygous-alternate PASS calls, highest first and coloured by role. An
-      outbred sample sits near 1.5 to 2 (the green band); a low value fits consanguinity or long runs of
-      homozygosity, a high one contamination. A click narrows the dashboard to the sample.
+    description: >-
+      Each bar is a sample: its heterozygous over homozygous-alternate PASS calls, highest first and
+      coloured by role. The question is whether the zygosity balance looks like an unrelated,
+      outbred person.
+
+      How to read: a bar inside the green band is in the usual range. A low value fits consanguinity
+      or long runs of homozygosity, a high one contamination or a mix of samples; compare the
+      samples of one family, then open [Family](tab:Family) to check the pedigree. A click narrows
+      the dashboard to the sample.
+
+      Lines and annotations: the green band, labelled Outbred, spans 1.5 to 2.0. It is a fixed
+      reference of this dashboard, not read from the run.
+
+      Source: Wang et al. 2015, doi:10.1093/bioinformatics/btu668 (a het to non-reference-hom ratio
+      of 2.0 expected under Hardy-Weinberg, with medians from about 1.4 to about 2.0 across ancestry
+      groups).
+
+      Note: the ratio is ancestry dependent, and the lower edge of the band (1.5) is a display aid,
+      not a published cut-off.
     layout: {x: 4, y: 0, w: 4, h: 5}
   - component_type: figure
     workflow_tag: raredisease
@@ -1413,9 +1539,18 @@ tabs:
     tag: rd-cs-spectrum
     index: cs-spectrum
     title: Substitution spectrum per sample
-    description: The six pyrimidine-folded classes as shares of each sample's PASS SNVs, coloured by role. The
-      first two classes are transitions; a sample whose bars depart from its relatives' points to a calling or
-      contamination problem.
+    description: >-
+      Each bar is a substitution class, as a share of one sample's PASS SNVs, folded onto the six
+      pyrimidine classes with the transitions (C to T, T to C) first. Bars are coloured by role, and
+      a sample is told apart by its bar pattern when a role has several.
+
+      How to read: the samples of a family should show the same profile. A sample whose bars depart
+      from its relatives' points to a calling or contamination problem, and a transition share far
+      below the others matches a low Ts/Tv above. Open [Alignment](tab:Alignment) to check that
+      sample's depth.
+
+      Lines and annotations: no reference is drawn, because no published cut-off applies to a
+      spectrum; read each sample against its relatives.
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: figure
     workflow_tag: raredisease
@@ -1447,7 +1582,23 @@ tabs:
     tag: rd-cs-vaf-vs-depth
     index: cs-vaf-vs-depth
     title: Allele fraction per sample
-    description: Share of each sample's PASS calls (read at least 10 times) in each 0.05 bin of allele fraction, split by variant type. A germline sample peaks in the green band at 0.5 (heterozygous) and in the blue one near 1 (homozygous-alternate). A heterozygous peak off 0.5, or a broad shoulder of low fractions, flags contamination, mosaicism or artefacts.
+    description: >-
+      One panel per sample (per sample and caller when several callers ran): the share of its PASS
+      calls in each 0.05 bin of allele fraction, split by variant type. Only calls read at least 10
+      times are counted.
+
+      How to read: a germline sample peaks near 0.5 for heterozygous calls and near 1 for
+      homozygous-alternate ones. A heterozygous peak off 0.5, or a broad shoulder of low fractions,
+      flags contamination, mosaicism or artefacts. Open [Family](tab:Family) if two samples may be
+      mixed.
+
+      Lines and annotations: the green band spans allele fractions of 0.3 to 0.7, where a
+      heterozygous germline call sits, and the blue band spans 0.9 to 1, where a
+      homozygous-alternate call sits. Both bands and the minimum depth of 10 reads are display
+      choices of this dashboard, not read from the run.
+
+      Note: the expected peaks (0.5 and 1) follow from a diploid germline sample, but the band edges
+      and the depth floor are not validated cut-offs and have no published source.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: advanced_viz
     workflow_tag: raredisease
@@ -1464,9 +1615,18 @@ tabs:
     tag: rd-cs-karyotype
     index: cs-karyotype
     title: PASS variants per 1 Mb on the karyotype
-    description: Each chromosome drawn to its length, banded by one sample's distinct PASS variants per
-      1 Mb. Only contigs that carry calls are drawn, so a callset on one chromosome shows that one and the
-      rest of the genome stays empty. Open a chromosome and use Filter dashboard to narrow the per-call plot to it.
+    description: >-
+      Each chromosome is drawn to its length and banded by one sample's distinct PASS variants per 1
+      Mb; the colour scale (Viridis) runs from few variants in dark to many in bright. Only contigs
+      that carry calls are drawn.
+
+      How to read: look for bands that stand out from their neighbours, since a pileup of calls and
+      an empty stretch are both leads, not verdicts: an empty stretch can be an uncallable region as
+      well as a real absence. Open a chromosome and use Filter dashboard to narrow the per-call
+      plots to it.
+
+      Lines and annotations: no cut-off is drawn; the 1 Mb window and the colour scale are display
+      settings.
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: table
     workflow_tag: raredisease
@@ -1480,8 +1640,13 @@ tabs:
     tag: rd-cs-table-summary
     index: cs-table-summary
     title: Callset summary per sample
-    description: Calls, PASS share, SNVs, indels, Ts/Tv, zygosity and the median quality, depth and allele
-      fraction.
+    description: >-
+      Calls, PASS share, SNVs, indels, multiallelic sites, Ts/Tv, zygosity and the median quality,
+      depth and allele fraction of every sample.
+
+      How to read: read the PASS share and the median depth first, then compare Ts/Tv and the
+      het/hom ratio between the samples of a family, as in the charts above. A picked row narrows
+      the dashboard to the sample.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: raredisease
@@ -1494,8 +1659,13 @@ tabs:
     tag: rd-cs-table-filters
     index: cs-table-filters
     title: FILTER breakdown per sample
-    description: Each FILTER value with its calls, their share of the sample's callset and the SNVs and
-      indels among them.
+    description: >-
+      Each FILTER value of a sample's callset with its calls, their share of the callset, and the
+      SNVs and indels among them.
+
+      How to read: PASS is what the rest of the dashboard counts. A large share under one other
+      FILTER value shows which filter removed most, which is a lead to the caller's or the
+      hard-filter settings. A picked row narrows the dashboard to that filter.
     layout: {x: 0, y: 6, w: 8, h: 6}
 - title: Ranked
   subtitle: Which variants rank first, and which inheritance model do they fit?
@@ -1713,8 +1883,19 @@ tabs:
     tag: rd-rk-rank-by-model
     index: rk-rank-by-model
     title: Rank score by inheritance model
-    description: A variant that fits a model scores above the rest; the box spans the middle half of each
-      model's variants.
+    description: >-
+      Each box is an inheritance model: the rank scores of the variants that fit it, with the box
+      spanning the middle half, the line inside the median and the whiskers the spread. Individual
+      outliers are not drawn.
+
+      How to read: inheritance is one of the ten categories that make up the rank score, so variants
+      that fit a model tend to score above those that fit none. A model whose box sits clearly high
+      holds the family's best candidates; open [Ranked](tab:Ranked) to see them.
+
+      Lines and annotations: no reference line is drawn; the box is the distribution of the family's
+      own scores.
+
+      Source: GENMOD, https://github.com/Clinical-Genomics/genmod
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: figure
     workflow_tag: raredisease
@@ -1743,10 +1924,20 @@ tabs:
     tag: rd-rk-score-parts
     index: rk-score-parts
     title: Rank score parts of the 20 best variants
-    description: GENMOD's rank model adds a score for each of ten categories, and the family's pedigree sets
-      the bounds of the total (the axis ends at the highest score the family can reach). Each bar is one
-      variant, best first, split into its ten parts, with its total at the end. A click narrows the table,
-      the record and the genotypes to that variant.
+    description: >-
+      Each bar is one of the 20 best-ranked variants, best first, split into the ten category scores
+      GENMOD's rank model adds up, with the total printed at the end of the bar. The axis ends at
+      the highest score the family's pedigree allows.
+
+      How to read: a bar made mostly of one category shows what carries that variant, such as
+      inheritance or consequence. A part to the left of zero is evidence against it, and the gap to
+      the end of the axis is the score it misses. A click narrows the table, the record and the
+      genotypes to that variant.
+
+      Lines and annotations: the axis bounds are the family's own rank score minimum and maximum
+      read from the run. No pass mark is drawn.
+
+      Source: GENMOD, https://github.com/Clinical-Genomics/genmod
     layout: {x: 0, y: 0, w: 5, h: 6}
   - component_type: figure
     workflow_tag: raredisease
@@ -1793,8 +1984,19 @@ tabs:
     tag: rd-rk-genotype-grid
     index: rk-genotype-grid
     title: Genotypes of the 20 best variants
-    description: One row per variant in rank order, one column per sample, coloured by zygosity (homozygous
-      reference, heterozygous, homozygous alternate, half call, no call).
+    description: >-
+      One row per variant of the 20 best-ranked, in rank order, and one column per sample. Each cell
+      is coloured by the zygosity of that sample at that variant: homozygous reference (grey),
+      heterozygous, homozygous alternate, half call or no call.
+
+      How to read: compare the affected samples with their relatives. A de novo variant is carried
+      by the affected child alone, a recessive one is homozygous alternate in the child and
+      heterozygous in both parents, and a dominant one follows the affected samples. A pattern that
+      matches the model in the Model column makes the candidate more credible; open the record
+      beside the table for its annotation.
+
+      Lines and annotations: no line is drawn; the legend lists the five genotype classes. A sample
+      missing from a variant's genotypes reads as no call.
     layout: {x: 5, y: 0, w: 3, h: 6}
   - component_type: advanced_viz
     workflow_tag: raredisease
@@ -1840,7 +2042,15 @@ tabs:
     tag: rd-rk-variant-record
     index: rk-variant-record
     title: Picked variant
-    description: The variant picked in the table, from its annotation to its carriers; the top-ranked one until a row is picked.
+    description: >-
+      The record of the variant picked in the table, in four groups: the variant, its ranking, its
+      frequencies and scores, and its carriers. The top-ranked variant is shown until a row is
+      picked.
+
+      How to read: no value is rated here. A rare variant in a gene intolerant of loss of function
+      (high pLI), with a high CADD score and a model that fits the family, is the profile of a good
+      candidate. The gene name links to GeneCards; open [Locus](tab:Locus) to see the variant in the
+      alignments.
     layout: {x: 5, y: 0, w: 3, h: 7}
   - component_type: figure
     workflow_tag: raredisease
@@ -1857,7 +2067,16 @@ tabs:
     tag: rd-rk-carriers
     index: rk-carriers
     title: Ranked variants carried per sample
-    description: Heterozygous, homozygous-alternate and half calls among the ranked variants of each sample.
+    description: >-
+      Each bar is a sample: the number of ranked variants it carries, split by zygosity into
+      heterozygous, homozygous-alternate and half calls.
+
+      How to read: compare the samples of one family. Carriers in common are candidates shared by
+      the affected samples, and a sample with a far higher count than its relatives points back to
+      the callset checks in [Callset](tab:Callset).
+
+      Lines and annotations: no reference is drawn. Only the ranked variants are counted, not the
+      whole callset.
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: advanced_viz
     workflow_tag: raredisease
@@ -1910,10 +2129,19 @@ tabs:
     tag: rd-rk-top-candidates
     index: rk-top-candidates
     title: Top candidates
-    description: The 50 best-ranked variants, best first. The rank score bar runs from the lowest to the highest
-      score the family's pedigree allows (GENMOD scores are signed, a negative one is evidence against the
-      variant), and the number reads score / highest possible. Hover a row for its annotation and frequencies;
-      a click pins it, picks the variant for the record beside it and opens the family with its carriers.
+    description: >-
+      The 50 best-ranked variants of the family, best first, each with its gene, protein change,
+      inheritance model, impact and a rank score bar. The first three wear a medal.
+
+      How to read: the bar runs from the lowest to the highest score the family's pedigree allows,
+      and the number reads score over highest possible. GENMOD scores are signed, so a negative one
+      is evidence against the variant. Hover a row for its annotation and frequencies; a click pins
+      it, picks the variant for the record beside it and opens the family with its carriers.
+
+      Lines and annotations: the ends of each bar are the family's own minimum and maximum rank
+      score, read from the run. No pass mark is drawn.
+
+      Source: GENMOD, https://github.com/Clinical-Genomics/genmod
     layout: {x: 0, y: 0, w: 5, h: 7}
   - component_type: table
     workflow_tag: raredisease
@@ -1926,8 +2154,13 @@ tabs:
     tag: rd-rk-table-variants
     index: rk-table-variants
     title: Ranked variants
-    description: Every ranked variant, best first, to sort, search and export. A picked row opens its
-      record.
+    description: >-
+      Every ranked variant, best first, with its gene, consequence, impact, inheritance model,
+      variant set, carriers, gnomAD frequency and position.
+
+      How to read: sort or search it to go beyond the 50 best. The variant set tells a
+      clinical-panel variant from a research-only one. A picked row opens its record in the Top
+      candidates section.
     layout: {x: 0, y: 0, w: 8, h: 7}
   - component_type: table
     workflow_tag: raredisease
@@ -1939,7 +2172,12 @@ tabs:
     tag: rd-rk-table-genotypes
     index: rk-table-genotypes
     title: Genotypes of the ranked variants
-    description: The genotype, depth and quality each sample has at each ranked variant.
+    description: >-
+      The genotype, depth, genotype quality and allele fraction each sample has at each ranked
+      variant.
+
+      How to read: a candidate backed by low depth or low genotype quality in the affected samples
+      is weaker than its rank suggests. A picked row narrows the dashboard to that variant.
     layout: {x: 0, y: 0, w: 8, h: 6}
 - title: Mitochondria
   subtitle: How heteroplasmic are the mitochondrial calls, and how rare?
@@ -2110,7 +2348,23 @@ tabs:
     tag: rd-mt-het-by-pos
     index: mt-het-by-pos
     title: Heteroplasmy along the mitochondrial genome
-    description: One point per call, by its position and the share of copies carrying it.
+    description: >-
+      Each point is a mitochondrial call, placed by its position on the mitochondrial genome, with
+      its height the heteroplasmy: the share of the sample's mitochondrial copies that carry it. The
+      colour is the heteroplasmy class.
+
+      How to read: a point near 1 is carried by almost every copy, a mid-height point by a share of
+      them, and a point near the floor is low level. Calls at mid heteroplasmy in a gene are the
+      ones to look at next, in the table below. gnomAD flags calls below 10 percent heteroplasmy and
+      leaves them out of its frequencies.
+
+      Lines and annotations: no line is drawn; the colour classes are Homoplasmic at 0.95 and above,
+      Heteroplasmic from 0.10, and Low level below. They follow gnomAD's mitochondrial thresholds
+      (95 to 100 percent alternate bases for homoplasmic, calls below 10 percent flagged), and are
+      fixed, not read from the run.
+
+      Source: gnomAD v3.1 mitochondrial DNA variants,
+      https://gnomad.broadinstitute.org/news/2020-11-gnomad-v3-1-mitochondrial-dna-variants/
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: figure
     workflow_tag: raredisease
@@ -2128,7 +2382,24 @@ tabs:
     tag: rd-mt-het-vs-gnomad
     index: mt-het-vs-gnomad
     title: Heteroplasmy against gnomAD frequency
-    description: Calls with a gnomAD frequency; the rare, heteroplasmic ones sit at the top left.
+    description: >-
+      Each point is a mitochondrial call with a gnomAD frequency: how often gnomAD sees the variant
+      heteroplasmic, on a log axis, against the heteroplasmy of the call. Colour is the heteroplasmy
+      class.
+
+      How to read: the rare, heteroplasmic calls sit at the top left, and a variant that gnomAD sees
+      often is less likely to explain a rare disease. Open the Mitochondrial calls table for their
+      gene, consequence and MitoTip prediction.
+
+      Lines and annotations: no line is drawn; the colour classes are those of the heteroplasmy
+      chart (Homoplasmic at 0.95 and above, Heteroplasmic from 0.10, Low level below), from gnomAD's
+      mitochondrial thresholds.
+
+      Source: gnomAD v3.1 mitochondrial DNA variants,
+      https://gnomad.broadinstitute.org/news/2020-11-gnomad-v3-1-mitochondrial-dna-variants/
+
+      Note: a call with no gnomAD heteroplasmic frequency, or a frequency of zero, cannot sit on the
+      log axis and is left out.
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: table
     workflow_tag: raredisease
@@ -2141,8 +2412,12 @@ tabs:
     tag: rd-mt-table-calls
     index: mt-table-calls
     title: Mitochondrial calls
-    description: Position, alleles, gene, consequence, heteroplasmy, depth, MitoTip and gnomAD frequencies
-      of each call.
+    description: >-
+      Position, alleles, gene, consequence, heteroplasmy, depth, MitoTip score and prediction, and
+      the gnomAD heteroplasmic and homoplasmic frequencies of each mitochondrial call.
+
+      How to read: combine a rare gnomAD frequency, a non-trivial heteroplasmy, a depth that
+      supports it and a damaging prediction. A picked row narrows the dashboard to that call.
     layout: {x: 0, y: 0, w: 8, h: 6}
 - title: Repeats
   subtitle: Do any repeat expansions or mobile element insertions stand out?
@@ -2331,10 +2606,25 @@ tabs:
     tag: rd-rp-counts
     index: rp-counts
     title: Repeat counts against the thresholds
-    description: One row per locus with its disease, one marker per sample, placed by its repeat count as a
-      share of the locus's pathogenic threshold. Green is the normal range, amber intermediate and red
-      pathogenic; the dotted line at 1 is the pathogenic threshold, and both limits come from the locus
-      catalogue Stranger reads. The marker colour is Stranger's verdict. Loci with no call are left out.
+    description: >-
+      Each row is a repeat locus with its disease, and each marker a sample, placed by its repeat
+      count as a share of the locus's pathogenic threshold. The marker colour is the verdict of the
+      Stranger annotation.
+
+      How to read: a marker in the red range is a pathogenic-size call and one in the amber range is
+      intermediate, to confirm in the genome browser and with the reads that span the repeat. Green
+      is the normal range. Open the Repeat expansion calls table for the counts and spanning reads.
+
+      Lines and annotations: each row is shaded green from 0 to the locus's normal maximum, amber up
+      to its pathogenic minimum, and red from there on. The dotted line at 1 is the pathogenic
+      threshold. Both limits come from the locus catalogue Stranger reads, per locus, and are not
+      set by this dashboard.
+
+      Source: Stranger, https://github.com/Clinical-Genomics/stranger (annotates the repeat calls
+      with the normal maximum and the pathogenic minimum of each locus from the variant catalogue).
+
+      Note: the larger of a sample's two alleles is plotted, the 25 loci with the highest ratio are
+      shown, and loci with no call are left out.
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: figure
     workflow_tag: raredisease
@@ -2351,7 +2641,16 @@ tabs:
     tag: rd-rp-mobile
     index: rp-mobile
     title: Mobile element insertions per sample
-    description: Insertions of ALU, L1, SVA and HERV elements each sample carries.
+    description: >-
+      Each bar is a sample: the number of mobile element insertions it carries, split by element
+      family (ALU, L1, SVA, HERV, other).
+
+      How to read: compare the samples of one family; a sample with far more insertions than its
+      relatives points at coverage or the caller rather than biology. Open the Mobile element calls
+      table for the position, the read evidence and how many samples share each insertion.
+
+      Lines and annotations: no reference is drawn, because no published cut-off applies to an
+      insertion count.
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: table
     workflow_tag: raredisease
@@ -2364,7 +2663,16 @@ tabs:
     tag: rd-rp-table-repeats
     index: rp-table-repeats
     title: Repeat expansion calls
-    description: Locus, disease, repeat count against its thresholds and the reads that span the repeat.
+    description: >-
+      Locus, disease, inheritance, repeat count, normal and pathogenic limits, the reads that span
+      the repeat and the status of every repeat call.
+
+      How to read: a call in the pathogenic range backed by many spanning reads is the strongest;
+      one with few spanning reads is weaker, since the count of a long repeat is an estimate. The
+      limits come from the locus catalogue Stranger reads. A picked row narrows the dashboard to the
+      call.
+
+      Source: Stranger, https://github.com/Clinical-Genomics/stranger
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: raredisease
@@ -2377,7 +2685,13 @@ tabs:
     tag: rd-rp-table-mobile
     index: rp-table-mobile
     title: Mobile element calls
-    description: Position, element family, genotype and the read evidence of each insertion.
+    description: >-
+      Position, element family, genotype, quality, filter and the read evidence of each mobile
+      element insertion.
+
+      How to read: an insertion with spanning pairs and clipped reads on both sides is better
+      supported than one with evidence on a single side. The samples-sharing column tells an
+      insertion every sample carries from one private to a sample.
     layout: {x: 0, y: 6, w: 8, h: 6}
   - component_type: table
     workflow_tag: raredisease
@@ -2389,7 +2703,16 @@ tabs:
     tag: rd-rp-table-smn
     index: rp-table-smn
     title: SMN copy number
-    description: SMN1 and SMN2 copy numbers and the raw counts behind them, per sample.
+    description: >-
+      The SMN1 and SMN2 copy numbers of every sample, the status the caller assigns and the raw
+      estimates behind them.
+
+      How to read: the status reads SMA, Carrier, Not a carrier or No call, and a No call means the
+      caller could not reach the locus, not that the sample is clear. Check the raw counts before
+      relying on a copy number.
+
+      Source: SMNCopyNumberCaller, https://github.com/Illumina/SMNCopyNumberCaller (estimates the
+      copy numbers of SMN1, SMN2 and SMN2 delta 7-8 from genome sequencing alignments).
     layout: {x: 0, y: 12, w: 8, h: 6}
 - title: Locus
   subtitle: What do the calls and alignments show at one locus?
@@ -2592,12 +2915,21 @@ tabs:
     tag: rd-loc-navigator
     index: loc-navigator
     title: Ranked variants along the genome
-    description: Each point is a ranked variant, higher for a higher rank score, so the best candidates sit at
-      the top. The colour is the inheritance model it fits, as in the ranked table and the variant track below
-      (purple compound heterozygous, orange recessive, blue dominant, green X-linked, grey no model fits). The
-      best candidates of a family often share one model, so one colour can fill the top; the height carries the
-      ranking. The axis keeps about 7 Mb around the browser's window, the band, so the neighbouring candidates
-      stay in view. A locus or gene in the header, or a brush, moves the browser.
+    description: >-
+      Each point is a ranked variant, placed along the genome by its position, higher for a higher
+      rank score. The colour is the inheritance model it fits, as in the ranked table and the
+      variant track of the browser below.
+
+      How to read: the best candidates sit at the top, and a family's best candidates often share
+      one model, so one colour can fill the top while the height carries the ranking. Brush a
+      region, or enter a locus or gene in the header, and the browser follows; open
+      [Ranked](tab:Ranked) to see why a variant ranks.
+
+      Lines and annotations: the band marks the window the browser shows, and the axis keeps about 7
+      Mb around it so the neighbouring candidates stay in view. The stars mark the three highest
+      rank scores. No cut-off line is drawn.
+
+      Source: GENMOD, https://github.com/Clinical-Genomics/genmod
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: jbrowse
     workflow_tag: raredisease
@@ -2674,7 +3006,18 @@ tabs:
     tag: rd-loc-browser
     index: loc-browser
     title: Genome browser
-    description: The ranked VCFs, the alignments, ClinVar and common dbSNP sites at the region of the navigator. The Top 20 track names each call by its rank; the best call, or the row picked in the table, is drawn in the selection colour on every track and in the table.
+    description: >-
+      The family's ranked variant files, the alignments, ClinVar and common dbSNP sites at the
+      region of the navigator, in a genome browser.
+
+      How to read: open a variant of the table or the navigator and check what the reads show, such
+      as how many carry the alternate allele, in which samples, and whether it sits in a gene. A
+      variant that the reads support in the affected samples only is the one worth keeping.
+
+      Lines and annotations: the Top 20 track names each call by its rank and gene; the best call,
+      or the row picked in the table, is drawn in the selection colour on every track. Variants are
+      coloured by the inheritance model, with grey for no model that fits. The ClinVar and common
+      dbSNP tracks are UCSC tracks (clinvarMain, dbSnp155Common).
     layout: {x: 0, y: 4, w: 8, h: 7}
   - component_type: table
     workflow_tag: raredisease
@@ -2689,6 +3032,10 @@ tabs:
     tag: rd-loc-table-ranked
     index: loc-table-ranked
     title: Ranked variants in the region
-    description: The ranked variants inside the region in view, with their gene, consequence and rank
-      score.
+    description: >-
+      The ranked variants inside the region in view, with their gene, consequence, impact, rank
+      score, model and carriers.
+
+      How to read: the table narrows as the navigator is brushed. Pick one row at a time to centre
+      the browser on that variant.
     layout: {x: 0, y: 0, w: 8, h: 6}

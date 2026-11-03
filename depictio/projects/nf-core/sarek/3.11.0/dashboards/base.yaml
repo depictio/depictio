@@ -268,6 +268,7 @@ main_dashboard:
       - ![](icon:mdi:dna) **Sequencing** whole exome (`wes` = {{param:wes}})
       - ![](icon:mdi:target) **Capture** {{param:intervals}}
       - ![](icon:mdi:file-table-outline) **Samplesheet** [one row per sample](section:Sample sheet), its path in [the run parameters](params:input)
+      - ![](icon:mdi:palette-outline) **Status** {{legend:status_label}}
     tag: sk-ov-study
     index: ov-study
     layout: {x: 0, y: 1, w: 5, h: 6}
@@ -565,7 +566,21 @@ main_dashboard:
     index: ov-genome
     title: Somatic variants along the genome
     link: tab:Locus
-    description: Each dot is a distinct somatic variant of a tumour/normal pair, its height the priority that ranks it (impact class, then callers in agreement, then tumour allele fraction) and its colour the SnpEff impact. Click a dot to open the gene in the genome browser.
+    description: >-
+      Where do the somatic variants sit along the genome? Each dot is a distinct somatic variant of a
+      tumour/normal pair, placed by chromosome and position. Its height is the priority that ranks it (impact
+      class, then callers in agreement, then tumour allele fraction) and its colour is the SnpEff impact
+      class.
+
+      How to read: the highest dots are the variants the ranking puts first, a HIGH or MODERATE impact kept by
+      several callers. A group of dots in one region is a locus worth opening: click a dot to open its gene in
+      the genome browser of the [Locus](tab:Locus) tab. Open [Somatic calls](tab:Somatic calls) for the ranked
+      list.
+
+      Source: SnpEff impact classes, https://pcingola.github.io/SnpEff/snpeff/inputoutput/
+
+      Note: the height is a sort key defined by this template (impact rank, then the number of callers, then
+      the tumour allele fraction in percent). It is not a probability, and no cut-off is drawn on it.
     layout: {x: 0, y: 15, w: 8, h: 4}
   # The pairs the somatic tabs read; the samples are the pinned sample sheet.
   - component_type: table
@@ -576,7 +591,12 @@ main_dashboard:
     tag: sk-ov-table-pairs
     index: ov-table-pairs
     title: Tumour/normal pairs
-    description: Each tumour with the normal of its patient. Sarek calls the pair as `<tumour>_vs_<normal>`, and the Somatic tabs read these calls.
+    description: >-
+      Which tumour is read against which normal? One row per tumour/normal pair, with its patient and the two
+      samples. Sarek calls the pair as `<tumour>_vs_<normal>`, and the Somatic tabs read these calls.
+
+      How to read: a patient without a row here has no pair, so a tumour of that patient is called on its own
+      and has no normal to subtract. Open [Somatic calls](tab:Somatic calls) to see what the pairs gained.
     layout: {x: 0, y: 0, w: 8, h: 3}
   # Link-only tab tiles: each prints its tab's subtitle. A tab the run does not
   # have is left out, and a heading whose tabs are all missing is hidden.
@@ -677,7 +697,13 @@ main_dashboard:
     tag: sk-sample-sheet
     index: sample-sheet
     title: Sample sheet
-    description: One row per sample, with its patient, sex, status, design and the callers run on it. A sex of NA means the samplesheet did not state it; the Coverage tab infers it from the sex chromosomes.
+    description: >-
+      Who was sequenced? One row per sample, with its patient, sex, status, design and the callers run on it.
+      A sex of NA means the samplesheet did not state it, and the Coverage tab infers it from the sex
+      chromosomes.
+
+      How to read: check the status and the design first, since they decide which tabs a sample reaches (a
+      tumour with a normal is paired, a tumour alone is called tumour-only). Select a row to pick that sample.
     layout: {x: 0, y: 0, w: 8, h: 6}
 tabs:
 # ============================================================================
@@ -1023,7 +1049,18 @@ tabs:
     tag: sk-cov-fig-contig
     index: cov-contig-bars
     title: Mean depth per contig
-    description: One bar per sample and contig. The total is mosdepth's own roll-up over the scope.
+    description: >-
+      Is the depth even across the genome? Each bar is the mean depth of one sample on one contig, grouped by
+      contig. The total is mosdepth's own roll-up over the scope in view.
+
+      How to read: autosomes of one sample sit at a similar depth, and the sex chromosomes differ with the sex
+      of the sample. A contig far below its neighbours in one sample only is a coverage dropout; one low in
+      every sample is a capture or mapping issue of the contig. Open the [sex check](section:Sex check) below
+      or the per-contig table for the numbers.
+
+      Note: the depth is a mean over the intervals (or the whole contig, when the whole-genome scope is
+      picked), so a few very deep or empty regions move it. No reference line is drawn, because no depth
+      cut-off is applied to this chart.
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: figure
     workflow_tag: sarek
@@ -1052,10 +1089,23 @@ tabs:
     tag: sk-cov-fig-sex
     index: cov-sex-scatter
     title: X depth against Y depth
-    description: One point per library, coloured by the sex its X/Y depth ratio implies. The pink wedge is
-      the XX zone (X depth at least ten times Y depth), the blue one the XY zone. The line between them is a
-      cut-off of this template, since a male has one X and one Y so his ratio sits near 1, a female has almost no
-      Y reads so hers is far above 10. The label is a heuristic, not a genotype.
+    description: >-
+      Does the sequenced material match the recorded sex? Each point is one library, placed by its mean depth
+      on chromosome X (x) and on chromosome Y (y) and coloured by the sex the X/Y depth ratio implies. A male
+      has one X and one Y, so the two depths are close; a female has almost no Y reads.
+
+      How to read: a point in the pink XX zone reads XX, one in the blue XY zone reads XY. A point near the
+      line between the zones, or one whose sex disagrees with the sample sheet, deserves a look at the raw
+      depths in the table below. A swapped or mixed library shows as a point on the wrong side.
+
+      Lines and annotations: the pink wedge is the XX zone, below the line where X depth is ten times Y depth,
+      and the blue wedge is the XY zone above it; both carry a label in their corner. The line at a ratio of
+      10 is a fixed cut-off of this template, set in the empty band between the two populations; it is not
+      read from the run and no published source sets it. A library is labelled with its name when its ratio
+      lies between 5 and 20, when it has no ratio, or when 12 libraries or fewer are drawn.
+
+      Note: the sex is a heuristic on two summary numbers, not a genotype. A sex chromosome aneuploidy, a
+      contaminated library or a very low depth can land on the wrong side of the line.
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: table
     workflow_tag: sarek
@@ -1067,7 +1117,12 @@ tabs:
     tag: sk-cov-table-contig
     index: cov-table-contig
     title: Per-contig coverage summary
-    description: Mean, minimum and maximum depth per sample, contig and scope.
+    description: >-
+      What are the depth numbers behind the contig chart? One row per sample, contig and scope, with the mean,
+      minimum and maximum depth as mosdepth wrote them.
+
+      How to read: sort a column to find the shallowest contig of a sample, and select a row to narrow the
+      other tiles to that sample. The row named total is mosdepth's own roll-up over the scope.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: sarek
@@ -1079,7 +1134,12 @@ tabs:
     tag: sk-cov-table-sex
     index: cov-table-sex
     title: X and Y coverage per sample
-    description: X and Y depth, their ratio and the sex it implies, per sample.
+    description: >-
+      What are the numbers behind the sex check? One row per sample, with its X depth, Y depth, their ratio
+      and the sex that ratio implies.
+
+      How to read: compare the inferred sex with the sex on the sample sheet. A ratio close to the cut-off of
+      10 of the chart above is a weak call; the cut-off is a heuristic of this template, not a genotype call.
     layout: {x: 0, y: 6, w: 8, h: 6}
 # ============================================================================
 # Variant calls
@@ -1261,7 +1321,16 @@ tabs:
     tag: sk-vy-fig-calls
     index: vy-calls-per-caller
     title: SNPs and indels per caller
-    description: One panel per sample, one stacked bar per caller. MNPs are counted apart from indels.
+    description: >-
+      How much did each caller call, and of what kind? One panel per sample, one stacked bar per caller, split
+      into SNPs and indels in the variant-type colours of the dashboard. MNPs are counted apart from indels.
+
+      How to read: callers run on the same sample call the same order of magnitude of SNPs. A caller far above
+      the rest over-calls or keeps more low-quality records, one far below filters hard or misses variants.
+      Yield is not accuracy: open [Call quality](tab:Call quality) for how clean the calls look and [Caller
+      concordance](tab:Caller concordance) for what the callers share.
+
+      Note: structural-variant callers write few SNPs and indels, so their bars are short by design.
     layout: {x: 0, y: 0, w: 8, h: 4}
   # One bar per caller, its callsets' shares averaged: the legend lists the
   # callers, not every sample and caller pair.
@@ -1279,7 +1348,17 @@ tabs:
     tag: sk-vy-fig-sbs
     index: vy-spectrum-sbs
     title: Substitution spectrum per caller
-    description: Six strand-folded classes, one bar per caller averaged over the samples in view; C>T and T>C are transitions.
+    description: >-
+      Which base changes does each caller call? Each bar is the share of a caller's SNVs in one of the six
+      substitution classes, averaged over the samples in view. The reference base is folded onto the
+      pyrimidine of the pair, and C>T and T>C are the transitions.
+
+      How to read: a germline callset is dominated by the transition classes C>T and T>C. A caller whose bars
+      differ from the others on the same samples writes or filters SNVs differently, which [Call
+      quality](tab:Call quality) can confirm with the Ts/Tv of each callset.
+
+      Source: the six pyrimidine-referenced classes follow the convention of Alexandrov et al., Nature 2013,
+      https://doi.org/10.1038/nature12477
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: figure
     workflow_tag: sarek
@@ -1295,7 +1374,17 @@ tabs:
     tag: sk-vy-fig-indel-length
     index: vy-spectrum-indel
     title: Indel length spectrum per caller
-    description: Indels within 20 bp, one bar per caller averaged over the samples in view; deletions left of zero.
+    description: >-
+      How long are the indels each caller calls? Each bar is the share of a caller's indels at one length,
+      averaged over the samples in view; deletions are left of zero and insertions right of it. Only indels
+      within 20 bp are drawn.
+
+      How to read: the shortest indels dominate and the shares fall with length. Callers run on the same
+      samples should share the shape; a caller with a different profile calls or normalises indels
+      differently, which is also what keeps its indels from matching another caller's in [Caller
+      concordance](tab:Caller concordance).
+
+      Note: indels longer than 20 bp are not drawn, so the shares add up to the indels within the window.
     layout: {x: 0, y: 4, w: 8, h: 4}
   - component_type: figure
     workflow_tag: sarek
@@ -1326,7 +1415,21 @@ tabs:
     tag: sk-vy-fig-dist
     index: vy-dist-bars
     title: The chosen block, caller by caller
-    description: Pick the block in the left panel. Each caller is drawn as a share of its own records so the yield does not flatten the rest; depth and indel length keep the bins that hold 99% of the records, and a log axis steps in when a few bins dominate.
+    description: >-
+      What does the chosen bcftools block look like, caller by caller? Pick the block in the left panel (read
+      depth, indel length, allele frequency, substitution or singleton type). Each caller is drawn as a share
+      of its own records, so a caller with more calls does not flatten the others.
+
+      How to read: callers run on the same sample should show the same shape. Read depth peaks near the depth
+      of the sample, and the allele frequency of a germline callset has peaks near the heterozygous and
+      homozygous-alternate fractions. A caller that departs from the others in a block points at what to check
+      first.
+
+      Note: a numeric block keeps the bins that hold the middle 99% of the pooled records, and the y axis
+      turns logarithmic when one bin is more than 25 times the median bin; the axis title says so. No
+      reference line is drawn, because no cut-off is applied here.
+
+      Source: bcftools stats manual, https://samtools.github.io/bcftools/bcftools.html#stats
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: table
     workflow_tag: sarek
@@ -1338,7 +1441,12 @@ tabs:
     tag: sk-vy-table-dist
     index: vy-table-dist
     title: bcftools stats distributions
-    description: One row per sample, caller, block and bin.
+    description: >-
+      What are the numbers behind the distribution chart? One row per sample, caller, block and bin of the
+      bcftools stats report, with its count.
+
+      How to read: filter on one block to read the counts the chart turns into shares. The chart drops the
+      tail bins, while this table keeps every bin.
     layout: {x: 0, y: 4, w: 8, h: 6}
   - component_type: table
     workflow_tag: sarek
@@ -1350,7 +1458,13 @@ tabs:
     tag: sk-vy-table-summary
     index: vy-table-summary
     title: Per-caller variant counts
-    description: SNPs, indels, MNPs, others and multiallelic sites, one row per sample and caller.
+    description: >-
+      How many records did each caller write? One row per sample and caller, with its SNPs, indels, MNPs,
+      other records and multiallelic sites.
+
+      How to read: compare the callers of one sample row by row. A caller with far fewer SNPs than its peers,
+      or with most records in the other column, deserves a look in [Call quality](tab:Call quality). Select a
+      row to narrow the other tiles to that caller.
     layout: {x: 0, y: 0, w: 8, h: 6}
 # Per-callset QC computed from the VCFs (callset_qc), the callers' own FILTER
 # partitions and the quality sweep from VCFtools.
@@ -1542,7 +1656,17 @@ tabs:
     tag: sk-cq-av-profile
     index: cq-qc-profile
     title: Callset QC profile
-    description: Each axis rescaled to compare, ticks in their units; colour is the caller. Brush an axis to keep a range.
+    description: >-
+      Do the callsets look like clean germline calls? Each line is one callset (one caller on one sample)
+      across five axes: Ts/Tv, SNP share, PASS share, heterozygous over homozygous-alternate ratio and median
+      read depth. The colour is the caller.
+
+      How to read: lines of one caller bunch together, and a line that leaves the bundle on an axis names the
+      check that callset fails. Brush an axis to keep a range and see which callsets stay. Open the Ts/Tv bars
+      and the FILTER bars below for the two checks that carry the most weight.
+
+      Note: each axis is rescaled from its lowest to its highest callset in view, with ticks in its own units,
+      so a narrow range looks wide. No cut-off is drawn on any axis.
     layout: {x: 0, y: 0, w: 8, h: 6}
   # One bar per caller, its FILTER values stacked (summed over the samples in
   # view). PASS keeps the green of category_colors.filter_label; the controls
@@ -1568,7 +1692,15 @@ tabs:
     tag: sk-cq-fig-filter
     index: cq-filter-partitions
     title: Calls per FILTER value
-    description: One bar per caller, split by the FILTER value it wrote; PASS is what it stands behind. Switch Normalise for counts, or sort on PASS.
+    description: >-
+      What does each caller keep? One bar per caller, split by the FILTER value it wrote, as shares of its
+      calls; PASS is what the caller stands behind. Switch Normalise off for counts, or sort the bars on PASS.
+
+      How to read: a large PASS share means the caller keeps most of what it writes, a small one means it
+      flags many records for its own reasons. Callers write their own FILTER vocabulary, so compare the PASS
+      share between callers and read the other labels one caller at a time.
+
+      Note: the PASS share says what a caller keeps, not whether the kept calls are true. No cut-off is drawn.
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: advanced_viz
     workflow_tag: sarek
@@ -1585,7 +1717,20 @@ tabs:
     tag: sk-cq-av-qual
     index: cq-quality-sweep
     title: Ts/Tv against the quality floor, per caller
-    description: One curve per sample and caller; callers use different quality scales, so read the shape. A curve that climbs toward 2 as the floor rises shows the low-quality calls were the noisy ones.
+    description: >-
+      Does the quality score separate real calls from noise? Each curve is one sample and caller: the Ts/Tv of
+      the calls above a quality floor (x, log scale), as VCFtools sweeps it. The curves are thinned to evenly
+      spaced steps.
+
+      How to read: a curve that climbs as the floor rises and then flattens shows the low-quality calls were
+      the noisy ones, and the flat part is where the quality score stops separating them. Callers write QUAL
+      on scales far apart, so compare the shapes, not the position on x. A flat curve from the start means the
+      score does not rank the calls.
+
+      Source: VCFtools, --TsTv-by-qual, https://vcftools.github.io/man_0112b.html
+
+      Note: no reference line is drawn. The 1.8 floor of the Ts/Tv bars is not repeated here, because the
+      exome and genome expectations differ.
     layout: {x: 4, y: 0, w: 4, h: 6}
   - component_type: figure
     workflow_tag: sarek
@@ -1603,11 +1748,25 @@ tabs:
     tag: sk-cq-fig-tstv
     index: cq-tstv-bars
     title: Ts/Tv per callset
-    description: One bar per sample and caller, in the caller's colour. The dashed line is the 1.8 Ts/Tv floor
-      of a germline callset; a human genome sits near 2.0 to 2.1 and an exome near 2.8 to 3.0, and below about
-      1.8 false calls dilute the transitions. The dotted line is the 1.5 warning level of the Ts/Tv card, set by
-      this template well under the floor (random errors give about 0.5). A bar left of the dashed line is
-      under the floor.
+    description: >-
+      Is the ratio of transitions to transversions plausible? Each bar is the Ts/Tv of one callset (one caller
+      on one sample) with SNPs, in the colour of its caller and sorted from the highest.
+
+      How to read: a bar to the right of the dashed line is above the floor of this dashboard. A bar to its
+      left has too many transversions, which false SNP calls add, so open [Variant yield](tab:Variant yield)
+      for the substitution classes and the FILTER bars for what the caller flagged. Random errors give a ratio
+      of about 0.5.
+
+      Lines and annotations: the dashed line at 1.8, labelled floor 1.8, is the minimum this template expects
+      of a human germline callset. The dotted line at 1.5 is the warning level of the Ts/Tv card. Both are
+      fixed values of this template, not read from the run, and neither has a published source.
+
+      Source: Ts/Tv depends on the genome region and gene function, and is a quality signal for SNPs from
+      sequencing, Wang et al., Bioinformatics 2015, https://doi.org/10.1093/bioinformatics/btu668
+
+      Note: the two lines are not validated cut-offs. An exome reads higher than a whole genome, so the same
+      floor is easier to pass on a targeted run. Callsets without SNPs, such as a structural-variant caller,
+      are left out.
     layout: {x: 0, y: 0, w: 4, h: 6}
   - component_type: table
     workflow_tag: sarek
@@ -1619,7 +1778,13 @@ tabs:
     tag: sk-cq-table-filter
     index: cq-table-filter
     title: FILTER breakdown per caller
-    description: Calls, transitions, transversions and their ratio per sample, caller and FILTER value.
+    description: >-
+      What are the numbers behind the FILTER bars and the Ts/Tv of each part? One row per sample, caller and
+      FILTER value, with its calls, transitions, transversions and their ratio.
+
+      How to read: compare the PASS row with the rows of the filtered calls of the same caller. A filtered
+      group with a low ratio shows the caller flagged the right records; a PASS row with a low ratio shows it
+      kept noise.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: sarek
@@ -1631,7 +1796,12 @@ tabs:
     tag: sk-cq-table-tstv
     index: cq-table-tstv
     title: Ts/Tv per callset
-    description: Transitions, transversions and their ratio, one row per sample and caller.
+    description: >-
+      What are the numbers behind the Ts/Tv bars? One row per sample and caller, with its transitions,
+      transversions and their ratio.
+
+      How to read: sort on the ratio to find the callsets under the floor of the bars above. Select a row to
+      narrow the other tiles to that caller.
     layout: {x: 0, y: 6, w: 8, h: 6}
 # The first tab that reads the VCFs themselves, one row per call: which
 # callsets claim the same locus and allele, and how the calls sit on depth.
@@ -1828,7 +1998,21 @@ tabs:
     tag: sk-cc-av-variant-upset
     index: cc-variant-upset
     title: PASS calls shared between callers
-    description: One set per caller; an element is a PASS call in one sample, so a bar is the calls that exact combination of callers made. Pick a sample in the left panel to read one library; the pickers on this tab do not narrow it.
+    description: >-
+      Which calls do the callers share? Each set is one caller, and an element is a PASS call in one sample,
+      matched on locus and allele. A bar is the number of calls that exactly that combination of callers made,
+      and the side bars give the size of each caller's set.
+
+      How to read: the tallest bar of all callers together is the consensus, and the bars of one caller alone
+      are the calls no other caller made, the ones to check first. Pick a sample in the left panel to read one
+      library; the pickers on this tab do not narrow this tile. Open the allele-fraction chart below to see
+      where those private calls sit.
+
+      Source: UpSet, Lex et al., IEEE TVCG 2014, https://doi.org/10.1109/TVCG.2014.2346248
+
+      Note: agreement between callers is not accuracy, since no truth set is compared here;
+      nf-core/variantbenchmarking does that. A caller that writes an indel in another representation looks
+      private. Combinations under 50 calls are hidden.
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: figure
     workflow_tag: sarek
@@ -1848,11 +2032,20 @@ tabs:
     tag: sk-cc-fig-vaf
     index: cc-vaf-dist
     title: Allele fraction per caller
-    description: Share of each caller's calls per allele-fraction bin. A germline callset peaks near 0.5
-      (heterozygous) and near 1 (homozygous alternate). The grey bands mark where those peaks are expected, 0.35
-      to 0.65 for heterozygous calls and 0.9 to 1 for homozygous-alternate ones, the spread that read sampling
-      gives around 0.5 and 1 at usual depths; a peak outside its band or a shoulder of low fractions flags
-      contamination or noise calls.
+    description: >-
+      Where do the calls of each caller sit between 0 and 1? Each line is one caller: the share of its calls
+      in each of 40 allele-fraction bins, so callers with different numbers of calls compare.
+
+      How to read: a germline callset peaks near 0.5 for heterozygous calls and near 1 for
+      homozygous-alternate ones. A peak outside its band, or a shoulder of low fractions, flags contamination,
+      mapping noise or calls that are not germline. A caller whose line departs from the others on the same
+      sample is the one to open in the call table.
+
+      Lines and annotations: the two grey bands mark where the peaks are expected, 0.35 to 0.65 (labelled
+      heterozygous) and 0.9 to 1 (labelled homozygous alt). They are display bands of this template for the
+      spread that read sampling gives, not read from the run and with no published cut-off.
+
+      Note: the bands are a guide to the eye, not a pass or fail rule.
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: table
     workflow_tag: sarek
@@ -1864,7 +2057,12 @@ tabs:
     tag: sk-cc-table-calls
     index: cc-table-calls
     title: Variant calls
-    description: Locus, allele, quality, FILTER, genotype, depth and allele fraction, one row per call and caller.
+    description: >-
+      What is the call behind a dot or a bar? One row per call and caller, with its locus, alleles, quality,
+      FILTER, genotype, depth and allele fraction as the caller wrote them.
+
+      How to read: filter on a caller or a contig, then sort on the quality or the depth to find the weak
+      calls. Open [Locus](tab:Locus) to read the reads at a call.
     layout: {x: 0, y: 0, w: 8, h: 6}
 # Structural variants: the records of the SV callers (Manta, TIDDIT), which the
 # small-variant tabs leave out. Optional with sv_calls: a run without such a
@@ -2058,7 +2256,14 @@ tabs:
     tag: sk-sv-fig-types
     index: sv-types-per-sample
     title: SV types per sample
-    description: One stacked bar per sample, one segment per type.
+    description: >-
+      Which kinds of structural variant does each sample hold? One stacked bar per sample, one segment per SV
+      type, in the type colours of the dashboard. A breakend is counted once.
+
+      How to read: compare samples called by the same caller; a sample whose mix of types, or whose total,
+      differs from its peers points at a quality or batch difference rather than biology. Different callers
+      call different types, so narrow to one caller before comparing. Open [Types by size class](section:Size
+      classes and evidence) for how the types spread over lengths.
     layout: {x: 0, y: 0, w: 4, h: 4}
   - component_type: figure
     workflow_tag: sarek
@@ -2078,7 +2283,16 @@ tabs:
     tag: sk-sv-fig-sizes
     index: sv-size-hist
     title: SV length by type
-    description: Events per length bin on a log axis, one colour per type; a breakend has no length and is not drawn.
+    description: >-
+      How long are the events of each type? Each bar is the number of events of one type in a length bin, on a
+      log axis from 10 bp to 10 Mb, in the type colours. A breakend has no length and is not drawn.
+
+      How to read: each type has its own length profile, and a sharp peak at one length is worth a look in the
+      call table. Events at the long end are the ones worth a look in the genome browser of the
+      [Locus](tab:Locus) tab.
+
+      Note: the bins are 40 equal steps of the log length, and the ticks are labelled in bp, kb and Mb. No
+      length cut-off is drawn.
     layout: {x: 4, y: 0, w: 4, h: 4}
   - component_type: advanced_viz
     workflow_tag: sarek
@@ -2101,7 +2315,14 @@ tabs:
     tag: sk-sv-av-ideogram
     index: sv-ideogram
     title: SVs on the karyotype
-    description: Every record on its chromosome, coloured by type, one sample at a time (picked above the chart). A deletion or duplication spans its length; a breakend and an insertion are a point. Click a chromosome to zoom along it.
+    description: >-
+      Where on the karyotype do the structural variants sit? Each record is drawn on its chromosome, coloured
+      by type, one sample at a time (picked above the chart). A deletion or duplication spans its length, and
+      a breakend or an insertion is a point.
+
+      How to read: a cluster on one chromosome, or events piled on a centromere or a gap, point at a local
+      rearrangement or a mapping artefact. Click a chromosome to zoom along it, then open [Locus](tab:Locus)
+      to read the reads at a breakpoint.
     layout: {x: 0, y: 0, w: 5, h: 6}
   - component_type: advanced_viz
     workflow_tag: sarek
@@ -2124,7 +2345,16 @@ tabs:
     tag: sk-sv-av-chord
     index: sv-chord
     title: What each event joins
-    description: One chord per event from its start to its far end, coloured by type. A breakend joins two loci, often on two chromosomes; a deletion, duplication or inversion links its two ends on one chromosome. Insertions have one locus and are not drawn.
+    description: >-
+      Which loci does each event join? One chord per event from its start to its far end, coloured by type. A
+      breakend joins two loci, often on two chromosomes, while a deletion, duplication or inversion links its
+      two ends on one chromosome.
+
+      How to read: chords between two chromosomes are the candidate translocations; many chords from one
+      region point at a rearranged locus. Insertions have one locus and are not drawn.
+
+      Note: at most 500 chords are drawn, so a busy sample shows a part of its events; narrow the type or the
+      sample to see them all.
     layout: {x: 5, y: 0, w: 3, h: 6}
   - component_type: figure
     workflow_tag: sarek
@@ -2145,7 +2375,14 @@ tabs:
     tag: sk-sv-fig-per-chrom
     index: sv-per-chrom
     title: Events per chromosome
-    description: Events on each chromosome in karyotype order, stacked by type, one row per sample. A chromosome far above its neighbours for one sample only points at a local rearrangement or a noisy region.
+    description: >-
+      Which chromosomes carry the events? Each bar is the number of events on a chromosome, in karyotype order
+      and stacked by type, one row per sample.
+
+      How to read: a chromosome far above its neighbours for one sample only points at a local rearrangement
+      or a noisy region. Longer chromosomes hold more events by size alone, so look for departures between
+      samples, not between chromosomes. Open [SVs on the karyotype](section:Along the genome) for the
+      positions.
     layout: {x: 0, y: 6, w: 8, h: 4}
   - component_type: figure
     workflow_tag: sarek
@@ -2174,7 +2411,18 @@ tabs:
     tag: sk-sv-fig-size-class
     index: sv-size-class
     title: Types by size class
-    description: Events per type and size class, the number in the cell and the shade its share of the type. Short-read callers find most deletions under 1 kb; a type piling up above 1 Mb is worth a look in the genome browser.
+    description: >-
+      How do the types spread over sizes? Each row is an SV type and each column a size class; the number in
+      the cell is the event count and the shade is the share of that type in the class.
+
+      How to read: read across a row, since the shade adds up to the whole type. A type piling up in the
+      largest class is worth a look in the genome browser of the [Locus](tab:Locus) tab.
+
+      Lines and annotations: the class edges at 1 kb, 10 kb, 100 kb and 1 Mb are display bins of this
+      template, not read from the run and with no published cut-off.
+
+      Note: the lowest class is labelled 50 bp to 1 kb, but its only edge is the upper one; shorter events a
+      caller writes fall in it too.
     layout: {x: 0, y: 0, w: 3, h: 4}
   - component_type: figure
     workflow_tag: sarek
@@ -2194,7 +2442,17 @@ tabs:
     tag: sk-sv-fig-evidence
     index: sv-evidence
     title: Filters passed and precise breakpoints
-    description: Per type, the share of events that pass the caller's own filters and the share whose breakpoints it placed to the base (the rest are IMPRECISE, located from read pairs only). Breakends and long events are usually the least precise.
+    description: >-
+      How well does the caller support each type? For each type, the dark bar is the share of events that pass
+      the caller's own filters and the light bar the share whose breakpoints it placed to the base. The events
+      outside it are IMPRECISE, located from read pairs only.
+
+      How to read: tall bars in both groups mean well-supported events. Breakends and long events are usually
+      the least precise, so a low light bar there is expected. A type with a low PASS share is the one to
+      check in the call table.
+
+      Note: the axis runs from 0 to 100 percent and no cut-off is drawn. The PASS share depends on the filters
+      of the caller.
     layout: {x: 3, y: 0, w: 3, h: 4}
   - component_type: figure
     workflow_tag: sarek
@@ -2211,7 +2469,16 @@ tabs:
     tag: sk-sv-fig-qual
     index: sv-qual
     title: Call quality by type
-    description: The caller's QUAL per type (Tukey boxes). Each caller scales QUAL its own way, so compare types within one caller (the caller filter on the left).
+    description: >-
+      Does the caller score its types alike? Each box is the QUAL of one SV type: the line is the median, the
+      box the middle half and the whiskers reach the furthest value within 1.5 times the interquartile range,
+      with the events beyond drawn as points.
+
+      How to read: compare types within one caller, since each caller scales QUAL its own way (use the caller
+      filter on the left). A type with a low box scores its events lower and is the more doubtful. Between
+      callers, only the order of the types is comparable.
+
+      Note: no QUAL cut-off is drawn, because each caller scales QUAL its own way.
     layout: {x: 6, y: 0, w: 2, h: 4}
   - component_type: table
     workflow_tag: sarek
@@ -2220,7 +2487,12 @@ tabs:
     tag: sk-sv-table
     index: sv-table
     title: Structural variant records
-    description: Locus, type, length, end, quality and FILTER, one row per record. A breakend is two rows, each naming the other side.
+    description: >-
+      What is the record behind a bar or a chord? One row per record, with its locus, type, length, end,
+      quality and FILTER. A breakend is two rows, each naming the other side.
+
+      How to read: sort on the length or the quality, then click a row to centre the genome browser of the
+      [Locus](tab:Locus) tab on it.
     layout: {x: 0, y: 0, w: 8, h: 6}
 # ============================================================================
 # Somatic
@@ -2464,7 +2736,14 @@ tabs:
     tag: sk-som-fig-callers
     index: som-callers-bar
     title: Calls each caller kept
-    description: PASS calls per caller, one stacked bar per caller and one segment per variant type, one panel per calling design. A call is one caller's record, so a variant several callers made counts once for each.
+    description: >-
+      Which caller kept how many calls? Each bar is the PASS calls of one caller, stacked by variant type in
+      the dashboard colours, with one panel per calling design. A call is one caller's record, so a variant
+      several callers made counts once for each.
+
+      How to read: callers differ in how many calls they keep, and a caller far above the others is the one to
+      check for noise in the agreement chart beside this one. The calls a caller set aside (any FILTER but
+      PASS) are not drawn; the call table below has them. No reference line is drawn.
     layout: {x: 0, y: 1, w: 4, h: 4}
   - component_type: figure
     workflow_tag: sarek
@@ -2482,7 +2761,16 @@ tabs:
     tag: sk-som-fig-overlap
     index: som-overlap-bar
     title: Which callers agree
-    description: Each bar is one set of callers (joined with +) and counts the variants that exactly those callers kept. The colour is the size of the set; the lightest bars are the single-caller variants.
+    description: >-
+      How often do the callers agree? Each bar is one set of callers (joined with +) and counts the distinct
+      variants that exactly those callers kept. The colour is the size of the set, and the lightest bars are
+      the variants a single caller made.
+
+      How to read: variants kept by several callers are the consensus, the set to trust for a burden or a gene
+      list. A large single-caller bar is where false positives are likeliest; open the allele-fraction charts
+      below to see whether those variants look somatic.
+
+      Note: agreement between callers is not accuracy, since no truth set is compared here.
     layout: {x: 4, y: 1, w: 4, h: 4}
   # Allele fraction
   - component_type: text
@@ -2518,7 +2806,21 @@ tabs:
     tag: sk-som-fig-vaf
     index: som-vaf-hist
     title: Tumour allele fraction
-    description: Distinct variants per allele-fraction bin, stacked by the number of callers that kept them. The dotted line is 0.5 and the solid one is the median of the consensus variants.
+    description: >-
+      How much of the tumour's reads carry each variant? Each bar is the number of distinct variants in a
+      tumour allele-fraction bin of 0.04, stacked by the number of callers that kept them.
+
+      How to read: a clonal heterozygous variant of a pure diploid tumour sits at 0.5, and subclonal variants
+      fall below it. A pile of variants at very low fractions, mostly kept by one caller, is noise or a small
+      subclone. Open the normal allele-fraction charts to see whether a variant is also in the normal.
+
+      Lines and annotations: the dotted line at 0.5, labelled 0.5, is where a clonal heterozygous variant of a
+      pure diploid tumour would sit; it is a reference by definition, not a cut-off. The solid orange line is
+      the median of the consensus variants (two callers or more), labelled with its value; it is defined by
+      the data in view.
+
+      Note: purity, ploidy and copy-number changes move the peak away from 0.5, so a peak elsewhere is not a
+      failure.
     layout: {x: 0, y: 1, w: 5, h: 4}
   - component_type: figure
     workflow_tag: sarek
@@ -2537,7 +2839,20 @@ tabs:
     tag: sk-som-fig-normal
     index: som-normal-bar
     title: Reads in the normal
-    description: Share of the variants that the normal also carries, by the number of callers that kept them. Trace is a normal allele fraction of 0.03 to 0.10, germline-like 0.10 or more.
+    description: >-
+      Does the normal also carry the somatic variants? Each bar is the share of the variants of one
+      callers-in-agreement group that have reads in the normal, split into a trace and a germline-like part.
+      The variants with a clean normal are not drawn.
+
+      How to read: a true somatic variant has no reads in the normal, so the bars should be short, and shorter
+      the more callers agree. A tall germline-like part is an inherited variant the callers failed to
+      subtract. Open [Germline vs somatic](tab:Germline vs somatic) for the variants themselves.
+
+      Lines and annotations: no line is drawn. The classes follow the normal allele fraction: trace is 0.03 to
+      0.10, germline-like is 0.10 or more. These cut-offs are set by this template; no published source sets
+      them.
+
+      Note: a normal contaminated by tumour cells carries trace reads of true somatic variants.
     layout: {x: 5, y: 1, w: 3, h: 4}
   # Mutation spectrum
   - component_type: text
@@ -2573,7 +2888,21 @@ tabs:
     tag: sk-som-fig-spectrum
     index: som-spectrum
     title: Substitution spectrum
-    description: Share of the SNVs in each class, the reference folded onto the pyrimidine of the pair. Left, the variants a single caller made; right, those two callers or more kept. A trinucleotide (96-class) spectrum needs the reference sequence around each site and is not drawn.
+    description: >-
+      Which of the six single-base changes dominate? Each bar is the share of the SNVs in one substitution
+      class, with the reference taken as the pyrimidine of the pair. Left is the group of variants a single
+      caller made, right the group kept by two callers or more, and the panel title gives the number of SNVs
+      behind it.
+
+      How to read: compare the two panels: a single-caller panel that differs in shape from the consensus
+      panel holds variants of another kind, which are the ones to check. The spectrum summarises the tumour's
+      changes and is not a test of the calls.
+
+      Source: the six pyrimidine-referenced classes follow the convention of Alexandrov et al., Nature 2013,
+      https://doi.org/10.1038/nature12477
+
+      Note: a trinucleotide (96-class) spectrum needs the reference sequence around each site and is not
+      drawn. No reference line is drawn.
     layout: {x: 0, y: 2, w: 8, h: 4}
   # Impact on genes
   - component_type: text
@@ -2623,7 +2952,18 @@ tabs:
     tag: sk-som-av-ranked
     index: som-genes-ranked
     title: Protein-altering somatic variants
-    description: HIGH and MODERATE variants, ranked by impact, then by the number of callers that kept them, then by tumour allele fraction. Hover a row for the locus, the depths and what the normal holds.
+    description: >-
+      Which somatic variants change a protein? Each row is a distinct variant of HIGH or MODERATE impact,
+      ranked by impact, then by the number of callers that kept it, then by the tumour allele fraction. The
+      bar is the tumour allele fraction on a scale from 0 to 1, with the normal one beside it.
+
+      How to read: start at the top, where several callers agree on a variant that changes the protein, and
+      check that the normal allele fraction is near zero. Hover a row for the locus, the depths and what the
+      normal holds. The 25 best-ranked variants are listed.
+
+      Source: SnpEff impact classes, https://pcingola.github.io/SnpEff/snpeff/inputoutput/
+
+      Note: the rank is a sort key of this template, not a probability or a pathogenicity score.
     layout: {x: 0, y: 4, w: 8, h: 8}
   - component_type: card
     workflow_tag: sarek
@@ -2679,7 +3019,15 @@ tabs:
     tag: sk-som-fig-consequence
     index: som-consequence-bar
     title: Consequences in genes
-    description: Variants per consequence, coloured by impact class. Silent changes (synonymous) are the LOW class and are expected to outnumber the stops and frameshifts many times over.
+    description: >-
+      What do the variants do to genes? Each bar is the number of variants with one consequence, among the
+      twelve commonest inside genes, coloured by SnpEff's impact class. MODIFIER, every call outside a coding
+      sequence, is not drawn.
+
+      How to read: synonymous changes are the LOW class, and stop gains and frameshifts are HIGH. Open [Impact
+      on genes](section:Impact on genes) for the ranked variants.
+
+      Source: SnpEff impact classes, https://pcingola.github.io/SnpEff/snpeff/inputoutput/
     layout: {x: 0, y: 12, w: 8, h: 5}
   # Mutation burden
   - component_type: text
@@ -2723,7 +3071,26 @@ tabs:
     tag: sk-som-fig-burden
     index: som-burden-bar
     title: Burden by set of calls
-    description: Variants per megabase for the consensus, for the union of the callers and for each caller alone, the median over the pairs in view. The dotted line is the usual 10 per megabase line for a high burden.
+    description: >-
+      How many somatic variants does the tumour carry per megabase of the target? Each bar is the median over
+      the pairs in view of the variants per megabase for one set of calls: the consensus (two callers or
+      more), every caller's calls, and each caller alone, largest first. The dotted line is the 10 per
+      megabase line.
+
+      How to read: the consensus bar is the figure to quote; the any-caller bar is the upper bound, and a
+      caller far above the consensus drives the burden with calls the others reject. A bar past the line is a
+      high burden by the usual definition.
+
+      Lines and annotations: the dotted line at 10 per Mb, labelled 10 per Mb, is the tumour mutational burden
+      level used to call a tumour TMB-high. It is a fixed reference, not read from the run, and it is drawn
+      only when the target size is known. Without a target size, the variant counts are drawn instead and the
+      line is omitted.
+
+      Source: Marabelle et al., Lancet Oncology 2020 (KEYNOTE-158),
+      https://doi.org/10.1016/S1470-2045(20)30445-9
+
+      Note: the TMB-high level was set for a tissue assay counting a defined class of coding mutations, while
+      this chart counts every PASS somatic variant in the target, so it can read higher than such an assay.
     layout: {x: 0, y: 2, w: 5, h: 4}
   - component_type: text
     surface: card
@@ -2751,7 +3118,13 @@ tabs:
     tag: sk-som-table-variants
     index: som-table-variants
     title: Somatic variants
-    description: One row per distinct variant of a pair, the callers merged, with the callers that kept it, the allele fraction and depth in both samples and SnpEff's worst consequence.
+    description: >-
+      What is the variant behind a point or a bar? One row per distinct variant of a pair, the callers merged,
+      with the callers that kept it, the allele fraction and depth in both samples and SnpEff's worst
+      consequence.
+
+      How to read: sort on the callers or on the tumour allele fraction, then check the normal columns. A
+      variant with reads in the normal may be inherited.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: sarek
@@ -2761,7 +3134,13 @@ tabs:
     tag: sk-som-table
     index: som-table
     title: Somatic call records
-    description: One row per call as the caller wrote it, the filtered ones included; locus, alleles, FILTER, the caller's own score, and the allele fraction and depth in the tumour and, for a pair, the normal.
+    description: >-
+      What did each caller write? One row per call as the caller wrote it, the filtered ones included, with
+      its locus, alleles, FILTER, the caller's own score, and the allele fraction and depth in the tumour and,
+      for a pair, the normal.
+
+      How to read: filter on the FILTER value to see what a caller set aside and why. The score is on the
+      caller's own scale, so compare it within one caller only.
     layout: {x: 0, y: 6, w: 8, h: 6}
 - title: Copy number & MSI
   subtitle: Which regions gained or lost copies, and is the tumour unstable?
@@ -3059,7 +3438,25 @@ tabs:
     tag: sk-cn-fig-genome
     index: cn-genome
     title: Gains and losses along the genome
-    description: Each block is a called segment, as high as its log2 ratio. Orange above the 0.3 cut-off is a gain, blue below -0.3 is a loss, grey is balanced. Chromosomes follow the karyotype order and alternate in shade. One row per sample; narrow the samples or the contigs to read a row larger.
+    description: >-
+      Which regions gained or lost copies? Each block is a called segment, as high as its log2 ratio, with one
+      row per sample. The colour says the state: orange above the gain cut-off, blue below the loss cut-off,
+      grey in between.
+
+      How to read: a long block far from zero is an arm-level gain or loss, a short one a focal event. A whole
+      row shifted up or down can point at a normalisation or purity issue rather than at biology. Open [One
+      tumour in detail](section:One tumour in detail) for the bins behind a row.
+
+      Lines and annotations: the dashed lines at +0.3 (gain above 0.3) and -0.3 (loss below -0.3) mark the
+      cut-offs; the grey line is zero, and alternate chromosomes are shaded. The +0.3 matches the upper edge
+      of CNVkit's neutral range by default, while its lower edge is -0.4, so -0.3 is the mirror image used by
+      this template and not CNVkit's own. They are fixed values, not read from the run.
+
+      Source: CNVkit, default thresholds of the call command,
+      https://cnvkit.readthedocs.io/en/stable/pipeline.html
+
+      Note: the log2 ratio depends on tumour purity and ploidy, so a gain or loss in an impure tumour is
+      smaller than the cut-off.
     layout: {x: 0, y: 0, w: 8, h: 7}
   - component_type: advanced_viz
     workflow_tag: sarek
@@ -3090,7 +3487,23 @@ tabs:
     tag: sk-cn-av-profile
     index: cn-profile
     title: Copy-number profile of one sample
-    description: Each dot is a bin's log2 ratio against the reference and the strokes are CNVkit's called segments, red above 0.3 and blue below -0.3. Pick the sample and a chromosome to zoom on in the controls; the profile opens on a tumour. CNVkit gives no B-allele frequency here, so none is drawn. Open in genome browser shows the reads at the region.
+    description: >-
+      What does the copy-number profile of one sample look like? Each dot is a bin's log2 ratio against the
+      reference and the strokes are CNVkit's called segments, red above the gain cut-off and blue below the
+      loss cut-off. Pick the sample and a chromosome to zoom on in the controls.
+
+      How to read: bins scattered around a segment give its noise, and a segment far from zero with tight bins
+      is a confident event. A profile with every bin far from zero is a normalisation issue. Open in genome
+      browser shows the reads at the region.
+
+      Lines and annotations: the two dotted lines at +0.3 and -0.3 mark where the segment colours switch, and
+      alternate chromosomes are shaded. The +0.3 matches the upper edge of CNVkit's neutral range by default,
+      while its lower edge is -0.4. Both are fixed values of this template, not read from the run.
+
+      Source: CNVkit, default thresholds of the call command,
+      https://cnvkit.readthedocs.io/en/stable/pipeline.html
+
+      Note: CNVkit gives no B-allele frequency here, so none is drawn.
     layout: {x: 0, y: 0, w: 8, h: 9}
   - component_type: figure
     workflow_tag: sarek
@@ -3119,7 +3532,23 @@ tabs:
     tag: sk-cn-fig-heatmap
     index: cn-heatmap
     title: Mean log2 ratio per chromosome
-    description: Length-weighted mean log2 ratio of the called segments of each chromosome, one row per sample. Orange is gained, blue is lost, white is balanced; the value is printed where it passes the 0.3 cut-offs. A chromosome with no called segment is left empty.
+    description: >-
+      Which chromosomes are gained or lost, per sample? Each cell is the length-weighted mean log2 ratio of
+      the called segments of one chromosome in one sample. Orange is gained, blue is lost, white is balanced,
+      and the colour saturates at +1 and -1.
+
+      How to read: a chromosome in one colour across a row is an arm or whole-chromosome event. The value is
+      printed in the cells that pass the cut-off, so scan for numbers first. A chromosome with no called
+      segment is left empty.
+
+      Lines and annotations: the value is printed where its size passes 0.3, the cut-off of the other
+      copy-number charts. It is a fixed value of this template, not read from the run, and the gain side
+      matches the upper edge of CNVkit's neutral range while its lower edge is -0.4.
+
+      Source: CNVkit, default thresholds of the call command,
+      https://cnvkit.readthedocs.io/en/stable/pipeline.html
+
+      Note: a mean over a chromosome hides a focal event on it.
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: figure
     workflow_tag: sarek
@@ -3145,7 +3574,23 @@ tabs:
     tag: sk-cn-fig-fga
     index: cn-fga
     title: Fraction of the genome altered
-    description: Share of the called genome that is gained (orange) or lost (blue), largest first, with the total at the end of the bar. A segment counts when its log2 ratio is past the 0.3 or -0.3 cut-off. Hover a bar for the megabases behind it.
+    description: >-
+      How much of the genome is altered in each tumour? Each bar is the share of the called genome that is
+      gained (orange) or lost (blue) in a sample, largest first, with the total at its end. Hover a bar for
+      the megabases behind it.
+
+      How to read: a high total is a genome with many copy-number events, a total near zero a quiet one. Open
+      [Gains and losses along the genome](section:Genome-wide gains and losses) for where the events are.
+
+      Lines and annotations: no line is drawn. A segment counts as altered when its log2 ratio is above +0.3
+      or below -0.3, the cut-off of the other copy-number charts; it is a fixed value of this template, not
+      read from the run, and the gain side matches the upper edge of CNVkit's neutral range while its lower
+      edge is -0.4.
+
+      Source: CNVkit, default thresholds of the call command,
+      https://cnvkit.readthedocs.io/en/stable/pipeline.html
+
+      Note: purity and ploidy change the share, and no cut-off is applied to the total.
     layout: {x: 0, y: 0, w: 4, h: 4}
   - component_type: figure
     workflow_tag: sarek
@@ -3172,7 +3617,21 @@ tabs:
     tag: sk-cn-fig-msi
     index: cn-msi
     title: MSI score per tumour
-    description: Unstable microsatellite sites as a share of the sites tested, largest first, with the counts beside each bar. The dashed line is 20%, the cut-off MSIsensor-pro users most often apply; it is a convention, not a call, and the right value depends on the assay. A score over a handful of sites is noisy.
+    description: >-
+      Is the tumour microsatellite unstable? Each bar is the MSIsensor-pro score of a tumour: the share of the
+      tested microsatellite sites whose length differs from the matched normal, largest first, with the counts
+      beside it. The bars at or above 20% are the darker green.
+
+      How to read: a higher score means more unstable sites, and a score well above the others is the tumour
+      to check. A tumour tested on few sites gives a noisy score, so read the counts. Open the MSIsensor-pro
+      table for the numbers.
+
+      Lines and annotations: the dashed line at 20%, labelled usual cut-off: 20%, and the shaded zone right of
+      it are drawn for reference. It is a fixed value of this template, not read from the run. MSIsensor-pro
+      publishes no cut-off with its score, and no source for 20% is given here.
+
+      Note: the line is not a validated cut-off and the right value depends on the assay, so a score near it
+      is not a call. A tumour called without a normal has no score.
     layout: {x: 4, y: 0, w: 4, h: 4}
   - component_type: table
     workflow_tag: sarek
@@ -3182,7 +3641,12 @@ tabs:
     tag: sk-cn-table-msi
     index: cn-table-msi
     title: MSIsensor-pro summary
-    description: One row per tumour and its normal. A tumour with few tested sites gives a noisy score; read the sites beside it.
+    description: >-
+      What are the numbers behind the MSI bars? One row per tumour and its normal, with the tested sites, the
+      unstable sites and the score.
+
+      How to read: read the sites beside the score, since a tumour with few tested sites gives a noisy score.
+      MSIsensor-pro writes a score, not a call, so no cut-off is applied in this table.
     layout: {x: 0, y: 0, w: 8, h: 3}
   - component_type: table
     workflow_tag: sarek
@@ -3192,7 +3656,13 @@ tabs:
     tag: sk-cn-table-segments
     index: cn-table-segments
     title: Copy-number segments and bins
-    description: Locus, log2 ratio, copy number and read depth of each segment (and of the bins behind it), as CNVkit wrote them.
+    description: >-
+      What are the segments and bins behind the copy-number charts? One row per called segment (and per bin
+      behind it), with its locus, log2 ratio, copy number, read depth and the file the call came from, as
+      CNVkit wrote them.
+
+      How to read: filter on the segment rows to read the calls, or on the bin rows to see their noise. A log2
+      ratio of -3 stands for a region with no coverage.
     layout: {x: 0, y: 3, w: 8, h: 6}
 - title: Germline vs somatic
   subtitle: Are the somatic calls really absent from the normal, and what did the tumour lose?
@@ -3416,7 +3886,23 @@ tabs:
     tag: sk-gs-av-scatter
     index: gs-vaf-scatter
     title: Tumour against normal allele fraction
-    description: Each point is a distinct somatic variant. Upper left, 0.03 or less in the normal and above 0.10 in the tumour, is where a true somatic variant sits; right of the vertical line the normal carries it. The colour says whether the normal's germline calls hold the same variant, and the diagonal is equal fractions.
+    description: >-
+      Is a somatic variant really absent from the normal? Each point is a distinct somatic variant, placed by
+      its allele fraction in the normal (x) and in the tumour (y). The colour says whether the normal's
+      germline calls hold the same variant.
+
+      How to read: the upper left corner, labelled Somatic, is where a true somatic variant sits: almost
+      nothing in the normal and a clear fraction in the tumour. Points to the right of the vertical line carry
+      reads in the normal, and points near the diagonal are as frequent in the normal as in the tumour, so
+      they are likely inherited. Open the ranked list below for the worst of them.
+
+      Lines and annotations: the vertical line at 0.03 in the normal and the horizontal line at 0.10 in the
+      tumour split the plane into four labelled corners: Somatic (upper left), Reads in both samples (upper
+      right), Faint in both (lower left) and Normal more than tumour (lower right). The dashed diagonal,
+      labelled x = y, marks equal fractions. The two cut-offs are set by this template; no published source
+      sets them.
+
+      Note: a normal contaminated by tumour cells has trace reads of true somatic variants.
     layout: {x: 0, y: 2, w: 5, h: 6}
   - component_type: figure
     workflow_tag: sarek
@@ -3437,7 +3923,18 @@ tabs:
     tag: sk-gs-fig-normal
     index: gs-normal-hist
     title: Allele fraction in the normal
-    description: Distinct somatic variants per normal allele fraction, log scale. A true somatic callset is a tall bar at 0 and a short, flat tail; a second bump near 0.5 is inherited variants.
+    description: >-
+      How many reads of the normal carry the somatic variants? Each bar is the number of distinct somatic
+      variants in a normal allele-fraction bin of 0.01, on a log axis, coloured by the class of the normal. A
+      fraction of 0.5 or more falls in the last bin.
+
+      How to read: a true somatic callset is a tall bar at 0 and a short, flat tail. A second bump near 0.5 is
+      inherited variants the callers failed to subtract. The log axis keeps the few variants in the tail
+      visible beside the many with a clean normal.
+
+      Lines and annotations: the dotted lines at 0.03 and 0.10 are the class boundaries: clean under 0.03,
+      trace from 0.03 to 0.10, germline-like from 0.10. They are set by this template and read from no
+      published source.
     layout: {x: 5, y: 2, w: 3, h: 6}
   - component_type: advanced_viz
     workflow_tag: sarek
@@ -3467,7 +3964,18 @@ tabs:
     tag: sk-gs-av-doubt
     index: gs-doubt-ranked
     title: Somatic calls the normal also carries
-    description: The somatic variants with the highest allele fraction in the normal, the worst first. A variant the normal's germline calls also hold (orange) is inherited; one with a modest normal fraction and no germline call points at contamination.
+    description: >-
+      Which somatic calls does the normal also carry? Each row is a somatic variant, ranked by its allele
+      fraction in the normal, the highest first. The badge says whether the normal's germline calls hold the
+      same variant, and the columns give the callers, the normal and tumour allele fractions as bars, and the
+      normal depth.
+
+      How to read: a variant the normal's germline calls also hold (orange badge) is inherited. One with a
+      modest fraction in the normal and no germline call points at contamination. Only the variants with trace
+      or germline-like reads in the normal are listed, and the first 15 are shown.
+
+      Lines and annotations: no line is drawn. The two classes it lists are trace (0.03 to 0.10) and
+      germline-like (0.10 or more); these cut-offs are set by this template.
     layout: {x: 0, y: 8, w: 8, h: 7}
   # What the tumour lost
   - component_type: text
@@ -3511,7 +4019,22 @@ tabs:
     tag: sk-gs-fig-loh
     index: gs-loh-genome
     title: Tumour allele fraction at the normal's heterozygous sites
-    description: One dot per heterozygous germline SNV of the normal, placed by genome position and by the share of the tumour's reads that carry the alternate allele. A single band at 0.5 is a balanced region; two bands near 0 and 1 are a region where a parental copy was lost.
+    description: >-
+      What did the tumour lose? Each dot is a heterozygous germline SNV of the normal, placed by genome
+      position (x) and by the share of the tumour's reads that carry the alternate allele (y). Grey is
+      balanced, orange imbalanced and red LOH-like.
+
+      How to read: a single band at 0.5 is a balanced region. Two bands near 0 and 1 are a region where a
+      parental copy was lost, and two bands near 0.33 and 0.67 a region with an extra copy. Open the
+      chromosome bars below for the share of LOH-like sites per chromosome.
+
+      Lines and annotations: the dotted line at 0.5 is the balanced fraction of a heterozygous site. The
+      states follow the tumour fraction: balanced is 0.35 to 0.65, imbalanced 0.15 to 0.35 or 0.65 to 0.85,
+      and LOH-like under 0.15 or over 0.85. Those bins are set by this template, and alternate chromosomes are
+      shaded.
+
+      Note: a tumour that is not pure mixes in normal reads, so a lost copy reads at 0.1 to 0.2 rather than 0.
+      The chromosome lengths are the last site seen on each, so the axis approximates the genome.
     layout: {x: 0, y: 2, w: 8, h: 6}
   - component_type: figure
     workflow_tag: sarek
@@ -3530,7 +4053,16 @@ tabs:
     tag: sk-gs-fig-loh-chrom
     index: gs-loh-chrom
     title: LOH-like sites per chromosome
-    description: Share of each chromosome's heterozygous sites read as LOH-like in the tumour. Bars near 100 % are chromosomes that lost a parental copy; the sites behind each bar are in the hover.
+    description: >-
+      Which chromosomes lost a parental copy? Each bar is the share of the normal's heterozygous sites of a
+      chromosome that the tumour reads as LOH-like, in karyotype order, with the value printed above it. The
+      sites behind each bar are in the hover.
+
+      How to read: a bar near 100 percent is a chromosome that lost a parental copy along its length, and one
+      near 0 kept both. A tall bar over few sites is not reliable, so read the hover counts.
+
+      Lines and annotations: no line is drawn. LOH-like means an allele fraction under 0.15 or over 0.85 in
+      the tumour, a bin set by this template.
     layout: {x: 0, y: 8, w: 8, h: 4}
   - component_type: table
     workflow_tag: sarek
@@ -3540,7 +4072,13 @@ tabs:
     tag: sk-gs-table
     index: gs-table
     title: Somatic calls against the normal
-    description: One row per somatic call of a pair, the filtered ones included, with the allele fraction and depth in both samples, where the normal's value comes from and how many germline callers made the same call.
+    description: >-
+      What are the numbers behind the comparison? One row per somatic call of a pair, the filtered ones
+      included, with the allele fraction and depth in both samples, where the normal's value comes from and
+      how many germline callers made the same call.
+
+      How to read: sort on the normal allele fraction to bring the doubtful calls to the top. A call with
+      germline callers behind it is inherited.
     layout: {x: 0, y: 0, w: 8, h: 6}
 # ============================================================================
 # Annotation
@@ -3722,7 +4260,15 @@ tabs:
     tag: sk-cs-fig-sections
     index: cs-section-bars
     title: The chosen section, caller by caller
-    description: The gap between two callers on one class is where their annotations disagree.
+    description: >-
+      What kind of variants did the annotation find? The bars are SnpEff's own counts for the section picked
+      in the left panel, one bar per class and caller.
+
+      How to read: the gap between two callers on one class is where their annotations disagree. Callers that
+      call the same sample should show the same shape. Open [Impact per call](section:Impact per call) for the
+      same composition recomputed on the calls.
+
+      Source: SnpEff, https://pcingola.github.io/SnpEff/snpeff/inputoutput/
     layout: {x: 0, y: 0, w: 8, h: 4}
   # The section's own bar: impact class and consequence narrow the per-call
   # tiles below, not the cards above.
@@ -3775,7 +4321,15 @@ tabs:
     tag: sk-cs-fig-impact-share
     index: cs-impact-by-caller
     title: Impact classes per caller
-    description: HIGH, MODERATE and LOW calls as shares of each caller's coding calls. MODIFIER calls (intergenic, intronic) are left out, they would fill every bar.
+    description: >-
+      How severe are the coding calls of each caller? Each bar is the share of a caller's coding calls in the
+      HIGH, MODERATE and LOW impact classes.
+
+      How to read: Compare the callers on the same sample: a caller with a larger HIGH share than its peers
+      may include noise, or annotate differently. MODIFIER calls (intergenic, intronic) are left out, since
+      they would fill every bar.
+
+      Source: SnpEff impact classes, https://pcingola.github.io/SnpEff/snpeff/inputoutput/
     layout: {x: 0, y: 0, w: 4, h: 4}
   - component_type: figure
     workflow_tag: sarek
@@ -3795,8 +4349,16 @@ tabs:
     tag: sk-cs-fig-impact-vaf
     index: cs-impact-vaf
     title: Allele fraction per impact class
-    description: Heterozygous calls band near 0.5 and homozygous ones near 1; a class that sits lower than
-      the rest carries more doubtful calls.
+    description: >-
+      Do the impact classes differ in allele fraction? Each box is the allele fraction of the annotated calls
+      in one impact class: the line is the median, the box the middle half and the whiskers the 5th to the
+      95th percentile. No outliers are drawn.
+
+      How to read: heterozygous calls band near 0.5 and homozygous ones near 1. A class that sits lower than
+      the rest carries more doubtful calls, since low fractions are where noise collects. Hover a box for the
+      number of calls behind it.
+
+      Source: SnpEff impact classes, https://pcingola.github.io/SnpEff/snpeff/inputoutput/
     layout: {x: 4, y: 0, w: 4, h: 4}
   - component_type: table
     workflow_tag: sarek
@@ -3808,7 +4370,11 @@ tabs:
     tag: sk-cs-table-sections
     index: cs-table-sections
     title: SnpEff summary sections
-    description: One row per sample, caller, section and class, with its count and share.
+    description: >-
+      What are SnpEff's own counts? One row per sample, caller, section and class, with its count and share.
+
+      How to read: filter on one section, then compare the callers on a class. Select a row to narrow the
+      other tiles to its caller.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: sarek
@@ -3820,7 +4386,11 @@ tabs:
     tag: sk-cs-table-calls
     index: cs-table-calls
     title: Annotated variant calls
-    description: Locus, allele, depth, allele fraction, gene, impact, consequence and protein change. Select a row to open its record.
+    description: >-
+      Which call is behind a bar? One row per annotated call, with its locus, alleles, depth, allele fraction,
+      gene, impact, consequence and protein change.
+
+      How to read: filter on the impact, then select a row to open its record in the card beside it.
     layout: {x: 0, y: 6, w: 5, h: 6}
   - component_type: advanced_viz
     workflow_tag: sarek
@@ -3842,7 +4412,12 @@ tabs:
     tag: sk-cs-av-record
     index: cs-variant-record
     title: Variant record
-    description: The picked call, one card per callset that made it. Empty until a call is picked.
+    description: >-
+      What do the callers say about one call? The card shows the picked call, one card per callset that made
+      it, grouped into its locus, the call and its consequence, with a link to the gene on Ensembl.
+
+      How to read: compare the callsets of one call; disagreeing fractions, depths or FILTER values show where
+      the callers differ. The card is empty until a call is picked in the table beside it.
     layout: {x: 5, y: 6, w: 3, h: 6}
 # The gene-level view, from SnpEff's per-gene table and from the protein
 # coordinates in the annotated VCF.
@@ -4012,7 +4587,17 @@ tabs:
     tag: sk-gn-av-heat
     index: gn-burden-heatmap
     title: Variant burden, gene against callset
-    description: Colour is log(1 + variants); callsets clustering by caller, not sample, mean the caller shapes the gene list.
+    description: >-
+      Which genes carry the most coding variants, and does the caller shape the list? Each cell is the variant
+      count of one gene (row) in one callset (column), as colour on a log scale of 1 plus the count. Rows and
+      columns are clustered (Ward linkage, Euclidean distance).
+
+      How to read: callsets that cluster by caller, not by sample, mean the caller shapes the gene list. A
+      dark row across every callset is a gene with many variants whatever the caller. The log scale keeps a
+      gene ten times above the next from hiding the rest.
+
+      Note: no cut-off is drawn, and the genes shown are the ones with the most coding variants, not all
+      genes.
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: advanced_viz
     workflow_tag: sarek
@@ -4030,7 +4615,18 @@ tabs:
     tag: sk-gn-av-gene-upset
     index: gn-gene-upset
     title: Genes hit by a coding call, shared between callers
-    description: Agreement on a gene survives callers writing one variant differently.
+    description: >-
+      Which genes do the callers share? Each set is one caller and an element is a gene with a HIGH or
+      MODERATE call. A bar is the number of genes that exactly that combination of callers hit, and the set
+      colours are the caller colours.
+
+      How to read: a gene hit by every caller is a robust finding, and a gene hit by one caller is the one to
+      check. Agreement on a gene survives callers writing one variant differently, which a variant-level
+      comparison does not.
+
+      Source: UpSet, Lex et al., IEEE TVCG 2014, https://doi.org/10.1109/TVCG.2014.2346248
+
+      Note: combinations of fewer than 5 genes are hidden, and agreement is not accuracy.
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: table
     workflow_tag: sarek
@@ -4042,7 +4638,12 @@ tabs:
     tag: sk-gn-table-genes
     index: gn-table-genes
     title: Per-gene variant burden
-    description: Gene, biotype and the HIGH, MODERATE, LOW and MODIFIER counts per gene and callset.
+    description: >-
+      What are the numbers behind the gene panels? One row per gene and callset, with its biotype and the
+      HIGH, MODERATE, LOW and MODIFIER counts.
+
+      How to read: sort on the HIGH column to bring the most disrupted genes up, then select a row to narrow
+      the other tiles to that gene.
     layout: {x: 0, y: 0, w: 8, h: 6}
 # The coding variants on the protein: a scatter of the lollipop's genes picks
 # one and the lollipop, the main figure of the tab, narrows to it. A click on a
@@ -4227,10 +4828,15 @@ tabs:
     tag: sk-pr-av-genes
     index: pr-genes
     title: Genes with coding variants
-    description: Each point is a gene with coding variants, placed by its number of distinct coding variants
-      (log axis) and the share of its calls made by two or more callers, and coloured by its worst impact class.
-      It covers the whole run; the six genes with the lowest share are named. A gene low on the axis carries
-      variants one caller sees, often a mapping artefact. A click picks the gene the lollipop draws.
+    description: >-
+      Which genes carry coding variants, and do the callers agree on them? Each point is a gene with coding
+      variants, placed by its number of distinct coding variants (x, log axis) and the share of its calls made
+      by two or more callers (y), and coloured by its worst impact class.
+
+      How to read: a gene low on the y axis carries variants one caller sees, which are the ones to check. A
+      click picks the gene the lollipop below draws. The six genes with the lowest share are named.
+
+      Note: it covers the whole run, not only the genes in view of the lollipop. No cut-off is drawn.
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: advanced_viz
     workflow_tag: sarek
@@ -4245,7 +4851,16 @@ tabs:
     tag: sk-pr-av-lolli
     index: pr-lollipop
     title: Coding variants along the protein
-    description: One lane per gene, one stem per variant, head colour by impact class and head size by allele fraction. Narrowed to the gene picked on the scatter; past four genes the tile switches to a picker.
+    description: >-
+      Where on the protein do the coding variants sit? Each lane is one gene and each stem one variant at its
+      amino-acid position, the head coloured by impact class and sized by allele fraction.
+
+      How to read: variants that cluster at one position or in one stretch of the protein are worth a look
+      before scattered ones. The lollipop narrows to the gene picked on the scatter above; past four genes the
+      tile switches to a picker.
+
+      Note: only variants whose protein change SnpEff could compute are drawn, which is what makes the
+      positions comparable within a lane. No domain cut-off is applied.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: sarek
@@ -4257,7 +4872,11 @@ tabs:
     tag: sk-pr-table-lolli
     index: pr-table-protein
     title: Coding variants with a protein position
-    description: Gene, amino-acid position, impact, consequence and protein change, one row per call.
+    description: >-
+      What is the variant behind a stem? One row per call with a protein position, with its gene, amino-acid
+      position, impact, consequence and protein change.
+
+      How to read: sort on the position to read a gene from its start.
     layout: {x: 0, y: 0, w: 8, h: 6}
 # One genome_view navigator on mosdepth_windows, one lane per sample, and the
 # genome browser under it that follows its brush: the browser's CRAM coverage
@@ -4451,7 +5070,21 @@ tabs:
     tag: sk-loc-av-genome
     index: loc-depth-navigator
     title: Depth per sample, 1 Mb windows
-    description: Mean depth per megabase window, one lane per sample, capped at 3 times the sample's median so repeats do not flatten it. The dashed line is the 20x floor of the depth cards, under which a heterozygous call gets hard to tell from noise. A locus or gene in the header, or a brush, moves the browser below.
+    description: >-
+      Is the depth even along the genome? Each lane is one sample and each bar the mean depth of a 1 Mb
+      window, capped at 3 times the sample's median so repeats do not flatten it. A locus or gene in the
+      header, or a brush, moves the genome browser below.
+
+      How to read: a gap or a dip in one lane only is a dropout of that library, which a pooled bar would
+      hide. A window that stays under the line is thinly covered. Brush a region to read its reads and calls
+      in the browser.
+
+      Lines and annotations: the dashed line at 20x is the depth floor of the depth cards, under which a
+      heterozygous call gets hard to tell from noise. It is a fixed value of this template, not read from the
+      run, and no published source sets it. The cap at 3 times the median, with a minimum of 40x, is a display
+      aid that stops the few repeat windows from flattening the lane.
+
+      Note: the line is not a validated cut-off, and the capped height hides how deep a window really is.
     layout: {x: 0, y: 0, w: 8, h: 6}
   # The navigator's brush moves the view without filtering. Unpicked, it opens
   # on the span of the 20 best calls by quality when they lie within 2 Mb of each
@@ -4500,5 +5133,12 @@ tabs:
     tag: sk-loc-browser
     index: loc-reads-browser
     title: Genome browser
-    description: The reads of the samples in scope, tumour and normal alike, each caller's VCF in its colour (the somatic callers' under the reads) when the run called variants, the genes and the dbSNP and ClinVar tracks. It opens on the best calls by quality, else on the data, and follows the navigator above.
+    description: >-
+      What do the reads and the calls show at one locus? The browser draws the reads of the samples in scope,
+      tumour and normal alike, each caller's VCF in its colour (the somatic callers' under the reads) when the
+      run called variants, and the genes with the dbSNP and ClinVar tracks.
+
+      How to read: it opens on the best calls by quality, else on the data, and follows the depth lanes above.
+
+      Note: no cut-off is drawn. Zoom in when a track asks to be loaded.
     layout: {x: 0, y: 6, w: 8, h: 10}

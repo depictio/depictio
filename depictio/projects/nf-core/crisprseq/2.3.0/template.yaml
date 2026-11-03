@@ -40,7 +40,7 @@
 template:
   template_id: "nf-core/crisprseq/2.3.0"
   description: "nf-core/crisprseq targeted gene editing template: read accounting, edit outcome composition per library and per guide, frameshift and template-based repair rates, the indel size and position signature around the cut site, per-position substitution rates, and the clonality call."
-  version: "1.1.0"
+  version: "2.0.0"
   variables:
     - name: "DATA_ROOT"
       description: "crisprseq output directory (cigar/, clonality/, pipeline_info/)."
@@ -147,6 +147,7 @@ workflows:
               "sample": "Library id, the prefix of every per-library output file"
               "guide": "Protospacer the library was edited with, upper-cased; the key of the per-guide tables"
               "has_template": "yes when the library has an HDR donor template"
+              "template_length": "Length of the HDR donor, present only when a library gives one"
               "amplicon_length": "Length of the reference amplicon, bp; present only when the sheet has a reference column"
               "protospacer": "Protospacer sequence as given in the samplesheet"
 

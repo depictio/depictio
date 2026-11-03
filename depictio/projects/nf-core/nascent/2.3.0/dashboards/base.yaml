@@ -185,6 +185,7 @@ main_dashboard:
       - ![](icon:mdi:chart-timeline-variant) **Time points** {{points}}, the baseline to {{last}} h
       - ![](icon:mdi:shape-outline) **Groups** {{groups}} to compare the time points by
       - ![](icon:mdi:file-table-outline) **Samplesheet** [one row per library](section:Sample sheet), its path in [the run parameters](params:input)
+      - ![](icon:mdi:palette-outline) **{GROUP_COL_DISPLAY}** {{legend:{GROUP_COL}}}
     tag: nc-ov-study
     index: nc-ov-study
     layout: {x: 0, y: 1, w: 5, h: 5}
@@ -440,7 +441,25 @@ main_dashboard:
     index: ov-genome
     title: Responsive genes along the genome
     link: tab:Genome signal
-    description: Each dot is an expressed gene, its height the largest change of its transcription against the baseline and its colour whether it is induced, repressed or stable. Click a dot to open the gene in the genome browser.
+    description: >-
+      Which expressed genes respond, and where do they sit on the genome? Each dot is an expressed gene
+      placed at its start, its height the largest absolute change of its transcription against the
+      baseline at any time point, its colour whether it is induced, repressed or stable. Click a dot to
+      open the gene in the genome browser.
+
+      How to read: a run of tall dots of one colour in one region points at a regional response, while an
+      isolated tall dot is a single gene to open in the browser. Dots near the floor are genes that barely
+      move. Open [Gene dynamics](tab:Gene dynamics) to read the curve of a gene before trusting its colour.
+
+      Annotations: no reference line is drawn. The colour follows the direction call: a gene is induced or
+      repressed when its largest change reaches a log2 fold change of 1 (two-fold) and at least two time
+      points change that much the same way, otherwise stable.
+
+      Source: counts from featureCounts (Liao et al. 2014, doi:10.1093/bioinformatics/btt656), as written
+      by nf-core/nascent, https://nf-co.re/nascent/2.3.0/docs/output
+
+      Note: the two-fold, two-time-point rule is a fixed convention of this template, not a validated
+      cut-off, and the calls are a fold-change rule rather than a statistical test.
     layout: {x: 0, y: 10, w: 8, h: 4}
   # Link-only tab tiles: each tile prints its tab's subtitle, the question the
   # tab answers.
@@ -516,7 +535,18 @@ main_dashboard:
     tag: nc-sheet-samples
     index: nc-sheet-samples
     title: Libraries
-    description: One row per library with its time point, the design columns and its QC. Ticking rows narrows every tab to those libraries.
+    description: >-
+      One row per library with its time point, the design columns and its QC measures. Ticking rows
+      narrows every tab to those libraries.
+
+      How to read: sort a QC column to find the libraries that stand out, then tick them to follow the
+      same libraries in every tile. The measures are the ones plotted in [Library QC](tab:Library QC):
+      reads in genes, genes detected, the share of the 100 most counted genes, the plus-strand share and
+      its distance from half, and the mitochondrial, off-chromosome and hotspot shares.
+
+      Source: gene counts from featureCounts (Liao et al. 2014, doi:10.1093/bioinformatics/btt656) and
+      strand coverage from bedtools genomecov, as written by nf-core/nascent,
+      https://nf-co.re/nascent/2.3.0/docs/output
     layout: {x: 0, y: 0, w: 8, h: 6}
 
 tabs:
@@ -707,7 +737,24 @@ tabs:
     tag: nc-qc-fig-reads
     index: nc-qc-fig-reads
     title: Reads in genes per library
-    description: One bar per library, in time order and in the colour of its time point, against the median and half of it. A bar under the dotted line reads its genes from under half the typical depth.
+    description: >-
+      Does each library have the depth to be read? One bar per library, in time order, is the number of
+      reads featureCounts assigned to gene bodies, in the colour of its time point (or of its group when
+      the analysis groups are on).
+
+      How to read: bars of similar height are libraries of comparable depth. A bar under the dotted line
+      reads its genes from under half the typical depth, so its fold changes are less reliable. Check its
+      genes detected beside it and its strand and hotspot shares before keeping it.
+
+      Lines and annotations: the dashed grey line, labelled median, is the median reads in genes of the
+      libraries in view. The dotted grey line, labelled half the median, sits at half of that. Both are
+      read from the data on display; the half-median line is a display aid.
+
+      Source: featureCounts (Liao et al. 2014, doi:10.1093/bioinformatics/btt656), as written by
+      nf-core/nascent, https://nf-co.re/nascent/2.3.0/docs/output
+
+      Note: nf-core/nascent and featureCounts publish no minimum depth for a run-on library, so a bar
+      under the dotted line is a lead and not a failed library.
     layout: {x: 0, y: 0, w: 4, h: 4}
   - component_type: figure
     workflow_tag: nascent
@@ -731,7 +778,24 @@ tabs:
     tag: nc-qc-fig-depth-genes
     index: nc-qc-fig-depth-genes
     title: Genes detected per library
-    description: One bar per library in time order, against the median of the libraries in view. A bar well below the line reads fewer genes. The reads in genes are in the hover; click a bar to narrow the other tiles.
+    description: >-
+      Does each library detect as many genes as the others? One bar per library, in time order and in the
+      colour of its time point, is the number of genes with at least 10 assigned reads. The reads in genes
+      are in the hover; click a bar to narrow the other tiles.
+
+      How to read: bars near the line are libraries of comparable complexity. A bar well below it detects
+      fewer genes, because the library is shallow or a few genes take its reads. Compare it with the reads
+      in genes beside it before deciding which of the two it is.
+
+      Lines and annotations: the dashed grey line, labelled median, is the median genes detected of the
+      libraries in view, read from the data. The detection floor of 10 reads is a fixed constant of this
+      template.
+
+      Source: featureCounts (Liao et al. 2014, doi:10.1093/bioinformatics/btt656), as written by
+      nf-core/nascent, https://nf-co.re/nascent/2.3.0/docs/output
+
+      Note: the median is a reference drawn from the data and not a cut-off; nf-core/nascent publishes no
+      minimum number of genes detected, and the 10-read floor is not a published threshold.
     layout: {x: 4, y: 0, w: 4, h: 4}
   - component_type: figure
     workflow_tag: nascent
@@ -759,7 +823,26 @@ tabs:
     tag: nc-qc-fig-strand
     index: nc-qc-fig-strand
     title: Plus-strand share per library
-    description: One bar per library, in time order and in the colour of its time point; the shaded band is a balanced split (within 10 points of half, 40 to 60%), the dotted line the even split. A bar outside the band has lost a strand.
+    description: >-
+      Are both strands represented in each library? One bar per library, in time order and in the colour
+      of its time point (or of its group), is the share of the signal on the plus strand, from 0 to 100%.
+
+      How to read: genes lie on both strands, so the reads are expected to split about evenly and a bar in
+      the shaded band reads as balanced. A bar outside the band has one strand over-represented, which
+      points at a protocol or library-strandedness problem. Open the bigWigs in [Genome signal](tab:Genome signal)
+      to see which strand is thin.
+
+      Lines and annotations: the dotted grey line at 50% is the even split between the strands. The grey
+      band from 40% to 60%, labelled balanced split, is 10 points either side of the even split, the same
+      distance the Strand skew card uses.
+
+      Source: strand coverage from bedtools genomecov,
+      https://bedtools.readthedocs.io/en/latest/content/tools/genomecov.html; neither it nor the
+      nf-core/nascent output documentation, https://nf-co.re/nascent/2.3.0/docs/output, gives a strand
+      balance criterion.
+
+      Note: the 40 to 60% band is a display aid and not a validated cut-off, so a bar outside it is a lead
+      to check and not a failed library.
     layout: {x: 0, y: 0, w: 4, h: 4}
   - component_type: figure
     workflow_tag: nascent
@@ -779,7 +862,21 @@ tabs:
     tag: nc-qc-fig-hotspots
     index: nc-qc-fig-hotspots
     title: Signal in hotspots and off the chromosomes
-    description: Three shares per library, in time order. A tall first bar is a library dominated by a few hotspot windows (the busiest 1% of 250 kb windows, where the ribosomal DNA sits).
+    description: >-
+      Where does the signal go outside the gene bodies? Three bars per library, in time order, give the
+      share of its chromosome signal held by the busiest 1% of 250 kb windows, and the shares of its whole
+      signal that fall outside the chromosomes and on the mitochondrion.
+
+      How to read: three low bars mean the signal sits on the chromosomes and is spread over many windows.
+      A tall first bar is a library dominated by a few hotspot windows, where the ribosomal DNA arrays
+      sit, so the rest of the genome is read from what is left. A tall third bar is depth spent on the
+      mitochondrion, which says nothing about nuclear genes.
+
+      Source: strand coverage from bedtools genomecov,
+      https://bedtools.readthedocs.io/en/latest/content/tools/genomecov.html
+
+      Note: no reference line is drawn because none is published for these shares; the 1% and the 250 kb
+      window width are fixed choices of this template.
     layout: {x: 4, y: 0, w: 4, h: 4}
   - component_type: table
     workflow_tag: nascent
@@ -791,7 +888,15 @@ tabs:
     tag: nc-qc-table-counts
     index: nc-qc-table-counts
     title: Gene-count summary per library
-    description: Reads counted over genes, genes detected and the share of the 100 most counted genes, one row per library.
+    description: >-
+      Reads counted over genes, genes detected and the share of the 100 most counted genes, one row per
+      library.
+
+      How to read: sort by reads in genes to rank the libraries by depth, and by the top-100 share to find
+      libraries that a few genes swamp. Ticking a row narrows the other tiles to that library.
+
+      Source: featureCounts (Liao et al. 2014, doi:10.1093/bioinformatics/btt656), as written by
+      nf-core/nascent, https://nf-co.re/nascent/2.3.0/docs/output
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: nascent
@@ -803,7 +908,16 @@ tabs:
     tag: nc-qc-table-strand
     index: nc-qc-table-strand
     title: Strand coverage totals per library
-    description: Read bases per strand, covered bases, deepest base and the mitochondrial, off-chromosome and hotspot shares, one row per library.
+    description: >-
+      Read bases per strand, covered bases, deepest base and the plus-strand, mitochondrial,
+      off-chromosome and hotspot shares, one row per library.
+
+      How to read: the plus and minus read bases show whether a library is balanced between the strands,
+      and the three shares tell where its signal goes outside the gene bodies, as plotted in the figures
+      above. Ticking a row narrows the other tiles to that library.
+
+      Source: strand coverage from bedtools genomecov,
+      https://bedtools.readthedocs.io/en/latest/content/tools/genomecov.html
     layout: {x: 0, y: 6, w: 8, h: 6}
 
 # =========================================================================
@@ -984,7 +1098,28 @@ tabs:
     tag: nc-gd-av-response
     index: gd-av-response
     title: Response classes over time
-    description: Median log2 fold change of each class's genes in scope at each time point, with the band from the first to the third quartile.
+    description: >-
+      What does a typical gene of each response class do over time? Each curve is the median log2 fold
+      change against the baseline of the genes of one class at each time point, with a band from the first
+      to the third quartile of those genes. The x axis is log2(1 + hours).
+
+      How to read: warm curves above zero are induced classes and cool curves below zero repressed ones,
+      darker the later the peak. A narrow band means the genes of a class move together, a wide one that
+      the median hides very different curves. Read the genes behind a class in the next tile and in the
+      calls table below.
+
+      Lines and annotations: the dotted vertical line, labelled Baseline, marks the baseline time point,
+      where every fold change is 0 by construction. The band is the interquartile range of the genes in
+      view, computed after the gene filters. A gene is induced or repressed when its largest change reaches
+      a log2 fold change of 1 and at least two time points change that much the same way; the class adds
+      the phase of the peak, the early, mid or late third of the later time points.
+
+      Source: counts from featureCounts (Liao et al. 2014, doi:10.1093/bioinformatics/btt656), as written
+      by nf-core/nascent, https://nf-co.re/nascent/2.3.0/docs/output
+
+      Note: the two-fold, two-time-point rule and the tertile phases are fixed conventions of this
+      template, not validated cut-offs, and the calls are a fold-change rule rather than a statistical
+      test.
     layout: {x: 0, y: 0, w: 4, h: 6}
   - component_type: figure
     workflow_tag: nascent
@@ -1011,7 +1146,27 @@ tabs:
     tag: nc-gd-av-top-genes
     index: gd-av-top-genes
     title: The ten genes that move most
-    description: One curve per gene, the ten responsive genes with the largest change at their peak, coloured by response class as the median curves beside it; the gene filters keep those of the ten in scope.
+    description: >-
+      Which individual genes move most, and how? Each curve is one of the ten responsive genes with the
+      largest absolute change at their peak, in the colour of its response class, with the gene named at
+      the end of the curve and in the hover. The x axis has one tick per time point, spaced on log2(1 +
+      hours); the gene filters keep those of the ten in scope.
+
+      How to read: a curve that rises then falls is a transient response, one that keeps climbing or
+      dropping a sustained response. Curves of one colour that overlap are genes with the same course. Open
+      a gene in the genome browser of [Genome signal](tab:Genome signal) to check the signal itself.
+
+      Lines and annotations: the dotted horizontal line at 0, labelled Baseline, is no change against the
+      baseline time point. The ten genes are the responsive genes with the largest absolute peak change
+      among those transcribed at a usable level at the baseline or at the peak, which the recipe sets at 3
+      on the log2 CPM scale (about 7 counts per million). That level floor and the choice of ten genes are
+      fixed constants of this template.
+
+      Source: counts from featureCounts (Liao et al. 2014, doi:10.1093/bioinformatics/btt656), as written
+      by nf-core/nascent, https://nf-co.re/nascent/2.3.0/docs/output
+
+      Note: the level floor is not a validated cut-off; it keeps a gene going from no reads to a few off
+      the list.
     layout: {x: 4, y: 0, w: 4, h: 6}
   - component_type: advanced_viz
     workflow_tag: nascent
@@ -1033,7 +1188,27 @@ tabs:
     tag: nc-gd-av-heatmap
     index: gd-av-heatmap
     title: Transcription of the forty most dynamic genes
-    description: log2 CPM per time point, z-scored per gene, rows clustered by shape and annotated by response class; the gene filters keep the rows in scope.
+    description: >-
+      Do the most dynamic genes share a course? Each row is one of the forty responsive genes with the
+      largest absolute peak change, each column a time point in time order, and each cell the gene's log2
+      CPM there, z-scored per row. The gene filters keep the rows in scope.
+
+      How to read: red cells are the time points where a gene is highest and blue where it is lowest, so a
+      row reads as when the gene is on and not how much. Rows clustered together share a shape, and a
+      block of red moving to the right is a wave of genes switched on at the same time. The size of each
+      gene's change is in the calls table below.
+
+      Annotations: each row is z-scored, so 0 is the gene's own mean across the time points, red above it
+      and blue below. Rows are clustered with average linkage on a correlation distance; columns keep their
+      time order and are not clustered. The row strip is the gene's response class, and the forty genes are
+      selected as in the curves above, with the same level floor of 3 on the log2 CPM scale at the
+      baseline or at the peak.
+
+      Source: counts from featureCounts (Liao et al. 2014, doi:10.1093/bioinformatics/btt656), as written
+      by nf-core/nascent, https://nf-co.re/nascent/2.3.0/docs/output
+
+      Note: the level floor and the choice of forty genes are fixed constants of this template, not
+      validated cut-offs.
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: table
     workflow_tag: nascent
@@ -1043,7 +1218,20 @@ tabs:
     tag: nc-gd-table-calls
     index: nc-gd-table-calls
     title: Call per expressed gene
-    description: The peak change, its time point, the time points changed and the response class of every expressed gene, largest change first.
+    description: >-
+      The peak change, its time point, the time points changed and the response class of every expressed
+      gene, largest change first.
+
+      How to read: peak_log2fc is the largest change against the baseline and peak_time_point where it
+      happens. n_changed counts the time points that changed by a log2 fold change of 1 in the peak's
+      direction, and response combines the direction with the phase of the peak. Sort or filter a column
+      to list the genes of one class.
+
+      Source: counts from featureCounts (Liao et al. 2014, doi:10.1093/bioinformatics/btt656), as written
+      by nf-core/nascent, https://nf-co.re/nascent/2.3.0/docs/output
+
+      Note: the response class is a fold-change rule rather than a statistical test, and its two-fold,
+      two-time-point cut is a fixed convention of this template.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: nascent
@@ -1052,7 +1240,16 @@ tabs:
     tag: nc-gd-table-trajectories
     index: nc-gd-table-trajectories
     title: Gene value per time point
-    description: Mean log2 CPM and log2 fold change against the baseline of every expressed gene at every time point.
+    description: >-
+      Mean log2 CPM and log2 fold change against the baseline of every expressed gene at every time
+      point, one row per gene and time point.
+
+      How to read: filter the table on one gene to read its whole course, where the fold change is 0 at
+      the baseline by construction. Libraries sharing a time point are averaged before the change is
+      taken.
+
+      Source: counts from featureCounts (Liao et al. 2014, doi:10.1093/bioinformatics/btt656), as written
+      by nf-core/nascent, https://nf-co.re/nascent/2.3.0/docs/output
     layout: {x: 0, y: 6, w: 8, h: 6}
 
 - title: Sample similarity
@@ -1225,7 +1422,24 @@ tabs:
     tag: nc-ss-av-correlation
     index: ss-av-correlation
     title: Library correlation matrix
-    description: Spearman correlation of log2 CPM over the expressed genes; neighbouring time points cluster together.
+    description: >-
+      How similar are the libraries to one another? Each cell is the Spearman correlation of log2 CPM
+      between two libraries, for every pair, over the genes detected in at least half of the libraries.
+      Libraries are ordered by hierarchical clustering.
+
+      How to read: a block of high values along the diagonal is a group of libraries with the same
+      transcription, and in a time course neighbouring time points are expected to sit together. A library
+      that sits away from the libraries of its own time point is an outlier to check in
+      [Library QC](tab:Library QC).
+
+      Annotations: rows and columns are clustered with average linkage on a correlation distance, and the
+      colour bar gives the coefficient. Spearman works on ranks, so a few very highly counted genes do not
+      set the coefficients on their own.
+
+      Source: Spearman's rank correlation, https://en.wikipedia.org/wiki/Spearman%27s_rank_correlation_coefficient
+
+      Note: no cut-off is drawn, because nf-core/nascent publishes no minimum correlation between
+      libraries; read the pattern and not a threshold.
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: advanced_viz
     workflow_tag: nascent
@@ -1249,7 +1463,23 @@ tabs:
     tag: nc-ss-av-embedding
     index: ss-av-embedding
     title: PCA of libraries (PC1 vs PC2)
-    description: Principal component analysis of the libraries over the 2,000 most variable genes, one point per library, coloured by phase; the points move along the first component with time.
+    description: >-
+      Do the libraries order themselves by time? Each point is one library on the first two principal
+      components of a PCA over the 2,000 most variable of the genes detected in at least half of the
+      libraries, coloured by its phase of the time course. Lasso libraries to narrow the other tiles.
+
+      How to read: in a time course the first component is usually time itself, so the points fan out
+      from the baseline to the late phase along PC1. A point away from the libraries of its own phase is
+      an outlier or a mislabelled library; check it in [Library QC](tab:Library QC).
+
+      Annotations: no line or zone is drawn. The colour is the phase: the baseline, then the early, mid
+      and late thirds of the later time points, on the ramp the browser tracks use. The colour menu can
+      switch to the group.
+
+      Source: principal component analysis, https://en.wikipedia.org/wiki/Principal_component_analysis
+
+      Note: a PCA is descriptive and gives no test, and the choice of 2,000 genes is a fixed constant of
+      this template.
     layout: {x: 0, y: 0, w: 4, h: 6}
   - component_type: advanced_viz
     workflow_tag: nascent
@@ -1269,7 +1499,20 @@ tabs:
     tag: nc-ss-av-drift
     index: ss-av-drift
     title: Correlation along the time course
-    description: Each time point against the baseline and against the previous time point; a dip in the second marks a large step.
+    description: >-
+      How far has transcription moved at each time point? Two curves over log2(1 + hours): the Spearman
+      correlation of each time point with the baseline, and with the previous time point, libraries of
+      one time point averaged.
+
+      How to read: a curve against the baseline that falls is the programme moving away from where it
+      started, and one that rises again after a dip is a transient response. A dip in the previous-point
+      curve marks the step where transcription changed most. The baseline is 1 against itself and has no
+      previous point.
+
+      Lines and annotations: the dotted vertical line, labelled Baseline, marks the baseline time point.
+      No threshold is drawn, so a step is large only relative to the other steps of this run.
+
+      Source: Spearman's rank correlation, https://en.wikipedia.org/wiki/Spearman%27s_rank_correlation_coefficient
     layout: {x: 4, y: 0, w: 4, h: 6}
   - component_type: table
     workflow_tag: nascent
@@ -1280,7 +1523,14 @@ tabs:
     tag: nc-ss-table
     index: nc-ss-table
     title: Components and correlations per library
-    description: PCA coordinates, variance explained and the two correlations, one row per library.
+    description: >-
+      PCA coordinates, variance explained and the two correlations, one row per library.
+
+      How to read: pc1 to pc3 place the library on the embedding, and the variance columns say how much of
+      the variation each component holds. corr_to_baseline and corr_to_previous are the Spearman
+      correlations plotted above. Ticking a row narrows the other tiles to that library.
+
+      Source: Spearman's rank correlation, https://en.wikipedia.org/wiki/Spearman%27s_rank_correlation_coefficient
     layout: {x: 0, y: 0, w: 8, h: 6}
 
 - title: Genome signal
@@ -1474,9 +1724,22 @@ tabs:
     index: gs-av-binned
     title: Binned signal, one lane per library
     description: >-
-      Nascent transcription along the genome, one lane per library, coloured along the time course
-      as the browser's tracks are: the reads of both strands summed in 250 kb windows, as log2(1 +
-      signal per million of the library). Pick Select in the header and brush, or type a region, to move the browser below to it.
+      Where along the genome is nascent transcription read, and how does it change with time? One lane
+      per library, up to 12, in time order and in the colour of its time point, shows the reads of both
+      strands summed in 250 kb windows, as log2(1 + signal per million of the library). Pick Select in the
+      header and brush a region, or type one, to move the browser below to it.
+
+      How to read: a tall bar that repeats in every lane is an expressed region, and one that grows or
+      shrinks down the lanes is a region that changes with time. A window towering over its neighbours in
+      every lane is a hotspot, typically the ribosomal DNA arrays. A region brushed here also narrows the
+      cards of the tab that follow the region.
+
+      Lines and annotations: the dashed band that appears on the lanes is the window the browser below
+      currently shows. The log2 scale keeps hotspot windows from flattening the rest and is a display
+      choice, not a threshold; the 250 kb width is a fixed choice of this template.
+
+      Source: strand coverage from bedtools genomecov,
+      https://bedtools.readthedocs.io/en/latest/content/tools/genomecov.html
     layout: {x: 0, y: 0, w: 8, h: 7}
   - component_type: jbrowse
     workflow_tag: nascent
@@ -1525,7 +1788,23 @@ tabs:
     tag: nc-gs-browser
     index: gs-browser
     title: Strand coverage from the bigWigs
-    description: The plus (+) and minus (-) strand bigWig of every library in time order, each on its own scale and coloured along the time course.
+    description: >-
+      What do the reads look like at a locus? The plus (+) and minus (-) strand bigWig of every library,
+      up to 24 tracks, in time order and in the colour of the library's time point. The browser opens on
+      the gene whose transcription changes most over the time course.
+
+      How to read: genes on the plus strand read on the plus tracks and genes on the minus strand on the
+      minus tracks. Follow the same gene down the tracks: signal that rises or falls with time is the
+      response seen in [Gene dynamics](tab:Gene dynamics). Brush a region on the binned lanes above to
+      move the browser.
+
+      Lines and annotations: each track is scaled on its own, to the mean plus three standard deviations
+      of what is in view, and when zoomed out a pixel draws the mean of its bins. Heights are therefore
+      not comparable between tracks; read the shape and not the level.
+
+      Source: strand bigWigs from deepTools bamCoverage,
+      https://deeptools.readthedocs.io/en/latest/content/tools/bamCoverage.html, as listed in the
+      nf-core/nascent output documentation, https://nf-co.re/nascent/2.3.0/docs/output
     layout: {x: 0, y: 7, w: 8, h: 9}
   - component_type: figure
     workflow_tag: nascent
@@ -1553,7 +1832,24 @@ tabs:
     tag: nc-gs-fig-chromosomes
     index: gs-fig-chromosomes
     title: Share of the signal per chromosome, against its baseline
-    description: log2 of each chromosome's share of the signal over its own share at the baseline, per time point (libraries of a time point averaged). Red gains share, blue loses it; a row that stays white follows the genome, one that moves carries a response or a hotspot.
+    description: >-
+      Which chromosomes gain or lose share of the signal over time? Each row is a chromosome in karyotype
+      order and each column a time point; the colour is the log2 of the chromosome's share of the signal
+      over its own share at the baseline, libraries of a time point averaged. The share itself is in the
+      hover.
+
+      How to read: white means the same share as at the baseline, red a larger share and blue a smaller
+      one. A row that stays white follows the genome, while a row that moves carries a large response or a
+      hotspot such as ribosomal DNA arrays, whose share follows how well each library was depleted. Open
+      the binned lanes above on that chromosome to find the windows behind it.
+
+      Lines and annotations: the colour scale is centred on 0 (white, no change) and runs to plus and
+      minus twice the 95th percentile of the absolute log2 ratios on display, with a floor of 0.5. The
+      range is a display choice and not a threshold. A cell is blank where the chromosome has no signal at
+      that time point or at the baseline.
+
+      Source: strand coverage from bedtools genomecov,
+      https://bedtools.readthedocs.io/en/latest/content/tools/genomecov.html
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: table
     workflow_tag: nascent
@@ -1563,7 +1859,16 @@ tabs:
     tag: nc-gs-table-bins
     index: nc-gs-table-bins
     title: Binned strand signal per library and window
-    description: Plus, minus and total signal per million of the library, and the plus-strand share, for every 250 kb window; a click centres the browser on the window.
+    description: >-
+      Plus, minus and total signal per million of the library, and the plus-strand share, for every 250 kb
+      window of every library. A click centres the browser on the window.
+
+      How to read: sort by total signal to list the busiest windows, which are mostly hotspots, or filter
+      on a chromosome to list its windows. The plus-strand share swings between the strands along a
+      chromosome because a gene dominates its window, and sits near half for the genome as a whole.
+
+      Source: strand coverage from bedtools genomecov,
+      https://bedtools.readthedocs.io/en/latest/content/tools/genomecov.html
     layout: {x: 0, y: 0, w: 8, h: 6}
 
 - title: Signal dynamics
@@ -1736,7 +2041,26 @@ tabs:
     tag: nc-sd-av-heatmap
     index: sd-av-heatmap
     title: Signal of the forty windows that change most
-    description: log2 signal per time point, z-scored per window, rows clustered by shape and annotated by trend; the window filters keep the rows in scope.
+    description: >-
+      Do the windows that change most share a course? Each row is one of the forty rising or falling
+      250 kb windows with the largest absolute peak change, each column a time point in time order, and
+      each cell the window's log2 signal there, z-scored per row. The window filters keep the rows in
+      scope.
+
+      How to read: red cells are the time points where a window is highest and blue where it is lowest,
+      so a row reads as when the signal is high and not how high. Rows clustered together share a shape.
+      The window ids name the chromosome and the span, to find in the browser of [Genome signal](tab:Genome signal).
+
+      Annotations: each row is z-scored, so 0 is the window's own mean across the time points. Rows are
+      clustered with average linkage on a correlation distance, columns keep their time order, and the
+      row strip is the trend, rising or falling. The windows compared are those whose mean signal lies
+      between the median window's and the 99.5th percentile of all windows, which drops the hotspots.
+
+      Source: strand coverage from bedtools genomecov,
+      https://bedtools.readthedocs.io/en/latest/content/tools/genomecov.html
+
+      Note: the median and 99.5th percentile bounds, the choice of forty windows and the two-fold,
+      two-time-point rule are fixed conventions of this template, not validated cut-offs.
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: advanced_viz
     workflow_tag: nascent
@@ -1759,7 +2083,26 @@ tabs:
     tag: nc-sd-av-trends
     index: sd-av-trends
     title: Rising, falling and stable windows over time
-    description: Median log2 fold change of each trend's windows in scope at each time point, with the band from the first to the third quartile.
+    description: >-
+      What do the windows that rise, fall or stay stable do over time? Each curve is the median log2 fold
+      change against the baseline of the windows of one trend at each time point, with a band from the
+      first to the third quartile of those windows. The x axis is log2(1 + hours).
+
+      How to read: the rising curve climbs above zero and the falling curve drops below it, by
+      construction of the call. A narrow band means the windows of a trend move together, and a stable
+      curve should stay near zero. Read the windows behind a trend in the heatmap above and in the table
+      below.
+
+      Lines and annotations: the dotted vertical line, labelled Baseline, marks the baseline time point,
+      where every fold change is 0 by construction. The band is the interquartile range of the windows in
+      view, computed after the window filters. A window rises or falls when its largest change reaches a
+      log2 fold change of 1 and at least two time points change that much the same way.
+
+      Source: strand coverage from bedtools genomecov,
+      https://bedtools.readthedocs.io/en/latest/content/tools/genomecov.html
+
+      Note: the two-fold, two-time-point rule is a fixed convention of this template, not a validated
+      cut-off, and the calls are a fold-change rule rather than a statistical test.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: nascent
@@ -1769,5 +2112,18 @@ tabs:
     tag: nc-sd-table
     index: nc-sd-table
     title: Call per window
-    description: The peak change, its time point, the time points changed and the trend of every window compared.
+    description: >-
+      The peak change, its time point, the time points changed and the trend of every window compared,
+      one row per 250 kb window.
+
+      How to read: peak_log2fc is the largest change against the baseline and peak_time_point where it
+      happens. n_changed counts the time points that changed by a log2 fold change of 1 in the peak's
+      direction, and trend is rising, falling or stable. Sort or filter a column to list the windows of
+      one trend or one chromosome.
+
+      Source: strand coverage from bedtools genomecov,
+      https://bedtools.readthedocs.io/en/latest/content/tools/genomecov.html
+
+      Note: only the transcribed windows without hotspots are compared, and the trend is a fold-change
+      rule rather than a statistical test.
     layout: {x: 0, y: 0, w: 8, h: 6}
