@@ -55,7 +55,14 @@ def world(db):
         ]
     )
     return SimpleNamespace(
-        owner=owner, visitor=visitor, pid=pid, dc=dc, wf=wf, published=published, child=child, copy=copy
+        owner=owner,
+        visitor=visitor,
+        pid=pid,
+        dc=dc,
+        wf=wf,
+        published=published,
+        child=child,
+        copy=copy,
     )
 
 
