@@ -25,7 +25,7 @@ the general statistics)
 | `depictio/tests/catalog/` and `depictio/tests/recipes/` (the BUSCO change touches genomeassembler's recipes) | 726 passed; 4 `test_conformance_project.py` failures, see GQ-D9 |
 | `depictio dev catalog validate` | pass (131 tools) |
 | Every recipe of the template over the mirrored megatest (`execute_recipe`, input and output schemas, in declaration order) | pass, row counts below |
-| `depictio ingest --template nf-core/genomeqc/1.0.1 --dry-run` on the megatest with `METADATA_FILE` | 24 of 24 collections ingest, 0 empty, 0 missing sources |
+| `depictio ingest --template nf-core/genomeqc/1.0.1 --dry-run` on the megatest with `METADATA_FILE` | 24 of 24 collections ingest, 0 empty, 0 missing sources (before the one-to-one matrix was dropped, GQ-D10; 23 now) |
 | Five route variants of the mirror (genome-only, `--skip_tidk`, no decontamination, no `--te`, `--skip_busco`) and no design table | every required collection and the hub build; the route's collections fail as optional, see Routes |
 
 ## Collection sizes on the megatest
@@ -47,7 +47,6 @@ the general statistics)
 | gene_overlaps | 3 (with the not-overlapping and overlapping-not-nested genes, so the four overlap columns sum to the genes) |
 | orthofinder_species_stats | 3 (with `genes_in_shared_orthogroups`) |
 | orthofinder_orthogroup_matrix | 9,543 orthogroups |
-| orthofinder_orthologue_matrix | 3 x 3 |
 | ortho_seq_count | 3 |
 | fcsgx_contamination | 3 |
 | fcsgx_actions | 3 (1 EXCLUDE range, 2 clean assemblies as `none`) |
@@ -82,12 +81,12 @@ component binds; the live import is pending (section 15 below).
 | Overview | 21 of 24 | hero 1, about 3, pipeline 3, key figures 2, findings 10, how to read 2 |
 | MultiQC | 13 | 1 (the intro is 1 of them) |
 | Assembly | 15 | strip + 2 (contiguity 6, length ladder 6; tables collapsed) |
-| Contamination | 7 | strip + 1 (foreign share and Tiara classes 4; tables collapsed) |
-| Completeness | 14 | strip + 2 (BUSCO classes 5, genome against annotation 6; table collapsed) |
+| Contamination | 15 | strip + 1 (foreign share 6, Tiara classes 6; tables collapsed) |
+| Completeness | 15 | strip + 2 (genome against annotation 6, BUSCO classes 6; table collapsed) |
 | Karyotype | 15 | strip + 2 (BUSCO ideogram 6, telomeric repeat ideogram 6; table collapsed) |
-| Repeats | 8 | strip + 1 (repeat classes 5; tables collapsed) |
-| Annotation | 13 | strip + 2 (gene models 6, genes and overlaps 4; tables collapsed) |
-| Orthology | 13 | strip + 2 (UpSet 5, one-to-one heatmap 5; tables collapsed) |
+| Repeats | 9 | strip + 1 (repeat classes 6; tables collapsed) |
+| Annotation | 21 | strip + 2 (gene models 6, genes and overlaps 12; tables collapsed) |
+| Orthology | 15 | strip + 2 (genes by orthogroup 6, UpSet 6; tables collapsed) |
 
 ## Findings on the megatest
 
@@ -113,8 +112,7 @@ component binds; the live import is pending (section 15 below).
 - **Annotation.** 9,934, 10,632 and 9,876 protein-coding genes, 7.2 to 7.5 exons per mRNA on the
   longest isoform, 2.9% to 3.8% single-exon genes; 24% to 40% of the genes overlap another.
 - **Orthology.** 9,543 orthogroups: 8,542 reach all three genomes (8,034 of them single-copy), 949
-  two, 52 one; 95.8% to 96.9% of each genome's genes are placed. One-to-one orthologues between pairs
-  run from 8,111 to 8,421.
+  two, 52 one; 95.8% to 96.9% of each genome's genes are placed.
 
 ## Decisions and defects
 
@@ -146,8 +144,8 @@ component binds; the live import is pending (section 15 below).
   the protein value.
 - **GQ-D7** Tiara is read on the raw assemblies only (`tiara/raw/`, `source_overrides`); genomeqc's
   second pass on the cleaned assemblies is left out.
-- **GQ-D8** OrthoFinder's tens of thousands of per-orthogroup files are never fetched; the three
-  summary tables are. The species tree (`Species_Tree/`, `tree/genome_anno/tree.nw`) is fetched but
+- **GQ-D8** OrthoFinder's tens of thousands of per-orthogroup files are never fetched; two of the
+  three summary tables are read (the one-to-one matrix is not, GQ-D10). The species tree (`Species_Tree/`, `tree/genome_anno/tree.nw`) is fetched but
   not drawn: with three tips it says nothing the UpSet does not.
 - **GQ-D9** the catalog gained 11 outputs (`tidk/search_windows`, `agat/statistics`,
   `agat/gene_models`, `repeatmasker/repeat_classes`, `repeatmasker/masking_summary`,
@@ -156,6 +154,27 @@ component binds; the live import is pending (section 15 below).
   `depictio/projects/init/catalog_conformance` (shared, not edited here) must be regenerated
   (`python -m depictio.projects.init.catalog_conformance.scripts.generate_project`) for
   `test_conformance_project.py` to pass again.
+- **GQ-D10** (template 2.0.0) the one-to-one orthologue heatmap is dropped: a 3 x 3 matrix cost a
+  Celery round trip and says nothing the UpSet and the genes-by-orthogroup bar do not. The
+  `orthofinder_orthologue_matrix` collection and its genome link go with it; the catalog output
+  `orthofinder/orthologue_matrix` stays (the catalog conformance project and the recipe tests use
+  it). Genome colours: `category_colors.genome` is declared and the orthogroup UpSet reads it
+  (`set_category_column: genome`, `color_intersections_by: set`), so a genome keeps one colour on
+  its set bar, dots and single-genome bars. The contiguity scatter colours each assembly's point with it, the stacked bars that draw one bar per genome carry a genome strip (`annotation_strips`), and the karyotype titles carry a swatch. The code-mode bars colour a class or a threshold zone, and the card compositions by genome use shades of the card colour; the length-ladder curves are keyed
+  on the FASTA label (GQ-D2), so they cannot take the genome colour.
+
+- **GQ-D11** (template 2.0.0, plot review) the value-axis crop (`y_zoom: auto`, still a Zoom switch
+  for the reader, without a `//` marker) is no longer on by default, and the tiles it served were redrawn so the minority is readable on an axis from
+  0: the foreign share is one bar per genome with genomeqc's 0.5% and 2% cut-offs (code figure on
+  `fcsgx_contamination`); BUSCO completeness is a dot plot of the assembly against its proteins with
+  the 95% and 90% levels as zones (dots, so a cropped axis misreads nothing), beside a bar of the
+  fragmented and missing BUSCOs per run with the 5% line a 95% pass allows (both code figures); the
+  orthogroup placement keeps only the genome-specific and unplaced shares (the shared majority is the
+  "Genes in orthogroups" card). The 3-point genome-against-annotation scatter is replaced by the dot
+  plot, the contiguity scatter keeps its record-card link but draws named fixed-size points with a 10
+  Mb N50 line, the genes-against-exons scatter drops its unscaled gene-length size, and the repeat
+  classes and Tiara bars carry axis titles in words. No collection column changed, so the template
+  version stays 2.0.0.
 
 ## Section 15 live check (pending, no stack in this environment)
 
@@ -178,8 +197,8 @@ Every item below is **pending live check**; nothing here has been seen rendered.
 
 - Six cards take the median of a `*_pct` column (lint rule f, warn only): each row is one assembly,
   so the median is the intended reading.
-- The orthogroup UpSet and the one-to-one heatmap have one column per genome; the persistent genome
-  filter narrows the heatmap's rows but not the UpSet's sets (an orthogroup row carries no genome).
+- The orthogroup UpSet has one column per genome; the persistent genome filter does not narrow its
+  sets (an orthogroup row carries no genome), though it does narrow the cards and tables.
 - The karyotype ideograms keep each genome's 24 longest sequences (`max_chromosomes: 24`); a draft
   assembly's hundreds of scaffolds are counted on the cards but not all drawn.
 - `tidk_search_windows` is 75,704 rows, served whole to the ideogram (its sampling policy is
@@ -190,7 +209,7 @@ Every item below is **pending live check**; nothing here has been seen rendered.
 
 | # | Label | Profile / Flags | What differs | Template impact |
 |---|-------|-----------------|--------------|-----------------|
-| GQ1 | **test_full megatest (validated offline)** | `test_full`, release run `bce44e5b` | none | 24 of 24 collections populate: 3 genomes, 698 karyotype sequences, 75,704 tidk windows, 9,543 orthogroups; CLI dry run 24/24. |
+| GQ1 | **test_full megatest (validated offline)** | `test_full`, release run `bce44e5b` | none | 24 of 24 collections populated at the time (23 now, GQ-D10): 3 genomes, 698 karyotype sequences, 75,704 tidk windows, 9,543 orthogroups; CLI dry run 24/24. |
 | GQ2 | **genome-only** | a samplesheet without GFF | no AGAT, overlaps, OrthoFinder, protein BUSCO; ideogram under `busco/genome/` | Annotation and Orthology tabs pruned (simulated); the proteins tiles of Completeness show a dash (GQ-D6). The `<a>_<lineage>.csv` ideogram name is inferred from the docs, unseen on a real run. |
 | GQ3 | **skip tidk** | `--skip_tidk` | no tidk | No sequence lengths: the Karyotype tab is pruned with tidk (simulated). |
 | GQ4 | **known telomere** | `--repeat TTAGG` | `tidk/<a>/search/apriori/<repeat>/` | The a priori search wins over the a posteriori one (unit-tested); the repeat ideogram then reads as a telomere map. Unseen on a real run. |

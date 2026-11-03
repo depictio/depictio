@@ -36,7 +36,7 @@
 template:
   template_id: "nf-core/epitopeprediction/3.2.0"
   description: "nf-core/epitopeprediction template: MHC binding predictions of peptides from variants, proteins or peptide lists, by allele, by sample and by tool, the peptides that bind with their source variant or protein, mutant against wild-type affinity, and how far the tools agree."
-  version: "1.1.0"
+  version: "2.0.0"
   variables:
     - name: "DATA_ROOT"
       description: "epitopeprediction output directory (predictions/, variant_peptides/, variant_fasta/, the per-tool directories, multiqc/, pipeline_info/)."
@@ -266,6 +266,7 @@ workflows:
               "peptide_id": "Peptide id of a peptide-table input"
               "length": "Peptide length in residues"
               "length_class": "Peptide length as a label, e.g. 9-mer"
+              "mhc_class": "Class I or Class II, from the alleles that scored the peptide, else from its sample"
               "origin": "Mutant, Wild type, Mutant and wild type (variant input) or Input sequence"
               "call": "Binder (a tool calls it a binder of an allele), Non-binder, or Unsupported (no tool could score it)"
               "binder": "1 when the peptide binds at least one allele"

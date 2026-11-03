@@ -45,6 +45,14 @@ main_dashboard:
       Class I: '#1c7ed6'
       Class II: '#ae3ec9'
     locus: auto
+    # One colour per allele group (HLA-A*02 and so on), ranked by the reads behind
+    # each group's calls. The allele grid draws a group in this colour and shades
+    # the alleles inside it lighter or darker; the group bars and the carrier
+    # matrix use it as it is. `allele` itself is not declared on purpose: `auto`
+    # gives each allele its own unrelated palette slot (eight at most, then none),
+    # which would flatten the grid's one-family-per-group reading, and an allele
+    # list is only known from the data, so it cannot be pinned by hand.
+    allele_group: auto:reads
     read: auto
     input_format: auto
     homozygous_class: auto
@@ -153,6 +161,8 @@ main_dashboard:
       - ![](icon:mdi:file-document-multiple-outline) **Input** {{n_fastq}} FASTQ and {{n_bam}} BAM samples, {{n_paired}} paired-end
       - ![](icon:mdi:merge) **Runs** {{n_runs}} sheet rows, the runs of a sample merged before typing
       - ![](icon:mdi:file-table-outline) **Samplesheet** [one row per sample](section:Sample sheet), its path in [the run parameters](params:input)
+      - ![](icon:mdi:palette-outline) **Color code** {{legend}}
+    legend: zygosity
     tag: ht-ov-study
     index: ov-study
     layout: {x: 0, y: 1, w: 5, h: 4}
@@ -357,12 +367,12 @@ main_dashboard:
   - component_type: highlight
     section: Findings
     source_tab: Typing quality
-    source_component: tq-reads-objective
-    caption: One point per sample, the reads its genotype explains against the objective.
+    source_component: tq-support
+    caption: The reads each genotype explains against the reads it needs, the weakest sample first.
     hide_legend: true
     tag: ht-ov-hl-quality
     index: ov-hl-quality
-    layout: {x: 0, y: 7, w: 4, h: 4}
+    layout: {x: 0, y: 7, w: 4, h: 5}
   - component_type: highlight
     section: Findings
     source_tab: Reads
@@ -371,7 +381,7 @@ main_dashboard:
     hide_legend: true
     tag: ht-ov-hl-reads
     index: ov-hl-reads
-    layout: {x: 4, y: 7, w: 4, h: 4}
+    layout: {x: 4, y: 7, w: 4, h: 5}
   # Link-only tab tiles: each tile prints its tab's subtitle, the question the
   # tab answers.
   - component_type: text
@@ -492,7 +502,8 @@ tabs:
     section: Read quality
     tag: ht-mqc-general-stats
     title: General statistics
-    description: One row per read file and per typed sample, FastQC and OptiType columns side by side.
+    description: >-
+      Are all samples here, and are the two files of a pair alike? One row per read file and per typed sample, FastQC and OptiType columns side by side: every sample should appear in both, and the two files of a pair should hold similar read counts. A table keeps every number in one place for exact comparison.
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: multiqc
     workflow_tag: hlatyping
@@ -503,7 +514,8 @@ tabs:
     section: Read quality
     tag: ht-mqc-counts
     title: Sequence counts
-    description: Reads per read file, unique and duplicate.
+    description: >-
+      Do the files hold enough reads? Unique and duplicate reads per file: the two files of a pair should match, and a small duplicate part is good. Stacked bars show the total and the duplicate share at once.
     layout: {x: 0, y: 4, w: 4, h: 4}
   - component_type: multiqc
     workflow_tag: hlatyping
@@ -514,7 +526,8 @@ tabs:
     section: Read quality
     tag: ht-mqc-quality
     title: Mean quality along the read
-    description: Mean base quality by position, per read file.
+    description: >-
+      Is base quality high along the whole read? The mean should stay in FastQC's green zone, above about 28, and fall only slowly towards the 3' end; a sharp drop marks a poor tail. One line per file shows each file's shape.
     layout: {x: 4, y: 4, w: 4, h: 4}
   - component_type: multiqc
     workflow_tag: hlatyping
@@ -525,7 +538,8 @@ tabs:
     section: Read quality
     tag: ht-mqc-gc
     title: GC content
-    description: GC content of the reads against FastQC's whole-genome expectation.
+    description: >-
+      Do the reads look like the genome? FastQC compares their GC content with a whole-genome model, so HLA-enriched, exome or RNA reads usually deviate without harm, while a second peak points to contamination. A distribution shows the shape that one number cannot.
     layout: {x: 0, y: 8, w: 4, h: 4}
   - component_type: multiqc
     workflow_tag: hlatyping
@@ -536,7 +550,8 @@ tabs:
     section: Read quality
     tag: ht-mqc-duplication
     title: Duplication levels
-    description: How many times each read sequence occurs, per read file.
+    description: >-
+      How many reads are copies? Most reads should occur once; a high share at many repeats means few distinct reads, although enriched reads repeat by design. The curve by repeat level shows whether the repeats are a few reads or many.
     layout: {x: 4, y: 8, w: 4, h: 4}
   - component_type: multiqc
     workflow_tag: hlatyping
@@ -546,7 +561,8 @@ tabs:
     section: HLA typing
     tag: ht-mqc-optitype
     title: Allele calls by locus
-    description: How many samples carry each allele, at each locus and haplotype.
+    description: >-
+      How many samples carry each allele? Each cell counts the samples at one locus and haplotype, so an allele shared by several samples stands out. Counts rather than frequencies keep every call readable on a handful of samples.
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: multiqc
     workflow_tag: hlatyping
@@ -557,7 +573,8 @@ tabs:
     section: More FastQC
     tag: ht-mqc-status
     title: FastQC status checks
-    description: Pass, warn or fail for each FastQC module and read file.
+    description: >-
+      Which FastQC module fails, and for which file? Green is a pass, amber a warning and red a failure; HLA-enriched reads often fail GC content without harm, so weigh the other modules first. A grid of colours finds the odd file at a glance.
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: multiqc
     workflow_tag: hlatyping
@@ -568,7 +585,8 @@ tabs:
     section: More FastQC
     tag: ht-mqc-adapters
     title: Adapter content
-    description: Share of the reads carrying an adapter, by position.
+    description: >-
+      Is adapter sequence left in the reads? The curve should stay near zero along the read, and a rise towards the 3' end means untrimmed adapters. Plotting by position shows where it starts.
     layout: {x: 0, y: 4, w: 4, h: 4}
   - component_type: multiqc
     workflow_tag: hlatyping
@@ -579,7 +597,8 @@ tabs:
     section: More FastQC
     tag: ht-mqc-overrepresented
     title: Overrepresented sequences
-    description: Share of each read file taken by overrepresented sequences.
+    description: >-
+      Do a few sequences dominate a file? A share near zero is good; a large share is adapters or a contaminant. One bar per file shows the worst at a glance.
     layout: {x: 4, y: 4, w: 4, h: 4}
   - component_type: multiqc
     workflow_tag: hlatyping
@@ -590,7 +609,8 @@ tabs:
     section: More FastQC
     tag: ht-mqc-n-content
     title: N content
-    description: Share of uncalled bases by position.
+    description: >-
+      Are there uncalled bases? N content should stay near zero at every position, and a spike marks a failed cycle. Plotting by position locates the bad cycle.
     layout: {x: 0, y: 8, w: 8, h: 4}
 - title: Reads
   subtitle: How many reads did each sample give, and how many typed it?
@@ -614,11 +634,12 @@ tabs:
   - name: Read depth
     icon: mdi:chart-bar
     color: teal
-    description: Reads per sample and the reads its genotype explains
+    description: Reads per read file, and the share of the read pairs each genotype uses
   - name: Read composition
     icon: mdi:chart-box-outline
     color: teal
-    description: GC content and duplicates per read file
+    description: GC content and duplicate reads per read file, against their guides
+    collapsed: true
   - name: Read file table
     icon: mdi:table
     color: gray
@@ -630,8 +651,10 @@ tabs:
     body: >
       [FastQC](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/) counts the reads of
       every file before yara maps them to the HLA reference; the mapping itself publishes no
-      statistics, so the reads behind the typing are OptiType's own count. A sample whose
-      genotype explains few of its reads, or few reads at all, is the one to check.
+      statistics, so the reads behind a typing are OptiType's own count. Look for samples with few
+      reads, and for read pairs whose two files differ in size. The share of read pairs a genotype
+      uses is usually small, because most reads are not HLA; whether the count is enough is judged
+      on the Typing quality tab.
     tag: ht-rd-intro
     index: rd-intro
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -745,74 +768,99 @@ tabs:
   - component_type: figure
     workflow_tag: hlatyping
     data_collection_tag: read_qc
+    mode: code
     visu_type: bar
-    dict_kwargs:
-      x: sample
-      y: total_sequences
-      color: read
-      barmode: group
-      labels: {sample: '', total_sequences: Reads, read: ''}
+    selection_enabled: true
+    selection_column: sample
+    code_content: |-
+      # Reads in each read file as FastQC counts them, one bar per file, the two reads of a pair side by side; the file with the fewest reads comes last.
+      colors = depictio_category_colors.get('read') or {}
+      d = df.with_columns(pl.col('total_sequences').max().over('sample').alias('largest'))
+      d = d.sort(['largest', 'sample', 'read'], descending=[True, False, False])
+      fig = px.bar(d.to_pandas(), y='sample', x='total_sequences', color='read', orientation='h', barmode='group', color_discrete_map=colors, text='total_sequences', custom_data=['sample'], labels={'sample': '', 'total_sequences': 'Reads in the file (FastQC)', 'read': 'Read'})
+      fig.update_traces(texttemplate='%{x:,}', textposition='outside', cliponaxis=False)
+      fig.update_yaxes(autorange='reversed', categoryorder='array', categoryarray=d['sample'].unique(maintain_order=True).to_list(), automargin=True)
+      fig.update_xaxes(tickformat=',', rangemode='tozero')
+      fig.update_layout(margin=dict(t=10, r=40), legend_title_text='', legend=dict(orientation='h', y=-0.15))
     section: Read depth
     tag: ht-rd-fig-depth
     index: rd-depth
-    title: Reads per sample
-    description: Reads in each read file of a sample, side by side for the two reads of a pair.
-    layout: {x: 0, y: 0, w: 4, h: 4}
-  - component_type: advanced_viz
-    workflow_tag: hlatyping
-    data_collection_tag: read_qc
-    viz_kind: scatter_xy
-    config:
-      viz_kind: scatter_xy
-      x_col: total_sequences
-      y_col: typing_reads
-      label_col: sample
-      color_col: '{GROUP_COL}'
-      x_title: Reads in the file
-      y_title: Reads the genotype explains
-      log_x: true
-      log_y: true
-      legend_pos: bottom
-      selection_enabled: true
-      selection_column: sample
-    section: Read depth
-    tag: ht-rd-av-typing
-    index: rd-typing-reads
-    title: Reads against typing reads
-    description: One point per read file; the higher above the others, the larger its share used for typing.
-    layout: {x: 4, y: 0, w: 4, h: 4}
+    title: Reads per read file
+    description: >-
+      How deep is each sample? One bar per read file, the two reads of a pair side by side, the sample with the largest file first and the count printed on each bar. A bar is the plainest way to read a handful of counts.
+
+      How to read: the two files of a pair should be about the same size, and a short bar is a sample with few reads to type from. Click a bar to keep that sample, then open [Typing quality](tab:Typing quality) to see whether its genotype rests on enough reads.
+
+      Note: neither FastQC nor OptiType sets a minimum number of reads, so no pass mark is drawn. The counts are FastQC's, taken before the reads are mapped to the HLA reference.
+    layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: figure
     workflow_tag: hlatyping
     data_collection_tag: read_qc
-    visu_type: box
-    dict_kwargs:
-      x: '{GROUP_COL}'
-      y: pct_gc
-      color: '{GROUP_COL}'
-      points: all
-      labels: {pct_gc: GC content (%), '{GROUP_COL}': ''}
-    section: Read composition
-    tag: ht-rd-fig-gc
-    index: rd-gc
-    title: GC content by {GROUP_COL_DISPLAY}
-    description: GC content of each read file, one box per group; a file far from its group stands out.
-    layout: {x: 0, y: 0, w: 4, h: 4, fit: auto}
-  - component_type: figure
-    workflow_tag: hlatyping
-    data_collection_tag: read_qc
+    mode: code
     visu_type: bar
-    dict_kwargs:
-      x: sample
-      y: pct_duplicates
-      color: read
-      barmode: group
-      labels: {sample: '', pct_duplicates: Duplicate reads (%), read: ''}
+    selection_enabled: true
+    selection_column: sample
+    code_content: |-
+      # Share of each sample's read pairs that its genotype explains, with the reads behind it printed on the bar; the smallest share comes last.
+      grp = depictio_group_by[0] if depictio_group_by else '{GROUP_COL}'
+      keys = ['sample', grp] if grp in df.columns else ['sample']
+      colors = depictio_group_kwargs.get('color_discrete_map') or depictio_category_colors.get('{GROUP_COL}') or {}
+      d = df.group_by(keys).agg(pl.col('total_sequences').max().alias('pairs'), pl.col('typing_reads').first().alias('used'))
+      d = d.with_columns((100 * pl.col('used') / pl.col('pairs')).alias('share'))
+      d = d.with_columns((pl.col('used').map_elements(lambda v: f'{v:,}', return_dtype=pl.Utf8) + ' of ' + pl.col('pairs').map_elements(lambda v: f'{v:,}', return_dtype=pl.Utf8) + ' read pairs').alias('note')).sort('share', descending=True)
+      color = grp if grp in d.columns else None
+      fig = px.bar(d.to_pandas(), y='sample', x='share', color=color, orientation='h', color_discrete_map=colors, text='note', custom_data=['sample'], labels={'sample': '', 'share': 'Read pairs the genotype explains (%)', grp: ''})
+      fig.update_traces(textposition='outside', cliponaxis=False)
+      fig.update_yaxes(autorange='reversed', categoryorder='array', categoryarray=d['sample'].to_list(), automargin=True)
+      fig.update_xaxes(range=[0, 1.45 * d['share'].max()], ticksuffix='%')
+      fig.update_layout(margin=dict(t=10, r=20), legend_title_text='', legend=dict(orientation='h', y=-0.15))
+    section: Read depth
+    tag: ht-rd-fig-typing-share
+    index: rd-typing-share
+    title: Share of read pairs used for typing
+    description: >-
+      How much of each sample's data did the typing use? One bar per sample: the reads its genotype explains over its read pairs, both counts printed on the bar, coloured by {GROUP_COL_DISPLAY}. The sample with the largest share comes first.
+
+      How to read: a small share is usual, because exome and RNA reads are mostly not HLA, so a short bar is not a fault in itself. A bar far shorter than the rest points to a sample with few usable reads, so check its file sizes under [Read depth](section:Read depth). Click a bar to keep that sample, and judge whether its count is enough on [Typing quality](tab:Typing quality).
+
+      Note: no cut-off is drawn, because neither FastQC nor OptiType publishes one for this share. The read pairs are the larger of the sample's two FastQC read counts.
+    layout: {x: 0, y: 6, w: 8, h: 6}
+  - component_type: figure
+    workflow_tag: hlatyping
+    data_collection_tag: read_qc
+    mode: code
+    code_content: |-
+      # GC content and duplicate reads of each read file side by side. Dashed guide on the left: the human genome's GC; dotted guides on the right: where FastQC warns (20%) and fails (50%) on duplicates.
+      colors = depictio_category_colors.get('read') or {}
+      d = df.sort(['sample', 'read'])
+      titles = ('GC content (%), dashed line at the human genome average', 'Duplicate reads (%), dotted at FastQC warn, dashed at fail')
+      fig = go.Figure().set_subplots(rows=1, cols=2, shared_yaxes=True, horizontal_spacing=0.04, subplot_titles=titles)
+      for r in sorted(d['read'].unique().to_list()):
+          s = d.filter(pl.col('read') == r)
+          c = colors.get(r)
+          fig.add_trace(go.Bar(y=s['read_key'].to_list(), x=s['pct_gc'].to_list(), orientation='h', name=r, legendgroup=r, marker_color=c, text=[f'{v:.0f}' for v in s['pct_gc'].to_list()], textposition='outside', cliponaxis=False), row=1, col=1)
+          fig.add_trace(go.Bar(y=s['read_key'].to_list(), x=s['pct_duplicates'].to_list(), orientation='h', name=r, legendgroup=r, showlegend=False, marker_color=c, text=[f'{v:.0f}' for v in s['pct_duplicates'].to_list()], textposition='outside', cliponaxis=False), row=1, col=2)
+      fig.add_vline(x=41, line_dash='dash', line_color='gray', row=1, col=1)
+      fig.add_vline(x=20, line_dash='dot', line_color='gray', row=1, col=2)
+      fig.add_vline(x=50, line_dash='dash', line_color='gray', row=1, col=2)
+      fig.update_yaxes(autorange='reversed', categoryorder='array', categoryarray=d['read_key'].to_list(), automargin=True)
+      fig.update_xaxes(range=[0, 75], row=1, col=1)
+      fig.update_xaxes(range=[0, 60], row=1, col=2)
+      fig.update_annotations(font_size=12)
+      fig.update_layout(margin=dict(t=40, r=20), barmode='group', legend_title_text='', legend=dict(orientation='h', y=-0.12))
     section: Read composition
-    tag: ht-rd-fig-duplicates
-    index: rd-duplicates
-    title: Duplicate reads per sample
-    description: Duplicate share of each read file, in percent.
-    layout: {x: 4, y: 0, w: 4, h: 4}
+    tag: ht-rd-fig-composition
+    index: rd-composition
+    title: GC content and duplicates per read file
+    description: >-
+      Are the reads typical of an HLA-enriched run? Each read file has one bar in each panel, GC content on the left and duplicate reads on the right, in the same file order and coloured by read of the pair. Two panels let one file be read across both.
+
+      How to read: GC content has no pass mark, because HLA-enriched, exome or RNA reads often differ from the genome average without harm; look for a file that departs from the other file of its pair or from the other samples. For duplicates, a bar short of the dotted line is fine, a bar past it warns and a bar past the dashed line fails, because few distinct reads are left. Enriched reads repeat by design, so a warning alone is not a defect; open [MultiQC](tab:MultiQC) for FastQC's duplication curve.
+
+      Lines and annotations: the dashed line on the left is at 41%, the average GC content of the human genome, a fixed reference and not read from the run. On the right the dotted line is at 20% and the dashed line at 50%, the duplicate shares at which FastQC warns and fails. The number at the end of each bar is its value in percent.
+
+      Sources: Lander et al. 2001, doi:10.1038/35057062 (GC content); https://www.bioinformatics.babraham.ac.uk/projects/fastqc/Help/3%20Analysis%20Modules/8%20Duplicate%20Sequences.html (duplication thresholds).
+    layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: hlatyping
     data_collection_tag: read_qc
@@ -865,9 +913,10 @@ tabs:
     order: 1
     body: >
       [OptiType](https://github.com/FRED-2/OptiType) picks, by integer linear programming, the
-      pair of alleles at each class I locus that explains the most reads. In the grid each cell
-      holds a locus's two haplotypes, one allele group per colour family; a merged cell is a
-      homozygous locus. Click an allele to narrow the dashboard to the samples that carry it.
+      pair of alleles at each class I locus that explains the most reads. In the grid a row is a
+      sample and a column a locus; each cell holds the two haplotypes, and a merged cell with a dot
+      is a homozygous locus. Click an allele to narrow the dashboard to the samples that carry it,
+      or a sample name to keep only that sample.
     tag: ht-gt-intro
     index: gt-intro
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -1012,14 +1061,55 @@ tabs:
       sample_order: alphabetical
       show_labels: true
       side_bars: [value, reads]
+      # Colours: a group wears its category_colors entry, alleles are shades of it;
+      # zygosity wears the zygosity entry. Samples can be grouped by the samplesheet
+      # column the dashboard groups by (the genotypes carry the sheet's columns).
+      color_by: allele_group
+      allele_group_col: allele_group
+      zygosity_col: zygosity
+      group_cols: ['{GROUP_COL}']
       selection_enabled: true
       selection_column: allele
     section: Genotype grid
     tag: ht-gt-av-grid
     index: gt-grid
     title: HLA class I genotypes
-    description: Each locus split into haplotype 1 and 2, coloured by allele group; the bars give the objective and reads.
+    description: >-
+      Which alleles does each sample carry? A row per sample, a column per locus, a cell per genotype: the left half is haplotype 1, the
+      right half haplotype 2, and a merged cell with a dot is homozygous at the chosen resolution.
+      Hue is the allele group, shade the allele inside it (switch to zygosity under Colour by); the
+      bars give the OptiType objective and the reads behind each genotype.
+
+      How to read: a good row has all three loci typed and a long reads bar, and under zygosity a grey cell is a locus where only one allele was typed. Samples sharing an allele share its shade in that column. Click an allele to keep the samples that carry it, or a sample name to keep that sample, then open [Typing quality](tab:Typing quality) for the genotypes with the fewest reads.
+
+      Annotations: each cell prints its allele (switch off under Cells), the key lists the alleles of each locus, with their copies and carriers on hover, and the fade option dims cells with few reads. Samples can be ordered by name, objective or the allele at a locus, and grouped by {GROUP_COL_DISPLAY}.
+
+      Note: OptiType publishes no minimum number of reads or objective, so the bars carry no pass mark. The objective reflects the zygosity more than the fit, as explained on [Typing quality](tab:Typing quality).
     layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: figure
+    workflow_tag: hlatyping
+    data_collection_tag: optitype_genotypes
+    mode: code
+    code_content: |-
+      # Calls of each allele group at each locus, in the colour the grid gives the group, the count printed in each segment.
+      colors = depictio_category_colors.get('allele_group') or {}
+      d = df.group_by(['locus', 'allele_group']).agg(pl.len().alias('calls'))
+      d = d.sort(['locus', 'calls', 'allele_group'], descending=[False, True, False])
+      fig = px.bar(d.to_pandas(), x='locus', y='calls', color='allele_group', color_discrete_map=colors, text='calls', labels={'locus': '', 'calls': 'Calls (two per sample)', 'allele_group': 'Allele group'})
+      fig.update_traces(textposition='inside')
+      fig.update_layout(margin=dict(t=10), legend_title_text='', barmode='stack')
+      fig.update_xaxes(automargin=True)
+    section: Genotype grid
+    tag: ht-gt-fig-groups
+    index: gt-groups
+    title: Allele groups by locus
+    description: >-
+      Which allele groups does each locus hold? Each bar is a locus and each segment an allele group, in the group colours of the grid, with its calls printed on it. It follows the same filters and picks as the grid, and a stacked bar shows the share of each group and the total at once.
+
+      How to read: a group that fills most of a bar dominates the locus, and many thin segments mean the samples are spread over many groups. Calls are two per sample and locus, so a homozygous locus counts its group twice. Open [Alleles](tab:Alleles) for the frequency of each allele inside its group.
+
+      Note: on a handful of samples the totals are counts in disguise, so read them as a census and not as a population frequency.
+    layout: {x: 0, y: 6, w: 8, h: 6}
   - component_type: table
     workflow_tag: hlatyping
     data_collection_tag: optitype_summary
@@ -1067,10 +1157,15 @@ tabs:
     icon: mdi:chart-bar
     color: violet
     description: Each allele's share of the calls at its locus
+  - name: Alleles by sample
+    icon: mdi:account-group-outline
+    color: violet
+    description: Which alleles each sample carries, and how many copies
   - name: Calls per allele
     icon: mdi:chart-bar
     color: violet
-    description: How many calls each allele takes, homozygous ones apart
+    description: How many calls each allele group takes, homozygous ones apart
+    collapsed: true
   components:
   - component_type: text
     order: 1
@@ -1078,7 +1173,8 @@ tabs:
       Each sample adds two calls per locus, one per haplotype, so a homozygous locus counts its
       allele twice. An allele's frequency is its share of the calls at its locus, comparable to
       the population tables of the [Allele Frequency Net Database](http://www.allelefrequencies.net).
-      On a handful of samples the frequencies are counts in disguise: read them as a census.
+      On a handful of samples the frequencies are counts in disguise: read them as a census, and
+      use the carrier matrix, which follows the sample filters, for the alleles of one sample.
     tag: ht-al-intro
     index: al-intro
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -1193,19 +1289,58 @@ tabs:
     mode: code
     code_content: |-
       # Allele frequency within each locus: an allele's calls over the locus's calls.
-      colors = depictio_category_colors.get('locus') or {}
-      d = df.group_by(['locus', 'allele']).agg(pl.len().alias('calls'))
+      # Coloured by allele group, the colour the genotype grid gives the group.
+      colors = depictio_category_colors.get('allele_group') or {}
+      d = df.group_by(['locus', 'allele', 'allele_group']).agg(pl.len().alias('calls'))
       d = d.with_columns((100 * pl.col('calls') / pl.col('calls').sum().over('locus')).alias('freq'))
       d = d.sort(['locus', 'freq', 'allele'], descending=[False, True, False])
-      fig = px.bar(d.to_pandas(), x='allele', y='freq', color='locus', color_discrete_map=colors, hover_data=['calls'], labels={'allele': '', 'freq': 'Frequency in its locus (%)', 'locus': 'Locus', 'calls': 'Calls'})
+      d = d.with_columns(pl.format('{}%', pl.col('freq').round(0).cast(pl.Int64)).alias('share'))
+      fig = px.bar(d.to_pandas(), x='allele', y='freq', color='allele_group', color_discrete_map=colors, text='share', hover_data=['calls', 'locus'], labels={'allele': '', 'freq': 'Frequency in its locus (%)', 'allele_group': 'Allele group', 'calls': 'Calls', 'locus': 'Locus'})
+      fig.update_traces(textposition='outside', cliponaxis=False)
       fig.update_layout(margin=dict(t=10), legend_title_text='')
       fig.update_xaxes(categoryorder='array', categoryarray=d['allele'].to_list(), automargin=True)
     section: Allele frequency
     tag: ht-al-fig-frequency
     index: al-frequency
     title: Allele frequency by locus
-    description: Each allele's share of the calls at its locus, alleles ordered from commonest within each locus.
-    layout: {x: 0, y: 0, w: 8, h: 4}
+    description: >-
+      Which alleles are common here? Each bar is an allele's share of the calls at its locus, commonest first within each locus, with its share printed on it (the call count is in the hover) and the colour of its allele group, as in the genotype grid. Bars sorted within a locus make the ranking readable, which the share of a pie would not.
+
+      How to read: a tall bar is an allele that most samples share, and many short bars mean the samples differ at that locus. The shares of one locus add up to 100%, with two calls per sample, so a homozygous locus counts its allele twice. See [Alleles by sample](section:Alleles by sample) for which samples carry an allele.
+
+      Annotations: no reference line is drawn, since there is no cut-off for an allele frequency. The share on each bar is rounded to a whole percent, and the population tables of the Allele Frequency Net Database are the outside reference to compare with.
+
+      Source: http://www.allelefrequencies.net (Gonzalez-Galarza et al. 2020, doi:10.1093/nar/gkz1029).
+
+      Note: on a few samples the shares are counts in disguise, so read them as a census and not as a population frequency.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: figure
+    workflow_tag: hlatyping
+    data_collection_tag: optitype_genotypes
+    mode: code
+    code_content: |-
+      # One marker per sample and allele; the marker grows with the copies carried (2 = homozygous).
+      colors = depictio_category_colors.get('allele_group') or {}
+      d = df.group_by(['sample_id', 'locus', 'allele', 'allele_group']).agg(pl.len().alias('copies'))
+      d = d.sort(['locus', 'allele', 'sample_id'])
+      samples = sorted(d['sample_id'].unique().to_list())
+      fig = px.scatter(d.to_pandas(), x='allele', y='sample_id', facet_col='locus', color='allele_group', color_discrete_map=colors, size='copies', size_max=26, category_orders={'sample_id': samples}, hover_data={'copies': True, 'locus': False}, labels={'allele': '', 'sample_id': '', 'allele_group': 'Allele group', 'copies': 'Copies'})
+      fig.update_xaxes(matches=None, categoryorder='category ascending', automargin=True)
+      fig.update_yaxes(autorange='reversed')
+      fig.update_traces(marker=dict(opacity=0.9, line=dict(width=1, color='#343a40')))
+      fig.for_each_annotation(lambda a: a.update(text=a.text.split('=')[-1]))
+      fig.update_layout(margin=dict(t=30), legend_title_text='')
+    section: Alleles by sample
+    tag: ht-al-fig-carriers
+    index: al-carriers
+    title: Alleles carried by each sample
+    description: >-
+      Which alleles does each sample carry, and which samples share one? A marker per sample and allele, one panel per locus, coloured by allele group; a large marker is two copies (a homozygous locus). It follows the sample filters, and a grid of markers keeps every sample on its own row, so none overlap.
+
+      How to read: a column with several markers is an allele the samples share, and a column with one marker is carried by that sample alone. A row with a large marker is homozygous at that locus. Narrow the sample filters to compare a few samples, or open [Genotypes](tab:Genotypes) to see both haplotypes of each.
+
+      Annotations: marker size is the number of copies, one or two, also shown in the hover. No reference line is drawn.
+    layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: figure
     workflow_tag: hlatyping
     data_collection_tag: optitype_genotypes
@@ -1219,8 +1354,13 @@ tabs:
     tag: ht-al-fig-groups
     index: al-group-calls
     title: Calls per allele group, by zygosity
-    description: Calls of each first-field group, stacked by the zygosity of the locus they sit on.
-    layout: {x: 0, y: 0, w: 8, h: 4}
+    description: >-
+      Are the allele groups mostly homozygous? Calls of each first-field group, stacked by the zygosity of the locus they sit on, in the zygosity colours of the dashboard (orange homozygous, blue heterozygous, grey one allele typed). Bars per group show the size and the split at once.
+
+      How to read: a group with much orange is often homozygous in these samples, and a mostly blue group sits on heterozygous loci. Calls are two per sample and locus, so a homozygous locus adds two calls to its group; the height is calls, not samples. Open [Genotypes](tab:Genotypes) and filter by zygosity to see which loci they are.
+
+      Annotations: no reference line is drawn, since no cut-off applies to a zygosity split.
+    layout: {x: 0, y: 0, w: 8, h: 5}
 - title: Typing quality
   subtitle: How many reads does each genotype rest on?
   tab_group: HLA
@@ -1241,21 +1381,23 @@ tabs:
     color: grape
     description: The reads behind the genotypes and the objective per read
   - name: Read support
-    icon: mdi:chart-scatter-plot
-    color: grape
-    description: The reads each genotype explains against the solver's objective
-  - name: Per sample
     icon: mdi:chart-bar
     color: grape
-    description: The reads each sample's genotype explains
+    description: The reads behind each genotype, per distinct allele, the weakest sample first
+  - name: Objective
+    icon: mdi:scale-balance
+    color: grape
+    description: What the solver's objective says beyond the zygosity
   components:
   - component_type: text
     order: 1
     body: >
-      OptiType maximises the reads its alleles explain, less `beta` times the reads for each
-      heterozygous locus, so the objective sits under the reads by the zygosity, not by the fit.
-      The support of a genotype is its reads: a genotype, or a homozygous call, on few reads is
-      the one to confirm, for instance by asking for more solutions (`enumerations`).
+      This tab asks which samples you can trust: the support of a genotype is the reads it
+      explains, and a call on few reads is the one to confirm, for instance by asking for more
+      solutions (`enumerations`). The objective is those reads less `beta` times the reads for each
+      heterozygous locus, so it reads the zygosity, not the fit. OptiType publishes no minimum
+      number of reads, so the first chart ranks the samples by reads per distinct allele against the
+      cohort median, and only OptiType's own tie between solutions is flagged.
     tag: ht-tq-intro
     index: tq-intro
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -1367,41 +1509,74 @@ tabs:
     title: Objective per read
     description: The objective over the reads explained; it falls by beta for each heterozygous locus.
     layout: {x: 6, y: 0, w: 2, h: 2}
-  - component_type: advanced_viz
+  - component_type: figure
     workflow_tag: hlatyping
     data_collection_tag: optitype_summary
-    use: optitype/reads_objective
-    viz_kind: scatter_xy
-    config:
-      viz_kind: scatter_xy
-      x_col: reads
-      y_col: objective
-      label_col: sample_id
-      color_col: homozygous_class
-      x_title: Reads the genotype explains
-      y_title: Objective
-      reference_line: diagonal
-      legend_pos: bottom
-      selection_enabled: true
-      selection_column: sample_id
+    mode: code
+    visu_type: bar
+    selection_enabled: true
+    selection_column: sample_id
+    code_content: |-
+      # Reads the genotype explains per distinct allele, one bar per sample. OptiType publishes no minimum, so no pass mark is drawn: the reference is the cohort's own median, and the one hard flag is OptiType's own tie (a runner-up solution with the same objective), available when --enumerations is above 1. The weakest sample comes first.
+      d = df.with_columns((pl.col('reads') / pl.col('distinct_alleles')).alias('per_allele')).sort(['per_allele', 'sample_id'])
+      med = d['per_allele'].median() or 0
+      d = d.with_columns(pl.struct(['reads', 'distinct_alleles', 'per_allele', 'solutions', 'runner_up_gap']).map_elements(lambda r: f"{r['per_allele']:.0f} per allele ({r['reads']:,} reads / {r['distinct_alleles']} alleles)" + ('' if (r['solutions'] or 1) < 2 else (', TIED with the runner-up' if (r['runner_up_gap'] or 0) == 0 else f", runner-up {r['runner_up_gap']:.1f} behind")), return_dtype=pl.Utf8).alias('note'))
+      fig = px.bar(d.to_pandas(), y='sample_id', x='per_allele', orientation='h', text='note', custom_data=['sample_id'], labels={'sample_id': '', 'per_allele': 'Reads the genotype explains, per distinct allele'}, **depictio_group_kwargs)
+      if not depictio_group_kwargs:
+          fig.update_traces(marker_color='#be4bdb')
+      fig.update_traces(textposition='outside', cliponaxis=False)
+      fig.add_vline(x=med, line_dash='dot', line_color='#343a40', line_width=2, annotation_text=f'cohort median: {med:.0f} per allele', annotation_position='top', annotation_font_size=11)
+      fig.update_yaxes(autorange='reversed', categoryorder='array', categoryarray=d['sample_id'].to_list(), automargin=True)
+      fig.update_xaxes(range=[0, 1.7 * max(d['per_allele'].max(), 1)], tickformat=',')
+      fig.update_layout(margin=dict(t=30, r=20), legend_title_text='', legend=dict(orientation='h', y=-0.15))
     section: Read support
-    tag: ht-tq-av-reads-objective
-    index: tq-reads-objective
-    title: Reads against objective
-    description: One point per sample, coloured by its homozygous loci; the diagonal is an objective equal to the reads.
+    tag: ht-tq-fig-support
+    index: tq-support
+    title: Can each genotype be trusted?
+    description: >-
+      Which samples rest on the least evidence per allele?
+
+      Each bar is the reads the genotype explains divided by its distinct alleles (a sample
+      heterozygous at the three loci has six, one with a homozygous locus five), so a heterozygous and
+      a homozygous sample compare fairly. Sorted so the weakest sample comes first.
+
+      How to read: the dotted line is the **median of this cohort**. The **lowest bars** are the ones to look at
+      first. A call is flagged as uncertain only when OptiType itself says so, that is a runner-up
+      solution with the same objective (a tie), which needs the run to have used --enumerations above 1.
+
+      Note: **OptiType publishes no minimum number of reads**, so no pass mark is drawn here. The reads each genotype explains are listed on [Reads](tab:Reads), and the objective on this tab's second chart.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: figure
     workflow_tag: hlatyping
     data_collection_tag: optitype_summary
-    visu_type: bar
-    dict_kwargs:
-      x: sample_id
-      y: reads
-      color: homozygous_class
-      labels: {sample_id: '', reads: Reads explained, homozygous_class: ''}
-    section: Per sample
-    tag: ht-tq-fig-reads
-    index: tq-reads
-    title: Reads explained per sample
-    description: The reads each sample's genotype explains, coloured by its homozygous loci.
-    layout: {x: 0, y: 0, w: 8, h: 4}
+    mode: code
+    visu_type: scatter
+    selection_enabled: true
+    selection_column: sample_id
+    code_content: |-
+      # Objective per read of each sample against the value its zygosity predicts. OptiType takes beta (0.009 by default) of the reads off for each heterozygous locus, so a dot belongs on the guide for its count of heterozygous loci.
+      beta = 0.009
+      d = df.with_columns((pl.col('heterozygous_loci').cast(pl.Utf8) + ' heterozygous, ' + pl.col('homozygous_loci').cast(pl.Utf8) + ' homozygous').alias('loci')).sort(['objective_per_read', 'sample_id'], descending=[False, False])
+      colors = depictio_category_colors.get('homozygous_class') or {}
+      fig = px.scatter(d.to_pandas(), x='objective_per_read', y='sample_id', color='homozygous_class', color_discrete_map=colors, text='loci', custom_data=['sample_id'], category_orders={'sample_id': d['sample_id'].to_list()}, labels={'objective_per_read': 'Objective per read', 'sample_id': '', 'homozygous_class': ''})
+      fig.update_traces(marker=dict(size=18, opacity=0.9, line=dict(width=1.5, color='#343a40')), textposition='middle right', cliponaxis=False)
+      for k in range(4):
+          fig.add_vline(x=1 - beta * k, line_dash='dot', line_color='gray', annotation_text=f'{k} heterozygous', annotation_position='top', annotation_font_size=11)
+      fig.update_yaxes(autorange='reversed', categoryorder='array', categoryarray=d['sample_id'].to_list(), automargin=True)
+      fig.update_xaxes(range=[1 - beta * 3.8, 1 + beta * 0.4], tickformat='.3f')
+      fig.update_layout(margin=dict(t=30, r=30), legend_title_text='', legend=dict(orientation='h', y=-0.15))
+    section: Objective
+    tag: ht-tq-fig-objective
+    index: tq-objective
+    title: Objective per read against zygosity
+    description: >-
+      Does the objective say anything beyond the zygosity? Each dot is a sample, on its own row, placed by its objective per read and coloured by its homozygous loci, with the loci counts printed beside it. OptiType takes beta (0.009 by default) of the reads off for each heterozygous locus, so each dot belongs on the guide for its number of heterozygous loci.
+
+      How to read: a dot on its guide is the normal case, and the objective then follows from the reads and the zygosity alone, which is why the reads are not plotted against it. A dot off its guide means the run used another beta. Click a dot to keep that sample; the reads behind its genotype are on [Reads](tab:Reads) and in the Reads explained card.
+
+      Lines and annotations: the dotted lines are at 1, 0.991, 0.982 and 0.973, the objective per read expected with 0, 1, 2 and 3 heterozygous loci, that is 1 minus 0.009 per heterozygous locus. The 0.009 is OptiType's default beta, a fixed reference in this chart and not read from the run.
+
+      Sources: https://github.com/FRED-2/OptiType (the --beta option); Szolek et al. 2014, doi:10.1093/bioinformatics/btu548.
+
+      Note: the objective reads the zygosity, not the fit, so no pass mark is drawn.
+    layout: {x: 0, y: 0, w: 8, h: 6}

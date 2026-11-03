@@ -564,7 +564,7 @@ def write_project(collections: list[dict]) -> None:
         "template": {
             "template_id": f"init/{DATASET_NAME}",
             "description": "Every catalog output, staged from the catalog's own fixtures",
-            "version": "1.0.0",
+            "version": "2.0.0",
             "variables": [
                 {
                     "name": "DATA_ROOT",

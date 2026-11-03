@@ -181,6 +181,12 @@ def test_peptides_report_best_prediction_and_unsupported(run_dir: Path) -> None:
     assert by_seq["SIINFEKLS"]["call"] == "Non-binder"
     assert by_seq["RLDSHLHTHVY"]["call"] == "Unsupported"
     assert by_seq["NLVPMVATV"]["call"] == "Non-binder"
+    # The class comes from the alleles that scored a peptide; an unscored peptide
+    # takes its sample's.
+    assert mutant["mhc_class"] == "Class I"
+    assert by_seq["AAAAAAAAAAAAAAAAAAAA"]["mhc_class"] == "Class I"
+    assert by_seq["RLDSHLHTHVY"]["mhc_class"] == "Class I"
+    assert out["mhc_class"].null_count() == 0
 
 
 def test_allele_summary_counts_peptides_once_over_tools(run_dir: Path) -> None:

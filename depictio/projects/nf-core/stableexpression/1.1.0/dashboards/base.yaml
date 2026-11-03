@@ -83,6 +83,11 @@ main_dashboard:
       Filtered out: '#adb5bd'
     platforms: auto
     step: auto
+    # The two platforms keep one colour on every tab: the dataset plots, the id
+    # mapping plots and the sample filters.
+    platform:
+      Microarray: '#1c7ed6'
+      RNA-seq: '#e8590c'
   # Persistent: drawn in every tab's filter panel, picks kept across tabs. All
   # three are bound to the samples hub, the source of every sample link.
   filter_sections:
@@ -185,6 +190,8 @@ main_dashboard:
       - ![](icon:mdi:chip) **Platforms** {{platforms}}, mostly {{top_platform}}
       - ![](icon:mdi:shape-outline) **Conditions** {{conditions}} across the datasets
       - ![](icon:mdi:file-table-outline) **Sample sheet** [one row per public sample](section:Sample sheet)
+      - ![](icon:mdi:palette-outline) **Color code** {{legend}}
+    legend: section
     tag: se-ov-study
     index: ov-study
     layout: {x: 0, y: 1, w: 5, h: 3}
@@ -644,55 +651,129 @@ tabs:
   - component_type: figure
     workflow_tag: stableexpression
     data_collection_tag: stableexpression_dataset_funnel
-    use: stableexpression/sample_funnel
-    visu_type: histogram
-    dict_kwargs:
-      x: step
-      y: samples
-      color: platform
-      histfunc: sum
-      category_orders: {step: [Downloaded, Gene IDs mapped, Zero filter, Missing-value filter]}
-      labels: {step: '', samples: Samples, platform: ''}
+    mode: code
+    code_content: |-
+      # Samples still in after each step of the pipeline, summed over the datasets and stacked by platform; the figure over a bar is its total and the drop since the step before.
+      colors = depictio_category_colors.get('platform') or {}
+      order = ['Downloaded', 'Gene IDs mapped', 'Zero filter', 'Missing-value filter']
+      d = df.group_by(['step', 'platform']).agg(pl.col('samples').sum().alias('samples'))
+      tot = d.group_by('step').agg(pl.col('samples').sum().alias('total'))
+      fig = px.bar(d.to_pandas(), x='step', y='samples', color='platform', color_discrete_map=colors, category_orders={'step': order}, labels={'step': '', 'samples': 'Samples', 'platform': ''})
+      totals = {r['step']: r['total'] for r in tot.to_dicts()}
+      prev = None
+      for s in order:
+          if s in totals:
+              drop = '' if prev is None or not prev else '<br>' + str(round(100 * (totals[s] - prev) / prev)) + '%'
+              fig.add_annotation(x=s, y=totals[s], text='<b>' + f'{totals[s]:,}' + '</b>' + drop, showarrow=False, yshift=22, font=dict(size=12))
+              prev = totals[s]
+      fig.update_yaxes(range=[0, max(totals.values()) * 1.2], tickformat=',')
+      fig.update_layout(margin=dict(t=20), legend=dict(orientation='h', y=-0.18, title_text=''), bargap=0.3)
     section: Samples through the filters
     tag: se-ds-fig-funnel
     index: ds-funnel
     title: Samples after each step
-    description: Samples still in after each step, summed over the datasets and stacked by platform.
+    description: >-
+      How many samples survive each step of the pipeline? Each bar is the samples still in after a step,
+      summed over the datasets and stacked by platform.
+
+      How to read: a healthy run loses few samples after the first bar. A large drop at gene ID mapping is
+      whole datasets whose ids g:Profiler could not map, which leave the run there; the zero and
+      missing-value filters then remove single samples, so their bars barely move. Open [ID
+      mapping](tab:ID mapping) to find the datasets behind a drop, and the dataset table of this tab for
+      their outcome.
+
+      Annotations: the figure over each bar is the total of that step in bold, with the change in percent
+      from the step before. Both are computed from the bars; no threshold is drawn.
     layout: {x: 0, y: 0, w: 4, h: 4}
   - component_type: figure
     workflow_tag: stableexpression
     data_collection_tag: stableexpression_dataset_summary
-    visu_type: histogram
-    dict_kwargs:
-      x: platform
-      color: outcome
-      barmode: stack
-      labels: {platform: '', outcome: '', count: Datasets}
+    mode: code
+    code_content: |-
+      # Datasets per platform, stacked by what became of them: merged into the matrix, or lost because no gene id mapped, only rare genes were left, or every sample was filtered out. The count sits on each segment and the share merged over each bar.
+      colors = depictio_category_colors.get('outcome') or {}
+      d = df.group_by(['platform', 'outcome']).agg(pl.len().alias('datasets'))
+      tot = df.group_by('platform').agg(pl.len().alias('n'), (pl.col('outcome') == 'Merged').sum().alias('merged'))
+      fig = px.bar(d.to_pandas(), x='platform', y='datasets', color='outcome', text='datasets', color_discrete_map=colors, category_orders={'outcome': ['Merged', 'No gene mapped', 'Only rare genes', 'All samples filtered out']}, labels={'platform': '', 'datasets': 'Datasets', 'outcome': ''})
+      fig.update_traces(textposition='inside', textfont=dict(size=13, color='white'))
+      for r in tot.to_dicts():
+          fig.add_annotation(x=r['platform'], y=r['n'], text='<b>' + str(round(100 * r['merged'] / r['n'])) + '%</b> merged of ' + str(r['n']), showarrow=False, yshift=16, font=dict(size=12))
+      fig.update_yaxes(range=[0, tot['n'].max() * 1.15])
+      fig.update_layout(margin=dict(t=20), legend=dict(orientation='h', y=-0.18, title_text=''), bargap=0.4)
     section: Samples through the filters
     tag: se-ds-fig-outcomes
     index: ds-outcome-bars
     title: Datasets by outcome
-    description: Datasets per platform, stacked by what became of them.
+    description: >-
+      What became of the datasets of each platform? Datasets per platform, stacked by outcome, with the
+      count on each segment.
+
+      How to read: a good platform is mostly **Merged**. The unmerged part is where to look first for a
+      missing study: no gene mapped is an array design g:Profiler does not know, only rare genes means the
+      genes were seen in too few datasets, and all samples filtered out means every sample failed the zero
+      or missing-value filter. Filter the outcome and read the dataset table of this tab to name them, or
+      open [ID mapping](tab:ID mapping) for the ids behind a mapping failure.
+
+      Annotations: the label over each bar is the share of that platform's datasets that were merged, with
+      their count. It is computed from the bars; no threshold is drawn.
     layout: {x: 4, y: 0, w: 4, h: 4}
   - component_type: figure
     workflow_tag: stableexpression
     data_collection_tag: stableexpression_dataset_summary
-    use: stableexpression/missing_by_design
-    visu_type: strip
-    dict_kwargs:
-      x: design
-      y: missing_share
-      color: platform
-      hover_data: [accession, samples_kept]
-      labels: {design: Array design, missing_share: Share of the genes not measured, platform: '', accession: Accession, samples_kept: Samples kept}
+    mode: code
+    code_content: |-
+      # Share of the merged matrix's genes each dataset did not measure, by the array design that measured it. An array only carries the probes of its chip, so every dataset of one design misses the same genes and the points stack at one height; RNA-seq measures nearly all of them. Marker area is the samples the dataset kept, the bar is the design's median.
+      colors = depictio_category_colors.get('platform') or {}
+      d = df.with_columns(pl.col('missing_share').alias('miss'))
+      stats = d.group_by('design').agg(pl.len().alias('n'), pl.col('platform').first().alias('platform'), pl.col('miss').median().alias('med'), pl.col('miss').is_null().sum().alias('none'), pl.col('samples_kept').sum().alias('kept'))
+      stats = stats.with_columns(pl.col('med').fill_null(-1).alias('key')).sort(['key', 'design'], descending=[True, False])
+      designs = stats['design'].to_list()
+      pos = {k: i for i, k in enumerate(designs)}
+      ticks = [str(r['design']) + '<br>' + str(r['n']) + (' dataset' if r['n'] == 1 else ' datasets') for r in stats.to_dicts()]
+      fig = go.Figure(layout=go.Layout(meta={'rows': d.height}))
+      for plat in d['platform'].unique().sort().to_list():
+          rows = d.filter((pl.col('platform') == plat) & pl.col('miss').is_not_null()).to_dicts()
+          seen = {}
+          xs, ys, sz, txt = [], [], [], []
+          for r in rows:
+              k = r['design']
+              j = seen.get(k, 0)
+              seen[k] = j + 1
+              xs.append(pos[k] + ((j % 9) - 4) * 0.075)
+              ys.append(r['miss'])
+              sz.append(max(10, min(30, 5 + 1.6 * (r['samples_kept'] or 0) ** 0.5)))
+              txt.append(r['accession'] + ': ' + str(r['samples_kept']) + ' samples kept')
+          if xs:
+              fig.add_trace(go.Scatter(x=xs, y=ys, mode='markers', name=plat, text=txt, hovertemplate='%{text}<br>%{y:.1%} of the genes not measured<extra></extra>', marker=dict(size=sz, color=colors.get(plat, '#1c7ed6'), opacity=0.8, line=dict(width=1, color='white'))))
+      for r in stats.filter(pl.col('med').is_not_null()).to_dicts():
+          x = pos[r['design']]
+          fig.add_shape(type='line', x0=x - 0.4, x1=x + 0.4, y0=r['med'], y1=r['med'], line=dict(width=2.5, color='#343a40'))
+          fig.add_annotation(x=x, y=r['med'], text=str(round(100 * r['med'])) + '%', showarrow=False, yshift=22 if r['platform'] == 'RNA-seq' else 24, font=dict(size=12))
+      for r in stats.filter(pl.col('none') > 0).to_dicts():
+          x = pos[r['design']]
+          fig.add_annotation(x=x, y=0.42, text='no gene mapped' if r['none'] == r['n'] else str(r['none']) + ' of ' + str(r['n']) + ' mapped no gene', showarrow=False, textangle=-90, font=dict(size=12, color='#868e96'))
+      fig.update_xaxes(tickmode='array', tickvals=list(range(len(designs))), ticktext=ticks, range=[-0.6, len(designs) - 0.4], title_text='Array design (or RNA-seq)', tickangle=0, tickfont=dict(size=11))
+      fig.update_yaxes(range=[0, 0.95], tickformat='.0%', title_text='Share of the genes not measured')
+      fig.update_layout(margin=dict(t=20, r=20), legend=dict(orientation='h', y=-0.3, title_text=''))
     section: Dataset profile
     tag: se-ds-fig-missing
     index: ds-plane
     title: Genes missing, by array design
     description: >-
-      One point per dataset. An array measures a fixed set of probes, so the datasets of one
-      design line up at one share; RNA-seq measures almost every gene.
-    layout: {x: 0, y: 0, w: 8, h: 4}
+      Why does a dataset miss so many genes? One point per dataset (area is the samples it kept), grouped
+      by the array design that measured it, with the share of the merged matrix's genes the dataset did
+      not measure on the y axis.
+
+      How to read: an array only carries the probes of its chip, so every dataset of one design misses the
+      same genes and its points stack at one height, while RNA-seq measures nearly every gene. A high
+      share is therefore a property of the design, not a defect of the dataset. A point off its design bar
+      is a dataset whose mapping or filters differ from its siblings, the one to open in the dataset table
+      of this tab.
+
+      Lines and annotations: the black bar of each design is the median share of its datasets, printed
+      over it; it is computed from the data and is not a published cut-off. A grey vertical label names a
+      design whose datasets, all or some, mapped no gene and so have no share to draw.
+    layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: table
     workflow_tag: stableexpression
     data_collection_tag: stableexpression_dataset_summary
@@ -726,7 +807,13 @@ tabs:
     tag: se-ds-av-record
     index: ds-record
     title: Dataset record
-    description: The selected dataset, with its samples through the filters and its gene ids.
+    description: >-
+      The selected dataset, with its samples through the filters and its gene ids.
+
+      How to read: select a row of the dataset table to fill the card. Samples shows how many were
+      downloaded and how many were kept, so a large gap means the zero or missing-value filter removed
+      them. Gene ids shows what became of the ids and the failure reason when none mapped, and the
+      accession links to Expression Atlas.
     layout: {x: 5, y: 0, w: 3, h: 6}
 - title: ID mapping
   subtitle: How many gene ids of each dataset map to an Ensembl gene?
@@ -769,6 +856,15 @@ tabs:
       to Ensembl genes; ids of the same gene collapse into one, and genes seen in too few
       datasets are dropped as rare. A dataset whose ids map to nothing (an array design
       g:Profiler does not know) leaves the run here.
+
+
+      **How to read this tab.** Every id of a dataset ends in one of four fates: kept as a gene of
+      the merged matrix, collapsed into another id of the same gene, dropped as a rare gene, or left
+      unmapped. The first plot compares the two platforms (what they keep, and what they lose and
+      why); the second picks out the datasets that map badly, one point each; the third shows every
+      dataset's split so a single bad one can be found and filtered. A healthy run keeps nearly all
+      the ids of every dataset that mapped; look at the unmapped slice first, because it is the one
+      you can act on (a different annotation or a custom mapping file).
     tag: se-id-intro
     index: id-intro
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -882,46 +978,90 @@ tabs:
     title: Rare genes
     description: Ids of genes seen in too few datasets, which the pipeline drops before merging.
     layout: {x: 6, y: 0, w: 2, h: 2}
-  - component_type: advanced_viz
+  - component_type: figure
     workflow_tag: stableexpression
     data_collection_tag: stableexpression_id_mapping
-    viz_kind: stacked_taxonomy
-    config:
-      viz_kind: stacked_taxonomy
-      sample_id_col: platform
-      taxon_col: fate
-      rank_col: null
-      abundance_col: gene_ids
-      normalise_to_one: true
-      sample_sort: category
-      sort_category: Kept
-      y_zoom: auto
-      top_n: 4
-      value_title: Share of the ids
-      hidden_controls: [rank, top_n, group]
+    mode: code
+    code_content: |-
+      # Two readings of the same gene ids, pooled by platform. Left, the share kept as genes of the merged matrix: both platforms keep most of what they came with. Right, the ids that are lost and why, on their own axis: unmapped ids (probes or ids g:Profiler does not know), rare genes (seen in too few datasets) and ids collapsed into another one of the same gene.
+      colors = depictio_category_colors.get('fate') or {}
+      d = df.group_by(['platform', 'fate']).agg(pl.col('gene_ids').sum().alias('ids'))
+      d = d.with_columns((100 * pl.col('ids') / pl.col('ids').sum().over('platform')).alias('pct'))
+      plats = sorted(d['platform'].unique().to_list())
+      kept = d.filter(pl.col('fate') == 'Kept')
+      fig = go.Figure(go.Bar(y=kept['platform'].to_list(), x=kept['pct'].to_list(), orientation='h', name='Kept', marker_color=colors.get('Kept', '#2f9e44'), text=[f'{v:.1f}' + '%' for v in kept['pct'].to_list()], textposition='inside', textfont=dict(size=13, color='white'), customdata=kept['ids'].to_list(), hovertemplate='%{y}: %{x:.1f}% of the ids kept (%{customdata:,})<extra></extra>', xaxis='x', yaxis='y'))
+      for fate in ['Unmapped', 'Rare gene', 'Collapsed']:
+          sub = d.filter(pl.col('fate') == fate)
+          fig.add_trace(go.Bar(y=sub['platform'].to_list(), x=sub['pct'].to_list(), orientation='h', name=fate, marker_color=colors.get(fate, '#adb5bd'), text=[f'{v:.1f}' + '%' if v >= 0.9 else '' for v in sub['pct'].to_list()], textposition='inside', textfont=dict(size=12), customdata=sub['ids'].to_list(), hovertemplate='%{y}: %{x:.2f}% of the ids, ' + fate.lower() + ' (%{customdata:,})<extra></extra>', xaxis='x2', yaxis='y2'))
+      lost_max = max(d.filter(pl.col('fate') != 'Kept').group_by('platform').agg(pl.col('pct').sum().alias('s'))['s'].max() or 1, 1)
+      fig.update_layout(barmode='stack', xaxis=dict(domain=[0, 0.46], range=[0, 100], ticksuffix='%', title=dict(text='Share of the ids kept')), yaxis=dict(anchor='x', categoryorder='array', categoryarray=plats, autorange='reversed'), xaxis2=dict(domain=[0.56, 1], range=[0, lost_max * 1.1], ticksuffix='%', title=dict(text='Share of the ids lost, by cause'), anchor='y2'), yaxis2=dict(anchor='x2', categoryorder='array', categoryarray=plats, autorange='reversed', showticklabels=False), margin=dict(t=20), legend=dict(orientation='h', y=-0.25, title_text=''))
     section: Fate of the gene ids
     tag: se-id-fig-platform
     index: id-platform-bars
     title: Fate of the ids by platform
-    description: Every dataset of a platform pooled, its ids split by fate. Kept fills most of each bar, so the axis starts near the smallest kept share (the // marks the cut); switch Zoom off for the whole bar.
-    layout: {x: 0, y: 0, w: 4, h: 4}
+    description: >-
+      Does a platform lose more ids, and why? Each bar is the ids of every dataset of a platform, pooled,
+      as a share of the ids that platform came with.
+
+      How to read: left, the share kept as genes of the merged matrix, where a good platform keeps most of
+      its ids. Right, the ids lost, split by cause on their own axis so the thin slices read. A platform
+      dominated by unmapped ids has an annotation problem, one dominated by rare genes has an overlap
+      problem.
+
+      Annotations: the percentage on a bar is its share of the platform's ids, left off thin slices.
+      Unmapped ids are probes or ids g:Profiler does not know, rare genes were seen in too few datasets,
+      and collapsed ids merge into another id of the same gene. No threshold is drawn.
+    layout: {x: 0, y: 0, w: 8, h: 3}
   - component_type: figure
     workflow_tag: stableexpression
     data_collection_tag: stableexpression_id_mapping
-    visu_type: histogram
-    dict_kwargs:
-      x: share
-      color: fate
-      nbins: 20
-      barmode: overlay
-      category_orders: {fate: [Kept, Collapsed, Rare gene, Unmapped]}
-      labels: {share: Share of the dataset's ids, fate: ''}
+    mode: code
+    code_content: |-
+      # One point per dataset: how many gene ids it came with, against the share of them kept as genes. A clean mapping sits at the top; a dataset on the floor mapped no gene at all, which is an array design g:Profiler does not know. The dashed line is the median over the datasets that mapped.
+      colors = depictio_category_colors.get('platform') or {}
+      tot = df.group_by(['dataset', 'accession', 'platform']).agg(pl.col('gene_ids').sum().alias('total'), pl.col('outcome').first().alias('outcome'))
+      kept = df.filter(pl.col('fate') == 'Kept').select('dataset', pl.col('gene_ids').alias('kept'))
+      d = tot.join(kept, on='dataset', how='left').with_columns((100 * pl.col('kept') / pl.col('total')).alias('pct')).filter(pl.col('total') > 0)
+      d = d.with_columns(pl.col('pct').fill_null(0))
+      fig = px.scatter(d.to_pandas(), x='total', y='pct', color='platform', color_discrete_map=colors, hover_name='accession', hover_data={'total': ':,', 'pct': ':.1f', 'platform': False}, log_x=True, labels={'total': 'Gene ids the dataset came with (log scale)', 'pct': 'Share kept (%)', 'platform': ''})
+      fig.update_traces(marker=dict(size=13, opacity=0.75, line=dict(width=1, color='white')))
+      ok = d.filter(pl.col('pct') > 0)
+      med = ok['pct'].median() or 0
+      med_all = d['pct'].median() or 0
+      fig.add_hline(y=med, line_dash='dash', line_width=1, opacity=0.6)
+      fig.add_annotation(xref='paper', yref='y', x=0.01, y=med, text='median of the ' + str(ok.height) + ' that mapped: ' + f'{med:.1f}' + '%', showarrow=False, xanchor='left', yanchor='bottom', font=dict(size=11))
+      if d.height > ok.height:
+          fig.add_hline(y=med_all, line_dash='dot', line_width=1, opacity=0.6)
+          fig.add_annotation(xref='paper', yref='y', x=0.01, y=med_all, text='median of all ' + str(d.height) + ': ' + f'{med_all:.1f}' + '%', showarrow=False, xanchor='left', yanchor='top', font=dict(size=11))
+      nz = d.filter(pl.col('pct') == 0).height
+      if nz:
+          fig.add_annotation(xref='paper', yref='y', x=0.5, y=0, text=str(nz) + ' datasets mapped no gene id', showarrow=False, yshift=14, font=dict(size=12, color='#868e96'))
+      low = ok.filter(pl.col('pct') < 70).sort('pct').head(5)
+      for r in low.to_dicts():
+          fig.add_annotation(x=float(np.log10(r['total'])), y=r['pct'], text=r['accession'], xref='x', yref='y', showarrow=False, xanchor='left', xshift=10, font=dict(size=10))
+      fig.update_yaxes(range=[-6, 104], ticksuffix='%')
+      fig.update_xaxes(tickvals=[100, 1000, 10000, 100000, 1000000], ticktext=['100', '1k', '10k', '100k', '1M'], minor=dict(ticks=''))
+      fig.update_layout(margin=dict(t=20), legend=dict(orientation='h', y=-0.2, title_text=''))
     section: Fate of the gene ids
     tag: se-id-fig-share
     index: id-share-histogram
-    title: Shares per dataset, by fate
-    description: Datasets by the share of their ids in each fate; kept near 1 is a clean mapping.
-    layout: {x: 4, y: 0, w: 4, h: 4}
+    title: Which datasets map badly?
+    description: >-
+      Which datasets lose most of their ids? One point per dataset, the gene ids it came with (log scale)
+      against the share kept as genes, coloured by platform.
+
+      How to read: a clean mapping sits near the top. A point on the floor mapped no gene at all, which is
+      an array design g:Profiler does not know and the reason a dataset leaves the run. The named points
+      between the two are the ones to check against their identifiers, with the fate filter and the
+      per-dataset bars of this tab.
+
+      Lines and annotations: the dashed line is the median share kept over the datasets that mapped at
+      least one id, and the dotted line, drawn only when some datasets mapped nothing, is the median over
+      all datasets; both are computed from the data and are not a pipeline or published cut-off. The grey
+      text on the floor counts the datasets that mapped no gene id. The named points are at most the five
+      lowest datasets that kept under 70 %, a labelling limit chosen by this template that has no
+      published or pipeline source, so it marks nothing as failed.
+    layout: {x: 0, y: 3, w: 8, h: 5}
   - component_type: advanced_viz
     workflow_tag: stableexpression
     data_collection_tag: stableexpression_id_mapping
@@ -944,7 +1084,16 @@ tabs:
     tag: se-id-fig-datasets
     index: id-dataset-bars
     title: Fate of the ids, dataset by dataset
-    description: One bar per dataset, its ids split by fate, grouped by platform and sorted by the share kept. Sort by name, total or another fate, or regroup, from the controls; Normalise off shows the id counts.
+    description: >-
+      One bar per dataset, its ids split by fate, grouped by platform and sorted by the share kept.
+
+      How to read: a good dataset is almost all **Kept**, and a dataset that mapped nothing is all
+      Unmapped. A large Unmapped or Rare gene slice marks the dataset to look at, and bars compare best
+      within a platform. Sort by name, total or another fate, regroup, or turn Normalise off to see the id
+      counts, from the controls; open [Datasets](tab:Datasets) for the outcome of a bad one.
+
+      Note: Kept fills most of every bar, so the axis starts near the smallest kept share and its title
+      says where; Zoom off draws the whole bar.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: stableexpression
@@ -1158,9 +1307,28 @@ tabs:
     index: rank-distribution
     title: The best genes of each section
     description: >-
-      Ten genes, the best of each section, then the second best as Top N grows; colour is the
-      section. Boxes over every sample, from statistics the recipe computed (the matrix is too large
-      to ship); the violins are below, drawn from each sample's value.
+      Which genes are the most stable in each expression section? Each row is a gene, the best of each
+      section first: a box of its normalised expression over the samples that measured it, and a lollipop
+      of the score that ranked it, coloured by section.
+
+      How to read: a good gene has a low score (lower is steadier) and a narrow box, so its expression
+      barely moves across the samples. A long box, or a score far above its section peers, is a gene that
+      varies whatever its rank. Ten genes show by default, the best of each section; raise Top N for the
+      next ones of each, filter a section to rank only it, and click a gene (its box or its lollipop) to
+      select it across the dashboard.
+
+      Lines and annotations: each box spans the first to the third quartile of the normalised expression
+      (0 to 1), with the median as a line and the mean as a dashed line. The whiskers end at the furthest
+      value within 1.5 IQR of the quartile (Tukey's convention). The lollipop is the gene's stability
+      score, from zero.
+
+      Source: the stability score and the section ranks are the pipeline's,
+      https://nf-co.re/stableexpression. Boxes are computed from the merged matrix before imputation, so a
+      box shows what was measured.
+
+      Note: a narrow box on a gene measured by few samples rests on little data; filter the share of
+      samples measured to leave those out. The violins of the same leaders are on the tile below, drawn
+      from each sample's value.
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: advanced_viz
     workflow_tag: stableexpression
@@ -1188,7 +1356,22 @@ tabs:
     tag: se-rank-av-values
     index: rank-values
     title: The section leaders, sample by sample
-    description: The same leaders from each sample's own value; pick a platform or a dataset on the left to redraw them.
+    description: >-
+      Do the section leaders hold on the samples in view? The same leaders as the boxes above, each drawn
+      as a violin of the normalised expression of every sample that measured it, with the stability score
+      beside it as a lollipop.
+
+      How to read: a good leader keeps a narrow violin on every platform and dataset you pick. One that
+      widens or shifts when you pick a platform is steady only on average. Pick a platform or a dataset in
+      the sample filters on the left to redraw the violins from those samples only; the score does not
+      move, because it is a statistic of the whole cohort.
+
+      Lines and annotations: each violin is cut at the extremes of its values, with a box and a mean line
+      inside, and all violins share the same maximum width, so the width compares shapes and not sample
+      counts. The lollipop is the gene's stability score, from zero. Click a gene to select it.
+
+      Note: only the best few genes of each section are kept sample by sample (two by default, a template
+      variable), so raising Top N past them adds no violin.
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: table
     workflow_tag: stableexpression
@@ -1384,7 +1567,23 @@ tabs:
     tag: se-cand-fig-parts
     index: cand-parts
     title: The score of each section, part by part
-    description: What each measure adds to the score of a section's candidates, as a share of it; sort by a part to see where it weighs most. Normalise off stacks the summed parts, so the bar's height is the section's total score.
+    description: >-
+      What does each measure add to the score of a section's candidates? Each bar is a section, split into
+      the weighted parts of the stability score, as a share of it.
+
+      How to read: a score made mostly of Normfinder, geNorm M and the coefficient of variation says the
+      candidates of that section are steady on the data. The grey part is the penalty for genes missing
+      from datasets, so a tall grey bar means the score of that section is mostly a coverage story, not a
+      stability one. Sort by a part to see where it weighs most, and open [Ranking](tab:Ranking) for the
+      genes behind a section.
+
+      Annotations: each measure is rescaled to 0 to 1 over the candidates and multiplied by its weight,
+      the pipeline's --stability_score_weights, and the parts add up to the score. Normalise off stacks
+      the parts summed over the section's candidates, so the height is the sum of their scores and
+      compares sections only as far as they hold the same number of candidates. No threshold is drawn.
+
+      Sources: Normfinder, https://doi.org/10.1158/0008-5472.CAN-04-0496; geNorm,
+      https://doi.org/10.1186/gb-2002-3-7-research0034.
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: advanced_viz
     workflow_tag: stableexpression
@@ -1404,6 +1603,9 @@ tabs:
       log_y: true
       reference_line: diagonal
       top_n_labels: 10
+      marker_size: 10
+      opacity: 0.8
+      marker_outline: true
       legend_pos: bottom
       selection_enabled: true
       selection_column: gene_id
@@ -1412,10 +1614,21 @@ tabs:
     index: cand-measures
     title: Do Normfinder and geNorm agree?
     description: >-
-      Each candidate's rank by Normfinder against its rank by geNorm M, within its section (log
-      axes, so the best ranks spread out). Near the dashed diagonal both measures agree; bottom
-      left is steady by both, the candidate to trust. A gene far off the diagonal is good by one
-      measure only. Labels name each section's leader.
+      Do Normfinder and geNorm agree? Each candidate's rank by Normfinder against its rank by geNorm M,
+      within its section, on log axes so the best ranks spread out.
+
+      How to read: near the diagonal both measures agree, and bottom left is steady by both, the candidate
+      to trust. A gene far off the diagonal is good by one measure only, so check it in the candidate
+      table of this tab before using it as a reference. Click a point to select its gene.
+
+      Lines and annotations: the dashed diagonal is x = y, where both ranks are equal; it is an identity
+      line, not a cut-off. The labels name the ten candidates with the best rank within their section, the
+      leader of each section on a default run of ten sections.
+
+      Sources: Normfinder, https://doi.org/10.1158/0008-5472.CAN-04-0496; geNorm,
+      https://doi.org/10.1186/gb-2002-3-7-research0034.
+
+      Note: with --skip_genorm geNorm M is empty for every candidate and this chart has no points.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: stableexpression
@@ -1451,7 +1664,13 @@ tabs:
     tag: se-cand-av-record
     index: cand-record
     title: Candidate record
-    description: The selected candidate, with its ranks, the parts of its score and its expression.
+    description: >-
+      The selected candidate, with its ranks, the parts of its score and its expression.
+
+      How to read: select a row of the candidate table to fill the card. Rank gives the stability score
+      and the ranks within the section and overall, where lower is steadier; Score parts shows which
+      measure weighs most, and a large missing-value part means the gene was missing from many samples.
+      Measures and Expression give the raw values, and the gene id links to Ensembl.
     layout: {x: 5, y: 0, w: 3, h: 6}
 - title: Sections
   subtitle: How does stability change with expression level?
@@ -1622,36 +1841,82 @@ tabs:
   - component_type: figure
     workflow_tag: stableexpression
     data_collection_tag: stableexpression_gene_stability
-    use: stableexpression/score_by_section
-    visu_type: box
-    dict_kwargs:
-      x: section
-      y: stability_score
-      color: section
-      labels: {section: '', stability_score: Stability score}
+    mode: code
+    code_content: |-
+      # Stability score of every candidate, one box per section (lower is more stable). Each point is a candidate, the best of each section is named, the dashed line is the median over all of them.
+      colors = depictio_category_colors.get('section') or {}
+      fig = go.Figure(layout=go.Layout(meta={'rows': df.height}))
+      secs = sorted(df['section'].unique().to_list())
+      for s in secs:
+          sub = df.filter(pl.col('section') == s)
+          fig.add_trace(go.Box(x=[s] * sub.height, y=sub['stability_score'].to_list(), name=s, marker=dict(color=colors.get(s, '#7048e8'), size=4, opacity=0.55), line=dict(width=1.5), fillcolor='rgba(255,255,255,0)', boxpoints='all', jitter=0.6, pointpos=0, width=0.7, boxmean=False, text=sub['gene_name'].to_list(), hovertemplate='%{text}: %{y:.3f}<extra>' + s + '</extra>', showlegend=False))
+          best = sub.sort('stability_score').head(1).to_dicts()[0]
+          fig.add_annotation(x=s, y=best['stability_score'], text=str(best['gene_name']), showarrow=False, yshift=-12, font=dict(size=10))
+      med = df['stability_score'].median()
+      fig.add_hline(y=med, line_dash='dash', line_width=1, opacity=0.5)
+      fig.add_annotation(xref='paper', yref='y', x=1, y=med, text='median ' + f'{med:.2f}', showarrow=False, xanchor='right', yanchor='bottom', font=dict(size=11))
+      fig.update_xaxes(title_text='Section (01 is the most expressed)', tickangle=0, tickmode='array', tickvals=secs, ticktext=[x.replace('Section ', '') for x in secs])
+      fig.update_yaxes(title_text='Stability score (lower is more stable)')
+      fig.update_layout(margin=dict(t=20), boxgap=0.15)
     section: Stability by section
     tag: se-sec-fig-score
     index: sec-score-box
     title: Candidate scores by section
-    description: The stability scores of each section's candidates, most expressed section first.
-    layout: {x: 0, y: 0, w: 4, h: 4, fit: auto}
+    description: >-
+      Are stable genes easier to find at some expression levels? Each box is one section of the genes
+      ranked by expression, 01 the most expressed, and each point a candidate of it; the score is lower
+      for a more stable gene.
+
+      How to read: a section whose box sits low holds genes that are steadier across the datasets, and a
+      long box means the candidates of that section differ a lot. A box wholly above the dashed line is a
+      section where even the candidates are unsteady relative to the others. Open
+      [Candidates](tab:Candidates) to see which measures drive a section's score.
+
+      Lines and annotations: the dashed line is the median stability score over all candidates in view, a
+      reference computed from the data and not a published cut-off. The name under each box is the
+      candidate with the lowest score of its section. Boxes show the quartiles of Plotly's default, with
+      whiskers to the furthest point within 1.5 IQR.
+
+      Note: the score ranks candidates against each other, and this chart draws no absolute pass mark.
+    layout: {x: 0, y: 0, w: 8, h: 5, fit: auto}
   - component_type: figure
     workflow_tag: stableexpression
     data_collection_tag: stableexpression_gene_statistics
-    use: stableexpression/cv_by_section
-    visu_type: box
-    dict_kwargs:
-      x: section
-      y: cv
-      color: candidate
-      log_y: true
-      labels: {section: '', cv: Coefficient of variation (log scale), candidate: ''}
+    mode: code
+    code_content: |-
+      # Spread (coefficient of variation) of every gene in each section, candidates beside the other genes, on a log axis. The candidates are the genes the ranking kept as the most stable, so they sit at the lower edge of each section's band; the figure over a pair is the median candidate's spread as a share of the others'.
+      colors = depictio_category_colors.get('candidate') or {}
+      d = df.filter(pl.col('cv') > 0)
+      secs = sorted(d['section'].unique().to_list())
+      fig = go.Figure(layout=go.Layout(meta={'rows': d.height}))
+      for cand in ['Not a candidate', 'Candidate']:
+          sub = d.filter(pl.col('candidate') == cand)
+          fig.add_trace(go.Box(x=sub['section'].to_list(), y=sub['cv'].to_list(), name=cand, marker_color=colors.get(cand, '#adb5bd'), boxpoints=False, line=dict(width=1.5)))
+      rel = d.group_by(['section', 'candidate']).agg(pl.col('cv').median().alias('m')).pivot(on='candidate', index='section', values='m')
+      top = d['cv'].max()
+      for r in rel.to_dicts():
+          if r.get('Candidate') and r.get('Not a candidate'):
+              fig.add_annotation(x=r['section'], y=0, yref='paper', text=f'{100 * r['Candidate'] / r['Not a candidate']:.0f}' + '%', showarrow=False, yanchor='bottom', font=dict(size=10))
+      fig.update_xaxes(title_text='Section (01 is the most expressed)', tickangle=0, categoryorder='array', categoryarray=secs, tickmode='array', tickvals=secs, ticktext=[x.replace('Section ', '') for x in secs])
+      fig.update_yaxes(type='log', title_text='Coefficient of variation (log scale)')
+      fig.update_layout(boxmode='group', margin=dict(t=20), legend=dict(orientation='h', y=-0.2, title_text=''))
     section: Stability by section
     tag: se-sec-fig-cv
     index: sec-cv-box
     title: Spread of every gene by section
-    description: Coefficient of variation of each section's genes, candidates beside the rest.
-    layout: {x: 4, y: 0, w: 4, h: 4, fit: auto}
+    description: >-
+      How much more stable are the candidates than the rest of their section? The coefficient of variation
+      of every gene of each section on a log axis, candidates beside the other genes.
+
+      How to read: spread grows with the expression section number, since low expressed genes vary more.
+      Inside a section the candidates should sit at the lower edge of the band, and the smaller the
+      percentage under a pair the more the candidates stand out. A pair whose boxes overlap is a section where the candidates stand out little.
+
+      Annotations: the percentage under each pair is the median spread of the candidates as a share of the
+      median spread of the other genes of that section, computed from the data. No threshold is drawn.
+
+      Note: genes with a coefficient of variation of zero cannot sit on a log axis and are left out.
+    layout: {x: 0, y: 5, w: 8, h: 5, fit: auto}
   - component_type: advanced_viz
     workflow_tag: stableexpression
     data_collection_tag: stableexpression_gene_statistics
@@ -1673,7 +1938,16 @@ tabs:
     tag: se-sec-av-plane
     index: sec-plane
     title: Mean expression against spread
-    description: One point per gene; the candidates sit on the lower edge of each section's band.
+    description: >-
+      One point per gene, its mean normalised expression (0 to 1) against its coefficient of variation on
+      a log axis, coloured by candidacy.
+
+      How to read: the candidates sit on the lower edge of each section's band, low spread for their
+      expression. A candidate far above that edge varies more than its section peers. Click a
+      gene to select it for the tiles that read the gene id.
+
+      Annotations: the coefficient of variation is the standard deviation over the mean of the gene's
+      normalised expression. No line or cut-off is drawn.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: stableexpression

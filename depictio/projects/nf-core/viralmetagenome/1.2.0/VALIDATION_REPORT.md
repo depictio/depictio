@@ -89,7 +89,7 @@ every consensus is `Not-determined` and completeness is null.
 - Every column a tile names exists in the table of its data collection, checked against the
   recipe outputs above, with the metadata table (`specimen`) and without it (`__no_group__`).
 - Row budget (open sections, stored `h`): Overview 21 of 24; MultiQC 17, Samples 13, Contigs 13,
-  Consensus 16, Mapping 15, Variants 15 of 20. Text tiles checked against `text_layout`.
+  Consensus 17, Mapping 16, Variants 15 of 20. Text tiles checked against `text_layout`.
 - Pruning simulated route by route with the import's rules (a tile on an absent optional
   collection goes, a values line citing one goes, a tab left without a filter or a non-metadata
   tile goes, a highlight whose source went goes):
@@ -138,7 +138,7 @@ Each item of section 15 needs a running stack with the template ingested from th
 - pending live check: the Overview fits in about two screens, values fill in, highlights draw,
   `tab:` links open;
 - pending live check: controls dock right on full-width viz and on top of the w4 and w5 ones
-  (depth against breadth, cumulative coverage, identity against ambiguity);
+  (depth against breadth and cumulative coverage at w4, identity against ambiguity at w5);
 - pending live check: no tile shows an empty band or a cut body; no tick label is cut, no legend
   scrolls or overlaps (the depth profile and the cumulative curves carry ten series);
 - pending live check: no map in this template (nothing to draw);
@@ -153,7 +153,8 @@ Each item of section 15 needs a running stack with the template ingested from th
   `{VAR}` (simulated offline above);
 - pending live check: a sample picked in the left panel moves every card of a child tab
   (through the `samples` links, MultiQC through `sample_mapping` on prefixed report rows); the
-  Variants genome view opens on data (`default_region: first`).
+  Variants genome view opens on every reference at once (no `default_region`: the first
+  reference by name carries few calls, and no existing value names the busiest one).
 
 Other open points:
 
@@ -169,3 +170,11 @@ Other open points:
   one header row. Not yet seen narrowing a panel on a stack.
 - The reprocessed MultiQC report lacks the pipeline's custom-content sections; the MultiQC tab
   pins tool modules only.
+
+## Plot quality round (offline)
+
+The scatters carry fixed markers of 14 (10 on the call cloud, 10 to 30 sized on the contigs),
+quadrant or reference lines for the verdict and named outliers; the refinement and the depth along
+the genome are code figures with a 5 % N and a 10X line. Both code figures were executed in the
+code-mode sandbox against the megatest tables with the pinned genome colours and render. Not seen
+in the viewer: label and quadrant text placement, the legend of the cumulative curves at w4.

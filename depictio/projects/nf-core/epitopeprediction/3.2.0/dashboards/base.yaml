@@ -178,6 +178,8 @@ main_dashboard:
       - ![](icon:mdi:dna) **Alleles** {{alleles}} distinct alleles scored
       - ![](icon:mdi:flask-empty-outline) **Matched tumour** {{n_tumour}} variant samples name their tumour sample
       - ![](icon:mdi:file-table-outline) **Samplesheet** [one row per sample](section:Sample sheet), its path in [the run parameters](params:input)
+      - ![](icon:mdi:palette-outline) **Color code** {{legend}}
+    legend: call
     tag: ep-ov-study
     index: ov-study
     layout: {x: 0, y: 1, w: 5, h: 4}
@@ -371,37 +373,37 @@ main_dashboard:
     section: Findings
     source_tab: Predictions
     source_component: pred-allele-dots
-    caption: One dot per allele and sample; size is the share of the peptides that bind, colour their median affinity.
+    caption: One cell per allele and sample; the darker, the larger the share of that sample's peptides the allele binds.
     tag: ep-ov-hl-alleles
     index: ov-hl-alleles
-    layout: {x: 0, y: 2, w: 4, h: 4}
+    layout: {x: 0, y: 2, w: 8, h: 6}
   - component_type: highlight
     section: Findings
     source_tab: Peptides
-    source_component: pep-length-histogram
-    caption: Peptides by length, stacked by call; the binders are the green part of each bar.
+    source_component: pep-length-bars
+    caption: Peptides by length, one panel per MHC class, stacked by call; the figure over a bar is the share that binds.
     hide_legend: true
     tag: ep-ov-hl-length
     index: ov-hl-length
-    layout: {x: 4, y: 2, w: 4, h: 4}
+    layout: {x: 0, y: 8, w: 4, h: 4}
   - component_type: highlight
     section: Findings
     source_tab: Predictors
     source_component: prd-affinity-rank
-    caption: One point per prediction, IC50 against percentile rank; colour is the tool.
+    caption: One point per prediction, IC50 against percentile rank; colour is the tool, the dashed lines the binder cut-offs.
     hide_legend: true
     tag: ep-ov-hl-affinity
     index: ov-hl-affinity
-    layout: {x: 0, y: 6, w: 4, h: 4}
+    layout: {x: 4, y: 8, w: 4, h: 4}
   - component_type: highlight
     section: Findings
     source_tab: Predictors
     source_component: prd-agreement
-    caption: One point per peptide and allele two tools scored, one IC50 against the other; colour is who calls a binder.
+    caption: One point per peptide and allele two tools scored, one IC50 against the other; the dashed lines split who calls a binder.
     hide_legend: true
     tag: ep-ov-hl-agreement
     index: ov-hl-agreement
-    layout: {x: 4, y: 6, w: 4, h: 4}
+    layout: {x: 0, y: 12, w: 8, h: 5}
   # Link-only tab tiles: each tile prints its tab's subtitle, the question the
   # tab answers.
   - component_type: text
@@ -651,8 +653,8 @@ tabs:
       Each tool scores every peptide against every allele of its sample: an IC50 in nM, lower
       is stronger, and a percentile rank. A peptide is a binder when a tool's own threshold
       calls it one ([binder definition](https://nf-co.re/epitopeprediction/3.2.0/docs/output)).
-      Pick an allele or a locus on the left; the dot plot opens on thirty alleles, those whose
-      affinity differs most between samples, and draws every allele on demand.
+      Pick an allele or a locus on the left; the heat map opens on thirty alleles, those scored in
+      most samples, and draws every allele on demand.
     tag: ep-pred-intro
     index: pred-intro
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -800,52 +802,175 @@ tabs:
     title: Median IC50
     description: Median predicted IC50 of the predictions; below 500 nM a peptide is usually read as a binder.
     layout: {x: 6, y: 0, w: 2, h: 2}
-  - component_type: advanced_viz
+  # Code mode: a heat map, not a dot grid. Colour AND the printed figure are the binder share,
+  # so a cell reads at a glance; a blank cell is an allele the sample was not scored on.
+  - component_type: figure
     workflow_tag: epitopeprediction
     data_collection_tag: epitopeprediction_allele_summary
-    use: epitopeprediction/allele_dot_plot
-    config:
-      max_genes: 30
-      gene_sort: frac
-      cluster_sort: name
-      colour_scale: Viridis
+    mode: code
+    code_content: |-
+      # Binder share per allele (rows) and sample (columns). A blank cell is an allele the sample was not scored on.
+      cap = 30
+      d = df.select(['sample', 'allele', 'peptides', 'binders', 'binder_rate'])
+      n_alleles = d['allele'].n_unique()
+      rank = d.group_by('allele').agg(pl.col('sample').n_unique().alias('n_samples'), pl.col('binder_rate').max().alias('top'))
+      # Every sample gets its three most-scored alleles first, so no column is blank; the rest of the rows go to the alleles scored in most samples.
+      own = d.sort(['peptides', 'allele'], descending=[True, False]).group_by('sample', maintain_order=True).head(3)['allele'].unique(maintain_order=True).to_list()
+      rest = [a for a in rank.sort(['n_samples', 'top', 'allele'], descending=[True, True, False])['allele'].to_list() if a not in own]
+      keep = (own + rest)[:cap]
+      d = d.filter(pl.col('allele').is_in(keep))
+      alleles = sorted(keep)
+      mean_rate = d.group_by('sample').agg(pl.col('binder_rate').mean().alias('m')).sort(['m', 'sample'], descending=[True, False])
+      samples = mean_rate['sample'].to_list()
+      cell = {(r['allele'], r['sample']): r for r in d.to_dicts()}
+      z = [[(cell[(a, s)]['binder_rate'] * 100 if (a, s) in cell else None) for s in samples] for a in alleles]
+      text = [[('' if (a, s) not in cell else str(round(cell[(a, s)]['binder_rate'] * 100)) + '%') for s in samples] for a in alleles]
+      n = [[(cell[(a, s)]['peptides'] if (a, s) in cell else None) for s in samples] for a in alleles]
+      b = [[(cell[(a, s)]['binders'] if (a, s) in cell else None) for s in samples] for a in alleles]
+      top = max([v for row in z for v in row if v is not None] or [1])
+      fig = go.Figure(go.Heatmap(
+          z=z, x=samples, y=alleles, text=text, texttemplate='%{text}', textfont=dict(size=10),
+          customdata=[[[n[i][j], b[i][j]] for j in range(len(samples))] for i in range(len(alleles))],
+          hovertemplate='%{y} in %{x}<br>%{customdata[1]} of %{customdata[0]} peptides bind (%{z:.1f}%)<extra></extra>',
+          colorscale='Blues', zmin=0, zmax=max(top, 5), xgap=3, ygap=3, hoverongaps=False,
+          colorbar=dict(title=dict(text='Peptides that bind (%)', side='right'), thickness=14),
+      ))
+      note = '' if n_alleles <= cap else ' (' + str(cap) + ' of ' + str(n_alleles) + ' alleles, each sample\'s best-scored first)'
+      fig.update_xaxes(title_text='Sample' + note, side='bottom', type='category')
+      fig.update_yaxes(title_text='Allele', autorange='reversed', type='category', tickmode='array', tickvals=alleles, tickfont=dict(size=10))
+      fig.update_layout(margin=dict(l=120, t=20, r=20))
     section: Binding by allele
     tag: ep-pred-av-allele-dots
     index: pred-allele-dots
     title: Binder share per allele and sample
-    description: Thirty alleles, those that differ most between samples first; size is the binder share, colour the median affinity.
-    layout: {x: 0, y: 0, w: 8, h: 6}
+    description: >-
+      Which alleles does each sample's peptide set bind? Each cell is one allele in one sample: the
+      darker it is, the larger the share of that sample's scored peptides that at least one tool
+      calls a binder of that allele, printed in the cell (hover for the peptide counts). Samples run
+      left to right from the highest mean share.
+
+      How to read: a dark row across many samples is an allele that binds a lot of what is
+      presented, and a dark cell in one column is an allele that sample's peptides favour. A column
+      that is pale everywhere means few of that sample's peptides bind any of the listed alleles.
+      Open [Peptides](tab:Peptides) to see which peptides they are, or pick an allele in the filter
+      to narrow the prediction tables.
+
+      Annotations: the colour scale runs from 0 to the highest share drawn (at least 5 %), so it is
+      relative to this chart and is not a binder threshold. A blank cell is an allele the sample was
+      not scored on. The grid opens on thirty alleles, each sample's three best-scored first and
+      then those scored in most samples; the sample axis title says how many alleles are shown, and
+      the allele filter draws any other.
+
+      Source: a peptide is a binder by each tool's own threshold, listed at
+      https://nf-co.re/epitopeprediction/3.2.0/docs/output.
+
+      Note: a share from very few peptides is noisy, so check the count in the hover.
+    layout: {x: 0, y: 0, w: 8, h: 7}
   - component_type: figure
     workflow_tag: epitopeprediction
     data_collection_tag: epitopeprediction_predictions
-    visu_type: histogram
-    dict_kwargs:
-      x: log10_ic50
-      color: predictor
-      barmode: overlay
-      opacity: 0.7
-      labels: {log10_ic50: log10 IC50 (nM), predictor: ''}
+    mode: code
+    code_content: |-
+      # Distribution of the predicted IC50 per tool, as a share of each tool's own predictions.
+      colors = depictio_category_colors.get('predictor') or {}
+      cut = 2.699
+      fig = px.histogram(df.to_pandas(), x='log10_ic50', color='predictor', barmode='overlay', opacity=0.65, nbins=60, histnorm='percent', color_discrete_map=colors, labels={'log10_ic50': 'Predicted IC50 (nM)', 'predictor': 'Tool'})
+      fig.update_traces(marker_line_width=0)
+      fig.add_vrect(x0=0, x1=cut, fillcolor=(depictio_category_colors.get('call') or {}).get('Binder', '#2f9e44'), opacity=0.08, layer='below', line_width=0)
+      fig.add_vline(x=cut, line_dash='dash', line_width=1)
+      fig.add_annotation(xref='x', yref='paper', x=cut, y=1.01, text='500 nM: the usual binder line', showarrow=False, xanchor='left', yanchor='bottom', font=dict(size=11))
+      fig.update_xaxes(tickvals=[0, 1, 2, 3, 4, 5], ticktext=['1', '10', '100', '1 000', '10 000', '100 000'], title_text='Predicted IC50 (nM, log scale; stronger to the left)')
+      fig.update_yaxes(title_text="Share of the tool's predictions (%)", ticksuffix='%')
+      # A tool that returns almost one value for most peptides makes a tall spike; say where it is and how much it holds.
+      pk = df.with_columns(pl.col('log10_ic50').round(1).alias('b')).group_by(['predictor', 'b']).agg(pl.len().alias('n')).sort('n', descending=True).group_by('predictor', maintain_order=True).first()
+      tp = df.group_by('predictor').agg(pl.len().alias('t'))
+      k = 0
+      for r in pk.join(tp, on='predictor').to_dicts():
+          sh = 100 * r['n'] / r['t']
+          if sh >= 30:
+              fig.add_annotation(xref='paper', yref='paper', x=1, y=0.98 - 0.09 * k, text=str(r['predictor']) + ': ' + str(round(sh)) + '% of its predictions sit at about ' + f"{10 ** r['b']:,.0f}" + ' nM', showarrow=False, xanchor='right', yanchor='top', font=dict(size=11))
+              k += 1
+      fig.update_layout(margin=dict(t=40), legend=dict(orientation='h', x=0, y=-0.25, title_text=''))
     section: Affinity distribution
     tag: ep-pred-fig-ic50
     index: pred-ic50-histogram
     title: Predicted IC50 by tool
-    description: log10 IC50 of every prediction, one colour per tool; 2.7 is the 500 nM binder line.
-    layout: {x: 0, y: 0, w: 4, h: 4}
+    description: >-
+      IC50 is the concentration of peptide (in nM) needed to displace half of a reference peptide
+      from the MHC molecule: the lower it is, the tighter the predicted binding. Where does each
+      tool put its predictions relative to the 500 nM binder line? Each tool is a histogram of its
+      own predictions, as a share so a tool with few peptides stays comparable, on a log IC50 axis
+      because affinities span several orders of magnitude.
+
+      How to read: most peptides do not bind, so most of a tool's mass is expected right of the
+      line, and a tool with most of its mass left of it calls a lot of peptides binders, which is
+      worth checking against its threshold. A spike in one bin means the tool returns almost the
+      same IC50 for many peptides, so its ranking carries little information there: MHCnuggets
+      returns about 5 000 nM for most non-binders, a floor value and not a measurement. Compare the
+      tools' calls on [Predictors](tab:Predictors).
+
+      Lines and annotations: the dashed line and the shading to its left mark 500 nM, the binder
+      side. It is the IC50 cut-off MHCnuggets applies in this pipeline (an affinity score of 0.425
+      or more) and IEDB's guideline for an intermediate-affinity binder. MHCflurry, NetMHCpan and
+      MixMHCpred call binders by a percentile rank of 2 or less and NetMHCIIpan by 5 or less, so
+      some of their binders sit right of the line; the text at the top right names a tool that holds
+      30 % or more of its predictions in one 0.1 log10 bin, a display trigger and not a quality
+      threshold.
+
+      Source: binder definitions of the pipeline at
+      https://nf-co.re/epitopeprediction/3.2.0/docs/output; IEDB IC50 guideline at
+      http://tools.iedb.org/mhci/help/.
+
+      Note: the IC50 is derived from the pipeline's 0 to 1 affinity score, and MixMHCpred gives
+      none, so it is absent here.
+    layout: {x: 0, y: 0, w: 4, h: 6}
   - component_type: figure
     workflow_tag: epitopeprediction
     data_collection_tag: epitopeprediction_predictions
-    visu_type: histogram
-    dict_kwargs:
-      x: sample
-      color: affinity_class
-      barmode: stack
-      labels: {sample: '', affinity_class: ''}
+    mode: code
+    code_content: |-
+      # The predictions at 500 nM or stronger, per sample, on their own 0-based axis (the rest of each sample is non-binding).
+      colors = depictio_category_colors.get('affinity_class') or {}
+      bands = ['Strong (50 nM or less)', 'Binder (50 to 500 nM)']
+      tot = df.group_by('sample').agg(pl.len().cast(pl.Int64).alias('total'))
+      hit = df.filter(pl.col('affinity_class').is_in(bands)).group_by(['sample', 'affinity_class']).agg(pl.len().cast(pl.Int64).alias('n'))
+      d = tot.join(pl.DataFrame({'affinity_class': bands}), how='cross').join(hit, on=['sample', 'affinity_class'], how='left').with_columns(pl.col('n').fill_null(0).cast(pl.Int64)).with_columns((pl.col('n') / pl.col('total') * 100).alias('pct'))
+      sums = d.group_by('sample').agg(pl.col('n').sum().alias('n'), pl.col('pct').sum().alias('pct'), pl.col('total').first().alias('total')).sort(['pct', 'sample'], descending=[True, False])
+      order = sums['sample'].to_list()
+      fig = px.bar(d.to_pandas(), x='pct', y='sample', color='affinity_class', orientation='h', barmode='stack', color_discrete_map=colors, category_orders={'sample': order, 'affinity_class': bands}, labels={'pct': 'Predictions at 500 nM or stronger (%)', 'sample': '', 'affinity_class': 'IC50 band'})
+      for r in sums.to_dicts():
+          fig.add_annotation(x=r['pct'], y=r['sample'], text=' ' + str(r['n']) + ' of ' + str(r['total']), showarrow=False, xanchor='left', font=dict(size=11))
+      fig.update_xaxes(range=[0, max((sums['pct'].max() or 0) * 1.3, 2)], ticksuffix='%')
+      fig.update_layout(margin=dict(t=30, r=30), legend=dict(orientation='h', x=0, y=-0.2, title_text=''))
     section: Affinity distribution
     tag: ep-pred-fig-affinity-class
     index: pred-affinity-class-bars
-    title: Affinity classes per sample
-    description: Predictions per sample, stacked by IC50 band from strong to non-binding.
-    layout: {x: 4, y: 0, w: 4, h: 4}
+    title: Predictions at 500 nM or stronger per sample
+    description: >-
+      Which samples carry the strong predictions? Bars show the share of each sample's predictions
+      with an IC50 of 500 nM or less, split into strong (50 nM or less) and binder (50 to 500 nM),
+      with the count printed at the end of the bar. The weak and non-binding bands, which hold most
+      predictions, are left out so that the minority has its own axis from zero instead of being
+      squeezed into the top of a full-height stack.
+
+      How to read: a longer bar means more candidates for follow-up, and a bar made mostly of the
+      strong colour holds the tightest predicted binders. An empty bar is a sample with no
+      prediction at 500 nM or stronger. Open [Peptides](tab:Peptides) and filter by sample to see
+      which peptides they are.
+
+      Annotations: the two bands are IC50 classes, 50 nM and 500 nM, the thresholds IEDB gives for
+      high and intermediate affinity (500 nM is also MHCnuggets' binder cut-off in the pipeline).
+      The text at the end of each bar is the predictions at 500 nM or stronger out of all
+      predictions of the sample.
+
+      Source: IEDB IC50 guideline at http://tools.iedb.org/mhci/help/; binder definitions of the
+      pipeline at https://nf-co.re/epitopeprediction/3.2.0/docs/output.
+
+      Note: a prediction is one peptide, allele and tool, so a sample scored on many alleles or by
+      several tools has more predictions, and those without an IC50 (MixMHCpred) count in the total
+      but never in a bar. Samples with very few predictions give coarse shares, so read the count
+      too.
+    layout: {x: 4, y: 0, w: 4, h: 6}
   - component_type: table
     workflow_tag: epitopeprediction
     data_collection_tag: epitopeprediction_allele_summary
@@ -892,7 +1017,7 @@ tabs:
   - name: Length
     icon: mdi:ruler
     color: violet
-    description: Peptides by length and call
+    description: Peptides by length, one panel per MHC class, and by call
   - name: Mutant against wild type
     icon: mdi:scale-balance
     color: violet
@@ -1044,34 +1169,90 @@ tabs:
     title: Best IC50
     description: Median of each peptide's lowest IC50 over its alleles and tools.
     layout: {x: 6, y: 0, w: 2, h: 2}
+  # Code mode: the bars are counted here on a numeric length axis (a length nobody has is an
+  # empty slot, not a gap that closes), each MHC class gets its own panel and count axis (class I
+  # outnumbers class II by far), and the usual class windows are shaded. The tool's length window
+  # is the run's min/max_peptide_length_classI / _classII, on the Overview (The run).
   - component_type: figure
     workflow_tag: epitopeprediction
     data_collection_tag: epitopeprediction_peptides
-    use: epitopeprediction/length_histogram
-    visu_type: histogram
-    dict_kwargs:
-      x: length
-      color: call
-      barmode: stack
-      labels: {length: Peptide length (residues), call: ''}
+    mode: code
+    code_content: |-
+      # Peptides per length, one panel per MHC class on its own count axis, stacked by call.
+      # The figure over each bar is the share of that length's peptides that bind.
+      colors = depictio_category_colors.get('call') or {}
+      class_colors = depictio_category_colors.get('mhc_class') or {}
+      # The shaded window is the textbook groove length of each class (closed groove 8 to 11, open groove 12 to 25), a fixed reference and not read from the run; the panel title says so.
+      windows = {'Class I': (8, 11, 'Class I (8 to 11 usual)'), 'Class II': (12, 25, 'Class II (12 to 25 usual)')}
+      d = df.with_columns(pl.col('length').cast(pl.Int64)).group_by(['mhc_class', 'length', 'call']).agg(pl.len().cast(pl.Int64).alias('peptides')).sort(['mhc_class', 'length'])
+      tot = df.with_columns(pl.col('length').cast(pl.Int64)).group_by(['mhc_class', 'length']).agg(pl.len().cast(pl.Int64).alias('total'), (pl.col('call') == 'Binder').sum().cast(pl.Int64).alias('binders'))
+      classes = [c for c in ['Class I', 'Class II'] if c in d['mhc_class'].to_list()]
+      orders = {'mhc_class': classes, 'call': ['Binder', 'Non-binder', 'Unsupported']}
+      fig = px.bar(d.to_pandas(), x='length', y='peptides', color='call', facet_col='mhc_class', color_discrete_map=colors, category_orders=orders, labels={'length': 'Peptide length (residues)', 'peptides': 'Peptides', 'call': 'Call', 'mhc_class': ''}, facet_col_spacing=0.09)
+      fig.update_xaxes(type='linear', dtick=1, tickmode='linear', matches=None, showticklabels=True)
+      fig.update_yaxes(matches=None, showticklabels=True)
+      for a in fig.layout.annotations:
+          a.text = windows.get(a.text.split('=')[-1], (0, 0, a.text))[2]
+      for i, c in enumerate(classes):
+          lo, hi, title = windows[c]
+          rows = tot.filter(pl.col('mhc_class') == c)
+          xs = rows['length'].to_list()
+          top = max(rows['total'].to_list() or [1])
+          fig.add_vrect(x0=lo - 0.5, x1=hi + 0.5, row=1, col=i + 1, fillcolor=class_colors.get(c, '#868e96'), opacity=0.09, layer='below', line_width=0)
+          fig.update_xaxes(range=[min(xs) - 0.6, max(xs) + 0.6], row=1, col=i + 1)
+          fig.update_yaxes(range=[0, top * 1.18], row=1, col=i + 1)
+          for r in rows.to_dicts():
+              fig.add_annotation(x=r['length'], y=r['total'], text=('<1%' if 0 < r['binders'] and round(100 * r['binders'] / r['total']) == 0 else str(round(100 * r['binders'] / r['total'])) + '%'), showarrow=False, yshift=9, font=dict(size=11), row=1, col=i + 1)
+      fig.add_annotation(xref='paper', yref='paper', x=1, y=-0.27, text='Figure over a bar: share of that length that binds', showarrow=False, xanchor='right', font=dict(size=11))
+      fig.update_layout(margin=dict(t=56, b=90), legend=dict(orientation='h', x=0, y=-0.27, title_text=''), bargap=0.15)
     section: Length
     tag: ep-pep-fig-length
-    index: pep-length-histogram
+    index: pep-length-bars
     title: Peptides by length and call
-    description: Peptides per length, stacked by binder call.
-    layout: {x: 0, y: 0, w: 8, h: 4}
+    description: >-
+      Does each MHC class get peptides of the length its groove takes, and which lengths bind? One
+      panel per class, each on its own count axis because class I peptides are far more numerous,
+      stacked by call (binder, non-binder, unsupported). The lengths shown are the ones in the run:
+      peptides cut from variants or proteins take the run's class I and class II length settings
+      (Overview, The run), and peptides from a table keep the length they came with, so one outside
+      what a tool supports is Unsupported.
+
+      How to read: a good result has class I peptides mostly 8 to 11 residues long and class II
+      peptides in the longer window, with the binder share highest at the lengths the groove prefers
+      (9 or 10 for class I). Bars outside the shaded window mean the run asked for lengths the class
+      does not usually present, and a large Unsupported part means the tools could not score that
+      length. Filter by length above to see which peptides sit in a bar.
+
+      Lines and annotations: the shaded band in each panel is the usual groove length of the class,
+      8 to 11 residues for class I (closed groove) and 12 to 25 for class II (open groove). It is a
+      fixed textbook reference, not read from the run and not a tool limit, and the panel titles
+      repeat it. The figure over each bar is the percentage of that length's peptides called binders
+      ('<1%' when some bind but fewer than 0.5 %).
+
+      Source: the groove lengths are textbook values (for example Janeway's Immunobiology, antigen
+      presentation); the lengths a tool supports are in its own manual.
+    layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: advanced_viz
     workflow_tag: epitopeprediction
     data_collection_tag: epitopeprediction_wildtype_pairs
     use: epitopeprediction/wildtype_scatter
     config:
-      x_title: Wild-type IC50 (nM)
-      y_title: Mutant IC50 (nM)
+      x_title: Wild-type IC50 (nM, log scale)
+      y_title: Mutant IC50 (nM, log scale)
       log_x: true
       log_y: true
       reference_line: diagonal
-      opacity: 0.7
-      marker_size: 6
+      reference_label: mutation changes nothing
+      quadrants:
+        x: 500
+        y: 500
+        labels: ['Wild type binds, mutant does not', Neither binds, Both bind, 'Mutant binds, wild type does not']
+      label_col: sequence
+      label_order_col: agretopicity
+      top_n_labels: 8
+      opacity: 0.85
+      marker_size: 12
+      marker_outline: true
       legend_pos: bottom
       selection_enabled: true
       selection_column: sequence
@@ -1079,8 +1260,33 @@ tabs:
     tag: ep-pep-av-wildtype
     index: pep-wildtype-scatter
     title: Mutant against wild-type affinity
-    description: One point per mutant peptide, allele and tool. Below the diagonal, the mutation strengthens binding.
-    layout: {x: 0, y: 0, w: 8, h: 6}
+    description: >-
+      Does the mutation make the peptide bind better than its wild type? One point per mutant
+      peptide, allele and tool, wild-type IC50 across and mutant IC50 up, both on log axes, coloured
+      by outcome. A scatter, because each pair is one peptide and the question is the change from
+      one axis to the other.
+
+      How to read: look at the bottom-right quadrant, where a mutant binds and its wild type does
+      not: the classic neoepitope candidate. Points below the diagonal bind better after the
+      mutation and points above it worse, and the eight labelled peptides are the ones whose IC50
+      drops most (lowest mutant over wild-type IC50). Most pairs are expected top right, since most
+      peptides bind neither form; click a point to select its peptide in the other tiles.
+
+      Lines and annotations: the dashed diagonal is an equal IC50 for the mutant and its wild type,
+      labelled 'mutation changes nothing'. The dashed lines at 500 nM on each axis cut the plane
+      into four outcomes named in the corners; 500 nM is MHCnuggets' binder cut-off in this pipeline
+      and IEDB's guideline for an intermediate-affinity binder. The colour is each tool's own call
+      on the mutant and on the wild type, which is rank-based for MHCflurry, NetMHCpan and
+      MixMHCpred, so it can disagree with the side of a 500 nM line a point sits on.
+
+      Source: binder definitions of the pipeline at
+      https://nf-co.re/epitopeprediction/3.2.0/docs/output; IEDB IC50 guideline at
+      http://tools.iedb.org/mhci/help/.
+
+      Note: predicted affinity is one step toward a neoepitope, and antigen processing, presentation
+      and T-cell recognition are not shown. Indels and frameshifts have no wild type and are not
+      drawn.
+    layout: {x: 0, y: 0, w: 8, h: 7}
   - component_type: figure
     workflow_tag: epitopeprediction
     data_collection_tag: epitopeprediction_variant_peptides
@@ -1090,13 +1296,26 @@ tabs:
       x: consequence
       color: length_class
       barmode: stack
-      labels: {consequence: '', length_class: ''}
+      category_orders:
+        length_class: [8-mer, 9-mer, 10-mer, 11-mer, 12-mer, 13-mer, 14-mer, 15-mer, 16-mer, 17-mer, 18-mer, 19-mer, 20-mer, 21-mer, 22-mer, 23-mer, 24-mer, 25-mer]
+      labels: {consequence: '', length_class: '', count: Candidate peptides}
     section: Variant peptides
     tag: ep-pep-fig-consequence
     index: pep-consequence-bars
     title: Candidate peptides by consequence
-    description: Peptides cut from each kind of variant, stacked by length.
-    layout: {x: 0, y: 0, w: 8, h: 4}
+    description: >-
+      Which kinds of variant feed the candidate pool, and at what lengths? Each bar counts the
+      peptides pVACseq cut from one consequence, stacked by length from the shortest up. Bars,
+      because the consequences are a few unordered categories.
+
+      How to read: a bar that dominates means the prediction mostly tests that kind of change. The
+      colours show the lengths the run asked for, and a missing length is one the run did not
+      request (Overview, The run). Frameshifts and indels get no wild-type pair; the table below
+      names each candidate's gene and protein change.
+
+      Note: these are candidates before prediction, so a peptide that no tool could score is still
+      counted here.
+    layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: epitopeprediction
     data_collection_tag: epitopeprediction_variant_peptides
@@ -1142,7 +1361,18 @@ tabs:
     tag: ep-pep-av-peptide-record
     index: pep-peptide-record
     title: Peptide record
-    description: The selected peptide, with its best prediction, its source and its wild type.
+    description: >-
+      The record of the peptide selected in the Predicted peptides table: its best prediction, its
+      source (gene, transcript, consequence, protein change and a UniProt link) and its wild type.
+
+      How to read: pick a row in the table to fill the card. Binding holds the best allele, tool,
+      IC50 and IC50 band of the peptide and how many alleles it binds; a low best IC50 and several
+      binding alleles make a stronger candidate. Wild type gives the wild-type peptide's best IC50
+      and the agretopicity, the mutant IC50 over the wild-type IC50: below 1, the mutation
+      strengthens binding.
+
+      Note: a peptide cut from a protein or taken from a peptide list has no variant, so its gene,
+      consequence and wild-type fields stay empty.
     layout: {x: 5, y: 0, w: 3, h: 6}
 - title: Predictors
   subtitle: How far do the prediction tools agree on the binders?
@@ -1300,34 +1530,65 @@ tabs:
   - component_type: figure
     workflow_tag: epitopeprediction
     data_collection_tag: epitopeprediction_predictor_summary
-    use: epitopeprediction/binder_rate_bar
-    visu_type: bar
-    dict_kwargs:
-      x: sample
-      y: binder_rate
-      color: predictor
-      barmode: group
-      labels: {sample: '', binder_rate: Share of scored peptides called binders, predictor: ''}
+    mode: code
+    code_content: |-
+      # Share of each sample's scored peptides that a tool calls a binder, one bar per sample and tool.
+      colors = depictio_category_colors.get('predictor') or {}
+      d = df.with_columns((pl.col('binder_rate') * 100).alias('pct'), pl.format('{} of {}', pl.col('binders'), pl.col('scored')).alias('counts'))
+      order = d.group_by('sample').agg(pl.col('pct').max().alias('top')).sort(['top', 'sample'], descending=[True, False])['sample'].to_list()
+      fig = px.bar(d.sort(['sample', 'predictor']).to_pandas(), x='pct', y='sample', color='predictor', orientation='h', barmode='group', text='counts', color_discrete_map=colors, category_orders={'sample': order}, labels={'pct': 'Scored peptides called binders (%)', 'sample': '', 'predictor': 'Tool'})
+      fig.update_traces(textposition='outside', cliponaxis=False, textfont_size=12)
+      fig.add_vline(x=2, line_dash='dash', line_width=1)
+      fig.add_annotation(xref='x', yref='paper', x=2, y=1.01, text='2 %: expected by chance at the MHCflurry rank cut-off', showarrow=False, xanchor='left', yanchor='bottom', font=dict(size=11))
+      fig.update_xaxes(range=[0, min(max((d['pct'].max() or 0) * 1.22, 6), 118)], ticksuffix='%')
+      fig.update_layout(margin=dict(t=40, r=30), legend=dict(orientation='h', x=0, y=-0.12, title_text=''), bargap=0.25, bargroupgap=0.05)
     section: Calls by tool
     tag: ep-prd-fig-rate
     index: prd-rate-bars
     title: Binder share per sample and tool
-    description: One bar per sample and tool. Tools with different thresholds can differ several-fold.
-    layout: {x: 0, y: 0, w: 8, h: 4}
+    description: >-
+      How many of a sample's scored peptides does each tool call a binder, and do the tools agree on
+      which samples have more? One bar per sample and tool, horizontal so the sample names stay
+      readable, with the count of binders out of scored peptides printed at the end. Samples are
+      sorted by their highest bar.
+
+      How to read: compare a tool across samples before comparing tools, because the tools use
+      different thresholds and can differ several-fold. A bar below the dashed line is no more than
+      chance; a bar above it is enrichment only for a sample with few alleles, since every extra
+      allele gives a peptide another chance to bind. Open [Predictions](tab:Predictions) to see
+      which alleles the binders fall on.
+
+      Lines and annotations: the dashed line is 2 %, the share a percentile rank of 2 or less lets
+      through on random peptides for one allele, which is the binder call of MHCflurry, NetMHCpan
+      and MixMHCpred. A bar counts a peptide as a binder when it binds any allele of its sample, so
+      the share expected by chance rises with the number of alleles. NetMHCIIpan calls binders at a
+      rank of 5 or less and MHCnuggets at 500 nM, so the line is not their chance level.
+
+      Source: binder definitions of the pipeline at
+      https://nf-co.re/epitopeprediction/3.2.0/docs/output.
+
+      Note: a bar from a handful of peptides jumps to 0 or 100 %, so read the printed count.
+    layout: {x: 0, y: 0, w: 8, h: 8}
   - component_type: advanced_viz
     workflow_tag: epitopeprediction
     data_collection_tag: epitopeprediction_predictions
     use: epitopeprediction/affinity_rank_scatter
     config:
-      x_title: Predicted IC50 (nM)
-      y_title: Percentile rank
+      x_title: Predicted IC50 (nM, log scale)
+      y_title: Percentile rank (log scale, lower is stronger)
       log_x: true
       log_y: true
-      reference_line: vertical
-      reference_value: 500
+      quadrants:
+        x: 500
+        y: 2
+        labels: [Strong IC50 but weak rank, Neither cut-off met, Both cut-offs met, Binder by rank only]
+      label_col: sequence
+      label_order_col: ic50_nm
+      top_n_labels: 8
       density_threshold: 20000
-      opacity: 0.5
-      marker_size: 5
+      opacity: 0.85
+      marker_size: 12
+      marker_outline: true
       legend_pos: bottom
       selection_enabled: true
       selection_column: sequence
@@ -1335,21 +1596,52 @@ tabs:
     tag: ep-prd-av-affinity-rank
     index: prd-affinity-rank
     title: IC50 against percentile rank
-    description: One point per prediction; the line marks 500 nM. MHCnuggets writes its rank as a fraction.
-    layout: {x: 0, y: 0, w: 8, h: 6}
+    description: >-
+      Do a tool's IC50 and its rank tell the same story, and which cut-off makes its binder calls?
+      One point per prediction, IC50 across and percentile rank up, both on log axes, coloured by
+      tool. A scatter, because both scores are continuous.
+
+      How to read: a well-behaved tool draws a band that rises from bottom-left to top-right,
+      because a stronger IC50 gets a lower rank. Points in the bottom-right quadrant are called
+      binders by rank although their IC50 is weak, which is how MHCflurry reaches binders above 500
+      nM; points in the top-left have a strong IC50 but a weak rank. Select points to narrow the
+      other tiles to their peptides.
+
+      Lines and annotations: the vertical dashed line is 500 nM, the IC50 cut-off MHCnuggets applies
+      in this pipeline (an affinity score of 0.425 or more). The horizontal one is a rank of 2, the
+      cut-off of MHCflurry, NetMHCpan and MixMHCpred; NetMHCIIpan uses 5, which is not drawn. The
+      corner texts name the four outcomes, and the eight labelled peptides have the strongest IC50.
+
+      Source: binder definitions of the pipeline at
+      https://nf-co.re/epitopeprediction/3.2.0/docs/output.
+
+      Note: MHCnuggets writes its rank as a fraction of the proteome (0 to 1) and not as a
+      percentage, so its points sit low on this axis and it is called by IC50 only. A tool that
+      gives no IC50 (MixMHCpred) is not drawn. A big cloud switches to a density view, and the
+      sparse points in its halo stay drawn.
+    layout: {x: 0, y: 0, w: 8, h: 7}
   - component_type: advanced_viz
     workflow_tag: epitopeprediction
     data_collection_tag: epitopeprediction_predictor_agreement
     use: epitopeprediction/agreement_scatter
     config:
-      x_title: IC50, first tool of the pair (nM)
-      y_title: IC50, second tool of the pair (nM)
+      x_title: IC50, first tool of the pair (nM, log scale)
+      y_title: IC50, second tool of the pair (nM, log scale)
       log_x: true
       log_y: true
       reference_line: diagonal
+      reference_label: both tools agree
+      quadrants:
+        x: 500
+        y: 500
+        labels: [Only the first tool binds, Neither binds, Both bind, Only the second tool binds]
+      label_col: sequence
+      label_order_col: ic50_a_nm
+      top_n_labels: 8
       density_threshold: 20000
-      opacity: 0.6
-      marker_size: 5
+      opacity: 0.85
+      marker_size: 12
+      marker_outline: true
       legend_pos: bottom
       selection_enabled: true
       selection_column: sequence
@@ -1357,8 +1649,29 @@ tabs:
     tag: ep-prd-av-agreement
     index: prd-agreement
     title: One tool's IC50 against the other's
-    description: One point per peptide and allele both tools scored; colour is who calls a binder. On the diagonal, they agree.
-    layout: {x: 0, y: 0, w: 8, h: 6}
+    description: >-
+      Do two tools agree on which peptides bind? One point per peptide and allele that both tools of
+      a pair scored, the first tool's IC50 across (tools are paired in alphabetical order) and the
+      second's up, on log axes. The colour is who calls a binder, by each tool's own threshold.
+
+      How to read: points near the diagonal get the same IC50 from both tools, and a cloud off the
+      diagonal is a tool that is systematically stronger or weaker than the other. The bottom-left
+      corner is both tools binding and the other two corners hold the disputed peptides, the ones to
+      check first. Pick a value in the Agreement filter to isolate them, or select points to narrow
+      the paired table.
+
+      Lines and annotations: the dashed diagonal is an equal IC50 from both tools. The dashed lines
+      at 500 nM are the IC50 cut-off MHCnuggets applies in this pipeline; the other tools call
+      binders by rank, so a point's colour can disagree with the side of a line it sits on. The
+      eight labelled peptides have the strongest IC50 from the first tool.
+
+      Source: binder definitions of the pipeline at
+      https://nf-co.re/epitopeprediction/3.2.0/docs/output.
+
+      Note: a tool that gives no IC50 (MixMHCpred) has no point, and a run with one tool per MHC
+      class has no pair. A big cloud switches to a density view, and the sparse points in its halo
+      stay drawn.
+    layout: {x: 0, y: 0, w: 8, h: 7}
   - component_type: table
     workflow_tag: epitopeprediction
     data_collection_tag: epitopeprediction_predictor_summary

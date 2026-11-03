@@ -72,6 +72,11 @@ main_dashboard:
       Centroid: '#7048e8'
       Member: '#9775fa'
       Not clustered: '#adb5bd'
+    # A genome keeps one colour on every tab (refinement, depth profile, cumulative
+    # coverage). The palette holds eight, so the genomes with the most mapped reads
+    # take the slots and the rest follow the brand colorway.
+    genome_id:
+      '*': auto:mapped_reads
     status:
       Refined: '#2f9e44'
       Filtered out: '#adb5bd'
@@ -184,6 +189,8 @@ main_dashboard:
       - ![](icon:mdi:test-tube) **Samples** {{n_samples}}, {{n_raw}} read pairs before trimming
       - ![](icon:mdi:shape-outline) **{GROUP_COL_DISPLAY}** {{groups}} groups, most often {{top_group}}
       - ![](icon:mdi:file-table-outline) **Samplesheet** [one row per sample](section:Sample sheet), its path in [the run parameters](params:input)
+      - ![](icon:mdi:palette-outline) **Color code** {{legend}}
+    legend: genome_id
     tag: vm-ov-study
     index: ov-study
     layout: {x: 0, y: 1, w: 5, h: 4}
@@ -391,7 +398,7 @@ main_dashboard:
     section: Findings
     source_tab: Consensus
     source_component: cns-identity-ambiguity
-    caption: One point per consensus genome, by its ambiguous bases and its identity to the closest reference; colour is the route.
+    caption: One point per consensus genome, by its ambiguous bases and its identity to the closest reference; the dashed lines sit at 5 % N and 95 % identity.
     hide_legend: true
     tag: vm-ov-hl-consensus
     index: ov-hl-consensus
@@ -409,7 +416,7 @@ main_dashboard:
     section: Findings
     source_tab: Variants
     source_component: var-af-depth
-    caption: One point per variant call, by read depth and allele frequency; colour is the frequency band.
+    caption: One point per variant call, by read depth and allele frequency; the dashed lines sit at 10 reads and half frequency.
     hide_legend: true
     tag: vm-ov-hl-variants
     index: ov-hl-variants
@@ -804,7 +811,19 @@ tabs:
     tag: vm-smp-fig-funnel
     index: smp-funnel
     title: Read pairs at each preprocessing stage
-    description: A bar that drops between two stages is where the sample lost its reads.
+    description: >-
+      Where does each sample lose its reads? The three stages of a sample sit side by side as bars (raw,
+      trimmed, host removed), so a bar that drops between two stages marks where the reads went, and
+      three bars of the same height mean nothing was lost.
+
+      How to read: a sample that keeps most of its pairs through both steps has three bars of similar
+      height. A drop at **Trimmed** is reads that failed quality, length or complexity filtering, so
+      open [MultiQC](tab:MultiQC) for its fastp report. A drop at **Host removed** means the sample was
+      mostly host, and a short last bar leaves little to assemble, whatever the later tabs show.
+
+      Note: bars are read-pair counts, so a deeply sequenced sample stands taller than a shallow one
+      even when both keep the same share. The share each sample keeps is in the scatter below and in the
+      per-stage table.
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: advanced_viz
     workflow_tag: viralmetagenome
@@ -815,9 +834,16 @@ tabs:
       x_col: raw_read_pairs
       y_col: retained_pct
       label_col: sample
+      label_order_col: retained_pct
+      top_n_labels: 6
       color_col: '{GROUP_COL}'
-      size_col: host_filtered_read_pairs
+      marker_size: 14
+      opacity: 0.85
+      marker_outline: true
       log_x: true
+      reference_line: horizontal
+      reference_value: 90
+      reference_label: 90 % kept
       x_title: Raw read pairs (log)
       y_title: Read pairs retained after preprocessing (%)
       legend_pos: bottom
@@ -827,7 +853,20 @@ tabs:
     tag: vm-smp-av-depth-loss
     index: smp-depth-loss
     title: Raw read pairs against the share retained
-    description: One point per sample, sized by its clean read pairs. Lasso a group to narrow every tab.
+    description: >-
+      Do the samples that start small also lose the most reads to trimming and host removal? One point
+      per sample, coloured by {GROUP_COL_DISPLAY}, on a log axis because read counts span orders of
+      magnitude. A scatter shows both measures at once.
+
+      How to read: points near the top keep nearly all their pairs whatever their depth, and a point low
+      on the plot lost a large share of them. If the low points are also the small ones, the loss goes
+      with shallow sequencing; if they sit at every depth, the cause is the sample itself, so open
+      [MultiQC](tab:MultiQC) for its fastp report. Lasso a group of points to narrow every tab to those
+      samples.
+
+      Lines and annotations: the dashed line sits at 90 % of the pairs retained, and the six samples
+      that retain the least are named. 90 % is a fixed reading aid, not a pass mark: neither fastp nor
+      Kraken2 publishes a share of reads a sample should keep, so no verdict is drawn from it.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: viralmetagenome
@@ -1023,20 +1062,47 @@ tabs:
       label_col: contig
       color_col: classification
       size_col: read_share_pct
+      min_size: 10
+      max_size: 30
+      opacity: 0.85
+      marker_outline: true
+      top_n_labels: 4
+      density_threshold: 2000
       log_x: true
       log_y: true
+      reference_line: vertical
+      reference_value: 1000
+      reference_label: 1 kb
       x_title: Contig length in bp (log)
       y_title: Reads mapped back (log)
       legend_pos: bottom
-      top_n_labels: 0
       selection_enabled: true
       selection_column: sample
     section: Length and support
     tag: vm-ctg-av-length-reads
     index: ctg-length-reads
     title: Contig length against the reads it holds
-    description: One point per contig, sized by its share of the sample's reads. Lasso contigs to narrow every tab to their samples.
-    layout: {x: 0, y: 0, w: 8, h: 6}
+    description: >-
+      Are the long contigs the ones the reads support? One point per contig, coloured by its taxonomic
+      call (classified, unclassified or not classified) and sized by its share of the sample's reads, on
+      log axes because both measures span orders of magnitude. Lasso contigs to narrow every tab to
+      their samples.
+
+      How to read: contigs follow a rising band, since a longer contig catches more reads. A long contig
+      well under the band has few reads for its length, which suggests a chimera or a contaminant, and a
+      short one above it is a fragment of a deep genome. Large, long points are what the assembly
+      rebuilt best, so follow them to [Consensus](tab:Consensus) to see which became genomes.
+
+      Lines and annotations: the dashed vertical line marks 1 kb, and the four contigs holding the
+      largest share of their sample's reads are named. 1 kb is a fixed reading aid with no published
+      source, as no tool sets a length a contig needs to rebuild a genome; the pipeline's own floor is
+      `--min_contig_size`, default 500 bp.
+
+      Source: nf-core/viralmetagenome parameters, https://nf-co.re/viralmetagenome/parameters
+
+      Note: past 2000 contigs the tile draws a density map in place of one marker per contig, and the
+      tile's view switch flips it back.
+    layout: {x: 0, y: 0, w: 8, h: 7}
   - component_type: advanced_viz
     workflow_tag: viralmetagenome
     data_collection_tag: vmg_clusters
@@ -1050,7 +1116,6 @@ tabs:
       normalise_to_one: true
       sample_sort: category
       sort_category: Filtered out
-      y_zoom: auto
       top_n: 4
       value_title: Share of the contig read depth
       hidden_controls: [rank, top_n, group]
@@ -1058,7 +1123,20 @@ tabs:
     tag: vm-ctg-fig-clusters
     index: ctg-clusters
     title: Read depth share of the clusters per sample
-    description: The refined clusters should hold most of a sample's contig reads; a large filtered share is a genome left behind. Sort by Filtered out to put those samples first.
+    description: >-
+      Did the refined clusters keep most of each sample's reads? Each bar is one sample, split into the
+      share of its contig read depth held by refined clusters (green) and by filtered ones (grey).
+
+      How to read: a bar mostly green is a sample whose genome was rebuilt from most of its reads. A
+      large grey part is a genome left behind, because those clusters held too small a share to refine.
+      The bars open with the largest grey share first, the sort control changes the order, and the
+      cluster table below lists the centroid and read share of each cluster.
+
+      Annotations: green is Refined and grey is Filtered out, each bar is scaled to 100 %, and no
+      cut-off line is drawn. The pipeline's own floor for keeping a cluster is `--perc_reads_contig`,
+      default 5, which the run's parameters show.
+
+      Source: nf-core/viralmetagenome parameters, https://nf-co.re/viralmetagenome/parameters
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: table
     workflow_tag: viralmetagenome
@@ -1124,8 +1202,8 @@ tabs:
     body: >
       Each consensus is compared with the annotation database and the reference pool by BLAST and
       scored by [CheckV](https://bitbucket.org/berkeleylab/checkv); QUAST counts its ambiguous
-      bases, the positions too shallow to call. A genome high on identity and low on N is ready to
-      use; click a point to open its record, and read the de novo ones down their refinement.
+      bases, the positions too shallow to call. A genome at 95 % identity or more and 5 % N or less
+      is ready to use; click a point to open its record, and read the de novo ones down their refinement.
     tag: vm-cns-intro
     index: cns-intro
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -1244,20 +1322,43 @@ tabs:
       x_col: n_pct
       y_col: annotation_identity_pct
       label_col: genome_id
+      label_order_col: annotation_identity_pct
+      top_n_labels: 3
       color_col: route
-      size_col: mean_depth
+      marker_size: 14
+      opacity: 0.85
+      marker_outline: true
+      quadrants:
+        x: 5
+        y: 95
+        labels: ['', 'Many N, close to a reference', 'Few N, far from a reference', 'Many N, far from a reference']
       x_title: Ambiguous bases (% N)
       y_title: Identity to the closest reference (%)
       legend_pos: bottom
-      top_n_labels: 0
       selection_enabled: true
       selection_column: genome_id
     section: Identity and ambiguity
     tag: vm-cns-av-identity-ambiguity
     index: cns-identity-ambiguity
     title: Ambiguous bases against identity per genome
-    description: One point per genome, sized by its mean depth. The ones to trust sit top left.
-    layout: {x: 0, y: 0, w: 5, h: 7}
+    description: >-
+      Which consensus genomes have few gaps and a close reference? One point per genome, coloured by
+      route, plotted by its share of ambiguous bases (N) and its identity to the closest reference. Two
+      measures describe a genome, which is why they are plotted against each other.
+
+      How to read: the top left corner, with few ambiguous bases and a close reference, holds a genome
+      that is complete and known. A point far to the right has gaps where the reads were too shallow
+      ([Mapping](tab:Mapping) shows its depth), and a point low on the plot is far from every reference
+      of the database, as a new virus would be. Click a point to open its record beside the plot.
+
+      Lines and annotations: the dashed lines sit at 5 % N and 95 % identity, the three genomes furthest
+      from a reference are named, and every corner carries a label except the top left one. 95 % is the
+      identity MIUViG uses to group genomes into one species-level virus unit, applied here to the
+      identity with the closest reference. 5 % N has no published source, as no tool or guideline sets a
+      maximum share of ambiguous bases, so it is a fixed reading aid and not a pass mark.
+
+      Source: MIUViG, Roux et al. 2019, https://doi.org/10.1038/nbt.4306
+    layout: {x: 0, y: 0, w: 5, h: 8}
   - component_type: advanced_viz
     workflow_tag: viralmetagenome
     data_collection_tag: genomes
@@ -1277,25 +1378,68 @@ tabs:
     tag: vm-cns-av-record
     index: cns-genome-record
     title: Picked genome
-    description: The genome picked on the plot, with its reference, quality and reads.
-    layout: {x: 5, y: 0, w: 3, h: 7}
-  - component_type: advanced_viz
+    description: >-
+      The record of the genome picked on the plot beside it, in four sections: the genome itself, its
+      closest reference, its quality and its reads.
+
+      How to read: the tile waits for a click on a point. Genome names the sample, reference, route and
+      refinement step, Reference gives the closest annotated reference and the BLAST hit with their
+      identity, Quality gives the ambiguous bases and the CheckV completeness and contamination, and
+      Reads gives the mapped reads, depth, breadth at 10X and the variant counts. A low identity, a high
+      N share or a low completeness explains where the genome sits on the plot.
+
+      Note: CheckV reads Not-determined, with no completeness, when its database holds no genome close
+      enough to the sequence.
+    layout: {x: 5, y: 0, w: 3, h: 8}
+  - component_type: figure
     workflow_tag: viralmetagenome
     data_collection_tag: vmg_contig_iterations
-    viz_kind: profile
-    config:
-      viz_kind: profile
-      series_col: genome_id
-      x_col: step_order
-      y_col: n_pct
-      x_title: Refinement step (0 is the scaffold, the last the variant-calling round)
-      y_title: Ambiguous bases (% N)
-      legend_pos: bottom
+    visu_type: line
+    mode: code
+    code_content: |-
+      # Ambiguous bases of each de novo consensus at every refinement step, one line per genome. The axis is
+      # logarithmic and floored at 0.1 %, because the share of N can be exactly 0. The dashed line is the 5 % N
+      # above which a genome is not ready to use. A genome with a single point has no later step in the table.
+      d = df.filter(pl.col('step_order').is_not_null() & pl.col('n_pct').is_not_null()).sort(['genome_id', 'step_order']).with_columns(pl.col('n_pct').clip(lower_bound=0.1).alias('n_shown'))
+      steps = d.select('step_order', 'step').unique(subset='step_order').sort('step_order')
+      names = ['Scaffold' if s == 'consensus' else ('Variant calling' if s == 'itvariant-calling' else 'Iteration ' + s[2:]) for s in steps['step'].to_list()]
+      top = max(d['n_pct'].max() or 5, 5) * 1.6
+      fig = px.line(d.to_pandas(), x='step_order', y='n_shown', color='genome_id', markers=True, log_y=True, custom_data=['n_pct', 'step'], color_discrete_map=depictio_category_colors.get('genome_id') or {}, labels={'step_order': 'Refinement step', 'n_shown': 'Ambiguous bases (% N, log)', 'genome_id': 'Genome'})
+      fig.update_traces(line=dict(width=2), marker=dict(size=11), hovertemplate='<b>%{fullData.name}</b><br>%{customdata[1]}: %{customdata[0]:.2f} % N<extra></extra>')
+      fig.add_shape(type='rect', xref='paper', x0=0, x1=1, yref='y', y0=5, y1=top, fillcolor='rgba(224, 49, 49, 0.08)', line_width=0, layer='below')
+      fig.add_shape(type='line', xref='paper', x0=0, x1=1, yref='y', y0=5, y1=5, line=dict(dash='dash', width=1), opacity=0.6)
+      fig.add_annotation(xref='paper', x=1, yref='y', y=np.log10(5), text='5 % N', showarrow=False, xanchor='right', yanchor='bottom', font=dict(size=10))
+      fig.update_xaxes(tickmode='array', tickvals=steps['step_order'].to_list(), ticktext=names, range=[-0.3, steps['step_order'].max() + 0.5])
+      fig.update_yaxes(range=[np.log10(0.07), np.log10(top)], tickmode='array', tickvals=[0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100], ticktext=['0.1 or less', '0.2', '0.5', '1', '2', '5', '10', '20', '50', '100'], automargin=True)
+      fig.update_layout(margin=dict(t=10), legend=dict(orientation='h', y=-0.22, title_text=''))
+      for row in d.filter(pl.col('step_order') == pl.col('step_order').max().over('genome_id')).iter_rows(named=True):
+          if row['step_order'] < d['step_order'].max():
+              fig.add_annotation(x=row['step_order'], y=np.log10(row['n_shown']), yref='y', text='no later step recorded', showarrow=False, xanchor='left', xshift=12, font=dict(size=10))
     section: Refinement
     tag: vm-cns-av-refinement
     index: cns-refinement
     title: Ambiguous bases along the refinement
-    description: One line per de novo genome; the variant-calling round masks the positions too shallow to call.
+    description: >-
+      Does refining a consensus close its gaps? One line per de novo genome, from the scaffold built
+      from the contigs through the mapping iterations to the variant-calling round, with a marker on
+      every step. The axis is logarithmic, so a nearly gap-free genome and a very gappy one both read.
+
+      How to read: a line that falls from step to step means the mapping iterations filled gaps, and a
+      flat line means refinement changed nothing. A rise at the last point is expected, because the
+      variant-calling round writes the positions under `--min_consensus_depth` (default 5) as N. A
+      genome that stays high at every step needs more reads, so check its depth in
+      [Mapping](tab:Mapping).
+
+      Lines and annotations: the dashed line and the red zone above it mark 5 % N, labelled on the
+      chart. 5 % N has no published source, as no tool sets a maximum share of ambiguous bases in a
+      consensus, so it is a fixed reading aid and not a pass mark. The axis floor is 0.1 %, so a genome
+      with no N sits on the tick labelled 0.1 or less.
+
+      Source: nf-core/viralmetagenome parameters, https://nf-co.re/viralmetagenome/parameters
+
+      Note: a line that ends before the others carries the label 'no later step recorded', because the
+      pipeline's table holds no mapping iteration or variant-calling round for that genome. Its last
+      point is the consensus it kept, with the gaps of that draft.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: viralmetagenome
@@ -1471,25 +1615,48 @@ tabs:
     title: Duplicate pairs
     description: Read pairs Picard marked as duplicates and removed, in percent of the pairs it examined.
     layout: {x: 6, y: 0, w: 2, h: 2}
-  - component_type: advanced_viz
+  - component_type: figure
     workflow_tag: viralmetagenome
     data_collection_tag: coverage_bins
-    viz_kind: profile
-    config:
-      viz_kind: profile
-      series_col: genome_id
-      x_col: position
-      y_col: mean_depth
-      log_y: true
-      line_width: 1.5
-      x_title: Position on the genome (bp)
-      y_title: Mean depth in the bin (log)
-      legend_pos: bottom
+    visu_type: line
+    mode: code
+    code_content: |-
+      # Mean depth of each 50 bp bin along each genome, one line per genome, on a log axis floored at 0.5X so a bin
+      # with no reads still draws (it sits on the bottom line). The dashed line is the 10X a position needs to be
+      # called; a line under it is a stretch the consensus writes as N.
+      d = df.filter(pl.col('mean_depth').is_not_null()).sort(['genome_id', 'chrom', 'position']).with_columns(pl.col('mean_depth').clip(lower_bound=0.5).alias('depth'))
+      top = max(d['mean_depth'].max() or 10, 10) * 1.6
+      fig = px.line(d.to_pandas(), x='position', y='depth', color='genome_id', line_group='chrom', log_y=True, custom_data=['mean_depth'], color_discrete_map=depictio_category_colors.get('genome_id') or {}, labels={'position': 'Position on the genome (bp)', 'depth': 'Mean depth in the bin (log)', 'genome_id': 'Genome'})
+      fig.update_traces(line=dict(width=1.5), opacity=0.85, hovertemplate='<b>%{fullData.name}</b><br>%{x} bp: %{customdata[0]:.1f}X<extra></extra>')
+      fig.add_shape(type='rect', xref='paper', x0=0, x1=1, yref='y', y0=0.4, y1=10, fillcolor='rgba(224, 49, 49, 0.08)', line_width=0, layer='below')
+      fig.add_shape(type='line', xref='paper', x0=0, x1=1, yref='y', y0=10, y1=10, line=dict(dash='dash', width=1), opacity=0.6)
+      fig.add_annotation(xref='paper', x=1, yref='y', y=np.log10(10), text='10X', showarrow=False, xanchor='right', yanchor='bottom', font=dict(size=10))
+      fig.update_yaxes(range=[np.log10(0.4), np.log10(top)], tickmode='array', tickvals=[0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000], ticktext=['0', '1', '2', '5', '10', '20', '50', '100', '200', '500', '1000'], automargin=True)
+      fig.update_layout(margin=dict(t=10), legend=dict(orientation='h', y=-0.2, title_text=''))
     section: Depth along the genome
     tag: vm-map-av-depth-profile
     index: map-depth-profile
     title: Depth along each genome
-    description: One line per genome, the mean depth of each bin; a line that drops to the floor is a stretch written as N.
+    description: >-
+      Where along each genome do the reads run thin? One line per genome, the length-weighted mean depth
+      of each bin along it, on a log axis. Bins are 50 bp wide for a genome up to 30 kb and wider, up to
+      5 kb, for a longer one, so that no genome draws more than 600.
+
+      How to read: a line that stays above the dashed line is evenly covered. A dip under it, in the
+      shaded zone, is a stretch at risk of being written as N in the consensus, and a line on the bottom
+      is a genome with almost no reads. Lines suit a position axis, where a dropout reads as a valley;
+      open the genome in [Consensus](tab:Consensus) for its share of N.
+
+      Lines and annotations: the dashed line marks 10X, and the zone under it is shaded. 10X is the
+      default minimum depth of iVar consensus; this pipeline lowers it to 5 by default
+      (`--min_consensus_depth`), so a stretch between 5X and 10X is thin but still called. A bin with no
+      reads sits on the bottom line, labelled 0 on the axis.
+
+      Sources: iVar manual, https://andersen-lab.github.io/ivar/html/manualpage.html;
+      nf-core/viralmetagenome parameters, https://nf-co.re/viralmetagenome/parameters
+
+      Note: the genomes sit on different references and overlay from their first base, so a position
+      means the same place only within one genome.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: advanced_viz
     workflow_tag: viralmetagenome
@@ -1500,21 +1667,45 @@ tabs:
       x_col: mean_depth
       y_col: cov_10x_pct
       label_col: genome_id
+      label_order_col: cov_10x_pct
+      top_n_labels: 3
       color_col: route
-      size_col: mapped_reads
+      marker_size: 14
+      opacity: 0.85
+      marker_outline: true
       log_x: true
+      quadrants:
+        x: 10
+        y: 90
+        labels: ['Broad but shallow', '', 'Shallow and narrow', 'Deep but narrow']
       x_title: Mean depth (log)
       y_title: Breadth at 10X (%)
       legend_pos: bottom
-      top_n_labels: 0
       selection_enabled: true
       selection_column: genome_id
     section: Depth and breadth
     tag: vm-map-av-depth-breadth
     index: map-depth-breadth
     title: Depth against breadth per genome
-    description: One point per genome, sized by its reads mapped. Deep but narrow is a partial genome.
-    layout: {x: 0, y: 0, w: 4, h: 6}
+    description: >-
+      Which genomes are covered deeply and completely enough to call? One point per genome, coloured by
+      route, with its mean depth on a log axis against the share of its bases covered at 10X or deeper.
+      Two measures describe the coverage, which is why they are plotted against each other.
+
+      How to read: a genome in the unlabelled top right corner is both deep and broad. Broad but shallow
+      is covered everywhere but thinly, deep but narrow is a partial genome whose reads pile on part of
+      it, and shallow and narrow has too few reads. Click a point to narrow the tab to a genome; the
+      line chart above shows where its reads run thin.
+
+      Lines and annotations: the dashed lines sit at 10X mean depth and at 90 % breadth, and the three
+      genomes with the lowest breadth are named. 10X is the default minimum depth of iVar consensus,
+      which this pipeline lowers to 5 by default (`--min_consensus_depth`). 90 % has no published
+      source, as no tool or guideline sets a minimum breadth for a viral consensus, so it is a fixed
+      reading aid and not a pass mark.
+
+      Sources: iVar manual, https://andersen-lab.github.io/ivar/html/manualpage.html;
+      nf-core/viralmetagenome parameters, https://nf-co.re/viralmetagenome/parameters
+    layout: {x: 0, y: 0, w: 4, h: 7}
   - component_type: advanced_viz
     workflow_tag: viralmetagenome
     data_collection_tag: coverage_cumulative
@@ -1534,8 +1725,23 @@ tabs:
     tag: vm-map-av-cumulative
     index: map-cumulative
     title: Cumulative coverage per genome
-    description: One curve per genome; where it crosses the 10X line is its breadth at 10X.
-    layout: {x: 4, y: 0, w: 4, h: 6}
+    description: >-
+      How much of each genome is deep enough to call? One curve per genome, the share of its bases
+      covered at least at each depth, on a log depth axis. A curve is the right form because it shows
+      every depth threshold at once, not only the one a card reports.
+
+      How to read: where a curve crosses the vertical marker is the breadth of that genome at 10X. A
+      curve that stays high past the marker is well covered, and one that falls before it is shallow or
+      patchy. A curve that stays flat and then drops sharply is evenly covered around one depth, while a
+      slow slope means uneven coverage.
+
+      Lines and annotations: the vertical marker is at 10X, the default minimum depth of iVar consensus.
+      This pipeline lowers it to 5 by default (`--min_consensus_depth`), so 10X is the stricter reading
+      and a fixed reference, not read from the run.
+
+      Sources: iVar manual, https://andersen-lab.github.io/ivar/html/manualpage.html;
+      nf-core/viralmetagenome parameters, https://nf-co.re/viralmetagenome/parameters
+    layout: {x: 4, y: 0, w: 4, h: 7}
   - component_type: table
     workflow_tag: viralmetagenome
     data_collection_tag: genomes
@@ -1589,8 +1795,8 @@ tabs:
     body: >
       [iVar](https://andersen-lab.github.io/ivar/html/) calls variants on the reads of each sample
       against each of its references, and keeps the calls under the consensus threshold too:
-      fixed calls make the consensus, minor ones are intra-host diversity or noise. The lanes open
-      on the first reference; filter the call type in the left panel.
+      fixed calls make the consensus, minor ones are intra-host diversity or noise. The lanes open on
+      every reference at once; brush one to zoom, and filter the call type in the left panel.
     tag: vm-var-intro
     index: var-intro
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -1714,15 +1920,34 @@ tabs:
       category_col: frequency_class
       mark: point
       facet_by_sample: true
-      max_facets: 6
+      max_facets: 12
+      auto_height: true
       score_title: Allele frequency
-      point_size: 5
-      default_region: first
+      point_size: 8
     section: Along the genome
     tag: vm-var-av-genome
     index: var-genome-view
     title: Calls along the reference, one lane per genome
-    description: Every call at its allele frequency, coloured by frequency band; the axis lists the references the calls are on.
+    description: >-
+      Where along each genome do the variants sit, and how fixed are they? Every iVar call is a point at
+      its position and allele frequency, coloured by frequency band, one lane per genome (up to 12, more
+      in the tile's controls).
+
+      How to read: calls near the top are carried by most of the reads, and those above the run's
+      consensus frequency set the base in the consensus. A row of low calls is minor variation or noise,
+      and calls that pile up at one position in several lanes are shared by those genomes. Brush a
+      reference to zoom on it, and filter the call type or the route in the left panel.
+
+      Annotations: no reference line is drawn, and the colour is the frequency band, Fixed at 0.9 or
+      more, Major from 0.5 to 0.9 and Minor under 0.5. These bands are this template's own grouping, not
+      a published standard. The consensus takes a base at the run's `--allele_frequency`, default 0.75
+      in nf-core/viralmetagenome.
+
+      Source: nf-core/viralmetagenome parameters, https://nf-co.re/viralmetagenome/parameters
+
+      Note: the axis lays the references the calls sit on end to end, so a lane shows its calls on the
+      reference it was mapped to. It is drawn from the table, not from a genome browser, because the
+      published VCFs have no index of their own and no viral assembly is bundled.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: advanced_viz
     workflow_tag: viralmetagenome
@@ -1734,18 +1959,44 @@ tabs:
       y_col: af
       label_col: variant_key
       color_col: frequency_class
+      marker_size: 10
+      opacity: 0.6
+      marker_outline: true
+      density_threshold: 5000
       log_x: true
+      quadrants:
+        x: 10
+        y: 0.5
+        labels: ['Major, thin reads', '', 'Noise, thin reads', 'Minor, well supported']
       x_title: Reads at the position (log)
       y_title: Allele frequency
       legend_pos: bottom
-      top_n_labels: 0
       selection_enabled: true
       selection_column: genome_id
     section: Frequency and depth
     tag: vm-var-av-af-depth
     index: var-af-depth
     title: Allele frequency against depth per call
-    description: One point per call. Lasso calls to narrow every tab to their genomes.
+    description: >-
+      Which calls can be believed? One point per call, coloured by frequency band, with the reads at its
+      position on a log axis against its allele frequency. Lasso calls to narrow every tab to their
+      genomes.
+
+      How to read: the unlabelled top right corner holds the calls that are both frequent and well
+      supported. Calls in the bottom left are low frequency read off few reads, which is mostly noise.
+      The minor calls with many reads behind them, bottom right, are the intra-host variants worth a
+      look, and iVar's own verdict is in the iVar calls table.
+
+      Lines and annotations: the dashed lines sit at 10 reads and at half frequency, and every corner is
+      labelled except the top right one. Half frequency is where the Major band starts, the point where
+      the alternative allele has as many reads as the reference. 10 reads is the default minimum depth
+      of iVar consensus, applied here to variant calls as a fixed reading aid, since iVar variants sets
+      no minimum depth by default.
+
+      Source: iVar manual, https://andersen-lab.github.io/ivar/html/manualpage.html
+
+      Note: points are smaller and fainter than elsewhere because thousands of calls overlap, and past
+      5000 calls the tile draws a density map. The call names show on hover.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: viralmetagenome

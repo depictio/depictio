@@ -36,7 +36,7 @@
 template:
   template_id: "nf-core/hlatyping/2.2.0"
   description: "nf-core/hlatyping template: HLA class I genotypes typed by OptiType (HLA-A, -B and -C, two-field alleles), sample by locus with both haplotypes, allele frequencies across the samples, the reads and the objective behind each genotype, and the FastQC read quality, with alleles spelled as nf-core/epitopeprediction spells them."
-  version: "1.1.0"
+  version: "2.0.0"
   variables:
     - name: "DATA_ROOT"
       description: "hlatyping output directory (optitype/, yara/, multiqc/, pipeline_info/ and the FastQC files)."
@@ -187,13 +187,13 @@ workflows:
       # OptiType, from optitype/<sample>/<sample>_result.tsv
       # ----------------------------------------------------------------
       - data_collection_tag: "optitype_genotypes"
-        description: "OptiType's HLA class I genotype, one row per sample, locus and haplotype, alleles normalised to HLA-A*02:01"
+        description: "OptiType's HLA class I genotype, one row per sample, locus and haplotype, alleles normalised to HLA-A*02:01, with the sample's samplesheet columns so the allele grid can group its rows"
         config:
           type: "Table"
           metatype: "Aggregate"
           source: "transformed"
           transform:
-            recipe: "optitype/genotypes.py"
+            recipe: "nf-core/hlatyping/genotypes.py"
           dc_specific_properties:
             format: "TSV"
             columns_description:
@@ -207,6 +207,7 @@ workflows:
               "zygosity": "Homozygous (one allele on both haplotypes), Heterozygous, or One allele typed"
               "reads": "Reads the sample's genotype explains"
               "objective": "Objective value of the sample's integer linear programme"
+              "seq_type": "DNA or RNA, from the samplesheet (Not stated for a sample the sheet does not list); this and the other samplesheet columns after it let the grid group its rows"
 
       - data_collection_tag: "optitype_summary"
         description: "One row per sample: the HLA-A, -B and -C allele pairs, the alleles as an epitopeprediction samplesheet lists them, zygosity and the reads and objective behind the genotype"

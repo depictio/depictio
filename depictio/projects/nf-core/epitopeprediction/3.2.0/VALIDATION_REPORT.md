@@ -21,6 +21,7 @@ below as pending, item by item.
 | `depictio/tests/recipes/test_epitopeprediction_recipes.py` (catalog recipes, both table shapes) and `test_epitopeprediction_project_recipes.py` (the `samples` hub) | 25 passed |
 | `depictio dev catalog validate`, `depictio/tests/models/test_catalog.py` | pass, 106 passed |
 | `depictio/tests/catalog/` | 25 passed, 4 failed: `test_conformance_project.py` wants the conformance project regenerated for the new `epitopeprediction` module (shared file, regenerated at integration) |
+| The code-mode figures `pep-length-bars`, `pred-allele-dots` (heat map), `pred-ic50-histogram`, `pred-affinity-class-bars` and `prd-rate-bars` run through the sandbox (`process_code_mode_figure`) on the megatest recipe outputs and rendered to images; `pep-length-bars` also on a one-class filter and on an empty frame (round 4, plot quality: annotated, scaled to the content, no cropped or zoomed bars) | pass, no error |
 | Every recipe over the megatest (`execute_recipe`, input and output schemas) | pass, 9 collections, 2 s each at most |
 | `epitopeprediction_predictor_summary` against MultiQC's `multiqc_peptide_binding_prediction_stats.txt` | identical binders, non-binders and unsupported for all 19 sample and tool rows |
 | `depictio ingest --template nf-core/epitopeprediction/3.2.0 --dry-run` on the megatest | template resolved, 9 of 9 collections `ok`, 0 empty, 0 missing sources; stops at step 1 (no server configured) |
@@ -65,7 +66,7 @@ when there is nothing to pair, so an ingest that meets such a run skips them and
 | --- | --- | --- |
 | Overview | 21 of 24 | hero 1, about 3, pipeline 3, key figures 2, findings 10, how to read 2 |
 | MultiQC | 13 | 1 (statistics 4, rank and affinity 4, binder length 4; input variants collapsed) |
-| Predictions | 14 | 3 (strip 2, dot plot 6, affinity distribution 4; tables collapsed) |
+| Predictions | 14 | 3 (strip 2, heat map 7, affinity distribution 6; tables collapsed) |
 | Peptides | 14 | 3 (strip 2, length 4, mutant against wild type 6; variant peptides and detail collapsed) |
 | Predictors | 19 | 4 (strip 2, calls by tool 4, affinity and rank 6, agreement 6; tables collapsed) |
 
@@ -98,7 +99,7 @@ None of these could be checked without a running stack; each is pending a live c
 | Controls dock right on full-width viz and on top of narrower ones | pending live check |
 | No tile shows an empty band or a cut body; no tick label cut, no legend scrolling over tick labels | pending live check (the per-sample bars name 11 samples on the x axis) |
 | The map draws its tiles and points | not applicable (no map) |
-| Each dock shows a few controls and "More options"; every view switch draws | pending live check (dot plot, scatters) |
+| Each dock shows a few controls and "More options"; every view switch draws | pending live check (heat map, scatters) |
 | The group has the same colour on figures, advanced viz and filter chips | pending live check |
 | Every child tab opens on its intro; every KPI card draws its secondary and caption, no bar reads about 1%, each icon in its own colour | pending live check |
 | The Guide's demos are not empty | pending live check |
@@ -135,7 +136,7 @@ None of these could be checked without a running stack; each is pending a live c
   `params.json` (`wild_type`, `tools`) or the sheet; the optional collections fall back to being
   skipped at ingest when they find nothing.
 - An `HLA-all` screen dominates the allele views (11,578 alleles from one sample of 5 peptides)
-  and the binder-call counts; the dot plot's gene cap ranks alleles by between-sample variance,
+  and the binder-call counts; the heat map's cap keeps the alleles scored in the most samples,
   so alleles shared by several samples come first.
 - MHCnuggets' rank is a fraction, MHCflurry's a percentage: kept as written, as the pipeline
   does, so a rank axis mixes two scales; the binder call never uses it for MHCnuggets.
