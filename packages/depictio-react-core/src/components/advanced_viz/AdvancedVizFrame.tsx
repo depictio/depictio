@@ -23,6 +23,7 @@ import { useAdvancedVizCaption, useAdvancedVizShowcase } from './advancedVizShow
 import { CARD_FRAME } from '../cardFrame';
 import FigureHeader from '../FigureHeader';
 import { useDensity } from '../density';
+import ComponentInfo, { TileSubtitle, TileTitleRow } from '../chrome/ComponentInfo';
 import { ControlsDockContext, ControlsLeadContext, resolveDock } from './controlsDock';
 import DockedControls from './DockedControls';
 import VizKindBadge from './VizKindBadge';
@@ -608,16 +609,17 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
     ) : null
   ) : compact ? (
     // One line: title, the visualization's type, what is on screen, the
-    // status chips. The subtitle moves to the title's tooltip, the tier counts
+    // status chips. The subtitle moves to the title's info popover, the tier counts
     // and the inline controls keep their own lines under it.
     <Stack gap={2} mb={4}>
       <Group gap={6} wrap="nowrap" style={{ minWidth: 0 }} pr={28}>
         {title ? (
-          <Tooltip label={subtitle} disabled={!subtitle} multiline maw={320} openDelay={300}>
-            <Text fw={600} size="sm" truncate style={{ flex: '0 1 auto', minWidth: 0 }}>
-              {title}
-            </Text>
-          </Tooltip>
+          <Text fw={600} size="sm" truncate style={{ flex: '0 1 auto', minWidth: 0 }}>
+            {title}
+          </Text>
+        ) : null}
+        {title && subtitle ? (
+          <ComponentInfo description={subtitle} title={title} trigger="title" always />
         ) : null}
         <VizKindBadge />
         {echoText ? (
@@ -648,15 +650,9 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
     // `dc-tile-head` while a text line leads the stack (see FigureRenderer).
     <Stack gap={2} mb="xs" className={title || subtitle || echoLine ? 'dc-tile-head' : undefined}>
       {title ? (
-        <Text fw={600} size="sm" lineClamp={1}>
-          {title}
-        </Text>
+        <TileTitleRow title={title} description={subtitle ?? ''} />
       ) : null}
-      {subtitle ? (
-        <Text size="xs" c="dimmed" lineClamp={2}>
-          {subtitle}
-        </Text>
-      ) : null}
+      {subtitle ? <TileSubtitle description={subtitle} /> : null}
       {echoLine}
       {countBadges}
       {reductionBadge ? (

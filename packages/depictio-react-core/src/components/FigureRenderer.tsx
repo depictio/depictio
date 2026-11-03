@@ -41,6 +41,8 @@ import RefetchOverlay from './RefetchOverlay';
 import ComponentSkeleton from './ComponentSkeleton';
 import { useReportLoadStatus } from './DashboardLoadingProvider';
 import { LoadAllState } from './chrome/LoadAllButton';
+import { TileSubtitle, TileTitleRow } from './chrome/ComponentInfo';
+import { titleCarriesDescription } from './chrome/descriptionText';
 import { CARD_FRAME } from './cardFrame';
 import FigureHeader from './FigureHeader';
 import { figurePlotConfig, resolveFigureStyle } from './figureStyle';
@@ -616,6 +618,11 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
   // The plain header row: the title and the figure's status chips. A chrome
   // style styles the row (`data-headed` on the tile) and, when the title leads
   // it, the title (`dc-tile-head`), without a `:has()` to look for either.
+  // The description rides the title row when this figure has one (the chrome
+  // leaves its toolbar icon out then, see `titleCarriesDescription`).
+  const infoDescription = titleCarriesDescription('figure', metadata)
+    ? String(metadata.description).trim()
+    : '';
   const plainHeader =
     !showcase &&
     Boolean(metadata.title || reductionBadge || groupedBadge || missingPointsBadges.length > 0);
@@ -657,6 +664,23 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
             ) : undefined
           }
         />
+      ) : plainHeader && infoDescription ? (
+        // The title row and a one-line subtitle; the full description is one
+        // click away on the info icon (see ComponentInfo).
+        <Stack gap={2} mb="xs" className="dc-tile-head">
+          <TileTitleRow
+            title={metadata.title as string}
+            description={infoDescription}
+            badges={
+              <>
+                {reductionBadge}
+                {groupedBadge}
+                {missingPointsBadges}
+              </>
+            }
+          />
+          <TileSubtitle description={infoDescription} />
+        </Stack>
       ) : (
         plainHeader && (
           <Group

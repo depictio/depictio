@@ -400,13 +400,13 @@
   padding-right: 32px;
   row-gap: 0 !important;
 }
-:root[data-chrome='glass'] [data-testid='dashboard-content'] :is(.dc-tile.mantine-Paper-root:not([data-showcase]), .depictio-component-chrome:is([data-component-type='map'], [data-component-type='advanced_viz']) > .mantine-Paper-root) > .dc-tile-head:first-child > .mantine-Text-root:first-child {
+:root[data-chrome='glass'] [data-testid='dashboard-content'] :is(.dc-tile.mantine-Paper-root:not([data-showcase]), .depictio-component-chrome:is([data-component-type='map'], [data-component-type='advanced_viz']) > .mantine-Paper-root) > .dc-tile-head:first-child > :is(.mantine-Text-root:first-child, .dc-tile-title-row:first-child > .mantine-Text-root:first-child) {
   font-size: 14px !important;
   font-weight: 650 !important;
   line-height: 22px !important;
   color: var(--gl-fg) !important;
 }
-:root[data-chrome='glass'] [data-testid='dashboard-content'] :is(.dc-tile.mantine-Paper-root:not([data-showcase]), .depictio-component-chrome:is([data-component-type='map'], [data-component-type='advanced_viz']) > .mantine-Paper-root) > .dc-tile-head:first-child > .mantine-Text-root + .mantine-Text-root {
+:root[data-chrome='glass'] [data-testid='dashboard-content'] :is(.dc-tile.mantine-Paper-root:not([data-showcase]), .depictio-component-chrome:is([data-component-type='map'], [data-component-type='advanced_viz']) > .mantine-Paper-root) > .dc-tile-head:first-child > :is(.mantine-Text-root + .mantine-Text-root, .dc-tile-title-row + .mantine-Text-root) {
   font-size: 12px !important;
   line-height: 16px !important;
   color: var(--gl-faint) !important;

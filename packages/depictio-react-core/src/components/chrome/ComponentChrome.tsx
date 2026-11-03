@@ -1,5 +1,5 @@
 import React, { useContext, useEffect, useRef, useState } from 'react';
-import { ActionIcon, Group, Tooltip } from '@mantine/core';
+import { ActionIcon, Group } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import { StoredMetadata } from '../../api';
@@ -26,7 +26,8 @@ import { supportsSelectionGrouping } from '../../selection';
 import { useGroupingColorVar } from '../../selectionGroups';
 import { actionsFor, type ChromeAction as TypeChromeAction } from './chromeActions';
 import { TILE_ACTION_STYLE } from './actionStyles';
-import { resolveFigureStyle } from '../figureStyle';
+import ComponentInfo from './ComponentInfo';
+import { titleCarriesDescription } from './descriptionText';
 import './chrome.css';
 
 export { actionsFor };
@@ -196,21 +197,22 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
   if (metadata.catalog_source) actions.push('catalog');
   /**
    * The author's own prose about this component, from `description` in the
-   * dashboard YAML. Every renderer but advanced_viz drops it on the floor, so
-   * a card explaining that it exists to demonstrate `filter_expr` said that to
-   * nobody. Surfacing it here rather than in each renderer keeps it out of the
-   * tile's own layout: a card has room for a title and a number, an interactive
-   * for a label and its control, and neither can grow a paragraph.
+   * dashboard YAML. Every renderer but advanced_viz used to drop it on the
+   * floor, so a card explaining that it exists to demonstrate `filter_expr`
+   * said that to nobody. Surfacing it here rather than in each renderer keeps
+   * it out of the tile's own layout: a card has room for a title and a number,
+   * an interactive for a label and its control, and neither can grow a
+   * paragraph.
    *
-   * advanced_viz is excluded because its renderers already print the same text
-   * as a subtitle under the title, so the icon would only offer a second copy —
-   * except in the `minimal` style, whose header shows the short `subtitle`
-   * instead and would otherwise lose the prose.
+   * A tile whose renderer draws a title row (a figure, a table, an advanced
+   * viz) carries it there instead: a one-line subtitle and an info icon beside
+   * the title open the same popover (`ComponentInfo`), so the toolbar does not
+   * offer a second way in. `titleCarriesDescription` is the one predicate both
+   * sides ask.
    */
   const description = typeof metadata.description === 'string' ? metadata.description.trim() : '';
   const hasDescription =
-    Boolean(description) &&
-    (componentType !== 'advanced_viz' || resolveFigureStyle(metadata.figure_style) === 'minimal');
+    Boolean(description) && !titleCarriesDescription(componentType, metadata);
   // Sits directly before `metadata` (always first in `actionsFor`): both answer
   // "what is this component", the prose one before the structured one.
   if (hasDescription) actions.push('description');
@@ -290,30 +292,12 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
       case 'description':
         if (!hasDescription) return null;
         return (
-          // Hover, focus and touch all open it: the icon has no click action of
-          // its own, so a viewer who never hovers (keyboard, tablet) would
-          // otherwise reach a button that does nothing. Mantine's Tooltip wires
-          // no aria-describedby, so the text is repeated in the aria-label,
-          // which is the only copy a screen reader ever reaches.
-          <Tooltip
+          <ComponentInfo
             key="description"
-            label={description}
-            withArrow
-            multiline
-            w={260}
-            openDelay={200}
-            position="bottom-end"
-            events={{ hover: true, focus: true, touch: true }}
-          >
-            <ActionIcon
-              variant="subtle"
-              color={TILE_ACTION_STYLE.description.color}
-              size="sm"
-              aria-label={`About this component: ${description}`}
-            >
-              <Icon icon={TILE_ACTION_STYLE.description.icon} width={16} height={16} />
-            </ActionIcon>
-          </Tooltip>
+            description={description}
+            title={typeof metadata.title === 'string' ? metadata.title : undefined}
+            trigger="toolbar"
+          />
         );
       case 'metadata':
         return <MetadataPopover key="metadata" metadata={metadata} />;

@@ -8,6 +8,8 @@ export { canDuplicate } from './chromeActions';
 export type { ComponentChromeProps, ChromeAction } from './ComponentChrome';
 export { default as MetadataPopover } from './MetadataPopover';
 export { default as MetadataBody } from './MetadataBody';
+export { default as ComponentInfo, TileSubtitle, TileTitleRow } from './ComponentInfo';
+export { titleCarriesDescription } from './descriptionText';
 export { default as CatalogButton } from './CatalogButton';
 export { default as CatalogOrigin } from './CatalogOrigin';
 export { default as FullscreenButton } from './FullscreenButton';
