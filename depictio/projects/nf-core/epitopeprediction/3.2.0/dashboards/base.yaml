@@ -178,8 +178,7 @@ main_dashboard:
       - ![](icon:mdi:dna) **Alleles** {{alleles}} distinct alleles scored
       - ![](icon:mdi:flask-empty-outline) **Matched tumour** {{n_tumour}} variant samples name their tumour sample
       - ![](icon:mdi:file-table-outline) **Samplesheet** [one row per sample](section:Sample sheet), its path in [the run parameters](params:input)
-      - ![](icon:mdi:palette-outline) **Color code** {{legend}}
-    legend: call
+      - ![](icon:mdi:palette-outline) **Call** {{legend:call}}
     tag: ep-ov-study
     index: ov-study
     layout: {x: 0, y: 1, w: 5, h: 4}

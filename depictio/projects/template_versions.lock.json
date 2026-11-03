@@ -321,7 +321,7 @@
     },
     "nf-core/epitopeprediction/3.2.0": {
       "version": "2.0.0",
-      "content_hash": "8c5444d455416cc8900f2a26d3aaab4dabfdbecff0db74f1fea3556d81e2e50a",
+      "content_hash": "ee322745a98536ec9ff4ff764777e3b8f7a0fa4a4fecf931dacbc999c0555245",
       "catalog": {
         "epitopeprediction": "2.0.0",
         "multiqc": "1.0.0"
@@ -351,7 +351,7 @@
     },
     "nf-core/genomeqc/1.0.1": {
       "version": "2.0.0",
-      "content_hash": "a24f659e16cc9366bc2177180e50ee349bdad4b1a8f4253484558e65315406e9",
+      "content_hash": "95e59a8c0f480a31038edff9debfcfebf51ca92e6153f3f0d66a5a9c98ccf230",
       "catalog": {
         "agat": "1.0.0",
         "busco": "2.0.0",
@@ -389,7 +389,7 @@
     },
     "nf-core/hlatyping/2.2.0": {
       "version": "2.0.0",
-      "content_hash": "08f5bae74d49a5d1a1649569aa66baa2c5b9ed6ef0b589be3c7bb385018109ad",
+      "content_hash": "4abc48e3479fbd4b1d10f36040197409beacda623ce417977582dfad6978ca72",
       "catalog": {
         "multiqc": "1.0.0",
         "optitype": "1.0.0"
@@ -635,7 +635,7 @@
     },
     "nf-core/stableexpression/1.1.0": {
       "version": "1.2.0",
-      "content_hash": "8b410e2e6400d6bebc96642f09a2347f2048bf7920ca4bddb8fb6915a05c5430",
+      "content_hash": "51bf65936c346ceadc568bcc0b2ffc72d3d2faebe91f9c3866fa501d10d0d48d",
       "catalog": {
         "stableexpression": "1.0.0"
       }
@@ -690,7 +690,7 @@
     },
     "nf-core/viralmetagenome/1.2.0": {
       "version": "1.2.0",
-      "content_hash": "117da80f859e9f479dd438d00530bfd6b01b3a6053751cd7861ebce80632c537",
+      "content_hash": "248b2347a6d9c980531fb6f91fc89ace71fbb339fbb34e8e659e96e20a08ca5f",
       "catalog": {
         "checkv": "1.0.0",
         "ivar": "1.0.0",

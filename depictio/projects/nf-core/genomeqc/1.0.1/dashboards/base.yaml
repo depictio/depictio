@@ -167,8 +167,8 @@ main_dashboard:
       - ![](icon:mdi:ruler) **Size** {{n_bp}} bases in {{n_seq}} sequences
       - ![](icon:mdi:file-tree-outline) **Annotated** {{n_annot}} assemblies with gene models
       - ![](icon:mdi:file-table-outline) **Samplesheet** [one row per assembly](section:Sample sheet), its path in [the run parameters](params:input)
-      - ![](icon:mdi:palette-outline) **Color code** {{legend}}
-    legend: genome
+      - ![](icon:mdi:palette-outline) **Genome** {{legend:genome}}
+      - ![](icon:mdi:palette-outline) **BUSCO class** {{legend:busco_class}}
     tag: gq-ov-study
     index: ov-study
     layout: {x: 0, y: 1, w: 5, h: 3}

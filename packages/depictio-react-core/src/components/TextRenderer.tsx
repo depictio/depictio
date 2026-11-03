@@ -42,7 +42,7 @@ import {
 } from './tabLinks';
 import { formatTextValue, splitPlaceholders, withStandIns } from './textValues';
 import { textLogoSrc } from './textLogo';
-import { LEGEND_MAX, legendEntries } from './textLegend';
+import { LEGEND_MAX, legendColumnOf, legendEntries } from './textLegend';
 import type { LegendEntry } from './textLegend';
 import { useCategoryColorSource } from '../hooks/useCategoryColors';
 
@@ -416,20 +416,9 @@ function proseWidth(alignment: 'left' | 'center' | 'right'): React.CSSProperties
   };
 }
 
-/** The tile's `legend`, for the fact whose value is `{{legend}}`. */
-const LegendContext = React.createContext<{ entries: LegendEntry[]; column: string } | null>(null);
-const LEGEND_PLACEHOLDER = '{{legend}}';
-
-/** A fact whose value is `{{legend}}`, on a tile that has a legend to draw. */
-function isLegendFact(
-  fact: Fact,
-  legend: { entries: LegendEntry[]; column: string } | null,
-): boolean {
-  return legend !== null && fact.value.trim() === LEGEND_PLACEHOLDER;
-}
-
-/** The key a text tile's `legend` draws: a dot in each pinned colour and the
- *  value it stands for, wrapping onto as many lines as it needs. */
+/** The colour key a fact line draws for `{{legend:column}}`: a dot in each
+ *  colour the dashboard pins to the column and the value it stands for, one per
+ *  line. */
 const LegendKey: React.FC<{ entries: LegendEntry[]; column: string }> = ({ entries, column }) => {
   // A column the run gave no colours to (an optional design column): a dash,
   // as a value the run lacks prints.
@@ -492,7 +481,7 @@ const FactLine: React.FC<{
   inline: (text: string) => React.ReactNode[];
   fill: Fill;
 }> = ({ facts, inline, fill }) => {
-  const legend = React.useContext(LegendContext);
+  const source = useCategoryColorSource();
   return (
   <div
     style={{
@@ -514,8 +503,11 @@ const FactLine: React.FC<{
           <Glyph icon={fact.icon} color="var(--mantine-color-dimmed)" size={15} />
         ) : null}
         <span style={{ color: 'var(--mantine-color-dimmed)' }}>{fill(fact.label)}</span>
-        {isLegendFact(fact, legend) ? (
-          <LegendKey entries={legend!.entries} column={legend!.column} />
+        {legendColumnOf(fact.value) ? (
+          <LegendKey
+            entries={legendEntries(source, legendColumnOf(fact.value))}
+            column={legendColumnOf(fact.value) ?? ''}
+          />
         ) : (
           <span style={{ fontWeight: 600 }}>{inline(fact.value)}</span>
         )}
@@ -535,7 +527,7 @@ const FactTable: React.FC<{
   inline: (text: string) => React.ReactNode[];
   fill: Fill;
 }> = ({ facts, inline, fill }) => {
-  const legend = React.useContext(LegendContext);
+  const source = useCategoryColorSource();
   return (
   <div
     style={{
@@ -568,9 +560,12 @@ const FactTable: React.FC<{
             ) : null}
             {fill(fact.label)}
           </span>
-          {isLegendFact(fact, legend) ? (
+          {legendColumnOf(fact.value) ? (
             <div style={{ ...cell, minWidth: 0, display: 'flex', alignItems: 'center' }}>
-              <LegendKey entries={legend!.entries} column={legend!.column} />
+              <LegendKey
+                entries={legendEntries(source, legendColumnOf(fact.value))}
+                column={legendColumnOf(fact.value) ?? ''}
+              />
             </div>
           ) : (
             <span style={{ ...cell, fontWeight: 600, minWidth: 0 }}>{inline(fact.value)}</span>
@@ -1030,19 +1025,6 @@ const TextRenderer: React.FC<TextRendererProps> = ({
     [metadata.values, liveValues, liveLoading, valueChips],
   );
 
-  // `legend`: the colours the dashboard pins to a column, as a key under the prose.
-  const categorySource = useCategoryColorSource();
-  const legendColumn = typeof metadata.legend === 'string' ? metadata.legend : '';
-  const legend = useMemo(
-    () => (legendColumn ? legendEntries(categorySource, legendColumn) : []),
-    [categorySource, legendColumn],
-  );
-
-  const legendContext = useMemo(
-    () => (legendColumn ? { entries: legend, column: legendColumn } : null),
-    [legend, legendColumn],
-  );
-
   const resolveTab = useTabLinkResolver();
   const surface =
     metadata.surface === 'card' || metadata.surface === 'tinted' ? metadata.surface : 'none';
@@ -1076,14 +1058,13 @@ const TextRenderer: React.FC<TextRendererProps> = ({
   useAutofitHeight(
     index,
     contentRef,
-    [rawTitle, body, order, size, alignment, surface, footerPx, logoSrc, legend.length],
+    [rawTitle, body, order, size, alignment, surface, footerPx, logoSrc],
     // The frame's padding and borders, and a footer, sit outside the measured
     // prose.
     frame.extra || footerPx ? (h) => h + frame.extra + footerPx : undefined,
   );
 
   return (
-    <LegendContext.Provider value={legendContext}>
     <Stack
       gap={4}
       h="100%"
@@ -1173,9 +1154,6 @@ const TextRenderer: React.FC<TextRendererProps> = ({
           fill={fill}
         />
       ) : null}
-      {legend.length && !body.includes(LEGEND_PLACEHOLDER) ? (
-        <LegendKey entries={legend} column={legendColumn} />
-      ) : null}
       </div>
       {footer ? (
         <div ref={footerRef} style={{ marginTop: 'auto', paddingTop: 12 }}>
@@ -1183,7 +1161,6 @@ const TextRenderer: React.FC<TextRendererProps> = ({
         </div>
       ) : null}
     </Stack>
-    </LegendContext.Provider>
   );
 };
 

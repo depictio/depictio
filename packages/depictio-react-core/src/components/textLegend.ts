@@ -4,6 +4,13 @@ import type { CategoryColorSource } from '../categoryColors';
 /** What a text tile's `legend` lists at most before it says how many more. */
 export const LEGEND_MAX = 24;
 
+/** The column a fact value names with `{{legend:column}}`, or null when the
+ *  value is anything else. */
+export function legendColumnOf(value: string): string | null {
+  const m = /^\{\{legend:([A-Za-z0-9_.-]+)\}\}$/.exec(value.trim());
+  return m ? m[1] : null;
+}
+
 export interface LegendEntry {
   label: string;
   color: string;

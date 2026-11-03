@@ -50,24 +50,14 @@ def test_no_logo_writes_none():
     assert "logo:" not in DashboardDataLite.from_full(full).to_yaml()
 
 
-def test_the_legend_survives_the_round_trip():
-    yaml = "title: T\ncomponents:\n  - {component_type: text, title: S, legend: genome}\n"
-    full = DashboardDataLite.from_yaml(yaml).to_full()
-    assert full["stored_metadata"][0]["legend"] == "genome"
-    again = DashboardDataLite.from_yaml(DashboardDataLite.from_full(full).to_yaml()).to_full()
-    assert again["stored_metadata"][0]["legend"] == "genome"
+def test_a_legend_placeholder_needs_no_declaration():
+    TextLiteComponent(
+        title="T", body="- **Genome** {{legend:genome}}\n- **Group** {{legend:g-1.x}}"
+    )
 
 
-def test_no_legend_writes_none():
-    full = DashboardDataLite.from_yaml(
-        "title: T\ncomponents:\n  - {component_type: text, title: T}\n"
-    ).to_full()
-    assert "legend:" not in DashboardDataLite.from_full(full).to_yaml()
-
-
-def test_the_legend_placeholder_needs_a_legend():
-    from depictio.models.components.lite import TextLiteComponent
-
-    TextLiteComponent(title="T", body="- **Key** {{legend}}", legend="genome")
-    with pytest.raises(ValidationError, match="not a declared value"):
-        TextLiteComponent(title="T", body="- **Key** {{legend}}")
+def test_a_legend_placeholder_names_a_column():
+    with pytest.raises(ValidationError, match="not a placeholder the viewer prints"):
+        TextLiteComponent(title="T", body="- **Key** {{legend: genome}}")
+    with pytest.raises(ValidationError, match="not a placeholder the viewer prints"):
+        TextLiteComponent(title="T", body="- **Key** {{legend:}}")
