@@ -78,7 +78,7 @@ import { UnstyledDropZone } from '../../components/UnstyledDropZone';
 import { useFolderDropzone } from '../../hooks/useFolderDropzone';
 
 import { useCurrentUser } from '../../hooks/useCurrentUser';
-import { AppSidebar } from '../../chrome';
+import { AppSidebar, LoadErrorCard } from '../../chrome';
 import IngestionReportPanel from './IngestionReportPanel';
 import ProjectIngestionHistoryPanel from './ProjectIngestionHistoryPanel';
 import ProjectIngestionTrigger from './ProjectIngestionTrigger';
@@ -307,7 +307,7 @@ const ProjectDetailApp: React.FC = () => {
   const [project, setProject] = useState<ProjectListEntry | null>(null);
   const [deltaLocations, setDeltaLocations] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<{ error: unknown } | null>(null);
   const [selectedDcId, setSelectedDcId] = useState<string | null>(null);
   // Active project-detail tab. Honors `#ingestion` deep links (e.g. from the
   // dashboard banner / settings drawer) and is controlled so the ingestion
@@ -361,7 +361,7 @@ const ProjectDetailApp: React.FC = () => {
 
   useEffect(() => {
     if (!projectId) {
-      setLoadError('No project ID in URL.');
+      setLoadError({ error: Object.assign(new Error('No project ID in URL.'), { status: 404 }) });
       setLoading(false);
       return;
     }
@@ -372,8 +372,8 @@ const ProjectDetailApp: React.FC = () => {
         setProject(project);
         setDeltaLocations(delta_locations || {});
       })
-      .catch((err: Error) => {
-        setLoadError(err.message || 'Failed to load project.');
+      .catch((err: unknown) => {
+        setLoadError({ error: err });
       })
       .finally(() => setLoading(false));
   }, [projectId, refreshKey]);
@@ -477,18 +477,13 @@ const ProjectDetailApp: React.FC = () => {
           <Loader />
         </Center>
       ) : loadError ? (
-        <Center mih={300}>
-          <Stack align="center" gap="xs">
-            <Icon
-              icon="mdi:alert-circle"
-              width={32}
-              color="var(--mantine-color-red-6)"
-            />
-            <Text c="red">{loadError}</Text>
-            <Button component="a" href="/projects" variant="light">
-              Back to projects
-            </Button>
-          </Stack>
+        <Center mih={300} py="xl">
+          <LoadErrorCard
+            subject="project"
+            resourceId={projectId}
+            error={loadError.error}
+            onRetry={refresh}
+          />
         </Center>
       ) : !project ? null : (
         (() => {

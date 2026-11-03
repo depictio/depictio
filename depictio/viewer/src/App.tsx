@@ -24,6 +24,7 @@ import {
   scopeUnits,
   AvailableFilterValuesProvider,
   DataVersionProvider,
+  HttpStatusError,
   dataVersionBody,
   isCurrentDataOnlyType,
   DashboardGrid,
@@ -147,6 +148,7 @@ import Inspector from './chrome/inspector/Inspector';
 import { useInspectorChrome } from './chrome/inspector/useInspectorChrome';
 import InspectorProviders from './chrome/inspector/InspectorProviders';
 import { CommentsHeaderButton, CommentsProvider } from './components/comments';
+import DashboardLoadError from './chrome/DashboardLoadError';
 import ComponentExportProvider from './components/export/ComponentExportProvider';
 import NotesFooter from './components/NotesFooter';
 import DashboardLoadIndicator from './components/DashboardLoadIndicator';
@@ -179,6 +181,11 @@ const App: React.FC = () => {
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [allDashboards, setAllDashboards] = useState<DashboardSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
+  // What the dashboard fetch threw, kept as thrown so the error page can tell a
+  // missing dashboard from a refused one from a server that is down.
+  const [loadFailure, setLoadFailure] = useState<{ error: unknown } | null>(null);
+  // Bumped by "Try again": the load effect depends on it.
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [loading, setLoading] = useState(true);
   // Seed synchronously from three sources merged per (index, source) key, in
   // ascending priority: this dashboard's remembered filters (localStorage, when
@@ -440,6 +447,9 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!dashboardId) {
       setError('No dashboard ID in URL. Expected /dashboard/<id>.');
+      setLoadFailure({
+        error: new HttpStatusError('No dashboard ID in URL. Expected /dashboard/<id>.', 404),
+      });
       setLoading(false);
       return;
     }
@@ -471,9 +481,17 @@ const App: React.FC = () => {
       })
       .catch((err) => {
         setError(`Failed to load dashboard: ${err.message || err}`);
+        setLoadFailure({ error: err });
       })
       .finally(() => setLoading(false));
-  }, [dashboardId, previewVersionId]);
+  }, [dashboardId, previewVersionId, loadAttempt]);
+
+  const retryLoad = useCallback(() => {
+    setError(null);
+    setLoadFailure(null);
+    setLoading(true);
+    setLoadAttempt((n) => n + 1);
+  }, []);
 
   // Resolve the parent project and its ingestion health (template projects only).
   useEffect(() => {
@@ -1725,7 +1743,6 @@ const App: React.FC = () => {
           for the header indicator to count. No prose — the title is already on
           screen, so naming the phase adds nothing. */}
       {loading && <BootSplash />}
-      {error && <Text c="red" p="lg">{error}</Text>}
     </>
   );
   const canvas =
@@ -2021,6 +2038,18 @@ const App: React.FC = () => {
       />
     </>
   );
+
+  // The dashboard could not be loaded: nothing to lay out, so none of the
+  // dashboard chrome (title, tab list, filter panel) is drawn around it.
+  if (loadFailure) {
+    return (
+      <DashboardLoadError
+        error={loadFailure.error}
+        resourceId={dashboardId}
+        onRetry={retryLoad}
+      />
+    );
+  }
 
   return (
     // Every renderer reads its pin from here rather than taking it as a prop:

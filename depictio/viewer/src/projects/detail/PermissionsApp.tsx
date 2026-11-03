@@ -63,7 +63,7 @@ import type {
 } from 'depictio-react-core';
 
 import { useCurrentUser } from '../../hooks/useCurrentUser';
-import { AppSidebar } from '../../chrome';
+import { AppSidebar, LoadErrorCard } from '../../chrome';
 import { usePageTitle } from '../../branding';
 import { AccessOverview, GroupMembersPreview, useEffectiveAccess } from './AccessOverview';
 
@@ -268,7 +268,7 @@ const PermissionsApp: React.FC = () => {
   const [rows, setRows] = useState<UserRow[]>([]);
   const [groupRows, setGroupRows] = useState<GroupRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<{ error: unknown } | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [emailInput, setEmailInput] = useState('');
   const [adding, setAdding] = useState(false);
@@ -340,7 +340,7 @@ const PermissionsApp: React.FC = () => {
 
   useEffect(() => {
     if (!projectId) {
-      setLoadError('No project ID in URL.');
+      setLoadError({ error: Object.assign(new Error('No project ID in URL.'), { status: 404 }) });
       setLoading(false);
       return;
     }
@@ -352,9 +352,7 @@ const PermissionsApp: React.FC = () => {
         setRows(buildRows(project));
         setGroupRows(buildGroupRows(project));
       })
-      .catch((err: Error) =>
-        setLoadError(err.message || 'Failed to load project.'),
-      )
+      .catch((err: unknown) => setLoadError({ error: err }))
       .finally(() => setLoading(false));
   }, [projectId, refreshKey]);
 
@@ -1101,22 +1099,13 @@ const PermissionsApp: React.FC = () => {
           <Loader />
         </Center>
       ) : loadError ? (
-        <Center mih={300}>
-          <Stack align="center" gap="xs">
-            {glass ? (
-              <TriangleAlert size={32} strokeWidth={STROKE} color="var(--mantine-color-red-6)" aria-hidden />
-            ) : (
-              <Icon
-                icon="mdi:alert-circle"
-                width={32}
-                color="var(--mantine-color-red-6)"
-              />
-            )}
-            <Text c="red">{loadError}</Text>
-            <Button component="a" href="/projects" variant={glass ? 'default' : 'light'}>
-              Back to projects
-            </Button>
-          </Stack>
+        <Center mih={300} py="xl">
+          <LoadErrorCard
+            subject="project"
+            resourceId={projectId}
+            error={loadError.error}
+            onRetry={refresh}
+          />
         </Center>
       ) : !project ? null : glass ? (
         glassBody

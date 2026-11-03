@@ -42,7 +42,7 @@ import type {
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import { useAuthMode } from '../auth/hooks/useAuthMode';
 import TourButton from '../walkthrough/TourButton';
-import { AppSidebar } from '../chrome';
+import { AppSidebar, LoadErrorCard } from '../chrome';
 import ProjectsList from './ProjectsList';
 import CreateProjectModal, {
   ManifestCreatedModal,
@@ -87,7 +87,7 @@ const ProjectsApp: React.FC = () => {
   const accent = useBrandAccents();
   const [projects, setProjects] = useState<ProjectListEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<{ error: unknown } | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
   const [createOpened, { open: openCreate, close: closeCreate }] = useDisclosure(false);
@@ -128,8 +128,8 @@ const ProjectsApp: React.FC = () => {
     setLoadError(null);
     listProjects()
       .then(setProjects)
-      .catch((err: Error) => {
-        setLoadError(err.message || 'Failed to load projects');
+      .catch((err: unknown) => {
+        setLoadError({ error: err });
       })
       .finally(() => setLoading(false));
   }, [refreshKey]);
@@ -259,17 +259,7 @@ const ProjectsApp: React.FC = () => {
         </Center>
       ) : loadError ? (
         <Center mih={200}>
-          <Stack align="center" gap="xs">
-            <Icon
-              icon="mdi:alert-circle"
-              width={32}
-              color="var(--mantine-color-red-6)"
-            />
-            <Text c="red">{loadError}</Text>
-            <Button variant="light" onClick={refresh}>
-              Try again
-            </Button>
-          </Stack>
+          <LoadErrorCard subject="projects" error={loadError.error} onRetry={refresh} />
         </Center>
       ) : (
         <ProjectsList

@@ -25,7 +25,7 @@ import type {
 } from 'depictio-react-core';
 
 import { useCurrentUser } from '../hooks/useCurrentUser';
-import { AppSidebar } from '../chrome';
+import { AppSidebar, LoadErrorCard } from '../chrome';
 import TourButton from '../walkthrough/TourButton';
 import DashboardsList from './DashboardsList';
 import type { ViewMode } from './hooks/useDashboardViewPrefs';
@@ -79,7 +79,7 @@ const DashboardsApp: React.FC = () => {
   const [dashboards, setDashboards] = useState<DashboardListEntry[]>([]);
   const [projects, setProjects] = useState<ProjectListEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<{ error: unknown } | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
   const [createOpened, { open: openCreate, close: closeCreate }] = useDisclosure(false);
@@ -113,8 +113,8 @@ const DashboardsApp: React.FC = () => {
         setDashboards(list);
         setProjects(projs);
       })
-      .catch((err: Error) => {
-        setLoadError(err.message || 'Failed to load dashboards');
+      .catch((err: unknown) => {
+        setLoadError({ error: err });
       })
       .finally(() => setLoading(false));
   }, [refreshKey]);
@@ -273,17 +273,7 @@ const DashboardsApp: React.FC = () => {
       </Center>
     ) : loadError ? (
       <Center mih={200}>
-        <Stack align="center" gap="xs">
-          <Icon
-            icon="mdi:alert-circle"
-            width={32}
-            color="var(--mantine-color-red-6)"
-          />
-          <Text c="red">{loadError}</Text>
-          <Button variant="light" onClick={refresh}>
-            Try again
-          </Button>
-        </Stack>
+        <LoadErrorCard subject="dashboards" error={loadError.error} onRetry={refresh} />
       </Center>
     ) : (
       <DashboardsList
