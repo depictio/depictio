@@ -6,7 +6,10 @@
  * called on; an Assembly menu listing hg19 and mm10 next to it only invites a
  * pick that mis-scales every bar. A template that leaves the key null (the
  * data decides) or carries an unresolved `{GENOME}` placeholder pins nothing,
- * and keeps the menu. `lock_assembly` overrides the inference either way.
+ * and keeps the menu. A table that carries its own chromosome lengths
+ * (`chrom_length_col`) needs no reference either: a pick would only add the
+ * reference's chromosomes as empty bars (chr1 to chrY next to an insect's
+ * scaffolds). `lock_assembly` overrides the inference either way.
  */
 
 /** A value still holding a template placeholder (`{GENOME}`, `${GENOME}`). */
@@ -28,7 +31,9 @@ export function pinnedAssembly(config: { assembly?: string | null }): string | n
 export function isAssemblyLocked(config: {
   assembly?: string | null;
   lock_assembly?: boolean | null;
+  chrom_length_col?: string | null;
 }): boolean {
   if (typeof config.lock_assembly === 'boolean') return config.lock_assembly;
+  if (typeof config.chrom_length_col === 'string' && config.chrom_length_col.trim() !== '') return true;
   return pinnedAssembly(config) !== null;
 }

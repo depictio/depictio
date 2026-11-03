@@ -4,8 +4,13 @@ import {
   colourUpsetSets,
   inkUpsetForDark,
   resolveUpsetSetColors,
+  scaleUpsetDots,
   upsetColumnSets,
+  upsetLegendLabels,
+  upsetLegendRows,
+  upsetScaleForWidth,
   upsetSetNames,
+  withUpsetResponsiveLayout,
   withUpsetSetLabelDots,
 } from './upsetFigure';
 
@@ -200,5 +205,116 @@ describe('inkUpsetForDark', () => {
     expect(bars).toBe(intersectionBars);
     const [setBars] = inkUpsetForDark([{ ...setSizes, marker: { color: ['#333333', '#f5a11b'] } }], layout, ink);
     expect(colorOf(setBars)).toEqual(['#ced4da', '#f5a11b']);
+  });
+});
+
+describe('upset responsive layout', () => {
+  // A figure as plotly-upset draws it: fixed margins, a legend in the corner
+  // over the set-size bars, a "Nb. of associations" group of legend entries.
+  const base = {
+    margin: { l: 90, r: 10, t: 30, b: 20 },
+    font: { size: 11 },
+    legend: { x: 0, y: 1, xanchor: 'left', yanchor: 'top', font: { size: 10 }, tracegroupgap: 4 },
+    yaxis: { title: { text: 'Intersection Size', font: { size: 11 } } },
+  };
+  const entry = (name: string) => ({
+    type: 'bar',
+    name,
+    x: [0],
+    y: [1],
+    legendgroup: 'degree',
+    legendgrouptitle: { text: 'Nb. of associations' },
+    showlegend: true,
+  });
+  const hidden = { type: 'bar', name: 'Set Size', orientation: 'h', x: [1], y: [0], showlegend: false };
+  const few = [hidden, entry('1'), entry('2'), entry('3')];
+  const many = [
+    hidden,
+    ...Array.from({ length: 40 }, (_, i) => ({ ...entry(`category number ${i}`), legendgroup: `g${i}`, legendgrouptitle: undefined })),
+  ];
+
+  it('scales with the width, never above the drawn size nor below the floor', () => {
+    expect(upsetScaleForWidth(null)).toBe(1);
+    expect(upsetScaleForWidth(2000)).toBe(1);
+    expect(upsetScaleForWidth(10)).toBe(0.7);
+    expect(upsetScaleForWidth(504)).toBe(0.7);
+    expect(upsetScaleForWidth(612)).toBeCloseTo(0.85);
+  });
+
+  it('lists the shown entries and the group title once', () => {
+    expect(upsetLegendLabels(few)).toEqual(['Nb. of associations', '1', '2', '3']);
+  });
+
+  it('wraps entries into more rows as the room narrows', () => {
+    const labels = upsetLegendLabels(many);
+    expect(upsetLegendRows([], 500, 10)).toBe(0);
+    expect(upsetLegendRows(labels, 300, 10)).toBeGreaterThan(upsetLegendRows(labels, 900, 10));
+  });
+
+  it('puts the legend above the plot, horizontal, anchored on its bottom edge', () => {
+    const out = withUpsetResponsiveLayout(base, few, { width: 720 });
+    const legend = out.legend as Record<string, unknown>;
+    expect(legend.orientation).toBe('h');
+    expect(legend.yref).toBe('paper');
+    expect(legend.y).toBe(1);
+    expect(legend.yanchor).toBe('bottom');
+    expect(legend.x).toBe(0);
+    // Room above the bars for the rows it takes, plus the pad.
+    const top = (out.margin as { t: number }).t;
+    expect(top).toBeGreaterThan(30);
+  });
+
+  it('grows the top margin with the number of entries', () => {
+    const topOf = (data: Record<string, unknown>[]) =>
+      (withUpsetResponsiveLayout(base, data, { width: 600 }).margin as { t: number }).t;
+    expect(topOf(many)).toBeGreaterThan(topOf(few));
+  });
+
+  it('keeps the title room and leaves no band for a hidden legend', () => {
+    const titled = { ...base, margin: { ...base.margin, t: 80 } };
+    const shown = withUpsetResponsiveLayout(titled, few, { width: 720 }).margin as { t: number };
+    const hiddenLegend = withUpsetResponsiveLayout(titled, few, { width: 720, hideLegend: true })
+      .margin as { t: number };
+    expect(hiddenLegend.t).toBe(50 + 20);
+    expect(shown.t).toBeGreaterThan(hiddenLegend.t);
+  });
+
+  it('shrinks fonts and margins on a narrow tile and leaves a wide one as drawn', () => {
+    const narrow = withUpsetResponsiveLayout(base, few, { width: 400 });
+    const wide = withUpsetResponsiveLayout(base, few, { width: 1200 });
+    expect((narrow.legend as { font: { size: number } }).font.size).toBeLessThan(10);
+    expect((narrow.font as { size: number }).size).toBeLessThan(11);
+    expect((narrow.margin as { l: number }).l).toBeLessThan(90);
+    expect((wide.legend as { font: { size: number } }).font.size).toBe(10);
+    expect((wide.font as { size: number }).size).toBe(11);
+    expect((wide.margin as { l: number }).l).toBe(90);
+    const axisTitle = (narrow.yaxis as { title: { font: { size: number } } }).title.font.size;
+    expect(axisTitle).toBeLessThan(11);
+  });
+
+  it('does not mutate its input', () => {
+    const copy = JSON.parse(JSON.stringify(base));
+    withUpsetResponsiveLayout(base, few, { width: 300 });
+    expect(base).toEqual(copy);
+  });
+
+  it('shrinks the matrix dots on a narrow tile only', () => {
+    const matrix = { yaxis3: { tickvals: [0, 1], ticktext: ['A', 'B'] } };
+    const dots = {
+      type: 'scatter',
+      mode: 'markers',
+      x: [0, 1],
+      y: [0, 1],
+      hovertext: ['a', 'b'],
+      marker: { size: 16, color: '#333333' },
+      xaxis: 'x3',
+      yaxis: 'y3',
+    };
+    const bars = { type: 'bar', x: [0], y: [1], marker: { size: 16 } };
+    const narrow = scaleUpsetDots([dots, bars], matrix, 360);
+    expect((narrow[0].marker as { size: number }).size).toBeLessThan(16);
+    expect(narrow[1]).toBe(bars);
+    const wide = scaleUpsetDots([dots, bars], matrix, 1000);
+    expect(wide[0]).toBe(dots);
   });
 });

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMantineColorScheme, useMantineTheme } from '@mantine/core';
 import { useElementSize } from '@mantine/hooks';
 import Plot from './LegendAwarePlot';
@@ -24,13 +24,13 @@ import { usePlotAnnotationLayer } from '../annotations/usePlotAnnotationLayer';
 import { supportsAdvancedVizAnnotation } from '../../annotations/plotDecorate';
 import { usePersistedVizControl } from './usePersistedVizControl';
 import { withRanksInOrder } from './phylo/view';
-import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragment } from './plotlyTheme';
+import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeColors, plotlyThemeFragment } from './plotlyTheme';
+import { syncAxisBreak, type AxisBreakSpec } from './axisBreakOverlay';
 import { demandForPx } from './contentDemand';
 import {
-  axisBreakShapes,
   barSlots,
   compositionColumns,
-  formatAxisFloor,
+  formatAxisValue,
   groupSamples,
   isDenseTaxonomyAxis,
   isSpacerSlot,
@@ -206,7 +206,7 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
   const [sampleSort, setSampleSort] = usePersistedVizControl<TaxonomySampleSort>(metadata, 'sample_sort', 'input');
   const [sortCategory, setSortCategory] = usePersistedVizControl<string | null>(metadata, 'sort_category', null);
   const [groupCol, setGroupCol] = usePersistedVizControl<string | null>(metadata, 'group_col', null);
-  const [yZoom, setYZoom] = usePersistedVizControl<'off' | 'auto'>(metadata, 'y_zoom', 'off');
+  const [yZoom, setYZoom] = usePersistedVizControl<'off' | 'auto'>(metadata, 'y_zoom', 'auto');
   const [showLegend, setShowLegend] = usePersistedVizControl(metadata, 'show_legend', true);
   const [logY, setLogY] = usePersistedVizControl(metadata, 'log_y', false);
 
@@ -401,7 +401,7 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
     };
   }, [metadata.wf_id, metadata.dc_id, bound, JSON.stringify(requiredCols), filterSig, refreshTick, fullLoad, rankReady, wantedRank]);
 
-  const { figure, allRanks, categories, seriesCount, stripCount, slotCount, canZoom } = useMemo(() => {
+  const { figure, allRanks, categories, seriesCount, stripCount, slotCount, canZoom, axisBreak } = useMemo(() => {
     if (!rows)
       return {
         figure: null,
@@ -411,6 +411,7 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
         stripCount: 0,
         slotCount: 0,
         canZoom: false,
+        axisBreak: null as { axis: 'x' | 'y'; normalise: boolean } | null,
       };
     const legendPos = config.legend_pos ?? 'right';
     const melted = wide
@@ -754,15 +755,6 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
     }
     const groupBandPx = !horizontal && spans.length > 0 ? GROUP_LABEL_PX : 0;
 
-    // The `//` at the base of a cropped value axis, drawn on its axis line.
-    const breakShapes = zoom
-      ? axisBreakShapes(
-          horizontal ? 'h' : 'v',
-          horizontal ? { x: barDomain[0], y: 0 } : { x: 0, y: barDomain[0] },
-          { line: axisColour, background: isDark ? theme.colors.dark[7] : theme.white },
-        )
-      : [];
-
     // Past 40 bars the tilted sample labels run into each other: they go (the
     // hover still names each bar), and a legend in rows moves above the bars.
     const denseAxis = isDenseTaxonomyAxis(nSamples);
@@ -787,7 +779,6 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
     // as percentages — this gives the toggle a visible effect even when the
     // input data is already pre-normalised (the old behaviour: both toggle
     // states rendered identically because each sample already summed to 1).
-    const croppedFrom = zoom ? formatAxisFloor(zoom, normalise) : null;
     const valueAxis = {
       ...plotlyAxisOverrides(isDark, theme),
       domain: barDomain,
@@ -795,7 +786,10 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
         text: valueAxisTitle(
           config.value_title,
           normalise ? 'Relative abundance' : wide ? 'Value' : config.abundance_col,
-          croppedFrom,
+          // The cropped axis says where it starts in the break marker's live
+          // caption (axisBreakOverlay), which follows zoom and pan; a title
+          // would keep printing the opening floor.
+          null,
         ),
       },
       ...(normalise
@@ -809,7 +803,7 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
             ...(logY ? { type: 'log' as const } : {}),
             ...(zoom ? { range: [zoom.floor, zoom.top] } : {}),
           }),
-      // A cropped axis draws its line, so the break has a line to cut.
+      // A cropped axis draws its line, so the base reads as a cut.
       ...(zoom ? { showline: true } : {}),
     };
 
@@ -821,6 +815,8 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
       slotCount: slots.length,
       categories: shownCategories,
       canZoom: zoomCandidate != null,
+      // Zoom is cropping the value axis: draw it as a broken one.
+      axisBreak: zoom ? { axis: (horizontal ? 'x' : 'y') as 'x' | 'y', normalise } : null,
       figure: {
         data: [...data, ...stripTraces],
         layout: {
@@ -830,9 +826,7 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
           // take what they need instead of a guess that clipped them.
           margin: { l: 60, r: 20, t: (stripKey ? 44 : 30) + legendTopPx + groupBandPx, b: 30 },
           annotations: [...stripLabels, ...groupLabels],
-          ...(breakShapes.length || groupRules.length
-            ? { shapes: [...groupRules, ...breakShapes] }
-            : {}),
+          ...(groupRules.length ? { shapes: groupRules } : {}),
           ...(horizontal
             ? { yaxis: categoryAxis, xaxis: valueAxis }
             : { xaxis: categoryAxis, yaxis: valueAxis }),
@@ -1025,9 +1019,52 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
     () => (figure ? applyDataTheme(figure.data, isDark, theme) : null),
     [figure, isDark, theme],
   );
-  const plotLayout = useMemo(
-    () => (figure ? applyLayoutTheme(figure.layout as any, isDark, theme) : null),
-    [figure, isDark, theme],
+  const plotLayout = useMemo(() => {
+    if (!figure) return null;
+    const themed = applyLayoutTheme(figure.layout as any, isDark, theme);
+    if (!axisBreak) return themed;
+    // The theme leaves axis lines at the grid's hairline colour; a broken
+    // axis needs a line a gap can interrupt and slashes can cross.
+    const key = horizontal ? 'xaxis' : 'yaxis';
+    return {
+      ...themed,
+      [key]: { ...(themed as any)[key], linecolor: plotlyThemeColors(isDark, theme).textColor },
+    };
+  }, [figure, isDark, theme, axisBreak, horizontal]);
+
+  // The break marker is an overlay on Plotly's own svg (axisBreakOverlay). It
+  // attaches through the plot's graph div and follows the current spec; the
+  // ref keeps the Plot's handlers stable across renders.
+  const breakSpec = useMemo<AxisBreakSpec | null>(
+    () =>
+      axisBreak
+        ? {
+            axis: axisBreak.axis,
+            // Read from the range on every draw, so the caption follows zoom and pan.
+            formatFloor: (floor: number, span: number) => formatAxisValue(floor, span, axisBreak.normalise),
+            fallbackBg: isDark ? theme.colors.dark[7] : theme.white,
+          }
+        : null,
+    [axisBreak, isDark, theme],
+  );
+  const breakSpecRef = useRef(breakSpec);
+  breakSpecRef.current = breakSpec;
+  const graphRef = useRef<unknown>(null);
+  const onGraph = useCallback((_figure: unknown, gd: unknown) => {
+    graphRef.current = gd;
+    syncAxisBreak(gd, breakSpecRef.current);
+  }, []);
+  useEffect(() => {
+    // Zoom toggled, floor changed, theme switched: the Plot's own update may
+    // not fire (nothing else about the figure moved), so push the spec here.
+    if (graphRef.current) syncAxisBreak(graphRef.current, breakSpec);
+  }, [breakSpec]);
+  useEffect(
+    () => () => {
+      syncAxisBreak(graphRef.current, null);
+      graphRef.current = null;
+    },
+    [],
   );
   // Chart annotations. A bar is a taxon's total in one sample, not a row,
   // so marked bars are stored as coordinates.
@@ -1074,7 +1111,7 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
               useResizeHandler
               style={{ width: '100%', height: '100%' }}
               config={{ displaylogo: false, responsive: true } as any}
-              {...annotations.plotProps()}
+              {...annotations.plotProps({ onInitialized: onGraph, onUpdate: onGraph })}
             />
           </div>
           {annotations.toolbar}

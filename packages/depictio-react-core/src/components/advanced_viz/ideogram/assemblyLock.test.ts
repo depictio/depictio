@@ -27,4 +27,11 @@ describe('isAssemblyLocked', () => {
     expect(isAssemblyLocked({ assembly: 'hg38', lock_assembly: false })).toBe(false);
     expect(isAssemblyLocked({ lock_assembly: true })).toBe(true);
   });
+
+  it('locks when the table carries its own chromosome lengths', () => {
+    expect(isAssemblyLocked({ chrom_length_col: 'sequence_length' })).toBe(true);
+    expect(isAssemblyLocked({ chrom_length_col: '  ' })).toBe(false);
+    expect(isAssemblyLocked({ chrom_length_col: null })).toBe(false);
+    expect(isAssemblyLocked({ chrom_length_col: 'len', lock_assembly: false })).toBe(false);
+  });
 });

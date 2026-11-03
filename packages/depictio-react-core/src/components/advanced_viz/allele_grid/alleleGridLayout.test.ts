@@ -2,15 +2,29 @@ import { describe, expect, it } from 'vitest';
 
 import {
   alleleFrequencies,
+  barValuePlacement,
+  clampResolution,
+  fitRowPx,
+  fontsForRow,
+  formatBarValue,
+  maxAlleleFields,
+  MAX_ROW_PX,
+  MIN_ROW_PX,
+  NATURAL_ROW_PX,
+  resolutionOptions,
   alleleGroup,
   assignAlleleShades,
   buildAlleleGrid,
   cellKey,
   cellSummary,
+  cellZygosity,
+  clusterByGroup,
   colourUniverse,
   fitAlleleLabel,
   formatAllele,
   gridGeometry,
+  groupKeyOf,
+  locusClasses,
   inkFor,
   locusGroups,
   MAX_CELL_PX,
@@ -22,8 +36,12 @@ import {
   parseAllele,
   parseAlleleRows,
   parseHaplotype,
+  rankInGroup,
   rawValuesForLabel,
+  rowPositions,
   shadeForRank,
+  shadeOffset,
+  zygosityCounts,
   type AlleleRow,
   type AlleleCall,
 } from './alleleGridLayout';
@@ -448,5 +466,214 @@ describe('geometry and labels', () => {
 
   it('frequencies of an empty set are empty', () => {
     expect(alleleFrequencies([], [])).toEqual([]);
+  });
+});
+
+describe('colour modes', () => {
+  const rows = rowsOf([
+    ['S1', 'A', 'A*02:01', 1],
+    ['S1', 'A', 'A*11:01', 2],
+    ['S2', 'A', 'A*02:01', 1],
+    ['S2', 'A', 'A*02:01', 2],
+    ['S3', 'A', 'A*03:01', 1],
+    ['S3', 'A', null, 2],
+  ]);
+
+  it('classes a cell as homozygous, heterozygous or one allele typed', () => {
+    const grid = buildAlleleGrid(rows, { resolution: 2 });
+    const z = (s: string) => cellZygosity(grid.cells.get(cellKey(s, 'A'))!);
+    expect(z('S1')).toBe('Heterozygous');
+    expect(z('S2')).toBe('Homozygous');
+    expect(z('S3')).toBe('One allele typed');
+    expect(Object.fromEntries(zygosityCounts(grid))).toEqual({
+      Heterozygous: 1,
+      Homozygous: 1,
+      'One allele typed': 1,
+    });
+  });
+
+  it('decides zygosity at the display resolution', () => {
+    const fine = rowsOf([
+      ['S1', 'A', 'A*02:01', 1],
+      ['S1', 'A', 'A*02:05', 2],
+    ]);
+    const at2 = buildAlleleGrid(fine, { resolution: 2 }).cells.get(cellKey('S1', 'A'))!;
+    const at1 = buildAlleleGrid(fine, { resolution: 1 }).cells.get(cellKey('S1', 'A'))!;
+    expect(cellZygosity(at2)).toBe('Heterozygous');
+    expect(cellZygosity(at1)).toBe('Homozygous');
+  });
+
+  it('lists the locus classes once each, in column order', () => {
+    expect(locusClasses([])).toEqual([]);
+    expect(
+      locusClasses([
+        { locus: 'A', category: 'Class I' },
+        { locus: 'B', category: 'Class I' },
+        { locus: 'DRB1', category: 'Class II' },
+        { locus: 'X', category: null },
+      ]),
+    ).toEqual(['Class I', 'Class II']);
+  });
+
+  it('finds the family of a pinned allele-group value', () => {
+    expect(groupKeyOf('HLA-A*02')).toBe('A*02');
+    expect(groupKeyOf('A*02')).toBe('A*02');
+    expect(groupKeyOf(null)).toBeNull();
+    const calls = buildAlleleGrid(rows, { resolution: 2 }).cells.get(cellKey('S1', 'A'))!.haplotypes;
+    expect(calls[0]!.group).toBe(groupKeyOf('HLA-A*02'));
+  });
+
+  it('shades alleles of a group lighter and darker around its base', () => {
+    const universe = colourUniverse(['HLA-A*02:01', 'HLA-A*02:05', 'HLA-A*11:01'], [], 2);
+    const ranks = rankInGroup(universe);
+    expect(ranks.get('A*02:01')).toBe(0);
+    expect(ranks.get('A*02:05')).toBe(1);
+    expect(ranks.get('A*11:01')).toBe(0);
+    expect(shadeOffset(0)).toBe(0);
+    expect(shadeOffset(1)).toBeGreaterThan(0);
+    expect(shadeOffset(2)).toBeLessThan(0);
+    const offsets = [1, 2, 3, 4, 5, 6].map(shadeOffset);
+    expect(new Set(offsets).size).toBe(offsets.length);
+    expect(Math.max(...offsets.map(Math.abs))).toBeLessThanOrEqual(0.7);
+  });
+});
+
+describe('grouping the rows', () => {
+  const cols = { ...COLS, haplotype: 'haplotype', group: 'grp' };
+  const table: Record<string, unknown[]> = {
+    sample: ['S1', 'S1', 'S2', 'S2', 'S3', 'S3', 'S4', 'S4'],
+    locus: Array(8).fill('A'),
+    allele: ['A*02:01', 'A*11:01', 'A*02:01', 'A*02:01', 'A*03:01', 'A*24:02', 'A*01:01', 'A*01:01'],
+    haplotype: [1, 2, 1, 2, 1, 2, 1, 2],
+    grp: ['RNA', 'RNA', 'DNA', 'DNA', 'RNA', 'RNA', null, null],
+  };
+
+  it('keeps the order untouched when not grouping', () => {
+    const grid = buildAlleleGrid(parseAlleleRows(table, cols), { resolution: 2 });
+    expect(grid.samples.map((s) => s.sample)).toEqual(['S1', 'S2', 'S3', 'S4']);
+    expect(grid.sampleRuns).toEqual([]);
+  });
+
+  it('clusters by group, no group last, and keeps the order inside a group', () => {
+    const grid = buildAlleleGrid(parseAlleleRows(table, cols), { resolution: 2, groupSamples: true });
+    expect(grid.samples.map((s) => s.sample)).toEqual(['S2', 'S1', 'S3', 'S4']);
+    expect(grid.sampleRuns).toEqual([
+      { group: 'DNA', start: 0, end: 1 },
+      { group: 'RNA', start: 1, end: 3 },
+      { group: null, start: 3, end: 4 },
+    ]);
+    expect(
+      clusterByGroup([
+        { sample: 'b', value: null, reads: null, group: 'x' },
+        { sample: 'a', value: null, reads: null, group: 'x' },
+      ]).map((s) => s.sample),
+    ).toEqual(['b', 'a']);
+  });
+
+  it('applies the sample guard after grouping and counts what it drops', () => {
+    const grid = buildAlleleGrid(parseAlleleRows(table, cols), {
+      resolution: 2,
+      groupSamples: true,
+      maxSamples: 2,
+    });
+    expect(grid.samples.map((s) => s.sample)).toEqual(['S2', 'S1']);
+    expect(grid.droppedSamples).toBe(2);
+  });
+
+  it('lays a header band before every run', () => {
+    const packed = rowPositions(3, [], 22, 18, 40);
+    expect(packed).toEqual({ ys: [40, 62, 84], bands: [], height: 66 });
+    const runs = [
+      { group: 'DNA', start: 0, end: 1 },
+      { group: 'RNA', start: 1, end: 3 },
+    ];
+    const laid = rowPositions(3, runs, 22, 18, 40);
+    expect(laid.bands).toEqual([40, 80]);
+    expect(laid.ys).toEqual([58, 98, 120]);
+    expect(laid.height).toBe(2 * 18 + 3 * 22);
+  });
+});
+
+describe('resolution on offer', () => {
+  it('counts the fields the data carries: OptiType alleles have two', () => {
+    const two = rowsOf([
+      ['S1', 'A', 'A*01:01', 1],
+      ['S1', 'A', 'A*02:01', 2],
+    ]);
+    expect(maxAlleleFields(two)).toBe(2);
+    expect(resolutionOptions(maxAlleleFields(two))).toEqual([1, 2]);
+  });
+
+  it('ignores an expression suffix and takes the finest allele', () => {
+    const rows = rowsOf([
+      ['S1', 'A', 'A*24:09N', 1],
+      ['S1', 'A', 'A*02:01:01:01', 2],
+    ]);
+    expect(maxAlleleFields(rows)).toBe(4);
+    expect(maxAlleleFields(rowsOf([['S1', 'A', 'A*24:09N', 1]]))).toBe(2);
+  });
+
+  it('is 4 when nothing parses, and offers nothing for one field', () => {
+    expect(maxAlleleFields([])).toBe(4);
+    expect(maxAlleleFields(rowsOf([['S1', 'A', 'A*02', 1]]))).toBe(1);
+    expect(resolutionOptions(1)).toEqual([]);
+    expect(resolutionOptions(4)).toEqual([1, 2, 3, 4]);
+  });
+
+  it('clamps a configured or persisted resolution down to the maximum', () => {
+    expect(clampResolution(4, 2)).toBe(2);
+    expect(clampResolution(3, 3)).toBe(3);
+    expect(clampResolution(0, 3)).toBe(1);
+    expect(clampResolution(Number.NaN, 4)).toBe(2);
+  });
+});
+
+describe('fitRowPx', () => {
+  it('fills the available height with the rows', () => {
+    // 12 rows under a 22 px header and 4 px pad in 400 px: (400 - 26) / 12 = 31.
+    expect(fitRowPx(400, 12, 22)).toBe(31);
+  });
+
+  it('counts the group bands', () => {
+    expect(fitRowPx(400, 10, 40, 2, 18)).toBe(Math.floor((400 - 40 - 36 - 4) / 10));
+  });
+
+  it('stays within the bounds', () => {
+    expect(fitRowPx(2000, 3, 22)).toBe(MAX_ROW_PX);
+    expect(fitRowPx(120, 40, 22)).toBe(MIN_ROW_PX);
+  });
+
+  it('falls back to the natural height before the tile is measured', () => {
+    expect(fitRowPx(0, 5, 22)).toBe(NATURAL_ROW_PX);
+    expect(fitRowPx(300, 0, 22)).toBe(NATURAL_ROW_PX);
+    expect(fitRowPx(Number.NaN, 5, 22)).toBe(NATURAL_ROW_PX);
+  });
+});
+
+describe('fontsForRow', () => {
+  it('grows with the row and never drops under the readable minimum', () => {
+    const small = fontsForRow(MIN_ROW_PX);
+    const big = fontsForRow(MAX_ROW_PX);
+    expect(small.label).toBeGreaterThanOrEqual(10);
+    expect(small.axis).toBeGreaterThanOrEqual(11);
+    expect(big.label).toBeGreaterThan(small.label);
+    expect(big.axis).toBeGreaterThanOrEqual(small.axis);
+  });
+});
+
+describe('side bar values', () => {
+  it('writes a value short enough for a bar end', () => {
+    expect(formatBarValue(950)).toBe('950');
+    expect(formatBarValue(12345)).toBe('12k');
+    expect(formatBarValue(4_100_000)).toBe('4.1M');
+    expect(formatBarValue(0.4567)).toBe('0.46');
+    expect(formatBarValue(0)).toBe('0');
+  });
+
+  it('puts it inside a long bar, past a short one, and nowhere without room', () => {
+    expect(barValuePlacement(50, 56, '950', 10)).toBe('inside');
+    expect(barValuePlacement(8, 56, '950', 10)).toBe('outside');
+    expect(barValuePlacement(28, 56, '4.1M', 12)).toBeNull();
+    expect(barValuePlacement(0, 56, '0', 10)).toBe('outside');
   });
 });

@@ -663,13 +663,13 @@ class StackedTaxonomyConfig(_BaseVizConfig):
         ),
     )
     y_zoom: Literal["off", "auto"] = Field(
-        default="off",
+        default="auto",
         description=(
-            "``auto`` crops the value axis to start just below the smallest "
+            "``auto`` (default) crops the value axis to start just below the smallest "
             "bottom segment, so a composition that is near-identical across "
             "bars (every bar 95 % one class) shows the part that varies. The "
-            "cropped axis carries a // break marker and says where it starts. "
-            "No effect when the crop would gain little, or on a log axis."
+            "axis title says where it starts. No effect when the crop would "
+            "gain little, or on a log axis."
         ),
     )
     orientation: Literal["v", "h"] = Field(
@@ -3485,8 +3485,18 @@ class IdeogramConfig(_BaseVizConfig):
             "Withhold the viewer's Assembly menu and ignore a pick saved earlier. "
             "Null locks when ``assembly`` is set to a real name (not empty, not an "
             "unresolved ``{GENOME}`` placeholder), so a template that states its "
-            "genome cannot be re-scaled by a click; true locks whatever ``assembly`` "
-            "says, false keeps the menu beside a stated assembly"
+            "genome cannot be re-scaled by a click, and also when ``chrom_length_col`` "
+            "is set (the table already carries its lengths, a reference would only add "
+            "empty bars); true locks whatever ``assembly`` says, false keeps the menu "
+            "beside a stated assembly"
+        ),
+    )
+    lock_mode: bool = Field(
+        default=False,
+        description=(
+            "Withhold the Auto / Marks / Density switch and keep ``mode``. For a table "
+            "whose rows are already summaries (one row per sequence, one per window), "
+            "where drawing a glyph per row would say nothing the density does not"
         ),
     )
     mode: Literal["marks", "density", "auto"] = Field(
@@ -5234,6 +5244,11 @@ AlleleResolution = Literal[1, 2, 3, 4]
 #: The per-sample bars an allele grid can draw beside it.
 AlleleSideBar = Literal["value", "reads"]
 
+#: What an allele grid's cells are coloured by: the allele group (a hue family
+#: per first field, a shade per allele), the zygosity of the locus (computed
+#: from the two halves, at the display resolution), or the locus class.
+AlleleColourBy = Literal["allele_group", "zygosity", "hla_class"]
+
 
 def _default_allele_side_bars() -> list[AlleleSideBar]:
     """Both bars; the renderer draws only those whose column is bound."""
@@ -5249,7 +5264,14 @@ class AlleleGridConfig(_BaseVizConfig):
     field) picks a hue family and the full allele a shade inside it, so every
     A*02 reads as one family across the cohort. A homozygous locus draws as
     one merged cell with a marker. The colours are the dashboard's
-    ``category_colors`` for the allele column first.
+    ``category_colors`` for the allele column first, then for the allele-group
+    column (``allele_group_col``), whose colour is the family's base and whose
+    shades are drawn lighter or darker inside it.
+
+    The reader can recolour the cells by zygosity or locus class (``color_by``)
+    and group the rows by a sample column (``group_cols``). There is no colour
+    by sample: the samples are the rows and already carry their label, and a hue
+    per row would break the reading of one hue per allele family.
     """
 
     viz_kind: Literal["allele_grid"] = "allele_grid"
@@ -5310,6 +5332,42 @@ class AlleleGridConfig(_BaseVizConfig):
         default=False,
         description="Fade a sample's cells by its read support instead of (or as well as) a bar",
     )
+    color_by: AlleleColourBy = Field(
+        default="allele_group",
+        description=(
+            "Colour the cells by allele group (a hue family per first field, a shade per "
+            "allele), by zygosity (homozygous, heterozygous, one allele typed; computed at "
+            "the display resolution) or by locus class (needs `category_col`)"
+        ),
+    )
+    allele_group_col: str | None = Field(
+        default=None,
+        description=(
+            "Column of allele groups (HLA-A*02) whose `category_colors` give each group its "
+            "base colour; the grid shades the alleles inside a group lighter or darker. Null, "
+            "or a group the dashboard does not colour, uses the theme's hue families. The "
+            "column is only read for its colours, never fetched."
+        ),
+    )
+    zygosity_col: str | None = Field(
+        default=None,
+        description=(
+            "Column whose `category_colors` colour Homozygous, Heterozygous and One allele "
+            "typed in zygosity mode; null uses the theme's colours. Only read for its "
+            "colours, never fetched."
+        ),
+    )
+    group_cols: list[str] | None = Field(
+        default=None,
+        description=(
+            "Sample-level columns (constant over a sample's rows) the reader may group the "
+            "rows by, each group under a header. Null, or empty, hides the control."
+        ),
+    )
+    group_by: str | None = Field(
+        default=None,
+        description="Column the rows start grouped by; null starts ungrouped. Must be in `group_cols` when that is set",
+    )
     value_label: str | None = Field(
         default=None, description="Header of the value bar; null uses the column name"
     )
@@ -5323,6 +5381,14 @@ class AlleleGridConfig(_BaseVizConfig):
         description="Guard on the grid rows drawn; the rest are counted, never sampled",
     )
     max_loci: int = Field(default=24, ge=1, le=60, description="Guard on the grid columns drawn")
+
+    @model_validator(mode="after")
+    def _check_allele_grid(self) -> AlleleGridConfig:
+        if self.color_by == "hla_class" and not self.category_col:
+            raise ValueError("color_by: hla_class needs category_col (the locus class column)")
+        if self.group_by and self.group_cols and self.group_by not in self.group_cols:
+            raise ValueError("group_by must be one of group_cols")
+        return self
 
     # --- Selection as a cross-filter ---------------------------------------
     # Off by default, as for the other non-protein kinds.

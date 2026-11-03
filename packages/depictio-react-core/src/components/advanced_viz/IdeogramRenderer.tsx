@@ -140,6 +140,8 @@ interface IdeogramConfig {
   chrom_length_col?: string | null;
   assembly?: string | null;
   lock_assembly?: boolean | null;
+  /** Withhold the Auto / Marks / Density switch and keep `mode`. */
+  lock_mode?: boolean | null;
   mode?: RenderMode;
   bin_size?: number | null;
   orientation?: Orientation;
@@ -341,6 +343,9 @@ const IdeogramRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onF
   const [hiddenCats, setHiddenCats] = usePersistedVizControl<string[] | null>(metadata, 'hidden_categories', null);
   const [colourBy, setColourBy] = useState<'category' | 'value'>('category');
   const pinnedColours = usePinnedCategoryColors(config.category_col);
+  // The genome's colour, when the dashboard gives its column one: a swatch by
+  // each karyotype's title ties it to the same genome elsewhere.
+  const sampleColours = usePinnedCategoryColors(config.sample_col);
 
   const regionEnabled = Boolean(onFilterChange) && config.region_filter_enabled !== false;
   const lodThreshold = config.lod_threshold ?? DEFAULT_LOD_THRESHOLD;
@@ -802,6 +807,7 @@ const IdeogramRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onF
           own: ownRegion,
           followed,
           colours: paintColours,
+          titleColour: sampleColours ? (t) => sampleColours[t] ?? null : undefined,
         });
       }
     });
@@ -828,6 +834,7 @@ const IdeogramRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onF
     followed,
     brush,
     paintColours,
+    sampleColours,
     karyotypes,
     overviewLod.drawn,
     overviewBins,
@@ -1274,17 +1281,19 @@ const IdeogramRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onF
         nothingFoundMessage="No chromosome by that name"
         comboboxProps={comboboxProps}
       />
-      <SegmentedControl
-        size="xs"
-        aria-label="Draw features as"
-        value={mode}
-        onChange={(v) => setMode((v as RenderMode) || 'marks')}
-        data={[
-          { value: 'auto', label: 'Auto' },
-          { value: 'marks', label: 'Marks' },
-          { value: 'density', label: 'Density' },
-        ]}
-      />
+      {config.lock_mode ? null : (
+        <SegmentedControl
+          size="xs"
+          aria-label="Draw features as"
+          value={mode}
+          onChange={(v) => setMode((v as RenderMode) || 'marks')}
+          data={[
+            { value: 'auto', label: 'Auto' },
+            { value: 'marks', label: 'Marks' },
+            { value: 'density', label: 'Density' },
+          ]}
+        />
+      )}
       <ActionIcon.Group>
         <Tooltip label={inDetail ? 'Zoom out (−)' : 'Open a chromosome to zoom'} portalProps={{ target: portalTarget }} withArrow>
           <ActionIcon variant="default" size="md" disabled={!zoomed} onClick={() => zoomBy(0.5)} aria-label="Zoom out">

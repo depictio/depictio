@@ -138,6 +138,12 @@ def test_display_defaults():
     assert config.show_labels is True
     assert config.side_bars == ["value", "reads"]
     assert config.reads_as_opacity is False
+    # The reader controls added later stay off: an existing dashboard is unchanged.
+    assert config.color_by == "allele_group"
+    assert config.allele_group_col is None
+    assert config.zygosity_col is None
+    assert config.group_cols is None
+    assert config.group_by is None
     assert config.controls_placement == "popover"
     assert config.selection_enabled is False
 
@@ -171,6 +177,30 @@ def test_side_bars_only_name_the_two_per_sample_columns():
     assert AlleleGridConfig(side_bars=[]).side_bars == []
     with pytest.raises(ValidationError):
         AlleleGridConfig(side_bars=["objective"])  # type: ignore[list-item]
+
+
+@pytest.mark.parametrize("mode", ["allele_group", "zygosity"])
+def test_a_colour_mode_that_needs_no_column_is_accepted(mode: str):
+    assert AlleleGridConfig(color_by=mode).color_by == mode  # type: ignore[arg-type]
+
+
+def test_the_class_colour_mode_needs_the_class_column():
+    with pytest.raises(ValidationError, match="category_col"):
+        AlleleGridConfig(color_by="hla_class")
+    assert AlleleGridConfig(color_by="hla_class", category_col="hla_class").color_by == "hla_class"
+    # There is no colour by sample: the samples are the rows and carry their label.
+    with pytest.raises(ValidationError):
+        AlleleGridConfig(color_by="sample")  # type: ignore[arg-type]
+
+
+def test_grouping_columns_are_opt_in_and_the_start_column_must_be_offered():
+    config = AlleleGridConfig(group_cols=["seq_type", "input_format"], group_by="seq_type")
+    assert config.group_cols == ["seq_type", "input_format"]
+    assert config.group_by == "seq_type"
+    with pytest.raises(ValidationError, match="group_cols"):
+        AlleleGridConfig(group_cols=["seq_type"], group_by="input_format")
+    # Naming only the starting column offers just that one.
+    assert AlleleGridConfig(group_by="seq_type").group_by == "seq_type"
 
 
 def test_unknown_keys_are_refused_and_the_union_discriminates():

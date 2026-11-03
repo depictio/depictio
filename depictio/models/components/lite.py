@@ -1251,6 +1251,14 @@ class TextLiteComponent(BaseLiteComponent):
         description="The logo for a dark page. Unset, a dark page draws the title as "
         "text: a wordmark in dark ink would vanish on it.",
     )
+    legend: str | None = Field(
+        default=None,
+        description="A column the dashboard gives colours to (`category_colors`): the tile "
+        "draws a key, a coloured dot and the value for each colour pinned to that "
+        "column, one per line, as the value of the fact line written `{{legend}}` (at "
+        "the end of the tile without one). Unset or a column without pinned colours, "
+        "no key.",
+    )
 
     @field_validator("logo", "logo_dark")
     @classmethod
@@ -1279,6 +1287,8 @@ class TextLiteComponent(BaseLiteComponent):
         used: set[str] = set()
         for content in text_placeholders(self.title, self.body):
             if TEXT_PARAM_PLACEHOLDER.match(content):
+                continue
+            if content == "legend" and self.legend and "legend" not in declared:
                 continue
             if not TEXT_VALUE_NAME.match(content):
                 raise ValueError(

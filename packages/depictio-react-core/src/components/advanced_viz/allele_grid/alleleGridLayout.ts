@@ -172,6 +172,8 @@ export interface AlleleRow {
   category: string | null;
   value: number | null;
   reads: number | null;
+  /** The sample-level grouping column's value, when rows are grouped. */
+  group: string | null;
 }
 
 export interface AlleleColumns {
@@ -182,6 +184,7 @@ export interface AlleleColumns {
   category?: string | null;
   value?: string | null;
   reads?: string | null;
+  group?: string | null;
 }
 
 const finiteOrNull = (v: unknown): number | null => {
@@ -212,6 +215,7 @@ export function parseAlleleRows(
   const cats = pick(cols.category);
   const values = pick(cols.value);
   const reads = pick(cols.reads);
+  const groups = pick(cols.group);
   const n = Math.max(samples.length, loci.length, alleles.length);
   const out: AlleleRow[] = [];
   for (let i = 0; i < n; i++) {
@@ -229,6 +233,7 @@ export function parseAlleleRows(
       category: cats ? textOrNull(cats[i]) : null,
       value: values ? finiteOrNull(values[i]) : null,
       reads: reads ? finiteOrNull(reads[i]) : null,
+      group: groups ? textOrNull(groups[i]) : null,
     });
   }
   return out;
@@ -258,6 +263,9 @@ export interface SampleInfo {
   sample: string;
   value: number | null;
   reads: number | null;
+  /** Value of the grouping column for this sample (the first one its rows
+   *  hold), null when ungrouped or the sample has none. */
+  group: string | null;
 }
 
 export interface LocusInfo {
@@ -268,6 +276,13 @@ export interface LocusInfo {
 export interface LocusGroup {
   category: string | null;
   /** Index of the first and one past the last column of the run. */
+  start: number;
+  end: number;
+}
+
+export interface SampleRun {
+  group: string | null;
+  /** Index of the first and one past the last row of the run. */
   start: number;
   end: number;
 }
@@ -292,10 +307,15 @@ export interface AlleleGridOptions {
   orderLocus?: string | null;
   maxSamples?: number;
   maxLoci?: number;
+  /** Cluster the rows by `SampleInfo.group` (natural order, no group last),
+   *  keeping the chosen order inside each group. */
+  groupSamples?: boolean;
 }
 
 export interface AlleleGrid {
   samples: SampleInfo[];
+  /** Runs of adjacent rows sharing a group; empty when rows are not grouped. */
+  sampleRuns: SampleRun[];
   loci: LocusInfo[];
   /** Runs of adjacent columns sharing a category, for the header band. */
   groups: LocusGroup[];
@@ -488,6 +508,65 @@ export function orderSamples(
 const maxOf = (current: number | null, next: number | null): number | null =>
   next === null ? current : current === null ? next : Math.max(current, next);
 
+/** Group order: natural, the samples with no group last. Stable, so the order
+ *  inside a group is the one `orderSamples` gave. */
+export function clusterByGroup(samples: readonly SampleInfo[]): SampleInfo[] {
+  const rank = (s: SampleInfo) => s.group;
+  return samples
+    .map((s, i) => ({ s, i }))
+    .sort((a, b) => {
+      const ga = rank(a.s);
+      const gb = rank(b.s);
+      if (ga === gb) return a.i - b.i;
+      if (ga === null) return 1;
+      if (gb === null) return -1;
+      return naturalCompare(ga, gb) || a.i - b.i;
+    })
+    .map((x) => x.s);
+}
+
+/** Runs of adjacent rows sharing a group. */
+export function sampleRuns(samples: readonly SampleInfo[]): SampleRun[] {
+  const out: SampleRun[] = [];
+  samples.forEach((s, i) => {
+    const last = out[out.length - 1];
+    if (last && last.group === s.group) last.end = i + 1;
+    else out.push({ group: s.group, start: i, end: i + 1 });
+  });
+  return out;
+}
+
+/**
+ * Vertical position of every row when group headers sit between runs: each
+ * run is preceded by a band of `bandPx`. `ys[i]` is the top of row `i`,
+ * `bands[k]` the top of run `k`'s header, `height` the total below `top`.
+ * With no runs the rows are packed and there are no bands.
+ */
+export function rowPositions(
+  nRows: number,
+  runs: readonly SampleRun[],
+  rowPx: number,
+  bandPx: number,
+  top = 0,
+): { ys: number[]; bands: number[]; height: number } {
+  const ys: number[] = [];
+  const bands: number[] = [];
+  if (runs.length === 0) {
+    for (let i = 0; i < nRows; i++) ys.push(top + i * rowPx);
+    return { ys, bands, height: nRows * rowPx };
+  }
+  let y = top;
+  for (const run of runs) {
+    bands.push(y);
+    y += bandPx;
+    for (let i = run.start; i < run.end; i++) {
+      ys[i] = y;
+      y += rowPx;
+    }
+  }
+  return { ys, bands, height: y - top };
+}
+
 /** The whole grid: cells, ordered and guarded axes, legend. */
 export function buildAlleleGrid(rows: readonly AlleleRow[], options: AlleleGridOptions): AlleleGrid {
   const resolution = options.resolution;
@@ -499,7 +578,13 @@ export function buildAlleleGrid(rows: readonly AlleleRow[], options: AlleleGridO
     const list = groups.get(key);
     if (list) list.push(row);
     else groups.set(key, [row]);
-    const s = sampleInfo.get(row.sample) ?? { sample: row.sample, value: null, reads: null };
+    const s = sampleInfo.get(row.sample) ?? {
+      sample: row.sample,
+      value: null,
+      reads: null,
+      group: null,
+    };
+    if (s.group === null) s.group = row.group;
     s.value = maxOf(s.value, row.value);
     s.reads = maxOf(s.reads, row.reads);
     sampleInfo.set(row.sample, s);
@@ -540,16 +625,18 @@ export function buildAlleleGrid(rows: readonly AlleleRow[], options: AlleleGridO
     options.sampleOrder ?? 'alphabetical',
     orderLocus,
   );
-  const maxSamples = Math.max(1, options.maxSamples ?? allSamples.length);
-  const samples = allSamples.slice(0, maxSamples);
+  const clustered = options.groupSamples ? clusterByGroup(allSamples) : allSamples;
+  const maxSamples = Math.max(1, options.maxSamples ?? clustered.length);
+  const samples = clustered.slice(0, maxSamples);
 
   return {
     samples,
+    sampleRuns: options.groupSamples ? sampleRuns(samples) : [],
     loci,
     groups: locusGroups(loci),
     cells,
     legend,
-    droppedSamples: allSamples.length - samples.length,
+    droppedSamples: clustered.length - samples.length,
     droppedLoci: allLoci.length - loci.length,
     overfull,
   };
@@ -656,6 +743,87 @@ export function assignAlleleShades(
   return out;
 }
 
+// ---------------------------------------------------------------------------
+// Colour by zygosity or class, and shades inside a pinned group colour
+// ---------------------------------------------------------------------------
+
+/** What the cells can be coloured by (`color_by`). */
+export type AlleleColourBy = 'allele_group' | 'zygosity' | 'hla_class';
+
+/** The zygosity states, spelt as nf-core/hlatyping's genotype table spells them. */
+export const ZYGOSITY_STATES = ['Homozygous', 'Heterozygous', 'One allele typed'] as const;
+export type ZygosityState = (typeof ZYGOSITY_STATES)[number];
+
+/** A cell's zygosity at the display resolution: null when it holds no call. */
+export function cellZygosity(cell: GenotypeCell): ZygosityState | null {
+  const [h1, h2] = cell.haplotypes;
+  if (h1 && h2) return cell.homozygous ? 'Homozygous' : 'Heterozygous';
+  if (h1 || h2) return 'One allele typed';
+  return null;
+}
+
+/** The locus classes present, in the grid's column order, deduplicated. The
+ *  class mode is offered only when this has more than one entry. */
+export function locusClasses(loci: readonly LocusInfo[]): string[] {
+  const out: string[] = [];
+  for (const l of loci) if (l.category && !out.includes(l.category)) out.push(l.category);
+  return out;
+}
+
+/** Cells per zygosity state, over the grid's drawn samples and loci. */
+export function zygosityCounts(grid: AlleleGrid): Map<ZygosityState, number> {
+  const out = new Map<ZygosityState, number>();
+  for (const s of grid.samples) {
+    for (const l of grid.loci) {
+      const cell = grid.cells.get(cellKey(s.sample, l.locus));
+      const z = cell ? cellZygosity(cell) : null;
+      if (z) out.set(z, (out.get(z) ?? 0) + 1);
+    }
+  }
+  return out;
+}
+
+/** The allele group a column value names, in the grid's key: `HLA-A*02` is
+ *  `A*02`. How a pinned colour of an allele-group column finds its family. */
+export function groupKeyOf(value: unknown): string | null {
+  const parsed = parseAllele(value);
+  if (!parsed || parsed.fields.length === 0) return parsed ? parsed.raw : null;
+  return alleleGroup(parsed);
+}
+
+/**
+ * Where each allele sits inside its group, in natural order, 0 for the first:
+ * the rank a shade is derived from when the group's colour is pinned. Alleles
+ * are keyed by their label at the display resolution.
+ */
+export function rankInGroup(universe: readonly ColourUniverseEntry[]): Map<string, number> {
+  const byGroup = new Map<string, string[]>();
+  for (const e of universe) {
+    const labels = byGroup.get(e.group) ?? [];
+    if (!labels.includes(e.label)) labels.push(e.label);
+    byGroup.set(e.group, labels);
+  }
+  const out = new Map<string, number>();
+  for (const labels of byGroup.values()) {
+    labels.sort(naturalCompare).forEach((label, i) => out.set(label, i));
+  }
+  return out;
+}
+
+/**
+ * How far a group's base colour is moved for its `rank`-th allele: 0 for the
+ * first, then alternately lighter (positive) and darker (negative), widening,
+ * so neighbours differ and the family stays recognisable. The renderer applies
+ * it with Mantine's `lighten` / `darken`.
+ */
+export function shadeOffset(rank: number): number {
+  const r = Math.max(0, Math.floor(rank));
+  if (r === 0) return 0;
+  const step = Math.ceil(r / 2);
+  const amount = Math.min(0.7, 0.18 * step + 0.08);
+  return r % 2 === 1 ? amount : -amount * 0.8;
+}
+
 /**
  * Whether text on `colour` should be light or dark, by its relative
  * luminance. Takes `#rgb`, `#rrggbb` and `rgb(...)`; anything else reads as a
@@ -755,6 +923,113 @@ export function gridGeometry(input: GridGeometryInput): GridGeometry {
     barWidth,
     totalWidth: labelWidth + nLoci * cellWidth + bars,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Resolution on offer
+// ---------------------------------------------------------------------------
+
+/**
+ * The most nomenclature fields any allele of the data carries, 1 to 4: the
+ * finest resolution that still changes anything. `A*01:01` is 2 (a trailing
+ * expression suffix is not a field), `A*02:01:01:01` is 4. Data with no
+ * nomenclature at all returns 4, so nothing is taken away from a reader who
+ * has nothing to compare it with.
+ */
+export function maxAlleleFields(rows: readonly AlleleRow[]): AlleleResolution {
+  let max = 0;
+  for (const r of rows) {
+    const n = r.allele?.fields.length ?? 0;
+    if (n > max) max = n;
+  }
+  if (max === 0) return 4;
+  return Math.min(4, max) as AlleleResolution;
+}
+
+/** A configured or persisted resolution, brought down to what the data holds. */
+export function clampResolution(resolution: number, max: AlleleResolution): AlleleResolution {
+  const wanted = Number.isFinite(resolution) ? Math.round(resolution) : 2;
+  return Math.max(1, Math.min(max, wanted)) as AlleleResolution;
+}
+
+/** The resolutions worth offering: 1 to `max`; none when there is only one. */
+export function resolutionOptions(max: AlleleResolution): AlleleResolution[] {
+  if (max <= 1) return [];
+  return Array.from({ length: max }, (_, i) => (i + 1) as AlleleResolution);
+}
+
+// ---------------------------------------------------------------------------
+// Row height that fills the tile
+// ---------------------------------------------------------------------------
+
+/** Row height bounds: below the minimum the allele text is unreadable, above
+ *  the maximum a cell is a slab and the fields stop reading as a grid. */
+export const MIN_ROW_PX = 22;
+export const MAX_ROW_PX = 44;
+/** The row height the tile asks for (its content demand), before it is sized:
+ *  independent of the tile's own height so the two cannot chase each other. */
+export const NATURAL_ROW_PX = 28;
+
+/**
+ * The row height that makes `nRows` rows (plus `bands` group headers of
+ * `bandPx`, under `headerPx` of column headers and `padPx` below) fill
+ * `availablePx`, within `MIN_ROW_PX..MAX_ROW_PX`. Falls back to the natural
+ * height before the tile has been measured.
+ */
+export function fitRowPx(
+  availablePx: number,
+  nRows: number,
+  headerPx: number,
+  bands = 0,
+  bandPx = 0,
+  padPx = 4,
+): number {
+  if (!Number.isFinite(availablePx) || availablePx <= 0 || nRows <= 0) return NATURAL_ROW_PX;
+  const free = availablePx - headerPx - bands * bandPx - padPx;
+  const px = Math.floor(free / nRows);
+  return Math.max(MIN_ROW_PX, Math.min(MAX_ROW_PX, px));
+}
+
+/** Font sizes that grow with the row: the allele text in a cell, and the
+ *  sample, locus and bar text around the grid. */
+export function fontsForRow(rowPx: number): { label: number; axis: number } {
+  return {
+    label: Math.max(10, Math.min(15, Math.round(rowPx * 0.42))),
+    axis: Math.max(11, Math.min(13, Math.round(rowPx * 0.4))),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Side bars
+// ---------------------------------------------------------------------------
+
+/** A bar's value, short enough to sit at its end: 950, 12.3k, 4.1M. */
+export function formatBarValue(v: number): string {
+  const abs = Math.abs(v);
+  const trim = (n: number) => String(Number(n.toFixed(n < 10 ? 1 : 0)));
+  if (abs >= 1e9) return `${trim(v / 1e9)}G`;
+  if (abs >= 1e6) return `${trim(v / 1e6)}M`;
+  if (abs >= 1e4) return `${trim(v / 1e3)}k`;
+  if (abs >= 100 || Number.isInteger(v)) return String(Math.round(v));
+  return String(Number(v.toFixed(abs >= 10 ? 1 : 2)));
+}
+
+/**
+ * Where a bar's value goes: `inside` the bar end when the bar is long enough
+ * to hold it, `outside` just past it when the column has room, else null (the
+ * hover still states it).
+ */
+export function barValuePlacement(
+  barPx: number,
+  columnPx: number,
+  text: string,
+  fontPx: number,
+  gapPx = 3,
+): 'inside' | 'outside' | null {
+  const textPx = text.length * fontPx * CHAR_WIDTH_EM;
+  if (barPx >= textPx + 2 * gapPx) return 'inside';
+  if (columnPx - barPx >= textPx + gapPx) return 'outside';
+  return null;
 }
 
 /** The sentence a hover states about one cell. */
