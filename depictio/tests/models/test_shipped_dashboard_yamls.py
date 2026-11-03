@@ -884,3 +884,37 @@ def test_no_genomespy_toggle_in_a_family_with_a_browser():
         "A GenomeSpy view is offered by a Plotly genomic tile in a family that has a "
         "jbrowse tile (set views: [track] / [plotly]):\n" + "\n".join(offenders)
     )
+
+
+_LAYOUT_IN_TEXT = re.compile(r"\{x: ?\d+, ?y: ?\d+, ?w: ?\d+, ?h: ?\d+\}")
+
+
+def _text_values(node: Any, key: str = "") -> list[tuple[str, str]]:
+    """Every ``description`` or ``body`` string below ``node``."""
+    found: list[tuple[str, str]] = []
+    if isinstance(node, dict):
+        for k, v in node.items():
+            if k in ("description", "body") and isinstance(v, str):
+                found.append((k, v))
+            else:
+                found.extend(_text_values(v, k))
+    elif isinstance(node, list):
+        for v in node:
+            found.extend(_text_values(v, key))
+    return found
+
+
+def test_no_tile_layout_sits_inside_a_text_value() -> None:
+    """A ``layout: {x, y, w, h}`` written after a folded description joins its text.
+
+    The line then reads as more description, the tile loses its layout and falls
+    back to the default size, and no validator objects. It reached 21 rnaseq and
+    rnafusion tiles through a bulk description rewrite.
+    """
+    offenders: list[str] = []
+    for path in _shipped_yamls():
+        doc = yaml.safe_load(path.read_text())
+        for key, text in _text_values(doc):
+            if _LAYOUT_IN_TEXT.search(text):
+                offenders.append(f"{_rel(path)}: {key} ends with a layout ({text[-60:]!r})")
+    assert not offenders, "A layout was folded into a text value:\n" + "\n".join(offenders)

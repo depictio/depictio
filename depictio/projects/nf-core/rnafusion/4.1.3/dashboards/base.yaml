@@ -529,7 +529,7 @@ main_dashboard:
 
       How to read: check the samples here before reading the fusion tabs, since a sample missing from the
       sheet has no fusion table. Pick rows to narrow every tab to those samples.
-
+    layout: {x: 0, y: 0, w: 8, h: 6}
 tabs:
 - title: MultiQC
   subtitle: Did the reads survive trimming and align to transcripts?
@@ -910,7 +910,8 @@ tabs:
 
       Note: agreement between callers raises confidence but does not prove a fusion, since callers share
       the same alignments and can share the same artefacts. fusion-report itself says only biological
-      validation verifies a fusion. {x: 0, y: 0, w: 8, h: 5}
+      validation verifies a fusion.
+    layout: {x: 0, y: 0, w: 8, h: 5}
   # The ranking as bars, the fusion names on the axis. The lollipop it
   # replaced drew one fusion per lane, so past six fusions it showed a single
   # stem behind a fusion picker. Read from the evidence rows (they carry the
@@ -975,7 +976,8 @@ tabs:
       0 or 1 flag for each caller that found it.
 
       How to read: sort by rank to see the top calls, and read the caller flags and the number of
-      knowledge bases beside the index. Pick a row to narrow the other tabs to that fusion. {x: 0, y: 0, w: 8, h: 6}
+      knowledge bases beside the index. Pick a row to narrow the other tabs to that fusion.
+    layout: {x: 0, y: 0, w: 8, h: 6}
 
 - title: Caller Evidence
   subtitle: How much read support did each caller find for each fusion?
@@ -1176,7 +1178,8 @@ tabs:
       Lines and annotations: no reference line or cut-off is drawn.
 
       Note: each caller counts reads its own way, and the recipe sums the read counts of each caller's
-      evidence into one figure, so the callers compare on one scale but are not identical measures. {x: 0, y: 0, w: 8, h: 6}
+      evidence into one figure, so the callers compare on one scale but are not identical measures.
+    layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: rnafusion
     data_collection_tag: caller_evidence
@@ -1193,7 +1196,8 @@ tabs:
       support and the fusion's Fusion Indication Index.
 
       How to read: sort by supporting reads to see which caller brings most of the evidence, and open the
-      detail column for the caller's own fields. Pick a row to narrow the other tabs to that fusion. {x: 0, y: 0, w: 8, h: 6}
+      detail column for the caller's own fields. Pick a row to narrow the other tabs to that fusion.
+    layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: rnafusion
     data_collection_tag: arriba_fusions
@@ -1213,7 +1217,8 @@ tabs:
       supporting reads. Treat low-confidence calls with caution, and pick a row to narrow the other tabs
       to that fusion.
 
-      Source: Arriba, confidence scoring, https://arriba.readthedocs.io/en/latest/interpretation-of-results/ {x: 0, y: 6, w: 8, h: 6}
+      Source: Arriba, confidence scoring, https://arriba.readthedocs.io/en/latest/interpretation-of-results/
+    layout: {x: 0, y: 6, w: 8, h: 6}
   - component_type: table
     workflow_tag: rnafusion
     data_collection_tag: starfusion_fusions
@@ -1230,7 +1235,8 @@ tabs:
       million (FFPM) and the share of the evidence that crosses the junction itself.
 
       How to read: a call carried mostly by junction reads is more direct evidence than one held up by
-      spanning fragments alone. Pick a row to narrow the other tabs to that fusion. {x: 0, y: 12, w: 8, h: 6}
+      spanning fragments alone. Pick a row to narrow the other tabs to that fusion.
+    layout: {x: 0, y: 12, w: 8, h: 6}
   - component_type: table
     workflow_tag: rnafusion
     data_collection_tag: fusioncatcher_fusions
@@ -1247,7 +1253,8 @@ tabs:
       sequence.
 
       How to read: read the labels and the effect beside the read counts, since FusionCatcher lists
-      candidates that other callers may not report. Pick a row to narrow the other tabs to that fusion. {x: 0, y: 18, w: 8, h: 6}
+      candidates that other callers may not report. Pick a row to narrow the other tabs to that fusion.
+    layout: {x: 0, y: 18, w: 8, h: 6}
 
 - title: Breakpoints
   subtitle: Where do the fusion partners sit, and what do the reads show?
@@ -1455,7 +1462,8 @@ tabs:
 
       Lines and annotations: no reference line or cut-off is drawn.
 
-      Note: the width adds read counts over calls, so one very well covered call can dominate a link. {x: 0, y: 0, w: 8, h: 5}
+      Note: the width adds read counts over calls, so one very well covered call can dominate a link.
+    layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: advanced_viz
     workflow_tag: rnafusion
     data_collection_tag: arriba_fusion_links
@@ -1821,7 +1829,8 @@ tabs:
       FFPM.
 
       Source: FusionInspector outputs described,
-      https://github.com/FusionInspector/FusionInspector/wiki/FusionInspector-Outputs-Described {x: 0, y: 0, w: 8, h: 6}
+      https://github.com/FusionInspector/FusionInspector/wiki/FusionInspector-Outputs-Described
+    layout: {x: 0, y: 0, w: 8, h: 6}
   # A scatter of the two ratios would hold a handful of points. What it showed
   # is the imbalance between the sides, so the bars draw that: log2 of the 5'
   # ratio over the 3' one, one bar per validated breakpoint.
@@ -1897,7 +1906,8 @@ tabs:
 
       How to read: pick a bar of the allelic ratio balance, then read the support and the predicted
       protein class here. A frameshift or a fusion with few junction reads is weaker than an in-frame one
-      held by many. {x: 5, y: 0, w: 3, h: 5}
+      held by many.
+    layout: {x: 5, y: 0, w: 3, h: 5}
   - component_type: table
     workflow_tag: rnafusion
     data_collection_tag: fusioninspector_fusions
@@ -1914,7 +1924,8 @@ tabs:
       predicted protein.
 
       How to read: sort by supporting reads or FFPM to find the best supported fusions, and read the
-      protein class for the consequence. Pick a row to narrow the other tabs to that fusion. {x: 0, y: 0, w: 8, h: 6}
+      protein class for the consequence. Pick a row to narrow the other tabs to that fusion.
+    layout: {x: 0, y: 0, w: 8, h: 6}
 
 - title: Protein Domains
   subtitle: Which protein domains would each fusion protein keep?
@@ -2096,7 +2107,8 @@ tabs:
       and no e-value filter is applied beyond what FusionInspector reports.
 
       Note: the domains are annotated on the predicted fusion protein, so they describe what the protein
-      could carry and not that it is expressed or active. {x: 0, y: 0, w: 8, h: 6}
+      could carry and not that it is expressed or active.
+    layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: advanced_viz
     workflow_tag: rnafusion
     data_collection_tag: fusion_protein_domains
@@ -2124,7 +2136,8 @@ tabs:
       -log10 scale so a reported 0 does not become infinite. No e-value cut-off is drawn.
 
       Note: a larger dot means a smaller e-value, which says the hit is unlikely by chance and does not say
-      the domain is functional in the fusion. {x: 0, y: 0, w: 8, h: 6}
+      the domain is functional in the fusion.
+    layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: rnafusion
     data_collection_tag: fusion_protein_domains
@@ -2140,7 +2153,8 @@ tabs:
       that contributes it, its amino-acid span in the fusion protein, its length and its e-value.
 
       How to read: a domain whose name ends in PARTIAL was cut by the breakpoint. Pick a row to narrow the
-      other tabs to that fusion. {x: 0, y: 0, w: 8, h: 6}
+      other tabs to that fusion.
+    layout: {x: 0, y: 0, w: 8, h: 6}
 
 - title: Splice Junctions
   subtitle: Which splice junctions do the reads support, and how strongly?
@@ -2325,7 +2339,8 @@ tabs:
       read count. Points are not dimmed by any rule.
 
       Note: a junction count depends on how deeply the gene is expressed, so compare junctions of the same
-      gene and not across genes. {x: 0, y: 0, w: 8, h: 6}
+      gene and not across genes.
+    layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: advanced_viz
     workflow_tag: rnafusion
     data_collection_tag: splice_junctions
@@ -2419,3 +2434,4 @@ tabs:
 
       How to read: sort by unique reads to find the busiest junctions, and compare unique with total
       reads to see how much of the support is ambiguous. Pick a row to narrow the tab to its gene.
+    layout: {x: 0, y: 0, w: 8, h: 6}

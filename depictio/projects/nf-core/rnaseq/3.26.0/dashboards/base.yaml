@@ -1156,7 +1156,7 @@ tabs:
       Lines and annotations: the tree beside the matrix is the Ward clustering of the libraries, and its
       branch heights are the merge distances. No cut-off is drawn, and the colour bar gives the scale.
 
-      Source: nf-core/rnaseq output documentation, https://nf-co.re/rnaseq/3.26.0/docs/output {x: 0, y: 6, w: 8, h: 5}
+      Source: nf-core/rnaseq output documentation, https://nf-co.re/rnaseq/3.26.0/docs/output
   - component_type: table
     workflow_tag: rnaseq
     data_collection_tag: sample_overview
@@ -1201,7 +1201,7 @@ tabs:
       its median TPM and its position on the first three PCA components.
 
       How to read: pick a row in the library summary table, or a point on a plot, and compare its values
-      with the other libraries of the same group. {x: 5, y: 0, w: 3, h: 6}
+      with the other libraries of the same group.
 - title: Variable Genes
   subtitle: Which genes vary most between the libraries and conditions?
   tab_group: Expression
@@ -1394,7 +1394,7 @@ tabs:
       blue below the gene's own mean across the libraries in view.
 
       Note: a z-score per row shows the pattern of a gene and hides its level, so a faint gene and a
-      strongly expressed one look alike. Read the levels in the table below. {x: 0, y: 0, w: 8, h: 5}
+      strongly expressed one look alike. Read the levels in the table below.
   # Colours by its own group axis, so it takes the pieces of the group kwargs
   # rather than spreading them: Analysis mode's groups when it has some, else
   # the condition, in the condition's colours.
@@ -1475,7 +1475,7 @@ tabs:
       log2(TPM + 1) in every library.
 
       How to read: sort a column to find the genes highest in a library, or search a gene symbol to read
-      its levels across the libraries. The heatmap above shows the same rows as z-scores. {x: 0, y: 0, w: 8, h: 6}
+      its levels across the libraries. The heatmap above shows the same rows as z-scores.
 - title: Gene Explorer
   subtitle: Where does a gene peak, and what do its reads look like?
   tab_group: Expression
@@ -1703,7 +1703,7 @@ tabs:
       condition and library where it peaks.
 
       How to read: pick a point on the plane, then compare its top condition and its lead over the other
-      conditions with the browser below. {x: 5, y: 0, w: 3, h: 6}
+      conditions with the browser below.
   # The run's own files on the gene picked above: the plane's pick narrows
   # gene_summary to one gene, whose StringTie span the view frames (a
   # --skip_stringtie run has none: the view then opens on the first region that
@@ -1778,7 +1778,7 @@ tabs:
       group.
 
       How to read: search a gene symbol to read its level library by library, or pick rows to keep those
-      genes in the other tiles. {x: 0, y: 0, w: 8, h: 6}
+      genes in the other tiles.
   - component_type: table
     workflow_tag: rnaseq
     data_collection_tag: gene_counts
@@ -1794,4 +1794,4 @@ tabs:
       writes, one row per gene and one estimated count column per library.
 
       How to read: use it to look up a gene, not to compare libraries, since counts are not scaled for
-      sequencing depth or gene length. {x: 0, y: 0, w: 8, h: 6}
+      sequencing depth or gene length.
