@@ -9,9 +9,9 @@ Timestamps are naive UTC strings (``utc_now_str``), like ``registration_time``,
 so a project round-trips through a JSON bundle without any datetime parsing.
 """
 
-from typing import Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 
 from depictio.models.timestamps import utc_now_str
 
@@ -19,6 +19,19 @@ from depictio.models.timestamps import utc_now_str
 #: Bumped only when the bundle layout changes, independently of the app version.
 #: Bundles that carry no ``bundle_format_version`` are format 1.
 BUNDLE_FORMAT_VERSION = 2
+
+
+def _as_str(value: Any) -> Any:
+    """An id stored as an ObjectId, read back as the string these records hold.
+
+    A backup restore (and the bundle import) turns every ObjectId-shaped string
+    of a document back into an ObjectId, including the ids kept here.
+    """
+    return value if value is None or isinstance(value, str) else str(value)
+
+
+#: A string id that tolerates an ObjectId in the stored document.
+IdStr = Annotated[str, BeforeValidator(_as_str)]
 
 
 class ImportHop(BaseModel):
@@ -38,12 +51,12 @@ class ImportHop(BaseModel):
     imported_at: str = Field(default_factory=utc_now_str)
     target_depictio_version: str = "unknown"
     bundle_sha256: str | None = None
-    migration_request_id: str | None = None
+    migration_request_id: IdStr | None = None
     via: Literal["push", "cli", "zip"] = "cli"
     # Dashboards this import wrote. The next import of the same lineage deletes
     # the ones it no longer carries, and leaves every other dashboard of the
     # project (a visitor's copy) alone.
-    dashboard_ids: list[str] = []
+    dashboard_ids: list[IdStr] = []
 
 
 class ProjectProvenance(BaseModel):
@@ -67,9 +80,9 @@ class PublishedLock(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     locked_at: str = Field(default_factory=utc_now_str)
-    locked_by_id: str | None = None
+    locked_by_id: IdStr | None = None
     locked_by_email: str | None = None
     reason: str | None = None
     source: Literal["migration", "admin"] = "admin"
-    migration_request_id: str | None = None
-    dashboard_ids: list[str] = []
+    migration_request_id: IdStr | None = None
+    dashboard_ids: list[IdStr] = []

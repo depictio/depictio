@@ -134,3 +134,34 @@ def test_project_model_round_trips_provenance():
     again = Project.model_validate(project.model_dump())
     assert again.provenance == project.provenance
     assert again.pending_owner_email == "attacker@example.org"
+
+
+def test_ids_restored_as_object_ids_still_read_back():
+    """A backup restore turns every ObjectId-shaped string into an ObjectId.
+
+    That includes the ids kept in ``provenance`` and ``published_lock``; reading
+    the project back must not fail on them (``GET /projects/get/all`` was a 500
+    after a restore of an imported project).
+    """
+    from depictio.api.v1.services.mongo_json import restore_complex_objects
+    from depictio.models.models.projects import ProjectResponse
+
+    dash = [str(ObjectId()), str(ObjectId())]
+    hop = ImportHop(source_instance="a", dashboard_ids=dash, migration_request_id=str(ObjectId()))
+    lock = PublishedLock(locked_by_id=str(ObjectId()), dashboard_ids=dash)
+    project = Project(
+        name="restored",
+        permissions=Permission(owners=[UserBase(id=ObjectId(), email="o@example.com")]),
+    ).mongo()
+    project["provenance"] = ProjectProvenance(imported_from=[hop]).model_dump()
+    project["published_lock"] = lock.model_dump()
+
+    restored = restore_complex_objects(project)
+    assert isinstance(restored["provenance"]["imported_from"][0]["dashboard_ids"][0], ObjectId)
+
+    response = ProjectResponse.from_mongo(restored)
+    assert response.provenance is not None
+    assert response.provenance.imported_from[0].dashboard_ids == dash
+    assert response.published_lock is not None
+    assert response.published_lock.dashboard_ids == dash
+    assert response.published_lock.locked_by_id == lock.locked_by_id
