@@ -3,6 +3,41 @@
 ### Docker Images 🐳
 
 ```plaintext
+ghcr.io/depictio/depictio:1.20.4
+ghcr.io/depictio/depictio:latest
+ghcr.io/depictio/depictio:stable
+ghcr.io/depictio/depictio:edge
+```
+
+
+<details>
+<summary>Click to expand the changelog for 1.20.4</summary>
+
+### Changes 📜
+
+#### Other Changes 📝
+
+* Bump version: 1.20.3 → 1.20.4 [8d95d31a0]
+* feat(nf-core): colour keys and chart descriptions across the Overview rework templates [155bca6e8]
+* feat(api): a text line citing a column its collection lacks is removed on import [305ad1413]
+* feat(viewer): a text tile prints one colour key per column, named in the placeholder [c732ec7f9]
+* feat(nf-core): review round on hlatyping, viralmetagenome, genomeqc, epitopeprediction and stableexpression [0128ddaee]
+* feat(viewer): colour codes in tables and text tiles, zoom axis break, allele grid controls [95d49c3b7]
+* feat(viewer): one error card for a page that cannot load ([#1329](https://github.com/depictio/depictio/pull/1329)) [60b775bd7]
+* feat(viewer): describe a tile in a structured info popover ([#1328](https://github.com/depictio/depictio/pull/1328)) [b6eb301eb]
+* fix(deps): keep kombu below 5.7 while redis-py is held at 5.2.1 ([#1331](https://github.com/depictio/depictio/pull/1331)) [7426e5797]
+* Update CHANGELOG.md for v1.20.3 [76c99b282]
+
+
+</details>
+
+### Documentation 📖
+
+For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
+
+### Docker Images 🐳
+
+```plaintext
 ghcr.io/depictio/depictio:1.20.3
 ghcr.io/depictio/depictio:latest
 ghcr.io/depictio/depictio:stable
