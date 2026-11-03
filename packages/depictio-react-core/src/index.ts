@@ -48,6 +48,9 @@ export {
 // Thrown by the fetch helpers on a non-2xx response; `status` lets a poller
 // stop on a refusal instead of retrying it forever.
 export { HttpStatusError } from './api';
+// Why a dashboard failed to load (missing, refused, unavailable), from the status.
+export { classifyLoadError } from './loadError';
+export type { LoadErrorInfo, LoadErrorKind } from './loadError';
 export { default as ComponentRenderer } from './components/ComponentRenderer';
 export { default as ErrorBoundary } from './components/ErrorBoundary';
 export { default as ComponentSkeleton } from './components/ComponentSkeleton';

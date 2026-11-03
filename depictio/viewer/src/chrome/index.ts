@@ -17,3 +17,9 @@ export { default as RunParametersHost } from './RunParametersHost';
 export { default as TabIntro, tabIntroShown } from './TabIntro';
 export { default as TabModal } from './TabModal';
 export type { TabModalSubmitPayload } from './TabModal';
+export {
+  default as DashboardLoadError,
+  DashboardLoadErrorCard,
+  LoadErrorCard,
+} from './DashboardLoadError';
+export type { DashboardLoadErrorProps, LoadErrorSubject } from './DashboardLoadError';

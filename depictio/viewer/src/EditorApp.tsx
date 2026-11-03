@@ -130,6 +130,7 @@ import {
   AdvancedVizConfigDraftProvider,
   AdvancedVizPlacementDefaultProvider,
   DataVersionProvider,
+  HttpStatusError,
   dataVersionBody,
   dataPinBody,
   fetchDashboardVersion,
@@ -168,6 +169,7 @@ import type { SectionKind, SectionOp } from './components/sections/sectionMutati
 import { Sidebar, RunParametersHost, SettingsDrawer, TabIntro, TabModal, tabIntroShown } from './chrome';
 import type { HeaderAction } from './chrome/Header';
 import ShellHost from './chrome/shell/ShellHost';
+import DashboardLoadError from './chrome/DashboardLoadError';
 import type { FilterPanelOptions } from './chrome/shell/types';
 import type { TabDefaults, TabModalSubmitPayload } from './chrome';
 import { useChromeVariant } from './chrome/variants';
@@ -278,6 +280,11 @@ const EditorApp: React.FC = () => {
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [allDashboards, setAllDashboards] = useState<DashboardSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
+  // What the dashboard fetch threw, kept as thrown so the error page can tell a
+  // missing dashboard from a refused one from a server that is down.
+  const [loadFailure, setLoadFailure] = useState<{ error: unknown } | null>(null);
+  // Bumped by "Try again": the load effect depends on it.
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [loading, setLoading] = useState(true);
   // Seed synchronously from the per-tab store so a builder round-trip (add or
   // edit a component — a full page navigation) comes back with the filters
@@ -610,6 +617,9 @@ const EditorApp: React.FC = () => {
   useEffect(() => {
     if (!dashboardId) {
       setError('No dashboard ID in URL. Expected /dashboard/<id>/edit.');
+      setLoadFailure({
+        error: new HttpStatusError('No dashboard ID in URL. Expected /dashboard/<id>/edit.', 404),
+      });
       setLoading(false);
       return;
     }
@@ -629,9 +639,17 @@ const EditorApp: React.FC = () => {
       })
       .catch((err) => {
         setError(`Failed to load dashboard: ${err.message || err}`);
+        setLoadFailure({ error: err });
       })
       .finally(() => setLoading(false));
-  }, [dashboardId]);
+  }, [dashboardId, loadAttempt]);
+
+  const retryLoad = useCallback(() => {
+    setError(null);
+    setLoadFailure(null);
+    setLoading(true);
+    setLoadAttempt((n) => n + 1);
+  }, []);
 
   // Section-bar scopes, as the viewer builds them (App.tsx): which filters
   // reach only their own section's components.
@@ -2736,11 +2754,6 @@ const EditorApp: React.FC = () => {
           <Text>Loading dashboard…</Text>
         </Group>
       )}
-      {error && (
-        <Text c="red" p="lg">
-          {error}
-        </Text>
-      )}
     </>
   );
   const canvas =
@@ -3036,6 +3049,18 @@ const EditorApp: React.FC = () => {
       />
     </>
   );
+
+  // The dashboard could not be loaded: nothing to edit, so none of the editor
+  // chrome (title, tab list, filter panel) is drawn around it.
+  if (loadFailure) {
+    return (
+      <DashboardLoadError
+        error={loadFailure.error}
+        resourceId={dashboardId}
+        onRetry={retryLoad}
+      />
+    );
+  }
 
   return (
     <>
