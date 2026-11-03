@@ -211,8 +211,8 @@
       }
     },
     "nf-core/atacseq/2.1.2": {
-      "version": "2.1.0",
-      "content_hash": "06461ceeea49b38565a72e1121fd5fb6bff269d8a493368cc68c5ab203cd1169",
+      "version": "3.0.0",
+      "content_hash": "d875c4ef816258851f972c3bcb176dcfde809ad2aef69693ee27fe275ff971d6",
       "catalog": {
         "ataqv": "1.0.0",
         "deeptools": "1.0.0",
@@ -237,8 +237,8 @@
       }
     },
     "nf-core/chipseq/2.1.0": {
-      "version": "3.1.0",
-      "content_hash": "d5fe2d35fff2428d2322f0b890ba73db69eed7e9b96510a9e7d306ec89ec1cef",
+      "version": "4.0.0",
+      "content_hash": "ed98fa81c6a3fbd8e8c652ef811a63b013338c1cf7889d8431890a4eef947202",
       "catalog": {
         "deeptools": "1.0.0",
         "deseq2": "1.0.0",
@@ -270,8 +270,8 @@
       }
     },
     "nf-core/cutandrun/3.2.2": {
-      "version": "1.2.0",
-      "content_hash": "90e4c5ed0df412a5ce660f7c2f5d9d5d083ee90b916afea4097a2bafb5826792",
+      "version": "2.0.0",
+      "content_hash": "5bc99ebb0decbcde664ea203629228e0d7c09a441778db12b1aa95fd9df404bb",
       "catalog": {
         "bowtie2": "1.0.0",
         "cutandrun": "1.0.0",

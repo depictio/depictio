@@ -24,8 +24,8 @@ every downstream file uses), the ChIPs and their input controls, with `role`, `a
 table (`METADATA_FILE`) and, without one, the sample name without its replicate suffix; the
 hub column is always called `condition`, so the dashboard reads it literally and works with
 or without the table. `GENOME` is empty by default: the Locus axis is then laid out from the
-contigs of the calls, which suits any reference; pass a UCSC assembly name to use its
-built-in axis.
+contigs of the calls, which suits any reference, and the genome browser is left out; pass a
+UCSC assembly name to use its built-in axis and to get the browser.
 
 > **Two MultiQC reports, two sets of module ids.** 2.1.0 pins MultiQC 1.23, which writes no
 > parquet. A run forced to a parquet-era MultiQC publishes its own report, whose
@@ -110,13 +110,32 @@ the promoter window shaded (1 kb either side of the start site at 0). The collap
 peak record card beside it: the card waits for a picked row. Filters: feature class and
 distance to the start site.
 
-**Locus.** The calls and the consensus intervals on one genome axis. Strip: calls in the
+**Locus.** The calls and, with an assembly, the run's own files on one genome axis. Strip: calls in the
 region (split by library), libraries per consensus interval, feature classes and nearest
-genes; the cards follow the region like the lane below. Then the navigator (`macs2/peak_genome_view` as bars rising from the baseline to the -log10 q-value, one lane per library on its own scale at a fixed lane height, up to 8 lanes, `assembly: {GENOME}`, opening on the first
-contig the calls carry and brushing a region with a drag) and a coverage track of the consensus intervals with one lane per
-consensus set (`views: [track]`). The locus field takes coordinates, not gene symbols. This
-template has no genome browser tile. Filters: significance, libraries per
-interval and feature class.
+genes; the cards follow the region like the lane and the tracks. Then the navigator
+(`macs2/peak_genome_view` as bars rising from the baseline to the -log10 q-value, one lane per library on its own scale at a fixed lane height, up to 8 lanes, `assembly: {GENOME}`)
+and the genome browser under it at full width, then a coverage track of the consensus intervals with one lane per
+consensus set (`views: [track]`). The navigator sets no default region: it opens on the chromosome the browser shows (`open_on_view_window`) and brushes a region with a drag (`interaction_mode: select`); a brush moves the browser without
+filtering it, and the browser's view comes back on the lanes as a dashed band. The consensus
+intervals are also the browser's second region source (its density strip and next / previous). The
+locus field takes coordinates, not gene symbols. Filters: significance, libraries per
+interval and feature class. Without `GENOME` the browser tile is dropped and the navigator opens on the
+whole genome.
+
+**Genome browser (in the Locus tab).** A browser over the `tracks` collection, a manifest the
+template-local recipe `nf-core/chipseq/tracks.py` spells out from the `design` hub: per ChIP its
+bigWig signal, MACS3 peak calls and filtered BAM, and per input control its bigWig, keyed on the
+merged-library id the peak calls use. The aligner and the MACS3 folder (`narrow_peak` or
+`broad_peak`) are read off the files DATA_ROOT holds, then off the run's `params_*.json`. Rows are
+ordered one antibody at a time: the ChIP signals (replicate 1 of every condition first), the peaks, the
+input signals; the BAMs close the list. ChIP tracks are coloured by antibody, or by condition when
+the run has one antibody; the inputs are grey. The assembly is `{GENOME}` and the browser opens on the
+most significant peak (`locus_from` sorted by `neg_log10_qvalue`; the stepper walks the peaks in that
+order, the consensus intervals are its second source). The left-panel sample filter picks which tracks
+are open; clicking a feature in the browser filters every other tab on its sample. The track files are
+not part of the tables-only megatest subset: pass `--var TRACKS_URI=<results folder>` and the
+collection reads them in place, by range; without it the recipe keeps only the files DATA_ROOT holds and
+the CLI uploads them at ingestion.
 
 **Consensus.** Pick one consensus set first: the libraries of two antibodies never meet. The set is picked with the tab's own `Consensus set` filter (it also narrows the count PCA and the signal heatmap); the left panel's Antibody filter does not reach this tab, so an antibody chosen elsewhere (the Locus tab, say) does not carry over and pre-filter the sets.
 Strip: consensus intervals (the chromosomes with the most), libraries per interval (box
@@ -142,6 +161,8 @@ catalog output's columns.
 | `--skip_preseq false` with `--var PRESEQ_RAN=true` | The two Picard collections are removed, so the preseq card and filter take the slots alone. Without the variable both cards are kept and the strip wraps to a second row. |
 | `--skip_deseq2_qc` | Both DESeq2 QC collections are pruned: the Sample space section, its two tables and the Overview PCA highlight; the fingerprint highlight widens to its row. |
 | broadPeak (the pipeline default) | `recipes/peaks.py` reads `*_peaks.broadPeak`; the region centre stands in for the summit. No tile changes. |
+| No `GENOME` | The `tracks` collection is removed with the genome browser tile and its links. |
+| `--var TRACKS_URI=<results folder>` | The `tracks` collection reads its files in place under that folder (every expected row is kept) instead of uploading those DATA_ROOT holds. |
 | Report regenerated by the reprocess tool | The `samtools-1` tile drops out, and the fingerprint tile on `deepTools` replaces the one on `mlib_deeptools`. |
 
 ## Derived collection
@@ -178,7 +199,7 @@ of a narrower one. Nothing is set per tab or per tile.
 
 No AWS megatest is pinned for 2.1.0 (`results_sha: null` in `megatest.yaml`); the template
 was validated on HPC runs of the release's `test` profile under every aligner. A run of the
-megatest design (`test_full`) needs `--var GENOME=<assembly>` for the built-in axis.
+megatest design (`test_full`) needs `--var GENOME=<assembly>` for the built-in axis and the genome browser.
 
 ```bash
 bash depictio/projects/nf-core/chipseq/2.1.0/download_test_data.sh
@@ -187,7 +208,9 @@ depictio-cli ingest --template nf-core/chipseq/2.1.0 --data-root <DATA_ROOT>
 ```
 
 Add `--var METADATA_FILE=<table>` for a design table, `--var PRESEQ_RAN=true` for a run made
-with `--skip_preseq false`, and `--var GENOME=<assembly>` for a run on a UCSC assembly.
+with `--skip_preseq false`, `--var GENOME=<assembly>` for a run on a UCSC assembly (it also
+switches the genome browser on) and `--var TRACKS_URI=<results folder>` to read the browser's
+bigWig, peak and BAM files in place.
 The reprocess step is needed only for a run that published MultiQC 1.23: without a parquet
 `multiqc_data` finds nothing and the MultiQC tab is empty. Do not re-run it over a directory
 that already holds the regenerated parquet. Do not pass `--project-name`: the dashboard's

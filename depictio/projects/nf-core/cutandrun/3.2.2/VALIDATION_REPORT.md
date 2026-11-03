@@ -277,6 +277,51 @@ test_full is unaffected.
 **Resolved** after the live check: the navigator opens on `default_region: first`, the first
 contig the calls sit on, like the atacseq 2.1.2 and chipseq 2.1.0 Locus tabs.
 
+## Genome browser in the Locus tab (template 2.0.0, 2026-11-02)
+
+The 3.1 template (2.1.0) carries a JBrowse genome browser in its Locus tab; 3.2.2 had the SEACR
+navigator and a fragment pile-up track only. Ported to 3.2.2 on the 3.1 design:
+
+- New `tracks` collection (`genomic_tracks`) built by the version's own `recipes/tracks.py`
+  (3.1 uses the catalog `cutandrun/tracks.py`, left untouched). Same manifest as 3.1: bigWig
+  signal first, then the SEACR and MACS2 calls of the targets, then the marked-duplicate BAMs.
+  Sample names are the `GROUP_R<n>` ones the hub and the peak calls use, so a picked peak opens
+  its own tracks. 3.2.2 adds layouts, so each kind lists its candidate paths and the first one
+  the run holds wins: the `linear_dedup/` and `dedup/` BAMs after `markdup/`, the
+  `04_reporting/igv/` copies of the signal and SEACR beds after the stage directories.
+- An empty file (a caller found nothing for a sample) counts as absent in an upload: the
+  browser cannot range-read zero bytes (a 416 on the track), and the lane would be empty.
+- `TRACKS_URI` variable and the `conditional` rule that turns it into `remote_base_uri`, next to
+  the existing MultiQC rule; `GENOME` (already declared) now also sets the collection's
+  assembly. Three links: hub to tracks, tracks to hub, SEACR peaks to tracks.
+- Locus tab: the navigator takes the 3.1 form (bar marks, one lane per sample, `open_on_view_window`,
+  linked section) and the browser replaces the fragment pile-up track there, as in 3.1: the
+  bigWigs carry the signal at the region. The pile-up stays on the Fragments tab and keeps its
+  region link. `default_region: first` (CR-D29) is gone with it: the axis opens on the
+  chromosome the browser shows.
+- Template version 1.2.0 to 2.0.0 (a collection and a variable are added: ingest again); the
+  lock is refreshed.
+
+Checked on a local stack (1.20.2 platform, `depictio local up`) on the test_full_small tree,
+copied whole:
+
+- Dry run and real ingest 8/8, both with the tracks uploaded from DATA_ROOT. The tracks
+  collection lists every file the run holds; the empty SEACR bed is left out.
+- Every tab of the dashboard opened in a headless browser: no console error (the only one is
+  the CSP refusal of a GenomeSpy font, see below), no 4xx or 5xx, no "No rows".
+- The genome browser: the bigWig, bed and BAM locations all answer a range request with 206 and
+  the right magic bytes; the signal lanes draw; Next and Previous step through the SEACR regions
+  and the navigator's dashed band follows; a region selected on the navigator moves the
+  browser; the assembly is hg38 and matches the BAM header.
+- Read in place: a second project ingested with `--var TRACKS_URI=s3://...` lists every
+  expected row and the render payload carries the remote base. The byte reads themselves were
+  not run (see below).
+- `depictio/tests/recipes/test_cutandrun_tracks.py`: manifest order, layouts, empty files, in
+  place, colours, template collection, variable and links.
+
+Known: the navigator's "Browser view" band label asks GitHub for a GenomeSpy font, which the
+viewer's content security policy refuses (a console error, nothing visible lost).
+
 ## Live check (2026-10-09)
 
 test_full_small, untouched (its zero-byte SEACR bed included), ingested 8/8 on a local stack
@@ -290,4 +335,6 @@ targets and spike-ins). The Locus tab opens on chr20, the contig the run covers.
 - test_full on a live stack (its dry run and collection builds are above).
 - The pipeline's own MultiQC report of test_full: only test_full_small's was checked (CR-D27).
 - No `docs/screenshots/`: the 3.1 ones predate the v2 dashboard and were not copied.
+- Reading the tracks in place (`TRACKS_URI`) end to end: the local object store takes no second bucket and the
+  API refuses its own, so only the manifest and the render payload were checked.
 - There is no `.db_seeds/` directory for 3.2.2, so no seed needs regenerating.

@@ -22,8 +22,9 @@ The design comes from the samplesheet the pipeline validated
 (`pipeline_info/samplesheet.valid.csv`), which becomes the `sample_design` hub: one row per
 merged library with its group, replicate, read type, control and merged-library name.
 atacseq has no metadata file and so no `GROUP_COL`: every grouped tile and the group
-filters read the hub's `group` column. `GENOME` (default `hg38`) is the only other
-variable; it feeds the assembly of the Locus tracks and the run card.
+filters read the hub's `group` column. `GENOME` (default `hg38`) feeds the assembly of the
+Locus tab and the run card; the optional `TRACKS_URI` (see Reproducing) reads the genome
+browser's files in place.
 
 > **Two MultiQC reports.** The release pins MultiQC 1.13, which writes no parquet. The
 > collection binds the pipeline's own report when the run had MultiQC 1.31 or later swapped
@@ -122,11 +123,17 @@ the promoter window shaded (1 kb either side of the start site at 0). The collap
 peak record card beside it: the card waits for a picked row. Filters: feature class and
 distance to the start site.
 
-**Locus.** The broad calls on one genome axis. Strip: calls in the region (split by
-library), libraries per consensus interval, feature classes and nearest genes; the cards
-follow the region. Then the navigator, a `genome_view` on the broad calls (bars rising from the baseline to the -log10 q-value) with one lane per library on its own scale at a fixed lane height, up to 8 lanes, and `assembly: {GENOME}`, opening on the first chromosome the calls carry and brushing a region with a drag. This
-template has no genome browser tile. Filters: significance, libraries per interval and
-feature class.
+**Locus.** The broad calls and the run's own files on one genome axis, and the only genome
+browser of the template. Strip: calls in the region (split by library), libraries per
+consensus interval, feature classes and nearest genes; the cards follow the region. Then
+the navigator, a `genome_view` on the broad calls (bars rising from the baseline to the -log10 q-value) with one lane per library on its own scale at a fixed lane height, up to 8 lanes, and `assembly: {GENOME}`, and under it, at full width, a genome browser that opens on the most
+significant peak and follows the navigator's brush without filtering. The browser reads the
+`tracks` collection: the bigWig signal of every merged library first (replicate 1 of each
+group before replicate 2), then the broad calls, and the filtered BAMs last. Its next and
+previous arrows step through the peaks and the consensus intervals. The navigator sets no
+default region: it opens on the chromosome the browser shows (`open_on_view_window`) and
+brushes a region with a drag (`interaction_mode: select`). Filters: significance,
+libraries per interval and feature class.
 
 **Consensus.** Strip: consensus intervals (by chromosome), libraries per interval (box
 plot), peaks merged and the support of the strongest intervals (a ring). Then the UpSet of
@@ -168,7 +175,7 @@ Code figures read the same map and follow Analysis mode's groups when it has som
 
 Tables select rows; the signal against specificity scatter, the fingerprint bars, the
 duplication scatter and the metagene curves select libraries; the genome-wide panel and the
-Locus tracks select peaks. A pick becomes a dashboard filter that narrows the other tiles of
+Locus navigator select peaks. A pick becomes a dashboard filter that narrows the other tiles of
 the same collection and, through the project links, the collections downstream of it. The
 design hub carries both spellings of a library (`sample` and `<sample>.mLb.clN`), so one
 sample pick reaches the MultiQC panels, the ataqv, deepTools, Picard, preseq and peak QC
@@ -179,7 +186,10 @@ sample filters do not narrow them.
 
 The link from the broad calls to the HOMER annotation on `peak_id` carries range filters as
 a span, so the q-value and width sliders on the Peaks tab narrow the HOMER tiles too. On the Locus tab, two region links rename the navigator's chromosome and position
-filters onto the consensus intervals and the HOMER annotation cards.
+filters onto the consensus intervals and the HOMER annotation cards. Three more links join
+the hub, the broad calls and the `tracks` collection on the merged-library spelling:
+picking samples opens their tracks, a picked track picks its sample back, and a picked peak
+opens the tracks of the library it was called in.
 
 ## Controls
 
@@ -200,3 +210,11 @@ depictio-cli ingest --template nf-core/atacseq/2.1.2 --data-root <DATA_ROOT> --v
 
 Without a MultiQC 1.31 or later parquet, `multiqc_data` finds nothing and the MultiQC tab is
 empty. Never reprocess a run that already published one.
+
+The genome browser reads the run's bigWig, broadPeak and BAM files. Left alone, the CLI
+uploads those found under `--data-root` (the `tracks` collection then lists only them).
+Pass `--var TRACKS_URI=<s3:// or https:// results folder>` to read them in place instead
+(every expected file is listed, so the BAMs need not be copied). The aligner folder
+(`bwa`, `bowtie2`, `chromap` or `star`) and the broad or narrow peak route are taken from
+what `--data-root` holds; without any table of the run there, bwa and broad peaks are
+assumed.
