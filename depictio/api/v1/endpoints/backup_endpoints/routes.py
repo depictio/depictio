@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, cast
 
-from bson import DBRef, ObjectId
+from bson import ObjectId
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
@@ -35,6 +35,11 @@ from depictio.api.v1.db import (
     workflows_collection,
 )
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
+from depictio.api.v1.services.mongo_json import (
+    convert_complex_objects_to_strings,
+    parse_json_datetime,
+    restore_complex_objects,
+)
 from depictio.models.models.users import User
 from depictio.version import get_version
 
@@ -1300,54 +1305,11 @@ async def upload_backup(
         raise HTTPException(status_code=500, detail="Backup upload failed.")
 
 
-def _convert_complex_objects_to_strings(obj):
-    """Convert DBRef and ObjectId to strings for JSON serialization."""
-    if isinstance(obj, DBRef):
-        return str(obj.id)
-    if isinstance(obj, ObjectId):
-        return str(obj)
-    if isinstance(obj, dict):
-        return {key: _convert_complex_objects_to_strings(value) for key, value in obj.items()}
-    if isinstance(obj, list):
-        return [_convert_complex_objects_to_strings(item) for item in obj]
-    return obj
-
-
-def _restore_complex_objects(obj):
-    """Re-hydrate the ObjectIds that backup serialization flattened to strings.
-
-    Backups are plain JSON, so ``_convert_complex_objects_to_strings`` turns
-    *every* ObjectId in a document into a string, not just the top-level
-    ``_id``: ``dashboards.project_id``, ``permissions.owners[]._id``,
-    ``projects.workflows[].data_collections[]._id``,
-    ``stored_metadata[].dc_id`` and so on. Inserting those back as strings
-    produces documents Mongo can no longer join — the dashboard listing filters
-    on ``{"project_id": {"$in": [<ObjectId>]}}``, which matches nothing, so
-    every dashboard silently disappears after a restore.
-
-    The rule mirrors ``MongoModel.mongo()``, the writer the application itself
-    uses: any string that is a valid ObjectId is one. DBRefs cannot be rebuilt
-    (the backup only kept ``str(ref.id)``, dropping the collection name) and
-    come back as plain ObjectIds, which is the shape ``db_init`` writes.
-    """
-    if isinstance(obj, dict):
-        return {key: _restore_complex_objects(value) for key, value in obj.items()}
-    if isinstance(obj, list):
-        return [_restore_complex_objects(item) for item in obj]
-    if isinstance(obj, str) and ObjectId.is_valid(obj):
-        return ObjectId(obj)
-    return obj
-
-
-def _parse_backup_datetime(value: Any) -> Any:
-    """A datetime the backup wrote with ``default=str``, back as a UTC datetime."""
-    if not isinstance(value, str):
-        return value
-    try:
-        parsed = datetime.fromisoformat(value)
-    except ValueError:
-        return value
-    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+# Shared with project migration (``services/mongo_json.py``); kept under their
+# historical names because other modules and tests import them from here.
+_convert_complex_objects_to_strings = convert_complex_objects_to_strings
+_restore_complex_objects = restore_complex_objects
+_parse_backup_datetime = parse_json_datetime
 
 
 def _restore_comment_thread(doc: dict) -> dict:

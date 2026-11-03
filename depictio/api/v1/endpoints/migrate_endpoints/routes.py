@@ -6,45 +6,40 @@ Exports a project bundle (MongoDB docs + S3 files) from the source instance
 and imports it into the target instance via upsert (never wipes other projects).
 """
 
-import io
-import json
+import hashlib
 import os
-import zipfile
-from datetime import datetime
-from typing import Any, Literal, cast
+import tempfile
+from collections.abc import Callable
+from typing import Any, Literal
 from urllib.parse import quote, urlsplit
 
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 from bson import ObjectId
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from pymongo.collection import Collection
-from pymongo.operations import ReplaceOne
+from starlette.background import BackgroundTask
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import (
-    dashboards_collection,
     data_collections_collection,
     deltatables_collection,
-    files_collection,
     jbrowse_collection,
     multiqc_collection,
     projects_collection,
-    runs_collection,
     users_collection,
 )
-from depictio.api.v1.endpoints.backup_endpoints.routes import _convert_complex_objects_to_strings
 from depictio.api.v1.endpoints.projects_endpoints.provenance import instance_label
 from depictio.api.v1.endpoints.user_endpoints.routes import (
     get_user_or_anonymous,
 )
 from depictio.api.v1.permissions import build_access_query, get_user_group_ids
+from depictio.api.v1.services import project_bundle
 from depictio.models.models.data_collections_types.genomic_tracks import genomic_tracks_s3_prefix
 from depictio.models.models.data_collections_types.phylogeny import phylogeny_s3_key
-from depictio.models.models.migration import BUNDLE_FORMAT_VERSION
+from depictio.models.models.migration import ImportHop
 from depictio.models.models.users import User
 from depictio.models.timestamps import utc_now_str
 from depictio.version import get_version
@@ -79,6 +74,8 @@ class MigrateImportResponse(BaseModel):
     upserted: dict = {}
     dry_run: bool = False
     conflict: bool = False  # True when project exists and overwrite=False was rejected
+    warnings: list[str] = []
+    report: dict | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -339,12 +336,45 @@ def _copy_s3_locations(
 # Export endpoint
 # ---------------------------------------------------------------------------
 
+#: Default cap on the S3 data an export may carry inline (overridden by
+#: ``DEPICTIO_MIGRATION_MAX_BUNDLE_BYTES`` once the migration settings exist).
+DEFAULT_MAX_BUNDLE_BYTES = 10 * 1024**3
+
+
+def _migration_setting(name: str, default: Any) -> Any:
+    migration = getattr(settings, "migration", None)
+    value = getattr(migration, name, None) if migration is not None else None
+    return default if value is None else value
+
+
+def _instance_s3_client() -> Any:
+    return boto3.client(
+        "s3",
+        endpoint_url=settings.s3.endpoint_url,
+        aws_access_key_id=settings.s3.aws_access_key_id,
+        aws_secret_access_key=settings.s3.aws_secret_access_key,
+        region_name="us-east-1",
+        verify=settings.s3.verify_tls,
+    )
+
+
+def _content_disposition(project_name: str) -> str:
+    """Latin-1 safe ``filename`` plus an RFC 5987 ``filename*`` with the real name."""
+    filename = f"depictio_export_{project_name}.zip"
+    ascii_name = "".join(
+        c if c.isascii() and (c.isalnum() or c in "._-") else "_" for c in project_name
+    )
+    return (
+        f'attachment; filename="depictio_export_{ascii_name}.zip"; '
+        f"filename*=UTF-8''{quote(filename)}"
+    )
+
 
 @migrate_endpoint_router.post("/export-project")
 async def export_project(
     request: MigrateExportRequest,
     current_user: User = Depends(get_user_or_anonymous),
-) -> StreamingResponse:
+) -> FileResponse:
     """
     Export a project bundle from this instance.
 
@@ -365,6 +395,10 @@ async def export_project(
     server-to-server S3 copy path (an exfiltration vector gated by
     ``_validate_target_s3_endpoint``), which has no place in the UI export flow
     that bundles S3 objects straight into the ZIP.
+
+    The ZIP is written to a temporary file and streamed from there, so memory
+    use does not grow with the project's data. Data above
+    ``DEPICTIO_MIGRATION_MAX_BUNDLE_BYTES`` is refused with a 413.
     """
     if not current_user.is_admin:
         if not settings.auth.is_public_mode:
@@ -396,104 +430,22 @@ async def export_project(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    project_id = project["_id"]
     mode = request.mode
-
-    # Cascade queries ---------------------------------------------------
-    # Workflows are embedded in the project document (may be ID-only refs after processing).
-    # Fetch full workflow documents from workflows_collection for authoritative DC IDs.
-    embedded_workflows: list[dict] = project.get("workflows", [])
-
-    # Use the same aggregation pattern as other endpoints (get_tag_from_id, _build_permission_pipeline)
-    # to extract DC and workflow IDs — proven way to traverse project.workflows.data_collections._id
-    dc_agg = list(
-        projects_collection.aggregate(
-            [
-                {"$match": {"_id": project_id}},
-                {"$unwind": "$workflows"},
-                {"$unwind": "$workflows.data_collections"},
-                {"$project": {"_id": 0, "dc_id": "$workflows.data_collections._id"}},
-            ]
-        )
-    )
-    dc_ids: list[ObjectId] = [r["dc_id"] for r in dc_agg if isinstance(r.get("dc_id"), ObjectId)]
-
-    # Also collect workflow IDs (needed for runs_collection query)
-    wf_agg = list(
-        projects_collection.aggregate(
-            [
-                {"$match": {"_id": project_id}},
-                {"$unwind": "$workflows"},
-                {"$project": {"_id": 0, "wf_id": "$workflows._id"}},
-            ]
-        )
-    )
-    workflow_ids: list[ObjectId] = [
-        r["wf_id"] for r in wf_agg if isinstance(r.get("wf_id"), ObjectId)
-    ]
+    scope = project_bundle.resolve_project_scope(project)
+    data = project_bundle.collect_bundle_docs(project, scope, mode)
     logger.info(
         "migrate export: project=%s workflow_ids=%d dc_ids=%d",
-        str(project_id),
-        len(workflow_ids),
-        len(dc_ids),
+        str(scope.project_id),
+        len(scope.workflow_ids),
+        len(scope.dc_ids),
     )
-
-    files_docs: list[dict] = []
-    deltatables_docs: list[dict] = []
-    runs_docs: list[dict] = []
-    dashboards_docs: list[dict] = []
-    multiqc_docs: list[dict] = []
-    jbrowse_docs: list[dict] = []
-
-    if mode in ("all", "metadata"):
-        if dc_ids:
-            dc_query = _dc_ids_query(dc_ids)
-            files_docs = list(files_collection.find({"data_collection_id": dc_query}))
-            deltatables_docs = list(deltatables_collection.find({"data_collection_id": dc_query}))
-            # MultiQC / JBrowse report docs hold the dc_id → s3_location mapping the
-            # renderers read; without them the target 404s on "missing s3_locations".
-            multiqc_docs = list(multiqc_collection.find({"data_collection_id": dc_query}))
-            jbrowse_docs = list(jbrowse_collection.find({"data_collection_id": dc_query}))
-        if workflow_ids:
-            runs_docs = list(runs_collection.find({"workflow_id": {"$in": workflow_ids}}))
-
-    if mode in ("all", "metadata", "dashboard"):
-        # project_id may be stored as ObjectId or string depending on how the dashboard was created
-        dashboards_docs = list(
-            dashboards_collection.find(
-                {"$or": [{"project_id": project_id}, {"project_id": str(project_id)}]}
-            )
-        )
-
-    # Build data dict based on mode
-    data: dict[str, list[dict]] = {}
-    if mode in ("all", "metadata"):
-        # The project document already embeds workflows and data_collections — no separate entries needed.
-        data["projects"] = [project]
-        data["files"] = files_docs
-        data["deltatables"] = deltatables_docs
-        data["runs"] = runs_docs
-        data["dashboards"] = dashboards_docs
-        data["multiqc"] = multiqc_docs
-        data["jbrowse"] = jbrowse_docs
-    elif mode == "dashboard":
-        data["dashboards"] = dashboards_docs
-    # files mode: only S3, no MongoDB docs
-
-    # Serialize all ObjectIds / DBRefs
-    data = cast(dict[str, list[dict]], _convert_complex_objects_to_strings(data))
-
-    # Document counts (include embedded workflows/DCs for informational purposes)
-    doc_counts = {k: len(v) for k, v in data.items()}
-    if mode in ("all", "metadata"):
-        doc_counts["workflows_embedded"] = len(embedded_workflows)
-        doc_counts["data_collections_embedded"] = len(dc_ids)
 
     # S3 handling -------------------------------------------------------
     s3_metadata: dict[str, Any] = {}
-    s3_paths: list[str] = []
+    s3_objects: list[project_bundle.S3ObjectRef] = []
+    s3_client: Any = None
     if mode in ("all", "files"):
-        s3_paths = _collect_s3_locations_for_project(dc_ids, settings.s3.bucket)
+        s3_paths = _collect_s3_locations_for_project(scope.dc_ids, settings.s3.bucket)
         logger.info("Migrate: found %d S3 locations for project", len(s3_paths))
 
         if request.target_s3_config:
@@ -520,112 +472,178 @@ async def export_project(
             )
             s3_metadata["paths"] = s3_paths
         else:
-            # UI path: S3 objects will be bundled directly into the ZIP below
+            # UI path: S3 objects are bundled directly into the ZIP below
             s3_metadata = {"paths": s3_paths, "bundled_in_zip": True, "dry_run": request.dry_run}
-
-    bundle: dict[str, Any] = {
-        "migrate_metadata": {
-            "timestamp": datetime.now().isoformat(),
-            "exported_at": utc_now_str(),
-            "project_id": str(project_id),
-            "project_name": project.get("name"),
-            "mode": mode,
-            "depictio_version": get_version(),
-            "bundle_format_version": BUNDLE_FORMAT_VERSION,
-            "source_instance": instance_label(),
-            "s3_bucket": settings.s3.bucket,
-            "s3_endpoint": _normalize_endpoint(settings.s3.endpoint_url or ""),
-            "document_counts": doc_counts,
-            "dry_run": request.dry_run,
-        },
-        "data": data,
-    }
-    if s3_metadata:
-        bundle["s3_migrate_metadata"] = s3_metadata
-
-    def _json_default(obj: Any) -> Any:
-        """Fallback serializer for types _convert_complex_objects_to_strings doesn't cover."""
-        if isinstance(obj, datetime):
-            return obj.isoformat()
-        raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
-
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr(
-            "migrate_metadata.json",
-            json.dumps(bundle["migrate_metadata"], indent=2, default=_json_default),
-        )
-        zf.writestr(
-            "bundle.json",
-            json.dumps(bundle["data"], indent=2, default=_json_default),
-        )
-
-        # UI path: bundle S3 objects directly into the ZIP under s3_data/
-        if (
-            mode in ("all", "files")
-            and not request.target_s3_config
-            and s3_paths
-            and not request.dry_run
-        ):
-            s3_client = boto3.client(
-                "s3",
-                endpoint_url=settings.s3.endpoint_url,
-                aws_access_key_id=settings.s3.aws_access_key_id,
-                aws_secret_access_key=settings.s3.aws_secret_access_key,
-                region_name="us-east-1",
-                verify=settings.s3.verify_tls,
-            )
-            bundled_files = 0
-            for path in s3_paths:
-                path_key = path.strip("/")
+            if s3_paths and not request.dry_run:
+                s3_client = _instance_s3_client()
                 try:
-                    paginator = s3_client.get_paginator("list_objects_v2")
-                    for page in paginator.paginate(Bucket=settings.s3.bucket, Prefix=path_key):
-                        for obj in page.get("Contents", []):
-                            key = obj["Key"]
-                            try:
-                                resp = s3_client.get_object(Bucket=settings.s3.bucket, Key=key)
-                                zf.writestr(f"s3_data/{key}", resp["Body"].read())
-                                bundled_files += 1
-                                logger.debug("Bundled S3 object into ZIP: %s", key)
-                            except ClientError as e:
-                                logger.error("Failed to bundle S3 object %s: %s", key, e)
-                except ClientError as e:
-                    logger.error("Error listing S3 path %s: %s", path_key, e)
-            logger.info("Migrate: bundled %d S3 files into ZIP", bundled_files)
-            bundle["s3_migrate_metadata"]["bundled_files"] = bundled_files
+                    s3_objects = project_bundle.list_s3_objects(
+                        s3_paths, settings.s3.bucket, s3_client
+                    )
+                except (ClientError, BotoCoreError) as e:
+                    logger.error("migrate export: listing S3 failed: %s", e)
+                    raise HTTPException(status_code=502, detail="Could not list the project's data")
 
-        # Write s3_metadata.json last so bundled_files count is included
-        if "s3_migrate_metadata" in bundle:
-            zf.writestr(
-                "s3_metadata.json",
-                json.dumps(bundle["s3_migrate_metadata"], indent=2, default=_json_default),
+    metadata = project_bundle.build_bundle_metadata(
+        project,
+        scope,
+        mode,
+        data,
+        dry_run=request.dry_run,
+        source_instance=instance_label(),
+        depictio_version=get_version(),
+        s3_bucket=settings.s3.bucket,
+        s3_endpoint=_normalize_endpoint(settings.s3.endpoint_url or ""),
+        exported_at=utc_now_str(),
+    )
+
+    spool_dir = _migration_setting("spool_dir", None)
+    if spool_dir:
+        os.makedirs(spool_dir, exist_ok=True)
+    fd, path = tempfile.mkstemp(prefix="depictio-export-", suffix=".zip", dir=spool_dir)
+    try:
+        with os.fdopen(fd, "wb") as fp:
+            written = project_bundle.write_bundle_zip(
+                fp,
+                metadata,
+                data,
+                s3_metadata=s3_metadata,
+                s3_objects=s3_objects,
+                s3_client=s3_client,
+                bucket=settings.s3.bucket,
+                max_bytes=int(_migration_setting("max_bundle_bytes", DEFAULT_MAX_BUNDLE_BYTES)),
             )
-    buf.seek(0)
+    except project_bundle.BundleTooLarge as e:
+        os.unlink(path)
+        raise HTTPException(status_code=413, detail=str(e))
+    except BaseException:
+        os.unlink(path)
+        raise
+    if s3_objects:
+        logger.info("Migrate: bundled %s S3 files into ZIP", written.get("bundled_files"))
 
-    project_name = project.get("name") or "export"
-    filename = f"depictio_export_{project_name}.zip"
-    # Content-Disposition header values must be latin-1 encodable, but project
-    # names may contain em-dashes, slashes, or other non-ASCII characters. Emit
-    # an ASCII-safe ``filename`` fallback plus an RFC 5987 ``filename*`` that
-    # preserves the original name for clients that support it.
-    ascii_name = "".join(
-        c if c.isascii() and (c.isalnum() or c in "._-") else "_" for c in project_name
-    )
-    ascii_filename = f"depictio_export_{ascii_name}.zip"
-    content_disposition = (
-        f"attachment; filename=\"{ascii_filename}\"; filename*=UTF-8''{quote(filename)}"
-    )
-    return StreamingResponse(
-        buf,
+    return FileResponse(
+        path,
         media_type="application/zip",
-        headers={"Content-Disposition": content_disposition},
+        headers={"Content-Disposition": _content_disposition(project.get("name") or "export")},
+        background=BackgroundTask(os.unlink, path),
     )
 
 
 # ---------------------------------------------------------------------------
-# Import endpoint
+# Import endpoints
 # ---------------------------------------------------------------------------
+
+
+def _run_import(
+    *,
+    metadata: dict[str, Any],
+    data: dict[str, list[dict]],
+    s3_keys: list[str],
+    current_user: User,
+    dry_run: bool,
+    overwrite: bool,
+    owner_user_id: str | None,
+    force_owner_remap: bool,
+    via: Literal["cli", "zip"],
+    bundle_sha256: str | None = None,
+    write_s3: Callable[[], None] | None = None,
+) -> MigrateImportResponse:
+    """Validate, prepare and apply one bundle (the admin import paths).
+
+    ``write_s3`` restores the bundle's inline data; it runs after every check
+    and before any Mongo write, and raises to abort the import.
+    """
+    report = project_bundle.validate_bundle(metadata, data, s3_keys, strict=False)
+    if report.errors:
+        raise HTTPException(
+            status_code=400,
+            detail={"message": "Bundle refused", "errors": report.errors[:20]},
+        )
+
+    if report.conflict != "none" and not overwrite and not dry_run:
+        name = report.existing_project_name or report.project_id
+        return MigrateImportResponse(
+            success=False,
+            message=f"Project '{name}' already exists on this instance. "
+            "Set overwrite=true to replace it.",
+            conflict=True,
+            warnings=report.warnings,
+        )
+
+    owner_id: Any = current_user.id
+    if owner_user_id:
+        try:
+            owner_id = ObjectId(owner_user_id)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid owner_user_id")
+
+    existing = (
+        projects_collection.find_one({"_id": ObjectId(report.project_id)})
+        if report.project_id
+        else None
+    )
+    hop = ImportHop(
+        source_instance=str(metadata.get("source_instance") or "unknown"),
+        source_depictio_version=metadata.get("depictio_version"),
+        bundle_format_version=report.bundle_format_version,
+        exported_at=metadata.get("exported_at") or metadata.get("timestamp"),
+        target_depictio_version=get_version(),
+        bundle_sha256=bundle_sha256,
+        via=via,
+    )
+    prepared = project_bundle.prepare_docs_for_import(
+        data,
+        owner_id=ObjectId(str(owner_id)),
+        owner_email=getattr(current_user, "email", None) if not owner_user_id else None,
+        existing_user_ids={str(u["_id"]) for u in users_collection.find({}, {"_id": 1})},
+        force_remap=force_owner_remap,
+        source_bucket=project_bundle._source_bucket(metadata, data),
+        target_bucket=settings.s3.bucket,
+        hop=hop if data.get("projects") else None,
+        existing_project=existing,
+    )
+    counts = {k: len(v) for k, v in prepared.docs.items()}
+
+    if dry_run:
+        total = sum(counts.values())
+        return MigrateImportResponse(
+            success=True,
+            message=f"DRY RUN: would upsert {total} documents",
+            upserted=counts,
+            dry_run=True,
+            warnings=report.warnings,
+            report=report.model_dump(),
+        )
+
+    if write_s3 is not None:
+        write_s3()
+
+    label = f"Imported from {hop.source_instance}"
+    if hop.source_depictio_version:
+        label += f" (Depictio {hop.source_depictio_version})"
+    try:
+        written = project_bundle.apply_project_import(
+            prepared,
+            actor=current_user,
+            label=label,
+            existing_project=existing,
+            invalidate=project_bundle.default_invalidate,
+        )
+    except project_bundle.ImportWriteError as e:
+        logger.error("migrate import error: %s", e)
+        raise HTTPException(status_code=500, detail=f"Import failed for {e.collection}")
+
+    upserted = {k: v for k, v in written.items() if k in project_bundle.COLLECTION_ORDER}
+    total = sum(upserted.values())
+    logger.info("migrate import: upserted %d documents (%s)", total, upserted)
+    return MigrateImportResponse(
+        success=True,
+        message=f"Upserted {total} documents",
+        upserted=upserted,
+        warnings=report.warnings,
+        report=report.model_dump(),
+    )
 
 
 @migrate_endpoint_router.post("/import-project", response_model=MigrateImportResponse)
@@ -634,109 +652,43 @@ async def import_project(
     current_user: User = Depends(get_user_or_anonymous),
 ) -> MigrateImportResponse:
     """
-    Import a project bundle into this instance (non-destructive upsert).
+    Import a project bundle into this instance (upsert by id).
 
-    Documents are upserted in dependency order.  Owner IDs that do not exist
-    on this instance are remapped to the calling admin (or the specified
-    owner_user_id).
+    The bundle is validated first: every document must belong to the bundled
+    project, and none may collide with another project's ids here. Owner ids
+    that do not exist on this instance are remapped to the calling admin (or
+    the specified owner_user_id). ``s3://`` locations are rewritten to this
+    instance's bucket. Each dashboard family records the state the import
+    replaces, then an ``import`` version.
     """
     if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Only administrators can import projects")
 
     bundle = request.bundle
-    if "data" not in bundle:
+    if "data" not in bundle or not isinstance(bundle["data"], dict):
         raise HTTPException(status_code=400, detail="Bundle missing 'data' section")
-
-    # Conflict check — refuse to overwrite an existing project unless overwrite=True
-    project_docs = bundle.get("data", {}).get("projects", [])
-    if project_docs:
-        raw_pid = project_docs[0].get("_id") or project_docs[0].get("id")
-        try:
-            existing = projects_collection.find_one({"_id": ObjectId(str(raw_pid))})
-        except Exception:
-            existing = None
-        if existing and not request.overwrite and not request.dry_run:
-            project_name = existing.get("name", str(raw_pid))
-            return MigrateImportResponse(
-                success=False,
-                message=f"Project '{project_name}' already exists on this instance. "
-                "Set overwrite=true to replace it.",
-                conflict=True,
-            )
-
-    # Determine fallback owner ID
-    admin_id = current_user.id
-    if request.owner_user_id:
-        try:
-            admin_id = ObjectId(request.owner_user_id)
-        except Exception:
-            raise HTTPException(status_code=400, detail="Invalid owner_user_id")
-
-    # Collect existing user IDs on this instance (for owner remapping)
-    existing_user_ids = {str(u["_id"]) for u in users_collection.find({}, {"_id": 1})}
-
-    # Import order respects dependencies (project first, then its dependents).
-    # Workflows and data_collections are embedded in the project document,
-    # so they are not stored in separate collections and don't appear in the bundle.
-    ordered_collections: list[tuple[str, Collection[dict[str, Any]]]] = [
-        ("projects", projects_collection),
-        ("files", files_collection),
-        ("deltatables", deltatables_collection),
-        ("runs", runs_collection),
-        ("dashboards", dashboards_collection),
-        ("multiqc", multiqc_collection),
-        ("jbrowse", jbrowse_collection),
-    ]
-
-    data_section = bundle["data"]
-    upserted: dict[str, int] = {}
-
-    for collection_name, collection in ordered_collections:
-        raw_docs: list[dict] = data_section.get(collection_name, [])
-        if not raw_docs:
-            upserted[collection_name] = 0
-            continue
-
-        # MultiQC reports store data_collection_id as a plain string (see the
-        # MultiQCReport model) and are looked up by string, so it must NOT be
-        # coerced to ObjectId on import or the report becomes invisible.
-        keep_string_dc_id = collection_name == "multiqc"
-        ops: list[ReplaceOne] = []
-        for doc in raw_docs:
-            doc = _prepare_doc_for_import(
-                doc,
-                existing_user_ids,
-                admin_id,
-                force_remap=request.force_owner_remap,
-                keep_string_dc_id=keep_string_dc_id,
-            )
-            ops.append(ReplaceOne({"_id": doc["_id"]}, doc, upsert=True))
-
-        if not request.dry_run:
-            try:
-                collection.bulk_write(ops, ordered=False)
-            except Exception as e:
-                logger.error("migrate import error for %s: %s", collection_name, e)
-                raise HTTPException(
-                    status_code=500,
-                    detail=f"Import failed for {collection_name}",
-                )
-
-        upserted[collection_name] = len(ops)
-        logger.info(
-            "migrate import: %s %d docs into %s",
-            "DRY RUN would upsert" if request.dry_run else "upserted",
-            len(ops),
-            collection_name,
-        )
-
-    total = sum(upserted.values())
-    return MigrateImportResponse(
-        success=True,
-        message=f"{'DRY RUN: would upsert' if request.dry_run else 'Upserted'} {total} documents",
-        upserted=upserted,
+    metadata = bundle.get("migrate_metadata") or {}
+    s3_keys: list[str] = []  # the CLI copies S3 server side; the JSON bundle holds no data
+    return _run_import(
+        metadata=metadata if isinstance(metadata, dict) else {},
+        data=bundle["data"],
+        s3_keys=s3_keys,
+        current_user=current_user,
         dry_run=request.dry_run,
+        overwrite=request.overwrite,
+        owner_user_id=request.owner_user_id,
+        force_owner_remap=request.force_owner_remap,
+        via="cli",
     )
+
+
+def _hash_upload(fileobj: Any) -> str:
+    digest = hashlib.sha256()
+    fileobj.seek(0)
+    for chunk in iter(lambda: fileobj.read(1024 * 1024), b""):
+        digest.update(chunk)
+    fileobj.seek(0)
+    return digest.hexdigest()
 
 
 @migrate_endpoint_router.post("/import-project-zip", response_model=MigrateImportResponse)
@@ -759,174 +711,51 @@ async def import_project_zip(
     if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Only administrators can import projects")
 
-    contents = await file.read()
-    buf = io.BytesIO(contents)
-
     # Parsing the archive and restoring its payload to object storage are two
     # different failures and are kept apart deliberately: they used to share one
     # try block, so an unreachable S3 endpoint surfaced as "Invalid ZIP bundle"
     # and sent the operator hunting a corrupt export that was in fact fine.
+    sha256 = _hash_upload(file.file)
     try:
-        zf = zipfile.ZipFile(buf)
-        bundle_data = json.loads(zf.read("bundle.json"))
-        migrate_metadata = json.loads(zf.read("migrate_metadata.json"))
-    except Exception as e:
+        opened = project_bundle.open_bundle_zip(file.file)
+    except project_bundle.BundleError as e:
         logger.error("migrate import-zip: failed to parse ZIP bundle: %s", e)
-        raise HTTPException(status_code=400, detail="Invalid ZIP bundle")
+        raise HTTPException(status_code=400, detail=f"Invalid ZIP bundle: {e}")
 
-    with zf:
-        # Restore S3 data files bundled in the ZIP back to the S3 store at original paths
-        s3_keys = [n for n in zf.namelist() if n.startswith("s3_data/")]
-        if s3_keys and not dry_run:
-            s3_client = boto3.client(
-                "s3",
-                endpoint_url=settings.s3.endpoint_url,
-                aws_access_key_id=settings.s3.aws_access_key_id,
-                aws_secret_access_key=settings.s3.aws_secret_access_key,
-                region_name="us-east-1",
-                verify=settings.s3.verify_tls,
+    def write_s3() -> None:
+        if not opened.s3_entries:
+            return
+        uploaded, failures = project_bundle.restore_s3_entries(
+            opened, _instance_s3_client(), settings.s3.bucket
+        )
+        logger.info("Migrate import: restored %d S3 objects to the S3 store", uploaded)
+        # Abort before touching Mongo. Importing the metadata of a project
+        # whose data files never landed would leave a project that lists
+        # collections it cannot read, which is worse than not importing it.
+        if failures:
+            raise HTTPException(
+                status_code=502,
+                detail=(
+                    f"ZIP bundle is valid, but only {uploaded} of {len(opened.s3_entries)} data "
+                    f"files could be written to object storage at "
+                    f"{settings.s3.endpoint_url}. Nothing was imported. "
+                    f"First error: {failures[0]}"
+                ),
             )
-            uploaded = 0
-            failures: list[str] = []
-            for zip_path in s3_keys:
-                s3_key = zip_path[len("s3_data/") :]  # strip prefix to get original path
-                if not s3_key:
-                    continue
-                # Zip-slip guard: the ZIP can contain absolute paths or
-                # ``..`` segments that would let an attacker upload arbitrary
-                # objects outside the intended bundle prefix. Reject anything
-                # that doesn't normalise to a clean relative S3 key.
-                if (
-                    s3_key.startswith("/")
-                    or ".." in s3_key.split("/")
-                    or s3_key != os.path.normpath(s3_key).replace(os.sep, "/")
-                ):
-                    logger.warning("Refusing to restore suspicious S3 key from ZIP: %s", s3_key)
-                    continue
-                try:
-                    s3_client.put_object(
-                        Bucket=settings.s3.bucket,
-                        Key=s3_key,
-                        Body=zf.read(zip_path),
-                    )
-                    uploaded += 1
-                    logger.debug("Restored S3 object: %s", s3_key)
-                except ClientError as e:
-                    logger.error("Failed to restore S3 object %s: %s", s3_key, e)
-                    failures.append(f"{s3_key}: {e}")
-                # BotoCoreError covers the connection-level failures ClientError
-                # does not, chiefly EndpointConnectionError from a dead or
-                # misconfigured endpoint. No later object recovers from that, so
-                # stop instead of paying the connect timeout once per file.
-                except BotoCoreError as e:
-                    logger.error("Aborting S3 restore, endpoint unusable: %s", e)
-                    failures.append(f"{s3_key}: {e}")
-                    break
-            logger.info("Migrate import: restored %d S3 objects to the S3 store", uploaded)
 
-            # Abort before touching Mongo. Importing the metadata of a project
-            # whose data files never landed would leave a project that lists
-            # collections it cannot read, which is worse than not importing it.
-            if failures:
-                raise HTTPException(
-                    status_code=502,
-                    detail=(
-                        f"ZIP bundle is valid, but only {uploaded} of {len(s3_keys)} data "
-                        f"files could be written to object storage at "
-                        f"{settings.s3.endpoint_url}. Nothing was imported. "
-                        f"First error: {failures[0]}"
-                    ),
-                )
-
-    bundle = {"data": bundle_data, "migrate_metadata": migrate_metadata}
-    import_request = MigrateImportRequest(
-        bundle=bundle,
-        dry_run=dry_run,
-        force_owner_remap=True,
-        overwrite=overwrite,
-    )
-    return await import_project(import_request, current_user)
-
-
-# ---------------------------------------------------------------------------
-# Internal helpers
-# ---------------------------------------------------------------------------
-
-
-def _prepare_doc_for_import(
-    doc: dict,
-    existing_user_ids: set[str],
-    fallback_owner_id: Any,
-    force_remap: bool = False,
-    keep_string_dc_id: bool = False,
-) -> dict:
-    """Convert string IDs back to ObjectId and remap unknown owners.
-
-    ``keep_string_dc_id`` preserves ``data_collection_id`` as a string (for
-    collections like ``multiqc`` that store and query it as a string) instead
-    of coercing it to ObjectId.
-    """
-    doc = dict(doc)
-    # Convert _id
-    if "id" in doc and "_id" not in doc:
-        doc["_id"] = doc.pop("id")
-    if "_id" in doc and isinstance(doc["_id"], str):
-        try:
-            doc["_id"] = ObjectId(doc["_id"])
-        except Exception:
-            pass
-
-    # Remap owner IDs in permissions
-    permissions = doc.get("permissions")
-    if isinstance(permissions, dict):
-        owners = permissions.get("owners")
-        if isinstance(owners, list):
-            new_owners = []
-            for owner in owners:
-                if isinstance(owner, dict):
-                    owner_id = str(owner.get("_id", ""))
-                    if force_remap or owner_id not in existing_user_ids:
-                        owner = dict(owner)
-                        owner["_id"] = str(fallback_owner_id)
-                    new_owners.append(owner)
-                else:
-                    new_owners.append(owner)
-            permissions = dict(permissions)
-            permissions["owners"] = new_owners
-            doc["permissions"] = permissions
-
-    # Recursively convert any remaining string ObjectIds for known ID fields
-    _convert_id_fields(doc)
-
-    # Some collections (e.g. multiqc) store data_collection_id as a string and
-    # look it up by string — undo the ObjectId coercion for those.
-    if keep_string_dc_id and doc.get("data_collection_id") is not None:
-        doc["data_collection_id"] = str(doc["data_collection_id"])
-
-    return doc
-
-
-_ID_FIELD_NAMES = {
-    "_id",
-    "project_id",
-    "workflow_id",
-    "data_collection_id",
-    "run_id",
-    "dashboard_id",
-}
-
-
-def _convert_id_fields(obj: Any) -> None:
-    """Convert known ID fields from string to ObjectId in-place."""
-    if isinstance(obj, dict):
-        for key, val in obj.items():
-            if key in _ID_FIELD_NAMES and isinstance(val, str):
-                try:
-                    obj[key] = ObjectId(val)
-                except Exception:
-                    pass
-            else:
-                _convert_id_fields(val)
-    elif isinstance(obj, list):
-        for item in obj:
-            _convert_id_fields(item)
+    try:
+        return _run_import(
+            metadata=opened.metadata,
+            data=opened.data,
+            s3_keys=[key for _, key in opened.s3_entries],
+            current_user=current_user,
+            dry_run=dry_run,
+            overwrite=overwrite,
+            owner_user_id=None,
+            force_owner_remap=True,
+            via="zip",
+            bundle_sha256=sha256,
+            write_s3=write_s3,
+        )
+    finally:
+        opened.close()
