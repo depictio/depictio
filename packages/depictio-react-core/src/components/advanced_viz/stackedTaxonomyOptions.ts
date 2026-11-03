@@ -381,6 +381,21 @@ export function formatAxisFloor(zoom: ValueAxisZoom, normalised: boolean): strin
   return zoom.floor.toLocaleString('en', { minimumFractionDigits: d, maximumFractionDigits: d });
 }
 
+/**
+ * A value as the cropped axis' caption prints it while the user zooms and
+ * pans: enough decimals for the visible `span`, so "85%" at 15 points wide and
+ * "92.4%" at 1.5. `span` and `value` are in the axis' own units (a fraction
+ * when `normalised`).
+ */
+export function formatAxisValue(value: number, span: number, normalised: boolean): string {
+  const scaled = normalised ? 100 : 1;
+  const visible = Math.abs(span) * scaled;
+  const decimals = visible > 0 && Number.isFinite(visible) ? Math.min(6, Math.max(0, Math.ceil(-Math.log10(visible / 10)))) : 0;
+  const v = value * scaled;
+  if (normalised) return `${v.toFixed(decimals)}%`;
+  return v.toLocaleString('en', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+}
+
 /** Value-axis title, saying so when the axis is cropped. Unset reads
  *  `fallback`; an empty string shows none, unless the axis is cropped. */
 export function valueAxisTitle(
@@ -394,53 +409,3 @@ export function valueAxisTitle(
 }
 
 export type TaxonomyOrientation = 'v' | 'h';
-
-/**
- * The classic `//` break marker at the base of the value axis, as Plotly line
- * shapes sized in pixels around a paper-coordinate anchor, so the slashes keep
- * their angle whatever the plot's aspect.
- *
- * `v`: the value axis is vertical at paper x = `anchor.x`, its base at paper
- * y = `anchor.y`, and the marker sits a few px above the base. `h`: the value
- * axis is horizontal at paper y = `anchor.y`, its base at paper x = `anchor.x`,
- * and the marker sits a few px right of it. A short background-coloured stroke
- * cuts the axis line between the two slashes.
- */
-export function axisBreakShapes(
-  orientation: TaxonomyOrientation,
-  anchor: { x: number; y: number },
-  colors: { line: string; background: string },
-): Record<string, unknown>[] {
-  const base = {
-    type: 'line',
-    xref: 'paper',
-    yref: 'paper',
-    xsizemode: 'pixel',
-    ysizemode: 'pixel',
-    xanchor: anchor.x,
-    yanchor: anchor.y,
-    layer: 'above',
-  };
-  /** Distance of the marker's centre from the axis base, px. */
-  const at = 10;
-  /** Half the distance between the slashes, px. */
-  const half = 3;
-  /** Half a slash's length across the axis, px. */
-  const reach = 5;
-  /** Half a slash's run along the axis, px: the lean. */
-  const lean = 3;
-  const cut = { ...base, line: { color: colors.background, width: 4 } };
-  const slash = { ...base, line: { color: colors.line, width: 1.5 } };
-  if (orientation === 'h') {
-    return [
-      { ...cut, x0: at - half, x1: at + half, y0: 0, y1: 0 },
-      { ...slash, x0: at - half - lean, x1: at - half + lean, y0: -reach, y1: reach },
-      { ...slash, x0: at + half - lean, x1: at + half + lean, y0: -reach, y1: reach },
-    ];
-  }
-  return [
-    { ...cut, x0: 0, x1: 0, y0: at - half, y1: at + half },
-    { ...slash, x0: -reach, x1: reach, y0: at - half - lean, y1: at - half + lean },
-    { ...slash, x0: -reach, x1: reach, y0: at + half - lean, y1: at + half + lean },
-  ];
-}

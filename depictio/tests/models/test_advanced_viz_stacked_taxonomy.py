@@ -65,7 +65,7 @@ def test_new_options_default_to_the_shipped_tile() -> None:
     assert cfg.sample_sort == "input"
     assert cfg.sort_category is None
     assert cfg.group_col is None
-    assert cfg.y_zoom == "off"
+    assert cfg.y_zoom == "auto"
     assert cfg.orientation == "v"
     assert cfg.value_title is None
     # The rank column keeps its default; a single-level composition sets null.

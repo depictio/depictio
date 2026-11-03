@@ -59,6 +59,8 @@ Curated from a 14-item survey across nf-core pipelines, Bioconductor Shiny apps,
 | 9 | Spatial scatter + image | `cell_id: str`, `x: float`, `y: float` + DC-level `image_uri: str` (in DC config, not rows) | `value: float`, `cluster_id: str`, `image_scale: float` | long, one row per cell + image referenced from DC config | No pyramid; image must fit `< ~20 MB` for v1. |
 | 10 | Pathway / network | DC = **graph**: edge table `source: str`, `target: str` + node table `id: str`, `label: str` | `weight: float`, `node_attr.*`, `edge_attr.*` | two-table DC (nodes + edges) — needs new DC kind | First viz that requires extending the DC kind list. |
 
+When the stacked taxonomy bar's Zoom crops the value axis, the axis is drawn as a broken one: a gap in the axis line with two slashes, a cut label (`0%`) at its end, holes through the bars at the break and a live caption ("y axis starts at 85%") that follows zoom and pan.
+
 ### 2.2 The `ColumnMapping` and `BindingSpec` types
 
 Per-viz Pydantic submodel pairs a **role** with a **DC column path**. Lives in `depictio/models/components/advanced_viz/<viz_kind>.py`:
@@ -834,6 +836,10 @@ says so in the echo, never a subset. Like `genome_chord` it is hand-drawn SVG wi
 in `ideogram/ideogramLayout.ts`, tested without a DOM. A click on a bar, or a drag along it,
 emits the `genome_selection` pair a `genome_view` brush emits (`region_filter_enabled`, on by
 default); a region from another tile is shaded on the matching bar through `genomicAxis.ts`.
+`lock_mode: true` withholds the Auto / Marks / Density switch, for a table whose rows are already
+summaries (one per sequence, one per window) where a glyph per row adds nothing to the density.
+When the dashboard's `category_colors` colour the `sample_col` column, each karyotype's title
+wears that colour as a small square, so a genome reads the same here as on every other tile.
 Producers: tidk windows and per-sequence BUSCO counts (nf-core/genomeqc), binned VCF densities
 (`vcf/variant_density`, nf-core/rnavar).
 
@@ -859,6 +865,17 @@ rows at the locus), `category` (HLA class, a header band over the columns), `val
 allele group (first field) picks a hue family and the full allele a shade inside it, so every
 A*02 reads as one family; a locus whose two calls agree at the display `resolution` (1 to 4
 fields, default 2) is one merged cell with a dot, and a missing call is a dashed half.
+When the dashboard's `category_colors` colour the allele-group column (`allele_group_col`, values
+like `HLA-A*02`), a group is drawn in that colour and its alleles are that colour moved lighter
+or darker (`shadeOffset`), so the grid, the bars and the tables agree on one colour per group;
+without it, or beyond the groups it colours, the theme's hue families apply. Reader controls,
+all opt-in and persisted like the other Tier-2 controls: `color_by` (`allele_group`, `zygosity`
+computed from the two halves at the display resolution, with colours from `zygosity_col`'s
+`category_colors`, or `hla_class` when `category_col` holds more than one class) and `group_cols`
+(sample-level columns the rows can be grouped by, each group under a header band; `group_by`
+starts grouped). There is no colour by sample: the samples are the rows and already labelled, and
+a hue per row would break the one-hue-per-allele-family reading. A key under the grid states how
+to read a cell and a legend lists the alleles (per locus) or the zygosity or class states.
 Nomenclature parsing (HLA-A*02:01:01:01, A*02:01, A02:01, pre-2010 A*0201, N/G suffixes),
 pairing, ordering and the `max_samples` / `max_loci` guards live in
 `allele_grid/alleleGridLayout.ts`. The server never samples: a sampled genotype loses a

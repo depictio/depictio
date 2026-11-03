@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  axisBreakShapes,
   barSlots,
   compositionColumns,
   DENSE_AXIS_BARS,
   formatAxisFloor,
+  formatAxisValue,
   groupSamples,
   isDenseTaxonomyAxis,
   isSpacerSlot,
@@ -300,54 +300,6 @@ describe('valueAxisTitle', () => {
   });
 });
 
-describe('axisBreakShapes', () => {
-  const colors = { line: '#333', background: '#fff' };
-
-  it('draws two parallel slashes across a vertical axis, cutting its line between them', () => {
-    const shapes = axisBreakShapes('v', { x: 0, y: 0.2 }, colors);
-    expect(shapes).toHaveLength(3);
-    for (const s of shapes) {
-      expect(s).toMatchObject({
-        type: 'line',
-        xref: 'paper',
-        yref: 'paper',
-        xsizemode: 'pixel',
-        ysizemode: 'pixel',
-        xanchor: 0,
-        yanchor: 0.2,
-      });
-    }
-    const [cut, a, b] = shapes as Record<string, number & { color?: string }>[];
-    // The cut runs along the axis (x fixed), in the background colour.
-    expect(cut.x0).toBe(0);
-    expect(cut.x1).toBe(0);
-    expect((cut as any).line.color).toBe('#fff');
-    // The slashes cross the axis and lean the same way, the cut between them.
-    for (const s of [a, b]) {
-      expect(s.x0).toBeLessThan(0);
-      expect(s.x1).toBeGreaterThan(0);
-      expect(s.y1 - s.y0).toBeGreaterThan(0);
-      expect((s as any).line.color).toBe('#333');
-    }
-    expect(b.y0 - a.y0).toBe(cut.y1 - cut.y0);
-    expect(a.y0).toBeGreaterThan(0);
-  });
-
-  it('draws them across a horizontal axis for horizontal bars', () => {
-    const shapes = axisBreakShapes('h', { x: 0.1, y: 0 }, colors) as Record<string, number>[];
-    const [cut, a, b] = shapes;
-    expect(shapes[0]).toMatchObject({ xanchor: 0.1, yanchor: 0 });
-    expect(cut.y0).toBe(0);
-    expect(cut.y1).toBe(0);
-    for (const s of [a, b]) {
-      expect(s.y0).toBeLessThan(0);
-      expect(s.y1).toBeGreaterThan(0);
-      expect(s.x1 - s.x0).toBeGreaterThan(0);
-    }
-    expect(b.x0 - a.x0).toBe(cut.x1 - cut.x0);
-  });
-});
-
 describe('taxonomyAxisTitle', () => {
   it('reads "Sample" when unset, as the tile always did', () => {
     expect(taxonomyAxisTitle(undefined)).toBe('Sample');
@@ -405,5 +357,23 @@ describe('taxonomyLegend', () => {
     expect(taxonomyLegendTopPx('bottom', true, true)).toBe(40);
     // No legend shown, no room kept for it.
     expect(taxonomyLegendTopPx('bottom', true, false)).toBe(0);
+  });
+});
+
+describe('formatAxisValue', () => {
+  it('prints a percent floor with the decimals the visible span needs', () => {
+    expect(formatAxisValue(0.85, 0.15, true)).toBe('85%');
+    expect(formatAxisValue(0.924, 0.015, true)).toBe('92.4%');
+    expect(formatAxisValue(0.9241, 0.0015, true)).toBe('92.41%');
+  });
+
+  it('prints a raw floor with thousands separators', () => {
+    expect(formatAxisValue(1200, 4000, false)).toBe('1,200');
+    expect(formatAxisValue(1200.5, 4, false)).toBe('1,200.5');
+  });
+
+  it('survives a degenerate span', () => {
+    expect(formatAxisValue(0.5, 0, true)).toBe('50%');
+    expect(formatAxisValue(3, NaN, false)).toBe('3');
   });
 });

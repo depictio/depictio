@@ -44,6 +44,7 @@ import {
   plotlyThemeFragment,
 } from './plotlyTheme';
 import { usePersistedVizControl } from './usePersistedVizControl';
+import { extentFraction, labelPlacement } from './scatterLabels';
 import { highlightPredicate, ReferenceHighlight, ReferenceLine } from './scatterReference';
 import { useGestureGuardedSelection, useSelectionRevision } from './selectionGesture';
 import { applyHighlight, highlightLayout } from './highlight/highlightTraces';
@@ -656,17 +657,38 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
             ? (b.size ?? 0) - (a.size ?? 0)
             : Math.abs(b.y) - Math.abs(a.y),
       );
+      // The extent the points span on screen (axis coordinates), so a label
+      // on the data's edge leans inward instead of running onto an axis.
+      let xLo = Infinity;
+      let xHi = -Infinity;
+      let yLo = Infinity;
+      let yHi = -Infinity;
+      for (const p of points) {
+        const px = axisCoord(p.x, logX);
+        const py = axisCoord(p.y, logY);
+        if (px !== null) {
+          xLo = Math.min(xLo, px);
+          xHi = Math.max(xHi, px);
+        }
+        if (py !== null) {
+          yLo = Math.min(yLo, py);
+          yHi = Math.max(yHi, py);
+        }
+      }
       for (const p of ranked.slice(0, topN)) {
         if (!p.label) continue;
         const ax = axisCoord(p.x, logX);
         const ay = axisCoord(p.y, logY);
         if (ax === null || ay === null) continue;
+        const place = labelPlacement(extentFraction(ax, xLo, xHi), extentFraction(ay, yLo, yHi));
         annotations.push({
           x: ax,
           y: ay,
           text: p.label,
           showarrow: false,
-          yshift: 10,
+          xanchor: place.xanchor,
+          xshift: place.xshift,
+          yshift: place.yshift,
           font: { size: 10 },
         });
       }

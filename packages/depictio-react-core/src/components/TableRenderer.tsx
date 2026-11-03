@@ -34,6 +34,8 @@ import { LoadAllState } from './chrome/LoadAllButton';
 import { TileSubtitle, TileTitleRow } from './chrome/ComponentInfo';
 import { titleCarriesDescription } from './chrome/descriptionText';
 import { visibleTableColumns } from './tableColumns';
+import { categoryDotCellRenderer, pinnedColourColumns } from './tableCategoryCell';
+import { useCategoryColorSource } from '../hooks/useCategoryColors';
 import { extractRowSelection } from '../selection';
 import { useInView } from '../hooks/useInView';
 import { enqueueFetch, isStaleFetch } from '../fetchQueue';
@@ -463,6 +465,10 @@ const TableRenderer: React.FC<TableRendererProps> = ({
               },
             ]
           : [];
+        const coloured = pinnedColourColumns(
+          categorySourceRef.current,
+          visibleColumns.map((c) => c.field),
+        );
         setColDefs([
           ...annotationCol,
           ...visibleColumns.map((c, i) => {
@@ -485,6 +491,9 @@ const TableRenderer: React.FC<TableRendererProps> = ({
               resizable: true,
               cellClass: isNumeric ? 'ag-right-aligned-cell' : undefined,
               headerClass: isNumeric ? 'ag-right-aligned-header' : undefined,
+              cellRenderer: coloured.has(c.field)
+                ? categoryDotCellRenderer(categorySourceRef, c.field)
+                : undefined,
               sort: isDefaultSort ? defaultSortDir : undefined,
               sortIndex: isDefaultSort ? 0 : undefined,
               // Surface the selection checkbox in the first column so users
@@ -699,6 +708,11 @@ const TableRenderer: React.FC<TableRendererProps> = ({
   // reads the latest map through this ref.
   const rowAnnotationsRef = useRef<RowAnnotationMap>(rowAnnotations);
   rowAnnotationsRef.current = rowAnnotations;
+  // A column the dashboard colours (`category_colors`) draws a dot before each
+  // value; the cell reads the latest source through this ref.
+  const categorySource = useCategoryColorSource();
+  const categorySourceRef = useRef(categorySource);
+  categorySourceRef.current = categorySource;
   const hasRowAnnotations = rowAnnotations.size > 0;
   const hasRowAnnotationsRef = useRef(hasRowAnnotations);
   hasRowAnnotationsRef.current = hasRowAnnotations;

@@ -1,11 +1,11 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import {
   Badge,
   Text,
   useMantineColorScheme,
   useMantineTheme,
 } from '@mantine/core';
-import Plot from './LegendAwarePlot';
+import Plot, { HideLegendContext } from './LegendAwarePlot';
 
 import {
   dispatchUpset,
@@ -38,8 +38,10 @@ import {
   colourUpsetSets,
   inkUpsetForDark,
   resolveUpsetSetColors,
+  scaleUpsetDots,
   upsetColumnSets,
   upsetSetNames,
+  withUpsetResponsiveLayout,
   withUpsetSetLabelDots,
 } from './upsetFigure';
 import { emphasizeUpsetColumns, upsetHoverColumn, withUpsetHoverTargets } from './upsetHover';
@@ -527,6 +529,29 @@ const UpsetRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFilt
   const clickable = Boolean(selectionColumn && members);
 
   // ---- Drawing ------------------------------------------------------------------
+  // The width the plot is drawn at: fonts, margins, dots and the legend band
+  // are fitted to it (upsetFigure.ts). Read off the graph div Plotly hands
+  // back, in steps of 16 px so a drag of the tile edge is not a redraw per pixel.
+  const hideLegend = useContext(HideLegendContext);
+  const [graphDiv, setGraphDiv] = useState<HTMLElement | null>(null);
+  const [plotWidth, setPlotWidth] = useState<number | null>(null);
+  useEffect(() => {
+    if (!graphDiv) return;
+    const measure = () => {
+      const next = Math.round(graphDiv.clientWidth / 16) * 16;
+      if (next > 0) setPlotWidth((prev) => (prev === next ? prev : next));
+    };
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(graphDiv);
+    return () => observer.disconnect();
+  }, [graphDiv]);
+  const rememberGraphDiv = useCallback(
+    (_figure: unknown, node: HTMLElement) => setGraphDiv((prev) => (prev === node ? prev : node)),
+    [],
+  );
+
   const themedData = useMemo(() => {
     if (!figureData || !figureLayout) return null;
     let data = applyDataTheme(figureData, isDark, theme) as Record<string, unknown>[];
@@ -536,8 +561,11 @@ const UpsetRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFilt
         empty: theme.colors.dark[4],
       });
     }
-    return withUpsetHoverTargets(colourUpsetSets(data, figureLayout, setColors), figureLayout);
-  }, [figureData, figureLayout, isDark, theme, setColors]);
+    return withUpsetHoverTargets(
+      scaleUpsetDots(colourUpsetSets(data, figureLayout, setColors), figureLayout, plotWidth),
+      figureLayout,
+    );
+  }, [figureData, figureLayout, isDark, theme, setColors, plotWidth]);
   // Hovering an intersection dims everything outside it, as the UpSet Shiny
   // app does. A selected one stays at full strength through the hover of
   // another, so both read: what is selected, and what a click would select.
@@ -557,21 +585,25 @@ const UpsetRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFilt
     () =>
       figureLayout
         ? withUpsetSetLabelDots(
-            applyLayoutTheme(
-              {
-                ...figureLayout,
-                width: undefined,
-                height: undefined,
-                autosize: true,
-                uirevision: figureRevision,
-              },
-              isDark,
-              theme,
-            ) as Record<string, unknown>,
+            withUpsetResponsiveLayout(
+              applyLayoutTheme(
+                {
+                  ...figureLayout,
+                  width: undefined,
+                  height: undefined,
+                  autosize: true,
+                  uirevision: figureRevision,
+                },
+                isDark,
+                theme,
+              ) as Record<string, unknown>,
+              figureData ?? [],
+              { width: plotWidth, hideLegend },
+            ),
             setColors,
           )
         : null,
-    [figureLayout, figureRevision, isDark, theme, setColors],
+    [figureLayout, figureData, figureRevision, isDark, theme, setColors, plotWidth, hideLegend],
   );
 
   // A pointer over an intersection says it can be clicked. Plotly puts its
@@ -628,6 +660,8 @@ const UpsetRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFilt
           onHover={handleHover as any}
           onUnhover={handleUnhover as any}
           onClick={clickable ? (handleClick as any) : undefined}
+          onInitialized={rememberGraphDiv as any}
+          onUpdate={rememberGraphDiv as any}
           useResizeHandler
           style={{ width: '100%', height: '100%' }}
           config={{ displaylogo: false, responsive: true } as any}

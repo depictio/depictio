@@ -148,6 +148,8 @@ export interface OverviewScene {
   own: Region | null;
   followed: Region | null;
   colours: PaintColours;
+  /** The colour a panel title's genome wears elsewhere in the dashboard: a swatch before the title. */
+  titleColour?: (title: string) => string | null;
 }
 
 function shadeRegion(
@@ -186,11 +188,18 @@ export function paintOverview(ctx: CanvasRenderingContext2D, scene: OverviewScen
       ctx.font = font(colours, 12, 600);
       ctx.textAlign = horizontal ? 'left' : 'center';
       ctx.textBaseline = 'alphabetic';
+      const swatch = scene.titleColour?.(panel.title) ?? null;
+      const SWATCH = 10;
+      const inset = swatch && horizontal ? SWATCH + 5 : 0;
       ctx.fillText(
-        fitText(ctx, panel.title, panel.w - 8),
-        panel.x + (horizontal ? 4 : panel.w / 2),
+        fitText(ctx, panel.title, panel.w - 8 - inset),
+        panel.x + (horizontal ? 4 + inset : panel.w / 2),
         panel.y + 13,
       );
+      if (swatch && horizontal) {
+        ctx.fillStyle = swatch;
+        ctx.fillRect(panel.x + 4, panel.y + 4, SWATCH, SWATCH);
+      }
     }
 
     // A position axis: tick marks and labels in the panel's own furniture,

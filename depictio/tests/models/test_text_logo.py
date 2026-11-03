@@ -48,3 +48,26 @@ def test_no_logo_writes_none():
         "title: T\ncomponents:\n  - {component_type: text, title: T}\n"
     ).to_full()
     assert "logo:" not in DashboardDataLite.from_full(full).to_yaml()
+
+
+def test_the_legend_survives_the_round_trip():
+    yaml = "title: T\ncomponents:\n  - {component_type: text, title: S, legend: genome}\n"
+    full = DashboardDataLite.from_yaml(yaml).to_full()
+    assert full["stored_metadata"][0]["legend"] == "genome"
+    again = DashboardDataLite.from_yaml(DashboardDataLite.from_full(full).to_yaml()).to_full()
+    assert again["stored_metadata"][0]["legend"] == "genome"
+
+
+def test_no_legend_writes_none():
+    full = DashboardDataLite.from_yaml(
+        "title: T\ncomponents:\n  - {component_type: text, title: T}\n"
+    ).to_full()
+    assert "legend:" not in DashboardDataLite.from_full(full).to_yaml()
+
+
+def test_the_legend_placeholder_needs_a_legend():
+    from depictio.models.components.lite import TextLiteComponent
+
+    TextLiteComponent(title="T", body="- **Key** {{legend}}", legend="genome")
+    with pytest.raises(ValidationError, match="not a declared value"):
+        TextLiteComponent(title="T", body="- **Key** {{legend}}")

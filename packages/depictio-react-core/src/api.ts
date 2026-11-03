@@ -514,6 +514,8 @@ export interface StoredMetadata {
    *  dark-page variant; see components/textLogo.ts. */
   logo?: string | null;
   logo_dark?: string | null;
+  /** A column with pinned `category_colors`: the tile ends with a key of dots. */
+  legend?: string | null;
   /** Live values the title and body cite as `{{name}}`, computed with the
    *  cards (see components/textValues.ts). */
   values?: Record<string, TextValueSpec> | null;
