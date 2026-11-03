@@ -30,6 +30,10 @@ from depictio.api.v1.endpoints.deltatables_endpoints.utils import (
     precompute_columns_specs,
     previous_column_types,
 )
+from depictio.api.v1.endpoints.projects_endpoints.publish_lock import (
+    assert_dc_project_unlocked,
+    assert_project_unlocked,
+)
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user, get_user_or_anonymous
 from depictio.api.v1.permissions import build_access_query, get_user_group_ids, has_permission
 from depictio.api.v1.s3 import polars_s3_config
@@ -231,6 +235,7 @@ async def upsert_deltatable(
             status_code=404,
             detail=f"No projects containing Data Collection id {data_collection_oid} found for the current user.",
         )
+    assert_dc_project_unlocked(data_collection_oid)
 
     dc_data = None
     for workflow in project.get("workflows", []):
@@ -1810,6 +1815,20 @@ async def get_preview_filtered(
         raise HTTPException(status_code=500, detail=f"Failed to read delta table preview: {e}")
 
 
+def _s3_prefix_of(location: str, bucket_name: str) -> str:
+    """The object-key prefix of a ``s3://bucket/key`` (or bare key) location."""
+    loc = location.strip()
+    scheme = "s3://"
+    if loc.startswith(scheme):
+        loc = loc[len(scheme) :]
+        if loc == bucket_name or loc.startswith(bucket_name + "/"):
+            loc = loc[len(bucket_name) :]
+        else:
+            # A different bucket's URL: drop its bucket segment all the same.
+            loc = loc.partition("/")[2]
+    return loc.lstrip("/")
+
+
 @deltatables_endpoint_router.delete("/delete/{deltatable_id}")
 async def delete_deltatable(
     deltatable_id: str,
@@ -1842,14 +1861,37 @@ async def delete_deltatable(
         )
 
     data_collection_oid = ObjectId(deltatable["data_collection_id"])
-    deltatable_location = deltatable["delta_table_location"].lstrip("/")
+
+    # Ownership first: nothing under the S3 prefix may be touched by a caller
+    # who does not own the data collection's project.
+    project = projects_collection.find_one(
+        {
+            "$and": [
+                _owned_or_admin_query(current_user, {}),
+                {
+                    "$or": [
+                        {"workflows.data_collections._id": data_collection_oid},
+                        {"data_collections._id": data_collection_oid},
+                    ]
+                },
+            ]
+        }
+    )
+    if not project:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No deltatable with id {deltatable_oid} found for the current user.",
+        )
+    assert_project_unlocked(project)
+
     bucket_name = settings.s3.bucket
+    deltatable_location = _s3_prefix_of(deltatable["delta_table_location"], bucket_name)
 
     s3_client = boto3.client(
         "s3",
-        endpoint_url=settings.s3.endpoint,  # type: ignore[possibly-unbound-attribute]
-        aws_access_key_id=settings.s3.access_key,  # type: ignore[possibly-unbound-attribute]
-        aws_secret_access_key=settings.s3.secret_key,  # type: ignore[possibly-unbound-attribute]
+        endpoint_url=settings.s3.endpoint_url,
+        aws_access_key_id=settings.s3.aws_access_key_id,
+        aws_secret_access_key=settings.s3.aws_secret_access_key,
         region_name="us-east-1",
     )
 
@@ -1861,14 +1903,6 @@ async def delete_deltatable(
     except ClientError as e:
         logger.error(f"Failed to delete S3 objects: {e}")
         raise HTTPException(status_code=500, detail="Failed to delete S3 objects.")
-
-    if not projects_collection.find_one(
-        _owned_or_admin_query(current_user, {"data_collections._id": data_collection_oid})
-    ):
-        raise HTTPException(
-            status_code=404,
-            detail=f"No workflows with id {deltatable_oid} found for the current user.",
-        )
 
     deltatables_collection.delete_one({"_id": deltatable_oid})
     return {"message": f"DeltaTableAggregated with id {deltatable_oid} deleted successfully."}

@@ -11,6 +11,7 @@ from fastapi import HTTPException
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import projects_collection, tokens_collection
+from depictio.api.v1.endpoints.projects_endpoints.publish_lock import assert_project_unlocked
 from depictio.api.v1.permissions import build_access_query, get_user_group_ids, has_permission
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 from depictio.models.s3_access import ProjectS3Config
@@ -257,6 +258,8 @@ def _project_with_dc_access(dc_oid: ObjectId, current_user, required: str) -> di
     )
     if not project or not has_permission(project, current_user, required, group_ids):
         raise HTTPException(status_code=404, detail="Data collection not found or access denied")
+    if required != "viewer":
+        assert_project_unlocked(project)
     return project
 
 
@@ -568,6 +571,7 @@ def _editable_project_and_token(project_id: str, current_user) -> tuple[ObjectId
             status_code=403,
             detail="You don't have edit permission on this project.",
         )
+    assert_project_unlocked(project_dict)
 
     # Any active token for this user will do (the dash flow does the same).
     full_token = tokens_collection.find_one({"user_id": current_user.id})
@@ -1191,6 +1195,7 @@ def _create_multiqc_dc_from_uploads(
             status_code=403,
             detail="You don't have edit permission on this project.",
         )
+    assert_project_unlocked(project_dict)
 
     cli_config = _build_cli_config_for_user(current_user)
 

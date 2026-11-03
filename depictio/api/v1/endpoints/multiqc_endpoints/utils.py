@@ -8,6 +8,7 @@ from fastapi import HTTPException
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import multiqc_collection
+from depictio.api.v1.endpoints.projects_endpoints.publish_lock import assert_project_unlocked
 from depictio.api.v1.s3 import s3_client
 
 # Import build_sample_mapping from CLI utils to avoid code duplication
@@ -744,6 +745,7 @@ def _replace_multiqc_dc_uploads(
         raise HTTPException(
             status_code=404, detail=f"Data collection {data_collection_id} not found."
         )
+    assert_project_unlocked(project_doc)
 
     workflow, dc = _load_workflow_and_dc(project_doc, data_collection_id)
     if workflow is None or dc is None:
@@ -857,6 +859,7 @@ def _append_multiqc_dc_uploads(
         raise HTTPException(
             status_code=404, detail=f"Data collection {data_collection_id} not found."
         )
+    assert_project_unlocked(project_doc)
 
     workflow, dc = _load_workflow_and_dc(project_doc, data_collection_id)
     if workflow is None or dc is None:

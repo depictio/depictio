@@ -32,6 +32,7 @@ from depictio.api.v1.db import (
     users_collection,
 )
 from depictio.api.v1.endpoints.projects_endpoints.provenance import instance_label
+from depictio.api.v1.endpoints.projects_endpoints.publish_lock import LOCKED_DETAIL
 from depictio.api.v1.endpoints.user_endpoints.routes import (
     get_user_or_anonymous,
 )
@@ -560,6 +561,10 @@ def _run_import(
             status_code=400,
             detail={"message": "Bundle refused", "errors": report.errors[:20]},
         )
+
+    if report.existing_locked:
+        # Only an approved migration request may write to a published project.
+        raise HTTPException(status_code=409, detail=LOCKED_DETAIL)
 
     if report.conflict != "none" and not overwrite and not dry_run:
         name = report.existing_project_name or report.project_id

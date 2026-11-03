@@ -1663,7 +1663,7 @@ const App: React.FC = () => {
           dashboardId={dashboardId}
           // Restoring is a write, so it lives in the editor's History; an
           // owner gets the way there. The editor route is owner-only.
-          editHref={canEditNow && dashboardId ? dashboardHref(dashboardId, 'edit') : null}
+          editHref={isOwner && !dashboard?.published_lock && dashboardId ? dashboardHref(dashboardId, 'edit') : null}
           currentDataOnly={currentDataOnlyCount}
         />
       )}

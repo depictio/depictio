@@ -9,6 +9,10 @@ from pymongo.errors import BulkWriteError
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import projects_collection, runs_collection
 from depictio.api.v1.endpoints.files_endpoints.routes import MAX_IDS_PER_DELETE_BATCH
+from depictio.api.v1.endpoints.projects_endpoints.publish_lock import (
+    assert_project_unlocked,
+    assert_workflow_project_unlocked,
+)
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 from depictio.api.v1.permissions import build_access_query, get_user_group_ids
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
@@ -88,6 +92,8 @@ async def delete_runs_batch(
 
     deleted = 0
     if oids:
+        for wf_id in runs_collection.distinct("workflow_id", {"_id": {"$in": oids}}):
+            assert_workflow_project_unlocked(wf_id)
         group_ids = [] if current_user.is_admin else get_user_group_ids(current_user.id)
         query: dict = {
             "_id": {"$in": oids},
@@ -118,6 +124,8 @@ async def delete_run(run_id: str, current_user: User = Depends(get_current_user)
 
     if not run:
         raise HTTPException(status_code=404, detail=f"Run '{run_id}' not found.")
+
+    assert_workflow_project_unlocked(run.get("workflow_id"))
 
     # Delete the run
     result = runs_collection.delete_one(query)
@@ -174,6 +182,8 @@ async def create_run(
             status_code=404,
             detail=f"User does not have permission on the project containing workflow '{workflow_id}'.",
         )
+
+    assert_project_unlocked(project)
 
     # All of this is synchronous pymongo — a find, one find_one *per run* to diff
     # scan_results, and a bulk_write — so it runs in a worker thread instead of

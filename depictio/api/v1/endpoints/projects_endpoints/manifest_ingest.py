@@ -31,6 +31,7 @@ from fastapi import HTTPException
 from pydantic import BaseModel, Field
 
 from depictio.api.v1.db import files_collection, projects_collection
+from depictio.api.v1.endpoints.projects_endpoints.publish_lock import assert_project_unlocked
 from depictio.api.v1.remote_fetch import (
     RemoteURLRejected,
     bounded_download,
@@ -576,6 +577,8 @@ def _ingest_manifest_into_project(
         raise HTTPException(status_code=400, detail=str(exc))
 
     project_oid, project_dict = _load_editable_project(project_id, current_user)
+    if not dry_run:
+        assert_project_unlocked(project_oid)
 
     field_map = manifest_field_map(
         id_field=id_field, type_field=type_field, url_field=url_field, run_field=run_field
@@ -887,6 +890,8 @@ def _refresh_manifest_in_project(
         require_local_caller(request, current_user)
 
     project_oid, project_dict = _load_editable_project(project_id, current_user)
+    if not dry_run:
+        assert_project_unlocked(project_oid)
 
     refreshable_index = _refreshable_dc_index(project_dict)
     if not refreshable_index:
