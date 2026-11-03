@@ -7119,12 +7119,33 @@ _LIST_ITEM_LINE = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+")
 _STRUCTURE_LINE = re.compile(r"^\s*(?:#{1,6}(?:\s|$)|(?:[-*_]\s*){3,}$)")
 
 
+_FILTER_COLUMN = re.compile(r"""col\(\s*['"]([^'"]+)['"]\s*\)""")
+
+
+def _text_value_lacks_column(spec: dict) -> bool:
+    """Whether a text value reads a column its collection does not carry.
+
+    The columns read are the value's own and those its `filter_expr` names with
+    `col('...')`. Compared with the schema recorded at ingest; a collection whose
+    schema is unknown never counts as lacking one (``None`` is "could not tell").
+    """
+    dc_id = spec.get("dc_id")
+    if not dc_id:
+        return False
+    names = _dc_column_names(str(dc_id))
+    if names is None:
+        return False
+    wanted = {spec.get("column")} | set(_FILTER_COLUMN.findall(spec.get("filter_expr") or ""))
+    return any(c and c not in names for c in wanted)
+
+
 def _prune_unresolved_text_values(component: dict, dc_meta: dict[str, dict]) -> bool:
     """Take out a text tile's list items citing a value this run cannot compute.
 
-    A value cannot be computed when its `dc` did not resolve, or names an
+    A value cannot be computed when its `dc` did not resolve, names an
     optional collection left unpopulated (the rule `_component_has_data`
-    applies to a card). Each list item citing one, its continuation lines
+    applies to a card), or reads a column the collection does not carry (an
+    optional sheet column the run left out). Each list item citing one, its continuation lines
     included, is removed; values no longer cited anywhere leave `values`, so an
     export stays valid. Lines that are not list items are kept, and print a
     dash for the value.
@@ -7140,7 +7161,7 @@ def _prune_unresolved_text_values(component: dict, dc_meta: dict[str, dict]) -> 
         if not isinstance(spec, dict):
             continue
         probe = {"data_collection_tag": spec.get("dc"), "dc_id": spec.get("dc_id")}
-        if not _component_has_data(probe, dc_meta):
+        if not _component_has_data(probe, dc_meta) or _text_value_lacks_column(spec):
             spec["dc_id"] = spec["wf_id"] = None
             unresolved.add(name)
     if not unresolved:
