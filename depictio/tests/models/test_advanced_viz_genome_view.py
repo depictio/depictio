@@ -42,7 +42,7 @@ def test_kind_is_registered_everywhere():
     assert KIND in _OPTIONAL_ROLES
     assert KIND in KIND_METADATA
     assert KIND_SAMPLING_POLICY[KIND] == "tail"
-    assert TAIL_ROLE[KIND] == ("score", "auto")
+    assert TAIL_ROLE[KIND] == ("score", "top")
 
 
 def test_old_kind_string_is_gone_from_every_registry():
