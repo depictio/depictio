@@ -887,10 +887,12 @@ button.gp-status:focus-visible {
   font-weight: 600;
 }
 :root[data-chrome='glass'] .gp-shell .mantine-Button-root:is([data-variant='default'], [data-variant='outline']) {
-  border-color: transparent;
+  /* One hairline: a ring outside the transparent border plus an inset rim
+   * read as a doubled edge. */
+  border-color: var(--gl-hair);
   background: var(--gl-glass-strong);
   color: var(--gl-fg);
-  box-shadow: inset 0 1px 0 var(--gl-rim), 0 0 0 1px var(--gl-hair);
+  box-shadow: none;
 }
 :root[data-chrome='glass'] .gp-shell .mantine-Button-root:is([data-variant='default'], [data-variant='outline']):not([data-disabled]):hover {
   background: var(--gp-raised);

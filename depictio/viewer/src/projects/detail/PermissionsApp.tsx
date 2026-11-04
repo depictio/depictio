@@ -36,6 +36,7 @@ import {
   Globe,
   Lock,
   PenLine,
+  PenOff,
   ShieldCheck,
   TriangleAlert,
   UserMinus,
@@ -836,7 +837,7 @@ const PermissionsApp: React.FC = () => {
   // the lock whether anyone, owners included, may change the content.
   const isAdmin = !!user?.is_admin;
   const editingLocked = !!project?.published_lock;
-  const EditMark = editingLocked ? Lock : PenLine;
+  const EditMark = editingLocked ? PenOff : PenLine;
   const editingTitle = editingLocked ? 'Editing locked' : 'Editable';
   const editingText = [
     editingLocked
@@ -856,7 +857,7 @@ const PermissionsApp: React.FC = () => {
         </Alert>
       )}
 
-      <section aria-label="Visibility">
+      <section aria-label="Visibility and editing" className="pm-access">
         <div className="pm-visibility" data-public={shownPublic ? '' : undefined}>
           <span className="pm-chip">
             <VisMark size={20} strokeWidth={STROKE} aria-hidden />

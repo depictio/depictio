@@ -354,3 +354,73 @@
     transition: none;
   }
 }
+
+/* Dashboard cards: the workflow card as a link, an arrow where the check
+ * would be; hovering lifts the ring as on a workflow. */
+:root[data-chrome='glass'] .gp-main a.pd-dash-card {
+  text-decoration: none;
+}
+:root[data-chrome='glass'] .gp-main .pd-dash-open {
+  color: var(--gl-faint);
+}
+:root[data-chrome='glass'] .gp-main .pd-dash-card:hover .pd-dash-open {
+  color: var(--gl-fg);
+}
+
+/* The page's two major parts (Dashboards, Data): a heavier head with a
+ * hairline under it, folding its part away. The hairline is what separates
+ * the parts; the sections inside keep their lighter heads. */
+:root[data-chrome='glass'] .gp-main .pd-part-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 0 4px 12px;
+  margin: 0 0 18px;
+  border: 0;
+  border-bottom: 1px solid var(--gl-hair);
+  background: none;
+  color: var(--gl-fg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+:root[data-chrome='glass'] .gp-main .pd-part:not([data-open]) .pd-part-head {
+  margin-bottom: 0;
+}
+:root[data-chrome='glass'] .gp-main .pd-part-head:focus-visible {
+  outline: 2px solid var(--gl-ring);
+  outline-offset: 4px;
+  border-radius: 6px;
+}
+:root[data-chrome='glass'] .gp-main .pd-part-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--gl-paper);
+  color: var(--gl-accent-fg);
+  box-shadow: 0 0 0 1px var(--gl-hair);
+}
+:root[data-chrome='glass'] .gp-main .pd-part-title {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+:root[data-chrome='glass'] .gp-main .pd-part-summary {
+  font-size: 13.5px;
+  color: var(--gl-muted);
+  font-variant-numeric: tabular-nums;
+}
+:root[data-chrome='glass'] .gp-main .pd-part-chevron {
+  margin-left: auto;
+  color: var(--gl-muted);
+  transition: transform 150ms ease;
+}
+:root[data-chrome='glass'] .gp-main .pd-part:not([data-open]) .pd-part-chevron {
+  transform: rotate(-90deg);
+}
+:root[data-chrome='glass'] .gp-main .pd-part-head:hover .pd-part-chevron {
+  color: var(--gl-fg);
+}
