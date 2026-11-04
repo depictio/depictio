@@ -1100,6 +1100,9 @@ async def save_dashboard(
     # Stored, it would freeze a copy that later changes to the main tab miss.
     save_payload.pop("inherited_brand_theme", None)
     save_payload.pop("inherited_category_colors", None)
+    # Read-time only too: the lock lives on the project, and a save must never
+    # write one (or clear one) onto the dashboard.
+    save_payload.pop("published_lock", None)
 
     # `creation_time` is write-once: the client round-trips the whole dashboard
     # document, so trusting its payload would let a save clobber (or invent) the

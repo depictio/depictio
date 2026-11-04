@@ -328,3 +328,21 @@ def test_get_reports_the_lock_and_a_visitors_copy_has_none(env, editor, visitor)
 
     assert locked == {"locked_at": "2026-01-01T00:00:00", "reason": "release", "source": "manual"}
     assert free is None
+
+
+def test_a_save_round_tripping_the_get_payload_is_accepted_and_stores_no_lock(env, editor) -> None:
+    """``/get`` adds ``published_lock``; the editor sends the document back to ``/save``.
+
+    The body model forbids extra keys, so without the field every editor save
+    was a 422. The lock lives on the project: a save must never write it.
+    """
+    project = _project(env, owner=editor, locked=False)
+    did, data = _save_new(
+        project, editor, published_lock={"locked_at": "2026-01-01T00:00:00", "source": "manual"}
+    )
+
+    asyncio.run(dash_routes.save_dashboard(dashboard_id=did, data=data, current_user=editor))
+
+    stored = env["dashboards"].find_one({"dashboard_id": did})
+    assert stored is not None
+    assert "published_lock" not in stored
