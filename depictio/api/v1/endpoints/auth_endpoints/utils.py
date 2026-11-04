@@ -17,6 +17,9 @@ from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.endpoints.groups_endpoints.pending_pi import (
     claim_pending_pi_groups,
 )
+from depictio.api.v1.endpoints.projects_endpoints.pending_owner import (
+    claim_pending_project_ownership_quietly,
+)
 from depictio.models.models.google_oauth import GoogleUserInfo, OAuthStateBeanie
 from depictio.models.models.users import UserBeanie
 
@@ -137,6 +140,8 @@ async def create_or_get_sso_user(
 
     if existing_user:
         logger.info(f"Existing user found for SSO login: {email}")
+        # The IdP verified this address, so projects parked on it are theirs.
+        await claim_pending_project_ownership_quietly(existing_user)
         return existing_user, False
 
     if not allow_create:
@@ -169,6 +174,7 @@ async def create_or_get_sso_user(
             f"Pending P.I. claim failed for {new_user.email} (designation stays parked): "
             f"{claim_error}"
         )
+    await claim_pending_project_ownership_quietly(new_user)
 
     return new_user, True
 

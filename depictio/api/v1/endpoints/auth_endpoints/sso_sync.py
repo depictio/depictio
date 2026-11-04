@@ -16,6 +16,9 @@ already-extracted ``dict[str, list[str]]`` attribute payload.
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.endpoints.groups_endpoints.pending_pi import claim_pending_pi_groups
+from depictio.api.v1.endpoints.projects_endpoints.pending_owner import (
+    claim_pending_project_ownership_quietly,
+)
 from depictio.models.models.users import GroupBeanie, UserBeanie
 
 
@@ -72,6 +75,8 @@ async def sync_sso_user(user: UserBeanie, attributes: dict[str, list[str]] | Non
     # Runs after group sync so a freshly mirrored group can be claimed in the
     # same login.
     await claim_pending_pi_groups(user)
+    # Projects pushed here for an address that had no account yet (#1303).
+    await claim_pending_project_ownership_quietly(user)
 
 
 def _attribute_values(attributes: dict[str, list[str]], name: str) -> list[str] | None:

@@ -4,7 +4,7 @@ from collections.abc import Awaitable
 import boto3
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 from pymongo.errors import DuplicateKeyError
 
 from depictio.api.v1.configs.config import settings
@@ -72,6 +72,11 @@ from depictio.api.v1.endpoints.projects_endpoints.manifest_ingest import (
     _ingest_manifest_into_project,
     _refresh_manifest_in_project,
 )
+from depictio.api.v1.endpoints.projects_endpoints.provenance import (
+    stamp_new_project,
+    strip_server_owned_fields,
+)
+from depictio.api.v1.endpoints.projects_endpoints.publish_lock import assert_project_unlocked
 from depictio.api.v1.endpoints.projects_endpoints.run_file_preview import (
     RunFilePreview,
     RunFilePreviewRequest,
@@ -119,6 +124,7 @@ from depictio.api.v1.permissions import (
     has_permission,
 )
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
+from depictio.models.models.migration import PublishedLock
 from depictio.models.models.projects import Project, ProjectPermissionRequest, ProjectResponse
 from depictio.models.models.users import Permission, UserBase
 from depictio.models.project_merge import (
@@ -681,6 +687,7 @@ async def trigger_project_ingestion(
     project = _async_get_project_from_id(project_id, current_user, projects_collection)
     if not _may_trigger_ingestion(project, current_user):
         raise HTTPException(status_code=403, detail="Editor access is required to run ingestion.")
+    assert_project_unlocked(project_id)
 
     is_admin = bool(getattr(current_user, "is_admin", False))
     refusal, outside = await asyncio.to_thread(roots_refusal, project)
@@ -902,6 +909,7 @@ async def set_project_storage(
     """
     if not current_user:
         raise HTTPException(status_code=401, detail="User not found.")
+    assert_project_unlocked(project_id)
     return await asyncio.to_thread(_set_project_storage, project_id, payload, current_user)
 
 
@@ -910,6 +918,7 @@ async def delete_project_storage(project_id: str, current_user=Depends(get_user_
     """Remove a project's storage credentials (owners only)."""
     if not current_user:
         raise HTTPException(status_code=401, detail="User not found.")
+    assert_project_unlocked(project_id)
     return await asyncio.to_thread(_delete_project_storage, project_id, current_user)
 
 
@@ -1276,7 +1285,7 @@ async def create_project(project: Project, current_user=Depends(get_user_or_anon
     except HTTPException as e:
         return {"success": False, "message": str(e.detail), "status_code": e.status_code}
 
-    create_payload = project.mongo()
+    create_payload = stamp_new_project(project.mongo())
     create_payload["registration_time"] = utc_now_str()
     create_payload["last_modified"] = create_payload["registration_time"]
     try:
@@ -1314,6 +1323,7 @@ async def update_project(project: Project, current_user=Depends(get_current_user
             detail="User does not have permission to update this project.",
         )
 
+    assert_project_unlocked(project.id)
     validate_workflow_uniqueness_in_project(project)
     update_payload = project.mongo()
     # `registration_time` is write-once: the client round-trips the whole project
@@ -1332,6 +1342,9 @@ async def update_project(project: Project, current_user=Depends(get_current_user
     # client round-trips the whole project, so honouring its `permissions` here
     # would let a plain update rewrite who owns the project.
     update_payload.pop("permissions", None)
+    # Provenance, the published lock and a parked owner are server-written: the
+    # `$set` below leaves the stored values in place once they are dropped here.
+    strip_server_owned_fields(update_payload)
     # The browser appends workflows straight onto the stored document while the
     # client round-trips the whole project through here, so a plain `$set` lets
     # whoever saves last delete the other surface's work. Same reasoning as the
@@ -1375,6 +1388,7 @@ async def delete_project(project_id: PyObjectId, current_user=Depends(get_curren
             detail="User does not have permission to delete this project.",
         )
 
+    assert_project_unlocked(project_id)
     _cascade_delete_project(project_id, project.name)
 
     return {
@@ -1606,6 +1620,68 @@ async def add_or_update_permission(
     }
 
 
+class ProjectLockRequest(BaseModel):
+    reason: str | None = None
+
+
+@projects_endpoint_router.post("/{project_id}/lock")
+async def lock_project(
+    project_id: PyObjectId,
+    request: ProjectLockRequest | None = None,
+    current_user=Depends(get_current_user),
+):
+    """Publish a project read-only (admin only).
+
+    Freezes the project and every dashboard it holds now; a dashboard created
+    later by a visitor (a copy) is not part of the release. Every content- or
+    data-mutating route then answers 409 until an administrator unlocks it.
+    """
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Only administrators can lock projects")
+    project = projects_collection.find_one({"_id": ObjectId(str(project_id))})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found.")
+    dashboard_ids = [
+        str(d.get("dashboard_id") or d["_id"])
+        for d in dashboards_collection.find(
+            {"$or": [{"project_id": project["_id"]}, {"project_id": str(project["_id"])}]},
+            {"_id": 1, "dashboard_id": 1},
+        )
+    ]
+    lock = PublishedLock(
+        locked_by_id=str(current_user.id),
+        locked_by_email=getattr(current_user, "email", None),
+        reason=(request.reason if request else None),
+        source="admin",
+        dashboard_ids=dashboard_ids,
+    ).model_dump()
+    projects_collection.update_one({"_id": project["_id"]}, {"$set": {"published_lock": lock}})
+    logger.info(f"Project {project_id} locked by {current_user.email}: {lock.get('reason')}")
+    return {"success": True, "published_lock": lock}
+
+
+@projects_endpoint_router.post("/{project_id}/unlock")
+async def unlock_project(
+    project_id: PyObjectId,
+    request: ProjectLockRequest | None = None,
+    current_user=Depends(get_current_user),
+):
+    """Lift the published lock (admin only). The project becomes editable again."""
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Only administrators can unlock projects")
+    project = projects_collection.find_one(
+        {"_id": ObjectId(str(project_id))}, {"published_lock": 1}
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found.")
+    projects_collection.update_one({"_id": project["_id"]}, {"$set": {"published_lock": None}})
+    logger.info(
+        f"Project {project_id} unlocked by {current_user.email}: "
+        f"{(request.reason if request else None)}"
+    )
+    return {"success": True, "published_lock": None}
+
+
 @projects_endpoint_router.post("/toggle_public_private/{project_id}")
 async def toggle_public_private(
     project_id: str, is_public: str, current_user=Depends(get_current_user)
@@ -1622,6 +1698,7 @@ async def toggle_public_private(
             detail="User does not have permission to update this project.",
         )
 
+    assert_project_unlocked(project_id)
     is_public_bool = is_public.lower() == "true"
 
     projects_collection.update_one(

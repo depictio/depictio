@@ -101,6 +101,11 @@ import {
 } from '../dcMetatype';
 import { usePageTitle } from '../../branding';
 import { UnrecognisedFilesPanel } from './UnrecognisedFilesPanel';
+import { ProvenanceBadge } from './ProvenanceBadge';
+import { PublishedLockBadge } from './PublishedLockBadge';
+import { ProjectMigrateButton } from './ProjectMigrateButton';
+import { ProjectDashboardsPanel } from './ProjectDashboardsPanel';
+import { ProjectPart } from './ProjectPart';
 
 interface DataCollectionShape {
   _id?: string;
@@ -385,11 +390,22 @@ const ProjectDetailApp: React.FC = () => {
   // backend's owner gate on /storage.
   const { canMutate, isOwner } = useMemo(() => {
     if (!user || !project) return { canMutate: false, isOwner: false };
+    // Published read-only: nobody mutates until an admin unlocks.
+    if (project.published_lock) return { canMutate: false, isOwner: false };
     if (user.is_admin) return { canMutate: true, isOwner: true };
     const matchUser = (list?: Array<{ _id?: string; id?: string }>) =>
       !!list?.some((u) => (u._id ?? u.id) === user.id);
     const owner = matchUser(project.permissions?.owners);
     return { canMutate: owner || matchUser(project.permissions?.editors), isOwner: owner };
+  }, [user, project]);
+
+  // Pushing to another instance is for owners and admins, locked or not.
+  const canPushProject = useMemo(() => {
+    if (!user || !project) return false;
+    if (user.is_admin) return true;
+    return !!project.permissions?.owners?.some(
+      (u: { _id?: string; id?: string }) => (u._id ?? u.id) === user.id,
+    );
   }, [user, project]);
 
   // Refresh and export are refused to non-admins on a public/demo deployment.
@@ -562,118 +578,134 @@ const ProjectDetailApp: React.FC = () => {
               </Box>
             </Stack>
           );
+          // The page's second major part, beside Dashboards: what the
+          // dashboards read (workflows, collections, ingestion runs).
+          const dataSummary = [
+            projectType === 'advanced' && workflows.length > 0
+              ? `${workflows.length} workflow${workflows.length === 1 ? '' : 's'}`
+              : null,
+            `${stats.total} collection${stats.total === 1 ? '' : 's'}`,
+            stats.totalBytes > 0 ? formatBytes(stats.totalBytes) : null,
+          ]
+            .filter(Boolean)
+            .join(' · ');
           return (
-            <Stack gap="lg">
+            <Stack gap="xl">
               <ProjectHeader project={project} projectType={projectType} />
-              {workflowsPanel}
-              {projectId ? (
-                <Tabs
-                  value={activeTab}
-                  onChange={setActiveTab}
-                  keepMounted={false}
-                  variant="pills"
-                  className="dc-project-tabs"
-                >
-                  {glass ? (
-                    // Glass: the page's switch, two equal halves across the
-                    // content width, each saying what it holds.
-                    <Tabs.List mb="xl">
-                      <Tabs.Tab
-                        value="overview"
-                        className="dc-project-tab"
-                        leftSection={
-                          <span className="dc-project-tab-icon">
-                            <Database size={20} strokeWidth={STROKE} aria-hidden />
-                          </span>
-                        }
-                      >
-                        <span className="dc-project-tab-label">Data collections</span>
-                        <span className="dc-project-tab-meta">
-                          {stats.total} collection{stats.total === 1 ? '' : 's'}
-                          {stats.totalBytes > 0 ? ` · ${formatBytes(stats.totalBytes)}` : ''}
-                        </span>
-                      </Tabs.Tab>
-                      <Tabs.Tab
-                        value="ingestion"
-                        className="dc-project-tab"
-                        leftSection={
-                          <span className="dc-project-tab-icon">
-                            <ClipboardCheck size={20} strokeWidth={STROKE} aria-hidden />
-                          </span>
-                        }
-                      >
-                        <span className="dc-project-tab-label">Ingestion report</span>
-                        <span className="dc-project-tab-meta">What each run found, and when</span>
-                      </Tabs.Tab>
-                    </Tabs.List>
-                  ) : (
-                    <Tabs.List mb="md">
-                      <Tabs.Tab
-                        value="overview"
-                        fz="md"
-                        px="lg"
-                        leftSection={<Icon icon="mdi:table-cog" width={18} />}
-                      >
-                        Data collections
-                      </Tabs.Tab>
-                      <Tabs.Tab
-                        value="ingestion"
-                        fz="md"
-                        px="lg"
-                        leftSection={<Icon icon="mdi:clipboard-check-outline" width={18} />}
-                      >
-                        Ingestion report
-                      </Tabs.Tab>
-                    </Tabs.List>
-                  )}
-                  <Tabs.Panel value="overview">{overviewSections}</Tabs.Panel>
-                  <Tabs.Panel value="ingestion">
-                    <Stack gap="md">
-                      <Group justify="space-between" wrap="wrap" gap="sm">
-                        <SegmentedControl
-                          size="xs"
-                          w="fit-content"
-                          value={ingestionView}
-                          onChange={(v: string) => setIngestionView(v as 'report' | 'history')}
-                          data={[
-                            { value: 'report', label: 'Latest run' },
-                            { value: 'history', label: 'History' },
-                          ]}
-                        />
-                        <ProjectIngestionTrigger
-                          projectId={projectId}
-                          // Switch to History as soon as a run starts —
-                          // that is where its progress is visible.
-                          onStarted={() => setIngestionView('history')}
-                          onFinished={() => setIngestionHistorySignal((n) => n + 1)}
-                        />
-                      </Group>
-                      {ingestionView === 'report' ? (
-                        <IngestionReportPanel
-                          projectId={projectId}
-                          dcIdByTag={dcIdByTag}
-                          onPreviewDc={(dcId) => {
-                            // Jump to the Overview tab with this DC selected so
-                            // its table/preview shows in the DataCollectionViewer,
-                            // then scroll it into view (see the effect above).
-                            scrollToDcRef.current = true;
-                            setSelectedWorkflowId(null);
-                            setSelectedDcId(dcId);
-                            setActiveTab('overview');
-                          }}
-                        />
+              {projectId && <ProjectDashboardsPanel projectId={projectId} />}
+              <ProjectPart id="data" icon={Database} title="Data" summary={dataSummary}>
+                <Stack gap="lg">
+                  {workflowsPanel}
+                  {projectId ? (
+                    <Tabs
+                      value={activeTab}
+                      onChange={setActiveTab}
+                      keepMounted={false}
+                      variant="pills"
+                      className="dc-project-tabs"
+                    >
+                      {glass ? (
+                        // Glass: the page's switch, two equal halves across the
+                        // content width, each saying what it holds.
+                        <Tabs.List mb="xl">
+                          <Tabs.Tab
+                            value="overview"
+                            className="dc-project-tab"
+                            leftSection={
+                              <span className="dc-project-tab-icon">
+                                <Database size={20} strokeWidth={STROKE} aria-hidden />
+                              </span>
+                            }
+                          >
+                            <span className="dc-project-tab-label">Data collections</span>
+                            <span className="dc-project-tab-meta">
+                              {stats.total} collection{stats.total === 1 ? '' : 's'}
+                              {stats.totalBytes > 0 ? ` · ${formatBytes(stats.totalBytes)}` : ''}
+                            </span>
+                          </Tabs.Tab>
+                          <Tabs.Tab
+                            value="ingestion"
+                            className="dc-project-tab"
+                            leftSection={
+                              <span className="dc-project-tab-icon">
+                                <ClipboardCheck size={20} strokeWidth={STROKE} aria-hidden />
+                              </span>
+                            }
+                          >
+                            <span className="dc-project-tab-label">Ingestion report</span>
+                            <span className="dc-project-tab-meta">What each run found, and when</span>
+                          </Tabs.Tab>
+                        </Tabs.List>
                       ) : (
-                        <ProjectIngestionHistoryPanel
-                          projectId={projectId}
-                          refreshSignal={ingestionHistorySignal}
-                        />
+                        <Tabs.List mb="md">
+                          <Tabs.Tab
+                            value="overview"
+                            fz="md"
+                            px="lg"
+                            leftSection={<Icon icon="mdi:table-cog" width={18} />}
+                          >
+                            Data collections
+                          </Tabs.Tab>
+                          <Tabs.Tab
+                            value="ingestion"
+                            fz="md"
+                            px="lg"
+                            leftSection={<Icon icon="mdi:clipboard-check-outline" width={18} />}
+                          >
+                            Ingestion report
+                          </Tabs.Tab>
+                        </Tabs.List>
                       )}
-                    </Stack>
-                  </Tabs.Panel>
-                </Tabs>
-              ) : (
-                overviewSections
-              )}
+                      <Tabs.Panel value="overview">{overviewSections}</Tabs.Panel>
+                      <Tabs.Panel value="ingestion">
+                        <Stack gap="md">
+                          <Group justify="space-between" wrap="wrap" gap="sm">
+                            <SegmentedControl
+                              size="xs"
+                              w="fit-content"
+                              value={ingestionView}
+                              onChange={(v: string) => setIngestionView(v as 'report' | 'history')}
+                              data={[
+                                { value: 'report', label: 'Latest run' },
+                                { value: 'history', label: 'History' },
+                              ]}
+                            />
+                            <ProjectIngestionTrigger
+                              projectId={projectId}
+                              // Switch to History as soon as a run starts —
+                              // that is where its progress is visible.
+                              onStarted={() => setIngestionView('history')}
+                              onFinished={() => setIngestionHistorySignal((n) => n + 1)}
+                            />
+                          </Group>
+                          {ingestionView === 'report' ? (
+                            <IngestionReportPanel
+                              projectId={projectId}
+                              dcIdByTag={dcIdByTag}
+                              onPreviewDc={(dcId) => {
+                                // Jump to the Overview tab with this DC selected so
+                                // its table/preview shows in the DataCollectionViewer,
+                                // then scroll it into view (see the effect above).
+                                scrollToDcRef.current = true;
+                                setSelectedWorkflowId(null);
+                                setSelectedDcId(dcId);
+                                setActiveTab('overview');
+                              }}
+                            />
+                          ) : (
+                            <ProjectIngestionHistoryPanel
+                              projectId={projectId}
+                              refreshSignal={ingestionHistorySignal}
+                            />
+                          )}
+                        </Stack>
+                      </Tabs.Panel>
+                    </Tabs>
+                  ) : (
+                    overviewSections
+                  )}
+                </Stack>
+              </ProjectPart>
             </Stack>
           );
         })()
@@ -750,6 +782,19 @@ const ProjectDetailApp: React.FC = () => {
     </>
   );
 
+  // Migrating to another instance sits in the page head beside the other
+  // project actions. Locking editing lives on the Permissions page, next to
+  // visibility: one says who may view, the other whether anyone may edit.
+  const migrateButton = (inGlass: boolean) =>
+    project && projectId ? (
+      <ProjectMigrateButton
+        projectId={projectId}
+        projectName={project.name}
+        canPush={canPushProject}
+        glass={inGlass}
+      />
+    ) : null;
+
   if (glass) {
     const name = project?.name || 'Project';
     return (
@@ -780,6 +825,7 @@ const ProjectDetailApp: React.FC = () => {
               >
                 Permissions
               </Button>
+              {migrateButton(true)}
             </Group>
           }
         >
@@ -856,6 +902,7 @@ const ProjectDetailApp: React.FC = () => {
             >
               Permissions
             </Button>
+            {migrateButton(false)}
             <Button
               component="a"
               href="/projects"
@@ -2253,6 +2300,8 @@ const ProjectHeader: React.FC<{
               Type
             </Text>
             <ProjectTypeTag projectType={projectType} size="md" />
+            <ProvenanceBadge provenance={project.provenance} />
+            <PublishedLockBadge lock={project.published_lock} />
             <Text size="sm" c="dimmed" visibleFrom="sm">
               {projectType === 'advanced'
                 ? 'CLI-driven, with workflows and pipelines'
@@ -2309,6 +2358,8 @@ const ProjectHeader: React.FC<{
             >
               {projectType === 'advanced' ? 'Advanced' : 'Basic'}
             </Badge>
+            <ProvenanceBadge provenance={project.provenance} />
+            <PublishedLockBadge lock={project.published_lock} />
           </Group>
           <Text size="sm" c="dimmed">
             {projectType === 'advanced'

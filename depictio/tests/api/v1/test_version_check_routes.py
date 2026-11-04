@@ -70,6 +70,17 @@ class TestServerInfo:
         assert body["docs_url"] == "https://depictio.github.io/depictio-docs/"
         assert body["version_check"] is None
 
+    @pytest.mark.parametrize("enabled", [False, True])
+    def test_features_report_the_migration_ui_switch(self, world, monkeypatch, enabled):
+        monkeypatch.setattr(settings.migration, "ui_enabled", enabled)
+        body = world.client_as().get("/utils/server-info").json()
+        assert body["features"] == {"migration": enabled}
+
+    def test_migration_ui_is_off_by_default(self):
+        from depictio.api.v1.configs.settings_models import MigrationConfig
+
+        assert MigrationConfig().ui_enabled is False
+
     def test_bad_token_is_anonymous_not_401(self, world):
         response = world.client_as().get("/utils/server-info", headers=bearer("nope"))
         assert response.status_code == 200

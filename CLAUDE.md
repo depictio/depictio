@@ -184,6 +184,26 @@ Route dispatch is plain regex in `depictio/viewer/src/main.tsx` +
   right, and "restore v1's data" quietly shows the complete survey. `rebuild_demo.py`
   asserts the stamps ascend
 
+### Migration & Publishing (#1303)
+- One instance pushes a project to another (`/migrate/push` → target `/migrate/inbound/requests`,
+  pairing key header); an admin approves it in Admin > Migrations; the import runs in a
+  FastAPI background task, not Celery. All off by default (`DEPICTIO_MIGRATION_*`); the UI
+  is hidden unless `DEPICTIO_MIGRATION_UI_ENABLED=true` (`features.migration` in `/utils/server-info`).
+  **Detail**: `docs/project-migration.md`
+- `project.published_lock` makes a project read-only: guards in
+  `projects_endpoints/publish_lock.py` return 409. An approved migration is the only
+  writer past it; `POST /projects/{id}/unlock` (admin) lifts it
+- **Every new POST/PUT/PATCH/DELETE route** must be classified in
+  `tests/api/v1/test_publish_lock_routes.py`: `GUARDED` if it changes project content
+  (and calls a lock guard), else `EXEMPT` with a reason. An unclassified route fails the test
+- A lock covers dashboards whose id or `parent_dashboard_id` is in
+  `published_lock.dashboard_ids`, so a viewer's copy of a published dashboard stays editable
+- Import records the state it replaces, then an `import` version; a re-push from the same
+  source lineage is a new version. Provenance (`project.provenance`) is server-owned:
+  create/update strip it from payloads
+- `published_lock` is returned by `/dashboards/get` but is runtime-only on `DashboardData`
+  (popped in `/save`, in `SNAPSHOT_DERIVED_FIELDS`)
+
 ### Screenshot System
 - Playwright drives the React SPA; composite targeting via `.react-grid-item`
 - **Detail**: see `depictio/api/v1/endpoints/utils_endpoints/CLAUDE.md`

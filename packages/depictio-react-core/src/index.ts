@@ -618,6 +618,21 @@ export {
   listProjectTemplates,
   updateProject,
   deleteProject,
+  lockProject,
+  unlockProject,
+  listMigrationRequests,
+  getMigrationRequest,
+  approveMigrationRequest,
+  rejectMigrationRequest,
+  revalidateMigrationRequest,
+  listMigrationTargets,
+  createMigrationTarget,
+  deleteMigrationTarget,
+  listPushTargets,
+  pushPreflight,
+  startPush,
+  listPushes,
+  getPush,
   toggleProjectVisibility,
   updateProjectPermissions,
   getProjectStorage,
@@ -1064,6 +1079,9 @@ export type {
   DashboardPermissions,
   DashboardPermissionsUser,
   ProjectListEntry,
+  ProjectProvenance,
+  ImportHop,
+  PublishedLock,
   CreateDashboardInput,
   EditDashboardInput,
   ImportDashboardOptions,
@@ -1159,6 +1177,15 @@ export type {
   FunnelTargetResult,
   FunnelStage,
   FunnelValuesResponse,
+  // Server-to-server push types
+  MigrationRequestStatus,
+  MigrationTransferMode,
+  MigrationRequestSummary,
+  MigrationRequestDetail,
+  MigrationTarget,
+  MigrationTargetList,
+  PushPreflightResult,
+  MigrationPush,
   // MultiQC management types
   CreateMultiQCDCInput,
   MultiQCMutationResult,
@@ -1239,6 +1266,9 @@ export {
   shortenHome,
 } from './runFolderPaths';
 export type { FolderSource } from './runFolderPaths';
+export { provenanceBadge } from './provenance';
+export type { ProvenanceBadgeInfo, ProvenanceState } from './provenance';
+export { bareVersion } from './versions';
 export {
   compareVersions,
   defaultVersionFor,

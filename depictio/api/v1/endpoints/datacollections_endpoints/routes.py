@@ -21,6 +21,10 @@ from depictio.api.v1.endpoints.datacollections_endpoints.utils import (
     _update_dc_specific_properties,
     generate_join_dict,
 )
+from depictio.api.v1.endpoints.projects_endpoints.publish_lock import (
+    assert_dc_project_unlocked,
+    assert_workflow_project_unlocked,
+)
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user, get_user_or_anonymous
 from depictio.api.v1.endpoints.validators import validate_workflow_and_collection
 from depictio.api.v1.endpoints.workflow_endpoints.routes import get_workflow_from_id
@@ -146,6 +150,8 @@ async def delete_datacollection(
         workflow_id,
         data_collection_id,
     )
+    assert_dc_project_unlocked(data_collection_id)
+    assert_workflow_project_unlocked(workflow_id)
 
     # delete the data collection from the workflow
     workflows_collection.update_one(

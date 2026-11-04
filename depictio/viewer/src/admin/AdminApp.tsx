@@ -18,6 +18,7 @@ import { ADMIN_TABS, MONITORING_PANES, adminUrl, parseAdminUrl } from 'depictio-
 import type { AdminRoute, AdminTab, MonitoringPane } from 'depictio-react-core';
 import {
   ArchiveRestore,
+  ArrowDownToLine,
   Database,
   Eye,
   HeartPulse,
@@ -42,10 +43,12 @@ import AdminProjectsPanel from './AdminProjectsPanel';
 import AdminDashboardsPanel from './AdminDashboardsPanel';
 import AdminBrandingPanel from './AdminBrandingPanel';
 import AdminBackupsPanel from './AdminBackupsPanel';
+import AdminMigrationsPanel from './AdminMigrationsPanel';
 import AdminMaintenancePanel from './AdminMaintenancePanel';
 import AdminMonitoringPanel from './AdminMonitoringPanel';
 import AdminSettingsPanel from './AdminSettingsPanel';
-import { canSeeBackups, canSeeMonitoring } from './access';
+import { canSeeBackups, canSeeMigrations, canSeeMonitoring } from './access';
+import { useMigrationUi } from '../hooks/useMigrationUi';
 import { usePageTitle } from '../branding';
 
 /** A page of the Glass admin: a plain tab, or one of the Log & Task panes
@@ -99,6 +102,7 @@ const NAV_GROUPS: AdminNavGroup[] = [
     items: [
       { view: 'branding', label: 'Branding', icon: Palette },
       { view: 'backups', label: 'Backups', icon: ArchiveRestore, trusted: true },
+      { view: 'migrations', label: 'Migrations', icon: ArrowDownToLine, trusted: true },
       { view: 'maintenance', label: 'Maintenance', icon: Wrench },
       { view: 'settings', label: 'Settings', icon: Settings },
     ],
@@ -151,13 +155,17 @@ const AdminApp: React.FC = () => {
   const showMonitoring = canSeeMonitoring(modes);
   // Full-DB backup/restore is a trusted-deployment tool only.
   const showBackups = canSeeBackups(modes);
+  // Also hidden while the instance hides migration (DEPICTIO_MIGRATION_UI_ENABLED).
+  const migrationUi = useMigrationUi();
+  const showMigrations = canSeeMigrations(modes) && migrationUi;
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure(false);
   const [desktopOpened, { toggle: toggleDesktop }] = useDisclosure(true);
   const [route, setRoute] = useState<AdminRoute>(readAdminRoute);
   // A tab that isn't rendered here; a URL naming it falls back to Users
   // instead of an empty panel.
   const activeTab: AdminTab =
-    (!showMonitoring && route.tab === 'monitoring') || (!showBackups && route.tab === 'backups')
+    (!showMonitoring && route.tab === 'monitoring') || (!showBackups && route.tab === 'backups') ||
+    (!showMigrations && route.tab === 'migrations')
       ? 'users'
       : route.tab;
 
@@ -237,7 +245,11 @@ const AdminApp: React.FC = () => {
           <Tabs.List className="ga-nav" aria-label="Administration">
             {NAV_GROUPS.map((group) => {
               const items = group.items.filter((item) =>
-                item.view === 'backups' ? showBackups : showMonitoring || !item.trusted,
+                item.view === 'backups'
+                  ? showBackups
+                  : item.view === 'migrations'
+                    ? showMigrations
+                    : showMonitoring || !item.trusted,
               );
               if (items.length === 0) return null;
               return (
@@ -253,7 +265,7 @@ const AdminApp: React.FC = () => {
                       data-hue={hue}
                       leftSection={<NavIcon size={17} strokeWidth={STROKE} aria-hidden />}
                       data-testid={
-                        value === 'backups' || value === 'settings' ? `admin-tab-${value}` : undefined
+                        value === 'backups' || value === 'migrations' || value === 'settings' ? `admin-tab-${value}` : undefined
                       }
                       // The Log & Task tab of old: the e2e suite and anyone
                       // searching the docs still look for it by that name.
@@ -284,6 +296,7 @@ const AdminApp: React.FC = () => {
               />
             )}
             {view === 'backups' && <AdminBackupsPanel />}
+            {view === 'migrations' && <AdminMigrationsPanel />}
             {view === 'maintenance' && <AdminMaintenancePanel />}
             {view === 'settings' && <AdminSettingsPanel />}
           </Tabs.Panel>
@@ -335,6 +348,15 @@ const AdminApp: React.FC = () => {
               Backups
             </Tabs.Tab>
           )}
+          {showMigrations && (
+            <Tabs.Tab
+              value="migrations"
+              leftSection={<Icon icon="mdi:transfer-down" width={16} />}
+              data-testid="admin-tab-migrations"
+            >
+              Migrations
+            </Tabs.Tab>
+          )}
           <Tabs.Tab value="maintenance" leftSection={<Icon icon="mdi:broom" width={16} />}>
             Maintenance
           </Tabs.Tab>
@@ -375,6 +397,11 @@ const AdminApp: React.FC = () => {
         {showBackups && (
           <Tabs.Panel value="backups" pt="md">
             <AdminBackupsPanel />
+          </Tabs.Panel>
+        )}
+        {showMigrations && (
+          <Tabs.Panel value="migrations" pt="md">
+            <AdminMigrationsPanel />
           </Tabs.Panel>
         )}
         <Tabs.Panel value="maintenance" pt="md">

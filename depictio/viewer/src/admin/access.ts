@@ -28,3 +28,9 @@ export function canSeeMonitoring(modes: AdminModes): boolean {
 export function canSeeBackups(modes: AdminModes): boolean {
   return isTrustedInstance(modes);
 }
+
+/** Reviewing projects pushed from other instances is admin work on trusted
+ *  instances only (the page is admin-only already; the API enforces it too). */
+export function canSeeMigrations(modes: AdminModes): boolean {
+  return isTrustedInstance(modes);
+}

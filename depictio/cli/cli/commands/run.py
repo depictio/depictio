@@ -35,6 +35,7 @@ from depictio.cli.cli.utils.image_upload import (
     image_collections_to_upload,
     upload_collection_images,
 )
+from depictio.cli.cli.utils.published import published_lock_message, published_lock_of
 from depictio.cli.cli.utils.renamed import note_if_called_as, note_renamed, pick_renamed
 from depictio.cli.cli.utils.rich_utils import (
     render_records_table,
@@ -2086,6 +2087,15 @@ def run_ingest(opts: IngestOptions, ingestion: _IngestionRecord) -> IngestOutcom
     if filter_error:
         rich_print_checked_statement(escape(filter_error), "error")
         raise typer.Exit(code=1)
+
+    # A published project refuses every write; stop before uploading anything.
+    if project_config is not None and not dry_run and not scan_dry_run:
+        lock = published_lock_of(str(project_config.name), CLI_config)
+        if lock is not None:
+            message = published_lock_message(str(project_config.name), lock)
+            rich_print_checked_statement(escape(message), "error")
+            _rec("validate_config", "failed", message)
+            raise typer.Exit(code=1)
 
     # One ingestion per project at a time, from here to the caller's release:
     # everything above only read, and the first write is close below. A second

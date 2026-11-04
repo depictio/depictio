@@ -42,6 +42,11 @@ from depictio.api.v1.endpoints.dashboards_endpoints.data_versions import (
 from depictio.api.v1.endpoints.dashboards_endpoints.filter_state_cascade import (
     delete_filter_states_for_dashboards,
 )
+from depictio.api.v1.endpoints.projects_endpoints.publish_lock import (
+    assert_dashboard_creation_allowed,
+    assert_dashboard_unlocked,
+    dashboard_lock,
+)
 from depictio.api.v1.endpoints.user_endpoints.routes import (
     get_current_user,
     get_user_or_anonymous,
@@ -707,6 +712,18 @@ def _overlay_version(
     return merged, main_tab
 
 
+def _public_lock(dashboard_doc: dict) -> dict | None:
+    """The published lock freezing this dashboard, trimmed for the client, or None."""
+    lock = dashboard_lock(dashboard_doc)
+    if lock is None:
+        return None
+    return {
+        "locked_at": lock.get("locked_at"),
+        "reason": lock.get("reason"),
+        "source": lock.get("source"),
+    }
+
+
 @dashboards_endpoint_router.get("/get/{dashboard_id}")
 async def get_dashboard(
     dashboard_id: PyObjectId,
@@ -810,6 +827,8 @@ async def get_dashboard(
         except Exception as e:
             logger.warning(f"get_dashboard: prewarm dispatch failed for {dashboard_id}: {e}")
 
+    dashboard_dict["published_lock"] = _public_lock(dashboard_data)
+
     return convert_objectid_to_str(dashboard_dict)
 
 
@@ -896,13 +915,19 @@ async def init_dashboard(
     # own so a save never freezes a copy of them here.
     dashboard_dict["inherited_category_colors"] = family_category_colors(dashboard_dict)
 
+    # A published dashboard is read-only for everyone: the role stays as it is,
+    # but the client is told it can neither edit nor delete.
+    published_lock = _public_lock(dashboard_data)
+    is_frozen = published_lock is not None
+
     response = {
         "dashboard": dashboard_dict,
         "project_id": str(project_id),
+        "published_lock": published_lock,
         "user_permissions": {
             "level": user_permission_level,
-            "can_edit": user_permission_level in ["owner", "editor"],
-            "can_delete": user_permission_level == "owner",
+            "can_edit": user_permission_level in ["owner", "editor"] and not is_frozen,
+            "can_delete": user_permission_level == "owner" and not is_frozen,
         },
     }
 
@@ -1011,6 +1036,8 @@ async def edit_dashboard(
             status_code=403, detail="You don't have permission to edit this dashboard."
         )
 
+    assert_dashboard_unlocked(dashboard)
+
     # Before the write, and only now that the caller is known to be an editor.
     _ensure_baseline_quietly(dashboard_id, current_user)
 
@@ -1073,6 +1100,9 @@ async def save_dashboard(
     # Stored, it would freeze a copy that later changes to the main tab miss.
     save_payload.pop("inherited_brand_theme", None)
     save_payload.pop("inherited_category_colors", None)
+    # Read-time only too: the lock lives on the project, and a save must never
+    # write one (or clear one) onto the dashboard.
+    save_payload.pop("published_lock", None)
 
     # `creation_time` is write-once: the client round-trips the whole dashboard
     # document, so trusting its payload would let a save clobber (or invent) the
@@ -1110,6 +1140,8 @@ async def save_dashboard(
                 status_code=403, detail="You don't have permission to update this dashboard."
             )
 
+        assert_dashboard_unlocked(existing_dashboard)
+
         # Visibility, permissions and project binding all have dedicated,
         # owner-gated paths (project visibility toggle, creation-time
         # stamping, no-move rule shared with /edit). The client round-trips
@@ -1145,6 +1177,10 @@ async def save_dashboard(
                 status_code=403,
                 detail="You don't have permission to create a dashboard in this project.",
             )
+        # In a published project only a visitor's own copy may be created.
+        assert_dashboard_creation_allowed(
+            project_id, current_user, save_payload.get("parent_dashboard_id")
+        )
         # Visibility is project-driven: dashboards are born with their
         # project's flag, whatever the client sent.
         save_payload["is_public"] = get_project_visibility(project_id)
@@ -1255,6 +1291,17 @@ def _require_dashboard_editor(dashboard_id: PyObjectId, current_user: User) -> d
     return dashboard
 
 
+def _require_dashboard_content_editor(dashboard_id: PyObjectId, current_user: User) -> dict:
+    """`_require_dashboard_editor`, plus a 409 when the dashboard is published.
+
+    For routes that change what the dashboard shows. Comments reuse the plain
+    editor check, since discussing a published dashboard stays allowed.
+    """
+    dashboard = _require_dashboard_editor(dashboard_id, current_user)
+    assert_dashboard_unlocked(dashboard)
+    return dashboard
+
+
 @dashboards_endpoint_router.patch("/appearance/{dashboard_id}")
 async def update_dashboard_appearance(
     dashboard_id: PyObjectId,
@@ -1269,7 +1316,7 @@ async def update_dashboard_appearance(
     can't fight. An empty theme clears the override (the dashboard inherits
     the instance branding again).
     """
-    _require_dashboard_editor(dashboard_id, current_user)
+    _require_dashboard_content_editor(dashboard_id, current_user)
 
     payload = brand_theme.model_dump(exclude_none=True)
     update = {"$set": {"brand_theme": payload}} if payload else {"$unset": {"brand_theme": ""}}
@@ -1302,7 +1349,7 @@ async def upload_dashboard_logo(
     WebP + magic-byte + 2MB rules as the instance logo, deliberately not a
     second copy that can drift.
     """
-    dashboard = _require_dashboard_editor(dashboard_id, current_user)
+    dashboard = _require_dashboard_content_editor(dashboard_id, current_user)
 
     content = await file.read()
     try:
@@ -1376,6 +1423,8 @@ async def delete_dashboard(
             status_code=404,
             detail=f"Dashboard with ID '{dashboard_id}' not found or access denied.",
         )
+
+    assert_dashboard_unlocked(dashboard)
 
     # A child tab deleted through this route is the same change as DELETE /tab,
     # so it seeds the family's baseline the same way: on the parent, and before
@@ -1494,6 +1543,8 @@ async def update_tab(
     if not check_dashboard_mutation_permission(dashboard, current_user, "editor"):
         raise HTTPException(status_code=403, detail="You don't have permission to edit this tab.")
 
+    assert_dashboard_unlocked(dashboard)
+
     # Build update fields based on what was provided
     update_fields: dict[str, Any] = {}
 
@@ -1604,6 +1655,8 @@ async def delete_tab(
     if not check_dashboard_mutation_permission(dashboard, current_user, "editor"):
         raise HTTPException(status_code=403, detail="You don't have permission to delete this tab.")
 
+    assert_dashboard_unlocked(dashboard)
+
     # Store parent dashboard ID for navigation after delete
     parent_dashboard_id = dashboard.get("parent_dashboard_id")
     tab_title = dashboard.get("title", "Untitled")
@@ -1694,6 +1747,8 @@ async def reorder_tabs(
 
     if not check_dashboard_mutation_permission(parent_dashboard, current_user, "editor"):
         raise HTTPException(status_code=403, detail="You don't have permission to reorder tabs.")
+
+    assert_dashboard_unlocked(parent_dashboard)
 
     _ensure_baseline_quietly(parent_dashboard_id, current_user)
 
@@ -8725,6 +8780,8 @@ def import_dashboard_yaml_content(
                 status_code=403,
                 detail="You don't have permission to create dashboards in this project.",
             )
+        # A published project takes no import from an editor, new dashboard or replacement.
+        assert_dashboard_creation_allowed(project_id, current_user)
 
         return _import_multi_tab_dashboard(
             yaml_data,
@@ -8770,6 +8827,8 @@ def import_dashboard_yaml_content(
             status_code=403,
             detail="You don't have permission to create dashboards in this project.",
         )
+    # A published project takes no import from an editor, new dashboard or replacement.
+    assert_dashboard_creation_allowed(project_id, current_user)
 
     # A child tab's parent first: the dashboard this import replaces is then one
     # of the parent's tabs, as a main one is a main dashboard.
@@ -9607,6 +9666,9 @@ async def import_dashboard_from_json(
         raise HTTPException(
             status_code=403, detail="You don't have permission to import dashboards to this project"
         )
+
+    # Always a new dashboard; a published project takes none from an editor.
+    assert_dashboard_creation_allowed(project_id, current_user)
 
     # Validate data integrity if requested
     validation_warnings: list[dict] = []

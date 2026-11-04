@@ -27,6 +27,7 @@ from depictio.api.v1.endpoints.deltatables_endpoints.utils import (
     delta_identity_hash,
     new_aggregation_hash,
 )
+from depictio.api.v1.endpoints.projects_endpoints.publish_lock import assert_project_unlocked
 from depictio.api.v1.s3 import polars_s3_config, s3_client
 from depictio.models.models.base import PyObjectId
 from depictio.models.models.deltatables import Aggregation, DeltaTableAggregated
@@ -70,6 +71,7 @@ def _load_table_dc(data_collection_id: str, current_user) -> tuple[dict, dict]:
         raise HTTPException(
             status_code=404, detail=f"Data collection {data_collection_id} not found."
         )
+    assert_project_unlocked(project_doc)
 
     dc_dict: dict | None = None
     for wf_dict in project_doc.get("workflows", []) or []:

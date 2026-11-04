@@ -305,7 +305,8 @@ def _require_provisioning_key(api_key: str) -> None:
             status_code=503,
             detail="User provisioning is not enabled on this instance",
         )
-    if api_key != configured:
+    # Constant time: a byte-by-byte `!=` leaks how much of the key matched.
+    if not hmac.compare_digest(str(api_key or "").encode(), str(configured).encode()):
         raise HTTPException(status_code=403, detail="Invalid provisioning API key")
 
 
@@ -1114,7 +1115,9 @@ async def admin_create_user(
         )
 
     email = str(payload.email).strip().lower()
-    result = await _create_user_in_db(email, payload.password, is_admin=payload.is_admin)
+    result = await _create_user_in_db(
+        email, payload.password, is_admin=payload.is_admin, claim_pending_owner=True
+    )
     if not result or not result.get("success"):
         if result and result.get("message") == "User already exists":
             raise HTTPException(

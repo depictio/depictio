@@ -223,7 +223,8 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
                     color={accent.primary}
                     size="sm"
                     leftSection={<Icon icon="mdi:pencil" width={16} />}
-                    disabled={!canMutate}
+                    disabled={!canMutate || !!project.published_lock}
+                    title={project.published_lock ? 'Read-only: editing is locked' : undefined}
                     onClick={() => onEdit(project)}
                   >
                     Edit
@@ -243,7 +244,8 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
                     color="red"
                     size="sm"
                     leftSection={<Icon icon="mdi:delete" width={16} />}
-                    disabled={!canMutate}
+                    disabled={!canMutate || !!project.published_lock}
+                    title={project.published_lock ? 'Read-only: editing is locked' : undefined}
                     onClick={() => onDelete(project)}
                   >
                     Delete

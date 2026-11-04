@@ -630,6 +630,9 @@ INHERITED_SETTINGS = (
     "DEPICTIO_FASTAPI_EMBED_",
     "DEPICTIO_STRUCTURE_RESOLVER_",
     "DEPICTIO_JBROWSE_",
+    # Push targets / inbound sources (#1303): a local instance may publish to,
+    # or receive from, another one.
+    "DEPICTIO_MIGRATION_",
 )
 
 

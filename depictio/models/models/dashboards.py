@@ -2612,6 +2612,9 @@ class DashboardData(MongoModel):
     inherited_category_colors: Optional[dict] = (
         None  # Populated at runtime for a child tab: its main tab's category_colors
     )
+    published_lock: Optional[dict] = (
+        None  # Populated at runtime from the project's published lock; never stored
+    )
     # Stable origin of an imported dashboard (e.g. "nf-core/rnaseq:dashboards/base.yaml"),
     # set by the YAML import so a refresh finds the dashboard it made even after a
     # rename. Server-owned: DashboardDataLite does not have it, so YAML files and

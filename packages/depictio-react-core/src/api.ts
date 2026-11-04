@@ -736,6 +736,8 @@ export interface FilterSectionSpec {
 export type CategoryColors = Record<string, Record<string, string>>;
 
 export interface DashboardData {
+  /** Set while the owning project is published read-only (no edits allowed). */
+  published_lock?: { locked_at: string; reason: string | null; source: 'migration' | 'admin' } | null;
   _id?: string;
   dashboard_id?: string;
   title?: string;
@@ -3147,6 +3149,8 @@ export interface ServerInfo {
   release_notes_url: string;
   docs_url: string;
   version_check: VersionCheckBlock | null;
+  /** UI switches from the server's settings; absent on older servers. */
+  features?: { migration?: boolean };
 }
 
 /** Optional-auth: the bearer goes along when there is one (it is what makes
@@ -4675,7 +4679,41 @@ export interface ProjectListEntry {
   data_management_platform_project_url?: string | null;
   permissions?: DashboardPermissions;
   workflows?: WorkflowEntry[];
+  /** Which Depictio version produced the project, and where it was imported from. */
+  provenance?: ProjectProvenance | null;
+  /** Set while a migration/admin has frozen the published dashboards. */
+  published_lock?: PublishedLock | null;
+  pending_owner_email?: string | null;
   [key: string]: unknown;
+}
+
+/** One import of a project bundle into an instance. */
+export interface ImportHop {
+  source_instance: string;
+  source_depictio_version: string | null;
+  bundle_format_version: number | null;
+  exported_at: string | null;
+  imported_at: string;
+  target_depictio_version: string;
+  bundle_sha256: string | null;
+  migration_request_id: string | null;
+  via: 'push' | 'cli' | 'zip';
+}
+
+export interface ProjectProvenance {
+  /** Null/absent on projects created before version tracking. */
+  created_with_version: string | null;
+  imported_from: ImportHop[];
+}
+
+export interface PublishedLock {
+  locked_at: string;
+  locked_by_id: string | null;
+  locked_by_email: string | null;
+  reason: string | null;
+  source: 'migration' | 'admin';
+  migration_request_id: string | null;
+  dashboard_ids: string[];
 }
 
 export async function listProjects(): Promise<ProjectListEntry[]> {
@@ -5639,6 +5677,273 @@ export async function deleteProject(projectId: string): Promise<void> {
     method: 'DELETE',
   });
   if (!res.ok) await throwHttpError(res, 'Failed to delete project');
+}
+
+/** Admin-only: freeze a project's dashboards (published read-only). */
+export async function lockProject(
+  projectId: string,
+  reason?: string,
+): Promise<{ success: boolean; published_lock: PublishedLock | null }> {
+  const res = await authFetch(`${API_BASE}/projects/${encodeURIComponent(projectId)}/lock`, {
+    method: 'POST',
+    body: JSON.stringify(reason ? { reason } : {}),
+  });
+  if (!res.ok) await throwHttpError(res, 'Failed to lock project');
+  return res.json();
+}
+
+/** Admin-only: lift the published read-only lock. */
+export async function unlockProject(
+  projectId: string,
+  reason?: string,
+): Promise<{ success: boolean; published_lock: null }> {
+  const res = await authFetch(`${API_BASE}/projects/${encodeURIComponent(projectId)}/unlock`, {
+    method: 'POST',
+    body: JSON.stringify(reason ? { reason } : {}),
+  });
+  if (!res.ok) await throwHttpError(res, 'Failed to unlock project');
+  return res.json();
+}
+
+// ── Server-to-server project push (issue #1303) ────────────────────────────
+
+const MIGRATE_BASE = `${API_BASE}/migrate`;
+
+export type MigrationRequestStatus =
+  | 'pending'
+  | 'importing'
+  | 'imported'
+  | 'rejected'
+  | 'failed'
+  | 'superseded'
+  | (string & {});
+
+export type MigrationTransferMode = 'inline' | 'server_side_copy';
+
+export interface MigrationRequestSummary {
+  id: string;
+  status: MigrationRequestStatus;
+  source_name: string;
+  source_instance: string | null;
+  source_depictio_version: string | null;
+  requester: { email: string | null; name: string | null };
+  project_id: string;
+  project_name: string;
+  transfer_mode: MigrationTransferMode;
+  bundle_bytes: number | null;
+  created_at: string;
+  updated_at: string;
+  conflict: 'none' | 're_push' | 'foreign' | (string & {});
+  existing_locked: boolean;
+  error_count: number;
+  warning_count: number;
+}
+
+/** Full request document. `report` is a BundleReport dump recomputed against
+ *  the current state; its inner shape is loosely typed on purpose. */
+export interface MigrationRequestDetail extends Omit<MigrationRequestSummary, 'requester'> {
+  requester?: { email: string | null; name: string | null; source_user_id?: string | null };
+  message?: string | null;
+  report?: {
+    errors?: string[];
+    warnings?: string[];
+    document_counts?: Record<string, number>;
+    dashboards_added?: unknown[];
+    dashboards_replaced?: unknown[];
+    dashboards_removed?: unknown[];
+    total_bytes?: number;
+    object_count?: number;
+    [k: string]: unknown;
+  } | null;
+  requester_has_account: boolean;
+  target_depictio_version: string | null;
+  lock_imported_default: boolean;
+  decision?: { action: string; at: string; reason: string | null } | null;
+  result?: { project_id: string; locked: boolean; made_public: boolean } | null;
+  error?: string | null;
+  superseded_by?: string | null;
+  [k: string]: unknown;
+}
+
+export async function listMigrationRequests(status?: string): Promise<MigrationRequestSummary[]> {
+  const qs = status ? `?${new URLSearchParams({ status })}` : '';
+  const res = await authFetch(`${MIGRATE_BASE}/requests/${qs}`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to list migration requests');
+  const body = (await res.json()) as { requests?: MigrationRequestSummary[] };
+  return body.requests ?? [];
+}
+
+export async function getMigrationRequest(id: string): Promise<MigrationRequestDetail> {
+  const res = await authFetch(`${MIGRATE_BASE}/requests/${encodeURIComponent(id)}`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to load migration request');
+  return res.json();
+}
+
+export async function approveMigrationRequest(
+  id: string,
+  body: { lock: boolean; make_public: boolean },
+): Promise<{ id: string; status: MigrationRequestStatus }> {
+  const res = await authFetch(`${MIGRATE_BASE}/requests/${encodeURIComponent(id)}/approve`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to approve migration request');
+  return res.json();
+}
+
+export async function rejectMigrationRequest(
+  id: string,
+  reason: string,
+): Promise<{ id: string; status: MigrationRequestStatus }> {
+  const res = await authFetch(`${MIGRATE_BASE}/requests/${encodeURIComponent(id)}/reject`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to reject migration request');
+  return res.json();
+}
+
+export async function revalidateMigrationRequest(
+  id: string,
+): Promise<{ id: string; report: NonNullable<MigrationRequestDetail['report']> }> {
+  const res = await authFetch(`${MIGRATE_BASE}/requests/${encodeURIComponent(id)}/revalidate`, {
+    method: 'POST',
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to revalidate migration request');
+  return res.json();
+}
+
+export interface MigrationTarget {
+  id: string;
+  name: string;
+  url: string;
+  source: 'env' | 'ui';
+  credential_type?: string;
+  /** Admin listing only. */
+  key_fingerprint?: string;
+}
+
+export interface MigrationTargetList {
+  targets: MigrationTarget[];
+  allow_ui_targets: boolean;
+}
+
+export async function listMigrationTargets(): Promise<MigrationTargetList> {
+  const res = await authFetch(`${MIGRATE_BASE}/targets/`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to list push targets');
+  const body = (await res.json()) as Partial<MigrationTargetList>;
+  return { targets: body.targets ?? [], allow_ui_targets: !!body.allow_ui_targets };
+}
+
+export async function createMigrationTarget(input: {
+  name: string;
+  url: string;
+  pairing_key: string;
+}): Promise<MigrationTarget> {
+  const res = await authFetch(`${MIGRATE_BASE}/targets/`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to add push target');
+  return res.json();
+}
+
+export async function deleteMigrationTarget(id: string): Promise<{ deleted: boolean }> {
+  const res = await authFetch(`${MIGRATE_BASE}/targets/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to delete push target');
+  return res.json();
+}
+
+/** Targets any signed-in user may push to (no fingerprint). */
+export async function listPushTargets(): Promise<MigrationTarget[]> {
+  const res = await authFetch(`${MIGRATE_BASE}/push/targets`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to list push targets');
+  const body = (await res.json()) as { targets?: MigrationTarget[] };
+  return body.targets ?? [];
+}
+
+export interface PushPreflightResult {
+  target: { id: string; name: string };
+  remote_info: Record<string, unknown>;
+  preflight: {
+    ok?: boolean;
+    conflict?: 'none' | 're_push' | 'foreign' | (string & {});
+    existing_project_name?: string | null;
+    existing_locked?: boolean;
+    requester_has_account?: boolean;
+    pending_requests?: number;
+    remaining_today?: number;
+    max_bundle_bytes?: number;
+    transfer_mode?: MigrationTransferMode;
+    errors?: string[];
+    warnings?: string[];
+    [k: string]: unknown;
+  };
+  transfer_mode: MigrationTransferMode;
+  total_bytes: number;
+  object_count: number;
+  can_push: boolean;
+  errors: string[];
+  warnings: string[];
+}
+
+export async function pushPreflight(
+  projectId: string,
+  targetId: string,
+): Promise<PushPreflightResult> {
+  const res = await authFetch(`${MIGRATE_BASE}/push/preflight`, {
+    method: 'POST',
+    body: JSON.stringify({ project_id: projectId, target_id: targetId }),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Push pre-flight failed');
+  return res.json();
+}
+
+export interface MigrationPush {
+  id: string;
+  project_id: string;
+  target_id?: string;
+  target_name?: string;
+  status: 'building' | 'uploading' | 'submitted' | 'failed' | (string & {});
+  error?: string | null;
+  remote_request_id?: string | null;
+  remote_status?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  [k: string]: unknown;
+}
+
+export async function startPush(
+  projectId: string,
+  targetId: string,
+  message?: string,
+): Promise<{ push_id: string; status: string }> {
+  const res = await authFetch(`${MIGRATE_BASE}/push/`, {
+    method: 'POST',
+    body: JSON.stringify({
+      project_id: projectId,
+      target_id: targetId,
+      ...(message ? { message } : {}),
+    }),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to start push');
+  return res.json();
+}
+
+export async function listPushes(projectId?: string): Promise<MigrationPush[]> {
+  const qs = projectId ? `?${new URLSearchParams({ project_id: projectId })}` : '';
+  const res = await authFetch(`${MIGRATE_BASE}/push/${qs}`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to list pushes');
+  const body = (await res.json()) as { pushes?: MigrationPush[] };
+  return body.pushes ?? [];
+}
+
+export async function getPush(pushId: string): Promise<MigrationPush> {
+  const res = await authFetch(`${MIGRATE_BASE}/push/${encodeURIComponent(pushId)}`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to load push');
+  return res.json();
 }
 
 export async function toggleProjectVisibility(

@@ -38,7 +38,11 @@ from depictio.api.v1.endpoints.groups_endpoints.routes import groups_endpoint_ro
 from depictio.api.v1.endpoints.jbrowse_endpoints.routes import jbrowse_endpoints_router
 from depictio.api.v1.endpoints.jobs_endpoints.routes import jobs_endpoint_router
 from depictio.api.v1.endpoints.links_endpoints.routes import links_endpoint_router
+from depictio.api.v1.endpoints.migrate_endpoints.inbound_routes import inbound_router
+from depictio.api.v1.endpoints.migrate_endpoints.push_routes import push_router
+from depictio.api.v1.endpoints.migrate_endpoints.requests_routes import requests_router
 from depictio.api.v1.endpoints.migrate_endpoints.routes import migrate_endpoint_router
+from depictio.api.v1.endpoints.migrate_endpoints.targets_routes import targets_router
 from depictio.api.v1.endpoints.monitoring_endpoints.routes import monitoring_endpoint_router
 from depictio.api.v1.endpoints.multiqc_endpoints.routes import router as multiqc_router
 from depictio.api.v1.endpoints.projects_endpoints.routes import projects_endpoint_router
@@ -114,6 +118,12 @@ router.include_router(
     prefix="/migrate",
     tags=["Migrate"],
 )
+
+# Server-to-server push (#1303).
+router.include_router(inbound_router, prefix="/migrate/inbound", tags=["Migrate"])
+router.include_router(requests_router, prefix="/migrate/requests", tags=["Migrate"])
+router.include_router(targets_router, prefix="/migrate/targets", tags=["Migrate"])
+router.include_router(push_router, prefix="/migrate/push", tags=["Migrate"])
 
 router.include_router(
     cli_endpoint_router,

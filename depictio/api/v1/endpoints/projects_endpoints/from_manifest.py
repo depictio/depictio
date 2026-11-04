@@ -34,6 +34,7 @@ from depictio.api.v1.endpoints.projects_endpoints.manifest_ingest import (
     _run_dc_ingest,
     _validate_manifest_url,
 )
+from depictio.api.v1.endpoints.projects_endpoints.provenance import stamp_new_project
 from depictio.api.v1.remote_fetch import RemoteURLRejected
 from depictio.models.logging import logger
 
@@ -217,7 +218,7 @@ def _new_project_document(resolved_config: dict[str, Any], current_user) -> dict
         raise HTTPException(status_code=422, detail=f"Resolved project config invalid: {exc}")
     validate_workflow_uniqueness_in_project(project)
 
-    create_payload = project.mongo()
+    create_payload = stamp_new_project(project.mongo())
     # Template links name their DCs by tag; store the new DCs' ids next to
     # them, as the CLI's template sync does, so readers that do not resolve
     # tags (link cleanup on DC deletion, for one) see real ids.

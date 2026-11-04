@@ -14,6 +14,7 @@ from depictio.cli.cli.utils.delta_versioning import (
     vacuum_delta_table,
 )
 from depictio.cli.cli.utils.helpers import process_project_helper
+from depictio.cli.cli.utils.published import published_lock_message
 from depictio.cli.cli.utils.renamed import note_if_called_as
 from depictio.cli.cli.utils.rich_utils import (
     render_records_table,
@@ -140,6 +141,12 @@ def scan(
     remote_project_config = api_get_project_from_name(str(project_config.name), CLI_config)
 
     if remote_project_config.status_code == 200:
+        lock = (remote_project_config.json() or {}).get("published_lock")
+        if isinstance(lock, dict):
+            rich_print_checked_statement(
+                published_lock_message(str(project_config.name), lock), "error"
+            )
+            raise typer.Exit(code=1)
         logger.info("Remote project configuration fetched successfully.")
         rich_print_checked_statement(
             "Remote project configuration fetched successfully.", "success"

@@ -24,6 +24,7 @@ from depictio.api.v1.db import (
     projects_collection,
 )
 from depictio.api.v1.endpoints.links_endpoints.resolvers import get_resolver
+from depictio.api.v1.endpoints.projects_endpoints.publish_lock import assert_project_unlocked
 from depictio.api.v1.endpoints.user_endpoints.routes import (
     get_current_user,
     get_user_or_anonymous,
@@ -507,6 +508,7 @@ async def create_link(
 
     if not current_user.is_admin and current_user.email not in owners + editors:
         raise HTTPException(status_code=403, detail="Edit permission required to create links")
+    assert_project_unlocked(project_id)
 
     # Create new link
     new_link = DCLink(
@@ -572,6 +574,7 @@ async def update_link(
 
     if not current_user.is_admin and current_user.email not in owners + editors:
         raise HTTPException(status_code=403, detail="Edit permission required to update links")
+    assert_project_unlocked(project_id)
 
     # Find existing link
     existing_link, link_index = _find_link_by_id(project, link_id)
@@ -637,6 +640,7 @@ async def delete_link(
 
     if not current_user.is_admin and current_user.email not in owners + editors:
         raise HTTPException(status_code=403, detail="Edit permission required to delete links")
+    assert_project_unlocked(project_id)
 
     # Find link to confirm it exists
     existing_link, _ = _find_link_by_id(project, link_id)

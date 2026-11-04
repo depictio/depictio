@@ -3,6 +3,7 @@ from fastapi import HTTPException
 
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import projects_collection
+from depictio.api.v1.endpoints.projects_endpoints.provenance import stamp_new_project
 from depictio.api.v1.permissions import build_access_query, get_user_group_ids
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 from depictio.models.models.projects import Project, ProjectResponse
@@ -94,7 +95,7 @@ async def _helper_create_project_beanie(project: Project, original_ids: dict | N
             detail=f"Project with name '{project.name}' already exists.",
         )
 
-    mongo_project = project.mongo()
+    mongo_project = stamp_new_project(project.mongo())
 
     # Restore static IDs from YAML in the MongoDB document dict
     # This ensures IDs are preserved across multiple K8s instances sharing the same S3 bucket

@@ -78,6 +78,9 @@ comment_threads_collection = db[settings.mongodb.collections.comment_threads_col
 dashboard_filter_states_collection = db["dashboard_filter_states"]
 cli_agents_collection = db[settings.mongodb.collections.cli_agents_collection]
 jobs_collection = db[settings.mongodb.collections.jobs_collection]
+migration_requests_collection = db[settings.mongodb.collections.migration_requests_collection]
+migration_targets_collection = db[settings.mongodb.collections.migration_targets_collection]
+migration_pushes_collection = db[settings.mongodb.collections.migration_pushes_collection]
 test_collection = db[settings.mongodb.collections.test_collection]
 
 
@@ -98,3 +101,15 @@ def ensure_project_storage_indexes(collection=None) -> None:
         target.create_index("project_id", unique=True, name="project_id_unique")
     except Exception as exc:
         logger.warning(f"Could not ensure unique project_id index on project storage: {exc}")
+
+
+def ensure_migration_indexes(requests=None, pushes=None) -> None:
+    """Indexes for the push queue (#1303). Idempotent and never raises."""
+    req = migration_requests_collection if requests is None else requests
+    push = migration_pushes_collection if pushes is None else pushes
+    try:
+        req.create_index([("status", 1), ("created_at", -1)], name="status_created")
+        req.create_index([("source_name", 1), ("project_id", 1)], name="source_project")
+        push.create_index([("project_id", 1), ("created_at", -1)], name="project_created")
+    except Exception as exc:
+        logger.warning(f"Could not ensure migration indexes: {exc}")

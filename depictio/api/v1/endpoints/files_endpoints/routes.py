@@ -14,6 +14,7 @@ from pymongo.errors import BulkWriteError
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import db
+from depictio.api.v1.endpoints.projects_endpoints.publish_lock import assert_dc_project_unlocked
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user, get_user_or_anonymous
 from depictio.api.v1.permissions import build_access_query, get_user_group_ids, has_permission
 from depictio.api.v1.s3 import s3_client
@@ -65,6 +66,9 @@ async def create_file(payload: UpsertFilesBatchRequest, current_user=Depends(get
             status_code=400,
             detail="Current user not found.",
         )
+
+    for dc_id in {str(f.data_collection_id) for f in payload.files}:
+        assert_dc_project_unlocked(dc_id)
 
     operations = []
     for file in payload.files:
@@ -223,6 +227,8 @@ async def delete_files_batch(
 
     deleted = 0
     if oids:
+        for dc_id in files_collection.distinct("data_collection_id", {"_id": {"$in": oids}}):
+            assert_dc_project_unlocked(dc_id)
         # Same predicate as delete_file: admin bypass keyed on the caller, never
         # on a document field.
         group_ids = [] if current_user.is_admin else get_user_group_ids(current_user.id)
@@ -255,6 +261,9 @@ async def delete_file(file_id: str, current_user=Depends(get_current_user)):
         )
 
     target_file_id = ObjectId(file_id)
+    stored_file = files_collection.find_one({"_id": target_file_id}, {"data_collection_id": 1})
+    if stored_file and stored_file.get("data_collection_id") is not None:
+        assert_dc_project_unlocked(stored_file["data_collection_id"])
     # SECURITY: the previous predicate ``{"permissions.owners.is_admin": True}``
     # matched any file whose owner happens to be an admin — meaning a
     # non-admin user could delete *another* admin's files. The correct check

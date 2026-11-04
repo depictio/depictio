@@ -96,6 +96,7 @@ SNAPSHOT_DERIVED_FIELDS: frozenset[str] = frozenset(
         "parent_dashboard_title",
         "project_realtime",
         "parent_dashboard_id",
+        "published_lock",
     }
 )
 
