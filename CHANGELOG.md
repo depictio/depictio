@@ -3,6 +3,38 @@
 ### Docker Images 🐳
 
 ```plaintext
+ghcr.io/depictio/depictio:1.20.5
+ghcr.io/depictio/depictio:latest
+ghcr.io/depictio/depictio:stable
+ghcr.io/depictio/depictio:edge
+```
+
+
+<details>
+<summary>Click to expand the changelog for 1.20.5</summary>
+
+### Changes 📜
+
+#### Other Changes 📝
+
+* Bump version: 1.20.4 → 1.20.5 [ac2c6a981]
+* fix(nf-core): thresholds and windows follow their tool or a cited source ([#1340](https://github.com/depictio/depictio/pull/1340)) [1e7dd4c9e]
+* feat(advanced-viz): rename stacked_taxonomy to stacked_bar, add click selection ([#1339](https://github.com/depictio/depictio/pull/1339)) [eace76cfd]
+* fix(advanced_viz): genome_view keeps its strongest rows by a data-defined cut-off ([#1338](https://github.com/depictio/depictio/pull/1338)) [3a2385bc5]
+* fix(dashboards): keep a section's highlights when its one data-bound tile is pruned ([#1337](https://github.com/depictio/depictio/pull/1337)) [5d34d0f41]
+* fix(ampliseq): regenerate reference_extended.yaml from base.yaml ([#1341](https://github.com/depictio/depictio/pull/1341)) [5910ccb90]
+* Update CHANGELOG.md for v1.20.4 [51883f4db]
+
+
+</details>
+
+### Documentation 📖
+
+For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
+
+### Docker Images 🐳
+
+```plaintext
 ghcr.io/depictio/depictio:1.20.4
 ghcr.io/depictio/depictio:latest
 ghcr.io/depictio/depictio:stable
