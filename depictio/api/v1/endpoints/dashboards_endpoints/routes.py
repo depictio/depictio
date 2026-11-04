@@ -7582,10 +7582,21 @@ def _section_key(component: dict) -> tuple[str, str] | None:
 
 
 def _data_bound_sections(components: list[dict]) -> set[tuple[str, str]]:
-    """Section keys holding at least one component bound to a data collection."""
+    """Section keys holding at least one component bound to a data collection.
+
+    A highlight counts too: it draws a figure of another tab, so it carries no
+    collection of its own, but it is not a header either. Without it, a section
+    whose one bound tile the run cannot back (a somatic genome view on a
+    germline-only run) is dropped whole, and the highlights that could still
+    draw go with it. `_prune_family_highlights` removes the ones whose source
+    is gone.
+    """
     keys: set[tuple[str, str]] = set()
     for component in components:
-        if not component.get("data_collection_tag"):
+        if (
+            not component.get("data_collection_tag")
+            and component.get("component_type") != "highlight"
+        ):
             continue
         key = _section_key(component)
         if key is not None:
