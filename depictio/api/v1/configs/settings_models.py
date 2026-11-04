@@ -416,6 +416,174 @@ class S3DepictioCLIConfig(ServiceConfig):
         return pw.get_secret_value() if isinstance(pw, SecretStr) else pw
 
 
+#: Public OIDC discovery document of Google accounts, used by the legacy
+#: ``DEPICTIO_AUTH_GOOGLE_OAUTH_*`` mapping (Google is a plain OIDC provider).
+GOOGLE_OIDC_DISCOVERY_URL = "https://accounts.google.com/.well-known/openid-configuration"
+
+_OIDC_PROVIDER_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,31}$")
+
+
+class OIDCClaimMapping(BaseModel):
+    """Which ``id_token`` / userinfo claims feed a Depictio account.
+
+    Every value is a claim name. A dotted name (``realm_access.roles``) is read
+    as a path into nested objects when no top-level claim carries the whole
+    name. Claim values may be a string or a list of strings. A mapping left
+    unset disables that part of the sync (see ``sso_sync.sync_sso_user``).
+    """
+
+    model_config = {"extra": "forbid"}
+
+    email: str = Field(default="email", description="Claim carrying the email address")
+    groups: Optional[str] = Field(
+        default=None,
+        description="Claim carrying group memberships. When set, sso_managed groups are "
+        "mirrored from it on every login, and a login without it leaves every SSO group.",
+    )
+    display_name: Optional[str] = Field(default=None, description="e.g. 'name'")
+    login: Optional[str] = Field(default=None, description="e.g. 'preferred_username'")
+    title: Optional[str] = Field(default=None, description="Claim carrying the user's title")
+    picture: Optional[str] = Field(
+        default="picture", description="Claim carrying a profile picture URL"
+    )
+
+    @field_validator("groups", "display_name", "login", "title", "picture", mode="before")
+    @classmethod
+    def _empty_to_none(cls, v: Any) -> Any:
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
+
+
+class OIDCProviderConfig(BaseModel):
+    """One OpenID Connect identity provider (Keycloak, Google, Entra ID, ...).
+
+    Declared in ``DEPICTIO_AUTH_OIDC_PROVIDERS`` as a JSON list. ``client_id``
+    and ``client_secret`` may be left out of the list and supplied instead as
+    ``DEPICTIO_AUTH_OIDC_<ID>_CLIENT_ID`` / ``DEPICTIO_AUTH_OIDC_<ID>_CLIENT_SECRET``
+    (``<ID>`` upper-cased, ``-`` as ``_``), so credentials can come from a
+    secret store while the rest stays in plain configuration.
+    """
+
+    model_config = {"extra": "forbid"}
+
+    id: str = Field(description="Stable identifier, used in URLs: [a-z0-9_-], max 32 chars")
+    label: Optional[str] = Field(default=None, description="Sign-in button text")
+    enabled: bool = True
+    issuer: Optional[str] = Field(
+        default=None,
+        description="Expected issuer, e.g. https://idp.example.org/realms/example. "
+        "Discovery defaults to <issuer>/.well-known/openid-configuration",
+    )
+    discovery_url: Optional[str] = Field(
+        default=None, description="Explicit discovery document URL (overrides the issuer default)"
+    )
+    client_id: Optional[str] = None
+    client_secret: Optional[SecretStr] = None
+    scopes: list[str] = Field(default_factory=lambda: ["openid", "email", "profile"])
+    redirect_uri: Optional[str] = Field(
+        default=None,
+        description="Callback URL registered at the provider. Defaults to "
+        "<fastapi external url>/depictio/api/v1/auth/oidc/<id>/callback. Never taken "
+        "from the request.",
+    )
+    claims: OIDCClaimMapping = Field(default_factory=OIDCClaimMapping)
+    sso_provider: Optional[str] = Field(
+        default=None, description="Value stored as user.sso_provider; defaults to the id"
+    )
+    assume_email_verified: bool = Field(
+        default=False,
+        description="Trust the email claim even without email_verified=true. Only for "
+        "providers that assert verified emails and never send the claim.",
+    )
+    token_endpoint_auth_method: Literal["client_secret_basic", "client_secret_post", "none"] = (
+        "client_secret_basic"
+    )
+    authorize_params: dict[str, str] = Field(
+        default_factory=dict,
+        description="Extra authorization request parameters (e.g. prompt, hd, acr_values)",
+    )
+    fetch_userinfo: bool = Field(
+        default=True, description="Also read the userinfo endpoint (claims merged under the token)"
+    )
+
+    @field_validator("id")
+    @classmethod
+    def _valid_id(cls, v: str) -> str:
+        v = v.strip().lower()
+        if not _OIDC_PROVIDER_ID_RE.match(v):
+            raise ValueError("OIDC provider id must match [a-z0-9][a-z0-9_-]{0,31}")
+        return v
+
+    @field_validator("scopes", mode="before")
+    @classmethod
+    def _split_scopes(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            return [s for s in v.replace(",", " ").split() if s]
+        return v
+
+    @field_validator("scopes")
+    @classmethod
+    def _openid_scope(cls, v: list[str]) -> list[str]:
+        if "openid" not in v:
+            v = ["openid", *v]
+        return v
+
+    @field_validator(
+        "label",
+        "issuer",
+        "discovery_url",
+        "client_id",
+        "redirect_uri",
+        "sso_provider",
+        mode="before",
+    )
+    @classmethod
+    def _empty_str_to_none(cls, v: Any) -> Any:
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
+
+    @field_validator("client_secret", mode="before")
+    @classmethod
+    def _empty_secret_to_none(cls, v: Any) -> Any:
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
+
+    @property
+    def env_prefix(self) -> str:
+        """Prefix of this provider's credential env vars."""
+        return f"DEPICTIO_AUTH_OIDC_{self.id.upper().replace('-', '_')}_"
+
+    @property
+    def display_label(self) -> str:
+        return self.label or f"Sign in with {self.id}"
+
+    @property
+    def stored_provider_name(self) -> str:
+        return self.sso_provider or self.id
+
+    @property
+    def resolved_discovery_url(self) -> Optional[str]:
+        if self.discovery_url:
+            return self.discovery_url
+        if self.issuer:
+            return f"{self.issuer.rstrip('/')}/.well-known/openid-configuration"
+        return None
+
+    def missing_settings(self) -> list[str]:
+        """Names of the settings this provider still needs before it can be used."""
+        missing = []
+        if not self.client_id:
+            missing.append("client_id")
+        if not self.resolved_discovery_url:
+            missing.append("issuer or discovery_url")
+        if self.token_endpoint_auth_method != "none" and not self.client_secret:
+            missing.append("client_secret")
+        return missing
+
+
 class AuthConfig(BaseSettings):
     """Authentication and authorisation configuration."""
 
@@ -470,12 +638,12 @@ class AuthConfig(BaseSettings):
     password_login_disabled: bool = Field(
         default=False,
         description="Block email + password sign-in. When True the /auth/login "
-        "endpoint returns 403 and the password form is hidden, leaving Google "
-        "OAuth and/or SAML as the only door in. /auth/register is refused too: "
+        "endpoint returns 403 and the password form is hidden, leaving the "
+        "OIDC providers as the only door in. /auth/register is refused too: "
         "a password account could never sign in, while SSO still creates "
         "accounts on first login (unlike registration_disabled, which stops "
-        "that as well). Ignored unless google_oauth_enabled or saml_enabled is "
-        "set, so a half-done configuration cannot lock every user out.",
+        "that as well). Ignored unless at least one OIDC provider is enabled "
+        "and configured, so a half-done configuration cannot lock every user out.",
     )
     public_access_code: Optional[SecretStr] = Field(
         default=None,
@@ -499,100 +667,35 @@ class AuthConfig(BaseSettings):
         description="Number of minutes until temporary users expire",
     )
 
-    # Google OAuth
+    # OpenID Connect SSO: one or more providers, one sign-in button each.
+    oidc_providers: list[OIDCProviderConfig] = Field(
+        default_factory=list,
+        description="OIDC identity providers, JSON list in DEPICTIO_AUTH_OIDC_PROVIDERS. "
+        "See OIDCProviderConfig for the keys.",
+    )
+
+    # Google OAuth (DEPRECATED): still read for one release and mapped onto an
+    # OIDC provider with id "google" (see _resolve_oidc_providers). Declare
+    # Google in oidc_providers instead.
     google_oauth_enabled: bool = Field(
-        default=False, description="Enable Google OAuth authentication"
+        default=False, description="Deprecated: declare Google in oidc_providers"
     )
     google_oauth_client_id: Optional[str] = Field(
-        default=None, description="Google OAuth client ID"
+        default=None, description="Deprecated: see google_oauth_enabled"
     )
     google_oauth_client_secret: Optional[str] = Field(
-        default=None, description="Google OAuth client secret"
+        default=None, description="Deprecated: see google_oauth_enabled"
     )
     google_oauth_redirect_uri: Optional[str] = Field(
-        default=None, description="Google OAuth redirect URI"
+        default=None, description="Deprecated: see google_oauth_enabled"
     )
 
-    # SAML 2.0 SSO (SP-initiated, python3-saml). Provider-agnostic: validated
-    # against a Keycloak realm, but nothing here is specific to it.
-    saml_enabled: bool = Field(default=False, description="Enable SAML SSO authentication")
-    saml_idp_entity_id: Optional[str] = Field(
-        default=None,
-        description="IdP entityID, e.g. https://sso.example.org/realms/myrealm",
-    )
-    saml_idp_sso_url: Optional[str] = Field(
-        default=None,
-        description="IdP SSO endpoint (HTTP-Redirect binding), "
-        "e.g. https://sso.example.org/realms/myrealm/protocol/saml",
-    )
-    saml_idp_cert: Optional[str] = Field(
-        default=None,
-        description="IdP X.509 signing certificate: inline PEM "
-        "(-----BEGIN CERTIFICATE-----...) or a path to a PEM file",
-    )
-    saml_sp_entity_id: Optional[str] = Field(
-        default=None,
-        description="SP entityID / issuer registered with the IdP",
-    )
-    saml_sp_base_url: Optional[str] = Field(
-        default=None,
-        description="Public base URL of the API used to build the ACS URL; "
-        "defaults to the FastAPI service external URL",
-    )
-    saml_name_id_format: str = Field(
-        default="urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress",
-        description="Requested NameID format",
-    )
-    saml_attribute_email: Optional[str] = Field(
-        default=None,
-        description="SAML attribute name carrying the email; unset → use NameID",
-    )
-    saml_attribute_username: Optional[str] = Field(
-        default=None, description="SAML attribute name carrying the username (informational)"
-    )
-    saml_login_label: str = Field(
-        default="Sign in with SSO",
-        description="Label for the SSO button in the login form (e.g. 'Sign in with your institution')",
-    )
-
-    # --- SAML attribute mappings (SSO attribute sync) -------------------------
-    # Which assertion attributes sso_sync.sync_sso_user reads, beside the SAML
-    # connection fields above.
-    saml_attribute_groups: Optional[str] = Field(
-        default=None,
-        description="SAML attribute name carrying group memberships (e.g. 'memberOf'). "
-        "When set, sso_managed groups are mirrored from the assertion on every login.",
-    )
-    saml_attribute_title: Optional[str] = Field(
-        default=None, description="SAML attribute name carrying the user's title"
-    )
-    saml_attribute_display_name: Optional[str] = Field(
-        default=None, description="SAML attribute name carrying the user's display name"
-    )
-    saml_attribute_login: Optional[str] = Field(
-        default=None, description="SAML attribute name carrying the user's login/username"
-    )
-    # --- end SAML attribute mappings ------------------------------------------
-
-    @field_validator(
-        "saml_idp_entity_id",
-        "saml_idp_sso_url",
-        "saml_idp_cert",
-        "saml_sp_entity_id",
-        "saml_sp_base_url",
-        "saml_attribute_email",
-        "saml_attribute_username",
-        "saml_attribute_groups",
-        "saml_attribute_title",
-        "saml_attribute_display_name",
-        "saml_attribute_login",
-        mode="before",
-    )
+    @field_validator("oidc_providers", mode="after")
     @classmethod
-    def _empty_saml_str_to_none(cls, v: Any) -> Any:
-        # Helm/compose render unset values as empty strings; treat them as unset.
-        if isinstance(v, str) and not v.strip():
-            return None
+    def _unique_provider_ids(cls, v: list[OIDCProviderConfig]) -> list[OIDCProviderConfig]:
+        ids = [p.id for p in v]
+        if len(ids) != len(set(ids)):
+            raise ValueError("oidc_providers ids must be unique")
         return v
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_AUTH_", case_sensitive=False)
@@ -635,6 +738,69 @@ class AuthConfig(BaseSettings):
         env_password_login_disabled = os.getenv("DEPICTIO_AUTH_PASSWORD_LOGIN_DISABLED", "").lower()
         if env_password_login_disabled in ("true", "1", "yes"):
             object.__setattr__(self, "password_login_disabled", True)
+
+        object.__setattr__(self, "oidc_providers", self._resolve_oidc_providers())
+
+    def _resolve_oidc_providers(self) -> list[OIDCProviderConfig]:
+        """Apply per-provider credential env vars and the legacy Google mapping.
+
+        ``DEPICTIO_AUTH_OIDC_<ID>_CLIENT_ID`` / ``_CLIENT_SECRET`` win over the
+        values in the JSON list, so credentials can live in a secret store.
+
+        The deprecated ``DEPICTIO_AUTH_GOOGLE_OAUTH_*`` variables become a
+        provider with id ``google`` unless the list already declares one. Its
+        redirect URI is kept as configured: it is the one registered at Google
+        (historically the viewer's ``/auth/google/callback``, which forwards to
+        the OIDC callback), so an existing deployment keeps working unchanged.
+        """
+        import os
+
+        resolved: list[OIDCProviderConfig] = []
+        for provider in self.oidc_providers:
+            updates: dict[str, Any] = {}
+            env_id = os.getenv(f"{provider.env_prefix}CLIENT_ID", "").strip()
+            if env_id:
+                updates["client_id"] = env_id
+            env_secret = os.getenv(f"{provider.env_prefix}CLIENT_SECRET", "").strip()
+            if env_secret:
+                updates["client_secret"] = SecretStr(env_secret)
+            resolved.append(provider.model_copy(update=updates) if updates else provider)
+
+        if self.google_oauth_enabled and not any(p.id == "google" for p in resolved):
+            resolved.append(
+                OIDCProviderConfig(
+                    id="google",
+                    label="Sign in with Google",
+                    issuer="https://accounts.google.com",
+                    discovery_url=GOOGLE_OIDC_DISCOVERY_URL,
+                    client_id=self.google_oauth_client_id or None,
+                    client_secret=(
+                        SecretStr(self.google_oauth_client_secret)
+                        if self.google_oauth_client_secret
+                        else None
+                    ),
+                    redirect_uri=self.google_oauth_redirect_uri or None,
+                    sso_provider="google",
+                )
+            )
+        return resolved
+
+    @property
+    def enabled_oidc_providers(self) -> list[OIDCProviderConfig]:
+        """Providers that are switched on and fully configured, in declared order."""
+        return [p for p in self.oidc_providers if p.enabled and not p.missing_settings()]
+
+    def get_oidc_provider(self, provider_id: str) -> Optional[OIDCProviderConfig]:
+        """An enabled, fully configured provider by id, or None."""
+        for provider in self.enabled_oidc_providers:
+            if provider.id == provider_id:
+                return provider
+        return None
+
+    @property
+    def sso_enabled(self) -> bool:
+        """True when at least one OIDC provider can be used to sign in."""
+        return bool(self.enabled_oidc_providers)
 
     @computed_field
     @property
@@ -695,13 +861,13 @@ class AuthConfig(BaseSettings):
     def is_password_login_disabled(self) -> bool:
         """Returns True if email + password sign-in should be refused.
 
-        Conditioned on an SSO door (Google OAuth or SAML) actually being
-        configured: the flag on its own would leave a deployment with no way in
+        Conditioned on an SSO door (an enabled, configured OIDC provider)
+        actually existing: the flag on its own would leave a deployment with no way in
         at all, and an operator who sets it while forgetting the SSO vars should
         get their password form back rather than a locked front door. Read this,
         not the raw flag.
         """
-        return self.password_login_disabled and (self.google_oauth_enabled or self.saml_enabled)
+        return self.password_login_disabled and self.sso_enabled
 
     @computed_field
     @property

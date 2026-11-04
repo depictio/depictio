@@ -1,6 +1,6 @@
 """Shared lazy Redis client for auth-adjacent features.
 
-Extracted from the rate limiter so other modules (OAuth/SAML state store) can
+Extracted from the rate limiter so other modules (caches, rate limiting) can
 reuse the same connection instead of each keeping a private one. Reuses
 ``settings.cache`` connection details (same Redis instance as the DataFrame
 cache, celery broker and events pub/sub).
