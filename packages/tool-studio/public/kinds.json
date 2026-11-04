@@ -5559,10 +5559,10 @@
     },
     {
       "category": "plot",
-      "description": "Per-sample stacked bar of a composition (taxa, classes, outcomes), with a level picker, zoom and sorting.",
+      "description": "Per-sample stacked relative-abundance bar with rank dropdown.",
       "heavy": false,
-      "icon": "tabler:chart-bar",
-      "label": "Stacked bar",
+      "icon": "tabler:chart-pie",
+      "label": "Stacked taxonomy",
       "legacy": false,
       "required_roles": [
         "sample_id",
@@ -5602,63 +5602,6 @@
           "taxonomy"
         ]
       },
-      "roles": {
-        "abundance": {
-          "description": "Abundance / count / relative frequency.",
-          "dtypes": [
-            "Float32",
-            "Float64",
-            "Int16",
-            "Int32",
-            "Int64",
-            "Int8",
-            "UInt16",
-            "UInt32",
-            "UInt64",
-            "UInt8"
-          ],
-          "required": true
-        },
-        "rank": {
-          "description": "Optional level column (e.g. Phylum, Genus): adds a rank picker. Omit for a single-level composition.",
-          "dtypes": [
-            "String",
-            "Utf8"
-          ],
-          "required": false
-        },
-        "sample_id": {
-          "description": "Identifier for each sample / observation.",
-          "dtypes": [
-            "String",
-            "Utf8"
-          ],
-          "required": true
-        },
-        "taxon": {
-          "description": "Taxon / lineage name, or tree tip label.",
-          "dtypes": [
-            "String",
-            "Utf8"
-          ],
-          "required": true
-        }
-      },
-      "viz_kind": "stacked_bar"
-    },
-    {
-      "category": "plot",
-      "description": "Retired name of the stacked bar; a stored tile of this kind opens as one.",
-      "heavy": false,
-      "icon": "tabler:chart-bar",
-      "label": "Stacked taxonomy",
-      "legacy": true,
-      "required_roles": [
-        "sample_id",
-        "taxon",
-        "abundance"
-      ],
-      "role_names": {},
       "roles": {
         "abundance": {
           "description": "Abundance / count / relative frequency.",
