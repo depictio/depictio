@@ -174,6 +174,8 @@ main_dashboard:
 
       - ![](icon:mdi:file-table-outline) **Samplesheet** [{{n_meta}} rows, one per sample](section:Sample sheet), its path in [the run parameters](params:input)
 
+      - ![](icon:mdi:palette-outline) **Habitat colours** {{legend:habitat}}
+
       '
     tag: am-ov-study
     index: ov-study
@@ -602,6 +604,13 @@ main_dashboard:
       extra_color_cols:
       - dominant_habitat
     title: Tree of life
+    description: 'Which lineages make up the community, and do the groups carry them in different shares? Each tip is one of the eight largest phyla, coloured by kingdom, with a dot whose area is its mean share of a sample''s reads. The strip of dots beside it gives the same share inside each Habitat group.
+
+      How to read: a large dot is a dominant phylum, and dots of similar size across the strip mean the groups carry that phylum alike. A dot that shrinks or vanishes in one group means the phylum is found mostly elsewhere. Open [Phylogeny](tab:Phylogeny) for the tree of every ASV and [Differential Abundance](tab:Differential Abundance) to test the differences.
+
+      Lines and annotations: branches join each phylum to its neighbours in the ASV tree, placed at its largest clean clade, and their lengths are not to scale. A line under the tree states how many further phyla are not shown and their combined share. No cut-off is drawn.
+
+      Note: with more than 3,000 ASVs, the tree keeps only the 3,000 most abundant, a readability cap of this dashboard.'
     link: tab:Phylogeny
     caption: The eight largest phyla, one tip each, their share of the reads split by group beside them. Branch lengths are not to scale.
     section: Findings
@@ -720,6 +729,9 @@ main_dashboard:
     tag: am-sample-sheet
     index: sample-sheet
     title: Sample sheet
+    description: 'Which samples are in the run, and what do we know about each? One row per sample with the metadata the run was given, narrowed by the sample filters.
+
+      How to read: check that every sample carries the Habitat value you expect before reading any group comparison, since a sample with no value is left out of grouped figures. Pick a row to follow that sample in the Analysis panel.'
     layout:
       x: 0
       y: 0
@@ -1263,6 +1275,15 @@ tabs:
     tag: am-alpha-rarefaction
     index: alpha-rarefaction-multi
     title: Rarefaction curves
+    description: 'Has each sample been sequenced deeply enough to see its diversity? Each curve is one sample: the chosen index (Shannon, observed ASVs or Faith''s PD, switched in the controls) at each subsampling depth, coloured by Habitat. The whiskers show the spread between the random subsamples drawn at that depth.
+
+      How to read: a curve that flattens means more reads would add little, while one still climbing at its last depth was cut short. Curves that level off at different heights differ in diversity, not in sequencing effort. Compare the groups in the box plot below once the curves have levelled.
+
+      Lines and annotations: each curve joins the mean of the subsamples at every depth. The whiskers are plus or minus one standard error across those subsamples and can be switched off. The tile shows at most 60 samples by default (Top-N samples), and no cut-off is drawn.
+
+      Source: nf-core/ampliseq output documentation, alpha rarefaction, which sets no numeric cut-off and reads a curve that does not become horizontal as too little sequencing depth, https://nf-co.re/ampliseq/2.18.0/docs/output
+
+      Note: diversity is computed on data rarefied to the lowest read count of the samples, or to the depth set with --diversity_rarefaction_depth, which excludes samples below it.'
     layout:
       x: 0
       y: 0
@@ -1293,7 +1314,15 @@ tabs:
     tag: am-alpha-boxplot-by-group
     index: alpha-boxplot-by-group
     title: Shannon diversity per group
-    description: One point per sample. Compare medians and spread, all the more when a group is small.
+    description: 'Does Shannon diversity differ between groups? One box per Habitat group, with every sample drawn as a point over it. The groups follow Analysis mode when it defines some.
+
+      How to read: boxes that sit apart with little overlap between their points suggest a difference, and overlapping boxes do not. With a handful of samples per group, trust the points over the box, since the quartiles of a few values move a lot. Open the rarefaction curves above to check that no group is simply undersequenced.
+
+      Lines and annotations: the box runs from the first to the third quartile (linear method), with the median as the line inside it. The whiskers reach the furthest point within 1.5 times the interquartile range of the box. No reference line is drawn.
+
+      Source: Plotly box trace reference, https://plotly.com/python/reference/box/
+
+      Note: the boxes describe the samples, they do not test the difference between groups.'
     layout:
       x: 0
       y: 0
@@ -1311,6 +1340,9 @@ tabs:
     tag: am-alpha-table
     index: alpha-table-summary
     title: Alpha diversity per sample
+    description: 'What are the diversity values behind the tiles above? One row per sample with its Shannon, observed ASVs, Faith''s PD and evenness, computed on the rarefied table.
+
+      How to read: sort a column to find the extremes. A sample far from the others on every index is the first to check in the rarefaction curves.'
     layout:
       x: 0
       y: 0
@@ -1457,6 +1489,15 @@ tabs:
     tag: am-ord-embedding
     index: ord-embedding
     title: Sample ordination (PCoA, Bray-Curtis)
+    description: 'Which samples have similar communities, and do the groups separate? Each point is one sample, placed so that the closer two points sit, the more alike their Bray-Curtis profiles, and coloured by Habitat. The axes are the first two principal coordinates, PCo1 and PCo2.
+
+      How to read: points of one colour that sit together and apart from the others mean the grouping shapes the community, while mixed colours mean it does not. An isolated point is a sample unlike the rest, worth checking in the sample sheet. Draw a lasso around points to turn them into an analysis group for the other tiles.
+
+      Lines and annotations: no reference line is drawn. The axes carry no units and the share of variation each holds is not printed. Filled density contours and a centroid per group can be switched on in the controls and are off at first.
+
+      Source: Bray and Curtis 1957, https://doi.org/10.2307/1942268
+
+      Note: the distances are computed by this dashboard from the phylum-level relative abundance table, not read from the QIIME 2 beta-diversity output, so they can differ from the pipeline''s own matrices.'
     layout:
       x: 0
       y: 0
@@ -1484,6 +1525,15 @@ tabs:
     tag: am-ord-bray-curtis
     index: ord-bray-curtis
     title: Sample distances (Bray-Curtis)
+    description: 'How different is every pair of samples? Each cell is the Bray-Curtis dissimilarity between the sample of its row and the sample of its column, from 0 for identical profiles to 1 for none shared. Rows and columns are reordered by hierarchical clustering so that similar samples sit together.
+
+      How to read: pale blocks along the diagonal are groups of similar samples, and dark cells mark the pairs that differ most. The dendrograms show how the clusters nest. Compare the clusters with the groups in the PCoA beside it.
+
+      Lines and annotations: the dendrograms above and to the left join the most similar samples first, using Ward linkage on the Euclidean distance between matrix rows. The colour runs from pale (small distance) to dark blue (large distance). No cut-off is drawn.
+
+      Sources: Bray and Curtis 1957, https://doi.org/10.2307/1942268; Ward 1963, https://doi.org/10.1080/01621459.1963.10500845
+
+      Note: the distances are computed by this dashboard from the phylum-level relative abundance table, so they can differ from the QIIME 2 matrices of the pipeline.'
     layout:
       x: 4
       y: 0
@@ -1511,6 +1561,13 @@ tabs:
     tag: am-ord-abundance-heatmap
     index: ord-complex-heatmap
     title: Phylum abundance across samples (clustered)
+    description: 'Which phyla rise and fall together across the samples? Each row is a phylum and each column a sample, and the colour is the relative abundance of the phylum in that sample, standardised within its row. A coloured strip marks the kingdom of each phylum.
+
+      How to read: red cells mean the phylum is more abundant in that sample than in the others, blue cells less. Columns that cluster together share a community profile, and rows that cluster together vary together. Open [Community & Diversity](tab:Community & Diversity) for the absolute shares.
+
+      Lines and annotations: each row is a z-score (its mean subtracted, divided by its standard deviation), so colour compares samples within one phylum and not phyla with each other. The dendrograms use Ward linkage on the Euclidean distance. The scale is diverging, from blue (low) through white to red (high), and no cut-off is drawn.
+
+      Source: Ward 1963, https://doi.org/10.1080/01621459.1963.10500845'
     layout:
       x: 0
       y: 0
@@ -1727,7 +1784,11 @@ tabs:
     tag: am-comm-composition-by-group
     index: comm-composition-by-group
     title: Phylum composition per group
-    description: The eight most abundant phyla of each group, the rest folded into Other.
+    description: 'Which phyla make up each group? One bar per Habitat group, split into the shares of the eight most abundant phyla of the samples in view, with the rest folded into Other (grey). Every bar is scaled to 100%.
+
+      How to read: a block that is long in one bar and short in another is a phylum that differs between groups. Read the lengths and not the colours when two groups look alike. Open [Differential Abundance](tab:Differential Abundance) to test which differences hold.
+
+      Note: pooling the samples of a group hides how much they vary, and the per-sample bars below show it. The phylum colours are the same as on the per-sample bars and the tree.'
     layout:
       x: 0
       y: 0
@@ -1751,6 +1812,13 @@ tabs:
     tag: am-comm-stacked-taxonomy
     index: adv-stacked-taxonomy
     title: Composition per sample
+    description: 'How does the community of each sample break down? One bar per sample, split into the shares of the eight most abundant taxa at the chosen rank (phylum at first), with the rest folded into Other (grey). A strip above the bars marks the Habitat of each sample.
+
+      How to read: samples with a similar stack share a community, and a sample whose stack differs from the rest of its group stands out. Sort the samples by one taxon to see its share change across them. A large Unclassified or Other block means the reference database named little at that rank.
+
+      Lines and annotations: Other (grey) is the sum of all taxa below the top eight. When the Zoom switch crops the value axis, it starts above 0, the cut is marked `//` on the axis and a caption names where the axis starts. No reference line is drawn.
+
+      Note: switch Zoom off to see the full bars.'
     layout:
       x: 0
       y: 4
@@ -1771,6 +1839,11 @@ tabs:
     tag: am-comm-sunburst
     index: adv-sunburst
     title: Taxonomic hierarchy
+    description: 'What is the community made of, from kingdom down to class? Each ring is a rank (kingdom inside, then phylum, then class) and each arc is a taxon, its angle proportional to its relative abundance summed over the samples in view. Click an arc to zoom into it.
+
+      How to read: a wide arc is a dominant taxon, and many thin arcs under one phylum mean a diverse phylum. Hover an arc for its share of the whole and of its parent. Each sample weighs the same, since its abundances are relative.
+
+      Note: no minimum arc share hides the rare taxa here, so the long tail of thin arcs can be hard to read; hover to read them.'
     layout:
       x: 0
       y: 0
@@ -1796,6 +1869,15 @@ tabs:
     tag: am-comm-upset
     index: adv-upset
     title: Taxa shared between groups
+    description: 'Which phyla do the groups share, and which belong to one group only? Each column of dots is a combination of groups, the bar above it counts the phyla found in exactly those groups, and the bars at the left give each group''s total. Bars of a single group take that group''s colour.
+
+      How to read: a tall bar for all groups together is the shared core, and tall single-group bars are phyla specific to one group. Few shared phyla means very different communities. An annotation track under the bars breaks each combination down by phylum.
+
+      Lines and annotations: no reference line is drawn. Bars are sorted by size, largest first, and every combination of at least one phylum is shown.
+
+      Source: Lex et al. 2014 (UpSet), https://doi.org/10.1109/TVCG.2014.2346248
+
+      Note: a phylum counts as present in a group when its relative abundance is above 0.1% in at least one sample of that group. This presence level is set by the dashboard''s recipe to drop noise and is not a published cut-off.'
     layout:
       x: 0
       y: 0
@@ -1811,6 +1893,9 @@ tabs:
     tag: am-comm-table
     index: comm-table-rel-abundance
     title: Relative abundance per sample and phylum
+    description: 'What is the abundance of each phylum in each sample? One row per sample and phylum with its relative abundance, its lineage and the sample metadata.
+
+      How to read: filter on Kingdom or Phylum and sort on the abundance to find the dominant phylum of a sample. The shares of one sample add up to 1 before any filter.'
     layout:
       x: 0
       y: 0
@@ -2047,6 +2132,17 @@ tabs:
     tag: am-diff-volcano
     index: adv-volcano
     title: Effect size against significance
+    description: 'Which taxa differ between groups, by how much and how surely? Each point is one taxon in one contrast, with the log fold change on the x axis (right means more abundant than in the reference group) and the significance, as -log10 of the ANCOM-BC q-value, on y. Pink points are up and blue points down when they count as a hit, and the View switch adds an MA and a QQ plot.
+
+      How to read: pink or blue points in the upper corners are the calls to follow up, and grey points are not significant or change too little. A point high on the plot but near zero on x is significant yet a small change, so read both axes. Pick a contrast in the filter first, then open the results table below for the exact values.
+
+      Lines and annotations: the volcano draws dotted vertical lines at log fold change -1 and +1 and a dotted horizontal line at q = 0.05 on the -log10 scale; a point must clear both to be a hit, and the six strongest are labelled. The MA view draws dotted horizontal lines at -1 and +1, and the QQ view a dashed diagonal (the expected spread under no differences), a grey 95% envelope around it and the inflation factor lambda in the corner. The 0.05 is the significance level ampliseq passes to ANCOM-BC, and the effect cut-off of 1 is this tile''s own default.
+
+      Sources: ANCOM-BC, Lin and Peddada 2020, https://doi.org/10.1038/s41467-020-17041-7; ampliseq ANCOM-BC settings, https://github.com/nf-core/ampliseq/blob/2.18.0/conf/modules.config
+
+      Warning: the effect cut-off of 1 has no published source, it is a display default and not a validated cut-off.
+
+      Note: the q-values use QIIME 2''s documented default adjustment, Holm, which ampliseq leaves unchanged. ANCOM-BC drops taxa seen in fewer than 10% of the samples and samples under 500 reads before testing, and assumes that fewer than about 25% of the taxa differ between groups.'
     layout:
       x: 0
       y: 0
@@ -2066,6 +2162,15 @@ tabs:
     tag: am-diff-da-barplot
     index: adv-da-barplot
     title: Largest effects per contrast
+    description: 'Which taxa change most in each contrast? One horizontal bar per taxon, showing its log fold change, for the 15 taxa with the largest absolute change in each contrast. Pink bars are more abundant in the contrast''s group than in its reference group, blue bars less.
+
+      How to read: solid bars clear the significance cut-off and hatched bars do not, so only solid bars are calls. Long solid bars at either end are the taxa to check first. A panel of hatched bars means large changes without statistical support.
+
+      Lines and annotations: a line at zero separates higher from lower abundance. Solid against hatched applies the q-value cut-off of 0.05, the level ampliseq passes to ANCOM-BC, and no other cut-off line is drawn. Bar labels are the taxon names, cut at 24 characters (hover for the whole name).
+
+      Sources: ANCOM-BC, Lin and Peddada 2020, https://doi.org/10.1038/s41467-020-17041-7; ampliseq ANCOM-BC settings, https://github.com/nf-core/ampliseq/blob/2.18.0/conf/modules.config
+
+      Note: only the 15 largest effects of each contrast are shown (Top-N), so a significant taxon with a modest change can be missing; the results table lists them all.'
     layout:
       x: 0
       y: 6
@@ -2081,6 +2186,9 @@ tabs:
     tag: am-diff-table-results
     index: diff-table-results
     title: ANCOM-BC results
+    description: 'What are the exact ANCOM-BC results? One row per taxon and contrast with the log fold change (lfc), its standard error (se), the W statistic, the p-value (p_val) and the adjusted q-value (q_val).
+
+      How to read: filter on a contrast first, then sort on q_val; a q_val below 0.05 with a large lfc is a call worth following. Pick a row to open its full record beside the table.'
     layout:
       x: 0
       y: 0
@@ -2119,6 +2227,9 @@ tabs:
     tag: am-diff-taxon-record
     index: diff-taxon-record
     title: Taxon record
+    description: 'What is the full test of one taxon? The record shows the taxon picked in the results table in two blocks: Test (contrast, log fold change, standard error, W statistic, p-value and adjusted p-value) and Lineage (kingdom, phylum and full lineage).
+
+      How to read: the card waits for a pick, so click a row of the results table. Compare the adjusted p-value with the 0.05 level of the run, and read the log fold change together with its standard error.'
     layout:
       x: 5
       y: 0
@@ -2338,6 +2449,15 @@ tabs:
     tag: am-phylo-tree
     index: phylo-tree
     title: Phylogenetic tree
+    description: 'How are the ASVs related, and where do the phyla sit on the tree? Each tip is an ASV, coloured by phylum, and branches join related sequences. The tile opens on a summary with one tip per phylum, and the View switch draws every ASV.
+
+      How to read: tips of one colour that sit together in one clade are a coherent phylum, while a colour scattered over the tree means taxonomy and tree disagree for those ASVs. Check such ASVs against the classifier confidence in the table below. In the full view, the Search tip control finds an ASV by name.
+
+      Lines and annotations: the full view is ladderised (clades ordered by size) and drawn in a circular layout. Branch lengths are hidden at first, and the controls add a scale bar, branch-length labels and support values. No cut-off is drawn.
+
+      Source: nf-core/ampliseq output documentation, phylogenetic tree, https://nf-co.re/ampliseq/2.18.0/docs/output
+
+      Note: with more than 3,000 ASVs, the tree keeps only the 3,000 most abundant, a readability cap of this dashboard.'
     layout:
       x: 0
       y: 0
@@ -2354,6 +2474,9 @@ tabs:
     tag: am-phylo-table
     index: phylo-table-metadata
     title: ASV taxonomy
+    description: 'How deeply is each ASV classified? One row per tree tip with its lineage by rank, the classifier confidence and its display label.
+
+      How to read: sort on confidence to find the ASVs with the least certain assignment. An empty genus cell means the ASV was not assigned that deep.'
     layout:
       x: 0
       y: 0
@@ -2531,7 +2654,11 @@ tabs:
     tag: am-sidle-composition
     index: sidle-composition
     title: Phylum composition per sample
-    description: Each sample's reconstructed community by phylum, as shares of its reads.
+    description: 'What does the community rebuilt across regions contain? One bar per sample, split into the shares of its reconstructed reads that SIDLE assigns to each phylum. Every bar is scaled to 100%, and the bars are split by group when Analysis mode defines one.
+
+      How to read: samples with a similar stack share a community, and a sample whose stack differs from its neighbours stands out. A large Unclassified block means the regions could not be resolved to a phylum for that share of reads. Open the genus bars to go one rank deeper.
+
+      Source: SIDLE documentation, https://q2-sidle.readthedocs.io; Fuks et al. 2018, https://doi.org/10.1186/s40168-017-0396-x'
     layout:
       x: 0
       y: 0
@@ -2562,7 +2689,11 @@ tabs:
     tag: am-sidle-genus
     index: sidle-genus
     title: Genus composition per sample
-    description: The 15 most abundant genera, the rest folded into Other.
+    description: 'Which genera dominate each sample? One bar per sample, stacked by the 15 most abundant genera of the samples in view (by reconstructed count), with all other genera folded into Other. The bars are split by group when Analysis mode defines one.
+
+      How to read: the height of a bar is the sample''s total reconstructed count, so a taller bar is a deeper sample and not a more diverse one. Compare the colours within a bar for the composition. Use the phylum bars to compare shares between samples of different depth.
+
+      Note: a real run carries hundreds of genera, so the 15 shown are a display limit and not a statistical one.'
     layout:
       x: 4
       y: 0
@@ -2587,7 +2718,13 @@ tabs:
     tag: am-sidle-regions
     index: sidle-regions
     title: Features by regions mapped
-    description: How many amplicon regions each feature was rebuilt from, the core SIDLE confidence signal.
+    description: 'How many amplicon regions support each reconstructed feature? Each bar counts the features that SIDLE rebuilt from that number of regions, and the count is printed above the bar. The bars are split by group when Analysis mode defines one.
+
+      How to read: most features rebuilt from several regions means the regions agree. A pile at one region is the weakest kind of support, since such a feature could be an artefact of that region. Open the support table below to list the features behind a bar.
+
+      Lines and annotations: no reference line is drawn, and no minimum number of regions is applied here.
+
+      Source: SIDLE documentation, https://q2-sidle.readthedocs.io; Fuks et al. 2018, https://doi.org/10.1186/s40168-017-0396-x'
     layout:
       x: 0
       y: 0
@@ -2608,7 +2745,13 @@ tabs:
     tag: am-sidle-kmers
     index: sidle-kmers
     title: K-mer support against regions mapped
-    description: Each feature's k-mer evidence against its regions. Outliers flag weakly supported features.
+    description: 'Is the k-mer evidence for a feature spread over several regions? Each point is one reconstructed feature, with the number of regions mapped on the x axis, the total k-mers mapped on y and the point size set by the mean k-mers per region. Points are coloured by group when Analysis mode defines one.
+
+      How to read: features high on the plot and to the right have the most support, and points low at one region are the weakest. Select points to follow those features in the tables below. Compare features with the same x value, since the total sums the support over the regions.
+
+      Lines and annotations: no reference line, zone or outlier flag is drawn, and no minimum support is applied. Weakly supported features are only visible as low points.
+
+      Source: SIDLE documentation, https://q2-sidle.readthedocs.io; Fuks et al. 2018, https://doi.org/10.1186/s40168-017-0396-x'
     layout:
       x: 4
       y: 0
@@ -2624,6 +2767,9 @@ tabs:
     tag: am-sidle-table-reconstructed
     index: sidle-reconstructed-table
     title: Reconstructed features per sample
+    description: 'What did SIDLE reconstruct in each sample? One row per feature and sample with the reconstructed count and the lineage of the feature.
+
+      How to read: filter on a phylum and sort on the count to find the dominant features of a sample. The support table gives the evidence behind each feature.'
     layout:
       x: 0
       y: 0
@@ -2639,6 +2785,9 @@ tabs:
     tag: am-sidle-table-qc
     index: sidle-reconstruction-qc-table
     title: Reconstruction support per feature
+    description: 'How well supported is each reconstructed feature? One row per feature with the regions mapped, the total k-mers mapped, the mean and spread of the k-mers per region and the per-region ASVs behind it.
+
+      How to read: sort on regions mapped to bring the single-region features to the top, then check their k-mer support. A feature with few regions and few k-mers is the weakest kind of reconstruction.'
     layout:
       x: 0
       y: 6
