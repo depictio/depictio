@@ -38,9 +38,10 @@ structure file named after the protein, share one `entity`. The original id stay
 
 ## Methods
 
-- **Domain inclusion.** The unified domain table keeps an hmmsearch domain when its
-  independent E-value is at most 0.01, HMMER's own default domain inclusion threshold
-  (`--incdomE`). The pipeline's `hmmsearch_evalue_cutoff` applies per sequence, so a
+- **Domain inclusion.** The unified domain table keeps an hmmsearch domain when it is in HMMER's
+  inclusion set at HMMER's own defaults: a full-sequence E-value of at most 0.01
+  (`--incE`) and a conditional E-value of at most 0.01 (`--incdomE`). The displayed E-value is
+  the independent one. The pipeline's `hmmsearch_evalue_cutoff` applies per sequence, so a
   sequence that passes it can still report weak extra domains; they stay visible in the
   collapsed *hmmsearch hits* section of the Domains tab. InterProScan matches are kept as
   reported, since each member database applies its own curated cut-offs.

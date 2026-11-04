@@ -1745,9 +1745,9 @@ tabs:
 
       How to read: genes that ride the diagonal change in ribosome-bound mRNA just as much as in total mRNA, so the mRNA level drives the change. Translation-regulated genes leave the diagonal, and buffered genes lie flat along x, with total mRNA changing and the ribosome-bound fraction not following. Pick a point to open its record in Gene detail; five genes carry a label.
 
-      Lines and annotations: the dashed diagonal, labelled x = y, is an equal change in the two. The mode colours follow anota2seq's default selection, an adjusted p-value below 0.15 and an absolute effect of at least a 1.2-fold change (0.263 in log2), with an APV slope between -1 and 2 for translation and between -2 and 1 for buffering. A gene is mRNA abundance when total and ribosome-bound mRNA both pass and move the same way.
+      Lines and annotations: the dashed diagonal, labelled x = y, is an equal change in the two. The mode colours follow anota2seq's own selection. Every analysis needs an adjusted p-value below 0.15 (maxPAdj). Translation and buffering also need an absolute effect of at least a 1.2-fold change (0.263 in log2; deltaPT and deltaTP) and an APV slope between -1 and 2 for translation and between -2 and 1 for buffering. Total and ribosome-bound mRNA need no minimum effect (deltaT and deltaP default to NULL). A gene is mRNA abundance when total and ribosome-bound mRNA both pass and move the same way. A gene that fits several modes takes one in anota2seq's order: translation, then mRNA abundance, then buffering.
 
-      Source: anota2seq, Oertlin et al. 2019, https://doi.org/10.1093/nar/gkz223; defaults of anota2seqRun, https://rdrr.io/github/ChrOertlin/anota2seq/man/anota2seqRun.html
+      Source: anota2seq, Oertlin et al. 2019, https://doi.org/10.1093/nar/gkz223; thresholds of anota2seqRun, https://rdrr.io/github/ChrOertlin/anota2seq/man/anota2seqRun.html; mode priority of anota2seqRegModes, https://github.com/ChrOertlin/anota2seq/blob/master/R/anota2seqRegModes.R; nf-core/riboseq 2.0.0 sets no effect cut on total or ribosome-bound mRNA (rna_lfc_threshold and ribo_lfc_threshold default to 0), https://github.com/nf-core/riboseq/blob/2.0.0/nextflow_schema.json
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: advanced_viz
     workflow_tag: riboseq
@@ -1788,7 +1788,11 @@ tabs:
     config:
       label_col: gene_name
       significance_threshold: 0.15
-      effect_threshold: 0.263
+      # anota2seqRun sets no effect cut on total and ribosome-bound mRNA
+      # (deltaT, deltaP NULL) and log2(1.2) on translation and buffering
+      # (deltaPT, deltaTP). One value cannot serve the four analyses, so the
+      # tile starts at 0 and the viewer sets 0.263 for those two.
+      effect_threshold: 0
       effect_label: Effect (log2)
       significance_label: -log10 adjusted p
       top_n_labels: 10
@@ -1803,13 +1807,13 @@ tabs:
     description: >-
       Which genes pass in each anota2seq analysis? The same volcano for one analysis at a time, picked with the analysis filter: total mRNA, ribosome-bound mRNA, translation or buffering. Each point is one gene, its effect in log2 (x) against -log10 of the adjusted p-value (y), coloured up, down or not significant, and ten genes carry a label.
 
-      How to read: genes beyond the vertical lines and above the horizontal one pass the selection of that analysis. A gene that passes for ribosome-bound mRNA and also for total mRNA, in the same direction, follows its mRNA level; one that passes only for translation or buffering is changed at the translation step. The View switch draws the QQ plot of the raw p-values.
+      How to read: genes above the horizontal line pass the adjusted p-value of that analysis, and for translation and buffering they must also lie beyond the effect cut (see the note). A gene that passes for ribosome-bound mRNA and also for total mRNA, in the same direction, follows its mRNA level; one that passes only for translation or buffering is changed at the translation step. The View switch draws the QQ plot of the raw p-values.
 
-      Lines and annotations: the dotted vertical lines sit at an effect of -0.263 and +0.263 in log2, a 1.2-fold change, and the dotted horizontal line at an adjusted p-value of 0.15. In the QQ view the dashed diagonal is observed equal to expected, the shaded band is the 95% range expected under the null, and the label gives the inflation factor lambda.
+      Lines and annotations: the dotted horizontal line sits at an adjusted p-value of 0.15 (maxPAdj). The two dotted vertical lines start at an effect of 0, on the centre line, because anota2seq sets no minimum effect for total and ribosome-bound mRNA; for translation and buffering its minimum is a 1.2-fold change, 0.263 in log2, which the effect cut control of this tile sets. In the QQ view the dashed diagonal is observed equal to expected, the shaded band is the 95% range expected under the null, and the label gives the inflation factor lambda.
 
-      Source: anota2seqRun documentation, defaults maxPAdj 0.15 and a log2(1.2) minimum for the translation and buffering analyses, https://rdrr.io/github/ChrOertlin/anota2seq/man/anota2seqRun.html
+      Source: anota2seqRun documentation, defaults maxPAdj 0.15, deltaPT and deltaTP log2(1.2) for the translation and buffering analyses, deltaP and deltaT NULL (no minimum) for ribosome-bound and total mRNA, https://rdrr.io/github/ChrOertlin/anota2seq/man/anota2seqRun.html. The nf-core/riboseq 2.0.0 parameters rna_lfc_threshold and ribo_lfc_threshold default to 0 ("Set to 0 to disable"), https://github.com/nf-core/riboseq/blob/2.0.0/nextflow_schema.json
 
-      Note: for the total mRNA and ribosome-bound mRNA analyses anota2seq sets no minimum effect by default, so the 1.2-fold lines there are the template's convention, shared with the mode assignment, and not a documented default.
+      Note: the points are coloured from this tile's two cut controls (adjusted p-value and effect), not from the recipe's significant column. At the start value of 0, a gene in total or ribosome-bound mRNA is coloured when its adjusted p-value is below 0.15, which is anota2seq's own selection for those two analyses. For translation or buffering, set the effect cut to 0.263 to match anota2seq's selection.
     layout: {x: 4, y: 0, w: 4, h: 6}
   - component_type: table
     workflow_tag: riboseq
@@ -1824,9 +1828,9 @@ tabs:
     description: >-
       Which mode was assigned to each gene? One row per contrast and gene, with the change and adjusted p-value of the four anota2seq analyses and the regulatory mode that results.
 
-      How to read: filter the regulatory mode and the contrast, then sort on the adjusted p-value of the translation analysis to list the strongest candidates. Pick a row to open its record beside the table. The mode follows anota2seq's default selection: an adjusted p-value below 0.15 and an absolute effect of at least a 1.2-fold change, with the slope windows of the plane above.
+      How to read: filter the regulatory mode and the contrast, then sort on the adjusted p-value of the translation analysis to list the strongest candidates. Pick a row to open its record beside the table. The mode follows anota2seq's own selection, the one described under the plane above: an adjusted p-value below 0.15 for every analysis, a 1.2-fold minimum effect and the slope windows for translation and buffering only, and the order translation, mRNA abundance, buffering.
 
-      Source: anota2seqRun documentation, https://rdrr.io/github/ChrOertlin/anota2seq/man/anota2seqRun.html
+      Source: anota2seqRun documentation, https://rdrr.io/github/ChrOertlin/anota2seq/man/anota2seqRun.html; mode priority of anota2seqRegModes, https://github.com/ChrOertlin/anota2seq/blob/master/R/anota2seqRegModes.R
     layout: {x: 0, y: 0, w: 5, h: 6}
   - component_type: advanced_viz
     workflow_tag: riboseq

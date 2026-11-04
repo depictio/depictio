@@ -94,7 +94,7 @@
 template:
   template_id: "nf-core/atacseq/2.1.2"
   description: "nf-core/atacseq template: ataqv library quality, deepTools and Picard signal QC, MACS2 broad peaks, HOMER peak annotation, the consensus peak set and its DESeq2 QC, on top of the pipeline's MultiQC report."
-  version: "3.1.0"
+  version: "4.0.0"
   variables:
     - name: "DATA_ROOT"
       description: "The atacseq --outdir: ALIGNER/merged_library/, fastqc/, trimgalore/, multiqc/, pipeline_info/, plus a MultiQC 1.31 or later parquet, either the pipeline's own under multiqc/broad_peak/multiqc_data/ or a reprocessed one under multiqc/multiqc_data/."
@@ -497,9 +497,9 @@ workflows:
               "peak_duplicate_ratio": "In-peak over out-of-peak duplicate rate"
               "total_peaks": "Peaks ataqv was given for the library"
               "total_peak_territory": "Bases covered by those peaks"
-              "hqaa_tf_count": "HQAA in sub-nucleosomal fragments (up to 100 bp)"
-              "hqaa_mononucleosomal_count": "HQAA in mononucleosomal fragments (150-324 bp)"
-              "short_mononucleosomal_ratio": "Sub-nucleosomal over mononucleosomal HQAA"
+              "hqaa_tf_count": "HQAA in fragments of 50 to 100 bp (ataqv Metrics.cpp l.907)"
+              "hqaa_mononucleosomal_count": "HQAA in fragments of 150 to 200 bp (ataqv Metrics.cpp l.911)"
+              "short_mononucleosomal_ratio": "HQAA of 50 to 100 bp over HQAA of 150 to 200 bp"
               "max_fraction_reads_from_single_autosome": "Largest share of reads on any one autosome"
               "median_mapq": "Median mapping quality"
               "properly_paired_fraction": "Properly paired and mapped reads over total_reads"
@@ -508,7 +508,7 @@ workflows:
               "ataqv_version": "ataqv version that wrote the report"
 
       - data_collection_tag: "ataqv_fragment_length"
-        description: "Fragment-length histogram of every library, in long form, with the nucleosome window each length belongs to"
+        description: "Fragment-length histogram of every library, in long form, with the ataqv counting window each length belongs to"
         config:
           type: "Table"
           metatype: "Aggregate"
@@ -522,7 +522,7 @@ workflows:
               "fragment_length": "Fragment length in bp"
               "read_count": "Reads with that fragment length"
               "fraction_of_all_reads": "read_count over all reads of the library"
-              "fragment_class": "sub-nucleosomal / transitional / mononucleosomal / multi-nucleosomal, on ataqv's own cut-offs"
+              "fragment_class": "short (50-100 bp) / mononucleosomal (150-200 bp) / outside ataqv windows, on the two windows ataqv counts (src/cpp/Metrics.cpp l.907 and l.911)"
 
       - data_collection_tag: "ataqv_tss_coverage"
         description: "Aggregate coverage in a 2 kb window centred on every transcription start site, one row per library and offset"

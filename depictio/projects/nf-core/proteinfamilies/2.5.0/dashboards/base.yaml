@@ -1575,9 +1575,11 @@ tabs:
       The consensus row shows the most frequent residue and fades where few members share it. Brush
       columns to select the same residues on the track and the structure.
 
-      Lines and annotations: the colours are the Clustal X classes as used by Jalview, simplified here to
-      colour a residue only where its class holds at least half of the column; glycine and proline are
-      always coloured. The conservation bars are the template's entropy score, the same as the track.
+      Lines and annotations: the colours are the Clustal X classes of Jalview, which colours a residue
+      only where its class passes a share of the column that depends on the class (over 50, 60 or 85
+      percent) and always colours glycine and proline. This tile applies one cut to every class, a class
+      holding at least half of the column, so it simplifies Jalview's table. The conservation bars are
+      the template's entropy score, the same as the track.
 
       Note: only the first 200 rows are drawn; the Members tab lists every member.
 
@@ -1902,9 +1904,10 @@ tabs:
       logo's states. Columns of one colour are similar residues, and uncoloured cells are residues whose
       class is not held by half of the column.
 
-      Lines and annotations: Clustal X colours as in Jalview, simplified to colour a residue only where
-      its class holds at least half of the column, and the template's entropy score as the conservation
-      bars.
+      Lines and annotations: the colours are the Clustal X classes of Jalview, whose table asks over 50,
+      60 or 85 percent of the column depending on the class and always colours glycine and proline. This
+      tile applies one cut to every class, a class holding at least half of the column, so it is a
+      simplification of Jalview's table. The conservation bars are the template's entropy score.
 
       Note: only the first 200 rows are drawn.
 

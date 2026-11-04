@@ -53,7 +53,7 @@
 template:
   template_id: "nf-core/mag/5.5.0"
   description: "nf-core/mag template: the bin funnel from reads to metagenome-assembled genomes. Read QC and host removal, assembly statistics and the contig-length ladder, per-contig differential coverage, CheckM2 completeness against contamination for every bin of every binner, the GTDB-Tk lineage of the ones that passed, Prokka gene and RNA content, and a per-bin locus map."
-  version: "1.1.0"
+  version: "2.0.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory containing mag output (Assembly/, GenomeBinning/, Taxonomy/, Annotation/, QC_shortreads/, QC_longreads/, pipeline_info/) plus input/samplesheet.full.v4.csv and the reprocessed multiqc/multiqc_data/multiqc.parquet."
@@ -402,7 +402,7 @@ workflows:
               "completeness": "Percent of the expected genome recovered"
               "contamination": "Percent of the bin that belongs to another organism"
               "quality_score": "completeness minus five times contamination"
-              "quality_tier": "CheckM2-only band: High, Medium or Low quality, or Contaminated"
+              "quality_tier": "CheckM2-only band by the MIMAG limits (high above 90% complete and under 5% contaminated; medium at least 50% and under 10%; low under 50% and under 10%), or Contaminated at 10% or more"
               "coding_density": "Fraction of the bin covered by coding sequence"
               "contig_n50": "N50 of the contigs in the bin"
               "genome_size": "Total bases in the bin"
@@ -542,8 +542,9 @@ workflows:
       # Annotation. Prokka's per-bin `.txt` is a key/value file, so it is
       # scanned as two colon-separated columns and pivoted by the recipe.
       # The GFFs present under the data root (the megatest fetch keeps a subset,
-      # see megatest.yaml) carry the
-      # coordinates the locus map needs.
+      # see megatest.yaml) carry the coordinates the locus map needs and name the
+      # rRNA genes behind meets_mimag_rna, so prokka_gff_raw is declared before
+      # prokka_summary, which reads it through dc_ref.
       # ----------------------------------------------------------------
       - data_collection_tag: "prokka_summary_raw"
         description: "Raw Prokka per-bin feature-count summaries as key/value rows (input of prokka_summary)"
@@ -569,33 +570,6 @@ workflows:
               "key": "Prokka metric name, e.g. CDS, tRNA, bases"
               "value": "Its value for this bin"
               "source_path": "File the row came from; the bin is derived from its name"
-
-      - data_collection_tag: "prokka_summary"
-        description: "One row per annotated bin: coding sequences, transfer and ribosomal RNAs, gene density and the MIMAG RNA criteria"
-        optional: true
-        config:
-          type: "Table"
-          metatype: "Aggregate"
-          source: "transformed"
-          transform:
-            recipe: "prokka/summary.py"
-          dc_specific_properties:
-            format: "TSV"
-            columns_description:
-              "bin_id": "Bin the annotation belongs to"
-              "sample": "Sample the assembly was built from"
-              "assembler": "FLYE, MEGAHIT, METAMDBG or SPAdes"
-              "binner": "COMEBin, MaxBin2, MetaBAT2, MetaBinner or SemiBin2"
-              "n_contigs": "Contigs Prokka annotated"
-              "bases": "Bases in the bin"
-              "cds": "Coding sequences"
-              "genes": "Gene features, coding plus RNA genes"
-              "trna": "Transfer RNAs"
-              "rrna": "Ribosomal RNAs"
-              "tmrna": "Transfer-messenger RNAs"
-              "repeat_regions": "Repeat regions"
-              "cds_per_mbp": "Coding sequences per megabase, the gene density"
-              "meets_mimag_rna": "True when the bin carries at least 3 rRNAs and 18 tRNAs"
 
       - data_collection_tag: "prokka_gff_raw"
         description: "Raw Prokka GFF rows including the embedded FASTA (input of prokka_gene_track); covers whichever bins have a GFF under the data root"
@@ -630,6 +604,33 @@ workflows:
               "phase": "Coding phase"
               "attributes": "Semicolon-separated key=value annotations; null on the embedded FASTA rows"
               "source_path": "File the row came from; the bin is derived from its name"
+
+      - data_collection_tag: "prokka_summary"
+        description: "One row per annotated bin: coding sequences, transfer and ribosomal RNAs, gene density and the MIMAG RNA criteria"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "prokka/summary.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "bin_id": "Bin the annotation belongs to"
+              "sample": "Sample the assembly was built from"
+              "assembler": "FLYE, MEGAHIT, METAMDBG or SPAdes"
+              "binner": "COMEBin, MaxBin2, MetaBAT2, MetaBinner or SemiBin2"
+              "n_contigs": "Contigs Prokka annotated"
+              "bases": "Bases in the bin"
+              "cds": "Coding sequences"
+              "genes": "Gene features, coding plus RNA genes"
+              "trna": "Transfer RNAs"
+              "rrna": "Ribosomal RNAs"
+              "tmrna": "Transfer-messenger RNAs"
+              "repeat_regions": "Repeat regions"
+              "cds_per_mbp": "Coding sequences per megabase, the gene density"
+              "meets_mimag_rna": "True when the bin carries the 5S, 16S and 23S rRNA genes and at least 18 tRNAs (MIMAG, Bowers et al. 2017); null when no Prokka GFF names the rRNA genes"
 
       - data_collection_tag: "prokka_gene_track"
         description: "One row per annotated feature with its coordinates inside the bin, the per-bin locus map"
@@ -691,7 +692,7 @@ workflows:
               "trna": "Transfer RNAs"
               "rrna": "Ribosomal RNAs"
               "cds_per_mbp": "Coding sequences per megabase"
-              "meets_mimag_rna": "True when the bin carries at least 3 rRNAs and 18 tRNAs"
+              "meets_mimag_rna": "True when the bin carries the 5S, 16S and 23S rRNA genes and at least 18 tRNAs (MIMAG, Bowers et al. 2017); null when no Prokka GFF names the rRNA genes"
               "domain": "GTDB domain"
               "phylum": "GTDB phylum"
               "class_name": "GTDB class"

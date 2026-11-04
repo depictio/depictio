@@ -635,7 +635,7 @@ tabs:
   - name: Against 10x's guidance
     icon: mdi:check-decagram
     color: blue
-    description: Each library metric against the cut-off 10x Genomics recommends
+    description: Each library metric against the expected value 10x Genomics gives
   - name: Where the reads map
     icon: mdi:chart-bar
     color: blue
@@ -649,10 +649,10 @@ tabs:
   - component_type: text
     order: 1
     body: >
-      Cell Ranger's per-sample metrics, read against the cut-offs
-      [10x Genomics](https://www.10xgenomics.com/support/single-cell-gene-expression) gives for
-      a usable library. A dot left of its cut-off is a library to check; the bars show where
-      the reads land, exonic first.
+      Cell Ranger's per-sample metrics, read against the expected values 10x Genomics gives in
+      its technical note [CG000329](https://assets.ctfassets.net/an68im79xiti/163qWiQBTVi2YLbskJphQX/e90bb82151b1cdab6d7e9b6c845e6130/CG000329_TechnicalNote_InterpretingCellRangerWebSummaryFiles_RevA.pdf).
+      A dot left of its tick is a library to check; the bars show where the reads land,
+      exonic first. Sequencing saturation has no expected value and is shown as a number only.
     tag: sc-lq-intro
     index: lq-intro
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -720,12 +720,15 @@ tabs:
     display:
       icon_name: mdi:chart-bell-curve
       icon_color: indigo
-      caption: median, 10x expects 20,000 or more
+      caption: median over samples, 10x recommends 20,000 or more
     section: Libraries at a glance
     tag: sc-lq-card-depth
     index: lq-card-depth
     title: Reads per cell
-    description: Mean reads per called cell. The strip counts the samples at or above the 20 000 10x recommends.
+    description: >-
+      Mean reads per called cell. The strip counts the samples at or above 20 000.
+
+      Source: 10x Genomics technical note CG000329, Table 1, which lists 20,000 reads per cell as the minimum recommended for the median reads per cell, depending on the cell type and the analysis. This card takes the mean Cell Ranger reports.
     layout: {x: 2, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: scrnaseq
@@ -746,7 +749,10 @@ tabs:
     tag: sc-lq-card-saturation
     index: lq-card-saturation
     title: Saturation (%)
-    description: Share of reads that repeat a UMI already seen. Near 100, more sequencing finds few new transcripts.
+    description: >-
+      Share of reads that repeat a UMI already seen. Near 100, more sequencing finds few new transcripts.
+
+      Note: 10x gives no expected value for it, since it depends on sequencing depth and sample complexity (technical note CG000329, Table 1), so no cut-off is drawn.
     layout: {x: 4, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: scrnaseq
@@ -778,7 +784,7 @@ tabs:
     code_content: |-
       # One dot per sample and metric, coloured by its verdict, with the 10x
       # cut-off as a grey tick: a dot left of its tick fails the check.
-      names = {'sequencing_saturation': 'Sequencing saturation', 'fraction_reads_in_cells': 'Reads in cells', 'valid_barcodes': 'Valid barcodes', 'q30_rna': 'Q30 bases, RNA read', 'confidently_mapped_transcriptome': 'Mapped to transcriptome'}
+      names = {'fraction_reads_in_cells': 'Reads in cells', 'valid_barcodes': 'Valid barcodes', 'q30_rna': 'Q30 bases, RNA read', 'confidently_mapped_transcriptome': 'Mapped to transcriptome'}
       d = df.with_columns(pl.col('metric').replace(names).alias('check')).sort('check')
       cuts = d.group_by('check').agg(pl.col('threshold').first()).sort('check')
       colors = depictio_category_colors.get('status') or {}
@@ -794,7 +800,14 @@ tabs:
     tag: sc-lq-fig-checks
     index: lq-checks
     title: Library metrics against their cut-offs
-    description: The grey tick is the 10x cut-off; the dot is the sample's value.
+    description: >-
+      Each dot is one sample and one metric, coloured by its verdict.
+
+      How to read: a dot left of its grey tick is a library to check; open the Cell Ranger metrics table below for the sample.
+
+      Lines and annotations: the grey tick is the expected value 10x gives for the metric (reads in cells 70%, valid barcodes 75%, Q30 bases in the RNA read 65%, reads mapped confidently to the transcriptome 30%). These are fixed references, not read from the run. 10x calls the Q30 value ideal and platform dependent, and splits no warn from fail; that split is this dashboard's own colouring.
+
+      Source: 10x Genomics technical note CG000329, Table 1, https://assets.ctfassets.net/an68im79xiti/163qWiQBTVi2YLbskJphQX/e90bb82151b1cdab6d7e9b6c845e6130/CG000329_TechnicalNote_InterpretingCellRangerWebSummaryFiles_RevA.pdf
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: figure
     workflow_tag: scrnaseq
@@ -1189,14 +1202,13 @@ tabs:
   components:
   - component_type: text
     order: 1
-    body: >
-      Each called cell is flagged when its UMIs or genes fall too low, or its top-20 gene share
-      or mitochondrial share rises too high, against the median and MAD of its sample. Flagged
-      cells stay in the data; the cell filters take them out. A reference without MT- genes
-      reads a mitochondrial share of 0.
+    body: |
+      A called cell is flagged against the median and MAD of its sample: UMIs or genes more than 5 MAD below it, a top-20 gene share more than 5 MAD above it, or a mitochondrial share both more than 3 MAD above it and above a fixed 8%. Flagged cells stay in the data; the cell filters take them out.
+
+      Source: [sc-best-practices, Heumos et al. 2023](https://www.sc-best-practices.org/preprocessing-visualization/quality-control/), which calls the 8% not universal across cell types and tissues. Only the low tail of UMIs and genes is flagged here, and the mitochondrial MAD is taken on the raw percentage where the book takes it on the logit; a reference without MT- genes reads a mitochondrial share of 0.
     tag: sc-cq-intro
     index: cq-intro
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: interactive
     workflow_tag: scrnaseq
     data_collection_tag: cellranger_cell_qc
@@ -1530,23 +1542,29 @@ tabs:
     workflow_tag: scrnaseq
     data_collection_tag: cellranger_hvg_dispersion
     use: cellranger/hvg_dispersion
-    # A count above a cut-off, not the median: the normalised dispersion is
-    # centred per expression bin, so its median is 0 by construction.
-    aggregation: count
+    # The highest dispersion, not a count above a cut-off and not the median
+    # (the normalised dispersion is centred per expression bin, so its median is
+    # 0 by construction). No dispersion cut-off is applied: tools that use one
+    # disagree (Scanpy min_disp 0.5, Seurat dispersion.cutoff 1).
+    aggregation: max
     column_name: normalized_dispersion
     column_type: float64
-    filter_expr: "col('normalized_dispersion') > 0.5"
     secondary_layout: histogram
     display:
       icon_name: mdi:chart-bell-curve
       icon_color: grape
-      caption: above 0.5, with their dispersions
+      caption: highest, with the spread of all genes
       decimals: 1
     section: Maps at a glance
     tag: sc-em-card-dispersion
     index: em-card-dispersion
-    title: Dispersed genes
-    description: Genes whose normalised dispersion passes 0.5, the Seurat and Scanpy default for a variable gene. They vary more than genes of their mean expression.
+    title: Highest dispersion
+    description: >-
+      Highest normalised dispersion among the genes Cell Ranger scored, with the histogram of all of them.
+
+      Note: no dispersion cut-off is drawn, so the card does not call a gene variable. Tools that apply one differ: Scanpy highly_variable_genes uses min_disp 0.5, Seurat FindVariableFeatures uses dispersion.cutoff 1. Cell Ranger's own list of kept genes is the Genes scored ring.
+
+      Source: Scanpy, https://scanpy.readthedocs.io/en/stable/generated/scanpy.pp.highly_variable_genes.html ; Seurat, https://satijalab.org/seurat/reference/findvariablefeatures
     layout: {x: 6, y: 0, w: 2, h: 2}
   - component_type: advanced_viz
     workflow_tag: scrnaseq

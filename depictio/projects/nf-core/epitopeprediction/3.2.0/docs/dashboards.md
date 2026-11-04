@@ -120,8 +120,8 @@ pairs through the project links.
 **Peptides.** Strip: the peptides (split by binder call), the predicted binders (split by the
 IC50 band of their best prediction), alleles per binder (its distribution) and the median
 best IC50 against the 500 nM line. Then the peptides by length, one panel per MHC class on its own
-count axis, stacked by call, with the binder share over each bar and the usual length window of
-the class shaded (closed class I groove, 8 to 11 residues; open class II groove, 12 to 25; a
+count axis, stacked by call, with the binder share over each bar and the published length window of
+the class shaded (class I 8 to 12 residues, Gfeller 2018; class II 13 to 25, Chicz 1992; a
 bar per length, so a length nobody has stays an empty slot; the class comes from the alleles
 that scored the peptide, else from its sample), and the mutant against wild-type IC50 of every
 missense mutant whose wild type was predicted (the 500 nM lines cut the plane into four

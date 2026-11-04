@@ -88,7 +88,7 @@ Computed per sample, on log1p values (sc-best-practices convention), by `cellran
   sample median.
 - `mad_high_top20`: the top-20 genes' share of a cell's counts (`pct_top20`) more than 5 MAD
   above the sample median.
-- `mad_high_mito`: `pct_mito` more than 3 MAD above the sample median, OR above 8% outright.
+- `mad_high_mito`: `pct_mito` both more than 3 MAD above the sample median AND above 8% (sc-best-practices: a cell must exceed both).
 - `qc_status` = "flagged" when any of the four is true, else "pass"; `qc_reason` names the first
   failing criterion; `qc_flagged` is the 0/1 form of `qc_status` (so a card can `average` it into
   a "% flagged" reading, the same trick doesn't exist for the 4 individual Boolean criteria,

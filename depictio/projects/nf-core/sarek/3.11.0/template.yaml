@@ -54,7 +54,7 @@
 template:
   template_id: "nf-core/sarek/3.11.0"
   description: "nf-core/sarek template: variant calling compared caller by caller, from coverage and bcftools statistics down to the annotated variant, on top of the native MultiQC report."
-  version: "2.1.2"
+  version: "3.0.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory of the sarek output (csv/, reports/, variant_calling/, annotation/, multiqc/, pipeline_info/)."
@@ -1479,8 +1479,8 @@ workflows:
               "normal": "The pair's normal sample; null for a single sample"
               "call_source": "Which CNVkit file the segments come from: somatic, germline or call"
               "n_segments": "Called segments"
-              "n_gains": "Segments with a log2 ratio above 0.3"
-              "n_losses": "Segments with a log2 ratio below -0.3"
+              "n_gains": "Segments with a log2 ratio above 0.2 (CNVkit call default threshold)"
+              "n_losses": "Segments with a log2 ratio below -0.25 (CNVkit call default threshold)"
               "covered_mb": "Megabases inside the called segments"
               "gained_mb": "Megabases in gained segments"
               "lost_mb": "Megabases in lost segments"

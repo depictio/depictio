@@ -18,7 +18,7 @@ missing data, not a genotype):
 The declared relation comes from the pedigree file (``pedigree/*.ped``): ``Parent-child``
 when one sample is the other's father or mother, ``Siblings`` when they share a parent,
 ``Unrelated`` otherwise. ``check_status`` is decided on ``ibs0_pct`` and only for a declared
-parent and child: ``Consistent`` at or under 1 percent, ``Check`` above it, ``Too few
+parent and child: ``Consistent`` below 1.2 percent (peddy's cut-off, an IBS0 rate of 0.012), ``Check`` at or above it, ``Too few
 sites`` under 50 shared sites (a shallow callset cannot decide), ``Not checked`` for any
 other relation. The relatedness estimate is reported but not judged: it assumes sites
 chosen without regard to the samples and read deep enough to call heterozygotes, which a
@@ -96,7 +96,10 @@ OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
 _AUTOSOME = r"^(?:chr)?(?:[1-9]|1[0-9]|2[0-2])\t"
 MIN_SITES = 50
 MIN_DEPTH = 1
-MAX_PARENT_CHILD_IBS0_PCT = 1.0
+#: peddy: "Pairs of samples with a rate of IBS0 less than our empirically derived cutoff of
+#: 0.012 are called as parent-child pairs" (Pedersen and Quinlan 2017, Am J Hum Genet 100:406,
+#: doi:10.1016/j.ajhg.2017.01.017), here in percent.
+MAX_PARENT_CHILD_IBS0_PCT = 1.2
 
 
 def _dosages(lines: pl.Series, names: list[str]) -> pl.DataFrame:
@@ -185,7 +188,7 @@ def transform(sources: dict[str, pl.DataFrame | None]) -> pl.DataFrame:
             elif shared < MIN_SITES or ibs0_pct is None:
                 status = "Too few sites"
             else:
-                status = "Consistent" if ibs0_pct <= MAX_PARENT_CHILD_IBS0_PCT else "Check"
+                status = "Consistent" if ibs0_pct < MAX_PARENT_CHILD_IBS0_PCT else "Check"
             row = {
                 "relation": relation,
                 "shared_sites": shared,

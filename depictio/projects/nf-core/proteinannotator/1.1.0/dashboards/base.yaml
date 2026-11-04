@@ -882,7 +882,7 @@ tabs:
     body: >
       [hmmsearch](http://hmmer.org) reports domains against four HMM libraries and
       [InterProScan](https://www.ebi.ac.uk/interpro/) adds its member databases; an hmmsearch domain
-      counts when it passes HMMER's inclusion E-value of 0.01. Click a domain on the architecture to
+      counts when it is in HMMER's inclusion set (sequence and domain E-values of 0.01 or lower). Click a domain on the architecture to
       select its span and family across the tab, or switch its view to group the proteins by
       architecture. A protein that only one database reaches rests on a single source.
     tag: pa-dom-intro
@@ -1020,12 +1020,12 @@ tabs:
       not known; 0.9 is this tile's `partial_coverage` setting, a display aid and not a published cut-off.
       InterProScan matches have no HMM span and are drawn as complete.
 
-      Source: HMMER hmmsearch manual, the default per-domain inclusion E-value is 0.01,
-      https://github.com/EddyRivasLab/hmmer/blob/master/documentation/man/hmmsearch.man.in
+      Source: HMMER hmmsearch manual, options for inclusion thresholds (--incE and --incdomE, both 0.01 by
+      default), https://github.com/EddyRivasLab/hmmer/blob/master/documentation/man/hmmsearch.man.in
 
-      Note: hmmsearch domains are drawn only when their independent E-value is 0.01 or lower, HMMER's
-      default inclusion value (HMMER applies it to the conditional E-value); InterProScan matches are
-      drawn as reported.
+      Note: hmmsearch domains are drawn only when the full-sequence E-value (--incE) and the domain's
+      conditional E-value (--incdomE) are both 0.01 or lower, HMMER's defaults; the E-value shown is the
+      independent one. InterProScan matches are drawn as reported.
     layout: {x: 0, y: 0, w: 5, h: 6}
   - component_type: advanced_viz
     workflow_tag: proteinannotator
@@ -1127,11 +1127,12 @@ tabs:
       Low points of any length are borderline calls worth checking in a second database. Click a point to
       read the domain's record.
 
-      Source: HMMER hmmsearch manual, the default per-domain inclusion E-value is 0.01,
-      https://github.com/EddyRivasLab/hmmer/blob/master/documentation/man/hmmsearch.man.in
+      Source: HMMER hmmsearch manual, options for inclusion thresholds (--incE and --incdomE, both 0.01 by
+      default), https://github.com/EddyRivasLab/hmmer/blob/master/documentation/man/hmmsearch.man.in
 
-      Note: the weakest hmmsearch domains sit at 2 on the y axis, the 0.01 inclusion value applied by the
-      recipe; InterProScan matches are plotted as reported. No reference line is drawn.
+      Note: the y axis is the independent E-value, while the recipe keeps a domain on its conditional and
+      full-sequence E-values (0.01 or lower), so a domain can sit slightly below 2. InterProScan matches
+      are plotted as reported. No reference line is drawn.
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: table
     workflow_tag: proteinannotator
@@ -1150,10 +1151,11 @@ tabs:
       How to read: sort on the E-value to list the strongest calls first, or filter on the database to see
       what one source adds. Tick rows to pick domains and open their records.
 
-      Note: hmmsearch domains are listed when their independent E-value is 0.01 or lower, HMMER's default
-      inclusion value; InterProScan matches are listed as reported.
+      Note: hmmsearch domains are listed when the full-sequence E-value and the domain's conditional
+      E-value are both 0.01 or lower, HMMER's inclusion defaults; InterProScan matches are listed as
+      reported.
 
-      Source: HMMER hmmsearch manual,
+      Source: HMMER hmmsearch manual, options for inclusion thresholds (--incE and --incdomE),
       https://github.com/EddyRivasLab/hmmer/blob/master/documentation/man/hmmsearch.man.in
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: advanced_viz
@@ -1193,12 +1195,12 @@ tabs:
       Every domain line hmmsearch wrote, with its conditional and independent E-values and its HMM,
       alignment and envelope spans, before any inclusion threshold.
 
-      How to read: the independent E-value is the one the Domains list filters on. A hit with a small
+      How to read: the independent E-value is the one the Domains list shows, while the inclusion set is decided on the full-sequence and conditional E-values. A hit with a small
       E-value and an HMM span covering most of the model is a family match, and one with a short HMM span
       is a fragment. Use it to see what the inclusion threshold removed.
 
-      Source: HMMER hmmsearch manual, the default per-domain inclusion E-value is 0.01 and it applies to
-      the conditional E-value,
+      Source: HMMER hmmsearch manual, options for inclusion thresholds (--incE and --incdomE, both 0.01 by
+      default),
       https://github.com/EddyRivasLab/hmmer/blob/master/documentation/man/hmmsearch.man.in
     layout: {x: 0, y: 5, w: 8, h: 6}
 

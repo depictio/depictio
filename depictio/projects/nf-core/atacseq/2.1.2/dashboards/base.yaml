@@ -62,12 +62,11 @@ main_dashboard:
       TTS: '#0ca678'
       non-coding: '#74b816'
       Intergenic: '#f59f00'
-    # ataqv's nucleosome windows, shortest fragments first.
+    # The two windows ataqv counts (Metrics.cpp l.907 and l.911), then the rest.
     fragment_class:
-      sub-nucleosomal: '#1098ad'
-      transitional: '#74b816'
-      mononucleosomal: '#7048e8'
-      multi-nucleosomal: '#c2255c'
+      short (50-100 bp): '#1098ad'
+      mononucleosomal (150-200 bp): '#7048e8'
+      outside ataqv windows: '#adb5bd'
   # Persistent: drawn in every tab's filter panel, picks kept across tabs. All
   # three are bound to the design hub, the source of every sample link in
   # template.yaml.
@@ -370,11 +369,12 @@ main_dashboard:
       n_cons: {dc: macs2_consensus_boolean, column: peak_id, aggregation: count, format: integer}
       n_repro: {dc: macs2_consensus_boolean, column: peak_id, aggregation: count, filter_expr: col('num_samples') > 1,
         format: integer}
-      frag_top: {dc: ataqv_fragment_length, column: fragment_class, aggregation: top, weight: read_count}
+      frag_top: {dc: ataqv_fragment_length, column: fragment_class, aggregation: top, weight: read_count,
+        filter_expr: col('fragment_class') != 'outside ataqv windows'}
       frag_share: {dc: ataqv_fragment_length, column: fragment_class, aggregation: top_share, weight: read_count,
-        format: percent}
+        filter_expr: col('fragment_class') != 'outside ataqv windows', format: percent}
     body: |
-      - **{{frag_share}}** of the reads come from {{frag_top}} fragments – the largest window of the fragment ladder [ATAC quality](tab:ATAC quality)
+      - **{{frag_share}}** of the reads in ataqv's two fragment windows (50 to 100 bp and 150 to 200 bp) are {{frag_top}} fragments – the larger window of the fragment ladder [ATAC quality](tab:ATAC quality)
       - **{{fold}}** median fold enrichment of the peaks over the local background – MACS2 broad calls [Peaks](tab:Peaks)
       - **{{top_share}}** of the peaks sit in the {{top}} class – the most common HOMER feature class [Annotation](tab:Annotation)
       - **{{n_repro}}** of {{n_cons}} consensus intervals are called by more than one library – the reproducible set [Consensus](tab:Consensus)
@@ -407,7 +407,7 @@ main_dashboard:
     section: Findings
     source_tab: Annotation
     source_component: anno-tss-distance
-    caption: Each library's peaks by distance to the nearest start site, one curve per library; the band is the promoter window.
+    caption: Each library's peaks by distance to the nearest start site, one curve per library; the band is the HOMER promoter-TSS region (-1 kb to +100 bp).
     hide_legend: true
     tag: at-ov-hl-tss
     index: ov-hl-tss
@@ -1265,12 +1265,17 @@ tabs:
     display:
       icon_name: mdi:chart-donut
       icon_color: violet
-      caption: reads, by nucleosome window
+      caption: reads, by ataqv fragment window
     section: Fragment ladder
     tag: at-aq-card-windows
     index: aq-card-windows
     title: Reads by fragment window
-    description: Reads in the sub-nucleosomal, transitional, mononucleosomal and multi-nucleosomal windows.
+    description: >-
+      How many reads fall in each of the two fragment windows ataqv counts? A donut of the reads of the
+      libraries in view: fragments of 50 to 100 bp, fragments of 150 to 200 bp, and all other lengths.
+
+      Source: ataqv counting windows, 50 to 100 bp and 150 to 200 bp,
+      https://github.com/ParkerLab/ataqv/blob/master/src/cpp/Metrics.cpp (lines 907 and 911)
     layout: {x: 2, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: atacseq
@@ -1288,8 +1293,8 @@ tabs:
     section: Fragment ladder
     tag: at-aq-card-shortmono
     index: aq-card-shortmono
-    title: Sub- to mononucleosomal
-    description: Median ratio of sub-nucleosomal to mononucleosomal usable reads.
+    title: Short to mononucleosomal
+    description: Median ratio of usable reads of 50 to 100 bp to usable reads of 150 to 200 bp, ataqv's short_mononucleosomal_ratio (https://github.com/ParkerLab/ataqv/blob/master/src/cpp/Metrics.cpp, lines 907 and 911).
     layout: {x: 4, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: atacseq
@@ -1319,13 +1324,13 @@ tabs:
     mode: code
     code_content: |-
       # The informative part of the ladder: the histogram runs to 1000 bp, but the
-      # tail past 800 bp is empty. One curve per library, the ataqv windows shaded
-      # and labelled short enough to fit inside them.
+      # tail past 800 bp is empty. One curve per library, the two windows ataqv counts
+      # shaded (Metrics.cpp l.907: 50-100 bp, l.911: 150-200 bp, both ends inclusive).
       d = df.filter(pl.col('fragment_length') <= 800).sort(['sample', 'fragment_length'])
       color_col = depictio_group_by[0] if depictio_group_by and depictio_group_by[0] in d.columns else 'sample'
       colors = depictio_group_kwargs.get('color_discrete_map') or depictio_category_colors.get(color_col) or {}
       fig = px.line(d.to_pandas(), x='fragment_length', y='fraction_of_all_reads', color=color_col, line_group='sample', color_discrete_map=colors, hover_name='sample', labels={'fragment_length': 'Fragment length (bp)', 'fraction_of_all_reads': 'Fraction of all reads', color_col: ''})
-      for start, end, label in ((0, 100, 'NFR'), (150, 324, 'mono-nucleosome')):
+      for start, end, label in ((50, 100, '50-100 bp'), (150, 200, '150-200 bp')):
           fig.add_vrect(x0=start, x1=end, fillcolor='grey', opacity=0.10, line_width=0, annotation_text=label, annotation_position='top left')
       fig.update_layout(margin=dict(t=10))
     section: Fragment ladder
@@ -1337,21 +1342,20 @@ tabs:
       fragment length, from 0 to 800 bp. Curves are coloured per library, or per group when Analysis mode
       groups the samples.
 
-      How to read: a working library shows a high peak of short fragments, the nucleosome-free window,
-      then smaller bumps near one and two nucleosome lengths. A curve without the short peak or without
-      the bumps has lost the nucleosome pattern. Replicates of a group should overlay.
+      How to read: a working library shows a high peak of short fragments, then smaller bumps near one
+      and two nucleosome lengths. A curve without the short peak or without the bumps has lost the
+      nucleosome pattern. Replicates of a group should overlay.
 
-      Lines and annotations: two grey bands are shaded and labelled, NFR for fragments up to 100 bp and
-      mono-nucleosome for 150 to 324 bp. They are fixed display windows of the catalog's ataqv module, not
-      read from the run.
+      Lines and annotations: two grey bands are shaded and labelled with the two windows ataqv counts
+      for its short to mononucleosomal ratio, 50 to 100 bp and 150 to 200 bp. They are fixed references
+      taken from ataqv's source, not read from the run. No pass or fail cut-off is drawn: ataqv publishes
+      none for the ladder.
 
-      Note: the windows are not ataqv's own counting windows, since ataqv counts fragments of 50 to 100 bp
-      and of 150 to 200 bp for its short to mononucleosomal ratio. They are display aids, not validated
-      cut-offs.
-
-      Sources: MultiQC ataqv help, nucleosome-free peak near 50-100 bp and mono-nucleosome peak near
-      180-247 bp, https://github.com/MultiQC/MultiQC/blob/main/multiqc/modules/ataqv/ataqv.py;
-      ataqv counting windows, https://github.com/ParkerLab/ataqv/blob/master/src/cpp/Metrics.cpp
+      Sources: ataqv counting windows (hqaa_short_count at 50 to 100 bp, hqaa_mononucleosomal_count at
+      150 to 200 bp), https://github.com/ParkerLab/ataqv/blob/master/src/cpp/Metrics.cpp (lines 907
+      and 911); MultiQC ataqv help for the typical positions of the peaks, which it gives as
+      near 50-100 bp, 180-247 bp and 350-430 bp,
+      https://github.com/MultiQC/MultiQC/blob/main/multiqc/modules/ataqv/ataqv.py
     layout: {x: 0, y: 2, w: 5, h: 4}
   - component_type: figure
     workflow_tag: atacseq
@@ -1368,21 +1372,20 @@ tabs:
     index: aq-class-bar
     title: Reads per fragment class
     description: >-
-      How does each library split across the nucleosome windows? One stacked bar per library: its reads in
-      four fragment windows, sub-nucleosomal (up to 100 bp), transitional (101 to 149 bp), mononucleosomal
-      (150 to 324 bp) and multi-nucleosomal (over 324 bp), each in its own colour.
+      How does each library split across the fragment windows ataqv counts? One stacked bar per library:
+      its reads with a fragment of 50 to 100 bp, of 150 to 200 bp, and of any other length, each in its own
+      colour.
 
-      How to read: replicates of a group should split alike. A library with a much smaller sub-nucleosomal
+      How to read: replicates of a group should split alike. A library with a much smaller 50 to 100 bp
       share than its peers lacks the short fragments that open chromatin gives. Bars are in read counts,
       so compare the colour shares and read the bar length as depth.
 
-      Note: the window edges (100, 150 and 324 bp) are fixed display windows of the catalog's ataqv
-      module, not read from the run and not validated cut-offs. ataqv's own counts use 50 to 100 bp for
-      short and 150 to 200 bp for mononucleosomal fragments.
+      Note: only the two windows are ataqv's own; it defines no other fragment class, so everything else
+      is grouped as outside them. The windows are fixed references, not read from the run, and no pass or
+      fail cut-off is drawn.
 
-      Sources: ataqv counting windows,
-      https://github.com/ParkerLab/ataqv/blob/master/src/cpp/Metrics.cpp; MultiQC ataqv help,
-      https://github.com/MultiQC/MultiQC/blob/main/multiqc/modules/ataqv/ataqv.py
+      Source: ataqv counting windows, 50 to 100 bp and 150 to 200 bp,
+      https://github.com/ParkerLab/ataqv/blob/master/src/cpp/Metrics.cpp (lines 907 and 911)
     layout: {x: 5, y: 2, w: 3, h: 4}
   - component_type: figure
     workflow_tag: atacseq
@@ -2118,7 +2121,7 @@ tabs:
     body: >
       [HOMER](http://homer.ucsd.edu/homer/) assigns every peak to a genomic feature class
       and to the nearest transcription start site. Accessible chromatin is promoter-heavy,
-      so a working library puts a large share of its peaks in the promoter window. Pick a
+      so a working library puts a large share of its peaks in the promoter-TSS class (HOMER: -1 kb to +100 bp of the start site). Pick a
       row of the collapsed table to read the record of one peak.
     tag: at-anno-intro
     index: anno-intro
@@ -2274,7 +2277,7 @@ tabs:
       reference_x: 0
       reference_label: TSS
       shaded_bands:
-      - [-1000, 1000, Promoter window]
+      - [-1000, 100, HOMER promoter-TSS]
       x_title: Distance to the nearest TSS (bp)
       y_title: Share of the library's peaks
       legend_pos: right
@@ -2292,8 +2295,12 @@ tabs:
       that differs from its group is a library worth checking.
 
       Lines and annotations: the vertical line at 0 marks the transcription start site. The shaded band
-      from -1000 to +1000 bp, labelled Promoter window, is a display aid fixed in the tile: 1 kb either
-      side of the start site, not read from the run and not a validated cut-off.
+      from -1000 to +100 bp, labelled HOMER promoter-TSS, is the region HOMER annotatePeaks calls TSS by
+      default. It is a fixed reference of the tile, not read from the run, and it is not symmetric: it
+      reaches 1 kb upstream and 100 bp downstream of the site.
+
+      Source: HOMER annotatePeaks, TSS defined by default from -1kb to +100bp,
+      http://homer.ucsd.edu/homer/ngs/annotation.html
     layout: {x: 0, y: 0, w: 8, h: 6}
   # Master and detail: a picked row is the selection the record card follows.
   - component_type: table

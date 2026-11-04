@@ -1279,9 +1279,12 @@ tabs:
       runs from 90% to 95% and the red zone lies below the dashed 90% line (labelled fail). They are fixed
       reference levels of this dashboard, the same as the Complete BUSCOs cards, not read from the run.
 
-      Warning: BUSCO publishes no pass level for complete BUSCOs, and genomeqc documents none for its
-      rating, so the 95% and 90% levels have no published source here. Read them as a guide to the gaps,
-      not as a verdict.
+      Source: the 95% and 90% levels are nf-core/genomeqc's own thresholds for complete BUSCOs (good at
+      95 or more, warn at 90 or more, in every preset of QUALITY_PRESETS), bin/plot_tree_summary.R at
+      release 1.0.1, https://github.com/nf-core/genomeqc/blob/1.0.1/bin/plot_tree_summary.R
+
+      Note: the script describes these BUSCO cut-offs as following community practice, and BUSCO itself
+      publishes no pass level, so read them as the pipeline's rating and not as a BUSCO verdict.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: figure
     workflow_tag: genomeqc
@@ -1322,9 +1325,12 @@ tabs:
       the Complete BUSCOs cards. A run left of it keeps 95% or more of the set complete, because
       fragmented plus missing then stay under 5%.
 
-      Warning: BUSCO publishes no pass level for complete BUSCOs, and genomeqc documents none for its
-      rating, so the 95% level behind this line has no published source here. Read the line as a guide,
-      not a verdict.
+      Source: the 95% level is nf-core/genomeqc's own threshold for complete BUSCOs (good at 95 or
+      more), QUALITY_PRESETS in bin/plot_tree_summary.R at release 1.0.1,
+      https://github.com/nf-core/genomeqc/blob/1.0.1/bin/plot_tree_summary.R
+
+      Note: the script describes it as following community practice, and BUSCO itself publishes no pass
+      level, so read the line as the pipeline's rating and not as a BUSCO verdict.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: genomeqc

@@ -89,7 +89,7 @@
 template:
   template_id: "nf-core/scrnaseq/4.2.0"
   description: "nf-core/scrnaseq template: per-cell QC and MAD-based flagging, graph-based clusters and their marker genes, UMAP/t-SNE/PCA embeddings and CellBender's ambient-RNA removal on the Cell Ranger route, on top of the MultiQC report, plus an optional aligner-concordance comparison against simpleaf/alevin-fry and kallisto|bustools."
-  version: "1.1.0"
+  version: "2.0.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory of the megatest results: one subdirectory per --aligner route (aligner_cellranger/ required; aligner_simpleaf/, aligner_kallisto/ optional, feed the Aligner concordance tab) plus aligner_cellranger/multiqc/multiqc_data/multiqc.parquet."
@@ -290,10 +290,10 @@ workflows:
             format: "TSV"
             columns_description:
               "sample": "Sample"
-              "metric": "One of: sequencing_saturation, fraction_reads_in_cells, valid_barcodes, q30_rna, confidently_mapped_transcriptome"
+              "metric": "One of: fraction_reads_in_cells, valid_barcodes, q30_rna, confidently_mapped_transcriptome (sequencing saturation has no 10x expected value and is not thresholded)"
               "value": "The metric's value, as a 0-1 fraction"
               "unit": "Always 'fraction'"
-              "threshold": "The pass/warn (or pass/fail) cutoff for this metric"
+              "threshold": "The expected value 10x Genomics gives for this metric (technical note CG000329); a value below it is warn, or fail for valid barcodes"
               "status": "pass, warn, or fail"
 
       - data_collection_tag: "cellranger_mapping_breakdown"
@@ -798,7 +798,7 @@ workflows:
               "mad_low_umi": "True if log1p(n_umi) is a low MAD outlier for the sample"
               "mad_low_genes": "True if log1p(n_genes) is a low MAD outlier for the sample"
               "mad_high_top20": "True if pct_top20 is a high MAD outlier for the sample"
-              "mad_high_mito": "True if pct_mito is a high MAD outlier for the sample, or exceeds 8 percent"
+              "mad_high_mito": "True if pct_mito is both more than 3 MAD above the sample median and above 8 percent (sc-best-practices rule: a cell must exceed both)"
               "qc_status": "pass or flagged"
               "qc_reason": "pass, or the first failing MAD criterion"
               "qc_flagged": "0/1 form of qc_status, so a card can average it into a percent-flagged reading"

@@ -41,7 +41,7 @@
 template:
   template_id: "nf-core/raredisease/3.1.2"
   description: "nf-core/raredisease template for rare disease analysis on a family: alignment and coverage QC, pedigree and relatedness checks, the callset, the GENMOD-ranked variants with their inheritance models, mitochondrial heteroplasmy, repeat expansions and mobile elements, and a genome browser over the ranked VCFs and alignments."
-  version: "1.1.1"
+  version: "2.0.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory of one raredisease run (alignment/, call_snv/, rank_and_filter/, qc_bam/, pedigree/, pipeline_info/)."
@@ -670,8 +670,8 @@ workflows:
               "role": "Proband, Father, Mother, Sibling or Other, from the pedigree"
               "status": "Affected, Unaffected or Unknown, from the pedigree phenotype"
               "sex": "Declared sex: Male, Female or Unknown"
-              "inferred_sex": "Sex read off the relative depth of X and Y; empty without those contigs"
-              "sex_check": "Match, Mismatch, or Not tested"
+              "x_relative_depth": "Mean depth of chromosome X over the sample's autosomal mean; empty without that contig"
+              "y_relative_depth": "Mean depth of chromosome Y over the sample's autosomal mean; empty without that contig"
               "total_reads": "Reads in the alignment summary"
               "aligned_pct": "Reads aligned, percent"
               "mismatch_rate_pct": "Mismatches per aligned base, percent"

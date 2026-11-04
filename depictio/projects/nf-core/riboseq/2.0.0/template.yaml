@@ -31,7 +31,7 @@
 template:
   template_id: "nf-core/riboseq/2.0.0"
   description: "nf-core/riboseq template: MultiQC funnel, Ribo-seq periodicity QC, sample space, anota2seq translational regulation, translational efficiency and ORF discovery"
-  version: "2.2.0"
+  version: "3.0.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory containing riboseq pipeline output (multiqc/, psites/, quantification/, translational_efficiency/, orf_predictions/)"
@@ -438,7 +438,7 @@ workflows:
               "translation_padj": "Adjusted p-value of the translation analysis"
               "buffering_effect": "Change in total mRNA not followed by ribosome-bound mRNA, log2"
               "buffering_padj": "Adjusted p-value of the buffering analysis"
-              "regulation_mode": "translation, buffering, mRNA abundance or not regulated"
+              "regulation_mode": "translation, mRNA abundance, buffering or not regulated, one mode per gene in anota2seq's order of priority"
               "direction": "Sign of the effect that decided the mode: up, down or none"
 
       - data_collection_tag: "anota2seq_results"
@@ -461,7 +461,7 @@ workflows:
               "pvalue": "RVM p-value"
               "padj": "Benjamini-Hochberg adjusted p-value"
               "neg_log10_padj": "-log10 of the adjusted p-value"
-              "significant": "Adjusted p below 0.15 and absolute effect of at least log2(1.2), anota2seq's default selection"
+              "significant": "Adjusted p below 0.15 (maxPAdj) and, for the translation and buffering analyses only, an absolute effect of at least log2(1.2) (deltaPT, deltaTP); anota2seqRun defaults"
               "direction": "up, down or not significant"
 
       - data_collection_tag: "translational_efficiency"

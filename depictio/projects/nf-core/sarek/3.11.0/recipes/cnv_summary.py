@@ -15,8 +15,11 @@ of ``cnv_segments`` (the bins are the evidence, not the call) and sums them per 
 * ``max_log2`` / ``min_log2``: the strongest gain and the deepest loss, the first place to look
   for a focal amplification or a deletion.
 
-The cut-offs are the conventional 0.3 and -0.3 of the profile, not a property of the run:
-they are constants of this recipe, so the tab's cards and the profile's colours agree.
+The cut-offs are CNVkit's own ``call`` thresholds, the edges of the neutral two-copy call:
+the second and third values of the default ``-t -1.1,-0.25,0.2,0.7`` (``cnvlib/commands.py``,
+https://github.com/etal/cnvkit/blob/master/cnvlib/commands.py; sarek sets no ``-t`` for
+CNVKIT_CALL). They are constants of this recipe, not read from the run, so the tab's cards and
+the profile's colours agree.
 
 Output schema:
     unit, unit_type, patient, sample, normal, call_source : Utf8   as in ``cnv_segments``
@@ -33,9 +36,10 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
-#: Log2 ratio above which a segment is a gain, and below which it is a loss.
-GAIN_LOG2 = 0.3
-LOSS_LOG2 = -0.3
+#: Log2 ratio above which a segment is a gain, and below which it is a loss: CNVkit `call -t`
+#: default -1.1,-0.25,0.2,0.7, the 3rd value (0.2) and the 2nd (-0.25).
+GAIN_LOG2 = 0.2
+LOSS_LOG2 = -0.25
 #: Share of a contig's called length that must be gained or lost for the contig to count as altered.
 ALTERED_CONTIG_SHARE = 0.10
 

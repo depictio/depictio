@@ -2,9 +2,10 @@ id: cellranger_library_metrics_long
 name: Library QC metrics, thresholded
 mode: count/library_metrics_long
 description: >-
-  The 5 headline Cell Ranger metrics 10x's QC guidance gives a pass/warn/fail
-  band for, one row per (sample, metric), with the threshold and the status
-  it crosses.
+  The 4 headline Cell Ranger metrics for which 10x's QC guidance (technical
+  note CG000329) gives an expected value, one row per (sample, metric), with
+  the threshold and the status it crosses. Sequencing saturation has no 10x
+  expected value and is not thresholded.
 find:
   path_glob: "**/metrics_summary.csv"
 recipe: cellranger/library_metrics_long.py

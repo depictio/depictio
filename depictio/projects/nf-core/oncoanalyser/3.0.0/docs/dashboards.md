@@ -95,15 +95,15 @@ every other tab.
 **Data & QC**
 
 1. **Sequencing QC.** *Is the sequencing deep and clean enough for the calls?* Mean coverage,
-   reads per sample, the highest duplicate share (against QSEE's 30% fail line) and the lowest
-   share at 10x or more (against QSEE's 90% fail line); fractions read as percentages. Cumulative
+   reads per sample, the highest duplicate share (against QSEE's 30% warn line) and the lowest
+   share at 10x or more (against QSEE's 90% warn line); fractions read as percentages. Cumulative
    coverage and insert-size curves per sample, and QSEE's PASS, WARN and FAIL verdicts per tool.
    The BamTools summary with a library record card and the QSEE checks are collapsed.
 
 **Genome**
 
 2. **Tumor profile.** *How pure is the tumor, and what kind of tumor is it?* Purity (against
-   QSEE's 20% fail line), ploidy (split by PURPLE fit status), mutations per Mb (against PURPLE's
+   PURPLE's 20% low-purity warning), ploidy (split by PURPLE fit status), mutations per Mb (against PURPLE's
    high-burden line at 10) and microsatellite indels (against its instability line at 4), each
    description saying what a normal value is. CUPPA's cancer-type probability per classifier
    (heatmap); the share of SNVs per COSMIC signature, sorted and coloured by the signature's

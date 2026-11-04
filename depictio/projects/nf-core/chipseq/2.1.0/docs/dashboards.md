@@ -106,7 +106,7 @@ table is collapsed. Filters: significance, fold enrichment, width and chromosome
 **Annotation.** Strip: annotated peaks (a ring by feature class), genes reached (by feature
 class), the distance to the nearest start site (box plot) and the peak score. Then the
 feature classes per library as 100% bars (an advanced `stacked_taxonomy` tile on the `homer_feature_classes` collection, written by a recipe from the HOMER peak table, with the share or count, sort and legend controls; the distance filter does not reach it) and the peaks around the nearest start site, with
-the promoter window shaded (1 kb either side of the start site at 0). The collapsed `Peak annotation` holds the HOMER table with the
+the HOMER promoter-TSS region shaded (-1 kb to +100 bp of the start site at 0, HOMER's default TSS definition). The collapsed `Peak annotation` holds the HOMER table with the
 peak record card beside it: the card waits for a picked row. Filters: feature class and
 distance to the start site.
 

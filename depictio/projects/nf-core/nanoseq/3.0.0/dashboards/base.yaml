@@ -297,7 +297,7 @@ main_dashboard:
     tag: ns-ov-kf-de-calls
     index: ov-kf-de-calls
     title: Significant genes
-    description: Distinct genes with a call at a 5% FDR and a two-fold change, over the whole run. The bars split them by direction.
+    description: Distinct genes with a call at a 5% FDR and a two-fold change (working values of this template, see the volcano note on the Gene expression tab), over the whole run. The bars split them by direction.
     layout: {x: 6, y: 0, w: 2, h: 2}
   # Findings filter bar: the condition, then the library, on the hub.
   - component_type: interactive
@@ -352,7 +352,7 @@ main_dashboard:
       n_tx: {dc: dexseq_results, column: feature_id, aggregation: nunique, format: integer}
       top_gene: {dc: isoform_loci, column: gene_name, aggregation: top, weight: rank_score}
     body: |
-      - **{{q7}}%** of a library's reads reach Q7, the basecaller's pass floor – the median over the libraries [Reads](tab:Reads)
+      - **{{q7}}%** of a library's reads reach Q7, pycoQC's default pass quality – the median over the libraries [Reads](tab:Reads)
       - **{{pc1}}%** of the expression variance lies on the first principal component – log CPM of the most variable genes [Quantification](tab:Quantification)
       - **{{n_up}}** genes up and **{{n_down}}** down between the conditions – DESeq2, 5% FDR and a two-fold change [Genes](tab:Gene expression)
       - **{{n_dtu}}** of {{n_tx}} transcripts shift their share of their gene – DEXSeq, gene-level 5% FDR; pick one to read its splice arcs in the genome browser [Locus](tab:Locus)
@@ -368,7 +368,7 @@ main_dashboard:
     title: Reads above each quality floor
     source_tab: Reads
     source_component: rd-quality-ladder
-    caption: One curve per library, the share of its reads above each quality floor, hover for its name; the marker is Q7, the pass floor, and a curve that falls early is the library to check.
+    caption: One curve per library, the share of its reads above each quality floor, hover for its name; the marker is Q7, pycoQC's default pass quality, and a curve that falls early is the library to check.
     hide_legend: true
     tag: ns-ov-hl-quality-ladder
     index: ov-hl-quality-ladder
@@ -416,6 +416,7 @@ main_dashboard:
       end_col: end
       score_col: rank_score
       feature_col: gene_name
+      category_col: direction
       mark: point
       point_size: 9
       score_title: Usage shift (-log10 q-value)
@@ -437,7 +438,8 @@ main_dashboard:
       cluster of tall dots on one chromosome is a region worth opening. Click a dot to open its gene in
       the genome browser of the [Locus](tab:Locus) tab.
 
-      Lines and annotations: no line or cut-off is drawn, the height only ranks the transcripts. On this
+      Lines and annotations: no line or cut-off is drawn, the height only ranks the transcripts. Red dots
+      are shifts called up, blue ones down, grey ones not significant, as in the usage volcano. On this
       axis the 5% gene-level q-value that this template uses to call a shift sits at 1.3.
 
       Source: DEXSeq, Anders, Reyes and Huber 2012, doi:10.1101/gr.133744.111
@@ -842,8 +844,9 @@ tabs:
     title: Read length N50
     description: Half of a library's bases sit in reads at least this long.
     layout: {x: 2, y: 0, w: 2, h: 2}
-  # Q7 is the basecaller's pass floor (Guppy and Dorado sort reads into pass
-  # and fail at it); Q10 is the good-quality mark the figures draw beside it.
+  # Q7 is pycoQC's default pass quality (min_pass_qual 7); Q10 is another bin
+  # NanoPlot's NanoStats report counts (>Q5, >Q7, >Q10, >Q12, >Q15), drawn
+  # beside it with no verdict.
   - component_type: card
     workflow_tag: nanoseq
     data_collection_tag: nanostats
@@ -857,13 +860,13 @@ tabs:
     display:
       icon_name: mdi:check-decagram
       icon_color: cyan.8
-      caption: libraries against Q7, the pass floor
+      caption: libraries against Q7, pycoQC's default pass quality
       decimals: 1
     section: Reads at a glance
     tag: ns-rd-card-quality
     index: rd-card-quality
     title: Mean read quality
-    description: Median of the libraries' mean Phred quality. Q7 is the basecaller's pass floor, Q10 is good.
+    description: Median of the libraries' mean Phred quality. Q7 is pycoQC's default pass quality and Q10 another quality bin NanoStats reports; neither is a verdict.
     layout: {x: 4, y: 0, w: 2, h: 2}
   # One row per library and quality floor: the card reads the Q7 rung only.
   - component_type: card
@@ -885,11 +888,11 @@ tabs:
     tag: ns-rd-card-q7
     index: rd-card-q7
     title: Reads passing Q7 (%)
-    description: Median share of a library's reads at a mean quality of Q7 or above, the pass floor.
+    description: Median share of a library's reads at a mean quality of Q7 or above, pycoQC's default pass quality.
     layout: {x: 6, y: 0, w: 2, h: 2}
   # nanoseq publishes no per-read table (NanoPlot runs without --raw), so a
   # scatter would hold one point per library: six or so. Sorted bars say more,
-  # with the Q7 pass floor and the Q10 good mark drawn as lines on the quality panel.
+  # with the Q7 pass quality and the Q10 NanoStats bin drawn as lines on the quality panel.
   - component_type: figure
     workflow_tag: nanoseq
     data_collection_tag: nanostats
@@ -897,7 +900,7 @@ tabs:
     visu_type: bar
     mode: code
     code_content: |-
-      # Mean read length, mean read quality and yield per library, sorted by quality, coloured by condition; the solid line is Q7 (pass), the dashed one Q10 (good). A picked bar stays full, the others dim.
+      # Mean read length, mean read quality and yield per library, sorted by quality, coloured by condition; the solid line is Q7 (pycoQC's default pass quality), the dashed one Q10 (another NanoStats bin). A picked bar stays full, the others dim.
       names = {'mean_read_length': 'Mean read length (bases)', 'mean_read_quality': 'Mean read quality (Phred)', 'total_gigabases': 'Yield (Gb)'}
       d = df.filter(pl.col('mean_read_quality').is_not_null()).sort(['mean_read_quality', 'sample']).with_columns(pl.col('sample').str.replace(r'_(?:R|r|rep|REP|Rep)\d+$', '').alias('condition'))
       long = d.select(['sample', 'condition', *names.keys()]).unpivot(index=['sample', 'condition'], variable_name='metric', value_name='value').with_columns(pl.col('metric').replace(names))
@@ -906,8 +909,8 @@ tabs:
       fig.update_yaxes(automargin=True)
       fig.for_each_annotation(lambda a: a.update(text=a.text.split('=')[-1]))
       fig.update_xaxes(range=[0, max(12, (d['mean_read_quality'].max() or 0) * 1.1)], col=2)
-      fig.add_vline(x=7, line_width=1, opacity=0.6, annotation_text='Q7 pass', annotation_position='top left', col=2)
-      fig.add_vline(x=10, line_dash='dash', line_width=1, opacity=0.6, annotation_text='Q10 good', col=2)
+      fig.add_vline(x=7, line_width=1, opacity=0.6, annotation_text='Q7 pycoQC pass', annotation_position='top left', col=2)
+      fig.add_vline(x=10, line_dash='dash', line_width=1, opacity=0.6, annotation_text='Q10 NanoStats bin', col=2)
       fig.update_traces(unselected=dict(marker=dict(opacity=0.3)))
       fig.update_layout(margin=dict(t=30), clickmode='event+select', legend=dict(orientation='h', y=-0.12, title_text=''))
     selection_enabled: true
@@ -926,15 +929,20 @@ tabs:
       with a normal yield means many short reads, so check its Nx curve on this tab before trusting it for
       isoform work. Click a bar to open the library's NanoStat summary beside it.
 
-      Lines and annotations: on the quality panel only, a solid vertical line at Q7 (labelled Q7 pass) and
-      a dashed one at Q10 (labelled Q10 good). Q is the Phred scale, so Q10 is one expected error in ten
-      bases. Q7 is the pass quality pycoQC uses by default; Q10 is a display aid with no source.
+      Lines and annotations: on the quality panel only, a solid vertical line at Q7 (labelled Q7 pycoQC pass)
+      and a dashed one at Q10 (labelled Q10 NanoStats bin). Q is the Phred scale, so Q10 is one expected
+      error in ten bases. Q7 is the pass quality pycoQC uses by default. Q10 is one of the quality bins
+      that NanoPlot's own NanoStats report counts reads above, beside Q5, Q7, Q12 and Q15; the line marks
+      that bin and says nothing about a good or bad library.
 
       Source: pycoQC, option min_pass_qual (default 7),
-      https://raw.githubusercontent.com/a-slide/pycoQC/master/pycoQC/pycoQC.py
+      https://raw.githubusercontent.com/a-slide/pycoQC/master/pycoQC/pycoQC.py; NanoPlot's NanoStats
+      quality bins, nanomath `_qualgroups = [5, 7, 10, 12, 15]` in the NanoPlot 1.38.0 era,
+      https://github.com/wdecoster/nanomath/blob/v1.0.1/nanomath/nanomath.py (newer NanoPlot releases print
+      >Q10 to >Q30 in steps of 5)
 
-      Note: neither line is a validated cut-off. A basecaller sets its own pass filter by version and
-      model, and Dorado applies none unless --min-qscore is set
+      Note: neither line is a validated cut-off, and nanoseq itself runs NanoPlot, not pycoQC. A basecaller
+      sets its own pass filter by version and model, and Dorado applies none unless --min-qscore is set
       (https://software-docs.nanoporetech.com/dorado/latest/basecaller/simplex/).
     layout: {x: 0, y: 0, w: 5, h: 6}
   - component_type: advanced_viz
@@ -1035,12 +1043,12 @@ tabs:
       whose mean quality is above each Phred cut-off that NanoStat reports. A mean quality hides whether a
       library is tight around it or bimodal, and this curve does not.
 
-      How to read: a curve that stays high up to Q10 is a library of mostly good reads, and one that falls
+      How to read: a curve that stays high up to Q10 keeps most of its reads at that quality, and one that falls
       early loses much of its yield at the floor an analysis wants to impose. Pick the floor the
       downstream step needs and read the share that remains. Click a curve to pick its library.
 
       Lines and annotations: the dotted vertical line at Q7 (labelled Q7 pass) is the pass quality pycoQC
-      uses by default. The curves are drawn at the cut-offs NanoStat prints and no other.
+      uses by default, not a NanoPlot or nanoseq setting. The curves are drawn at the cut-offs NanoStat prints and no other.
 
       Source: pycoQC, option min_pass_qual (default 7),
       https://raw.githubusercontent.com/a-slide/pycoQC/master/pycoQC/pycoQC.py
@@ -1597,6 +1605,10 @@ tabs:
       Lines and annotations: a diverging scale centred on the gene's mean, with rows and columns
       clustered, and a bar giving each gene's biotype. No cut-off is drawn.
 
+      Source: the filter of at least 10 reads follows the DESeq2 vignette, which keeps rows with a count of
+      at least 10 as a reasonable choice for bulk RNA-seq (the vignette applies it per smallest group, here
+      it is a total over the run), https://bioconductor.org/packages/release/bioc/vignettes/DESeq2/inst/doc/DESeq2.html
+
       Note: ranking by variance on CPM and not on raw counts is what keeps the list from being a
       library-size ranking.
     layout: {x: 0, y: 0, w: 8, h: 5}
@@ -1763,7 +1775,8 @@ tabs:
     body: >
       [DESeq2](https://bioconductor.org/packages/DESeq2/) tests Bambu's counts between the
       run's two conditions ({{contrast}}), once over the whole run, so the sample filters do not
-      narrow this tab. A call clears a 5% FDR and a two-fold change, and up means higher in the
+      narrow this tab. A call clears a 5% FDR and a two-fold change (working values of this template,
+      see the note of the volcano below), and up means higher in the
       first condition; the View switch reads the same rows as an MA or a QQ plot.
     tag: ns-de-intro
     index: de-intro
@@ -1895,8 +1908,9 @@ tabs:
     title: Fold change down (log2)
     description: Median log2 fold change of the calls lower in the first condition of the contrast.
     layout: {x: 4, y: 0, w: 2, h: 2}
-  # Past the two-fold cut-off every call already is significant, so the strong
-  # effects are the calls at four-fold or more, either way: the genes where the
+  # Past the two-fold working value every call already is significant, so the
+  # strong effects are the calls at four-fold or more, either way (a working
+  # value of this template: neither DESeq2 nor nanoseq defines a four-fold class): the genes where the
   # biology is large, ranked by biotype (nunique per category draws ranked bars).
   - component_type: card
     workflow_tag: nanoseq
@@ -1918,7 +1932,7 @@ tabs:
     tag: ns-de-card-strong
     index: de-card-strong
     title: Strong effects
-    description: Distinct genes with a call and a log2 fold change of 2 or more, in either direction.
+    description: Distinct genes with a call and a log2 fold change of 2 or more (four-fold), in either direction. The four-fold step is a working value of this template, not a DESeq2 or nanoseq class.
     layout: {x: 6, y: 0, w: 2, h: 2}
   # One tile, three views of the same rows: the MA view reads log2_base_mean,
   # the QQ view the raw p-values. No point labels: Ensembl ids pile up.
@@ -1961,11 +1975,16 @@ tabs:
       rate). On the MA view, two dotted horizontal lines at log2 fold change -1 and +1. On the QQ view, a
       dashed diagonal where observed equals expected, and the lambda badge.
 
-      Source: DESeq2 vignette,
-      https://bioconductor.org/packages/release/bioc/vignettes/DESeq2/inst/doc/DESeq2.html
+      Source: nanoseq 3.0.0 runs DESeq2 with results(dds), line 80 of bin/run_deseq2.r,
+      https://github.com/nf-core/nanoseq/blob/3.0.0/bin/run_deseq2.r; DESeq2 vignette, alpha defaults to 0.1,
+      https://bioconductor.org/packages/release/bioc/vignettes/DESeq2/inst/doc/DESeq2.html;
+      nf-core/differentialabundance, differential_max_qval 0.05 and differential_min_fold_change 2,
+      https://github.com/nf-core/differentialabundance/blob/master/nextflow_schema.json
 
-      Note: the 0.05 and the two-fold lines are this template's call and not DESeq2's, whose own alpha
-      default is 0.1. They are not validated cut-offs. A point is an annotation entry and not a gene, so
+      Note: the 0.05 and the two-fold lines are working values of this template, not defaults of nanoseq.
+      Its DESeq2 step uses DESeq2's own alpha of 0.1 and sets no fold-change threshold. The template borrows
+      the 0.05 and the fold change of 2 (log2 fold change 1) from the defaults of the sibling pipeline
+      nf-core/differentialabundance, and they are not validated cut-offs. A point is an annotation entry and not a gene, so
       entries that share a gene are separate points.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: advanced_viz
@@ -1995,9 +2014,11 @@ tabs:
       at an adjusted p-value of 0.05 (a 5% false discovery rate), and an entry that DESeq2 gave no
       adjusted p-value counts as not significant.
 
-      Note: the entries are ranked on effect size alone, and the 0.05 is this template's choice and not a
-      validated cut-off. DESeq2's own alpha default is 0.1
-      (https://bioconductor.org/packages/release/bioc/vignettes/DESeq2/inst/doc/DESeq2.html).
+      Note: the entries are ranked on effect size alone. The 0.05 is a working value of this template, not
+      a nanoseq default: nanoseq's DESeq2 step uses DESeq2's own alpha of 0.1 (results(dds), line 80 of
+      bin/run_deseq2.r, https://github.com/nf-core/nanoseq/blob/3.0.0/bin/run_deseq2.r; vignette,
+      https://bioconductor.org/packages/release/bioc/vignettes/DESeq2/inst/doc/DESeq2.html), and 0.05 is
+      the differential_max_qval default of nf-core/differentialabundance, https://github.com/nf-core/differentialabundance/blob/master/nextflow_schema.json.
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: table
     workflow_tag: nanoseq
@@ -2242,9 +2263,11 @@ tabs:
       since the q-value alone decides the call. On the QQ view, a dashed diagonal where observed equals
       expected, and the lambda badge.
 
-      Source: DEXSeq, Anders, Reyes and Huber 2012, doi:10.1101/gr.133744.111
+      Source: DEXSeq, Anders, Reyes and Huber 2012, doi:10.1101/gr.133744.111; nanoseq 3.0.0 bin/run_dexseq.r
+      applies stageR with alpha = 0.05 to the gene-level q-value (stageWiseAdjustment, method "dtu", line
+      136), https://github.com/nf-core/nanoseq/blob/3.0.0/bin/run_dexseq.r
 
-      Note: the 0.05 is this template's call and not a validated cut-off. As the q-value is shared by all
+      Note: the 0.05 is the alpha the pipeline's own script uses, not a validated cut-off. As the q-value is shared by all
       the transcripts of a gene, the points above the line overstate the number of genes affected.
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: figure

@@ -11,12 +11,12 @@
       "content_hash": "ded2246534baa99872216b60bd5cf2802b443ba6d0133d7e18363dc6cb3e65dd"
     },
     "ampcombi": {
-      "version": "1.0.0",
-      "content_hash": "dd38257d31da119441f52ddf6fef3b0fe27d3bdb00b4d86305141e2beb204e2b"
+      "version": "1.1.0",
+      "content_hash": "d2d37061ede0b9babf6c56c99bd2b7c9e3edbfe12487ba927a7e98d3efa593ec"
     },
     "anota2seq": {
-      "version": "1.0.0",
-      "content_hash": "ad45fb53d1b3b21bd5db0f4d575fcb28bf9976470ebd5c2c40ff198bd12a66d7"
+      "version": "1.1.0",
+      "content_hash": "8417235695576416ba19c323a202bb652a9bf5cba8ba825ce94548e52e0a4700"
     },
     "arriba": {
       "version": "1.0.0",
@@ -31,8 +31,8 @@
       "content_hash": "3ddaa9c7f33fa1ed257af6596eb91fa7c3fbe9cb7ebfa0c963d8705cf5fccf14"
     },
     "ataqv": {
-      "version": "1.0.0",
-      "content_hash": "183f58ac10180e1beade9ee6eeed8831925952137ae19e8d62b56f5285cf0a97"
+      "version": "1.1.0",
+      "content_hash": "1399b654455d411fad4832000e817de1c11dcf8b458525ca4c947d296bfffd28"
     },
     "bambu": {
       "version": "1.0.0",
@@ -71,12 +71,12 @@
       "content_hash": "c3839339b6d39e89679db03ca3cf2f83785e030e9c0378728531e2d7ff40c337"
     },
     "cellranger": {
-      "version": "1.0.0",
-      "content_hash": "cdc8d211e1602dba0c7739d4634e296b6b4aff8ce0d2fa4481a8e881802e94c6"
+      "version": "1.1.0",
+      "content_hash": "9d97355f747a15957f9838b8440935f199443bdc785346b48b01e16cf77ffb26"
     },
     "checkm2": {
-      "version": "1.0.0",
-      "content_hash": "6e2b9273b4f50608fed6fb8f4b0c8ba16a11c4e5df2e7fd530b6df9de5bd1102"
+      "version": "1.1.0",
+      "content_hash": "ea40c67d701a573b4e4ef10885c7df91a0ff32e64c0b1cf053d90c0955963c03"
     },
     "checkv": {
       "version": "1.0.0",
@@ -175,8 +175,8 @@
       "content_hash": "782c6b6e163bfa878d8d0fefc5e1e5c131cbd98354616d9e4a8c961e01b6a5d9"
     },
     "funcscan": {
-      "version": "1.0.0",
-      "content_hash": "1c6f32ae6f7075080e5b1eda1a4b7f742c482536678f733a4fc56d5182d53cdf"
+      "version": "1.1.0",
+      "content_hash": "7ab5a11e6e36ff3382485422be2901803dc411d913fdd388a5978848545bf762"
     },
     "fusioncatcher": {
       "version": "1.0.0",
@@ -275,8 +275,8 @@
       "content_hash": "abf30a47cb86f175bed9fcc96184c08b0c95eff0485d1c92bacdc422ac4ff403"
     },
     "mag": {
-      "version": "1.0.0",
-      "content_hash": "799f67a246fa65599020e15c41bceab1e0e5ddeaa75de51aa39de6ebd1534c4c"
+      "version": "1.1.0",
+      "content_hash": "c39cf656d3a1d2edb306eba82e0d558090f49f041623d4a8f013cd6a5beecf83"
     },
     "mcquant": {
       "version": "1.0.0",
@@ -359,12 +359,12 @@
       "content_hash": "a316cd6f70b7e05043c6eaddb37db5ba27c866c4da270cffdc42b917cfc9989c"
     },
     "prokka": {
-      "version": "1.0.0",
-      "content_hash": "8dffcc4dc600f19bf2b0ea72a688d0c5c9742daa61825ebeef339ac3a64164c6"
+      "version": "1.1.0",
+      "content_hash": "15b0f994d4c3f78a1d7d24905e47322261e186af7e83f7391f515a6dcd96ee82"
     },
     "proteinannotator": {
-      "version": "1.0.0",
-      "content_hash": "d2d63b9cc4069bdf71f448222911313280a8f5904dffc0a99859dc36c31e8d94"
+      "version": "1.1.0",
+      "content_hash": "33a9a3ee971b46280307693052390f509608d65c67cdf012060ced8f26fa1a5d"
     },
     "proteinfamilies": {
       "version": "1.0.0",

@@ -104,15 +104,15 @@ The import prunes what depends on an absent collection (RULES section 13):
 - **Alignment**: reads, aligned share, mean coverage, duplication and the mitochondrial to nuclear
   depth ratio; one table of the samples with the record of the picked sample beside it. The contig
   depth and the full tables are collapsed.
-- **Family**: samples by affected status, the parent-child IBS0 share and the sex check; the pedigree
+- **Family**: samples by affected status, the parent-child IBS0 share and the declared sex; the pedigree
   as a pedigree figure from the sample sheet (squares male, circles female, filled marks affected),
   beside the opposite homozygous share of every pair of samples, one bar each, coloured by the
   verdict. The pair table is collapsed.
 - **Callset**: PASS calls, Ts/Tv, het/hom ratio and calls by FILTER value; Ts/Tv and het/hom ratio
-  per sample as two sorted bars, with the usual range shaded (a click on a bar narrows the dashboard
+  per sample as two sorted bars, with the Ts/Tv bands shaded and the het/hom reference line drawn (a click on a bar narrows the dashboard
   to that sample). The descriptions say what the values mean: Ts/Tv about 2.0 to 2.1 for a genome and
-  2.8 to 3.0 for an exome, a lower value pointing to false positives; het/hom 1.5 to 2 for outbred
-  samples, lower with consanguinity or loss of heterozygosity, higher with contamination. The
+  2.8 to 3.0 for an exome, a lower value pointing to false positives; het/hom 2.0 expected under Hardy-Weinberg
+  (medians 1.4 to 2.0 by ancestry), lower with consanguinity or loss of heterozygosity, higher with contamination. The
   substitution spectrum is folded onto six classes, one bar per sample coloured by role like the two
   sorted bars. The karyotype of one sample (a brush on it
   filters the dashboard to that region; only the contigs that carry calls are drawn) and the

@@ -110,7 +110,9 @@ the fold-change plane (ribosome-bound against total mRNA, coloured by mode, the 
 strongest genes labelled), then the translation volcano (unlabelled, since its adjusted p
 plateaus and the top genes share one height) beside a volcano of any one of the four
 anota2seq analyses; each has a View switch to the QQ plot of its raw p-values. The dotted volcano lines are
-anota2seq's defaults, adjusted p 0.15 and a 1.2-fold change (0.263 in log2). Collapsed: the regulation table with the
+anota2seq's defaults: adjusted p 0.15, and a 1.2-fold change (0.263 in log2) for translation and buffering only,
+since anota2seq sets no minimum effect for total and ribosome-bound mRNA (the any-analysis volcano starts at 0
+and takes 0.263 from its effect cut control). Collapsed: the regulation table with the
 gene record beside it, across the four analyses. Filters: contrast, mode, gene and analysis.
 
 **ORF discovery.** Strip: the pooled ORFs (a ring by class), the ORFs Ribo-TISH and the ORFs
@@ -194,10 +196,13 @@ a narrower one. Nothing is set per tab or per tile.
 
 ## Method notes
 
-- **Regulatory mode** follows anota2seq's default selection: adjusted p below 0.15 and an
-  absolute effect of at least log2(1.2), with the APV slope inside [-1, 2] for translation
-  and [-2, 1] for buffering. Priority: translation, buffering, mRNA abundance (total and
-  ribosome-bound both significant with the same sign), otherwise not regulated.
+- **Regulatory mode** follows anota2seq's own selection (`anota2seqRun` defaults): adjusted p
+  below 0.15 for every analysis; for translation and buffering also an absolute effect of at
+  least log2(1.2) (`deltaPT`, `deltaTP`) and the APV slope inside [-1, 2] for translation
+  and [-2, 1] for buffering; no minimum effect for total and ribosome-bound mRNA (`deltaT`,
+  `deltaP` default to NULL; nf-core/riboseq `rna_lfc_threshold` and `ribo_lfc_threshold`
+  default to 0). Priority, as in `anota2seqRegModes`: translation, mRNA abundance (total and
+  ribosome-bound both significant with the same sign), buffering, otherwise not regulated.
 - **ORF key.** Ribo-TISH and RiboCode are compared on `chrom:strand:stop`, the genomic stop
   codon, so alternative start sites of one ORF collapse onto one row.
 - **Translational efficiency** is log2 of Ribo-seq CPM over RNA-seq CPM, computed from the
