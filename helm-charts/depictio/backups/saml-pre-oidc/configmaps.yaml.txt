@@ -1,0 +1,363 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-backend-config
+  namespace: {{ .Release.Namespace }}
+data:
+  DEPICTIO_CONTEXT: {{ .Values.backend.env.DEPICTIO_CONTEXT | quote }}
+  DEPICTIO_DEV_MODE: {{ .Values.backend.env.DEPICTIO_DEV_MODE | quote }}
+  DEPICTIO_LOGGING_VERBOSITY_LEVEL: {{ .Values.backend.env.DEPICTIO_LOGGING_VERBOSITY_LEVEL | quote }}
+  DEPICTIO_FASTAPI_SERVICE_NAME: {{ printf "%s-depictio-backend" .Release.Name | quote }}
+  DEPICTIO_FASTAPI_SERVICE_PORT: {{ .Values.backend.env.DEPICTIO_FASTAPI_SERVICE_PORT | quote }}
+  DEPICTIO_FASTAPI_PUBLIC_URL: {{ .Values.backend.env.DEPICTIO_FASTAPI_PUBLIC_URL | default (include "depictio.apiUrlWithProtocol" .) | quote }}
+  DEPICTIO_VIEWER_SERVICE_PORT: {{ .Values.backend.env.DEPICTIO_VIEWER_SERVICE_PORT | quote }}
+  DEPICTIO_VIEWER_SERVICE_NAME: {{ printf "%s-depictio-viewer" .Release.Name | quote }}
+  # Public viewer URL: the backend builds browser-facing redirect/link targets
+  # from it (magic-link login URLs, SAML ACS → /auth/magic hand-off).
+  DEPICTIO_VIEWER_PUBLIC_URL: {{ .Values.backend.env.DEPICTIO_VIEWER_PUBLIC_URL | default (include "depictio.frontendUrlWithProtocol" .) | quote }}
+  {{- if .Values.mongo.useOperator }}
+  DEPICTIO_MONGODB_SERVICE_NAME: {{ printf "%s-mongo-rs0" .Release.Name | quote }}
+  DEPICTIO_MONGODB_SERVICE_PORT: "27017"
+  DEPICTIO_MONGODB_AUTH_SOURCE: "admin"
+  {{- else }}
+  DEPICTIO_MONGODB_SERVICE_NAME: {{ printf "%s-mongo" .Release.Name | quote }}
+  DEPICTIO_MONGODB_SERVICE_PORT: {{ .Values.backend.env.DEPICTIO_MONGODB_SERVICE_PORT | quote }}
+  {{- end }}
+  DEPICTIO_MONGODB_WIPE: {{ .Values.backend.env.DEPICTIO_MONGODB_WIPE | quote }}
+
+  # Redis Cache Configuration
+  {{- if .Values.redis.enabled }}
+  DEPICTIO_CACHE_REDIS_HOST: {{ printf "%s-redis" .Release.Name | quote }}
+  DEPICTIO_CACHE_REDIS_PORT: {{ .Values.backend.env.DEPICTIO_CACHE_REDIS_PORT | default "6379" | quote }}
+  DEPICTIO_CACHE_REDIS_DB: {{ .Values.backend.env.DEPICTIO_CACHE_REDIS_DB | default "0" | quote }}
+  DEPICTIO_CACHE_ENABLE_REDIS_CACHE: {{ .Values.backend.env.DEPICTIO_CACHE_ENABLE_REDIS_CACHE | default "true" | quote }}
+
+  # Celery Configuration (uses Redis as broker)
+  DEPICTIO_CELERY_ENABLED: {{ .Values.celery.env.DEPICTIO_CELERY_ENABLED | quote }}
+  DEPICTIO_CELERY_BROKER_HOST: {{ printf "%s-redis" .Release.Name | quote }}
+  DEPICTIO_CELERY_BROKER_PORT: {{ .Values.backend.env.DEPICTIO_CELERY_BROKER_PORT | default "6379" | quote }}
+  DEPICTIO_CELERY_BROKER_DB: {{ .Values.backend.env.DEPICTIO_CELERY_BROKER_DB | default "1" | quote }}
+  DEPICTIO_CELERY_RESULT_BACKEND_HOST: {{ printf "%s-redis" .Release.Name | quote }}
+  DEPICTIO_CELERY_RESULT_BACKEND_PORT: {{ .Values.backend.env.DEPICTIO_CELERY_RESULT_BACKEND_PORT | default "6379" | quote }}
+  DEPICTIO_CELERY_RESULT_BACKEND_DB: {{ .Values.backend.env.DEPICTIO_CELERY_RESULT_BACKEND_DB | default "2" | quote }}
+  {{- else }}
+  DEPICTIO_CACHE_ENABLE_REDIS_CACHE: "false"
+  {{- end }}
+
+  # Authentication mode (defaults to authenticated mode)
+  DEPICTIO_AUTH_PUBLIC_MODE: {{ .Values.backend.env.DEPICTIO_AUTH_PUBLIC_MODE | default "false" | quote }}
+  DEPICTIO_AUTH_DEMO_MODE: {{ .Values.backend.env.DEPICTIO_AUTH_DEMO_MODE | default "false" | quote }}
+  DEPICTIO_AUTH_SINGLE_USER_MODE: {{ .Values.backend.env.DEPICTIO_AUTH_SINGLE_USER_MODE | default "false" | quote }}
+  DEPICTIO_AUTH_REGISTRATION_DISABLED: {{ .Values.backend.env.DEPICTIO_AUTH_REGISTRATION_DISABLED | default "false" | quote }}
+  # Blocks email+password sign-in, leaving Google OAuth as the only door in.
+  # The backend ignores it unless google_oauth_enabled is also set, so a
+  # half-done configuration cannot lock every user out. Not a secret, so it
+  # belongs here; the public-mode access code does not (see secrets.yaml).
+  DEPICTIO_AUTH_PASSWORD_LOGIN_DISABLED: {{ .Values.backend.env.DEPICTIO_AUTH_PASSWORD_LOGIN_DISABLED | default "false" | quote }}
+  DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL: {{ .Values.backend.env.DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL | default "anonymous@example.com" | quote }}
+  DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS: {{ .Values.backend.env.DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS | default "24" | quote }}
+
+  # Google OAuth Configuration
+  DEPICTIO_AUTH_GOOGLE_OAUTH_ENABLED: {{ .Values.backend.env.DEPICTIO_AUTH_GOOGLE_OAUTH_ENABLED | default "false" | quote }}
+  {{- if .Values.auth }}
+  DEPICTIO_AUTH_GOOGLE_OAUTH_CLIENT_ID: {{ .Values.auth.DEPICTIO_AUTH_GOOGLE_OAUTH_CLIENT_ID | default "" | quote }}
+  DEPICTIO_AUTH_GOOGLE_OAUTH_CLIENT_SECRET: {{ .Values.auth.DEPICTIO_AUTH_GOOGLE_OAUTH_CLIENT_SECRET | default "" | quote }}
+  DEPICTIO_AUTH_GOOGLE_OAUTH_REDIRECT_URI: {{ .Values.auth.DEPICTIO_AUTH_GOOGLE_OAUTH_REDIRECT_URI | default "" | quote }}
+  {{- else }}
+  DEPICTIO_AUTH_GOOGLE_OAUTH_CLIENT_ID: ""
+  DEPICTIO_AUTH_GOOGLE_OAUTH_CLIENT_SECRET: ""
+  DEPICTIO_AUTH_GOOGLE_OAUTH_REDIRECT_URI: ""
+  {{- end }}
+
+  # SAML SSO Configuration (the SP side of a deployment is set in its own values
+  # file; the IdP side — entity ID, SSO URL, certificate — belongs in the
+  # environment's secrets values, merged into `auth:`). The IdP signing certificate is
+  # public X.509 material — a ConfigMap is fine; no key material rides here.
+  # Empty strings are coerced to "unset" by the backend settings model.
+  DEPICTIO_AUTH_SAML_ENABLED: {{ .Values.backend.env.DEPICTIO_AUTH_SAML_ENABLED | default "false" | quote }}
+  {{- if .Values.auth }}
+  DEPICTIO_AUTH_SAML_IDP_ENTITY_ID: {{ .Values.auth.DEPICTIO_AUTH_SAML_IDP_ENTITY_ID | default "" | quote }}
+  DEPICTIO_AUTH_SAML_IDP_SSO_URL: {{ .Values.auth.DEPICTIO_AUTH_SAML_IDP_SSO_URL | default "" | quote }}
+  DEPICTIO_AUTH_SAML_IDP_CERT: {{ .Values.auth.DEPICTIO_AUTH_SAML_IDP_CERT | default "" | quote }}
+  DEPICTIO_AUTH_SAML_SP_ENTITY_ID: {{ .Values.auth.DEPICTIO_AUTH_SAML_SP_ENTITY_ID | default "" | quote }}
+  DEPICTIO_AUTH_SAML_SP_BASE_URL: {{ .Values.auth.DEPICTIO_AUTH_SAML_SP_BASE_URL | default "" | quote }}
+  DEPICTIO_AUTH_SAML_ATTRIBUTE_EMAIL: {{ .Values.auth.DEPICTIO_AUTH_SAML_ATTRIBUTE_EMAIL | default "" | quote }}
+  DEPICTIO_AUTH_SAML_LOGIN_LABEL: {{ .Values.auth.DEPICTIO_AUTH_SAML_LOGIN_LABEL | default "Sign in with SSO" | quote }}
+  # Which assertion attributes feed the group and profile sync. Each one left empty
+  # disables its part of the sync.
+  DEPICTIO_AUTH_SAML_ATTRIBUTE_GROUPS: {{ .Values.auth.DEPICTIO_AUTH_SAML_ATTRIBUTE_GROUPS | default "" | quote }}
+  DEPICTIO_AUTH_SAML_ATTRIBUTE_TITLE: {{ .Values.auth.DEPICTIO_AUTH_SAML_ATTRIBUTE_TITLE | default "" | quote }}
+  DEPICTIO_AUTH_SAML_ATTRIBUTE_DISPLAY_NAME: {{ .Values.auth.DEPICTIO_AUTH_SAML_ATTRIBUTE_DISPLAY_NAME | default "" | quote }}
+  DEPICTIO_AUTH_SAML_ATTRIBUTE_LOGIN: {{ .Values.auth.DEPICTIO_AUTH_SAML_ATTRIBUTE_LOGIN | default "" | quote }}
+  {{- end }}
+
+  # Instance branding (issue #397) — see examples/values-branding.yaml.
+  # Forwarded by prefix rather than as an explicit key list: BrandingConfig
+  # (api/v1/configs/settings_models.py, env_prefix DEPICTIO_BRANDING_) already
+  # owns which names are valid, and a second copy here would drift from it.
+  # Only keys the operator actually set are emitted — "" is not "unset" to
+  # pydantic, it is an invalid colour, and one of those discards the whole
+  # flat branding layer with a warning.
+  {{- range $key, $value := .Values.backend.env }}
+  {{- if and (hasPrefix "DEPICTIO_BRANDING_" $key) $value }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}
+  {{- end }}
+
+  # Genome browser (jbrowse component + genomic_tracks collections). Forwarded
+  # by prefix like branding: JBrowseConfig (env_prefix DEPICTIO_JBROWSE_) owns
+  # the names. The remote-S3 secret key is a credential: pass it through a
+  # Secret (secrets.jbrowseRemoteS3SecretKey), never here.
+  {{- range $key, $value := .Values.backend.env }}
+  {{- if and (hasPrefix "DEPICTIO_JBROWSE_" $key) (ne $key "DEPICTIO_JBROWSE_REMOTE_S3_SECRET_KEY") (ne (toString $value) "") }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}
+  {{- end }}
+
+  # Performance
+  DEPICTIO_FASTAPI_WORKERS: {{ .Values.backend.env.DEPICTIO_FASTAPI_WORKERS | quote }}
+  # Analytics
+  DEPICTIO_ANALYTICS_ENABLED: {{ .Values.backend.env.DEPICTIO_ANALYTICS_ENABLED | default "true" | quote }}
+  DEPICTIO_ANALYTICS_SESSION_TIMEOUT_MINUTES: {{ .Values.backend.env.DEPICTIO_ANALYTICS_SESSION_TIMEOUT_MINUTES | default "30" | quote }}
+  DEPICTIO_ANALYTICS_CLEANUP_DAYS: {{ .Values.backend.env.DEPICTIO_ANALYTICS_CLEANUP_DAYS | default "90" | quote }}
+  DEPICTIO_ANALYTICS_TRACK_ANONYMOUS_USERS: {{ .Values.backend.env.DEPICTIO_ANALYTICS_TRACK_ANONYMOUS_USERS | default "true" | quote }}
+  DEPICTIO_ANALYTICS_CLEANUP_ENABLED: {{ .Values.backend.env.DEPICTIO_ANALYTICS_CLEANUP_ENABLED | default "true" | quote }}
+  # Anonymous installation telemetry (see docs/telemetry.md). Enabled by default;
+  # set backend.env.DEPICTIO_TELEMETRY_ENABLED=false to opt out. The deployment
+  # kind is stated outright rather than guessed — a Helm pod and a hand-rolled
+  # Kubernetes pod are indistinguishable from the inside.
+  DEPICTIO_TELEMETRY_ENABLED: {{ .Values.backend.env.DEPICTIO_TELEMETRY_ENABLED | default "true" | quote }}
+  DEPICTIO_TELEMETRY_DEPLOYMENT_KIND: {{ .Values.backend.env.DEPICTIO_TELEMETRY_DEPLOYMENT_KIND | default "helm" | quote }}
+  # Configured (not live) replica count and CPU/memory requests/limits, taken from
+  # backend.replicas / backend.resources — the chart already knows these at
+  # template time, so no Kubernetes API call or extra RBAC is needed to report
+  # them. Parsed into millicores/MiB server-side before they can reach the
+  # telemetry payload; never sent as raw strings. See docs/telemetry.md.
+  DEPICTIO_TELEMETRY_REPLICAS: {{ .Values.backend.env.DEPICTIO_TELEMETRY_REPLICAS | default .Values.backend.replicas | quote }}
+  DEPICTIO_TELEMETRY_CPU_REQUEST: {{ .Values.backend.env.DEPICTIO_TELEMETRY_CPU_REQUEST | default .Values.backend.resources.requests.cpu | quote }}
+  DEPICTIO_TELEMETRY_CPU_LIMIT: {{ .Values.backend.env.DEPICTIO_TELEMETRY_CPU_LIMIT | default .Values.backend.resources.limits.cpu | quote }}
+  DEPICTIO_TELEMETRY_MEMORY_REQUEST: {{ .Values.backend.env.DEPICTIO_TELEMETRY_MEMORY_REQUEST | default .Values.backend.resources.requests.memory | quote }}
+  DEPICTIO_TELEMETRY_MEMORY_LIMIT: {{ .Values.backend.env.DEPICTIO_TELEMETRY_MEMORY_LIMIT | default .Values.backend.resources.limits.memory | quote }}
+  DEPICTIO_TELEMETRY_INCLUDE_USAGE_METRICS: {{ .Values.backend.env.DEPICTIO_TELEMETRY_INCLUDE_USAGE_METRICS | default "true" | quote }}
+  DEPICTIO_TELEMETRY_DEBUG: {{ .Values.backend.env.DEPICTIO_TELEMETRY_DEBUG | default "false" | quote }}
+  # Release check (admins are told when a newer Depictio exists). Each key is
+  # rendered only when set: an unset ENABLED leaves the /admin toggle usable, and
+  # any value forces it and locks the toggle. `hasKey`, not `with`, for the
+  # boolean, since `with` would skip a literal `false`.
+  {{- if hasKey .Values.backend.env "DEPICTIO_VERSION_CHECK_ENABLED" }}
+  DEPICTIO_VERSION_CHECK_ENABLED: {{ .Values.backend.env.DEPICTIO_VERSION_CHECK_ENABLED | quote }}
+  {{- end }}
+  {{- with .Values.backend.env.DEPICTIO_VERSION_CHECK_INTERVAL_HOURS }}
+  DEPICTIO_VERSION_CHECK_INTERVAL_HOURS: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.backend.env.DEPICTIO_VERSION_CHECK_REPOSITORY }}
+  DEPICTIO_VERSION_CHECK_REPOSITORY: {{ . | quote }}
+  {{- end }}
+  # Which view /dashboards opens in for someone who never picked one, and the
+  # geometry of the thumbnails it shows. See .env.example.
+  DEPICTIO_VIEWER_DASHBOARDS_DEFAULT_VIEW: {{ .Values.backend.env.DEPICTIO_VIEWER_DASHBOARDS_DEFAULT_VIEW | default "table" | quote }}
+  DEPICTIO_PERFORMANCE_SCREENSHOT_VIEWPORT_WIDTH: {{ .Values.backend.env.DEPICTIO_PERFORMANCE_SCREENSHOT_VIEWPORT_WIDTH | default "1440" | quote }}
+  DEPICTIO_PERFORMANCE_SCREENSHOT_VIEWPORT_HEIGHT: {{ .Values.backend.env.DEPICTIO_PERFORMANCE_SCREENSHOT_VIEWPORT_HEIGHT | default "900" | quote }}
+  DEPICTIO_PERFORMANCE_SCREENSHOT_SCALE: {{ .Values.backend.env.DEPICTIO_PERFORMANCE_SCREENSHOT_SCALE | default "2.0" | quote }}
+  # Dashboard feedback link, served to the SPA through /utils/public-config.
+  # Both halves are required: the flag alone renders nothing, and so does a URL
+  # without it. The URL is a template the browser fills with {dashboard},
+  # {dashboard_id}, {tab} and {url}.
+  DEPICTIO_FEEDBACK_ENABLED: {{ .Values.backend.env.DEPICTIO_FEEDBACK_ENABLED | default "false" | quote }}
+  DEPICTIO_FEEDBACK_URL: {{ .Values.backend.env.DEPICTIO_FEEDBACK_URL | default "" | quote }}
+  DEPICTIO_FEEDBACK_LABEL: {{ .Values.backend.env.DEPICTIO_FEEDBACK_LABEL | default "Feedback" | quote }}
+  # Protein structure resolver for molecule_3d (AlphaFold DB, UniProt, ESMFold).
+  # Off by default: accessions, gene names or sequences leave the server.
+  DEPICTIO_STRUCTURE_RESOLVER_ENABLED: {{ .Values.backend.env.DEPICTIO_STRUCTURE_RESOLVER_ENABLED | default "false" | quote }}
+  DEPICTIO_GOOGLE_ANALYTICS_ENABLED: {{ .Values.backend.env.DEPICTIO_GOOGLE_ANALYTICS_ENABLED | default "false" | quote }}
+  {{- if .Values.googleAnalytics }}
+  DEPICTIO_GOOGLE_ANALYTICS_TRACKING_ID: {{ .Values.googleAnalytics.DEPICTIO_GOOGLE_ANALYTICS_TRACKING_ID | default "G-XXXXXXXXXX" | quote }}
+  {{- else }}
+  DEPICTIO_GOOGLE_ANALYTICS_TRACKING_ID: {{ .Values.backend.env.DEPICTIO_GOOGLE_ANALYTICS_TRACKING_ID | default "G-XXXXXXXXXX" | quote }}
+  {{- end }}
+  # Comment threads are for editors and owners unless this is "true": then anyone
+  # with viewer access to a project can read and write them (not moderate).
+  DEPICTIO_COMMENTS_VIEWERS_CAN_COMMENT: {{ .Values.backend.env.DEPICTIO_COMMENTS_VIEWERS_CAN_COMMENT | default "false" | quote }}
+  # YAML Dashboard Sync configuration (disabled for K8s by default)
+  DEPICTIO_DASHBOARD_YAML_ENABLED: {{ .Values.backend.env.DEPICTIO_DASHBOARD_YAML_ENABLED | default "false" | quote }}
+  DEPICTIO_DASHBOARD_YAML_WATCHER_AUTO_START: {{ .Values.backend.env.DEPICTIO_DASHBOARD_YAML_WATCHER_AUTO_START | default "false" | quote }}
+  DEPICTIO_DASHBOARD_YAML_WATCH_LOCAL_DIR: {{ .Values.backend.env.DEPICTIO_DASHBOARD_YAML_WATCH_LOCAL_DIR | default "false" | quote }}
+  DEPICTIO_DASHBOARD_YAML_AUTO_EXPORT_ON_SAVE: {{ .Values.backend.env.DEPICTIO_DASHBOARD_YAML_AUTO_EXPORT_ON_SAVE | default "false" | quote }}
+  # Remote data sources (URL / manifest scan modes): policy for the SSRF
+  # gateway in api/v1/remote_fetch.py. Explicit keys with the safe defaults
+  # (this ConfigMap is an allowlist, an unlisted key is silently dropped).
+  # Mirrored into the celery ConfigMap below; the two must agree.
+  DEPICTIO_REMOTE_ALLOW_HTTP: {{ .Values.backend.env.DEPICTIO_REMOTE_ALLOW_HTTP | default "false" | quote }}
+  DEPICTIO_REMOTE_URL_ALLOWLIST: {{ .Values.backend.env.DEPICTIO_REMOTE_URL_ALLOWLIST | default "" | quote }}
+  DEPICTIO_REMOTE_URL_DENYLIST: {{ .Values.backend.env.DEPICTIO_REMOTE_URL_DENYLIST | default "" | quote }}
+  DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS: {{ .Values.backend.env.DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS | default "" | quote }}
+  DEPICTIO_REMOTE_CREDENTIALED_S3_BUCKETS: {{ .Values.backend.env.DEPICTIO_REMOTE_CREDENTIALED_S3_BUCKETS | default "" | quote }}
+  DEPICTIO_REMOTE_MAX_DOWNLOAD_BYTES: {{ .Values.backend.env.DEPICTIO_REMOTE_MAX_DOWNLOAD_BYTES | default "524288000" | quote }}
+  DEPICTIO_REMOTE_TIMEOUT_S: {{ .Values.backend.env.DEPICTIO_REMOTE_TIMEOUT_S | default "30" | quote }}
+  DEPICTIO_REMOTE_MAX_REDIRECTS: {{ .Values.backend.env.DEPICTIO_REMOTE_MAX_REDIRECTS | default "3" | quote }}
+  # Component export / embed API (/depictio/api/v1/export). Off by default:
+  # serving embeds relaxes X-Frame-Options and CSP frame-ancestors on that path.
+  # Backend only — the worker never serves these routes.
+  DEPICTIO_FASTAPI_EMBED_ENABLED: {{ .Values.backend.env.DEPICTIO_FASTAPI_EMBED_ENABLED | default "false" | quote }}
+  DEPICTIO_FASTAPI_EMBED_ALLOWED_ORIGINS: {{ .Values.backend.env.DEPICTIO_FASTAPI_EMBED_ALLOWED_ORIGINS | default "" | quote }}
+  # S3 storage configuration.
+  # NOTE: DEPICTIO_S3_ROOT_USER and DEPICTIO_S3_ROOT_PASSWORD (and their
+  # legacy DEPICTIO_MINIO_* names) are
+  # intentionally NOT in this ConfigMap. ConfigMaps are world-readable to
+  # anything in-cluster (incl. exec/describe) and ship in etcd unencrypted
+  # by default. Both values are injected from the
+  # ``{{ printf "%s-depictio-secrets" .Release.Name }}`` Secret via the
+  # backend / celery / S3 store Deployment ``env`` blocks. Adding them here
+  # would silently re-introduce the leak.
+  {{- $s3 := include "depictio.s3" . | fromYaml }}
+  {{- $s3Env := $s3.env | default dict }}
+  {{- $s3Bucket := index $s3Env "DEPICTIO_S3_BUCKET" | default "depictio-bucket" }}
+  {{- $s3PublicUrl := index $s3Env "DEPICTIO_S3_PUBLIC_URL" }}
+  {{- $s3ServicePort := index $s3Env "DEPICTIO_S3_SERVICE_PORT" | default "9000" }}
+  DEPICTIO_S3_BUCKET: {{ $s3Bucket | quote }}
+  {{- if not $s3.enabled }}
+  # External S3 configuration (when the bundled store is disabled)
+  DEPICTIO_S3_PUBLIC_URL: {{ $s3PublicUrl | quote }}
+  DEPICTIO_S3_EXTERNAL_SERVICE: "true"
+  {{- else }}
+  # Bundled S3 store (SeaweedFS) service configuration
+  DEPICTIO_S3_PUBLIC_URL: {{ include "depictio.s3UrlWithProtocol" . | quote }}
+  DEPICTIO_S3_EXTERNAL_SERVICE: "false"
+  {{- /* Service name keeps the legacy "-minio" suffix (see services.yaml). */}}
+  DEPICTIO_S3_SERVICE_NAME: {{ printf "%s-minio" .Release.Name | quote }}
+  DEPICTIO_S3_SERVICE_PORT: {{ $s3ServicePort | quote }}
+  {{- end }}
+  {{- /* Legacy DEPICTIO_MINIO_* names, same values: keeps an older image
+         pinned via backend/celery image tags working. Remove in a later
+         release once all supported images read DEPICTIO_S3_*. */}}
+  DEPICTIO_MINIO_BUCKET: {{ $s3Bucket | quote }}
+  {{- if not $s3.enabled }}
+  DEPICTIO_MINIO_PUBLIC_URL: {{ $s3PublicUrl | quote }}
+  DEPICTIO_MINIO_EXTERNAL_SERVICE: "true"
+  {{- else }}
+  DEPICTIO_MINIO_PUBLIC_URL: {{ include "depictio.s3UrlWithProtocol" . | quote }}
+  DEPICTIO_MINIO_EXTERNAL_SERVICE: "false"
+  DEPICTIO_MINIO_SERVICE_NAME: {{ printf "%s-minio" .Release.Name | quote }}
+  DEPICTIO_MINIO_SERVICE_PORT: {{ $s3ServicePort | quote }}
+  {{- end }}
+
+---
+# Celery Worker ConfigMap
+{{- if .Values.celery.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-celery-config
+  namespace: {{ .Release.Namespace }}
+data:
+  DEPICTIO_CONTEXT: "server"
+  DEPICTIO_DEV_MODE: {{ .Values.backend.env.DEPICTIO_DEV_MODE | quote }}
+  DEPICTIO_LOGGING_VERBOSITY_LEVEL: {{ .Values.backend.env.DEPICTIO_LOGGING_VERBOSITY_LEVEL | quote }}
+  DEPICTIO_CELERY_WORKERS: {{ .Values.celery.env.DEPICTIO_CELERY_WORKERS | quote }}
+  DEPICTIO_CELERY_ENABLED: {{ .Values.celery.env.DEPICTIO_CELERY_ENABLED | quote }}
+
+  # Authentication mode — MUST mirror the backend (sourced from the same
+  # backend.env keys). The screenshot task validates dashboard ownership
+  # inside the worker; without these the worker defaults to authenticated
+  # mode and rejects single-user/public-mode captures as "User is not
+  # dashboard owner" (HTTP 500) even though the backend allowed the request.
+  DEPICTIO_AUTH_PUBLIC_MODE: {{ .Values.backend.env.DEPICTIO_AUTH_PUBLIC_MODE | default "false" | quote }}
+  DEPICTIO_AUTH_DEMO_MODE: {{ .Values.backend.env.DEPICTIO_AUTH_DEMO_MODE | default "false" | quote }}
+  DEPICTIO_AUTH_SINGLE_USER_MODE: {{ .Values.backend.env.DEPICTIO_AUTH_SINGLE_USER_MODE | default "false" | quote }}
+  DEPICTIO_AUTH_REGISTRATION_DISABLED: {{ .Values.backend.env.DEPICTIO_AUTH_REGISTRATION_DISABLED | default "false" | quote }}
+  DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL: {{ .Values.backend.env.DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL | default "anonymous@example.com" | quote }}
+  DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS: {{ .Values.backend.env.DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS | default "24" | quote }}
+
+  # Branding — must mirror the backend for the same reason the auth block
+  # does: the worker renders figures too, and the brand colorway/template is
+  # applied on that render path. Without these the worker would fall back to
+  # the stock palette and screenshots would not match the live dashboard.
+  {{- range $key, $value := .Values.backend.env }}
+  {{- if and (hasPrefix "DEPICTIO_BRANDING_" $key) $value }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}
+  {{- end }}
+
+  # Remote data source policy: must mirror the backend ConfigMap above (same
+  # backend.env keys). The worker performs the remote reads the API enqueues,
+  # so a mismatch would let one process accept a URL the other rejects.
+  DEPICTIO_REMOTE_ALLOW_HTTP: {{ .Values.backend.env.DEPICTIO_REMOTE_ALLOW_HTTP | default "false" | quote }}
+  DEPICTIO_REMOTE_URL_ALLOWLIST: {{ .Values.backend.env.DEPICTIO_REMOTE_URL_ALLOWLIST | default "" | quote }}
+  DEPICTIO_REMOTE_URL_DENYLIST: {{ .Values.backend.env.DEPICTIO_REMOTE_URL_DENYLIST | default "" | quote }}
+  DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS: {{ .Values.backend.env.DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS | default "" | quote }}
+  DEPICTIO_REMOTE_CREDENTIALED_S3_BUCKETS: {{ .Values.backend.env.DEPICTIO_REMOTE_CREDENTIALED_S3_BUCKETS | default "" | quote }}
+  DEPICTIO_REMOTE_MAX_DOWNLOAD_BYTES: {{ .Values.backend.env.DEPICTIO_REMOTE_MAX_DOWNLOAD_BYTES | default "524288000" | quote }}
+  DEPICTIO_REMOTE_TIMEOUT_S: {{ .Values.backend.env.DEPICTIO_REMOTE_TIMEOUT_S | default "30" | quote }}
+  DEPICTIO_REMOTE_MAX_REDIRECTS: {{ .Values.backend.env.DEPICTIO_REMOTE_MAX_REDIRECTS | default "3" | quote }}
+
+  # Redis/Celery broker settings
+  {{- if .Values.redis.enabled }}
+  DEPICTIO_CELERY_BROKER_HOST: {{ printf "%s-redis" .Release.Name | quote }}
+  DEPICTIO_CELERY_BROKER_PORT: {{ .Values.backend.env.DEPICTIO_CELERY_BROKER_PORT | default "6379" | quote }}
+  DEPICTIO_CELERY_BROKER_DB: {{ .Values.backend.env.DEPICTIO_CELERY_BROKER_DB | default "1" | quote }}
+  DEPICTIO_CELERY_RESULT_BACKEND_HOST: {{ printf "%s-redis" .Release.Name | quote }}
+  DEPICTIO_CELERY_RESULT_BACKEND_PORT: {{ .Values.backend.env.DEPICTIO_CELERY_RESULT_BACKEND_PORT | default "6379" | quote }}
+  DEPICTIO_CELERY_RESULT_BACKEND_DB: {{ .Values.backend.env.DEPICTIO_CELERY_RESULT_BACKEND_DB | default "2" | quote }}
+  DEPICTIO_CACHE_REDIS_HOST: {{ printf "%s-redis" .Release.Name | quote }}
+  DEPICTIO_CACHE_REDIS_PORT: {{ .Values.backend.env.DEPICTIO_CACHE_REDIS_PORT | default "6379" | quote }}
+  DEPICTIO_CACHE_REDIS_DB: {{ .Values.backend.env.DEPICTIO_CACHE_REDIS_DB | default "0" | quote }}
+  DEPICTIO_CACHE_ENABLE_REDIS_CACHE: {{ .Values.backend.env.DEPICTIO_CACHE_ENABLE_REDIS_CACHE | default "true" | quote }}
+  {{- else }}
+  DEPICTIO_CACHE_ENABLE_REDIS_CACHE: "false"
+  {{- end }}
+
+  # Service settings
+  {{- if .Values.mongo.useOperator }}
+  DEPICTIO_MONGODB_SERVICE_NAME: {{ printf "%s-mongo-rs0" .Release.Name | quote }}
+  DEPICTIO_MONGODB_SERVICE_PORT: "27017"
+  DEPICTIO_MONGODB_AUTH_SOURCE: "admin"
+  {{- else }}
+  DEPICTIO_MONGODB_SERVICE_NAME: {{ printf "%s-mongo" .Release.Name | quote }}
+  DEPICTIO_MONGODB_SERVICE_PORT: {{ .Values.backend.env.DEPICTIO_MONGODB_SERVICE_PORT | quote }}
+  {{- end }}
+  DEPICTIO_FASTAPI_SERVICE_NAME: {{ printf "%s-depictio-backend" .Release.Name | quote }}
+  DEPICTIO_FASTAPI_SERVICE_PORT: {{ .Values.backend.env.DEPICTIO_FASTAPI_SERVICE_PORT | quote }}
+  DEPICTIO_FASTAPI_PUBLIC_URL: {{ .Values.backend.env.DEPICTIO_FASTAPI_PUBLIC_URL | default (include "depictio.apiUrlWithProtocol" .) | quote }}
+  DEPICTIO_VIEWER_SERVICE_NAME: {{ printf "%s-depictio-viewer" .Release.Name | quote }}
+  # Viewer Service exposes nginx on port 80.
+  DEPICTIO_VIEWER_SERVICE_PORT: {{ .Values.viewer.service.httpPort | quote }}
+
+  # S3 storage configuration.
+  # NOTE: DEPICTIO_S3_ROOT_USER and DEPICTIO_S3_ROOT_PASSWORD (and their
+  # legacy DEPICTIO_MINIO_* names) are
+  # intentionally NOT in this ConfigMap. ConfigMaps are world-readable to
+  # anything in-cluster (incl. exec/describe) and ship in etcd unencrypted
+  # by default. Both values are injected from the
+  # ``{{ printf "%s-depictio-secrets" .Release.Name }}`` Secret via the
+  # backend / celery / S3 store Deployment ``env`` blocks. Adding them here
+  # would silently re-introduce the leak.
+  {{- $s3 := include "depictio.s3" . | fromYaml }}
+  {{- $s3Env := $s3.env | default dict }}
+  {{- $s3Bucket := index $s3Env "DEPICTIO_S3_BUCKET" | default "depictio-bucket" }}
+  {{- $s3PublicUrl := index $s3Env "DEPICTIO_S3_PUBLIC_URL" }}
+  {{- $s3ServicePort := index $s3Env "DEPICTIO_S3_SERVICE_PORT" | default "9000" }}
+  DEPICTIO_S3_BUCKET: {{ $s3Bucket | quote }}
+  {{- if not $s3.enabled }}
+  DEPICTIO_S3_PUBLIC_URL: {{ $s3PublicUrl | quote }}
+  DEPICTIO_S3_EXTERNAL_SERVICE: "true"
+  {{- else }}
+  DEPICTIO_S3_PUBLIC_URL: {{ include "depictio.s3UrlWithProtocol" . | quote }}
+  DEPICTIO_S3_EXTERNAL_SERVICE: "false"
+  {{- /* Service name keeps the legacy "-minio" suffix (see services.yaml). */}}
+  DEPICTIO_S3_SERVICE_NAME: {{ printf "%s-minio" .Release.Name | quote }}
+  DEPICTIO_S3_SERVICE_PORT: {{ $s3ServicePort | quote }}
+  {{- end }}
+  {{- /* Legacy DEPICTIO_MINIO_* names, same values: keeps an older image
+         pinned via backend/celery image tags working. Remove in a later
+         release once all supported images read DEPICTIO_S3_*. */}}
+  DEPICTIO_MINIO_BUCKET: {{ $s3Bucket | quote }}
+  {{- if not $s3.enabled }}
+  DEPICTIO_MINIO_PUBLIC_URL: {{ $s3PublicUrl | quote }}
+  DEPICTIO_MINIO_EXTERNAL_SERVICE: "true"
+  {{- else }}
+  DEPICTIO_MINIO_PUBLIC_URL: {{ include "depictio.s3UrlWithProtocol" . | quote }}
+  DEPICTIO_MINIO_EXTERNAL_SERVICE: "false"
+  DEPICTIO_MINIO_SERVICE_NAME: {{ printf "%s-minio" .Release.Name | quote }}
+  DEPICTIO_MINIO_SERVICE_PORT: {{ $s3ServicePort | quote }}
+  {{- end }}
+{{- end }}

@@ -73,6 +73,58 @@ under the data keys `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` (legacy names kept
 the chart reads the generated password back through them on upgrade). Override them only if
 custom values are required.
 
+### Single sign-on (OpenID Connect)
+
+Any OpenID Connect provider (Keycloak, Authentik, Microsoft Entra ID, Google, ...) can be added
+under `oidc.providers`. The list is rendered as JSON into `DEPICTIO_AUTH_OIDC_PROVIDERS`.
+
+```yaml
+oidc:
+  providers:
+    - id: keycloak                 # [a-z0-9][a-z0-9_-]{0,31}, used in URLs
+      label: "Sign in with SSO"    # button text
+      enabled: true
+      issuer: "https://idp.example.org/realms/example"
+      scopes: ["openid", "email", "profile"]
+      claims: {email: email, groups: groups, display_name: name, login: preferred_username}
+```
+
+Client credentials never go in `oidc.providers`. Put them in a values file kept out of the
+repository (or an external secret manager); the chart stores them in the Secret and exposes
+them as `DEPICTIO_AUTH_OIDC_<ID>_CLIENT_ID` / `_CLIENT_SECRET` (`<ID>` is the provider id,
+upper-cased, `-` replaced by `_`):
+
+```yaml
+secrets:
+  oidcClients:
+    keycloak:
+      clientId: "<client-id>"
+      clientSecret: "<client-secret>"
+```
+
+Register this redirect URI at the identity provider:
+
+```
+https://<api-host>/depictio/api/v1/auth/oidc/<id>/callback
+```
+
+Related switches in `backend.env`: `DEPICTIO_AUTH_REGISTRATION_DISABLED` (SSO becomes login-only
+for pre-provisioned accounts) and `DEPICTIO_AUTH_PASSWORD_LOGIN_DISABLED` (SSO-only mode, effective
+only while at least one provider is enabled and configured). Optional provider keys (`discovery_url`,
+`redirect_uri`, `assume_email_verified`, `token_endpoint_auth_method`, `authorize_params`,
+`fetch_userinfo`, `sso_provider`) are described in `depictio/api/v1/configs/settings_models.py`.
+
+**SAML is no longer supported.** The `DEPICTIO_AUTH_SAML_*` variables are ignored and the backend
+logs an error naming each one with its OIDC replacement (for example `ATTRIBUTE_GROUPS` becomes
+`claims.groups`). OIDC claim names can differ from SAML attribute names: check them against the
+identity provider's mappers.
+
+**Legacy Google keys (deprecated, removed in a later release).** `backend.env.DEPICTIO_AUTH_GOOGLE_OAUTH_ENABLED`
+and `auth.DEPICTIO_AUTH_GOOGLE_OAUTH_CLIENT_ID` / `_CLIENT_SECRET` / `_REDIRECT_URI` still work and map onto
+a provider with id `google`. The client secret is now carried by the Secret rather than the ConfigMap.
+To migrate, declare a `google` entry in `oidc.providers` with its credentials in `secrets.oidcClients.google`;
+an explicit `google` entry takes precedence over the legacy keys.
+
 ### MongoDB parameters
 
 | Parameter | Description | Default |
