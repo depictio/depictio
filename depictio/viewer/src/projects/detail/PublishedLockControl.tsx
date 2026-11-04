@@ -3,8 +3,8 @@ import { Button, Group, Modal, Stack, Text, TextInput } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { lockProject, unlockProject } from 'depictio-react-core';
 
-/** Confirmation for the admin-only Lock / Unlock of a project's published
- *  read-only state. Opened from the page head's Publish menu. */
+/** Confirmation for the admin-only Lock / Unlock of a project's editing.
+ *  Opened from the Editing row of the Permissions page. */
 export const PublishedLockModal: React.FC<{
   opened: boolean;
   onClose: () => void;
@@ -28,7 +28,7 @@ export const PublishedLockModal: React.FC<{
       else await lockProject(projectId, r);
       notifications.show({
         color: 'green',
-        message: locked ? 'Project unlocked.' : 'Project published (read-only).',
+        message: locked ? 'Editing unlocked.' : 'Editing locked: the project is read-only.',
       });
       close();
       onChanged();
@@ -47,14 +47,14 @@ export const PublishedLockModal: React.FC<{
     <Modal
       opened={opened}
       onClose={close}
-      title={locked ? 'Unlock project' : 'Publish project read-only'}
+      title={locked ? 'Unlock editing' : 'Lock editing'}
       centered
     >
       <Stack gap="sm">
         <Text size="sm">
           {locked
-            ? 'Editing of the project and its dashboards will be allowed again.'
-            : 'Dashboards and data of this project can no longer be edited until an administrator unlocks it.'}
+            ? 'Owners and editors will be able to change the dashboards and data again.'
+            : 'Nobody, owners included, can change the dashboards or data until an administrator unlocks editing. Who can view the project does not change.'}
         </Text>
         <TextInput
           label="Reason (optional)"
@@ -66,7 +66,7 @@ export const PublishedLockModal: React.FC<{
             Cancel
           </Button>
           <Button color={locked ? 'orange' : 'blue'} loading={busy} onClick={confirm}>
-            {locked ? 'Unlock' : 'Publish read-only'}
+            {locked ? 'Unlock editing' : 'Lock editing'}
           </Button>
         </Group>
       </Stack>

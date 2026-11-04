@@ -37,7 +37,7 @@ const ProjectActionsMenu: React.FC<ProjectActionsMenuProps> = ({
   const mutable = canMutate && !locked;
   const lockTip = (node: React.ReactElement) =>
     locked ? (
-      <Tooltip label="Published (read-only)" position="left" withinPortal>
+      <Tooltip label="Read-only: editing is locked" position="left" withinPortal>
         <div>{node}</div>
       </Tooltip>
     ) : (
@@ -102,7 +102,7 @@ const ProjectActionsMenu: React.FC<ProjectActionsMenuProps> = ({
             onClick={() => setPushOpen(true)}
             data-testid="project-push-menu-item"
           >
-            Push to another instance…
+            Migrate to another instance…
           </Menu.Item>
         )}
         <Menu.Divider />

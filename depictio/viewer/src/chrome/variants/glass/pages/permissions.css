@@ -60,6 +60,10 @@
   background: var(--gl-accent-soft);
   color: var(--gl-accent-fg);
 }
+/* Visibility and the editing lock sit as two rows of one section. */
+:root[data-chrome='glass'] .gp-main .pm-visibility + .pm-visibility {
+  margin-top: 10px;
+}
 :root[data-chrome='glass'] .gp-main .pm-visibility-body {
   flex: 1;
   min-width: 0;

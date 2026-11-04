@@ -3,7 +3,8 @@ import { Badge, Tooltip } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import type { PublishedLock } from 'depictio-react-core';
 
-/** Shown when a project (or its dashboards) is published read-only. */
+/** Shown when editing of a project (or its dashboards) is locked. Says nothing
+ *  about visibility: a read-only project can be public or private. */
 export const PublishedLockBadge: React.FC<{
   lock?: Pick<PublishedLock, 'locked_at' | 'reason'> &
     Partial<Pick<PublishedLock, 'locked_by_email' | 'source'>> | null;
@@ -17,6 +18,7 @@ export const PublishedLockBadge: React.FC<{
       w={300}
       label={
         <div>
+          <div>Editing is locked: nobody can change it, owners included.</div>
           <div>Locked at: {lock.locked_at}</div>
           {lock.reason && <div>Reason: {lock.reason}</div>}
           {by && <div>By: {by}</div>}
@@ -31,7 +33,7 @@ export const PublishedLockBadge: React.FC<{
         leftSection={<Icon icon="mdi:lock-outline" width={12} />}
         style={{ cursor: 'default' }}
       >
-        Published (read-only)
+        Read-only
       </Badge>
     </Tooltip>
   );

@@ -35,6 +35,7 @@ import {
   Database,
   Globe,
   Lock,
+  PenLine,
   ShieldCheck,
   TriangleAlert,
   UserMinus,
@@ -66,6 +67,7 @@ import { useCurrentUser } from '../../hooks/useCurrentUser';
 import { AppSidebar, LoadErrorCard } from '../../chrome';
 import { usePageTitle } from '../../branding';
 import { AccessOverview, GroupMembersPreview, useEffectiveAccess } from './AccessOverview';
+import { PublishedLockModal } from './PublishedLockControl';
 
 type Role = 'Owner' | 'Editor' | 'Viewer';
 const ROLES: Role[] = ['Owner', 'Editor', 'Viewer'];
@@ -292,6 +294,8 @@ const PermissionsApp: React.FC = () => {
   // the modal; the API call fires on confirm.
   const [pendingPublic, setPendingPublic] = useState<boolean | null>(null);
   const [visibilityBusy, setVisibilityBusy] = useState(false);
+  // Lock / unlock editing (admins): the switch only opens the confirmation.
+  const [lockModalOpen, setLockModalOpen] = useState(false);
 
   usePageTitle('Project Permissions');
   const glass = useGlassPages();
@@ -828,6 +832,21 @@ const PermissionsApp: React.FC = () => {
   const shownPublic = pendingPublic !== null ? pendingPublic : Boolean(project?.is_public);
   const VisMark = shownPublic ? Globe : Lock;
 
+  // Editing lock (#1303), beside visibility: visibility says who may view,
+  // the lock whether anyone, owners included, may change the content.
+  const isAdmin = !!user?.is_admin;
+  const editingLocked = !!project?.published_lock;
+  const EditMark = editingLocked ? Lock : PenLine;
+  const editingTitle = editingLocked ? 'Editing locked' : 'Editable';
+  const editingText = [
+    editingLocked
+      ? 'Read-only: nobody can change its dashboards or data, owners included. Who can view it is unchanged.'
+      : 'Owners and editors can change its dashboards and data.',
+    isAdmin ? null : 'Only an administrator can lock or unlock editing.',
+  ]
+    .filter(Boolean)
+    .join(' ');
+
   // Glass: visibility as a row, members as a list with the role on each row.
   const glassBody = project && (
     <div className="pm-page" data-testid="permissions-page">
@@ -856,6 +875,22 @@ const PermissionsApp: React.FC = () => {
             disabled={!canManage || visibilityBusy}
             aria-label="Public project"
             data-testid="project-visibility-switch"
+          />
+        </div>
+        <div className="pm-visibility" data-testid="project-editing-row">
+          <span className="pm-chip">
+            <EditMark size={20} strokeWidth={STROKE} aria-hidden />
+          </span>
+          <div className="pm-visibility-body">
+            <div className="pm-visibility-title">{editingTitle}</div>
+            <div className="pm-visibility-text">{editingText}</div>
+          </div>
+          <Switch
+            checked={editingLocked}
+            onChange={() => setLockModalOpen(true)}
+            disabled={!isAdmin}
+            aria-label="Lock editing"
+            data-testid="project-editing-switch"
           />
         </div>
       </section>
@@ -1158,6 +1193,15 @@ const PermissionsApp: React.FC = () => {
               <Text size="sm" c="dimmed">
                 {project.name}
               </Text>
+              <Switch
+                mt="xs"
+                label={editingTitle}
+                description={editingText}
+                checked={editingLocked}
+                onChange={() => setLockModalOpen(true)}
+                disabled={!isAdmin}
+                data-testid="project-editing-switch"
+              />
             </Stack>
           </Paper>
 
@@ -1414,6 +1458,15 @@ const PermissionsApp: React.FC = () => {
           </Group>
         </Stack>
       </Modal>
+      {isAdmin && projectId && (
+        <PublishedLockModal
+          opened={lockModalOpen}
+          onClose={() => setLockModalOpen(false)}
+          projectId={projectId}
+          locked={editingLocked}
+          onChanged={refresh}
+        />
+      )}
     </>
   );
 

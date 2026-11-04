@@ -6,14 +6,14 @@
 
 ## The flow
 
-1. **Source**: the project owner (or an admin) clicks *Push to instance…* in the
-   project menu and picks a target. A preflight asks the target whether it will
+1. **Source**: the project owner (or an admin) clicks *Migrate…* in the
+   project page head (or the project card menu) and picks a target. A preflight asks the target whether it will
    accept the project and how the data should travel.
 2. **Source → target**: the source builds a bundle (the same ZIP as
    `/migrate/export-project`) and streams it to the target's
    `POST /migrate/inbound/requests`, authenticated by a pairing key.
 3. **Target**: the request waits in *Admin > Migrations*. An admin approves it
-   (with *Publish read-only* ticked by default) or rejects it with a reason.
+   (with *Lock editing* ticked by default) or rejects it with a reason.
 4. **Target**: approval runs the import in the background:
    - re-validate the bundle;
    - copy the data;
@@ -42,7 +42,7 @@ List settings take JSON.
 | `UI_TARGET_HOST_ALLOWLIST` | source | `[]` | Hosts a UI target may reach over http or on a private IP |
 | `INBOUND_ENABLED` | target | `false` | Accept pushes. When off, every inbound route returns 404 |
 | `INBOUND_SOURCES` | target | `[]` | `[{"name", "pairing_key", "allowed_source_buckets", "max_pending", "max_per_day", "max_bundle_bytes"}]` |
-| `LOCK_IMPORTED_DEFAULT` | target | `true` | Initial state of *Publish read-only* |
+| `LOCK_IMPORTED_DEFAULT` | target | `true` | Initial state of *Lock editing* |
 | `MAX_BUNDLE_BYTES` | both | 10 GiB | Bundle size cap (413 above it) |
 | `STAGING_PREFIX` | target | `_migration_staging` | S3 prefix for staged bundles. Must be one path segment, not an ObjectId |
 | `PENDING_TTL_DAYS` | target | `14` | Pending requests older than this expire, and their bundle is deleted |
@@ -167,7 +167,12 @@ request.
 - data collections, deltatables, MultiQC, files, runs and links;
 - project edit, project delete, and visibility changes.
 
-Only an admin can lift it, with `POST /projects/{id}/unlock`.
+Only an admin can lift it, with `POST /projects/{id}/unlock`. In the UI, the
+lock is the *Editing* row of the project's Permissions page, beside *Public /
+Private*: visibility says who may view the project, the lock whether anyone,
+owners included, may change it. The two are independent, and a published
+version is usually both public and locked. The project shows a *Read-only*
+badge while it is locked.
 
 A viewer's *copy* of a locked dashboard stays editable: a dashboard is locked
 only when its id, or its `parent_dashboard_id`, is in

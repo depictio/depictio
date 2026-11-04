@@ -396,15 +396,15 @@ const RequestDetail: React.FC<DetailProps> = ({ requestId, onClose, onChanged })
       >
         <Stack gap="md">
           <Checkbox
-            label="Publish read-only"
-            description="Lock the imported dashboards until an admin unlocks them."
+            label="Lock editing (read-only)"
+            description="Nobody can change its dashboards or data here, owners included, until an admin unlocks it."
             checked={lock}
             onChange={(e) => setLock(e.currentTarget.checked)}
             data-testid="migration-approve-lock"
           />
           <Checkbox
             label="Make public"
-            description="Anyone who can reach this instance can view the project."
+            description="Everyone on this instance can view it. Who can edit is unchanged."
             checked={makePublic}
             onChange={(e) => setMakePublic(e.currentTarget.checked)}
             data-testid="migration-approve-public"

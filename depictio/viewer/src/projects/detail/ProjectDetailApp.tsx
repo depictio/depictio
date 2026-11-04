@@ -103,7 +103,7 @@ import { usePageTitle } from '../../branding';
 import { UnrecognisedFilesPanel } from './UnrecognisedFilesPanel';
 import { ProvenanceBadge } from './ProvenanceBadge';
 import { PublishedLockBadge } from './PublishedLockBadge';
-import { ProjectPublishMenu } from './ProjectPublishMenu';
+import { ProjectMigrateButton } from './ProjectMigrateButton';
 
 interface DataCollectionShape {
   _id?: string;
@@ -764,17 +764,15 @@ const ProjectDetailApp: React.FC = () => {
     </>
   );
 
-  // Push and read-only lock live in the page head beside the other project
-  // actions; the project card's badge shows the state.
-  const publishMenu = (inGlass: boolean) =>
+  // Migrating to another instance sits in the page head beside the other
+  // project actions. Locking editing lives on the Permissions page, next to
+  // visibility: one says who may view, the other whether anyone may edit.
+  const migrateButton = (inGlass: boolean) =>
     project && projectId ? (
-      <ProjectPublishMenu
+      <ProjectMigrateButton
         projectId={projectId}
         projectName={project.name}
         canPush={canPushProject}
-        isAdmin={!!user?.is_admin}
-        locked={!!project.published_lock}
-        onLockChanged={refresh}
         glass={inGlass}
       />
     ) : null;
@@ -809,7 +807,7 @@ const ProjectDetailApp: React.FC = () => {
               >
                 Permissions
               </Button>
-              {publishMenu(true)}
+              {migrateButton(true)}
             </Group>
           }
         >
@@ -886,7 +884,7 @@ const ProjectDetailApp: React.FC = () => {
             >
               Permissions
             </Button>
-            {publishMenu(false)}
+            {migrateButton(false)}
             <Button
               component="a"
               href="/projects"

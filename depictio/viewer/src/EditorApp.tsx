@@ -613,8 +613,8 @@ const EditorApp: React.FC = () => {
     if (dashboard.published_lock) {
       notifications.show({
         color: 'orange',
-        title: 'Published (read-only)',
-        message: 'This dashboard is published read-only. An administrator must unlock it to edit.',
+        title: 'Read-only',
+        message: 'Editing of this dashboard is locked. An administrator must unlock it to edit.',
       });
       window.location.replace(`/dashboard/${dashboardId}`);
     }

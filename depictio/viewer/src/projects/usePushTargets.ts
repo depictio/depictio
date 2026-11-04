@@ -4,7 +4,7 @@ import { listPushTargets } from 'depictio-react-core';
 import type { MigrationTarget } from 'depictio-react-core';
 
 /** One fetch shared by every row of a project list: the menu of each row asks
- *  whether to offer "Push to another instance…", and the answer is the same. */
+ *  whether to offer "Migrate to another instance…", and the answer is the same. */
 let cached: Promise<MigrationTarget[]> | null = null;
 
 function loadTargets(): Promise<MigrationTarget[]> {

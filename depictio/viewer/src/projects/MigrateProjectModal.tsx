@@ -270,7 +270,7 @@ const MigrateProjectModal: React.FC<MigrateProjectModalProps> = ({
     <Modal
       opened={opened}
       onClose={onClose}
-      title={`Push ${projectName ? `"${projectName}" ` : 'project '}to another instance`}
+      title={`Migrate ${projectName ? `"${projectName}" ` : 'project '}to another instance`}
       centered
       size="md"
       data-testid="migrate-project-modal"
@@ -328,7 +328,7 @@ const MigrateProjectModal: React.FC<MigrateProjectModalProps> = ({
               leftSection={<Icon icon="mdi:transfer-up" width={16} />}
               data-testid="migrate-push-button"
             >
-              Push
+              Migrate
             </Button>
           )}
         </Group>
