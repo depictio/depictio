@@ -285,23 +285,41 @@ def main() -> int:
                     spec_b.status_code == 200 and spec_a.json() == spec_b.json(),
                     {"a": spec_a.status_code, "b": spec_b.status_code},
                 )
-                up = b.post("/deltatables/upsert", json={"data_collection_id": dc})
+                # A valid body, so the answer is the lock's and not validation's.
+                up = b.post(
+                    "/deltatables/upsert",
+                    json={"data_collection_id": dc, "delta_table_location": loc, "update": True},
+                )
                 rep.check(
                     f"{dc}: delta table upsert on B answers 409",
                     up.status_code == 409,
                     up.status_code,
                 )
 
-            # -- 2. re-push: a new version on B -----------------------------
+            # -- 2. re-push after an edit on A: a new version on B ----------
+            # An unchanged state writes no version, whatever its kind, so the
+            # source changes first; B must then carry the edit.
             before = _versions(b, dashes)
+            main_a = next(
+                (d for d in _dashboards(a, pid) if d.get("is_main_tab") is not False), None
+            )
+            new_title = f"Edited on A {time.strftime('%H:%M:%S')}"
+            if main_a:
+                edit = a.post(
+                    f"/dashboards/edit/{main_a['dashboard_id']}", json={"title": new_title}
+                )
+                rep.check("A edits its dashboard title", edit.status_code == 200, edit.status_code)
             again = _push_and_approve(a, b, rep, pid, "re-push")
             if again:
-                after = _versions(b, _dashboards(b, pid))
+                after_dashes = _dashboards(b, pid)
+                after = _versions(b, after_dashes)
                 rep.check(
                     "re-push adds an `import` version on B",
                     after.count("import") > before.count("import"),
                     {"before": before, "after": after},
                 )
+                titles = [d.get("title") for d in after_dashes]
+                rep.check("B carries A's edit", new_title in titles, titles)
 
     # -- 3. negatives -----------------------------------------------------------
     missing = httpx.get(
