@@ -1690,6 +1690,7 @@ export type AdvancedVizKind =
   | 'volcano'
   | 'embedding'
   | 'manhattan'
+  | 'stacked_bar'
   | 'stacked_taxonomy'
   | 'phylogenetic'
   | 'rarefaction'

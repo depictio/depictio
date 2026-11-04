@@ -62,7 +62,7 @@ def _as_float(value: Any) -> float:
         return 0.0
 
 
-@register("stacked_taxonomy", columns=_columns)
+@register("stacked_bar", columns=_columns)
 def build(
     *,
     rows: dict[str, list[Any]],

@@ -1,7 +1,7 @@
 /**
  * Truncated value axis, drawn as a broken one: the pure geometry.
  *
- * A bar chart whose value axis starts above zero (stacked_taxonomy's Zoom)
+ * A bar chart whose value axis starts above zero (stacked_bar's Zoom)
  * would otherwise read as an axis that starts at its first tick. This turns
  * the crop into a visible break. Along the axis, from the cropped end inwards:
  *

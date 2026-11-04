@@ -23,7 +23,7 @@ import {
   visibleTaxonomyControls,
   wideCategoryName,
   zoomedValueRange,
-} from './stackedTaxonomyOptions';
+} from './stackedBarOptions';
 
 describe('wide tables', () => {
   // orthofinder species stats: one row per species, one column per class.

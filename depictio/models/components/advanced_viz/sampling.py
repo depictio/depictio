@@ -76,6 +76,8 @@ KIND_SAMPLING_POLICY: dict[AdvancedVizKind, SamplingPolicy] = {
     "manhattan": "tail",
     "genome_view": "tail",
     # Client-side aggregation — a sample is a wrong answer.
+    "stacked_bar": "none",
+    # Retired name, still sent by a client that predates the rename.
     "stacked_taxonomy": "none",
     "rarefaction": "none",
     "da_barplot": "none",

@@ -168,6 +168,9 @@ export function advancedVizSelectionColumn(metadata: StoredMetadata): string | u
   switch (kind) {
     case 'embedding':
       return named ?? configColumn('sample_id_col');
+    case 'stacked_bar':
+      // A clicked bar is one sample: the sample column unless another is named.
+      return named ?? configColumn('sample_id_col');
     case 'manhattan':
       return named;
     case 'genome_view':

@@ -23,6 +23,7 @@ export const ANNOTATABLE_VIZ_KINDS: ReadonlySet<string> = new Set([
   'da_barplot',
   'ancombc_differentials',
   'ma',
+  'stacked_bar',
   'stacked_taxonomy',
   'rarefaction',
   'enrichment',

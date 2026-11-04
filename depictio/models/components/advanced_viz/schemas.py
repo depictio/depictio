@@ -21,7 +21,7 @@ from typing import Any, Literal
 from depictio.models.components.advanced_viz.configs import (
     EmbeddingConfig,
     ManhattanConfig,
-    StackedTaxonomyConfig,
+    StackedBarConfig,
     VizConfig,
     VolcanoConfig,
 )
@@ -126,7 +126,7 @@ CANONICAL_SCHEMAS: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
     },
     # `rank` is optional (see `_OPTIONAL_ROLES`): a single-level composition
     # (BUSCO classes, CCS outcomes) has no rank to pick.
-    "stacked_taxonomy": {
+    "stacked_bar": {
         "sample_id": _STRING,
         "taxon": _STRING,
         "abundance": _NUMERIC,
@@ -528,7 +528,7 @@ ROLE_NAMES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
             }
         ),
     },
-    "stacked_taxonomy": {
+    "stacked_bar": {
         "sample_id": frozenset({"sample_id", "sample-id", "sample"}),
         "taxon": frozenset(
             {"taxon", "taxonomy", "lineage", "name", "otu", "otu_id", "asv", "taxa"}
@@ -1108,7 +1108,7 @@ _OPTIONAL_ROLES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
     },
     # A level column turns the bars into a rank picker (Phylum / Genus, region
     # class / feature); without one the composition is drawn as it comes.
-    "stacked_taxonomy": {"rank": _STRING},
+    "stacked_bar": {"rank": _STRING},
     "phylogenetic": {
         "color": _NUMERIC | _STRING,
         "label": _STRING,
@@ -1399,10 +1399,10 @@ def _roles_for(
     a second kind: ``hmm_logo`` reads a profile table by default and an
     alignment table with ``profile_source: msa``.
     """
-    # A wide stacked_taxonomy table (`value_cols`) has one numeric column per
+    # A wide stacked_bar table (`value_cols`) has one numeric column per
     # category, so only the sample id is a role; `validate_binding` checks the
     # value columns themselves.
-    if kind == "stacked_taxonomy" and config is not None and getattr(config, "value_cols", None):
+    if kind == "stacked_bar" and config is not None and getattr(config, "value_cols", None):
         return _STACKED_WIDE_REQUIRED, {}
     mode = _MODE_ROLES.get(kind)
     if mode is not None and config is not None:
@@ -1593,7 +1593,7 @@ def validate_binding(config: VizConfig, dc_schema: dict[str, str]) -> list[Bindi
         errors.extend(shape_check(config))
 
     # Wide stacked_taxonomy: every value column is an abundance column.
-    wide_cols = (getattr(config, "value_cols", None) or []) if kind == "stacked_taxonomy" else []
+    wide_cols = (getattr(config, "value_cols", None) or []) if kind == "stacked_bar" else []
     for col in wide_cols:
         if col not in dc_schema:
             errors.append(
@@ -2333,7 +2333,11 @@ def suggest_viz_kinds(
     Returns:
         List of VizSuggestion sorted by score desc, then viz_kind asc.
     """
-    suggestions = [_score_kind(kind, dc_schema, dc_type, context) for kind in CANONICAL_SCHEMAS]
+    suggestions = [
+        _score_kind(kind, dc_schema, dc_type, context)
+        for kind in CANONICAL_SCHEMAS
+        if kind not in _RENAMED_KINDS
+    ]
     suggestions = [s for s in suggestions if s.score >= min_confidence]
     suggestions.sort(key=lambda s: (-s.score, s.viz_kind))
     return suggestions
@@ -2428,7 +2432,7 @@ _KIND_ROLE_DESCRIPTIONS: dict[AdvancedVizKind, dict[str, str]] = {
         "region_start": "Optional start of the neighbourhood band behind the arrows.",
         "region_end": "Optional end of the neighbourhood band behind the arrows.",
     },
-    "stacked_taxonomy": {
+    "stacked_bar": {
         "rank": (
             "Optional level column (e.g. Phylum, Genus): adds a rank picker. "
             "Omit for a single-level composition."
@@ -2659,7 +2663,7 @@ __all__ = [
     "ManhattanConfig",
     "RECOMMENDED_SCORE",
     "ROLE_NAMES",
-    "StackedTaxonomyConfig",
+    "StackedBarConfig",
     "VizSuggestion",
     "VolcanoConfig",
     "role_dtype_specs",
@@ -2718,10 +2722,16 @@ KIND_METADATA: dict[AdvancedVizKind, dict[str, Any]] = {
         "icon": "tabler:dna-2",
         "category": "tool",
     },
+    "stacked_bar": {
+        "label": "Stacked bar",
+        "description": "Per-sample stacked bar of a composition (taxa, classes, outcomes), with a level picker, zoom and sorting.",
+        "icon": "tabler:chart-bar",
+    },
     "stacked_taxonomy": {
         "label": "Stacked taxonomy",
-        "description": "Per-sample stacked relative-abundance bar with rank dropdown.",
-        "icon": "tabler:chart-pie",
+        "description": "Retired name of the stacked bar; a stored tile of this kind opens as one.",
+        "icon": "tabler:chart-bar",
+        "legacy": True,
     },
     "rarefaction": {
         "label": "Rarefaction curves",
@@ -3107,6 +3117,17 @@ INCUBATING: frozenset[str] = frozenset(
         "allele_grid",
     }
 )
+
+
+# The renamed kind keeps the same roles under its old name, so a raw stored
+# `stacked_taxonomy` (a catalog entry, a dashboard document read unvalidated)
+# resolves in every table above. It is a legacy kind: the builder's picker hides
+# it and the binding suggestions below skip it, so nothing is offered twice.
+_RENAMED_KINDS: dict[str, str] = {"stacked_taxonomy": "stacked_bar"}
+CANONICAL_SCHEMAS["stacked_taxonomy"] = CANONICAL_SCHEMAS["stacked_bar"]
+ROLE_NAMES["stacked_taxonomy"] = ROLE_NAMES["stacked_bar"]
+_OPTIONAL_ROLES["stacked_taxonomy"] = _OPTIONAL_ROLES["stacked_bar"]
+_KIND_ROLE_DESCRIPTIONS["stacked_taxonomy"] = _KIND_ROLE_DESCRIPTIONS["stacked_bar"]
 
 
 def kind_descriptors() -> list[dict[str, Any]]:

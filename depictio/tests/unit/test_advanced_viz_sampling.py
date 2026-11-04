@@ -178,7 +178,7 @@ def test_an_aggregating_kind_is_never_sampled(patched_scan):
     )
 
     frame, total, sampling = _reduce(
-        ["sample_id", "abundance"], policy="none", viz_kind="stacked_taxonomy"
+        ["sample_id", "abundance"], policy="none", viz_kind="stacked_bar"
     )
 
     assert frame.height == n, "the whole frame, not a sample"
@@ -201,7 +201,7 @@ def test_an_aggregating_kind_past_the_ceiling_says_its_values_are_estimates(
     n = 200_000
     patched_scan(pl.DataFrame({"row_id": range(n), "v": [float(i % 977) for i in range(n)]}))
 
-    frame, total, sampling = _reduce(["row_id", "v"], policy="none", viz_kind="stacked_taxonomy")
+    frame, total, sampling = _reduce(["row_id", "v"], policy="none", viz_kind="stacked_bar")
 
     assert total == n
     assert frame.height < n
@@ -224,7 +224,7 @@ def test_an_unsamplable_frame_past_the_ceiling_is_still_bounded(patched_scan, mo
     # Two distinct value tuples: the hash can only split all-or-nothing.
     patched_scan(pl.DataFrame({"flag": [i % 2 for i in range(n)]}))
 
-    frame, total, sampling = _reduce(["flag"], policy="none", viz_kind="stacked_taxonomy")
+    frame, total, sampling = _reduce(["flag"], policy="none", viz_kind="stacked_bar")
 
     assert frame is not None, "must not fall through to an unbounded load"
     assert frame.height <= 10_000

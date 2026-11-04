@@ -87,10 +87,15 @@ const VIZ_KIND: Readonly<Record<string, VizKindLabel>> = {
     'Association score along the genome, by chromosome and position',
   ),
   embedding: label('Embedding', 'tabler:atom', '2D or 3D sample embedding (PCA, UMAP, t-SNE or PCoA)'),
+  stacked_bar: label(
+    'Stacked bar',
+    'tabler:chart-bar',
+    'Composition per sample, stacked, with a level picker, zoom and sorting',
+  ),
   stacked_taxonomy: label(
-    'Taxonomy',
-    'tabler:chart-pie',
-    'Relative abundance of taxa per sample, stacked, at a chosen rank',
+    'Stacked bar',
+    'tabler:chart-bar',
+    'Composition per sample, stacked, with a level picker, zoom and sorting',
   ),
   phylogenetic: label(
     'Tree',

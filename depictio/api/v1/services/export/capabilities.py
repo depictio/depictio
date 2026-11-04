@@ -147,7 +147,8 @@ AV_JSON_SOURCE: dict[str, AvJsonSource] = {
     "volcano": "python",
     "embedding": "python",
     "manhattan": "python",
-    "stacked_taxonomy": "python",
+    "stacked_bar": "python",
+    "stacked_taxonomy": "python",  # retired name; resolves to stacked_bar
     "phylogenetic": "client_only",
     "rarefaction": "client_only",
     "da_barplot": "python",
