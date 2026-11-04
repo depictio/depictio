@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
-"""Hand-drawn schema of the SAML SSO login flow.
+"""Hand-drawn schema of the OpenID Connect SSO login flow.
 
-SP-initiated login, drawn as the screens the user sees and the envelope that
-travels between them: the Depictio login page, the IdP page, the signed
-SAMLResponse, the URL bar carrying the ticket in its fragment, the viewer that
-redeems it. Built on the shared sketch toolkit; the seeded jitter makes re-runs
+Authorization code flow with PKCE, drawn as the screens the user sees and the
+redirect that travels between them: the Depictio login page with its provider
+buttons, the IdP page, the callback carrying a code, the URL bar carrying the
+ticket in its fragment, the viewer that redeems it. Built on the shared sketch toolkit; the seeded jitter makes re-runs
 byte-identical, so the picture can be corrected in a diff when the flow moves.
 
 Usage::
 
-    python dev/diagrams/saml_login.py            # writes docs/images/*.svg/.png
-    python dev/diagrams/saml_login.py --no-png   # svg only (no browser render)
+    python dev/diagrams/oidc_login.py            # writes docs/images/*.svg/.png
+    python dev/diagrams/oidc_login.py --no-png   # svg only (no browser render)
 """
 
 from __future__ import annotations
@@ -35,7 +35,6 @@ from sketch import (  # noqa: E402
     PINK,
     RED,
     RED_INK,
-    VIOLET,
     WHITE,
     YELLOW,
     Box,
@@ -50,7 +49,7 @@ from sketch import (  # noqa: E402
     write,
 )
 
-OUT = Path(__file__).resolve().parent.parent.parent / "docs" / "images" / "saml-login"
+OUT = Path(__file__).resolve().parent.parent.parent / "docs" / "images" / "oidc-login"
 
 W, H = 1680, 1470
 
@@ -126,13 +125,13 @@ def cylinder(s: Sketch, cx: float, top: float, w: float, h: float, fill: str) ->
 
 
 def envelope(s: Sketch, x: float, y: float, w: float, h: float) -> None:
-    """The signed SAMLResponse: a sealed letter."""
+    """The redirect carrying the code: a sealed letter."""
     s.rect(Box(x, y, w, h, YELLOW, "", ()))
     cx = x + w / 2
     s.line(x + 2, y + 2, cx, y + h * 0.58, amount=0.8, passes=1)
     s.line(x + w - 2, y + 2, cx, y + h * 0.58, amount=0.8, passes=1)
     circle(s, cx, y + h * 0.58, 9, RED_INK)
-    s.text(cx, y + h * 0.58 + 4.5, "S", size=12, weight="bold")
+    s.text(cx, y + h * 0.58 + 4.5, "C", size=12, weight="bold")
 
 
 def avatar(s: Sketch, cx: float, cy: float) -> None:
@@ -188,9 +187,9 @@ def build_login_flow() -> Sketch:
     s.heading(
         40,
         52,
-        "Signing in with SAML",
-        "SP-initiated: the browser goes out to the IdP and comes back with a signed assertion, "
-        "then trades a one-use ticket for a session",
+        "Signing in with OpenID Connect",
+        "authorization code + PKCE: the browser goes out to the IdP and comes back with a code, "
+        "Depictio verifies the id_token, then trades a one-use ticket for a session",
     )
 
     # ---- 1. the Depictio login page -------------------------------------
@@ -201,13 +200,17 @@ def build_login_flow() -> Sketch:
     card = Box(bx + 30, by + 42, bw - 60, 282, WHITE, "", ())
     s.rect(card, colour=GREY)
     s.text(card.cx, by + 72, "Sign in", size=18, weight="bold")
-    sso = Box(bx + 60, by + 86, bw - 120, 34, YELLOW, "", ())
+    sso = Box(bx + 60, by + 84, bw - 120, 24, YELLOW, "", ())
     halo = Box(sso.x - 6, sso.y - 6, sso.w + 12, sso.h + 12, "none", "", ())
     s.rect(halo, colour=BLUE_INK, dashed=True)
     s.rect(sso)
     key_glyph(s, sso.x + 26, sso.cy)
-    s.text(sso.cx + 12, sso.cy + 5, "Sign in with SSO", size=14, weight="bold")
+    s.text(sso.cx + 12, sso.cy + 5, "Sign in with Keycloak", size=14, weight="bold")
     cursor(s, sso.right - 40, sso.cy + 4)
+    other = Box(bx + 60, by + 114, bw - 120, 24, WHITE, "", ())
+    s.rect(other, colour=GREY)
+    key_glyph(s, other.x + 26, other.cy)
+    s.text(other.cx + 12, other.cy + 5, "Sign in with Google", size=14, colour=DIM)
     s.text(card.cx, by + 150, "or with your email", size=11, colour=DIM)
     s.line(card.x + 20, by + 146, card.cx - 60, by + 146, colour=GREY, amount=0.3, passes=1)
     s.line(card.cx + 60, by + 146, card.right - 20, by + 146, colour=GREY, amount=0.3, passes=1)
@@ -218,7 +221,7 @@ def build_login_flow() -> Sketch:
     s.text(
         bx,
         by + bh + 28,
-        "button text: `DEPICTIO_AUTH_SAML_LOGIN_LABEL`",
+        "one button per provider: `label` in `DEPICTIO_AUTH_OIDC_PROVIDERS`",
         size=13,
         anchor="start",
         colour=DIM,
@@ -228,36 +231,41 @@ def build_login_flow() -> Sketch:
     s.arrow(bx + bw + 2, 230, 588, 230)
     s.text(519, 202, "click:", size=13, colour=DIM)
     s.text(519, 220, "full-page GET", size=13, colour=DIM)
+    s.text(519, 250, "`?next=/path`", size=12, colour=DIM)
 
     # ---- the API handler --------------------------------------------------
     api = Box(590, 128, 420, 182, YELLOW, "", ())
     s.rect(api)
     server_rack(s, 612, 152)
     s.text(692, 172, "Depictio API", size=18, anchor="start", weight="bold")
-    s.text(692, 196, "`GET /auth/saml/login`", size=14, anchor="start")
-    lines = ("builds the AuthnRequest", "keeps its request id, one-shot", "answers 302 to the IdP")
+    s.text(692, 196, "`GET /auth/oidc/<id>/login`", size=14, anchor="start")
+    lines = (
+        "state + nonce + PKCE verifier",
+        "kept server-side, one-shot",
+        "answers 302 to the IdP",
+    )
     for i, line in enumerate(lines):
         s.text(612, 236 + i * 22, line, size=14, anchor="start", colour=DIM)
 
     # the one-shot store
     cylinder(s, 660, 380, 84, 52, ORANGE)
     s.arrow(660, 312, 660, 366, dashed=True, colour=DIM)
-    s.text(648, 346, "stores the id", size=13, anchor="end", colour=DIM)
-    s.text(722, 392, "auth state store", size=15, anchor="start", weight="bold")
-    s.text(722, 414, "Redis `SET NX EX`, expires in 10 min", size=13, anchor="start", colour=DIM)
-    s.text(722, 436, "in-process dict if Redis is down", size=13, anchor="start", colour=DIM)
+    s.text(648, 346, "stores them", size=13, anchor="end", colour=DIM)
+    s.text(722, 392, "`oauth_states` collection", size=15, anchor="start", weight="bold")
+    s.text(722, 414, "MongoDB, TTL index, expires in 10 min", size=13, anchor="start", colour=DIM)
+    s.text(722, 436, "consumed atomically: valid once", size=13, anchor="start", colour=DIM)
 
     # ---- API -> IdP -------------------------------------------------------
     s.arrow(1012, 230, 1198, 230)
     s.text(1105, 194, "302 redirect", size=14, colour=DIM)
-    s.text(1105, 212, "carrying the AuthnRequest", size=12.5, colour=DIM)
-    s.text(1105, 256, "(HTTP-Redirect binding)", size=12.5, colour=DIM)
+    s.text(1105, 212, "`state`, `nonce`, `code_challenge`", size=12, colour=DIM)
+    s.text(1105, 256, "(`S256`), `redirect_uri`", size=12.5, colour=DIM)
 
     # ---- 2. the IdP login page ----------------------------------
     kx, ky, kw, kh = 1200, 128, 440, 340
     browser(s, kx, ky, kw, kh)
     screen_bg(s, kx, ky, kw, kh)
-    url_pill(s, kx + 70, ky, kw - 90, "<idp>/realms/<realm>/protocol/saml")
+    url_pill(s, kx + 70, ky, kw - 90, "idp.example.org/realms/example/auth")
     kcard = Box(kx + 40, ky + 42, kw - 80, 282, WHITE, "", ())
     s.rect(kcard, colour=GREY)
     s.text(kcard.cx, ky + 72, "Sign in to your account", size=17, weight="bold")
@@ -265,50 +273,52 @@ def build_login_flow() -> Sketch:
     field(s, kx + 70, ky + 106, kw - 140, "Username or email", "jdoe")
     field(s, kx + 70, ky + 158, kw - 140, "Password", "••••••••")
     button(s, kx + 70, ky + 226, kw - 140, "Sign In", enabled=True)
-    s.text(kcard.cx, ky + 292, "any SAML IdP", size=12, colour=DIM)
+    s.text(kcard.cx, ky + 292, "any OpenID Connect provider", size=12, colour=DIM)
     badge(s, kx + 2, ky - 6, 2)
 
     # ---- IdP -> the signed response ---------------------------------------
     s.arrow(1420, 472, 1420, 566)
     s.text(1406, 506, "authenticates the user,", size=13, anchor="end", colour=DIM)
-    s.text(1406, 524, "signs the assertion", size=13, anchor="end", colour=DIM)
+    s.text(1406, 524, "issues a one-use code", size=13, anchor="end", colour=DIM)
 
     envelope(s, 1256, 580, 118, 78)
-    s.text(1400, 604, "browser form POST", size=15, anchor="start", weight="bold")
-    s.text(1400, 626, "`SAMLResponse`, base64 XML", size=13, anchor="start", colour=DIM)
-    s.text(1400, 648, "the assertion inside is signed", size=13, anchor="start", colour=DIM)
+    s.text(1400, 604, "browser redirect (GET)", size=15, anchor="start", weight="bold")
+    s.text(1400, 626, "to the API callback URL", size=13, anchor="start", colour=DIM)
+    s.text(1400, 648, "no token, only a short-lived code", size=13, anchor="start", colour=DIM)
 
-    # the envelope, opened: what the ACS reads
+    # the envelope, opened: what the callback reads
     s.arrow(1315, 664, 1315, 696, dashed=True, colour=DIM)
     doc = Box(1230, 700, 410, 214, WHITE, "", ())
     s.rect(doc, colour=GREY)
-    s.text(1250, 724, "the POST: what the ACS reads", size=14, anchor="start", weight="bold")
+    s.text(1250, 724, "the query: what the callback reads", size=14, anchor="start", weight="bold")
     s.shade(1242, 744, 386, 30, fill=BLUE, opacity=1.0)
     s.shade(1242, 780, 386, 30, fill=YELLOW, opacity=1.0)
     s.shade(1242, 816, 386, 30, fill=YELLOW, opacity=1.0)
-    s.text(1252, 764, "`<Signature>…</Signature>`", size=14, anchor="start")
-    s.text(1626, 764, "vs the IdP cert", size=12.5, anchor="end", colour=DIM)
-    s.text(1252, 800, "`<Attribute Name=…>`", size=14, anchor="start")
-    s.text(1626, 800, "email, if configured", size=12.5, anchor="end", colour=DIM)
-    s.text(1252, 836, "`<NameID>…</NameID>`", size=14, anchor="start")
-    s.text(1626, 836, "else the NameID", size=12.5, anchor="end", colour=DIM)
-    s.text(1250, 868, "`InResponseTo`: the id we stored", size=13, anchor="start", colour=DIM)
-    s.text(1250, 896, "`RelayState`: echoed back, ignored", size=13, anchor="start", colour=DIM)
+    s.text(1252, 764, "`code=…`", size=14, anchor="start")
+    s.text(1626, 764, "traded at the token endpoint", size=12.5, anchor="end", colour=DIM)
+    s.text(1252, 800, "`state=…`", size=14, anchor="start")
+    s.text(1626, 800, "must match a stored one", size=12.5, anchor="end", colour=DIM)
+    s.text(1252, 836, "`error=…`", size=14, anchor="start")
+    s.text(1626, 836, "user said no: `sso_cancelled`", size=12.5, anchor="end", colour=DIM)
+    s.text(1250, 868, "the id_token is not in the URL:", size=13, anchor="start", colour=DIM)
+    s.text(1250, 896, "it comes back on a server-side call", size=13, anchor="start", colour=DIM)
 
-    # ---- 3. the ACS ---------------------------------------------------------
+    # ---- 3. the callback ---------------------------------------------------------
     s.arrow(1226, 632, 1114, 632)
-    s.text(1170, 608, "POST", size=14, colour=DIM)
+    s.text(1170, 608, "GET", size=14, colour=DIM)
     acs = Box(560, 560, 552, 392, GREEN, "", ())
     s.rect(acs)
-    s.text(584, 590, "ACS: validates before it trusts", size=18, anchor="start", weight="bold")
-    s.text(584, 614, "`POST /auth/saml/callback`", size=14, anchor="start")
+    s.text(584, 590, "Callback: validates before it trusts", size=18, anchor="start", weight="bold")
+    s.text(584, 614, "`GET /auth/oidc/<id>/callback`", size=14, anchor="start")
+    check_row(s, 584, 640, True, "state is one WE issued", "consumed once: a replay is refused")
     check_row(
-        s, 584, 640, True, "InResponseTo is an id WE issued", "consumed once: a replay is refused"
+        s, 584, 692, True, "code traded with the code_verifier", "server-to-server, PKCE S256"
     )
-    check_row(s, 584, 692, True, "assertion signature verified", "against the IdP certificate")
-    check_row(s, 584, 744, True, "email from the attribute or the NameID", "")
     check_row(
-        s, 584, 796, False, "RelayState echoed by the IdP", "ignored: the path comes from our store"
+        s, 584, 744, True, "id_token verified against the JWKS", "signature, iss, aud, exp, nonce"
+    )
+    check_row(
+        s, 584, 796, True, "email present and `email_verified`", "unless `assume_email_verified`"
     )
     check_row(
         s, 584, 848, True, "redirect target: a same-origin path", "relative only, never `//host`"
@@ -318,18 +328,18 @@ def build_login_flow() -> Sketch:
     s.text(
         612,
         927,
-        "any check fails: 303 to `/auth?error=saml_failed`",
+        "any check fails: 303 to `/auth?error=sso_failed`",
         size=13,
         anchor="start",
         colour=RED,
     )
     badge(s, 562, 558, 3)
 
-    # the ACS reads the store
+    # the callback reads the store
     s.arrow(700, 556, 700, 470, dashed=True, colour=DIM)
-    s.text(712, 520, "consumes the id: GETDEL", size=13, anchor="start", colour=DIM)
+    s.text(712, 520, "consumes the state, atomically", size=13, anchor="start", colour=DIM)
 
-    # ---- ACS -> user --------------------------------------------------------
+    # ---- callback -> user --------------------------------------------------------
     s.arrow(558, 750, 492, 750)
     s.text(525, 730, "email", size=13, colour=DIM)
 
@@ -338,7 +348,14 @@ def build_login_flow() -> Sketch:
     s.rect(usr)
     avatar(s, 84, 606)
     s.text(122, 598, "`create_or_get_sso_user`", size=15, anchor="start", weight="bold")
-    s.text(122, 620, "the login door for IdP-verified emails", size=13, anchor="start", colour=DIM)
+    s.text(
+        122,
+        620,
+        "via `provision_sso_login`, verified emails only",
+        size=13,
+        anchor="start",
+        colour=DIM,
+    )
     tick(s, 70, 668, size=9)
     s.text(94, 674, "known email: that user signs in", size=14, anchor="start")
     tick(s, 70, 712, size=9)
@@ -436,35 +453,46 @@ def build_login_flow() -> Sketch:
     s.text(1316, 1070, "Setup, once", size=18, anchor="start", weight="bold")
     s.text(1316, 1090, "what the IdP admin registers", size=13, anchor="start", colour=DIM)
     tick(s, 1326, 1118, size=8)
-    s.text(1346, 1124, "ACS URL, HTTP-POST binding", size=13.5, anchor="start")
+    s.text(1346, 1124, "redirect URI", size=13.5, anchor="start")
     s.text(
-        1346, 1144, "`…/depictio/api/v1/auth/saml/callback`", size=12.5, anchor="start", colour=DIM
+        1346,
+        1144,
+        "`…/depictio/api/v1/auth/oidc/<id>/callback`",
+        size=12,
+        anchor="start",
+        colour=DIM,
     )
     tick(s, 1326, 1172, size=8)
-    s.text(1346, 1178, "entity id", size=13.5, anchor="start")
-    s.text(1346, 1198, "`DEPICTIO_AUTH_SAML_SP_ENTITY_ID`", size=12.5, anchor="start", colour=DIM)
-    tick(s, 1326, 1226, size=8)
-    s.text(1346, 1232, "sign assertions: on", size=13.5, anchor="start")
-    page(s, 1318, 1252, 26, 34, fill=VIOLET)
-    s.text(1356, 1268, "or import the SP metadata", size=13.5, anchor="start")
-    s.text(1356, 1288, "`GET /auth/saml/metadata`", size=12.5, anchor="start", colour=DIM)
-    s.line(1316, 1306, 1620, 1306, colour=GREY, amount=0.4, passes=1, width=1.2)
+    s.text(1346, 1178, "a client with the standard (code) flow", size=13.5, anchor="start")
     s.text(
-        1316, 1326, "and gives Depictio the IdP's entity id,", size=13, anchor="start", colour=DIM
+        1346, 1198, "PKCE S256 on, secret kept for the API", size=12.5, anchor="start", colour=DIM
     )
+    tick(s, 1326, 1226, size=8)
+    s.text(1346, 1232, "client id + secret to Depictio", size=13.5, anchor="start")
+    s.text(
+        1346,
+        1252,
+        "`DEPICTIO_AUTH_OIDC_<ID>_CLIENT_ID` / `_SECRET`",
+        size=11.5,
+        anchor="start",
+        colour=DIM,
+    )
+    s.line(1316, 1280, 1620, 1280, colour=GREY, amount=0.4, passes=1, width=1.2)
+    s.text(1316, 1304, "and tells it where the IdP is:", size=13, anchor="start", colour=DIM)
     s.text(
         1316,
-        1344,
-        "SSO URL and cert: `DEPICTIO_AUTH_SAML_IDP_*`",
+        1326,
+        "`issuer` in `DEPICTIO_AUTH_OIDC_PROVIDERS`;",
         size=13,
         anchor="start",
         colour=DIM,
     )
+    s.text(1316, 1344, "discovery finds the rest", size=13, anchor="start", colour=DIM)
 
     s.text(
         40,
         1420,
-        "The session never rides in a URL: the API sees a signed assertion over POST, "
+        "The session never rides in a URL: the API sees a one-use code and verifies the id_token itself, "
         "the viewer sees a 2-minute ticket only in the fragment.",
         size=14.5,
         anchor="start",

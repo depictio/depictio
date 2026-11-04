@@ -235,6 +235,12 @@ Six types (`table`, `jbrowse2`, `multiqc`, `image`, `geojson`, `phylogeny`) with
 ### Auth & Storage
 - JWT tokens, role-based access (users, groups, projects); single-user mode via
   `DEPICTIO_AUTH_SINGLE_USER_MODE`
+- SSO is generic OpenID Connect: providers are a JSON list in `DEPICTIO_AUTH_OIDC_PROVIDERS`
+  (secrets via `DEPICTIO_AUTH_OIDC_<ID>_CLIENT_ID/_SECRET`); routes in
+  `auth_endpoints/oidc_routes.py`; verification in `oidc.py` (PKCE S256, state in
+  `oauth_states` consumed atomically, nonce, JWKS rotation). One provisioning path:
+  `sso_sync.provision_sso_login` → `create_or_get_sso_user` → `sync_sso_user`. SAML is
+  removed; `DEPICTIO_AUTH_GOOGLE_OAUTH_*` maps to provider `google` (deprecated)
 - S3-compatible storage (bundled SeaweedFS `weed mini` locally, compose service `s3` with a
   `minio` network alias; any S3 endpoint in prod), Delta Lake format. Config prefix
   `DEPICTIO_S3_*` (`settings.s3`); legacy `DEPICTIO_MINIO_*` / `settings.minio` still accepted.
