@@ -78,8 +78,6 @@ import { UnstyledDropZone } from '../../components/UnstyledDropZone';
 import { useFolderDropzone } from '../../hooks/useFolderDropzone';
 
 import { useCurrentUser } from '../../hooks/useCurrentUser';
-import MigrateProjectModal from '../MigrateProjectModal';
-import { usePushTargets } from '../usePushTargets';
 import { AppSidebar, LoadErrorCard } from '../../chrome';
 import IngestionReportPanel from './IngestionReportPanel';
 import ProjectIngestionHistoryPanel from './ProjectIngestionHistoryPanel';
@@ -105,7 +103,7 @@ import { usePageTitle } from '../../branding';
 import { UnrecognisedFilesPanel } from './UnrecognisedFilesPanel';
 import { ProvenanceBadge } from './ProvenanceBadge';
 import { PublishedLockBadge } from './PublishedLockBadge';
-import { PublishedLockControl } from './PublishedLockControl';
+import { ProjectPublishMenu } from './ProjectPublishMenu';
 
 interface DataCollectionShape {
   _id?: string;
@@ -581,16 +579,6 @@ const ProjectDetailApp: React.FC = () => {
           return (
             <Stack gap="lg">
               <ProjectHeader project={project} projectType={projectType} />
-              {canPushProject && projectId && (
-                <PushToInstanceControl projectId={projectId} projectName={project.name} />
-              )}
-              {user?.is_admin && projectId && (
-                <PublishedLockControl
-                  projectId={projectId}
-                  locked={!!project.published_lock}
-                  onChanged={refresh}
-                />
-              )}
               {workflowsPanel}
               {projectId ? (
                 <Tabs
@@ -776,6 +764,21 @@ const ProjectDetailApp: React.FC = () => {
     </>
   );
 
+  // Push and read-only lock live in the page head beside the other project
+  // actions; the project card's badge shows the state.
+  const publishMenu = (inGlass: boolean) =>
+    project && projectId ? (
+      <ProjectPublishMenu
+        projectId={projectId}
+        projectName={project.name}
+        canPush={canPushProject}
+        isAdmin={!!user?.is_admin}
+        locked={!!project.published_lock}
+        onLockChanged={refresh}
+        glass={inGlass}
+      />
+    ) : null;
+
   if (glass) {
     const name = project?.name || 'Project';
     return (
@@ -806,6 +809,7 @@ const ProjectDetailApp: React.FC = () => {
               >
                 Permissions
               </Button>
+              {publishMenu(true)}
             </Group>
           }
         >
@@ -882,6 +886,7 @@ const ProjectDetailApp: React.FC = () => {
             >
               Permissions
             </Button>
+            {publishMenu(false)}
             <Button
               component="a"
               href="/projects"
@@ -2258,35 +2263,6 @@ const ProjectTypeTag: React.FC<{
     >
       {projectType === 'advanced' ? 'Advanced' : 'Basic'}
     </Badge>
-  );
-};
-
-/** Header action: opens the push modal; absent when no target is configured. */
-const PushToInstanceControl: React.FC<{ projectId: string; projectName?: string }> = ({
-  projectId,
-  projectName,
-}) => {
-  const targets = usePushTargets();
-  const [open, setOpen] = useState(false);
-  if (targets.length === 0) return null;
-  return (
-    <Group justify="flex-end">
-      <Button
-        variant="default"
-        size="xs"
-        leftSection={<Icon icon="mdi:transfer-up" width={16} />}
-        onClick={() => setOpen(true)}
-        data-testid="project-push-button"
-      >
-        Push to another instance…
-      </Button>
-      <MigrateProjectModal
-        opened={open}
-        onClose={() => setOpen(false)}
-        projectId={projectId}
-        projectName={projectName}
-      />
-    </Group>
   );
 };
 
