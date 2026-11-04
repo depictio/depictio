@@ -193,8 +193,8 @@ of a narrower one. Nothing is set per tab or per tile.
 | `QUANT_ROUTE` | `star_salmon` | which Salmon copy feeds the PCA, DTU and SUPPA2 (`salmon` for pseudo-alignment-only runs) |
 | `GENOME` | `hg38` | UCSC assembly for the event locus link |
 | `SPLICING_FDR` | `0.05` | FDR / q-value cut-off of every tool's call (SUPPA2 uses it on its p-value) |
-| `MIN_DPSI` | `0.1` | minimal absolute PSI change of an rMATS or SUPPA2 call |
-| `RMATS_MIN_READS` | `10` | mean junction reads per replicate required in both conditions |
+| `MIN_DPSI` | `0` | optional extra floor on the absolute PSI change of an rMATS or SUPPA2 call; 0 keeps the tool's own call (rMATS tests against `--cstat`, default 0.0001; SUPPA2's lower bound defaults to 0) |
+| `RMATS_MIN_READS` | `10` | mean junction reads per replicate required in both conditions; the template's working value, rMATS and nf-core/rnasplice set no such minimum |
 
 ## Method notes
 
@@ -206,7 +206,7 @@ of a narrower one. Nothing is set per tab or per tile.
 - **Gene-level calls.** DEXSeq exon usage and DTU use the per-gene q-value
   (`perGeneQValue`); edgeR uses the gene F-test FDR; rMATS and SUPPA2 call a gene when at
   least one of its events is significant with an absolute PSI change of at least
-  `MIN_DPSI`. The volcano x axis of the gene-level tools is the fold change of the gene's
+  `MIN_DPSI` (default 0: the tool's call alone). The volcano x axis of the gene-level tools is the fold change of the gene's
   most significant bin or exon.
 - **Composite genes.** DEXSeq (`ENSG1+ENSG2`) and SUPPA2 (`ENSG1_and_ENSG2`) merge
   overlapping genes; the cross-tool table counts such a row for each gene it names.

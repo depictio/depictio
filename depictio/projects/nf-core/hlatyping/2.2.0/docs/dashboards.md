@@ -95,12 +95,12 @@ that module without harm. The pinned sample filters narrow the FastQC panels.
 
 **Reads.** Strip: the read files (a ring by their worst FastQC module), the median reads per
 file, the share of a sample's read pairs its genotype explains (OptiType's reads over the
-larger read file of the pair) and the highest duplicate share against FastQC's 20% and 50%
+larger read file of the pair) and the highest duplicate share against FastQC's 30% and 50%
 lines. Then the reads of each read file (a bar per file, the two reads of a pair side by side,
 the count printed on it) and the share of each sample's read pairs its genotype explains (a bar
 per sample, coloured by the group, both counts printed; no cut-off applies, because exome and
 RNA reads are mostly not HLA). Collapsed: the GC content and the duplicate share of each read
-file side by side, against the human genome's GC and FastQC's 20% and 50% duplicate lines, and
+file side by side, against the human genome's GC and FastQC's 30% and 50% duplicate lines, and
 the read file table. Filters: read of the pair and FastQC status. A scatter of read file
 against typing reads was dropped: a handful of points, two per sample, says less than a bar.
 

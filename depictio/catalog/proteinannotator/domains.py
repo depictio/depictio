@@ -22,9 +22,13 @@ InterProScan match E-value on its rows), so a ``domain_architecture`` tile on th
 table sets ``evalue_col: evalue``; every other column it reads has its default
 name.
 
-hmmsearch domains are kept when their independent E-value passes HMMER's own
-default domain inclusion threshold (``--incdomE 0.01``); the raw hmmer table
-keeps every reported domain. InterProScan matches are kept as reported (each
+hmmsearch domains are kept when they sit in HMMER's inclusion set at its own
+defaults: the full-sequence E-value passes the per-target threshold
+(``--incE``, default 0.01) and the domain's conditional E-value passes the
+per-domain threshold (``--incdomE``, default 0.01, applied in targets that
+already satisfied the per-target one; HMMER User Guide and hmmsearch manual).
+The ``evalue`` column still carries the independent E-value, which is the
+measure drawn; the raw hmmer table keeps every reported domain. InterProScan matches are kept as reported (each
 member database applies its own curated cut-offs).
 """
 
@@ -52,6 +56,8 @@ SOURCES: list[RecipeSource] = [
             "hmm_length": pl.Int64,
             "hmm_from": pl.Int64,
             "hmm_to": pl.Int64,
+            "seq_evalue": pl.Float64,
+            "c_evalue": pl.Float64,
             "i_evalue": pl.Float64,
             "dom_score": pl.Float64,
             "hmm_coverage": pl.Float64,
@@ -99,12 +105,19 @@ OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "accession": pl.Utf8,
 }
 
-#: HMMER's default domain inclusion threshold (``--incdomE``).
-INCLUSION_EVALUE = 0.01
+#: HMMER's default per-target inclusion threshold (``--incE``), tested on the
+#: full-sequence E-value (hmmsearch manual, "OPTIONS FOR INCLUSION THRESHOLDS").
+INCLUSION_EVALUE_TARGET = 0.01
+#: HMMER's default per-domain inclusion threshold (``--incdomE``), tested on the
+#: conditional E-value of domains in targets that passed the per-target one.
+INCLUSION_EVALUE_DOMAIN = 0.01
 
 
 def _hmmer(df: pl.DataFrame) -> pl.DataFrame:
-    return df.filter(pl.col("i_evalue") <= INCLUSION_EVALUE).select(
+    return df.filter(
+        (pl.col("seq_evalue") <= INCLUSION_EVALUE_TARGET)
+        & (pl.col("c_evalue") <= INCLUSION_EVALUE_DOMAIN)
+    ).select(
         "entity",
         "sample",
         pl.col("source").str.to_lowercase().alias("database"),

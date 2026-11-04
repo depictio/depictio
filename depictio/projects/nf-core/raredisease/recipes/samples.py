@@ -12,11 +12,11 @@ columns null rather than failing the collection.
   (a singleton, an affected parent keeps the role of parent). The group filter and every
   group colour of the dashboard use it, so the same word means the same thing everywhere;
 * ``status``: Affected or Unaffected from the pedigree phenotype (2 or 1), Unknown otherwise;
-* ``sex``: the declared sex (Male, Female, Unknown); ``inferred_sex`` is read from the
-  relative depth of the X and Y chromosomes (``contig_depth``): a Y at 10 percent of the
-  autosomal depth or more is Male, below it Female, and X alone decides when no Y row exists
-  (under 0.75 Male). ``sex_check`` compares the two: Match, Mismatch, or Not tested when the
-  alignment has no X or Y contig;
+* ``sex``: the declared sex (Male, Female, Unknown); ``x_relative_depth`` and
+  ``y_relative_depth`` are the mean depth of the X and Y chromosomes over the sample's
+  autosomal mean (``contig_depth``), null without that contig. They are shown as measured:
+  no cut-off turns them into an inferred sex, because no published or tool-defined one
+  is read by this template (peddy's own sex check is not an input);
 * ``alignment_qc``: reads, alignment rate, mismatch rate, duplication, insert size, mean
   coverage, the share of the genome at 10x and 20x, and the mitochondrial depth;
 * ``vcf_callset_summary``: the sample's PASS calls, SNVs, indels, Ts/Tv, het/hom ratio and
@@ -31,7 +31,7 @@ Output schema (a column a missing source would have filled is null):
     father : Utf8, mother : Utf8        declared parents, null when 0
     role : Utf8                          Proband / Father / Mother / Sibling / Other
     status : Utf8                        Affected / Unaffected / Unknown
-    sex : Utf8, inferred_sex : Utf8, sex_check : Utf8
+    sex : Utf8, x_relative_depth : Float64, y_relative_depth : Float64
     total_reads : Int64, aligned_pct, mismatch_rate_pct, duplication_pct : Float64
     median_insert, mean_coverage, bases_10x_pct, bases_20x_pct, mito_depth : Float64
     pass_calls, snvs, indels : Int64
@@ -114,8 +114,8 @@ OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "role": pl.Utf8,
     "status": pl.Utf8,
     "sex": pl.Utf8,
-    "inferred_sex": pl.Utf8,
-    "sex_check": pl.Utf8,
+    "x_relative_depth": pl.Float64,
+    "y_relative_depth": pl.Float64,
     "total_reads": pl.Int64,
     "aligned_pct": pl.Float64,
     "mismatch_rate_pct": pl.Float64,
@@ -150,8 +150,6 @@ _QC_COLUMNS = [
     "mito_depth",
 ]
 _CALLSET_COLUMNS = ["pass_calls", "snvs", "indels", "ts_tv", "het_hom_ratio", "median_dp"]
-Y_MALE_MIN = 0.10
-X_MALE_MAX = 0.75
 
 
 def _pedigree(ped: pl.DataFrame | None) -> pl.DataFrame:
@@ -195,10 +193,16 @@ def _pedigree(ped: pl.DataFrame | None) -> pl.DataFrame:
     ).unique(subset="sample", keep="first", maintain_order=True)
 
 
-def _inferred_sex(contigs: pl.DataFrame | None) -> pl.DataFrame:
-    """Sex from the relative depth of X and Y, per sample (null without either contig)."""
+def _sex_chromosome_depth(contigs: pl.DataFrame | None) -> pl.DataFrame:
+    """Relative depth of X and Y per sample, as measured (null without that contig)."""
     if contigs is None:
-        return pl.DataFrame(schema={"sample": pl.Utf8, "inferred_sex": pl.Utf8})
+        return pl.DataFrame(
+            schema={
+                "sample": pl.Utf8,
+                "x_relative_depth": pl.Float64,
+                "y_relative_depth": pl.Float64,
+            }
+        )
     per_class = contigs.filter(pl.col("contig_class").is_in(["X", "Y"])).pivot(
         on="contig_class", index="sample", values="relative_depth", aggregate_function="mean"
     )
@@ -207,12 +211,8 @@ def _inferred_sex(contigs: pl.DataFrame | None) -> pl.DataFrame:
             per_class = per_class.with_columns(pl.lit(None, dtype=pl.Float64).alias(need))
     return per_class.select(
         "sample",
-        pl.when(pl.col("Y").is_not_null())
-        .then(pl.when(pl.col("Y") >= Y_MALE_MIN).then(pl.lit("Male")).otherwise(pl.lit("Female")))
-        .when(pl.col("X").is_not_null())
-        .then(pl.when(pl.col("X") < X_MALE_MAX).then(pl.lit("Male")).otherwise(pl.lit("Female")))
-        .otherwise(None)
-        .alias("inferred_sex"),
+        pl.col("X").alias("x_relative_depth"),
+        pl.col("Y").alias("y_relative_depth"),
     )
 
 
@@ -276,7 +276,7 @@ def transform(sources: dict[str, pl.DataFrame | None]) -> pl.DataFrame:
             how="left",
         )
     hub = (
-        hub.join(_inferred_sex(sources.get("contigs")), on="sample", how="left")
+        hub.join(_sex_chromosome_depth(sources.get("contigs")), on="sample", how="left")
         .join(_carried(sources.get("genotypes")), on="sample", how="left")
         .join(_parent_check(sources.get("checks")), on="sample", how="left")
     )
@@ -284,16 +284,6 @@ def transform(sources: dict[str, pl.DataFrame | None]) -> pl.DataFrame:
         if column not in hub.columns:
             hub = hub.with_columns(pl.lit(None, dtype=dtype).alias(column))
     hub = hub.with_columns(
-        pl.when(
-            pl.col("inferred_sex").is_null()
-            | (pl.col("sex") == "Unknown")
-            | pl.col("sex").is_null()
-        )
-        .then(pl.lit("Not tested"))
-        .when(pl.col("inferred_sex") == pl.col("sex"))
-        .then(pl.lit("Match"))
-        .otherwise(pl.lit("Mismatch"))
-        .alias("sex_check"),
         pl.col("role").fill_null("Other"),
         pl.col("status").fill_null("Unknown"),
         pl.col("sex").fill_null("Unknown"),

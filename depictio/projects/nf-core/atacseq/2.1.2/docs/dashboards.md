@@ -98,9 +98,8 @@ the panels, down to the sequencing libraries behind them.
 (threshold at 20%), the mitochondrial fraction (box plot) and the duplicate fraction
 (distribution). Then the coverage around start sites (a dotted vertical line at 0 marks the start site the profiles are centred on) beside the signal against specificity
 scatter (a lasso selects libraries), the fragment ladder with its own four cards (fragment
-length, reads by nucleosome window, the sub- to mononucleosomal ratio, properly paired
-reads as a box plot), the fragment ladder curve with the nucleosome-free (NFR) and
-mono-nucleosome windows shaded (up to 100 bp and 150 to 324 bp, ataqv's own windows), and the reads per fragment class, and the reads per reference sequence (each library's share of reads per chromosome against the median share of the libraries in view, on a log2 scale, chromosomes in karyotype order; one library alone in view falls back to a plain share). The ataqv table is collapsed. Filters:
+length, reads by fragment window, the short to mononucleosomal ratio, properly paired
+reads as a box plot), the fragment ladder curve with the two windows ataqv counts shaded (50 to 100 bp and 150 to 200 bp, ataqv's `src/cpp/Metrics.cpp`), and the reads per fragment class (those two windows and the rest), and the reads per reference sequence (each library's share of reads per chromosome against the median share of the libraries in view, on a log2 scale, chromosomes in karyotype order; one library alone in view falls back to a plain share). The ataqv table is collapsed. Filters:
 fragment class, fragment length and reference sequence.
 
 **Signal.** Strip: coverage concentration (the fingerprint area ratio, box plot), the
@@ -119,7 +118,7 @@ the genome-wide panel (a heatmap of calls per megabase, one row per library, chr
 **Annotation.** Strip: annotated peaks (a ring by feature class), genes reached (by feature
 class), the distance to the nearest start site (box plot) and the peak score. Then the
 feature classes per library as 100% bars (an advanced `stacked_taxonomy` tile on the `homer_feature_classes` collection, written by a recipe from the HOMER peak table, with the share or count, sort and legend controls; the distance filter does not reach it) and the peaks around the nearest start site, with
-the promoter window shaded (1 kb either side of the start site at 0). The collapsed `Peak annotation` holds the HOMER table with the
+the HOMER promoter-TSS region shaded (-1 kb to +100 bp of the start site at 0, HOMER's default TSS definition). The collapsed `Peak annotation` holds the HOMER table with the
 peak record card beside it: the card waits for a picked row. Filters: feature class and
 distance to the start site.
 

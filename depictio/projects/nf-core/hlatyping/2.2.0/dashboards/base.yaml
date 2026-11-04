@@ -750,19 +750,19 @@ tabs:
     column_name: pct_duplicates
     column_type: float64
     secondary_layout: threshold
-    threshold_value: 20
+    threshold_value: 30
     threshold_direction: max
     threshold_warn: 50
     display:
       icon_name: mdi:content-duplicate
       icon_color: orange
-      caption: highest, files against FastQC's 20% and 50% lines
+      caption: highest, files against FastQC's 30% and 50% limits
       decimals: 1
     section: Reads at a glance
     tag: ht-rd-card-duplicates
     index: rd-card-duplicates
     title: Duplicate reads
-    description: The highest duplicate share of a read file, in percent; FastQC warns past 20% and fails past 50%.
+    description: "The highest duplicate share of a read file, in percent; FastQC warns past 30% and fails past 50% (its shipped limits.txt, v0.12.1, where duplication warn 70 and error 50 are the shares left after deduplication)."
     layout: {x: 6, y: 0, w: 2, h: 2}
   - component_type: figure
     workflow_tag: hlatyping
@@ -829,7 +829,7 @@ tabs:
     data_collection_tag: read_qc
     mode: code
     code_content: |-
-      # GC content and duplicate reads of each read file side by side. Dashed guide on the left: the human genome's GC; dotted guides on the right: where FastQC warns (20%) and fails (50%) on duplicates.
+      # GC content and duplicate reads of each read file side by side. Dashed guide on the left: the human genome's GC; dotted guides on the right: where FastQC warns (30%) and fails (50%) on duplicates.
       colors = depictio_category_colors.get('read') or {}
       d = df.sort(['sample', 'read'])
       titles = ('GC content (%), dashed line at the human genome average', 'Duplicate reads (%), dotted at FastQC warn, dashed at fail')
@@ -840,7 +840,7 @@ tabs:
           fig.add_trace(go.Bar(y=s['read_key'].to_list(), x=s['pct_gc'].to_list(), orientation='h', name=r, legendgroup=r, marker_color=c, text=[f'{v:.0f}' for v in s['pct_gc'].to_list()], textposition='outside', cliponaxis=False), row=1, col=1)
           fig.add_trace(go.Bar(y=s['read_key'].to_list(), x=s['pct_duplicates'].to_list(), orientation='h', name=r, legendgroup=r, showlegend=False, marker_color=c, text=[f'{v:.0f}' for v in s['pct_duplicates'].to_list()], textposition='outside', cliponaxis=False), row=1, col=2)
       fig.add_vline(x=41, line_dash='dash', line_color='gray', row=1, col=1)
-      fig.add_vline(x=20, line_dash='dot', line_color='gray', row=1, col=2)
+      fig.add_vline(x=30, line_dash='dot', line_color='gray', row=1, col=2)
       fig.add_vline(x=50, line_dash='dash', line_color='gray', row=1, col=2)
       fig.update_yaxes(autorange='reversed', categoryorder='array', categoryarray=d['read_key'].to_list(), automargin=True)
       fig.update_xaxes(range=[0, 75], row=1, col=1)
@@ -856,9 +856,9 @@ tabs:
 
       How to read: GC content has no pass mark, because HLA-enriched, exome or RNA reads often differ from the genome average without harm; look for a file that departs from the other file of its pair or from the other samples. For duplicates, a bar short of the dotted line is fine, a bar past it warns and a bar past the dashed line fails, because few distinct reads are left. Enriched reads repeat by design, so a warning alone is not a defect; open [MultiQC](tab:MultiQC) for FastQC's duplication curve.
 
-      Lines and annotations: the dashed line on the left is at 41%, the average GC content of the human genome, a fixed reference and not read from the run. On the right the dotted line is at 20% and the dashed line at 50%, the duplicate shares at which FastQC warns and fails. The number at the end of each bar is its value in percent.
+      Lines and annotations: the dashed line on the left is at 41%, the average GC content of the human genome, a fixed reference and not read from the run. On the right the dotted line is at 30% and the dashed line at 50%, the duplicate shares at which FastQC warns and fails. They come from FastQC's shipped limits.txt, where the duplication limits are written as the share left after deduplication (warn below 70%, error below 50%); they are fixed values, not read from the run. The FastQC help page for the module words the warning as 20%, which differs from the shipped limits. The number at the end of each bar is its value in percent.
 
-      Sources: Lander et al. 2001, doi:10.1038/35057062 (GC content); https://www.bioinformatics.babraham.ac.uk/projects/fastqc/Help/3%20Analysis%20Modules/8%20Duplicate%20Sequences.html (duplication thresholds).
+      Sources: Lander et al. 2001, doi:10.1038/35057062 (GC content); FastQC v0.12.1 shipped Configuration/limits.txt, https://github.com/s-andrews/FastQC/blob/v0.12.1/Configuration/limits.txt (duplication thresholds, lines 17-20).
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: hlatyping

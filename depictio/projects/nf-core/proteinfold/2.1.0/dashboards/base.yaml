@@ -1007,13 +1007,16 @@ tabs:
 
       How to read: columns where many rows agree with the query are conserved and tend to be predicted
       confidently; a lone query row means no homologs were found, which usually lowers confidence. Brush
-      columns to select those residues on the structure.
+      columns to select those residues on the structure. Rows are ordered by rank and capped at 200.
 
       Lines and annotations: the rows below the ruler are the consensus (the most frequent residue of each
       column, fainter where fewer rows agree) and the conservation bars (one minus the Shannon entropy of
       the column over log2(20), weighted by the share of non-gap rows). Residues are coloured with the
-      Clustal X classes, only where their class holds at least half of the column, and rows are ordered by
-      rank and capped at 200.
+      Clustal X classes of Jalview. Jalview asks over 50, 60 or 85 percent of the column depending on the
+      class and always colours glycine and proline; this tile applies one cut to every class, a class
+      holding at least half of the column, so it simplifies Jalview's table.
+
+      Source: Jalview colour schemes, https://www.jalview.org/help/html/colourSchemes/clustal.html
 
       Note: ESMFold folds without an alignment, so its structure opens an empty tile.
     layout: {x: 0, y: 0, w: 8, h: 6}

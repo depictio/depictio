@@ -65,7 +65,7 @@ rest. `nominal` is true for the first two. The volcanoes plot the raw p-value, w
 dashed line at p = 0.05, and colour the points by status; the tables are sorted by raw p-value;
 the cards add the nominal hits, the samples that carry one and the strongest -log10 p; the
 samples-and-genes views count the nominal hits and split them into called and not called.
-The Overview findings list the nominal counts beside the calls, state each call's cut-off, and end with a row that reads the cohort size: OUTRIDER and FRASER recommend at least 30 samples, below which every adjusted p-value tends to 1 and zero calls is the expected answer (the Cohort size card counts each sample as pass at a group of 30 or more, warn from 20, fail under 20, the 20 being this dashboard's borderline level). A nominal hit is a lead: a
+The Overview findings list the nominal counts beside the calls, state each call's cut-off, and end with a row that reads the cohort size: DROP requires at least 10 samples per group and recommends at least 50 (the FRASER vignette agrees), so a small run with zero calls is plausible (the Cohort size card counts each sample as pass at a group of 50 or more; the dashboard sets no other level). A nominal hit is a lead: a
 share `NOMINAL_P` of all tests passes by chance, so a count near that share of the genes tested
 is what chance alone gives. The tables keep the near-null background out, so the number of
 tests per sample is not known and the dashboard states the rate, not an expected count.
@@ -97,8 +97,8 @@ The landing page, at compact width with the filter panel collapsed:
 - **Pipeline**: six steps (group, count, expression, splicing, alleles, locate). Each step
   opens the parameters that drive it and the tab that shows its result.
 - **Key figures**: four headline cards, each opening the tab that explains it. The cohort size
-  (samples in the largest analysis group, with a threshold at 30 and a warning from 20: OUTRIDER
-  and FRASER learn what is normal from that cohort and have little power below it; a group is
+  (samples in the largest analysis group, with a threshold at 50, the DROP recommendation, DROP
+  requiring at least 10: OUTRIDER and FRASER learn what is normal from that cohort; a group is
   the set of samples one analysis fits together), outliers called (by group, most first), the
   heaviest sample (its genes at the raw p-value, with the spread over all samples as a box) and
   calls on a phenotype gene (the outliers-called card says that a small run may count only mono-allelic calls). All four read the per-sample table, which every

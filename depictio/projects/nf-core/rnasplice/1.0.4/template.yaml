@@ -43,14 +43,17 @@
 # DATA_ROOT holds. The assembly is the GENOME variable.
 #
 # Thresholds are variables with generic defaults: SPLICING_FDR (0.05) on every
-# tool's adjusted p-value (SUPPA2's empirical p-value), MIN_DPSI (0.1) on the
-# event-level PSI change of rMATS and SUPPA2, RMATS_MIN_READS (10) mean
-# junction reads per replicate an rMATS event needs in both conditions.
+# tool's adjusted p-value (SUPPA2's empirical p-value), MIN_DPSI (0, an optional
+# extra floor on the event-level PSI change of rMATS and SUPPA2: rMATS already
+# tests the change against its own --cstat cutoff, default 0.0001, and SUPPA2's
+# diffSplice lower bound defaults to 0), RMATS_MIN_READS (10, the template's
+# working value) mean junction reads per replicate an rMATS event needs in both
+# conditions.
 # ============================================================================
 template:
   template_id: "nf-core/rnasplice/1.0.4"
   description: "nf-core/rnasplice template: MultiQC funnel, sample space, cross-tool differential splicing (DEXSeq exon and DTU, edgeR, rMATS, SUPPA2) with per-tool volcanoes, event types and a sashimi of the junctions around the rMATS calls"
-  version: "2.1.1"
+  version: "3.0.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory of one rnasplice run (multiqc/, pipeline_info/, contrastsheet/, star_salmon/ and/or salmon/)"
@@ -85,11 +88,11 @@ template:
       required: false
       default: "0.05"
     - name: "MIN_DPSI"
-      description: "Minimal absolute change in percent spliced-in (0 to 1) for an rMATS or SUPPA2 event to be called."
+      description: "Optional extra floor on the absolute change in percent spliced-in (0 to 1) for an rMATS or SUPPA2 event to be called. 0 (default) keeps the tool's own call: the rMATS FDR already tests the change against rMATS --cstat (default 0.0001) and SUPPA2 diffSplice has a lower bound of 0 by default. Raise it to ask for a larger shift; any value above 0 is your own working value."
       required: false
-      default: "0.1"
+      default: "0"
     - name: "RMATS_MIN_READS"
-      description: "Mean junction reads per replicate an rMATS event needs in both conditions to be kept."
+      description: "Mean junction reads per replicate an rMATS event needs in both conditions to be kept. 10 is the template's working value (rMATS and nf-core/rnasplice set no such minimum); 0 keeps every event."
       required: false
       default: "10"
   # Variables for the BUNDLED reference dataset: the test_full run with the
@@ -460,7 +463,7 @@ workflows:
               "neg_log10_fdr": "-log10 FDR (300 when it is 0)"
               "reads_treatment": "Mean inclusion plus skipping junction reads per treatment replicate"
               "reads_control": "Mean inclusion plus skipping junction reads per control replicate"
-              "significant": "FDR under SPLICING_FDR and absolute dPSI at or above MIN_DPSI"
+              "significant": "rMATS FDR under SPLICING_FDR and absolute dPSI at or above MIN_DPSI (default 0, so the FDR alone decides)"
               "direction": "up (more inclusion in treatment), down, or not significant"
 
       # Declared after rmats_events, samples and contrasts, which its recipe
@@ -517,7 +520,7 @@ workflows:
               "abs_dpsi": "Absolute delta PSI"
               "pvalue": "SUPPA2 empirical p-value"
               "neg_log10_pvalue": "-log10 p-value (300 when it is 0)"
-              "significant": "p-value under SPLICING_FDR and absolute delta PSI at or above MIN_DPSI"
+              "significant": "SUPPA2 p-value under SPLICING_FDR and absolute delta PSI at or above MIN_DPSI (default 0, so the p-value alone decides)"
               "direction": "up (more inclusion in treatment), down, or not significant"
 
       - data_collection_tag: "splicing_genes"

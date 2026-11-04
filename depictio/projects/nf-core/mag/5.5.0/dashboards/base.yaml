@@ -377,7 +377,7 @@ main_dashboard:
       - **{{bn_top}}** recovered the most bins of at least medium quality – {{bn_share}} of them, by CheckM2 [Bins](tab:Bins)
       - **{{asm_top}}** put the most bases into contigs of 1 kbp or more – QUAST, summed over the samples [Assembly](tab:Assembly)
       - **{{ph_share}}** of the named bins are {{ph_top}} – the phylum with the most bins, by GTDB-Tk [Taxonomy](tab:Taxonomy)
-      - **{{rna_ok}}** of {{n_ann}} annotated bins carry the RNAs a high-quality draft needs – Prokka [Annotation](tab:Annotation)
+      - **{{rna_ok}}** of {{n_ann}} annotated bins carry the 5S, 16S and 23S rRNAs and 18 tRNAs a high-quality draft needs – Prokka [Annotation](tab:Annotation)
     section: Findings
     tag: mg-ov-findings
     index: ov-findings
@@ -388,7 +388,7 @@ main_dashboard:
     section: Findings
     source_tab: Bins
     source_component: bin-mimag-plane
-    caption: One point per bin, coloured by binner; bottom right, at least 90% complete and under 5% contaminated, are the bins worth naming.
+    caption: One point per bin, coloured by binner; bottom right, more than 90% complete and under 5% contaminated, are the bins worth naming.
     tag: mg-ov-hl-mimag
     index: ov-hl-mimag
     layout: {x: 0, y: 2, w: 4, h: 4}
@@ -1142,7 +1142,7 @@ tabs:
     body: >
       [CheckM2](https://github.com/chklovski/CheckM2) predicts how complete and how contaminated each
       bin is from its marker genes, and [QUAST](https://quast.sourceforge.net) measures its contigs.
-      The bottom right of the plane, at least 90% complete and under 5% contaminated, holds the bins
+      The bottom right of the plane, more than 90% complete and under 5% contaminated, holds the bins
       worth naming. A complete bin with a low N50 is a pile of fragments, not one genome.
     tag: mg-bin-intro
     index: bin-intro
@@ -1242,13 +1242,20 @@ tabs:
     display:
       icon_name: mdi:alert-outline
       icon_color: red
-      caption: median; 5% or less for a high-quality draft
+      caption: median; under 5% for a high-quality draft
       decimals: 1
     section: Bins at a glance
     tag: mg-bin-card-contamination
     index: bin-card-contamination
     title: Contamination (%)
-    description: Median CheckM2 contamination. MIMAG asks under 5% for a high-quality draft, under 10% for a medium one.
+    description: >-
+      Median CheckM2 contamination of the bins in view, against the MIMAG limits: under 5% for a
+      high-quality draft and under 10% for a medium one.
+
+      Lines and annotations: the strip passes at 5% or less and warns up to 10%. MIMAG asks for strictly
+      less than 5%, so a median of exactly 5 is the one value the strip passes that MIMAG does not.
+
+      Source: MIMAG, Bowers et al. 2017, Table 1, https://doi.org/10.1038/nbt.3893
     layout: {x: 4, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: mag
@@ -1289,7 +1296,22 @@ tabs:
     tag: mg-bin-mimag
     index: bin-mimag-plane
     title: Completeness against contamination
-    description: The lines sit at 90% complete and 5% contaminated. Marker size is the bin's length.
+    description: >-
+      Each point is one bin, with CheckM2 completeness on x and contamination on y; marker size is the
+      bin's length. The bottom right quadrant holds the bins that can be high-quality drafts.
+
+      How to read: a point in the bottom right is a bin worth naming, and one above the horizontal line
+      mixes in sequence from another organism. A bin left of the vertical line is incomplete, which
+      lowers its tier before contamination does.
+
+      Lines and annotations: the vertical line at 90% completeness and the horizontal line at 5%
+      contamination are the MIMAG limits of a high-quality draft, which asks more than 90% complete
+      and under 5% contaminated, so a point exactly on a line is outside it.
+
+      Source: MIMAG, Bowers et al. 2017, Table 1, https://doi.org/10.1038/nbt.3893
+
+      Note: the plane sees CheckM2 only. A high-quality draft also needs the 5S, 16S and 23S rRNA genes
+      and 18 tRNAs, which the Annotation tab checks.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: advanced_viz
     workflow_tag: mag
@@ -1501,13 +1523,22 @@ tabs:
     display:
       icon_name: mdi:target
       icon_color: orange
-      caption: median; 95% is the GTDB species boundary
+      caption: median; 95% is the typical GTDB species radius
       decimals: 1
     section: Placements at a glance
     tag: mg-tax-card-ani
     index: tax-card-ani
     title: Identity to reference (%)
-    description: Median identity of a bin to its closest GTDB genome, over the bins that have one.
+    description: >-
+      Median identity of a bin to its closest GTDB genome, over the bins that have one.
+
+      Lines and annotations: the strip passes at 95%, the typical ANI radius of a GTDB species. GTDB
+      groups genomes into a species by a radius around each species representative that differs from
+      species to species, and GTDB-Tk also asks for a minimum alignment fraction, so 95% is a guide and
+      not the cut-off applied to each bin.
+
+      Sources: Parks et al. 2020, Nat Biotechnol 38:1079, https://doi.org/10.1038/s41587-020-0501-8;
+      GTDB-Tk classify, https://ecogenomics.github.io/GTDBTk/commands/classify.html
     layout: {x: 6, y: 0, w: 2, h: 2}
   - component_type: advanced_viz
     workflow_tag: mag
@@ -1543,7 +1574,19 @@ tabs:
     tag: mg-tax-ani
     index: tax-ani-alignment
     title: How confidently each bin was named
-    description: The line marks 95% identity; points to its left were named above species level.
+    description: >-
+      Each point is one bin, with its identity to the closest GTDB genome on x and the share of the bin
+      aligned to it on y. The question is how confidently the bin was named.
+
+      How to read: a point at high identity and high alignment is a firm species call, and one with low
+      identity or a short alignment is placed on shakier ground. Click a point to open the bin.
+
+      Lines and annotations: the vertical line at 95% is the typical ANI radius of a GTDB species. GTDB
+      uses a radius per species and a minimum alignment fraction, so a point on either side of the line
+      is not always named differently.
+
+      Sources: Parks et al. 2020, Nat Biotechnol 38:1079, https://doi.org/10.1038/s41587-020-0501-8;
+      GTDB-Tk classify, https://ecogenomics.github.io/GTDBTk/commands/classify.html
     layout: {x: 4, y: 0, w: 4, h: 6}
   # Phylum and top 8, the eight the phylum colours were given to, so the bars,
   # the sunburst and the sankey share a key.
@@ -1632,7 +1675,7 @@ tabs:
       [Prokka](https://github.com/tseemann/prokka) annotates each bin's coding sequences, transfer
       RNAs and ribosomal RNAs. A prokaryotic genome carries about 900 coding sequences per megabase, so
       a bin far from that line holds a second organism or sequence that is not a genome. A high-quality
-      draft also needs its ribosomal RNAs and 18 transfer RNAs, which the last plot checks.
+      draft also needs its 5S, 16S and 23S ribosomal RNAs and 18 transfer RNAs, which the last plot checks.
     tag: mg-ann-intro
     index: ann-intro
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -1736,7 +1779,10 @@ tabs:
     tag: mg-ann-card-trna
     index: ann-card-trna
     title: Transfer RNAs
-    description: Median transfer RNAs per bin. A high-quality draft carries at least 18.
+    description: >-
+      Median transfer RNAs per bin. A high-quality draft carries at least 18.
+
+      Source: MIMAG, Bowers et al. 2017, Table 1, https://doi.org/10.1038/nbt.3893
     layout: {x: 4, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: mag
@@ -1756,7 +1802,15 @@ tabs:
     tag: mg-ann-card-rna
     index: ann-card-rna
     title: Bins with their RNAs
-    description: Bins carrying the ribosomal RNAs and the 18 transfer RNAs of a high-quality draft.
+    description: >-
+      Bins carrying the 5S, 16S and 23S ribosomal RNA genes and at least 18 transfer RNAs, the RNA half
+      of a high-quality draft.
+
+      Lines and annotations: the rRNA genes are named from the bin's Prokka GFF. A bin without a GFF
+      cannot be checked and is not counted here, and a bin with fewer than 3 rRNA features or 18 tRNAs
+      is left out without it.
+
+      Source: MIMAG, Bowers et al. 2017, Table 1, https://doi.org/10.1038/nbt.3893
     layout: {x: 6, y: 0, w: 2, h: 2}
   - component_type: advanced_viz
     workflow_tag: mag
@@ -1810,7 +1864,17 @@ tabs:
     tag: mg-ann-rna
     index: ann-rna-plane
     title: Transfer RNAs against ribosomal RNAs
-    description: The line marks 18 transfer RNAs. Points on the bottom row carry no ribosomal RNA at all.
+    description: >-
+      Each point is one bin, with its transfer RNA count on x and its ribosomal RNA count on y.
+
+      How to read: points on the bottom row carry no ribosomal RNA at all, and a bin needs the 5S, 16S
+      and 23S genes, so at least three ribosomal RNAs, to be a high-quality draft. This count does not
+      say which genes they are; the Findings and the card count only the bins whose GFF names all three.
+
+      Lines and annotations: the vertical line at 18 is the MIMAG minimum of transfer RNAs for a
+      high-quality draft.
+
+      Source: MIMAG, Bowers et al. 2017, Table 1, https://doi.org/10.1038/nbt.3893
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: mag

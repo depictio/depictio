@@ -13,7 +13,8 @@ caller's own VCF otherwise):
 - ``multiallelic_pct``: multiallelic sites per hundred records.
 - ``pass_pct``: calls the caller kept (FILTER PASS or unset) per hundred.
 - ``het_hom_ratio``: heterozygous over homozygous-alternate PASS calls
-  (a single diploid genome sits near 1.5 to 2 on an exome).
+  (Hardy-Weinberg expects 2.0; cohort medians run from about 1.4 to 2.0 by
+  ancestry, Wang et al., Bioinformatics 2015, doi:10.1093/bioinformatics/btu668).
 - ``median_dp``: median read depth at the call.
 - ``median_het_vaf``: median allele fraction of heterozygous PASS calls,
   which a clean caller keeps near 0.5.

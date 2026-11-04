@@ -21,9 +21,14 @@ Sources:
              merged Salmon count matrix by default) to put symbols on the
              Ensembl ids; repoint it with ``source_overrides``.
 
-Output: see ``OUTPUT_SCHEMA``. ``significant`` uses anota2seq's default
-selection: adjusted p below ``MAX_PADJ`` and an absolute effect of at least
-``MIN_EFFECT`` (log2 of a 1.2-fold change).
+Output: see ``OUTPUT_SCHEMA``. ``significant`` uses anota2seqRun's default
+selection (https://rdrr.io/github/ChrOertlin/anota2seq/man/anota2seqRun.html):
+adjusted p below ``MAX_PADJ`` (``maxPAdj`` 0.15) for every analysis, plus an
+absolute effect of at least ``MIN_EFFECT_TE`` (``deltaPT`` and ``deltaTP``,
+log2 of a 1.2-fold change) for the translation and buffering analyses only. The
+ribosome-bound and total mRNA analyses carry no effect cut (``deltaP`` and
+``deltaT`` default to NULL; nf-core/riboseq 2.0.0 ``ribo_lfc_threshold`` and
+``rna_lfc_threshold`` default to 0, "Set to 0 to disable").
 """
 
 from __future__ import annotations
@@ -74,8 +79,10 @@ OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "direction": pl.Utf8,
 }
 
+# anota2seqRun defaults: maxPAdj 0.15; deltaPT and deltaTP log2(1.2) apply to the
+# translation and buffering analyses only (deltaP and deltaT are NULL).
 MAX_PADJ = 0.15
-MIN_EFFECT = math.log2(1.2)
+MIN_EFFECT_TE = math.log2(1.2)
 PADJ_ZERO_NEG_LOG10 = 300.0
 
 ANALYSIS_LABELS = {
@@ -85,6 +92,8 @@ ANALYSIS_LABELS = {
     "buffering": "Buffering",
     "mRNA_abundance": "mRNA abundance",
 }
+# The analyses anota2seqRun cuts on effect size (deltaPT, deltaTP), by label.
+EFFECT_CUT_ANALYSES = (ANALYSIS_LABELS["translation"], ANALYSIS_LABELS["buffering"])
 
 _FILE = r"([^/]+)\.([^./]+)\.anota2seq\.results\.tsv$"
 
@@ -123,7 +132,10 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         out = out.join(names, on="gene_id", how="left")
     else:
         out = out.with_columns(pl.lit(None, dtype=pl.Utf8).alias("gene_name"))
-    significant = (pl.col("padj") < MAX_PADJ) & (pl.col("effect").abs() >= MIN_EFFECT)
+    cut_on_effect = pl.col("analysis").is_in(EFFECT_CUT_ANALYSES)
+    significant = (pl.col("padj") < MAX_PADJ) & (
+        ~cut_on_effect | (pl.col("effect").abs() >= MIN_EFFECT_TE)
+    )
     out = out.with_columns(
         pl.col("gene_name").fill_null(pl.col("gene_id")),
         pl.when(pl.col("padj") > 0)

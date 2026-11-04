@@ -1620,7 +1620,7 @@ tabs:
     tag: sk-cq-card-hethom
     index: cq-card-hethom
     title: Het to hom ratio
-    description: Heterozygous over homozygous-alternate PASS calls of a callset. A human germline callset reads about 1.5 to 2; far above hints at contamination or mapping noise, far below at a loss of heterozygosity or a small, inbred cohort.
+    description: Heterozygous over homozygous-alternate PASS calls of a callset. Hardy-Weinberg equilibrium expects 2.0, and cohort medians run from about 1.4 to 2.0 by ancestry (Wang et al., Bioinformatics 2015, doi:10.1093/bioinformatics/btu668), so no pass or fail range is drawn. A value far above can hint at contamination or mapping noise, far below at a loss of heterozygosity or a small, inbred cohort.
     layout: {x: 4, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: sarek
@@ -3189,8 +3189,8 @@ tabs:
     body: |
       ### How to read this tab
       - ![](icon:mdi:chart-timeline-variant) **log2 ratio** The coverage of a region in the tumour against the reference, on a log scale. 0 is balanced (two copies), +0.58 is about three copies, -1 about one copy.
-      - ![](icon:mdi:arrow-up-bold-outline) **Gain** A called segment above +0.3, drawn in orange. The dashed line of the figures marks the cut-off.
-      - ![](icon:mdi:arrow-down-bold-outline) **Loss** A called segment below -0.3, drawn in blue. The dashed line of the figures marks the cut-off.
+      - ![](icon:mdi:arrow-up-bold-outline) **Gain** A called segment above +0.2, drawn in orange. The dashed line of the figures marks the cut-off, the edge between two and three copies in the default [CNVkit](https://github.com/etal/cnvkit/blob/master/cnvlib/commands.py) call (`-t`, 0.2).
+      - ![](icon:mdi:arrow-down-bold-outline) **Loss** A called segment below -0.25, drawn in blue. The dashed line of the figures marks the cut-off, the edge between two and one copy in the default CNVkit call (`-t`, -0.25).
       - ![](icon:mdi:percent-outline) **Genome altered** The megabases in gained or lost segments over the megabases [CNVkit](https://cnvkit.readthedocs.io) called.
       - ![](icon:mdi:barcode) **MSI score** The share of microsatellite sites whose length differs between a tumour and its matched normal ([MSIsensor-pro](https://github.com/xjtu-omics/msisensor-pro)). A tumour called without a normal has none.
     tag: sk-cn-intro
@@ -3257,7 +3257,7 @@ tabs:
     tag: sk-cn-card-fga
     index: cn-card-fga
     title: "Fraction of genome altered"
-    description: "Megabases in segments past the 0.3 and -0.3 cut-offs over the megabases CNVkit called, in percent, median over the samples in view. It covers the whole genome, so the contig filter does not change it."
+    description: "Megabases in segments above +0.2 or below -0.25 (CNVkit's default call thresholds) over the megabases CNVkit called, in percent, median over the samples in view. It covers the whole genome, so the contig filter does not change it."
     layout: {x: 0, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: sarek
@@ -3277,7 +3277,7 @@ tabs:
     tag: sk-cn-card-gained
     index: cn-card-gained
     title: "Megabases gained"
-    description: "Megabases in segments above the 0.3 gain cut-off, median over the samples in view. It covers the whole genome, so the contig filter does not change it."
+    description: "Megabases in segments above the +0.2 gain cut-off (CNVkit's default call threshold), median over the samples in view. It covers the whole genome, so the contig filter does not change it."
     layout: {x: 2, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: sarek
@@ -3297,7 +3297,7 @@ tabs:
     tag: sk-cn-card-lost
     index: cn-card-lost
     title: "Megabases lost"
-    description: "Megabases in segments below the -0.3 loss cut-off, median over the samples in view. It covers the whole genome, so the contig filter does not change it."
+    description: "Megabases in segments below the -0.25 loss cut-off (CNVkit's default call threshold), median over the samples in view. It covers the whole genome, so the contig filter does not change it."
     layout: {x: 4, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: sarek
@@ -3405,12 +3405,12 @@ tabs:
     visu_type: line
     mode: code
     code_content: |-
-      # Called segments along the genome, one row per sample: height is the log2 ratio, red above 0.3 (gain), blue below -0.3 (loss), grey in between. Chromosomes in karyotype order, alternate ones shaded; the dashed lines are the cut-offs.
+      # Called segments along the genome, one row per sample: height is the log2 ratio, red above 0.2 (gain), blue below -0.25 (loss), grey in between. Chromosomes in karyotype order, alternate ones shaded; the dashed lines are the cut-offs.
       key = pl.col('chrom').str.replace('^chr', '')
       rank = pl.when(key.str.contains('^[0-9]+$')).then(key.cast(pl.Int64, strict=False)).when(key == 'X').then(23).when(key == 'Y').then(24).when(key.is_in(['M', 'MT'])).then(25).otherwise(100)
       seg = df.filter(pl.col('segment') == 'segment').with_columns(key.alias('c'), rank.alias('r'), pl.when(pl.col('unit_type') == 'paired').then(0).when(pl.col('unit_type') == 'tumour_only').then(1).otherwise(2).alias('u')).with_row_index('sid')
       chroms = seg.group_by('c').agg(pl.col('r').first(), (pl.col('end').max() / 1e6).alias('len')).sort(['r', 'c']).with_columns((pl.col('len').cum_sum() - pl.col('len')).alias('off')).with_columns((pl.col('off') + pl.col('len')).alias('stop'), (pl.col('off') + pl.col('len') / 2).alias('mid'))
-      seg = seg.join(chroms.select('c', 'off'), on='c').with_columns((pl.col('off') + pl.col('start') / 1e6).alias('x0'), (pl.col('off') + pl.col('end') / 1e6).alias('x1'), pl.when(pl.col('log2') > 0.3).then(pl.lit('Gain')).when(pl.col('log2') < -0.3).then(pl.lit('Loss')).otherwise(pl.lit('Neutral')).alias('state'))
+      seg = seg.join(chroms.select('c', 'off'), on='c').with_columns((pl.col('off') + pl.col('start') / 1e6).alias('x0'), (pl.col('off') + pl.col('end') / 1e6).alias('x1'), pl.when(pl.col('log2') > 0.2).then(pl.lit('Gain')).when(pl.col('log2') < -0.25).then(pl.lit('Loss')).otherwise(pl.lit('Neutral')).alias('state'))
       seg = seg.with_columns(pl.format('chr{}:{}-{} Mb, log2 {}, copy number {}', pl.col('c'), (pl.col('start') / 1e6).round(1), (pl.col('end') / 1e6).round(1), pl.col('log2').round(2), pl.col('copy_number')).alias('tip'))
       base = seg.select('sid', 'sample', 'u', 'state', 'log2', 'tip')
       poly = pl.concat([base.with_columns(seg['x0'].alias('x'), pl.lit(0.0).alias('y'), pl.lit(0).alias('k')), base.with_columns(seg['x0'].alias('x'), pl.col('log2').alias('y'), pl.lit(1).alias('k')), base.with_columns(((seg['x0'] + seg['x1']) / 2).alias('x'), pl.col('log2').alias('y'), pl.lit(2).alias('k')), base.with_columns(seg['x1'].alias('x'), pl.col('log2').alias('y'), pl.lit(3).alias('k')), base.with_columns(seg['x1'].alias('x'), pl.lit(0.0).alias('y'), pl.lit(4).alias('k')), base.with_columns(seg['x0'].alias('x'), pl.lit(0.0).alias('y'), pl.lit(5).alias('k')), base.with_columns(pl.lit(None, dtype=pl.Float64).alias('x'), pl.lit(None, dtype=pl.Float64).alias('y'), pl.lit(6).alias('k'))]).sort(['u', 'sample', 'state', 'sid', 'k'])
@@ -3430,8 +3430,8 @@ tabs:
               fig.add_vrect(x0=starts[i], x1=stops[i], row='all', col='all', fillcolor='#868e96', opacity=0.08, line_width=0, layer='below')
       fig.update_xaxes(tickmode='array', tickvals=mids, ticktext=names, range=[0, stops[-1]], showgrid=False, tickfont_size=10)
       fig.update_yaxes(range=[-ymax, ymax], zeroline=True, zerolinecolor='#868e96', showgrid=False, title_font_size=11)
-      fig.add_hline(y=0.3, line_dash='dash', line_width=1, line_color=colors.get('Gain', '#e8590c'), row='all', col='all', annotation_text='gain above 0.3', annotation_position='top left', annotation_font_size=10, annotation_font_color=colors.get('Gain', '#e8590c'))
-      fig.add_hline(y=-0.3, line_dash='dash', line_width=1, line_color=colors.get('Loss', '#1c7ed6'), row='all', col='all', annotation_text='loss below -0.3', annotation_position='bottom left', annotation_font_size=10, annotation_font_color=colors.get('Loss', '#1c7ed6'))
+      fig.add_hline(y=0.2, line_dash='dash', line_width=1, line_color=colors.get('Gain', '#e8590c'), row='all', col='all', annotation_text='gain above 0.2', annotation_position='top left', annotation_font_size=10, annotation_font_color=colors.get('Gain', '#e8590c'))
+      fig.add_hline(y=-0.25, line_dash='dash', line_width=1, line_color=colors.get('Loss', '#1c7ed6'), row='all', col='all', annotation_text='loss below -0.25', annotation_position='bottom left', annotation_font_size=10, annotation_font_color=colors.get('Loss', '#1c7ed6'))
       fig.for_each_annotation(lambda a: a.update(text=a.text.split('=')[-1]) if '=' in a.text else None)
       fig.update_layout(margin=dict(t=30, r=10), legend=dict(orientation='h', y=1.08, x=0, title_text=''))
     section: Genome-wide gains and losses
@@ -3447,13 +3447,14 @@ tabs:
       row shifted up or down can point at a normalisation or purity issue rather than at biology. Open [One
       tumour in detail](section:One tumour in detail) for the bins behind a row.
 
-      Lines and annotations: the dashed lines at +0.3 (gain above 0.3) and -0.3 (loss below -0.3) mark the
-      cut-offs; the grey line is zero, and alternate chromosomes are shaded. The +0.3 matches the upper edge
-      of CNVkit's neutral range by default, while its lower edge is -0.4, so -0.3 is the mirror image used by
-      this template and not CNVkit's own. They are fixed values, not read from the run.
+      Lines and annotations: the dashed lines at +0.2 (gain above 0.2) and -0.25 (loss below -0.25) mark the
+      cut-offs; the grey line is zero, and alternate chromosomes are shaded. They are the edges of the
+      neutral two-copy call in CNVkit's default `call` thresholds (the second and third values of
+      -1.1,-0.25,0.2,0.7), so they are asymmetric on purpose. They are fixed values, not read from the run.
 
-      Source: CNVkit, default thresholds of the call command,
-      https://cnvkit.readthedocs.io/en/stable/pipeline.html
+      Source: CNVkit `call`, option -t/--thresholds, default -1.1,-0.25,0.2,0.7 (cnvlib/commands.py,
+      https://github.com/etal/cnvkit/blob/master/cnvlib/commands.py). sarek sets no -t for CNVKIT_CALL
+      (conf/modules/cnvkit.config), so the defaults apply.
 
       Note: the log2 ratio depends on tumour purity and ploidy, so a gain or loss in an impure tumour is
       smaller than the cut-off.
@@ -3481,8 +3482,8 @@ tabs:
       facet_by_sample: false
       y_range: 2.5
       point_size: 4
-      gain_threshold: 0.3
-      loss_threshold: -0.3
+      gain_threshold: 0.2
+      loss_threshold: -0.25
     section: One tumour in detail
     tag: sk-cn-av-profile
     index: cn-profile
@@ -3496,12 +3497,14 @@ tabs:
       is a confident event. A profile with every bin far from zero is a normalisation issue. Open in genome
       browser shows the reads at the region.
 
-      Lines and annotations: the two dotted lines at +0.3 and -0.3 mark where the segment colours switch, and
-      alternate chromosomes are shaded. The +0.3 matches the upper edge of CNVkit's neutral range by default,
-      while its lower edge is -0.4. Both are fixed values of this template, not read from the run.
+      Lines and annotations: the two dotted lines at +0.2 and -0.25 mark where the segment colours switch, and
+      alternate chromosomes are shaded. They are the edges of the neutral two-copy call in CNVkit's default
+      `call` thresholds (the second and third values of -1.1,-0.25,0.2,0.7). Both are fixed values of this
+      template, not read from the run.
 
-      Source: CNVkit, default thresholds of the call command,
-      https://cnvkit.readthedocs.io/en/stable/pipeline.html
+      Source: CNVkit `call`, option -t/--thresholds, default -1.1,-0.25,0.2,0.7 (cnvlib/commands.py,
+      https://github.com/etal/cnvkit/blob/master/cnvlib/commands.py). sarek sets no -t for CNVKIT_CALL
+      (conf/modules/cnvkit.config), so the defaults apply.
 
       Note: CNVkit gives no B-allele frequency here, so none is drawn.
     layout: {x: 0, y: 0, w: 8, h: 9}
@@ -3511,11 +3514,11 @@ tabs:
     visu_type: heatmap
     mode: code
     code_content: |-
-      # Length-weighted mean log2 ratio of the called segments, one cell per sample and chromosome: red where the chromosome is gained, blue where it is lost, white where it is balanced. The number is printed in the cells past the 0.3 cut-offs.
+      # Length-weighted mean log2 ratio of the called segments, one cell per sample and chromosome: red where the chromosome is gained, blue where it is lost, white where it is balanced. The number is printed in the cells past the +0.2 and -0.25 cut-offs.
       key = pl.col('chrom').str.replace('^chr', '')
       rank = pl.when(key.str.contains('^[0-9]+$')).then(key.cast(pl.Int64, strict=False)).when(key == 'X').then(23).when(key == 'Y').then(24).when(key.is_in(['M', 'MT'])).then(25).otherwise(100)
       seg = df.filter(pl.col('segment') == 'segment').with_columns(key.alias('c'), rank.alias('r'), ((pl.col('end') - pl.col('start')) / 1e6).alias('mb'), pl.when(pl.col('unit_type') == 'paired').then(0).when(pl.col('unit_type') == 'tumour_only').then(1).otherwise(2).alias('u'))
-      cell = seg.group_by(['u', 'sample', 'c', 'r']).agg(((pl.col('log2') * pl.col('mb')).sum() / pl.col('mb').sum()).alias('v')).with_columns(pl.when(pl.col('v').abs() >= 0.3).then(pl.col('v').map_elements(lambda x: f'{x:+.2f}', return_dtype=pl.Utf8)).otherwise(pl.lit('')).alias('t'))
+      cell = seg.group_by(['u', 'sample', 'c', 'r']).agg(((pl.col('log2') * pl.col('mb')).sum() / pl.col('mb').sum()).alias('v')).with_columns(pl.when((pl.col('v') > 0.2) | (pl.col('v') < -0.25)).then(pl.col('v').map_elements(lambda x: f'{x:+.2f}', return_dtype=pl.Utf8)).otherwise(pl.lit('')).alias('t'))
       samples = cell.sort(['u', 'sample'])['sample'].unique(maintain_order=True).to_list()
       chroms = cell.sort(['r', 'c'])['c'].unique(maintain_order=True).to_list()
       wide = cell.pivot(on='c', index='sample', values='v').with_columns(pl.col('sample').cast(pl.Utf8))
@@ -3541,12 +3544,13 @@ tabs:
       printed in the cells that pass the cut-off, so scan for numbers first. A chromosome with no called
       segment is left empty.
 
-      Lines and annotations: the value is printed where its size passes 0.3, the cut-off of the other
-      copy-number charts. It is a fixed value of this template, not read from the run, and the gain side
-      matches the upper edge of CNVkit's neutral range while its lower edge is -0.4.
+      Lines and annotations: the value is printed where the mean passes +0.2 or -0.25, the cut-offs of the
+      other copy-number charts, which are the edges of the neutral two-copy call in CNVkit's default `call`
+      thresholds. They are fixed values of this template, not read from the run.
 
-      Source: CNVkit, default thresholds of the call command,
-      https://cnvkit.readthedocs.io/en/stable/pipeline.html
+      Source: CNVkit `call`, option -t/--thresholds, default -1.1,-0.25,0.2,0.7 (cnvlib/commands.py,
+      https://github.com/etal/cnvkit/blob/master/cnvlib/commands.py). sarek sets no -t for CNVKIT_CALL
+      (conf/modules/cnvkit.config), so the defaults apply.
 
       Note: a mean over a chromosome hides a focal event on it.
     layout: {x: 0, y: 0, w: 8, h: 4}
@@ -3556,7 +3560,7 @@ tabs:
     visu_type: bar
     mode: code
     code_content: |-
-      # Share of the called genome that is gained (red) or lost (blue) in each sample, the fraction of the genome altered, largest first. A segment counts when its log2 ratio is above 0.3 or below -0.3.
+      # Share of the called genome that is gained (red) or lost (blue) in each sample, the fraction of the genome altered, largest first. A segment counts when its log2 ratio is above 0.2 or below -0.25.
       d = df.filter(pl.col('fga_pct').is_not_null()).sort('fga_pct', descending=True).with_columns(pl.col('fga_pct').round(1).cast(pl.Utf8).alias('total'))
       samples = d['sample'].to_list()
       totals = d['fga_pct'].to_list()
@@ -3582,13 +3586,14 @@ tabs:
       How to read: a high total is a genome with many copy-number events, a total near zero a quiet one. Open
       [Gains and losses along the genome](section:Genome-wide gains and losses) for where the events are.
 
-      Lines and annotations: no line is drawn. A segment counts as altered when its log2 ratio is above +0.3
-      or below -0.3, the cut-off of the other copy-number charts; it is a fixed value of this template, not
-      read from the run, and the gain side matches the upper edge of CNVkit's neutral range while its lower
-      edge is -0.4.
+      Lines and annotations: no line is drawn. A segment counts as altered when its log2 ratio is above +0.2
+      or below -0.25, the cut-offs of the other copy-number charts, which are the edges of the neutral
+      two-copy call in CNVkit's default `call` thresholds. They are fixed values of this template, not read
+      from the run.
 
-      Source: CNVkit, default thresholds of the call command,
-      https://cnvkit.readthedocs.io/en/stable/pipeline.html
+      Source: CNVkit `call`, option -t/--thresholds, default -1.1,-0.25,0.2,0.7 (cnvlib/commands.py,
+      https://github.com/etal/cnvkit/blob/master/cnvlib/commands.py). sarek sets no -t for CNVKIT_CALL
+      (conf/modules/cnvkit.config), so the defaults apply.
 
       Note: purity and ploidy change the share, and no cut-off is applied to the total.
     layout: {x: 0, y: 0, w: 4, h: 4}

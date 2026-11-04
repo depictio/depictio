@@ -200,12 +200,12 @@ the tumour (`somatic_burden.target_mb`), the padded intervals including the UTRs
 comparable only to another exome counted the same way. Collapsed: the variant table and the call table
 (a click centres the Locus browser). Filters: design, caller, variant type, number of callers, impact.
 
-**Copy number & MSI.** A short text says how to read the tab (what a log2 ratio is, the 0.3 and -0.3
-cut-offs, what MSI measures). Strip, two rows of four cards: the fraction of the genome altered,
+**Copy number & MSI.** A short text says how to read the tab (what a log2 ratio is, the +0.2 and -0.25
+cut-offs of CNVkit's default call, what MSI measures). Strip, two rows of four cards: the fraction of the genome altered,
 the megabases gained and lost and the chromosomes altered (from `cnv_summary`, the whole genome per
 sample, so the contig filter does not change them), then the highest MSI score, the sites tested,
 the strongest gain and the deepest loss. Then one row per sample of called segments along the genome,
-chromosomes in karyotype order, gains orange and losses blue with the 0.3 and -0.3 cut-offs drawn and
+chromosomes in karyotype order, gains orange and losses blue with the +0.2 and -0.25 cut-offs drawn and
 labelled. Then the `cnv_profile` tile on Plotly (the template has a genome browser, so no GenomeSpy
 toggle): the log2 ratio of each bin with the called segments over it, one sample at a time, a
 chromosome to zoom on in its controls; CNVkit gives no B-allele frequency, so none is drawn. Then a

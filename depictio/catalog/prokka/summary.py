@@ -17,10 +17,24 @@ null: "this bin has no rRNA" is a finding, not a missing measurement, and it is
 the finding MIMAG turns on.
 
 `meets_mimag_rna` applies the RNA half of the MIMAG high-quality draft
-definition: the 5S, 16S and 23S rRNA genes present (counted here as at least
-three rRNA features, which is what a count-only file can support) and at least
-18 tRNAs. The completeness half comes from CheckM2; `mag/bin_summary` puts the
-two together.
+definition (Table 1 of Bowers et al. 2017, Nat Biotechnol 35:725,
+https://doi.org/10.1038/nbt.3893): the 5S, 16S and 23S rRNA genes each present
+and at least 18 tRNAs. The `.txt` file only counts rRNA features, so it cannot
+say which genes they are; the product of each rRNA feature ("5S ribosomal RNA",
+"16S ribosomal RNA", "23S ribosomal RNA", a partial one included) is read from
+the same bin's GFF (``prokka_gff_raw``, optional second source). Three things
+follow:
+
+* a bin with fewer than 3 rRNA features, or fewer than 18 tRNAs, cannot meet
+  the criterion, GFF or not: it is False;
+* otherwise the GFF decides: True when all three genes are named in it, False
+  when one is missing;
+* a bin with no GFF (the file is optional and a run may publish a subset)
+  cannot be checked: it is null, and `mag/bin_summary` then never rates it a
+  high-quality draft.
+
+The completeness half comes from CheckM2; `mag/bin_summary` puts the two
+together.
 
 Input: the ``prokka_summary_raw`` data collection, a recursive Table scan of
 the `.txt` files read as two colon-separated columns. The pattern is scoped to
@@ -54,7 +68,7 @@ Output schema:
     tmrna : Int64          transfer-messenger RNAs
     repeat_regions : Int64 repeat regions
     cds_per_mbp : Float64  coding sequences per megabase, the gene density
-    meets_mimag_rna : Boolean  at least 3 rRNAs and 18 tRNAs
+    meets_mimag_rna : Boolean  5S, 16S and 23S rRNAs present and 18 tRNAs; null when no GFF
 """
 
 from __future__ import annotations
@@ -65,6 +79,7 @@ from depictio.models.models.transforms import RecipeSource
 from depictio.recipes.lib.mag_bins import bin_id_lookup, file_stem
 
 RAW_DC_TAG = "prokka_summary_raw"
+GFF_DC_TAG = "prokka_gff_raw"
 
 # INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
@@ -76,6 +91,13 @@ SOURCES: list[RecipeSource] = [
             "value": pl.Utf8,
         },
         dc_ref=RAW_DC_TAG,
+    ),
+    # Names the rRNA genes; declared before this collection in the workflow.
+    RecipeSource(
+        ref="gff",
+        dc_ref=GFF_DC_TAG,
+        optional=True,
+        input_schema={"ftype": pl.Utf8, "attributes": pl.Utf8, "source_path": pl.Utf8},
     ),
 ]
 
@@ -113,9 +135,45 @@ _COUNT_KEYS: dict[str, str] = {
     "repeat_region": "repeat_regions",
 }
 
-#: MIMAG's RNA criteria for a high-quality draft.
-MIN_RRNA = 3
+#: MIMAG's RNA criteria for a high-quality draft (Bowers et al. 2017, Table 1):
+#: the 5S, 16S and 23S rRNA genes, and at least 18 tRNAs.
+RRNA_GENES: tuple[str, ...] = ("5S", "16S", "23S")
 MIN_TRNA = 18
+
+#: Product of an rRNA feature in Prokka's GFF; the space is `%20` in a URL-encoded value.
+_RRNA_PRODUCT = r"(?i)(?:^|;)product=(5S|16S|23S)(?:%20|\s)ribosomal(?:%20|\s)RNA"
+
+
+def _rrna_genes(gff: pl.DataFrame | None) -> pl.DataFrame | None:
+    """One row per bin in the GFF with a boolean per MIMAG rRNA gene, or None.
+
+    A bin is listed as soon as the GFF holds any feature for it, so a bin with
+    no rRNA at all is a row of Falses and not an absent one.
+    """
+    if gff is None or gff.is_empty():
+        return None
+    features = gff.filter(pl.col("attributes").is_not_null()).select(
+        pl.col(SOURCE_PATH_COL)
+        .map_elements(lambda path: file_stem(path, ".gff"), return_dtype=pl.Utf8)
+        .alias("bin_id"),
+        pl.col("ftype").cast(pl.Utf8),
+        pl.col("attributes").str.extract(_RRNA_PRODUCT, 1).str.to_uppercase().alias("gene"),
+    )
+    if features.is_empty():
+        return None
+    named = features.filter(pl.col("ftype") == "rRNA")
+    return (
+        features.select("bin_id")
+        .unique()
+        .with_columns(
+            *[
+                pl.col("bin_id")
+                .is_in(named.filter(pl.col("gene") == gene)["bin_id"].to_list())
+                .alias(f"_has_{gene}")
+                for gene in RRNA_GENES
+            ]
+        )
+    )
 
 
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
@@ -163,6 +221,15 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     lookup = bin_id_lookup(frame["bin_id"].to_list()).drop("bin_index")
     frame = frame.join(lookup, on="bin_id", how="left")
 
+    genes = _rrna_genes(sources.get("gff"))
+    gene_cols = [f"_has_{gene}" for gene in RRNA_GENES]
+    if genes is None:
+        frame = frame.with_columns(*[pl.lit(None, dtype=pl.Boolean).alias(c) for c in gene_cols])
+    else:
+        frame = frame.join(genes, on="bin_id", how="left")
+    # None when the GFF does not cover the bin, else whether all three genes are named.
+    all_genes = pl.all_horizontal(*[pl.col(c) for c in gene_cols])
+
     return (
         frame.with_columns(
             pl.when(pl.col("bases") > 0)
@@ -170,7 +237,14 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             .otherwise(None)
             .cast(pl.Float64)
             .alias("cds_per_mbp"),
-            ((pl.col("rrna") >= MIN_RRNA) & (pl.col("trna") >= MIN_TRNA)).alias("meets_mimag_rna"),
+            # Fewer than 3 rRNA features cannot name 3 genes, and fewer than 18 tRNAs
+            # fails on its own: both are False without the GFF. Otherwise the GFF decides.
+            pl.when((pl.col("trna") < MIN_TRNA) | (pl.col("rrna") < len(RRNA_GENES)))
+            .then(pl.lit(False))
+            .when(pl.col(gene_cols[0]).is_not_null())
+            .then(all_genes)
+            .otherwise(pl.lit(None, dtype=pl.Boolean))
+            .alias("meets_mimag_rna"),
         )
         .select(list(OUTPUT_SCHEMA))
         .sort(["assembler", "binner", "sample", "bin_id"])

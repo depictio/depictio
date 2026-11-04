@@ -1834,6 +1834,8 @@ tabs:
       label_col: Phylum
       category_col: contrast
       significance_is_neg_log10: false
+      # Pipeline defaults ancombc_significance = 0.05 and ancombc_effect_size = 1
+      # (nf-core/ampliseq 2.18.0 nextflow_schema.json); the run's params.json repeats them.
       significance_threshold: 0.05
       effect_threshold: 1.0
       top_n_labels: 6
@@ -1865,13 +1867,14 @@ tabs:
       hit, and the six strongest are labelled. The MA view draws dotted horizontal lines at -1 and
       +1, and the QQ view a dashed diagonal (the expected spread under no differences), a grey 95%
       envelope around it and the inflation factor lambda in the corner. The 0.05 is the significance
-      level ampliseq passes to ANCOM-BC, and the effect cut-off of 1 is this tile's own default.
+      level ampliseq passes to ANCOM-BC, and the effect cut-off of 1 is ampliseq's own default
+      (ancombc_effect_size).
 
       Sources: ANCOM-BC, Lin and Peddada 2020, https://doi.org/10.1038/s41467-020-17041-7; ampliseq
-      ANCOM-BC settings, https://github.com/nf-core/ampliseq/blob/2.18.0/conf/modules.config
-
-      Warning: the effect cut-off of 1 has no published source, it is a display default and not a
-      validated cut-off.
+      ANCOM-BC settings, https://github.com/nf-core/ampliseq/blob/2.18.0/conf/modules.config; effect
+      size threshold of 1 (ancombc_effect_size) and significance threshold of 0.05
+      (ancombc_significance), the defaults in the pipeline's
+      https://github.com/nf-core/ampliseq/blob/2.18.0/nextflow_schema.json
 
       Note: the q-values use QIIME 2's documented default adjustment, Holm, which ampliseq leaves
       unchanged. ANCOM-BC drops taxa seen in fewer than 10% of the samples and samples under 500

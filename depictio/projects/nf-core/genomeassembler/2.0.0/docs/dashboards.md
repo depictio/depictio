@@ -40,8 +40,8 @@ The landing page, at compact width with the filter panel collapsed:
   opens the parameters that drive it and the tab that shows its output.
 - **Key figures**: four headline cards, each opening the tab that explains it. Samples
   (split by group), the median N50 (with its spread), the median consensus QV (against
-  QV 40, the Earth BioGenome Project floor) and the median share of complete BUSCOs
-  (counting the assemblies at 90% or above). The three assembly cards read `assemblies`, which every route writes; a QC tool
+  QV 40, the Earth BioGenome Project floor) and the median share of complete single-copy
+  BUSCOs (counting the assemblies at 90% or above, the Earth BioGenome Project target). The three assembly cards read `assemblies`, which every route writes; a QC tool
   the run skipped leaves its card with a dash rather than a gap in the row. A group and a
   sample filter above them narrow these four only.
 - **Findings**: result rows whose values are computed under the filters, each with a link
@@ -107,8 +107,8 @@ order).
 Collapsed: the per-sequence QV scatter and the Merqury table. Filters: a QV range and
 error-free sequences.
 
-**Gene completeness.** Strip: the median share of complete BUSCOs (counting the
-assemblies at 90% or above), the highest duplicated share, the median fragmented and
+**Gene completeness.** Strip: the median share of complete single-copy BUSCOs (counting the
+assemblies at 90% or above, the Earth BioGenome Project target), the highest duplicated share, the median fragmented and
 missing shares, each with its spread. Then the BUSCO classes
 per assembly and complete against duplicated BUSCOs. The BUSCO table is collapsed.
 Filters: lineage and a complete range.

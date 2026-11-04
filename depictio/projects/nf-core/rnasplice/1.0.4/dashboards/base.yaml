@@ -428,15 +428,18 @@ main_dashboard:
       browser, or open [Splicing Events](tab:Splicing Events) for the volcanoes, the junction reads and the
       event table.
 
-      Lines and annotations: no reference line is drawn; the colour carries the call. An event is called when
-      its FDR is under SPLICING_FDR (default 0.05) and its absolute PSI change is at least MIN_DPSI (default
-      0.1), both template variables read by the rMATS recipe.
+      Lines and annotations: no reference line is drawn; the colour carries the call and the height is the
+      measured absolute PSI change, so the height does not depend on any cut-off. An event is called when its
+      rMATS FDR is under SPLICING_FDR (default 0.05) and its absolute PSI change is at least MIN_DPSI (default
+      0, so the rMATS FDR alone decides), both template variables read by the rMATS recipe.
 
-      Source: rMATS counts an event as significant at FDR 0.05 or lower by default,
-      https://github.com/Xinglab/rmats-turbo
+      Source: rMATS-turbo README, events count as significant at FDR 0.05 or lower by default, and the
+      differential test already compares the PSI change with --cstat (default 0.0001),
+      https://github.com/Xinglab/rmats-turbo; nf-core/rnasplice 1.0.4 passes it as rmats_splice_diff_cutoff
+      (default 0.0001), https://github.com/nf-core/rnasplice/blob/1.0.4/nextflow_schema.json
 
-      Note: rMATS and SUPPA2 publish no recommended minimum PSI change, so the MIN_DPSI default of 0.1 is the
-      template's own choice and not a validated cut-off.
+      Note: rMATS publishes no recommended minimum PSI change beyond --cstat. MIN_DPSI is an optional extra
+      floor you can raise, and any value above 0 is your own working value, not a tool default.
     layout: {x: 0, y: 11, w: 8, h: 4}
   # Link-only tab tiles: each tile prints its tab's subtitle. A tab the run does
   # not have is left out, and a heading whose tabs are all missing is hidden.
@@ -1161,10 +1164,16 @@ tabs:
 
       Lines and annotations: no reference line is drawn. Each tool's call applies SPLICING_FDR (default 0.05)
       to its own gene-level adjusted p-value, and for rMATS and SUPPA2 a gene is called when one of its events
-      passes, including the MIN_DPSI floor.
+      passes, including the MIN_DPSI floor (default 0, so no extra floor).
 
-      Note: a tool the run skipped draws no bar. The 0.05 and the 0.1 are template defaults, not validated
-      cut-offs.
+      Source: rMATS-turbo README, FDR 0.05 or lower counts as significant by default,
+      https://github.com/Xinglab/rmats-turbo; nf-core/rnasplice 1.0.4 stageR alpha = 0.05 in
+      bin/run_stager.R (line 160) and SUPPA2 diffsplice_alpha 0.05 in nextflow_schema.json,
+      https://github.com/nf-core/rnasplice/tree/1.0.4
+
+      Note: a tool the run skipped draws no bar. SPLICING_FDR applies one 0.05 to every tool, SUPPA2's
+      p-value included, whereas SUPPA2 gives no recommended cut-off on it. Any MIN_DPSI above 0 is your own
+      working value.
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: advanced_viz
     workflow_tag: rnasplice
@@ -1193,10 +1202,13 @@ tabs:
       Agreement) to compare the evidence.
 
       Lines and annotations: the calls are the same as in the per-tool bars, each tool at SPLICING_FDR
-      (default 0.05) and, for rMATS and SUPPA2, MIN_DPSI (default 0.1).
+      (default 0.05) and, for rMATS and SUPPA2, MIN_DPSI (default 0, so no extra floor).
 
-      Note: a tool the run skipped shows an empty set. The default cut-offs are template choices, not
-      validated ones.
+      Source: rMATS-turbo README, FDR 0.05 or lower counts as significant by default,
+      https://github.com/Xinglab/rmats-turbo; nf-core/rnasplice 1.0.4 diffsplice_alpha 0.05,
+      https://github.com/nf-core/rnasplice/blob/1.0.4/nextflow_schema.json
+
+      Note: a tool the run skipped shows an empty set. Any MIN_DPSI above 0 is your own working value.
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: table
     workflow_tag: rnasplice
@@ -1863,7 +1875,7 @@ tabs:
     tag: rs-ev-card-rmats-called
     index: ev-card-rmats-called
     title: rMATS calls
-    description: Events under SPLICING_FDR with an absolute PSI change of at least MIN_DPSI.
+    description: Events under SPLICING_FDR with an absolute PSI change of at least MIN_DPSI (default 0, the rMATS FDR alone).
     layout: {x: 2, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: rnasplice
@@ -1882,7 +1894,7 @@ tabs:
     tag: rs-ev-card-rmats-dpsi
     index: ev-card-rmats-dpsi
     title: rMATS absolute PSI change
-    description: Inclusion change of the called events, from MIN_DPSI up to 1 for an event fully switched between conditions.
+    description: Inclusion change of the called events, up to 1 for an event fully switched between conditions.
     layout: {x: 4, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: rnasplice
@@ -1903,7 +1915,7 @@ tabs:
     tag: rs-ev-card-suppa
     index: ev-card-suppa
     title: SUPPA2 calls
-    description: Local events under SPLICING_FDR with an absolute delta PSI of at least MIN_DPSI.
+    description: Local events under SPLICING_FDR with an absolute delta PSI of at least MIN_DPSI (default 0, the SUPPA2 p-value alone).
     layout: {x: 6, y: 0, w: 2, h: 2}
   # Called events per type, stacked by direction in the family's direction
   # colours. No sample column, so Analysis mode's groups do not apply here.
@@ -1930,12 +1942,13 @@ tabs:
       or the direction in the left panel to narrow the volcano and table.
 
       Lines and annotations: no reference line is drawn. An event is called when its FDR is under SPLICING_FDR
-      (default 0.05) and its absolute PSI change is at least MIN_DPSI (default 0.1); bars are sorted by total.
+      (default 0.05) and its absolute PSI change is at least MIN_DPSI (default 0, so the FDR alone decides);
+      bars are sorted by total.
 
-      Source: rMATS counts an event as significant at FDR 0.05 or lower by default,
+      Source: rMATS-turbo README, events count as significant at FDR 0.05 or lower by default,
       https://github.com/Xinglab/rmats-turbo
 
-      Note: the MIN_DPSI default of 0.1 is the template's own choice, not a validated cut-off.
+      Note: any MIN_DPSI above 0 is your own working value, not a tool default.
     layout: {x: 0, y: 0, w: 4, h: 4}
   - component_type: figure
     workflow_tag: rnasplice
@@ -1960,13 +1973,16 @@ tabs:
       shifts one way in the treatment.
 
       Lines and annotations: no reference line is drawn. An event is called when its p-value is under
-      SPLICING_FDR (default 0.05) and its absolute delta PSI is at least MIN_DPSI (default 0.1); bars are
-      sorted by total.
+      SPLICING_FDR (default 0.05) and its absolute delta PSI is at least MIN_DPSI (default 0, SUPPA2's own
+      lower bound); bars are sorted by total.
 
-      Source: local event types as defined by SUPPA, https://github.com/comprna/SUPPA
+      Source: local event types as defined by SUPPA, https://github.com/comprna/SUPPA; diffSplice lower
+      bound default 0 and alpha default 0.05 as passed by nf-core/rnasplice 1.0.4 (diffsplice_lower_bound,
+      diffsplice_alpha), https://github.com/nf-core/rnasplice/blob/1.0.4/nextflow_schema.json
 
-      Note: SUPPA2 gives a p-value, not an FDR, and publishes no recommended minimum delta PSI; the 0.05 and
-      the 0.1 are template defaults, not validated cut-offs.
+      Note: SUPPA2 gives a p-value, not an FDR, and recommends no cut-off on it; the 0.05 is the diffsplice_alpha
+      default (a family-wise error rate setting) applied here to the p-value as given. Any MIN_DPSI above 0 is
+      your own working value.
     layout: {x: 4, y: 0, w: 4, h: 4}
   - component_type: advanced_viz
     workflow_tag: rnasplice
@@ -1974,7 +1990,8 @@ tabs:
     use: rmats/event_volcano
     config:
       significance_threshold: 0.05
-      effect_threshold: 0.1
+      # MIN_DPSI default (0): the rMATS FDR alone decides; the viewer can raise it.
+      effect_threshold: 0
       # Gene symbols; one gene can carry several top events, so keep few
       # labels on a half-row tile.
       top_n_labels: 6
@@ -1996,18 +2013,19 @@ tabs:
       with a large change. A tall point near zero is a precise but small shift. Find a labelled event in the
       table to read its record.
 
-      Lines and annotations: dotted lines mark the significance cut-off (horizontal, at an FDR of 0.05) and
-      the PSI cut-off (vertical, at -0.1 and +0.1), set in the tile and read from neither the run nor
+      Lines and annotations: the dotted horizontal line marks the significance cut-off, at an FDR of 0.05. The
+      two vertical lines start at a PSI change of 0, on the centre line, because rMATS sets no minimum beyond
+      its own --cstat (default 0.0001); raise the effect cut control to draw a floor. Both cut-offs are set in the tile and read from neither the run nor
       SPLICING_FDR. Hits are larger outlined triangles, the rest small grey circles, and up to six of the
       strongest hits carry their gene symbol. In the QQ view the dashed diagonal is the expectation under no
       effect, the grey band its 95% null envelope and the label lambda, the genomic inflation factor.
 
-      Source: rMATS counts an event as significant at FDR 0.05 or lower by default,
-      https://github.com/Xinglab/rmats-turbo; genomic inflation factor, Devlin and Roeder, Biometrics 1999,
-      doi 10.1111/j.0006-341X.1999.00997.x
+      Source: rMATS-turbo README, events count as significant at FDR 0.05 or lower by default and the test
+      compares the PSI change with --cstat (default 0.0001), https://github.com/Xinglab/rmats-turbo; genomic
+      inflation factor, Devlin and Roeder, Biometrics 1999, doi 10.1111/j.0006-341X.1999.00997.x
 
-      Note: rMATS publishes no recommended minimum PSI change, so the 0.1 lines are the template's own choice,
-      not a validated cut-off.
+      Note: rMATS publishes no recommended minimum PSI change beyond --cstat, so any floor you set with the
+      effect cut control is your own working value.
     layout: {x: 0, y: 0, w: 4, h: 6}
   - component_type: advanced_viz
     workflow_tag: rnasplice
@@ -2015,7 +2033,8 @@ tabs:
     use: suppa/local_event_volcano
     config:
       significance_threshold: 0.05
-      effect_threshold: 0.1
+      # SUPPA2 diffSplice lower bound default (0); the viewer can raise it.
+      effect_threshold: 0
       # Gene ids, often joined (ENSG1_and_ENSG2): labels would pile up.
       show_labels: false
       effect_label: Delta PSI, treatment minus control
@@ -2035,18 +2054,21 @@ tabs:
       with the rMATS volcano beside it, as an event far out on both is a robust call. Genes are not labelled
       because SUPPA2 joins the ids of overlapping genes.
 
-      Lines and annotations: dotted lines mark the significance cut-off (horizontal, at a p-value of 0.05) and
-      the delta PSI cut-off (vertical, at -0.1 and +0.1), set in the tile and not read from the run. Hits are
+      Lines and annotations: the dotted horizontal line marks the significance cut-off, at a p-value of 0.05.
+      The two vertical lines start at a delta PSI of 0, on the centre line, which is SUPPA2's default lower
+      bound; raise the effect cut control to draw a floor. Both cut-offs are set in the tile and not read from the run. Hits are
       larger outlined triangles and the rest small grey circles. In the QQ view the dashed diagonal is the
       expectation under no effect, the grey band its 95% null envelope and the label lambda, the genomic
       inflation factor.
 
-      Source: SUPPA2, Trincado et al., Genome Biology 2018, doi 10.1186/s13059-018-1417-1; genomic inflation
-      factor, Devlin and Roeder, Biometrics 1999, doi 10.1111/j.0006-341X.1999.00997.x
+      Source: SUPPA2, Trincado et al., Genome Biology 2018, doi 10.1186/s13059-018-1417-1; diffSplice lower
+      bound default 0 and alpha default 0.05, nf-core/rnasplice 1.0.4 schema
+      (diffsplice_lower_bound, diffsplice_alpha), https://github.com/nf-core/rnasplice/blob/1.0.4/nextflow_schema.json;
+      genomic inflation factor, Devlin and Roeder, Biometrics 1999, doi 10.1111/j.0006-341X.1999.00997.x
 
       Warning: the axis is SUPPA2's p-value, not an FDR as on the other volcanoes. SUPPA2 documents no
-      recommended p-value or delta PSI cut-off, so the 0.05 and 0.1 lines are template defaults, not validated
-      cut-offs.
+      recommended p-value cut-off, so the 0.05 line is the diffsplice_alpha default (a family-wise error rate
+      setting) applied to the p-value as given, and any delta PSI floor you set is your own working value.
     layout: {x: 4, y: 0, w: 4, h: 6}
   # Sashimi of the called rMATS events: STAR's junction reads (SJ.out.tab),
   # averaged over the replicates of each condition, one lane per condition and

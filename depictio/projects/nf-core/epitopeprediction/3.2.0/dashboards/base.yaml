@@ -1170,7 +1170,7 @@ tabs:
     layout: {x: 6, y: 0, w: 2, h: 2}
   # Code mode: the bars are counted here on a numeric length axis (a length nobody has is an
   # empty slot, not a gap that closes), each MHC class gets its own panel and count axis (class I
-  # outnumbers class II by far), and the usual class windows are shaded. The tool's length window
+  # outnumbers class II by far), and the published class windows are shaded. The tool's length window
   # is the run's min/max_peptide_length_classI / _classII, on the Overview (The run).
   - component_type: figure
     workflow_tag: epitopeprediction
@@ -1181,8 +1181,8 @@ tabs:
       # The figure over each bar is the share of that length's peptides that bind.
       colors = depictio_category_colors.get('call') or {}
       class_colors = depictio_category_colors.get('mhc_class') or {}
-      # The shaded window is the textbook groove length of each class (closed groove 8 to 11, open groove 12 to 25), a fixed reference and not read from the run; the panel title says so.
-      windows = {'Class I': (8, 11, 'Class I (8 to 11 usual)'), 'Class II': (12, 25, 'Class II (12 to 25 usual)')}
+      # The shaded window is the published length range of eluted ligands of each class (class I 8 to 12, Gfeller et al. 2018; class II 13 to 25, Chicz et al. 1992), a fixed reference and not read from the run; the panel title says so.
+      windows = {'Class I': (8, 12, 'Class I (8 to 12 published)'), 'Class II': (13, 25, 'Class II (13 to 25 published)')}
       d = df.with_columns(pl.col('length').cast(pl.Int64)).group_by(['mhc_class', 'length', 'call']).agg(pl.len().cast(pl.Int64).alias('peptides')).sort(['mhc_class', 'length'])
       tot = df.with_columns(pl.col('length').cast(pl.Int64)).group_by(['mhc_class', 'length']).agg(pl.len().cast(pl.Int64).alias('total'), (pl.col('call') == 'Binder').sum().cast(pl.Int64).alias('binders'))
       classes = [c for c in ['Class I', 'Class II'] if c in d['mhc_class'].to_list()]
@@ -1216,20 +1216,21 @@ tabs:
       (Overview, The run), and peptides from a table keep the length they came with, so one outside
       what a tool supports is Unsupported.
 
-      How to read: a good result has class I peptides mostly 8 to 11 residues long and class II
-      peptides in the longer window, with the binder share highest at the lengths the groove prefers
-      (9 or 10 for class I). Bars outside the shaded window mean the run asked for lengths the class
-      does not usually present, and a large Unsupported part means the tools could not score that
+      How to read: a good result has class I peptides mostly 8 to 12 residues long and class II
+      peptides in the longer window. Bars outside the shaded window mean the run asked for lengths
+      the class is not reported to present, and a large Unsupported part means the tools could not score that
       length. Filter by length above to see which peptides sit in a bar.
 
-      Lines and annotations: the shaded band in each panel is the usual groove length of the class,
-      8 to 11 residues for class I (closed groove) and 12 to 25 for class II (open groove). It is a
-      fixed textbook reference, not read from the run and not a tool limit, and the panel titles
-      repeat it. The figure over each bar is the percentage of that length's peptides called binders
+      Lines and annotations: the shaded band in each panel is the published length range of eluted
+      ligands of the class, 8 to 12 residues for class I and 13 to 25 for class II. It is a fixed
+      reference, not read from the run and not a tool limit, and the panel titles repeat it. The
+      length window the run asked for is in its params (min and max_peptide_length_classI and
+      _classII, Overview, The run). The figure over each bar is the percentage of that length's peptides called binders
       ('<1%' when some bind but fewer than 0.5 %).
 
-      Source: the groove lengths are textbook values (for example Janeway's Immunobiology, antigen
-      presentation); the lengths a tool supports are in its own manual.
+      Sources: class I, Gfeller et al. 2018, J Immunol 201:3705, doi:10.4049/jimmunol.1800914; class
+      II, Chicz et al. 1992, Nature 358:764, doi:10.1038/358764a0. The lengths a tool supports are in
+      its own manual.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: advanced_viz
     workflow_tag: epitopeprediction

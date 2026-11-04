@@ -380,7 +380,7 @@ main_dashboard:
     section: Findings
     source_tab: Annotation
     source_component: anno-tss-distance
-    caption: Each library's peaks by distance to the nearest start site, one curve per library; the band is the promoter window.
+    caption: Each library's peaks by distance to the nearest start site, one curve per library; the band is the HOMER promoter-TSS region (-1 kb to +100 bp).
     hide_legend: true
     tag: cs-ov-hl-tss
     index: ov-hl-tss
@@ -1638,7 +1638,7 @@ tabs:
     body: >
       [HOMER](http://homer.ucsd.edu/homer/) assigns every peak to a genomic feature class
       and to the nearest transcription start site. A promoter-bound factor puts most of
-      its peaks in the promoter window, a distal one spreads them over introns and
+      its peaks in the promoter-TSS class (HOMER: -1 kb to +100 bp of the start site), a distal one spreads them over introns and
       intergenic space. Pick a row of the collapsed table to read the record of one peak.
     tag: cs-anno-intro
     index: anno-intro
@@ -1795,7 +1795,7 @@ tabs:
       reference_x: 0
       reference_label: TSS
       shaded_bands:
-      - [-1000, 1000, Promoter window]
+      - [-1000, 100, HOMER promoter-TSS]
       x_title: Distance to the nearest TSS (bp)
       y_title: Share of the library's peaks
       legend_pos: right
@@ -1812,10 +1812,12 @@ tabs:
       across gene bodies and intergenic space. Replicates of one antibody should draw similar curves.
 
       Lines and annotations: the line at 0 is the transcription start site. The shaded band from -1000 to
-      1000 bp is a promoter window, a fixed display aid of this dashboard that is not read from the run.
+      +100 bp, labelled HOMER promoter-TSS, is the region HOMER annotatePeaks calls TSS by default. It is
+      a fixed reference of this dashboard, not read from the run, and it is not symmetric: it reaches
+      1 kb upstream and 100 bp downstream of the site.
 
-      Note: the band is not a validated cut-off and not HOMER's own classification, whose feature classes
-      follow HOMER's rules.
+      Source: HOMER annotatePeaks, TSS defined by default from -1kb to +100bp,
+      http://homer.ucsd.edu/homer/ngs/annotation.html
     layout: {x: 0, y: 0, w: 8, h: 6}
   # Master and detail: a picked row is the selection the record card follows.
   - component_type: table

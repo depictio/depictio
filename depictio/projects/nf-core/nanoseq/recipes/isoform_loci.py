@@ -19,7 +19,8 @@ and it opens on the first region its tracks hold.
 Output, one row per tested transcript:
     transcript_id      DEXSeq featureID (a Bambu transcript id)
     gene_id            Ensembl gene id
-    gene_name          readable symbol from the annotation, else the gene id
+    gene_name          readable symbol from the annotation, else the gene id (the trailing
+                       token when the id carries folded GTF attributes)
     chrom              contig of the transcript (null without the annotation)
     start, end         first base of its first exon, last base of its last exon
     strand             transcript strand
@@ -129,6 +130,17 @@ def _spans(blocks: pl.DataFrame | None) -> pl.DataFrame:
     )
 
 
+def _readable_gene_id(gene_id: pl.Expr) -> pl.Expr:
+    """The trailing id of a ``gene_id`` that carries other GTF attributes.
+
+    Some Bambu annotations fold the input GTF's attributes into the gene id, as in
+    ``exon_id ENSE0001; exon_number 1; gene_biotype pseudogene; ENSG0001``. The
+    gene is the last token. ``gene_id`` itself stays as it is: DEXSeq's group ids
+    are the same string, so joins keep matching.
+    """
+    return gene_id.str.extract(r"([^;\s]+)\s*$", 1)
+
+
 def transform(sources: dict[str, pl.DataFrame | None]) -> pl.DataFrame:
     """The DEXSeq transcripts, each with its span where the annotation has one."""
     dex = sources["dex"]
@@ -147,7 +159,9 @@ def transform(sources: dict[str, pl.DataFrame | None]) -> pl.DataFrame:
         .select(
             pl.col("feature_id").alias("transcript_id"),
             "gene_id",
-            pl.coalesce("_gene_name", "gene_id").alias("gene_name"),
+            pl.coalesce("_gene_name", _readable_gene_id(pl.col("gene_id")), "gene_id").alias(
+                "gene_name"
+            ),
             pl.col("_chrom").alias("chrom"),
             pl.col("_start").alias("start"),
             pl.col("_end").alias("end"),

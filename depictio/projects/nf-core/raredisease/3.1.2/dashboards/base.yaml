@@ -100,10 +100,6 @@ main_dashboard:
       Check: '#e03131'
       Too few sites: '#f08c00'
       Not checked: '#adb5bd'
-    sex_check:
-      Match: '#2f9e44'
-      Mismatch: '#e03131'
-      Not tested: '#adb5bd'
     smn_status:
       No call: '#adb5bd'
       Not a carrier: '#2f9e44'
@@ -598,7 +594,7 @@ main_dashboard:
   - component_type: table
     workflow_tag: raredisease
     data_collection_tag: samples
-    columns: [sample, family_id, role, status, sex, sex_check, aligned_pct, duplication_pct, mean_coverage,
+    columns: [sample, family_id, role, status, sex, x_relative_depth, y_relative_depth, aligned_pct, duplication_pct, mean_coverage,
       pass_calls, ts_tv, ranked_carried, clinical_carried, parent_check]
     row_selection_enabled: true
     row_selection_column: sample
@@ -610,13 +606,16 @@ main_dashboard:
       One row per sample, with its pedigree, alignment, coverage and callset numbers side by side.
 
       How to read: use it first to check that every sample is the person the sample sheet says, with
-      the sex check and the parent check, before reading any variant. A Mismatch or a Check points
-      to [Family](tab:Family) for the pair behind it; low coverage or a high duplication rate points
+      the declared sex against the X and Y depth, and the parent check, before reading any variant.
+      A Check points to [Family](tab:Family) for the pair behind it; low coverage or a high duplication rate points
       to [Alignment](tab:Alignment). A picked row narrows the dashboard to that sample.
 
-      Note: the sex check compares the declared sex with one inferred from the relative depth of X
-      and Y (a Y at 10 percent of the autosomal depth or more reads as male). Those two cut-offs are
-      this template's own settings, not a published rule.
+      Note: x_relative_depth and y_relative_depth are the mean depth of X and Y over the sample's
+      autosomal mean, as measured. No cut-off turns them into a call, because no tool-defined or
+      published threshold is read here: the reading is left to you. From the number of copies, X is
+      expected near 1 in a female and near 0.5 in a male, and Y near 0 in a female. The sex
+      check of peddy (predicted sex against the pedigree, nf-core/raredisease docs, output) is not
+      read by this template.
     layout: {x: 0, y: 0, w: 8, h: 6}
 tabs:
 - title: MultiQC
@@ -1053,7 +1052,7 @@ tabs:
   - name: Family at a glance
     icon: mdi:counter
     color: pink
-    description: Samples, the parent-child check, the sex check and the relatedness estimates
+    description: Samples, the parent-child check, the declared sex and the relatedness estimates
   - name: Pedigree and pair checks
     icon: mdi:family-tree
     color: pink
@@ -1150,17 +1149,17 @@ tabs:
     column_name: sample
     column_type: object
     secondary_layout: composition
-    breakdown_col: sex_check
+    breakdown_col: sex
     display:
       icon_name: mdi:gender-male-female
       icon_color: pink.8
-      caption: samples, by sex check result
+      caption: samples, by declared sex
       format: integer
     section: Family at a glance
     tag: rd-fam-card-sex
     index: fam-card-sex
-    title: Sex check
-    description: Samples whose stated sex was compared with the sex inferred from the X and Y depth.
+    title: Declared sex
+    description: Samples by the sex stated in the pedigree. The X and Y depth behind it is in the Samples table; no cut-off turns it into an inferred sex, and peddy's sex check is not read here.
     layout: {x: 4, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: raredisease
@@ -1234,17 +1233,19 @@ tabs:
       swap or a wrong parent. Open the Pair checks table for the counts behind it, and
       [Alignment](tab:Alignment) to see whether a shallow sample explains it.
 
-      Lines and annotations: no line is drawn, the colour is the verdict. Consistent is 1 percent of
-      shared sites or less, Check is above it, Too few sites is under 50 shared sites, and Not
-      checked is any other relation. These are the template's settings, not read from the run.
+      Lines and annotations: no line is drawn, the colour is the verdict. Consistent is an IBS0 rate
+      below 1.2 percent of shared sites (0.012), Check is at or above it, Too few sites is under 50
+      shared sites, and Not checked is any other relation. The 1.2 percent is peddy's cut-off, a fixed
+      value of this template and not read from the run. The 50-site floor is a guard on sample size
+      with no published source.
 
-      Source: peddy, Pedersen and Quinlan 2017, doi:10.1016/j.ajhg.2017.01.017,
-      https://pmc.ncbi.nlm.nih.gov/articles/PMC5339084 (it expects an IBS0 statistic close to zero
-      for a parent and child and uses an empirically derived cut-off of 0.012; the 1 percent here is
-      this template's own setting).
+      Source: peddy, Pedersen and Quinlan 2017, Am J Hum Genet 100:406, doi:10.1016/j.ajhg.2017.01.017,
+      https://pmc.ncbi.nlm.nih.gov/articles/PMC5339084 ("Pairs of samples with a rate of IBS0 less
+      than our empirically derived cutoff of 0.012 are called as parent-child pairs").
 
-      Note: the sites are those of the joint callset, which are variable sites and not a panel
-      chosen for the purpose, so a shallow callset can decide fewer pairs.
+      Note: peddy counts IBS0 on its own curated set of sites; here the sites are those of the joint
+      callset, which are variable sites and not a panel chosen for the purpose, so the rate is not
+      strictly comparable to peddy's and a shallow callset can decide fewer pairs.
     layout: {x: 4, y: 0, w: 4, h: 6}
   - component_type: table
     workflow_tag: raredisease
@@ -1290,7 +1291,7 @@ tabs:
   - name: Callset quality
     icon: mdi:chart-bar
     color: teal
-    description: Ts/Tv and het/hom ratio of every sample, against the range they usually fall in
+    description: Ts/Tv and het/hom ratio of every sample, against their reference values
   - name: Substitution spectrum
     icon: mdi:chart-bar
     color: teal
@@ -1484,13 +1485,13 @@ tabs:
     visu_type: bar
     mode: code
     code_content: |-
-      # Het over hom-alt of each sample's PASS calls, highest first. The band is the usual range of an outbred sample (1.5 to 2).
+      # Het over hom-alt of each sample's PASS calls, highest first. The dotted line is the Hardy-Weinberg expectation of 2.0 (Wang et al. 2015), drawn as a reference and not as a pass level.
       grp = depictio_group_by[0] if depictio_group_by else 'role'
       colors = depictio_group_kwargs.get('color_discrete_map') or depictio_category_colors.get('role') or {}
       d = df.filter(pl.col('het_hom_ratio').is_not_null())
       top = max(2.5, float(d.get_column('het_hom_ratio').max() or 0) * 1.1)
       fig = px.bar(d.to_pandas(), x='het_hom_ratio', y='sample', color=grp, orientation='h', color_discrete_map=colors, custom_data=['sample'], hover_data={'pass_calls': ':,', 'het_hom_ratio': ':.2f'}, labels={'het_hom_ratio': 'Heterozygous over homozygous-alternate calls', 'sample': '', 'pass_calls': 'PASS calls'})
-      fig.add_vrect(x0=1.5, x1=2.0, fillcolor='rgba(47,158,68,0.25)', line_width=0, layer='above', annotation_text='Outbred', annotation_position='top left', annotation_font_size=10)
+      fig.add_vline(x=2.0, line_dash='dot', line_width=1.5, line_color='#2f9e44', annotation_text='Hardy-Weinberg: 2.0', annotation_position='top', annotation_font_size=10)
       fig.update_xaxes(range=[0, top])
       fig.update_yaxes(categoryorder='total ascending', automargin=True)
       fig.update_layout(margin=dict(t=10), legend_title_text='', legend=dict(orientation='h', y=-0.3))
@@ -1505,20 +1506,21 @@ tabs:
       coloured by role. The question is whether the zygosity balance looks like an unrelated,
       outbred person.
 
-      How to read: a bar inside the green band is in the usual range. A low value fits consanguinity
+      How to read: a bar near the dotted line is close to the Hardy-Weinberg expectation, and no bar is
+      judged pass or fail. A low value fits consanguinity
       or long runs of homozygosity, a high one contamination or a mix of samples; compare the
       samples of one family, then open [Family](tab:Family) to check the pedigree. A click narrows
       the dashboard to the sample.
 
-      Lines and annotations: the green band, labelled Outbred, spans 1.5 to 2.0. It is a fixed
+      Lines and annotations: the dotted line, labelled Hardy-Weinberg, sits at 2.0. It is a fixed
       reference of this dashboard, not read from the run.
 
       Source: Wang et al. 2015, doi:10.1093/bioinformatics/btu668 (a het to non-reference-hom ratio
       of 2.0 expected under Hardy-Weinberg, with medians from about 1.4 to about 2.0 across ancestry
       groups).
 
-      Note: the ratio is ancestry dependent, and the lower edge of the band (1.5) is a display aid,
-      not a published cut-off.
+      Note: the ratio is ancestry dependent (medians from about 1.4 to about 2.0), and no range is drawn
+      because the paper gives no pass level.
     layout: {x: 4, y: 0, w: 4, h: 5}
   - component_type: figure
     workflow_tag: raredisease

@@ -17,7 +17,7 @@
 #   * the depth is far too low for the numbers to mean anything biological: the relatedness
 #     estimate is unreliable, the repeat and SMN calls are mostly "No call", and the
 #     mitochondrion is covered thousands of times deeper than the autosome;
-#   * there is no X or Y contig, so the sex check reads "Not tested";
+#   * there is no X or Y contig, so the X and Y relative depths are empty;
 #   * peddy, GENS, the germline CNV caller and structural variant calling were skipped by
 #     the run (`skip_tools`, `skip_subworkflows`), so no tab reads their outputs.
 pipeline: raredisease

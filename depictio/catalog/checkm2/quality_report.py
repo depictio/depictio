@@ -20,7 +20,11 @@ computing them per tile would let two tiles disagree:
     by. It is what "the best bin" means when one bin is more complete and
     another is cleaner.
 ``quality_tier``
-    the MIMAG completeness / contamination band. NOT the full MIMAG tier: a
+    the MIMAG completeness / contamination band (Table 1 of Bowers et al. 2017,
+    https://doi.org/10.1038/nbt.3893: high above 90% complete and under 5%
+    contaminated, medium at least 50% and under 10%, low under 50% and under
+    10%); a bin at 10% contamination or more is "Contaminated", this module's
+    label for a bin in no MIMAG tier. NOT the full MIMAG tier: a
     high-quality MIMAG draft also needs the 5S / 16S / 23S rRNAs and 18 tRNAs,
     which CheckM2 does not count. `mag/bin_summary` adds those from Prokka and
     publishes the full `mimag_tier` beside this one.
@@ -46,7 +50,7 @@ Output schema:
     completeness : Float64          percent of the expected genome recovered
     contamination : Float64         percent of the bin that belongs elsewhere
     quality_score : Float64         completeness - 5 * contamination
-    quality_tier : Utf8             High / Medium / Low quality, or Contaminated
+    quality_tier : Utf8             High / Medium / Low quality, or Contaminated (10% or more)
     coding_density : Float64        fraction of the bin covered by coding sequence
     contig_n50 : Int64              N50 of the contigs in the bin
     genome_size : Int64             total bases in the bin

@@ -6,10 +6,14 @@
 ``fraction_of_all_reads``). This recipe stacks those histograms into one long
 table so the nucleosome ladder of every library can be drawn on one axis.
 
-``fragment_class`` uses ataqv's own cut-offs: it counts fragments up to 100 bp as
-the transcription-factor (sub-nucleosomal) window and 150 to 324 bp as the
-mononucleosomal one, which is what ``hqaa_tf_count`` and
-``hqaa_mononucleosomal_count`` in the metrics table are built from.
+``fragment_class`` uses the two windows ataqv itself counts: fragments of 50 to
+100 bp (``hqaa_short_count``, reported as ``hqaa_tf_count``) and of 150 to 200 bp
+(``hqaa_mononucleosomal_count``), which are what those two columns of the metrics
+table are built from. Every other length is ``outside ataqv windows``: ataqv
+defines no further class, so none is invented here.
+Source: ataqv src/cpp/Metrics.cpp, lines 907 (``50 <= fragment_length &&
+fragment_length <= 100``) and 911 (``150 <= fragment_length && fragment_length
+<= 200``), https://github.com/ParkerLab/ataqv/blob/master/src/cpp/Metrics.cpp
 
 Reading the JSON through the recipe loader
 ------------------------------------------
@@ -24,8 +28,8 @@ Output schema:
     fragment_length : Int64        fragment length in bp
     read_count : Int64             reads with that fragment length
     fraction_of_all_reads : Float64  read_count over all reads of the library
-    fragment_class : Utf8          sub-nucleosomal / transitional /
-                                   mononucleosomal / multi-nucleosomal
+    fragment_class : Utf8          short (50-100 bp) / mononucleosomal
+                                   (150-200 bp) / outside ataqv windows
 """
 
 import json
@@ -65,11 +69,17 @@ OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "fragment_class": pl.Utf8,
 }
 
-# ataqv's own windows: <= 100 bp is the TF (sub-nucleosomal) count, 150-324 bp
-# the mononucleosomal one. The gap between them is the transition.
-_SUB_NUCLEOSOMAL_MAX = 100
+# ataqv's own counting windows (src/cpp/Metrics.cpp l.907 and l.911), both ends
+# inclusive: 50-100 bp is hqaa_short_count (hqaa_tf_count in the report), 150-200 bp
+# is hqaa_mononucleosomal_count. ataqv has no other fragment class.
+_SHORT_MIN = 50
+_SHORT_MAX = 100
 _MONONUCLEOSOMAL_MIN = 150
-_MONONUCLEOSOMAL_MAX = 324
+_MONONUCLEOSOMAL_MAX = 200
+
+SHORT_CLASS = "short (50-100 bp)"
+MONONUCLEOSOMAL_CLASS = "mononucleosomal (150-200 bp)"
+OTHER_CLASS = "outside ataqv windows"
 
 _FIELDS_KEY = "fragment_length_counts_fields"
 _COUNTS_KEY = "fragment_length_counts"
@@ -99,13 +109,11 @@ def read_reports(frame: pl.DataFrame) -> list[dict]:
 
 def _classify(length: pl.Expr) -> pl.Expr:
     return (
-        pl.when(length <= _SUB_NUCLEOSOMAL_MAX)
-        .then(pl.lit("sub-nucleosomal"))
-        .when(length < _MONONUCLEOSOMAL_MIN)
-        .then(pl.lit("transitional"))
-        .when(length <= _MONONUCLEOSOMAL_MAX)
-        .then(pl.lit("mononucleosomal"))
-        .otherwise(pl.lit("multi-nucleosomal"))
+        pl.when(length.is_between(_SHORT_MIN, _SHORT_MAX))
+        .then(pl.lit(SHORT_CLASS))
+        .when(length.is_between(_MONONUCLEOSOMAL_MIN, _MONONUCLEOSOMAL_MAX))
+        .then(pl.lit(MONONUCLEOSOMAL_CLASS))
+        .otherwise(pl.lit(OTHER_CLASS))
     )
 
 

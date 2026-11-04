@@ -62,8 +62,8 @@ The landing page, at compact width with the filter panel collapsed:
   a call at a 5% FDR and a two-fold change, the same number as the Gene expression tab's. A
   condition and a library filter above them narrow these four only.
 - **Findings**: result rows whose values are computed under the filters, each with a link to
-  its tab: the median share of a library's reads at Q7 or above (the basecaller's pass
-  floor), the share of the expression variance on the first principal component, the genes
+  its tab: the median share of a library's reads at Q7 or above (pycoQC's default pass
+  quality), the share of the expression variance on the first principal component, the genes
   DESeq2 calls up and down (distinct genes, as the Key figure counts them), and the
   transcripts DEXSeq calls. Below them, four figures in two rows, each linking its tab: the
   share of reads above each quality floor beside the library PCA, then the DESeq2 volcano
@@ -90,9 +90,9 @@ draws the NanoStat summary and its quality ladder from the data. The pinned samp
 narrow its panels.
 
 **Reads.** Strip: reads basecalled (with their distribution over the libraries), the median
-read length N50 (with its spread), the median mean read quality (libraries against Q7, the
-basecaller's pass floor) and the median share of reads at Q7 or above (a gauge). Q10 is the
-good mark, drawn beside the pass floor in the figures. Then mean read length, mean quality and
+read length N50 (with its spread), the median mean read quality (libraries against Q7, pycoQC's
+default pass quality) and the median share of reads at Q7 or above (a gauge). Q10 is another quality
+bin that NanoPlot's NanoStats report counts, drawn beside Q7 in the figures with no verdict. Then mean read length, mean quality and
 yield per library as three sorted bars (nanoseq publishes no per-read table, so a scatter would
 hold one point per library), a solid line at Q7 and a dashed one at Q10 on the quality panel,
 with the library record card beside it, and the two ladders side by side: the Nx ladder

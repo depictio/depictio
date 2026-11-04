@@ -98,7 +98,7 @@ and text of the Overview cite only collections every route writes, except the tw
 - The relatedness estimate is unreliable at this depth (an unrelated pair reads high), so the
   family verdict is judged on IBS0 of parent and child pairs only; `relatedness` is shown, not
   judged.
-- There is no X or Y contig: the sex check reads Not tested for every sample, and the SMN table is
+- There is no X or Y contig: the X and Y relative depths of the Samples table are empty for every sample, and the SMN table is
   all No call. Both tiles draw correctly but say little here.
 - The mitochondrial VCF is Mutect2: the allele fraction is the heteroplasmy. MitoTip scores exist
   for a handful of calls only, so they stay in the table and not on a card.

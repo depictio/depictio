@@ -301,14 +301,14 @@ main_dashboard:
     display:
       icon_name: mdi:gauge
       icon_color: blue
-      caption: median; QSEE fails a fit under 20%
+      caption: median; PURPLE warns on a fit under 20%
       link: tab:Tumor profile
       format: percent
     section: Key figures
     tag: oa-ov-kf-purity
     index: ov-kf-purity
     title: Tumor purity
-    description: Share of tumor cells in the sample, from PURPLE's fit, median over the tumors in view. Below 20% the fit is too uncertain to trust the copy numbers.
+    description: Share of tumor cells in the sample, from PURPLE's fit, median over the tumors in view. Under 20% PURPLE raises WARN_LOW_PURITY (PURPLE README, QC status; PurpleQCStatus.java, MIN_PURITY = 0.2), a warning and not a failure.
     layout: {x: 2, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: oncoanalyser
@@ -726,13 +726,13 @@ tabs:
     display:
       icon_name: mdi:content-duplicate
       icon_color: orange.8
-      caption: highest of any DNA sample; QSEE fails above 30%
+      caption: highest of any DNA sample; QSEE warns above 30%
       format: percent
     section: QC at a glance
     tag: oa-qc-card-duplicates
     index: qc-card-duplicates
     title: Highest duplicate share
-    description: Share of reads marked as duplicates in the worst DNA sample. QSEE fails a sample above 30%; a high share means a low-complexity library whose depth overstates the evidence.
+    description: Share of reads marked as duplicates in the worst DNA sample. QSEE warns on a sample above 30% in whole-genome mode (0.99 in targeted mode; qsee ThresholdRegistry.java, DUPLICATE_READS, WARN); a high share means a low-complexity library whose depth overstates the evidence.
     layout: {x: 4, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: oncoanalyser
@@ -747,13 +747,13 @@ tabs:
     display:
       icon_name: mdi:percent-outline
       icon_color: orange.9
-      caption: lowest of any DNA sample; QSEE fails under 90%
+      caption: lowest of any DNA sample; QSEE warns under 90%
       format: percent
     section: QC at a glance
     tag: oa-qc-card-breadth
     index: qc-card-breadth
     title: Lowest share at 10x or more
-    description: Share of bases covered at least 10 times in the shallowest DNA sample. QSEE fails a tumor or a normal under 90% at this depth, so a variant caller has too little to work with there.
+    description: Share of bases covered at least 10 times in the shallowest DNA sample. QSEE warns on a normal under 90% at this depth, and on a tumor under 90% in whole-genome mode (0.99 in targeted mode; qsee ThresholdRegistry.java, COVERAGE_ABOVE_10, WARN), so a variant caller has too little to work with there.
     layout: {x: 6, y: 0, w: 2, h: 2}
   - component_type: advanced_viz
     workflow_tag: oncoanalyser
@@ -999,13 +999,13 @@ tabs:
     display:
       icon_name: mdi:gauge
       icon_color: blue.4
-      caption: median; QSEE fails a fit under 20%
+      caption: median; PURPLE warns on a fit under 20%
       format: percent
     section: Tumor at a glance
     tag: oa-tp-card-purity
     index: tp-card-purity
     title: Tumor purity
-    description: Share of tumor cells in the sample, from PURPLE's fit, median over the tumors in view. Below 20% the fit is too uncertain to trust the copy numbers.
+    description: Share of tumor cells in the sample, from PURPLE's fit, median over the tumors in view. Under 20% PURPLE raises WARN_LOW_PURITY (PURPLE README, QC status; PurpleQCStatus.java, MIN_PURITY = 0.2), a warning and not a failure.
     layout: {x: 0, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: oncoanalyser
@@ -1105,7 +1105,7 @@ tabs:
     mode: code
     code_content: |-
       # SNVs per COSMIC signature, largest first, in the colour of the signature's proposed cause (COSMIC v2); the cause is in the hover. Mean over the tumors in view.
-      cause = {'Sig1': 'Clock-like (ageing)', 'Sig5': 'Clock-like (ageing)', 'Sig2': 'APOBEC', 'Sig13': 'APOBEC', 'Sig3': 'HR deficiency', 'Sig4': 'Smoking', 'Sig29': 'Smoking', 'Sig6': 'Mismatch repair', 'Sig15': 'Mismatch repair', 'Sig20': 'Mismatch repair', 'Sig21': 'Mismatch repair', 'Sig26': 'Mismatch repair', 'Sig7': 'UV light', 'Sig9': 'Polymerase eta', 'Sig10': 'POLE', 'Sig14': 'POLE', 'Sig11': 'Alkylating agents', 'Sig22': 'Aristolochic acid', 'Sig24': 'Aflatoxin', 'MISALLOC': 'Unexplained'}
+      cause = {'Sig1': 'Clock-like (ageing)', 'Sig2': 'APOBEC', 'Sig13': 'APOBEC', 'Sig3': 'HR deficiency', 'Sig4': 'Smoking', 'Sig29': 'Tobacco chewing', 'Sig6': 'Mismatch repair', 'Sig15': 'Mismatch repair', 'Sig20': 'Mismatch repair', 'Sig26': 'Mismatch repair', 'Sig7': 'UV light', 'Sig9': 'Polymerase eta', 'Sig10': 'POLE', 'Sig11': 'Alkylating agents', 'Sig22': 'Aristolochic acid', 'Sig24': 'Aflatoxin', 'MISALLOC': 'Unexplained'}
       d = df.group_by('signature').agg(pl.col('percent').mean().alias('percent'), pl.col('sample').n_unique().alias('tumors')).with_columns(pl.col('signature').replace_strict(cause, default='Unknown cause', return_dtype=pl.Utf8).alias('cause')).sort('percent', descending=True)
       fig = px.bar(d.to_pandas(), x='percent', y='signature', color='cause', orientation='h', color_discrete_map=depictio_category_colors.get('signature_cause') or {}, category_orders={'signature': d['signature'].to_list()}, hover_data={'cause': True, 'tumors': True}, labels={'percent': 'Share of SNVs (%)', 'signature': '', 'cause': 'Proposed cause', 'tumors': 'Tumors'})
       fig.update_yaxes(autorange='reversed')
@@ -1125,15 +1125,15 @@ tabs:
       no signature takes, so read the other bars with that in mind.
 
       Lines and annotations: the colours group the signatures by their proposed cause in COSMIC version 2:
-      ageing (1, 5), APOBEC (2, 13), HR deficiency (3), smoking (4, 29), mismatch repair (6, 15, 20, 21, 26),
-      UV light (7), polymerase eta (9), POLE (10, 14), alkylating agents (11), aristolochic acid (22) and
-      aflatoxin (24). Signatures outside this list are coloured as an unknown cause.
+      ageing (1), APOBEC (2, 13), HR deficiency (3), smoking (4), tobacco chewing (29), mismatch repair
+      (6, 15, 20, 26), UV light (7), polymerase eta (9), POLE (10), alkylating agents (11), aristolochic
+      acid (22) and aflatoxin (24). Every other signature is coloured as an unknown cause, among them 5, 14
+      and 21, whose aetiology COSMIC version 2 lists as unknown.
 
       Sources: COSMIC mutational signatures v2, https://cancer.sanger.ac.uk/signatures/signatures_v2/ ; SIGS
       documentation, https://github.com/hartwigmedical/hmftools/tree/master/sigs
 
-      Note: COSMIC version 2 lists the cause of signatures 5, 14 and 21 as unknown or only probable, so the
-      colours of those three are a grouping and not a finding.
+      Note: a proposed cause is COSMIC's attribution of the signature and not a finding about this tumor.
     layout: {x: 0, y: 0, w: 5, h: 4}
   - component_type: card
     workflow_tag: oncoanalyser

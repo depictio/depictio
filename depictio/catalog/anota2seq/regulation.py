@@ -6,16 +6,31 @@ gene one regulatory mode, following anota2seq's own reading of the tables:
 * ``translation``: the translation analysis is significant (a change in
   ribosome-bound mRNA not explained by total mRNA), with an APV slope inside
   anota2seq's default window (``SLOPE_TRANSLATION``);
-* ``buffering``: otherwise, the buffering analysis is significant (total mRNA
-  changes and the ribosome-bound fraction does not follow), slope inside
-  ``SLOPE_BUFFERING``;
 * ``mRNA abundance``: otherwise, total and ribosome-bound mRNA both change
   significantly in the same direction, so the gene is regulated through its
   mRNA level;
+* ``buffering``: otherwise, the buffering analysis is significant (total mRNA
+  changes and the ribosome-bound fraction does not follow), slope inside
+  ``SLOPE_BUFFERING``;
 * ``not regulated``: none of the above.
 
-Significance is anota2seq's default selection: adjusted p below ``MAX_PADJ``
-and an absolute effect of at least ``MIN_EFFECT`` (log2 of a 1.2-fold change).
+The order is anota2seq's own: ``anota2seqRegModes`` gives a gene found in
+several modes the single mode "translation > mRNA abundance > buffering"
+(``anota2seqGetOutput`` documentation, and the ``singleRegMode`` column of
+``anota2seqRegModes`` in https://github.com/ChrOertlin/anota2seq/blob/master/R/anota2seqRegModes.R).
+
+Significance is anota2seq's default selection (``anota2seqRun`` thresholds,
+https://rdrr.io/github/ChrOertlin/anota2seq/man/anota2seqRun.html):
+
+* every analysis: adjusted p below ``MAX_PADJ`` (``maxPAdj``, default 0.15);
+* translation and buffering: also an absolute effect of at least
+  ``MIN_EFFECT_TE`` (``deltaPT`` and ``deltaTP``, default log2(1.2)) and the APV
+  slope window;
+* total mRNA and ribosome-bound mRNA: no minimum effect (``deltaT`` and
+  ``deltaP`` default to NULL, i.e. no filtering). nf-core/riboseq 2.0.0 agrees:
+  its ``rna_lfc_threshold`` and ``ribo_lfc_threshold`` default to 0, "Set to 0 to
+  disable" (https://github.com/nf-core/riboseq/blob/2.0.0/nextflow_schema.json).
+
 ``direction`` is the sign of the effect that decided the mode.
 
 Sources: the same files as ``results.py`` (every
@@ -76,8 +91,11 @@ OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "direction": pl.Utf8,
 }
 
+# anota2seqRun defaults: maxPAdj 0.15, deltaPT and deltaTP log2(1.2) (translation
+# and buffering only), slope windows -1..2 and -2..1. deltaP and deltaT are NULL,
+# so the two mRNA analyses carry no effect cut.
 MAX_PADJ = 0.15
-MIN_EFFECT = math.log2(1.2)
+MIN_EFFECT_TE = math.log2(1.2)
 SLOPE_TRANSLATION = (-1.0, 2.0)
 SLOPE_BUFFERING = (-2.0, 1.0)
 
@@ -90,8 +108,17 @@ _PREFIX = {
 }
 
 
-def _sig(prefix: str, effect: str, slope: tuple[float, float] | None = None) -> pl.Expr:
-    expr = (pl.col(f"{prefix}_padj") < MAX_PADJ) & (pl.col(effect).abs() >= MIN_EFFECT)
+def _sig(
+    prefix: str,
+    effect: str,
+    min_effect: float | None = None,
+    slope: tuple[float, float] | None = None,
+) -> pl.Expr:
+    """anota2seq's selection: adjusted p below MAX_PADJ, plus an effect cut and a slope window
+    only where anota2seqRun sets one (translation and buffering)."""
+    expr = pl.col(f"{prefix}_padj") < MAX_PADJ
+    if min_effect is not None:
+        expr = expr & (pl.col(effect).abs() >= min_effect)
     if slope is not None:
         lo, hi = slope
         expr = expr & pl.col(f"{prefix}_slope").is_between(lo, hi)
@@ -130,8 +157,8 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             if f"{prefix}_{suffix}" not in wide.columns:
                 wide = wide.with_columns(pl.lit(None, dtype=pl.Float64).alias(f"{prefix}_{suffix}"))
 
-    translation = _sig("translation", "translation_eff", SLOPE_TRANSLATION)
-    buffering = _sig("buffering", "buffering_eff", SLOPE_BUFFERING)
+    translation = _sig("translation", "translation_eff", MIN_EFFECT_TE, SLOPE_TRANSLATION)
+    buffering = _sig("buffering", "buffering_eff", MIN_EFFECT_TE, SLOPE_BUFFERING)
     abundance = (
         _sig("total_mrna", "total_mrna_eff")
         & _sig("translated_mrna", "translated_mrna_eff")
@@ -140,18 +167,18 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     wide = wide.with_columns(
         pl.when(translation)
         .then(pl.lit("translation"))
-        .when(buffering)
-        .then(pl.lit("buffering"))
         .when(abundance)
         .then(pl.lit("mRNA abundance"))
+        .when(buffering)
+        .then(pl.lit("buffering"))
         .otherwise(pl.lit("not regulated"))
         .alias("regulation_mode"),
         pl.when(translation)
         .then(pl.col("translation_eff"))
-        .when(buffering)
-        .then(pl.col("buffering_eff"))
         .when(abundance)
         .then(pl.col("translated_mrna_eff"))
+        .when(buffering)
+        .then(pl.col("buffering_eff"))
         .otherwise(None)
         .alias("_deciding"),
     ).with_columns(
