@@ -305,7 +305,8 @@ def _require_provisioning_key(api_key: str) -> None:
             status_code=503,
             detail="User provisioning is not enabled on this instance",
         )
-    if api_key != configured:
+    # Constant time: a byte-by-byte `!=` leaks how much of the key matched.
+    if not hmac.compare_digest(str(api_key or "").encode(), str(configured).encode()):
         raise HTTPException(status_code=403, detail="Invalid provisioning API key")
 
 

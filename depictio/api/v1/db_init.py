@@ -986,9 +986,10 @@ async def initialize_db() -> UserBeanie | None:
     logger.info("Running initial database setup...")
 
     # Indexes come after the (optional) wipe: dropping the database drops them.
-    from depictio.api.v1.db import ensure_project_storage_indexes
+    from depictio.api.v1.db import ensure_migration_indexes, ensure_project_storage_indexes
 
     ensure_project_storage_indexes()
+    ensure_migration_indexes()
 
     # ── Groups (idempotent; non-credential bootstrap) ────────────────────────
     for group_config in (

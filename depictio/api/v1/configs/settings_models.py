@@ -9,6 +9,7 @@ from urllib.parse import urlsplit
 
 from pydantic import (
     AliasChoices,
+    BaseModel,
     Field,
     SecretStr,
     computed_field,
@@ -326,6 +327,12 @@ class MongoDBConfig(ServiceConfig):
         comment_threads_collection: str = Field(default="comment_threads")
         cli_agents_collection: str = Field(default="cli_agents")
         jobs_collection: str = Field(default="jobs")
+        # Server-to-server push (#1303). Target side: inbound requests waiting
+        # for an admin decision. Source side: UI-added targets (keys encrypted)
+        # and the log of outbound pushes.
+        migration_requests_collection: str = Field(default="migration_requests")
+        migration_targets_collection: str = Field(default="migration_targets")
+        migration_pushes_collection: str = Field(default="migration_pushes")
         test_collection: str = Field(default="test")
 
     collections: Collections = Field(default_factory=Collections)
@@ -1701,6 +1708,111 @@ class IngestionConfig(BaseSettings):
         return self
 
 
+class MigrationTargetConfig(BaseModel):
+    """An instance this one may push projects to (source side, #1303).
+
+    Targets declared in ``DEPICTIO_MIGRATION_TARGETS`` are trusted by the
+    operator: ``http://`` and private addresses are allowed. Targets added in
+    the admin UI (``allow_ui_targets``) go through the SSRF guard instead.
+    """
+
+    name: str = Field(min_length=1, max_length=100)
+    url: str = Field(description="Base URL of the target's API, e.g. https://depictio.example.org")
+    pairing_key: SecretStr
+    #: Only ``pairing_key`` exists today. Kept so a personal token can be added
+    #: later without changing the registry's shape.
+    credential_type: Literal["pairing_key"] = "pairing_key"
+
+    @field_validator("pairing_key")
+    @classmethod
+    def _long_enough(cls, v: SecretStr) -> SecretStr:
+        if len(v.get_secret_value()) < 32:
+            raise ValueError("pairing_key must be at least 32 characters")
+        return v
+
+
+class MigrationInboundSource(BaseModel):
+    """An instance allowed to push projects here (target side, #1303).
+
+    The source is identified by its key alone: ``name`` comes from this entry,
+    never from what the source sends.
+    """
+
+    name: str = Field(min_length=1, max_length=100)
+    pairing_key: SecretStr
+    #: Buckets on this instance's S3 endpoint the source's data may be copied
+    #: from (``server_side_copy``). Empty: data must travel inline.
+    allowed_source_buckets: list[str] = Field(default_factory=list)
+    max_pending: int = Field(default=5, ge=1)
+    max_per_day: int = Field(default=20, ge=1)
+    #: Overrides ``MigrationConfig.max_bundle_bytes`` for this source.
+    max_bundle_bytes: Optional[int] = Field(default=None, ge=1)
+
+    @field_validator("pairing_key")
+    @classmethod
+    def _long_enough(cls, v: SecretStr) -> SecretStr:
+        if len(v.get_secret_value()) < 32:
+            raise ValueError("pairing_key must be at least 32 characters")
+        return v
+
+
+class MigrationConfig(BaseSettings):
+    """Server-to-server project push with admin approval (#1303).
+
+    Lists are JSON in the environment, e.g.
+    ``DEPICTIO_MIGRATION_TARGETS='[{"name": "public", "url": "https://...", "pairing_key": "..."}]'``.
+    Both directions are off until configured: no target, no push; inbound
+    routes answer 404 unless ``inbound_enabled``.
+    """
+
+    instance_label: Optional[str] = Field(
+        default=None, description="How this instance names itself in bundles and import hops"
+    )
+    targets: list[MigrationTargetConfig] = Field(default_factory=list)
+    allow_ui_targets: bool = Field(
+        default=False, description="Let admins add push targets in the UI"
+    )
+    ui_target_host_allowlist: list[str] = Field(
+        default_factory=list,
+        description="Hosts a UI-added target may use over http or on a private address (LAN)",
+    )
+    inbound_enabled: bool = Field(default=False, description="Accept pushes from inbound_sources")
+    inbound_sources: list[MigrationInboundSource] = Field(default_factory=list)
+    lock_imported_default: bool = Field(
+        default=True, description="Approval publishes the project read-only unless unticked"
+    )
+    max_bundle_bytes: int = Field(default=10 * 1024**3, ge=1)
+    staging_prefix: str = Field(default="_migration_staging")
+    pending_ttl_days: int = Field(default=14, ge=1)
+    spool_dir: Optional[str] = Field(default=None)
+    http_timeout_s: float = Field(default=60.0, gt=0)
+
+    @field_validator("staging_prefix")
+    @classmethod
+    def _not_an_object_id(cls, v: str) -> str:
+        v = v.strip().strip("/")
+        if not v or re.fullmatch(r"[0-9a-fA-F]{24}", v):
+            # The orphan sweep deletes every top-level prefix that looks like a
+            # data collection id and is unknown to Mongo.
+            raise ValueError("staging_prefix must be non-empty and must not look like an ObjectId")
+        if "/" in v:
+            raise ValueError("staging_prefix must be a single path segment")
+        return v
+
+    @model_validator(mode="after")
+    def _unique_names(self) -> "MigrationConfig":
+        for label, items in (("targets", self.targets), ("inbound_sources", self.inbound_sources)):
+            names = [i.name for i in items]
+            if len(names) != len(set(names)):
+                raise ValueError(f"{label} names must be unique")
+        keys = [s.pairing_key.get_secret_value() for s in self.inbound_sources]
+        if len(keys) != len(set(keys)):
+            raise ValueError("inbound_sources pairing keys must be unique")
+        return self
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_MIGRATION_")
+
+
 class JobsConfig(BaseSettings):
     """User-facing job records for offloaded work (``jobs`` collection).
 
@@ -2527,6 +2639,7 @@ class Settings(BaseSettings):
     comments: CommentsConfig = Field(default_factory=CommentsConfig)
     ingestion: IngestionConfig = Field(default_factory=IngestionConfig)
     jobs: JobsConfig = Field(default_factory=JobsConfig)
+    migration: MigrationConfig = Field(default_factory=MigrationConfig)
     dashboard_yaml: DashboardYAMLConfig = Field(default_factory=DashboardYAMLConfig)
     structure_resolver: StructureResolverSettings = Field(default_factory=StructureResolverSettings)
 
