@@ -416,6 +416,7 @@ main_dashboard:
       end_col: end
       score_col: rank_score
       feature_col: gene_name
+      category_col: direction
       mark: point
       point_size: 9
       score_title: Usage shift (-log10 q-value)
@@ -437,7 +438,8 @@ main_dashboard:
       cluster of tall dots on one chromosome is a region worth opening. Click a dot to open its gene in
       the genome browser of the [Locus](tab:Locus) tab.
 
-      Lines and annotations: no line or cut-off is drawn, the height only ranks the transcripts. On this
+      Lines and annotations: no line or cut-off is drawn, the height only ranks the transcripts. Red dots
+      are shifts called up, blue ones down, grey ones not significant, as in the usage volcano. On this
       axis the 5% gene-level q-value that this template uses to call a shift sits at 1.3.
 
       Source: DEXSeq, Anders, Reyes and Huber 2012, doi:10.1101/gr.133744.111
