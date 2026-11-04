@@ -647,7 +647,7 @@ export async function fetchAuthStatus(): Promise<AuthStatusResponse> {
     is_public_mode: false,
     is_single_user_mode: false,
     is_demo_mode: false,
-    google_oauth_enabled: false,
+    sso_providers: [],
   };
 }
 

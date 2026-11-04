@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import { fetchAuthStatus } from 'depictio-react-core';
+import type { SsoProvider } from 'depictio-react-core';
 
 import { syncMyAvatar } from '../chrome/account/avatar';
 
@@ -42,12 +43,8 @@ export interface UseCurrentUserResult {
   /** True when the server is in demo mode (a public_mode variant with a
    *  curated set of read-only example dashboards). */
   isDemoMode: boolean;
-  /** True when Google OAuth is configured: a guest can sign in with it. */
-  googleOAuthEnabled: boolean;
-  /** True when SAML single sign-on is configured. */
-  samlEnabled: boolean;
-  /** Label of the SAML sign-in button, when the server names one. */
-  samlLabel: string | undefined;
+  /** Enabled OpenID Connect providers a visitor can sign in with. */
+  ssoProviders: SsoProvider[];
   /** True when the server is in development mode (DEPICTIO_DEV_MODE=true).
    *  Used to suppress the walkthrough during local dev — devs hot-reload
    *  constantly and don't need the tour relaunching on every version bump. */
@@ -94,9 +91,7 @@ export function useCurrentUser(): UseCurrentUserResult {
   const [authMode, setAuthMode] = useState<AuthMode>('standard');
   const [isPublicMode, setIsPublicMode] = useState<boolean>(false);
   const [isDemoMode, setIsDemoMode] = useState<boolean>(false);
-  const [googleOAuthEnabled, setGoogleOAuthEnabled] = useState<boolean>(false);
-  const [samlEnabled, setSamlEnabled] = useState<boolean>(false);
-  const [samlLabel, setSamlLabel] = useState<string | undefined>(undefined);
+  const [ssoProviders, setSsoProviders] = useState<SsoProvider[]>([]);
   const [isDevMode, setIsDevMode] = useState<boolean>(false);
   const [walkthroughDisabled, setWalkthroughDisabled] = useState<boolean>(false);
   const [isSingleUserMode, setIsSingleUserMode] = useState<boolean>(false);
@@ -120,9 +115,7 @@ export function useCurrentUser(): UseCurrentUserResult {
         setAuthMode((data.auth_mode as AuthMode) ?? 'standard');
         setIsPublicMode(Boolean(data.is_public_mode));
         setIsDemoMode(Boolean(data.is_demo_mode));
-        setGoogleOAuthEnabled(Boolean(data.google_oauth_enabled));
-        setSamlEnabled(Boolean(data.saml_enabled));
-        setSamlLabel(data.saml_login_label);
+        setSsoProviders(data.sso_providers ?? []);
         setIsDevMode(Boolean(data.is_dev_mode));
         setWalkthroughDisabled(Boolean(data.walkthrough_disabled));
         setIsSingleUserMode(Boolean(data.is_single_user_mode));
@@ -172,9 +165,7 @@ export function useCurrentUser(): UseCurrentUserResult {
     authMode,
     isPublicMode,
     isDemoMode,
-    googleOAuthEnabled,
-    samlEnabled,
-    samlLabel,
+    ssoProviders,
     isDevMode,
     walkthroughDisabled,
     isSingleUserMode,

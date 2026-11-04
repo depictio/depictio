@@ -11,13 +11,10 @@ export function useGuestSignIn() {
     isPublicMode: me.isPublicMode,
     isDemoMode: me.isDemoMode,
     isGuest: Boolean(me.user?.is_temporary),
-    googleOAuthEnabled: me.googleOAuthEnabled,
-    samlEnabled: me.samlEnabled,
+    providers: me.ssoProviders,
   });
   return {
     available,
-    googleEnabled: me.googleOAuthEnabled,
-    samlEnabled: me.samlEnabled,
-    samlLabel: me.samlLabel,
+    providers: me.ssoProviders,
   };
 }

@@ -35,7 +35,7 @@ function statusBody(user: unknown) {
     is_dev_mode: true,
     walkthrough_disabled: true,
     unauthenticated_mode: false,
-    google_oauth_enabled: false,
+    sso_providers: [],
   };
 }
 

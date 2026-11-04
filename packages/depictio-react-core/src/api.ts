@@ -4159,10 +4159,17 @@ export async function fetchCurrentUser(): Promise<CurrentUser | null> {
 // ---- Auth helpers (React /auth page) ------------------------------------
 //
 // Thin wrappers around the FastAPI auth endpoints. These back the React
-// /auth route — login form, register form, public-mode modal, and Google
-// OAuth callback. The returned session payloads share the same JSON shape
-// the Dash app writes into localStorage[`local-store`], so the still-Dash
-// /dashboards page picks up the React-issued session without changes.
+// /auth route — login form, register form, public-mode modal, and the
+// OpenID Connect sign-in buttons. The returned session payloads are written
+// into localStorage[`local-store`] by `persistSession`.
+
+/** An enabled OpenID Connect provider, as listed in /auth/me/optional. */
+export interface SsoProvider {
+  /** URL-safe provider id (`[a-z0-9][a-z0-9_-]*`). */
+  id: string;
+  /** Button text, e.g. "Sign in with SSO". */
+  label: string;
+}
 
 /** Auth mode + flags returned by /auth/me/optional. */
 export type AuthMode = 'standard' | 'single_user' | 'unauthenticated';
@@ -4202,19 +4209,17 @@ export interface AuthStatusResponse {
    *  treat absent as `false`. */
   registration_disabled?: boolean;
   /** Email + password sign-in is disabled — hide the credentials form and
-   *  leave Google OAuth as the only way in. Already accounts for whether
-   *  Google OAuth is actually configured. Older backends omit this — treat
+   *  leave single sign-on as the only way in. Already accounts for whether
+   *  an OpenID Connect provider is actually configured. Older backends omit this — treat
    *  absent as `false`. */
   password_login_disabled?: boolean;
   /** Public mode is gated by a shared access code — do not auto-mint a
    *  temporary session, ask for the code first. Older backends omit this —
    *  treat absent as `false`. */
   public_access_code_required?: boolean;
-  google_oauth_enabled: boolean;
-  /** SAML SSO login enabled. Older backends omit this — treat absent as `false`. */
-  saml_enabled?: boolean;
-  /** Label for the SAML login button (e.g. "Sign in with EMBL"). */
-  saml_login_label?: string;
+  /** Enabled OpenID Connect providers, in display order. Older backends omit
+   *  this — treat absent as `[]`. */
+  sso_providers?: SsoProvider[];
   /** Development mode (DEPICTIO_DEV_MODE). Suppresses the walkthrough. */
   is_dev_mode?: boolean;
   /** Explicit walkthrough kill switch (DEPICTIO_WALKTHROUGH_DISABLED). */
@@ -4302,7 +4307,7 @@ export async function fetchAuthStatus(): Promise<AuthStatusResponse> {
       user: null,
       is_public_mode: false,
       is_single_user_mode: false,
-      google_oauth_enabled: false,
+      sso_providers: [],
     };
   }
   return (await res.json()) as AuthStatusResponse;
@@ -4400,68 +4405,20 @@ export async function getAnonymousSession(): Promise<SessionPayload> {
   return (await res.json()) as SessionPayload;
 }
 
-/** Initiate Google OAuth — caller redirects to the returned authorization_url. */
-export async function startGoogleOAuth(): Promise<{ authorization_url: string; state: string }> {
-  const res = await fetch(`${API_BASE}/auth/google/login`);
-  if (!res.ok) await throwHttpError(res, 'Failed to start Google OAuth');
-  return (await res.json()) as { authorization_url: string; state: string };
+/** URL starting the OpenID Connect login for one provider. Use as a full-page
+ *  navigation (window.location.assign), NOT a fetch — the backend 302s to the
+ *  identity provider. `next` must be a same-origin path; the backend
+ *  re-validates it. */
+export function oidcLoginUrl(providerId: string, next: string = '/dashboards'): string {
+  return `${API_BASE}/auth/oidc/${encodeURIComponent(providerId)}/login?next=${encodeURIComponent(next)}`;
 }
 
-/** URL starting the SAML SP-initiated login. Use as a full-page navigation
- *  (window.location.assign), NOT a fetch — the backend 302s to the IdP.
- *  `next` must be a same-origin path; the backend re-validates it. */
-export function samlLoginUrl(next: string = '/dashboards'): string {
-  return `${API_BASE}/auth/saml/login?next=${encodeURIComponent(next)}`;
-}
-
-/** Complete the Google OAuth flow with the code/state from the redirect URL. */
-export interface GoogleCallbackResult {
-  success: boolean;
-  message?: string;
-  session: SessionPayload | null;
-  redirect_url?: string;
-}
-
-export async function handleGoogleCallback(code: string, state: string): Promise<GoogleCallbackResult> {
-  const params = new URLSearchParams({ code, state });
-  const res = await fetch(`${API_BASE}/auth/google/callback?${params.toString()}`);
-  if (!res.ok) {
-    // The API answers with a `{detail}` envelope; show its text, not the JSON.
-    const detail = await readErrorDetail(res);
-    return { success: false, message: detail || `OAuth failed: ${res.status}`, session: null };
-  }
-  const body = (await res.json()) as {
-    success?: boolean;
-    message?: string;
-    user?: { id: string; email: string };
-    token?: {
-      access_token: string;
-      refresh_token: string;
-      token_type?: string;
-      expire_datetime: string;
-      refresh_expire_datetime: string;
-      user_id: string;
-    };
-    redirect_url?: string;
-  };
-  if (!body.success || !body.token || !body.user) {
-    return { success: false, message: body.message, session: null };
-  }
-  return {
-    success: true,
-    message: body.message,
-    redirect_url: body.redirect_url,
-    session: {
-      logged_in: true,
-      email: body.user.email,
-      user_id: String(body.token.user_id),
-      access_token: body.token.access_token,
-      refresh_token: body.token.refresh_token,
-      expire_datetime: body.token.expire_datetime,
-      refresh_expire_datetime: body.token.refresh_expire_datetime,
-      token_type: body.token.token_type ?? 'bearer',
-    },
-  };
+/** URL of a provider's API callback, with the identity provider's query string
+ *  (`?code=..&state=..`) carried over verbatim. Full-page navigation only: the
+ *  legacy `/auth/google/callback` viewer route forwards the browser here. */
+export function oidcCallbackUrl(providerId: string, search: string = ''): string {
+  const query = search && !search.startsWith('?') ? `?${search}` : search;
+  return `${API_BASE}/auth/oidc/${encodeURIComponent(providerId)}/callback${query}`;
 }
 
 /** Redeem a single-use magic-link ticket for a browser session.
@@ -7546,7 +7503,7 @@ export interface ProfileUser {
   registration_date?: string | null;
   last_login?: string | null;
   /** SSO-provided profile attributes (UserBaseUI.display_name/title) —
-   *  present only when populated by sso_sync on SAML/OAuth login. */
+   *  present only when populated by sso_sync on OpenID Connect login. */
   display_name?: string | null;
   title?: string | null;
 }
