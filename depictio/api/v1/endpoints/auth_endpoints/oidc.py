@@ -381,6 +381,17 @@ async def exchange_code(
 # ---------------------------------------------------------------------------
 
 
+#: Issuers known to sign with a second spelling of their discovery issuer.
+#: Google documents both forms for the ``iss`` of its ID tokens.
+_ISSUER_ALIASES: dict[str, tuple[str, ...]] = {
+    "https://accounts.google.com": ("accounts.google.com",),
+}
+
+
+def _accepted_issuers(issuer: str) -> list[str]:
+    return [issuer, *_ISSUER_ALIASES.get(issuer, ())]
+
+
 async def verify_id_token(
     provider: OIDCProviderConfig,
     metadata: Mapping[str, Any],
@@ -430,7 +441,7 @@ async def verify_id_token(
     registry = JWTClaimsRegistry(
         now=now,
         leeway=CLOCK_SKEW_SECONDS,
-        iss={"essential": True, "value": issuer},
+        iss={"essential": True, "values": _accepted_issuers(issuer)},
         aud={"essential": True, "value": client_id},
         sub={"essential": True},
         exp={"essential": True},
