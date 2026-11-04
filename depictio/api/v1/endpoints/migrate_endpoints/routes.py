@@ -8,13 +8,12 @@ and imports it into the target instance via upsert (never wipes other projects).
 
 import hashlib
 import os
-import tempfile
 from collections.abc import Callable
 from typing import Any, Literal
 from urllib.parse import quote, urlsplit
 
 import boto3
-from botocore.exceptions import BotoCoreError, ClientError
+from botocore.exceptions import ClientError
 from bson import ObjectId
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
@@ -31,18 +30,17 @@ from depictio.api.v1.db import (
     projects_collection,
     users_collection,
 )
-from depictio.api.v1.endpoints.projects_endpoints.provenance import instance_label
 from depictio.api.v1.endpoints.projects_endpoints.publish_lock import LOCKED_DETAIL
 from depictio.api.v1.endpoints.user_endpoints.routes import (
     get_user_or_anonymous,
 )
 from depictio.api.v1.permissions import build_access_query, get_user_group_ids
 from depictio.api.v1.services import project_bundle
+from depictio.api.v1.services.migration_push import BundleListingError, build_project_bundle_file
 from depictio.models.models.data_collections_types.genomic_tracks import genomic_tracks_s3_prefix
 from depictio.models.models.data_collections_types.phylogeny import phylogeny_s3_key
 from depictio.models.models.migration import ImportHop
 from depictio.models.models.users import User
-from depictio.models.timestamps import utc_now_str
 from depictio.version import get_version
 
 migrate_endpoint_router = APIRouter()
@@ -431,97 +429,18 @@ async def export_project(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    mode = request.mode
-    scope = project_bundle.resolve_project_scope(project)
-    data = project_bundle.collect_bundle_docs(project, scope, mode)
-    logger.info(
-        "migrate export: project=%s workflow_ids=%d dc_ids=%d",
-        str(scope.project_id),
-        len(scope.workflow_ids),
-        len(scope.dc_ids),
-    )
-
-    # S3 handling -------------------------------------------------------
-    s3_metadata: dict[str, Any] = {}
-    s3_objects: list[project_bundle.S3ObjectRef] = []
-    s3_client: Any = None
-    if mode in ("all", "files"):
-        s3_paths = _collect_s3_locations_for_project(scope.dc_ids, settings.s3.bucket)
-        logger.info("Migrate: found %d S3 locations for project", len(s3_paths))
-
-        if request.target_s3_config:
-            # SSRF / data-exfiltration guard: the target endpoint is caller-supplied and
-            # gets handed to boto3, so the server would otherwise connect to (and push
-            # exported project data to) any host the caller names. Validate before any
-            # boto3 client is constructed.
-            _validate_target_s3_endpoint(request.target_s3_config)
-
-            # CLI path: copy between two S3 instances
-            source_config = {
-                "bucket": settings.s3.bucket,
-                "endpoint_url": settings.s3.endpoint_url,
-                "aws_access_key_id": settings.s3.aws_access_key_id,
-                "aws_secret_access_key": settings.s3.aws_secret_access_key,
-                "region_name": "us-east-1",
-            }
-            logger.info("Migrate: copying %d S3 locations to target", len(s3_paths))
-            s3_metadata = _copy_s3_locations(
-                s3_paths,
-                source_config,
-                request.target_s3_config,
-                dry_run=request.dry_run,
-            )
-            s3_metadata["paths"] = s3_paths
-        else:
-            # UI path: S3 objects are bundled directly into the ZIP below
-            s3_metadata = {"paths": s3_paths, "bundled_in_zip": True, "dry_run": request.dry_run}
-            if s3_paths and not request.dry_run:
-                s3_client = _instance_s3_client()
-                try:
-                    s3_objects = project_bundle.list_s3_objects(
-                        s3_paths, settings.s3.bucket, s3_client
-                    )
-                except (ClientError, BotoCoreError) as e:
-                    logger.error("migrate export: listing S3 failed: %s", e)
-                    raise HTTPException(status_code=502, detail="Could not list the project's data")
-
-    metadata = project_bundle.build_bundle_metadata(
-        project,
-        scope,
-        mode,
-        data,
-        dry_run=request.dry_run,
-        source_instance=instance_label(),
-        depictio_version=get_version(),
-        s3_bucket=settings.s3.bucket,
-        s3_endpoint=_normalize_endpoint(settings.s3.endpoint_url or ""),
-        exported_at=utc_now_str(),
-    )
-
-    spool_dir = _migration_setting("spool_dir", None)
-    if spool_dir:
-        os.makedirs(spool_dir, exist_ok=True)
-    fd, path = tempfile.mkstemp(prefix="depictio-export-", suffix=".zip", dir=spool_dir)
     try:
-        with os.fdopen(fd, "wb") as fp:
-            written = project_bundle.write_bundle_zip(
-                fp,
-                metadata,
-                data,
-                s3_metadata=s3_metadata,
-                s3_objects=s3_objects,
-                s3_client=s3_client,
-                bucket=settings.s3.bucket,
-                max_bytes=int(_migration_setting("max_bundle_bytes", DEFAULT_MAX_BUNDLE_BYTES)),
-            )
+        built = build_project_bundle_file(
+            project,
+            mode=request.mode,
+            dry_run=request.dry_run,
+            target_s3_config=request.target_s3_config,
+        )
     except project_bundle.BundleTooLarge as e:
-        os.unlink(path)
         raise HTTPException(status_code=413, detail=str(e))
-    except BaseException:
-        os.unlink(path)
-        raise
-    if s3_objects:
-        logger.info("Migrate: bundled %s S3 files into ZIP", written.get("bundled_files"))
+    except BundleListingError:
+        raise HTTPException(status_code=502, detail="Could not list the project's data")
+    path = built.path
 
     return FileResponse(
         path,

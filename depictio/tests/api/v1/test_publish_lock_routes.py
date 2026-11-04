@@ -274,6 +274,27 @@ EXEMPT: dict[tuple[str, str], str] = {
     (_LINKS, "resolve_link"): _READ,
     (_WF, "compare_models_endpoint"): _READ,
     (_MIG, "export_project"): "reads the project into a bundle",
+    ("migrate_endpoints.targets_routes", "create_target"): (
+        "instance registry of push targets, no project content"
+    ),
+    ("migrate_endpoints.targets_routes", "delete_target"): (
+        "instance registry of push targets, no project content"
+    ),
+    ("migrate_endpoints.push_routes", "preflight"): _READ,
+    ("migrate_endpoints.inbound_routes", "inbound_preflight"): _READ,
+    ("migrate_endpoints.inbound_routes", "inbound_probe"): _READ,
+    ("migrate_endpoints.inbound_routes", "inbound_create_request"): (
+        "stages a request; nothing reaches a project until an admin approves it"
+    ),
+    ("migrate_endpoints.requests_routes", "approve_request"): (
+        "the approved migration is the one writer past the lock: it records the "
+        "replaced state and a new version, then sets the lock again"
+    ),
+    ("migrate_endpoints.requests_routes", "reject_request"): "writes the request record only",
+    ("migrate_endpoints.requests_routes", "revalidate_request"): "writes the request record only",
+    ("migrate_endpoints.push_routes", "start_push"): (
+        "reads the project into a bundle; a published project may be pushed on"
+    ),
 }
 
 

@@ -78,6 +78,8 @@ import { UnstyledDropZone } from '../../components/UnstyledDropZone';
 import { useFolderDropzone } from '../../hooks/useFolderDropzone';
 
 import { useCurrentUser } from '../../hooks/useCurrentUser';
+import MigrateProjectModal from '../MigrateProjectModal';
+import { usePushTargets } from '../usePushTargets';
 import { AppSidebar, LoadErrorCard } from '../../chrome';
 import IngestionReportPanel from './IngestionReportPanel';
 import ProjectIngestionHistoryPanel from './ProjectIngestionHistoryPanel';
@@ -397,6 +399,15 @@ const ProjectDetailApp: React.FC = () => {
     return { canMutate: owner || matchUser(project.permissions?.editors), isOwner: owner };
   }, [user, project]);
 
+  // Pushing to another instance is for owners and admins, locked or not.
+  const canPushProject = useMemo(() => {
+    if (!user || !project) return false;
+    if (user.is_admin) return true;
+    return !!project.permissions?.owners?.some(
+      (u: { _id?: string; id?: string }) => (u._id ?? u.id) === user.id,
+    );
+  }, [user, project]);
+
   // Refresh and export are refused to non-admins on a public/demo deployment.
   // Whether this is one is unknown until the auth status lands, so both stay
   // gated until then rather than being enabled for a moment.
@@ -570,6 +581,9 @@ const ProjectDetailApp: React.FC = () => {
           return (
             <Stack gap="lg">
               <ProjectHeader project={project} projectType={projectType} />
+              {canPushProject && projectId && (
+                <PushToInstanceControl projectId={projectId} projectName={project.name} />
+              )}
               {user?.is_admin && projectId && (
                 <PublishedLockControl
                   projectId={projectId}
@@ -2244,6 +2258,35 @@ const ProjectTypeTag: React.FC<{
     >
       {projectType === 'advanced' ? 'Advanced' : 'Basic'}
     </Badge>
+  );
+};
+
+/** Header action: opens the push modal; absent when no target is configured. */
+const PushToInstanceControl: React.FC<{ projectId: string; projectName?: string }> = ({
+  projectId,
+  projectName,
+}) => {
+  const targets = usePushTargets();
+  const [open, setOpen] = useState(false);
+  if (targets.length === 0) return null;
+  return (
+    <Group justify="flex-end">
+      <Button
+        variant="default"
+        size="xs"
+        leftSection={<Icon icon="mdi:transfer-up" width={16} />}
+        onClick={() => setOpen(true)}
+        data-testid="project-push-button"
+      >
+        Push to another instance…
+      </Button>
+      <MigrateProjectModal
+        opened={open}
+        onClose={() => setOpen(false)}
+        projectId={projectId}
+        projectName={projectName}
+      />
+    </Group>
   );
 };
 

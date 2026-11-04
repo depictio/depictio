@@ -18,6 +18,7 @@ describe('parseAdminUrl', () => {
 
   it('reads a plain tab from the path', () => {
     expect(parseAdminUrl('/admin/backups', '').tab).toBe('backups');
+    expect(parseAdminUrl('/admin/migrations', '').tab).toBe('migrations');
   });
 
   it('opens Log & Task on the pane a monitoring path names', () => {

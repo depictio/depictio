@@ -6,6 +6,9 @@ import { Icon } from '@iconify/react';
 import { exportProjectZip } from 'depictio-react-core';
 import type { ProjectListEntry } from 'depictio-react-core';
 
+import MigrateProjectModal from './MigrateProjectModal';
+import { usePushTargets } from './usePushTargets';
+
 export interface ProjectActionsMenuProps {
   project: ProjectListEntry;
   /** True when the current user is an Owner of this project, OR an admin.
@@ -26,6 +29,10 @@ const ProjectActionsMenu: React.FC<ProjectActionsMenuProps> = ({
 }) => {
   const projectId = (project._id ?? project.id) as string;
   const [exporting, setExporting] = useState(false);
+  const [pushOpen, setPushOpen] = useState(false);
+  // Owners and admins only; hidden when this instance has no push target.
+  const pushTargets = usePushTargets(canMutate);
+  const canPush = canMutate && pushTargets.length > 0;
   const locked = !!project.published_lock;
   const mutable = canMutate && !locked;
   const lockTip = (node: React.ReactElement) =>
@@ -59,7 +66,8 @@ const ProjectActionsMenu: React.FC<ProjectActionsMenuProps> = ({
   };
 
   return (
-    <Menu position="bottom-end" shadow="md" withinPortal width={170}>
+    <>
+    <Menu position="bottom-end" shadow="md" withinPortal width={230}>
       <Menu.Target>
         <ActionIcon
           variant="subtle"
@@ -88,6 +96,15 @@ const ProjectActionsMenu: React.FC<ProjectActionsMenuProps> = ({
         >
           {exporting ? 'Exporting…' : 'Export'}
         </Menu.Item>
+        {canPush && (
+          <Menu.Item
+            leftSection={<Icon icon="mdi:transfer-up" width={14} />}
+            onClick={() => setPushOpen(true)}
+            data-testid="project-push-menu-item"
+          >
+            Push to another instance…
+          </Menu.Item>
+        )}
         <Menu.Divider />
         {lockTip(
           <Menu.Item
@@ -101,6 +118,18 @@ const ProjectActionsMenu: React.FC<ProjectActionsMenuProps> = ({
         )}
       </Menu.Dropdown>
     </Menu>
+    {canPush && (
+      // The modal is portalled, but React events still bubble to the table row.
+      <div onClick={(e) => e.stopPropagation()}>
+        <MigrateProjectModal
+          opened={pushOpen}
+          onClose={() => setPushOpen(false)}
+          projectId={projectId}
+          projectName={project.name}
+        />
+      </div>
+    )}
+    </>
   );
 };
 

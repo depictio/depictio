@@ -30,6 +30,7 @@ import {
 import { refreshServerInfo } from '../hooks/useServerInfo';
 import { formatDateTimeVerbose, formatRelativeTime } from '../lib/datetime';
 import { useCurrentUser } from '../hooks/useCurrentUser';
+import AdminMigrationTargetsSection from './AdminMigrationTargetsSection';
 
 type Action = 'save' | 'reset' | 'check';
 
@@ -289,6 +290,7 @@ const AdminSettingsPanel: React.FC = () => {
           </Group>
         </Stack>
       </SettingsSection>
+      <AdminMigrationTargetsSection readOnly={readOnly} />
     </SectionAccordion>
   );
 };
