@@ -5,7 +5,7 @@ OpenID Connect (issue #1336). They are kept for reference only, so that the prev
 service-provider settings (attribute mappings, labels, IdP registration notes) can be
 looked up when configuring the OIDC provider.
 
-The removal happens on branch `feat/oidc-sso-1336`, in commit COMMIT_PLACEHOLDER.
+The removal happens on branch `feat/oidc-sso-1336`, in commit a6998b1 ("feat(auth): replace SAML and Google OAuth with generic OIDC SSO (API core)").
 
 Contents:
 
