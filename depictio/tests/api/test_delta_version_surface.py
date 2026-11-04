@@ -38,7 +38,6 @@ def _run(run_tag: str, dc_stats: dict) -> dict:
 
 @pytest.fixture
 def project() -> dict:
-
     return {"workflows": [{"_id": str(ObjectId())}]}
 
 
@@ -171,17 +170,14 @@ class TestOperatorVisibility:
         )
 
     def test_owner_sees_operators(self):
-
         self.set_project(_project_with())
         assert self.routes._caller_is_project_operator(ObjectId(), _User(OWNER)) is True
 
     def test_editor_sees_operators(self):
-
         self.set_project(_project_with())
         assert self.routes._caller_is_project_operator(ObjectId(), _User(EDITOR)) is True
 
     def test_viewer_does_not(self):
-
         self.set_project(_project_with())
         assert self.routes._caller_is_project_operator(ObjectId(), _User(VIEWER)) is False
 
@@ -192,7 +188,6 @@ class TestOperatorVisibility:
         assert self.routes._caller_is_project_operator(ObjectId(), _User(NOBODY)) is False
 
     def test_admin_always_does(self):
-
         self.set_project(_project_with())
         assert (
             self.routes._caller_is_project_operator(ObjectId(), _User(NOBODY, is_admin=True))
@@ -200,7 +195,6 @@ class TestOperatorVisibility:
         )
 
     def test_a_missing_project_denies_rather_than_raising(self):
-
         self.set_project(None)
         assert self.routes._caller_is_project_operator(ObjectId(), _User(OWNER)) is False
 

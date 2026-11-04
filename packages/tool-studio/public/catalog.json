@@ -2786,7 +2786,7 @@
               "dict_kwargs": {},
               "headline": false,
               "id": "lane_composition",
-              "kind": "stacked_taxonomy",
+              "kind": "stacked_bar",
               "roles": {
                 "abundance": "pct_of_lane",
                 "rank": "level",
@@ -3184,7 +3184,7 @@
               "dict_kwargs": {},
               "headline": false,
               "id": "lane_composition",
-              "kind": "stacked_taxonomy",
+              "kind": "stacked_bar",
               "roles": {
                 "abundance": "pct_of_lane",
                 "rank": "level",
@@ -5173,7 +5173,7 @@
               "dict_kwargs": {},
               "headline": false,
               "id": "class_composition",
-              "kind": "stacked_taxonomy",
+              "kind": "stacked_bar",
               "roles": {
                 "abundance": "percent",
                 "rank": "rank",
@@ -5189,7 +5189,7 @@
               "dict_kwargs": {},
               "headline": false,
               "id": "class_composition_by_run",
-              "kind": "stacked_taxonomy",
+              "kind": "stacked_bar",
               "roles": {
                 "abundance": "percent",
                 "rank": "rank",
@@ -8953,7 +8953,7 @@
               "dict_kwargs": {},
               "headline": false,
               "id": "outcome_bars",
-              "kind": "stacked_taxonomy",
+              "kind": "stacked_bar",
               "roles": {
                 "abundance": "pct",
                 "rank": "level",
@@ -13099,7 +13099,7 @@
               "dict_kwargs": {},
               "headline": false,
               "id": "v_usage_composition",
-              "kind": "stacked_taxonomy",
+              "kind": "stacked_bar",
               "roles": {
                 "abundance": "seq_freq",
                 "rank": "rank",
@@ -15816,7 +15816,7 @@
               "dict_kwargs": {},
               "headline": false,
               "id": "recovered_community",
-              "kind": "stacked_taxonomy",
+              "kind": "stacked_bar",
               "roles": {
                 "abundance": "abundance",
                 "rank": "rank",
@@ -21454,7 +21454,7 @@
               "dict_kwargs": {},
               "headline": false,
               "id": "copy_number_bars",
-              "kind": "stacked_taxonomy",
+              "kind": "stacked_bar",
               "roles": {
                 "abundance": "percent",
                 "rank": "rank",
@@ -21634,7 +21634,7 @@
               "dict_kwargs": {},
               "headline": false,
               "id": "stacked_taxonomy",
-              "kind": "stacked_taxonomy",
+              "kind": "stacked_bar",
               "roles": {
                 "abundance": "relative_abundance",
                 "rank": "rank",
@@ -21894,7 +21894,7 @@
               "dict_kwargs": {},
               "headline": false,
               "id": "composition_bars",
-              "kind": "stacked_taxonomy",
+              "kind": "stacked_bar",
               "roles": {
                 "abundance": "peptides",
                 "rank": "rank",
@@ -22881,7 +22881,7 @@
               "dict_kwargs": {},
               "headline": false,
               "id": "isomir_classes",
-              "kind": "stacked_taxonomy",
+              "kind": "stacked_bar",
               "roles": {
                 "abundance": "abundance",
                 "rank": "rank",
@@ -25061,7 +25061,7 @@
               "dict_kwargs": {},
               "headline": false,
               "id": "rna_composition",
-              "kind": "stacked_taxonomy",
+              "kind": "stacked_bar",
               "roles": {
                 "abundance": "abundance",
                 "rank": "rank",
@@ -27707,7 +27707,7 @@
               "dict_kwargs": {},
               "headline": false,
               "id": "ccs_outcome_bars",
-              "kind": "stacked_taxonomy",
+              "kind": "stacked_bar",
               "roles": {
                 "abundance": "pct_of_input",
                 "rank": "rank",
@@ -31520,7 +31520,7 @@
               "dict_kwargs": {},
               "headline": false,
               "id": "stacked_taxonomy",
-              "kind": "stacked_taxonomy",
+              "kind": "stacked_bar",
               "roles": {
                 "abundance": "abundance",
                 "rank": "rank",
@@ -31595,7 +31595,7 @@
               "dict_kwargs": {},
               "headline": false,
               "id": "stacked_taxonomy_barplot",
-              "kind": "stacked_taxonomy",
+              "kind": "stacked_bar",
               "roles": {
                 "abundance": "abundance",
                 "rank": "rank",
@@ -33011,7 +33011,7 @@
               "dict_kwargs": {},
               "headline": false,
               "id": "class_composition",
-              "kind": "stacked_taxonomy",
+              "kind": "stacked_bar",
               "roles": {
                 "abundance": "genome_pct",
                 "rank": "rank",
@@ -33317,7 +33317,7 @@
               "dict_kwargs": {},
               "headline": false,
               "id": "frame_composition",
-              "kind": "stacked_taxonomy",
+              "kind": "stacked_bar",
               "roles": {
                 "abundance": "pct",
                 "rank": "region",
@@ -33661,7 +33661,7 @@
               "dict_kwargs": {},
               "headline": false,
               "id": "region_composition",
-              "kind": "stacked_taxonomy",
+              "kind": "stacked_bar",
               "roles": {
                 "abundance": "pct",
                 "rank": "scope",
@@ -33863,7 +33863,7 @@
               "dict_kwargs": {},
               "headline": false,
               "id": "distribution_composition",
-              "kind": "stacked_taxonomy",
+              "kind": "stacked_bar",
               "roles": {
                 "abundance": "abundance",
                 "rank": "rank",
@@ -39134,7 +39134,7 @@
               "dict_kwargs": {},
               "headline": false,
               "id": "stacked_taxonomy",
-              "kind": "stacked_taxonomy",
+              "kind": "stacked_bar",
               "roles": {
                 "abundance": "abundance",
                 "rank": "rank",
@@ -39207,7 +39207,7 @@
               "dict_kwargs": {},
               "headline": false,
               "id": "category_bars",
-              "kind": "stacked_taxonomy",
+              "kind": "stacked_bar",
               "roles": {
                 "abundance": "pct",
                 "rank": "level",
@@ -39895,7 +39895,7 @@
               "dict_kwargs": {},
               "headline": false,
               "id": "stacked_taxonomy",
-              "kind": "stacked_taxonomy",
+              "kind": "stacked_bar",
               "roles": {
                 "abundance": "rel_abundance",
                 "rank": "rank",

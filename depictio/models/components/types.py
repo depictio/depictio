@@ -29,6 +29,8 @@ AdvancedVizKind = Literal[
     "volcano",
     "embedding",
     "manhattan",
+    "stacked_bar",
+    # Retired name of `stacked_bar`: kept so a stored dashboard still validates.
     "stacked_taxonomy",
     "phylogenetic",
     "rarefaction",

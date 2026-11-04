@@ -1166,9 +1166,9 @@ tabs:
   - component_type: advanced_viz
     workflow_tag: crisprseq
     data_collection_tag: guide_outcomes
-    viz_kind: stacked_taxonomy
+    viz_kind: stacked_bar
     config:
-      viz_kind: stacked_taxonomy
+      viz_kind: stacked_bar
       sample_id_col: guide
       taxon_col: outcome
       rank_col: level

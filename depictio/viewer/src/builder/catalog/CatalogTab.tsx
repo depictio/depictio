@@ -447,7 +447,7 @@ const CatalogTab: React.FC<CatalogTabProps> = ({ projectId }) => {
   const { glass, tone } = useCatalogGlass();
   const [modules, setModules] = useState<CatalogModule[] | null>(null);
   // Labels + descriptions for advanced-viz renders. The catalog only stores the
-  // `viz_kind` string, and "stacked_taxonomy" is not what the viz is called.
+  // `viz_kind` string, and "stacked_bar" is not what the viz is called.
   const [vizKinds, setVizKinds] = useState<VizKinds>(() => new Map());
   const [error, setError] = useState<string | null>(null);
   const [selectedMatch, setSelectedMatch] = useState<CatalogOutputMatch | null>(null);

@@ -1105,9 +1105,9 @@ tabs:
   - component_type: advanced_viz
     workflow_tag: viralmetagenome
     data_collection_tag: vmg_clusters
-    viz_kind: stacked_taxonomy
+    viz_kind: stacked_bar
     config:
-      viz_kind: stacked_taxonomy
+      viz_kind: stacked_bar
       sample_id_col: sample
       taxon_col: status
       rank_col: null

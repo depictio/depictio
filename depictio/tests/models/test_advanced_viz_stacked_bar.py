@@ -1,4 +1,4 @@
-"""stacked_taxonomy options for a composition that is not a taxonomy."""
+"""stacked_bar options for a composition that is not a taxonomy."""
 
 from __future__ import annotations
 
@@ -9,11 +9,15 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
-from depictio.models.components.advanced_viz.configs import ScatterXyConfig, StackedTaxonomyConfig
+from depictio.models.components.advanced_viz.configs import (
+    ScatterXyConfig,
+    StackedBarConfig,
+    apply_kind_aliases,
+)
 
 
 def test_defaults_keep_the_taxonomy_tile() -> None:
-    cfg = StackedTaxonomyConfig()
+    cfg = StackedBarConfig()
     assert cfg.hidden_controls is None
     assert cfg.rank_label is None
     assert cfg.x_title is None
@@ -23,7 +27,7 @@ def test_defaults_keep_the_taxonomy_tile() -> None:
 
 
 def test_non_taxonomy_options_validate() -> None:
-    cfg = StackedTaxonomyConfig(
+    cfg = StackedBarConfig(
         hidden_controls=["rank", "top_n", "sample_sort"],
         rank_label="Level",
         x_title="",
@@ -48,7 +52,7 @@ def test_non_taxonomy_options_validate() -> None:
 )
 def test_unknown_values_are_refused(bad: dict) -> None:
     with pytest.raises(ValidationError):
-        StackedTaxonomyConfig(**bad)
+        StackedBarConfig(**bad)
 
 
 def test_scatter_colours_come_from_the_dashboard() -> None:
@@ -61,7 +65,7 @@ def test_scatter_colours_come_from_the_dashboard() -> None:
 
 
 def test_new_options_default_to_the_shipped_tile() -> None:
-    cfg = StackedTaxonomyConfig()
+    cfg = StackedBarConfig()
     assert cfg.sample_sort == "input"
     assert cfg.sort_category is None
     assert cfg.group_col is None
@@ -70,16 +74,16 @@ def test_new_options_default_to_the_shipped_tile() -> None:
     assert cfg.value_title is None
     # The rank column keeps its default; a single-level composition sets null.
     assert cfg.rank_col == "rank"
-    assert StackedTaxonomyConfig(rank_col=None).rank_col is None
+    assert StackedBarConfig(rank_col=None).rank_col is None
 
 
 @pytest.mark.parametrize("sort", ["input", "name", "total_abundance", "first_taxon", "category"])
 def test_every_sample_sort_validates(sort: str) -> None:
-    assert StackedTaxonomyConfig(sample_sort=sort).sample_sort == sort
+    assert StackedBarConfig(sample_sort=sort).sample_sort == sort
 
 
 def test_general_composition_options_validate() -> None:
-    cfg = StackedTaxonomyConfig(
+    cfg = StackedBarConfig(
         rank_col=None,
         sample_sort="category",
         sort_category="Complete (single copy)",
@@ -106,7 +110,7 @@ def test_general_composition_options_validate() -> None:
 )
 def test_unknown_composition_values_are_refused(bad: dict) -> None:
     with pytest.raises(ValidationError):
-        StackedTaxonomyConfig(**bad)
+        StackedBarConfig(**bad)
 
 
 def test_rank_is_an_optional_role() -> None:
@@ -116,34 +120,35 @@ def test_rank_is_an_optional_role() -> None:
         CANONICAL_SCHEMAS,
     )
 
-    assert set(CANONICAL_SCHEMAS["stacked_taxonomy"]) == {"sample_id", "taxon", "abundance"}
-    assert set(_OPTIONAL_ROLES["stacked_taxonomy"]) == {"rank"}
+    assert set(CANONICAL_SCHEMAS["stacked_bar"]) == {"sample_id", "taxon", "abundance"}
+    assert set(_OPTIONAL_ROLES["stacked_bar"]) == {"rank"}
 
 
-def _stacked_taxonomy_nodes(node: object) -> Iterator[dict]:
+def _stacked_bar_nodes(node: object) -> Iterator[dict]:
     if isinstance(node, dict):
-        if node.get("viz_kind") == "stacked_taxonomy":
+        if node.get("viz_kind") in ("stacked_bar", "stacked_taxonomy"):
             yield node
         for value in node.values():
-            yield from _stacked_taxonomy_nodes(value)
+            yield from _stacked_bar_nodes(value)
     elif isinstance(node, list):
         for value in node:
-            yield from _stacked_taxonomy_nodes(value)
+            yield from _stacked_bar_nodes(value)
 
 
-def test_shipped_stacked_taxonomy_configs_still_validate() -> None:
-    """Every stacked_taxonomy config in a shipped dashboard YAML still validates."""
+def test_shipped_stacked_bar_configs_still_validate() -> None:
+    """Every stacked_bar (or retired stacked_taxonomy) config in a shipped dashboard YAML still validates."""
     repo = Path(__file__).resolve().parents[3]
     seen = 0
     for path in sorted(repo.glob("depictio/projects/**/dashboards/*.yaml")):
         text = path.read_text()
-        if "stacked_taxonomy" not in text:
+        if "stacked_taxonomy" not in text and "stacked_bar" not in text:
             continue
-        for node in _stacked_taxonomy_nodes(yaml.safe_load(text)):
+        for node in _stacked_bar_nodes(yaml.safe_load(text)):
             cfg = node.get("config") if isinstance(node.get("config"), dict) else node
             # Only the config keys: a component node also carries layout keys.
-            keys = set(StackedTaxonomyConfig.model_fields)
-            StackedTaxonomyConfig(**{k: v for k, v in cfg.items() if k in keys})
+            keys = set(StackedBarConfig.model_fields)
+            # A shipped tile may still name the retired kind; it validates through the alias.
+            StackedBarConfig(**apply_kind_aliases({k: v for k, v in cfg.items() if k in keys}))
             seen += 1
     assert seen > 0
 
@@ -163,12 +168,10 @@ def test_figure_builder_sorts_by_name_and_by_category_share() -> None:
         "rank_col": None,
         "abundance_col": "abundance",
     }
-    by_name = build(
-        "stacked_taxonomy", config={**base, "sample_sort": "name"}, rows=rows, theme="light"
-    )
+    by_name = build("stacked_bar", config={**base, "sample_sort": "name"}, rows=rows, theme="light")
     assert by_name["data"][0]["x"] == ["s1", "S2", "S10"]
     by_share = build(
-        "stacked_taxonomy",
+        "stacked_bar",
         config={**base, "sample_sort": "category", "sort_category": "B"},
         rows=rows,
         theme="light",
@@ -187,12 +190,12 @@ _WIDE = {
 
 
 def test_wide_form_validates_and_long_form_stays_the_default() -> None:
-    assert StackedTaxonomyConfig().value_cols is None
-    assert StackedTaxonomyConfig().value_labels is None
-    cfg = StackedTaxonomyConfig(**_WIDE)
+    assert StackedBarConfig().value_cols is None
+    assert StackedBarConfig().value_labels is None
+    cfg = StackedBarConfig(**_WIDE)
     assert cfg.value_cols == ["genes_in_orthogroups", "unassigned_genes"]
     with pytest.raises(ValidationError):
-        StackedTaxonomyConfig(value_cols=[])
+        StackedBarConfig(value_cols=[])
 
 
 def test_wide_form_binds_the_sample_id_and_numeric_value_columns() -> None:
@@ -200,22 +203,20 @@ def test_wide_form_binds_the_sample_id_and_numeric_value_columns() -> None:
 
     schema = {"species": "String", "genes_in_orthogroups": "Int64", "unassigned_genes": "Int64"}
     # No taxon / abundance / rank column needed.
-    assert validate_binding(StackedTaxonomyConfig(**_WIDE), schema) == []
-    missing = validate_binding(StackedTaxonomyConfig(**_WIDE), {"species": "String"})
+    assert validate_binding(StackedBarConfig(**_WIDE), schema) == []
+    missing = validate_binding(StackedBarConfig(**_WIDE), {"species": "String"})
     assert {e.column for e in missing} == {"genes_in_orthogroups", "unassigned_genes"}
-    text = validate_binding(
-        StackedTaxonomyConfig(**_WIDE), {**schema, "unassigned_genes": "String"}
-    )
+    text = validate_binding(StackedBarConfig(**_WIDE), {**schema, "unassigned_genes": "String"})
     assert [e.column for e in text] == ["unassigned_genes"]
     # The long form still needs its bindings.
-    assert validate_binding(StackedTaxonomyConfig(sample_id_col="species"), schema)
+    assert validate_binding(StackedBarConfig(sample_id_col="species"), schema)
 
 
 def test_figure_builder_melts_a_wide_table() -> None:
     pytest.importorskip("fastapi")
     from depictio.api.v1.services.advanced_viz.figure_registry import build, required_columns
 
-    assert required_columns("stacked_taxonomy", _WIDE) == [
+    assert required_columns("stacked_bar", _WIDE) == [
         "species",
         "genes_in_orthogroups",
         "unassigned_genes",
@@ -225,6 +226,40 @@ def test_figure_builder_melts_a_wide_table() -> None:
         "genes_in_orthogroups": [18000, 17000],
         "unassigned_genes": [2000, 3000],
     }
-    spec = build("stacked_taxonomy", config=_WIDE, rows=rows, theme="light")
+    spec = build("stacked_bar", config=_WIDE, rows=rows, theme="light")
     by_name = {trace["name"]: trace["y"] for trace in spec["data"]}
     assert by_name == {"genes_in_orthogroups": [0.9, 0.85], "Unassigned": [0.1, 0.15]}
+
+
+def test_the_retired_kind_name_opens_as_a_stacked_bar() -> None:
+    """A stored `stacked_taxonomy` config validates as the renamed kind, field for field."""
+    from depictio.models.components.advanced_viz.configs import (
+        apply_kind_aliases,
+        resolve_viz_kind,
+    )
+
+    stored = {"viz_kind": "stacked_taxonomy", "taxon_col": "t", "abundance_col": "n", "top_n": 5}
+    rewritten = apply_kind_aliases(stored)
+    assert rewritten == {
+        "viz_kind": "stacked_bar",
+        "taxon_col": "t",
+        "abundance_col": "n",
+        "top_n": 5,
+    }
+    assert resolve_viz_kind("stacked_taxonomy") == "stacked_bar"
+    assert resolve_viz_kind("stacked_bar") == "stacked_bar"
+
+
+def test_a_click_selection_is_opt_in_and_defaults_to_the_sample_column() -> None:
+    cfg = StackedBarConfig()
+    assert cfg.selection_enabled is False
+    assert cfg.selection_column is None
+    picked = StackedBarConfig(selection_enabled=True, selection_column="patient")
+    assert (picked.selection_enabled, picked.selection_column) == (True, "patient")
+
+
+def test_the_retired_name_keeps_its_sampling_policy() -> None:
+    from depictio.models.components.advanced_viz.sampling import policy_for_kind
+
+    assert policy_for_kind("stacked_bar") == "none"
+    assert policy_for_kind("stacked_taxonomy") == "none"

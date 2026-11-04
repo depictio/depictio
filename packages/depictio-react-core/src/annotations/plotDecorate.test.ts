@@ -30,6 +30,7 @@ describe('componentSupportsAnnotation', () => {
   });
   it('accepts the single-subplot cartesian kinds', () => {
     for (const kind of [
+      'stacked_bar',
       'stacked_taxonomy',
       'rarefaction',
       'enrichment',
