@@ -69,6 +69,7 @@ def _summary(doc: dict[str, Any]) -> dict[str, Any]:
 
 
 @requests_router.get("/")
+@requests_router.get("", include_in_schema=False)
 async def list_requests(
     status: str | None = Query(default=None),
     current_user: User = Depends(get_current_user),
