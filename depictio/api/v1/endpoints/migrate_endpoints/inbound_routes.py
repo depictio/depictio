@@ -1,19 +1,23 @@
-"""Target side: requests pushed by a paired source instance (X-Depictio-Pairing-Key). (#1303).
+"""Target side: requests pushed by a source instance. (#1303).
 
-The source authenticates with its pairing key and uploads a bundle; nothing is
-imported here. A valid bundle is parked in S3 and recorded as a ``pending``
-request for an administrator to approve (``requests_routes``).
+The source authenticates with its pairing key or an invite code
+(``inbound_auth``) and uploads a bundle. A valid bundle is parked in S3. With a
+pairing key it is recorded as a ``pending`` request for an administrator to
+approve (``requests_routes``). With an invite code the invite is the admin's
+consent given in advance: it is consumed atomically and the import starts at
+once, through the same job an approval starts, with the invite's lock policy.
 """
 
 from __future__ import annotations
 
 import hashlib
 import re
+import secrets
 from datetime import timedelta
 from typing import Any
 
 from bson import ObjectId
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -22,6 +26,10 @@ from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.configs.settings_models import MigrationInboundSource
 from depictio.api.v1.endpoints.migrate_endpoints.inbound_auth import (
+    InviteSource,
+    hash_request_token,
+    request_token_matches,
+    require_inbound_reader,
     require_inbound_source,
     source_max_bundle_bytes,
 )
@@ -30,7 +38,7 @@ from depictio.api.v1.endpoints.migrate_endpoints.routes import (
     _normalize_endpoint,
 )
 from depictio.api.v1.endpoints.projects_endpoints.provenance import instance_label
-from depictio.api.v1.services import migration_import, project_bundle
+from depictio.api.v1.services import migration_import, migration_invites, project_bundle
 from depictio.models.models.migration import (
     BUNDLE_FORMAT_VERSION,
     MigrationRequest,
@@ -103,9 +111,23 @@ def _clip(value: str | None, limit: int) -> str | None:
 # ---------------------------------------------------------------------------
 
 
-@inbound_router.get("/info")
-async def inbound_info(source: MigrationInboundSource = Depends(require_inbound_source)):
-    """What a source needs to know about this instance before it builds a bundle."""
+def _invite_view(source: MigrationInboundSource) -> dict[str, Any] | None:
+    """What the source may know of the invite it presented (never the code)."""
+    if not isinstance(source, InviteSource):
+        return None
+    invite = source.invite
+    return {
+        "policy": invite.get("policy", "single_use"),
+        "lock_on_import": bool(invite.get("lock_on_import", True)),
+        "expires_at": invite.get("expires_at"),
+        "lineage_project_id": invite.get("lineage_project_id"),
+        "lineage_project_name": invite.get("lineage_project_name"),
+        "imports_immediately": True,
+    }
+
+
+def _info(source: MigrationInboundSource) -> dict[str, Any]:
+    invite = _invite_view(source)
     return {
         "instance_label": instance_label(),
         "depictio_version": get_version(),
@@ -114,8 +136,18 @@ async def inbound_info(source: MigrationInboundSource = Depends(require_inbound_
         "s3_bucket": settings.s3.bucket,
         "max_bundle_bytes": source_max_bundle_bytes(source),
         "server_side_copy_buckets": list(source.allowed_source_buckets),
-        "lock_imported_default": settings.migration.lock_imported_default,
+        "lock_imported_default": (
+            invite["lock_on_import"] if invite else settings.migration.lock_imported_default
+        ),
+        "credential_type": "invite_code" if invite else "pairing_key",
+        "invite": invite,
     }
+
+
+@inbound_router.get("/info")
+async def inbound_info(source: MigrationInboundSource = Depends(require_inbound_source)):
+    """What a source needs to know about this instance before it builds a bundle."""
+    return _info(source)
 
 
 class PreflightBody(BaseModel):
@@ -134,6 +166,10 @@ async def inbound_preflight(
     body: PreflightBody, source: MigrationInboundSource = Depends(require_inbound_source)
 ):
     """Would a push of this project be accepted? Nothing is stored."""
+    return _preflight(body, source)
+
+
+def _preflight(body: PreflightBody, source: MigrationInboundSource) -> dict[str, Any]:
     errors: list[str] = []
     warnings: list[str] = []
     max_bytes = source_max_bundle_bytes(source)
@@ -172,6 +208,11 @@ async def inbound_preflight(
             )
             if clash:
                 errors.append(f"another project here is already named {body.project_name!r}")
+
+    if isinstance(source, InviteSource):
+        bound = migration_invites.lineage_error(source.invite, body.project_id)
+        if bound:
+            errors.append(bound)
 
     pending = _pending_count(source)
     remaining = max(0, source.max_per_day - _created_last_day(source))
@@ -223,16 +264,49 @@ async def inbound_probe(
         raise HTTPException(status_code=400, detail="bucket is not allowed for this source")
     if not project_bundle.is_safe_s3_key(body.key):
         raise HTTPException(status_code=400, detail="invalid key")
+    return await _probe(body.bucket, body.key)
+
+
+async def _probe(bucket: str, key: str) -> dict[str, Any]:
     client = _instance_s3_client()
     try:
-        await run_in_threadpool(client.head_object, Bucket=body.bucket, Key=body.key)
+        await run_in_threadpool(client.head_object, Bucket=bucket, Key=key)
     except Exception as exc:  # noqa: BLE001 — any failure just means "not readable"
         return {"readable": False, "error": str(exc)[:300]}
     return {"readable": True, "error": None}
 
 
+class CheckBody(PreflightBody):
+    #: The first object of the source's data, probed only when the preflight
+    #: picks a server-side copy.
+    probe_key: str | None = None
+
+
+@inbound_router.post("/check")
+async def inbound_check(
+    body: CheckBody, source: MigrationInboundSource = Depends(require_inbound_source)
+):
+    """``/info`` + ``/preflight`` + ``/probe`` in one round trip. Nothing is stored.
+
+    The three older routes stay for sources that predate this one. The probe
+    runs only when a server-side copy is on the table, on the source's own
+    bucket, with the same restrictions as ``/probe``.
+    """
+    preflight = _preflight(body, source)
+    probe = None
+    if (
+        preflight["transfer_mode"] == "server_side_copy"
+        and body.probe_key
+        and body.source_bucket
+        and project_bundle.is_safe_s3_key(body.probe_key)
+    ):
+        probe = await _probe(body.source_bucket, body.probe_key)
+    return {"info": _info(source), "preflight": preflight, "probe": probe}
+
+
 @inbound_router.post("/requests", status_code=202)
 async def inbound_create_request(
+    background_tasks: BackgroundTasks = None,  # type: ignore[assignment]
     file: UploadFile = File(...),
     sha256: str = Form(...),
     transfer_mode: str = Form(...),
@@ -242,7 +316,11 @@ async def inbound_create_request(
     message: str | None = Form(default=None),
     source: MigrationInboundSource = Depends(require_inbound_source),
 ):
-    """Receive a bundle, validate it and park it for an admin's decision."""
+    """Receive a bundle, validate it and park it for an admin's decision.
+
+    With an invite code: consume the invite and start the import now.
+    """
+    via_invite = isinstance(source, InviteSource)
     if transfer_mode not in _TRANSFER_MODES:
         raise HTTPException(
             status_code=400, detail="transfer_mode must be inline or server_side_copy"
@@ -282,6 +360,10 @@ async def inbound_create_request(
             metadata = opened.metadata
         finally:
             opened.close()
+        if via_invite and not report.errors:
+            bound = migration_invites.lineage_error(source.invite, report.project_id)
+            if bound:
+                report.errors.append(bound)
         if report.errors:
             return _refused(report.errors[:50])
         if report.s3_bytes > max_bytes:
@@ -303,9 +385,32 @@ async def inbound_create_request(
             logger.error("inbound request: staging upload failed: %s", exc)
             raise HTTPException(status_code=502, detail="could not stage the bundle")
 
+    staged_uri = migration_import.staging_uri(bucket, key)
+    invite: dict[str, Any] | None = None
+    if isinstance(source, InviteSource):
+        # Consumed only now, once the bundle is valid and staged: a refused
+        # upload leaves the code usable. Two uploads racing on one single-use
+        # code: one wins here, the other's staged bundle is dropped.
+        invite = migration_invites.claim_invite(
+            source.invite["_id"],
+            project_id=str(report.project_id),
+            project_name=report.project_name,
+            request_id=request_id,
+        )
+        if invite is None:
+            migration_import.delete_staged_bundle({"staging_key": staged_uri})
+            raise HTTPException(status_code=409, detail="This invite code can no longer be used")
+
     request = MigrationRequest(
         source_name=source.name,
-        source_instance=source.name,
+        credential_type="invite_code" if invite else "pairing_key",
+        invite_id=str(invite["_id"]) if invite else None,
+        # An invite does not name the sender: show what the bundle says, marked as such.
+        source_instance=(
+            f"{_clip(str(metadata.get('source_instance') or 'unknown'), 100)} (invite)"
+            if invite
+            else source.name
+        ),
         source_depictio_version=report.source_depictio_version,
         bundle_format_version=report.bundle_format_version,
         requester=MigrationRequester(
@@ -317,7 +422,7 @@ async def inbound_create_request(
         project_id=report.project_id,
         project_name=report.project_name,
         transfer_mode=transfer_mode,  # type: ignore[arg-type]
-        staging_key=migration_import.staging_uri(bucket, key),
+        staging_key=staged_uri,
         bundle_sha256=sha256,
         bundle_bytes=size,
         report=report.model_dump(),
@@ -328,12 +433,45 @@ async def inbound_create_request(
     doc["dc_ids"] = dc_ids
     doc["source_exported_at"] = metadata.get("exported_at")
     col = _db().migration_requests_collection
+    if invite is None:
+        col.insert_one(doc)
+        _supersede_older(source, report.project_id, request_id)
+        logger.info(
+            "inbound request %s from %s: project %s", request_id, source.name, report.project_id
+        )
+        return {"request_id": str(request_id), "status": "pending"}
+
+    # Invite: no queue. The import runs as the admin who issued the invite.
+    lock = bool(invite.get("lock_on_import", True))
+    approver = {"id": str(invite.get("created_by_id")), "email": invite.get("created_by_email")}
+    status_token = secrets.token_urlsafe(32)
+    doc["status"] = "importing"
+    doc["status_token_sha256"] = hash_request_token(status_token)
+    doc["decision"] = {
+        "action": "approve",
+        "by_id": approver["id"],
+        "by_email": approver["email"],
+        "at": utc_now_str(),
+        "lock": lock,
+        "make_public": False,
+        "reason": f"invite {invite['_id']}",
+    }
     col.insert_one(doc)
-    _supersede_older(source, report.project_id, request_id)
     logger.info(
-        "inbound request %s from %s: project %s", request_id, source.name, report.project_id
+        "inbound request %s via invite %s: project %s, importing",
+        request_id,
+        invite["_id"],
+        report.project_id,
     )
-    return {"request_id": str(request_id), "status": "pending"}
+    if background_tasks is not None:
+        background_tasks.add_task(
+            migration_import.run_migration_import, str(request_id), approver, lock, False
+        )
+    else:  # called outside FastAPI (tests, scripts): run it inline
+        await run_in_threadpool(
+            migration_import.run_migration_import, str(request_id), approver, lock, False
+        )
+    return {"request_id": str(request_id), "status": "importing", "status_token": status_token}
 
 
 def _refused(errors: list[str]) -> JSONResponse:
@@ -373,15 +511,23 @@ def _supersede_older(
 
 @inbound_router.get("/requests/{request_id}")
 async def inbound_request_status(
-    request_id: str, source: MigrationInboundSource = Depends(require_inbound_source)
+    request_id: str, source: MigrationInboundSource | str = Depends(require_inbound_reader)
 ):
-    """The state of a request, readable only by the source that made it."""
+    """The state of a request, readable only by the source that made it
+    (or by the bearer of the status token its upload returned)."""
     try:
         oid = ObjectId(request_id)
     except Exception:  # noqa: BLE001
         raise HTTPException(status_code=404, detail="Not Found")
     doc = _db().migration_requests_collection.find_one({"_id": oid})
-    if not doc or doc.get("source_name") != source.name:
+    if not doc:
+        raise HTTPException(status_code=404, detail="Not Found")
+    allowed = (
+        request_token_matches(doc, source)
+        if isinstance(source, str)
+        else doc.get("source_name") == source.name
+    )
+    if not allowed:
         raise HTTPException(status_code=404, detail="Not Found")
     decision = doc.get("decision") or None
     result = doc.get("result") or None
@@ -410,4 +556,6 @@ async def inbound_request_status(
             if result and result.get("project_id")
             else None
         ),
+        # The import's error text stays on this instance: it can name buckets and keys.
+        "retryable": bool(doc.get("retryable")),
     }

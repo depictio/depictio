@@ -324,7 +324,8 @@ def _import(
                 # A push never decides visibility: the admin's make_public does.
                 keep_bundle_visibility=False,
             )
-            label = f"Migrated from {source_name}"
+            # Display name: an invite's source name is an id, the bundle says who sent it.
+            label = f"Migrated from {request_doc.get('source_instance') or source_name}"
             if hop.source_depictio_version:
                 label += f" (Depictio {hop.source_depictio_version})"
             actor = SimpleNamespace(id=str(approver_id), email=_get(approver, "email"))
@@ -409,6 +410,46 @@ def run_migration_import(request_id: str, approver: Any, lock: bool, make_public
     except Exception as exc:  # noqa: BLE001 — the status must never stay "importing"
         logger.exception("migration import %s crashed", request_id)
         _fail(oid, doc, f"unexpected error: {exc}")
+
+
+INTERRUPTED = "interrupted by a restart"
+
+
+def recover_interrupted_requests(now: Any = None) -> int:
+    """Requests left ``importing`` by a restart become ``failed`` and retryable.
+
+    Run at API startup. The import job lived in the process that died, so
+    nothing will ever finish it. Only requests whose last update is older than
+    ``interrupted_after_minutes`` are touched, so another replica's running
+    import is left alone. The staged bundle is kept: an admin can retry.
+    """
+    now = now or utc_now()
+    cutoff = (now - timedelta(minutes=settings.migration.interrupted_after_minutes)).strftime(
+        TIMESTAMP_FORMAT
+    )
+    col = _db().migration_requests_collection
+    result = col.update_many(
+        {"status": "importing", "updated_at": {"$lt": cutoff}},
+        {
+            "$set": {
+                "status": "failed",
+                "retryable": True,
+                "result": MigrationResult(error=INTERRUPTED).model_dump(),
+                "updated_at": utc_now_str(),
+            }
+        },
+    )
+    if result.modified_count:
+        logger.warning("migration: %d import(s) %s", result.modified_count, INTERRUPTED)
+    return int(result.modified_count)
+
+
+def claim_retry(request_id: ObjectId) -> dict[str, Any] | None:
+    """Take an interrupted request back to ``importing``, once. None when it is not one."""
+    return _db().migration_requests_collection.find_one_and_update(
+        {"_id": request_id, "status": "failed", "retryable": True},
+        {"$set": {"status": "importing", "retryable": False, "updated_at": utc_now_str()}},
+    )
 
 
 def expire_stale_requests(now: Any = None) -> int:

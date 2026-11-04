@@ -153,14 +153,60 @@ class MigrationResult(BaseModel):
     error: str | None = None
 
 
+#: How an inbound request authenticated: a configured pairing key, or an
+#: invite code an admin of the target issued.
+InboundCredentialType = Literal["pairing_key", "invite_code"]
+
+#: ``single_use``: one accepted push, then the code is spent.
+#: ``lineage``: every push of the project lineage it first imported, until expiry.
+InvitePolicy = Literal["single_use", "lineage"]
+
+
+class MigrationInvite(BaseModel):
+    """An invite code issued on the target, stored in ``migration_invites``.
+
+    The code itself is shown once at creation and never stored: only its
+    sha256 is. An accepted push made with an invite is imported at once, the
+    invite being the admin's consent given in advance.
+    """
+
+    model_config = ConfigDict(extra="ignore", populate_by_name=True)
+
+    id: IdStr | None = Field(default=None, alias="_id")
+    code_sha256: str
+    #: The last characters of the code, so an admin can tell two invites apart.
+    code_hint: str = ""
+    policy: InvitePolicy = "single_use"
+    lock_on_import: bool = True
+    note: str | None = None
+    created_by_id: IdStr | None = None
+    created_by_email: str | None = None
+    created_at: str = Field(default_factory=utc_now_str)
+    expires_at: str
+    revoked_at: str | None = None
+    revoked_by_id: IdStr | None = None
+    #: First and latest accepted push.
+    used_at: str | None = None
+    last_used_at: str | None = None
+    use_count: int = 0
+    request_ids: list[IdStr] = []
+    #: Set by the first accepted push of a ``lineage`` invite: later pushes
+    #: must carry the same project.
+    lineage_project_id: IdStr | None = None
+    lineage_project_name: str | None = None
+
+
 class MigrationRequest(BaseModel):
     """One inbound push, stored in ``migration_requests`` on the target."""
 
     id: IdStr | None = Field(default=None, alias="_id")
     status: MigrationRequestStatus = "pending"
     #: The inbound source's configured name: taken from the pairing key that
-    #: authenticated the upload, never from the request body.
+    #: authenticated the upload, never from the request body. For an invite,
+    #: ``invite:<invite id>``.
     source_name: str
+    credential_type: InboundCredentialType = "pairing_key"
+    invite_id: IdStr | None = None
     source_instance: str | None = None
     source_depictio_version: str | None = None
     bundle_format_version: int | None = None
@@ -178,6 +224,9 @@ class MigrationRequest(BaseModel):
     decision: MigrationDecision | None = None
     result: MigrationResult | None = None
     superseded_by: IdStr | None = None
+    #: An import cut short by a restart: the staged bundle was kept, so an
+    #: admin can retry it.
+    retryable: bool = False
     created_at: str = Field(default_factory=utc_now_str)
     updated_at: str = Field(default_factory=utc_now_str)
 
@@ -197,8 +246,16 @@ class MigrationPush(BaseModel):
     status: MigrationPushStatus = "building"
     project_id: IdStr
     project_name: str | None = None
+    #: ``env:<name>``, a UI target id, or ``adhoc`` for a URL + invite code.
     target_id: str
     target_name: str | None = None
+    #: The destination URL of an ``adhoc`` push (the invite code is never stored).
+    target_url: str | None = None
+    credential_type: InboundCredentialType = "pairing_key"
+    #: True while ``building``/``uploading``; a partial unique index on it keeps
+    #: one push in flight per project.
+    in_flight: bool = False
+    retry_of: IdStr | None = None
     requested_by_id: IdStr | None = None
     requested_by_email: str | None = None
     message: str | None = None
@@ -209,6 +266,8 @@ class MigrationPush(BaseModel):
     remote_request_id: str | None = None
     #: Last status read back from the target (``GET /inbound/requests/{id}``).
     remote_status: str | None = None
+    #: What the target reported once the import ended (locked, made public).
+    remote_result: dict[str, Any] | None = None
     error: str | None = None
     created_at: str = Field(default_factory=utc_now_str)
     updated_at: str = Field(default_factory=utc_now_str)

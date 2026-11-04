@@ -203,6 +203,13 @@ Route dispatch is plain regex in `depictio/viewer/src/main.tsx` +
   create/update strip it from payloads
 - `published_lock` is returned by `/dashboards/get` but is runtime-only on `DashboardData`
   (popped in `/save`, in `SNAPSHOT_DERIVED_FIELDS`)
+- **Invite codes** (`migration_invites`, `services/migration_invites.py`): a target admin
+  issues a code (shown once, only its sha256 stored); a source owner publishes with
+  URL + code (`DEPICTIO_MIGRATION_DESTINATION_DOMAINS`, https, SSRF guard per call). An
+  accepted invite push imports at once (no queue), as source `invite:<id>`; status is read
+  back with a per-request token, never the code. The chart turns `INBOUND_ENABLED` and
+  `UI_ENABLED` on; code defaults stay off. Startup marks stuck pushes/imports failed
+  (`interrupted by a restart`, retryable). An admin may toggle visibility of a locked project
 
 ### Screenshot System
 - Playwright drives the React SPA; composite targeting via `.react-grid-item`

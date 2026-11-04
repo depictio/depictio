@@ -38,6 +38,7 @@ from depictio.api.v1.endpoints.jbrowse_endpoints.routes import jbrowse_endpoints
 from depictio.api.v1.endpoints.jobs_endpoints.routes import jobs_endpoint_router
 from depictio.api.v1.endpoints.links_endpoints.routes import links_endpoint_router
 from depictio.api.v1.endpoints.migrate_endpoints.inbound_routes import inbound_router
+from depictio.api.v1.endpoints.migrate_endpoints.invites_routes import invites_router
 from depictio.api.v1.endpoints.migrate_endpoints.push_routes import push_router
 from depictio.api.v1.endpoints.migrate_endpoints.requests_routes import requests_router
 from depictio.api.v1.endpoints.migrate_endpoints.routes import migrate_endpoint_router
@@ -121,6 +122,7 @@ router.include_router(
 # Server-to-server push (#1303).
 router.include_router(inbound_router, prefix="/migrate/inbound", tags=["Migrate"])
 router.include_router(requests_router, prefix="/migrate/requests", tags=["Migrate"])
+router.include_router(invites_router, prefix="/migrate/invites", tags=["Migrate"])
 router.include_router(targets_router, prefix="/migrate/targets", tags=["Migrate"])
 router.include_router(push_router, prefix="/migrate/push", tags=["Migrate"])
 

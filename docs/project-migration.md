@@ -24,9 +24,145 @@
 
    The source's push record follows the remote status.
 
-Nothing reaches a project on the target before an admin approves it. Until then,
-an inbound request writes only its `migration_requests` record and the staged
-bundle at `s3://<bucket>/<staging_prefix>/<request_id>/bundle.zip`.
+With a pairing key, nothing reaches a project on the target before an admin
+approves it. Until then, an inbound request writes only its `migration_requests`
+record and the staged bundle at
+`s3://<bucket>/<staging_prefix>/<request_id>/bundle.zip`.
+
+With an **invite code** (below), the admin's approval is given in advance: the
+import starts as soon as the bundle is accepted.
+
+## Publishing with an invite code (two gestures)
+
+One mechanism serves every target: a per-project SciLifeLab Serve app (one
+Depictio per researcher, single-user mode) and a public multi-project instance
+such as EMBL's. The differences are policy carried by the invite and by the
+target's settings, never a code path of their own.
+
+1. **On the target**, an admin clicks *Receive a project* (Admin > Migrations >
+   *Invitations*, or the entry in the admin menu). The dialog shows the
+   instance URL and a code such as `7KQ2-M9XD-…` once, with copy buttons.
+2. **On the source**, the project owner opens *Publish to…*, picks
+   *Destination URL + invite code*, pastes both, and publishes.
+
+The target imports at once, as the admin who issued the invite. The owner is
+resolved as for an approval: the requester's account when one exists with that
+email, else that admin. In single-user mode, that is the instance's only admin.
+
+| Invite policy | Lifetime (default) | Accepts |
+| --- | --- | --- |
+| `single_use` | `INVITE_SINGLE_USE_TTL_HOURS` (1 h) | one accepted push, then the code is spent |
+| `lineage` | `INVITE_LINEAGE_TTL_DAYS` (30 d) | every push of the project it first imported (re-pushes add `import` versions) |
+
+`lock_on_import` (on by default) decides whether the imported project is
+locked. An admin may give an invite another lifetime, up to
+`INVITE_MAX_TTL_DAYS`, and a note.
+
+**Security**
+- The code is 24 symbols (120 bits) of Crockford base32. It is returned once;
+  only its sha256 and its last 4 characters are stored. The lookup goes through
+  the hash, and the stored hash is compared again in constant time.
+- The invite is consumed atomically once the bundle is valid and staged:
+  - a refused upload leaves it usable;
+  - of two uploads racing on one single-use code, one wins and the other gets
+    409, with its staged bundle deleted.
+- Revoking an invite stops it everywhere.
+- Invites work only while `INBOUND_ENABLED` is on. With inbound on, no
+  `INBOUND_SOURCES` and no valid invite, every inbound call is a 403.
+- An invite never gets a server-side copy: its data always travels inline.
+- The source has no stored credential for an invite push, so the 202 returns a
+  **request token**. It reads that one request's status
+  (`X-Depictio-Request-Token`) and nothing else. The source stores it encrypted;
+  the target stores its sha256.
+- The request is recorded under `source_name: invite:<invite id>`, and that name
+  is the lineage: a project imported with one invite can be re-pushed with that
+  same lineage invite, or by an admin approval, but not with an unrelated new
+  invite (it would be a `foreign` project).
+
+**Source settings.** A typed destination must:
+- be under a domain suffix of `DESTINATION_DOMAINS`, for example
+  `["serve.scilifelab.se", "embl.org"]`. A host matches when it equals the
+  suffix or ends with `.<suffix>`. Empty (the default) disables typed
+  destinations;
+- use https;
+- pass the SSRF guard. Both checks run again before every call.
+
+The LAN exception is a host on `UI_TARGET_HOST_ALLOWLIST`, which may use http
+and a private address.
+
+The code is handed to the background job in memory and never stored. *Publish
+to…* remembers recent destination URLs, read from `migration_pushes`, never
+codes. Retrying a failed push to a typed destination asks for a code again.
+
+Env-declared pairing-key targets keep working unchanged.
+
+**One round trip.** Before building, the source calls
+`POST /migrate/inbound/check`, which answers `/info`, `/preflight` and, when a
+server-side copy is possible, `/probe` together. Targets from before slice 2 are
+still served by those three routes (the source falls back on a 404).
+
+## Publishing manually (Serve and EMBL)
+
+There is no automatic lock when an instance goes public (for now). The steps:
+
+1. **Push with an invite.** For a Serve app, issue the invite with *Lock
+   editing on import* off if the researcher still wants to adjust the project
+   on the target; otherwise leave it on.
+2. **Lock.** On the target, open the project's *Permissions* page and turn on
+   *Editing: locked* (admin only; `POST /projects/{id}/lock`).
+3. **Make the project public.** Use *Public* on the same page. An admin may
+   change the visibility of a locked project, because visibility is not
+   content and snapshots never hold it. An owner who is not an admin still
+   meets the lock (409).
+4. **Make the app public on Serve.** Serve then switches the app to
+   `DEPICTIO_AUTH_PUBLIC_MODE=true` / `DEPICTIO_AUTH_SINGLE_USER_MODE=false`.
+   Only a Serve admin can switch it back.
+
+With the chart defaults, an admin in single-user mode reaches every control
+involved: *Admin > Migrations* (Invitations, Requests, Sent), *Receive a
+project*, and the *Editing* switch.
+
+## Following a push (source)
+
+- *Admin > Migrations > Sent* lists every push: status, destination, dates and
+  the target's status. It refreshes while a push is in flight or still
+  importing on the target.
+- The project page has a *Publications* history; owners see their own pushes.
+- `GET /migrate/push` refreshes the remote status of a few submitted pushes on
+  each call.
+- A project can have only one push in flight: a second one while one is
+  `building`/`uploading` answers 409. A partial unique index on
+  `migration_pushes.in_flight` closes the race.
+- **Restarts.** On API startup, pushes still `building`/`uploading`, and
+  requests still `importing`, whose last update is older than
+  `INTERRUPTED_AFTER_MINUTES` (60) become `failed` with
+  `interrupted by a restart`:
+  - the push keeps a **Retry** action, which starts a new push with the same
+    project, target and message;
+  - the request is `retryable`: its staged bundle was kept, and *Retry* on the
+    target (`POST /migrate/requests/{id}/retry`) re-runs the import with its
+    original decision.
+
+## Helm chart defaults
+
+`helm-charts/depictio/values.yaml` turns receiving and the UI on in
+`backend.env`:
+
+```yaml
+DEPICTIO_MIGRATION_INBOUND_ENABLED: "true"
+DEPICTIO_MIGRATION_UI_ENABLED: "true"
+```
+
+The code defaults in `MigrationConfig` stay off. This is safe because inbound
+with no `INBOUND_SOURCES` accepts nothing until an admin of the instance issues
+an invite. `configmaps.yaml` forwards every `DEPICTIO_MIGRATION_*` key of
+`backend.env` except `TARGETS` and `INBOUND_SOURCES`, which carry pairing keys
+and belong in a Secret.
+
+> **Note for the Serve team.** Serve does not use `values-serve.yaml`. Set the
+> two variables above in each Depictio app's `k8s_values` (`backend.env`) so
+> that a researcher's app can receive their project from EMBL with an invite
+> code.
 
 ## Configuration
 
@@ -36,14 +172,19 @@ List settings take JSON.
 
 | Variable | Side | Default | Meaning |
 | --- | --- | --- | --- |
-| `UI_ENABLED` | both | `false` | Show the controls: *Migrate…*, *Admin > Migrations*, push targets, the *Lock editing* switch. Off hides them only; the API follows the settings below. A project already locked keeps its *Read-only* badge and its unlock switch |
+| `UI_ENABLED` | both | `false` (chart: `true`) | Show the controls: *Migrate…*, *Admin > Migrations*, push targets, the *Lock editing* switch. Off hides them only; the API follows the settings below. A project already locked keeps its *Read-only* badge and its unlock switch |
 | `INSTANCE_LABEL` | both | public URL host | Name recorded in provenance hops |
 | `TARGETS` | source | `[]` | `[{"name", "url", "pairing_key"}]`, trusted by the operator |
 | `ALLOW_UI_TARGETS` | source | `false` | Let admins add targets in *Admin > Settings* |
 | `UI_TARGET_HOST_ALLOWLIST` | source | `[]` | Hosts a UI target may reach over http or on a private IP |
-| `INBOUND_ENABLED` | target | `false` | Accept pushes. When off, every inbound route returns 404 |
+| `INBOUND_ENABLED` | target | `false` (chart: `true`) | Accept pushes from `INBOUND_SOURCES` and from valid invite codes. When off, every inbound route returns 404 |
 | `INBOUND_SOURCES` | target | `[]` | `[{"name", "pairing_key", "allowed_source_buckets", "max_pending", "max_per_day", "max_bundle_bytes"}]` |
 | `LOCK_IMPORTED_DEFAULT` | target | `true` | Initial state of *Lock editing* |
+| `DESTINATION_DOMAINS` | source | `[]` | Domain suffixes an owner may publish to with a URL + invite code |
+| `INVITE_SINGLE_USE_TTL_HOURS` | target | `1` | Default lifetime of a single-use invite |
+| `INVITE_LINEAGE_TTL_DAYS` | target | `30` | Default lifetime of a lineage invite |
+| `INVITE_MAX_TTL_DAYS` | target | `365` | Longest lifetime an admin may give an invite |
+| `INTERRUPTED_AFTER_MINUTES` | both | `60` | Startup recovery threshold for pushes and imports |
 | `MAX_BUNDLE_BYTES` | both | 10 GiB | Bundle size cap (413 above it) |
 | `STAGING_PREFIX` | target | `_migration_staging` | S3 prefix for staged bundles. Must be one path segment, not an ObjectId |
 | `PENDING_TTL_DAYS` | target | `14` | Pending requests older than this expire, and their bundle is deleted |
@@ -168,7 +309,9 @@ request.
 - data collections, deltatables, MultiQC, files, runs and links;
 - project edit, project delete, and visibility changes.
 
-Only an admin can lift it, with `POST /projects/{id}/unlock`. In the UI, the
+Only an admin can lift it, with `POST /projects/{id}/unlock`. An admin may
+still change a locked project's visibility (publishing a release); anyone else
+meets the 409. In the UI, the
 lock is the *Editing* row of the project's Permissions page, beside *Public /
 Private*: visibility says who may view the project, the lock whether anyone,
 owners included, may change it. The two are independent, and a published
@@ -196,8 +339,11 @@ API guarantee only.
 
 ## Testing on a LAN
 
-`dev/migration_lan_test/` starts two `depictio local up` stacks and runs the
-whole flow against them (`check.py`).
+`dev/migration_lan_test/` starts three `depictio local up` stacks and runs
+the whole flow against them (`check.py`):
+- A, the source;
+- B, a pairing-key target with an approval queue;
+- C, a target with the chart defaults, for the invite scenario.
 
 On one machine, with both instances reached through its LAN address:
 

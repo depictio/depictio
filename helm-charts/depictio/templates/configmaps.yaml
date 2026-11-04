@@ -98,6 +98,16 @@ data:
   {{- end }}
   {{- end }}
 
+  # Project migration (#1303). Forwarded by prefix: MigrationConfig (env_prefix
+  # DEPICTIO_MIGRATION_) owns the names. TARGETS and INBOUND_SOURCES carry
+  # pairing keys: pass them through a Secret, never here. Only the API runs
+  # migrations (FastAPI background tasks), so the worker needs none of these.
+  {{- range $key, $value := .Values.backend.env }}
+  {{- if and (hasPrefix "DEPICTIO_MIGRATION_" $key) (ne $key "DEPICTIO_MIGRATION_TARGETS") (ne $key "DEPICTIO_MIGRATION_INBOUND_SOURCES") (ne (toString $value) "") }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}
+  {{- end }}
+
   # Performance
   DEPICTIO_FASTAPI_WORKERS: {{ .Values.backend.env.DEPICTIO_FASTAPI_WORKERS | quote }}
   # Analytics

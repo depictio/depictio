@@ -1698,7 +1698,11 @@ async def toggle_public_private(
             detail="User does not have permission to update this project.",
         )
 
-    assert_project_unlocked(project_id)
+    # Visibility is not content (snapshots never hold it): an administrator may
+    # publish a locked release, which is the publication order "lock, then make
+    # public" (#1303). Anyone else still meets the lock.
+    if not getattr(current_user, "is_admin", False):
+        assert_project_unlocked(project_id)
     is_public_bool = is_public.lower() == "true"
 
     projects_collection.update_one(
