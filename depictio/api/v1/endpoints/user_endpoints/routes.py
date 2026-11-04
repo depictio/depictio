@@ -1115,7 +1115,9 @@ async def admin_create_user(
         )
 
     email = str(payload.email).strip().lower()
-    result = await _create_user_in_db(email, payload.password, is_admin=payload.is_admin)
+    result = await _create_user_in_db(
+        email, payload.password, is_admin=payload.is_admin, claim_pending_owner=True
+    )
     if not result or not result.get("success"):
         if result and result.get("message") == "User already exists":
             raise HTTPException(

@@ -15,6 +15,9 @@ from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.endpoints.groups_endpoints.pending_pi import (
     claim_pending_pi_groups,
 )
+from depictio.api.v1.endpoints.projects_endpoints.pending_owner import (
+    claim_pending_project_ownership_quietly,
+)
 from depictio.api.v1.endpoints.user_endpoints.utils import create_access_token
 from depictio.api.v1.key_utils import get_public_key
 from depictio.models.models.base import PyObjectId
@@ -786,6 +789,7 @@ async def _create_user_in_db(
     is_anonymous: bool = False,
     id: PyObjectId = None,  # type: ignore[invalid-parameter-default]
     group: str | None = None,
+    claim_pending_owner: bool = False,
 ) -> dict[str, bool | str | UserBeanie | None] | None:
     """
     Helper function to create a user in the database using Beanie.
@@ -795,6 +799,8 @@ async def _create_user_in_db(
         password: Raw password (will be hashed)
         group: User's group (optional)
         is_admin: Whether user is admin
+        claim_pending_owner: Hand over projects parked on this email (#1303). Only
+            for accounts an admin creates: a self-registered address is unverified.
 
     Returns:
         The created UserBeanie object if successful
@@ -837,6 +843,8 @@ async def _create_user_in_db(
             logger.error(
                 f"Pending P.I. claim failed for {email} (designation stays parked): {claim_error}"
             )
+        if claim_pending_owner:
+            await claim_pending_project_ownership_quietly(user_beanie)
         return {
             "success": True,
             "message": "User created successfully",

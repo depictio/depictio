@@ -43,3 +43,25 @@ def _unlocked_publish_lock_db(monkeypatch):
     )
     monkeypatch.setattr(publish_lock, "_db", lambda: fake_db)
     yield fake_db
+
+
+@pytest.fixture(autouse=True)
+def _no_pending_project_owner_db(monkeypatch):
+    """Answer the pending-project-owner claim from an empty in-memory database.
+
+    Every SSO sign-in and admin-created account asks ``pending_owner`` for
+    projects parked on the user's email, which reads the synchronous project
+    collections. Tests that only initialise Beanie would otherwise dial the real
+    MongoDB for it and hang. An empty database holds nothing to claim; a test of
+    the claim itself patches ``pending_owner._db`` (the later patch wins).
+    """
+    from types import SimpleNamespace
+
+    from depictio.api.v1.endpoints.projects_endpoints import pending_owner
+
+    database = mongomock.MongoClient()["depictio_test_pending_owner"]
+    fake_db = SimpleNamespace(
+        projects_collection=database["projects"], dashboards_collection=database["dashboards"]
+    )
+    monkeypatch.setattr(pending_owner, "_db", lambda: fake_db)
+    yield fake_db

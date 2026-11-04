@@ -77,6 +77,7 @@ def store():
         patch.object(core_functions, "s3_client", s3),
         patch.object(core_functions, "deltatables_collection", db.deltatables),
         patch.object(core_functions, "multiqc_collection", db.multiqc),
+        patch.object(core_functions, "migration_requests_collection", db.migration_requests),
     ):
         yield s3, db
 
@@ -148,3 +149,41 @@ async def test_the_safety_check_still_stops_an_all_orphaned_listing(store):
 
     assert "Safety check failed" in result["error"]
     assert s3.deleted == []
+
+
+IMPORTING = "646b0f3c1e4a2d7f8e5b8e11"
+
+
+@pytest.mark.asyncio
+async def test_a_prefix_being_imported_by_a_push_is_kept(store):
+    """Approval writes the data to S3 before any document names it (#1303)."""
+    s3, db = store
+    s3.objects.update(_table(IMPORTING, LONG_AGO))
+    db.migration_requests.insert_one({"status": "importing", "dc_ids": [IMPORTING]})
+
+    result = await cleanup_orphaned_s3_files(dry_run=False)
+
+    assert IMPORTING in _prefixes(s3)
+    assert result["orphaned_prefixes"] == [OLD_ORPHAN]
+
+
+@pytest.mark.asyncio
+async def test_a_finished_or_pending_request_does_not_protect_a_prefix(store):
+    s3, db = store
+    s3.objects.update(_table(IMPORTING, LONG_AGO))
+    db.migration_requests.insert_one({"status": "failed", "dc_ids": [IMPORTING]})
+
+    result = await cleanup_orphaned_s3_files(dry_run=False)
+
+    assert IMPORTING in result["orphaned_prefixes"]
+
+
+@pytest.mark.asyncio
+async def test_staged_bundles_are_never_swept(store):
+    s3, _ = store
+    staged = f"{core_functions.settings.migration.staging_prefix}/{IMPORTING}/bundle.zip"
+    s3.objects[staged] = LONG_AGO
+
+    await cleanup_orphaned_s3_files(dry_run=False, min_age_seconds=0)
+
+    assert staged in s3.objects
