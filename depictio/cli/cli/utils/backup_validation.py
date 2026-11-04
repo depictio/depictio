@@ -367,6 +367,14 @@ def check_backup_collections_coverage() -> Dict[str, Any]:
             "ingestion_runs",
             "jobs",
             "cli_agents",
+            # Instance-to-instance push state (#1303): a request points at a
+            # staged bundle in S3 and a push at a remote request, neither of
+            # which a MongoDB backup holds; a UI target's key is encrypted with
+            # this instance's own secrets key. The migrated project itself is
+            # in 'projects' like any other.
+            "migration_requests",
+            "migration_pushes",
+            "migration_targets",
         ]
         core_collections = {
             col
