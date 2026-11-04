@@ -24,7 +24,10 @@ from typing import Any
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.configs.settings_models import OIDCProviderConfig
-from depictio.api.v1.endpoints.auth_endpoints.utils import create_or_get_sso_user
+from depictio.api.v1.endpoints.auth_endpoints.utils import (
+    AmbiguousSSOAccount,
+    create_or_get_sso_user,
+)
 from depictio.api.v1.endpoints.groups_endpoints.pending_pi import claim_pending_pi_groups
 from depictio.api.v1.endpoints.projects_endpoints.pending_owner import (
     claim_pending_project_ownership_quietly,
@@ -142,9 +145,14 @@ async def provision_sso_login(
             "email_not_verified",
         )
 
-    user, created = await create_or_get_sso_user(
-        email, allow_create=not settings.auth.registration_disabled
-    )
+    try:
+        user, created = await create_or_get_sso_user(
+            email, allow_create=not settings.auth.registration_disabled
+        )
+    except AmbiguousSSOAccount as e:
+        # Two accounts differ only by the case of their email: signing in to
+        # either would be a guess, and creating a third would make it worse.
+        raise SSOLoginRejected(f"several accounts match {email} ignoring case", "sso_failed") from e
     if user is None:
         raise SSOLoginRejected(
             f"no account for {email} and registration is disabled", "registration_disabled"

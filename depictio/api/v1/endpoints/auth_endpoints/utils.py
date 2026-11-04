@@ -7,6 +7,7 @@
   ``sso_sync.provision_sso_login``.
 """
 
+import re
 import secrets
 from datetime import timedelta
 
@@ -71,6 +72,33 @@ async def consume_oauth_state(state: str) -> OAuthState | None:
     return OAuthState.model_validate(consumed)
 
 
+async def _find_user_by_email(email: str) -> UserBeanie | None:
+    """The account for ``email``, matched exactly first, then ignoring case.
+
+    Email addresses are compared case-insensitively: accounts created by the
+    former SAML and Google integrations (or by registration) may be stored
+    with a mixed-case local part, and the provider may send another casing.
+    When the case-insensitive match is ambiguous (two accounts differing only
+    by case), nothing is returned rather than guessing which one to sign in.
+    """
+    exact = await UserBeanie.find_one({"email": email})
+    if exact is not None:
+        return exact
+    pattern = {"$regex": f"^{re.escape(email)}$", "$options": "i"}
+    matches = await UserBeanie.find({"email": pattern}).limit(2).to_list()
+    if len(matches) > 1:
+        logger.error(
+            f"SSO login for {email}: several accounts match ignoring case; refusing to "
+            "pick one. Merge or rename them."
+        )
+        raise AmbiguousSSOAccount(email)
+    return matches[0] if matches else None
+
+
+class AmbiguousSSOAccount(Exception):
+    """Several accounts match the SSO email once case is ignored."""
+
+
 async def create_or_get_sso_user(
     email: str, *, allow_create: bool = True
 ) -> tuple[UserBeanie | None, bool]:
@@ -95,9 +123,7 @@ async def create_or_get_sso_user(
     from depictio.api.v1.endpoints.user_endpoints.core_functions import _hash_password
 
     email = email.strip()
-    existing_user = await UserBeanie.find_one({"email": email})
-    if existing_user is None and email.lower() != email:
-        existing_user = await UserBeanie.find_one({"email": email.lower()})
+    existing_user = await _find_user_by_email(email)
 
     if existing_user:
         logger.info(f"Existing user found for SSO login: {email}")
