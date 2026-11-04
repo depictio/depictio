@@ -289,6 +289,8 @@ def _tail_predicate(column: str, direction: str, threshold: float) -> Any:
         return col <= threshold
     if direction == "high":
         return col >= threshold
+    # "both" and "top" both keep the large |x| end; they differ in where the
+    # threshold comes from (a convention, or the k-th largest value).
     return col.abs() >= threshold
 
 
@@ -298,6 +300,7 @@ def _resolve_tail(
     roles: dict[str, str],
     tail: dict | None,
     available: set[str],
+    cap: int = 10_000,
 ) -> tuple[str, str, float] | None:
     """Settle ``(column, direction, threshold)`` for a ``tail`` reduction.
 
@@ -342,6 +345,19 @@ def _resolve_tail(
             role,
         )
         return None
+
+    if declared == "top":
+        # The cut-off is the k-th largest |score|, k being half the row budget:
+        # the strongest rows stay whole and the other half of the budget goes to
+        # a uniform sample of the rest. No convention is involved, so a score in
+        # [0, 1] (a change in usage) is kept at its large end like any other.
+        import polars as pl
+
+        k = max(1, cap // 2)
+        cutoff = scan.select(pl.col(column).abs().top_k(k).min().alias("cut")).collect()["cut"][0]
+        if cutoff is None:
+            return None
+        return column, "top", float(cutoff)
 
     direction: str = declared
     if declared == "auto":
@@ -560,7 +576,7 @@ def _load_reduced(
             return _exact(scan.collect(), total, policy)
 
         if policy == "tail":
-            spec = _resolve_tail(scan, viz_kind, roles or {}, tail, set(projection))
+            spec = _resolve_tail(scan, viz_kind, roles or {}, tail, set(projection), cap)
             frame = _tail_sample(scan, projection, total, cap, spec) if spec else None
             if frame is not None:
                 return _reduced(frame, total, "tail")

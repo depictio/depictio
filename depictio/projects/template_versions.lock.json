@@ -8,7 +8,7 @@
     },
     "init/catalog_conformance": {
       "version": "2.1.0",
-      "content_hash": "8deef712c85fc3282c4579a34e30a7edde2bbcc1d8362da1a554686801ebd290",
+      "content_hash": "5ab62e06e7c48f21d71eb97d769e3188483f6cf9e098080b0fe3507980ea3170",
       "catalog": {
         "adapterremoval": "1.0.0",
         "agat": "1.0.0",
@@ -189,7 +189,7 @@
     },
     "nf-core/ampliseq/2.18.0": {
       "version": "1.3.2",
-      "content_hash": "ad3529f92606b88d0ca9caf8fe28e9e8e261885b4d2d451a63cc6e3362ff155a",
+      "content_hash": "b690e2ee5828b6a5f17cbb2698c9a6525384f28288efe17bcece166d95759993",
       "catalog": {
         "multiqc": "1.0.0",
         "qiime2": "2.0.0",
@@ -199,7 +199,7 @@
     },
     "nf-core/atacseq/1.2.2": {
       "version": "3.0.0",
-      "content_hash": "5bb73da887e4b34e0b31963c0fe516953cd88ed7f535cb4e7936dd9d0af65d7a",
+      "content_hash": "d96c3158a9016511ef449f7c7d29d08af3c84a6bd09a23c86490ee5dcd7bd05e",
       "catalog": {
         "ataqv": "1.1.0",
         "deeptools": "1.0.0",
@@ -212,7 +212,7 @@
     },
     "nf-core/atacseq/2.1.2": {
       "version": "4.0.0",
-      "content_hash": "0028fc644072732b6646f8346c82c9a632616820202de26bb6e8c8a7bcd89dd1",
+      "content_hash": "843af8483a27e1d24fe5d48916908315b9d32c46630040636fe3a68ae1e49627",
       "catalog": {
         "ataqv": "1.1.0",
         "deeptools": "1.0.0",
@@ -226,7 +226,7 @@
     },
     "nf-core/chipseq/1.2.0": {
       "version": "2.1.0",
-      "content_hash": "6bcada6850ca57293e863ad4a44847edf161928e06e69119ef530c479a846fe7",
+      "content_hash": "dc922158884691a41553f56680df6f0e65bfb35da4be143482cd01285f0d3990",
       "catalog": {
         "deeptools": "1.0.0",
         "deseq2": "1.0.0",
@@ -238,7 +238,7 @@
     },
     "nf-core/chipseq/2.1.0": {
       "version": "4.2.0",
-      "content_hash": "e884a2536254f081f9391037dd3b88ea252d199c01ebbbbc02ffab67d21851a6",
+      "content_hash": "119d9e0b7fc99ee5fd7d644fd6d8f59adad2a14325b20ee06551b16f78b20553",
       "catalog": {
         "deeptools": "1.0.0",
         "deseq2": "1.0.0",
@@ -251,7 +251,7 @@
     },
     "nf-core/crisprseq/2.3.0": {
       "version": "2.0.0",
-      "content_hash": "5cacb9574433cdaff466092b3d39cf6ea5a2bbace257ac6253b7d148997830bf",
+      "content_hash": "4b4fd1a1f9c78241caf2919a872170f7538106f64cef5f15aa392821f0d5874c",
       "catalog": {
         "crisprseq": "1.0.0"
       }
@@ -351,7 +351,7 @@
     },
     "nf-core/genomeqc/1.0.1": {
       "version": "2.0.1",
-      "content_hash": "2119cddf92e6d841c16610950cdfeeae67c2441ba45ffe1388790a3a4cd07fe2",
+      "content_hash": "a170f165db1a2d3447198d25cbbb96c29fb993e32af6cbcad7eba7559e3c94e0",
       "catalog": {
         "agat": "1.0.0",
         "busco": "2.0.0",
@@ -531,7 +531,7 @@
     },
     "nf-core/riboseq/2.0.0": {
       "version": "3.0.0",
-      "content_hash": "0ca7cc4ca0ed237ca69300c72d3653d13aa5f7dd1ead856de968bf641c20283c",
+      "content_hash": "ba74bd92410b02db085f9f062db79126d56a117f5e5afe17ab51426184f9ce07",
       "catalog": {
         "anota2seq": "1.1.0",
         "multiqc": "1.0.0",
@@ -578,7 +578,7 @@
     },
     "nf-core/rnavar/1.3.0": {
       "version": "1.1.1",
-      "content_hash": "21a0933004fa1b32ed3f77dad21be35760e1d6ed9a640009d3768c9ffbac93c0",
+      "content_hash": "19c8187a2effc1078e68b414495830d37655ef3051296cea86f51d7e37085ba7",
       "catalog": {
         "multiqc": "1.0.0",
         "picard": "1.1.0",
@@ -590,7 +590,7 @@
     },
     "nf-core/sarek/3.10.0": {
       "version": "2.1.0",
-      "content_hash": "04cfbf2815a7550324044bc71c4b0cd970120306e62ac1502c12e10e6068adf9",
+      "content_hash": "ae5145298f1de19c6d129adff46b32f25a896316866440715a137b15627488f9",
       "catalog": {
         "bcftools": "1.0.0",
         "mosdepth": "1.0.0",
@@ -602,7 +602,7 @@
     },
     "nf-core/sarek/3.11.0": {
       "version": "3.0.0",
-      "content_hash": "0cba8d960af3202eae7f6560d3ce4fea238a02f21055c5c44872031df4a70bba",
+      "content_hash": "3bd8b49b81a2808f1d51b5277ca22573a93166cd5bffcbe8d2a2330081018c3e",
       "catalog": {
         "bcftools": "1.0.0",
         "mosdepth": "1.0.0",
@@ -635,7 +635,7 @@
     },
     "nf-core/stableexpression/1.1.0": {
       "version": "1.2.0",
-      "content_hash": "51bf65936c346ceadc568bcc0b2ffc72d3d2faebe91f9c3866fa501d10d0d48d",
+      "content_hash": "35aa085c8cfe937462be0862cedcd5719ecedc049b12e55a6f3fd972441e0c95",
       "catalog": {
         "stableexpression": "1.0.0"
       }
@@ -690,7 +690,7 @@
     },
     "nf-core/viralmetagenome/1.2.0": {
       "version": "1.2.0",
-      "content_hash": "248b2347a6d9c980531fb6f91fc89ace71fbb339fbb34e8e659e96e20a08ca5f",
+      "content_hash": "ec999af3369067e8b425b5dd87d88c6402fceb80a3b2003df36ee4ea76840c38",
       "catalog": {
         "checkv": "1.0.0",
         "ivar": "1.0.0",

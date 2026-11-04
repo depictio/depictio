@@ -11,6 +11,7 @@ import type { BrandTheme } from './brandTheme';
 import { enqueueFetch } from './fetchQueue';
 import type { GroupStatusEntry } from './groupStatus';
 import type { GroupingDisplay, GroupRenderDef } from './selectionGroups';
+import { canonicalizeVizKinds } from './vizKindAliases';
 import type {
   Annotation,
   AnnotationColor,
@@ -838,7 +839,7 @@ export async function fetchDashboard(
   if (!res.ok) {
     throw new HttpError(`Failed to fetch dashboard: ${res.status}`, res.status);
   }
-  return res.json();
+  return canonicalizeVizKinds(await res.json());
 }
 
 /** A component lifted out of the grid into the floating panel, paired with the
@@ -874,7 +875,7 @@ export async function fetchFloatingComponents(
       `${API_BASE}/dashboards/floating_components/${dashboardId}`,
     );
     if (!res.ok) return empty;
-    const data = await res.json();
+    const data = canonicalizeVizKinds(await res.json());
     if (!Array.isArray(data?.components)) return empty;
     return {
       parent_dashboard_id: data.parent_dashboard_id ?? null,
@@ -938,7 +939,7 @@ export async function fetchCrossTabComponents(
       `${API_BASE}/dashboards/cross_tab_components/${dashboardId}${qs}`,
     );
     if (!res.ok) return empty;
-    const data = await res.json();
+    const data = canonicalizeVizKinds(await res.json());
     if (!Array.isArray(data?.floating)) return empty;
     return {
       parent_dashboard_id: data.parent_dashboard_id ?? null,
@@ -1690,6 +1691,7 @@ export type AdvancedVizKind =
   | 'volcano'
   | 'embedding'
   | 'manhattan'
+  | 'stacked_bar'
   | 'stacked_taxonomy'
   | 'phylogenetic'
   | 'rarefaction'

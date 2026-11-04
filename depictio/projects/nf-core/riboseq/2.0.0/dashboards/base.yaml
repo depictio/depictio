@@ -2032,9 +2032,9 @@ tabs:
   - component_type: advanced_viz
     workflow_tag: riboseq
     data_collection_tag: orf_calls
-    viz_kind: stacked_taxonomy
+    viz_kind: stacked_bar
     config:
-      viz_kind: stacked_taxonomy
+      viz_kind: stacked_bar
       sample_id_col: sample
       taxon_col: orf_class
       rank_col: caller

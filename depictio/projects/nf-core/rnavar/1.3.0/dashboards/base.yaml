@@ -887,9 +887,9 @@ tabs:
   - component_type: advanced_viz
     workflow_tag: rnavar
     data_collection_tag: star_junctions
-    viz_kind: stacked_taxonomy
+    viz_kind: stacked_bar
     config:
-      viz_kind: stacked_taxonomy
+      viz_kind: stacked_bar
       sample_id_col: sample
       taxon_col: motif_class
       rank_col: annotation
@@ -1126,9 +1126,9 @@ tabs:
   - component_type: advanced_viz
     workflow_tag: rnavar
     data_collection_tag: samtools_idxstats
-    viz_kind: stacked_taxonomy
+    viz_kind: stacked_bar
     config:
-      viz_kind: stacked_taxonomy
+      viz_kind: stacked_bar
       sample_id_col: sample
       taxon_col: contig_class
       rank_col: null
@@ -1770,9 +1770,9 @@ tabs:
   - component_type: advanced_viz
     workflow_tag: rnavar
     data_collection_tag: snpeff_csv_stats
-    viz_kind: stacked_taxonomy
+    viz_kind: stacked_bar
     config:
-      viz_kind: stacked_taxonomy
+      viz_kind: stacked_bar
       sample_id_col: sample
       taxon_col: category
       rank_col: section

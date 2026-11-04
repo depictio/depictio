@@ -16,6 +16,7 @@ import {
   StoredMetadata,
 } from '../../api';
 import { isStaleFetch } from '../../fetchQueue';
+import { advancedVizSelectionFilter, filtersExcludingOwn } from '../../selection';
 import { columnCategoryColors } from '../../categoryColors';
 import { resolveCategoricalPalette, stableColorMap } from '../../colors';
 import { useCategoryColorSource } from '../../hooks/useCategoryColors';
@@ -49,7 +50,7 @@ import {
   type TaxonomyLegendPos,
   type TaxonomyOrientation,
   type TaxonomySampleSort,
-} from './stackedTaxonomyOptions';
+} from './stackedBarOptions';
 
 /** The stacked bars run vertically: samples are the x axis, so the tile's
  *  height is furniture, not a count. This is the plot area a stack of
@@ -102,7 +103,7 @@ interface AnnotationStrip {
   palette?: Record<string, string> | null;
 }
 
-interface StackedTaxonomyConfig {
+interface StackedBarConfig {
   sample_id_col: string;
   taxon_col: string;
   /** Null (or a column the table lacks) draws a single-level composition;
@@ -140,12 +141,18 @@ interface StackedTaxonomyConfig {
   orientation?: TaxonomyOrientation;
   /** Per-sample column grouping the bars; the sort applies inside groups. */
   group_col?: string | null;
+  /** A click on a bar emits a filter on its sample. Opt-in. */
+  selection_enabled?: boolean;
+  /** Column the picked sample belongs to; null falls back to `sample_id_col`. */
+  selection_column?: string | null;
 }
 
 interface Props {
-  metadata: StoredMetadata & { viz_kind?: string; config?: StackedTaxonomyConfig };
+  metadata: StoredMetadata & { viz_kind?: string; config?: StackedBarConfig };
   filters: InteractiveFilter[];
   refreshTick?: number;
+  /** Selection-as-filter callback; absent on read-only hosts. */
+  onFilterChange?: (filter: InteractiveFilter) => void;
 }
 
 /** Fallback cycle for an unbranded deployment; a brand's colorway wins. */
@@ -178,11 +185,11 @@ function textOn(fill: string | undefined): string {
 /** Stand-in value of a spacer slot in a strip: breaks runs, never shown. */
 const SPACER_VALUE = '\u0000';
 
-const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
+const StackedBarRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFilterChange }) => {
   const { colorScheme } = useMantineColorScheme();
   const theme = useMantineTheme();
   const isDark = colorScheme === 'dark';
-  const config = (metadata.config || {}) as StackedTaxonomyConfig;
+  const config = (metadata.config || {}) as StackedBarConfig;
   const palette = resolveCategoricalPalette(theme, PALETTE);
   const categorySource = useCategoryColorSource();
   // A wide table (`value_cols`) is melted into the long form below; it has no
@@ -347,7 +354,20 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
     degraded: boolean;
   } | null>(null);
 
-  const filterSig = JSON.stringify(filters);
+  // The tile's own pick must not narrow its own bars: it dims the others
+  // instead, so the pick can be moved or cleared from the same chart.
+  const fetchFilters = useMemo(
+    () => filtersExcludingOwn(filters, String(metadata.index), 'scatter_selection'),
+    [filters, metadata.index],
+  );
+  const filterSig = JSON.stringify(fetchFilters);
+  const pickedSamples = useMemo(() => {
+    const own = filters.find(
+      (f) => f.index === String(metadata.index) && f.source === 'scatter_selection',
+    );
+    const value = own?.value;
+    return new Set(Array.isArray(value) ? value.map((v) => String(v)) : []);
+  }, [filters, metadata.index]);
   useEffect(() => {
     setFullLoad(false);
   }, [filterSig]);
@@ -357,7 +377,7 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
   );
   useEffect(() => {
     if (!metadata.wf_id || !metadata.dc_id || !bound) {
-      setError('Stacked taxonomy: missing data binding');
+      setError('Stacked bar: missing data binding');
       setLoading(false);
       return;
     }
@@ -371,9 +391,9 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
         wfId: metadata.wf_id,
         dcId: metadata.dc_id,
         columns: requiredCols,
-        filters: [...filters, ...rankFilter],
+        filters: [...fetchFilters, ...rankFilter],
         fullLoad,
-        vizKind: 'stacked_taxonomy',
+        vizKind: 'stacked_bar',
       },
       ctrl.signal,
     )
@@ -1015,10 +1035,24 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
   }, [figure, showLegend, seriesCount, stripCount, legendRows, horizontal, slotCount]);
 
   // Themed once per figure so the annotation layer can memoise on them.
-  const plotData = useMemo(
-    () => (figure ? applyDataTheme(figure.data, isDark, theme) : null),
-    [figure, isDark, theme],
-  );
+  const plotData = useMemo(() => {
+    const themed = figure ? applyDataTheme(figure.data, isDark, theme) : null;
+    if (!themed || pickedSamples.size === 0) return themed;
+    // A pick leaves the other bars drawn, dimmed, so the pick can be moved.
+    return themed.map((trace: any) =>
+      trace.type === 'bar'
+        ? {
+            ...trace,
+            marker: {
+              ...trace.marker,
+              opacity: ((horizontal ? trace.y : trace.x) as unknown[]).map((slot) =>
+                pickedSamples.has(String(slot)) ? 1 : 0.3,
+              ),
+            },
+          }
+        : trace,
+    );
+  }, [figure, isDark, theme, pickedSamples, horizontal]);
   const plotLayout = useMemo(() => {
     if (!figure) return null;
     const themed = applyLayoutTheme(figure.layout as any, isDark, theme);
@@ -1066,6 +1100,21 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
     },
     [],
   );
+  const selectionEnabled = Boolean(onFilterChange) && config.selection_enabled === true;
+  const selectionColumn = config.selection_column || config.sample_id_col;
+  const handleClick = useCallback(
+    (event: any) => {
+      if (!onFilterChange) return;
+      const point = event?.points?.[0];
+      if (!point) return;
+      const sample = String(horizontal ? point.y : point.x);
+      if (!sample || isSpacerSlot(sample)) return;
+      // Clicking the one picked bar again clears the pick.
+      const clear = pickedSamples.size === 1 && pickedSamples.has(sample);
+      onFilterChange(advancedVizSelectionFilter(metadata, selectionColumn, clear ? [] : [sample]));
+    },
+    [onFilterChange, horizontal, pickedSamples, metadata, selectionColumn],
+  );
   // Chart annotations. A bar is a taxon's total in one sample, not a row,
   // so marked bars are stored as coordinates.
   const annotations = usePlotAnnotationLayer({
@@ -1077,7 +1126,7 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
 
   return (
     <AdvancedVizFrame
-      title={metadata.title || 'Stacked taxonomy'}
+      title={metadata.title || 'Stacked bar'}
       subtitle={(metadata as any).description || (metadata as any).subtitle}
       primaryControls={primaryControls}
       controls={controls}
@@ -1111,7 +1160,11 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
               useResizeHandler
               style={{ width: '100%', height: '100%' }}
               config={{ displaylogo: false, responsive: true } as any}
-              {...annotations.plotProps({ onInitialized: onGraph, onUpdate: onGraph })}
+              {...annotations.plotProps({
+                onClick: selectionEnabled ? handleClick : undefined,
+                onInitialized: onGraph,
+                onUpdate: onGraph,
+              })}
             />
           </div>
           {annotations.toolbar}
@@ -1121,4 +1174,4 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
   );
 };
 
-export default StackedTaxonomyRenderer;
+export default StackedBarRenderer;

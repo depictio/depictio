@@ -192,6 +192,7 @@ export const GROUPING_MODE_BY_KIND: Readonly<Record<AdvancedVizKind, GroupingMod
   qq: 'split',
   rarefaction: 'split',
   coverage_track: 'split',
+  stacked_bar: 'split',
   stacked_taxonomy: 'split',
   sunburst: 'split',
   sankey: 'split',

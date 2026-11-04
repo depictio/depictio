@@ -555,7 +555,7 @@ class ManhattanConfig(_BaseVizConfig):
     )
 
 
-class StackedTaxonomyConfig(_BaseVizConfig):
+class StackedBarConfig(_BaseVizConfig):
     """Stacked composition bar: one bar per sample, one segment per category.
 
     Built for taxa, but stacks any per-sample composition (CCS outcomes per
@@ -564,7 +564,7 @@ class StackedTaxonomyConfig(_BaseVizConfig):
     near-identical base away.
     """
 
-    viz_kind: Literal["stacked_taxonomy"] = "stacked_taxonomy"
+    viz_kind: Literal["stacked_bar"] = "stacked_bar"
 
     sample_id_col: str = Field(default="sample_id", description="Column with the sample identifier")
     taxon_col: str = Field(default="taxon", description="Column with taxon name")
@@ -722,6 +722,26 @@ class StackedTaxonomyConfig(_BaseVizConfig):
             "Legend in a column right of the bars (default), or in rows under the "
             "figure. Past 40 bars the sample labels are hidden (hover names each "
             "bar) and a bottom legend moves above the bars."
+        ),
+    )
+
+    # --- Selection as a cross-filter ---------------------------------------
+    # Off by default so a shipped dashboard keeps the bars inert and no
+    # deployment inherits a cross-filter nobody asked for.
+    selection_enabled: bool = Field(
+        default=False,
+        description=(
+            "Let a click on a bar emit a dashboard filter on its sample, which "
+            "the other tiles of the tab follow. Clicking the picked bar again "
+            "clears it."
+        ),
+    )
+    selection_column: str | None = Field(
+        default=None,
+        description=(
+            "Column the picked sample belongs to in the tiles that follow the "
+            "selection. Null uses ``sample_id_col``; name another column when "
+            "the other tiles join on something else."
         ),
     )
 
@@ -5927,6 +5947,12 @@ _KIND_ALIASES: dict[str, tuple[str, dict[str, Any]]] = {
     "qq": ("volcano", {"view": "qq"}),
     "enrichment": ("dot_plot", {"view": "enrichment"}),
     "roc_pr_curve": ("pr_benchmark", {"view": "roc"}),
+    # A rename, not a merge: the kind was built for taxa and stacks any
+    # per-sample composition, so it took a name that says what it draws. The
+    # config carries over key for key (`taxon_col` and the rest keep their
+    # names: `stored_metadata` reaches the client unvalidated, so a renamed
+    # field would blank every stored tile).
+    "stacked_taxonomy": ("stacked_bar", {}),
 }
 
 #: ``old kind -> {old field: surviving field}``, applied before the overrides.
@@ -5943,6 +5969,7 @@ _ALIAS_FIELD_RENAMES: dict[str, dict[str, str]] = {
     "qq": {},
     "enrichment": {},
     "roc_pr_curve": {},
+    "stacked_taxonomy": {},
 }
 
 #: Bindings the survivor needs that the retired kind spelled under another
@@ -6031,12 +6058,16 @@ def resolve_viz_kind(viz_kind: str | None) -> str | None:
     return alias[0] if alias else viz_kind
 
 
+#: The kind's old class name, for code that imports it. A stored config of the
+#: retired kind validates through ``_KIND_ALIASES``, not through this name.
+StackedTaxonomyConfig = StackedBarConfig
+
 _VizConfigUnion = Annotated[
     ScatterXyConfig
     | VolcanoConfig
     | EmbeddingConfig
     | ManhattanConfig
-    | StackedTaxonomyConfig
+    | StackedBarConfig
     | PhylogeneticConfig
     | RarefactionConfig
     | DaBarplotConfig
@@ -6089,6 +6120,7 @@ _SURVIVOR_MODELS: dict[str, type[BaseModel]] = {
     "volcano": VolcanoConfig,
     "dot_plot": DotPlotConfig,
     "pr_benchmark": PrBenchmarkConfig,
+    "stacked_bar": StackedBarConfig,
 }
 
 # The union as everything outside this module validates it: the alias rewrite

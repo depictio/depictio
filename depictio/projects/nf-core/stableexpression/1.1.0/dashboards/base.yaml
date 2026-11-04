@@ -1064,9 +1064,9 @@ tabs:
   - component_type: advanced_viz
     workflow_tag: stableexpression
     data_collection_tag: stableexpression_id_mapping
-    viz_kind: stacked_taxonomy
+    viz_kind: stacked_bar
     config:
-      viz_kind: stacked_taxonomy
+      viz_kind: stacked_bar
       sample_id_col: dataset
       taxon_col: fate
       rank_col: null
@@ -1550,9 +1550,9 @@ tabs:
   - component_type: advanced_viz
     workflow_tag: stableexpression
     data_collection_tag: stableexpression_score_components
-    viz_kind: stacked_taxonomy
+    viz_kind: stacked_bar
     config:
-      viz_kind: stacked_taxonomy
+      viz_kind: stacked_bar
       sample_id_col: section
       taxon_col: component
       rank_col: null

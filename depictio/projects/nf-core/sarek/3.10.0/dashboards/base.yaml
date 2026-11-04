@@ -1520,9 +1520,9 @@ tabs:
   - component_type: advanced_viz
     workflow_tag: sarek
     data_collection_tag: vcftools_filter_summary
-    viz_kind: stacked_taxonomy
+    viz_kind: stacked_bar
     config:
-      viz_kind: stacked_taxonomy
+      viz_kind: stacked_bar
       sample_id_col: caller
       taxon_col: filter_label
       abundance_col: n_variants

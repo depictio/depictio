@@ -76,6 +76,8 @@ KIND_SAMPLING_POLICY: dict[AdvancedVizKind, SamplingPolicy] = {
     "manhattan": "tail",
     "genome_view": "tail",
     # Client-side aggregation — a sample is a wrong answer.
+    "stacked_bar": "none",
+    # Retired name, still sent by a client that predates the rename.
     "stacked_taxonomy": "none",
     "rarefaction": "none",
     "da_barplot": "none",
@@ -193,13 +195,19 @@ KIND_SAMPLING_POLICY: dict[AdvancedVizKind, SamplingPolicy] = {
 #: ``"auto"``  — decided at read time from the column's observed range, because
 #:               the same role is published as both a p-value and a −log10 score
 #:               depending on the pipeline. See ``resolve_tail_direction``.
-TailDirection = Literal["low", "high", "both", "auto"]
+#: ``"top"``   — the largest ``|x|`` the row budget allows. The cut-off is the value
+#:               of the k-th largest ``|x|`` in the column, so it comes from the data
+#:               and not from a convention. For a track whose score is a magnitude
+#:               (a coverage depth, a change in usage in [0, 1], a −log10 p), where
+#:               ``"auto"`` would read a [0, 1] range as p-values and keep the
+#:               weakest rows instead of the strongest.
+TailDirection = Literal["low", "high", "both", "auto", "top"]
 
 TAIL_ROLE: dict[AdvancedVizKind, tuple[str, TailDirection]] = {
     "volcano": ("significance", "auto"),
     "ma": ("log2_fold_change", "both"),
     "manhattan": ("score", "auto"),
-    "genome_view": ("score", "auto"),
+    "genome_view": ("score", "top"),
 }
 
 # Both tables are declared over ``AdvancedVizKind`` so a new kind that forgets
@@ -234,7 +242,7 @@ def tail_role_for_kind(viz_kind: str | None) -> tuple[str, TailDirection] | None
 
 def resolve_tail_direction(
     declared: TailDirection, lo: float | None, hi: float | None
-) -> Literal["low", "high", "both"]:
+) -> Literal["low", "high", "both", "top"]:
     """Pin an ``auto`` direction using the column's observed range.
 
     A significance column arrives either as a raw p-value or as its −log10, and

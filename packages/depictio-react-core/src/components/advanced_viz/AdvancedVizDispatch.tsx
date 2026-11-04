@@ -9,7 +9,7 @@ import { HideLegendContext } from './LegendAwarePlot';
 import VolcanoRenderer from './VolcanoRenderer';
 import EmbeddingRenderer from './EmbeddingRenderer';
 import ManhattanRenderer from './ManhattanRenderer';
-import StackedTaxonomyRenderer from './StackedTaxonomyRenderer';
+import StackedBarRenderer from './StackedBarRenderer';
 import PhylogeneticRenderer from './PhylogeneticRenderer';
 import RarefactionRenderer from './RarefactionRenderer';
 import DaBarplotRenderer from './DaBarplotRenderer';
@@ -221,7 +221,10 @@ const RENDERERS: Record<string, React.ComponentType<any>> = {
   volcano: VolcanoRenderer,
   embedding: EmbeddingRenderer,
   manhattan: ManhattanRenderer,
-  stacked_taxonomy: StackedTaxonomyRenderer,
+  stacked_bar: StackedBarRenderer,
+  // Retired name of `stacked_bar`: `stored_metadata` reaches the client
+  // unvalidated, so a tile saved before the rename still carries it.
+  stacked_taxonomy: StackedBarRenderer,
   phylogenetic: PhylogeneticRenderer,
   rarefaction: RarefactionRenderer,
   da_barplot: DaBarplotRenderer,
