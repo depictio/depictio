@@ -46,6 +46,7 @@ forward() { # ip, port
 
 up_target() { # ip
   local ip="$1" key; key="$(pairing_key)"
+  DEPICTIO_MIGRATION_UI_ENABLED=true \
   DEPICTIO_MIGRATION_INSTANCE_LABEL="lan-b" \
   DEPICTIO_MIGRATION_INBOUND_ENABLED=true \
   DEPICTIO_MIGRATION_INBOUND_SOURCES="$(python3 -c 'import json, sys; b = sys.argv[2]; print(json.dumps([{"name": "lan-a", "pairing_key": sys.argv[1], "allowed_source_buckets": [b] if b else []}]))' "$key" "${SHARED_SOURCE_BUCKET:-}")" \
@@ -58,6 +59,7 @@ up_target() { # ip
 up_source() { # ip, target url
   local ip="$1" target="$2" key thost; key="$(pairing_key)"
   thost="$(python3 -c 'import sys, urllib.parse as u; print(u.urlsplit(sys.argv[1]).hostname)' "$target")"
+  DEPICTIO_MIGRATION_UI_ENABLED=true \
   DEPICTIO_MIGRATION_INSTANCE_LABEL="lan-a" \
   DEPICTIO_MIGRATION_TARGETS="[{\"name\": \"lan-b\", \"url\": \"$target\", \"pairing_key\": \"$key\"}]" \
   NO_PROXY="${NO_PROXY:-},$thost" no_proxy="${no_proxy:-},$thost" \

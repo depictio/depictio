@@ -69,6 +69,7 @@ import { AppSidebar, LoadErrorCard } from '../../chrome';
 import { usePageTitle } from '../../branding';
 import { AccessOverview, GroupMembersPreview, useEffectiveAccess } from './AccessOverview';
 import { PublishedLockModal } from './PublishedLockControl';
+import { useMigrationUi } from '../../hooks/useMigrationUi';
 
 type Role = 'Owner' | 'Editor' | 'Viewer';
 const ROLES: Role[] = ['Owner', 'Editor', 'Viewer'];
@@ -263,6 +264,7 @@ const PermissionsApp: React.FC = () => {
   const accent = useBrandAccents();
   const projectId = readProjectIdFromPath();
   const { user } = useCurrentUser();
+  const migrationUi = useMigrationUi();
   const { colorScheme } = useMantineColorScheme();
   const primary = useMantineTheme().primaryColor;
   const isDark = colorScheme === 'dark';
@@ -837,6 +839,9 @@ const PermissionsApp: React.FC = () => {
   // the lock whether anyone, owners included, may change the content.
   const isAdmin = !!user?.is_admin;
   const editingLocked = !!project?.published_lock;
+  // Hidden with the rest of migration, except on a project already locked,
+  // so an admin can still unlock it.
+  const showEditing = migrationUi || editingLocked;
   const EditMark = editingLocked ? PenOff : PenLine;
   const editingTitle = editingLocked ? 'Editing locked' : 'Editable';
   const editingText = [
@@ -878,6 +883,7 @@ const PermissionsApp: React.FC = () => {
             data-testid="project-visibility-switch"
           />
         </div>
+        {showEditing && (
         <div className="pm-visibility" data-testid="project-editing-row">
           <span className="pm-chip">
             <EditMark size={20} strokeWidth={STROKE} aria-hidden />
@@ -894,6 +900,7 @@ const PermissionsApp: React.FC = () => {
             data-testid="project-editing-switch"
           />
         </div>
+        )}
       </section>
 
       <section aria-label="Members">
@@ -1194,6 +1201,7 @@ const PermissionsApp: React.FC = () => {
               <Text size="sm" c="dimmed">
                 {project.name}
               </Text>
+              {showEditing && (
               <Switch
                 mt="xs"
                 label={editingTitle}
@@ -1203,6 +1211,7 @@ const PermissionsApp: React.FC = () => {
                 disabled={!isAdmin}
                 data-testid="project-editing-switch"
               />
+              )}
             </Stack>
           </Paper>
 

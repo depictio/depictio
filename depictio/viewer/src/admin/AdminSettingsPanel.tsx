@@ -31,6 +31,7 @@ import { refreshServerInfo } from '../hooks/useServerInfo';
 import { formatDateTimeVerbose, formatRelativeTime } from '../lib/datetime';
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import AdminMigrationTargetsSection from './AdminMigrationTargetsSection';
+import { useMigrationUi } from '../hooks/useMigrationUi';
 
 type Action = 'save' | 'reset' | 'check';
 
@@ -61,6 +62,7 @@ const InfoRow: React.FC<{ label: string; testId?: string; children: React.ReactN
  * store, so the sidebar dot follows without waiting for its own poll.
  */
 const AdminSettingsPanel: React.FC = () => {
+  const migrationUi = useMigrationUi();
   const { isPublicMode, isDemoMode } = useCurrentUser();
   // Visible but read-only on a shared demo or public instance, whose
   // administrators must not change settings for every visitor.
@@ -290,7 +292,7 @@ const AdminSettingsPanel: React.FC = () => {
           </Group>
         </Stack>
       </SettingsSection>
-      <AdminMigrationTargetsSection readOnly={readOnly} />
+      {migrationUi && <AdminMigrationTargetsSection readOnly={readOnly} />}
     </SectionAccordion>
   );
 };

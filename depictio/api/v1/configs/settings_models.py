@@ -1765,6 +1765,14 @@ class MigrationConfig(BaseSettings):
     routes answer 404 unless ``inbound_enabled``.
     """
 
+    ui_enabled: bool = Field(
+        default=False,
+        description=(
+            "Show the migration controls in the UI (Migrate, Admin > Migrations, push"
+            " targets, the editing lock switch). Off hides them only: the API routes"
+            " keep following the settings below"
+        ),
+    )
     instance_label: Optional[str] = Field(
         default=None, description="How this instance names itself in bundles and import hops"
     )

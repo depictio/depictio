@@ -187,7 +187,8 @@ Route dispatch is plain regex in `depictio/viewer/src/main.tsx` +
 ### Migration & Publishing (#1303)
 - One instance pushes a project to another (`/migrate/push` → target `/migrate/inbound/requests`,
   pairing key header); an admin approves it in Admin > Migrations; the import runs in a
-  FastAPI background task, not Celery. All off by default (`DEPICTIO_MIGRATION_*`).
+  FastAPI background task, not Celery. All off by default (`DEPICTIO_MIGRATION_*`); the UI
+  is hidden unless `DEPICTIO_MIGRATION_UI_ENABLED=true` (`features.migration` in `/utils/server-info`).
   **Detail**: `docs/project-migration.md`
 - `project.published_lock` makes a project read-only: guards in
   `projects_endpoints/publish_lock.py` return 409. An approved migration is the only

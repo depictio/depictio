@@ -4,10 +4,12 @@ import { Send } from 'lucide-react';
 
 import MigrateProjectModal from '../MigrateProjectModal';
 import { usePushTargets } from '../usePushTargets';
+import { useMigrationUi } from '../../hooks/useMigrationUi';
 
 /** Page-head action: send a copy of this project to another Depictio instance
  *  (the word matches `depictio migrate` and Admin > Migrations). Owners and
- *  admins only, and absent when this instance has no target configured. */
+ *  admins only, and absent when this instance has no target configured or
+ *  hides migration (`DEPICTIO_MIGRATION_UI_ENABLED`). */
 export const ProjectMigrateButton: React.FC<{
   projectId: string;
   projectName?: string;
@@ -15,9 +17,10 @@ export const ProjectMigrateButton: React.FC<{
   /** Glass pages use bordered buttons in their head; the classic shell, subtle ones. */
   glass?: boolean;
 }> = ({ projectId, projectName, canPush, glass }) => {
-  const targets = usePushTargets(canPush);
+  const migrationUi = useMigrationUi();
+  const targets = usePushTargets(canPush && migrationUi);
   const [open, setOpen] = useState(false);
-  if (!canPush || targets.length === 0) return null;
+  if (!canPush || !migrationUi || targets.length === 0) return null;
   return (
     <>
       <Tooltip label="Send a copy of this project to another Depictio instance" withinPortal>

@@ -3149,6 +3149,8 @@ export interface ServerInfo {
   release_notes_url: string;
   docs_url: string;
   version_check: VersionCheckBlock | null;
+  /** UI switches from the server's settings; absent on older servers. */
+  features?: { migration?: boolean };
 }
 
 /** Optional-auth: the bearer goes along when there is one (it is what makes

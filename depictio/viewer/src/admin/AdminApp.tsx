@@ -48,6 +48,7 @@ import AdminMaintenancePanel from './AdminMaintenancePanel';
 import AdminMonitoringPanel from './AdminMonitoringPanel';
 import AdminSettingsPanel from './AdminSettingsPanel';
 import { canSeeBackups, canSeeMigrations, canSeeMonitoring } from './access';
+import { useMigrationUi } from '../hooks/useMigrationUi';
 import { usePageTitle } from '../branding';
 
 /** A page of the Glass admin: a plain tab, or one of the Log & Task panes
@@ -154,7 +155,9 @@ const AdminApp: React.FC = () => {
   const showMonitoring = canSeeMonitoring(modes);
   // Full-DB backup/restore is a trusted-deployment tool only.
   const showBackups = canSeeBackups(modes);
-  const showMigrations = canSeeMigrations(modes);
+  // Also hidden while the instance hides migration (DEPICTIO_MIGRATION_UI_ENABLED).
+  const migrationUi = useMigrationUi();
+  const showMigrations = canSeeMigrations(modes) && migrationUi;
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure(false);
   const [desktopOpened, { toggle: toggleDesktop }] = useDisclosure(true);
   const [route, setRoute] = useState<AdminRoute>(readAdminRoute);

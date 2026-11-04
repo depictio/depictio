@@ -36,6 +36,7 @@ List settings take JSON.
 
 | Variable | Side | Default | Meaning |
 | --- | --- | --- | --- |
+| `UI_ENABLED` | both | `false` | Show the controls: *Migrate…*, *Admin > Migrations*, push targets, the *Lock editing* switch. Off hides them only; the API follows the settings below. A project already locked keeps its *Read-only* badge and its unlock switch |
 | `INSTANCE_LABEL` | both | public URL host | Name recorded in provenance hops |
 | `TARGETS` | source | `[]` | `[{"name", "url", "pairing_key"}]`, trusted by the operator |
 | `ALLOW_UI_TARGETS` | source | `false` | Let admins add targets in *Admin > Settings* |

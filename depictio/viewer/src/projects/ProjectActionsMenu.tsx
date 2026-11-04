@@ -8,6 +8,7 @@ import type { ProjectListEntry } from 'depictio-react-core';
 
 import MigrateProjectModal from './MigrateProjectModal';
 import { usePushTargets } from './usePushTargets';
+import { useMigrationUi } from '../hooks/useMigrationUi';
 
 export interface ProjectActionsMenuProps {
   project: ProjectListEntry;
@@ -30,9 +31,11 @@ const ProjectActionsMenu: React.FC<ProjectActionsMenuProps> = ({
   const projectId = (project._id ?? project.id) as string;
   const [exporting, setExporting] = useState(false);
   const [pushOpen, setPushOpen] = useState(false);
-  // Owners and admins only; hidden when this instance has no push target.
-  const pushTargets = usePushTargets(canMutate);
-  const canPush = canMutate && pushTargets.length > 0;
+  // Owners and admins only; hidden when this instance has no push target or
+  // hides migration.
+  const migrationUi = useMigrationUi();
+  const pushTargets = usePushTargets(canMutate && migrationUi);
+  const canPush = canMutate && migrationUi && pushTargets.length > 0;
   const locked = !!project.published_lock;
   const mutable = canMutate && !locked;
   const lockTip = (node: React.ReactElement) =>
