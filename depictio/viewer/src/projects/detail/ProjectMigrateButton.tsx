@@ -3,13 +3,13 @@ import { Button, Tooltip } from '@mantine/core';
 import { Send } from 'lucide-react';
 
 import MigrateProjectModal from '../MigrateProjectModal';
-import { usePushTargets } from '../usePushTargets';
+import { usePublishAvailable } from '../usePushTargets';
 import { useMigrationUi } from '../../hooks/useMigrationUi';
 
-/** Page-head action: send a copy of this project to another Depictio instance
- *  (the word matches `depictio migrate` and Admin > Migrations). Owners and
- *  admins only, and absent when this instance has no target configured or
- *  hides migration (`DEPICTIO_MIGRATION_UI_ENABLED`). */
+/** Page-head action: publish a copy of this project to another Depictio instance
+ *  (to a registered target, or with a destination URL + invite code). Owners and
+ *  admins only, and absent when this instance has neither a target nor URL
+ *  publishing, or hides migration (`DEPICTIO_MIGRATION_UI_ENABLED`). */
 export const ProjectMigrateButton: React.FC<{
   projectId: string;
   projectName?: string;
@@ -18,12 +18,12 @@ export const ProjectMigrateButton: React.FC<{
   glass?: boolean;
 }> = ({ projectId, projectName, canPush, glass }) => {
   const migrationUi = useMigrationUi();
-  const targets = usePushTargets(canPush && migrationUi);
+  const available = usePublishAvailable(canPush && migrationUi);
   const [open, setOpen] = useState(false);
-  if (!canPush || !migrationUi || targets.length === 0) return null;
+  if (!canPush || !migrationUi || !available) return null;
   return (
     <>
-      <Tooltip label="Send a copy of this project to another Depictio instance" withinPortal>
+      <Tooltip label="Publish a copy of this project to another Depictio instance" withinPortal>
         <Button
           variant={glass ? 'default' : 'subtle'}
           color={glass ? undefined : 'gray'}
@@ -31,7 +31,7 @@ export const ProjectMigrateButton: React.FC<{
           onClick={() => setOpen(true)}
           data-testid="project-push-button"
         >
-          Migrate…
+          Publish to…
         </Button>
       </Tooltip>
       <MigrateProjectModal

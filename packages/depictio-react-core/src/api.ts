@@ -5694,6 +5694,13 @@ export interface MigrationRequestSummary {
   existing_locked: boolean;
   error_count: number;
   warning_count: number;
+  /** How the sender authenticated: a pairing key (reviewed here) or an invite code. */
+  credential_type?: 'pairing_key' | 'invite_code' | (string & {});
+  invite_id?: string | null;
+  /** A failed import the admin may start again. */
+  retryable?: boolean;
+  /** Why it failed (failed requests only). */
+  error?: string | null;
 }
 
 /** Full request document. `report` is a BundleReport dump recomputed against
@@ -5821,9 +5828,37 @@ export async function listPushTargets(): Promise<MigrationTarget[]> {
   return body.targets ?? [];
 }
 
+export type PushRemoteStatus =
+  | 'pending'
+  | 'importing'
+  | 'imported'
+  | 'rejected'
+  | 'failed'
+  | 'expired'
+  | 'superseded'
+  | (string & {});
+
+/** Where a push goes: a registered target, or a destination URL + invite code
+ *  (the code is sent once and never stored by the source). */
+export type PushDestination =
+  | { target_id: string }
+  | { destination_url: string; invite_code: string };
+
+export interface PushInviteInfo {
+  policy: MigrationInvitePolicy;
+  lock_on_import: boolean;
+  expires_at: string | null;
+  lineage_project_name: string | null;
+  imports_immediately: boolean;
+}
+
 export interface PushPreflightResult {
-  target: { id: string; name: string };
-  remote_info: Record<string, unknown>;
+  target: { id: string; name: string; url?: string };
+  remote_info: {
+    credential_type?: 'pairing_key' | 'invite_code' | (string & {});
+    invite?: PushInviteInfo | null;
+    [k: string]: unknown;
+  };
   preflight: {
     ok?: boolean;
     conflict?: 'none' | 're_push' | 'foreign' | (string & {});
@@ -5842,46 +5877,80 @@ export interface PushPreflightResult {
   total_bytes: number;
   object_count: number;
   can_push: boolean;
+  /** A push of this project is already building or uploading. */
+  in_flight?: boolean;
   errors: string[];
   warnings: string[];
 }
 
-export async function pushPreflight(
+/** Dry-run a push: validates the destination and reports what would happen. */
+export async function checkPush(
   projectId: string,
-  targetId: string,
+  destination: PushDestination,
 ): Promise<PushPreflightResult> {
-  const res = await authFetch(`${MIGRATE_BASE}/push/preflight`, {
+  const res = await authFetch(`${MIGRATE_BASE}/push/check`, {
     method: 'POST',
-    body: JSON.stringify({ project_id: projectId, target_id: targetId }),
+    body: JSON.stringify({ project_id: projectId, ...destination }),
   });
   if (!res.ok) await throwHttpDetailError(res, 'Push pre-flight failed');
   return res.json();
 }
 
+export interface PushDestinations {
+  /** Whether ad-hoc destination URL + invite code pushes are allowed. */
+  enabled: boolean;
+  /** Allowed destination domains (empty: any). */
+  domains: string[];
+  /** Destination URLs this user pushed to recently (codes are never stored). */
+  recent: string[];
+}
+
+export async function getPushDestinations(): Promise<PushDestinations> {
+  const res = await authFetch(`${MIGRATE_BASE}/push/destinations`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to load push destinations');
+  const body = (await res.json()) as Partial<PushDestinations>;
+  return {
+    enabled: !!body.enabled,
+    domains: body.domains ?? [],
+    recent: body.recent ?? [],
+  };
+}
+
+export type MigrationPushStatus = 'building' | 'uploading' | 'submitted' | 'failed';
+
 export interface MigrationPush {
   id: string;
+  status: MigrationPushStatus | (string & {});
   project_id: string;
+  project_name?: string;
+  /** `env:x`, a UI target id, or `adhoc` (destination URL + invite code). */
   target_id?: string;
   target_name?: string;
-  status: 'building' | 'uploading' | 'submitted' | 'failed' | (string & {});
-  error?: string | null;
+  target_url?: string;
+  credential_type?: 'pairing_key' | 'invite_code' | (string & {});
+  retry_of?: string | null;
+  requested_by_email?: string | null;
+  message?: string | null;
+  transfer_mode?: MigrationTransferMode;
+  bundle_bytes?: number | null;
   remote_request_id?: string | null;
-  remote_status?: string | null;
+  remote_status?: PushRemoteStatus | null;
+  remote_result?: { project_id: string; locked: boolean; made_public: boolean } | null;
+  error?: string | null;
   created_at?: string;
   updated_at?: string;
-  [k: string]: unknown;
 }
 
 export async function startPush(
   projectId: string,
-  targetId: string,
+  destination: PushDestination,
   message?: string,
 ): Promise<{ push_id: string; status: string }> {
   const res = await authFetch(`${MIGRATE_BASE}/push/`, {
     method: 'POST',
     body: JSON.stringify({
       project_id: projectId,
-      target_id: targetId,
+      ...destination,
       ...(message ? { message } : {}),
     }),
   });
@@ -5900,6 +5969,107 @@ export async function listPushes(projectId?: string): Promise<MigrationPush[]> {
 export async function getPush(pushId: string): Promise<MigrationPush> {
   const res = await authFetch(`${MIGRATE_BASE}/push/${encodeURIComponent(pushId)}`);
   if (!res.ok) await throwHttpDetailError(res, 'Failed to load push');
+  return res.json();
+}
+
+/** Start a failed push again. An ad-hoc push needs its invite code re-entered. */
+export async function retryPush(
+  pushId: string,
+  inviteCode?: string,
+): Promise<{ push_id: string; status: string }> {
+  const res = await authFetch(`${MIGRATE_BASE}/push/${encodeURIComponent(pushId)}/retry`, {
+    method: 'POST',
+    body: JSON.stringify(inviteCode ? { invite_code: inviteCode } : {}),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to retry push');
+  return res.json();
+}
+
+// ── Invite codes (target side, admin only) ──
+
+export type MigrationInvitePolicy = 'single_use' | 'lineage';
+export type MigrationInviteState = 'active' | 'used' | 'expired' | 'revoked';
+
+export interface MigrationInvite {
+  id: string;
+  state: MigrationInviteState;
+  policy: MigrationInvitePolicy;
+  lock_on_import: boolean;
+  note: string | null;
+  /** Last 4 characters of the code. */
+  code_hint: string;
+  created_at: string;
+  created_by_email: string | null;
+  expires_at: string | null;
+  revoked_at: string | null;
+  used_at: string | null;
+  last_used_at: string | null;
+  use_count: number;
+  request_ids: string[];
+  lineage_project_id: string | null;
+  lineage_project_name: string | null;
+}
+
+export interface MigrationInviteDefaults {
+  single_use_ttl_hours: number;
+  lineage_ttl_days: number;
+  max_ttl_days: number;
+  lock_on_import: boolean;
+}
+
+export interface MigrationInviteList {
+  invites: MigrationInvite[];
+  inbound_enabled: boolean;
+  defaults: MigrationInviteDefaults;
+}
+
+export async function listMigrationInvites(): Promise<MigrationInviteList> {
+  const res = await authFetch(`${MIGRATE_BASE}/invites`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to list invitations');
+  const body = (await res.json()) as Partial<MigrationInviteList>;
+  return {
+    invites: body.invites ?? [],
+    inbound_enabled: !!body.inbound_enabled,
+    defaults: body.defaults ?? {
+      single_use_ttl_hours: 1,
+      lineage_ttl_days: 30,
+      max_ttl_days: 90,
+      lock_on_import: true,
+    },
+  };
+}
+
+/** The only answer that ever carries the plain code. */
+export async function createMigrationInvite(input: {
+  policy: MigrationInvitePolicy;
+  lock_on_import: boolean;
+  expires_in_hours?: number;
+  note?: string;
+}): Promise<MigrationInvite & { code: string }> {
+  const res = await authFetch(`${MIGRATE_BASE}/invites`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to create invitation');
+  return res.json();
+}
+
+export async function revokeMigrationInvite(id: string): Promise<MigrationInvite> {
+  const res = await authFetch(`${MIGRATE_BASE}/invites/${encodeURIComponent(id)}/revoke`, {
+    method: 'POST',
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to revoke invitation');
+  return res.json();
+}
+
+/** Start a failed import again (target side, admin only). */
+export async function retryMigrationRequest(
+  id: string,
+): Promise<{ id: string; status: MigrationRequestStatus }> {
+  const res = await authFetch(`${MIGRATE_BASE}/requests/${encodeURIComponent(id)}/retry`, {
+    method: 'POST',
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to retry the import');
   return res.json();
 }
 

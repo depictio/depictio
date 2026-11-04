@@ -104,6 +104,7 @@ import { UnrecognisedFilesPanel } from './UnrecognisedFilesPanel';
 import { ProvenanceBadge } from './ProvenanceBadge';
 import { PublishedLockBadge } from './PublishedLockBadge';
 import { ProjectMigrateButton } from './ProjectMigrateButton';
+import { ProjectPublications } from './ProjectPublications';
 import { ProjectDashboardsPanel } from './ProjectDashboardsPanel';
 import { ProjectPart } from './ProjectPart';
 
@@ -557,6 +558,7 @@ const ProjectDetailApp: React.FC = () => {
                   }
                 />
               )}
+              {projectId && <ProjectPublications projectId={projectId} canPush={canPushProject} />}
               <Box ref={dcViewerRef}>
                 {selectedDc && (
                   <DataCollectionViewer

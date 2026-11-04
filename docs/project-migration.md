@@ -6,7 +6,7 @@
 
 ## The flow
 
-1. **Source**: the project owner (or an admin) clicks *Migrate…* in the
+1. **Source**: the project owner (or an admin) clicks *Publish to…* in the
    project page head (or the project card menu) and picks a target. A preflight asks the target whether it will
    accept the project and how the data should travel.
 2. **Source → target**: the source builds a bundle (the same ZIP as
@@ -40,7 +40,7 @@ such as EMBL's. The differences are policy carried by the invite and by the
 target's settings, never a code path of their own.
 
 1. **On the target**, an admin clicks *Receive a project* (Admin > Migrations >
-   *Invitations*, or the entry in the admin menu). The dialog shows the
+   *Invitations*, or the button in the *Projects* page header). The dialog shows the
    instance URL and a code such as `7KQ2-M9XD-…` once, with copy buttons.
 2. **On the source**, the project owner opens *Publish to…*, picks
    *Destination URL + invite code*, pastes both, and publishes.
@@ -172,7 +172,7 @@ List settings take JSON.
 
 | Variable | Side | Default | Meaning |
 | --- | --- | --- | --- |
-| `UI_ENABLED` | both | `false` (chart: `true`) | Show the controls: *Migrate…*, *Admin > Migrations*, push targets, the *Lock editing* switch. Off hides them only; the API follows the settings below. A project already locked keeps its *Read-only* badge and its unlock switch |
+| `UI_ENABLED` | both | `false` (chart: `true`) | Show the controls: *Publish to…*, *Receive a project*, *Admin > Migrations*, push targets, the *Lock editing* switch. Off hides them only; the API follows the settings below. A project already locked keeps its *Read-only* badge and its unlock switch |
 | `INSTANCE_LABEL` | both | public URL host | Name recorded in provenance hops |
 | `TARGETS` | source | `[]` | `[{"name", "url", "pairing_key"}]`, trusted by the operator |
 | `ALLOW_UI_TARGETS` | source | `false` | Let admins add targets in *Admin > Settings* |

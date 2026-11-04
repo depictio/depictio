@@ -7,7 +7,7 @@ import { exportProjectZip } from 'depictio-react-core';
 import type { ProjectListEntry } from 'depictio-react-core';
 
 import MigrateProjectModal from './MigrateProjectModal';
-import { usePushTargets } from './usePushTargets';
+import { usePublishAvailable } from './usePushTargets';
 import { useMigrationUi } from '../hooks/useMigrationUi';
 
 export interface ProjectActionsMenuProps {
@@ -31,11 +31,11 @@ const ProjectActionsMenu: React.FC<ProjectActionsMenuProps> = ({
   const projectId = (project._id ?? project.id) as string;
   const [exporting, setExporting] = useState(false);
   const [pushOpen, setPushOpen] = useState(false);
-  // Owners and admins only; hidden when this instance has no push target or
-  // hides migration.
+  // Owners and admins only; hidden when this instance has no push target (nor
+  // URL publishing) or hides migration.
   const migrationUi = useMigrationUi();
-  const pushTargets = usePushTargets(canMutate && migrationUi);
-  const canPush = canMutate && migrationUi && pushTargets.length > 0;
+  const publishAvailable = usePublishAvailable(canMutate && migrationUi);
+  const canPush = canMutate && migrationUi && publishAvailable;
   const locked = !!project.published_lock;
   const mutable = canMutate && !locked;
   const lockTip = (node: React.ReactElement) =>
@@ -105,7 +105,7 @@ const ProjectActionsMenu: React.FC<ProjectActionsMenuProps> = ({
             onClick={() => setPushOpen(true)}
             data-testid="project-push-menu-item"
           >
-            Migrate to another instance…
+            Publish to another instance…
           </Menu.Item>
         )}
         <Menu.Divider />
