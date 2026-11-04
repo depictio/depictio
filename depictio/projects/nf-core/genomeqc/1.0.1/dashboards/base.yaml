@@ -1020,9 +1020,9 @@ tabs:
   - component_type: advanced_viz
     workflow_tag: genomeqc
     data_collection_tag: tiara_class_counts
-    viz_kind: stacked_taxonomy
+    viz_kind: stacked_bar
     config:
-      viz_kind: stacked_taxonomy
+      viz_kind: stacked_bar
       sample_id_col: genome
       taxon_col: tiara_class
       rank_col: null
@@ -1969,9 +1969,9 @@ tabs:
   - component_type: advanced_viz
     workflow_tag: genomeqc
     data_collection_tag: agat_gene_models
-    viz_kind: stacked_taxonomy
+    viz_kind: stacked_bar
     config:
-      viz_kind: stacked_taxonomy
+      viz_kind: stacked_bar
       sample_id_col: genome
       taxon_col: feature_type
       rank_col: null
@@ -2007,9 +2007,9 @@ tabs:
   - component_type: advanced_viz
     workflow_tag: genomeqc
     data_collection_tag: gene_overlaps
-    viz_kind: stacked_taxonomy
+    viz_kind: stacked_bar
     config:
-      viz_kind: stacked_taxonomy
+      viz_kind: stacked_bar
       sample_id_col: genome
       value_cols: [not_overlapping_genes, overlapping_not_nested, contained_opposite_strand, contained_same_strand]
       value_labels:
@@ -2211,9 +2211,9 @@ tabs:
   - component_type: advanced_viz
     workflow_tag: genomeqc
     data_collection_tag: orthofinder_species_stats
-    viz_kind: stacked_taxonomy
+    viz_kind: stacked_bar
     config:
-      viz_kind: stacked_taxonomy
+      viz_kind: stacked_bar
       sample_id_col: genome
       value_cols: [genes_in_species_specific_pct, unassigned_genes_pct]
       value_labels:
