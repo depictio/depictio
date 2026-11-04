@@ -130,15 +130,16 @@ def _spans(blocks: pl.DataFrame | None) -> pl.DataFrame:
     )
 
 
-def _readable_gene_id(gene_id: pl.Expr) -> pl.Expr:
-    """The trailing id of a ``gene_id`` that carries other GTF attributes.
+def _readable_gene_id(label: pl.Expr) -> pl.Expr:
+    """The trailing id of a gene label that carries other GTF attributes.
 
     Some Bambu annotations fold the input GTF's attributes into the gene id, as in
-    ``exon_id ENSE0001; exon_number 1; gene_biotype pseudogene; ENSG0001``. The
-    gene is the last token. ``gene_id`` itself stays as it is: DEXSeq's group ids
-    are the same string, so joins keep matching.
+    ``exon_id ENSE0001; exon_number 1; gene_biotype pseudogene; ENSG0001``, and the
+    annotation's own gene name falls back to that same string. The gene is the last
+    token; a plain symbol or id is returned as it is. ``gene_id`` itself stays as it
+    is: DEXSeq's group ids are the same string, so joins keep matching.
     """
-    return gene_id.str.extract(r"([^;\s]+)\s*$", 1)
+    return label.str.extract(r"([^;\s]+)\s*$", 1)
 
 
 def transform(sources: dict[str, pl.DataFrame | None]) -> pl.DataFrame:
@@ -159,9 +160,7 @@ def transform(sources: dict[str, pl.DataFrame | None]) -> pl.DataFrame:
         .select(
             pl.col("feature_id").alias("transcript_id"),
             "gene_id",
-            pl.coalesce("_gene_name", _readable_gene_id(pl.col("gene_id")), "gene_id").alias(
-                "gene_name"
-            ),
+            _readable_gene_id(pl.coalesce("_gene_name", "gene_id")).alias("gene_name"),
             pl.col("_chrom").alias("chrom"),
             pl.col("_start").alias("start"),
             pl.col("_end").alias("end"),

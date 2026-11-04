@@ -444,7 +444,7 @@
     },
     "nf-core/nanoseq/3.0.0": {
       "version": "3.0.0",
-      "content_hash": "2fb99bf1b9ab8f9abf1ea799a8d8c2100d080f88cc932a2586a257fa695f6e01",
+      "content_hash": "df1fa860cae447df716d21690cabbcbb07d2c033c5d63cfad3135968993a38d0",
       "catalog": {
         "bambu": "1.0.0",
         "deseq2": "1.0.0",

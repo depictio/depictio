@@ -116,3 +116,34 @@ def test_a_gene_id_that_carries_folded_gtf_attributes_is_labelled_by_its_last_to
 
     assert out["gene_name"].to_list() == ["ENSG0001"]
     assert out["gene_id"].to_list() == [folded]
+
+
+def test_a_gene_name_that_repeats_the_folded_id_is_cleaned_too():
+    """The annotation's own gene name falls back to the folded string: it is cleaned as well."""
+    folded = "exon_id ENSE0001; exon_number 1; gene_biotype pseudogene; ENSG0001"
+    dex = pl.DataFrame(
+        [("T1", folded, 2.0, 1e-10, True, "up"), ("T2", "G2", 1.0, 1e-3, True, "up")],
+        schema=["feature_id", "gene_id", "log2fc", "padj", "significant", "direction"],
+        orient="row",
+    )
+    blocks = pl.DataFrame(
+        [
+            ("T1", folded, folded, "1", 100, 200, "exon", "+", "known"),
+            ("T2", "G2", "GENE2", "1", 300, 400, "exon", "+", "known"),
+        ],
+        schema=[
+            "transcript_id",
+            "gene_id",
+            "gene_name",
+            "chrom",
+            "start",
+            "end",
+            "feature",
+            "strand",
+            "transcript_class",
+        ],
+        orient="row",
+    )
+    out = load_recipe(RECIPE).transform({"dex": dex, "blocks": blocks}).sort("transcript_id")
+
+    assert out["gene_name"].to_list() == ["ENSG0001", "GENE2"]
