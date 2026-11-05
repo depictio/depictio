@@ -155,6 +155,11 @@ def _surviving_tabs(present: set[str], monkeypatch) -> set[str]:
         for tag in present
     }
     monkeypatch.setattr(routes, "_build_dc_meta", lambda project_id: meta)
+    # A text value is pruned when its column is missing from the collection's
+    # recorded schema, read from MongoDB. No MongoDB here: each lookup waited out
+    # the server selection timeout (16 of them, ~8 min per test). ``None`` is the
+    # "schema unknown" answer that lookup gave anyway, so nothing else changes.
+    monkeypatch.setattr(routes, "_dc_column_names", lambda dc_id: None)
     main = doc["main_dashboard"]
     family = [("Overview", main)] + [(tab["title"], tab) for tab in doc["tabs"]]
     kept_tabs: set[str] = set()
