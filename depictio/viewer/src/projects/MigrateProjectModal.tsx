@@ -315,7 +315,7 @@ const MigrateProjectModal: React.FC<MigrateProjectModalProps> = ({
           publishing again.
         </Alert>
       )}
-      {invite && (
+      {invite && !foreign && (
         <Alert color="blue" variant="light" data-testid="migrate-invite-info">
           Imported immediately on the destination, with no review;{' '}
           {invite.lock_on_import
@@ -333,8 +333,9 @@ const MigrateProjectModal: React.FC<MigrateProjectModalProps> = ({
       )}
       {foreign && (
         <Alert color="red" variant="light" data-testid="migrate-foreign">
-          A different project with this id already exists on the target. It cannot be
-          overwritten from here.
+          {invite
+            ? 'This project is already on the destination. Only the code that first brought it can update it: ask its administrator for a "Push + updates" code next time.'
+            : 'A different project with this id already exists on the target. It cannot be overwritten from here.'}
         </Alert>
       )}
       {pre?.existing_locked && (
