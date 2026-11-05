@@ -152,7 +152,7 @@ const AdminMigrationInvitesView: React.FC = () => {
                   </Table.Td>
                   <Table.Td>{inv.note ?? '—'}</Table.Td>
                   <Table.Td>
-                    {inv.state !== 'revoked' && (
+                    {inv.state === 'active' && (
                       <Button
                         size="compact-xs"
                         color="red"
