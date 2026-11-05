@@ -268,13 +268,77 @@
   width: 44px;
   height: 40px;
 }
+/* The scroll region sits in a host so its overflow cue (a fade at the edge
+   that has more tabs, and a chevron that pages the list) can sit over it. The
+   fade is a mask, not a coloured overlay, so it holds on any rail background. */
+.hy-side-scroll-host {
+  position: relative;
+  /* Takes every pixel the tools and the foot leave: the list scrolls inside the
+     whole free height instead of stopping at its content or a spacer's share. */
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-height: 0;
+}
 .hy-side-scroll {
-  flex: 0 1 auto;
+  --hy-side-fade: 36px;
+  flex: 1 1 auto;
   width: 100%;
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
   scrollbar-width: none;
+}
+.hy-side-scroll[data-more-below] {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - var(--hy-side-fade)), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - var(--hy-side-fade)), transparent);
+}
+.hy-side-scroll[data-more-above] {
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 var(--hy-side-fade));
+  mask-image: linear-gradient(to bottom, transparent, #000 var(--hy-side-fade));
+}
+.hy-side-scroll[data-more-above][data-more-below] {
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    #000 var(--hy-side-fade),
+    #000 calc(100% - var(--hy-side-fade)),
+    transparent
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    #000 var(--hy-side-fade),
+    #000 calc(100% - var(--hy-side-fade)),
+    transparent
+  );
+}
+.hy-side-more {
+  position: absolute;
+  left: 50%;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--gl-rail-muted);
+  cursor: pointer;
+  transform: translateX(-50%);
+}
+.hy-side-more:hover {
+  background: var(--gl-rail-hover);
+  color: var(--gl-rail-fg);
+}
+.hy-side-more--above {
+  top: 0;
+}
+.hy-side-more--below {
+  bottom: 0;
 }
 .hy-side-scroll::-webkit-scrollbar {
   display: none;
@@ -393,8 +457,7 @@
   transform: none;
 }
 .hy-side-spacer {
-  flex: 1;
-  min-height: 12px;
+  flex: 0 0 12px;
 }
 .hy-rail-tabs {
   display: flex;

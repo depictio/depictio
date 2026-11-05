@@ -30,7 +30,14 @@ import React from 'react';
 import { Drawer, MantineThemeContext, Tooltip, useMantineTheme } from '@mantine/core';
 import type { MantineTheme } from '@mantine/core';
 import { useReducedMotion } from 'motion/react';
-import { ArrowLeft, BookOpenText, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import {
+  ArrowLeft,
+  BookOpenText,
+  ChevronDown,
+  ChevronUp,
+  PanelLeftClose,
+  PanelLeftOpen,
+} from 'lucide-react';
 import {
   ChromeButton,
   ChromeButtonGroup,
@@ -43,6 +50,7 @@ import type { HeaderAction } from '../../Header';
 import type { DashboardShellProps } from '../../shell/types';
 import { Dock } from './Dock';
 import { STROKE } from './icons';
+import { useScrollOverflow } from '../../useScrollOverflow';
 import {
   DrawerHead,
   ProfileRows,
@@ -344,6 +352,8 @@ const DeskLayout: React.FC<DashboardShellProps> = ({
   }, [filtersOpen]);
   const autoFold = filtersOpen && !keepSide;
   const sideOpen = sideChoice && !autoFold;
+  // The tab list hides its scrollbar: this tells a reader when tabs lie out of view.
+  const side = useScrollOverflow<HTMLDivElement>([sideOpen, mode]);
   const toggleSide = () => {
     const next = !sideOpen;
     if (next && filtersOpen) setKeepSide(true);
@@ -480,7 +490,23 @@ const DeskLayout: React.FC<DashboardShellProps> = ({
               </button>
             </Tooltip>
           </div>
-          <div className="hy-side-scroll">
+          <div className="hy-side-scroll-host">
+            {sideOpen && side.above && (
+              <button
+                type="button"
+                className="hy-side-more hy-side-more--above"
+                aria-label="Show earlier tabs"
+                onClick={() => side.scrollBy(-1)}
+              >
+                <ChevronUp size={16} aria-hidden />
+              </button>
+            )}
+          <div
+            className="hy-side-scroll"
+            ref={side.ref}
+            data-more-above={(sideOpen && side.above) || undefined}
+            data-more-below={(sideOpen && side.below) || undefined}
+          >
             {sideOpen ? (
               mode === 'edit' ? (
                 // The editor's own tab list: rename, move, add, the group menus.
@@ -492,6 +518,17 @@ const DeskLayout: React.FC<DashboardShellProps> = ({
               <div className="hy-rail-tabs">
                 <RailTabs nav={nav.model} />
               </div>
+            )}
+          </div>
+            {sideOpen && side.below && (
+              <button
+                type="button"
+                className="hy-side-more hy-side-more--below"
+                aria-label="Show more tabs"
+                onClick={() => side.scrollBy(1)}
+              >
+                <ChevronDown size={16} aria-hidden />
+              </button>
             )}
           </div>
           <div className="hy-rule" role="separator" />
