@@ -1,6 +1,6 @@
 [project]
 name = "depictio"
-version = "1.20.5"
+version = "1.21.0-b1"
 description = "Interactive dashboards for bioinformatics pipeline results: server, worker, viewer and CLI"
 readme = "README.md"
 requires-python = ">=3.11"
