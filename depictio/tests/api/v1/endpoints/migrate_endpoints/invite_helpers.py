@@ -39,10 +39,9 @@ def invite_world(monkeypatch, target_db, **source_opts):
 
 
 def make_invite(
-    policy: str = "single_use", lock: bool = True, hours: int | None = None, note=None
+    lock: bool = True, hours: int | None = None, note=None
 ) -> tuple[dict[str, Any], str]:
     return migration_invites.create_invite(
-        policy=policy,  # type: ignore[arg-type]
         lock_on_import=lock,
         expires_in_hours=hours,
         note=note,

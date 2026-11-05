@@ -47,11 +47,11 @@ def _status(request_id, source):
 
 
 # ---------------------------------------------------------------------------
-# Single use
+# First push
 # ---------------------------------------------------------------------------
 
 
-def test_an_invite_push_imports_immediately_and_spends_the_code(world):
+def test_an_invite_push_imports_immediately_and_binds_the_code(world):
     doc, code = make_invite()
     out = push(world.payload, source_for(code))
     assert out["status"] == "importing" and out["status_token"]
@@ -72,8 +72,9 @@ def test_an_invite_push_imports_immediately_and_spends_the_code(world):
     assert _staged(world) == [], "the staged bundle is gone after the import"
 
     stored = _invite(world, doc)
-    assert migration_invites.invite_state(stored) == "used"
+    assert migration_invites.invite_state(stored) == "active"
     assert stored["use_count"] == 1 and stored["request_ids"] == [out["request_id"]]
+    assert stored["project_id"] == str(world.ids["project_id"])
     hop = _project(world)["provenance"]["imported_from"][-1]
     assert hop["migration_request_id"] == out["request_id"]
 
@@ -123,13 +124,18 @@ def test_an_unknown_requester_is_parked_on_the_invite_creator(world):
     )
 
 
-def test_a_second_push_with_a_spent_single_use_code_is_a_403(world):
-    _, code = make_invite()
+def test_a_second_push_with_the_same_code_is_accepted_until_it_expires(world):
+    doc, code = make_invite()
     push(world.payload, source_for(code))
+    assert source_for(code).invite_id == str(doc["_id"])
+    push(world.payload, source_for(code))
+    assert world.db.migration_requests_collection.count_documents({}) == 2
+    world.db.migration_invites_collection.update_one(
+        {"_id": doc["_id"]}, {"$set": {"expires_at": "2000-01-01 00:00:00"}}
+    )
     with pytest.raises(HTTPException) as exc:
         source_for(code)
-    assert exc.value.status_code == 403 and "used" in exc.value.detail
-    assert world.db.migration_requests_collection.count_documents({}) == 1
+    assert exc.value.status_code == 403 and "expired" in exc.value.detail
 
 
 def test_a_refused_bundle_leaves_the_code_usable(world):
@@ -159,12 +165,14 @@ def test_a_refused_bundle_leaves_the_code_usable(world):
 
 def test_the_claim_losing_a_race_is_a_409_and_drops_the_staged_bundle(world, monkeypatch):
     doc, code = make_invite()
-    src = source_for(code)  # authenticated while the code is still unspent
+    src = source_for(code)  # authenticated while the code is still unbound
     real = migration_invites.claim_invite
 
     def raced(invite_id, **kwargs):
-        # Another upload wins between validation and our claim.
-        assert real(invite_id, **{**kwargs, "request_id": ObjectId()}) is not None
+        # Another upload, of a different project, binds the code between validation
+        # and our claim.
+        rival = {**kwargs, "project_id": str(ObjectId()), "project_name": "Rival"}
+        assert real(invite_id, **{**rival, "request_id": ObjectId()}) is not None
         return real(invite_id, **kwargs)
 
     monkeypatch.setattr(migration_invites, "claim_invite", raced)
@@ -188,7 +196,7 @@ def test_an_invite_revoked_after_authentication_cannot_be_claimed(world):
     assert world.db.projects_collection.count_documents({}) == 0
 
 
-def test_an_invite_push_that_fails_to_import_still_spends_the_code(world, monkeypatch):
+def test_an_invite_push_that_fails_to_import_still_binds_the_code(world, monkeypatch):
     """The import runs after the claim; its failure is the request's status."""
     from depictio.api.v1.services import migration_import
 
@@ -200,18 +208,20 @@ def test_an_invite_push_that_fails_to_import_still_spends_the_code(world, monkey
     out = push(world.payload, source_for(code))
     assert out["status"] == "importing"
     assert _request(world, out["request_id"])["status"] == "failed"
-    assert migration_invites.invite_state(_invite(world, doc)) == "used"
+    stored = _invite(world, doc)
+    assert migration_invites.invite_state(stored) == "active"
+    assert stored["use_count"] == 1 and stored["project_id"] == str(world.ids["project_id"])
     status = _status(out["request_id"], out["status_token"])
     assert status["status"] == "failed" and "disk full" not in json.dumps(status)
 
 
 # ---------------------------------------------------------------------------
-# Lineage
+# Binding
 # ---------------------------------------------------------------------------
 
 
-def test_a_lineage_code_accepts_the_same_project_again(world):
-    doc, code = make_invite("lineage")
+def test_a_code_accepts_the_same_project_again(world):
+    doc, code = make_invite()
     first = push(world.payload, source_for(code))
     second = push(world.payload, source_for(code))
     assert first["request_id"] != second["request_id"]
@@ -220,8 +230,8 @@ def test_a_lineage_code_accepts_the_same_project_again(world):
     stored = _invite(world, doc)
     assert migration_invites.invite_state(stored) == "active"
     assert stored["use_count"] == 2
-    assert stored["lineage_project_id"] == str(world.ids["project_id"])
-    assert stored["lineage_project_name"] == "Iris published"
+    assert stored["project_id"] == str(world.ids["project_id"])
+    assert stored["project_name"] == "Iris published"
     assert stored["request_ids"] == [first["request_id"], second["request_id"]]
     hops = _project(world)["provenance"]["imported_from"]
     assert hops[-1]["migration_request_id"] == second["request_id"]
@@ -242,17 +252,17 @@ def _second_project_payload(world, monkeypatch):
     return _export_zip((src_db, ids, s3), monkeypatch), ids
 
 
-def test_a_lineage_code_bound_to_one_project_refuses_another(world, monkeypatch):
-    doc, code = make_invite("lineage")
+def test_a_code_bound_to_one_project_refuses_another(world, monkeypatch):
+    doc, code = make_invite()
     push(world.payload, source_for(code))
     other_payload, other_ids = _second_project_payload(world, monkeypatch)
 
     response = push(other_payload, source_for(code))
     assert response.status_code == 422
     errors = json.loads(response.body)["errors"]
-    assert any("bound to the project 'Iris published'" in e for e in errors)
+    assert any("this code already brought the project 'Iris published'" in e for e in errors)
     stored = _invite(world, doc)
-    assert stored["lineage_project_id"] == str(world.ids["project_id"])
+    assert stored["project_id"] == str(world.ids["project_id"])
     assert stored["use_count"] == 1
     assert world.db.projects_collection.find_one({"_id": other_ids["project_id"]}) is None
     assert _staged(world) == []
@@ -260,14 +270,12 @@ def test_a_lineage_code_bound_to_one_project_refuses_another(world, monkeypatch)
     assert push(world.payload, source_for(code))["status"] == "importing"
 
 
-def test_an_unbound_lineage_code_binds_on_its_first_push(world, monkeypatch):
-    doc, code = make_invite("lineage")
-    assert "lineage_project_id" not in _invite(world, doc) or not _invite(world, doc).get(
-        "lineage_project_id"
-    )
+def test_an_unbound_code_binds_on_its_first_push(world, monkeypatch):
+    doc, code = make_invite()
+    assert not _invite(world, doc).get("project_id")
     other_payload, other_ids = _second_project_payload(world, monkeypatch)
     assert push(other_payload, source_for(code))["status"] == "importing"
-    assert _invite(world, doc)["lineage_project_id"] == str(other_ids["project_id"])
+    assert _invite(world, doc)["project_id"] == str(other_ids["project_id"])
     assert push(world.payload, source_for(code)).status_code == 422
 
 
@@ -277,7 +285,7 @@ def test_an_unbound_lineage_code_binds_on_its_first_push(world, monkeypatch):
 
 
 def test_the_status_token_reads_exactly_its_own_request(world):
-    doc, code = make_invite("lineage")
+    doc, code = make_invite()
     first = push(world.payload, source_for(code))
     second = push(world.payload, source_for(code))
     token = first["status_token"]
@@ -312,7 +320,7 @@ def test_the_stored_request_holds_only_the_token_hash(world):
     assert code not in blob and migration_invites.normalize_code(code) not in blob
 
 
-def test_a_spent_invite_still_reads_its_own_status_until_revoked(world):
+def test_an_imported_invite_still_reads_its_own_status_until_revoked(world):
     doc, code = make_invite()
     out = push(world.payload, source_for(code))
     reader = inbound_auth.require_inbound_reader(None, code, None)
@@ -384,26 +392,29 @@ def test_check_for_a_pairing_key_source(monkeypatch, target_db):
     assert unsafe["probe"] is None
 
 
-def test_check_shows_a_lineage_binding_to_another_project(world):
-    doc, code = make_invite("lineage")
+def test_check_shows_a_binding_to_another_project(world):
+    doc, code = make_invite()
     push(world.payload, source_for(code))
     other = str(ObjectId())
     out = _check(world, source_for(code), project_id=other, project_name="Elsewhere")
     assert out["preflight"]["ok"] is False
-    assert any("bound to the project 'Iris published'" in e for e in out["preflight"]["errors"])
-    assert out["info"]["invite"]["lineage_project_id"] == str(world.ids["project_id"])
+    assert any(
+        "this code already brought the project 'Iris published'" in e
+        for e in out["preflight"]["errors"]
+    )
+    assert out["info"]["invite"]["project_id"] == str(world.ids["project_id"])
     # The bound project itself is fine.
     same = _check(world, source_for(code))
     assert same["preflight"]["ok"] and same["preflight"]["conflict"] == "re_push"
     assert doc["_id"]
 
 
-def test_preflight_route_applies_the_lineage_rule_too(world):
-    _, code = make_invite("lineage")
+def test_preflight_route_applies_the_binding_rule_too(world):
+    _, code = make_invite()
     push(world.payload, source_for(code))
     body = inbound_routes.PreflightBody(project_id=str(ObjectId()), total_bytes=1)
     out = asyncio.run(inbound_routes.inbound_preflight(body, source=source_for(code)))
-    assert not out["ok"] and any("bound to the project" in e for e in out["errors"])
+    assert not out["ok"] and any("already brought the project" in e for e in out["errors"])
 
 
 def test_info_for_an_invite_hides_the_code(world):

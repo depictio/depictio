@@ -18,8 +18,8 @@ Scenarios, each reported PASS/FAIL in a Markdown report:
      rejection removes the request from the pending queue;
   4. (``--invite-target``) C runs the chart's defaults in single-user mode: it
      accepts nothing until its admin issues an invite; A publishes with the
-     URL + code; C imports at once; the code is spent; C's admin locks the
-     project, then makes it public.
+     URL + code; C imports at once; the same code still accepts the project's
+     update; C's admin locks the project, then makes it public.
 """
 
 from __future__ import annotations
@@ -213,7 +213,7 @@ def _invite_scenario(a: Instance, c: Instance, rep: Report, project_id: str, nam
         r = httpx.get(f"{c.base}{API}/migrate/inbound/info", headers=headers, trust_env=False)
         rep.check(f"C refuses {label} (403)", r.status_code == 403, r.status_code)
 
-    made = c.post("/migrate/invites", json={"policy": "single_use", "lock_on_import": False})
+    made = c.post("/migrate/invites", json={"lock_on_import": False})
     if not rep.check("C's admin issues an invite", made.status_code == 201, made.text[:300]):
         return
     code = made.json()["code"]
@@ -249,7 +249,11 @@ def _invite_scenario(a: Instance, c: Instance, rep: Report, project_id: str, nam
     stored = json.dumps(a.get("/migrate/push").json())
     rep.check("A never stored the code", code not in stored, "")
     reuse = a.post("/migrate/push/check", json=body).json()
-    rep.check("the single-use code is spent", not reuse.get("can_push"), reuse.get("errors"))
+    rep.check(
+        "the same code still accepts this project's update",
+        bool(reuse.get("can_push")),
+        reuse.get("errors"),
+    )
     queue = c.get("/migrate/requests").json().get("requests", [])
     rep.check(
         "C's request is recorded as invite-sourced",

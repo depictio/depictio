@@ -6,7 +6,6 @@ import {
   Group,
   Loader,
   Modal,
-  NumberInput,
   SegmentedControl,
   Stack,
   Switch,
@@ -17,18 +16,16 @@ import {
 import { Icon } from '@iconify/react';
 
 import { createMigrationInvite, listMigrationInvites } from 'depictio-react-core';
+import { formatDateTime } from '../lib/datetime';
 import type {
   MigrationInvite,
-  MigrationInviteDefaults,
-  MigrationInvitePolicy,
 } from 'depictio-react-core';
 
-const POLICY_TEXT: Record<MigrationInvitePolicy, string> = {
-  single_use:
-    'One push: the code works once, then stops. Valid for about an hour by default.',
-  lineage:
-    'Push + updates: keep the code to send new versions of the same project later. Valid for weeks; to update a project later, choose this one.',
-};
+const VALIDITY: { value: string; label: string; hours: number }[] = [
+  { value: '1', label: '1 day', hours: 24 },
+  { value: '30', label: '30 days', hours: 720 },
+  { value: '365', label: '1 year', hours: 8760 },
+];
 
 const CopyRow: React.FC<{ label: string; value: string; testId: string }> = ({
   label,
@@ -82,10 +79,8 @@ const ReceiveProjectModal: React.FC<ReceiveProjectModalProps> = ({
 }) => {
   const [loading, setLoading] = useState(false);
   const [inboundEnabled, setInboundEnabled] = useState(true);
-  const [defaults, setDefaults] = useState<MigrationInviteDefaults | null>(null);
-  const [policy, setPolicy] = useState<MigrationInvitePolicy>('single_use');
   const [lock, setLock] = useState(true);
-  const [hours, setHours] = useState<number | string>('');
+  const [validity, setValidity] = useState('30');
   const [note, setNote] = useState('');
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -96,9 +91,7 @@ const ReceiveProjectModal: React.FC<ReceiveProjectModalProps> = ({
       // The code must not outlive the dialog.
       setCreated(null);
       setError(null);
-      setHours('');
       setNote('');
-      setPolicy('single_use');
       return undefined;
     }
     let live = true;
@@ -107,8 +100,10 @@ const ReceiveProjectModal: React.FC<ReceiveProjectModalProps> = ({
       .then((r) => {
         if (!live) return;
         setInboundEnabled(r.inbound_enabled);
-        setDefaults(r.defaults);
         setLock(r.defaults.lock_on_import);
+        // The default lifetime, when it is one of the choices.
+        const days = String(r.defaults.ttl_days);
+        setValidity(VALIDITY.some((v) => v.value === days) ? days : '30');
       })
       .catch((err) => live && setError(err instanceof Error ? err.message : 'Failed to load.'))
       .finally(() => live && setLoading(false));
@@ -117,21 +112,13 @@ const ReceiveProjectModal: React.FC<ReceiveProjectModalProps> = ({
     };
   }, [opened]);
 
-  const defaultHours = defaults
-    ? policy === 'single_use'
-      ? defaults.single_use_ttl_hours
-      : defaults.lineage_ttl_days * 24
-    : undefined;
-  const maxHours = defaults ? defaults.max_ttl_days * 24 : undefined;
-
   const handleCreate = async () => {
     setCreating(true);
     setError(null);
     try {
       const invite = await createMigrationInvite({
-        policy,
         lock_on_import: lock,
-        ...(typeof hours === 'number' ? { expires_in_hours: hours } : {}),
+        expires_in_hours: VALIDITY.find((v) => v.value === validity)?.hours ?? 720,
         ...(note.trim() ? { note: note.trim() } : {}),
       });
       setCreated(invite);
@@ -176,36 +163,16 @@ const ReceiveProjectModal: React.FC<ReceiveProjectModalProps> = ({
               value={window.location.origin}
               testId="receive-url"
             />
-            <CopyRow label="Invite code" value={created.code} testId="receive-code" />
-            <Alert color="yellow" variant="light" icon={<Icon icon="mdi:alert-outline" />}>
-              This code will not be shown again. Copy it now; if it is lost, revoke it and
-              create another.
-            </Alert>
+            <CopyRow label="Code" value={created.code} testId="receive-code" />
             <Text size="xs" c="dimmed">
-              {created.policy === 'single_use' ? 'One push' : 'Push + updates'}
-              {created.lock_on_import ? ', editing locked on import' : ', editable after import'}
+              The first project sent with this code is imported. The same code then publishes
+              that project's updates until{' '}
+              {created.expires_at ? formatDateTime(created.expires_at) : 'it is revoked'}. It is
+              shown only once.
             </Text>
           </Stack>
         ) : (
           <>
-            <Stack gap={6}>
-              <Text size="sm" fw={500}>
-                Policy
-              </Text>
-              <SegmentedControl
-                fullWidth
-                value={policy}
-                onChange={(v) => setPolicy(v as MigrationInvitePolicy)}
-                data={[
-                  { value: 'single_use', label: 'One push' },
-                  { value: 'lineage', label: 'Push + updates' },
-                ]}
-                data-testid="receive-policy"
-              />
-              <Text size="xs" c="dimmed">
-                {POLICY_TEXT[policy]}
-              </Text>
-            </Stack>
             <Switch
               label="Lock editing on import"
               description="The imported project is read-only, owners included, until an admin unlocks it."
@@ -213,21 +180,18 @@ const ReceiveProjectModal: React.FC<ReceiveProjectModalProps> = ({
               onChange={(e) => setLock(e.currentTarget.checked)}
               data-testid="receive-lock"
             />
-            <NumberInput
-              label="Lifetime (hours)"
-              description={
-                defaultHours !== undefined
-                  ? `Optional. Default ${defaultHours} h${maxHours ? `, at most ${maxHours} h` : ''}.`
-                  : 'Optional.'
-              }
-              placeholder={defaultHours !== undefined ? String(defaultHours) : undefined}
-              min={1}
-              max={maxHours}
-              allowDecimal={false}
-              value={hours}
-              onChange={setHours}
-              data-testid="receive-hours"
-            />
+            <Stack gap={6}>
+              <Text size="sm" fw={500}>
+                Valid for
+              </Text>
+              <SegmentedControl
+                fullWidth
+                value={validity}
+                onChange={setValidity}
+                data={VALIDITY.map(({ value, label }) => ({ value, label }))}
+                data-testid="receive-validity"
+              />
+            </Stack>
             <TextInput
               label="Note"
               description="Optional. Who this is for; shown in the list of invitations."
@@ -255,7 +219,7 @@ const ReceiveProjectModal: React.FC<ReceiveProjectModalProps> = ({
               leftSection={<Icon icon="mdi:key-plus" width={16} />}
               data-testid="receive-create"
             >
-              Create invitation
+              Create code
             </Button>
           )}
         </Group>

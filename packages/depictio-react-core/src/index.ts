@@ -1197,7 +1197,6 @@ export type {
   MigrationPush,
   MigrationPushStatus,
   MigrationInvite,
-  MigrationInvitePolicy,
   MigrationInviteState,
   MigrationInviteDefaults,
   MigrationInviteList,

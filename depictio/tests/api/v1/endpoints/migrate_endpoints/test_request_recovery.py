@@ -149,7 +149,7 @@ def test_retry_of_an_interrupted_invite_import(world):
     stored = _doc(world, out["request_id"])
     assert stored["status"] == "imported" and stored["credential_type"] == "invite_code"
     assert world.db.projects_collection.count_documents({}) == 1
-    # The invite stays spent: a retry is not another use.
+    # The use count stays at 1: a retry is not another use.
     assert world.db.migration_invites_collection.find_one({"_id": doc["_id"]})["use_count"] == 1
 
 

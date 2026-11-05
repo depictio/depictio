@@ -49,29 +49,27 @@ The target imports at once, as the admin who issued the invite. The owner is
 resolved as for an approval: the requester's account when one exists with that
 email, else that admin. In single-user mode, that is the instance's only admin.
 
-In the UI the two policies are called *One push* (`single_use`) and *Push +
-updates* (`lineage`). The rule to remember: **a project can only be updated
-with the code that first brought it.** To publish new versions later, issue a
-*Push + updates* code from the start; a fresh code for a project that is
-already here is refused.
+There is **one kind of code**. The first project sent with it is imported, and
+the code is then bound to that project. Until it expires, the same code
+publishes that project's **updates**: each re-push adds an `import` version.
+It refuses any other project.
 
-| Invite policy | Lifetime (default) | Accepts |
-| --- | --- | --- |
-| `single_use` | `INVITE_SINGLE_USE_TTL_HOURS` (1 h) | one accepted push, then the code is spent |
-| `lineage` | `INVITE_LINEAGE_TTL_DAYS` (30 d) | every push of the project it first imported (re-pushes add `import` versions) |
+The rule to remember: **a project can only be updated with the code that
+first brought it.** A new code for a project that is already here is refused.
 
-`lock_on_import` (on by default) decides whether the imported project is
-locked. An admin may give an invite another lifetime, up to
-`INVITE_MAX_TTL_DAYS`, and a note.
+- *Valid for*: 1 day, 30 days (the default, `INVITE_TTL_DAYS`) or 1 year. The
+  API accepts any lifetime up to `INVITE_MAX_TTL_DAYS`.
+- *Lock editing on import*: on by default.
+- *Note*: optional.
 
 **Security**
 - The code is 24 symbols (120 bits) of Crockford base32. It is returned once;
   only its sha256 and its last 4 characters are stored. The lookup goes through
   the hash, and the stored hash is compared again in constant time.
-- The invite is consumed atomically once the bundle is valid and staged:
-  - a refused upload leaves it usable;
-  - of two uploads racing on one single-use code, one wins and the other gets
-    409, with its staged bundle deleted.
+- The code is claimed atomically once the bundle is valid and staged:
+  - a refused upload leaves it untouched;
+  - of two uploads of different projects racing on one fresh code, one binds
+    it and the other gets 409, with its staged bundle deleted.
 - Revoking an invite stops it everywhere.
 - Invites work only while `INBOUND_ENABLED` is on. With inbound on, no
   `INBOUND_SOURCES` and no valid invite, every inbound call is a 403.
@@ -80,10 +78,10 @@ locked. An admin may give an invite another lifetime, up to
   **request token**. It reads that one request's status
   (`X-Depictio-Request-Token`) and nothing else. The source stores it encrypted;
   the target stores its sha256.
-- The request is recorded under `source_name: invite:<invite id>`, and that name
-  is the lineage: a project imported with one invite can be re-pushed with that
-  same lineage invite, or by an admin approval, but not with an unrelated new
-  invite (it would be a `foreign` project).
+- The request is recorded under `source_name: invite:<invite id>`, and that
+  name is the project's lineage. A project imported with one code can be
+  re-pushed with that same code, or through an admin approval. A different
+  code would make it a `foreign` project.
 
 **Source settings.** A typed destination must:
 - be under a domain suffix of `DESTINATION_DOMAINS`, for example
@@ -187,8 +185,7 @@ List settings take JSON.
 | `INBOUND_SOURCES` | target | `[]` | `[{"name", "pairing_key", "allowed_source_buckets", "max_pending", "max_per_day", "max_bundle_bytes"}]` |
 | `LOCK_IMPORTED_DEFAULT` | target | `true` | Initial state of *Lock editing* |
 | `DESTINATION_DOMAINS` | source | `[]` | Domain suffixes an owner may publish to with a URL + invite code |
-| `INVITE_SINGLE_USE_TTL_HOURS` | target | `1` | Default lifetime of a single-use invite |
-| `INVITE_LINEAGE_TTL_DAYS` | target | `30` | Default lifetime of a lineage invite |
+| `INVITE_TTL_DAYS` | target | `30` | Default lifetime of an invite code (its project's first push, then its updates) |
 | `INVITE_MAX_TTL_DAYS` | target | `365` | Longest lifetime an admin may give an invite |
 | `INTERRUPTED_AFTER_MINUTES` | both | `60` | Startup recovery threshold for pushes and imports |
 | `MAX_BUNDLE_BYTES` | both | 10 GiB | Bundle size cap (413 above it) |

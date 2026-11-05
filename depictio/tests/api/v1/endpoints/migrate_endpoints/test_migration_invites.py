@@ -108,19 +108,15 @@ def test_public_invite_never_exposes_the_code_or_the_hash(target):
     assert public["state"] == "active" and public["use_count"] == 0
 
 
-def test_default_ttls_follow_the_policy(target, monkeypatch):
-    monkeypatch.setattr(settings.migration, "invite_single_use_ttl_hours", 2)
-    monkeypatch.setattr(settings.migration, "invite_lineage_ttl_days", 3)
-    single, _ = make_invite("single_use")
-    lineage, _ = make_invite("lineage")
-    fmt = TIMESTAMP_FORMAT
+def test_default_ttl_follows_the_setting(target, monkeypatch):
+    monkeypatch.setattr(settings.migration, "invite_ttl_days", 3)
+    doc, _ = make_invite()
     from datetime import datetime
 
     now = utc_now().replace(tzinfo=None)
-    single_left = datetime.strptime(single["expires_at"], fmt) - now
-    lineage_left = datetime.strptime(lineage["expires_at"], fmt) - now
-    assert timedelta(hours=1, minutes=55) < single_left <= timedelta(hours=2, seconds=5)
-    assert timedelta(days=2, hours=23) < lineage_left <= timedelta(days=3, seconds=5)
+    left = datetime.strptime(doc["expires_at"], TIMESTAMP_FORMAT) - now
+    assert timedelta(days=2, hours=23) < left <= timedelta(days=3, seconds=5)
+    assert migration_invites.default_ttl() == timedelta(days=3)
 
 
 def test_the_note_is_trimmed_and_clipped(target):
@@ -198,26 +194,23 @@ def test_invite_states(target):
     doc, _ = make_invite()
     assert migration_invites.invite_state(doc) == "active"
     assert migration_invites.invite_state({**doc, "expires_at": _past()}) == "expired"
-    assert migration_invites.invite_state({**doc, "used_at": "2026-01-01 00:00:00"}) == "used"
+    # There is no "used" state: a code that has imported stays active until it expires.
+    used = {**doc, "used_at": "2026-01-01 00:00:00", "use_count": 1, "project_id": "p1"}
+    assert migration_invites.invite_state(used) == "active"
     # Revoked wins over everything else.
     both = {**doc, "used_at": "x", "revoked_at": "2026-01-01 00:00:00", "expires_at": _past()}
     assert migration_invites.invite_state(both) == "revoked"
-    # A lineage invite that has imported is not "used".
-    lineage, _ = make_invite("lineage")
-    assert migration_invites.invite_state({**lineage, "used_at": "2026-01-01 00:00:00"}) == (
-        "active"
-    )
     assert migration_invites.invite_state({**doc, "expires_at": _past()}, now="1999-01-01") == (
         "active"
     )
 
 
 # ---------------------------------------------------------------------------
-# Claim and lineage
+# Claim and binding
 # ---------------------------------------------------------------------------
 
 
-def test_single_use_claim_succeeds_once(target):
+def test_a_claim_binds_the_code_and_does_not_spend_it(target):
     doc, _ = make_invite()
     first = migration_invites.claim_invite(
         doc["_id"], project_id="p1", project_name="P", request_id=ObjectId()
@@ -226,10 +219,10 @@ def test_single_use_claim_succeeds_once(target):
     again = migration_invites.claim_invite(
         doc["_id"], project_id="p1", project_name="P", request_id=ObjectId()
     )
-    assert again is None
+    assert again is not None
     stored = _stored(target, doc)
-    assert stored["use_count"] == 1 and stored["used_at"] and len(stored["request_ids"]) == 1
-    assert migration_invites.invite_state(stored) == "used"
+    assert stored["use_count"] == 2 and stored["used_at"] and len(stored["request_ids"]) == 2
+    assert migration_invites.invite_state(stored) == "active"
 
 
 def test_claim_of_an_unknown_expired_or_revoked_invite_fails(target):
@@ -254,28 +247,27 @@ def test_claim_of_an_unknown_expired_or_revoked_invite_fails(target):
         )
 
 
-def test_lineage_binds_to_the_first_project_and_accepts_it_again(target):
-    doc, _ = make_invite("lineage")
+def test_a_code_binds_to_the_first_project_and_accepts_it_again(target):
+    doc, _ = make_invite()
     claim = migration_invites.claim_invite
     assert claim(doc["_id"], project_id="p1", project_name="One", request_id=ObjectId())
     assert claim(doc["_id"], project_id="p1", project_name="One", request_id=ObjectId())
     assert claim(doc["_id"], project_id="p2", project_name="Two", request_id=ObjectId()) is None
     stored = _stored(target, doc)
-    assert stored["lineage_project_id"] == "p1" and stored["use_count"] == 2
-    assert stored["lineage_project_name"] == "One"
+    assert stored["project_id"] == "p1" and stored["use_count"] == 2
+    assert stored["project_name"] == "One"
     assert migration_invites.invite_state(stored) == "active"
 
 
-def test_lineage_error_only_for_a_bound_lineage_invite(target):
-    unbound, _ = make_invite("lineage")
-    assert migration_invites.lineage_error(unbound, "p1") is None
-    bound = {**unbound, "lineage_project_id": "p1", "lineage_project_name": "One"}
-    assert migration_invites.lineage_error(bound, "p1") is None
-    assert migration_invites.lineage_error({**bound, "lineage_project_id": ObjectId()}, "p1")
-    err = migration_invites.lineage_error(bound, "p2")
-    assert err and "bound to the project 'One'" in err
-    single, _ = make_invite("single_use")
-    assert migration_invites.lineage_error({**single, "lineage_project_id": "p1"}, "p2") is None
+def test_bound_error_only_for_a_bound_invite(target):
+    unbound, _ = make_invite()
+    assert migration_invites.bound_error(unbound, "p1") is None
+    bound = {**unbound, "project_id": "p1", "project_name": "One"}
+    assert migration_invites.bound_error(bound, "p1") is None
+    assert migration_invites.bound_error({**bound, "project_id": ObjectId()}, "p1")
+    err = migration_invites.bound_error(bound, "p2")
+    assert err and "this code already brought the project 'One'" in err
+    assert "Ask for a new code to send another project" in err
 
 
 def test_revoke_is_idempotent_in_effect(target):
@@ -292,7 +284,7 @@ def test_revoke_is_idempotent_in_effect(target):
 
 
 def test_an_invite_authenticates_as_an_invite_source(target):
-    doc, code = make_invite("lineage", lock=False)
+    doc, code = make_invite(lock=False)
     src = source_for(code.lower())
     assert isinstance(src, inbound_auth.InviteSource)
     assert src.name == f"invite:{doc['_id']}" and src.invite_id == str(doc["_id"])
@@ -311,13 +303,12 @@ def test_pairing_key_comes_first_and_a_wrong_key_is_not_rescued_by_a_code(target
     assert exc.value.status_code == 403
 
 
-@pytest.mark.parametrize("which", ["expired", "used", "revoked"])
-def test_a_spent_expired_or_revoked_invite_cannot_upload(target, which):
+@pytest.mark.parametrize("which", ["expired", "revoked"])
+def test_an_expired_or_revoked_invite_cannot_upload(target, which):
     doc, code = make_invite()
     col = target.db.migration_invites_collection
     patch_ = {
         "expired": {"expires_at": _past()},
-        "used": {"used_at": "2026-01-01 00:00:00"},
         "revoked": {"revoked_at": "2026-01-01 00:00:00"},
     }[which]
     col.update_one({"_id": doc["_id"]}, {"$set": patch_})
@@ -326,10 +317,9 @@ def test_a_spent_expired_or_revoked_invite_cannot_upload(target, which):
     assert exc.value.status_code == 403 and which in exc.value.detail
 
 
-def test_readers_accept_spent_and_expired_invites_but_not_revoked_ones(target):
+def test_readers_accept_expired_invites_but_not_revoked_ones(target):
     col = target.db.migration_invites_collection
     for field, value, allowed in (
-        ("used_at", "2026-01-01 00:00:00", True),
         ("expires_at", _past(), True),
         ("revoked_at", "2026-01-01 00:00:00", False),
     ):
@@ -448,10 +438,10 @@ def _create(**over):
 
 
 def test_create_route_returns_the_code_once(target):
-    out = _create(policy="lineage", lock_on_import=False, note="n")
+    out = _create(lock_on_import=False, note="n")
     code = out["code"]
     assert migration_invites.find_invite(code) is not None
-    assert out["policy"] == "lineage" and out["lock_on_import"] is False
+    assert "policy" not in out and out["lock_on_import"] is False
     assert out["state"] == "active" and out["created_by_email"] == "admin@target.org"
     listing = invites_routes.list_invites(current_user=admin_user())
     blob = json.dumps(listing, default=str)
@@ -459,6 +449,8 @@ def test_create_route_returns_the_code_once(target):
     assert out["id"] in blob and "code_sha256" not in blob
     assert listing["inbound_enabled"] is True
     assert listing["defaults"]["max_ttl_days"] == settings.migration.invite_max_ttl_days
+    assert listing["defaults"]["ttl_days"] == settings.migration.invite_ttl_days
+    assert set(listing["defaults"]) == {"ttl_days", "max_ttl_days", "lock_on_import"}
     assert all("code" not in row for row in listing["invites"])
 
 
@@ -483,8 +475,6 @@ def test_create_over_the_max_ttl_is_a_422(target, monkeypatch):
 def test_create_validates_the_body():
     with pytest.raises(ValueError):
         invites_routes.InviteCreate(expires_in_hours=0)
-    with pytest.raises(ValueError):
-        invites_routes.InviteCreate(policy="forever")  # type: ignore[arg-type]
     with pytest.raises(ValueError):
         invites_routes.InviteCreate(note="x" * 501)
 

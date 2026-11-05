@@ -157,10 +157,6 @@ class MigrationResult(BaseModel):
 #: invite code an admin of the target issued.
 InboundCredentialType = Literal["pairing_key", "invite_code"]
 
-#: ``single_use``: one accepted push, then the code is spent.
-#: ``lineage``: every push of the project lineage it first imported, until expiry.
-InvitePolicy = Literal["single_use", "lineage"]
-
 
 class MigrationInvite(BaseModel):
     """An invite code issued on the target, stored in ``migration_invites``.
@@ -168,6 +164,9 @@ class MigrationInvite(BaseModel):
     The code itself is shown once at creation and never stored: only its
     sha256 is. An accepted push made with an invite is imported at once, the
     invite being the admin's consent given in advance.
+
+    One kind of code: the first accepted push binds it to that project; until
+    it expires it then accepts that project's updates, and nothing else.
     """
 
     model_config = ConfigDict(extra="ignore", populate_by_name=True)
@@ -176,7 +175,6 @@ class MigrationInvite(BaseModel):
     code_sha256: str
     #: The last characters of the code, so an admin can tell two invites apart.
     code_hint: str = ""
-    policy: InvitePolicy = "single_use"
     lock_on_import: bool = True
     note: str | None = None
     created_by_id: IdStr | None = None
@@ -190,10 +188,9 @@ class MigrationInvite(BaseModel):
     last_used_at: str | None = None
     use_count: int = 0
     request_ids: list[IdStr] = []
-    #: Set by the first accepted push of a ``lineage`` invite: later pushes
-    #: must carry the same project.
-    lineage_project_id: IdStr | None = None
-    lineage_project_name: str | None = None
+    #: Set by the first accepted push: later pushes must carry the same project.
+    project_id: IdStr | None = None
+    project_name: str | None = None
 
 
 class MigrationRequest(BaseModel):

@@ -204,7 +204,8 @@ Route dispatch is plain regex in `depictio/viewer/src/main.tsx` +
 - `published_lock` is returned by `/dashboards/get` but is runtime-only on `DashboardData`
   (popped in `/save`, in `SNAPSHOT_DERIVED_FIELDS`)
 - **Invite codes** (`migration_invites`, `services/migration_invites.py`): a target admin
-  issues a code (shown once, only its sha256 stored); a source owner publishes with
+  issues a code (shown once, only its sha256 stored; one kind: the first project it brings,
+  then that project's updates, until it expires); a source owner publishes with
   URL + code (`DEPICTIO_MIGRATION_DESTINATION_DOMAINS`, https, SSRF guard per call). An
   accepted invite push imports at once (no queue), as source `invite:<id>`; status is read
   back with a per-request token, never the code. The chart turns `INBOUND_ENABLED` and

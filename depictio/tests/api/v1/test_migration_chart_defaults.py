@@ -87,21 +87,21 @@ def test_the_chart_env_names_are_read_by_the_config(monkeypatch, backend_env):
 
 def test_new_slice_two_settings_have_safe_defaults(monkeypatch):
     for name in (
-        "INVITE_SINGLE_USE_TTL_HOURS",
-        "INVITE_LINEAGE_TTL_DAYS",
+        "INVITE_TTL_DAYS",
         "INVITE_MAX_TTL_DAYS",
         "INTERRUPTED_AFTER_MINUTES",
         "DESTINATION_DOMAINS",
     ):
         monkeypatch.delenv(f"DEPICTIO_MIGRATION_{name}", raising=False)
     config = MigrationConfig()
-    assert config.invite_single_use_ttl_hours == 1
-    assert config.invite_lineage_ttl_days == 30
+    assert config.invite_ttl_days == 30
+    for removed in ("invite_single_use_ttl_hours", "invite_lineage_ttl_days"):
+        assert removed not in MigrationConfig.model_fields
+        assert not hasattr(config, removed)
     assert config.invite_max_ttl_days == 365
     assert config.interrupted_after_minutes == 60
     for field in (
-        "invite_single_use_ttl_hours",
-        "invite_lineage_ttl_days",
+        "invite_ttl_days",
         "invite_max_ttl_days",
         "interrupted_after_minutes",
     ):

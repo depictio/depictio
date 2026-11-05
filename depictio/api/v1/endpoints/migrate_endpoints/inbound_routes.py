@@ -117,11 +117,10 @@ def _invite_view(source: MigrationInboundSource) -> dict[str, Any] | None:
         return None
     invite = source.invite
     return {
-        "policy": invite.get("policy", "single_use"),
         "lock_on_import": bool(invite.get("lock_on_import", True)),
         "expires_at": invite.get("expires_at"),
-        "lineage_project_id": invite.get("lineage_project_id"),
-        "lineage_project_name": invite.get("lineage_project_name"),
+        "project_id": invite.get("project_id"),
+        "project_name": invite.get("project_name"),
         "imports_immediately": True,
     }
 
@@ -207,7 +206,7 @@ def _preflight(body: PreflightBody, source: MigrationInboundSource) -> dict[str,
                 errors.append(f"another project here is already named {body.project_name!r}")
 
     if isinstance(source, InviteSource):
-        bound = migration_invites.lineage_error(source.invite, body.project_id)
+        bound = migration_invites.bound_error(source.invite, body.project_id)
         if bound:
             errors.append(bound)
 
@@ -358,7 +357,7 @@ async def inbound_create_request(
         finally:
             opened.close()
         if via_invite and not report.errors:
-            bound = migration_invites.lineage_error(source.invite, report.project_id)
+            bound = migration_invites.bound_error(source.invite, report.project_id)
             if bound:
                 report.errors.append(bound)
         if report.errors:

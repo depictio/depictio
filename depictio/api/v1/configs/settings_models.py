@@ -1971,11 +1971,13 @@ class MigrationConfig(BaseSettings):
             ' invite code (e.g. ["serve.scilifelab.se"]). Empty: no ad-hoc destination'
         ),
     )
-    invite_single_use_ttl_hours: int = Field(
-        default=1, ge=1, description="Default lifetime of a single-use invite code"
-    )
-    invite_lineage_ttl_days: int = Field(
-        default=30, ge=1, description="Default lifetime of a lineage invite code"
+    invite_ttl_days: int = Field(
+        default=30,
+        ge=1,
+        description=(
+            "Default lifetime of an invite code: it brings one project, then that"
+            " project's updates, until it expires"
+        ),
     )
     invite_max_ttl_days: int = Field(
         default=365, ge=1, description="Longest lifetime an admin may give an invite code"

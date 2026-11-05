@@ -5845,10 +5845,11 @@ export type PushDestination =
   | { destination_url: string; invite_code: string };
 
 export interface PushInviteInfo {
-  policy: MigrationInvitePolicy;
   lock_on_import: boolean;
   expires_at: string | null;
-  lineage_project_name: string | null;
+  /** The project this code already brought, once it has brought one. */
+  project_id?: string | null;
+  project_name: string | null;
   imports_immediately: boolean;
 }
 
@@ -5987,13 +5988,11 @@ export async function retryPush(
 
 // ── Invite codes (target side, admin only) ──
 
-export type MigrationInvitePolicy = 'single_use' | 'lineage';
-export type MigrationInviteState = 'active' | 'used' | 'expired' | 'revoked';
+export type MigrationInviteState = 'active' | 'expired' | 'revoked';
 
 export interface MigrationInvite {
   id: string;
   state: MigrationInviteState;
-  policy: MigrationInvitePolicy;
   lock_on_import: boolean;
   note: string | null;
   /** Last 4 characters of the code. */
@@ -6006,13 +6005,13 @@ export interface MigrationInvite {
   last_used_at: string | null;
   use_count: number;
   request_ids: string[];
-  lineage_project_id: string | null;
-  lineage_project_name: string | null;
+  /** Set by the first accepted push: the code then carries only this project. */
+  project_id: string | null;
+  project_name: string | null;
 }
 
 export interface MigrationInviteDefaults {
-  single_use_ttl_hours: number;
-  lineage_ttl_days: number;
+  ttl_days: number;
   max_ttl_days: number;
   lock_on_import: boolean;
 }
@@ -6031,9 +6030,8 @@ export async function listMigrationInvites(): Promise<MigrationInviteList> {
     invites: body.invites ?? [],
     inbound_enabled: !!body.inbound_enabled,
     defaults: body.defaults ?? {
-      single_use_ttl_hours: 1,
-      lineage_ttl_days: 30,
-      max_ttl_days: 90,
+      ttl_days: 30,
+      max_ttl_days: 365,
       lock_on_import: true,
     },
   };
@@ -6041,7 +6039,6 @@ export async function listMigrationInvites(): Promise<MigrationInviteList> {
 
 /** The only answer that ever carries the plain code. */
 export async function createMigrationInvite(input: {
-  policy: MigrationInvitePolicy;
   lock_on_import: boolean;
   expires_in_hours?: number;
   note?: string;

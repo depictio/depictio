@@ -4,9 +4,9 @@ The admin creates an invite and reads its code once; the source's user pastes
 the target URL and the code. Only ``sha256(code)`` is stored, the lookup goes
 through that hash, and the stored hash is compared again in constant time.
 
-An accepted push consumes the invite atomically (``claim_invite``): a
-``single_use`` invite is spent, a ``lineage`` invite binds to the project it
-first imported and keeps accepting pushes of that project until it expires.
+An accepted push claims the invite atomically (``claim_invite``). The first
+one binds the code to its project; until the code expires it then accepts that
+project's updates, and nothing else. There is one kind of code.
 Nothing here works while ``DEPICTIO_MIGRATION_INBOUND_ENABLED`` is off.
 """
 
@@ -22,7 +22,7 @@ from typing import Any
 from bson import ObjectId
 
 from depictio.api.v1.configs.config import settings
-from depictio.models.models.migration import InvitePolicy, MigrationInvite
+from depictio.models.models.migration import MigrationInvite
 from depictio.models.timestamps import TIMESTAMP_FORMAT, utc_now, utc_now_str
 
 INVITE_HEADER = "X-Depictio-Invite-Code"
@@ -71,11 +71,8 @@ def _ts(dt: datetime) -> str:
     return dt.strftime(TIMESTAMP_FORMAT)
 
 
-def default_ttl(policy: InvitePolicy) -> timedelta:
-    cfg = settings.migration
-    if policy == "lineage":
-        return timedelta(days=cfg.invite_lineage_ttl_days)
-    return timedelta(hours=cfg.invite_single_use_ttl_hours)
+def default_ttl() -> timedelta:
+    return timedelta(days=settings.migration.invite_ttl_days)
 
 
 def max_ttl() -> timedelta:
@@ -84,7 +81,6 @@ def max_ttl() -> timedelta:
 
 def create_invite(
     *,
-    policy: InvitePolicy,
     lock_on_import: bool,
     expires_in_hours: int | None,
     note: str | None,
@@ -92,7 +88,7 @@ def create_invite(
     created_by_email: str | None,
 ) -> tuple[dict[str, Any], str]:
     """Store a new invite; return (stored document, code). The code is not stored."""
-    ttl = timedelta(hours=expires_in_hours) if expires_in_hours else default_ttl(policy)
+    ttl = timedelta(hours=expires_in_hours) if expires_in_hours else default_ttl()
     if ttl > max_ttl():
         raise ValueError(
             f"an invite may live at most {settings.migration.invite_max_ttl_days} days"
@@ -103,7 +99,6 @@ def create_invite(
     invite = MigrationInvite(
         code_sha256=hash_code(normalized),
         code_hint=normalized[-4:],
-        policy=policy,
         lock_on_import=lock_on_import,
         note=(note or "").strip()[:500] or None,
         created_by_id=created_by_id,
@@ -116,12 +111,14 @@ def create_invite(
 
 
 def invite_state(doc: dict[str, Any], now: str | None = None) -> str:
-    """``active``, ``used`` (single-use, spent), ``expired`` or ``revoked``."""
+    """``active``, ``expired`` or ``revoked``.
+
+    An active code may already be bound to a project (``project_id``): it then
+    accepts only that project's updates.
+    """
     now = now or utc_now_str()
     if doc.get("revoked_at"):
         return "revoked"
-    if doc.get("policy", "single_use") == "single_use" and doc.get("used_at"):
-        return "used"
     if (doc.get("expires_at") or "") <= now:
         return "expired"
     return "active"
@@ -144,22 +141,25 @@ def find_invite(code: str | None) -> dict[str, Any] | None:
     return doc
 
 
-def lineage_error(invite: dict[str, Any], project_id: str | None) -> str | None:
+def bound_error(invite: dict[str, Any], project_id: str | None) -> str | None:
     """Why this invite cannot carry ``project_id``, or None."""
-    bound = invite.get("lineage_project_id")
-    if invite.get("policy") == "lineage" and bound and str(bound) != str(project_id):
-        name = invite.get("lineage_project_name") or bound
-        return f"this invite is bound to the project {name!r} it first imported"
+    bound = invite.get("project_id")
+    if bound and str(bound) != str(project_id):
+        name = invite.get("project_name") or bound
+        return (
+            f"this code already brought the project {name!r}; it only accepts that "
+            "project's updates. Ask for a new code to send another project"
+        )
     return None
 
 
 def claim_invite(
     invite_id: Any, *, project_id: str, project_name: str | None, request_id: ObjectId
 ) -> dict[str, Any] | None:
-    """Consume the invite for one accepted push, atomically; None when it no longer can.
+    """Claim the invite for one accepted push, atomically; None when it no longer can.
 
-    Two uploads racing with one single-use code both pass validation; only one
-    of them wins this update.
+    The first claim binds the code to the project. Two uploads of different
+    projects racing on one fresh code both pass validation; only one binds it.
     """
     now = utc_now_str()
     doc = _col().find_one({"_id": invite_id})
@@ -169,20 +169,14 @@ def claim_invite(
         "_id": invite_id,
         "revoked_at": None,
         "expires_at": {"$gt": now},
+        "$or": [{"project_id": None}, {"project_id": str(project_id)}],
     }
     update: dict[str, Any] = {
-        "$set": {"last_used_at": now},
+        "$set": {"last_used_at": now, "project_id": str(project_id), "project_name": project_name},
         "$inc": {"use_count": 1},
         "$push": {"request_ids": str(request_id)},
     }
-    if doc.get("policy") == "lineage":
-        query["$or"] = [{"lineage_project_id": None}, {"lineage_project_id": str(project_id)}]
-        update["$set"]["lineage_project_id"] = str(project_id)
-        update["$set"]["lineage_project_name"] = project_name
-        if not doc.get("used_at"):
-            update["$set"]["used_at"] = now
-    else:
-        query["used_at"] = None
+    if not doc.get("used_at"):
         update["$set"]["used_at"] = now
     return _col().find_one_and_update(query, update)
 
@@ -199,7 +193,6 @@ def public_invite(doc: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": str(doc["_id"]),
         "state": invite_state(doc),
-        "policy": doc.get("policy", "single_use"),
         "lock_on_import": bool(doc.get("lock_on_import", True)),
         "note": doc.get("note"),
         "code_hint": doc.get("code_hint"),
@@ -211,6 +204,6 @@ def public_invite(doc: dict[str, Any]) -> dict[str, Any]:
         "last_used_at": doc.get("last_used_at"),
         "use_count": int(doc.get("use_count") or 0),
         "request_ids": [str(r) for r in doc.get("request_ids") or []],
-        "lineage_project_id": doc.get("lineage_project_id"),
-        "lineage_project_name": doc.get("lineage_project_name"),
+        "project_id": doc.get("project_id"),
+        "project_name": doc.get("project_name"),
     }

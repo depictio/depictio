@@ -540,7 +540,7 @@ def foreign_project_error(project_id: str, source: str | None) -> str:
         # An invite's name is an id; say what to do instead.
         return (
             f"project {project_id} is already here: only the code that first brought it "
-            "can update it (ask for a 'Push + updates' code next time)"
+            "can send its updates"
         )
     return f"project {project_id} already exists here and was not imported from {source!r}"
 

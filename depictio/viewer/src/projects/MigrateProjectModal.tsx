@@ -321,8 +321,8 @@ const MigrateProjectModal: React.FC<MigrateProjectModalProps> = ({
           {invite.lock_on_import
             ? 'editing will be locked there.'
             : 'editing will stay unlocked there.'}
-          {invite.policy === 'lineage' && invite.lineage_project_name
-            ? ` This code is bound to "${invite.lineage_project_name}".`
+          {invite.project_name && invite.project_id === projectId
+            ? ' This code already brought this project: this push is an update.'
             : ''}
         </Alert>
       )}
@@ -334,7 +334,7 @@ const MigrateProjectModal: React.FC<MigrateProjectModalProps> = ({
       {foreign && (
         <Alert color="red" variant="light" data-testid="migrate-foreign">
           {invite
-            ? 'This project is already on the destination. Only the code that first brought it can update it: ask its administrator for a "Push + updates" code next time.'
+            ? 'This project is already on the destination, brought by another code. Only that code can send its updates.'
             : 'A different project with this id already exists on the target. It cannot be overwritten from here.'}
         </Alert>
       )}
@@ -429,7 +429,7 @@ const MigrateProjectModal: React.FC<MigrateProjectModalProps> = ({
                 />
                 <PasswordInput
                   label="Invite code"
-                  description="Issued by an administrator of the destination. It is used once and not stored."
+                  description="Issued by an administrator of the destination. Never stored here; keep it to publish this project's updates later."
                   placeholder="XXXX-XXXX-XXXX-XXXX-XXXX-XXXX"
                   value={code}
                   onChange={(e) => setCode(e.currentTarget.value)}

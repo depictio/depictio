@@ -23,7 +23,6 @@ import ReceiveProjectModal from './ReceiveProjectModal';
 
 const STATE_COLOR: Record<string, string> = {
   active: 'green',
-  used: 'blue',
   expired: 'gray',
   revoked: 'gray',
 };
@@ -122,7 +121,6 @@ const AdminMigrationInvitesView: React.FC = () => {
             <Table.Thead>
               <Table.Tr>
                 <Table.Th>State</Table.Th>
-                <Table.Th>Policy</Table.Th>
                 <Table.Th>Code</Table.Th>
                 <Table.Th>Expires</Table.Th>
                 <Table.Th>Uses</Table.Th>
@@ -139,16 +137,19 @@ const AdminMigrationInvitesView: React.FC = () => {
                       {inv.state}
                     </Badge>
                   </Table.Td>
+                  <Table.Td ff="monospace">…{inv.code_hint}</Table.Td>
+                  <Table.Td>{inv.expires_at ? formatDateTime(inv.expires_at) : 'Never'}</Table.Td>
+                  <Table.Td>{inv.use_count}</Table.Td>
                   <Table.Td>
-                    {inv.policy === 'single_use' ? 'One push' : 'Push + updates'}
+                    {inv.project_name ?? (
+                      <Text size="sm" c="dimmed">
+                        Not used yet
+                      </Text>
+                    )}
                     <Text size="xs" c="dimmed">
                       {inv.lock_on_import ? 'locks on import' : 'editable'}
                     </Text>
                   </Table.Td>
-                  <Table.Td ff="monospace">…{inv.code_hint}</Table.Td>
-                  <Table.Td>{inv.expires_at ? formatDateTime(inv.expires_at) : 'Never'}</Table.Td>
-                  <Table.Td>{inv.use_count}</Table.Td>
-                  <Table.Td>{inv.lineage_project_name ?? '—'}</Table.Td>
                   <Table.Td>{inv.note ?? '—'}</Table.Td>
                   <Table.Td>
                     {inv.state !== 'revoked' && (

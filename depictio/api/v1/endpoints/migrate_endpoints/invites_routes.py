@@ -16,16 +16,14 @@ from pydantic import BaseModel, Field
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 from depictio.api.v1.services import migration_invites
-from depictio.models.models.migration import InvitePolicy
 from depictio.models.models.users import User
 
 invites_router = APIRouter()
 
 
 class InviteCreate(BaseModel):
-    policy: InvitePolicy = "single_use"
     lock_on_import: bool = True
-    #: Lifetime; the policy's default when omitted.
+    #: Lifetime; ``DEPICTIO_MIGRATION_INVITE_TTL_DAYS`` when omitted.
     expires_in_hours: int | None = Field(default=None, ge=1)
     note: str | None = Field(default=None, max_length=500)
 
@@ -51,8 +49,7 @@ def list_invites(current_user: User = Depends(get_current_user)) -> dict[str, An
         "invites": [migration_invites.public_invite(d) for d in docs],
         "inbound_enabled": bool(settings.migration.inbound_enabled),
         "defaults": {
-            "single_use_ttl_hours": settings.migration.invite_single_use_ttl_hours,
-            "lineage_ttl_days": settings.migration.invite_lineage_ttl_days,
+            "ttl_days": settings.migration.invite_ttl_days,
             "max_ttl_days": settings.migration.invite_max_ttl_days,
             "lock_on_import": True,
         },
@@ -71,7 +68,6 @@ def create_invite(body: InviteCreate, current_user: User = Depends(get_current_u
         )
     try:
         doc, code = migration_invites.create_invite(
-            policy=body.policy,
             lock_on_import=body.lock_on_import,
             expires_in_hours=body.expires_in_hours,
             note=body.note,
