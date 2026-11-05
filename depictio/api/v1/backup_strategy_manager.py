@@ -21,6 +21,7 @@ from botocore.exceptions import ClientError
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
+from depictio.models.s3_utils import delete_keys
 
 
 class S3BackupStrategyManager:
@@ -434,12 +435,7 @@ class S3BackupStrategyManager:
 
         for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
             if "Contents" in page:
-                objects_to_delete = [{"Key": obj["Key"]} for obj in page["Contents"]]
-
-                if objects_to_delete:
-                    self.backup_s3_client.delete_objects(
-                        Bucket=bucket, Delete={"Objects": objects_to_delete}
-                    )
+                delete_keys(self.backup_s3_client, bucket, (o["Key"] for o in page["Contents"]))
 
 
 async def create_backup_with_strategy(

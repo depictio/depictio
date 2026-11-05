@@ -41,6 +41,7 @@ from depictio.api.v1.endpoints.utils_endpoints.process_data_collections import (
 from depictio.api.v1.s3 import s3_client
 from depictio.models.models.branding import BrandTheme, InstanceLook, resolve_brand_theme
 from depictio.models.models.users import UserBeanie
+from depictio.models.s3_utils import delete_keys
 from depictio.version import get_api_version, get_version
 
 # Define the router
@@ -70,8 +71,7 @@ async def drop_S3_content(current_user=Depends(get_current_user)):
     objects_to_delete = s3_client.list_objects_v2(Bucket=bucket_name)
     while objects_to_delete.get("Contents"):
         logger.info(f"Deleting {len(objects_to_delete['Contents'])} objects...")
-        delete_keys = [{"Key": obj["Key"]} for obj in objects_to_delete["Contents"]]
-        s3_client.delete_objects(Bucket=bucket_name, Delete={"Objects": delete_keys})
+        delete_keys(s3_client, bucket_name, (obj["Key"] for obj in objects_to_delete["Contents"]))
         objects_to_delete = s3_client.list_objects_v2(Bucket=bucket_name)
 
     logger.info("All objects deleted from the bucket.")
