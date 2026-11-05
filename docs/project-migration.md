@@ -49,6 +49,12 @@ The target imports at once, as the admin who issued the invite. The owner is
 resolved as for an approval: the requester's account when one exists with that
 email, else that admin. In single-user mode, that is the instance's only admin.
 
+In the UI the two policies are called *One push* (`single_use`) and *Push +
+updates* (`lineage`). The rule to remember: **a project can only be updated
+with the code that first brought it.** To publish new versions later, issue a
+*Push + updates* code from the start; a fresh code for a project that is
+already here is refused.
+
 | Invite policy | Lifetime (default) | Accepts |
 | --- | --- | --- |
 | `single_use` | `INVITE_SINGLE_USE_TTL_HOURS` (1 h) | one accepted push, then the code is spent |

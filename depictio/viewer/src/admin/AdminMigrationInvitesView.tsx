@@ -140,7 +140,7 @@ const AdminMigrationInvitesView: React.FC = () => {
                     </Badge>
                   </Table.Td>
                   <Table.Td>
-                    {inv.policy === 'single_use' ? 'Single use' : 'Lineage'}
+                    {inv.policy === 'single_use' ? 'One push' : 'Push + updates'}
                     <Text size="xs" c="dimmed">
                       {inv.lock_on_import ? 'locks on import' : 'editable'}
                     </Text>

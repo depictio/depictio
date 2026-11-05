@@ -25,9 +25,9 @@ import type {
 
 const POLICY_TEXT: Record<MigrationInvitePolicy, string> = {
   single_use:
-    'Single use: one push, then the code stops working. Valid for about an hour by default.',
+    'One push: the code works once, then stops. Valid for about an hour by default.',
   lineage:
-    'Lineage: the code also accepts re-pushes of the project it first imports. Valid longer.',
+    'Push + updates: keep the code to send new versions of the same project later. Valid for weeks; to update a project later, choose this one.',
 };
 
 const CopyRow: React.FC<{ label: string; value: string; testId: string }> = ({
@@ -182,7 +182,7 @@ const ReceiveProjectModal: React.FC<ReceiveProjectModalProps> = ({
               create another.
             </Alert>
             <Text size="xs" c="dimmed">
-              {created.policy === 'single_use' ? 'Single use' : 'Lineage'}
+              {created.policy === 'single_use' ? 'One push' : 'Push + updates'}
               {created.lock_on_import ? ', editing locked on import' : ', editable after import'}
             </Text>
           </Stack>
@@ -197,8 +197,8 @@ const ReceiveProjectModal: React.FC<ReceiveProjectModalProps> = ({
                 value={policy}
                 onChange={(v) => setPolicy(v as MigrationInvitePolicy)}
                 data={[
-                  { value: 'single_use', label: 'Single use' },
-                  { value: 'lineage', label: 'Lineage' },
+                  { value: 'single_use', label: 'One push' },
+                  { value: 'lineage', label: 'Push + updates' },
                 ]}
                 data-testid="receive-policy"
               />

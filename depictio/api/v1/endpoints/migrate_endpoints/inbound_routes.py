@@ -198,10 +198,7 @@ def _preflight(body: PreflightBody, source: MigrationInboundSource) -> dict[str,
             same = project_bundle._last_hop_source(existing) == source.name
             conflict = "re_push" if same else "foreign"
             if not same:
-                errors.append(
-                    "a project with this id already exists here and was not imported from "
-                    f"{source.name!r}"
-                )
+                errors.append(project_bundle.foreign_project_error(body.project_id, source.name))
         if body.project_name:
             clash = _db().projects_collection.find_one(
                 {"name": body.project_name, "_id": {"$ne": pid}}, {"_id": 1}

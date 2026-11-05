@@ -528,3 +528,12 @@ def test_revoke_route(target):
         with pytest.raises(HTTPException) as exc:
             invites_routes.revoke_invite(bad, current_user=admin_user())
         assert exc.value.status_code == 404
+
+
+def test_a_fresh_code_for_a_project_already_here_says_what_to_do():
+    """The refusal names the rule, not an internal invite id."""
+    from depictio.api.v1.services import project_bundle
+
+    msg = project_bundle.foreign_project_error("p1", "invite:abc")
+    assert "only the code that first brought it" in msg and "invite:abc" not in msg
+    assert "'lab'" in project_bundle.foreign_project_error("p1", "lab")

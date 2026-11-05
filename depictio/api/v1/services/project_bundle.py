@@ -534,6 +534,17 @@ def _doc_id(doc: dict[str, Any]) -> ObjectId | None:
     return _as_oid(doc.get("_id") or doc.get("id"))
 
 
+def foreign_project_error(project_id: str, source: str | None) -> str:
+    """Why a push of a project that already exists here, from elsewhere, is refused."""
+    if (source or "").startswith("invite:"):
+        # An invite's name is an id; say what to do instead.
+        return (
+            f"project {project_id} is already here: only the code that first brought it "
+            "can update it (ask for a 'Push + updates' code next time)"
+        )
+    return f"project {project_id} already exists here and was not imported from {source!r}"
+
+
 def _last_hop_source(project_doc: dict[str, Any] | None) -> str | None:
     hops = ((project_doc or {}).get("provenance") or {}).get("imported_from") or []
     if hops and isinstance(hops[-1], dict):
@@ -641,10 +652,7 @@ def validate_bundle(
         )
         report.conflict = "re_push" if same_lineage else "foreign"
         if report.conflict == "foreign" and strict:
-            report.errors.append(
-                f"project {pid} already exists here and was not imported from "
-                f"{report.source_instance!r}"
-            )
+            report.errors.append(foreign_project_error(str(pid), report.source_instance))
     name_clash = cols["projects"].find_one({"name": project.get("name"), "_id": {"$ne": pid}})
     if name_clash:
         report.errors.append(f"another project here is already named {project.get('name')!r}")
