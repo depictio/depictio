@@ -15,7 +15,11 @@ Scenarios, each reported PASS/FAIL in a Markdown report:
      with the bucket rewritten, same column specs as on A;
   2. re-push: a new request, approved, adds an ``import`` version on B;
   3. negatives: wrong key 403, unknown request 404, non-admin approval refused,
-     rejection removes the request from the pending queue.
+     rejection removes the request from the pending queue;
+  4. (``--invite-target``) C runs the chart's defaults in single-user mode: it
+     accepts nothing until its admin issues an invite; A publishes with the
+     URL + code; C imports at once; the same code still accepts the project's
+     update; C's admin locks the project, then makes it public.
 """
 
 from __future__ import annotations
@@ -199,6 +203,121 @@ def _push_and_approve(
     return done
 
 
+# A 1x1 transparent PNG.
+_PNG_1PX = bytes.fromhex(
+    "89504e470d0a1a0a0000000d4948445200000001000000010806000000"
+    "1f15c4890000000d49444154789c6360000002000154a24f5d0000000049454e44ae426082"
+)
+
+
+def _invite_scenario(a: Instance, c: Instance, rep: Report, project_id: str, name: str) -> None:
+    feats = c.get("/utils/server-info").json().get("features") or {}
+    rep.check("C: migration UI on (chart default)", feats.get("migration") is True, feats)
+    for label, headers in (
+        ("no credential", {}),
+        ("a made-up invite code", {"X-Depictio-Invite-Code": "AAAA-BBBB-CCCC-DDDD-EEEE-FFFF"}),
+    ):
+        r = httpx.get(f"{c.base}{API}/migrate/inbound/info", headers=headers, trust_env=False)
+        rep.check(f"C refuses {label} (403)", r.status_code == 403, r.status_code)
+
+    made = c.post("/migrate/invites", json={"lock_on_import": False})
+    if not rep.check("C's admin issues an invite", made.status_code == 201, made.text[:300]):
+        return
+    code = made.json()["code"]
+    listed = c.get("/migrate/invites").json().get("invites", [])
+    rep.check(
+        "C lists the invite without its code",
+        code not in json.dumps(listed) and any(i["id"] == made.json()["id"] for i in listed),
+        [(i["state"], i["code_hint"]) for i in listed],
+    )
+    # A logo and an annotated comment on A's main dashboard travel with it.
+    main = next((d for d in _dashboards(a, project_id) if d.get("is_main_tab") is not False), None)
+    did = str(main["dashboard_id"]) if main else None
+    label = f"LAN threshold {time.strftime('%H%M%S')}"
+    if did:
+        logo = a.post(
+            f"/dashboards/upload_logo/{did}",
+            files={"file": ("logo.png", _PNG_1PX, "image/png")},
+        )
+        rep.check("A: dashboard logo uploaded", logo.status_code == 200, logo.text[:200])
+        thread = a.post(
+            "/comments/threads",
+            json={
+                "anchor": {"dashboard_id": did},
+                "body": "Published threshold",
+                "annotation": {
+                    "kind": "line",
+                    "geometry": {"kind": "ref_line", "axis": "y", "value": 5},
+                    "label": label,
+                },
+            },
+        )
+        rep.check("A: annotated comment created", thread.status_code == 201, thread.text[:200])
+    dest = a.get("/migrate/push/destinations").json()
+    rep.check("A allows a destination URL", dest.get("enabled") is True, dest)
+    body = {"project_id": project_id, "destination_url": c.base, "invite_code": code}
+    check = a.post("/migrate/push/check", json=body).json()
+    rep.check(
+        "A checks C with the URL + code (one round trip)",
+        check.get("can_push")
+        and (check.get("remote_info") or {}).get("credential_type") == "invite_code",
+        {k: check.get(k) for k in ("can_push", "errors", "transfer_mode")},
+    )
+    started = a.post("/migrate/push", json={**body, "message": "invite"})
+    if not rep.check("A publishes to C (202)", started.status_code == 202, started.text[:300]):
+        return
+    push_id = started.json()["push_id"]
+    push = _wait(
+        lambda: a.get(f"/migrate/push/{push_id}").json(),
+        lambda p: p.get("status") == "failed" or p.get("remote_status") in ("imported", "failed"),
+    )
+    rep.check(
+        "C imported at once, A reads it back with the status token",
+        push.get("remote_status") == "imported",
+        {k: push.get(k) for k in ("status", "remote_status", "remote_result", "error")},
+    )
+    stored = json.dumps(a.get("/migrate/push").json())
+    rep.check("A never stored the code", code not in stored, "")
+    reuse = a.post("/migrate/push/check", json=body).json()
+    rep.check(
+        "the same code still accepts this project's update",
+        bool(reuse.get("can_push")),
+        reuse.get("errors"),
+    )
+    queue = c.get("/migrate/requests").json().get("requests", [])
+    rep.check(
+        "C's request is recorded as invite-sourced",
+        any(r.get("credential_type") == "invite_code" for r in queue),
+        [(r["status"], r.get("credential_type")) for r in queue],
+    )
+    imported = _project(c, name)
+    if not rep.check("project exists on C", imported is not None, name):
+        return
+    cid = str(imported.get("id") or imported.get("_id"))
+    rep.check("unlocked on import (invite policy)", not imported.get("published_lock"), "")
+    if did:
+        logo_c = c.get(f"/dashboards/logo/{did}")
+        rep.check("C serves the dashboard logo", logo_c.status_code == 200, logo_c.status_code)
+        threads = c.get(f"/comments/dashboard/{did}")
+        labels = [
+            (t.get("annotation") or {}).get("label")
+            for t in (threads.json() if threads.status_code == 200 else [])
+        ]
+        rep.check("C has the annotated comment", label in labels, labels)
+    lock = c.post(f"/projects/{cid}/lock", json={"reason": "release"})
+    rep.check(
+        "C's admin locks it (Permissions > Editing)", lock.status_code == 200, lock.text[:200]
+    )
+    pub = c.post(f"/projects/toggle_public_private/{cid}", params={"is_public": "true"})
+    rep.check("then makes it public", pub.status_code == 200, pub.text[:200])
+    final = _project(c, name) or {}
+    rep.check(
+        "C serves it public and read-only",
+        final.get("is_public") is True and bool(final.get("published_lock")),
+        {"is_public": final.get("is_public"), "locked": bool(final.get("published_lock"))},
+    )
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--source", required=True)
@@ -208,6 +327,9 @@ def main() -> int:
     ap.add_argument("--target-home")
     ap.add_argument("--source-password")
     ap.add_argument("--target-password")
+    ap.add_argument("--invite-target", help="a target with chart defaults (scenario 4)")
+    ap.add_argument("--invite-target-home")
+    ap.add_argument("--invite-target-password")
     ap.add_argument("--project", default="Iris Dataset Project Data Analysis")
     ap.add_argument("--report")
     args = ap.parse_args()
@@ -320,6 +442,13 @@ def main() -> int:
                 )
                 titles = [d.get("title") for d in after_dashes]
                 rep.check("B carries A's edit", new_title in titles, titles)
+
+    # -- 4. publish with an invite code to a chart-defaults target -------------
+    if args.invite_target:
+        c = Instance(
+            args.invite_target, _password(args.invite_target_home, args.invite_target_password)
+        )
+        _invite_scenario(a, c, rep, pid, args.project)
 
     # -- 3. negatives -----------------------------------------------------------
     missing = httpx.get(

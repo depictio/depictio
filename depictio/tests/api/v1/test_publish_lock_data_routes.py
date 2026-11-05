@@ -129,16 +129,32 @@ def test_project_delete_locked(make_db):
     assert db["projects"].count_documents({}) == 1
 
 
-def test_toggle_public_private_locked(make_db):
+def test_toggle_public_private_locked_for_a_non_admin(make_db, monkeypatch):
     db = make_db(True)
+    owner = UserBase(id=ObjectId(), email="owner@example.org")
+    monkeypatch.setattr(proj_routes, "_async_get_project_from_id", lambda *_: {"_id": PID})
+    monkeypatch.setattr(proj_routes, "_can_manage_project_sharing", lambda *_: True)
     _assert_409(
         lambda: asyncio.run(
             proj_routes.toggle_public_private(
-                project_id=str(PID), is_public="true", current_user=_admin()
+                project_id=str(PID), is_public="true", current_user=owner
             )
         )
     )
     assert db["projects"].find_one({"_id": PID})["is_public"] is False
+
+
+def test_an_admin_may_publish_a_locked_release(make_db, monkeypatch):
+    """Lock, then make public: visibility is not content (#1303)."""
+    db = make_db(True)
+    monkeypatch.setattr(proj_routes, "cascade_project_visibility", lambda *_: {})
+    asyncio.run(
+        proj_routes.toggle_public_private(
+            project_id=str(PID), is_public="true", current_user=_admin()
+        )
+    )
+    doc = db["projects"].find_one({"_id": PID})
+    assert doc["is_public"] is True and doc.get("published_lock")
 
 
 def test_project_storage_locked(make_db):

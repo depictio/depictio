@@ -53,6 +53,10 @@ def _summary(doc: dict[str, Any]) -> dict[str, Any]:
         "status": doc.get("status"),
         "source_name": doc.get("source_name"),
         "source_instance": doc.get("source_instance"),
+        "credential_type": doc.get("credential_type", "pairing_key"),
+        "invite_id": doc.get("invite_id"),
+        "retryable": bool(doc.get("retryable")),
+        "error": (doc.get("result") or {}).get("error") if doc.get("status") == "failed" else None,
         "source_depictio_version": doc.get("source_depictio_version"),
         "requester": {"email": requester.get("email"), "name": requester.get("name")},
         "project_id": doc.get("project_id"),
@@ -193,3 +197,32 @@ async def revalidate_request(request_id: str, current_user: User = Depends(get_c
         {"$set": {"report": dumped, "updated_at": utc_now_str()}},
     )
     return {"id": str(doc["_id"]), "report": dumped}
+
+
+@requests_router.post("/{request_id}/retry", status_code=202)
+async def retry_request(
+    request_id: str,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user),
+):
+    """Run again an import that a restart interrupted, with its original decision.
+
+    Only a request marked ``retryable`` qualifies: its staged bundle was kept.
+    Any other failure deleted the bundle, and the source must push again.
+    """
+    _require_admin(current_user)
+    doc = _load(request_id)
+    claimed = migration_import.claim_retry(doc["_id"])
+    if claimed is None:
+        raise HTTPException(status_code=409, detail="Only an interrupted import can be retried")
+    decision = claimed.get("decision") or {}
+    lock = bool(decision.get("lock", settings.migration.lock_imported_default))
+    make_public = bool(decision.get("make_public"))
+    approver = {
+        "id": str(decision.get("by_id") or current_user.id),
+        "email": decision.get("by_email") or getattr(current_user, "email", None),
+    }
+    background_tasks.add_task(
+        migration_import.run_migration_import, str(claimed["_id"]), approver, lock, make_public
+    )
+    return {"id": str(claimed["_id"]), "status": "importing"}

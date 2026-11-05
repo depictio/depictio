@@ -1,11 +1,14 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
+  Autocomplete,
   Badge,
   Button,
   Group,
   Loader,
   Modal,
+  PasswordInput,
+  SegmentedControl,
   Select,
   Stack,
   Text,
@@ -13,8 +16,14 @@ import {
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
-import { getPush, pushPreflight, startPush } from 'depictio-react-core';
-import type { MigrationPush, MigrationTarget, PushPreflightResult } from 'depictio-react-core';
+import { checkPush, getPush, getPushDestinations, startPush } from 'depictio-react-core';
+import type {
+  MigrationPush,
+  MigrationTarget,
+  PushDestination,
+  PushDestinations,
+  PushPreflightResult,
+} from 'depictio-react-core';
 
 import { usePushTargets } from './usePushTargets';
 
@@ -49,6 +58,7 @@ const REMOTE_COLOR: Record<string, string> = {
   imported: 'green',
   rejected: 'red',
   failed: 'red',
+  expired: 'gray',
   superseded: 'gray',
 };
 
@@ -58,8 +68,18 @@ const REMOTE_TEXT: Record<string, string> = {
   imported: 'Imported on the target.',
   rejected: 'Rejected by an administrator on the target.',
   failed: 'The import failed on the target.',
+  expired: 'The request expired before it was reviewed.',
   superseded: 'Replaced by a newer push.',
 };
+
+/** A 409 on start means this project already has a push under way. */
+function pushErrorText(err: unknown, fallback: string): string {
+  const status = (err as { status?: number } | null)?.status;
+  if (status === 409) {
+    return 'A push of this project is already in progress. Wait for it to finish, then try again.';
+  }
+  return err instanceof Error ? err.message : fallback;
+}
 
 export interface MigrateProjectModalProps {
   opened: boolean;
@@ -69,9 +89,11 @@ export interface MigrateProjectModalProps {
 }
 
 /**
- * Push a project to another Depictio instance for review: pick a target, run
- * the pre-flight, submit. The push builds and uploads in the background; the
- * modal follows it until it is submitted, then shows what the target made of it.
+ * Publish a project to another Depictio instance: pick a registered target, or
+ * enter a destination URL and the invite code its admin issued, run the
+ * pre-flight, submit. The push builds and uploads in the background; the modal
+ * follows it until it is submitted, then shows what the destination made of it.
+ * The invite code lives in component state only; it is never persisted.
  */
 const MigrateProjectModal: React.FC<MigrateProjectModalProps> = ({
   opened,
@@ -80,7 +102,11 @@ const MigrateProjectModal: React.FC<MigrateProjectModalProps> = ({
   projectName,
 }) => {
   const targets = usePushTargets(opened);
+  const [destinations, setDestinations] = useState<PushDestinations | null>(null);
+  const [mode, setMode] = useState<'target' | 'url' | null>(null);
   const [targetId, setTargetId] = useState<string | null>(null);
+  const [url, setUrl] = useState('');
+  const [code, setCode] = useState('');
   const [preflight, setPreflight] = useState<PushPreflightResult | null>(null);
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -90,45 +116,93 @@ const MigrateProjectModal: React.FC<MigrateProjectModalProps> = ({
   const [refreshing, setRefreshing] = useState(false);
   const pushId = useRef<string | null>(null);
 
+  const adhocEnabled = destinations?.enabled === true;
+  const hasTargets = targets.length > 0;
+
+  useEffect(() => {
+    if (!opened) return undefined;
+    let live = true;
+    getPushDestinations()
+      .then((d) => live && setDestinations(d))
+      .catch(() => live && setDestinations({ enabled: false, domains: [], recent: [] }));
+    return () => {
+      live = false;
+    };
+  }, [opened]);
+
+  // Open on the mode that can work: registered targets first, else URL + code.
+  useEffect(() => {
+    if (!opened || mode !== null || destinations === null) return;
+    if (hasTargets) setMode('target');
+    else if (adhocEnabled) setMode('url');
+  }, [opened, mode, destinations, hasTargets, adhocEnabled]);
+
   // A single target needs no choosing.
   useEffect(() => {
     if (opened && targetId === null && targets.length === 1) setTargetId(targets[0].id);
   }, [opened, targets, targetId]);
 
-  // Fresh state each time the modal opens.
+  // Fresh state each time the modal opens (and the code never lingers).
   useEffect(() => {
     if (opened) return;
     setPreflight(null);
     setError(null);
     setMessage('');
     setPush(null);
+    setMode(null);
+    setUrl('');
+    setCode('');
     pushId.current = null;
   }, [opened]);
 
-  useEffect(() => {
-    if (!opened || !targetId) {
+  const destination: PushDestination | null =
+    mode === 'target' && targetId
+      ? { target_id: targetId }
+      : mode === 'url' && url.trim() && code.trim()
+        ? { destination_url: url.trim(), invite_code: code.trim() }
+        : null;
+
+  const runCheck = useCallback(
+    async (dest: PushDestination, isLive: () => boolean) => {
+      setChecking(true);
+      setError(null);
       setPreflight(null);
+      try {
+        const r = await checkPush(projectId, dest);
+        if (isLive()) setPreflight(r);
+      } catch (err) {
+        if (isLive()) setError(pushErrorText(err, 'Pre-flight failed.'));
+      } finally {
+        if (isLive()) setChecking(false);
+      }
+    },
+    [projectId],
+  );
+
+  // A registered target is checked as soon as it is chosen.
+  useEffect(() => {
+    if (!opened || mode !== 'target' || !targetId) {
+      if (mode === 'target') setPreflight(null);
       return undefined;
     }
     let live = true;
-    setChecking(true);
-    setError(null);
-    setPreflight(null);
-    pushPreflight(projectId, targetId)
-      .then((r) => live && setPreflight(r))
-      .catch((err) => live && setError(err instanceof Error ? err.message : 'Pre-flight failed.'))
-      .finally(() => live && setChecking(false));
+    void runCheck({ target_id: targetId }, () => live);
     return () => {
       live = false;
     };
-  }, [opened, targetId, projectId]);
+  }, [opened, mode, targetId, runCheck]);
+
+  // An edited URL or code invalidates the last check.
+  useEffect(() => {
+    if (mode === 'url') setPreflight(null);
+  }, [mode, url, code]);
 
   const refreshPush = useCallback(async () => {
     if (!pushId.current) return;
     try {
       setPush(await getPush(pushId.current));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to read the push status.');
+      setError(pushErrorText(err, 'Failed to read the push status.'));
     }
   }, []);
 
@@ -140,15 +214,17 @@ const MigrateProjectModal: React.FC<MigrateProjectModalProps> = ({
   }, [inFlight, refreshPush]);
 
   const handlePush = async () => {
-    if (!targetId) return;
+    if (!destination) return;
     setStarting(true);
     setError(null);
     try {
-      const res = await startPush(projectId, targetId, message.trim() || undefined);
+      const res = await startPush(projectId, destination, message.trim() || undefined);
       pushId.current = res.push_id;
       setPush({ id: res.push_id, project_id: projectId, status: res.status });
+      // The code has done its job; do not keep it around.
+      setCode('');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to start the push.');
+      setError(pushErrorText(err, 'Failed to start the push.'));
     } finally {
       setStarting(false);
     }
@@ -163,9 +239,17 @@ const MigrateProjectModal: React.FC<MigrateProjectModalProps> = ({
   const pre = preflight?.preflight;
   const blockingErrors = preflight?.errors ?? [];
   const foreign = pre?.conflict === 'foreign';
-  const canPush = !!preflight && preflight.can_push && !foreign && blockingErrors.length === 0;
+  const invite = preflight?.remote_info?.invite ?? null;
+  const canPush =
+    !!preflight &&
+    preflight.can_push &&
+    !preflight.in_flight &&
+    !foreign &&
+    blockingErrors.length === 0;
   const targetName =
-    preflight?.target.name ?? targets.find((t: MigrationTarget) => t.id === targetId)?.name ?? '';
+    preflight?.target.name ??
+    targets.find((t: MigrationTarget) => t.id === targetId)?.name ??
+    (mode === 'url' ? url.trim() : '');
 
   const renderProgress = (p: MigrationPush) => {
     if (p.status === 'failed') {
@@ -189,7 +273,9 @@ const MigrateProjectModal: React.FC<MigrateProjectModalProps> = ({
     return (
       <Stack gap="xs" data-testid="push-status" data-status="submitted" data-remote-status={remote}>
         <Alert color="green" variant="light" icon={<Icon icon="mdi:check-circle" />}>
-          Submitted to {targetName}. An administrator there reviews it before it is imported.
+          {invite?.imports_immediately || p.credential_type === 'invite_code'
+            ? `Sent to ${targetName}. It is imported there without review.`
+            : `Submitted to ${targetName}. An administrator there reviews it before it is imported.`}
         </Alert>
         <Group gap="xs">
           <Text size="sm">Status on the target:</Text>
@@ -223,6 +309,23 @@ const MigrateProjectModal: React.FC<MigrateProjectModalProps> = ({
       </Row>
       <Row label="Size">{formatBytes(r.total_bytes)}</Row>
       <Row label="Objects">{r.object_count}</Row>
+      {preflight?.in_flight && (
+        <Alert color="yellow" variant="light" data-testid="migrate-in-flight">
+          A push of this project is already in progress. Wait for it to finish before
+          publishing again.
+        </Alert>
+      )}
+      {invite && !foreign && (
+        <Alert color="blue" variant="light" data-testid="migrate-invite-info">
+          Imported immediately on the destination, with no review;{' '}
+          {invite.lock_on_import
+            ? 'editing will be locked there.'
+            : 'editing will stay unlocked there.'}
+          {invite.project_name && invite.project_id === projectId
+            ? ' This code already brought this project: this push is an update.'
+            : ''}
+        </Alert>
+      )}
       {pre?.conflict === 're_push' && (
         <Alert color="blue" variant="light" data-testid="migrate-re-push">
           This will become a new version on the target.
@@ -230,8 +333,9 @@ const MigrateProjectModal: React.FC<MigrateProjectModalProps> = ({
       )}
       {foreign && (
         <Alert color="red" variant="light" data-testid="migrate-foreign">
-          A different project with this id already exists on the target. It cannot be
-          overwritten from here.
+          {invite
+            ? 'This project is already on the destination, brought by another code. Only that code can send its updates.'
+            : 'A different project with this id already exists on the target. It cannot be overwritten from here.'}
         </Alert>
       )}
       {pre?.existing_locked && (
@@ -270,7 +374,7 @@ const MigrateProjectModal: React.FC<MigrateProjectModalProps> = ({
     <Modal
       opened={opened}
       onClose={onClose}
-      title={`Migrate ${projectName ? `"${projectName}" ` : 'project '}to another instance`}
+      title={`Publish ${projectName ? `"${projectName}" ` : 'project '}to another instance`}
       centered
       size="md"
       data-testid="migrate-project-modal"
@@ -278,27 +382,85 @@ const MigrateProjectModal: React.FC<MigrateProjectModalProps> = ({
       <Stack gap="md">
         {!push && (
           <>
-            <Select
-              label="Target instance"
-              placeholder="Choose a target"
-              data={targets.map((t) => ({ value: t.id, label: `${t.name} (${t.url})` }))}
-              value={targetId}
-              onChange={setTargetId}
-              allowDeselect={false}
-              data-testid="migrate-target-select"
-            />
+            {hasTargets && adhocEnabled && (
+              <SegmentedControl
+                fullWidth
+                value={mode ?? 'target'}
+                onChange={(v) => setMode(v as 'target' | 'url')}
+                data={[
+                  { value: 'target', label: 'Registered target' },
+                  { value: 'url', label: 'URL + invite code' },
+                ]}
+                data-testid="migrate-mode"
+              />
+            )}
+            {destinations !== null && !hasTargets && !adhocEnabled && (
+              <Alert color="yellow" variant="light" data-testid="migrate-no-destination">
+                No destination is available: no target is registered and publishing to a URL is
+                disabled on this instance.
+              </Alert>
+            )}
+            {mode === 'target' && (
+              <Select
+                label="Target instance"
+                placeholder="Choose a target"
+                data={targets.map((t) => ({ value: t.id, label: `${t.name} (${t.url})` }))}
+                value={targetId}
+                onChange={setTargetId}
+                allowDeselect={false}
+                data-testid="migrate-target-select"
+              />
+            )}
+            {mode === 'url' && (
+              <Stack gap="xs">
+                <Autocomplete
+                  label="Destination URL"
+                  placeholder="https://depictio.example.org"
+                  description={
+                    (destinations?.domains.length ?? 0) > 0
+                      ? `Allowed domains: ${destinations?.domains.join(', ')}`
+                      : 'The address of the instance that issued the invite code.'
+                  }
+                  data={destinations?.recent ?? []}
+                  value={url}
+                  onChange={setUrl}
+                  autoComplete="off"
+                  data-testid="migrate-url"
+                />
+                <PasswordInput
+                  label="Invite code"
+                  description="Issued by an administrator of the destination. Never stored here; keep it to publish this project's updates later."
+                  placeholder="XXXX-XXXX-XXXX-XXXX-XXXX-XXXX"
+                  value={code}
+                  onChange={(e) => setCode(e.currentTarget.value)}
+                  autoComplete="off"
+                  data-testid="migrate-code"
+                />
+                <Group justify="flex-end">
+                  <Button
+                    size="xs"
+                    variant="default"
+                    disabled={!destination || checking}
+                    onClick={() => destination && void runCheck(destination, () => true)}
+                    data-testid="migrate-check"
+                  >
+                    Check destination
+                  </Button>
+                </Group>
+              </Stack>
+            )}
             {checking && (
               <Group gap="xs">
                 <Loader size="xs" />
                 <Text size="sm" c="dimmed">
-                  Checking the target…
+                  Checking the destination…
                 </Text>
               </Group>
             )}
             {preflight && renderReport(preflight)}
             {preflight && (
               <Textarea
-                label="Message to the reviewer"
+                label={preflight.remote_info?.invite ? 'Message' : 'Message to the reviewer'}
                 description="Optional."
                 autosize
                 minRows={2}
@@ -328,7 +490,7 @@ const MigrateProjectModal: React.FC<MigrateProjectModalProps> = ({
               leftSection={<Icon icon="mdi:transfer-up" width={16} />}
               data-testid="migrate-push-button"
             >
-              Migrate
+              Publish
             </Button>
           )}
         </Group>

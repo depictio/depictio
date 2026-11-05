@@ -54,6 +54,11 @@ COLLECTION_ORDER: tuple[str, ...] = (
     "dashboards",
     "multiqc",
     "jbrowse",
+    # Dashboard logos (bytes, base64) and comment threads with their
+    # annotations. Bundles from before these sections carry neither; a target
+    # from before ignores them, so they need no new bundle format.
+    "branding_assets",
+    "comment_threads",
 )
 
 #: Sections whose documents point at a data collection.
@@ -79,7 +84,14 @@ def _collections() -> dict[str, Collection[dict[str, Any]]]:
         "dashboards": db.dashboards_collection,
         "multiqc": db.multiqc_collection,
         "jbrowse": db.jbrowse_collection,
+        "branding_assets": db.branding_assets_collection,
+        "comment_threads": db.comment_threads_collection,
     }
+
+
+def dashboard_logo_key(dashboard_id: Any) -> str:
+    """The ``branding_assets`` key of a dashboard's logo (see ``services/branding.py``)."""
+    return f"dashboard-{dashboard_id}"
 
 
 # ---------------------------------------------------------------------------
@@ -191,6 +203,14 @@ def collect_bundle_docs(
         data["dashboards"] = list(
             cols["dashboards"].find({"$or": [{"project_id": pid}, {"project_id": str(pid)}]})
         )
+        # A logo is keyed by its dashboard's id, which an import keeps.
+        keys = [dashboard_logo_key(d["_id"]) for d in data["dashboards"] if d.get("_id")]
+        data["branding_assets"] = (
+            list(cols["branding_assets"].find({"_id": {"$in": keys}})) if keys else []
+        )
+        # Threads hold their annotations; author ids are kept as recorded (the
+        # email shows who wrote it, on any instance).
+        data["comment_threads"] = list(cols["comment_threads"].find({"project_id": str(pid)}))
     return data
 
 
@@ -534,6 +554,60 @@ def _doc_id(doc: dict[str, Any]) -> ObjectId | None:
     return _as_oid(doc.get("_id") or doc.get("id"))
 
 
+def _known_component_kinds() -> tuple[set[str], set[str]]:
+    """Component types, and advanced-viz kinds, this instance can render."""
+    from typing import get_args
+
+    from depictio.models.components.types import AdvancedVizKind
+    from depictio.models.models.dashboards import DashboardDataLite
+
+    types = set(DashboardDataLite._COMPONENT_TYPE_MAP) | {"advanced_viz"}
+    return types, set(get_args(AdvancedVizKind))
+
+
+def compatibility_errors(dashboards: Iterable[dict[str, Any]]) -> list[str]:
+    """What a bundle's dashboards use that this instance cannot render.
+
+    Two instances can share a bundle format and still differ in what a
+    dashboard may hold: a component type or an advanced-viz kind added on the
+    source after the target's release would be imported and then fail to show.
+    Refusing it here, with what to do, is the compatibility test.
+    """
+    from depictio.version import get_version
+
+    types, kinds = _known_component_kinds()
+    unknown: set[str] = set()
+    for dash in dashboards:
+        for comp in dash.get("stored_metadata") or []:
+            if not isinstance(comp, dict):
+                continue
+            ctype = comp.get("component_type")
+            if ctype and ctype not in types:
+                unknown.add(f"component type {ctype!r}")
+            if ctype == "advanced_viz":
+                kind = comp.get("viz_kind") or (comp.get("config") or {}).get("viz_kind")
+                if kind and kind not in kinds:
+                    unknown.add(f"advanced visualisation {kind!r}")
+    if not unknown:
+        return []
+    return [
+        f"this instance (Depictio {get_version()}) cannot display "
+        + ", ".join(sorted(unknown))
+        + ": update Depictio here to the source's version, then publish again"
+    ]
+
+
+def foreign_project_error(project_id: str, source: str | None) -> str:
+    """Why a push of a project that already exists here, from elsewhere, is refused."""
+    if (source or "").startswith("invite:"):
+        # An invite's name is an id; say what to do instead.
+        return (
+            f"project {project_id} is already here: only the code that first brought it "
+            "can send its updates"
+        )
+    return f"project {project_id} already exists here and was not imported from {source!r}"
+
+
 def _last_hop_source(project_doc: dict[str, Any] | None) -> str | None:
     hops = ((project_doc or {}).get("provenance") or {}).get("imported_from") or []
     if hops and isinstance(hops[-1], dict):
@@ -641,10 +715,7 @@ def validate_bundle(
         )
         report.conflict = "re_push" if same_lineage else "foreign"
         if report.conflict == "foreign" and strict:
-            report.errors.append(
-                f"project {pid} already exists here and was not imported from "
-                f"{report.source_instance!r}"
-            )
+            report.errors.append(foreign_project_error(str(pid), report.source_instance))
     name_clash = cols["projects"].find_one({"name": project.get("name"), "_id": {"$ne": pid}})
     if name_clash:
         report.errors.append(f"another project here is already named {project.get('name')!r}")
@@ -684,6 +755,23 @@ def validate_bundle(
         ):
             if str(doc.get("project_id")) != str(pid):
                 report.errors.append(f"dashboard id {doc['_id']} belongs to another project here")
+    report.errors.extend(compatibility_errors(data.get("dashboards") or []))
+    thread_ids = [i for i in (_doc_id(d) for d in data.get("comment_threads") or []) if i]
+    if thread_ids:
+        for doc in cols["comment_threads"].find({"_id": {"$in": thread_ids}}, {"project_id": 1}):
+            if str(doc.get("project_id")) != str(pid):
+                report.errors.append(
+                    f"comment thread id {doc['_id']} belongs to another project here"
+                )
+    for doc in data.get("comment_threads") or []:
+        if str(doc.get("project_id")) != str(pid):
+            report.errors.append(f"comment thread {doc.get('_id')} belongs to another project")
+    for doc in data.get("branding_assets") or []:
+        key = str(doc.get("_id") or doc.get("id") or "")
+        if key.removeprefix("dashboard-") not in bundle_dash_ids or not key.startswith(
+            "dashboard-"
+        ):
+            report.errors.append(f"logo {key!r} is not one of the bundled dashboards")
     existing_dash_ids = {
         str(d["_id"])
         for d in cols["dashboards"].find(
@@ -738,6 +826,28 @@ def _rewrite_bucket(obj: Any, source_prefix: str, target_prefix: str) -> Any:
 def _restore_doc(section: str, doc: dict[str, Any]) -> dict[str, Any]:
     """ObjectIds and datetimes back, with the per-collection exceptions."""
     doc = _normalise_id(doc)
+    if section == "branding_assets":
+        # String key, base64 payload: nothing to restore.
+        return dict(doc)
+    if section == "comment_threads":
+        thread = dict(doc)
+        if isinstance(thread.get("_id"), str) and ObjectId.is_valid(thread["_id"]):
+            thread["_id"] = ObjectId(thread["_id"])
+        # Every other id is a string by model and is matched as one.
+        for key in ("created_at", "updated_at", "resolved_at"):
+            if isinstance(thread.get(key), str):
+                thread[key] = parse_json_datetime_naive(thread[key])
+        comments = []
+        for c in thread.get("comments") or []:
+            if isinstance(c, dict):
+                c = dict(c)
+                for key in ("created_at", "edited_at"):
+                    if isinstance(c.get(key), str):
+                        c[key] = parse_json_datetime_naive(c[key])
+            comments.append(c)
+        if "comments" in thread:
+            thread["comments"] = comments
+        return thread
     if section == "multiqc":
         # data_collection_id is a string by model and is queried as one.
         restored = dict(doc)

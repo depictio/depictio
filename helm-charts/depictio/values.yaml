@@ -353,6 +353,14 @@ backend:
     # public-facing instance.
     DEPICTIO_AUTH_REGISTRATION_DISABLED: "false"
 
+    # Project migration (#1303). Receiving is on by default in the chart, off in
+    # the code: inbound with no DEPICTIO_MIGRATION_INBOUND_SOURCES and no valid
+    # invite code accepts nothing, and an invite can only be issued by an admin
+    # of this instance (Admin > Migrations > Invitations, or "Receive a project").
+    # UI_ENABLED shows those controls and the Permissions > Editing lock switch.
+    DEPICTIO_MIGRATION_INBOUND_ENABLED: "true"
+    DEPICTIO_MIGRATION_UI_ENABLED: "true"
+
     # Anonymous user configuration
     DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL: "anonymous@depict.io"
     DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS: "24"

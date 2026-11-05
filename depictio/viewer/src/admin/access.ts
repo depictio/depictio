@@ -29,8 +29,10 @@ export function canSeeBackups(modes: AdminModes): boolean {
   return isTrustedInstance(modes);
 }
 
-/** Reviewing projects pushed from other instances is admin work on trusted
- *  instances only (the page is admin-only already; the API enforces it too). */
+/** Receiving projects pushed from other instances (requests, invitations) is
+ *  admin work. Same rule as monitoring: a public instance has real admins who
+ *  sign in and receive projects too; a guest or a demo instance never does.
+ *  The page is admin-only already and the API enforces it too. */
 export function canSeeMigrations(modes: AdminModes): boolean {
-  return isTrustedInstance(modes);
+  return canSeeMonitoring(modes);
 }

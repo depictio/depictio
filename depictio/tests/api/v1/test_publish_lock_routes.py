@@ -282,8 +282,23 @@ EXEMPT: dict[tuple[str, str], str] = {
     ("migrate_endpoints.push_routes", "preflight"): _READ,
     ("migrate_endpoints.inbound_routes", "inbound_preflight"): _READ,
     ("migrate_endpoints.inbound_routes", "inbound_probe"): _READ,
+    ("migrate_endpoints.inbound_routes", "inbound_check"): _READ,
     ("migrate_endpoints.inbound_routes", "inbound_create_request"): (
-        "stages a request; nothing reaches a project until an admin approves it"
+        "stages a request; with a pairing key nothing reaches a project until an admin "
+        "approves it, with an invite code the invite is that approval given in advance "
+        "and the import is the same one-writer-past-the-lock job"
+    ),
+    ("migrate_endpoints.requests_routes", "retry_request"): (
+        "re-runs an approved import a restart interrupted: the same one writer past the lock"
+    ),
+    ("migrate_endpoints.invites_routes", "create_invite"): (
+        "instance registry of invite codes, no project content"
+    ),
+    ("migrate_endpoints.invites_routes", "revoke_invite"): (
+        "instance registry of invite codes, no project content"
+    ),
+    ("migrate_endpoints.push_routes", "retry_push"): (
+        "starts a new push: reads the project into a bundle, like start_push"
     ),
     ("migrate_endpoints.requests_routes", "approve_request"): (
         "the approved migration is the one writer past the lock: it records the "

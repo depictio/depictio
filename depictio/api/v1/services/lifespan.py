@@ -252,6 +252,25 @@ def start_core_indexes(should_initialize: bool) -> None:
         logger.warning(f"Worker {WORKER_ID}: Core index setup failed: {exc}")
 
 
+def start_migration_recovery(should_initialize: bool) -> None:
+    """Fail pushes and imports a restart cut short (#1303). Never fails boot.
+
+    Their background job lived in the process that died, so their status would
+    otherwise say "in progress" forever (and an in-flight push would block the
+    next push of its project).
+    """
+    if not should_initialize:
+        return
+    try:
+        from depictio.api.v1.services.migration_import import recover_interrupted_requests
+        from depictio.api.v1.services.migration_push import recover_interrupted_pushes
+
+        recover_interrupted_pushes()
+        recover_interrupted_requests()
+    except Exception as exc:
+        logger.warning(f"Worker {WORKER_ID}: migration recovery failed: {exc}")
+
+
 def start_dashboard_version_storage(should_initialize: bool) -> None:
     """Create the dashboard version-ledger indexes. Never fails boot."""
     if not (settings.dashboard_versions.enabled and should_initialize):
@@ -449,6 +468,7 @@ async def lifespan(_app: FastAPI):
     start_yaml_services(should_initialize)
     await start_event_services(should_initialize)
     start_core_indexes(should_initialize)
+    start_migration_recovery(should_initialize)
     start_dashboard_version_storage(should_initialize)
     start_monitoring_storage(should_initialize)
     start_comment_indexes(should_initialize)

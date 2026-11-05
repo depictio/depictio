@@ -16,6 +16,7 @@ import hashlib
 import os
 import tempfile
 from dataclasses import dataclass, field
+from datetime import timedelta
 from typing import Any
 
 from botocore.exceptions import BotoCoreError, ClientError
@@ -26,7 +27,7 @@ from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.endpoints.projects_endpoints.provenance import instance_label
 from depictio.api.v1.services import project_bundle
 from depictio.models.models.migration import TransferMode
-from depictio.models.timestamps import utc_now_str
+from depictio.models.timestamps import TIMESTAMP_FORMAT, utc_now, utc_now_str
 from depictio.version import get_version
 
 
@@ -207,22 +208,70 @@ def build_project_bundle_file(
 # ---------------------------------------------------------------------------
 
 
+INTERRUPTED = "interrupted by a restart"
+
+
 def _set_push(push_id: ObjectId, **fields: Any) -> None:
     from depictio.api.v1.db import migration_pushes_collection
 
     fields["updated_at"] = utc_now_str()
+    if fields.get("status") in ("submitted", "failed"):
+        fields["in_flight"] = False
     migration_pushes_collection.update_one({"_id": push_id}, {"$set": fields})
 
 
-def run_push(push_id: str) -> None:
+def recover_interrupted_pushes(now: Any = None) -> int:
+    """Pushes left ``building``/``uploading`` by a restart become ``failed``.
+
+    Run at API startup: the job lived in the process that died. Only pushes
+    whose last update is older than ``interrupted_after_minutes`` are touched,
+    so another replica's running push is left alone.
+    """
+    from depictio.api.v1.db import migration_pushes_collection
+
+    now = now or utc_now()
+    cutoff = (now - timedelta(minutes=settings.migration.interrupted_after_minutes)).strftime(
+        TIMESTAMP_FORMAT
+    )
+    result = migration_pushes_collection.update_many(
+        {"status": {"$in": ["building", "uploading"]}, "updated_at": {"$lt": cutoff}},
+        {
+            "$set": {
+                "status": "failed",
+                "error": INTERRUPTED,
+                "in_flight": False,
+                "updated_at": utc_now_str(),
+            }
+        },
+    )
+    if result.modified_count:
+        logger.warning("migrate: %d push(es) %s", result.modified_count, INTERRUPTED)
+    return int(result.modified_count)
+
+
+def _push_target(push: dict[str, Any], credential: str | None) -> Any:
+    from depictio.api.v1.endpoints.migrate_endpoints.push_routes import ADHOC, adhoc_target
+    from depictio.api.v1.endpoints.migrate_endpoints.targets_routes import resolve_target
+
+    if push.get("target_id") == ADHOC:
+        if not credential or not push.get("target_url"):
+            raise RuntimeError("The invite code is no longer available; retry the push")
+        return adhoc_target(push["target_url"], credential)
+    return resolve_target(push["target_id"])
+
+
+def run_push(push_id: str, credential: str | None = None) -> None:
     """Build the bundle, send it to the target, record the outcome.
 
-    Runs in the FastAPI background thread pool. Every failure ends as
-    ``status: failed`` with a short message (never the pairing key), and the
+    Runs in the FastAPI background thread pool. ``credential`` is the invite
+    code of an ad-hoc destination, held in memory only. Every failure ends as
+    ``status: failed`` with a short message (never a key or code), and the
     temp bundle is always removed.
     """
+    from fastapi import HTTPException
+
+    from depictio.api.v1.crypto import encrypt_secret
     from depictio.api.v1.db import migration_pushes_collection, projects_collection
-    from depictio.api.v1.endpoints.migrate_endpoints.targets_routes import resolve_target
     from depictio.api.v1.services.outbound_http import RemoteError, TargetClient
 
     oid = ObjectId(push_id)
@@ -235,7 +284,7 @@ def run_push(push_id: str) -> None:
         project = projects_collection.find_one({"_id": ObjectId(push["project_id"])})
         if not project:
             raise RuntimeError("Project no longer exists")
-        target = resolve_target(push["target_id"])
+        target = _push_target(push, credential)
         built = build_project_bundle_file(
             project, mode="all", transfer_mode=push.get("transfer_mode", "inline")
         )
@@ -255,18 +304,25 @@ def run_push(push_id: str) -> None:
                     "message": push.get("message"),
                 },
             )
+        extra: dict[str, Any] = {}
+        if answer.get("status_token"):
+            # Reads this one request's status, nothing else; sealed like a key.
+            extra["status_token_enc"] = encrypt_secret(str(answer["status_token"]))
         _set_push(
             oid,
             status="submitted",
             remote_request_id=str(answer.get("request_id")),
             remote_status=answer.get("status"),
             error=None,
+            **extra,
         )
     except RemoteError as exc:
         logger.warning("migrate push %s failed: %s", push_id, exc)
         _set_push(oid, status="failed", error=f"Target refused ({exc.status_code}): {exc.detail}")
     except project_bundle.BundleTooLarge as exc:
         _set_push(oid, status="failed", error=str(exc))
+    except HTTPException as exc:  # an ad-hoc destination no longer allowed
+        _set_push(oid, status="failed", error=str(exc.detail))
     except Exception as exc:  # noqa: BLE001 - recorded, not raised: nobody awaits a background job
         logger.exception("migrate push %s failed", push_id)
         _set_push(oid, status="failed", error=f"{type(exc).__name__}: {str(exc)[:300]}")

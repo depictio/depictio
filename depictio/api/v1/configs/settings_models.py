@@ -333,6 +333,9 @@ class MongoDBConfig(ServiceConfig):
         migration_requests_collection: str = Field(default="migration_requests")
         migration_targets_collection: str = Field(default="migration_targets")
         migration_pushes_collection: str = Field(default="migration_pushes")
+        # Target side: invite codes an admin issued so a source can push without
+        # a pre-shared pairing key. Only the sha256 of each code is stored.
+        migration_invites_collection: str = Field(default="migration_invites")
         test_collection: str = Field(default="test")
 
     collections: Collections = Field(default_factory=Collections)
@@ -1950,10 +1953,42 @@ class MigrationConfig(BaseSettings):
         default_factory=list,
         description="Hosts a UI-added target may use over http or on a private address (LAN)",
     )
-    inbound_enabled: bool = Field(default=False, description="Accept pushes from inbound_sources")
+    inbound_enabled: bool = Field(
+        default=False,
+        description=(
+            "Accept pushes from inbound_sources and from holders of a valid invite code."
+            " On with no source and no invite accepts nothing"
+        ),
+    )
     inbound_sources: list[MigrationInboundSource] = Field(default_factory=list)
     lock_imported_default: bool = Field(
         default=True, description="Approval publishes the project read-only unless unticked"
+    )
+    destination_domains: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Source side: domain suffixes a project owner may publish to with a URL and an"
+            ' invite code (e.g. ["serve.scilifelab.se"]). Empty: no ad-hoc destination'
+        ),
+    )
+    invite_ttl_days: int = Field(
+        default=30,
+        ge=1,
+        description=(
+            "Default lifetime of an invite code: it brings one project, then that"
+            " project's updates, until it expires"
+        ),
+    )
+    invite_max_ttl_days: int = Field(
+        default=365, ge=1, description="Longest lifetime an admin may give an invite code"
+    )
+    interrupted_after_minutes: int = Field(
+        default=60,
+        ge=1,
+        description=(
+            "On startup, a push still building/uploading or a request still importing whose"
+            " last update is older than this is marked failed (interrupted by a restart)"
+        ),
     )
     max_bundle_bytes: int = Field(default=10 * 1024**3, ge=1)
     staging_prefix: str = Field(default="_migration_staging")
@@ -1972,6 +2007,12 @@ class MigrationConfig(BaseSettings):
         if "/" in v:
             raise ValueError("staging_prefix must be a single path segment")
         return v
+
+    @field_validator("destination_domains")
+    @classmethod
+    def _clean_domains(cls, v: list[str]) -> list[str]:
+        # "serve.scilifelab.se" and ".serve.scilifelab.se" mean the same suffix.
+        return [d.strip().lower().strip(".") for d in v if d.strip().strip(".")]
 
     @model_validator(mode="after")
     def _unique_names(self) -> "MigrationConfig":

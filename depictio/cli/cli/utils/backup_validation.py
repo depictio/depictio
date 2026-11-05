@@ -371,10 +371,13 @@ def check_backup_collections_coverage() -> Dict[str, Any]:
             # staged bundle in S3 and a push at a remote request, neither of
             # which a MongoDB backup holds; a UI target's key is encrypted with
             # this instance's own secrets key. The migrated project itself is
-            # in 'projects' like any other.
+            # in 'projects' like any other. Invites are short-lived, single-
+            # instance credentials (only a code hash): restoring one elsewhere
+            # would re-open a door the admin may have meant to close.
             "migration_requests",
             "migration_pushes",
             "migration_targets",
+            "migration_invites",
         ]
         core_collections = {
             col

@@ -8,7 +8,12 @@ https and resolve to public addresses, unless their host is explicitly
 allowlisted. The check runs again before every call, not only when the target
 is saved, because a DNS record can change between the two (rebinding).
 
-The pairing key is only ever placed in a request header here. It is never
+A third kind is the *ad-hoc destination*: a project owner types a URL and an
+invite code (never stored). Its host must end with one of
+``DEPICTIO_MIGRATION_DESTINATION_DOMAINS`` and it goes through the same guard,
+both checked again before every call.
+
+The pairing key (or invite code) is only ever placed in a request header here. It is never
 logged, and error details quoted from the remote are bounded and never echo
 request headers.
 """
@@ -29,6 +34,8 @@ from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 
 PAIRING_HEADER = "X-Depictio-Pairing-Key"
+INVITE_HEADER = "X-Depictio-Invite-Code"
+REQUEST_TOKEN_HEADER = "X-Depictio-Request-Token"
 #: JSON answers of a target are small; anything bigger is not a Depictio.
 MAX_JSON_BYTES = 1024 * 1024
 _MAX_DETAIL_CHARS = 500
@@ -52,13 +59,20 @@ class RemoteError(Exception):
 
 @dataclass(frozen=True)
 class ResolvedTarget:
-    """A push target with its pairing key in the clear, for one call only."""
+    """A push target with its credential in the clear, for one call only.
+
+    ``pairing_key`` holds whatever goes into ``credential_header``: a pairing
+    key, an invite code, or a request's status token.
+    """
 
     id: str
     name: str
     url: str
     pairing_key: str
     trusted: bool
+    credential_header: str = PAIRING_HEADER
+    #: Set for an ad-hoc destination: the host must end with one of these.
+    domain_suffixes: tuple[str, ...] | None = None
 
     def __repr__(self) -> str:  # keep the key out of tracebacks and logs
         return f"ResolvedTarget(id={self.id!r}, name={self.name!r}, url={self.url!r})"
@@ -128,6 +142,23 @@ def check_target_url(url: str, *, trusted: bool, host_allowlist: list[str]) -> N
             raise TargetURLRejected(f"Target host {host!r} resolves to a {reason}")
 
 
+def check_destination_domain(url: str, suffixes: list[str] | tuple[str, ...]) -> None:
+    """Raise ``TargetURLRejected`` unless the URL's host is, or is under, a suffix."""
+    try:
+        host = (urlsplit(url.strip()).hostname or "").lower().rstrip(".")
+    except ValueError as exc:
+        raise TargetURLRejected(f"Destination URL is not valid: {exc}") from exc
+    if not suffixes:
+        raise TargetURLRejected("Publishing to a destination URL is not enabled here")
+    for suffix in suffixes:
+        suffix = suffix.lower().strip(".")
+        if suffix and (host == suffix or host.endswith("." + suffix)):
+            return
+    raise TargetURLRejected(
+        f"Destination host {host!r} is not in an allowed domain ({', '.join(suffixes)})"
+    )
+
+
 def _detail(response: httpx.Response, body: bytes) -> str:
     try:
         payload = json.loads(body)
@@ -160,6 +191,8 @@ class TargetClient:
         self._client.close()
 
     def _guard(self) -> None:
+        if self._target.domain_suffixes is not None:
+            check_destination_domain(self._target.url, self._target.domain_suffixes)
         check_target_url(
             self._target.url,
             trusted=self._target.trusted,
@@ -171,7 +204,7 @@ class TargetClient:
             self._guard()
         except TargetURLRejected as exc:
             raise RemoteError(400, str(exc)) from exc
-        headers = {PAIRING_HEADER: self._target.pairing_key}
+        headers = {self._target.credential_header: self._target.pairing_key}
         try:
             with self._client.stream(
                 method, self._base + path, headers=headers, **kwargs
@@ -202,6 +235,10 @@ class TargetClient:
 
     def preflight(self, body: dict[str, Any]) -> dict[str, Any]:
         return self._call("POST", "/preflight", json=body)
+
+    def check(self, body: dict[str, Any]) -> dict[str, Any]:
+        """``/info`` + ``/preflight`` + ``/probe`` in one call (targets from #1303 slice 2)."""
+        return self._call("POST", "/check", json=body)
 
     def probe(self, bucket: str, key: str) -> dict[str, Any]:
         return self._call("POST", "/probe", json={"bucket": bucket, "key": key})

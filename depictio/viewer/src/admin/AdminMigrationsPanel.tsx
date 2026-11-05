@@ -13,6 +13,7 @@ import {
   Select,
   Stack,
   Table,
+  Tabs,
   Text,
   Textarea,
   Title,
@@ -25,12 +26,15 @@ import {
   getMigrationRequest,
   listMigrationRequests,
   rejectMigrationRequest,
+  retryMigrationRequest,
   revalidateMigrationRequest,
 } from 'depictio-react-core';
 import type { MigrationRequestDetail, MigrationRequestSummary } from 'depictio-react-core';
 
 import { formatDateTime } from '../lib/datetime';
 import { useTone } from '../monitoring/useTone';
+import AdminMigrationInvitesView from './AdminMigrationInvitesView';
+import AdminMigrationSentView from './AdminMigrationSentView';
 
 const POLL_MS = 2000;
 
@@ -463,16 +467,35 @@ const RequestDetail: React.FC<DetailProps> = ({ requestId, onClose, onChanged })
 };
 
 /**
- * Admin > Migrations tab: projects other Depictio instances pushed here for
- * review. An admin inspects the validation report, then approves (the import
- * runs in the background) or rejects with a reason.
+ * Requests: projects other Depictio instances pushed here. A pairing-key push
+ * waits for review: an admin inspects the validation report, then approves (the
+ * import runs in the background) or rejects with a reason. An invite-code push
+ * imports at once; it shows here too, and a failed one can be retried.
  */
-const AdminMigrationsPanel: React.FC = () => {
+const RequestsView: React.FC = () => {
   const [requests, setRequests] = useState<MigrationRequestSummary[]>([]);
   const [status, setStatus] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
+  const [retrying, setRetrying] = useState<string | null>(null);
+
+  const handleRetry = async (id: string) => {
+    setRetrying(id);
+    try {
+      await retryMigrationRequest(id);
+      notifications.show({ message: 'Import started again.' });
+      await load();
+    } catch (err) {
+      notifications.show({
+        color: 'red',
+        title: 'Could not retry',
+        message: err instanceof Error ? err.message : 'Unknown error',
+      });
+    } finally {
+      setRetrying(null);
+    }
+  };
 
   const load = useCallback(async () => {
     try {
@@ -542,6 +565,7 @@ const AdminMigrationsPanel: React.FC = () => {
                 <Table.Th>Mode</Table.Th>
                 <Table.Th>Size</Table.Th>
                 <Table.Th>Submitted</Table.Th>
+                <Table.Th />
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
@@ -556,6 +580,11 @@ const AdminMigrationsPanel: React.FC = () => {
                   <Table.Td>
                     <Group gap={6} wrap="nowrap">
                       <StatusBadge status={r.status} />
+                      {r.credential_type === 'invite_code' && (
+                        <Badge color="grape" variant="outline" size="xs">
+                          invite
+                        </Badge>
+                      )}
                       {r.error_count > 0 && (
                         <Badge color="red" variant="outline" size="xs">
                           {r.error_count} err
@@ -568,7 +597,28 @@ const AdminMigrationsPanel: React.FC = () => {
                   <Table.Td>{r.project_name}</Table.Td>
                   <Table.Td>{modeLabel(r.transfer_mode)}</Table.Td>
                   <Table.Td>{formatBytes(r.bundle_bytes)}</Table.Td>
-                  <Table.Td>{formatDateTime(r.created_at)}</Table.Td>
+                  <Table.Td>
+                    {formatDateTime(r.created_at)}
+                    {r.status === 'failed' && r.error && (
+                      <Text size="xs" c="red" style={{ wordBreak: 'break-word' }}>
+                        {r.error}
+                      </Text>
+                    )}
+                  </Table.Td>
+                  <Table.Td onClick={(e) => e.stopPropagation()}>
+                    {r.retryable && (
+                      <Button
+                        size="compact-xs"
+                        variant="light"
+                        loading={retrying === r.id}
+                        onClick={() => void handleRetry(r.id)}
+                        leftSection={<Icon icon="mdi:reload" width={14} />}
+                        data-testid="migration-retry"
+                      >
+                        Retry
+                      </Button>
+                    )}
+                  </Table.Td>
                 </Table.Tr>
               ))}
             </Table.Tbody>
@@ -592,6 +642,38 @@ const AdminMigrationsPanel: React.FC = () => {
         )}
       </Drawer>
     </Stack>
+  );
+};
+
+/**
+ * Admin > Migrations: what other instances pushed here (Requests), the codes
+ * that let them (Invitations), and what this instance pushed out (Sent).
+ */
+const AdminMigrationsPanel: React.FC = () => {
+  const [tab, setTab] = useState<string>('requests');
+  return (
+    <Tabs value={tab} onChange={(v) => v && setTab(v)} keepMounted={false}>
+      <Tabs.List mb="md">
+        <Tabs.Tab value="requests" data-testid="migrations-tab-requests">
+          Requests
+        </Tabs.Tab>
+        <Tabs.Tab value="invitations" data-testid="migrations-tab-invitations">
+          Invitations
+        </Tabs.Tab>
+        <Tabs.Tab value="sent" data-testid="migrations-tab-sent">
+          Sent
+        </Tabs.Tab>
+      </Tabs.List>
+      <Tabs.Panel value="requests">
+        <RequestsView />
+      </Tabs.Panel>
+      <Tabs.Panel value="invitations">
+        <AdminMigrationInvitesView />
+      </Tabs.Panel>
+      <Tabs.Panel value="sent">
+        <AdminMigrationSentView />
+      </Tabs.Panel>
+    </Tabs>
   );
 };
 

@@ -42,6 +42,7 @@ import type {
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import { useAuthMode } from '../auth/hooks/useAuthMode';
 import TourButton from '../walkthrough/TourButton';
+import { ReceiveProjectButton } from '../admin/ReceiveProjectButton';
 import { AppSidebar, LoadErrorCard } from '../chrome';
 import ProjectsList from './ProjectsList';
 import CreateProjectModal, {
@@ -328,6 +329,7 @@ const ProjectsApp: React.FC = () => {
           actions={
             <>
               <TourButton />
+              <ReceiveProjectButton />
               <Tooltip
                 label="Project creation is disabled in public or demo mode for non-admin users"
                 disabled={!createDisabled}
@@ -399,6 +401,7 @@ const ProjectsApp: React.FC = () => {
           </Group>
           <Group gap="sm" wrap="nowrap">
             <TourButton />
+            <ReceiveProjectButton />
             {/* Visitors in public/demo mode see the button visibly disabled
                 rather than hidden — keeps the affordance discoverable while
                 making it obvious that login/elevated permissions are needed.
