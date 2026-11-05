@@ -9,8 +9,8 @@
  * code that is the normal path, not an edge case.
  *
  * The intended target rides in `sessionStorage` rather than a `?next=` query
- * parameter: the Google flow leaves the origin entirely and comes back to
- * `/auth/google/callback`, where a query parameter set on `/auth` is long gone.
+ * parameter: the identity-provider flow leaves the origin entirely and comes
+ * back through the API callback, where a query parameter set on `/auth` is long gone.
  * sessionStorage is also per-tab, which is what we want when someone opens the
  * shared link in a new tab while already reading another dashboard.
  */

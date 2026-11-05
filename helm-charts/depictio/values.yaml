@@ -90,6 +90,38 @@ secrets:
   # Secret key for private remote s3:// genome tracks (the access key goes in
   # backend.env.DEPICTIO_JBROWSE_REMOTE_S3_ACCESS_KEY). Empty = anonymous reads.
   jbrowseRemoteS3SecretKey: ""
+  # OpenID Connect client credentials, one entry per provider id declared in
+  # `oidc.providers` below. They land in the Secret (never the ConfigMap) as
+  # DEPICTIO_AUTH_OIDC_<ID>_CLIENT_ID / _CLIENT_SECRET (ID upper-cased, "-" -> "_").
+  # Supply them from a values file kept out of the repository, or an external
+  # secret manager. Example:
+  #   oidcClients:
+  #     keycloak: {clientId: "...", clientSecret: "..."}
+  oidcClients: {}
+  # Legacy Google OAuth client secret: set through
+  # auth.DEPICTIO_AUTH_GOOGLE_OAUTH_CLIENT_SECRET (deprecated, see `oidc`).
+
+# OpenID Connect single sign-on. One entry per identity provider (Keycloak,
+# Authentik, Microsoft Entra ID, Google, ...). Rendered as JSON into
+# DEPICTIO_AUTH_OIDC_PROVIDERS. Credentials do NOT go here: see
+# secrets.oidcClients. Register this redirect URI at the provider:
+#   https://<api-host>/depictio/api/v1/auth/oidc/<id>/callback
+# Provider keys: id, label, enabled, issuer, discovery_url, scopes, redirect_uri,
+# claims, sso_provider, assume_email_verified, token_endpoint_auth_method,
+# authorize_params, fetch_userinfo.
+#
+# The legacy Google keys (backend.env.DEPICTIO_AUTH_GOOGLE_OAUTH_ENABLED and
+# auth.DEPICTIO_AUTH_GOOGLE_OAUTH_*) are deprecated and still work for one
+# release: they map onto an OIDC provider with id `google`. Prefer a `google`
+# entry below, which takes precedence over them.
+oidc:
+  providers: []
+  #  - id: keycloak
+  #    label: "Sign in with SSO"
+  #    enabled: true
+  #    issuer: "https://idp.example.org/realms/example"
+  #    scopes: ["openid", "email", "profile"]
+  #    claims: {email: email, groups: groups, display_name: name, login: preferred_username}
 
 local_development: false # Set to true for local development
 

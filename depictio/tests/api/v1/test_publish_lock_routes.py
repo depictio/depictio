@@ -129,8 +129,7 @@ def _route_consults_lock(route: APIRoute) -> bool:
 EXEMPT_MODULES: dict[str, str] = {
     "user_endpoints.routes": "accounts and tokens, not project content",
     "groups_endpoints.routes": "groups, not project content",
-    "auth_endpoints.saml_routes": "login",
-    "auth_endpoints.google_oauth_routes": "login",
+    "auth_endpoints.oidc_routes": "login",
     "comments_endpoints.routes": "comments are conversation about a release, not part of it",
     "dashboards_endpoints.filter_state_routes": "per-viewer filter state",
     "figure_endpoints.routes": "renders a preview, writes nothing",

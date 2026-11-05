@@ -28,8 +28,7 @@ import { shouldSuppressWalkthrough } from './availability';
 const WalkthroughHost: React.FC = () => {
   const {
     user,
-    googleOAuthEnabled,
-    samlEnabled,
+    ssoProviders,
     isPublicMode,
     isDemoMode,
     isDevMode,
@@ -44,8 +43,7 @@ const WalkthroughHost: React.FC = () => {
     isPublicMode,
     isDemoMode,
     isGuest,
-    googleOAuthEnabled,
-    samlEnabled,
+    providers: ssoProviders,
   });
   const publicWalkthrough = useMemo(
     () =>

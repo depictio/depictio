@@ -103,12 +103,8 @@ backend:
     DEPICTIO_ANALYTICS_ENABLED: "true"
     DEPICTIO_GOOGLE_ANALYTICS_ENABLED: "true"
 
-    # Google OAuth Configuration
+    # Google OAuth Configuration (legacy, deprecated: see oidc below)
     DEPICTIO_AUTH_GOOGLE_OAUTH_ENABLED: "true"
-
-    # SAML SSO — off until the production client is registered with the IdP.
-    # Enable it (and set the IdP side) from values-embl-secrets.yaml.
-    DEPICTIO_AUTH_SAML_ENABLED: "false"
 
     # Celery Configuration - Disabled for now
     # DEPICTIO_CELERY_ENABLED: "false"
@@ -125,19 +121,33 @@ auth:
   # code/state sitting unused in the URL (silent failure, no redirect).
   DEPICTIO_AUTH_GOOGLE_OAUTH_REDIRECT_URI: "https://depictio.embl.org/auth/google/callback"
 
-  # SAML SSO, service-provider side. The identity provider side (entity ID, SSO
-  # URL, signing certificate) is deployment-private configuration: set
-  # DEPICTIO_AUTH_SAML_IDP_ENTITY_ID, DEPICTIO_AUTH_SAML_IDP_SSO_URL and
-  # DEPICTIO_AUTH_SAML_IDP_CERT in values-embl-secrets.yaml, which is merged into
-  # this block, alongside backend.env.DEPICTIO_AUTH_SAML_ENABLED: "true".
-  #
-  # IdP-side registration (a SAML client in the realm):
-  #   - Client ID            = DEPICTIO_AUTH_SAML_SP_ENTITY_ID
-  #   - ACS / redirect URL   = https://api.depictio.embl.org/depictio/api/v1/auth/saml/callback
-  #   - Sign assertions: ON, Client signature required: OFF
-  #   (or import GET https://api.depictio.embl.org/depictio/api/v1/auth/saml/metadata)
-  # DEPICTIO_AUTH_SAML_SP_ENTITY_ID: set to the Client ID once the client exists
-  DEPICTIO_AUTH_SAML_LOGIN_LABEL: "Sign in with EMBL"
+# Google OAuth below uses the legacy variables: deprecated, still working for one
+# release (mapped onto the `google` OIDC provider). To migrate, declare a `google`
+# entry in oidc.providers with secrets.oidcClients.google in the secrets file.
+
+# OpenID Connect SSO (replaces the former SAML login). Off until the client is
+# registered with the IdP. Helm replaces lists instead of merging them: to enable,
+# repeat this whole entry with `enabled: true` in the off-repo secrets values file.
+#   - Redirect URI to register at the IdP:
+#       https://api.depictio.embl.org/depictio/api/v1/auth/oidc/embl/callback
+#   - Client id/secret are NEVER inlined: put them in the off-repo secrets values file
+#     as secrets.oidcClients.embl.clientId / secrets.oidcClients.embl.clientSecret.
+#   - Claim names below were carried over from the old SAML attribute keys
+#     (groups, displayName, uid). OIDC claim names can differ from SAML attribute
+#     names: check them against the IdP's protocol mappers before enabling.
+oidc:
+  providers:
+    - id: embl
+      label: "Sign in with EMBL"
+      enabled: false
+      # TODO(placeholder): set to the IdP realm issuer URL; it must equal the
+      # `issuer` of the realm's .well-known/openid-configuration document.
+      issuer: "https://FILL-ME-EMBL-IDP-ISSUER"
+      claims:
+        email: email
+        groups: groups
+        display_name: displayName
+        login: uid
 
 
 mongo:

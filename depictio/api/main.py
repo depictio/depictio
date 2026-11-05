@@ -378,7 +378,7 @@ if _VIEWER_DIST.is_dir() and _VIEWER_ASSETS.is_dir() and _VIEWER_INDEX.is_file()
         Asset paths in index.html still resolve via /dashboard/assets/."""
         return _spa_index()
 
-    # /auth and /auth/google/callback → same React bundle. The SPA's boot
+    # /auth and /auth/* (incl. the legacy /auth/google/callback) → same React bundle. The SPA's boot
     # routing detects /auth and renders <AuthApp/>. Replaces the Dash /auth
     # page; Dash now redirects users straight here for sign-in.
     @app.get("/auth")

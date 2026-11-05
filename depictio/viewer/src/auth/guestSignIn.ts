@@ -1,3 +1,5 @@
+import type { SsoProvider } from 'depictio-react-core';
+
 import { rememberReturnTo, safePostAuthTarget } from './postAuthTarget';
 
 /**
@@ -28,8 +30,7 @@ interface GuestSignInState {
   isPublicMode: boolean;
   isDemoMode: boolean;
   isGuest: boolean;
-  googleOAuthEnabled: boolean;
-  samlEnabled: boolean;
+  providers: SsoProvider[];
 }
 
 /**
@@ -43,13 +44,13 @@ export function canGuestSignIn(s: GuestSignInState): boolean {
     s.isPublicMode &&
     !s.isDemoMode &&
     s.isGuest &&
-    (s.googleOAuthEnabled || s.samlEnabled)
+    s.providers.length > 0
   );
 }
 
 /** The page to come back to after signing in: the current one, or the listing
  *  when this is the sign-in page itself. For providers that carry the target
- *  in their own redirect (SAML) rather than in `sessionStorage`. */
+ *  in their own redirect rather than in `sessionStorage`. */
 export function returnPathOrDefault(): string {
   return safePostAuthTarget(
     window.location.pathname + window.location.search + window.location.hash,

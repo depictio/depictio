@@ -1,6 +1,7 @@
-import { Anchor, Button, Divider, Group, PasswordInput, Stack, Text, TextInput } from '@mantine/core';
+import { Alert, Anchor, Button, Divider, Group, PasswordInput, Stack, Text, TextInput } from '@mantine/core';
 import { useState } from 'react';
-import { loginUser, persistSession, startGoogleOAuth } from 'depictio-react-core';
+import { loginUser, persistSession } from 'depictio-react-core';
+import type { SsoProvider } from 'depictio-react-core';
 
 import { useGlassPages } from '../../chrome/variants/glass/pages';
 import SignInProviders from './SignInProviders';
@@ -8,13 +9,12 @@ import SignInProviders from './SignInProviders';
 const EMAIL_RE = /^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$/;
 
 interface Props {
-  googleEnabled: boolean;
-  /** SAML SSO login enabled (e.g. EMBL Keycloak). */
-  samlEnabled?: boolean;
-  /** Label for the SAML button, e.g. "Sign in with EMBL". */
-  samlLabel?: string;
-  /** Email + password sign-in is disabled on this instance, leaving Google as
-   *  the only door in. The credentials form is hidden rather than shown and
+  /** Enabled OpenID Connect providers, one button each. */
+  providers: SsoProvider[];
+  /** Message for a failed single sign-on, from `/auth?error=<code>`. */
+  ssoError?: string | null;
+  /** Email + password sign-in is disabled on this instance, leaving single
+   *  sign-on as the only door in. The credentials form is hidden rather than shown and
    *  rejected, since /auth/login answers 403 to every attempt. */
   passwordLoginDisabled?: boolean;
   /** Switch to the register view. Omit to hide the Register button entirely
@@ -25,9 +25,8 @@ interface Props {
 }
 
 export default function LoginForm({
-  googleEnabled,
-  samlEnabled = false,
-  samlLabel,
+  providers,
+  ssoError = null,
   passwordLoginDisabled = false,
   onSwitchToRegister,
   onSuccess,
@@ -40,10 +39,16 @@ export default function LoginForm({
 
   const emailValid = EMAIL_RE.test(email);
   const canSubmit = emailValid && password.length > 0 && !submitting;
+  const hasProviders = providers.length > 0;
   // Mirrors the server-side guard: hiding the credentials form is only safe
   // while there is another way in, so a deployment that sets the flag without
-  // configuring OAuth keeps its password form instead of a dead card.
-  const showCredentials = !passwordLoginDisabled || !(googleEnabled || samlEnabled);
+  // configuring a provider keeps its password form instead of a dead card.
+  const showCredentials = !passwordLoginDisabled || !hasProviders;
+  const ssoAlert = ssoError ? (
+    <Alert color="red" variant="light" data-testid="sso-error-alert" role="alert">
+      {ssoError}
+    </Alert>
+  ) : null;
 
   async function handleSubmit() {
     if (!canSubmit) return;
@@ -63,55 +68,18 @@ export default function LoginForm({
     }
   }
 
-  async function handleGoogleClick() {
-    try {
-      const { authorization_url } = await startGoogleOAuth();
-      window.location.assign(authorization_url);
-    } catch (err) {
-      setError('Failed to start Google sign-in.');
-      console.error(err);
-    }
-  }
-
-  const googleButton = (label: string, variant: 'outline' | 'default') => (
-    <Button
-      id="google-oauth-button"
-      variant={variant}
-      radius="md"
-      fullWidth
-      onClick={handleGoogleClick}
-      leftSection={
-        <img
-          src={`${import.meta.env.BASE_URL}logos/google_g.svg`}
-          alt=""
-          width={18}
-          height={18}
-          style={{ display: 'block' }}
-        />
-      }
-    >
-      {label}
-    </Button>
-  );
-
-  // Glass: one column. The identity providers lead (an institution's SSO
-  // first, then Google), the email form follows under an "or", and the
+  // Glass: one column. The identity providers lead, the email form follows under an "or", and the
   // register switch sits in the card's foot (AuthApp).
   if (glass) {
-    const providers = samlEnabled || googleEnabled;
     return (
       <>
-        {providers && (
+        {ssoAlert}
+        {hasProviders && (
           <div className="gp-auth-providers">
-            <SignInProviders
-              googleEnabled={googleEnabled}
-              samlEnabled={samlEnabled}
-              samlLabel={samlLabel}
-              onError={setError}
-            />
+            <SignInProviders providers={providers} />
           </div>
         )}
-        {providers && showCredentials && <div className="gp-auth-or">or with your email</div>}
+        {hasProviders && showCredentials && <div className="gp-auth-or">or with your email</div>}
         {showCredentials && (
           <>
             <TextInput
@@ -158,6 +126,7 @@ export default function LoginForm({
 
   return (
     <Stack gap="md">
+      {ssoAlert}
       {showCredentials && (
         <>
           <TextInput
@@ -214,7 +183,7 @@ export default function LoginForm({
           )}
         </Group>
       )}
-      {googleEnabled && (
+      {hasProviders && (
         <Stack gap="xs">
           {/* The divider separates two alternatives. With the credentials form
               hidden there is only one, so it would divide nothing. */}
@@ -222,27 +191,10 @@ export default function LoginForm({
             <Divider label="Or" labelPosition="center" />
           ) : (
             <Text size="sm" c="dimmed" ta="center">
-              This instance signs in with Google.
+              This instance signs in with single sign-on.
             </Text>
           )}
-          <Button
-            id="google-oauth-button"
-            variant="outline"
-            radius="md"
-            fullWidth
-            onClick={handleGoogleClick}
-            leftSection={
-              <img
-                src={`${import.meta.env.BASE_URL}logos/google_g.svg`}
-                alt=""
-                width={18}
-                height={18}
-                style={{ display: 'block' }}
-              />
-            }
-          >
-            Sign in with Google
-          </Button>
+          <SignInProviders providers={providers} />
         </Stack>
       )}
     </Stack>

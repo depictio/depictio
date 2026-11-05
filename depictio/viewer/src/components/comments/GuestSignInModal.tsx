@@ -20,11 +20,7 @@ const GuestSignInModal: React.FC<GuestSignInModalProps> = ({ opened, onClose }) 
           You are browsing as a guest. Everything here stays open without an account; signing
           in is only needed to leave comments.
         </Text>
-        <SignInProviders
-          googleEnabled={guest.googleEnabled}
-          samlEnabled={guest.samlEnabled}
-          samlLabel={guest.samlLabel}
-        />
+        <SignInProviders providers={guest.providers} />
         <Button variant="subtle" color="gray" fullWidth onClick={onClose}>
           Keep browsing
         </Button>

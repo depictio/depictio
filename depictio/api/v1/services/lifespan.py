@@ -18,6 +18,7 @@ from pymongo import AsyncMongoClient
 from depictio.api.v1.configs.config import MONGODB_URL, settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db_init import wipe_database
+from depictio.api.v1.endpoints.auth_endpoints.oidc import check_legacy_sso_env
 from depictio.api.v1.initialization import run_initialization
 from depictio.api.v1.services.background_tasks import delayed_process_data_collections
 from depictio.api.v1.services.branding import migrate_legacy_logo_files
@@ -38,7 +39,7 @@ from depictio.api.v1.tasks.cleanup_tasks import start_cleanup_tasks
 from depictio.api.v1.utils import clean_screenshots
 from depictio.models.models.analytics import UserActivity, UserSession
 from depictio.models.models.dashboard_filter_state import DashboardFilterStateBeanie
-from depictio.models.models.google_oauth import OAuthStateBeanie
+from depictio.models.models.oauth_state import OAuthStateBeanie
 from depictio.models.models.projects import ProjectBeanie
 from depictio.models.models.users import (
     GroupBeanie,
@@ -437,6 +438,8 @@ async def lifespan(_app: FastAPI):
     - Real-time event services
     """
     # Startup
+    # Removed SAML / deprecated Google OAuth variables must not fail silently.
+    check_legacy_sso_env()
     should_initialize, mongo_client = await handle_initialization()
     # Deliberately outside the `should_initialize` branch: an already-initialised
     # deployment never re-runs initialization, and it is exactly the deployment

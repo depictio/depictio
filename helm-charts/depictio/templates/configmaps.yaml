@@ -13,7 +13,7 @@ data:
   DEPICTIO_VIEWER_SERVICE_PORT: {{ .Values.backend.env.DEPICTIO_VIEWER_SERVICE_PORT | quote }}
   DEPICTIO_VIEWER_SERVICE_NAME: {{ printf "%s-depictio-viewer" .Release.Name | quote }}
   # Public viewer URL: the backend builds browser-facing redirect/link targets
-  # from it (magic-link login URLs, SAML ACS → /auth/magic hand-off).
+  # from it (magic-link login URLs, OIDC callback → /auth/magic hand-off).
   DEPICTIO_VIEWER_PUBLIC_URL: {{ .Values.backend.env.DEPICTIO_VIEWER_PUBLIC_URL | default (include "depictio.frontendUrlWithProtocol" .) | quote }}
   {{- if .Values.mongo.useOperator }}
   DEPICTIO_MONGODB_SERVICE_NAME: {{ printf "%s-mongo-rs0" .Release.Name | quote }}
@@ -49,46 +49,30 @@ data:
   DEPICTIO_AUTH_DEMO_MODE: {{ .Values.backend.env.DEPICTIO_AUTH_DEMO_MODE | default "false" | quote }}
   DEPICTIO_AUTH_SINGLE_USER_MODE: {{ .Values.backend.env.DEPICTIO_AUTH_SINGLE_USER_MODE | default "false" | quote }}
   DEPICTIO_AUTH_REGISTRATION_DISABLED: {{ .Values.backend.env.DEPICTIO_AUTH_REGISTRATION_DISABLED | default "false" | quote }}
-  # Blocks email+password sign-in, leaving Google OAuth as the only door in.
-  # The backend ignores it unless google_oauth_enabled is also set, so a
-  # half-done configuration cannot lock every user out. Not a secret, so it
+  # Blocks email+password sign-in, leaving SSO as the only door in.
+  # The backend ignores it unless at least one OIDC provider is enabled and
+  # fully configured, so a half-done configuration cannot lock every user out. Not a secret, so it
   # belongs here; the public-mode access code does not (see secrets.yaml).
   DEPICTIO_AUTH_PASSWORD_LOGIN_DISABLED: {{ .Values.backend.env.DEPICTIO_AUTH_PASSWORD_LOGIN_DISABLED | default "false" | quote }}
   DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL: {{ .Values.backend.env.DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL | default "anonymous@example.com" | quote }}
   DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS: {{ .Values.backend.env.DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS | default "24" | quote }}
 
-  # Google OAuth Configuration
+  # Legacy Google OAuth (deprecated, still honoured for one release). The backend
+  # maps these onto the `google` OIDC provider; prefer `oidc.providers`. The client
+  # secret is NOT here: it is carried by the Secret (see secrets.yaml).
   DEPICTIO_AUTH_GOOGLE_OAUTH_ENABLED: {{ .Values.backend.env.DEPICTIO_AUTH_GOOGLE_OAUTH_ENABLED | default "false" | quote }}
   {{- if .Values.auth }}
   DEPICTIO_AUTH_GOOGLE_OAUTH_CLIENT_ID: {{ .Values.auth.DEPICTIO_AUTH_GOOGLE_OAUTH_CLIENT_ID | default "" | quote }}
-  DEPICTIO_AUTH_GOOGLE_OAUTH_CLIENT_SECRET: {{ .Values.auth.DEPICTIO_AUTH_GOOGLE_OAUTH_CLIENT_SECRET | default "" | quote }}
   DEPICTIO_AUTH_GOOGLE_OAUTH_REDIRECT_URI: {{ .Values.auth.DEPICTIO_AUTH_GOOGLE_OAUTH_REDIRECT_URI | default "" | quote }}
   {{- else }}
   DEPICTIO_AUTH_GOOGLE_OAUTH_CLIENT_ID: ""
-  DEPICTIO_AUTH_GOOGLE_OAUTH_CLIENT_SECRET: ""
   DEPICTIO_AUTH_GOOGLE_OAUTH_REDIRECT_URI: ""
   {{- end }}
 
-  # SAML SSO Configuration (the SP side of a deployment is set in its own values
-  # file; the IdP side — entity ID, SSO URL, certificate — belongs in the
-  # environment's secrets values, merged into `auth:`). The IdP signing certificate is
-  # public X.509 material — a ConfigMap is fine; no key material rides here.
-  # Empty strings are coerced to "unset" by the backend settings model.
-  DEPICTIO_AUTH_SAML_ENABLED: {{ .Values.backend.env.DEPICTIO_AUTH_SAML_ENABLED | default "false" | quote }}
-  {{- if .Values.auth }}
-  DEPICTIO_AUTH_SAML_IDP_ENTITY_ID: {{ .Values.auth.DEPICTIO_AUTH_SAML_IDP_ENTITY_ID | default "" | quote }}
-  DEPICTIO_AUTH_SAML_IDP_SSO_URL: {{ .Values.auth.DEPICTIO_AUTH_SAML_IDP_SSO_URL | default "" | quote }}
-  DEPICTIO_AUTH_SAML_IDP_CERT: {{ .Values.auth.DEPICTIO_AUTH_SAML_IDP_CERT | default "" | quote }}
-  DEPICTIO_AUTH_SAML_SP_ENTITY_ID: {{ .Values.auth.DEPICTIO_AUTH_SAML_SP_ENTITY_ID | default "" | quote }}
-  DEPICTIO_AUTH_SAML_SP_BASE_URL: {{ .Values.auth.DEPICTIO_AUTH_SAML_SP_BASE_URL | default "" | quote }}
-  DEPICTIO_AUTH_SAML_ATTRIBUTE_EMAIL: {{ .Values.auth.DEPICTIO_AUTH_SAML_ATTRIBUTE_EMAIL | default "" | quote }}
-  DEPICTIO_AUTH_SAML_LOGIN_LABEL: {{ .Values.auth.DEPICTIO_AUTH_SAML_LOGIN_LABEL | default "Sign in with SSO" | quote }}
-  # Which assertion attributes feed the group and profile sync. Each one left empty
-  # disables its part of the sync.
-  DEPICTIO_AUTH_SAML_ATTRIBUTE_GROUPS: {{ .Values.auth.DEPICTIO_AUTH_SAML_ATTRIBUTE_GROUPS | default "" | quote }}
-  DEPICTIO_AUTH_SAML_ATTRIBUTE_TITLE: {{ .Values.auth.DEPICTIO_AUTH_SAML_ATTRIBUTE_TITLE | default "" | quote }}
-  DEPICTIO_AUTH_SAML_ATTRIBUTE_DISPLAY_NAME: {{ .Values.auth.DEPICTIO_AUTH_SAML_ATTRIBUTE_DISPLAY_NAME | default "" | quote }}
-  DEPICTIO_AUTH_SAML_ATTRIBUTE_LOGIN: {{ .Values.auth.DEPICTIO_AUTH_SAML_ATTRIBUTE_LOGIN | default "" | quote }}
+  # OpenID Connect providers (JSON list). Client credentials come from the Secret
+  # (secrets.oidcClients), not from here.
+  {{- if .Values.oidc.providers }}
+  DEPICTIO_AUTH_OIDC_PROVIDERS: {{ .Values.oidc.providers | toJson | quote }}
   {{- end }}
 
   # Instance branding (issue #397) — see examples/values-branding.yaml.

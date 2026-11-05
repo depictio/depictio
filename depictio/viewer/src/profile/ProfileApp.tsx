@@ -318,11 +318,7 @@ const ProfileApp: React.FC = () => {
               make with it. Sign in to leave comments.
             </Text>
             <Stack gap="xs" w="100%" maw={320} data-testid="guest-sign-in-profile">
-              <SignInProviders
-                googleEnabled={guest.googleEnabled}
-                samlEnabled={guest.samlEnabled}
-                samlLabel={guest.samlLabel}
-              />
+              <SignInProviders providers={guest.providers} />
             </Stack>
           </Stack>
         </Alert>

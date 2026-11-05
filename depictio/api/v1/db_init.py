@@ -830,18 +830,18 @@ async def _bootstrap_admin_and_test_user() -> tuple[UserBeanie | None, dict | No
                     admin_email,
                 )
             elif settings.auth.is_password_login_disabled and admin_email:
-                # Google OAuth is the only door in, so this admin's password
+                # SSO (an OIDC provider) is the only door in, so this admin's password
                 # can never be used to reach it: /auth/login refuses every
                 # attempt. Requiring one anyway would make an operator invent a
                 # secret whose only job is to be unusable. The email is still
-                # required — it is what the OAuth login matches the admin on
-                # (`create_or_get_user` looks the account up by email), so
-                # setting it to your own Google address is what makes you the
+                # required — it is what the SSO login matches the admin on
+                # (`create_or_get_sso_user` looks the account up by email), so
+                # setting it to your own SSO address is what makes you the
                 # admin without any seeded local account.
                 admin_password = secrets.token_urlsafe(32)
                 logger.info(
                     "Password sign-in disabled: seeding admin '%s' with an unusable "
-                    "random password; sign in to it with Google",
+                    "random password; sign in to it with SSO",
                     admin_email,
                 )
             else:
@@ -850,7 +850,7 @@ async def _bootstrap_admin_and_test_user() -> tuple[UserBeanie | None, dict | No
                     "DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD are not set. Set both env vars (via a "
                     "Kubernetes Secret in production) so the first-boot admin can be created. "
                     "With DEPICTIO_AUTH_PASSWORD_LOGIN_DISABLED=true, the email alone is "
-                    "enough: set it to the Google address that should own the instance."
+                    "enough: set it to the SSO email address that should own the instance."
                 )
 
         logger.info(

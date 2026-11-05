@@ -41,8 +41,7 @@ export function useAccountIdentity(): AccountIdentity {
       isPublicMode,
       isDemoMode,
       isGuest: Boolean(user?.is_temporary),
-      googleOAuthEnabled: me.googleOAuthEnabled,
-      samlEnabled: me.samlEnabled,
+      providers: me.ssoProviders,
     });
   const name =
     authMode === 'single_user'

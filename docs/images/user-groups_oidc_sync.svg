@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1760" height="1700" viewBox="0 0 1760 1700">
   <rect width="1760" height="1700" fill="#ffffff"/>
   <text x="40.0" y="52.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="25" fill="#1e1e1e" text-anchor="start" font-weight="normal">SSO sync and who runs a group</text>
-  <text x="40.0" y="78.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="15" fill="#5c5c5c" text-anchor="start" font-weight="normal">every SAML login re-syncs the user's groups and profile; people, not code, decide who administers them</text>
+  <text x="40.0" y="78.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="15" fill="#5c5c5c" text-anchor="start" font-weight="normal">every OpenID Connect login re-syncs the user's groups and profile; people, not code, decide who administers them</text>
   <text x="40.0" y="126.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="13" fill="#adb5bd" text-anchor="start" font-weight="normal">a login through the identity provider</text>
   <rect x="40.0" y="140.0" width="250.0" height="190.0" rx="6" fill="#ffffff"/>
   <path d="M39.3,140.6 C124.3,139.3 208.2,141.2 289.9,139.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
@@ -119,22 +119,22 @@
   <path d="M655.3,173.6 C557.0,174.1 455.5,175.1 355.9,173.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
   <path d="M355.4,174.5 C354.6,163.4 355.2,152.7 355.8,140.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
   <path d="M356.2,173.5 C356.3,161.7 356.0,151.2 355.4,140.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
-  <text x="372.0" y="163.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="16" fill="#1e1e1e" text-anchor="start" font-weight="bold">SAML assertion</text>
-  <text x="640.0" y="163.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="11.5" fill="#5c5c5c" text-anchor="end" font-weight="normal">attributes</text>
+  <text x="372.0" y="163.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="16" fill="#1e1e1e" text-anchor="start" font-weight="bold">ID token claims</text>
+  <text x="640.0" y="163.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="11.5" fill="#5c5c5c" text-anchor="end" font-weight="normal">claims</text>
   <text x="372.0" y="202.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#1e1e1e" text-anchor="start" font-weight="bold">groups</text>
   <text x="472.0" y="202.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="13.5" fill="#1e1e1e" text-anchor="start" font-weight="normal">korbel-lab, new-lab</text>
-  <text x="372.0" y="223.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="11.5" fill="#5c5c5c" text-anchor="start" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="10.1">DEPICTIO_AUTH_SAML_ATTRIBUTE_GROUPS</tspan></text>
+  <text x="372.0" y="223.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="11.5" fill="#5c5c5c" text-anchor="start" font-weight="normal">provider key <tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="10.1">claims.groups</tspan></text>
   <text x="372.0" y="248.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#1e1e1e" text-anchor="start" font-weight="bold">title</text>
   <text x="472.0" y="248.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="13.5" fill="#1e1e1e" text-anchor="start" font-weight="normal">group leader</text>
-  <text x="372.0" y="269.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="11.5" fill="#5c5c5c" text-anchor="start" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="10.1">..._ATTRIBUTE_TITLE</tspan></text>
+  <text x="372.0" y="269.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="11.5" fill="#5c5c5c" text-anchor="start" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="10.1">claims.title</tspan></text>
   <path d="M363.9,228.1 C458.6,228.1 553.5,228.2 648.1,228.1" fill="none" stroke="#f1f3f5" stroke-width="1.2" stroke-linecap="round"/>
   <text x="372.0" y="294.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#1e1e1e" text-anchor="start" font-weight="bold">display name</text>
   <text x="472.0" y="294.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="13.5" fill="#1e1e1e" text-anchor="start" font-weight="normal">Ada L.</text>
-  <text x="372.0" y="315.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="11.5" fill="#5c5c5c" text-anchor="start" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="10.1">..._ATTRIBUTE_DISPLAY_NAME</tspan></text>
+  <text x="372.0" y="315.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="11.5" fill="#5c5c5c" text-anchor="start" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="10.1">claims.display_name</tspan></text>
   <path d="M363.9,274.0 C458.6,274.1 553.4,274.2 648.0,274.0" fill="none" stroke="#f1f3f5" stroke-width="1.2" stroke-linecap="round"/>
   <text x="372.0" y="340.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#1e1e1e" text-anchor="start" font-weight="bold">login</text>
   <text x="472.0" y="340.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="13.5" fill="#1e1e1e" text-anchor="start" font-weight="normal">ada</text>
-  <text x="372.0" y="361.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="11.5" fill="#5c5c5c" text-anchor="start" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="10.1">..._ATTRIBUTE_LOGIN</tspan></text>
+  <text x="372.0" y="361.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="11.5" fill="#5c5c5c" text-anchor="start" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="10.1">claims.login</tspan></text>
   <path d="M363.9,320.1 C458.9,319.8 553.5,319.7 648.1,320.0" fill="none" stroke="#f1f3f5" stroke-width="1.2" stroke-linecap="round"/>
   <text x="506.0" y="392.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="12" fill="#5c5c5c" text-anchor="middle" font-weight="normal">each mapping is optional: unset = skipped</text>
   <path d="M662.1,234.2 C678.9,234.4 696.3,234.3 716.8,235.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
@@ -159,8 +159,8 @@
   <path d="M822.0,146.8 C794.0,146.7 766.7,144.7 738.3,145.9" fill="none" stroke="#e8590c" stroke-width="1.7" stroke-linecap="round"/>
   <path d="M737.7,145.3 C738.2,140.1 738.3,130.5 737.5,123.5" fill="none" stroke="#e8590c" stroke-width="1.7" stroke-linecap="round"/>
   <path d="M738.6,146.5 C738.6,138.4 739.5,130.3 738.8,124.3" fill="none" stroke="#e8590c" stroke-width="1.7" stroke-linecap="round"/>
-  <text x="780.0" y="139.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="11.5" fill="#1e1e1e" text-anchor="middle" font-weight="normal">SAML</text>
-  <text x="847.0" y="176.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">ACS callback</text>
+  <text x="780.0" y="139.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="11.5" fill="#1e1e1e" text-anchor="middle" font-weight="normal">OIDC</text>
+  <text x="847.0" y="176.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">OIDC callback</text>
   <text x="847.0" y="204.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="12.5" fill="#5c5c5c" text-anchor="middle" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="11.0">create_or_get_sso_user</tspan></text>
   <text x="847.0" y="232.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="13" fill="#5c5c5c" text-anchor="middle" font-weight="normal">then a magic-link ticket</text>
   <text x="847.0" y="252.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="13" fill="#5c5c5c" text-anchor="middle" font-weight="normal">and the user lands in</text>
@@ -187,13 +187,13 @@
   <path d="M1275.9,145.9 C1207.9,145.2 1142.7,146.6 1076.7,146.3" fill="none" stroke="#e8590c" stroke-width="1.7" stroke-linecap="round"/>
   <path d="M1076.5,146.1 C1074.6,138.8 1075.5,132.5 1075.9,124.2" fill="none" stroke="#e8590c" stroke-width="1.7" stroke-linecap="round"/>
   <path d="M1075.4,146.0 C1076.7,138.9 1076.9,130.5 1076.1,124.0" fill="none" stroke="#e8590c" stroke-width="1.7" stroke-linecap="round"/>
-  <text x="1176.0" y="139.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="11.5" fill="#1e1e1e" text-anchor="middle" font-weight="normal">called by the ACS</text>
-  <text x="1080.0" y="176.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="15" fill="#1e1e1e" text-anchor="start" font-weight="bold">the hook in the ACS handler</text>
+  <text x="1176.0" y="139.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="11.5" fill="#1e1e1e" text-anchor="middle" font-weight="normal">called by the callback</text>
+  <text x="1080.0" y="176.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="15" fill="#1e1e1e" text-anchor="start" font-weight="bold">the last step of <tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="13.2">provision_sso_login</tspan></text>
   <text x="1086.0" y="208.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="12" fill="#adb5bd" text-anchor="end" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="10.6">1</tspan></text>
   <text x="1086.0" y="235.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="12" fill="#adb5bd" text-anchor="end" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="10.6">2</tspan></text>
   <text x="1086.0" y="262.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="12" fill="#adb5bd" text-anchor="end" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="10.6">3</tspan></text>
-  <text x="1100.0" y="208.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#1e1e1e" text-anchor="start" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">from ...sso_sync import sync_sso_user</tspan></text>
-  <text x="1100.0" y="262.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#1e1e1e" text-anchor="start" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">await sync_sso_user(user, auth.get_attributes())</tspan></text>
+  <text x="1100.0" y="208.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#1e1e1e" text-anchor="start" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">user, created = await create_or_get_sso_user(email, …)</tspan></text>
+  <text x="1100.0" y="262.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#1e1e1e" text-anchor="start" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">await sync_sso_user(user, claims, provider)</tspan></text>
   <text x="1080.0" y="296.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="13" fill="#5c5c5c" text-anchor="start" font-weight="normal">after the user is created or fetched, before the magic-link ticket</text>
   <text x="1080.0" y="316.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="13" fill="#5c5c5c" text-anchor="start" font-weight="normal">a failed sync is logged and never blocks the sign-in</text>
   <path d="M1394.2,334.2 C1395.5,359.6 1394.1,386.1 1395.9,411.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
@@ -210,9 +210,9 @@
   <path d="M1730.4,494.5 C1168.7,493.9 605.1,492.4 40.2,494.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
   <path d="M40.0,493.9 C41.5,459.1 38.6,421.7 40.2,385.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
   <path d="M40.0,494.2 C41.3,457.7 39.8,422.4 40.8,386.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
-  <text x="60.0" y="412.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="start" font-weight="bold">sync_sso_user(user, attributes)</text>
+  <text x="60.0" y="412.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="start" font-weight="bold">sync_sso_user(user, claims, provider)</text>
   <text x="380.0" y="412.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="12.5" fill="#5c5c5c" text-anchor="start" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="11.0">auth_endpoints/sso_sync.py</tspan></text>
-  <text x="1711.0" y="412.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="13" fill="#5c5c5c" text-anchor="end" font-weight="normal">idempotent - no attributes in the assertion = a no-op, nothing is wiped</text>
+  <text x="1711.0" y="412.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="13" fill="#5c5c5c" text-anchor="end" font-weight="normal">idempotent - no claims in the login = a no-op, nothing is wiped</text>
   <rect x="260.0" y="432.0" width="300.0" height="46.0" rx="6" fill="#ffffff"/>
   <path d="M259.4,431.5 C360.4,432.6 460.2,432.5 560.4,431.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
   <path d="M260.1,431.2 C361.1,431.8 460.5,430.6 560.2,432.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
@@ -1185,7 +1185,7 @@
   <path d="M354.6,697.9 C391.9,697.9 425.4,697.6 462.0,697.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
   <path d="M461.5,697.7 C457.9,695.8 454.2,694.4 450.0,691.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
   <path d="M462.4,698.1 C457.6,699.4 454.3,702.5 449.2,705.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
-  <text x="408.0" y="650.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="12" fill="#5c5c5c" text-anchor="middle" font-weight="normal">assertion:</text>
+  <text x="408.0" y="650.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="12" fill="#5c5c5c" text-anchor="middle" font-weight="normal">claim:</text>
   <text x="408.0" y="666.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="12" fill="#5c5c5c" text-anchor="middle" font-weight="normal">korbel-lab,</text>
   <text x="408.0" y="682.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="12" fill="#5c5c5c" text-anchor="middle" font-weight="normal">new-lab</text>
   <path d="M762.0,623.0 C765.9,622.9 769.7,623.3 773.9,623.0" fill="none" stroke="#2f9e44" stroke-width="2.4" stroke-linecap="round"/>
@@ -1319,7 +1319,7 @@
   <path d="M1021.6,762.4 C1023.0,755.0 1021.6,747.4 1022.4,738.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
   <text x="1072.0" y="754.2" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="12" fill="#1e1e1e" text-anchor="middle" font-weight="normal">new-lab</text>
   <text x="995.0" y="794.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="12.5" fill="#5c5c5c" text-anchor="middle" font-weight="normal">title, display name and login are written when they</text>
-  <text x="995.0" y="814.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="12.5" fill="#5c5c5c" text-anchor="middle" font-weight="normal">change; <tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="11.0">sso_provider</tspan> is stamped saml</text>
+  <text x="995.0" y="814.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="12.5" fill="#5c5c5c" text-anchor="middle" font-weight="normal">change; <tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="11.0">sso_provider</tspan> is stamped with the provider id</text>
   <rect x="1210.0" y="530.0" width="521.0" height="312.0" rx="6" fill="#ffffff"/>
   <path d="M1210.6,529.7 C1384.3,531.2 1558.1,528.4 1730.2,529.4" fill="none" stroke="#adb5bd" stroke-width="1.7" stroke-linecap="round" stroke-dasharray="9 7"/>
   <path d="M1210.5,530.3 C1383.5,529.1 1556.9,531.5 1731.7,530.7" fill="none" stroke="#adb5bd" stroke-width="1.7" stroke-linecap="round" stroke-dasharray="9 7"/>
@@ -1531,7 +1531,7 @@
   <path d="M1630.7,766.8 C1631.6,769.0 1633.3,767.5 1633.0,770.0" fill="none" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round"/>
   <path d="M1633.0,769.7 C1636.7,766.0 1636.2,764.5 1636.5,763.1" fill="none" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round"/>
   <text x="1648.0" y="757.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="12.5" fill="#1e1e1e" text-anchor="start" font-weight="normal">P.I.</text>
-  <text x="1470.0" y="824.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="12" fill="#5c5c5c" text-anchor="middle" font-weight="normal">on an sso_managed group the IdP must assert her membership first</text>
+  <text x="1470.0" y="824.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="12" fill="#5c5c5c" text-anchor="middle" font-weight="normal">on an sso_managed group the IdP must send her membership first</text>
   <path d="M39.6,872.3 C599.7,872.6 1160.8,872.0 1719.4,871.7" fill="none" stroke="#adb5bd" stroke-width="1.7" stroke-linecap="round" stroke-dasharray="9 7"/>
   <path d="M40.2,872.6 C600.4,870.8 1160.6,873.1 1720.3,871.6" fill="none" stroke="#adb5bd" stroke-width="1.7" stroke-linecap="round" stroke-dasharray="9 7"/>
   <text x="40.0" y="912.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="22" fill="#1e1e1e" text-anchor="start" font-weight="normal">who runs a group</text>

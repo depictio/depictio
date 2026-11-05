@@ -631,7 +631,7 @@ async def get_current_user_info_optional(
 
     Backward compatible: existing callers that read ``auth_mode`` and ``user``
     keep working. The React /auth page additionally consumes ``is_public_mode``,
-    ``is_single_user_mode``, and ``google_oauth_enabled`` to decide which UI to
+    ``is_single_user_mode``, and ``sso_providers`` to decide which UI to
     render with a single round-trip on page load.
 
     Args:
@@ -705,7 +705,7 @@ async def get_current_user_info_optional(
         "is_demo_mode": getattr(settings.auth, "is_demo_mode", False),
         "registration_disabled": getattr(settings.auth, "registration_disabled", False),
         # Effective, not the raw flag: the SPA must not hide the password form
-        # on an instance where Google OAuth was never configured.
+        # on an instance where no OIDC provider is configured.
         "password_login_disabled": getattr(settings.auth, "is_password_login_disabled", False),
         # Whether public mode asks for the shared code — never the code itself.
         "public_access_code_required": getattr(
@@ -714,9 +714,11 @@ async def get_current_user_info_optional(
         "is_dev_mode": is_dev_mode,
         "walkthrough_disabled": walkthrough_disabled,
         "unauthenticated_mode": getattr(settings.auth, "unauthenticated_mode", False),
-        "google_oauth_enabled": settings.auth.google_oauth_enabled,
-        "saml_enabled": settings.auth.saml_enabled,
-        "saml_login_label": settings.auth.saml_login_label,
+        # Sign-in buttons, one per enabled OIDC provider (id + label only; the
+        # same list as GET /auth/oidc/providers, here to save a round-trip).
+        "sso_providers": [
+            {"id": p.id, "label": p.display_label} for p in settings.auth.enabled_oidc_providers
+        ],
         "temporary_user_expiry_hours": settings.auth.temporary_user_expiry_hours,
         "temporary_user_expiry_minutes": settings.auth.temporary_user_expiry_minutes,
         # Viewer feature flags ride along here rather than on an endpoint of

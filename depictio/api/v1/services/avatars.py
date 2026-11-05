@@ -30,8 +30,8 @@ once the user is resolved, after authentication has succeeded::
     # OIDC / OAuth: the userinfo `picture` claim is a URL.
     await set_provider_avatar(user.id, provider="oidc", url=claims.get("picture"))
 
-    # SAML / LDAP: `jpegPhoto` or `thumbnailPhoto` arrive as bytes.
-    await set_provider_avatar(user.id, provider="saml", raw=photo_bytes)
+    # LDAP-style sources: `jpegPhoto` or `thumbnailPhoto` arrive as bytes.
+    await set_provider_avatar(user.id, provider="ldap", raw=photo_bytes)
 
 It never raises and returns whether a new picture was stored, so a login can
 call it without a try/except and never fails because of a photo. Precedence:
@@ -43,7 +43,8 @@ call it without a try/except and never fails because of a photo. Precedence:
   the same way: it comes back at the next login, which is how the provider
   stays the source of truth until the user uploads their own.
 
-The Google OAuth callback is the first caller (``google_oauth_routes.py``).
+Every OIDC login calls it with the provider's ``picture`` claim
+(``sso_sync.provision_sso_login``).
 """
 
 from __future__ import annotations

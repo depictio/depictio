@@ -1,20 +1,33 @@
-"""SSO attribute synchronisation for SAML logins.
+"""The single provisioning path of SSO logins, and the claim sync it runs.
 
-On every SAML login the IdP assertion can carry group memberships and profile
-attributes. :func:`sync_sso_user` mirrors those into Depictio: SSO-managed
-groups are created/joined/left to match the assertion, and profile fields
-(title, display name, login) are refreshed. The mapping between SAML attribute
-names and Depictio fields is configured via ``settings.auth.saml_attribute_*``
-(env vars ``DEPICTIO_AUTH_SAML_ATTRIBUTE_*``); each mapping left unset simply
-disables that part of the sync, so the function is safe to call
-unconditionally from the ACS handler.
+Every OpenID Connect login, whatever the provider, goes through
+:func:`provision_sso_login`:
 
-No python3-saml dependency here on purpose — the module only consumes the
-already-extracted ``dict[str, list[str]]`` attribute payload.
+1. the email is read from the configured claim and accepted only when the
+   provider verified it (``email_verified`` true, or the provider is configured
+   with ``assume_email_verified``);
+2. :func:`create_or_get_sso_user` matches or creates the account, honouring
+   ``registration_disabled`` and claiming pending project ownership;
+3. :func:`sync_sso_user` mirrors groups and profile claims, stamps
+   ``user.sso_provider`` and claims pending P.I. designations and project
+   ownership;
+4. the provider's picture, when it sends one, becomes the profile picture.
+
+Claim values may be a string or a list of strings: IdPs disagree (a single
+group arrives as ``"lab"`` from one and ``["lab"]`` from another), and both
+mean the same thing here.
 """
+
+from collections.abc import Mapping
+from typing import Any
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
+from depictio.api.v1.configs.settings_models import OIDCProviderConfig
+from depictio.api.v1.endpoints.auth_endpoints.utils import (
+    AmbiguousSSOAccount,
+    create_or_get_sso_user,
+)
 from depictio.api.v1.endpoints.groups_endpoints.pending_pi import claim_pending_pi_groups
 from depictio.api.v1.endpoints.projects_endpoints.pending_owner import (
     claim_pending_project_ownership_quietly,
@@ -22,55 +35,198 @@ from depictio.api.v1.endpoints.projects_endpoints.pending_owner import (
 from depictio.models.models.users import GroupBeanie, UserBeanie
 
 
-async def sync_sso_user(user: UserBeanie, attributes: dict[str, list[str]] | None) -> None:
-    """Synchronise a user's groups and profile from SAML assertion attributes.
+class SSOLoginRejected(Exception):
+    """The identity is authentic but may not sign in. ``code`` goes to the browser."""
 
-    Called from the ACS handler in saml_routes.py, after ``create_or_get_sso_user``
-    and before the magic-link ticket is minted.
+    def __init__(self, reason: str, code: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+        self.code = code
 
-    Idempotent and safe to run on every login. When ``attributes`` is None or
-    empty the whole sync is a no-op (a broken/attribute-less assertion never
-    wipes state). Each step is independently skipped when its
-    ``settings.auth.saml_attribute_*`` mapping is unset.
+
+# ---------------------------------------------------------------------------
+# Claim access
+# ---------------------------------------------------------------------------
+
+
+def _lookup(claims: Mapping[str, Any], name: str) -> tuple[bool, Any]:
+    """``(found, value)`` for a claim name: exact, then case-insensitive, then dotted path."""
+    if name in claims:
+        return True, claims[name]
+    folded = name.casefold()
+    for key, value in claims.items():
+        if isinstance(key, str) and key.casefold() == folded:
+            return True, value
+    if "." in name:
+        node: Any = claims
+        for part in name.split("."):
+            if not isinstance(node, Mapping):
+                return False, None
+            found, node = _lookup(node, part)
+            if not found:
+                return False, None
+        return True, node
+    return False, None
+
+
+def claim_values(claims: Mapping[str, Any] | None, name: str) -> list[str] | None:
+    """The values of claim ``name`` as a list of strings, or None if absent.
+
+    A string becomes a one-item list, a list keeps its string items (numbers
+    are stringified, anything else is dropped). Values are stripped and empty
+    ones dropped. The exact name wins; otherwise the match ignores case,
+    because an IdP may send ``Groups`` where a deployment configured
+    ``groups`` and a mismatch would otherwise read as an empty list, which
+    removes the user from every SSO-managed group. A dotted name not present
+    as such is followed as a path (``realm_access.roles``).
+    """
+    if not claims:
+        return None
+    found, raw = _lookup(claims, name)
+    if not found or raw is None:
+        return None
+    items = raw if isinstance(raw, (list, tuple)) else [raw]
+    values: list[str] = []
+    for item in items:
+        if isinstance(item, bool):
+            continue
+        if isinstance(item, (str, int, float)):
+            text = str(item).strip()
+            if text:
+                values.append(text)
+    return values
+
+
+def first_claim(claims: Mapping[str, Any] | None, name: str | None) -> str | None:
+    """The first value of claim ``name``, or None."""
+    if not name:
+        return None
+    values = claim_values(claims, name)
+    return values[0] if values else None
+
+
+# ---------------------------------------------------------------------------
+# Provisioning
+# ---------------------------------------------------------------------------
+
+
+def _is_email_verified(provider: OIDCProviderConfig, claims: Mapping[str, Any]) -> bool:
+    if provider.assume_email_verified:
+        return True
+    value = claims.get("email_verified")
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() == "true"
+    return False
+
+
+async def provision_sso_login(
+    provider: OIDCProviderConfig, claims: Mapping[str, Any]
+) -> tuple[UserBeanie, bool]:
+    """Resolve the account of a verified login and bring it up to date.
+
+    Raises:
+        SSOLoginRejected: no usable or no verified email (``code`` ``sso_failed``),
+            or an unknown email while registration is disabled
+            (``registration_disabled``).
+    """
+    email = first_claim(claims, provider.claims.email)
+    if not email or "@" not in email:
+        raise SSOLoginRejected(
+            f"provider '{provider.id}' sent no usable '{provider.claims.email}' claim",
+            "sso_failed",
+        )
+    if not _is_email_verified(provider, claims):
+        # An unverified address could be anyone's: matching it to an account
+        # would hand that account to whoever typed it at the provider.
+        raise SSOLoginRejected(
+            f"provider '{provider.id}' did not verify {email} (email_verified is not true)",
+            "email_not_verified",
+        )
+
+    try:
+        user, created = await create_or_get_sso_user(
+            email, allow_create=not settings.auth.registration_disabled
+        )
+    except AmbiguousSSOAccount as e:
+        # Two accounts differ only by the case of their email: signing in to
+        # either would be a guess, and creating a third would make it worse.
+        raise SSOLoginRejected(f"several accounts match {email} ignoring case", "sso_failed") from e
+    if user is None:
+        raise SSOLoginRejected(
+            f"no account for {email} and registration is disabled", "registration_disabled"
+        )
+
+    # A failed sync must never turn a valid sign-in into an error: the user is
+    # authenticated, and the next login re-syncs.
+    try:
+        await sync_sso_user(user, claims, provider)
+    except Exception as sync_error:  # noqa: BLE001
+        logger.error(f"SSO claim sync failed for {email}: {sync_error}")
+
+    picture_claim = provider.claims.picture
+    picture = first_claim(claims, picture_claim) if picture_claim else None
+    if user.id is not None and picture and picture.startswith("https://"):
+        from depictio.api.v1.services.avatars import set_provider_avatar
+
+        # Never raises; an uploaded picture is left untouched, and an
+        # unchanged URL is not downloaded again (see services/avatars.py).
+        await set_provider_avatar(user.id, provider=provider.stored_provider_name, url=picture)
+
+    return user, created
+
+
+# ---------------------------------------------------------------------------
+# Sync
+# ---------------------------------------------------------------------------
+
+
+async def sync_sso_user(
+    user: UserBeanie, claims: Mapping[str, Any] | None, provider: OIDCProviderConfig
+) -> None:
+    """Synchronise a user's groups and profile from the login's claims.
+
+    Called by :func:`provision_sso_login`, after ``create_or_get_sso_user``
+    and before the session ticket is minted.
+
+    Idempotent and safe to run on every login. When ``claims`` is None or empty
+    the whole sync is a no-op (a broken, claim-less login never wipes state).
+    Each step is independently skipped when its mapping in
+    ``provider.claims`` is unset.
 
     Group and profile sync are followed by ``claim_pending_pi_groups``: a P.I.
     designated by email before the account existed is promoted here, on the
-    login that first asserts the group.
+    login that first asserts the group. Projects parked on the address are
+    claimed too (``claim_pending_project_ownership_quietly``).
 
-    Attribute names are matched exactly first, then ignoring case (``Groups`` and
-    ``groups`` are the same attribute to an IdP and to this sync).
+    Group sync (``claims.groups``):
+        The claim's values are taken verbatim as group names (whitespace
+        stripped, empties dropped); no parsing is attempted. For each incoming
+        name the group is created if missing (``sso_managed=True``, no admins,
+        no P.I.) and the user is added to ``users_ids``. The user is then
+        removed from every ``sso_managed`` group NOT named in the claim
+        (including ``admin_ids``, and ``pi_id`` is cleared if it was them).
+        Manually created groups (``sso_managed=False``) are never touched.
 
-    Group sync (``saml_attribute_groups``):
-        The attribute's value list is taken verbatim as group names (whitespace
-        stripped, empties dropped) — IdPs may send full DNs or plain names; no
-        parsing is attempted, the raw value is the group name. For each
-        incoming name the group is created if missing (``sso_managed=True``,
-        no admins, no P.I. — a sysadmin designates the P.I. afterwards, either
-        directly or by parking an email via ``pending_pi_email``) and the user
-        is added to ``users_ids``. The user is then removed from every
-        ``sso_managed`` group NOT named in the assertion (including
-        ``admin_ids``, and ``pi_id`` is cleared if it was them). Manually
-        created groups (``sso_managed=False``) are never touched.
+        NOTE: when ``claims.groups`` is configured but the claim is absent from
+        this login, it is treated as an empty list: the user is removed from
+        ALL sso-managed groups. The provider is the source of truth for
+        SSO-managed membership.
 
-        NOTE: when ``saml_attribute_groups`` is configured but the attribute
-        is absent from this assertion, it is treated as an empty list — the
-        user is removed from ALL sso-managed groups. The IdP assertion is the
-        source of truth for SSO-managed membership.
-
-    Profile sync (``saml_attribute_title`` / ``saml_attribute_display_name``
-    / ``saml_attribute_login``):
-        For each configured mapping whose attribute is present, the first
-        value is stripped and written to ``user.title`` /
-        ``user.display_name`` / ``user.login`` when non-empty and different.
-        ``user.sso_provider`` is stamped ``"saml"``. The user document is
-        saved once, and only if something actually changed.
+    Profile sync (``claims.title`` / ``claims.display_name`` / ``claims.login``):
+        For each configured mapping whose claim is present, the first value
+        is written to ``user.title`` / ``user.display_name`` / ``user.login``
+        when non-empty and different. ``user.sso_provider`` is stamped with
+        the provider's ``sso_provider`` name (its id by default). The user
+        document is saved once, and only if something actually changed.
     """
-    if not attributes:
-        logger.debug(f"SSO sync: no attributes in assertion for {user.email} — skipping")
+    if not claims:
+        logger.debug(f"SSO sync: no claims for {user.email}, skipping")
         return
 
-    await _sync_groups(user, attributes)
-    await _sync_profile(user, attributes)
+    await _sync_groups(user, claims, provider)
+    await _sync_profile(user, claims, provider)
     # Groups whose P.I. was designated by email before this account existed.
     # Runs after group sync so a freshly mirrored group can be claimed in the
     # same login.
@@ -79,34 +235,17 @@ async def sync_sso_user(user: UserBeanie, attributes: dict[str, list[str]] | Non
     await claim_pending_project_ownership_quietly(user)
 
 
-def _attribute_values(attributes: dict[str, list[str]], name: str) -> list[str] | None:
-    """The values of the assertion attribute called ``name``, or None if absent.
-
-    The exact name wins; otherwise the match ignores case, because an IdP may
-    send ``Groups`` where a deployment configured ``groups`` (or the reverse)
-    and a mismatch would otherwise read as an empty list, which removes the
-    user from every SSO-managed group.
-    """
-    if name in attributes:
-        return attributes[name]
-    folded = name.casefold()
-    for key, values in attributes.items():
-        if key.casefold() == folded:
-            return values
-    return None
-
-
-async def _sync_groups(user: UserBeanie, attributes: dict[str, list[str]]) -> None:
-    """Mirror the assertion's group list onto sso_managed GroupBeanie docs."""
-    attr_name = settings.auth.saml_attribute_groups
-    if not attr_name:
+async def _sync_groups(
+    user: UserBeanie, claims: Mapping[str, Any], provider: OIDCProviderConfig
+) -> None:
+    """Mirror the claim's group list onto sso_managed GroupBeanie docs."""
+    claim_name = provider.claims.groups
+    if not claim_name:
         return
 
     user_id_str = str(user.id)
-    # Absent attribute => empty list => user leaves all sso_managed groups.
-    incoming_names = [
-        v.strip() for v in (_attribute_values(attributes, attr_name) or []) if v and v.strip()
-    ]
+    # Absent claim => empty list => user leaves all sso_managed groups.
+    incoming_names = list(dict.fromkeys(claim_values(claims, claim_name) or []))
     incoming_set = set(incoming_names)
 
     # Ensure membership in every asserted group, creating missing ones.
@@ -142,32 +281,28 @@ async def _sync_groups(user: UserBeanie, attributes: dict[str, list[str]]) -> No
             logger.info(f"SSO sync: removed {user.email} from stale group '{group.name}'")
 
 
-async def _sync_profile(user: UserBeanie, attributes: dict[str, list[str]]) -> None:
-    """Refresh user profile fields from configured SAML attribute mappings."""
+async def _sync_profile(
+    user: UserBeanie, claims: Mapping[str, Any], provider: OIDCProviderConfig
+) -> None:
+    """Refresh user profile fields from the provider's claim mapping."""
     field_mappings: list[tuple[str | None, str]] = [
-        (settings.auth.saml_attribute_title, "title"),
-        (settings.auth.saml_attribute_display_name, "display_name"),
-        (settings.auth.saml_attribute_login, "login"),
+        (provider.claims.title, "title"),
+        (provider.claims.display_name, "display_name"),
+        (provider.claims.login, "login"),
     ]
-    if all(attr_name is None for attr_name, _ in field_mappings):
-        return
 
     changed = False
-    for attr_name, field in field_mappings:
-        if not attr_name:
-            continue
-        values = _attribute_values(attributes, attr_name)
-        if not values:
-            continue
-        value = values[0].strip()
+    for claim_name, field in field_mappings:
+        value = first_claim(claims, claim_name)
         if value and getattr(user, field) != value:
             setattr(user, field, value)
             changed = True
 
-    if user.sso_provider != "saml":
-        user.sso_provider = "saml"
+    stamp = provider.stored_provider_name
+    if user.sso_provider != stamp:
+        user.sso_provider = stamp
         changed = True
 
     if changed:
         await user.save()
-        logger.info(f"SSO sync: updated profile attributes for {user.email}")
+        logger.info(f"SSO sync: updated profile for {user.email}")
