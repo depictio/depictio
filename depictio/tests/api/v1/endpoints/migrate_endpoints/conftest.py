@@ -23,6 +23,8 @@ COLLECTIONS = {
     "jbrowse_collection": "jbrowse",
     "data_collections_collection": "data_collections",
     "users_collection": "users",
+    "branding_assets_collection": "branding_assets",
+    "comment_threads_collection": "comment_threads",
 }
 
 

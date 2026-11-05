@@ -203,6 +203,13 @@ def _push_and_approve(
     return done
 
 
+# A 1x1 transparent PNG.
+_PNG_1PX = bytes.fromhex(
+    "89504e470d0a1a0a0000000d4948445200000001000000010806000000"
+    "1f15c4890000000d49444154789c6360000002000154a24f5d0000000049454e44ae426082"
+)
+
+
 def _invite_scenario(a: Instance, c: Instance, rep: Report, project_id: str, name: str) -> None:
     feats = c.get("/utils/server-info").json().get("features") or {}
     rep.check("C: migration UI on (chart default)", feats.get("migration") is True, feats)
@@ -223,6 +230,29 @@ def _invite_scenario(a: Instance, c: Instance, rep: Report, project_id: str, nam
         code not in json.dumps(listed) and any(i["id"] == made.json()["id"] for i in listed),
         [(i["state"], i["code_hint"]) for i in listed],
     )
+    # A logo and an annotated comment on A's main dashboard travel with it.
+    main = next((d for d in _dashboards(a, project_id) if d.get("is_main_tab") is not False), None)
+    did = str(main["dashboard_id"]) if main else None
+    label = f"LAN threshold {time.strftime('%H%M%S')}"
+    if did:
+        logo = a.post(
+            f"/dashboards/upload_logo/{did}",
+            files={"file": ("logo.png", _PNG_1PX, "image/png")},
+        )
+        rep.check("A: dashboard logo uploaded", logo.status_code == 200, logo.text[:200])
+        thread = a.post(
+            "/comments/threads",
+            json={
+                "anchor": {"dashboard_id": did},
+                "body": "Published threshold",
+                "annotation": {
+                    "kind": "line",
+                    "geometry": {"kind": "ref_line", "axis": "y", "value": 5},
+                    "label": label,
+                },
+            },
+        )
+        rep.check("A: annotated comment created", thread.status_code == 201, thread.text[:200])
     dest = a.get("/migrate/push/destinations").json()
     rep.check("A allows a destination URL", dest.get("enabled") is True, dest)
     body = {"project_id": project_id, "destination_url": c.base, "invite_code": code}
@@ -265,6 +295,15 @@ def _invite_scenario(a: Instance, c: Instance, rep: Report, project_id: str, nam
         return
     cid = str(imported.get("id") or imported.get("_id"))
     rep.check("unlocked on import (invite policy)", not imported.get("published_lock"), "")
+    if did:
+        logo_c = c.get(f"/dashboards/logo/{did}")
+        rep.check("C serves the dashboard logo", logo_c.status_code == 200, logo_c.status_code)
+        threads = c.get(f"/comments/dashboard/{did}")
+        labels = [
+            (t.get("annotation") or {}).get("label")
+            for t in (threads.json() if threads.status_code == 200 else [])
+        ]
+        rep.check("C has the annotated comment", label in labels, labels)
     lock = c.post(f"/projects/{cid}/lock", json={"reason": "release"})
     rep.check(
         "C's admin locks it (Permissions > Editing)", lock.status_code == 200, lock.text[:200]

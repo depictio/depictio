@@ -331,9 +331,34 @@ state, writes, and sets the lock again.
 Anyone holding the S3 keys directly can still change the data; the lock is an
 API guarantee only.
 
+## What a bundle carries
+
+- **Documents**: the project (with its workflows and data collections), files,
+  Delta tables, runs, every dashboard tab, MultiQC and JBrowse records.
+- **Dashboard logos** (`branding_assets`, keyed by dashboard id, which an import
+  keeps).
+- **Comment threads with their annotations** (`comment_threads`). A re-push
+  upserts them; threads written on the target are kept.
+- **Data** for the six collection types: Delta tables, MultiQC parquet, JBrowse
+  tracks stored in S3 (`https://` tracks stay links), image folders, GeoJSON
+  objects, phylogeny trees and genomic-track prefixes. Every
+  `s3://<source bucket>/` reference is rewritten to the target's bucket.
+
+Bundles without the logo and comment sections still import, and an older
+target ignores them, so they need no new bundle format.
+
+**Compatibility check.** Two instances can share a bundle format and still
+differ in what a dashboard may hold. The target refuses, before anything is
+written, a bundle whose dashboards use a component type or an advanced-viz kind
+it does not know, and says which version to update to. `/check` also warns when
+the source runs a newer Depictio than the target.
+
 ## Known gaps
 
-- Dashboard logos live in `branding_assets`, which the bundle does not carry.
+- Version history (`dashboard_versions`) is not carried: the target starts
+  from an `import` version and adds one per update.
+- Comment authors keep the user id they had on the source; the email shows who
+  wrote it.
 - The requester's email is asserted by the source. Approval by an admin, and
   claims through SSO only, limit what a forged email can do.
 - MongoDB has no transaction around the import: a failure halfway can leave a

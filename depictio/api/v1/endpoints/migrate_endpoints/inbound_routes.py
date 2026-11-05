@@ -168,6 +168,24 @@ async def inbound_preflight(
     return _preflight(body, source)
 
 
+def _version_key(version: str | None) -> tuple[int, ...] | None:
+    """``1.20.5`` -> ``(1, 20, 5)``; None when there is no leading number."""
+    parts = re.findall(r"\d+", (version or "").split("+")[0].split("-")[0])
+    return tuple(int(p) for p in parts[:3]) or None
+
+
+def _source_is_newer(source_version: str | None) -> str | None:
+    """A warning when the source runs a newer Depictio than this instance."""
+    theirs, ours = _version_key(source_version), _version_key(get_version())
+    if theirs is None or ours is None or theirs <= ours:
+        return None
+    return (
+        f"the source runs Depictio {source_version}, newer than this instance "
+        f"({get_version()}): a dashboard using something this version lacks is refused at "
+        "upload. Update Depictio here first to be safe"
+    )
+
+
 def _preflight(body: PreflightBody, source: MigrationInboundSource) -> dict[str, Any]:
     errors: list[str] = []
     warnings: list[str] = []
@@ -222,6 +240,9 @@ def _preflight(body: PreflightBody, source: MigrationInboundSource) -> dict[str,
         if server_side_copy_possible(source, body.source_s3_endpoint, body.source_bucket)
         else "inline"
     )
+    newer = _source_is_newer(body.source_depictio_version)
+    if newer:
+        warnings.append(newer)
     has_account = migration_import.find_user_by_email(body.requester_email) is not None
     if body.requester_email and not has_account:
         warnings.append(
