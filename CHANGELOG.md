@@ -3,6 +3,66 @@
 ### Docker Images 🐳
 
 ```plaintext
+ghcr.io/depictio/depictio:1.21.0-b1
+ghcr.io/depictio/depictio:latest
+ghcr.io/depictio/depictio:stable
+ghcr.io/depictio/depictio:edge
+```
+
+
+<details>
+<summary>Click to expand the changelog for 1.21.0-b1</summary>
+
+### Changes 📜
+
+#### Improvements 🚀
+
+* style: sort the test_local_compose imports [782a84907]
+
+#### Documentation Updates 📚
+
+* docs: redraw SSO diagrams for OIDC, note OIDC in the repo guide [106a9d801]
+
+#### Other Changes 📝
+
+* Bump version: 1.20.5 → 1.21.0-b1 [8489f9ef7]
+* test(publish): every collection type, logos and comments round trip, compatibility check ([#1303](https://github.com/depictio/depictio/pull/1303)) [db676761e]
+* feat(publish): carry dashboard logos and comment threads, refuse what the target cannot render ([#1303](https://github.com/depictio/depictio/pull/1303)) [3ba33afa9]
+* fix(viewer): offer Revoke on active invite codes only ([#1303](https://github.com/depictio/depictio/pull/1303)) [744dd0941]
+* feat(publish): one kind of invite code: a project, then its updates ([#1303](https://github.com/depictio/depictio/pull/1303)) [90bf1ddbf]
+* fix(viewer): a fresh invite code for a project already published says how to update it ([#1303](https://github.com/depictio/depictio/pull/1303)) [adb3518e5]
+* ci(helm): pull mongo from Google's Docker Hub mirror in the chart test [c5262bc27]
+* feat(publish): plain invite wording, and say how to update a project brought by a code ([#1303](https://github.com/depictio/depictio/pull/1303)) [78dda07fa]
+* fix(backup): list migration_invites with the other migration ledgers ([#1303](https://github.com/depictio/depictio/pull/1303)) [f24087651]
+* feat(viewer): receive a project, publish to a URL + code, push tracking ([#1303](https://github.com/depictio/depictio/pull/1303)) [0e837df93]
+* test(publish): invites, invite push, push tracking, recovery, chart defaults ([#1303](https://github.com/depictio/depictio/pull/1303)) [27b9958cf]
+* feat(publish): invite codes, publish to a URL + code, push tracking ([#1303](https://github.com/depictio/depictio/pull/1303)) [f0c0cbdb4]
+* test(multiqc): stop a monkeypatch from leaking load_deltatable_lite's mock [dfd1389da]
+* chore(helm): name the commit that removed SAML in the backup README [eccb62a0c]
+* test(auth): OIDC verification, flow, settings and provisioning; match SSO email ignoring case [197847f72]
+* feat(viewer): one sign-in button per OIDC provider [de0100348]
+* test(sarek): stop the mapping-only tests waiting on a MongoDB that is not there [66c402417]
+* chore(helm,docker): OIDC provider config, back up and migrate SAML values [099ecf726]
+* fix(auth): accept Google's documented second iss spelling [a4fff6ec1]
+* feat(auth): replace SAML and Google OAuth with generic OIDC SSO (API core) [a6998b1b9]
+* feat(publish): push a project to another instance, approve it there, serve it read-only ([#1334](https://github.com/depictio/depictio/pull/1334)) [12f4efa4f]
+* Update CHANGELOG.md for v1.20.5 [09164a8f4]
+* docs(gcs): reading from GCS is supported, GCS as instance storage is not yet [c312a61a0]
+* fix(compose): let glibc own rseq so mongo starts on Linux 6.19+ [128dfca85]
+* fix(compose): run mongo 8.0.34, which starts on Linux 6.19+ kernels [65099ee21]
+* fix(cli): keep remote_storage_options from the CLI configuration [29df5a788]
+* feat(s3): make the S3 clients work on Google Cloud Storage's XML API [a2b640dae]
+
+
+</details>
+
+### Documentation 📖
+
+For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
+
+### Docker Images 🐳
+
+```plaintext
 ghcr.io/depictio/depictio:1.20.5
 ghcr.io/depictio/depictio:latest
 ghcr.io/depictio/depictio:stable
