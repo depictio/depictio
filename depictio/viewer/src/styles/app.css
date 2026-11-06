@@ -333,3 +333,25 @@ body.panel-transitioning .react-grid-layout {
 :root[data-chrome='glass'] .mantine-Button-root[data-variant='filled']:not([data-disabled]) {
   box-shadow: 0 8px 18px -8px color-mix(in srgb, var(--button-bg, var(--mantine-primary-color-filled)) 80%, transparent) !important;
 }
+
+/* Create project / Create dashboard: one type scale for every field, so a
+ * switch reads like the inputs around it (the glass chrome sets input labels
+ * at 13px, the switch label stays at the body size). */
+:root .depictio-form-modal .mantine-InputWrapper-label,
+:root .depictio-form-modal .mantine-Switch-label,
+:root .depictio-form-modal .mantine-Checkbox-label {
+  font-size: 15px !important;
+  font-weight: 600 !important;
+  line-height: 1.35;
+}
+:root .depictio-form-modal .mantine-InputWrapper-description,
+:root .depictio-form-modal .mantine-Switch-description,
+:root .depictio-form-modal .mantine-Checkbox-description {
+  font-size: 13px !important;
+  line-height: 1.4;
+}
+:root .depictio-form-modal .mantine-Input-input,
+:root .depictio-form-modal .mantine-Select-input,
+:root .depictio-form-modal .mantine-Textarea-input {
+  font-size: 15px;
+}

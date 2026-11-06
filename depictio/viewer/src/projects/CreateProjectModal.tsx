@@ -277,6 +277,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
   const createDialog = (
     <Modal
       stackId={CREATE_STACK_ID}
+      className="depictio-form-modal"
       opened={opened}
       onClose={handleModalClose}
       centered
