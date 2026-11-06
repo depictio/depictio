@@ -23,7 +23,13 @@ import type { MigrationRequestSummary } from 'depictio-react-core';
 import { formatDateTime } from '../lib/datetime';
 import AdminMigrationInvitesView from './AdminMigrationInvitesView';
 import AdminMigrationSentView from './AdminMigrationSentView';
-import { RequestDetail, StatusBadge, formatBytes, modeLabel } from './MigrationRequestDetail';
+import {
+  REQUEST_DRAWER_STYLES,
+  RequestDetail,
+  StatusBadge,
+  formatBytes,
+  modeLabel,
+} from './MigrationRequestDetail';
 
 const STATUS_FILTERS = [
   { value: '', label: 'All statuses' },
@@ -201,6 +207,7 @@ const RequestsView: React.FC = () => {
         position="right"
         size="lg"
         title="Migration request"
+        styles={REQUEST_DRAWER_STYLES}
       >
         {selected && (
           <RequestDetail

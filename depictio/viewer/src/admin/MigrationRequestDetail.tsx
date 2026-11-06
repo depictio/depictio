@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  ActionIcon,
   Alert,
   Badge,
   Button,
@@ -89,17 +90,86 @@ const Fact: React.FC<{ label: string; children: React.ReactNode }> = ({ label, c
   </Group>
 );
 
+/** The requester as one reading: the name only when it says more than the email. */
+function requesterLabel(requester?: { name?: string | null; email?: string | null } | null): string {
+  const name = requester?.name?.trim();
+  const email = requester?.email?.trim();
+  if (!name) return email || '—';
+  if (!email) return name;
+  const sameAsEmail = name.toLowerCase() === email.toLowerCase() || name.toLowerCase() === email.split('@')[0].toLowerCase();
+  return sameAsEmail ? email : `${name} · ${email}`;
+}
+
+/** Drawer chrome for the request sheet: the sheet owns the padding, scrolls its
+ *  own body and keeps its action row in view. Pass to `<Drawer styles=…>`. */
+export const REQUEST_DRAWER_STYLES = {
+  content: { display: 'flex', flexDirection: 'column' },
+  body: { flex: 1, minHeight: 0, padding: 0, display: 'flex', flexDirection: 'column' },
+} as const;
+
+/** Scrolling body of the sheet. A chevron appears while more lies below and
+ *  scrolls the next screenful into view. */
+const ScrollBody: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const ref = useRef<HTMLDivElement>(null);
+  const [more, setMore] = useState(false);
+  const update = useCallback(() => {
+    const el = ref.current;
+    if (el) setMore(el.scrollHeight - el.scrollTop - el.clientHeight > 8);
+  }, []);
+  useEffect(() => {
+    update();
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === 'undefined') return undefined;
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    if (el.firstElementChild) ro.observe(el.firstElementChild);
+    return () => ro.disconnect();
+  }, [update]);
+  return (
+    <div style={{ position: 'relative', flex: 1, minHeight: 0 }}>
+      <div
+        ref={ref}
+        onScroll={update}
+        data-testid="migration-detail-scroll"
+        style={{ height: '100%', overflowY: 'auto', padding: '4px 16px 16px' }}
+      >
+        {children}
+      </div>
+      {more && (
+        <ActionIcon
+          variant="default"
+          radius="xl"
+          size="lg"
+          aria-label="Scroll down for more"
+          data-testid="migration-detail-more"
+          onClick={() => ref.current?.scrollBy({ top: ref.current.clientHeight * 0.8, behavior: 'smooth' })}
+          style={{
+            position: 'absolute',
+            bottom: 12,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            boxShadow: 'var(--mantine-shadow-md)',
+          }}
+        >
+          <Icon icon="mdi:chevron-down" width={22} />
+        </ActionIcon>
+      )}
+    </div>
+  );
+};
+
 /** A titled block of the request: the same card for every section. */
 const Section: React.FC<{
   title: string;
   icon: string;
+  iconColor?: string;
   testId?: string;
   children: React.ReactNode;
-}> = ({ title, icon, testId, children }) => (
+}> = ({ title, icon, iconColor, testId, children }) => (
   <Paper withBorder radius="sm" p="md" data-testid={testId}>
     <Stack gap="xs">
       <Group gap={6} wrap="nowrap">
-        <Icon icon={icon} width={16} aria-hidden />
+        <Icon icon={icon} width={16} color={iconColor} aria-hidden />
         <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
           {title}
         </Text>
@@ -266,7 +336,7 @@ export const RequestDetail: React.FC<DetailProps> = ({ requestId, onClose, onCha
 
   if (error && !detail) {
     return (
-      <Alert color="red" variant="light">
+      <Alert color="red" variant="light" m="md">
         {error}
       </Alert>
     );
@@ -289,7 +359,9 @@ export const RequestDetail: React.FC<DetailProps> = ({ requestId, onClose, onCha
   const approveBlocked = errors.length > 0;
 
   return (
-    <Stack gap="md" data-testid="migration-detail">
+    <div data-testid="migration-detail" style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+      <ScrollBody>
+        <Stack gap="md">
       <Group justify="space-between">
         <Title order={4}>{detail.project_name}</Title>
         <Group gap="xs" wrap="nowrap">
@@ -335,8 +407,7 @@ export const RequestDetail: React.FC<DetailProps> = ({ requestId, onClose, onCha
           </Fact>
         )}
         <Fact label="Requester">
-          {detail.requester?.name ? `${detail.requester.name} ` : ''}
-          {detail.requester?.email ?? '—'}
+          {requesterLabel(detail.requester)}
         </Fact>
         <Fact label="Requester account here">
           {detail.requester_has_account
@@ -461,7 +532,12 @@ export const RequestDetail: React.FC<DetailProps> = ({ requestId, onClose, onCha
       )}
 
       {counts.length > 0 && (
-        <Section title="Documents" icon="mdi:file-document-multiple-outline" testId="migration-documents">
+        <Section
+          title="Database documents"
+          icon="simple-icons:mongodb"
+          iconColor="#47A248"
+          testId="migration-documents"
+        >
           {counts.map(([k, v]) => (
             <Fact key={k} label={k.replace(/_/g, ' ')}>
               {v}
@@ -516,7 +592,18 @@ export const RequestDetail: React.FC<DetailProps> = ({ requestId, onClose, onCha
         </Alert>
       )}
 
-      <Group justify="space-between">
+        </Stack>
+      </ScrollBody>
+      <Group
+        justify="space-between"
+        data-testid="migration-detail-footer"
+        style={{
+          flexShrink: 0,
+          padding: '12px 16px',
+          borderTop: '1px solid var(--mantine-color-default-border)',
+          background: 'var(--mantine-color-body)',
+        }}
+      >
         <Button
           variant="default"
           onClick={() => void handleRevalidate()}
@@ -621,6 +708,6 @@ export const RequestDetail: React.FC<DetailProps> = ({ requestId, onClose, onCha
           </Group>
         </Stack>
       </Modal>
-    </Stack>
+    </div>
   );
 };
