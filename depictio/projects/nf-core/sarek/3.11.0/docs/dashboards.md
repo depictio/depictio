@@ -2,7 +2,7 @@
 
 One dashboard: an **Overview**, then child tabs in four groups, read as a funnel from the
 reads to the genes the calls hit, with a Somatic group for the runs that have tumours. A run that stopped after mapping keeps the Overview, MultiQC,
-Coverage and Locus tabs; every tab behind a caller or SnpEff appears only when the run made its
+Coverage and Genome browser tabs; every tab behind a caller or SnpEff appears only when the run made its
 inputs (see "Which `--tools` light up which tab"). [nf-core/sarek](https://nf-co.re/sarek) trims and aligns
 reads, marks duplicates, recalibrates base quality, calls variants with any mix of callers and
 annotates the calls with SnpEff and VEP. The dashboard follows that chain past the summary
@@ -23,7 +23,7 @@ The family rules are in `depictio/projects/nf-core/RULES.md`.
 | Annotation | Consequences | What do the calls do to the transcripts? |
 | Annotation | Genes | Which genes carry the calls, and which do the callers share? |
 | Annotation | Protein | Where on the protein do the coding variants sit? |
-| Annotation | Locus | What do depth and calls show at one region? |
+| Explore | Genome browser | What do the reads and calls show at one region? |
 
 The design comes from sarek's own CSV manifests (`csv/recalibrated.csv`,
 `csv/markduplicates*.csv`, `csv/variantcalled.csv`): the `samples` hub reads patient, sex and
@@ -156,7 +156,7 @@ the left panel reads one library, and the tab's own pickers do not narrow it), t
 allele fraction per caller: the share of each caller's calls in 40 bins, one line per caller
 in its colour, with the heterozygous band (0.35 to 0.65) and the homozygous-alternate band
 (0.9 to 1) shaded and explained in the description. A heterozygous peak off 0.5 or a shoulder of low fractions flags contamination or
-noise calls. The rainfall plot is not on the dashboard: it duplicated the Locus tab's view of
+noise calls. The rainfall plot is not on the dashboard: it duplicated the Genome browser tab's view of
 where calls sit. Collapsed: the call table. Filters: caller, variant type, contig and
 a depth range.
 
@@ -167,7 +167,7 @@ both. Strip: the events (a bar splitting them by type), the events per sample (a
 median length per type and the longest event (the bars rank the types). Then one stacked bar
 per sample by type, and the length histogram on a log axis, overlaid by type. Collapsed: the
 record table (type, locus, end, length, QUAL, FILTER, mate for a breakend), where a click
-centres the Locus browser on the record. A breakend has no length, so a length range filter
+centres the Genome browser on the record. A breakend has no length, so a length range filter
 leaves it out. Filters: type, caller and length. The tab appears only when the run called
 structural variants (`--tools manta` or `tiddit`); the types keep one colour on every tile
 (`category_colors.svtype`).
@@ -198,7 +198,7 @@ consequences); mutation burden (variants per megabase of the capture target for 
 and each caller). The target size is the summed length of `mosdepth_targets` over the primary contigs for
 the tumour (`somatic_burden.target_mb`), the padded intervals including the UTRs here, so a burden is
 comparable only to another exome counted the same way. Collapsed: the variant table and the call table
-(a click centres the Locus browser). Filters: design, caller, variant type, number of callers, impact.
+(a click centres the Genome browser). Filters: design, caller, variant type, number of callers, impact.
 
 **Copy number & MSI.** A short text says how to read the tab (what a log2 ratio is, the +0.2 and -0.25
 cut-offs of CNVkit's default call, what MSI measures). Strip, two rows of four cards: the fraction of the genome altered,
@@ -272,7 +272,7 @@ The tab draws no 3D structure. That tile needs the server's structure resolver
 (`DEPICTIO_STRUCTURE_RESOLVER_ENABLED`, off by default, since the gene symbol leaves the server),
 and on a deployment without it the tile would be a message above the figure that matters.
 
-**Locus.** A depth navigator in 1 Mb windows, one lane per sample, drives the genome browser
+**Genome browser.** A depth navigator in 1 Mb windows, one lane per sample, drives the genome browser
 under it; the browser follows its brush and its window shows as a band on the lanes. The lanes
 are bars at a fixed height, titled with the sample and drawn in the colour that sample has on
 every other tile, with the 20x floor of the depth card as a dashed line. They draw the depth held
@@ -309,7 +309,7 @@ first sample followed by that sample's CRAM, then the sample's structural-varian
 `Somatic variants` (track id `<unit>.<caller>`), with the tumour's CRAM among the alignments; they
 sit after the germline VCFs, so a run with a normal still opens on it. The browser opens on a
 caller comparison with the reads under it and the structural-variant calls below, picked by
-category rather than by a row count (`initial_categories` on the Locus browser): the tracks of the
+category rather than by a row count (`initial_categories` on the Genome browser): the tracks of the
 categories that belong to the sample of the first such row. A run with one more caller, or none,
 opens on whatever it holds. Picking a patient in the sample filters loads the tumour and the normal
 side by side, the somatic calls under the reads. The reference
@@ -322,7 +322,7 @@ the sample filter. The use cases are in `docs/design/jbrowse/sarek.md`.
 
 | Route | What changes |
 |---|---|
-| No caller (`--tools` empty) | Only the Overview, MultiQC, Coverage and Locus tabs; the Overview keeps the depth card and the findings and pipeline lines that read depth. The Locus browser shows the reads and the depth, with no calls. |
+| No caller (`--tools` empty) | Only the Overview, MultiQC, Coverage and Genome browser tabs; the Overview keeps the depth card and the findings and pipeline lines that read depth. The Locus browser shows the reads and the depth, with no calls. |
 | No SV caller | No Structural variants tab. |
 | No SnpEff (`--tools` without `snpeff`) | No Consequences, Genes or Protein tab, no shared-calls UpSet (so no caller-agreement row on the Overview), no HIGH-impact row or impact highlight on the Overview. |
 | VCFtools skipped | No FILTER partitions, quality sweep or FILTER filter on Call quality; the FILTER highlight is dropped. |
@@ -339,13 +339,13 @@ The import re-packs the Overview grid after a drop, so a lone highlight takes th
 
 nf-core/sarek runs mapping, duplicate marking and recalibration with no `--tools` at all, and
 every other stage is chosen with `--tools`. The tabs follow the same split: the Data & QC group
-needs no caller, the Variant calls group needs a caller, the Annotation group needs SnpEff.
+needs no caller, the Variant calls group needs a caller, the Annotation group needs SnpEff. The Explore group holds the Genome browser: it needs no caller (it draws the reads), and every other tab links to it.
 
 | `--tools` | Tabs it lights up | Collections behind them |
 |---|---|---|
-| none (the default) | MultiQC, Coverage, Locus (depth and reads, no calls); the Overview without its variant figures | `multiqc_data`, `mosdepth_*`, `samples`, `tracks` |
-| a variant caller: `haplotypecaller`, `deepvariant`, `freebayes`, `strelka`, `manta`, `tiddit` | Variant yield, Call quality, Caller concordance, and the calls in the Locus browser | `bcftools_stats_*`, `callset_qc`, `vcf_calls_raw`, `vcf_variants`, `tracks`; the `vcftools_*` panels of Call quality when VCFtools was not skipped |
-| `manta`, `tiddit` (structural variants) | The Structural variants tab, and the same tabs as extra callsets (Ts/Tv cards keep `ts_tv > 0`). In the Locus browser the structural-variant track opens by default and the circular view draws them | `sv_calls`, `tracks` rows of kind `sv` |
+| none (the default) | MultiQC, Coverage, Genome browser (depth and reads, no calls); the Overview without its variant figures | `multiqc_data`, `mosdepth_*`, `samples`, `tracks` |
+| a variant caller: `haplotypecaller`, `deepvariant`, `freebayes`, `strelka`, `manta`, `tiddit` | Variant yield, Call quality, Caller concordance, and the calls in the Genome browser | `bcftools_stats_*`, `callset_qc`, `vcf_calls_raw`, `vcf_variants`, `tracks`; the `vcftools_*` panels of Call quality when VCFtools was not skipped |
+| `manta`, `tiddit` (structural variants) | The Structural variants tab, and the same tabs as extra callsets (Ts/Tv cards keep `ts_tv > 0`). In the Genome browser the structural-variant track opens by default and the circular view draws them | `sv_calls`, `tracks` rows of kind `sv` |
 | `snpeff` | Consequences, Genes, Protein, the shared-calls UpSet and the HIGH-impact rows of the Overview, the SnpEff panels of MultiQC | `snpeff_*`, `protein_genes`, `snpeff_vcf_files` |
 | `vep` | The VEP panels of the MultiQC tab only; the annotation tabs read SnpEff output, so VEP alone adds no tab | `multiqc_data` |
 | `mutect2`, `strelka`, `muse` on a tumour/normal pair, or on a tumour alone | Somatic calls; Germline vs somatic when the pair also has a germline callset for the normal (the LOH section also needs `freebayes` on the pair) | `somatic_calls`, `pairs`, `somatic_vs_germline`, `patient_call_counts`, `somatic_variants`, `somatic_burden` (needs `mosdepth_targets` for the per-megabase burden), `germline_het_sites`, `tracks` rows of kind `somatic`; `somatic_ann_vcf_raw` (the `*_vs_*_snpEff.ann.vcf.gz` of a pair) adds the gene and impact of each variant |
@@ -368,8 +368,8 @@ VCF is declared optional (`bcftools_stats_*`, `bcftools_*_spectrum`, `vcf_calls_
 `mosdepth_xy_sex_check`, `pairs`, `somatic_*`, `cnv_segments`, `msi` and the other somatic
 collections already so), so a mapping-only run ingests
 cleanly: the ingestion summary lists the optional collections it skipped, and the import
-keeps the Overview, MultiQC, Coverage and Locus tabs. Required are the collections every run
-writes: `samples`, `tracks`, `multiqc_data` and `mosdepth_*`. A Locus source (`locus_from`)
+keeps the Overview, MultiQC, Coverage and Genome browser tabs. Required are the collections every run
+writes: `samples`, `tracks`, `multiqc_data` and `mosdepth_*`. A genome browser source (`locus_from`)
 that names a skipped collection resolves to nothing instead of reading a table that is not
 there. `megatest.yaml` holds a `mapping_only` subset
 (`python scripts/nfcore_megatest.py fetch --pipeline sarek --version 3.11.0 --subset

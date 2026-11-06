@@ -4,12 +4,13 @@ version: 1
 #
 # Funnel: the MultiQC report and the coverage (Data & QC) -> what each caller
 # called, how clean it looks and which calls the callers share (Variant calls)
-# -> what the calls do to the transcripts, which genes carry them and one
-# region on one axis (Annotation).
+# -> what the calls do to the transcripts and which genes carry them
+# (Annotation). The Genome browser (Explore) comes last: the calls it draws exist
+# only after the callers ran, and every tab above links to it.
 #
 # A run without `--tools` (mapping only) has no calls: every collection built
 # from a VCF or a bcftools report is optional, so it imports with the Overview,
-# MultiQC, Coverage and Locus tabs (depth and reads) and nothing else. The texts
+# MultiQC, Coverage and Genome browser tabs (depth and reads) and nothing else. The texts
 # that cite a call count carry it as a live value, so the line goes with its data.
 #
 # Germline and somatic are two sets of tabs. A call belongs to a unit: a sample, or
@@ -541,7 +542,7 @@ main_dashboard:
     index: ov-hl-loh
     layout: {x: 4, y: 11, w: 4, h: 4}
   # The somatic variants on the genome, opened on the chromosome or region they cover:
-  # a click opens the Locus tab's browser on the variant, so the Overview needs no
+  # a click opens the Genome browser tab on the variant, so the Overview needs no
   # browser of its own.
   - component_type: advanced_viz
     workflow_tag: sarek
@@ -565,7 +566,7 @@ main_dashboard:
     tag: sk-ov-genome
     index: ov-genome
     title: Somatic variants along the genome
-    link: tab:Locus
+    link: tab:Genome browser
     description: >-
       Where do the somatic variants sit along the genome? Each dot is a distinct somatic variant of a
       tumour/normal pair, placed by chromosome and position. Its height is the priority that ranks it (impact
@@ -574,7 +575,7 @@ main_dashboard:
 
       How to read: the highest dots are the variants the ranking puts first, a HIGH or MODERATE impact kept by
       several callers. A group of dots in one region is a locus worth opening: click a dot to open its gene in
-      the genome browser of the [Locus](tab:Locus) tab. Open [Somatic calls](tab:Somatic calls) for the ranked
+      the [Genome browser](tab:Genome browser) tab. Open [Somatic calls](tab:Somatic calls) for the ranked
       list.
 
       Source: SnpEff impact classes, https://pcingola.github.io/SnpEff/snpeff/inputoutput/
@@ -621,7 +622,9 @@ main_dashboard:
       - [Consequences](tab:Consequences)
       - [Genes](tab:Genes)
       - [Protein](tab:Protein)
-      - [Locus](tab:Locus)
+
+      ### Explore
+      - [Genome browser](tab:Genome browser)
     section: How to read this dashboard
     tag: sk-ov-how-to-read
     index: ov-how-to-read
@@ -900,6 +903,10 @@ tabs:
     filter_bar: true
     visible_filters: 1
     description: Mean depth per contig and sample. It opens on the intervals, where the callers look for calls; the bar switches to whole contigs.
+  - name: Depth along the genome
+    icon: mdi:dna
+    color: blue
+    description: Mean depth in 1 Mb windows, one lane per sample. Drag to filter on a region, or click a window to open it in the [Genome browser](tab:Genome browser)
   - name: Sex check
     icon: mdi:chart-scatter-plot
     color: blue
@@ -915,7 +922,9 @@ tabs:
     body: >
       [mosdepth](https://github.com/brentp/mosdepth) measures the depth over the intervals (the
       capture targets, or the calling intervals of a whole genome) and over each whole contig.
-      A caller cannot report what was not sequenced, so read the depth before any call.
+      A caller cannot report what was not sequenced, so read the depth before any call. To read the reads
+      themselves at a contig or a locus, open the [Genome browser](tab:Genome browser): a click on a bar of
+      the contig chart or on a window of the depth lanes below opens it there.
     tag: sk-cov-intro
     index: cov-intro
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -974,6 +983,7 @@ tabs:
     tag: sk-cov-card-target
     index: cov-card-target
     title: Depth per interval
+    link: tab:Genome browser
     description: Median mean depth of an interval in a sample. The bar turns amber under the 20x floor, where a heterozygous call gets hard to tell from noise, and red under 10x.
     layout: {x: 2, y: 0, w: 2, h: 2}
   - component_type: card
@@ -1049,9 +1059,12 @@ tabs:
     tag: sk-cov-fig-contig
     index: cov-contig-bars
     title: Mean depth per contig
+    link: tab:Genome browser
+    click_opens_browser: true
     description: >-
       Is the depth even across the genome? Each bar is the mean depth of one sample on one contig, grouped by
-      contig. The total is mosdepth's own roll-up over the scope in view.
+      contig. The total is mosdepth's own roll-up over the scope in view. A click on a bar opens that contig in
+      the [Genome browser](tab:Genome browser).
 
       How to read: autosomes of one sample sit at a similar depth, and the sex chromosomes differ with the sex
       of the sample. A contig far below its neighbours in one sample only is a coverage dropout; one low in
@@ -1062,6 +1075,54 @@ tabs:
       picked), so a few very deep or empty regions move it. No reference line is drawn, because no depth
       cut-off is applied to this chart.
     layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: advanced_viz
+    workflow_tag: sarek
+    data_collection_tag: mosdepth_windows
+    viz_kind: genome_view
+    config:
+      viz_kind: genome_view
+      chr_col: chrom
+      pos_col: pos
+      end_col: end
+      score_col: depth_capped
+      # The tooltip lists the real depth next to the capped one the bar is drawn at.
+      hover_cols: [depth]
+      feature_col: sample
+      sample_col: sample_id
+      category_col: sample_id
+      facet_by_sample: true
+      max_facets: 8
+      lane_height: 70
+      auto_height: true
+      facet_y_scale: shared
+      mark: bar
+      assembly: '{GENOME}'
+      score_title: mean depth, capped at 3x the median
+      score_threshold: 20
+      opacity: 1
+      # A drag filters to a region (the default tool), a click opens the browser.
+      interaction_mode: select
+      click_opens_browser: true
+    section: Depth along the genome
+    tag: sk-cov-av-genome
+    index: cov-depth-lanes
+    title: Depth per sample along the genome
+    link: tab:Genome browser
+    description: >-
+      Is the depth even along the genome? Each lane is one sample and each bar the mean depth of a 1 Mb
+      window, capped at 3 times the sample's median so repeats do not flatten it. Click a window to open the
+      [Genome browser](tab:Genome browser) on it and read the reads and calls there.
+
+      How to read: a gap or a dip in one lane only is a dropout of that library, which the per-contig bars
+      above would average away. A window that stays under the line is thinly covered.
+
+      Lines and annotations: the dashed line at 20x is the depth floor of the depth cards. It is a fixed
+      value of this template, not read from the run, and no published source sets it. The cap at 3 times the
+      median, with a minimum of 40x, is a display aid that stops the few repeat windows from flattening the
+      lane.
+
+      Note: the line is not a validated cut-off, and the capped height hides how deep a window really is.
+    layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: figure
     workflow_tag: sarek
     data_collection_tag: mosdepth_xy_sex_check
@@ -1149,7 +1210,7 @@ tabs:
 - title: Variant yield
   subtitle: How much did each caller call, and of what kind?
   tab_group: Variant calls
-  tab_order: 3
+  tab_order: 4
   tab_icon: mdi:chart-bar
   tab_icon_color: violet
   icon: /assets/images/workflows/nf-core.png
@@ -1471,7 +1532,7 @@ tabs:
 - title: Call quality
   subtitle: Do the callsets look like clean germline calls?
   tab_group: Variant calls
-  tab_order: 4
+  tab_order: 5
   tab_icon: mdi:check-decagram
   tab_icon_color: cyan
   icon: /assets/images/workflows/nf-core.png
@@ -1808,7 +1869,7 @@ tabs:
 - title: Caller concordance
   subtitle: Which calls do the callers share, and where do they differ?
   tab_group: Variant calls
-  tab_order: 5
+  tab_order: 6
   tab_icon: mdi:set-merge
   tab_icon_color: teal
   icon: /assets/images/workflows/nf-core.png
@@ -2062,16 +2123,16 @@ tabs:
       FILTER, genotype, depth and allele fraction as the caller wrote them.
 
       How to read: filter on a caller or a contig, then sort on the quality or the depth to find the weak
-      calls. Open [Locus](tab:Locus) to read the reads at a call.
+      calls. Open [Genome browser](tab:Genome browser) to read the reads at a call.
     layout: {x: 0, y: 0, w: 8, h: 6}
 # Structural variants: the records of the SV callers (Manta, TIDDIT), which the
 # small-variant tabs leave out. Optional with sv_calls: a run without such a
 # caller does not get the tab. A click on a table row centres the genome browser
-# of the Locus tab (the table carries chrom, pos and end).
+# of the Genome browser tab (the table carries chrom, pos and end).
 - title: Structural variants
   subtitle: Which structural variants did the SV callers find, and how big?
   tab_group: Variant calls
-  tab_order: 6
+  tab_order: 7
   tab_icon: mdi:vector-polyline
   tab_icon_color: lime
   icon: /assets/images/workflows/nf-core.png
@@ -2111,7 +2172,7 @@ tabs:
       [Manta](https://github.com/Illumina/manta) and [TIDDIT](https://github.com/SciLifeLab/TIDDIT)
       call structural variants from the alignments: deletions, duplications, insertions and
       breakends. A breakend is written as two records, one per side, and counts once in the cards
-      and the bars. Click a row of the table to centre the genome browser of the Locus tab on it.
+      and the bars. Click a row of the table to centre the Genome browser tab on it.
     tag: sk-sv-intro
     index: sv-intro
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -2289,7 +2350,7 @@ tabs:
 
       How to read: each type has its own length profile, and a sharp peak at one length is worth a look in the
       call table. Events at the long end are the ones worth a look in the genome browser of the
-      [Locus](tab:Locus) tab.
+      [Genome browser](tab:Genome browser) tab.
 
       Note: the bins are 40 equal steps of the log length, and the ticks are labelled in bp, kb and Mb. No
       length cut-off is drawn.
@@ -2321,7 +2382,7 @@ tabs:
       a breakend or an insertion is a point.
 
       How to read: a cluster on one chromosome, or events piled on a centromere or a gap, point at a local
-      rearrangement or a mapping artefact. Click a chromosome to zoom along it, then open [Locus](tab:Locus)
+      rearrangement or a mapping artefact. Click a chromosome to zoom along it, then open [Genome browser](tab:Genome browser)
       to read the reads at a breakpoint.
     layout: {x: 0, y: 0, w: 5, h: 6}
   - component_type: advanced_viz
@@ -2416,7 +2477,7 @@ tabs:
       the cell is the event count and the shade is the share of that type in the class.
 
       How to read: read across a row, since the shade adds up to the whole type. A type piling up in the
-      largest class is worth a look in the genome browser of the [Locus](tab:Locus) tab.
+      largest class is worth a look in the [Genome browser](tab:Genome browser) tab.
 
       Lines and annotations: the class edges at 1 kb, 10 kb, 100 kb and 1 Mb are display bins of this
       template, not read from the run and with no published cut-off.
@@ -2492,7 +2553,7 @@ tabs:
       quality and FILTER. A breakend is two rows, each naming the other side.
 
       How to read: sort on the length or the quality, then click a row to centre the genome browser of the
-      [Locus](tab:Locus) tab on it.
+      [Genome browser](tab:Genome browser) tab on it.
     layout: {x: 0, y: 0, w: 8, h: 6}
 # ============================================================================
 # Somatic
@@ -2506,7 +2567,7 @@ tabs:
 - title: Somatic calls
   subtitle: What did the tumour gain, and can the calls be trusted?
   tab_group: Somatic
-  tab_order: 7
+  tab_order: 8
   tab_icon: mdi:target-variant
   tab_icon_color: yellow
   icon: /assets/images/workflows/nf-core.png
@@ -3145,7 +3206,7 @@ tabs:
 - title: Copy number & MSI
   subtitle: Which regions gained or lost copies, and is the tumour unstable?
   tab_group: Somatic
-  tab_order: 8
+  tab_order: 9
   tab_icon: mdi:chart-timeline-variant
   tab_icon_color: green
   icon: /assets/images/workflows/nf-core.png
@@ -3475,7 +3536,7 @@ tabs:
       segment_col: segment
       label_col: label
       annotation: '{GENOME}'
-      # The template has a genome browser (Locus), so the profile stays on Plotly.
+      # The template has a genome browser (its own tab), so the profile stays on Plotly.
       view: plotly
       views: [plotly]
       show_baf: false
@@ -3672,7 +3733,7 @@ tabs:
 - title: Germline vs somatic
   subtitle: Are the somatic calls really absent from the normal, and what did the tumour lose?
   tab_group: Somatic
-  tab_order: 9
+  tab_order: 10
   tab_icon: mdi:compare-horizontal
   tab_icon_color: gray
   icon: /assets/images/workflows/nf-core.png
@@ -3712,7 +3773,7 @@ tabs:
 
       Pick a patient in the
       sample filters to see one pair, and click a row of the table to see the tumour and the normal
-      together in the Locus tab.
+      together in the Genome browser tab.
     tag: sk-gs-intro
     index: gs-intro
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -4093,7 +4154,7 @@ tabs:
 - title: Consequences
   subtitle: What do the calls do to the transcripts?
   tab_group: Annotation
-  tab_order: 10
+  tab_order: 11
   tab_icon: mdi:chart-donut
   tab_icon_color: red
   icon: /assets/images/workflows/nf-core.png
@@ -4320,7 +4381,8 @@ tabs:
       order = ['HIGH', 'MODERATE', 'LOW']
       d = df.filter(pl.col('impact').is_in(order)).group_by(['caller', 'impact']).agg(pl.len().alias('calls'))
       d = d.with_columns((pl.col('calls') / pl.col('calls').sum().over('caller') * 100).alias('share')).sort('caller')
-      fig = px.bar(d.to_pandas(), x='caller', y='share', color='impact', color_discrete_map=depictio_category_colors.get('impact') or {}, category_orders={'impact': order}, labels={'caller': '', 'share': 'Share of coding calls (%)', 'impact': 'Impact class'})
+      fig = px.bar(d.to_pandas(), x='caller', y='share', color='impact', custom_data=['calls'], color_discrete_map=depictio_category_colors.get('impact') or {}, category_orders={'impact': order}, labels={'caller': '', 'share': 'Share of coding calls (%)', 'impact': 'Impact class'})
+      fig.update_traces(hovertemplate='%{x}<br>%{fullData.name}: %{y:.1f}% (%{customdata[0]:,} calls)<extra></extra>')
       fig.update_layout(margin=dict(t=10))
     section: Impact per call
     tag: sk-cs-fig-impact-share
@@ -4429,7 +4491,7 @@ tabs:
 - title: Genes
   subtitle: Which genes carry the calls, and which do the callers share?
   tab_group: Annotation
-  tab_order: 11
+  tab_order: 12
   tab_icon: mdi:dna
   tab_icon_color: pink
   icon: /assets/images/workflows/nf-core.png
@@ -4603,7 +4665,7 @@ tabs:
 
       Note: no cut-off is drawn, and the genes shown are the ones with the most coding variants, not all
       genes.
-    layout: {x: 0, y: 0, w: 8, h: 5}
+    layout: {x: 0, y: 0, w: 8, h: 8}
   - component_type: advanced_viz
     workflow_tag: sarek
     data_collection_tag: snpeff_gene_upset
@@ -4659,7 +4721,7 @@ tabs:
 - title: Protein
   subtitle: Where on the protein do the coding variants sit?
   tab_group: Annotation
-  tab_order: 12
+  tab_order: 13
   tab_icon: mdi:molecule
   tab_icon_color: grape
   icon: /assets/images/workflows/nf-core.png
@@ -4890,11 +4952,11 @@ tabs:
 # and the calls. The cards opt in to the region with
 # follow_region_filter, so they recount what the region holds. This is the only
 # browser of the template.
-- title: Locus
-  subtitle: What do depth and calls show at one region?
-  tab_group: Annotation
-  tab_order: 13
-  tab_icon: mdi:map-marker-outline
+- title: Genome browser
+  subtitle: What do the reads and calls show at one region?
+  tab_group: Explore
+  tab_order: 14
+  tab_icon: mdi:dna
   tab_icon_color: indigo
   icon: /assets/images/workflows/nf-core.png
   icon_color: green
@@ -5049,6 +5111,8 @@ tabs:
       # depth_capped holds each sample's windows at 3x its median (the recipe says why):
       # the few windows over repeats read ten times the rest and flatten the lane.
       score_col: depth_capped
+      # The tooltip lists the real depth next to the capped one the bar is drawn at.
+      hover_cols: [depth]
       feature_col: sample
       # One lane per sample: a dropout in one library shows as a gap in its
       # lane, which a pooled bar hides. The lane is titled with the sample and

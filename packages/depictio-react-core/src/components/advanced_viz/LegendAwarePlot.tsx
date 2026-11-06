@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useMemo } from 'react';
 import Plot from 'react-plotly.js';
 
+import { followSeriesHover } from '../../figureHover';
 import { tintSingleSeries } from '../../figureTint';
 import { useTabHue } from '../../tabColor';
 
@@ -27,11 +28,16 @@ const LegendAwarePlot: React.FC<React.ComponentProps<typeof Plot>> = (props) => 
       ),
     [props.data, props.layout, tabHue],
   );
+  // The hover label of each series wears its colour (figureHover), once the tint settled it.
+  const data = useMemo(
+    () => followSeriesHover((props.data as unknown[]) ?? [], tinted.data),
+    [props.data, tinted],
+  );
   const layout = useMemo(
     () => (hide ? { ...tinted.layout, showlegend: false } : tinted.layout),
     [hide, tinted],
   );
-  return <Plot {...props} data={tinted.data as never} layout={layout as never} />;
+  return <Plot {...props} data={data as never} layout={layout as never} />;
 };
 
 export default LegendAwarePlot;

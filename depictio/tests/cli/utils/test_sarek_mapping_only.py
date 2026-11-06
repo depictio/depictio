@@ -83,9 +83,9 @@ ALL_TABS = {
     "Consequences",
     "Genes",
     "Protein",
-    "Locus",
+    "Genome browser",
 }
-MAPPING_TABS = {"Overview", "MultiQC", "Coverage", "Locus"}
+MAPPING_TABS = {"Overview", "MultiQC", "Coverage", "Genome browser"}
 #: The Somatic group. A tab appears only when a collection it reads holds rows.
 SOMATIC_TABS = {"Somatic calls", "Copy number & MSI", "Germline vs somatic"}
 #: The collections the Somatic tabs read. The preview counts files, not rows, so these are
