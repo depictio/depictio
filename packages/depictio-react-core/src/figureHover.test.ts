@@ -27,6 +27,19 @@ describe('followSeriesHover', () => {
     expect(followSeriesHover(data, data)).toBe(data);
   });
 
+  it('keeps the extra tail when the unnamed line is the last one', () => {
+    const data = [{ type: 'bar', marker: { color: '#e03131' }, hovertemplate: 'a=%{x}<br>=%{y}<extra></extra>' }];
+    expect((followSeriesHover(data, data)[0] as any).hovertemplate).toBe('a=%{x}<extra></extra>');
+    const only = [{ type: 'bar', hovertemplate: '=%{y}<extra></extra>' }];
+    expect(followSeriesHover(only, only)).toBe(only);
+  });
+
+  it('leaves a translucent series colour on the neutral label', () => {
+    const data = [{ type: 'bar', marker: { color: 'rgba(99,110,250,0.25)' } }];
+    expect(followSeriesHover(data, data)).toBe(data);
+    expect(seriesColour({ type: 'bar', marker: { color: 'rgba(224,49,49,0.95)' } })).toBe('rgba(224,49,49,0.95)');
+  });
+
   it('gives one label colour per point when the points are coloured one by one', () => {
     const data = [{ type: 'bar', marker: { color: ['#e03131', '#f08c00'] } }];
     expect(hl(followSeriesHover(data, data)[0]).bgcolor).toEqual(['#e03131', '#f08c00']);

@@ -322,7 +322,7 @@ the sample filter. The use cases are in `docs/design/jbrowse/sarek.md`.
 
 | Route | What changes |
 |---|---|
-| No caller (`--tools` empty) | Only the Overview, MultiQC, Coverage and Genome browser tabs; the Overview keeps the depth card and the findings and pipeline lines that read depth. The Locus browser shows the reads and the depth, with no calls. |
+| No caller (`--tools` empty) | Only the Overview, MultiQC, Coverage and Genome browser tabs; the Overview keeps the depth card and the findings and pipeline lines that read depth. The Genome browser tab shows the reads and the depth, with no calls. |
 | No SV caller | No Structural variants tab. |
 | No SnpEff (`--tools` without `snpeff`) | No Consequences, Genes or Protein tab, no shared-calls UpSet (so no caller-agreement row on the Overview), no HIGH-impact row or impact highlight on the Overview. |
 | VCFtools skipped | No FILTER partitions, quality sweep or FILTER filter on Call quality; the FILTER highlight is dropped. |

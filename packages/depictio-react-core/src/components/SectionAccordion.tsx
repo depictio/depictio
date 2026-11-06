@@ -139,6 +139,11 @@ const DescriptionWithLinks: React.FC<{ text: string }> = ({ text }) => {
       const go = (e: React.SyntheticEvent) => {
         e.stopPropagation();
         e.preventDefault();
+        // A modifier click keeps the page, as on a real anchor.
+        if (e.nativeEvent instanceof MouseEvent && (e.nativeEvent.metaKey || e.nativeEvent.ctrlKey)) {
+          window.open(target.href, '_blank', 'noopener');
+          return;
+        }
         window.location.assign(target.href);
       };
       parts.push(

@@ -523,3 +523,29 @@ def test_a_hover_line_without_a_name_is_dropped():
         apply_figure_style(fig, "minimal")["data"][0]["hovertemplate"]
         == fig["data"][0]["hovertemplate"]
     )
+
+
+def test_the_unnamed_line_can_be_the_last_one_without_losing_the_extra_tail():
+    fig = _bar("#e03131")
+    fig["data"][0]["hovertemplate"] = "Impact class=HIGH<br>count=%{x}<br>=%{y}<extra></extra>"
+    out = apply_figure_style(fig, "minimal")
+    assert out["data"][0]["hovertemplate"] == "Impact class=HIGH<br>count=%{x}<extra></extra>"
+    # The only value line is never dropped.
+    fig["data"][0]["hovertemplate"] = "=%{y}<extra></extra>"
+    assert apply_figure_style(fig, "minimal")["data"][0]["hovertemplate"] == "=%{y}<extra></extra>"
+
+
+def test_a_translucent_series_colour_keeps_the_neutral_hover_label():
+    for colour in ("rgba(99,110,250,0.25)", "rgba(99, 110, 250, 0.5)"):
+        out = apply_figure_style(_bar(colour), "minimal")
+        assert "bgcolor" not in out["data"][0].get("hoverlabel", {})
+    # An almost opaque one still colours the label.
+    out = apply_figure_style(_bar("rgba(224,49,49,0.95)"), "minimal")
+    assert out["data"][0]["hoverlabel"]["bgcolor"] == "rgba(224,49,49,0.95)"
+
+
+def test_a_hover_label_the_figure_chose_is_kept():
+    fig = _bar("#e03131")
+    fig["data"][0]["hoverlabel"] = {"bgcolor": "#000000", "font": {"color": "#ffffff"}}
+    out = apply_figure_style(fig, "minimal")
+    assert out["data"][0]["hoverlabel"] == {"bgcolor": "#000000", "font": {"color": "#ffffff"}}
