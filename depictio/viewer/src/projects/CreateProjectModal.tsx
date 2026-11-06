@@ -1,11 +1,9 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Badge,
-  Box,
   Button,
   Center,
-  FileButton,
   Group,
   Loader,
   Modal,
@@ -43,7 +41,7 @@ import { DisabledReason, GatedButton } from '../components/settings/SettingsSect
 import { RunFolderTab } from './fromRun';
 import type { RunCreatedContext } from './fromRun';
 
-type Tab = 'create' | 'import' | 'manifest' | 'run';
+type Tab = 'create' | 'manifest' | 'run';
 type ProjectType = 'basic' | 'advanced';
 
 /** A required template variable with a declared default is filled in
@@ -63,7 +61,6 @@ interface CreateProjectModalProps {
   existingNames: string[];
   onClose: () => void;
   onCreate: (input: CreateProjectInput) => Promise<CreateProjectResult>;
-  onImport: (file: File, overwrite: boolean) => Promise<void>;
   onCreateFromManifest: (input: FromManifestRequest) => Promise<FromManifestReport>;
   onCreateFromRun: (input: FromRunRequest, context: RunCreatedContext) => Promise<FromRunReport>;
   /** The server reads run folders from its own disk (`depictio local`): the
@@ -82,7 +79,6 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
   existingNames,
   onClose,
   onCreate,
-  onImport,
   onCreateFromManifest,
   onCreateFromRun,
   localDataRootsEnabled = false,
@@ -98,11 +94,6 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
   const [isPublic, setIsPublic] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // Import tab state
-  const [importFile, setImportFile] = useState<File | null>(null);
-  const [overwrite, setOverwrite] = useState(false);
-  const importResetRef = useRef<() => void>(null);
 
   // From Manifest tab state
   const [manifestStep, setManifestStep] = useState(0);
@@ -125,8 +116,6 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
     setName('');
     setDescription('');
     setIsPublic(false);
-    setImportFile(null);
-    setOverwrite(false);
     setManifestStep(0);
     setManifestUrl('');
     setManifestTemplateId(null);
@@ -136,7 +125,6 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
     setPreviewError(null);
     setError(null);
     setSubmitting(false);
-    importResetRef.current?.();
   }, [opened]);
 
   // Every template the backend knows, fetched fresh per open so a newly
@@ -192,19 +180,6 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
       } as CreateProjectInput);
     } catch (err) {
       setError((err as Error).message || 'Failed to create project.');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleImport = async () => {
-    if (!importFile) return;
-    setSubmitting(true);
-    setError(null);
-    try {
-      await onImport(importFile, overwrite);
-    } catch (err) {
-      setError((err as Error).message || 'Failed to import project.');
     } finally {
       setSubmitting(false);
     }
@@ -346,7 +321,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
           </Group>
         </Center>
 
-        {/* Pill-style tabs (Create new / Import / From manifest / From a run folder) */}
+        {/* Pill-style tabs (Create new / From manifest / From a run folder) */}
         <Tabs
           value={tab}
           onChange={(v) => setTab((v as Tab) || 'create')}
@@ -359,12 +334,6 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
               leftSection={<Icon icon="mdi:plus" width={16} />}
             >
               Create new
-            </Tabs.Tab>
-            <Tabs.Tab
-              value="import"
-              leftSection={<Icon icon="mdi:import" width={16} />}
-            >
-              Import
             </Tabs.Tab>
             <Tabs.Tab
               value="manifest"
@@ -499,81 +468,6 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                   </Button>
                 )}
               </Group>
-            </Stack>
-          </Tabs.Panel>
-
-          <Tabs.Panel value="import" pt="md">
-            <Stack gap="md">
-              <Text size="sm" c="dimmed" ta="center">
-                Upload a .zip bundle exported from another Depictio instance.
-              </Text>
-              <FileButton
-                resetRef={importResetRef}
-                accept=".zip,application/zip,application/x-zip-compressed"
-                onChange={(f) => setImportFile(f)}
-              >
-                {(props) => (
-                  <Box
-                    {...props}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(e: React.KeyboardEvent<HTMLDivElement>) => {
-                      if (e.key === 'Enter' || e.key === ' ') props.onClick();
-                    }}
-                    style={{
-                      cursor: 'pointer',
-                      border: `2px dashed var(--mantine-color-${accent.secondary}-6)`,
-                      borderRadius: 12,
-                      padding: 32,
-                      textAlign: 'center' as const,
-                      background: 'var(--mantine-color-default-hover)',
-                    }}
-                  >
-                    <Stack gap="xs" align="center">
-                      <Icon
-                        icon="mdi:file-upload-outline"
-                        width={36}
-                        color={`var(--mantine-color-${accent.secondary}-6)`}
-                      />
-                      <Text fw={500}>
-                        {importFile
-                          ? importFile.name
-                          : 'Drop .zip here or click to browse'}
-                      </Text>
-                      {importFile && (
-                        <Text size="xs" c="dimmed">
-                          {(importFile.size / 1024).toFixed(1)} KB
-                        </Text>
-                      )}
-                    </Stack>
-                  </Box>
-                )}
-              </FileButton>
-              <Switch
-                label={
-                  <span style={{ fontFamily: 'Virgil' }}>
-                    overwrite if project already exists
-                  </span>
-                }
-                checked={overwrite}
-                onChange={(e) => setOverwrite(e.currentTarget.checked)}
-                color={accent.secondary}
-              />
-              {error && (
-                <Alert color="red" variant="light">
-                  {error}
-                </Alert>
-              )}
-              <Button
-                color={accent.secondary}
-                onClick={handleImport}
-                disabled={!importFile || submitting}
-                loading={submitting}
-                leftSection={<Icon icon="mdi:check" width={16} />}
-                fullWidth
-              >
-                Import Project
-              </Button>
             </Stack>
           </Tabs.Panel>
 

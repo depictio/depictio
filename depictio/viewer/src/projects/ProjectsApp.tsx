@@ -42,7 +42,7 @@ import type {
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import { useAuthMode } from '../auth/hooks/useAuthMode';
 import TourButton from '../walkthrough/TourButton';
-import { ReceiveProjectButton } from '../admin/ReceiveProjectButton';
+import { ImportProjectButton } from './ImportProjectButton';
 import { MigrationRequestsBanner } from './MigrationRequestsBanner';
 import { AppSidebar, LoadErrorCard } from '../chrome';
 import ProjectsList from './ProjectsList';
@@ -286,7 +286,6 @@ const ProjectsApp: React.FC = () => {
         existingNames={projects.map((p) => p.name).filter(Boolean) as string[]}
         onClose={closeCreate}
         onCreate={handleCreate}
-        onImport={handleImport}
         onCreateFromManifest={handleCreateFromManifest}
         onCreateFromRun={handleCreateFromRun}
         localDataRootsEnabled={localDataRootsEnabled}
@@ -331,7 +330,7 @@ const ProjectsApp: React.FC = () => {
           actions={
             <>
               <TourButton />
-              <ReceiveProjectButton />
+              <ImportProjectButton onImport={handleImport} disabled={createDisabled} />
               <Tooltip
                 label="Project creation is disabled in public or demo mode for non-admin users"
                 disabled={!createDisabled}
@@ -403,7 +402,7 @@ const ProjectsApp: React.FC = () => {
           </Group>
           <Group gap="sm" wrap="nowrap">
             <TourButton />
-            <ReceiveProjectButton />
+            <ImportProjectButton onImport={handleImport} disabled={createDisabled} />
             {/* Visitors in public/demo mode see the button visibly disabled
                 rather than hidden — keeps the affordance discoverable while
                 making it obvious that login/elevated permissions are needed.

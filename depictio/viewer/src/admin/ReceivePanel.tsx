@@ -6,7 +6,6 @@ import {
   CopyButton,
   Group,
   Loader,
-  Modal,
   SegmentedControl,
   Stack,
   Switch,
@@ -62,25 +61,22 @@ const CopyRow: React.FC<{ label: string; value: string; testId: string }> = ({
   />
 );
 
-export interface ReceiveProjectModalProps {
-  opened: boolean;
+export interface ReceivePanelProps {
+  /** Close the dialog that holds the panel. */
   onClose: () => void;
-  /** Called after an invite was created, so a listing behind the modal refreshes. */
+  /** Called after an invite was created, so a listing behind the dialog refreshes. */
   onCreated?: (invite: MigrationInvite) => void;
 }
 
 /**
  * Admin of the receiving instance: issue an invite code. The owner of a project
  * on another instance pastes this instance's URL and the code into "Send to
- * another instance…"; the import starts right away, with no review. The code
- * is shown once. Defaults fit most cases, so the three settings (lifetime,
- * read-only, note) sit in a folded Options block.
+ * another instance": the import starts right away, with no review. The code
+ * is shown once and lives in this panel's state only, so it goes with the
+ * dialog. Defaults fit most cases, so the three settings (lifetime, read-only,
+ * note) sit in a folded Options block.
  */
-const ReceiveProjectModal: React.FC<ReceiveProjectModalProps> = ({
-  opened,
-  onClose,
-  onCreated,
-}) => {
+export const ReceivePanel: React.FC<ReceivePanelProps> = ({ onClose, onCreated }) => {
   const [loading, setLoading] = useState(false);
   const [inboundEnabled, setInboundEnabled] = useState(true);
   const [lock, setLock] = useState(true);
@@ -92,14 +88,6 @@ const ReceiveProjectModal: React.FC<ReceiveProjectModalProps> = ({
   const [created, setCreated] = useState<(MigrationInvite & { code: string }) | null>(null);
 
   useEffect(() => {
-    if (!opened) {
-      // The code must not outlive the dialog.
-      setCreated(null);
-      setError(null);
-      setNote('');
-      setOptionsOpen(false);
-      return undefined;
-    }
     let live = true;
     setLoading(true);
     listMigrationInvites()
@@ -116,7 +104,7 @@ const ReceiveProjectModal: React.FC<ReceiveProjectModalProps> = ({
     return () => {
       live = false;
     };
-  }, [opened]);
+  }, []);
 
   const handleCreate = async () => {
     setCreating(true);
@@ -137,15 +125,7 @@ const ReceiveProjectModal: React.FC<ReceiveProjectModalProps> = ({
   };
 
   return (
-    <Modal
-      opened={opened}
-      onClose={onClose}
-      title="Receive a project"
-      centered
-      size="md"
-      data-testid="receive-project-modal"
-    >
-      <Stack gap="md">
+      <Stack gap="md" data-testid="receive-panel">
         {loading ? (
           <Group gap="xs">
             <Loader size="xs" />
@@ -162,7 +142,7 @@ const ReceiveProjectModal: React.FC<ReceiveProjectModalProps> = ({
           <Stack gap="sm" data-testid="receive-created">
             <Text size="sm">
               Send these two values to the owner of the project. In the project's settings,
-              under Send, they choose Send to another instance… and paste both.
+              under Send, they choose Send to another instance and paste both.
             </Text>
             <CopyRow
               label="Instance URL"
@@ -259,8 +239,5 @@ const ReceiveProjectModal: React.FC<ReceiveProjectModalProps> = ({
           )}
         </Group>
       </Stack>
-    </Modal>
   );
 };
-
-export default ReceiveProjectModal;
