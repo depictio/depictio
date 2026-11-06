@@ -20,6 +20,7 @@ import SliderRenderer from './interactive/SliderRenderer';
 import DatePickerRenderer from './interactive/DatePickerRenderer';
 import CheckboxSwitchRenderer from './interactive/CheckboxSwitchRenderer';
 import SegmentedControlRenderer from './interactive/SegmentedControlRenderer';
+import TextInputRenderer from './interactive/TextInputRenderer';
 import TimelineRenderer from './interactive/TimelineRenderer';
 import GroupCompareStrip, { type GroupComparePayload } from './card/GroupCompareStrip';
 import SecondaryMetrics, {
@@ -232,6 +233,15 @@ const ComponentRendererBody: React.FC<ComponentRendererProps> = ({
           compact={compact}
         />
       );
+    } else if (subType === 'TextInput') {
+      inner = (
+        <TextInputRenderer
+          metadata={metadata}
+          filters={filters}
+          onChange={onFilterChange}
+          compact={compact}
+        />
+      );
     } else if (subType === 'Timeline') {
       inner = (
         <TimelineRenderer
@@ -289,6 +299,7 @@ const ComponentRendererBody: React.FC<ComponentRendererProps> = ({
             <LazyMount>
               <AdvancedVizDispatch
                 metadata={shown}
+                dashboardId={dashboardId}
                 filters={filters}
                 refreshTick={refreshTick}
                 // The `minimal` header links the source tab itself; any other
@@ -454,6 +465,7 @@ const ComponentRendererBody: React.FC<ComponentRendererProps> = ({
       <LazyMount>
         <AdvancedVizDispatch
           metadata={metadata}
+          dashboardId={dashboardId}
           filters={filters}
           refreshTick={refreshTick}
           onFilterChange={onFilterChange}

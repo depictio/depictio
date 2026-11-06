@@ -273,9 +273,13 @@ export function buildInteractive(
     strip_icon?: boolean;
     show_histogram?: boolean;
     always_selected?: boolean;
+    multiple?: boolean;
     default_by?: string;
     default_order?: 'asc' | 'desc';
     banner_facts?: StoredMetadata['banner_facts'];
+    placeholder?: string;
+    case_sensitive?: boolean;
+    match_mode?: 'regex' | 'contains';
   }>(state.config);
   // Mirror Dash design_interactive: the form surfaces only the basics, no
   // default value/range, marks, or scale. Those are derived at render time.
@@ -327,11 +331,28 @@ export function buildInteractive(
     // `loadExisting` seeds the config bag from the stored metadata, and
     // without this line saving an edit would silently drop the setting.
     show_histogram: c.show_histogram,
+    // TextInput options, stored only while the control is a TextInput and only
+    // when they differ from the default: the model rejects them on any other
+    // control, so switching the variant away must not carry them into a save the
+    // backend then refuses.
+    placeholder:
+      c.interactive_component_type === 'TextInput' ? c.placeholder?.trim() || undefined : undefined,
+    case_sensitive:
+      c.interactive_component_type === 'TextInput' && c.case_sensitive === true ? true : undefined,
+    match_mode:
+      c.interactive_component_type === 'TextInput' && c.match_mode === 'contains'
+        ? 'contains'
+        : undefined,
     // Stored only while on and while the control is still a Select: the model
     // rejects the flag on any other control, so switching the variant away
     // must not carry it into a save the backend then refuses.
     always_selected:
       c.interactive_component_type === 'Select' && c.always_selected === true ? true : undefined,
+    // YAML only as well: lets the always-on Select hold several values.
+    multiple:
+      c.interactive_component_type === 'Select' && c.always_selected === true && c.multiple === true
+        ? true
+        : undefined,
     // Set in YAML only (no builder control): kept through an edit while the
     // flag it ranks for is on.
     default_by:

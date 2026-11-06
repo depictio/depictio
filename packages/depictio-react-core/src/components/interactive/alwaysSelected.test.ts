@@ -118,3 +118,41 @@ describe('rankPickOptions', () => {
     ]);
   });
 });
+
+describe('always_selected with multiple', () => {
+  const options = [
+    { value: 'a' },
+    { value: 'b' },
+    { value: 'c', disabled: true },
+  ];
+
+  it('keeps several values that are still on offer', () => {
+    expect(
+      autoPickValue({ enabled: true, loading: false, selected: ['a', 'b'], options, multiple: true }),
+    ).toBeNull();
+  });
+
+  it('drops the ones no longer on offer and keeps the rest', () => {
+    expect(
+      autoPickValue({ enabled: true, loading: false, selected: ['a', 'c'], options, multiple: true }),
+    ).toEqual(['a']);
+  });
+
+  it('still starts on the first enabled option when empty', () => {
+    expect(
+      autoPickValue({ enabled: true, loading: false, selected: [], options, multiple: true }),
+    ).toEqual(['a']);
+  });
+
+  it('collapses several values to the first without the flag, as before', () => {
+    expect(autoPickValue({ enabled: true, loading: false, selected: ['a', 'b'], options })).toEqual([
+      'a',
+    ]);
+  });
+
+  it('keeps every pick a user makes, and refills an emptied one', () => {
+    expect(singlePick(['a', 'b'], options, true)).toEqual(['a', 'b']);
+    expect(singlePick(['a', 'b'], options)).toEqual(['b']);
+    expect(singlePick([], options, true)).toEqual(['a']);
+  });
+});

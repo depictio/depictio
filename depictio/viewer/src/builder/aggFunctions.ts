@@ -59,6 +59,16 @@ const TEXT_INPUT: Record<string, AggMethodMeta> = {
   },
 };
 
+/** String columns also take a free-text filter (a regular expression). Not on
+ *  `category`: the server matches text, and a categorical column is a pick list. */
+const STRING_INPUT: Record<string, AggMethodMeta> = {
+  ...TEXT_INPUT,
+  TextInput: {
+    description: 'Search box: keeps rows matching a regular expression (GGG$, ^ACG)',
+    label: 'Text search (regex)',
+  },
+};
+
 const AGG_BY_TYPE: Record<string, ColumnTypeMeta> = {
   int64: {
     title: 'Integer',
@@ -122,7 +132,7 @@ const AGG_BY_TYPE: Record<string, ColumnTypeMeta> = {
       mode: { description: 'Most common value', label: 'Mode' },
       nunique: { description: 'Number of distinct elements', label: 'Distinct count' },
     },
-    inputMethods: TEXT_INPUT,
+    inputMethods: STRING_INPUT,
   },
   utf8: {
     title: 'Object',
@@ -131,7 +141,7 @@ const AGG_BY_TYPE: Record<string, ColumnTypeMeta> = {
       mode: { description: 'Most common value', label: 'Mode' },
       nunique: { description: 'Number of distinct elements', label: 'Distinct count' },
     },
-    inputMethods: TEXT_INPUT,
+    inputMethods: STRING_INPUT,
   },
 };
 

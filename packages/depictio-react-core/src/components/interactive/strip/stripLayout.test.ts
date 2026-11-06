@@ -111,6 +111,7 @@ describe('stripControlKind', () => {
     expect(stripControlKind('Checkbox')).toBe('toggle');
     expect(stripControlKind('DateRangePicker')).toBe('date');
     expect(stripControlKind('DatePicker')).toBe('date');
+    expect(stripControlKind('TextInput')).toBe('text');
     expect(stripControlKind('Timeline')).toBe('unsupported');
     expect(stripControlKind(undefined)).toBe('unsupported');
   });

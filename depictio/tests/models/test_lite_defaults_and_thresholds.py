@@ -216,6 +216,24 @@ class TestAlwaysSelected:
                 always_selected=True,
             )
 
+    def test_multiple_round_trips_and_stays_out_when_unset(self):
+        single = DashboardDataLite(title="t", components=[self._select(always_selected=True)])
+        assert "multiple" not in single.to_full()["stored_metadata"][0]
+        several = DashboardDataLite(
+            title="t", components=[self._select(always_selected=True, multiple=True)]
+        )
+        assert several.to_full()["stored_metadata"][0]["multiple"] is True
+        back = DashboardDataLite.from_full(several.to_full()).components[0]
+        back = back if isinstance(back, dict) else back.model_dump()
+        assert back["multiple"] is True
+
+    @pytest.mark.parametrize("kind", ["MultiSelect", "SegmentedControl"])
+    def test_multiple_needs_an_always_selected_select(self, kind):
+        with pytest.raises(ValidationError, match="multiple"):
+            InteractiveLiteComponent(**BASE_FILTER, interactive_component_type=kind, multiple=True)
+        with pytest.raises(ValidationError, match="multiple"):
+            InteractiveLiteComponent(**self._select(multiple=True))
+
     def test_default_by_round_trips_and_stays_out_when_unset(self):
         plain = DashboardDataLite(title="t", components=[self._select(always_selected=True)])
         stored = plain.to_full()["stored_metadata"][0]

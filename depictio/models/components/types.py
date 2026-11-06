@@ -198,6 +198,7 @@ InteractiveType = Literal[
     "Select",
     "MultiSelect",
     "SegmentedControl",
+    "TextInput",
     "Slider",
     "RangeSlider",
     "DateRangePicker",
