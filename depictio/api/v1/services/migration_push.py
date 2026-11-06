@@ -76,6 +76,11 @@ def _sha256_of(path: str) -> str:
     return digest.hexdigest()
 
 
+def _public_url() -> str | None:
+    """This instance's public viewer URL, for the receiving admin to read."""
+    return str(getattr(settings.viewer, "external_url", "") or "").rstrip("/") or None
+
+
 def build_project_bundle_file(
     project: dict[str, Any],
     *,
@@ -165,6 +170,7 @@ def build_project_bundle_file(
         s3_bucket=bucket,
         s3_endpoint=routes._normalize_endpoint(settings.s3.endpoint_url or ""),
         exported_at=utc_now_str(),
+        source_url=_public_url(),
     )
 
     spool_dir = routes._migration_setting("spool_dir", None)

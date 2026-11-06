@@ -302,6 +302,7 @@ def build_bundle_metadata(
     s3_bucket: str,
     s3_endpoint: str | None,
     exported_at: str,
+    source_url: str | None = None,
 ) -> dict[str, Any]:
     counts: dict[str, int] = {k: len(v) for k, v in data.items()}
     if mode in ("all", "metadata"):
@@ -316,6 +317,9 @@ def build_bundle_metadata(
         "depictio_version": depictio_version,
         "bundle_format_version": BUNDLE_FORMAT_VERSION,
         "source_instance": source_instance,
+        # The public URL of the sending instance, so the receiving admin can
+        # tell where a push came from. Absent from bundles of older versions.
+        **({"source_url": source_url} if source_url else {}),
         "s3_bucket": s3_bucket,
         "s3_endpoint": s3_endpoint,
         "document_counts": counts,
@@ -530,9 +534,15 @@ class BundleReport(BaseModel):
     project_id: str | None = None
     project_name: str | None = None
     source_instance: str | None = None
+    #: Where the sender says it lives (its public URL), when the bundle says.
+    source_url: str | None = None
     source_depictio_version: str | None = None
     bundle_format_version: int = 1
     document_counts: dict[str, int] = {}
+    #: The bundle's dashboards, for display: id, title, icon, colour, tab parent.
+    dashboards: list[dict[str, Any]] = []
+    #: The project's data collections, for display: id, tag, type, description.
+    data_collections: list[dict[str, Any]] = []
     s3_object_count: int = 0
     s3_bytes: int = 0
     #: none: new here. re_push: same lineage, becomes a new version.
@@ -645,6 +655,60 @@ def _last_hop_source(project_doc: dict[str, Any] | None) -> str | None:
     return None
 
 
+def _source_url(value: Any) -> str | None:
+    """The sender's claimed URL, kept only when it is a plain http(s) one."""
+    text = _clip_text(value, 300)
+    return text if text and text.lower().startswith(("http://", "https://")) else None
+
+
+def _clip_text(value: Any, limit: int) -> str | None:
+    text = str(value).strip() if value is not None else ""
+    return text[:limit] if text else None
+
+
+def dashboard_summaries(dashboards: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """What an admin needs to recognise each dashboard: never its content."""
+    out: list[dict[str, Any]] = []
+    for doc in dashboards:
+        ref = _doc_id(doc)
+        if ref is None:
+            continue
+        parent = doc.get("parent_dashboard_id")
+        out.append(
+            {
+                "id": str(ref),
+                "title": _clip_text(doc.get("title"), 200),
+                "icon": _clip_text(doc.get("icon"), 100),
+                "icon_color": _clip_text(doc.get("icon_color"), 40),
+                "parent_dashboard_id": str(parent) if parent else None,
+            }
+        )
+    return out
+
+
+def data_collection_summaries(project: dict[str, Any]) -> list[dict[str, Any]]:
+    """The project's data collections as an admin recognises them."""
+    out: list[dict[str, Any]] = []
+    for wf in project.get("workflows") or []:
+        if not isinstance(wf, dict):
+            continue
+        for dc in wf.get("data_collections") or []:
+            if not isinstance(dc, dict):
+                continue
+            config = dc.get("config") if isinstance(dc.get("config"), dict) else {}
+            ref = dc.get("_id") or dc.get("id")
+            out.append(
+                {
+                    "id": str(ref) if ref else None,
+                    "tag": _clip_text(dc.get("data_collection_tag"), 200),
+                    "type": _clip_text(config.get("type"), 40),
+                    "description": _clip_text(dc.get("description"), 300),
+                    "workflow": _clip_text(wf.get("name") or wf.get("workflow_tag"), 200),
+                }
+            )
+    return out
+
+
 def validate_bundle(
     metadata: dict[str, Any],
     data: dict[str, list[dict]],
@@ -667,9 +731,11 @@ def validate_bundle(
     cols = _collections()
     report = BundleReport(
         source_instance=source_instance or metadata.get("source_instance"),
+        source_url=_source_url(metadata.get("source_url")),
         source_depictio_version=metadata.get("depictio_version"),
         bundle_format_version=int(metadata.get("bundle_format_version") or 1),
         document_counts={k: len(v) for k, v in data.items() if isinstance(v, list)},
+        dashboards=dashboard_summaries(data.get("dashboards") or []),
     )
     if report.bundle_format_version > BUNDLE_FORMAT_VERSION:
         report.errors.append(
@@ -689,6 +755,7 @@ def validate_bundle(
         return report
 
     project = projects[0]
+    report.data_collections = data_collection_summaries(project)
     try:
         scope = resolve_project_scope(project)
     except ValueError as exc:
