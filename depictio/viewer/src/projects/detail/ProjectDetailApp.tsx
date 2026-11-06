@@ -104,7 +104,6 @@ import { UnrecognisedFilesPanel } from './UnrecognisedFilesPanel';
 import { ProvenanceBadge } from './ProvenanceBadge';
 import { PublishedLockBadge } from './PublishedLockBadge';
 import { ProjectMigrateButton } from './ProjectMigrateButton';
-import { ProjectPublications } from './ProjectPublications';
 import { ProjectDashboardsPanel } from './ProjectDashboardsPanel';
 import { ProjectPart } from './ProjectPart';
 
@@ -558,7 +557,6 @@ const ProjectDetailApp: React.FC = () => {
                   }
                 />
               )}
-              {projectId && <ProjectPublications projectId={projectId} canPush={canPushProject} />}
               <Box ref={dcViewerRef}>
                 {selectedDc && (
                   <DataCollectionViewer
@@ -729,6 +727,8 @@ const ProjectDetailApp: React.FC = () => {
           canMutate={canMutate}
           publicModeReason={publicModeReason}
           dataCollections={allDataCollections}
+          canPush={canPushProject}
+          publishedLock={project?.published_lock}
           onReloadProject={refresh}
         />
       )}

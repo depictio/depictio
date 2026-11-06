@@ -17,8 +17,11 @@ import ManifestRefreshPanel, {
 } from './ManifestRefreshPanel';
 import { summarizeManifestRun } from '../manifestRun';
 import ExportTemplatePanel from './ExportTemplatePanel';
+import PublicationPanel from './PublicationPanel';
+import { useMigrationUi } from '../../hooks/useMigrationUi';
+import type { PublishedLock } from 'depictio-react-core';
 
-export type ProjectSettingsSectionKey = 'storage' | 'refresh' | 'export';
+export type ProjectSettingsSectionKey = 'storage' | 'refresh' | 'export' | 'publish';
 
 interface ProjectSettingsModalProps {
   opened: boolean;
@@ -35,6 +38,10 @@ interface ProjectSettingsModalProps {
    *  auth status loads); null when they are not gated by it. */
   publicModeReason: string | null;
   dataCollections: ReadonlyArray<ManifestRefreshDc>;
+  /** Owners and admins: they alone can publish the project elsewhere. */
+  canPush?: boolean;
+  /** The project's editing lock, shown in the Publication section. */
+  publishedLock?: PublishedLock | null;
   /** Reload the project page once a refresh has rebuilt its tables. */
   onReloadProject?: () => void;
   /** Open on this section rather than the one last visited. */
@@ -50,6 +57,8 @@ interface ProjectSettingsModalProps {
  * 2. Data refresh: re-read the collections whose source the server can reach
  *    again, and follow the run.
  * 3. Export template: package the project as a reusable template bundle.
+ * 4. Publication: send a copy to another Depictio instance, and see what was
+ *    sent (only where the instance shows migration).
  *
  * Unlike the dashboard settings, nothing saves as you go: each section acts
  * on its own button. Unsaved edits survive a switch to another section and
@@ -67,9 +76,12 @@ const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
   canMutate,
   publicModeReason,
   dataCollections,
+  canPush = false,
+  publishedLock,
   onReloadProject,
   initialSection,
 }) => {
+  const migrationUi = useMigrationUi();
   const refresh = useManifestRefresh(projectId, dataCollections);
   const refreshing = refresh.state === 'starting' || refresh.state === 'running';
 
@@ -133,7 +145,6 @@ const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
       key: 'export',
       icon: 'mdi:package-variant-closed',
       title: 'Export template',
-      navLabel: 'Export',
       subtitle: 'Package this project and its dashboards to build them again on other data',
       body: (
         <ExportTemplatePanel
@@ -143,6 +154,24 @@ const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
         />
       ),
     },
+    ...(migrationUi
+      ? [
+          {
+            key: 'publish',
+            icon: 'mdi:transfer-up',
+            title: 'Publication',
+            subtitle: 'Send a copy of this project to another Depictio instance',
+            body: (
+              <PublicationPanel
+                projectId={projectId}
+                projectName={projectName}
+                canPush={canPush}
+                lock={publishedLock}
+              />
+            ),
+          },
+        ]
+      : []),
   ];
 
   const title = (

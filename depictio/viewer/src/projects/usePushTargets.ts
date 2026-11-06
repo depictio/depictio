@@ -18,13 +18,21 @@ function loadTargets(): Promise<MigrationTarget[]> {
   return cached;
 }
 
+let cachedTargetsValue: MigrationTarget[] | null = null;
+
 /** Push targets the current user may use; empty until loaded or when none. */
 export function usePushTargets(enabled = true): MigrationTarget[] {
-  const [targets, setTargets] = useState<MigrationTarget[]>([]);
+  return usePushTargetsState(enabled) ?? [];
+}
+
+/** Like `usePushTargets`, but `null` until the answer is in. */
+function usePushTargetsState(enabled: boolean): MigrationTarget[] | null {
+  const [targets, setTargets] = useState<MigrationTarget[] | null>(cachedTargetsValue);
   useEffect(() => {
     if (!enabled) return undefined;
     let live = true;
     void loadTargets().then((t) => {
+      cachedTargetsValue = t;
       if (live) setTargets(t);
     });
     return () => {
@@ -48,11 +56,14 @@ function loadAdhocEnabled(): Promise<boolean> {
   return cachedAdhoc;
 }
 
+export type PublishStatus = 'loading' | 'available' | 'unavailable';
+
 /** Whether "Publish to…" has anywhere to go for this user: a registered target,
- *  or a destination URL + invite code (when the instance allows it). */
-export function usePublishAvailable(enabled = true): boolean {
-  const targets = usePushTargets(enabled);
-  const [adhoc, setAdhoc] = useState(false);
+ *  or a destination URL + invite code (when the instance allows it).
+ *  `loading` until both answers are in, so a control never flashes disabled. */
+export function usePublishStatus(enabled = true): PublishStatus {
+  const targets = usePushTargetsState(enabled);
+  const [adhoc, setAdhoc] = useState<boolean | null>(null);
   useEffect(() => {
     if (!enabled) return undefined;
     let live = true;
@@ -63,5 +74,17 @@ export function usePublishAvailable(enabled = true): boolean {
       live = false;
     };
   }, [enabled]);
-  return targets.length > 0 || adhoc;
+  if (targets && targets.length > 0) return 'available';
+  if (adhoc === true) return 'available';
+  if (targets === null || adhoc === null) return 'loading';
+  return 'unavailable';
 }
+
+/** True once a destination exists; see `usePublishStatus` for the pending case. */
+export function usePublishAvailable(enabled = true): boolean {
+  return usePublishStatus(enabled) === 'available';
+}
+
+/** Why "Publish to…" is disabled when migration is shown but nothing is set up. */
+export const NO_DESTINATION_REASON =
+  'No destination is configured. An administrator must add a push target or allow publishing with a destination URL and invite code.';
