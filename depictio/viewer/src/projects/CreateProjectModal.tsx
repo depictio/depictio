@@ -23,7 +23,6 @@ import { Icon } from '@iconify/react';
 
 import { createProjectFromManifest, listProjectTemplates, Z_LAYERS } from 'depictio-react-core';
 import { useListingAccents } from '../lib/useListingAccents';
-import { useGlassPages } from '../chrome/variants/glass/pages';
 import type {
   CreateProjectInput,
   CreateProjectResult,
@@ -41,8 +40,8 @@ import { DisabledReason, GatedButton } from '../components/settings/SettingsSect
 import { RunFolderTab } from './fromRun';
 import type { RunCreatedContext } from './fromRun';
 
+/** Where a new project starts from; null is the chooser. */
 type Tab = 'create' | 'manifest' | 'run';
-type ProjectType = 'basic' | 'advanced';
 
 /** A required template variable with a declared default is filled in
  *  server-side, so only the ones without a default must be typed here. */
@@ -86,9 +85,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
   privateBucketDisabledReason = null,
 }) => {
   const accent = useListingAccents('projects');
-  const [tab, setTab] = useState<Tab>('create');
-  const [activeStep, setActiveStep] = useState(0);
-  const [projectType, setProjectType] = useState<ProjectType | null>(null);
+  const [tab, setTab] = useState<Tab | null>(null);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [isPublic, setIsPublic] = useState(false);
@@ -110,9 +107,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
   // Reset everything whenever the modal opens.
   useEffect(() => {
     if (!opened) return;
-    setTab('create');
-    setActiveStep(0);
-    setProjectType(null);
+    setTab(null);
     setName('');
     setDescription('');
     setIsPublic(false);
@@ -152,29 +147,22 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
     [templates],
   );
 
-  // Step-1 card click also auto-advances (matches Dash UX).
-  const handleSelectType = (type: ProjectType) => {
-    if (type === 'advanced') return; // disabled card
-    setProjectType(type);
-    setActiveStep(1);
-  };
-
   const isNameTaken = (candidate: string) =>
     existingNames.some((n) => n.toLowerCase() === candidate.toLowerCase());
 
   const trimmedName = name.trim();
   const nameAlreadyUsed = isNameTaken(trimmedName);
-  const canSubmit =
-    !!projectType && trimmedName.length > 0 && !nameAlreadyUsed && !submitting;
+  const canSubmit = trimmedName.length > 0 && !nameAlreadyUsed && !submitting;
 
   const handleCreate = async () => {
-    if (!projectType || !trimmedName) return;
+    if (!trimmedName) return;
     setSubmitting(true);
     setError(null);
     try {
       await onCreate({
         name: trimmedName,
-        project_type: projectType,
+        // Legacy field: the type no longer changes what a project can do.
+        project_type: 'basic',
         is_public: isPublic,
         ...(description.trim() ? { description: description.trim() } : {}),
       } as CreateProjectInput);
@@ -321,80 +309,51 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
           </Group>
         </Center>
 
-        {/* Pill-style tabs (Create new / From manifest / From a run folder) */}
-        <Tabs
-          value={tab}
-          onChange={(v) => setTab((v as Tab) || 'create')}
-          variant="pills"
-          color={accent.secondary}
-        >
-          <Tabs.List justify="center" className="dc-modal-modes">
-            <Tabs.Tab
-              value="create"
-              leftSection={<Icon icon="mdi:plus" width={16} />}
-            >
-              Create new
-            </Tabs.Tab>
-            <Tabs.Tab
-              value="manifest"
-              leftSection={<Icon icon="mdi:link-variant" width={16} />}
-            >
-              From manifest
-            </Tabs.Tab>
-            <Tabs.Tab
-              value="run"
-              leftSection={<Icon icon="mdi:folder-search-outline" width={16} />}
-            >
-              From a run folder
-            </Tabs.Tab>
-          </Tabs.List>
+        {tab === null ? (
+          <Stack gap="md" data-testid="create-project-chooser">
+            <Text ta="center" fw={500}>
+              Start a project from:
+            </Text>
+            <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
+              <SourceCard
+                icon="mdi:folder-plus-outline"
+                title="An empty project"
+                description="Name it, then add data collections from the project page: drop a folder or files, or link a bucket."
+                onClick={() => setTab('create')}
+                testId="create-source-empty"
+              />
+              <SourceCard
+                icon="mdi:link-variant"
+                title="A data manifest"
+                description="Point to a manifest URL and pick a template: the data collections and dashboards are built from it."
+                onClick={() => setTab('manifest')}
+                testId="create-source-manifest"
+              />
+              <SourceCard
+                icon="mdi:folder-search-outline"
+                title="A run folder"
+                description="Point to a pipeline run folder: Depictio detects what it holds and plans the project."
+                onClick={() => setTab('run')}
+                testId="create-source-run"
+              />
+            </SimpleGrid>
+          </Stack>
+        ) : (
+        <Tabs value={tab} variant="unstyled" color={accent.secondary}>
+          <Button
+            variant="subtle"
+            color="gray"
+            size="compact-sm"
+            leftSection={<Icon icon="mdi:arrow-left" width={16} />}
+            onClick={() => setTab(null)}
+            disabled={submitting}
+            data-testid="create-source-back"
+          >
+            Start from
+          </Button>
 
           <Tabs.Panel value="create" pt="md">
             <Stack gap="md">
-              <Stepper
-                active={activeStep}
-                onStepClick={setActiveStep}
-                color={accent.secondary}
-                size="sm"
-                allowNextStepsSelect={false}
-              >
-                <Stepper.Step
-                  label="Project Type"
-                  description="Choose basic or advanced"
-                >
-                  <Stack gap="md" pt="md">
-                    <Text ta="center" fw={500}>
-                      Choose your project type:
-                    </Text>
-                    <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
-                      <ProjectTypeCard
-                        active={projectType === 'basic'}
-                        type="basic"
-                        title="Basic Project"
-                        description="Perfect for simple data visualization and exploration. No workflows required: upload data collections directly through the UI. Best for individual datasets and quick analysis."
-                        icon="mdi:view-dashboard-outline"
-                        tag="UI Creation Only"
-                        tagColor="cyan"
-                        onClick={() => handleSelectType('basic')}
-                      />
-                      <ProjectTypeCard
-                        active={false}
-                        type="advanced"
-                        title="Advanced Project"
-                        description="Designed for complex bioinformatics runs, processing workflows, and data ingestion pipelines. Requires depictio-CLI for project design and workflow management. Best for bioinformatics and computational analysis."
-                        icon="mdi:sitemap"
-                        tag="Depictio-CLI Only"
-                        tagColor="orange"
-                        disabled
-                      />
-                    </SimpleGrid>
-                  </Stack>
-                </Stepper.Step>
-
-                <Stepper.Step
-                  label="Project Details"
-                  description="Configure your project"
-                >
                   <Stack gap="md" pt="md">
                     <TextInput
                       label="Project Name"
@@ -432,8 +391,6 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                       color={accent.secondary}
                     />
                   </Stack>
-                </Stepper.Step>
-              </Stepper>
 
               {error && (
                 <Alert color="red" variant="light">
@@ -441,32 +398,16 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                 </Alert>
               )}
 
-              <Group justify="space-between">
+              <Group justify="flex-end">
                 <Button
-                  variant="default"
-                  onClick={() => setActiveStep((s) => Math.max(0, s - 1))}
-                  disabled={activeStep === 0 || submitting}
+                  color={accent.secondary}
+                  onClick={handleCreate}
+                  loading={submitting}
+                  disabled={!canSubmit}
+                  data-testid="create-project-submit"
                 >
-                  Previous
+                  Create project
                 </Button>
-                {activeStep === 0 ? (
-                  <Button
-                    color={accent.secondary}
-                    onClick={() => setActiveStep(1)}
-                    disabled={!projectType}
-                  >
-                    Next
-                  </Button>
-                ) : (
-                  <Button
-                    color={accent.secondary}
-                    onClick={handleCreate}
-                    loading={submitting}
-                    disabled={!canSubmit}
-                  >
-                    Create Project
-                  </Button>
-                )}
               </Group>
             </Stack>
           </Tabs.Panel>
@@ -657,6 +598,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
             />
           </Tabs.Panel>
         </Tabs>
+        )}
       </Stack>
     </Modal>
   );
@@ -846,67 +788,38 @@ export const ManifestCreatedModal: React.FC<{
   );
 };
 
-interface ProjectTypeCardProps {
-  active: boolean;
-  type: ProjectType;
+interface SourceCardProps {
+  icon: string;
   title: string;
   description: string;
-  icon: string;
-  tag: string;
-  tagColor: string;
-  disabled?: boolean;
-  onClick?: () => void;
+  onClick: () => void;
+  testId: string;
 }
 
-const ProjectTypeCard: React.FC<ProjectTypeCardProps> = ({
-  active,
-  type,
-  title,
-  description,
-  icon,
-  tag,
-  tagColor,
-  disabled,
-  onClick,
-}) => {
-  // Project-type taxonomy, not a brand role — basic and advanced have to stay
-  // told apart, so these keep their own hues.
-  const glass = useGlassPages();
-  const typeAccent = glass
-    ? type === 'basic'
-      ? 'var(--mantine-primary-color-filled)'
-      : 'var(--mantine-color-gray-6)'
-    : type === 'basic'
-      ? 'var(--mantine-color-teal-6)'
-      : 'var(--mantine-color-orange-6)';
-  return (
-    <Paper
-      withBorder
-      radius="md"
-      p="lg"
-      onClick={disabled ? undefined : onClick}
-      style={{
-        cursor: disabled ? 'not-allowed' : 'pointer',
-        opacity: disabled ? 0.55 : 1,
-        borderColor: active ? typeAccent : undefined,
-        borderWidth: active ? 2 : 1,
-        transition: 'border-color 120ms ease',
-      }}
-    >
-      <Stack gap="sm" align="center">
-        <Icon icon={icon} width={42} height={42} color={typeAccent} />
-        <Title order={4} ta="center">
-          {title}
-        </Title>
-        <Text size="xs" c="dimmed" ta="center" lh={1.4}>
-          {description}
-        </Text>
-        <Badge color={glass ? 'gray' : tagColor} variant="light" radius="sm">
-          {tag}
-        </Badge>
-      </Stack>
-    </Paper>
-  );
-};
+const SourceCard: React.FC<SourceCardProps> = ({ icon, title, description, onClick, testId }) => (
+  <Paper
+    withBorder
+    radius="md"
+    p="lg"
+    role="button"
+    tabIndex={0}
+    onClick={onClick}
+    onKeyDown={(e: React.KeyboardEvent<HTMLDivElement>) => {
+      if (e.key === 'Enter' || e.key === ' ') onClick();
+    }}
+    style={{ cursor: 'pointer' }}
+    data-testid={testId}
+  >
+    <Stack gap="sm" align="center">
+      <Icon icon={icon} width={40} height={40} color="var(--mantine-primary-color-filled)" />
+      <Title order={4} ta="center">
+        {title}
+      </Title>
+      <Text size="sm" c="dimmed" ta="center" lh={1.4}>
+        {description}
+      </Text>
+    </Stack>
+  </Paper>
+);
 
 export default CreateProjectModal;
