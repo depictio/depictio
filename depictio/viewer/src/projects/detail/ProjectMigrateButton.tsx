@@ -3,13 +3,14 @@ import { Button, Tooltip } from '@mantine/core';
 import { Send } from 'lucide-react';
 
 import MigrateProjectModal from '../MigrateProjectModal';
-import { usePublishAvailable } from '../usePushTargets';
+import { NO_DESTINATION_REASON, usePublishStatus } from '../usePushTargets';
 import { useMigrationUi } from '../../hooks/useMigrationUi';
 
 /** Page-head action: publish a copy of this project to another Depictio instance
  *  (to a registered target, or with a destination URL + invite code). Owners and
- *  admins only, and absent when this instance has neither a target nor URL
- *  publishing, or hides migration (`DEPICTIO_MIGRATION_UI_ENABLED`). */
+ *  admins only, absent when this instance hides migration
+ *  (`DEPICTIO_MIGRATION_UI_ENABLED`), and disabled with the reason when it has
+ *  neither a target nor URL publishing. */
 export const ProjectMigrateButton: React.FC<{
   projectId: string;
   projectName?: string;
@@ -18,9 +19,27 @@ export const ProjectMigrateButton: React.FC<{
   glass?: boolean;
 }> = ({ projectId, projectName, canPush, glass }) => {
   const migrationUi = useMigrationUi();
-  const available = usePublishAvailable(canPush && migrationUi);
+  const status = usePublishStatus(canPush && migrationUi);
   const [open, setOpen] = useState(false);
-  if (!canPush || !migrationUi || !available) return null;
+  if (!canPush || !migrationUi || status === 'loading') return null;
+  if (status === 'unavailable') {
+    // A disabled button takes no pointer events: the span carries the tooltip.
+    return (
+      <Tooltip label={NO_DESTINATION_REASON} multiline w={280} withinPortal>
+        <span data-testid="project-push-disabled-reason">
+          <Button
+            variant={glass ? 'default' : 'subtle'}
+            color={glass ? undefined : 'gray'}
+            leftSection={<Send size={glass ? 17 : 16} strokeWidth={1.8} aria-hidden />}
+            disabled
+            data-testid="project-push-button"
+          >
+            Publish to…
+          </Button>
+        </span>
+      </Tooltip>
+    );
+  }
   return (
     <>
       <Tooltip label="Publish a copy of this project to another Depictio instance" withinPortal>

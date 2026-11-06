@@ -166,7 +166,7 @@ const ExportTemplatePanel: React.FC<ExportTemplatePanelProps> = ({
           loading={submitting}
           reason={reason}
         >
-          Export
+          Export template
         </GatedButton>
         <DisabledReason reason={reason} />
       </Stack>
