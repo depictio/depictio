@@ -776,7 +776,7 @@ class InteractiveLiteComponent(BaseLiteComponent):
           column_name: guide
           column_type: object
           title: Guide sequence
-          placeholder: "e.g. ^CCA or GG$"
+          placeholder: "e.g. ^CCA|GG$"
 
     A TextInput keeps the rows of a string column whose text matches what is
     typed, read as a regular expression: ``GGG$`` ends with GGG, ``^ACG`` starts
@@ -936,7 +936,7 @@ class InteractiveLiteComponent(BaseLiteComponent):
     # TextInput-specific
     placeholder: str | None = Field(
         default=None,
-        description="TextInput only: hint shown in the empty box, e.g. 'e.g. ^CCA or GG$'.",
+        description="TextInput only: hint shown in the empty box, e.g. 'e.g. ^CCA|GG$'.",
     )
     case_sensitive: bool | None = Field(
         default=None,

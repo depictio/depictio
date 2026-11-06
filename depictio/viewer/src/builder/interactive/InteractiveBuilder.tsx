@@ -405,7 +405,7 @@ const InteractiveBuilder: React.FC = () => {
             <>
               <TextInput
                 label="Placeholder"
-                description="Hint shown in the empty box, “e.g. ^CCA or GG$”"
+                description="Hint shown in the empty box, “e.g. ^CCA|GG$”"
                 value={config.placeholder ?? ''}
                 onChange={(e) => patchConfig({ placeholder: e.currentTarget.value })}
               />
