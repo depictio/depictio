@@ -360,8 +360,14 @@ def _style_traces(traces: list[dict], layout: dict, palette: dict[str, str]) -> 
 
 _HEX_COLOUR = re.compile(r"^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
 _RGB_COLOUR = re.compile(
-    r"^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*(?:,\s*[\d.]+\s*)?\)$"
+    r"^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*(?:,\s*([\d.]+)\s*)?\)$"
 )
+# Below this alpha a colour is a wash, not a series colour: a label filled with
+# it would be composited over the plot and its ink chosen for the wrong colour.
+_MIN_HOVER_ALPHA = 0.9
+
+#: The `<extra>...</extra>` that ends a hover template.
+_EXTRA_TAIL = re.compile(r"<extra>.*?</extra>\s*$", re.DOTALL)
 
 # Ink on a coloured hover label: the card's own dark and a white.
 _HOVER_INK_DARK = "#212529"
@@ -382,7 +388,10 @@ def _rgb_of(colour: object) -> tuple[int, int, int] | None:
         return int(digits[0:2], 16), int(digits[2:4], 16), int(digits[4:6], 16)
     match = _RGB_COLOUR.match(text)
     if match:
-        r, g, b = (int(v) for v in match.groups())
+        r, g, b = (int(v) for v in match.groups()[:3])
+        alpha = match.group(4)
+        if alpha is not None and float(alpha) < _MIN_HOVER_ALPHA:
+            return None
         return (r, g, b) if max(r, g, b) <= 255 else None
     return None
 
@@ -438,10 +447,14 @@ def _drop_unnamed_hover_lines(trace: dict) -> None:
     template = trace.get("hovertemplate")
     if not isinstance(template, str) or "=%{" not in template:
         return
-    parts = template.split("<br>")
+    # `<extra>...</extra>` closes the template; keep it (or Plotly draws the
+    # trace-name box back) and filter only the lines before it.
+    extra = _EXTRA_TAIL.search(template)
+    body, tail = (template[: extra.start()], extra.group(0)) if extra else (template, "")
+    parts = body.split("<br>")
     kept = [part for part in parts if not part.startswith("=%{")]
     if len(kept) != len(parts) and kept:
-        trace["hovertemplate"] = "<br>".join(kept)
+        trace["hovertemplate"] = "<br>".join(kept) + tail
 
 
 def _style_hover(traces: list[dict]) -> None:
@@ -460,6 +473,10 @@ def _style_hover(traces: list[dict]) -> None:
         colours = colour if isinstance(colour, list) else [colour]
         inks = [_hover_ink(_rgb_of(c)) for c in colours]  # type: ignore[arg-type]
         label = _sub(trace, "hoverlabel")
+        own = label.get("bgcolor")
+        if own is not None and own != colour:
+            # A label the figure chose for itself is kept, as on the client.
+            continue
         label["bgcolor"] = colour
         label["bordercolor"] = _HOVER_EDGE
         label["font"] = {
