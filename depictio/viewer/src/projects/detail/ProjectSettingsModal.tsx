@@ -42,6 +42,8 @@ interface ProjectSettingsModalProps {
   canPush?: boolean;
   /** The project's editing lock, shown in the Send section. */
   publishedLock?: PublishedLock | null;
+  /** Administrators alone can lock or unlock editing. */
+  isAdmin?: boolean;
   /** Reload the project page once a refresh has rebuilt its tables. */
   onReloadProject?: () => void;
   /** Open on this section rather than the one last visited. */
@@ -78,6 +80,7 @@ const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
   dataCollections,
   canPush = false,
   publishedLock,
+  isAdmin = false,
   onReloadProject,
   initialSection,
 }) => {
@@ -168,6 +171,8 @@ const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
                 projectName={projectName}
                 canPush={canPush}
                 lock={publishedLock}
+                isAdmin={isAdmin}
+                onLockChanged={onReloadProject}
               />
             ),
           },

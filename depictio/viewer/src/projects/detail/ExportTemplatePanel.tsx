@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Alert, Stack, Text, Textarea, TextInput } from '@mantine/core';
+import { Alert, Group, Stack, Text, Textarea, TextInput } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import { exportProjectTemplate } from 'depictio-react-core';
@@ -95,7 +95,7 @@ const ExportTemplatePanel: React.FC<ExportTemplatePanelProps> = ({
   };
 
   return (
-    <Stack gap="md" data-testid="export-template-panel">
+    <Stack gap="lg" data-testid="export-template-panel">
       <Text size="sm" c="dimmed">
         Package this project&apos;s configuration and dashboards as a template bundle (.zip),
         so the same layout can be built again on other data.
@@ -158,16 +158,19 @@ const ExportTemplatePanel: React.FC<ExportTemplatePanelProps> = ({
           server&apos;s depictio/projects/ folder.
         </Alert>
       )}
-      <Stack gap={6} align="flex-end">
+      <Stack gap={6}>
+        <Group>
         <GatedButton
+          size="sm"
           data-testid="export-template-submit"
-          leftSection={<Icon icon="mdi:package-down" width={16} />}
+          leftSection={<Icon icon="mdi:package-down" width={14} />}
           onClick={handleExport}
           loading={submitting}
           reason={reason}
         >
           Create a template
         </GatedButton>
+        </Group>
         <DisabledReason reason={reason} />
       </Stack>
     </Stack>
