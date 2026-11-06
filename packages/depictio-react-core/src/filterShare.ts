@@ -124,6 +124,9 @@ function encodeCompactEntry(f: InteractiveFilter): string | null {
   if (f.source !== undefined || f.filter_expr != null) return null;
   const meta = f.metadata ?? {};
   if (meta.selection_column != null || meta.filter_expr != null) return null;
+  // A TextInput's case / match options ride in the metadata, which the compact
+  // grammar has no field for: the opaque form keeps them.
+  if (meta.case_sensitive != null || meta.match_mode != null) return null;
   const column = f.column_name ?? meta.column_name ?? '';
   const componentType = f.interactive_component_type ?? meta.interactive_component_type ?? '';
   // A single field per concept: if top-level and metadata disagree, the entry

@@ -576,6 +576,13 @@
   max-width: 360px;
 }
 
+/* The search box of a TextInput filter: as wide as a slider, no wider. */
+.depictio-strip-text {
+  flex: 1 1 auto;
+  min-width: 140px;
+  max-width: 360px;
+}
+
 /* Half a thumb of room at each end, so a thumb resting on an end stays inside
    the bar's clip when the slider starts a row (always, on a phone). */
 .depictio-filter-strip__item[data-kind='range'] .depictio-filter-strip__control,
@@ -690,6 +697,7 @@
   }
 
   .depictio-strip-slider,
+  .depictio-strip-text,
   .depictio-strip-picker {
     max-width: none;
   }

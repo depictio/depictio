@@ -1695,8 +1695,18 @@ class DashboardDataLite(BaseModel):
                     lite_comp["option_cards"] = _option_cards_payload(comp["option_cards"])
                 if comp.get("order_by"):
                     lite_comp["order_by"] = comp["order_by"]
+                # TextInput options, written only when set so other types and a
+                # default TextInput export no extra key.
+                if comp.get("placeholder"):
+                    lite_comp["placeholder"] = comp["placeholder"]
+                if comp.get("case_sensitive"):
+                    lite_comp["case_sensitive"] = True
+                if comp.get("match_mode") and comp["match_mode"] != "regex":
+                    lite_comp["match_mode"] = comp["match_mode"]
                 if comp.get("always_selected"):
                     lite_comp["always_selected"] = True
+                    if comp.get("multiple"):
+                        lite_comp["multiple"] = True
                     if comp.get("default_by"):
                         lite_comp["default_by"] = comp["default_by"]
                         if comp.get("default_order") == "asc":
@@ -2201,8 +2211,17 @@ class DashboardDataLite(BaseModel):
                     full_comp["option_cards"] = _option_cards_payload(comp_dict["option_cards"])
                 if comp_dict.get("order_by"):
                     full_comp["order_by"] = comp_dict["order_by"]
+                # TextInput options, stored only when set (see the export mirror).
+                if comp_dict.get("placeholder"):
+                    full_comp["placeholder"] = comp_dict["placeholder"]
+                if comp_dict.get("case_sensitive"):
+                    full_comp["case_sensitive"] = True
+                if comp_dict.get("match_mode") and comp_dict["match_mode"] != "regex":
+                    full_comp["match_mode"] = comp_dict["match_mode"]
                 if comp_dict.get("always_selected"):
                     full_comp["always_selected"] = True
+                    if comp_dict.get("multiple"):
+                        full_comp["multiple"] = True
                     if comp_dict.get("default_by"):
                         full_comp["default_by"] = comp_dict["default_by"]
                         if comp_dict.get("default_order") == "asc":

@@ -24,6 +24,7 @@ const TYPE_LABELS: Record<string, string> = {
   Checkbox: 'Filter',
   Switch: 'Filter',
   Timeline: 'Timeline',
+  TextInput: 'Search',
 };
 
 /** ``{Type} on {column}`` in one consistent shape. Exported so the builder

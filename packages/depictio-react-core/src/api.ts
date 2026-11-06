@@ -524,10 +524,20 @@ export interface StoredMetadata {
   default_state?: { default_value?: unknown; default_range?: unknown; options?: unknown[] };
   /** Slider only: comparison with the value (gte when absent). */
   slider_mode?: string;
+  /** TextInput only: hint shown in the empty box. */
+  placeholder?: string;
+  /** TextInput only: match letter case exactly (off when absent). */
+  case_sensitive?: boolean;
+  /** TextInput only: `regex` (default) reads the text as a regular expression,
+   *  `contains` as literal text. */
+  match_mode?: 'regex' | 'contains';
   /** Select only: the filter always holds one value, the first option of its
    *  list when empty, and cannot be cleared (see
    *  `components/interactive/alwaysSelected.ts`). */
   always_selected?: boolean;
+  /** `always_selected` only: the filter may hold several values, never none (it still
+   *  starts on the first option and takes it back when emptied). */
+  multiple?: boolean;
   /** `always_selected` only: a numeric column of the same collection that ranks
    *  the options, so the filter starts on the one with the largest value of it
    *  (`default_order` "asc": the smallest) rather than the first of the list. */
@@ -1321,6 +1331,71 @@ async function fetchFilterOptions(
   return res.json();
 }
 
+/** What a TextInput pattern catches: see `POST /dashboards/text_filter_matches`. */
+export interface TextFilterMatchesResult {
+  column: string;
+  /** Distinct values of the column in the whole collection. */
+  total: number;
+  /** Of those, the ones the pattern keeps. */
+  matching: number;
+  /** The first of them, sorted; `truncated` says there are more. */
+  values: string[];
+  truncated: boolean;
+  /** The pattern does not compile server side: nothing was filtered. */
+  invalid: boolean;
+}
+
+export async function fetchTextFilterMatches(
+  dashboardId: string,
+  request: {
+    dc_id: string;
+    column: string;
+    value: string;
+    case_sensitive?: boolean;
+    match_mode?: string;
+    filter_expr?: string | null;
+    limit?: number;
+  } & DataPinFields,
+  signal?: AbortSignal,
+): Promise<TextFilterMatchesResult> {
+  const res = await authFetch(`${API_BASE}/dashboards/text_filter_matches/${dashboardId}`, {
+    method: 'POST',
+    body: JSON.stringify(request),
+    signal,
+  });
+  if (!res.ok) await throwRenderError(res, 'Failed to read the text filter matches', { ...request });
+  return res.json();
+}
+
+/** Selection groups pointed at one data collection (`POST /resolve_groups`). */
+export interface ResolvedGroupsResult {
+  /** The groups that reach the collection, rewritten to its column and values. */
+  groups: Array<{
+    name: string;
+    column_name: string;
+    values: string[];
+    color: string;
+    dc_id?: string;
+  }>;
+  /** One verdict per group sent, reached or not. */
+  status: Array<{ name: string; status: string; applied: boolean; matched_values: number }>;
+}
+
+export async function fetchResolvedGroups(
+  dashboardId: string,
+  dcId: string,
+  groups: Array<{ name: string; column_name: string; values: string[]; color: string; dc_id?: string }>,
+  signal?: AbortSignal,
+): Promise<ResolvedGroupsResult> {
+  const res = await authFetch(`${API_BASE}/dashboards/resolve_groups/${dashboardId}`, {
+    method: 'POST',
+    body: JSON.stringify({ dc_id: dcId, groups }),
+    signal,
+  });
+  if (!res.ok) throw new Error(`Failed to resolve the groups: ${res.status}`);
+  return res.json();
+}
+
 /** `fetchUniqueValues` at a data version (see `fetchFilterOptions`). */
 export async function fetchUniqueValuesAt(
   dashboardId: string,
@@ -1494,6 +1569,10 @@ export interface InteractiveFilter {
     filter_expr?: string;
     /** Slider comparison (gte, gt, lte, lt, eq, ne); the server defaults to gte. */
     slider_mode?: string;
+    /** TextInput options, present only when they differ from the default
+     *  (case-insensitive regex); the server reads them with the value. */
+    case_sensitive?: boolean;
+    match_mode?: string;
   };
 }
 

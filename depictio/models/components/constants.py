@@ -73,8 +73,11 @@ INTERACTIVE_COMPATIBILITY: dict[str, list[str]] = {
     "datetime": ["DateRangePicker", "Timeline"],
     "timedelta": [],  # No interactive component supported for timedelta
     "category": ["Select", "MultiSelect", "SegmentedControl"],
-    "object": ["Select", "MultiSelect", "SegmentedControl"],
+    "object": ["Select", "MultiSelect", "SegmentedControl", "TextInput"],
 }
+
+# Match modes of a TextInput: a regular expression (default) or literal text.
+TEXT_MATCH_MODES: tuple[str, ...] = ("regex", "contains")
 
 # ---------------------------------------------------------------------------
 # Interactive component placement options

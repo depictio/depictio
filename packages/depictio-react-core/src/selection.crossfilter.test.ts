@@ -125,3 +125,24 @@ describe('mergeFiltersBySource: a new entity drops the residue pick on the old o
     expect(filters.map((f) => f.index).sort()).toEqual(['mol', 'mol::res', 'side-engine']);
   });
 });
+
+describe('text pattern on the selection column', () => {
+  const column = advancedVizSelectionColumn(scatter);
+  const pattern: InteractiveFilter = {
+    index: 'pattern-entity',
+    value: 'GGG$',
+    column_name: 'entity',
+    interactive_component_type: 'TextInput',
+    metadata: { dc_id: 'dc_scores', column_name: 'entity', interactive_component_type: 'TextInput' },
+  };
+
+  it('still narrows a tile that selects on that column', () => {
+    const picked = sidebar('entity', ['a']);
+    const kept = filtersForSelector([pattern, picked], 'sc', 'scatter_selection', column);
+    expect(kept).toEqual([pattern]);
+  });
+
+  it('is not read as a picked value', () => {
+    expect([...valuesOnColumn([pattern, sidebar('entity', ['a'])], 'entity')]).toEqual(['a']);
+  });
+});

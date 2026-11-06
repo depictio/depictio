@@ -726,7 +726,18 @@ export function filtersForSelector(
   selectionColumn: string | null | undefined,
 ): InteractiveFilter[] {
   const others = filtersExcludingOwn(filters, componentIndex, source);
-  return selectionColumn ? others.filter((f) => filterColumn(f) !== selectionColumn) : others;
+  return selectionColumn
+    ? others.filter((f) => isTextPatternFilter(f) || filterColumn(f) !== selectionColumn)
+    : others;
+}
+
+/** A text pattern (the `TextInput` control) names no identity: it narrows the
+ *  rows by what they look like. A selector tile therefore keeps it as a filter
+ *  even on its own selection column, and never reads it as a picked value
+ *  (see `valuesOnColumn`): a pattern typed on a guide column narrows a scatter
+ *  that selects guides, where a picked guide would only be marked on it. */
+export function isTextPatternFilter(f: InteractiveFilter): boolean {
+  return (f.interactive_component_type ?? f.metadata?.interactive_component_type) === 'TextInput';
 }
 
 /**
@@ -741,7 +752,7 @@ export function valuesOnColumn(
   const out = new Set<string>();
   if (!column) return out;
   for (const f of filters) {
-    if (filterColumn(f) !== column) continue;
+    if (filterColumn(f) !== column || isTextPatternFilter(f)) continue;
     if (exclude && f.index === exclude.index && f.source === exclude.source) continue;
     const values = Array.isArray(f.value) ? f.value : [f.value];
     for (const x of values) if (x != null && x !== '') out.add(String(x));

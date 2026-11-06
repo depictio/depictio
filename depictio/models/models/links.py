@@ -241,6 +241,18 @@ class DCLink(BaseModel):
         return self
 
 
+class TextMatchSpec(BaseModel):
+    """How a ``TextInput`` pattern is matched (mirrors the component's own options)."""
+
+    case_sensitive: bool = Field(default=False, description="Match letter case exactly")
+    match_mode: Literal["regex", "contains"] = Field(
+        default="regex",
+        description="regex: the pattern is a regular expression; contains: literal text",
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class LinkResolutionRequest(BaseModel):
     """Request to resolve filtered values via a link.
 
@@ -294,6 +306,16 @@ class LinkResolutionRequest(BaseModel):
             "values. The rows inside the range are translated to the link's join column "
             "before resolving, so a position or q-value slider reaches the linked "
             "collection as the ids it selects, not as two ids that do not exist."
+        ),
+    )
+
+    text_match: TextMatchSpec | None = Field(
+        default=None,
+        description=(
+            "filter_values is the single pattern of a TextInput on source_column, to be "
+            "matched against that column rather than compared to it. The rows whose text "
+            "matches are translated to the link's join column before resolving, so a "
+            "sequence pattern reaches the linked collection as the ids it selects."
         ),
     )
 
