@@ -519,7 +519,7 @@ main_dashboard:
     interactive_component_type: TextInput
     column_name: '{GROUP_COL}'
     column_type: object
-    placeholder: 'e.g. ^ctrl or _rep1$'
+    placeholder: 'e.g. ^ctrl|_rep1$'
     display:
       icon_name: mdi:magnify
       custom_color: violet
@@ -1419,7 +1419,7 @@ tabs:
     interactive_component_type: TextInput
     column_name: guide
     column_type: object
-    placeholder: 'e.g. ^CCA or GG$'
+    placeholder: 'e.g. ^CCA|GG$'
     display:
       icon_name: mdi:magnify
       custom_color: violet
@@ -1664,7 +1664,7 @@ tabs:
     interactive_component_type: TextInput
     column_name: guide
     column_type: object
-    placeholder: 'e.g. ^CCA or GG$'
+    placeholder: 'e.g. ^CCA|GG$'
     display:
       icon_name: mdi:magnify
       custom_color: violet
