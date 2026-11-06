@@ -83,7 +83,7 @@ import IngestionReportPanel from './IngestionReportPanel';
 import ProjectIngestionHistoryPanel from './ProjectIngestionHistoryPanel';
 import ProjectIngestionTrigger from './ProjectIngestionTrigger';
 import { DeltaVersionHistory } from './DeltaVersionHistory';
-import ProjectSettingsModal from './ProjectSettingsModal';
+import ProjectSettingsModal, { type ProjectSettingsSectionKey } from './ProjectSettingsModal';
 import { parseTemplate, TemplateChip, TemplateRevisionBadge, templateDocsUrl } from '../template';
 import {
   DcTypeBadges,
@@ -103,8 +103,6 @@ import { usePageTitle } from '../../branding';
 import { UnrecognisedFilesPanel } from './UnrecognisedFilesPanel';
 import { ProvenanceBadge } from './ProvenanceBadge';
 import { PublishedLockBadge } from './PublishedLockBadge';
-import { ProjectMigrateButton } from './ProjectMigrateButton';
-import { ProjectPublications } from './ProjectPublications';
 import { ProjectDashboardsPanel } from './ProjectDashboardsPanel';
 import { ProjectPart } from './ProjectPart';
 
@@ -346,6 +344,23 @@ const ProjectDetailApp: React.FC = () => {
   const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(null);
   const [createDcOpened, setCreateDcOpened] = useState(false);
   const [settingsOpened, setSettingsOpened] = useState(false);
+  // `?settings=send` opens the project settings on that section: the project
+  // list's menu links here instead of carrying a dialog of its own.
+  const [settingsSection, setSettingsSection] = useState<ProjectSettingsSectionKey | undefined>();
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const wanted = params.get('settings');
+    if (wanted !== 'send') return;
+    setSettingsSection('send');
+    setSettingsOpened(true);
+    params.delete('settings');
+    const rest = params.toString();
+    window.history.replaceState(
+      window.history.state,
+      '',
+      `${window.location.pathname}${rest ? `?${rest}` : ''}${window.location.hash}`,
+    );
+  }, []);
   /** Cross-DC links for this project. Fetched alongside the project doc and
    *  refreshed when the user creates / edits / deletes a link from the
    *  Links section. */
@@ -558,7 +573,6 @@ const ProjectDetailApp: React.FC = () => {
                   }
                 />
               )}
-              {projectId && <ProjectPublications projectId={projectId} canPush={canPushProject} />}
               <Box ref={dcViewerRef}>
                 {selectedDc && (
                   <DataCollectionViewer
@@ -729,6 +743,10 @@ const ProjectDetailApp: React.FC = () => {
           canMutate={canMutate}
           publicModeReason={publicModeReason}
           dataCollections={allDataCollections}
+          canPush={canPushProject}
+          publishedLock={project?.published_lock}
+          isAdmin={!!user?.is_admin}
+          initialSection={settingsSection}
           onReloadProject={refresh}
         />
       )}
@@ -784,19 +802,6 @@ const ProjectDetailApp: React.FC = () => {
     </>
   );
 
-  // Migrating to another instance sits in the page head beside the other
-  // project actions. Locking editing lives on the Permissions page, next to
-  // visibility: one says who may view, the other whether anyone may edit.
-  const migrateButton = (inGlass: boolean) =>
-    project && projectId ? (
-      <ProjectMigrateButton
-        projectId={projectId}
-        projectName={project.name}
-        canPush={canPushProject}
-        glass={inGlass}
-      />
-    ) : null;
-
   if (glass) {
     const name = project?.name || 'Project';
     return (
@@ -827,7 +832,6 @@ const ProjectDetailApp: React.FC = () => {
               >
                 Permissions
               </Button>
-              {migrateButton(true)}
             </Group>
           }
         >
@@ -904,7 +908,6 @@ const ProjectDetailApp: React.FC = () => {
             >
               Permissions
             </Button>
-            {migrateButton(false)}
             <Button
               component="a"
               href="/projects"

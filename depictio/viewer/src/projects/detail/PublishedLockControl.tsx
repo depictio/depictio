@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Button, Group, Modal, Stack, Text, TextInput } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { lockProject, unlockProject } from 'depictio-react-core';
+import { Z_LAYERS, lockProject, unlockProject } from 'depictio-react-core';
 
 /** Confirmation for the admin-only Lock / Unlock of a project's editing.
  *  Opened from the Editing row of the Permissions page. */
@@ -49,6 +49,7 @@ export const PublishedLockModal: React.FC<{
       onClose={close}
       title={locked ? 'Unlock editing' : 'Lock editing'}
       centered
+      zIndex={Z_LAYERS.nestedOverlay}
     >
       <Stack gap="sm">
         <Text size="sm">
@@ -65,7 +66,7 @@ export const PublishedLockModal: React.FC<{
           <Button variant="default" onClick={close}>
             Cancel
           </Button>
-          <Button color={locked ? 'orange' : 'blue'} loading={busy} onClick={confirm}>
+          <Button color={locked ? 'orange' : undefined} loading={busy} onClick={confirm}>
             {locked ? 'Unlock editing' : 'Lock editing'}
           </Button>
         </Group>

@@ -306,6 +306,9 @@ EXEMPT: dict[tuple[str, str], str] = {
     ),
     ("migrate_endpoints.requests_routes", "reject_request"): "writes the request record only",
     ("migrate_endpoints.requests_routes", "revalidate_request"): "writes the request record only",
+    ("migrate_endpoints.requests_routes", "regenerate_thumbnails"): (
+        "queues screenshots of imported dashboards: writes thumbnail PNGs, no project content"
+    ),
     ("migrate_endpoints.push_routes", "start_push"): (
         "reads the project into a bundle; a published project may be pushed on"
     ),

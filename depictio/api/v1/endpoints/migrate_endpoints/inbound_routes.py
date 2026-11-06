@@ -428,6 +428,7 @@ async def inbound_create_request(
             if invite
             else source.name
         ),
+        source_url=report.source_url,
         source_depictio_version=report.source_depictio_version,
         bundle_format_version=report.bundle_format_version,
         requester=MigrationRequester(

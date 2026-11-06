@@ -53,6 +53,7 @@ def _summary(doc: dict[str, Any]) -> dict[str, Any]:
         "status": doc.get("status"),
         "source_name": doc.get("source_name"),
         "source_instance": doc.get("source_instance"),
+        "source_url": doc.get("source_url"),
         "credential_type": doc.get("credential_type", "pairing_key"),
         "invite_id": doc.get("invite_id"),
         "retryable": bool(doc.get("retryable")),
@@ -85,6 +86,50 @@ async def list_requests(
     return {"requests": [_summary(d) for d in docs]}
 
 
+def _enrich_report(report: dict[str, Any], doc: dict[str, Any]) -> dict[str, Any]:
+    """Give a report the dashboards and collections an admin recognises them by.
+
+    Reports computed from this version on carry both. An older request does
+    not: once imported, read them from the project as it now stands here.
+    """
+    if report.get("dashboards") or report.get("data_collections"):
+        return report
+    project_id = (doc.get("result") or {}).get("project_id") or doc.get("project_id")
+    if doc.get("status") != "imported" or not project_id:
+        return report
+    from depictio.api.v1.services import project_bundle
+
+    db = _db()
+    ids = [
+        ObjectId(i)
+        for i in {
+            *(report.get("dashboards_added") or []),
+            *(report.get("dashboards_replaced") or []),
+        }
+        if ObjectId.is_valid(i)
+    ]
+    dashboards = list(db.dashboards_collection.find({"_id": {"$in": ids}})) if ids else []
+    project = None
+    if ObjectId.is_valid(str(project_id)):
+        project = db.projects_collection.find_one({"_id": ObjectId(str(project_id))})
+    return {
+        **report,
+        "dashboards": project_bundle.dashboard_summaries(dashboards),
+        "data_collections": project_bundle.data_collection_summaries(project or {}),
+    }
+
+
+def _invite_facts(doc: dict[str, Any]) -> dict[str, Any]:
+    """The note and code hint of the invite behind a request, never the code."""
+    invite_id = doc.get("invite_id")
+    if not invite_id or not ObjectId.is_valid(str(invite_id)):
+        return {}
+    invite = _db().migration_invites_collection.find_one({"_id": ObjectId(str(invite_id))})
+    if not invite:
+        return {}
+    return {"invite_note": invite.get("note"), "invite_code_hint": invite.get("code_hint")}
+
+
 @requests_router.get("/{request_id}")
 async def get_request(request_id: str, current_user: User = Depends(get_current_user)):
     """One request in full, with its report recomputed while it is still pending."""
@@ -99,7 +144,8 @@ async def get_request(request_id: str, current_user: User = Depends(get_current_
         except migration_import.ImportFailed as exc:
             report = {**report, "errors": [*(report.get("errors") or []), str(exc)]}
     body = MigrationRequest.model_validate(doc).model_dump()
-    body["report"] = report
+    body["report"] = _enrich_report(report, doc)
+    body.update(_invite_facts(doc))
     body["requester_has_account"] = (
         migration_import.find_user_by_email((doc.get("requester") or {}).get("email")) is not None
     )
@@ -226,3 +272,40 @@ async def retry_request(
         migration_import.run_migration_import, str(claimed["_id"]), approver, lock, make_public
     )
     return {"id": str(claimed["_id"]), "status": "importing"}
+
+
+@requests_router.post("/{request_id}/thumbnails", status_code=202)
+async def regenerate_thumbnails(request_id: str, current_user: User = Depends(get_current_user)):
+    """Queue new thumbnails for the dashboards an imported request brought in.
+
+    A bundle carries no thumbnails, so an imported dashboard shows none until
+    something captures it; this asks for that, once, by hand.
+    """
+    _require_admin(current_user)
+    doc = _load(request_id)
+    if doc.get("status") != "imported":
+        raise HTTPException(status_code=409, detail="Only an imported request has dashboards here")
+    if not settings.performance.screenshots_enabled:
+        raise HTTPException(status_code=503, detail="Screenshots are disabled on this instance")
+    report = doc.get("report") or {}
+    refs = {*(report.get("dashboards_added") or []), *(report.get("dashboards_replaced") or [])}
+    db = _db()
+    dashboard_ids = [
+        str(d["dashboard_id"])
+        for d in db.dashboards_collection.find(
+            {"_id": {"$in": [ObjectId(i) for i in refs if ObjectId.is_valid(i)]}},
+            {"dashboard_id": 1},
+        )
+        if d.get("dashboard_id")
+    ]
+    from depictio.api.celery_app import generate_dashboard_screenshot_dual
+
+    user_id = str(current_user.id)
+    queued = 0
+    for dashboard_id in dashboard_ids:
+        try:
+            generate_dashboard_screenshot_dual.delay(dashboard_id, user_id, force=True)
+            queued += 1
+        except Exception:  # noqa: BLE001 — a broker outage must not 500 the page
+            continue
+    return {"id": str(doc["_id"]), "queued": queued, "dashboards": len(dashboard_ids)}

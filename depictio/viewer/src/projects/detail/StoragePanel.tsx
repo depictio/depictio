@@ -355,11 +355,11 @@ const StorageForm: React.FC<{
         </ErrorAlert>
       )}
       <Group justify="flex-end" gap="xs">
-        <Button variant="default" size="xs" onClick={onCancel} disabled={saving}>
+        <Button variant="default" size="sm" onClick={onCancel} disabled={saving}>
           Cancel
         </Button>
         <Button
-          size="xs"
+          size="sm"
           data-testid="storage-save-button"
           leftSection={<Icon icon="mdi:content-save-outline" width={14} />}
           onClick={handleSave}
@@ -543,7 +543,7 @@ const StoragePanel: React.FC<StoragePanelProps> = ({ projectId, canManage }) => 
         <Stack gap={6}>
           <Group gap="xs">
             <GatedButton
-              size="xs"
+              size="sm"
               variant="light"
               data-testid="storage-test-button"
               leftSection={<Icon icon="mdi:connection" width={14} />}
@@ -554,7 +554,7 @@ const StoragePanel: React.FC<StoragePanelProps> = ({ projectId, canManage }) => 
               Test connection
             </GatedButton>
             <GatedButton
-              size="xs"
+              size="sm"
               variant="light"
               data-testid="storage-edit-button"
               leftSection={<Icon icon="mdi:pencil" width={14} />}
@@ -568,7 +568,7 @@ const StoragePanel: React.FC<StoragePanelProps> = ({ projectId, canManage }) => 
               Edit
             </GatedButton>
             <GatedButton
-              size="xs"
+              size="sm"
               variant="light"
               color="red"
               data-testid="storage-remove-button"
@@ -600,14 +600,14 @@ const StoragePanel: React.FC<StoragePanelProps> = ({ projectId, canManage }) => 
               <Group justify="flex-end" gap="xs">
                 <Button
                   variant="default"
-                  size="xs"
+                  size="sm"
                   onClick={() => setConfirmingRemove(false)}
                   disabled={removing}
                 >
                   Cancel
                 </Button>
                 <Button
-                  size="xs"
+                  size="sm"
                   color="red"
                   data-testid="storage-remove-confirm-button"
                   leftSection={<Icon icon="mdi:delete-outline" width={14} />}
@@ -639,7 +639,7 @@ const StoragePanel: React.FC<StoragePanelProps> = ({ projectId, canManage }) => 
         <Stack gap={6}>
           <Group>
             <GatedButton
-              size="xs"
+              size="sm"
               data-testid="storage-configure-button"
               leftSection={<Icon icon="mdi:plus" width={14} />}
               onClick={() => setEditing(true)}

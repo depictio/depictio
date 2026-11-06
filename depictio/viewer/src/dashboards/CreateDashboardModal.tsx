@@ -204,6 +204,7 @@ const CreateDashboardModal: React.FC<CreateDashboardModalProps> = ({
     <Modal
       opened={opened}
       onClose={onClose}
+      className="depictio-form-modal"
       withCloseButton
       centered
       closeOnClickOutside={false}
@@ -233,8 +234,9 @@ const CreateDashboardModal: React.FC<CreateDashboardModalProps> = ({
           onChange={(v) => setTab((v as 'create' | 'import') ?? 'create')}
           variant="pills"
           color={accent.tertiary}
+          className="depictio-modal-tabs"
         >
-          <Tabs.List justify="center" style={{ gap: 12 }}>
+          <Tabs.List justify="center">
             <Tabs.Tab
               value="create"
               leftSection={<Icon icon="mdi:plus" width={18} />}

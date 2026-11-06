@@ -351,7 +351,7 @@ const ManifestRefreshPanel: React.FC<ManifestRefreshPanelProps> = ({
       <Stack gap={6}>
         <Group gap="xs">
           <GatedButton
-            size="xs"
+            size="sm"
             data-testid="manifest-refresh-button"
             leftSection={<Icon icon="mdi:refresh" width={14} />}
             onClick={refresh.start}
@@ -362,7 +362,7 @@ const ManifestRefreshPanel: React.FC<ManifestRefreshPanelProps> = ({
           </GatedButton>
           {isRefreshEnded(state) && report && onReloadProject && (
             <Button
-              size="xs"
+              size="sm"
               variant="subtle"
               leftSection={<Icon icon="mdi:reload" width={14} />}
               onClick={onReloadProject}

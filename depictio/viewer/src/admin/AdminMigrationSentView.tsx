@@ -68,7 +68,7 @@ const AdminMigrationSentView: React.FC = () => {
       ) : pushes.length === 0 ? (
         <Center mih={120}>
           <Text c="dimmed" size="sm" data-testid="sent-empty">
-            Nothing sent yet. Use Publish to… on a project.
+            Nothing sent yet. Open a project's settings and choose Send.
           </Text>
         </Center>
       ) : (

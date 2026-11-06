@@ -2,16 +2,17 @@ import React, { useEffect, useState } from 'react';
 import {
   Alert,
   Button,
+  Collapse,
   CopyButton,
   Group,
   Loader,
-  Modal,
   SegmentedControl,
   Stack,
   Switch,
   Text,
   TextInput,
   Tooltip,
+  UnstyledButton,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
@@ -60,40 +61,33 @@ const CopyRow: React.FC<{ label: string; value: string; testId: string }> = ({
   />
 );
 
-export interface ReceiveProjectModalProps {
-  opened: boolean;
+export interface ReceivePanelProps {
+  /** Close the dialog that holds the panel. */
   onClose: () => void;
-  /** Called after an invite was created, so a listing behind the modal refreshes. */
+  /** Called after an invite was created, so a listing behind the dialog refreshes. */
   onCreated?: (invite: MigrationInvite) => void;
 }
 
 /**
  * Admin of the receiving instance: issue an invite code. The owner of a project
- * on another instance pastes this instance's URL and the code into "Publish
- * to…"; the import starts right away, with no review. The code is shown once.
+ * on another instance pastes this instance's URL and the code into "Send to
+ * another instance": the import starts right away, with no review. The code
+ * is shown once and lives in this panel's state only, so it goes with the
+ * dialog. Defaults fit most cases, so the three settings (lifetime, read-only,
+ * note) sit in a folded Options block.
  */
-const ReceiveProjectModal: React.FC<ReceiveProjectModalProps> = ({
-  opened,
-  onClose,
-  onCreated,
-}) => {
+export const ReceivePanel: React.FC<ReceivePanelProps> = ({ onClose, onCreated }) => {
   const [loading, setLoading] = useState(false);
   const [inboundEnabled, setInboundEnabled] = useState(true);
   const [lock, setLock] = useState(true);
   const [validity, setValidity] = useState('30');
   const [note, setNote] = useState('');
+  const [optionsOpen, setOptionsOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<(MigrationInvite & { code: string }) | null>(null);
 
   useEffect(() => {
-    if (!opened) {
-      // The code must not outlive the dialog.
-      setCreated(null);
-      setError(null);
-      setNote('');
-      return undefined;
-    }
     let live = true;
     setLoading(true);
     listMigrationInvites()
@@ -110,7 +104,7 @@ const ReceiveProjectModal: React.FC<ReceiveProjectModalProps> = ({
     return () => {
       live = false;
     };
-  }, [opened]);
+  }, []);
 
   const handleCreate = async () => {
     setCreating(true);
@@ -131,15 +125,7 @@ const ReceiveProjectModal: React.FC<ReceiveProjectModalProps> = ({
   };
 
   return (
-    <Modal
-      opened={opened}
-      onClose={onClose}
-      title="Receive a project"
-      centered
-      size="md"
-      data-testid="receive-project-modal"
-    >
-      <Stack gap="md">
+      <Stack gap="md" data-testid="receive-panel">
         {loading ? (
           <Group gap="xs">
             <Loader size="xs" />
@@ -155,8 +141,8 @@ const ReceiveProjectModal: React.FC<ReceiveProjectModalProps> = ({
         ) : created ? (
           <Stack gap="sm" data-testid="receive-created">
             <Text size="sm">
-              Send these two values to the owner of the project. In their project, they choose
-              Publish to… and paste both.
+              Send these two values to the owner of the project. In the project's settings,
+              under Send, they choose Send to another instance and paste both.
             </Text>
             <CopyRow
               label="Instance URL"
@@ -173,33 +159,62 @@ const ReceiveProjectModal: React.FC<ReceiveProjectModalProps> = ({
           </Stack>
         ) : (
           <>
-            <Switch
-              label="Lock editing on import"
-              description="The imported project is read-only, owners included, until an admin unlocks it."
-              checked={lock}
-              onChange={(e) => setLock(e.currentTarget.checked)}
-              data-testid="receive-lock"
-            />
-            <Stack gap={6}>
-              <Text size="sm" fw={500}>
-                Valid for
-              </Text>
-              <SegmentedControl
-                fullWidth
-                value={validity}
-                onChange={setValidity}
-                data={VALIDITY.map(({ value, label }) => ({ value, label }))}
-                data-testid="receive-validity"
-              />
-            </Stack>
-            <TextInput
-              label="Note"
-              description="Optional. Who this is for; shown in the list of invitations."
-              maxLength={200}
-              value={note}
-              onChange={(e) => setNote(e.currentTarget.value)}
-              data-testid="receive-note"
-            />
+            <Text size="sm">
+              Create a code so the owner of a project on another instance can send it here.
+              Nothing is imported until they use it.
+            </Text>
+            <Alert
+              color="gray"
+              variant="light"
+              icon={<Icon icon="mdi:information-outline" width={16} />}
+              data-testid="receive-summary"
+            >
+              The code works for {VALIDITY.find((v) => v.value === validity)?.label ?? validity}.
+              The imported project will be {lock ? 'read-only' : 'editable'} here.
+            </Alert>
+            <UnstyledButton
+              onClick={() => setOptionsOpen((o) => !o)}
+              aria-expanded={optionsOpen}
+              data-testid="receive-options-toggle"
+            >
+              <Group gap={6}>
+                <Icon icon={optionsOpen ? 'mdi:chevron-down' : 'mdi:chevron-right'} width={18} />
+                <Text size="sm" fw={600}>
+                  Options
+                </Text>
+              </Group>
+            </UnstyledButton>
+            <Collapse in={optionsOpen}>
+              <Stack gap="md" pl="md">
+                <Stack gap={6}>
+                  <Text size="sm" fw={500}>
+                    Code expires after
+                  </Text>
+                  <SegmentedControl
+                    fullWidth
+                    value={validity}
+                    onChange={setValidity}
+                    data={VALIDITY.map(({ value, label }) => ({ value, label }))}
+                    data-testid="receive-validity"
+                  />
+                </Stack>
+                <Switch
+                  label="Imported project is read-only"
+                  description="Nobody can edit it here, owners included, until an administrator unlocks it."
+                  checked={lock}
+                  onChange={(e) => setLock(e.currentTarget.checked)}
+                  data-testid="receive-lock"
+                />
+                <TextInput
+                  label="Note (optional)"
+                  description="Who this code is for. Shown in the list of invitations."
+                  maxLength={200}
+                  value={note}
+                  onChange={(e) => setNote(e.currentTarget.value)}
+                  data-testid="receive-note"
+                />
+              </Stack>
+            </Collapse>
           </>
         )}
         {error && (
@@ -224,8 +239,5 @@ const ReceiveProjectModal: React.FC<ReceiveProjectModalProps> = ({
           )}
         </Group>
       </Stack>
-    </Modal>
   );
 };
-
-export default ReceiveProjectModal;

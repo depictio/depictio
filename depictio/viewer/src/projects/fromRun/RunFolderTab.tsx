@@ -100,6 +100,8 @@ interface RunFolderTabProps {
   onCreateFromRun: (input: FromRunRequest, context: RunCreatedContext) => Promise<FromRunReport>;
   submitting: boolean;
   setSubmitting: (submitting: boolean) => void;
+  /** Leave the tab for the list of sources: the first step's Previous. */
+  onBack?: () => void;
 }
 
 const RunFolderTab: React.FC<RunFolderTabProps> = ({
@@ -113,6 +115,7 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
   onCreateFromRun,
   submitting,
   setSubmitting,
+  onBack,
 }) => {
   const accent = useBrandAccents();
   const [step, setStep] = useState(0);
@@ -710,11 +713,11 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
       <Group justify="space-between" align="flex-start" wrap="nowrap">
         <Button
           variant="default"
-          onClick={() => setStep((s) => Math.max(0, s - 1))}
-          disabled={step === 0 || submitting}
+          onClick={() => (step === 0 ? onBack?.() : setStep((s) => Math.max(0, s - 1)))}
+          disabled={(step === 0 && !onBack) || submitting}
           data-testid="run-previous"
         >
-          Previous
+          {step === 0 && onBack ? 'Back' : 'Previous'}
         </Button>
         <Stack gap={4} align="flex-end" style={{ minWidth: 0 }}>
           <GatedButton

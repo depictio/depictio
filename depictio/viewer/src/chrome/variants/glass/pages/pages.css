@@ -1045,6 +1045,33 @@ button.gp-status:focus-visible {
 :root[data-chrome='glass'] .gp-main .mantine-Table-td {
   font-variant-numeric: tabular-nums;
 }
+/* Row hover: a rounded, softer tint than the head's, eased in. The head used
+ * to touch the first row and hovering it painted the same well colour, so the
+ * two fused into one block; a transparent gap now separates them. */
+:root[data-chrome='glass'] .gp-main .mantine-Table-thead .mantine-Table-th {
+  border-bottom: 6px solid transparent;
+  background-clip: padding-box;
+}
+:root[data-chrome='glass'] .gp-main .mantine-Table-table {
+  --table-hover-color: transparent;
+}
+:root[data-chrome='glass'] .gp-main .mantine-Table-tr[data-hover] > .mantine-Table-td {
+  transition: background-color 140ms ease;
+}
+:root[data-chrome='glass'] .gp-main .mantine-Table-tr[data-hover]:hover > .mantine-Table-td {
+  background-color: color-mix(in srgb, var(--gl-well) 55%, transparent);
+}
+/* The sticky actions cell stays opaque, so it gets the tint already blended. */
+:root[data-chrome='glass'] .gp-main .mantine-Table-tr[data-hover]:hover > .mantine-Table-td.dc-actions-col {
+  background-color: color-mix(in srgb, var(--gl-well) 55%, var(--gl-surface));
+}
+:root[data-chrome='glass'] .gp-main .mantine-Table-tr[data-hover] > .mantine-Table-td:first-child {
+  border-radius: 10px 0 0 10px;
+}
+:root[data-chrome='glass'] .gp-main .mantine-Table-tr[data-hover] > .mantine-Table-td:last-child {
+  border-radius: 0 10px 10px 0;
+}
+
 :root[data-chrome='glass'] .gp-main .dc-list-table {
   padding: 8px;
 }

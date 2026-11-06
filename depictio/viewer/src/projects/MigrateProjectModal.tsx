@@ -11,12 +11,20 @@ import {
   SegmentedControl,
   Select,
   Stack,
+  Stepper,
   Text,
   Textarea,
+  ThemeIcon,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
-import { checkPush, getPush, getPushDestinations, startPush } from 'depictio-react-core';
+import {
+  Z_LAYERS,
+  checkPush,
+  getPush,
+  getPushDestinations,
+  startPush,
+} from 'depictio-react-core';
 import type {
   MigrationPush,
   MigrationTarget,
@@ -49,6 +57,31 @@ const Row: React.FC<{ label: string; children: React.ReactNode }> = ({ label, ch
     <Text size="sm" ta="right" component="div">
       {children}
     </Text>
+  </Group>
+);
+
+/** One line of the pre-flight summary: an icon, what it means, a detail. */
+const Fact: React.FC<{
+  icon: string;
+  color?: string;
+  title: string;
+  children?: React.ReactNode;
+  testId?: string;
+}> = ({ icon, color = 'gray', title, children, testId }) => (
+  <Group gap="sm" wrap="nowrap" align="flex-start" data-testid={testId}>
+    <ThemeIcon variant="light" color={color} size="lg" radius="md">
+      <Icon icon={icon} width={20} height={20} />
+    </ThemeIcon>
+    <Stack gap={0} style={{ minWidth: 0 }}>
+      <Text size="sm" fw={600}>
+        {title}
+      </Text>
+      {children && (
+        <Text size="sm" c="dimmed">
+          {children}
+        </Text>
+      )}
+    </Stack>
   </Group>
 );
 
@@ -302,28 +335,98 @@ const MigrateProjectModal: React.FC<MigrateProjectModalProps> = ({
     );
   };
 
-  const renderReport = (r: PushPreflightResult) => (
-    <Stack gap="xs" data-testid="migrate-preflight">
-      <Row label="Transfer mode">
-        {r.transfer_mode === 'server_side_copy' ? 'Server-side copy' : 'Inline upload'}
-      </Row>
-      <Row label="Size">{formatBytes(r.total_bytes)}</Row>
-      <Row label="Objects">{r.object_count}</Row>
+  const blocked = blockingErrors.length > 0 || foreign;
+  // One message for a blocked send: the reasons the API gives overlap.
+  const blockedText = foreign
+    ? invite
+      ? 'This project already exists there and was not brought by this code. Use the code that brought it.'
+      : 'A different project with this id already exists there.'
+    : blockingErrors[0];
+
+  const renderReport = (r: PushPreflightResult) =>
+    blocked ? (
+      <Alert
+        color="red"
+        variant="light"
+        icon={<Icon icon="mdi:alert-circle-outline" width={20} />}
+        title={`${targetName || 'The destination'} cannot receive this project`}
+        data-testid="migrate-errors"
+      >
+        {blockedText}
+      </Alert>
+    ) : (
+    <Stack gap="md" data-testid="migrate-preflight">
+      <Alert
+        color="green"
+        variant="light"
+        icon={<Icon icon="mdi:check-circle-outline" width={20} />}
+        title={`${targetName || 'The destination'} is ready`}
+      >
+        Nothing has been sent yet.
+      </Alert>
+
+      <Stack gap="sm">
+        <Text size="xs" tt="uppercase" fw={700} c="dimmed">
+          What will be sent
+        </Text>
+        <Fact icon="mdi:database-outline" title={r.object_count > 0 ? `${formatBytes(r.total_bytes)} in ${r.object_count} files` : 'The project settings only'}>
+          {r.object_count === 0
+            ? 'This project holds no data files yet.'
+            : r.transfer_mode === 'server_side_copy'
+              ? 'Copied from storage to storage, without going through this server.'
+              : 'Uploaded from this server to the destination.'}
+        </Fact>
+      </Stack>
+
+      {(invite || pre) && !foreign && (
+        <Stack gap="sm" data-testid="migrate-invite-info">
+          <Text size="xs" tt="uppercase" fw={700} c="dimmed">
+            What happens there
+          </Text>
+          <Fact
+            icon={invite ? 'mdi:flash-outline' : 'mdi:account-check-outline'}
+            color={invite ? 'green' : 'yellow'}
+            title={invite ? 'Imported right away' : 'Waits for an administrator'}
+          >
+            {invite
+              ? 'The code you pasted authorises the import: nobody has to approve it.'
+              : 'An administrator on the destination reviews the project before it is imported.'}
+          </Fact>
+          {invite && (
+            <Fact
+              icon={invite.lock_on_import ? 'mdi:lock-outline' : 'mdi:lock-open-variant-outline'}
+              color={invite.lock_on_import ? 'orange' : 'gray'}
+              title={invite.lock_on_import ? 'Read-only there' : 'Editable there'}
+            >
+              {invite.lock_on_import
+                ? 'Nobody can change the copy on the destination until an administrator there unlocks it.'
+                : 'People with access on the destination can change the copy.'}
+            </Fact>
+          )}
+          {invite && (
+            <Fact
+              icon={
+                invite.project_name && invite.project_id === projectId
+                  ? 'mdi:update'
+                  : 'mdi:plus-circle-outline'
+              }
+              title={
+                invite.project_name && invite.project_id === projectId
+                  ? 'Updates the copy it already has'
+                  : 'Creates the project there'
+              }
+            >
+              {invite.project_name && invite.project_id === projectId
+                ? 'This code already brought this project: this send becomes a new version of it.'
+                : 'This code is then tied to this project, and sends its later updates.'}
+            </Fact>
+          )}
+        </Stack>
+      )}
       {preflight?.in_flight && (
         <Alert color="yellow" variant="light" data-testid="migrate-in-flight">
-          A push of this project is already in progress. Wait for it to finish before
-          publishing again.
-        </Alert>
-      )}
-      {invite && !foreign && (
-        <Alert color="blue" variant="light" data-testid="migrate-invite-info">
-          Imported immediately on the destination, with no review;{' '}
-          {invite.lock_on_import
-            ? 'editing will be locked there.'
-            : 'editing will stay unlocked there.'}
-          {invite.project_name && invite.project_id === projectId
-            ? ' This code already brought this project: this push is an update.'
-            : ''}
+          A send of this project is already in progress. Wait for it to finish before
+          sending again.
         </Alert>
       )}
       {pre?.conflict === 're_push' && (
@@ -331,31 +434,9 @@ const MigrateProjectModal: React.FC<MigrateProjectModalProps> = ({
           This will become a new version on the target.
         </Alert>
       )}
-      {foreign && (
-        <Alert color="red" variant="light" data-testid="migrate-foreign">
-          {invite
-            ? 'This project is already on the destination, brought by another code. Only that code can send its updates.'
-            : 'A different project with this id already exists on the target. It cannot be overwritten from here.'}
-        </Alert>
-      )}
-      {pre?.existing_locked && (
-        <Alert color="gray" variant="light">
-          The existing copy on the target is published read-only; it stays so until an
-          administrator there decides otherwise.
-        </Alert>
-      )}
       {pre?.requester_has_account === false && (
         <Alert color="yellow" variant="light" data-testid="migrate-no-account">
           You have no account on the target yet: an admin will own it until you sign in there.
-        </Alert>
-      )}
-      {blockingErrors.length > 0 && (
-        <Alert color="red" variant="light" title="Cannot push" data-testid="migrate-errors">
-          {blockingErrors.map((e, i) => (
-            <Text key={i} size="sm">
-              {e}
-            </Text>
-          ))}
         </Alert>
       )}
       {(preflight?.warnings ?? []).length > 0 && (
@@ -368,18 +449,54 @@ const MigrateProjectModal: React.FC<MigrateProjectModalProps> = ({
         </Alert>
       )}
     </Stack>
-  );
+    );
 
   return (
     <Modal
       opened={opened}
       onClose={onClose}
-      title={`Publish ${projectName ? `"${projectName}" ` : 'project '}to another instance`}
+      title={`Send ${projectName ? `"${projectName}" ` : 'project '}to another instance`}
       centered
-      size="md"
+      size="lg"
+      className="depictio-form-modal"
+      // Opened from the project settings dialog, which sits at the overlay layer.
+      zIndex={Z_LAYERS.nestedOverlay}
       data-testid="migrate-project-modal"
     >
       <Stack gap="md">
+        <Text size="sm" c="dimmed">
+          Send a copy of this project, its data and its dashboards, to another Depictio
+          instance. Nothing leaves this instance until you press Send.
+        </Text>
+        <Stepper
+          active={push ? 3 : preflight ? 2 : 0}
+          size="sm"
+          iconSize={30}
+          allowNextStepsSelect={false}
+          data-testid="migrate-steps"
+        >
+          <Stepper.Step
+            label="Destination"
+            description="Where it goes"
+            icon={<Icon icon="mdi:link-variant" width={16} />}
+          />
+          <Stepper.Step
+            label="Check"
+            description="Can it receive?"
+            icon={<Icon icon="mdi:shield-check-outline" width={16} />}
+            color={preflight && blocked ? 'red' : undefined}
+            completedIcon={
+              preflight && blocked ? (
+                <Icon icon="mdi:close" width={16} />
+              ) : undefined
+            }
+          />
+          <Stepper.Step
+            label="Send"
+            description="Copy and import"
+            icon={<Icon icon="mdi:transfer-up" width={16} />}
+          />
+        </Stepper>
         {!push && (
           <>
             {hasTargets && adhocEnabled && (
@@ -396,7 +513,7 @@ const MigrateProjectModal: React.FC<MigrateProjectModalProps> = ({
             )}
             {destinations !== null && !hasTargets && !adhocEnabled && (
               <Alert color="yellow" variant="light" data-testid="migrate-no-destination">
-                No destination is available: no target is registered and publishing to a URL is
+                No destination is available: no target is registered and sending to a URL is
                 disabled on this instance.
               </Alert>
             )}
@@ -415,6 +532,7 @@ const MigrateProjectModal: React.FC<MigrateProjectModalProps> = ({
               <Stack gap="xs">
                 <Autocomplete
                   label="Destination URL"
+                  leftSection={<Icon icon="mdi:link-variant" width={16} />}
                   placeholder="https://depictio.example.org"
                   description={
                     (destinations?.domains.length ?? 0) > 0
@@ -429,7 +547,8 @@ const MigrateProjectModal: React.FC<MigrateProjectModalProps> = ({
                 />
                 <PasswordInput
                   label="Invite code"
-                  description="Issued by an administrator of the destination. Never stored here; keep it to publish this project's updates later."
+                  leftSection={<Icon icon="mdi:key-outline" width={16} />}
+                  description="Issued by an administrator of the destination. Never stored here; keep it to send this project's updates later."
                   placeholder="XXXX-XXXX-XXXX-XXXX-XXXX-XXXX"
                   value={code}
                   onChange={(e) => setCode(e.currentTarget.value)}
@@ -438,8 +557,9 @@ const MigrateProjectModal: React.FC<MigrateProjectModalProps> = ({
                 />
                 <Group justify="flex-end">
                   <Button
-                    size="xs"
+                    size="sm"
                     variant="default"
+                    leftSection={<Icon icon="mdi:shield-check-outline" width={16} />}
                     disabled={!destination || checking}
                     onClick={() => destination && void runCheck(destination, () => true)}
                     data-testid="migrate-check"
@@ -490,7 +610,7 @@ const MigrateProjectModal: React.FC<MigrateProjectModalProps> = ({
               leftSection={<Icon icon="mdi:transfer-up" width={16} />}
               data-testid="migrate-push-button"
             >
-              Publish
+              Send
             </Button>
           )}
         </Group>
