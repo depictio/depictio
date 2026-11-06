@@ -99,6 +99,26 @@ def dashboard_logo_key(dashboard_id: Any) -> str:
 # ---------------------------------------------------------------------------
 
 
+def image_base_prefix(location: str | None, bucket: str | None = None) -> str | None:
+    """Key prefix (trailing slash) of an image collection's ``s3_base_folder``.
+
+    Image files are uploaded to the folder the project names, not under the
+    collection's id. ``None`` when there is nothing to copy: not an S3 location,
+    another bucket (read in place), an escape attempt, or the bucket itself,
+    which would sweep in every other project's data. Without ``bucket`` any host
+    is accepted, for a bundle that names the source bucket in its documents.
+    """
+    if not location or not location.startswith("s3://"):
+        return None
+    host, _, key = location[len("s3://") :].partition("/")
+    if bucket is not None and host != bucket:
+        return None
+    key = key.strip("/")
+    if not key or ".." in key.split("/"):
+        return None
+    return key + "/"
+
+
 @dataclass
 class ProjectScope:
     """The ids a project owns: everything a bundle of it may touch."""
@@ -108,6 +128,8 @@ class ProjectScope:
     workflow_ids: list[ObjectId] = field(default_factory=list)
     # dc id -> config.type, for the S3 keys derived from the id.
     dc_types: dict[str, str | None] = field(default_factory=dict)
+    # Folders outside the id prefixes: an image collection's ``s3_base_folder``.
+    extra_prefixes: list[str] = field(default_factory=list)
 
     @property
     def dc_id_strs(self) -> set[str]:
@@ -120,6 +142,7 @@ class ProjectScope:
             prefixes.append(f"{dc}/")
             prefixes.append(f"phylogeny/{dc}/")
             prefixes.append(genomic_tracks_s3_prefix(dc))
+        prefixes.extend(self.extra_prefixes)
         return prefixes
 
     def owns_key(self, key: str) -> bool:
@@ -152,7 +175,14 @@ def resolve_project_scope(project_doc: dict[str, Any]) -> ProjectScope:
         if dc_id is None or dc_id in scope.dc_ids:
             return
         scope.dc_ids.append(dc_id)
-        scope.dc_types[str(dc_id)] = (dc.get("config") or {}).get("type")
+        config = dc.get("config") or {}
+        scope.dc_types[str(dc_id)] = config.get("type")
+        if config.get("type") == "image":
+            folder = image_base_prefix(
+                (config.get("dc_specific_properties") or {}).get("s3_base_folder")
+            )
+            if folder and folder not in scope.extra_prefixes:
+                scope.extra_prefixes.append(folder)
 
     for wf in project_doc.get("workflows") or []:
         if not isinstance(wf, dict):
@@ -1202,6 +1232,7 @@ __all__ = [
     "bundle_json_bytes",
     "collect_bundle_docs",
     "default_invalidate",
+    "image_base_prefix",
     "list_s3_objects",
     "manifest_from_s3_metadata",
     "normalize_s3_path",
