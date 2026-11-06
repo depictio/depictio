@@ -5682,6 +5682,8 @@ export interface MigrationRequestSummary {
   status: MigrationRequestStatus;
   source_name: string;
   source_instance: string | null;
+  /** The sender's public URL as its bundle states it (absent on older senders). */
+  source_url?: string | null;
   source_depictio_version: string | null;
   requester: { email: string | null; name: string | null };
   project_id: string;
@@ -5703,6 +5705,23 @@ export interface MigrationRequestSummary {
   error?: string | null;
 }
 
+export interface MigrationDashboardSummary {
+  id: string;
+  title: string | null;
+  icon: string | null;
+  icon_color: string | null;
+  /** Set on a child tab: the id of the dashboard it belongs to. */
+  parent_dashboard_id: string | null;
+}
+
+export interface MigrationDcSummary {
+  id: string | null;
+  tag: string | null;
+  type: string | null;
+  description: string | null;
+  workflow: string | null;
+}
+
 /** Full request document. `report` is a BundleReport dump recomputed against
  *  the current state; its inner shape is loosely typed on purpose. */
 export interface MigrationRequestDetail extends Omit<MigrationRequestSummary, 'requester'> {
@@ -5717,8 +5736,16 @@ export interface MigrationRequestDetail extends Omit<MigrationRequestSummary, 'r
     dashboards_removed?: unknown[];
     total_bytes?: number;
     object_count?: number;
+    /** The bundle's dashboards, as an admin recognises them. */
+    dashboards?: MigrationDashboardSummary[];
+    /** The project's data collections, as an admin recognises them. */
+    data_collections?: MigrationDcSummary[];
     [k: string]: unknown;
   } | null;
+  /** The note typed when the invite was issued (invite pushes only). */
+  invite_note?: string | null;
+  /** Last characters of the invite code, never the code. */
+  invite_code_hint?: string | null;
   requester_has_account: boolean;
   target_depictio_version: string | null;
   lock_imported_default: boolean;
@@ -5735,6 +5762,17 @@ export async function listMigrationRequests(status?: string): Promise<MigrationR
   if (!res.ok) await throwHttpDetailError(res, 'Failed to list migration requests');
   const body = (await res.json()) as { requests?: MigrationRequestSummary[] };
   return body.requests ?? [];
+}
+
+/** Queue new thumbnails for the dashboards an imported request brought in. */
+export async function regenerateMigrationThumbnails(
+  id: string,
+): Promise<{ queued: number; dashboards: number }> {
+  const res = await authFetch(`${MIGRATE_BASE}/requests/${encodeURIComponent(id)}/thumbnails`, {
+    method: 'POST',
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to queue thumbnails');
+  return res.json();
 }
 
 export async function getMigrationRequest(id: string): Promise<MigrationRequestDetail> {

@@ -205,6 +205,9 @@ class MigrationRequest(BaseModel):
     credential_type: InboundCredentialType = "pairing_key"
     invite_id: IdStr | None = None
     source_instance: str | None = None
+    #: The sender's public URL as its bundle states it (informational: the
+    #: target cannot verify it).
+    source_url: str | None = None
     source_depictio_version: str | None = None
     bundle_format_version: int | None = None
     requester: MigrationRequester = Field(default_factory=MigrationRequester)

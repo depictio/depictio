@@ -43,6 +43,7 @@ import { useCurrentUser } from '../hooks/useCurrentUser';
 import { useAuthMode } from '../auth/hooks/useAuthMode';
 import TourButton from '../walkthrough/TourButton';
 import { ReceiveProjectButton } from '../admin/ReceiveProjectButton';
+import { MigrationRequestsBanner } from './MigrationRequestsBanner';
 import { AppSidebar, LoadErrorCard } from '../chrome';
 import ProjectsList from './ProjectsList';
 import CreateProjectModal, {
@@ -254,6 +255,7 @@ const ProjectsApp: React.FC = () => {
 
   const body = (
     <>
+      <MigrationRequestsBanner />
       {loading ? (
         <Center mih={200}>
           <Loader />
