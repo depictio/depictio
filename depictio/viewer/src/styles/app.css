@@ -299,3 +299,37 @@ body.panel-transitioning .react-grid-layout {
   background-color: color-mix(in srgb, var(--mantine-color-body) 86%, transparent);
   backdrop-filter: blur(6px);
 }
+
+/* Tabs at the top of a dialog (New dashboard, Import a project): one flat
+ * row with a hairline and an underline on the active tab. The default pills
+ * draw a strip and a bordered pill inside it, which read as two bars. */
+:root .depictio-modal-tabs .mantine-Tabs-list {
+  background: none !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  border-bottom: 1px solid var(--mantine-color-default-border);
+  gap: 4px;
+}
+:root .depictio-modal-tabs .mantine-Tabs-tab {
+  background: none !important;
+  box-shadow: none !important;
+  border: 0 !important;
+  border-bottom: 2px solid transparent !important;
+  border-radius: 0 !important;
+  color: var(--mantine-color-dimmed);
+  margin-bottom: -1px;
+}
+:root .depictio-modal-tabs .mantine-Tabs-tab[data-active] {
+  color: var(--mantine-primary-color-filled) !important;
+  border-bottom-color: var(--mantine-primary-color-filled) !important;
+}
+
+/* Glass buttons: no 1px highlight along the top edge. Next to the button's
+ * own border it reads as a second line stacked on the first. The soft drop
+ * shadow stays. */
+:root[data-chrome='glass'] .mantine-Button-root {
+  --gl-rim: transparent;
+}
+:root[data-chrome='glass'] .mantine-Button-root[data-variant='filled']:not([data-disabled]) {
+  box-shadow: 0 8px 18px -8px color-mix(in srgb, var(--button-bg, var(--mantine-primary-color-filled)) 80%, transparent) !important;
+}
