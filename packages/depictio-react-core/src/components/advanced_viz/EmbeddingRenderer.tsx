@@ -35,7 +35,7 @@ import {
 } from './controls/VizControls';
 import { applyDataTheme, applyLayoutTheme, plotlyThemeColors } from './plotlyTheme';
 import { usePersistedVizControl } from './usePersistedVizControl';
-import { splitFigureByGroups } from './groupSplit';
+import { OTHER_COLOR, splitFigureByGroups } from './groupSplit';
 import { useSelectionRevision } from './selectionGesture';
 import { embeddingAxisTitles, type EmbeddingMethod } from './embeddingAxes';
 import {
@@ -103,9 +103,11 @@ interface Props {
 }
 
 // Past this many distinct values, one trace and one legend entry per value is
-// not a plot: colouring falls back to a single trace with a per-point colour
-// array. Reachable now that the Colour-by menu lists every column of the DC.
+// not a plot: the most frequent LEGEND_TOP_VALUES keep a trace and the rest
+// share a grey "Other" one. Reachable now that the Colour-by menu lists every
+// column of the DC.
 const MAX_CATEGORY_TRACES = 40;
+const LEGEND_TOP_VALUES = 10;
 // A contour drawn over a handful of points is noise, not a density.
 const MIN_DENSITY_POINTS = 8;
 // Polars dtype prefixes that mean "this column gets a continuous colourscale".
@@ -534,17 +536,37 @@ const EmbeddingRenderer: React.FC<Props> = ({
       }
       categories.sort();
     }
-    const colourSource =
+    const categoricalPalette = resolveCategoricalPalette(theme, TAB10_PALETTE);
+    let colourSource =
       isCategorical && colorValues
-        ? stableColorMap(
-            colorUniverse ?? categories,
-            resolveCategoricalPalette(theme, TAB10_PALETTE),
-            pinnedColours,
-          )
+        ? stableColorMap(colorUniverse ?? categories, categoricalPalette, pinnedColours)
         : null;
     // One trace per group only while the group count stays sane, see
-    // MAX_CATEGORY_TRACES. Past it the colours survive but the traces collapse
-    // into one, so picking a free-text column can't lock up the tab.
+    // MAX_CATEGORY_TRACES. A column with more values than that (a guide, a
+    // sample) keeps its LEGEND_TOP_VALUES most frequent values as traces and
+    // folds the rest into one grey "Other" trace: the legend still names what
+    // it can, instead of vanishing, and the points are not painted from a
+    // 10-colour palette that repeats after ten values and says nothing.
+    if (colourSource && categories.length > MAX_CATEGORY_TRACES) {
+      const count = (c: string) => categoryIdx.get(c)?.length ?? 0;
+      const kept = [...categories]
+        .sort((a, b) => count(b) - count(a) || a.localeCompare(b))
+        .slice(0, LEGEND_TOP_VALUES)
+        .sort();
+      const otherLabel = `Other (${categories.length - kept.length} values)`;
+      const otherIdx = categories
+        .filter((c) => !kept.includes(c))
+        .flatMap((c) => categoryIdx.get(c) ?? [])
+        .sort((a, b) => a - b);
+      const keptColours = stableColorMap(kept, categoricalPalette, pinnedColours);
+      for (const cat of categories) if (!kept.includes(cat)) categoryIdx.delete(cat);
+      categoryIdx.set(otherLabel, otherIdx);
+      categories.splice(0, categories.length, ...kept, otherLabel);
+      colourSource = {
+        universe: keptColours.universe,
+        get: (value: string) => (value === otherLabel ? OTHER_COLOR : keptColours.get(value)),
+      };
+    }
     const perCategoryTraces = Boolean(colourSource) && categories.length <= MAX_CATEGORY_TRACES;
 
     // 2D only: a volumetric density would dwarf the scatter, so 3D skips it.
@@ -584,7 +606,9 @@ const EmbeddingRenderer: React.FC<Props> = ({
       }
     }
 
-    const denseAutoSize = x.length > 1000 ? Math.min(markerSize, 4) : markerSize;
+    // `autoMarker` already drops a dense cloud to 4 px; a size the reader typed is
+    // theirs, so it is not clamped again here.
+    const denseAutoSize = markerSize;
     // An opaque, contrasting stroke. The old line was 0.5 px of translucent
     // background colour, which was invisible at every point size.
     const outline = outlineOn ? { width: markerOutlineWidth, color: textColor } : { width: 0 };
@@ -676,9 +700,8 @@ const EmbeddingRenderer: React.FC<Props> = ({
         }
       }
     } else {
-      // Three cases land here: a continuous colour column, no colour binding at
-      // all, and a categorical column with more distinct values than
-      // MAX_CATEGORY_TRACES (which keeps its per-value colours, as one trace).
+      // Two cases land here: a continuous colour column and no colour binding at
+      // all. A categorical column of any size never does, see the fold above.
       // The continuous case uses Spectral (optionally reversed) so cluster-heavy
       // reads get a perceptually-ordered diverging palette, not Viridis monotone.
       const colourArr = isCategorical ? undefined : (colorValues as number[] | undefined) ?? undefined;
@@ -796,7 +819,12 @@ const EmbeddingRenderer: React.FC<Props> = ({
       layout: {
         template: isDark ? 'plotly_dark' : 'plotly_white',
         font: { color: textColor },
-        margin: actuallyRender3D ? { l: 0, r: 0, t: 8, b: 0 } : { l: 40, r: 12, t: 12, b: 40 },
+        // A right-hand legend gets the width of the tile's action rail on top of
+        // the usual margin: the rail overlays the last ~40 px of the plot and
+        // used to cover the ends of the longest legend entries.
+        margin: actuallyRender3D
+          ? { l: 0, r: 0, t: 8, b: 0 }
+          : { l: 40, r: legendPos === 'right' && perCategoryTraces ? 52 : 12, t: 12, b: 40 },
         // Plotly wipes UI state — the drawn lasso and every trace's
         // `selectedpoints` — on each `Plotly.react`. Without a stable
         // `uirevision` a redraw while a lasso stands (the plot's props are
@@ -810,8 +838,8 @@ const EmbeddingRenderer: React.FC<Props> = ({
         selectionrevision: `sel-${selectionRevision}`,
         ...(actuallyRender3D ? { scene: scene3D, uirevision: 'embedding-3d' } : layout2D),
         ...(!actuallyRender3D && annotations2D.length > 0 ? { annotations: annotations2D } : {}),
-        // A legend only exists while there is one trace per group; the
-        // collapsed high-cardinality fallback has nothing to list.
+        // A legend only exists while there is one trace per group, which a
+        // categorical colour always has (long tails fold into "Other").
         showlegend: perCategoryTraces && legendPos !== 'hidden',
         legend: perCategoryTraces
           ? {

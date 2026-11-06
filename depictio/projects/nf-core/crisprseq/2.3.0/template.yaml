@@ -39,8 +39,8 @@
 # SKIP_CLONALITY (see `conditional` below); the collection is also optional.
 template:
   template_id: "nf-core/crisprseq/2.3.0"
-  description: "nf-core/crisprseq targeted gene editing template: read accounting, edit outcome composition per library and per guide, frameshift and template-based repair rates, the indel size and position signature around the cut site, per-position substitution rates, and the clonality call."
-  version: "2.0.0"
+  description: "nf-core/crisprseq targeted gene editing template: read accounting and replicate agreement, edit outcome composition per library and per guide, the library sample space, frameshift and template-based repair rates, the indel size and position signature around the cut site, per-position substitution rates, and the clonality call."
+  version: "2.2.4"
   variables:
     - name: "DATA_ROOT"
       description: "crisprseq output directory (cigar/, clonality/, pipeline_info/)."
@@ -282,6 +282,9 @@ workflows:
               "libraries": "Libraries edited with the guide that classified reads"
               "classified_reads": "Classified reads over the guide's libraries"
               "median_edited_pct": "Median edited share over the guide's libraries, percent"
+              "q1_edited_pct": "First quartile of the edited share over the guide's libraries, percent"
+              "q3_edited_pct": "Third quartile of the edited share over the guide's libraries, percent"
+              "iqr_edited_pct": "Third minus first quartile of the edited share over the guide's libraries, percentage points: how far the libraries of a guide agree"
               "median_frameshift_pct": "Median frameshift share, percent"
               "median_inframe_pct": "Median in-frame share, percent"
               "median_template_based_pct": "Median template-based share, percent"
@@ -291,7 +294,7 @@ workflows:
               "dominant_indel_size": "Signed indel size carrying the most reads over the guide's libraries, bp"
               "dominant_indel_share_pct": "Share of the guide's indel reads at the dominant size, percent"
               "classification_mix": "Libraries per clonality class, most frequent first"
-              "edit_class": "Editing level from the median edited share: High (50 percent and up), Moderate (10 and up), Low (1 and up) or Unedited"
+              "edit_quartile": "Quartile of the guide's median edited share among the guides of this run (Highest, Upper-middle, Lower-middle or Lowest quartile; Not ranked with fewer than four guides). A reference the data defines, not a threshold from a tool or a paper"
 
       - data_collection_tag: "guide_outcomes"
         description: "Edit outcome composition per guide, reads pooled over the guide's libraries"
@@ -353,6 +356,79 @@ workflows:
               "q3_pct_reads": "Third quartile of that share over the guide's libraries, percent"
               "libraries_with_signal": "Libraries with an indel of that size"
 
+      - data_collection_tag: "guide_indel_size_matrix"
+        description: "Mean share of classified reads per guide and signed indel size, one column per size"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/crisprseq/guide_indel_size_matrix.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "size_guide": "Protospacer"
+              "-30": "Mean share of classified reads with an indel of 30 bp (deletion), percent"
+              "-29": "Mean share of classified reads with an indel of 29 bp (deletion), percent"
+              "-28": "Mean share of classified reads with an indel of 28 bp (deletion), percent"
+              "-27": "Mean share of classified reads with an indel of 27 bp (deletion), percent"
+              "-26": "Mean share of classified reads with an indel of 26 bp (deletion), percent"
+              "-25": "Mean share of classified reads with an indel of 25 bp (deletion), percent"
+              "-24": "Mean share of classified reads with an indel of 24 bp (deletion), percent"
+              "-23": "Mean share of classified reads with an indel of 23 bp (deletion), percent"
+              "-22": "Mean share of classified reads with an indel of 22 bp (deletion), percent"
+              "-21": "Mean share of classified reads with an indel of 21 bp (deletion), percent"
+              "-20": "Mean share of classified reads with an indel of 20 bp (deletion), percent"
+              "-19": "Mean share of classified reads with an indel of 19 bp (deletion), percent"
+              "-18": "Mean share of classified reads with an indel of 18 bp (deletion), percent"
+              "-17": "Mean share of classified reads with an indel of 17 bp (deletion), percent"
+              "-16": "Mean share of classified reads with an indel of 16 bp (deletion), percent"
+              "-15": "Mean share of classified reads with an indel of 15 bp (deletion), percent"
+              "-14": "Mean share of classified reads with an indel of 14 bp (deletion), percent"
+              "-13": "Mean share of classified reads with an indel of 13 bp (deletion), percent"
+              "-12": "Mean share of classified reads with an indel of 12 bp (deletion), percent"
+              "-11": "Mean share of classified reads with an indel of 11 bp (deletion), percent"
+              "-10": "Mean share of classified reads with an indel of 10 bp (deletion), percent"
+              "-9": "Mean share of classified reads with an indel of 9 bp (deletion), percent"
+              "-8": "Mean share of classified reads with an indel of 8 bp (deletion), percent"
+              "-7": "Mean share of classified reads with an indel of 7 bp (deletion), percent"
+              "-6": "Mean share of classified reads with an indel of 6 bp (deletion), percent"
+              "-5": "Mean share of classified reads with an indel of 5 bp (deletion), percent"
+              "-4": "Mean share of classified reads with an indel of 4 bp (deletion), percent"
+              "-3": "Mean share of classified reads with an indel of 3 bp (deletion), percent"
+              "-2": "Mean share of classified reads with an indel of 2 bp (deletion), percent"
+              "-1": "Mean share of classified reads with an indel of 1 bp (deletion), percent"
+              "+1": "Mean share of classified reads with an indel of 1 bp (insertion), percent"
+              "+2": "Mean share of classified reads with an indel of 2 bp (insertion), percent"
+              "+3": "Mean share of classified reads with an indel of 3 bp (insertion), percent"
+              "+4": "Mean share of classified reads with an indel of 4 bp (insertion), percent"
+              "+5": "Mean share of classified reads with an indel of 5 bp (insertion), percent"
+              "+6": "Mean share of classified reads with an indel of 6 bp (insertion), percent"
+              "+7": "Mean share of classified reads with an indel of 7 bp (insertion), percent"
+              "+8": "Mean share of classified reads with an indel of 8 bp (insertion), percent"
+              "+9": "Mean share of classified reads with an indel of 9 bp (insertion), percent"
+              "+10": "Mean share of classified reads with an indel of 10 bp (insertion), percent"
+              "+11": "Mean share of classified reads with an indel of 11 bp (insertion), percent"
+              "+12": "Mean share of classified reads with an indel of 12 bp (insertion), percent"
+              "+13": "Mean share of classified reads with an indel of 13 bp (insertion), percent"
+              "+14": "Mean share of classified reads with an indel of 14 bp (insertion), percent"
+              "+15": "Mean share of classified reads with an indel of 15 bp (insertion), percent"
+              "+16": "Mean share of classified reads with an indel of 16 bp (insertion), percent"
+              "+17": "Mean share of classified reads with an indel of 17 bp (insertion), percent"
+              "+18": "Mean share of classified reads with an indel of 18 bp (insertion), percent"
+              "+19": "Mean share of classified reads with an indel of 19 bp (insertion), percent"
+              "+20": "Mean share of classified reads with an indel of 20 bp (insertion), percent"
+              "+21": "Mean share of classified reads with an indel of 21 bp (insertion), percent"
+              "+22": "Mean share of classified reads with an indel of 22 bp (insertion), percent"
+              "+23": "Mean share of classified reads with an indel of 23 bp (insertion), percent"
+              "+24": "Mean share of classified reads with an indel of 24 bp (insertion), percent"
+              "+25": "Mean share of classified reads with an indel of 25 bp (insertion), percent"
+              "+26": "Mean share of classified reads with an indel of 26 bp (insertion), percent"
+              "+27": "Mean share of classified reads with an indel of 27 bp (insertion), percent"
+              "+28": "Mean share of classified reads with an indel of 28 bp (insertion), percent"
+              "+29": "Mean share of classified reads with an indel of 29 bp (insertion), percent"
+              "+30": "Mean share of classified reads with an indel of 30 bp (insertion), percent"
+
       - data_collection_tag: "guide_cut_site_profile"
         description: "Deletion coverage and insertion rate at every offset from the cut site per guide: the mean library, the median and the interquartile band"
         config:
@@ -388,7 +464,7 @@ workflows:
             format: "TSV"
             columns_description:
               "profile_guide": "Protospacer. Named apart from guide so the tab's guide picker narrows this profile alone and leaves the guide heatmap whole"
-              "offset": "Position minus the cut site, bp; offsets reached by fewer than 90 percent of the guide's libraries (the amplicon ends) are left out"
+              "offset": "Position minus the cut site, bp; offsets that any of the guide's libraries does not reach (the amplicon ends) are left out"
               "mean_substitution_pct": "Mean share of reads with a base other than the dominant one over the guide's libraries, percent"
               "median_substitution_pct": "Median of the substitution rate over the guide's libraries, percent"
               "q1_substitution_pct": "First quartile of the substitution rate over the guide's libraries, percent"
@@ -397,7 +473,7 @@ workflows:
               "median_gap_pct": "Median of the gap rate over the guide's libraries, percent"
               "q1_gap_pct": "First quartile of the gap rate over the guide's libraries, percent"
               "q3_gap_pct": "Third quartile of the gap rate over the guide's libraries, percent"
-              "libraries": "Libraries whose amplicon reaches the offset"
+              "libraries": "Libraries whose amplicon reaches the offset; the window keeps only offsets every library of the guide reaches"
 
       - data_collection_tag: "guide_substitutions"
         description: "Mean substitution rate per guide and offset from the cut site, one column per offset"
@@ -453,6 +529,39 @@ workflows:
               "+18": "Mean substitution rate at 18 bp after the cut site, percent"
               "+19": "Mean substitution rate at 19 bp after the cut site, percent"
               "+20": "Mean substitution rate at 20 bp after the cut site, percent"
+
+      # ----------------------------------------------------------------
+      # Sample space (derived from the collections above, no new files)
+      # ----------------------------------------------------------------
+      - data_collection_tag: "library_outcome_space"
+        description: "One row per library that classified reads: the share of its reads in each outcome class and its coordinates on the first principal components of those shares"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/crisprseq/library_outcome_space.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Library id"
+              "guide": "Protospacer of the library"
+              "edit_quartile": "Editing quartile of the library's guide among the guides of this run; a reference the data defines, not a threshold"
+              "dominant_outcome": "The edit class with the most reads in the library; Wild type when the library has no edit read"
+              "classified_reads": "Reads the CIGAR parser classified"
+              "dim_1": "First principal component of the seven outcome shares (each standardised); wild type loads negatively, so editing grows to the right"
+              "dim_2": "Second principal component"
+              "dim_3": "Third principal component"
+              "explained_pc1_pct": "Share of the total variance on the first component, percent (the same on every row)"
+              "explained_pc2_pct": "Share of the total variance on the second component, percent (the same on every row)"
+              "edited_pct": "Edited share of the classified reads, percent"
+              "wt_pct": "Wild-type share of the classified reads, percent"
+              "template_based_pct": "Template-based (HDR) share, percent"
+              "delins_pct": "Deletion-insertion share, percent"
+              "ins_inframe_pct": "In-frame insertion share, percent"
+              "ins_frameshift_pct": "Frameshift insertion share, percent"
+              "del_inframe_pct": "In-frame deletion share, percent"
+              "del_frameshift_pct": "Frameshift deletion share, percent"
 
 # ============================================================================
 # LINKS: the samplesheet fans out to every collection, by library and by guide
@@ -534,4 +643,11 @@ links:
     target_type: "table"
     link_config: {resolver: "direct", target_field: "profile_guide"}
     description: "Filter the guide substitution profiles by the guides of the selected libraries"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "library_outcome_space"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the library sample space by samplesheet libraries"
     enabled: true

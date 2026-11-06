@@ -6,17 +6,23 @@ version: 1
 # Two units carry every tile: the library (one amplicon sequencing library, the
 # `sample` of the samplesheet) and the guide (its protospacer, upper-cased in
 # `guide`). Funnel: whether each library had the reads and the alignment to
-# support a call (Data & QC) -> how much each library and each guide edits, and
-# how the edits shift the reading frame (Editing) -> the repair signature of
-# one guide, as indel sizes, positions and substitutions around the cut site
-# (Repair signature). The pipeline writes no MultiQC report, so the family has
-# no MultiQC tab.
+# support a call, and whether the libraries of a guide agree (Data & QC) -> how
+# much each library and each guide edits, where the libraries sit by their
+# outcomes, and how the edits shift the reading frame (Editing) -> the repair
+# signature of one guide, as indel sizes, positions and substitutions around the
+# cut site (Repair signature). The pipeline writes no MultiQC report, so the
+# family has no MultiQC tab, and the run has no assembly, so no Locus tab.
 #
 # The samplesheet hub (`samples`) carries the persistent sample filters; its
 # links reach the per-library collections by `sample` and the per-guide ones by
 # `guide`. Profiles along the amplicon are drawn per guide, as the mean library
 # with the band from the first to the third quartile of the guide's libraries,
 # because one curve per library does not read at thousands of libraries.
+#
+# Colours: a run has far more guides than the palette has colours, so a
+# guide-level chart colours by `edit_quartile` (four values, a rank among the
+# guides of the run, never a threshold) and the group column keeps its automatic
+# colours for the filter chips only.
 #
 # Guide pickers: the Indel spectrum tab picks a guide on the samplesheet, which
 # narrows every collection of the tab through the links. The Substitutions tab
@@ -42,8 +48,7 @@ main_dashboard:
   content_width_default: compact
   show_tab_header: false
   # Declared once here, read by every tab of the family: figures, advanced viz
-  # and filter chips all colour a value the same way. A run has more guides than
-  # the palette has colours, so the group column falls back to the brand colours.
+  # and filter chips all colour a value the same way.
   category_colors:
     '{GROUP_COL}': auto
     # The outcome classes of the CIGAR parser, wherever a column names one.
@@ -55,12 +60,26 @@ main_dashboard:
       Insertion, frameshift: '#1c7ed6'
       Deletion, in-frame: '#ffc078'
       Deletion, frameshift: '#f76707'
-    # The editing level of a guide, from its median edited share.
-    edit_class:
-      High editing: '#0ca678'
-      Moderate editing: '#74b816'
-      Low editing: '#f59f00'
-      Unedited: '#868e96'
+    # The rank of a guide by its median edited share among the guides of the run
+    # (quartiles, four steps of the viridis ramp: ordered, and still four distinct
+    # colours on thousands of points; no class is good or bad). Libraries take
+    # their guide's.
+    # The edit class with the most reads in a library (Wild type when it has none):
+    # the outcome colours, under the column name of the sample space.
+    dominant_outcome:
+      Wild type: '#868e96'
+      Template-based: '#0ca678'
+      Deletion-insertion: '#ae3ec9'
+      Insertion, in-frame: '#74c0fc'
+      Insertion, frameshift: '#1c7ed6'
+      Deletion, in-frame: '#ffc078'
+      Deletion, frameshift: '#f76707'
+    edit_quartile:
+      Highest quartile: '#440154'
+      Upper-middle quartile: '#31688e'
+      Lower-middle quartile: '#35b779'
+      Lowest quartile: '#fde725'
+      Not ranked: '#adb5bd'
     indel_type:
       Deletion: '#f76707'
       Insertion: '#1c7ed6'
@@ -212,12 +231,12 @@ main_dashboard:
       n_guides: {dc: guide_summary, column: guide, aggregation: nunique, format: integer}
     body: |
       ### Six steps from reads to repair signature
-      Each step names its settings and the tab that shows its result.
+      Each step names its settings and the tabs that show its result.
 
       ::: steps
-      1. ![](icon:mdi:filter-variant) **Prepare** Merge, quality-filter and cluster {{n_reads}} reads · [Settings](params:umi) · [Read QC](tab:Read QC)
+      1. ![](icon:mdi:filter-variant) **Prepare** Merge, quality-filter and cluster {{n_reads}} reads · [Settings](params:umi) · [Read QC](tab:Read QC) · [Replicates & QC](tab:Replicates & QC)
       2. ![](icon:mdi:sort-variant) **Align** Each library to its amplicon with {{param:aligner}} · [Settings](params:aligner) · [Read QC](tab:Read QC)
-      3. ![](icon:mdi:content-cut) **Call** CIGAR parser, {{n_edits}} edited reads · [Edit outcomes](tab:Edit outcomes)
+      3. ![](icon:mdi:content-cut) **Call** CIGAR parser, {{n_edits}} edited reads · [Edit outcomes](tab:Edit outcomes) · [Sample space](tab:Sample space)
       4. ![](icon:mdi:family-tree) **Classify** Clonality of {{n_clon}} libraries · [Settings](params:skip_clonality) · [Edit outcomes](tab:Edit outcomes)
       5. ![](icon:mdi:scale-balance) **Pool** Libraries per guide, {{n_guides}} guides · [Guides](tab:Guides)
       6. ![](icon:mdi:chart-bell-curve) **Profile** Sizes, positions and substitutions · [Indel spectrum](tab:Indel spectrum) · [Substitutions](tab:Substitutions)
@@ -229,11 +248,11 @@ main_dashboard:
     surface: card
     body: |
       ### About this dashboard
-      nf-core/crisprseq aligns each amplicon library to its reference and classifies every read as wild type or an edit. This page sums up one run; each tab behind it answers one question.
+      nf-core/crisprseq aligns each amplicon library to its reference and classifies every read as wild type or an edit. This page sums up one run; each of the seven tabs behind it answers one question.
 
       The sample filters in the left panel apply to every tab. A bar above a section narrows that section only.
 
-      Provenance: every setting and tool version on this page is read from the run's own `params.json` and software-versions report, and every number from the files the run wrote.
+      Provenance: every setting and tool version on this page is read from the run's own `params.json` and software-versions report, and every number from the files the run wrote. The guide classes are quartiles of this run, a rank among its guides, not a threshold from a tool or a paper.
     tag: cs-ov-about
     index: cs-ov-about
     layout: {x: 0, y: 8, w: 8, h: 3}
@@ -241,23 +260,22 @@ main_dashboard:
   # explains it. The icon colour is that tab's colour.
   - component_type: card
     workflow_tag: crisprseq
-    data_collection_tag: samples
-    aggregation: nunique
-    column_name: '{METADATA_ID_COL}'
+    data_collection_tag: library_outcome_space
+    aggregation: count
+    column_name: sample
     column_type: object
-    secondary_layout: concentration
-    breakdown_col: '{GROUP_COL}'
-    top_n_count: 3
+    secondary_layout: donut
+    breakdown_col: edit_quartile
     display:
       icon_name: mdi:test-tube
       icon_color: teal
-      caption: libraries, and the share in the 3 largest {GROUP_COL_DISPLAY} groups
-      link: tab:Read QC
+      caption: libraries with classified reads, by the editing quartile of their guide
+      link: tab:Replicates & QC
     section: Key figures
     tag: cs-ov-kf-libraries
     index: cs-ov-kf-libraries
     title: Libraries
-    description: Amplicon libraries of the run, one per samplesheet row. The strip shows how evenly they spread over the groups.
+    description: Libraries that classified reads, one per samplesheet row. The ring splits them by the quartile of their guide's median edited share among the guides of this run.
     layout: {x: 0, y: 0, w: 2, h: 2}
   # The funnel reads left to right: raw reads, the reads left after merging,
   # filtering and clustering, then the reads the CIGAR parser classified.
@@ -294,7 +312,7 @@ main_dashboard:
     filter_expr: col('classified_reads') > 0
     display:
       icon_name: mdi:target
-      icon_color: orange
+      icon_color: grape
       caption: median per library, with its spread
       link: tab:Edit outcomes
       decimals: 1
@@ -304,24 +322,28 @@ main_dashboard:
     title: Edited reads (%)
     description: Share of a library's classified reads that are not wild type, median over the libraries in view.
     layout: {x: 4, y: 0, w: 2, h: 2}
+  # One row per guide, so the spread of guides is the box; a ring by quartile
+  # would split in four equal parts by construction.
   - component_type: card
     workflow_tag: crisprseq
     data_collection_tag: guide_summary
-    aggregation: nunique
-    column_name: guide
-    column_type: object
-    secondary_layout: donut
-    breakdown_col: edit_class
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: median_edited_pct
+    column_type: float64
+    filter_expr: col('libraries') > 0
     display:
       icon_name: mdi:scale-balance
       icon_color: indigo
-      caption: guides, by editing level
+      caption: median guide, with the spread of guides
       link: tab:Guides
+      decimals: 1
     section: Key figures
     tag: cs-ov-kf-guides
     index: cs-ov-kf-guides
-    title: Guides
-    description: Guides of the run. The ring splits them by the median edited share of their libraries.
+    title: Guide editing (%)
+    description: Median edited share of a guide's libraries, median over the guides in view. The box shows how the guides spread.
     layout: {x: 6, y: 0, w: 2, h: 2}
   # Findings filter bar: the group, then the library.
   - component_type: interactive
@@ -362,21 +384,25 @@ main_dashboard:
     values:
       med_fs: {dc: crisprseq_edit_summary, column: frameshift_of_indels_pct, aggregation: median,
         filter_expr: "col('classified_reads') > 0", format: 'decimals:0'}
-      n_high: {dc: guide_summary, column: guide, aggregation: nunique,
-        filter_expr: "col('edit_class') == 'High editing'", format: integer}
+      med_gd: {dc: guide_summary, column: median_edited_pct, aggregation: median,
+        filter_expr: "col('libraries') > 0", format: 'decimals:0'}
+      top_gd: {dc: guide_summary, column: median_edited_pct, aggregation: max,
+        filter_expr: "col('libraries') > 0", format: 'decimals:0'}
       top_size: {dc: guide_summary, column: dominant_indel_size, aggregation: top}
       peak_sub: {dc: guide_substitution_profile, column: mean_substitution_pct, aggregation: max, format: 'decimals:1'}
     body: |
       - **{{med_fs}}%** of the indel reads shift the reading frame – median over the libraries, the edits that knock a gene out [Edit outcomes](tab:Edit outcomes)
-      - **{{n_high}}** guides edit half of their reads or more – a median over their libraries [Guides](tab:Guides)
+      - **{{med_gd}}%** of its reads are edited in the median guide – the best guide reaches {{top_gd}}%, a median over its libraries [Guides](tab:Guides)
       - **{{top_size}} bp** is the indel size most guides repair to – deletions negative, insertions positive [Indel spectrum](tab:Indel spectrum)
       - **{{peak_sub}}%** of the reads carry a substituted base at the most affected offset – the highest mean over a guide's libraries, where a base editor shows as a band [Substitutions](tab:Substitutions)
     section: Findings
     tag: cs-ov-findings
     index: cs-ov-findings
     layout: {x: 0, y: 0, w: 8, h: 2}
-  # One highlight per analysis tab, in the order of the rows above. The tiles of
-  # a row share a stored height.
+  # One figure per analysis tab, in the order of the rows above. The tiles of a
+  # row share a stored height. The first two redraw a figure of their tab; the
+  # last two are summaries, because the allele map and the guide by offset
+  # heatmap are too dense for a half-width tile.
   - component_type: highlight
     section: Findings
     source_tab: Edit outcomes
@@ -390,28 +416,66 @@ main_dashboard:
     section: Findings
     source_tab: Guides
     source_component: cs-gd-av-comparison
-    caption: One point per guide, coloured by editing level and sized by its libraries.
+    caption: One point per guide, coloured by the quartile of its median edited share among the guides of this run and sized by its libraries.
     hide_legend: true
     tag: cs-ov-hl-guides
     index: cs-ov-hl-guides
     layout: {x: 4, y: 2, w: 4, h: 5}
-  - component_type: highlight
+  - component_type: figure
+    workflow_tag: crisprseq
+    data_collection_tag: guide_summary
+    visu_type: bar
+    mode: code
+    code_content: |-
+      # Guides per dominant indel size: deletions (negative sizes) and insertions (positive) in the colours of the indel type. A size of 0 is left out.
+      colors = depictio_category_colors.get('indel_type') or {}
+      d = df.filter(pl.col('dominant_indel_size').is_not_null() & (pl.col('dominant_indel_size') != 0)).group_by('dominant_indel_size').agg(pl.len().alias('guides')).sort('dominant_indel_size')
+      d = d.with_columns(pl.when(pl.col('dominant_indel_size') < 0).then(pl.lit('Deletion')).otherwise(pl.lit('Insertion')).alias('indel_type'))
+      fig = px.bar(d.to_pandas(), x='dominant_indel_size', y='guides', color='indel_type', color_discrete_map=colors, labels={'dominant_indel_size': 'Dominant indel size (bp)', 'guides': 'Guides', 'indel_type': ''})
+      fig.update_xaxes(dtick=5)
+      fig.update_layout(margin=dict(t=10), legend_title_text='')
+    title: Dominant indel size per guide
+    description: >-
+      Which indel size do the guides repair to? Each bar counts the guides whose most frequent signed indel size, pooled over their libraries, is that size; deletions are negative and insertions positive.
+
+      How to read: one tall bar means most guides leave the same dominant repair, such as a 1 bp insertion, and a spread over many sizes means the repair depends on the guide. Open [Indel spectrum](tab:Indel spectrum) to pick a guide and read its whole size distribution.
+
+      Note: only the dominant size of each guide is counted, so a guide with two near-equal sizes counts for one of them. No cut-off is drawn.
+    link: tab:Indel spectrum
+    caption: Guides by the signed indel size most of their indel reads repair to; deletions are negative, insertions positive.
     section: Findings
-    source_tab: Indel spectrum
-    source_component: cs-ind-av-allele-map
-    caption: Every frequent indel allele of the guides in view by start and size, coloured by type; diagonal trails are microhomology deletions.
-    hide_legend: true
-    tag: cs-ov-hl-spectrum
-    index: cs-ov-hl-spectrum
+    tag: cs-ov-fig-sizes
+    index: cs-ov-fig-sizes
     layout: {x: 0, y: 7, w: 4, h: 5}
-  - component_type: highlight
+  - component_type: figure
+    workflow_tag: crisprseq
+    data_collection_tag: guide_substitution_profile
+    visu_type: line
+    mode: code
+    code_content: |-
+      # Across the guides in view, at each offset from the cut site: the median guide, the band from the first to the third quartile of the guides, and the guide with the highest mean substitution rate. The colour is the cyan of the Substitutions tab.
+      hue = '#1098ad'
+      d = df.group_by('offset').agg(pl.col('mean_substitution_pct').median().alias('median'), pl.col('mean_substitution_pct').quantile(0.25).alias('q1'), pl.col('mean_substitution_pct').quantile(0.75).alias('q3'), pl.col('mean_substitution_pct').max().alias('top')).sort('offset')
+      long = d.select('offset', pl.col('median').alias('Median guide'), pl.col('top').alias('Highest guide')).unpivot(index=['offset'], variable_name='view', value_name='rate')
+      fig = px.line(long.to_pandas(), x='offset', y='rate', color='view', line_dash='view', line_dash_map={'Median guide': 'solid', 'Highest guide': 'dash'}, color_discrete_map={'Median guide': hue, 'Highest guide': hue}, labels={'offset': 'Offset from the cut site (bp)', 'rate': 'Reads with a substituted base (%)', 'view': ''})
+      xs = d['offset'].to_list()
+      fig.add_trace(go.Scatter(x=xs + xs[::-1], y=d['q3'].to_list() + d['q1'].to_list()[::-1], fill='toself', fillcolor='rgba(16,152,173,0.2)', line=dict(width=0), hoverinfo='skip', name='Middle half of the guides'))
+      fig.add_vline(x=0, line_dash='dot', line_width=1, opacity=0.6, annotation_text='Cut site')
+      fig.update_layout(margin=dict(t=10), legend_title_text='', legend=dict(orientation='h', y=-0.25))
+    title: Substitution rate along the cut
+    description: >-
+      Where do bases change around the cut? At each offset from the cut site, the mean share of reads with a base other than the dominant one is taken per guide; the solid line is the median guide, the shaded band the middle half of the guides and the dashed line the guide with the highest rate.
+
+      How to read: a flat line near zero is a nuclease run with no substitution signal, and a hump of the dashed line a few bases upstream of the cut is a guide where a base editor works. A band that stays near zero while the dashed line rises means a few guides carry the signal. Open [Substitutions](tab:Substitutions) to read one guide.
+
+      Lines and annotations: the vertical dotted line at offset 0, labelled Cut site, is the position the pipeline reports for the amplicon (the cut_site column of the indel table and the _cutSite.json file). It is derived from the protospacer and its convention may be shifted for some guides, which moves a curve by a constant and keeps its shape. It is a landmark, not a cut-off.
+
+      Source: nf-core/crisprseq output documentation, https://nf-co.re/crisprseq/2.3.0/docs/output
+    link: tab:Substitutions
+    caption: At each offset from the cut site, the median guide, the middle half of the guides and the guide with the highest rate.
     section: Findings
-    source_tab: Substitutions
-    source_component: cs-sub-av-heatmap
-    caption: Mean substituted share per guide, one row each, along the offsets around the cut; a hot band upstream marks a base editor.
-    hide_legend: true
-    tag: cs-ov-hl-subs
-    index: cs-ov-hl-subs
+    tag: cs-ov-fig-subs
+    index: cs-ov-fig-subs
     layout: {x: 4, y: 7, w: 4, h: 5}
   # Link-only tab tiles: each tile prints its tab's subtitle, the question the
   # tab answers.
@@ -419,9 +483,11 @@ main_dashboard:
     body: |
       ### Data & QC
       - [Read QC](tab:Read QC)
+      - [Replicates & QC](tab:Replicates & QC)
 
       ### Editing
       - [Edit outcomes](tab:Edit outcomes)
+      - [Sample space](tab:Sample space)
       - [Guides](tab:Guides)
 
       ### Repair signature
@@ -450,6 +516,22 @@ main_dashboard:
   - component_type: interactive
     workflow_tag: crisprseq
     data_collection_tag: samples
+    interactive_component_type: TextInput
+    column_name: '{GROUP_COL}'
+    column_type: object
+    placeholder: 'e.g. ^ctrl|_rep1$'
+    display:
+      icon_name: mdi:magnify
+      custom_color: violet
+    section: Sample filters
+    group: Sample scope
+    tag: cs-filter-group-pattern
+    index: sample-filters-group-pattern
+    title: '{GROUP_COL_DISPLAY} pattern'
+    layout: {x: 0, y: 3, w: 1, h: 2}
+  - component_type: interactive
+    workflow_tag: crisprseq
+    data_collection_tag: samples
     interactive_component_type: MultiSelect
     column_name: '{METADATA_ID_COL}'
     column_type: object
@@ -461,7 +543,7 @@ main_dashboard:
     tag: cs-filter-sample
     index: sample-filters-sample
     title: Library
-    layout: {x: 0, y: 3, w: 1, h: 3}
+    layout: {x: 0, y: 5, w: 1, h: 3}
   - component_type: interactive
     workflow_tag: crisprseq
     data_collection_tag: samples
@@ -476,7 +558,7 @@ main_dashboard:
     tag: cs-filter-template
     index: sample-filters-template
     title: Donor template
-    layout: {x: 0, y: 6, w: 1, h: 3}
+    layout: {x: 0, y: 8, w: 1, h: 3}
   # Row selection feeds the Analysis panel.
   - component_type: table
     workflow_tag: crisprseq
@@ -487,7 +569,10 @@ main_dashboard:
     tag: cs-sheet-samples
     index: cs-sheet-samples
     title: Samplesheet
-    description: One row per library with its guide and donor template. Ticking rows narrows every tab to those libraries.
+    description: >-
+      Which libraries does the run hold? One row per library, with the guide it was edited with, whether it has a donor template and the other columns of the samplesheet.
+
+      How to read: check here that every library carries the guide you expect before reading the other tabs. Ticking rows narrows every tab to those libraries, and the sample filters of the left panel do the same.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: crisprseq
@@ -499,7 +584,12 @@ main_dashboard:
     tag: cs-sheet-summary
     index: cs-sheet-summary
     title: Editing outcome per library
-    description: Read accounting, reads per outcome class and the editing rates, one row per library.
+    description: >-
+      How was each library read and edited? One row per library with its read accounting, reads per outcome class and the editing rates.
+
+      How to read: look at the classified reads before the rates, since a library with few of them rests its rates on a handful of reads. Tick rows to narrow every tab to those libraries.
+
+      Note: every rate is a share of the classified reads, the reads the CIGAR parser kept after its filters, not of the raw reads.
     layout: {x: 0, y: 6, w: 8, h: 6}
 
 tabs:
@@ -566,9 +656,9 @@ tabs:
     order: 1
     body: >
       [The CIGAR parser](https://nf-co.re/crisprseq/2.3.0/docs/output) follows the reads of each
-      library from sequencing to classification, so a library that loses most of them, or aligns
-      poorly to its amplicon, gives a noisy editing rate. Read the depth scatter before the
-      outcome tabs. Lasso a group of points to narrow the other tiles.
+      library from sequencing to classification, so a library with few reads, or one that aligns
+      poorly to its amplicon, rests its editing rate on fewer reads. Read the depth scatter before
+      the outcome tabs. Lasso a group of points to narrow the other tiles.
     tag: cs-qc-intro
     index: cs-qc-intro
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -583,7 +673,7 @@ tabs:
     column_type: int64
     display:
       icon_name: mdi:file-document-outline
-      icon_color: blue
+      icon_color: blue.4
       caption: median reads, with their spread
       format: si
     section: Reads at a glance
@@ -603,7 +693,7 @@ tabs:
     attrition_cols: [classified_reads]
     display:
       icon_name: mdi:filter-variant
-      icon_color: teal
+      icon_color: blue.6
       caption: clustered, then classified
       format: si
     section: Reads at a glance
@@ -624,7 +714,7 @@ tabs:
     coverage_max: 100
     display:
       icon_name: mdi:check-decagram
-      icon_color: indigo
+      icon_color: blue.8
       caption: median share of reads aligned
       decimals: 1
     section: Reads at a glance
@@ -644,7 +734,7 @@ tabs:
     column_type: int64
     display:
       icon_name: mdi:alert-outline
-      icon_color: orange
+      icon_color: blue.9
       caption: median reads, with their spread
     section: Reads at a glance
     tag: cs-qc-card-filtered
@@ -660,7 +750,7 @@ tabs:
       x_title: Raw reads
       y_title: Aligned reads (%)
       log_x: true
-      density_threshold: 8000
+      density_threshold: 3000
       legend_pos: bottom
       selection_enabled: true
       selection_column: sample
@@ -668,7 +758,258 @@ tabs:
     tag: cs-qc-av-depth-alignment
     index: cs-qc-av-depth-alignment
     title: Depth against alignment per library
-    description: One point per library. Libraries low on either axis carry too few amplicon reads to call an editing rate.
+    description: >-
+      Did each library have the reads and the alignment to call editing? Each point is one library, placed by its raw reads on a log scale and by the share of its reads aligned to its amplicon.
+
+      How to read: most libraries form a cloud. A point far to the left has fewer reads than the rest of the run, and one low on the vertical axis aligned fewer of them, so either rests its editing rate on fewer reads. Lasso such points to narrow the other tiles, then compare their rates in [Edit outcomes](tab:Edit outcomes) before trusting them.
+
+      Note: no cut-off is drawn. This dashboard names no minimum depth or aligned share, so read each library against the others of the run. With thousands of libraries the tile can switch to a density view.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+
+- title: Replicates & QC
+  subtitle: Do the libraries lose reads alike, and do a guide's libraries agree?
+  tab_group: Data & QC
+  tab_order: 2
+  tab_icon: mdi:content-duplicate
+  tab_icon_color: teal
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Library scope
+    icon: mdi:tune
+    color: teal
+    description: Keep libraries inside a range of classified reads
+  - name: Guide scope
+    icon: mdi:dna
+    color: teal
+    description: Keep guides by the libraries behind them; the library tiles are unchanged
+  grid_sections:
+  - name: Replicates at a glance
+    icon: mdi:counter
+    color: teal
+    description: Depth, editing, the spread between a guide's libraries and the fewest libraries
+  - name: Read attrition
+    icon: mdi:filter-variant
+    color: teal
+    description: Share of the raw reads left at each stage, over the libraries
+  - name: Reads kept per library
+    icon: mdi:chart-line
+    color: teal
+    description: Classified reads of every library, ranked
+  - name: Library agreement
+    icon: mdi:scale-balance
+    color: teal
+    description: How far the libraries of one guide differ in their edited share
+  components:
+  - component_type: interactive
+    workflow_tag: crisprseq
+    data_collection_tag: crisprseq_edit_summary
+    interactive_component_type: RangeSlider
+    column_name: classified_reads
+    column_type: int64
+    display:
+      icon_name: mdi:file-check-outline
+      custom_color: teal
+    placement: left
+    section: Library scope
+    group: Libraries
+    tag: cs-rep-filter-classified
+    index: cs-rep-classified-range
+    title: Classified reads
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: crisprseq
+    data_collection_tag: guide_summary
+    interactive_component_type: RangeSlider
+    column_name: libraries
+    column_type: int64
+    display:
+      icon_name: mdi:test-tube
+      custom_color: blue
+    placement: left
+    section: Guide scope
+    group: Guides
+    tag: cs-rep-filter-libraries
+    index: cs-rep-libraries-range
+    title: Libraries per guide
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: text
+    order: 1
+    body: >
+      Each library loses reads between sequencing and classification, and [the CIGAR
+      parser](https://nf-co.re/crisprseq/2.3.0/docs/output) reports every stage. The attrition
+      boxes show whether the libraries lost reads alike, and the ranked curve how unevenly depth
+      spreads over them. The last tile shows how far the libraries of one guide agree on their
+      editing; they are replicates only where the design makes them so.
+    tag: cs-rep-intro
+    index: cs-rep-intro
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: card
+    workflow_tag: crisprseq
+    data_collection_tag: crisprseq_edit_summary
+    use: crisprseq/edit_summary
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: classified_reads
+    column_type: int64
+    display:
+      icon_name: mdi:file-check-outline
+      icon_color: teal.4
+      caption: median reads, with their spread
+      format: si
+    section: Replicates at a glance
+    tag: cs-rep-card-classified
+    index: cs-rep-card-classified
+    title: Classified reads per library
+    description: Median reads the CIGAR parser classified per library, the reads every rate rests on. The box shows how the depth spreads.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: crisprseq
+    data_collection_tag: crisprseq_edit_summary
+    use: crisprseq/edit_summary
+    aggregation: median
+    column_name: edited_pct
+    column_type: float64
+    filter_expr: col('classified_reads') > 0
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:chart-histogram
+      icon_color: teal.6
+      caption: libraries, by edited share
+      decimals: 1
+    section: Replicates at a glance
+    tag: cs-rep-card-edited
+    index: cs-rep-card-edited
+    title: Edited reads (%)
+    description: Median edited share over the libraries in view. The histogram shows whether the libraries edit alike or in groups.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: crisprseq
+    data_collection_tag: guide_summary
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: iqr_edited_pct
+    column_type: float64
+    filter_expr: col('libraries') > 0
+    display:
+      icon_name: mdi:arrow-expand-horizontal
+      icon_color: teal.8
+      caption: median guide, with the spread of guides
+      decimals: 1
+    section: Replicates at a glance
+    tag: cs-rep-card-spread
+    index: cs-rep-card-spread
+    title: Spread between libraries (points)
+    description: Width of the middle half of a guide's libraries in edited share, in percentage points, median over the guides in view. A small value means the libraries of a guide edit alike.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: crisprseq
+    data_collection_tag: guide_summary
+    aggregation: min
+    column_name: libraries
+    column_type: int64
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:test-tube
+      icon_color: teal.9
+      caption: guides, by libraries behind them
+      decimals: 0
+    section: Replicates at a glance
+    tag: cs-rep-card-fewest
+    index: cs-rep-card-fewest
+    title: Fewest libraries behind a guide
+    description: The smallest number of libraries behind any guide in view. A guide with few libraries has a median that rests on few observations.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: figure
+    workflow_tag: crisprseq
+    data_collection_tag: crisprseq_edit_summary
+    use: crisprseq/edit_summary
+    visu_type: box
+    mode: code
+    code_content: |-
+      # Share of the raw reads left at each stage, one box per stage over the libraries in view. Merged, quality filtered and aligned are the percentages the CIGAR parser reports; clustered and classified are read counts over the raw reads. A single-end run has no merged reads, so that stage is drawn only when a library reports some. Each stage has its own colour, and the colours only tell the stages apart.
+      stages = {'merged_pct': 'Merged', 'quality_filtered_pct': 'Quality filtered', 'clustered_pct': 'Clustered', 'aligned_pct': 'Aligned', 'classified_pct': 'Classified'}
+      d = df.filter(pl.col('raw_reads') > 0).with_columns((pl.col('clustered_reads') * 100.0 / pl.col('raw_reads')).alias('clustered_pct'), (pl.col('classified_reads') * 100.0 / pl.col('raw_reads')).alias('classified_pct'))
+      has_merged = d.select((pl.col('merged_pct').fill_null(0) > 0).any()).item()
+      keep = [c for c in stages if c != 'merged_pct' or has_merged]
+      long = d.select(['sample', *keep]).unpivot(index=['sample'], variable_name='stage', value_name='share').with_columns(pl.col('stage').replace(stages))
+      palette = {'Merged': '#4c6ef5', 'Quality filtered': '#15aabf', 'Clustered': '#12b886', 'Aligned': '#fab005', 'Classified': '#f76707'}
+      fig = px.box(long.to_pandas(), x='stage', y='share', color='stage', points='outliers', hover_data=['sample'], category_orders={'stage': [stages[c] for c in keep]}, color_discrete_map=palette, labels={'stage': '', 'share': 'Share of the raw reads (%)'})
+      fig.update_layout(margin=dict(t=10), showlegend=False)
+    title: Read attrition per library
+    description: >-
+      Do the libraries lose reads alike? Each box is one stage between sequencing and classification, and each library contributes the share of its raw reads left at that stage.
+
+      How to read: boxes near 100 percent with a short spread mean the libraries kept almost all their reads at that stage. A box that drops from one stage to the next shows where reads are lost, and a long whisker or outlier points at libraries that lost more than the rest; open them in the ranked curve below and in [Read QC](tab:Read QC).
+
+      Note: no cut-off is drawn. The quality-filtered and merged shares are the CIGAR parser's own percentages, and which count each is taken against is not stated in its table. Clustered and classified are computed here from the read counts over the raw reads.
+
+      Source: nf-core/crisprseq output documentation, https://nf-co.re/crisprseq/2.3.0/docs/output
+    section: Read attrition
+    tag: cs-rep-fig-attrition
+    index: cs-rep-fig-attrition
+    layout: {x: 0, y: 0, w: 8, h: 5}
+  - component_type: figure
+    workflow_tag: crisprseq
+    data_collection_tag: library_outcome_space
+    visu_type: scatter
+    mode: code
+    code_content: |-
+      # Classified reads per library, largest first, on log axes: a ranked curve of points, because a bar per library does not read at thousands of libraries. Each point takes the colour of its guide's editing quartile, the colours the other tabs use.
+      d = df.filter(pl.col('classified_reads') > 0).sort('classified_reads', descending=True).with_row_index('rank', offset=1)
+      order = ['Highest quartile', 'Upper-middle quartile', 'Lower-middle quartile', 'Lowest quartile', 'Not ranked']
+      palette = {'Highest quartile': '#440154', 'Upper-middle quartile': '#31688e', 'Lower-middle quartile': '#35b779', 'Lowest quartile': '#fde725', 'Not ranked': '#adb5bd'}
+      fig = px.scatter(d.to_pandas(), x='rank', y='classified_reads', color='edit_quartile', log_x=True, log_y=True, hover_data=['sample', 'guide'], category_orders={'edit_quartile': order}, color_discrete_map=palette, labels={'rank': 'Library rank (log scale)', 'classified_reads': 'Classified reads (log scale)', 'edit_quartile': 'Guide editing quartile'})
+      fig.update_traces(marker=dict(size=4, opacity=0.8))
+      fig.update_layout(margin=dict(t=10), legend=dict(orientation='h', y=-0.25, title=''))
+    title: Classified reads per library, ranked
+    description: >-
+      How unevenly does depth spread over the libraries? Each point on the curve is one library, ranked from the one with the most classified reads (left) to the one with the fewest (right), on log axes.
+
+      How to read: a flat curve means the libraries have similar depth, and a steep fall at the right end is a tail of shallow libraries whose editing rates rest on few reads. Hover the tail to name those libraries, then look them up in [Read QC](tab:Read QC). The colour is the quartile of the library's guide by median edited share: a tail of one colour says the shallow libraries belong to guides of the same editing level.
+
+      Annotations: the quartiles rank the guides of this run against each other, they are not a threshold from a tool or a paper.
+
+      Note: no cut-off is drawn, and the curve shows the libraries in view, so the left panel filters redraw it.
+    section: Reads kept per library
+    tag: cs-rep-fig-ranked
+    index: cs-rep-fig-ranked
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: advanced_viz
+    workflow_tag: crisprseq
+    data_collection_tag: guide_summary
+    viz_kind: ranked_distribution
+    config:
+      viz_kind: ranked_distribution
+      feature_id_col: guide
+      score_col: iqr_edited_pct
+      q1_col: q1_edited_pct
+      median_col: median_edited_pct
+      q3_col: q3_edited_pct
+      lower_col: min_edited_pct
+      upper_col: max_edited_pct
+      group_col: edit_quartile
+      top_n: 25
+      ascending: false
+      distribution: box
+      orientation: horizontal
+      score_label: Width of the middle half (points)
+      value_label: Edited reads (%)
+    section: Library agreement
+    tag: cs-rep-av-agreement
+    index: cs-rep-av-agreement
+    title: Agreement between the libraries of a guide
+    description: >-
+      Which guides have libraries that disagree? Each row is one guide, ranked by the width of the middle half of its libraries' edited share, with a box from the first to the third quartile around the median and whiskers to the lowest and highest library, and the width itself on the right.
+
+      How to read: a short box and a small width mean the libraries of the guide edit alike, so its median is a stable number. A long box, or whiskers far from the box, means one or a few libraries differ a lot; open those libraries in [Edit outcomes](tab:Edit outcomes). Colours are the guide's quartile among the guides of this run.
+
+      Annotations: the colour of a row is the quartile of the guide's median edited share among the guides of this run, a rank and not a threshold from a tool or a paper. The tile lists the 25 guides with the widest spread; the control changes how many.
+
+      Note: libraries of a guide are replicates only where the design makes them so, and they may differ in cell line or condition. No cut-off for agreement is drawn.
     layout: {x: 0, y: 0, w: 8, h: 6}
 
 # =========================================================================
@@ -677,7 +1018,7 @@ tabs:
 - title: Edit outcomes
   subtitle: Which libraries carry disruptive edits, and how were they called?
   tab_group: Editing
-  tab_order: 2
+  tab_order: 3
   tab_icon: mdi:target
   tab_icon_color: grape
   icon: /assets/images/workflows/nf-core.png
@@ -777,7 +1118,7 @@ tabs:
     filter_expr: col('classified_reads') > 0
     display:
       icon_name: mdi:target
-      icon_color: orange
+      icon_color: grape.4
       caption: median per library, with its spread
       decimals: 1
     section: Outcomes at a glance
@@ -798,7 +1139,7 @@ tabs:
     coverage_max: 100
     display:
       icon_name: mdi:arrow-expand-horizontal
-      icon_color: grape
+      icon_color: grape.6
       caption: median share of indels out of frame
       decimals: 1
     section: Outcomes at a glance
@@ -818,7 +1159,7 @@ tabs:
     secondary_layout: histogram
     display:
       icon_name: mdi:ruler
-      icon_color: cyan
+      icon_color: grape.8
       caption: libraries, by in-frame share
       decimals: 1
     section: Outcomes at a glance
@@ -839,7 +1180,7 @@ tabs:
     top_n_count: 5
     display:
       icon_name: mdi:chart-donut
-      icon_color: teal
+      icon_color: grape.9
       caption: classified reads, by outcome
       format: si
     section: Outcomes at a glance
@@ -855,7 +1196,7 @@ tabs:
     config:
       x_title: Edited reads (%)
       y_title: Frameshift share of the indels (%)
-      density_threshold: 8000
+      density_threshold: 3000
       legend_pos: bottom
       selection_enabled: true
       selection_column: sample
@@ -863,7 +1204,12 @@ tabs:
     tag: cs-out-av-frameshift
     index: cs-out-av-frameshift
     title: Frameshift share against editing
-    description: One point per library, sized by classified reads. The upper right holds the libraries edited often and disruptively.
+    description: >-
+      Which libraries edit often and out of frame? Each point is one library, placed by its edited share of the classified reads and by the share of its indel reads that shift the reading frame, and sized by its classified reads.
+
+      How to read: the upper right holds libraries edited often with disruptive indels, the likely knockouts. A library on the right but low on the vertical axis has edits that are mostly in frame and leave more of the protein intact, and one at the far left has little editing to read a frame share from. Click a library to open its record on the right.
+
+      Note: a frame share needs indel reads, so a library with very few of them can sit anywhere on the vertical axis. No cut-off is drawn. Frameshift is an indel whose length is not a multiple of 3, as the CIGAR parser calls it (https://nf-co.re/crisprseq/2.3.0/docs/output).
     layout: {x: 0, y: 0, w: 5, h: 6}
   - component_type: advanced_viz
     workflow_tag: crisprseq
@@ -883,7 +1229,10 @@ tabs:
     tag: cs-out-av-library-record
     index: cs-out-av-library-record
     title: Library record
-    description: Read accounting, outcome rates and indel filter counts of the selected library.
+    description: >-
+      What does the picked library look like? A fact panel for the library clicked on the scatter: its read accounting, outcome rates, reads per outcome and indel filter counts.
+
+      How to read: compare its classified reads with its raw reads first, then its rates with the cards above. The indel filter counts show how many indel reads the error-rate and peak filters dropped, and how many passing reads sit inside or outside the main indel peak.
     layout: {x: 5, y: 0, w: 3, h: 6}
   - component_type: card
     workflow_tag: crisprseq
@@ -896,7 +1245,7 @@ tabs:
     breakdown_col: classification
     display:
       icon_name: mdi:chart-donut
-      icon_color: pink
+      icon_color: grape.4
       caption: libraries, by zygosity class
     section: Clonality
     tag: cs-out-card-classification
@@ -915,7 +1264,7 @@ tabs:
     breakdown_col: clonality
     display:
       icon_name: mdi:family-tree
-      icon_color: red
+      icon_color: grape.6
       caption: libraries, by clonality label
     section: Clonality
     tag: cs-out-card-clonality
@@ -934,7 +1283,7 @@ tabs:
     column_type: float64
     display:
       icon_name: mdi:shield-check-outline
-      icon_color: green
+      icon_color: grape.8
       caption: median confidence, with its spread
       decimals: 2
     section: Clonality
@@ -954,7 +1303,7 @@ tabs:
     column_type: int64
     display:
       icon_name: mdi:chart-bell-curve
-      icon_color: yellow
+      icon_color: grape.9
       caption: median peaks, with their spread
       decimals: 0
     section: Clonality
@@ -973,7 +1322,12 @@ tabs:
     tag: cs-out-table-clonality
     index: cs-out-table-clonality
     title: Clonality call per library
-    description: Zygosity class, clonality label, confidence and peak statistics of every library.
+    description: >-
+      How did the classifier call each library? One row per library with its zygosity class, clonality label, confidence and the statistics of its indel peaks.
+
+      How to read: open the confidence first, since a call with low confidence is the classifier's own doubt. Ambiguous and insufficient-data labels come from the classifier and mean it could not settle the call from that library's reads; check the library's depth in [Read QC](tab:Read QC).
+
+      Note: the classes and labels are the nf-core/crisprseq clonality classifier's, and this dashboard draws no cut-off on them (https://nf-co.re/crisprseq/2.3.0/docs/output).
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: crisprseq
@@ -984,13 +1338,265 @@ tabs:
     tag: cs-out-table-outcomes
     index: cs-out-table-outcomes
     title: Reads per outcome class
-    description: Reads and share of the classified reads per outcome class, one row per library and class.
+    description: >-
+      How many reads fell in each outcome class? One row per library and class, with the reads and their share of the library's classified reads.
+
+      How to read: the shares of one library add up to 100. Sort by a class to find the libraries that carry most of it, and use the left-panel library filter to read one library.
     layout: {x: 0, y: 6, w: 8, h: 6}
+
+- title: Sample space
+  subtitle: Which libraries repair alike, judged by their outcome mix?
+  tab_group: Editing
+  tab_order: 4
+  tab_icon: mdi:chart-scatter-plot
+  tab_icon_color: pink
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Composition scope
+    icon: mdi:tune
+    color: pink
+    description: Outcome classes kept in the bars; shares are renormalised over them
+  - name: Space scope
+    icon: mdi:chart-scatter-plot
+    color: pink
+    description: Keep libraries by the quartile of their guide; the bars are unchanged
+  grid_sections:
+  - name: Libraries at a glance
+    icon: mdi:counter
+    color: pink
+    description: Libraries placed, variance on the first component and two outcome shares
+  - name: Sample space
+    icon: mdi:chart-scatter-plot
+    color: pink
+    description: Libraries on the first components of their seven outcome shares
+  - name: Outcome composition
+    icon: mdi:chart-bar
+    color: pink
+    description: Share of every library's classified reads per outcome class
+  - name: Library rows
+    icon: mdi:table
+    color: gray
+    description: Each library's coordinates, guide and outcome shares
+    collapsed: true
+  components:
+  - component_type: interactive
+    workflow_tag: crisprseq
+    data_collection_tag: crisprseq_edit_outcomes
+    interactive_component_type: MultiSelect
+    column_name: outcome
+    column_type: object
+    display:
+      icon_name: mdi:chart-donut
+      custom_color: orange
+    placement: left
+    section: Composition scope
+    group: Composition
+    tag: cs-sp-filter-outcome
+    index: cs-sp-outcome-filter
+    title: Outcome class
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: crisprseq
+    data_collection_tag: library_outcome_space
+    interactive_component_type: MultiSelect
+    column_name: edit_quartile
+    column_type: object
+    display:
+      icon_name: mdi:target
+      custom_color: indigo
+    placement: left
+    section: Space scope
+    group: Space
+    tag: cs-sp-filter-quartile
+    index: cs-sp-quartile-filter
+    title: Guide editing quartile
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: crisprseq
+    data_collection_tag: library_outcome_space
+    interactive_component_type: TextInput
+    column_name: guide
+    column_type: object
+    placeholder: 'e.g. ^CCA|GG$'
+    display:
+      icon_name: mdi:magnify
+      custom_color: violet
+    placement: left
+    section: Space scope
+    group: Space
+    tag: cs-sp-filter-sequence
+    index: cs-sp-sequence-filter
+    title: Guide sequence
+    layout: {x: 0, y: 3, w: 1, h: 2}
+  - component_type: text
+    order: 1
+    body: >
+      Each library is placed by the share of its classified reads in the seven outcome classes, so
+      libraries that repair alike sit together. Read the first component against the variance
+      cards, and lasso a cluster to narrow the other tiles. Points are coloured by the edit class
+      with the most reads in the library; switch to the quartile of the guide in Colour by.
+    tag: cs-sp-intro
+    index: cs-sp-intro
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: card
+    workflow_tag: crisprseq
+    data_collection_tag: library_outcome_space
+    aggregation: count
+    column_name: sample
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: edit_quartile
+    display:
+      icon_name: mdi:flask-outline
+      icon_color: pink.4
+      caption: libraries, by the editing quartile of their guide
+    section: Libraries at a glance
+    tag: cs-sp-card-libraries
+    index: cs-sp-card-libraries
+    title: Libraries placed
+    description: Libraries that classified reads, one point each on the plane. The ring splits them by the quartile of their guide among the guides of this run.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: crisprseq
+    data_collection_tag: library_outcome_space
+    aggregation: median
+    column_name: explained_pc1_pct
+    column_type: float64
+    filter_expr: col('classified_reads') > 0
+    secondary_layout: gauge
+    coverage_max: 100
+    display:
+      icon_name: mdi:chart-bell-curve
+      icon_color: pink.6
+      caption: of the variance on the first component
+      decimals: 1
+    section: Libraries at a glance
+    tag: cs-sp-card-pc1
+    index: cs-sp-card-pc1
+    title: Variance on PC1 (%)
+    description: Share of the variance of the seven outcome shares carried by the first principal component, computed over all the libraries of the run.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: crisprseq
+    data_collection_tag: library_outcome_space
+    aggregation: median
+    column_name: wt_pct
+    column_type: float64
+    filter_expr: col('classified_reads') > 0
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:dna
+      icon_color: pink.8
+      caption: libraries, by wild-type share
+      decimals: 1
+    section: Libraries at a glance
+    tag: cs-sp-card-wt
+    index: cs-sp-card-wt
+    title: Wild-type reads (%)
+    description: Median share of a library's classified reads that stay wild type, over the libraries in view. The histogram shows whether the libraries form groups.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: crisprseq
+    data_collection_tag: library_outcome_space
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: del_frameshift_pct
+    column_type: float64
+    filter_expr: col('classified_reads') > 0
+    display:
+      icon_name: mdi:content-cut
+      icon_color: pink.9
+      caption: median per library, with its spread
+      decimals: 1
+    section: Libraries at a glance
+    tag: cs-sp-card-delfs
+    index: cs-sp-card-delfs
+    title: Frameshift deletions (%)
+    description: Median share of a library's classified reads that carry a frameshift deletion, over the libraries in view.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    workflow_tag: crisprseq
+    data_collection_tag: library_outcome_space
+    viz_kind: embedding
+    config:
+      viz_kind: embedding
+      sample_id_col: sample
+      dim_1_col: dim_1
+      dim_2_col: dim_2
+      dim_3_col: dim_3
+      color_col: dominant_outcome
+      default_color_by: dominant_outcome
+      axis_prefix: PC
+      show_centroids: false
+      hover_cols: [guide, edit_quartile, classified_reads, edited_pct]
+      legend_pos: right
+      selection_enabled: true
+      selection_column: sample
+    section: Sample space
+    tag: cs-sp-av-pca
+    index: cs-sp-av-pca
+    title: Libraries by outcome mix
+    description: >-
+      Which libraries repair alike? Each point is one library, placed on the leading principal components of its seven outcome shares (wild type, template-based, deletion-insertion, and the in-frame and frameshift insertions and deletions), each standardised, and coloured by the edit class that holds most of its edited reads (wild type when it has no edit read).
+
+      How to read: libraries close together have a similar outcome mix, and a colour region is a repair signature shared by many libraries. The first component is oriented so that editing grows to the right, and the variance cards above say how much of the spread the plane shows. A lone point is a library with an unusual mix; lasso it or a cluster to narrow the other tiles, and open the library in [Edit outcomes](tab:Edit outcomes).
+
+      Annotations: the colours are the outcome classes of the CIGAR parser, the same as in Edit outcomes; Colour by switches to the quartile of the library's guide, a rank among the guides of this run and not a threshold from a tool or a paper. No group centroid or cut-off is drawn.
+
+      Note: libraries that classified no reads are not placed, and a class absent from every library, such as template-based reads without a donor, does not enter the reduction.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: crisprseq
+    data_collection_tag: crisprseq_edit_outcomes
+    viz_kind: stacked_bar
+    config:
+      viz_kind: stacked_bar
+      sample_id_col: sample
+      taxon_col: outcome
+      rank_col: level
+      abundance_col: pct
+      top_n: 7
+      sort_by: abundance
+      normalise_to_one: true
+      sample_sort: first_taxon
+      hidden_controls: [rank, top_n]
+      x_title: Library
+      value_title: Share of the classified reads
+      legend_pos: bottom
+    section: Outcome composition
+    tag: cs-sp-av-composition
+    index: cs-sp-av-composition
+    title: Outcome mix per library
+    description: >-
+      What does each library's repair look like? Each bar is one library and each segment an outcome class, as a share of the library's classified reads.
+
+      How to read: libraries are ordered by their largest class, wild type first, so the libraries on the left edit least and the bars grow more edited towards the right. Compare the segment widths of neighbouring bars to see whether the edits are mostly deletions or insertions and in or out of frame. Switch to counts or sort by another class from the controls.
+
+      Note: with thousands of libraries the bars are very thin and their names are hidden, so hover a bar for its library. The outcome filter on the left renormalises the bars over the classes kept.
+    layout: {x: 0, y: 0, w: 8, h: 5}
+  - component_type: table
+    workflow_tag: crisprseq
+    data_collection_tag: library_outcome_space
+    columns: [sample, guide, edit_quartile, classified_reads, edited_pct, wt_pct, del_frameshift_pct, dim_1, dim_2]
+    row_selection_enabled: true
+    row_selection_column: sample
+    section: Library rows
+    tag: cs-sp-table
+    index: cs-sp-table
+    title: Library coordinates and outcome shares
+    description: >-
+      Where does each library sit? One row per library with its guide, the quartile of its guide, its classified reads, a few outcome shares and its coordinates on the first two components.
+
+      How to read: sort by a coordinate to find the libraries at the edge of the plane, and tick rows to narrow the other tiles to them. The quartile is a rank among the guides of this run, not a threshold.
+    layout: {x: 0, y: 0, w: 8, h: 6}
 
 - title: Guides
   subtitle: Which guides edit well, and which edits disrupt the reading frame?
   tab_group: Editing
-  tab_order: 3
+  tab_order: 5
   tab_icon: mdi:scale-balance
   tab_icon_color: indigo
   icon: /assets/images/workflows/nf-core.png
@@ -1000,7 +1606,7 @@ tabs:
   - name: Guide scope
     icon: mdi:tune
     color: indigo
-    description: Narrow by editing level or by the libraries behind a guide
+    description: Narrow by editing quartile or by the libraries behind a guide
   grid_sections:
   - name: Guides at a glance
     icon: mdi:counter
@@ -1024,7 +1630,7 @@ tabs:
     workflow_tag: crisprseq
     data_collection_tag: guide_summary
     interactive_component_type: MultiSelect
-    column_name: edit_class
+    column_name: edit_quartile
     column_type: object
     display:
       icon_name: mdi:target
@@ -1034,7 +1640,7 @@ tabs:
     group: Guides
     tag: cs-gd-filter-class
     index: cs-gd-class-filter
-    title: Editing level
+    title: Editing quartile
     layout: {x: 0, y: 0, w: 1, h: 3}
   - component_type: interactive
     workflow_tag: crisprseq
@@ -1052,13 +1658,30 @@ tabs:
     index: cs-gd-libraries-range
     title: Libraries per guide
     layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: crisprseq
+    data_collection_tag: guide_summary
+    interactive_component_type: TextInput
+    column_name: guide
+    column_type: object
+    placeholder: 'e.g. ^CCA|GG$'
+    display:
+      icon_name: mdi:magnify
+      custom_color: violet
+    placement: left
+    section: Guide scope
+    group: Guides
+    tag: cs-gd-filter-sequence
+    index: cs-gd-sequence-filter
+    title: Guide sequence
+    layout: {x: 0, y: 6, w: 1, h: 2}
   - component_type: text
     order: 1
     body: >
       Each guide is summarised by the median over its libraries, so one failed library does not
-      move it. The scatter puts editing against the frameshift share and the bars show which
-      outcomes each guide leaves. Open the guide detail below to select a guide and read its
-      record.
+      move it, and ranked against the other guides of this run by quartile. The scatter puts
+      editing against the frameshift share and the bars show which outcomes each guide leaves.
+      Open the guide detail below to select a guide and read its record.
     tag: cs-gd-intro
     index: cs-gd-intro
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -1073,7 +1696,7 @@ tabs:
     filter_expr: col('libraries') > 0
     display:
       icon_name: mdi:target
-      icon_color: orange
+      icon_color: indigo.4
       caption: median guide, with the spread of guides
       decimals: 1
     section: Guides at a glance
@@ -1093,7 +1716,7 @@ tabs:
     coverage_max: 100
     display:
       icon_name: mdi:arrow-expand-horizontal
-      icon_color: grape
+      icon_color: indigo.6
       caption: median share of indels out of frame
       decimals: 1
     section: Guides at a glance
@@ -1111,7 +1734,7 @@ tabs:
     secondary_layout: histogram
     display:
       icon_name: mdi:test-tube
-      icon_color: teal
+      icon_color: indigo.8
       caption: guides, by libraries behind them
       decimals: 0
     section: Guides at a glance
@@ -1131,7 +1754,7 @@ tabs:
     coverage_max: 100
     display:
       icon_name: mdi:chart-bell-curve
-      icon_color: blue
+      icon_color: indigo.9
       caption: median share of indel reads at the dominant size
       decimals: 1
     section: Guides at a glance
@@ -1149,7 +1772,7 @@ tabs:
       x_col: median_edited_pct
       y_col: median_frameshift_of_indels_pct
       label_col: guide
-      color_col: edit_class
+      color_col: edit_quartile
       size_col: libraries
       x_title: Median edited reads (%)
       y_title: Median frameshift share of the indels (%)
@@ -1161,7 +1784,12 @@ tabs:
     tag: cs-gd-av-comparison
     index: cs-gd-av-comparison
     title: Editing against frameshift share per guide
-    description: One point per guide, sized by its libraries and coloured by editing level. The upper right holds the efficient knockout guides.
+    description: >-
+      Which guides edit well, and do their edits shift the reading frame? Each point is one guide, placed by the median edited share and the median frameshift share of the indels over its libraries, sized by its libraries and coloured by the quartile of its median edited share.
+
+      How to read: the upper right holds guides that edit often and mostly out of frame, the strongest knockout candidates; the lower right edits often but mostly in frame. A small point rests on few libraries, so weigh it less. Click a point to narrow the other tiles of the tab to that guide.
+
+      Annotations: the colours are the quartiles of the median edited share among the guides of this run (highest, upper-middle, lower-middle, lowest). They rank the guides against each other and are not a threshold from a tool or a paper, so the bounds move with the run.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: advanced_viz
     workflow_tag: crisprseq
@@ -1181,19 +1809,27 @@ tabs:
     tag: cs-gd-av-outcomes
     index: cs-gd-av-outcomes
     title: Repair outcomes per guide
-    description: Share of each guide's classified reads per outcome, pooled over its libraries. Guides are ordered by the share of the most common outcome; hover a bar for its guide.
+    description: >-
+      Which repairs does each guide leave? Each bar is one guide and each segment an outcome class, as a share of the guide's classified reads pooled over its libraries.
+
+      How to read: guides are ordered by their largest class, so wild type heads the order and the guides on the left edit least. Compare the frameshift deletion segment across guides to see which repair dominates, and hover a bar for its guide. A guide whose mix differs from its neighbours has a different repair signature; open it in [Indel spectrum](tab:Indel spectrum).
+
+      Note: shares are pooled over a guide's libraries by reads, so a deep library weighs more than a shallow one.
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: table
     workflow_tag: crisprseq
     data_collection_tag: guide_summary
-    columns: [guide, edit_class, libraries, median_edited_pct, median_frameshift_of_indels_pct]
+    columns: [guide, edit_quartile, libraries, median_edited_pct, iqr_edited_pct, median_frameshift_of_indels_pct]
     row_selection_enabled: true
     row_selection_column: guide
     section: Guide detail
     tag: cs-gd-table
     index: cs-gd-table
     title: Guides
-    description: Editing level, libraries and the median editing and frameshift shares of every guide. Select a row to open its full record.
+    description: >-
+      Which guides does the run hold? One row per guide with its editing quartile, libraries, the median edited share, the width of the middle half of its libraries and the median frameshift share.
+
+      How to read: sort by a column to rank the guides, and select a row to open its full record. The quartile is a rank among the guides of this run and not a threshold, and a guide with few libraries rests its median on few observations.
     layout: {x: 0, y: 0, w: 5, h: 6}
   - component_type: advanced_viz
     workflow_tag: crisprseq
@@ -1205,14 +1841,17 @@ tabs:
       id_col: guide
       selection_source: table_selection
       sections:
-        Guide: [guide, edit_class, libraries, classified_reads]
-        Editing: [median_edited_pct, min_edited_pct, max_edited_pct, median_frameshift_pct, median_inframe_pct, median_template_based_pct, median_frameshift_of_indels_pct]
+        Guide: [guide, edit_quartile, libraries, classified_reads]
+        Editing: [median_edited_pct, q1_edited_pct, q3_edited_pct, min_edited_pct, max_edited_pct, median_frameshift_pct, median_inframe_pct, median_template_based_pct, median_frameshift_of_indels_pct]
         Repair signature: [dominant_indel_size, dominant_indel_share_pct, classification_mix]
     section: Guide detail
     tag: cs-gd-av-guide-record
     index: cs-gd-av-guide-record
     title: Guide record
-    description: Editing rates, repair signature and clonality mix of the selected guide.
+    description: >-
+      What does the picked guide look like? Its libraries, editing rates, repair signature and clonality mix.
+
+      How to read: the first and third quartile, minimum and maximum edited share show how far its libraries disagree, and the dominant indel size with its share says how predictable the repair is. A wide gap between the minimum and maximum means the median rests on libraries that differ; check them in [Replicates & QC](tab:Replicates & QC).
     layout: {x: 5, y: 0, w: 3, h: 6}
 
 # =========================================================================
@@ -1221,7 +1860,7 @@ tabs:
 - title: Indel spectrum
   subtitle: What is the repair signature of one guide's cut?
   tab_group: Repair signature
-  tab_order: 4
+  tab_order: 6
   tab_icon: mdi:chart-bell-curve
   tab_icon_color: orange
   icon: /assets/images/workflows/nf-core.png
@@ -1231,7 +1870,7 @@ tabs:
   - name: Guide picker
     icon: mdi:dna
     color: orange
-    description: The guide the tab shows, the first of the list until another is picked
+    description: The guide the tab shows, the first of the list until another is picked; add more to compare them
   - name: Indel scope
     icon: mdi:tune
     color: orange
@@ -1245,6 +1884,10 @@ tabs:
     icon: mdi:chart-bell-curve
     color: orange
     description: Share of reads at every signed indel size, mean library with its band
+  - name: Guide comparison
+    icon: mdi:view-comfy
+    color: orange
+    description: Every guide's indel size signature side by side
   - name: Position around the cut site
     icon: mdi:chart-line
     color: orange
@@ -1252,8 +1895,7 @@ tabs:
   - name: Allele map
     icon: mdi:chart-scatter-plot
     color: orange
-    description: The most frequent indel alleles by start and size
-    collapsed: true
+    description: The most frequent indel alleles of the guide by start and size
   - name: Indel tables
     icon: mdi:table
     color: gray
@@ -1265,6 +1907,7 @@ tabs:
     data_collection_tag: samples
     interactive_component_type: Select
     always_selected: true
+    multiple: true
     column_name: guide
     column_type: object
     display:
@@ -1344,9 +1987,11 @@ tabs:
   - component_type: text
     order: 1
     body: >
-      The tab reads one guide, the first of the list until another is picked on the left. Each
-      curve is the mean library of the guide, with a band over the middle half of its libraries,
-      and offsets are relative to the cut site the pipeline reports.
+      The tab reads the first guide of the list until others are picked on the left, one curve
+      each, and with Analysis groups saved each group draws its guides in its own colour or panel.
+      A curve is the mean library of the guide, with a band over the middle half of its libraries,
+      and offsets are relative to the cut site the pipeline reports. The allele map lists the most
+      frequent alleles of the guides in view.
     tag: cs-ind-intro
     index: cs-ind-intro
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -1360,7 +2005,7 @@ tabs:
     column_type: int64
     display:
       icon_name: mdi:ruler
-      icon_color: orange
+      icon_color: orange.4
       caption: median size, with its spread
       decimals: 0
     section: Signature at a glance
@@ -1380,7 +2025,7 @@ tabs:
     coverage_max: 100
     display:
       icon_name: mdi:chart-bell-curve
-      icon_color: blue
+      icon_color: orange.6
       caption: median share of indel reads at that size
       decimals: 1
     section: Signature at a glance
@@ -1400,7 +2045,7 @@ tabs:
     coverage_max: 100
     display:
       icon_name: mdi:arrow-expand-horizontal
-      icon_color: grape
+      icon_color: orange.8
       caption: median share of indels out of frame
       decimals: 1
     section: Signature at a glance
@@ -1420,7 +2065,7 @@ tabs:
     breakdown_col: indel_type
     display:
       icon_name: mdi:dna
-      icon_color: teal
+      icon_color: orange.9
       caption: distinct alleles, by type
     section: Signature at a glance
     tag: cs-ind-card-alleles
@@ -1448,7 +2093,41 @@ tabs:
     tag: cs-ind-av-guide-sizes
     index: cs-ind-av-guide-sizes
     title: Indel size distribution of the guide
-    description: Mean share of the classified reads at every signed indel size over the guide's libraries, with the band from the first to the third quartile. A narrow band means the libraries repair the cut the same way.
+    description: >-
+      How big are the indels of the guide? The curve is the mean share of the classified reads at every signed indel size over the guide's libraries, deletions negative and insertions positive, with a band from the first to the third quartile of the libraries.
+
+      How to read: a tall narrow peak at one size is a predictable repair, such as a 1 bp insertion or a deletion with a repeated flank, and a flat curve is a scattered one. A narrow band means the libraries repair the cut alike, and a curve above its band means a minority of libraries carries the signal. Compare with another guide from the picker on the left.
+
+      Lines and annotations: the vertical marker at size 0, labelled Deletions left, insertions right, separates the two signs. It is a landmark on the size axis, not the cut site and not a cut-off. The band is the guide's own first and third quartile, a reference the data defines.
+
+      Note: only sizes within 100 bp are drawn, a fixed window of this template, and a library without an indel of a size counts as zero there.
+
+      Source: nf-core/crisprseq output documentation, https://nf-co.re/crisprseq/2.3.0/docs/output
+    layout: {x: 0, y: 0, w: 8, h: 5}
+  - component_type: advanced_viz
+    workflow_tag: crisprseq
+    data_collection_tag: guide_indel_size_matrix
+    viz_kind: complex_heatmap
+    config:
+      viz_kind: complex_heatmap
+      index_column: size_guide
+      value_columns_pattern: "^[-+]?[0-9]+$"
+      cluster_rows: true
+      cluster_cols: false
+      cluster_method: ward
+      cluster_metric: euclidean
+      normalize: log1p
+      colorscale: Oranges
+    section: Guide comparison
+    tag: cs-ind-av-size-heatmap
+    index: cs-ind-av-size-heatmap
+    title: Indel size per guide
+    description: >-
+      Which guides repair alike? Each row is one guide, each column a signed indel size (deletions negative, insertions positive), and each cell the mean share of the guide's classified reads carrying an indel of that size.
+
+      How to read: a guide with one bright cell has a predictable repair, such as a 1 bp insertion, and a row spread over many cells is a scattered one. Rows are clustered by signature, so guides that repair alike sit together. Pick one of them in the Guide picker on the left to read its curve with the band of its libraries.
+
+      Note: no filter narrows this matrix, so it always shows every guide of the run; the Guide picker only sets the curve and the tables of the tab. Cells use a log(1 + share) colour scale, so a few bright cells do not wash out the rest; read relative differences and not the colour as a linear share. Only sizes within 30 bp are drawn, a fixed window of this template; the curve above draws 100 bp.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: advanced_viz
     workflow_tag: crisprseq
@@ -1470,8 +2149,17 @@ tabs:
     tag: cs-ind-av-guide-deletions
     index: cs-ind-av-guide-deletions
     title: Deletion coverage around the cut site
-    description: Mean share of reads whose deletion spans each position, with the band of the guide's libraries. A nuclease cut shows as a peak straddling offset 0.
-    layout: {x: 0, y: 0, w: 4, h: 6}
+    description: >-
+      Where do deletions fall? The curve is the mean share of reads whose deletion spans each position, at each offset from the cut site, over the guide's libraries, with a band from the first to the third quartile of the libraries.
+
+      How to read: a nuclease cut is expected to show as a peak near offset 0, and the width of the peak is how far the deletions reach. A peak displaced by a constant points at the cut-site convention below rather than at the biology, and a second peak elsewhere at a second target or an amplicon-end artefact; the allele map shows which alleles make a peak.
+
+      Lines and annotations: the vertical marker at offset 0, labelled Cut site, is the cut site the pipeline reports for each amplicon (the cut_site column of the indel table and the _cutSite.json file). For some guides that convention may be shifted, which moves the curve by a constant and keeps its shape. It is a landmark, not a cut-off.
+
+
+
+      Source: nf-core/crisprseq output documentation, https://nf-co.re/crisprseq/2.3.0/docs/output
+    layout: {x: 0, y: 0, w: 4, h: 5}
   - component_type: advanced_viz
     workflow_tag: crisprseq
     data_collection_tag: guide_cut_site_profile
@@ -1492,8 +2180,17 @@ tabs:
     tag: cs-ind-av-guide-insertions
     index: cs-ind-av-guide-insertions
     title: Insertion position around the cut site
-    description: Mean share of reads with an insertion starting at each position, with the band of the guide's libraries.
-    layout: {x: 4, y: 0, w: 4, h: 6}
+    description: >-
+      Where do insertions start? The curve is the mean share of reads with an insertion starting at each offset from the cut site, over the guide's libraries, with a band from the first to the third quartile of the libraries.
+
+      How to read: insertions of a nuclease cut cluster at one or two positions next to the cut, so a single sharp peak is the expected shape. A flat curve means few insertions, and a peak far from the cut points at the cut-site convention below or at a second target.
+
+      Lines and annotations: the vertical marker at offset 0, labelled Cut site, is the cut site the pipeline reports for each amplicon (the cut_site column of the indel table and the _cutSite.json file). For some guides that convention may be shifted, which moves the curve by a constant and keeps its shape. It is a landmark, not a cut-off.
+
+
+
+      Source: nf-core/crisprseq output documentation, https://nf-co.re/crisprseq/2.3.0/docs/output
+    layout: {x: 4, y: 0, w: 4, h: 5}
   - component_type: advanced_viz
     workflow_tag: crisprseq
     data_collection_tag: guide_alleles
@@ -1514,8 +2211,13 @@ tabs:
     tag: cs-ind-av-allele-map
     index: cs-ind-av-allele-map
     title: Indel alleles by position and size
-    description: One point per allele, pooled over the libraries of its guide, sized by its share of the guide's classified reads and coloured by type. A trail along one size is a deletion placed at shifting offsets.
-    layout: {x: 0, y: 0, w: 8, h: 6}
+    description: >-
+      Which alleles make the signature? Each point is one allele of the picked guide, pooled over its libraries, placed by its start offset from the cut site and its signed size, sized by its share of the guide's classified reads and coloured by type.
+
+      How to read: large points are the guide's frequent alleles. A horizontal trail is one size placed at shifting positions, and a vertical column is alleles of different sizes starting at the same position. Hover a point for its allele label, then find it in the allele table below.
+
+      Note: the 200 most frequent alleles of each guide are kept, and offset 0 is the cut site the pipeline reports, whose convention may be shifted for some guides. No cut-off is drawn.
+    layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: table
     workflow_tag: crisprseq
     data_collection_tag: guide_alleles
@@ -1524,7 +2226,10 @@ tabs:
     tag: cs-ind-table-guide-alleles
     index: cs-ind-table-guide-alleles
     title: Indel alleles of the guide
-    description: The guide's most frequent alleles pooled over its libraries, with how many libraries carry each, its share of the classified reads and its median share where present.
+    description: >-
+      Which alleles does the guide leave? The guide's most frequent alleles pooled over its libraries, with how many libraries carry each, its share of the classified reads and its median share where present.
+
+      How to read: an allele carried by most libraries is a reproducible repair, and one carried by a single library may be noise or a library-specific event. Main peak marks the alleles inside the main indel cluster of at least half the libraries carrying them.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: crisprseq
@@ -1536,13 +2241,16 @@ tabs:
     tag: cs-ind-table-alleles
     index: cs-ind-table-alleles
     title: Indel alleles per library
-    description: Every distinct allele of the guide's libraries with type, size, offset, frame, peak membership and read share, ranked within its library.
+    description: >-
+      Which alleles does each library carry? Every distinct allele of the guide's libraries with its type, size, offset, frame, peak membership and read share, ranked within its library.
+
+      How to read: filter to one library on the left to read its alleles, and sort by rank to see the dominant ones. The read share is a share of the library's classified reads.
     layout: {x: 0, y: 6, w: 8, h: 6}
 
 - title: Substitutions
   subtitle: Where around the cut do bases change or drop out?
   tab_group: Repair signature
-  tab_order: 5
+  tab_order: 7
   tab_icon: mdi:waves
   tab_icon_color: cyan
   icon: /assets/images/workflows/nf-core.png
@@ -1552,7 +2260,7 @@ tabs:
   - name: Guide picker
     icon: mdi:dna
     color: cyan
-    description: The guide the cards and profiles show; the heatmap stays whole
+    description: The guides the cards and profiles show, the first of the list until others are picked; the heatmap stays whole
   - name: Position scope
     icon: mdi:tune
     color: cyan
@@ -1584,6 +2292,7 @@ tabs:
     data_collection_tag: guide_substitution_profile
     interactive_component_type: Select
     always_selected: true
+    multiple: true
     column_name: profile_guide
     column_type: object
     display:
@@ -1616,9 +2325,9 @@ tabs:
     order: 1
     body: >
       A base editor leaves a band of substitutions a few bases upstream of the cut, while a
-      nuclease leaves the matrix flat and a gap peak at the cut. The heatmap covers every guide
-      in scope. The Guide picker on the left narrows the cards and the profiles below it, not the
-      heatmap.
+      nuclease leaves the matrix flat and a peak in the gap rate near the cut site. The heatmap
+      covers every guide in scope. The Guide picker on the left narrows the cards and the profiles
+      below it, not the heatmap.
     tag: cs-sub-intro
     index: cs-sub-intro
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -1633,7 +2342,7 @@ tabs:
     top_n_count: 3
     display:
       icon_name: mdi:swap-horizontal
-      icon_color: orange
+      icon_color: cyan.4
       caption: highest rates, by offset
       decimals: 1
     section: Substitutions at a glance
@@ -1653,14 +2362,14 @@ tabs:
     top_n_count: 3
     display:
       icon_name: mdi:dots-horizontal
-      icon_color: grape
+      icon_color: cyan.6
       caption: highest rates, by offset
       decimals: 1
     section: Substitutions at a glance
     tag: cs-sub-card-gap
     index: cs-sub-card-gap
     title: Peak gap rate (%)
-    description: Highest mean share of reads with a gap at any offset. A nuclease cut shows as a peak at offset 0.
+    description: Highest mean share of reads with a gap at any offset. A nuclease cut is expected to show as a peak near offset 0.
     layout: {x: 2, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: crisprseq
@@ -1672,7 +2381,7 @@ tabs:
     secondary_layout: histogram
     display:
       icon_name: mdi:chart-histogram
-      icon_color: cyan
+      icon_color: cyan.8
       caption: offsets, by mean rate
     section: Substitutions at a glance
     tag: cs-sub-card-typical
@@ -1690,14 +2399,14 @@ tabs:
     column_type: int64
     display:
       icon_name: mdi:test-tube
-      icon_color: teal
+      icon_color: cyan.9
       caption: median libraries, with their spread
       decimals: 0
     section: Substitutions at a glance
     tag: cs-sub-card-libraries
     index: cs-sub-card-libraries
-    title: Libraries behind an offset
-    description: Libraries of a guide whose amplicon reaches an offset, median over the offsets and guides in view.
+    title: Libraries behind a profile
+    description: Libraries of a guide whose amplicon reaches the whole window, median over the guides in view.
     layout: {x: 6, y: 0, w: 2, h: 2}
   - component_type: advanced_viz
     workflow_tag: crisprseq
@@ -1717,8 +2426,13 @@ tabs:
     tag: cs-sub-av-heatmap
     index: cs-sub-av-heatmap
     title: Substitution rate per guide and offset
-    description: Mean share of reads with a substituted base, one row per guide and one column per offset from the cut site, on a log(1 + rate) colour scale so a few hot positions do not wash out the rest; rows cluster by profile.
-    layout: {x: 0, y: 0, w: 8, h: 5}
+    description: >-
+      Which offsets carry substitutions, guide by guide? Each row is one guide, each column an offset from the cut site, and each cell the mean share of reads with a base other than the dominant one over the guide's libraries.
+
+      How to read: a base editor leaves a hot band a few bases upstream of the cut in the guides it was used with, while a nuclease leaves the matrix flat. Rows are clustered by profile, so guides with the same band sit together; pick a hot row in the Guide picker and read its curve in the profile below.
+
+      Note: cells use a log(1 + rate) colour scale, so a few hot cells do not wash out the rest; read relative differences and not the colour as a linear rate. The dominant base stands in for the reference, which the table does not name, so a position edited in most reads reads the edit as the reference. Only offsets every library of a guide reaches are drawn.
+    layout: {x: 0, y: 0, w: 8, h: 10}
   - component_type: advanced_viz
     workflow_tag: crisprseq
     data_collection_tag: guide_substitution_profile
@@ -1739,7 +2453,16 @@ tabs:
     tag: cs-sub-av-guide-subs
     index: cs-sub-av-guide-subs
     title: Substitution rate around the cut site
-    description: Mean share of reads carrying a base other than the dominant one at each offset over the guide's libraries, with their band; a curve above its band means a minority of libraries carries the substitution.
+    description: >-
+      Where do bases change around the cut? The curve is the mean share of reads carrying a base other than the dominant one at each offset from the cut site, over the guide's libraries, with a band from the first to the third quartile of the libraries.
+
+      How to read: a flat curve at the background is no substitution signal, and a hump a few bases upstream of the cut is where a base editor works. A curve above its band means a minority of libraries carries the substitution.
+
+      Lines and annotations: the vertical marker at offset 0, labelled Cut site, is the cut site the pipeline reports for each amplicon (the cut_site column of the indel table and the _cutSite.json file). For some guides that convention may be shifted, which moves the curve by a constant and keeps its shape. It is a landmark, not a cut-off.
+
+      Note: only offsets every library of the guide reaches are drawn, because the amplicon ends are alignment edges where the gap rate climbs without any edit.
+
+      Source: nf-core/crisprseq output documentation, https://nf-co.re/crisprseq/2.3.0/docs/output
     layout: {x: 0, y: 0, w: 4, h: 6}
   - component_type: advanced_viz
     workflow_tag: crisprseq
@@ -1761,7 +2484,16 @@ tabs:
     tag: cs-sub-av-guide-gaps
     index: cs-sub-av-guide-gaps
     title: Gap rate around the cut site
-    description: Mean share of reads with a gap at each offset over the guide's libraries, with their band; a nuclease cut shows as a peak at offset 0.
+    description: >-
+      Where do reads lose bases? The curve is the mean share of reads with a gap at each offset from the cut site, over the guide's libraries, with a band from the first to the third quartile of the libraries.
+
+      How to read: a nuclease cut is expected to show as a peak near the cut site, from the deletions it leaves. A peak displaced by a constant points at the cut-site convention below rather than at the biology, and a rise at the window ends is an alignment edge.
+
+      Lines and annotations: the vertical marker at offset 0, labelled Cut site, is the cut site the pipeline reports for each amplicon (the cut_site column of the indel table and the _cutSite.json file). For some guides that convention may be shifted, which moves the curve by a constant and keeps its shape. It is a landmark, not a cut-off.
+
+
+
+      Source: nf-core/crisprseq output documentation, https://nf-co.re/crisprseq/2.3.0/docs/output
     layout: {x: 4, y: 0, w: 4, h: 6}
   - component_type: table
     workflow_tag: crisprseq
@@ -1771,5 +2503,8 @@ tabs:
     tag: cs-sub-table
     index: cs-sub-table
     title: Substitution and gap rate per offset
-    description: Mean, median and quartiles of the substitution and gap rates at every offset of the profile window.
+    description: >-
+      What are the numbers behind the profile? Mean, median and quartiles of the substitution and gap rates at every offset of the picked guide's window.
+
+      How to read: sort by the mean substitution rate to find the offsets that carry the most, and compare the mean with the median: a mean far above its median means a minority of libraries carries the rate. Libraries is the number of libraries behind the offset.
     layout: {x: 0, y: 0, w: 8, h: 6}

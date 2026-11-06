@@ -250,8 +250,8 @@
       }
     },
     "nf-core/crisprseq/2.3.0": {
-      "version": "2.0.0",
-      "content_hash": "4b4fd1a1f9c78241caf2919a872170f7538106f64cef5f15aa392821f0d5874c",
+      "version": "2.2.4",
+      "content_hash": "a16668b6d1f5eeb0f5d040cba0c670fc36d45abf7d530082802df6bf19f3f341",
       "catalog": {
         "crisprseq": "1.0.0"
       }

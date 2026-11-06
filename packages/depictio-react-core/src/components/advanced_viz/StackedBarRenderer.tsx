@@ -57,6 +57,23 @@ import {
  *  proportions stays readable in once the tilted sample labels and the axis
  *  title have taken their share. */
 const TAXONOMY_PLOT_PX = 300;
+/** A data value placed inside a Plotly `hovertemplate`: `<` would open a tag
+ *  and `%{` a template variable, so a taxon or column name carrying either is
+ *  defused. */
+function escapeHover(text: string): string {
+  return text.replace(/</g, '&lt;').replace(/%\{/g, '%​{');
+}
+
+/** Black or white, whichever reads on `colour` (a `#rgb` / `#rrggbb` fill; any
+ *  other form falls back to dark text). */
+function readableOn(colour: string | undefined): string {
+  const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec((colour ?? '').trim());
+  if (!m) return '#212529';
+  const hex = m[1].length === 3 ? m[1].replace(/./g, (c) => c + c) : m[1];
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  return 0.299 * r + 0.587 * g + 0.114 * b > 150 ? '#212529' : '#ffffff';
+}
+
 /** One bar of a horizontal chart (`orientation: h`), where the bar count is
  *  the tile's height problem. */
 const BAR_ROW_PX = 18;
@@ -552,17 +569,38 @@ const StackedBarRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
     for (const t of [...topTaxa, 'Other'])
       tracesByTaxon.set(t, slots.map((_, i) => (spacer[i] ? null : 0)));
 
+    // What a segment's tooltip reads, whatever the bar is drawn in: the raw
+    // value, its share of the bar and the bar's total. Plotly's default label
+    // only echoes the position and the plotted number, which in a normalised
+    // bar is a bare "87%" with no way to tell what it is a share of.
+    const rawByTaxon = new Map<string, (number | null)[]>();
+    for (const t of [...topTaxa, 'Other'])
+      rawByTaxon.set(t, slots.map((_, i) => (spacer[i] ? null : 0)));
+    const barTotals = slots.map(() => 0);
+
     slots.forEach((s, sIdx) => {
       if (spacer[sIdx]) return;
       const inner = cellTotals.get(s) || new Map();
       let total = 0;
       for (const v of inner.values()) total += v;
+      barTotals[sIdx] = total;
       for (const [t, v] of inner.entries()) {
         const bucket = topSet.has(t) ? t : 'Other';
         const arr = tracesByTaxon.get(bucket)!;
         arr[sIdx] = (arr[sIdx] ?? 0) + (normalise && total > 0 ? v / total : v);
+        const raw = rawByTaxon.get(bucket)!;
+        raw[sIdx] = (raw[sIdx] ?? 0) + v;
       }
     });
+    // A bar that already sums to 100 (percentages) or 1 (fractions) has a raw
+    // value equal to its share; repeating it as "Value" would be noise.
+    // Most bars, not all: rounding and a dropped class leave a few off by a
+    // little.
+    const filled = barTotals.filter((_, i) => !spacer[i]);
+    const rawIsShare =
+      filled.length > 0 &&
+      filled.filter((t) => Math.abs(t - 100) < 2 || Math.abs(t - 1) < 0.02).length >=
+        filled.length * 0.9;
 
     // Stable taxon→colour map so filtering (e.g. by habitat) doesn't reshuffle
     // the top-N colours. Universe = all taxa in the DC; fallback = the filtered
@@ -579,14 +617,35 @@ const StackedBarRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
     const series = Array.from(tracesByTaxon.entries()).filter(([, arr]) =>
       arr.some((v) => (v ?? 0) > 0),
     );
-    const data = series.map(([t, arr]) => ({
-      type: 'bar' as const,
-      name: t,
-      ...(horizontal
-        ? { orientation: 'h' as const, x: arr, y: slots }
-        : { x: slots, y: arr }),
-      marker: { color: t === 'Other' ? '#adb5bd' : colourSource.get(t) },
-    }));
+    const barLabel = '%{' + (horizontal ? 'y' : 'x') + '}';
+    const valueLabel = (config.value_title || config.abundance_col || 'Value').trim();
+    const data = series.map(([t, arr]) => {
+      const colour = t === 'Other' ? '#adb5bd' : colourSource.get(t);
+      const raw = rawByTaxon.get(t) ?? [];
+      return {
+        type: 'bar' as const,
+        name: t,
+        ...(horizontal
+          ? { orientation: 'h' as const, x: arr, y: slots }
+          : { x: slots, y: arr }),
+        marker: { color: colour },
+        // [value, share of the bar, bar total]
+        customdata: slots.map((_, i) => [
+          raw[i] ?? 0,
+          barTotals[i] > 0 ? (raw[i] ?? 0) / barTotals[i] : 0,
+          barTotals[i],
+        ]),
+        hovertemplate:
+          `<b>${barLabel}</b><br><b>${escapeHover(t)}</b>: %{customdata[1]:.1%} of the bar` +
+          (rawIsShare
+            ? ''
+            : `<br>${escapeHover(valueLabel)}: %{customdata[0]:,.4~g} of %{customdata[2]:,.4~g}`) +
+          '<extra></extra>',
+        // The segment's own colour fills its tooltip, as Plotly does by
+        // default, so the label reads as the segment under the pointer.
+        hoverlabel: { bgcolor: colour, bordercolor: colour, font: { color: readableOn(colour) } },
+      };
+    });
 
     // Zoom: the value axis starts just under the smallest bottom segment.
     // Never on a log axis, which is a crop of its own.
@@ -842,6 +901,9 @@ const StackedBarRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
         layout: {
           ...plotlyThemeFragment(isDark, theme),
           barmode: 'stack' as const,
+          // Larger, left-aligned text; the fill is each segment's colour (set on
+          // its trace), not a theme plaque, so the colour survives in the tooltip.
+          hoverlabel: { font: { size: 12 }, align: 'left' as const, namelength: -1 },
           // Automargins: the tilted sample ids, the strip names and the legend
           // take what they need instead of a guess that clipped them.
           margin: { l: 60, r: 20, t: (stripKey ? 44 : 30) + legendTopPx + groupBandPx, b: 30 },
