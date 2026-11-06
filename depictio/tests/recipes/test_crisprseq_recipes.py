@@ -210,8 +210,12 @@ def test_guide_tables(run_dir: Path) -> None:
     assert g1["median_edited_pct"] == pytest.approx(20.0)
     assert g1["dominant_indel_size"] == -2
     assert g1["classification_mix"] == "Het NHEJ 2"
-    assert g1["edit_class"] == "Moderate editing"
-    assert guides.columns[:3] == ["guide", "edit_class", "libraries"]
+    # Two guides only: a quartile of two values says nothing, so no guide is ranked.
+    assert g1["edit_quartile"] == "Not ranked"
+    assert guides.columns[:3] == ["guide", "edit_quartile", "libraries"]
+    # L1 edits 40%, L2 0%: the quartiles and their width are those of the guide's libraries.
+    assert (g1["q1_edited_pct"], g1["q3_edited_pct"]) == (pytest.approx(10.0), pytest.approx(30.0))
+    assert g1["iqr_edited_pct"] == pytest.approx(20.0)
 
     gsizes = execute_recipe("nf-core/crisprseq/guide_indel_sizes.py", run_dir, extra_sources=extra)
     g1_sizes = gsizes.filter(pl.col("guide") == "GGGTTTAAACCC")
@@ -256,7 +260,7 @@ def test_guide_tables(run_dir: Path) -> None:
     assert at_cut["mean_gap_pct"] == pytest.approx(4.0)
     assert at_cut["libraries"] == 2
     # L1 alone reaches offset +1 (its amplicon edge, a gap in every read): one of
-    # the guide's two libraries is under the coverage floor, so the offset is left out.
+    # the guide's two libraries does not reach it, so the offset is left out.
     assert g1_sub["offset"].to_list() == [-1, 0]
 
     gsubs = execute_recipe(
@@ -296,3 +300,132 @@ def test_a_table_without_its_outcome_columns_names_them(run_dir: Path) -> None:
     (run_dir / "cigar" / "L1_edits.csv").write_text('"","Wt"\n"L1",5\n')
     with pytest.raises(RecipeError, match=r"source 'edits' lacks input column\(s\)"):
         execute_recipe("crisprseq/edit_outcomes.py", run_dir)
+
+
+def _quartile_frames() -> dict[str, pl.DataFrame]:
+    """Eight guides, one library each, editing 0 to 70 percent in steps of 10."""
+    ids = [f"L{i}" for i in range(8)]
+    edited = [10.0 * i for i in range(8)]
+    return {
+        "samples": pl.DataFrame({"sample": ids, "guide": [f"G{i}" for i in range(8)]}),
+        "summary": pl.DataFrame(
+            {
+                "sample": ids,
+                "classified_reads": [100] * 8,
+                "edited_pct": edited,
+                "frameshift_pct": edited,
+                "inframe_pct": [0.0] * 8,
+                "template_based_pct": [0.0] * 8,
+                "frameshift_of_indels_pct": [100.0] * 8,
+            }
+        ),
+        "indels": pl.DataFrame(
+            schema={
+                "sample": pl.Utf8,
+                "size": pl.Int64,
+                "reads": pl.Int64,
+                "pct_reads": pl.Float64,
+                "pct_indel_reads": pl.Float64,
+            }
+        ),
+    }
+
+
+def test_edit_quartile_ranks_the_guides_of_the_run(run_dir: Path) -> None:
+    """The classes are quartiles of the guides' median edited share, not fixed percentages."""
+    guides = execute_recipe(
+        "nf-core/crisprseq/guide_summary.py", run_dir, extra_sources=_quartile_frames()
+    )
+    by_guide = dict(zip(guides["guide"], guides["edit_quartile"], strict=True))
+    # Quartiles of 0..70 are 17.5, 35 and 52.5.
+    assert by_guide["G7"] == by_guide["G6"] == "Highest quartile"
+    assert by_guide["G5"] == by_guide["G4"] == "Upper-middle quartile"
+    assert by_guide["G3"] == by_guide["G2"] == "Lower-middle quartile"
+    assert by_guide["G1"] == by_guide["G0"] == "Lowest quartile"
+
+
+def test_edit_quartile_needs_four_guides(run_dir: Path) -> None:
+    frames = _quartile_frames()
+    keep = ["L0", "L1", "L2"]
+    frames["samples"] = frames["samples"].filter(pl.col("sample").is_in(keep))
+    frames["summary"] = frames["summary"].filter(pl.col("sample").is_in(keep))
+    guides = execute_recipe("nf-core/crisprseq/guide_summary.py", run_dir, extra_sources=frames)
+    assert set(guides["edit_quartile"]) == {"Not ranked"}
+
+
+def test_edit_quartile_ranks_nothing_when_every_guide_ties(run_dir: Path) -> None:
+    """A negative-control run (all guides unedited) has no top quartile to name."""
+    frames = _quartile_frames()
+    frames["summary"] = frames["summary"].with_columns(edited_pct=pl.lit(0.0))
+    guides = execute_recipe("nf-core/crisprseq/guide_summary.py", run_dir, extra_sources=frames)
+    assert set(guides["edit_quartile"]) == {"Not ranked"}
+
+
+def test_library_outcome_space(run_dir: Path) -> None:
+    samples = execute_recipe("nf-core/crisprseq/samples.py", run_dir)
+    summary = execute_recipe("crisprseq/edit_summary.py", run_dir)
+    guides = pl.DataFrame(
+        {
+            "guide": ["GGGTTTAAACCC", "CCCAAATTTGGG"],
+            "edit_quartile": ["Highest quartile", "Lowest quartile"],
+        }
+    )
+    out = execute_recipe(
+        "nf-core/crisprseq/library_outcome_space.py",
+        run_dir,
+        extra_sources={"samples": samples, "summary": summary, "guides": guides},
+    )
+    assert out["sample"].to_list() == ["L1", "L2", "L3"]
+    # A library takes the quartile of its guide.
+    assert out["edit_quartile"].to_list() == [
+        "Highest quartile",
+        "Highest quartile",
+        "Lowest quartile",
+    ]
+    shares = [
+        c
+        for c in out.columns
+        if c.endswith("_pct") and c.split("_")[0] in {"wt", "template", "delins", "ins", "del"}
+    ]
+    assert len(shares) == 7
+    assert (
+        out.select(pl.sum_horizontal(shares)).to_series().to_list()
+        == [pytest.approx(100.0, abs=0.5)] * 3
+    )
+    # A library is named by the edit class with the most reads, Wild type only without an edit.
+    edit_cols = {
+        "template_based_pct": "Template-based",
+        "delins_pct": "Deletion-insertion",
+        "ins_inframe_pct": "Insertion, in-frame",
+        "ins_frameshift_pct": "Insertion, frameshift",
+        "del_inframe_pct": "Deletion, in-frame",
+        "del_frameshift_pct": "Deletion, frameshift",
+    }
+    for row in out.iter_rows(named=True):
+        best = max(edit_cols, key=lambda c: row[c])
+        expected = edit_cols[best] if row[best] > 0 else "Wild type"
+        assert row["dominant_outcome"] == expected
+    # Editing grows to the right: the first component runs against the wild-type share.
+    corr = pl.DataFrame({"x": out["dim_1"], "y": out["wt_pct"]}).corr().row(0)[1]
+    assert corr < 0
+    assert 0 < out["explained_pc1_pct"][0] <= 100
+    assert out["explained_pc1_pct"][0] + out["explained_pc2_pct"][0] <= 100.01
+
+
+def test_guide_indel_size_matrix(run_dir: Path) -> None:
+    sizes = pl.DataFrame(
+        {
+            "guide": ["GA", "GA", "GB", "GB"],
+            "size": [-3, 1, 1, 80],
+            "mean_pct_reads": [2.0, 5.0, 4.0, 9.0],
+        }
+    )
+    out = execute_recipe(
+        "nf-core/crisprseq/guide_indel_size_matrix.py", run_dir, extra_sources={"sizes": sizes}
+    )
+    assert out["size_guide"].to_list() == ["GA", "GB"]
+    row = {r["size_guide"]: r for r in out.iter_rows(named=True)}
+    # A size a guide has no row for is zero; a size beyond the window is not a column.
+    assert row["GA"]["-3"] == 2.0 and row["GA"]["+1"] == 5.0 and row["GA"]["-2"] == 0.0
+    assert row["GB"]["+1"] == 4.0 and row["GB"]["-3"] == 0.0
+    assert "+80" not in out.columns and "0" not in out.columns
