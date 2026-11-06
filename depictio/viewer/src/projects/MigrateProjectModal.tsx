@@ -311,8 +311,8 @@ const MigrateProjectModal: React.FC<MigrateProjectModalProps> = ({
       <Row label="Objects">{r.object_count}</Row>
       {preflight?.in_flight && (
         <Alert color="yellow" variant="light" data-testid="migrate-in-flight">
-          A push of this project is already in progress. Wait for it to finish before
-          publishing again.
+          A send of this project is already in progress. Wait for it to finish before
+          sending again.
         </Alert>
       )}
       {invite && !foreign && (
@@ -340,7 +340,7 @@ const MigrateProjectModal: React.FC<MigrateProjectModalProps> = ({
       )}
       {pre?.existing_locked && (
         <Alert color="gray" variant="light">
-          The existing copy on the target is published read-only; it stays so until an
+          The existing copy on the target is read-only; it stays so until an
           administrator there decides otherwise.
         </Alert>
       )}
@@ -374,7 +374,7 @@ const MigrateProjectModal: React.FC<MigrateProjectModalProps> = ({
     <Modal
       opened={opened}
       onClose={onClose}
-      title={`Publish ${projectName ? `"${projectName}" ` : 'project '}to another instance`}
+      title={`Send ${projectName ? `"${projectName}" ` : 'project '}to another instance`}
       centered
       size="md"
       data-testid="migrate-project-modal"
@@ -396,7 +396,7 @@ const MigrateProjectModal: React.FC<MigrateProjectModalProps> = ({
             )}
             {destinations !== null && !hasTargets && !adhocEnabled && (
               <Alert color="yellow" variant="light" data-testid="migrate-no-destination">
-                No destination is available: no target is registered and publishing to a URL is
+                No destination is available: no target is registered and sending to a URL is
                 disabled on this instance.
               </Alert>
             )}
@@ -429,7 +429,7 @@ const MigrateProjectModal: React.FC<MigrateProjectModalProps> = ({
                 />
                 <PasswordInput
                   label="Invite code"
-                  description="Issued by an administrator of the destination. Never stored here; keep it to publish this project's updates later."
+                  description="Issued by an administrator of the destination. Never stored here; keep it to send this project's updates later."
                   placeholder="XXXX-XXXX-XXXX-XXXX-XXXX-XXXX"
                   value={code}
                   onChange={(e) => setCode(e.currentTarget.value)}
@@ -490,7 +490,7 @@ const MigrateProjectModal: React.FC<MigrateProjectModalProps> = ({
               leftSection={<Icon icon="mdi:transfer-up" width={16} />}
               data-testid="migrate-push-button"
             >
-              Publish
+              Send
             </Button>
           )}
         </Group>

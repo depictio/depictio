@@ -192,7 +192,7 @@ export const MigrationRequestsBanner: React.FC = () => {
         dismissable: true,
       })}
       {block(imported, {
-        color: 'teal',
+        color: 'green',
         icon: 'mdi:check-circle-outline',
         title: imported.length === 1 ? 'A project was received' : 'Projects were received',
         testId: 'migration-banner-imported',

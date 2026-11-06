@@ -20,7 +20,7 @@ import { PublishedLockBadge } from './PublishedLockBadge';
 
 const POLL_MS = 5000;
 
-interface PublicationPanelProps {
+interface SendPanelProps {
   projectId: string;
   projectName?: string | null;
   /** Owners and admins: publishing is theirs alone. */
@@ -30,12 +30,12 @@ interface PublicationPanelProps {
 }
 
 /**
- * Publishing this project to another Depictio instance, in the project
- * settings: the Publish action, whether editing is locked here, and what was
+ * Sending this project to another Depictio instance, in the project
+ * settings: the Send action, whether editing is locked here, and what was
  * sent already (newest first, as the API lists it). Polls while a push is
  * still moving.
  */
-const PublicationPanel: React.FC<PublicationPanelProps> = ({
+const SendPanel: React.FC<SendPanelProps> = ({
   projectId,
   projectName,
   canPush,
@@ -79,14 +79,14 @@ const PublicationPanel: React.FC<PublicationPanelProps> = ({
   if (!migrationUi) {
     return (
       <Text size="sm" c="dimmed" data-testid="publication-hidden">
-        Publishing to another instance is turned off on this instance.
+        Sending projects to another instance is turned off on this instance.
       </Text>
     );
   }
   if (!canPush) {
     return (
       <Text size="sm" c="dimmed" data-testid="publication-owners-only">
-        Only the project owners and administrators can publish this project.
+        Only the project owners and administrators can send this project.
       </Text>
     );
   }
@@ -99,7 +99,7 @@ const PublicationPanel: React.FC<PublicationPanelProps> = ({
       onClick={() => setOpen(true)}
       data-testid="publication-publish-button"
     >
-      Publish to…
+      Send to another instance…
     </Button>
   );
 
@@ -186,4 +186,4 @@ const PublicationPanel: React.FC<PublicationPanelProps> = ({
   );
 };
 
-export default PublicationPanel;
+export default SendPanel;

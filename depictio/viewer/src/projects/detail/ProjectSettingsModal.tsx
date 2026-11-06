@@ -17,11 +17,11 @@ import ManifestRefreshPanel, {
 } from './ManifestRefreshPanel';
 import { summarizeManifestRun } from '../manifestRun';
 import ExportTemplatePanel from './ExportTemplatePanel';
-import PublicationPanel from './PublicationPanel';
+import SendPanel from './SendPanel';
 import { useMigrationUi } from '../../hooks/useMigrationUi';
 import type { PublishedLock } from 'depictio-react-core';
 
-export type ProjectSettingsSectionKey = 'storage' | 'refresh' | 'export' | 'publish';
+export type ProjectSettingsSectionKey = 'storage' | 'refresh' | 'export' | 'send';
 
 interface ProjectSettingsModalProps {
   opened: boolean;
@@ -40,7 +40,7 @@ interface ProjectSettingsModalProps {
   dataCollections: ReadonlyArray<ManifestRefreshDc>;
   /** Owners and admins: they alone can publish the project elsewhere. */
   canPush?: boolean;
-  /** The project's editing lock, shown in the Publication section. */
+  /** The project's editing lock, shown in the Send section. */
   publishedLock?: PublishedLock | null;
   /** Reload the project page once a refresh has rebuilt its tables. */
   onReloadProject?: () => void;
@@ -56,9 +56,9 @@ interface ProjectSettingsModalProps {
  *    collections read private buckets with (owners only).
  * 2. Data refresh: re-read the collections whose source the server can reach
  *    again, and follow the run.
- * 3. Export template: package the project as a reusable template bundle.
- * 4. Publication: send a copy to another Depictio instance, and see what was
- *    sent (only where the instance shows migration).
+ * 3. Create a template: package the project as a reusable template bundle.
+ * 4. Send: send a copy to another Depictio instance, and see what was sent
+ *    (only where the instance shows migration).
  *
  * Unlike the dashboard settings, nothing saves as you go: each section acts
  * on its own button. Unsaved edits survive a switch to another section and
@@ -144,7 +144,7 @@ const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
     {
       key: 'export',
       icon: 'mdi:package-variant-closed',
-      title: 'Export template',
+      title: 'Create a template',
       subtitle: 'Package this project and its dashboards to build them again on other data',
       body: (
         <ExportTemplatePanel
@@ -157,12 +157,13 @@ const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
     ...(migrationUi
       ? [
           {
-            key: 'publish',
+            key: 'send',
             icon: 'mdi:transfer-up',
-            title: 'Publication',
+            title: 'Send to another instance',
+            navLabel: 'Send',
             subtitle: 'Send a copy of this project to another Depictio instance',
             body: (
-              <PublicationPanel
+              <SendPanel
                 projectId={projectId}
                 projectName={projectName}
                 canPush={canPush}
