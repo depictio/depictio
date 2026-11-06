@@ -16,7 +16,13 @@ import {
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
-import { checkPush, getPush, getPushDestinations, startPush } from 'depictio-react-core';
+import {
+  Z_LAYERS,
+  checkPush,
+  getPush,
+  getPushDestinations,
+  startPush,
+} from 'depictio-react-core';
 import type {
   MigrationPush,
   MigrationTarget,
@@ -377,6 +383,8 @@ const MigrateProjectModal: React.FC<MigrateProjectModalProps> = ({
       title={`Send ${projectName ? `"${projectName}" ` : 'project '}to another instance`}
       centered
       size="md"
+      // Opened from the project settings dialog, which sits at the overlay layer.
+      zIndex={Z_LAYERS.nestedOverlay}
       data-testid="migrate-project-modal"
     >
       <Stack gap="md">
@@ -438,7 +446,7 @@ const MigrateProjectModal: React.FC<MigrateProjectModalProps> = ({
                 />
                 <Group justify="flex-end">
                   <Button
-                    size="xs"
+                    size="sm"
                     variant="default"
                     disabled={!destination || checking}
                     onClick={() => destination && void runCheck(destination, () => true)}

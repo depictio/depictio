@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Badge, Button, Group, Stack, Table, Text, Tooltip } from '@mantine/core';
+import { Button, Group, Paper, Stack, Switch, Table, Text, ThemeIcon, Tooltip } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import { Send } from 'lucide-react';
 
@@ -17,7 +17,7 @@ import {
   pushResultLabel,
 } from '../pushStatus';
 import { NO_DESTINATION_REASON, usePublishStatus } from '../usePushTargets';
-import { PublishedLockBadge } from './PublishedLockBadge';
+import { PublishedLockModal } from './PublishedLockControl';
 
 const POLL_MS = 5000;
 
@@ -28,6 +28,10 @@ interface SendPanelProps {
   canPush: boolean;
   /** The project's editing lock, when it has one. */
   lock?: PublishedLock | null;
+  /** Administrators alone can lock or unlock editing. */
+  isAdmin?: boolean;
+  /** Reload the project once its editing lock changed. */
+  onLockChanged?: () => void;
 }
 
 /**
@@ -41,6 +45,8 @@ const SendPanel: React.FC<SendPanelProps> = ({
   projectName,
   canPush,
   lock,
+  isAdmin = false,
+  onLockChanged,
 }) => {
   const migrationUi = useMigrationUi();
   const enabled = migrationUi && canPush;
@@ -48,6 +54,7 @@ const SendPanel: React.FC<SendPanelProps> = ({
   const [pushes, setPushes] = useState<MigrationPush[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [open, setOpen] = useState(false);
+  const [lockOpen, setLockOpen] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -94,23 +101,37 @@ const SendPanel: React.FC<SendPanelProps> = ({
 
   const publishButton = (
     <Button
+      size="sm"
       leftSection={<Send size={16} strokeWidth={1.8} aria-hidden />}
       disabled={status !== 'available'}
       loading={status === 'loading'}
       onClick={() => setOpen(true)}
       data-testid="publication-publish-button"
     >
-      Send to another instance…
+      Send to another instance
     </Button>
   );
 
+  const locked = !!lock;
+  const lockSwitch = (
+    <Switch
+      size="md"
+      label="Lock editing"
+      styles={{ label: { whiteSpace: 'nowrap' }, root: { flexShrink: 0 } }}
+      checked={locked}
+      onChange={() => setLockOpen(true)}
+      disabled={!isAdmin}
+      data-testid="project-editing-switch"
+    />
+  );
+
   return (
-    <Stack gap="md" data-testid="publication-panel">
-      <Stack gap="sm" align="flex-start">
-        <Text size="sm">
-          Send a copy of this project, its data and its dashboards, to another Depictio
-          instance.
-        </Text>
+    <Stack gap="lg" data-testid="publication-panel">
+      <Text size="sm" c="dimmed">
+        Send a copy of this project, its data and its dashboards, to another Depictio
+        instance.
+      </Text>
+      <Group>
         {status === 'unavailable' ? (
           <Tooltip label={NO_DESTINATION_REASON} multiline w={280} withinPortal>
             <span data-testid="publication-disabled-reason">{publishButton}</span>
@@ -118,44 +139,54 @@ const SendPanel: React.FC<SendPanelProps> = ({
         ) : (
           publishButton
         )}
-      </Stack>
-
-      <Group
-        justify="space-between"
-        wrap="nowrap"
-        px="sm"
-        py={8}
-        style={{
-          border: '1px solid var(--mantine-color-default-border)',
-          borderRadius: 'var(--mantine-radius-sm)',
-        }}
-        data-testid={lock ? 'publication-locked' : 'publication-unlocked'}
-      >
-        <Stack gap={0}>
-          <Text size="sm" fw={500}>
-            Editing on this instance
-          </Text>
-          <Text size="xs" c="dimmed">
-            {lock
-              ? 'Read-only: nobody can change the dashboards or data here.'
-              : 'Owners and editors can change the dashboards and data here.'}
-          </Text>
-        </Stack>
-        {lock ? (
-          <PublishedLockBadge lock={lock} />
-        ) : (
-          <Badge
-            variant="light"
-            color="gray"
-            leftSection={<Icon icon="mdi:lock-open-variant-outline" width={12} />}
-          >
-            Editable
-          </Badge>
-        )}
       </Group>
 
+      <Paper
+        withBorder
+        p="md"
+        radius="md"
+        data-testid={locked ? 'publication-locked' : 'publication-unlocked'}
+      >
+        <Group justify="space-between" wrap="nowrap" align="center">
+          <Group gap="sm" wrap="nowrap" align="flex-start" style={{ minWidth: 0 }}>
+            <ThemeIcon variant="light" color={locked ? 'orange' : 'gray'} size={40} radius="md">
+              <Icon
+                icon={locked ? 'mdi:lock-outline' : 'mdi:pencil-outline'}
+                width={22}
+                height={22}
+              />
+            </ThemeIcon>
+            <Stack gap={2} style={{ minWidth: 0 }}>
+              <Text size="md" fw={600}>
+                {locked ? 'Editing locked' : 'Editable'}
+              </Text>
+              <Text size="sm" c="dimmed">
+                {locked
+                  ? 'Read-only: nobody can change the dashboards or data, owners included.'
+                  : 'Owners and editors can change the dashboards and data on this instance.'}
+              </Text>
+              {!isAdmin && (
+                <Text size="sm" c="dimmed">
+                  Only an administrator can lock or unlock editing.
+                </Text>
+              )}
+            </Stack>
+          </Group>
+          {lockSwitch}
+        </Group>
+      </Paper>
+      {isAdmin && (
+        <PublishedLockModal
+          opened={lockOpen}
+          onClose={() => setLockOpen(false)}
+          projectId={projectId}
+          locked={locked}
+          onChanged={() => onLockChanged?.()}
+        />
+      )}
+
       <Stack gap="xs">
-        <Text fw={600} size="sm">
+        <Text fw={500} size="sm">
           Sent
         </Text>
         {loaded && pushes.length === 0 ? (

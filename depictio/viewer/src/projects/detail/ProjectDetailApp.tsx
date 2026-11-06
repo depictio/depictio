@@ -745,6 +745,7 @@ const ProjectDetailApp: React.FC = () => {
           dataCollections={allDataCollections}
           canPush={canPushProject}
           publishedLock={project?.published_lock}
+          isAdmin={!!user?.is_admin}
           initialSection={settingsSection}
           onReloadProject={refresh}
         />

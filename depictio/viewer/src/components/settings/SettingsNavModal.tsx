@@ -223,6 +223,17 @@ const SettingsNavLayout: React.FC<SettingsNavLayoutProps> = ({
                 label={s.navLabel ?? s.title}
                 active={isActive}
                 variant="light"
+                // The light variant sets its colours inline from the named
+                // primary colour (blue), while the page accent is set through
+                // the primary CSS variables (teal on Projects): a `style`
+                // prop is the one thing that beats those inline values.
+                style={
+                  {
+                    '--nl-bg': 'var(--mantine-primary-color-light)',
+                    '--nl-hover': 'var(--mantine-primary-color-light-hover)',
+                    '--nl-color': 'var(--mantine-primary-color-light-color)',
+                  } as React.CSSProperties
+                }
                 onClick={() => select(s.key)}
                 leftSection={
                   <Icon
@@ -239,15 +250,7 @@ const SettingsNavLayout: React.FC<SettingsNavLayoutProps> = ({
                 }
                 rightSection={s.navHint}
                 styles={{
-                  // The light variant resolves the named primary colour
-                  // (blue), while the page accent is set through the
-                  // primary CSS variables (teal on Projects): read those.
-                  root: {
-                    borderRadius: 'var(--mantine-radius-sm)',
-                    '--nl-bg': 'var(--mantine-primary-color-light)',
-                    '--nl-hover': 'var(--mantine-primary-color-light-hover)',
-                    '--nl-color': 'var(--mantine-primary-color-light-color)',
-                  },
+                  root: { borderRadius: 'var(--mantine-radius-sm)' },
                   label: { fontWeight: isActive ? 600 : 500 },
                 }}
                 data-testid={`${testIdPrefix}-nav-${s.key}`}
