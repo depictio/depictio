@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ActionIcon,
   Anchor,
@@ -31,6 +31,7 @@ import type { BrandTheme, DashboardSummary } from 'depictio-react-core';
 import { paletteVar } from 'depictio-react-core';
 import BrandLogo from './BrandLogo';
 import ThemeToggle from './ThemeToggle';
+import { useScrollOverflow } from './useScrollOverflow';
 import ServerStatusBadge from './ServerStatusBadge';
 import ProfileBadge from './ProfileBadge';
 import AuthModeBadge from './AuthModeBadge';
@@ -358,7 +359,14 @@ const Sidebar: React.FC<SidebarProps> = ({
   // tab's neighbourhood every single time they moved. sessionStorage rather
   // than component state for exactly that reason: the component does not
   // survive the navigation, the session does.
-  const tabScrollRef = useRef<HTMLDivElement>(null);
+  // Tabs above or below the visible part of the list drive a fade and a chevron
+  // (the scrollbar only draws on hover, so the list looked complete).
+  const {
+    ref: tabScrollRef,
+    above: moreAbove,
+    below: moreBelow,
+    scrollBy: scrollTabsBy,
+  } = useScrollOverflow<HTMLDivElement>([tabs.length]);
   const rememberTabScroll = ({ y }: { x: number; y: number }) => {
     try {
       sessionStorage.setItem(TAB_SCROLL_KEY, String(y));
@@ -571,8 +579,24 @@ const Sidebar: React.FC<SidebarProps> = ({
           side of a dozen tabs is chrome the reader never asked for, and it
           sits between the pills and the sidebar edge where it reads as a
           border. It still appears the moment the pointer is over the list. */}
+      <Box className="dc-tabs-scroll-host">
+      {moreAbove && (
+        <ActionIcon
+          variant="subtle"
+          color="gray"
+          size="xs"
+          className="dc-tabs-more dc-tabs-more-above"
+          aria-label="Show earlier tabs"
+          onClick={() => scrollTabsBy(-1)}
+        >
+          <Icon icon="mdi:chevron-up" width={16} />
+        </ActionIcon>
+      )}
       <ScrollArea
-        style={{ flex: 1 }}
+        className="dc-tabs-scroll"
+        data-more-above={moreAbove || undefined}
+        data-more-below={moreBelow || undefined}
+        style={{ flex: 1, minHeight: 0 }}
         type="hover"
         viewportRef={tabScrollRef}
         onScrollPositionChange={rememberTabScroll}
@@ -762,6 +786,19 @@ const Sidebar: React.FC<SidebarProps> = ({
           )}
         </Stack>
       </ScrollArea>
+      {moreBelow && (
+        <ActionIcon
+          variant="subtle"
+          color="gray"
+          size="xs"
+          className="dc-tabs-more dc-tabs-more-below"
+          aria-label="Show more tabs"
+          onClick={() => scrollTabsBy(1)}
+        >
+          <Icon icon="mdi:chevron-down" width={16} />
+        </ActionIcon>
+      )}
+      </Box>
 
       {/* Bottom region — centered stack, original Dash order: theme,
         server, profile. AuthModeBadge sits above the avatar to surface the

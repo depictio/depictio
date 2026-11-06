@@ -32,6 +32,57 @@
   overflow: hidden;
 }
 
+/* The tab list's overflow cue. The scrollbar only draws on hover, so a list
+ * longer than the sidebar looked complete. The edge that has more tabs fades
+ * out (a mask, not a coloured overlay, so it holds on any sidebar background,
+ * the glass style included) and carries a chevron that pages the list. */
+.dc-tabs-scroll-host {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.dc-tabs-scroll {
+  --dc-tabs-fade: 32px;
+}
+.dc-tabs-scroll[data-more-below] {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - var(--dc-tabs-fade)), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - var(--dc-tabs-fade)), transparent);
+}
+.dc-tabs-scroll[data-more-above] {
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 var(--dc-tabs-fade));
+  mask-image: linear-gradient(to bottom, transparent, #000 var(--dc-tabs-fade));
+}
+.dc-tabs-scroll[data-more-above][data-more-below] {
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    #000 var(--dc-tabs-fade),
+    #000 calc(100% - var(--dc-tabs-fade)),
+    transparent
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    #000 var(--dc-tabs-fade),
+    #000 calc(100% - var(--dc-tabs-fade)),
+    transparent
+  );
+}
+.dc-tabs-more {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+}
+.dc-tabs-more-above {
+  top: 0;
+}
+.dc-tabs-more-below {
+  bottom: 0;
+}
+
 /* ------------------------------------------------------------------------
  * Chrome style hooks (see depictio-react-core `chromeStyle.ts`).
  *

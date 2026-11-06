@@ -19,7 +19,7 @@
 # profile, the structural variants (sv_calls, needs Manta or TIDDIT), the
 # annotation (snpeff_*) and the VCFtools ones (vcftools_*). A mapping-only run
 # (no --tools) therefore ingests cleanly and imports the Overview, MultiQC,
-# Coverage and Locus tabs; each caller or annotator it does have brings back its
+# Coverage and Genome browser tabs; each caller or annotator it does have brings back its
 # tabs. The ingestion report lists the optional collections it skipped.
 #
 # WHAT A RUN CALLS ON: SAMPLES, PAIRS, TUMOURS.
@@ -54,7 +54,7 @@
 template:
   template_id: "nf-core/sarek/3.11.0"
   description: "nf-core/sarek template: variant calling compared caller by caller, from coverage and bcftools statistics down to the annotated variant, on top of the native MultiQC report."
-  version: "3.0.0"
+  version: "3.2.1"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory of the sarek output (csv/, reports/, variant_calling/, annotation/, multiqc/, pipeline_info/)."

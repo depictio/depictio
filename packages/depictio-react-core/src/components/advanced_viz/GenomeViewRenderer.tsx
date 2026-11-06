@@ -973,10 +973,9 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
     interactionMode: mode,
     dragHint:
       // Many lanes scroll inside the tile: say so, a plain wheel moves them.
-      (built?.scrolls && !fileMode && mode !== 'pan' ? 'scroll to move through the lanes · ' : '') +
+      (built?.scrolls && !fileMode ? 'scroll to move through the lanes · ' : '') +
       modeHint(mode, regionBrushEnabled),
-    // In pan mode the wheel is the zoom's, not the lanes'.
-    scrollLanes: Boolean(built?.scrolls) && !fileMode && mode !== 'pan',
+    scrollLanes: Boolean(built?.scrolls) && !fileMode,
   });
 
   // ---- Clearing the region: Escape (the chrome), double-click, the badge's x ----

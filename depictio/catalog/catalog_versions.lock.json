@@ -307,8 +307,8 @@
       "content_hash": "bce286943f35affc942a72c22eec187869ee93b8af43022262a4c4fd718b91f7"
     },
     "mosdepth": {
-      "version": "1.0.0",
-      "content_hash": "c0c2dac40a3fa3655afe425969d9b08a8c936de771a7c874ea70e4885e6bfcc4"
+      "version": "1.1.0",
+      "content_hash": "63d9805fb3fcc9cd29c39b5d2ffd8ffb56e66841456312503267988fd0d03c17"
     },
     "multiqc": {
       "version": "1.0.0",
@@ -467,8 +467,8 @@
       "content_hash": "285e929542fac760ea1423aaf4817ebfae2c7ab7b7d3fe12508703c732d29d50"
     },
     "snpeff": {
-      "version": "1.0.0",
-      "content_hash": "dfc9e8f28a56f3b809b4b9f352f6296146f3c16b2de95890a82480a650b51095"
+      "version": "1.0.1",
+      "content_hash": "1afe82c15493ec0b1d6f097bdf7ce47c3acd7506073dc8eb7e3322de0984ce04"
     },
     "sompy": {
       "version": "1.0.0",
