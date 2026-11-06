@@ -369,10 +369,12 @@ const MigrateProjectModal: React.FC<MigrateProjectModalProps> = ({
         <Text size="xs" tt="uppercase" fw={700} c="dimmed">
           What will be sent
         </Text>
-        <Fact icon="mdi:database-outline" title={`${formatBytes(r.total_bytes)} in ${r.object_count} files`}>
-          {r.transfer_mode === 'server_side_copy'
-            ? 'Copied from storage to storage, without going through this server.'
-            : 'Uploaded from this server to the destination.'}
+        <Fact icon="mdi:database-outline" title={r.object_count > 0 ? `${formatBytes(r.total_bytes)} in ${r.object_count} files` : 'The project settings only'}>
+          {r.object_count === 0
+            ? 'This project holds no data files yet.'
+            : r.transfer_mode === 'server_side_copy'
+              ? 'Copied from storage to storage, without going through this server.'
+              : 'Uploaded from this server to the destination.'}
         </Fact>
       </Stack>
 
