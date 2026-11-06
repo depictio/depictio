@@ -156,17 +156,31 @@ def _collect_s3_locations_for_project(dc_ids: list[ObjectId], source_bucket: str
     wanted = set(dc_ids)
     for project in projects_collection.find(
         {"workflows.data_collections._id": {"$in": dc_ids}},
-        {"workflows.data_collections._id": 1, "workflows.data_collections.config.type": 1},
+        {
+            "workflows.data_collections._id": 1,
+            "workflows.data_collections.config.type": 1,
+            "workflows.data_collections.config.dc_specific_properties.s3_base_folder": 1,
+        },
     ):
         for wf in project.get("workflows") or []:
             for dc in wf.get("data_collections") or []:
                 if dc.get("_id") not in wanted:
                     continue
-                dc_type = (dc.get("config") or {}).get("type")
+                config = dc.get("config") or {}
+                dc_type = config.get("type")
                 if dc_type == "phylogeny":
                     add(phylogeny_s3_key(str(dc["_id"])))
                 elif dc_type == "genomic_tracks":
                     add(genomic_tracks_s3_prefix(str(dc["_id"])))
+                elif dc_type == "image":
+                    # Uploaded to the folder the project names, not under the DC
+                    # id, and the DC lives here, not in ``data_collections``.
+                    add(
+                        project_bundle.image_base_prefix(
+                            (config.get("dc_specific_properties") or {}).get("s3_base_folder"),
+                            source_bucket,
+                        )
+                    )
 
     return locations
 
