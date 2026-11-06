@@ -18,7 +18,14 @@
 type Json = Record<string, unknown>;
 
 const HEX = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
-const RGB = /^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*(?:,\s*[\d.]+\s*)?\)$/i;
+const RGB = /^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*(?:,\s*([\d.]+)\s*)?\)$/i;
+
+/** Below this alpha a colour is a wash, not a series colour (a label filled
+ *  with it is composited over the plot, and its ink would be chosen wrong). */
+const MIN_ALPHA = 0.9;
+
+/** The `<extra>...</extra>` that ends a hover template. */
+const EXTRA_TAIL = /<extra>[\s\S]*?<\/extra>\s*$/;
 
 /** The card's own dark ink and white, for text on a coloured label. */
 const INK_DARK = '#212529';
@@ -46,6 +53,7 @@ function rgbOf(colour: unknown): [number, number, number] | null {
   }
   const m = RGB.exec(text);
   if (!m) return null;
+  if (m[4] !== undefined && Number(m[4]) < MIN_ALPHA) return null;
   const rgb = [Number(m[1]), Number(m[2]), Number(m[3])] as [number, number, number];
   return Math.max(...rgb) <= 255 ? rgb : null;
 }
@@ -94,9 +102,11 @@ const same = (a: unknown, b: unknown) =>
  */
 function withoutUnnamedLines(template: unknown): string | null {
   if (typeof template !== 'string' || !template.includes('=%{')) return null;
-  const parts = template.split('<br>');
+  const tail = EXTRA_TAIL.exec(template);
+  const body = tail ? template.slice(0, tail.index) : template;
+  const parts = body.split('<br>');
   const kept = parts.filter((p) => !p.startsWith('=%{'));
-  return kept.length > 0 && kept.length !== parts.length ? kept.join('<br>') : null;
+  return kept.length > 0 && kept.length !== parts.length ? kept.join('<br>') + (tail?.[0] ?? '') : null;
 }
 
 /**
