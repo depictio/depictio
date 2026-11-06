@@ -237,6 +237,14 @@ class FigureLiteComponent(BaseLiteComponent):
         "figure drawn from an analysis tab's data links back to it, as an icon at the end "
         "of the card header (`minimal` style) or in the tile's actions.",
     )
+    click_opens_browser: bool | None = Field(
+        default=None,
+        description="A click on a bar or point opens the family's genome browser on the "
+        "contig the mark's category axis names (`x`, or `y` on a horizontal bar). For a "
+        "chart of one bar per contig; a `total` bar opens nothing. Needs a genome browser "
+        "in the tab family, else the click does nothing. Independent of the figure's own "
+        "selection.",
+    )
 
     @model_validator(mode="after")
     def validate_figure_constraints(self) -> "FigureLiteComponent":

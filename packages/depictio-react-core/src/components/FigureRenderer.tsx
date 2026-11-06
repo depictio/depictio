@@ -30,6 +30,7 @@ import { ActiveHighlight } from '../highlight';
 import { asNumberArray, extractCustomdataIds } from '../plotlyData';
 import { markSelectedPoints, standingSelectionValues } from '../standingSelection';
 import { adaptGlTraces, PlotlyTrace, useWebglSlot } from '../webglBudget';
+import { followSeriesHover } from '../figureHover';
 import { tintSingleSeries } from '../figureTint';
 import { useTabHue } from '../tabColor';
 import { useUiScale } from '../uiScale';
@@ -45,6 +46,9 @@ import { TileSubtitle, TileTitleRow } from './chrome/ComponentInfo';
 import { titleCarriesDescription } from './chrome/descriptionText';
 import { CARD_FRAME } from './cardFrame';
 import FigureHeader from './FigureHeader';
+import { useGenomeBrowserTarget } from './jbrowse/browserTarget';
+import { openInGenomeBrowser } from './jbrowse/openAction';
+import { contigOfClickedMark } from './jbrowse/contigClick';
 import { figurePlotConfig, resolveFigureStyle } from './figureStyle';
 import type { TabLinkTarget } from './tabLinks';
 import { stripOverlayPoints, supportsAnnotation } from '../annotations/layer';
@@ -301,6 +305,27 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
     emitSelection(values);
   };
 
+  // `click_opens_browser`: a bar per contig, and a click on it goes to that
+  // contig in the family's genome browser (on its own tab, or by event when it
+  // is on this one). It leaves the figure's own selection alone.
+  const browserTarget = useGenomeBrowserTarget();
+  const clickOpensBrowser = metadata.click_opens_browser === true && browserTarget != null;
+  const handleBrowserClick = (event: any) => {
+    if (!browserTarget) return;
+    const contig = contigOfClickedMark(
+      stripOverlayPoints(event),
+      metadata.dict_kwargs as Record<string, unknown> | undefined,
+    );
+    if (contig) openInGenomeBrowser(browserTarget, contig);
+  };
+  const handlePlotClick =
+    selectionEnabled || clickOpensBrowser
+      ? (event: any) => {
+          handleClick(event);
+          if (clickOpensBrowser) handleBrowserClick(event);
+        }
+      : undefined;
+
   const handleDeselect = () => {
     if (!selectionEnabled) return;
     emitSelection([]);
@@ -455,11 +480,11 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
   );
 
   const figureData = useMemo<unknown[]>(() => {
-    let traces = (tinted.data as PlotlyTrace[]) || [];
+    let traces = (followSeriesHover(figure?.data ?? [], tinted.data) as PlotlyTrace[]) || [];
     if (standingSelection) traces = markSelectedPoints(traces, standingSelection, selectionColumnIndex);
     const base = adaptGlTraces(traces, glGranted);
     return overlayTrace ? [...base, overlayTrace] : base;
-  }, [tinted, overlayTrace, glGranted, standingSelection, selectionColumnIndex]);
+  }, [figure, tinted, overlayTrace, glGranted, standingSelection, selectionColumnIndex]);
 
   const baseLayout = useMemo<Record<string, unknown>>(() => {
     // The chrome style's Plotly patch (fonts, backgrounds, grid) lands over the
@@ -719,7 +744,7 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
             // draw annotations and never filter the dashboard.
             {...annotations.plotProps({
               onSelected: selectionEnabled ? handleSelected : undefined,
-              onClick: selectionEnabled ? handleClick : undefined,
+              onClick: handlePlotClick,
               onDeselect: selectionEnabled ? handleDeselect : undefined,
             })}
           />

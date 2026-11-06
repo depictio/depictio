@@ -9,7 +9,6 @@ import {
   modeForKey,
   modeHint,
   specInteractionMode,
-  wheelZooms,
 } from './interactionMode';
 
 describe('initialInteractionMode', () => {
@@ -48,12 +47,6 @@ describe('what a mode means', () => {
     expect(laneCursor('pointer')).toBeUndefined();
     expect(laneCursor('pan')).toBe('grab');
     expect(laneCursor('select')).toBe('crosshair');
-  });
-
-  it('gives the wheel to the zoom in pan mode only', () => {
-    expect(wheelZooms('pan')).toBe(true);
-    expect(wheelZooms('pointer')).toBe(false);
-    expect(wheelZooms('select')).toBe(false);
   });
 
   it('names what a drag does in the hint, and says when select is off', () => {

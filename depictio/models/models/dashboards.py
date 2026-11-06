@@ -190,6 +190,7 @@ FIGURE_DISPLAY_FIELDS: tuple[str, ...] = (
     "hide_legend",
     "link",
     "caption",
+    "click_opens_browser",
 )
 
 # The fields of a card's secondary strip (see CardLiteComponent), each with the

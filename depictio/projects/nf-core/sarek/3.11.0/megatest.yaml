@@ -122,7 +122,7 @@ renames: {}
 # coverage and alignment QC and MultiQC, with no VCF, no bcftools / vcftools / snpEff
 # report and no `csv/variantcalled.csv`. The template must ingest it with every
 # variant-derived collection skipped and import only the Overview, MultiQC, Coverage
-# and Locus tabs (depictio/tests/cli/utils/test_sarek_mapping_only.py asserts the tab
+# and Genome browser tabs (depictio/tests/cli/utils/test_sarek_mapping_only.py asserts the tab
 # set offline, from the same file names).
 subsets:
   mapping_only:

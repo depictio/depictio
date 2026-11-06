@@ -9,6 +9,7 @@ import SectionIcon, {
   SectionColorContext,
   sectionColorVar,
 } from './SectionIcon';
+import { useTabLinkResolver } from './tabLinks';
 import './sectionAccordion.css';
 
 /**
@@ -110,6 +111,57 @@ export const SectionAccordionItem: React.FC<{
   );
 };
 
+const TAB_LINK = /\[([^\]]+)\]\(tab:([^)]+)\)/g;
+
+/** A section description with its `[label](tab:Name)` links as words: where nothing can be clicked. */
+const plainDescription = (text: string): string => text.replace(TAB_LINK, '$1');
+
+/**
+ * A section description whose `[label](tab:Name)` links open that tab.
+ *
+ * The description sits inside the section's `Accordion.Control`, a button, so
+ * a link here is a `span role="link"` and not an anchor (an anchor in a button
+ * is invalid, and Firefox gives the click to the button). Its click and key
+ * events stop there, so following the link does not fold the section. A name
+ * that resolves to no tab stays plain text.
+ */
+const DescriptionWithLinks: React.FC<{ text: string }> = ({ text }) => {
+  const resolveTab = useTabLinkResolver();
+  const parts: React.ReactNode[] = [];
+  let last = 0;
+  for (const match of text.matchAll(TAB_LINK)) {
+    const at = match.index ?? 0;
+    if (at > last) parts.push(text.slice(last, at));
+    const target = resolveTab?.(match[2]) ?? null;
+    if (!target) {
+      parts.push(match[1]);
+    } else {
+      const go = (e: React.SyntheticEvent) => {
+        e.stopPropagation();
+        e.preventDefault();
+        window.location.assign(target.href);
+      };
+      parts.push(
+        <span
+          key={at}
+          role="link"
+          tabIndex={0}
+          onClick={go}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') go(e);
+          }}
+          style={{ fontWeight: 600, cursor: 'pointer', color: 'var(--mantine-color-anchor)' }}
+        >
+          {match[1]}
+        </span>,
+      );
+    }
+    last = at + match[0].length;
+  }
+  if (last < text.length) parts.push(text.slice(last));
+  return <>{parts}</>;
+};
+
 export const SectionHeader: React.FC<{
   spec?: FilterSectionSpec | null;
   /** Optional only because the section types leave the unsectioned bucket
@@ -138,7 +190,7 @@ export const SectionHeader: React.FC<{
           c="dimmed"
           style={{ fontSize: 15, lineHeight: 1.45, marginTop: 2, paddingLeft: spec.icon ? 34 : 0 }}
         >
-          {spec.description}
+          <DescriptionWithLinks text={spec.description} />
         </Text>
       ) : null}
     </div>
@@ -196,9 +248,9 @@ export const SectionHeader: React.FC<{
           )}
         </Group>
         {spec?.description && (
-          <Tooltip label={spec.description} withArrow multiline w={260} openDelay={400}>
+          <Tooltip label={plainDescription(spec.description)} withArrow multiline w={260} openDelay={400}>
             <Text size="sm" c="dimmed" truncate>
-              {spec.description}
+              <DescriptionWithLinks text={spec.description} />
             </Text>
           </Tooltip>
         )}
