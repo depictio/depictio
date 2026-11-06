@@ -100,24 +100,120 @@ export function formatTextFilterValue(filter: Pick<InteractiveFilter, 'value' | 
   return filter.metadata?.match_mode === 'contains' ? `"${text}"` : text;
 }
 
-/** Where `pattern` first lands in `text`, as `[start, end)`, to mark the
- *  caught part in a list of matches. Read with the browser's regex dialect,
- *  which can differ from the server's on exotic syntax: `null` (nothing
- *  marked) then, never a wrong filter. Empty matches mark nothing. */
-export function firstMatchSpan(
-  text: string,
+/** Mantine colours the alternatives of a pattern are marked with, in order. */
+export const MARK_COLORS = ['yellow', 'cyan', 'grape', 'lime', 'orange', 'pink'] as const;
+
+/**
+ * The top-level alternatives of a regular expression (`^CCA|GG$` is two):
+ * the parts a person would call separate patterns, each marked in its own
+ * colour. A `|` inside a group, a class or after a backslash is not a split.
+ * Literal text is one alternative whatever it contains.
+ */
+export function splitAlternatives(
   pattern: string,
   matchMode: string | null | undefined = 'regex',
-  caseSensitive = false,
-): [number, number] | null {
+): string[] {
+  if (matchMode === 'contains') return pattern === '' ? [] : [pattern];
+  const parts: string[] = [];
+  let depth = 0;
+  let inClass = false;
+  let current = '';
+  for (let i = 0; i < pattern.length; i += 1) {
+    const ch = pattern[i];
+    if (ch === '\\' && i + 1 < pattern.length) {
+      current += ch + pattern[i + 1];
+      i += 1;
+      continue;
+    }
+    if (inClass) {
+      if (ch === ']') inClass = false;
+    } else if (ch === '[') {
+      inClass = true;
+    } else if (ch === '(') {
+      depth += 1;
+    } else if (ch === ')') {
+      depth = Math.max(0, depth - 1);
+    } else if (ch === '|' && depth === 0) {
+      parts.push(current);
+      current = '';
+      continue;
+    }
+    current += ch;
+  }
+  parts.push(current);
+  return parts.filter((part) => part !== '');
+}
+
+function alternativeRegExp(
+  alternative: string,
+  matchMode: string | null | undefined,
+  caseSensitive: boolean,
+  flags: string,
+): RegExp | null {
   const source =
     matchMode === 'contains'
-      ? pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-      : pattern.replace(INLINE_FLAGS, '');
+      ? alternative.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      : alternative.replace(INLINE_FLAGS, '');
   try {
-    const hit = new RegExp(source, caseSensitive ? '' : 'i').exec(text);
-    return hit && hit[0].length > 0 ? [hit.index, hit.index + hit[0].length] : null;
+    return new RegExp(source, flags + (caseSensitive ? '' : 'i'));
   } catch {
     return null;
   }
+}
+
+/** One stretch of a value: the alternative that caught it, or `null` for plain text. */
+export interface MarkedPiece {
+  text: string;
+  alt: number | null;
+}
+
+/**
+ * `text` cut into plain and caught pieces, every match of every alternative
+ * marked with the index of its alternative. Where two matches overlap the
+ * earlier one wins. Read with the browser's regex dialect, which can differ
+ * from the server's on exotic syntax: an alternative it rejects marks nothing,
+ * it never changes the filter. Empty matches mark nothing.
+ */
+export function markMatches(
+  text: string,
+  alternatives: string[],
+  matchMode: string | null | undefined = 'regex',
+  caseSensitive = false,
+): MarkedPiece[] {
+  const spans: { start: number; end: number; alt: number }[] = [];
+  alternatives.forEach((alternative, alt) => {
+    const re = alternativeRegExp(alternative, matchMode, caseSensitive, 'g');
+    if (!re) return;
+    for (let hit = re.exec(text); hit; hit = re.exec(text)) {
+      if (hit[0].length === 0) {
+        re.lastIndex += 1;
+        continue;
+      }
+      spans.push({ start: hit.index, end: hit.index + hit[0].length, alt });
+    }
+  });
+  spans.sort((a, b) => a.start - b.start || a.alt - b.alt);
+  const pieces: MarkedPiece[] = [];
+  let at = 0;
+  for (const span of spans) {
+    if (span.start < at) continue;
+    if (span.start > at) pieces.push({ text: text.slice(at, span.start), alt: null });
+    pieces.push({ text: text.slice(span.start, span.end), alt: span.alt });
+    at = span.end;
+  }
+  if (at < text.length) pieces.push({ text: text.slice(at), alt: null });
+  return pieces.length > 0 ? pieces : [{ text, alt: null }];
+}
+
+/** How many of `values` each alternative catches, in the order of `alternatives`. */
+export function countAlternativeHits(
+  values: string[],
+  alternatives: string[],
+  matchMode: string | null | undefined = 'regex',
+  caseSensitive = false,
+): number[] {
+  return alternatives.map((alternative) => {
+    const re = alternativeRegExp(alternative, matchMode, caseSensitive, '');
+    return re ? values.filter((v) => re.test(v)).length : 0;
+  });
 }

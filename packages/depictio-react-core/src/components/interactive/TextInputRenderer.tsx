@@ -42,7 +42,17 @@ export const TextFilterBox: React.FC<{
   size?: string;
   /** Show the error as a red border and a tooltip only, for a one-line host. */
   bareError?: boolean;
-}> = ({ metadata, filters, onChange, label, size = INTERACTIVE_FRAME.controlSize, bareError }) => {
+  /** Told the text of the box on every keystroke, applied or not. */
+  onType?: (text: string) => void;
+}> = ({
+  metadata,
+  filters,
+  onChange,
+  label,
+  size = INTERACTIVE_FRAME.controlSize,
+  bareError,
+  onType,
+}) => {
   const stored = appliedValue(metadata, filters);
   const [text, setText] = useState(stored);
   // The last value this box sent (or took from the store): what "unchanged"
@@ -55,6 +65,10 @@ export const TextFilterBox: React.FC<{
       setText(stored);
     }
   }, [stored]);
+
+  useEffect(() => {
+    onType?.(text);
+  }, [text, onType]);
 
   const error = regexError(text, metadata.match_mode);
 
@@ -130,20 +144,25 @@ const TextInputRenderer: React.FC<{
   onChange?: (filter: InteractiveFilter) => void;
   /** Compact rendering: drops the frame, relies on the parent group's card. */
   compact?: boolean;
-}> = ({ metadata, filters, onChange, compact }) => (
-  <InteractiveFrame compact={compact}>
-    <InteractiveTitle metadata={metadata} compact={compact} />
-    <CompactControlSlot compact={compact}>
-      <TextFilterBox
-        metadata={metadata}
-        filters={filters}
-        onChange={onChange}
-        label={interactiveTitle(metadata) || metadata.column_name || 'Text filter'}
-        size={compact ? 'xs' : INTERACTIVE_FRAME.controlSize}
-      />
-      <TextFilterMatches metadata={metadata} applied={appliedValue(metadata, filters)} />
-    </CompactControlSlot>
-  </InteractiveFrame>
-);
+}> = ({ metadata, filters, onChange, compact }) => {
+  // The box's own text, for the match list to follow while it is typed.
+  const [typed, setTyped] = useState(() => appliedValue(metadata, filters));
+  return (
+    <InteractiveFrame compact={compact}>
+      <InteractiveTitle metadata={metadata} compact={compact} />
+      <CompactControlSlot compact={compact}>
+        <TextFilterBox
+          metadata={metadata}
+          filters={filters}
+          onChange={onChange}
+          label={interactiveTitle(metadata) || metadata.column_name || 'Text filter'}
+          size={compact ? 'xs' : INTERACTIVE_FRAME.controlSize}
+          onType={setTyped}
+        />
+        <TextFilterMatches metadata={metadata} pattern={typed} />
+      </CompactControlSlot>
+    </InteractiveFrame>
+  );
+};
 
 export default TextInputRenderer;
