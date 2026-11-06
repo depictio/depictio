@@ -8,10 +8,11 @@ The mean is the curve the dashboard draws, with the band from the first to the
 third quartile: at most positions most libraries carry no substitution at all,
 so the median sits on zero even where part of the libraries carry an edit. Only
 libraries whose amplicon reaches an offset count there (a position outside the
-amplicon is not a zero rate), and an offset reached by fewer than
-:data:`MIN_COVERAGE` of the guide's libraries is left out: the amplicon ends
-that only some libraries reach are alignment edges, where the gap rate climbs
-towards 100% without any edit. One row per guide and offset instead of one per
+amplicon is not a zero rate), and an offset that any of the guide's libraries
+does not reach is left out: the amplicon ends that only some libraries reach
+are alignment edges, where the gap rate climbs towards 100% without any edit.
+The window is the offsets every library of the guide reaches, which the data
+defines (no share of libraries was picked). One row per guide and offset instead of one per
 library and position, which on a large run is over a million rows no view can
 show.
 
@@ -75,12 +76,6 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-# Share of a guide's libraries that must reach an offset for it to be reported.
-# On the reference run the offsets below it are the amplicon ends, where the
-# libraries that do reach them show a gap in most reads (mean gap rate near 50%
-# against about 5% where every library aligns).
-MIN_COVERAGE = 0.9
-
 # OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "profile_guide": pl.Utf8,
@@ -111,7 +106,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     )
     return (
         stats.join(reached, on="guide", how="inner")
-        .filter(pl.col("libraries") >= MIN_COVERAGE * pl.col("_libraries"))
+        .filter(pl.col("libraries") == pl.col("_libraries"))
         .rename({"guide": "profile_guide"})
         .select(list(OUTPUT_SCHEMA))
         .sort("profile_guide", "offset")
