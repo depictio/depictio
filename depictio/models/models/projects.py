@@ -41,6 +41,10 @@ class Project(MongoModel):
     # Last modification timestamp, UTC. Stamped by the API on every update;
     # empty on projects that have never been edited since creation.
     last_modified: str = ""
+    # Legacy. A project created from the CLI is stamped "advanced", one created
+    # in the UI "basic", but the type no longer decides what either can do: the
+    # UI manages data collections of both. Kept so existing projects, exports
+    # and the CLI keep validating; new code should not branch on it.
     project_type: Literal["basic", "advanced"] = "basic"
     realtime: RealtimeConfig | None = None  # Optional real-time event configuration
     template_origin: TemplateOrigin | None = None  # Tracks if project was created from a template
