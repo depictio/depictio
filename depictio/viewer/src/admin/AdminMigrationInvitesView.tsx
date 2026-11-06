@@ -19,7 +19,7 @@ import type { MigrationInvite, MigrationInviteList } from 'depictio-react-core';
 
 import { formatDateTime } from '../lib/datetime';
 import { useTone } from '../monitoring/useTone';
-import ReceiveProjectModal from './ReceiveProjectModal';
+import ImportProjectModal from '../projects/ImportProjectModal';
 
 const STATE_COLOR: Record<string, string> = {
   active: 'green',
@@ -74,18 +74,18 @@ const AdminMigrationInvitesView: React.FC = () => {
         <Title order={4}>Invitations</Title>
         <Group gap="xs">
           <Button
-            size="xs"
+            size="sm"
             variant="default"
             onClick={() => void load()}
-            leftSection={<Icon icon="mdi:refresh" width={14} />}
+            leftSection={<Icon icon="mdi:refresh" width={16} />}
           >
             Refresh
           </Button>
           {data?.inbound_enabled && (
             <Button
-              size="xs"
+              size="sm"
               onClick={() => setCreating(true)}
-              leftSection={<Icon icon="mdi:key-plus" width={14} />}
+              leftSection={<Icon icon="mdi:key-plus" width={16} />}
               data-testid="invites-receive"
             >
               Receive a project
@@ -172,10 +172,11 @@ const AdminMigrationInvitesView: React.FC = () => {
         </Table.ScrollContainer>
       )}
 
-      <ReceiveProjectModal
+      <ImportProjectModal
         opened={creating}
         onClose={() => setCreating(false)}
-        onCreated={() => void load()}
+        canReceive
+        onInviteCreated={() => void load()}
       />
     </Stack>
   );
