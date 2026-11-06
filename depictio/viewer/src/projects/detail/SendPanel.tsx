@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Button, Group, Stack, Table, Text, Tooltip } from '@mantine/core';
+import { Badge, Button, Group, Stack, Table, Text, Tooltip } from '@mantine/core';
+import { Icon } from '@iconify/react';
 import { Send } from 'lucide-react';
 
 import { listPushes } from 'depictio-react-core';
@@ -105,31 +106,51 @@ const SendPanel: React.FC<SendPanelProps> = ({
 
   return (
     <Stack gap="md" data-testid="publication-panel">
-      <Group justify="space-between" align="flex-start" wrap="nowrap">
-        <Stack gap={4}>
-          <Text size="sm">
-            Send a copy of this project, its data and its dashboards, to another Depictio
-            instance.
-          </Text>
-          <Group gap="xs">
-            <Text size="sm" c="dimmed">
-              Editing here
-            </Text>
-            {lock ? (
-              <PublishedLockBadge lock={lock} />
-            ) : (
-              <Text size="sm" data-testid="publication-unlocked">
-                Not locked
-              </Text>
-            )}
-          </Group>
-        </Stack>
+      <Stack gap="sm" align="flex-start">
+        <Text size="sm">
+          Send a copy of this project, its data and its dashboards, to another Depictio
+          instance.
+        </Text>
         {status === 'unavailable' ? (
           <Tooltip label={NO_DESTINATION_REASON} multiline w={280} withinPortal>
             <span data-testid="publication-disabled-reason">{publishButton}</span>
           </Tooltip>
         ) : (
           publishButton
+        )}
+      </Stack>
+
+      <Group
+        justify="space-between"
+        wrap="nowrap"
+        px="sm"
+        py={8}
+        style={{
+          border: '1px solid var(--mantine-color-default-border)',
+          borderRadius: 'var(--mantine-radius-sm)',
+        }}
+        data-testid={lock ? 'publication-locked' : 'publication-unlocked'}
+      >
+        <Stack gap={0}>
+          <Text size="sm" fw={500}>
+            Editing on this instance
+          </Text>
+          <Text size="xs" c="dimmed">
+            {lock
+              ? 'Read-only: nobody can change the dashboards or data here.'
+              : 'Owners and editors can change the dashboards and data here.'}
+          </Text>
+        </Stack>
+        {lock ? (
+          <PublishedLockBadge lock={lock} />
+        ) : (
+          <Badge
+            variant="light"
+            color="gray"
+            leftSection={<Icon icon="mdi:lock-open-variant-outline" width={12} />}
+          >
+            Editable
+          </Badge>
         )}
       </Group>
 
