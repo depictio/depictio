@@ -154,7 +154,11 @@ const ImportProjectModal: React.FC<ImportProjectModalProps> = ({
       data-testid="import-project-modal"
     >
       {tabs.length > 1 ? (
-        <Tabs value={active} onChange={(v) => setTab(v as ImportTab)}>
+        <Tabs
+          value={active}
+          onChange={(v) => setTab(v as ImportTab)}
+          className="depictio-modal-tabs"
+        >
           <Tabs.List mb="md">
             <Tabs.Tab
               value="receive"

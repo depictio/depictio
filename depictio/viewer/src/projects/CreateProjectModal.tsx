@@ -282,13 +282,13 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
       centered
       // The run tab shows a detection card, a two-column summary and the
       // grouped plan, which the other tabs' width would wrap into noise.
-      size={tab === 'run' ? 'xl' : 'lg'}
+      size={tab === 'run' ? 1160 : 980}
       withCloseButton
       closeOnClickOutside={false}
       closeOnEscape={!submitting}
       overlayProps={{ blur: 3, backgroundOpacity: 0.55 }}
       title={null}
-      padding="lg"
+      padding="xl"
     >
       <Stack gap="md">
         {/* Title row: folder+ icon + Virgil "Projects" */}
@@ -311,10 +311,10 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
 
         {tab === null ? (
           <Stack gap="md" data-testid="create-project-chooser">
-            <Text ta="center" fw={500}>
+            <Text ta="center" fw={500} size="lg">
               Start a project from:
             </Text>
-            <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
+            <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="lg">
               <SourceCard
                 icon="mdi:folder-plus-outline"
                 title="An empty project"
@@ -354,8 +354,9 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
 
           <Tabs.Panel value="create" pt="md">
             <Stack gap="md">
-                  <Stack gap="md" pt="md">
+                  <Stack gap="lg" pt="md">
                     <TextInput
+                      size="md"
                       label="Project Name"
                       description="Give your project a descriptive name"
                       required
@@ -370,6 +371,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                       }
                     />
                     <Textarea
+                      size="md"
                       label="Project Description (Optional)"
                       description="Describe what this project is about"
                       placeholder="Enter project description..."
@@ -380,6 +382,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                       maxRows={5}
                     />
                     <Switch
+                      size="md"
                       label={
                         <span style={{ fontFamily: 'Virgil' }}>
                           Make this project public
@@ -400,6 +403,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
 
               <Group justify="flex-end">
                 <Button
+                  size="md"
                   color={accent.secondary}
                   onClick={handleCreate}
                   loading={submitting}
@@ -563,10 +567,12 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
               <Group justify="space-between">
                 <Button
                   variant="default"
-                  onClick={() => setManifestStep((s) => Math.max(0, s - 1))}
-                  disabled={manifestStep === 0 || submitting}
+                  onClick={() =>
+                    manifestStep === 0 ? setTab(null) : setManifestStep((s) => s - 1)
+                  }
+                  disabled={submitting}
                 >
-                  Previous
+                  {manifestStep === 0 ? 'Back' : 'Previous'}
                 </Button>
                 <Button
                   color={accent.secondary}
@@ -595,6 +601,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
               onCreateFromRun={onCreateFromRun}
               submitting={submitting}
               setSubmitting={setSubmitting}
+              onBack={() => setTab(null)}
             />
           </Tabs.Panel>
         </Tabs>
@@ -800,7 +807,7 @@ const SourceCard: React.FC<SourceCardProps> = ({ icon, title, description, onCli
   <Paper
     withBorder
     radius="md"
-    p="lg"
+    p="xl"
     role="button"
     tabIndex={0}
     onClick={onClick}
@@ -811,11 +818,11 @@ const SourceCard: React.FC<SourceCardProps> = ({ icon, title, description, onCli
     data-testid={testId}
   >
     <Stack gap="sm" align="center">
-      <Icon icon={icon} width={40} height={40} color="var(--mantine-primary-color-filled)" />
-      <Title order={4} ta="center">
+      <Icon icon={icon} width={48} height={48} color="var(--mantine-primary-color-filled)" />
+      <Title order={3} ta="center">
         {title}
       </Title>
-      <Text size="sm" c="dimmed" ta="center" lh={1.4}>
+      <Text size="md" c="dimmed" ta="center" lh={1.5}>
         {description}
       </Text>
     </Stack>
