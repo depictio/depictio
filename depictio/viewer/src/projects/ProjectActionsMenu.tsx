@@ -6,7 +6,6 @@ import { Icon } from '@iconify/react';
 import { exportProjectZip } from 'depictio-react-core';
 import type { ProjectListEntry } from 'depictio-react-core';
 
-import MigrateProjectModal from './MigrateProjectModal';
 import { NO_DESTINATION_REASON, usePublishStatus } from './usePushTargets';
 import { useMigrationUi } from '../hooks/useMigrationUi';
 
@@ -30,7 +29,6 @@ const ProjectActionsMenu: React.FC<ProjectActionsMenuProps> = ({
 }) => {
   const projectId = (project._id ?? project.id) as string;
   const [exporting, setExporting] = useState(false);
-  const [pushOpen, setPushOpen] = useState(false);
   // Owners and admins only; hidden when this instance hides migration, and
   // disabled with the reason when it has no push target (nor URL publishing).
   const migrationUi = useMigrationUi();
@@ -71,7 +69,7 @@ const ProjectActionsMenu: React.FC<ProjectActionsMenuProps> = ({
 
   return (
     <>
-    <Menu position="bottom-end" shadow="md" withinPortal width={230}>
+    <Menu position="bottom-end" shadow="md" withinPortal width={260}>
       <Menu.Target>
         <ActionIcon
           variant="subtle"
@@ -104,10 +102,10 @@ const ProjectActionsMenu: React.FC<ProjectActionsMenuProps> = ({
           (canPush ? (
             <Menu.Item
               leftSection={<Icon icon="mdi:transfer-up" width={14} />}
-              onClick={() => setPushOpen(true)}
+              onClick={() => window.location.assign(`/projects/${projectId}?settings=send`)}
               data-testid="project-push-menu-item"
             >
-              Publish to another instance…
+              Send to another instance…
             </Menu.Item>
           ) : (
             <Tooltip label={NO_DESTINATION_REASON} multiline w={260} position="left" withinPortal>
@@ -117,7 +115,7 @@ const ProjectActionsMenu: React.FC<ProjectActionsMenuProps> = ({
                   disabled
                   data-testid="project-push-menu-item"
                 >
-                  Publish to another instance…
+                  Send to another instance…
                 </Menu.Item>
               </div>
             </Tooltip>
@@ -135,17 +133,6 @@ const ProjectActionsMenu: React.FC<ProjectActionsMenuProps> = ({
         )}
       </Menu.Dropdown>
     </Menu>
-    {canPush && (
-      // The modal is portalled, but React events still bubble to the table row.
-      <div onClick={(e) => e.stopPropagation()}>
-        <MigrateProjectModal
-          opened={pushOpen}
-          onClose={() => setPushOpen(false)}
-          projectId={projectId}
-          projectName={project.name}
-        />
-      </div>
-    )}
     </>
   );
 };

@@ -155,11 +155,6 @@ const RequestsView: React.FC = () => {
                   <Table.Td>
                     <Group gap={6} wrap="nowrap">
                       <StatusBadge status={r.status} />
-                      {r.credential_type === 'invite_code' && (
-                        <Badge color="grape" variant="outline" size="xs">
-                          invite
-                        </Badge>
-                      )}
                       {r.error_count > 0 && (
                         <Badge color="red" variant="outline" size="xs">
                           {r.error_count} err
@@ -167,7 +162,18 @@ const RequestsView: React.FC = () => {
                       )}
                     </Group>
                   </Table.Td>
-                  <Table.Td>{r.source_name}</Table.Td>
+                  <Table.Td>
+                    {r.credential_type === 'invite_code' ? (
+                      <>
+                        {(r.source_instance ?? r.source_name).replace(/ \(invite\)$/, '')}
+                        <Text size="xs" c="dimmed">
+                          via invite code
+                        </Text>
+                      </>
+                    ) : (
+                      r.source_name
+                    )}
+                  </Table.Td>
                   <Table.Td>{r.requester?.email ?? r.requester?.name ?? '—'}</Table.Td>
                   <Table.Td>{r.project_name}</Table.Td>
                   <Table.Td>{modeLabel(r.transfer_mode)}</Table.Td>

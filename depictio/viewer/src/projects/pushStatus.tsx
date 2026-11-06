@@ -11,7 +11,7 @@ import { useTone } from '../monitoring/useTone';
 const PUSH_COLOR: Record<string, string> = {
   building: 'blue',
   uploading: 'blue',
-  submitted: 'teal',
+  submitted: 'green',
   failed: 'red',
 };
 
