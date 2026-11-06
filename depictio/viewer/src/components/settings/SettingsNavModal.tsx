@@ -239,7 +239,15 @@ const SettingsNavLayout: React.FC<SettingsNavLayoutProps> = ({
                 }
                 rightSection={s.navHint}
                 styles={{
-                  root: { borderRadius: 'var(--mantine-radius-sm)' },
+                  // The light variant resolves the named primary colour
+                  // (blue), while the page accent is set through the
+                  // primary CSS variables (teal on Projects): read those.
+                  root: {
+                    borderRadius: 'var(--mantine-radius-sm)',
+                    '--nl-bg': 'var(--mantine-primary-color-light)',
+                    '--nl-hover': 'var(--mantine-primary-color-light-hover)',
+                    '--nl-color': 'var(--mantine-primary-color-light-color)',
+                  },
                   label: { fontWeight: isActive ? 600 : 500 },
                 }}
                 data-testid={`${testIdPrefix}-nav-${s.key}`}

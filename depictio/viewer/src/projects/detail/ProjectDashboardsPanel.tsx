@@ -1,10 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Anchor, Group, Stack, Text } from '@mantine/core';
+import { Icon } from '@iconify/react';
 import { ArrowUpRight, LayoutDashboard, Layers } from 'lucide-react';
 import { listDashboards } from 'depictio-react-core';
 import type { DashboardListEntry } from 'depictio-react-core';
 
 import { STROKE, useGlassPages } from '../../chrome/variants/glass/pages';
+import { coerceString, isImagePath, resolveAssetUrl } from '../../dashboards/lib/format';
 import { ProjectPart } from './ProjectPart';
 
 interface DashboardRow {
@@ -13,7 +15,31 @@ interface DashboardRow {
   subtitle?: string;
   tabs: number;
   lastSaved?: string;
+  /** The dashboard's own icon (an Iconify id or an image path) and colour. */
+  icon: string;
+  iconColor?: string;
 }
+
+/** The dashboard's icon as it shows on its card: an image path as an image,
+ *  anything else as an Iconify glyph in the dashboard's colour. */
+const DashboardGlyph: React.FC<{ row: DashboardRow; size: number }> = ({ row, size }) =>
+  isImagePath(row.icon) ? (
+    <img
+      src={resolveAssetUrl(row.icon)}
+      alt=""
+      width={size}
+      height={size}
+      style={{ objectFit: 'contain' }}
+    />
+  ) : (
+    <Icon
+      icon={row.icon}
+      width={size}
+      height={size}
+      color={row.iconColor ? `var(--mantine-color-${row.iconColor}-6)` : undefined}
+      aria-hidden
+    />
+  );
 
 /** The project's dashboards (main tabs, with their tab count), each a link
  *  to the viewer, as the page's collapsible Dashboards part. */
@@ -52,6 +78,8 @@ export const ProjectDashboardsPanel: React.FC<{ projectId: string }> = ({ projec
         subtitle: d.subtitle || undefined,
         tabs: 1 + (childCount.get(d.dashboard_id) ?? 0),
         lastSaved: typeof d.last_saved_ts === 'string' ? d.last_saved_ts.slice(0, 16) : undefined,
+        icon: coerceString(d.icon, 'mdi:view-dashboard'),
+        iconColor: coerceString(d.icon_color, '') || undefined,
       }))
       .sort((a, b) => a.title.localeCompare(b.title));
   }, [all, projectId]);
@@ -81,7 +109,7 @@ export const ProjectDashboardsPanel: React.FC<{ projectId: string }> = ({ projec
                 data-testid="project-dashboard-link"
               >
                 <span className="pd-wf-chip">
-                  <LayoutDashboard size={20} strokeWidth={STROKE} aria-hidden />
+                  <DashboardGlyph row={r} size={22} />
                 </span>
                 <span className="pd-wf-body">
                   <span className="pd-wf-name">{r.title}</span>
@@ -102,6 +130,7 @@ export const ProjectDashboardsPanel: React.FC<{ projectId: string }> = ({ projec
           <Stack gap="xs">
             {rows.map((r) => (
               <Group key={r.id} gap="xs" wrap="nowrap">
+                <DashboardGlyph row={r} size={18} />
                 <Anchor href={`/dashboard/${r.id}`} fw={600} data-testid="project-dashboard-link">
                   {r.title}
                 </Anchor>
