@@ -37,6 +37,7 @@ import {
   RangeSliderRenderer,
   SegmentedControlRenderer,
   SliderRenderer,
+  TextInputRenderer,
 } from 'depictio-react-core';
 import type { StoredMetadata } from 'depictio-react-core';
 import { useBuilderStore } from '../store/useBuilderStore';
@@ -54,6 +55,7 @@ const VARIANT_ICONS: Record<string, string> = {
   Select: 'mdi:menu-down',
   MultiSelect: 'mdi:filter-variant',
   SegmentedControl: 'mdi:button-cursor',
+  TextInput: 'mdi:magnify',
   Slider: 'bx:slider',
   RangeSlider: 'bx:slider-alt',
   DateRangePicker: 'mdi:calendar',
@@ -136,6 +138,11 @@ interface InteractiveConfig {
    *  list until another is picked (see `alwaysSelected.ts` in
    *  depictio-react-core). */
   always_selected?: boolean;
+  /** TextInput only: hint in the empty box, letter case, and how the text is
+   *  matched (a regular expression, or literally). */
+  placeholder?: string;
+  case_sensitive?: boolean;
+  match_mode?: 'regex' | 'contains';
 }
 
 /** Variants whose renderers read `show_marks`. */
@@ -219,6 +226,9 @@ const InteractivePreview: React.FC = () => {
       break;
     case 'SegmentedControl':
       renderer = <SegmentedControlRenderer metadata={metadata} filters={previewFilters} />;
+      break;
+    case 'TextInput':
+      renderer = <TextInputRenderer metadata={metadata} filters={previewFilters} compact={grouped} />;
       break;
     case 'Switch':
     case 'Checkbox':
@@ -328,6 +338,7 @@ const InteractiveBuilder: React.FC = () => {
   const supportsMarks = MARKS_VARIANTS.includes(selected ?? '');
   const supportsHistogram = HISTOGRAM_VARIANTS.includes(selected ?? '');
   const supportsAlwaysSelected = selected === 'Select';
+  const isTextInput = selected === 'TextInput';
   const supportsMarkLabels = MARK_LABEL_VARIANTS.includes(selected ?? '');
   // What the renderer does with `show_marks` unset: ticks for a control on its
   // own, none inside a group's compact card.
@@ -389,6 +400,38 @@ const InteractiveBuilder: React.FC = () => {
             disabled={!config.column_type || variants.length === 0}
             allowDeselect={false}
           />
+
+          {isTextInput && (
+            <>
+              <TextInput
+                label="Placeholder"
+                description="Hint shown in the empty box, “e.g. ^CCA or GG$”"
+                value={config.placeholder ?? ''}
+                onChange={(e) => patchConfig({ placeholder: e.currentTarget.value })}
+              />
+              <Field
+                label="Match as"
+                description="A regular expression keeps GGG$ (ends with GGG), ^ACG (starts with ACG), A{5,} (a run of five A). Literal text matches the characters as typed."
+              >
+                <SegmentedControl
+                  fullWidth
+                  size="xs"
+                  value={config.match_mode === 'contains' ? 'contains' : 'regex'}
+                  onChange={(val) => patchConfig({ match_mode: val as 'regex' | 'contains' })}
+                  data={[
+                    { value: 'regex', label: 'Regular expression' },
+                    { value: 'contains', label: 'Literal text' },
+                  ]}
+                />
+              </Field>
+              <SwitchField
+                label="Match letter case"
+                description="Off by default: ACG also finds acg."
+                checked={config.case_sensitive === true}
+                onChange={(checked) => patchConfig({ case_sensitive: checked })}
+              />
+            </>
+          )}
 
           {supportsAlwaysSelected && (
             <SwitchField

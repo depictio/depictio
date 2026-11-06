@@ -184,6 +184,7 @@ export type {
 
 // Interactive renderers
 export { default as MultiSelectRenderer } from './components/interactive/MultiSelectRenderer';
+export { default as TextInputRenderer } from './components/interactive/TextInputRenderer';
 export { default as RangeSliderRenderer } from './components/interactive/RangeSliderRenderer';
 export { default as SliderRenderer } from './components/interactive/SliderRenderer';
 export { default as DatePickerRenderer } from './components/interactive/DatePickerRenderer';

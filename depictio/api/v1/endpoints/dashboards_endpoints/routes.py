@@ -2390,6 +2390,10 @@ def _resolve_link_filters(
                 "interactive_component_type": meta.get("interactive_component_type")
                 or f.get("interactive_component_type"),
                 "selection_column": meta.get("selection_column"),
+                # TextInput options: the pattern is resolved on the origin
+                # collection with the same rules the component filters by.
+                "case_sensitive": meta.get("case_sensitive", f.get("case_sensitive")),
+                "match_mode": meta.get("match_mode", f.get("match_mode")),
             },
         }
         filters_by_dc.setdefault(dc_id, []).append(entry)
@@ -2485,6 +2489,9 @@ def _link_filter_key(
                 str((f.get("metadata") or {}).get("dc_id") or f.get("dc_id") or ""),
                 str((f.get("metadata") or {}).get("column_name") or f.get("column_name") or ""),
                 json.dumps(f.get("value"), sort_keys=True, default=str),
+                # TextInput options change what a pattern resolves to.
+                str((f.get("metadata") or {}).get("case_sensitive", f.get("case_sensitive"))),
+                str((f.get("metadata") or {}).get("match_mode", f.get("match_mode"))),
             )
             for f in filters
         ),
@@ -3165,6 +3172,8 @@ def bulk_compute_cards(
                     str(fm.get("column_name")),
                     str(fm.get("interactive_component_type")),
                     repr(fm.get("value")),
+                    repr(fm.get("case_sensitive")),
+                    repr(fm.get("match_mode")),
                 )
                 for fm in card_filters
             )
@@ -6258,6 +6267,12 @@ def _resolve_multiqc_sample_filter(
             comp_dc == multiqc_dc_id_str
             and str(column_name or "").lower() in MULTIQC_SAMPLE_FILTER_COLUMNS
         ):
+            if (
+                f.get("interactive_component_type") or comp_meta.get("interactive_component_type")
+            ) == "TextInput":
+                # A pattern is not a sample name: reading it as one would match no
+                # sample and empty the figure, so it leaves the sample set alone.
+                continue
             values_list = value if isinstance(value, list) else [value]
             direct_sample_filters.append([str(v) for v in values_list])
             continue
@@ -6277,6 +6292,11 @@ def _resolve_multiqc_sample_filter(
                     or comp_meta.get("interactive_component_type"),
                     "column_name": column_name,
                     "value": value,
+                    # TextInput options (ignored by every other type).
+                    "case_sensitive": (f.get("metadata") or {}).get(
+                        "case_sensitive", f.get("case_sensitive")
+                    ),
+                    "match_mode": (f.get("metadata") or {}).get("match_mode", f.get("match_mode")),
                 }
             )
 
@@ -10688,6 +10708,209 @@ async def filter_options_endpoint(
             order_by=order_by if kind == "unique" else None,
         )
     )
+
+
+_TEXT_MATCHES_LIMIT = 100
+
+
+def _text_filter_matches(
+    *,
+    dc_id: str,
+    dc_info: dict[str, Any],
+    column: str,
+    value: Any,
+    case_sensitive: Any,
+    match_mode: Any,
+    filter_expr: str | None,
+    limit: int,
+    delta_version: int | None,
+) -> dict[str, Any]:
+    """The distinct values of ``column`` a TextInput ``value`` keeps.
+
+    Counted with the predicate the filter itself applies
+    (``text_filter_predicate``), so the list is what the dashboard will show and
+    not a second regex dialect's idea of it. A value that is empty or does not
+    compile filters nothing: every value is returned as matching, as the
+    dashboard would show them.
+    """
+    import polars as pl
+
+    from depictio.api.v1.db import deltatables_collection
+    from depictio.api.v1.deltatables_utils import (
+        is_valid_text_pattern,
+        open_deltatable_scan,
+        text_filter_predicate,
+    )
+    from depictio.models.components.filter_expr import build_filter_expr, validate_filter_expr
+
+    dc_type = dc_info.get("dc_type") or "table"
+    if delta_version is not None and versioning._classify_dc(dc_type) != "delta":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Time travel is not available for '{dc_type}' collections: they have "
+            "no commit log.",
+        )
+    deltatable = deltatables_collection.find_one(
+        {"data_collection_id": ObjectId(dc_id)}, {"delta_table_location": 1}
+    )
+    location = (deltatable or {}).get("delta_table_location")
+    if not location:
+        raise HTTPException(status_code=404, detail=f"No Delta table for data collection {dc_id}.")
+    scan = open_deltatable_scan(
+        workflow_id=str(dc_info.get("workflow_id")),
+        data_collection_id=dc_id,
+        init_data={dc_id: {"delta_location": location, "dc_type": dc_type, "size_bytes": 0}},
+        delta_version=delta_version,
+    )
+    if scan is None:
+        raise HTTPException(status_code=500, detail=f"Could not read data collection {dc_id}.")
+
+    schema = scan.collect_schema()
+    if column not in schema.names():
+        raise HTTPException(
+            status_code=404, detail=f"Column '{column}' not found in data collection {dc_id}."
+        )
+    if filter_expr:
+        try:
+            validate_filter_expr(filter_expr)
+            scan = scan.filter(build_filter_expr(filter_expr))
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"Invalid filter_expr: {exc}")
+
+    # Collected once: the count, the total and the listed values all come from
+    # the same distinct set, so the column is scanned a single time.
+    distinct = (
+        scan.select(pl.col(column).cast(pl.Utf8, strict=False).alias("v"))
+        .drop_nulls()
+        .unique()
+        .collect()
+    )
+    total = distinct.height
+    predicate = text_filter_predicate("v", value, case_sensitive, match_mode, dtype=pl.String)
+    matching = distinct if predicate is None else distinct.filter(predicate)
+    count = matching.height
+    values = matching.sort("v").head(limit)["v"].to_list()
+    return {
+        "column": column,
+        "total": total,
+        "matching": count,
+        "values": values,
+        "truncated": count > len(values),
+        "invalid": not is_valid_text_pattern(value, match_mode),
+    }
+
+
+@dashboards_endpoint_router.post("/text_filter_matches/{dashboard_id}")
+async def text_filter_matches_endpoint(
+    dashboard_id: PyObjectId,
+    request: dict,
+    current_user: User = Depends(get_user_or_anonymous),
+):
+    """How many distinct values a TextInput pattern keeps, and which.
+
+    Request body:
+        {"dc_id": str, "column": str, "value": str, "case_sensitive": bool,
+         "match_mode": "regex" | "contains", "filter_expr": str (optional),
+         "limit": int (optional, default 100, at most 1000),
+         "as_of_version": str, "data_versions": {"<dc_id>": int | null}}
+
+    Response:
+        {"column": str, "total": int, "matching": int, "values": [str, ...],
+         "truncated": bool, "invalid": bool}
+
+    ``total`` is the column's distinct values in the whole collection (the
+    component's own ``filter_expr`` applied, the dashboard's other filters not):
+    the question it answers is "what does this pattern catch", not "what is left
+    on screen". Viewer permission on the dashboard; ``dc_id`` must belong to its
+    project. Pins resolve as for ``filter_options``.
+    """
+    dc_id = request.get("dc_id")
+    column = request.get("column")
+    filter_expr = request.get("filter_expr") or None
+    if not isinstance(dc_id, str) or not dc_id or not isinstance(column, str) or not column:
+        raise HTTPException(status_code=400, detail="dc_id and column are required.")
+    if filter_expr is not None and not isinstance(filter_expr, str):
+        raise HTTPException(status_code=400, detail="filter_expr must be a string.")
+    raw_limit = request.get("limit")
+    limit = (
+        min(max(int(raw_limit), 1), _FILTER_OPTIONS_LIMIT)
+        if isinstance(raw_limit, int) and not isinstance(raw_limit, bool)
+        else _TEXT_MATCHES_LIMIT
+    )
+
+    def _run() -> dict[str, Any]:
+        dashboard_data = _viewable_dashboard(dashboard_id, current_user)
+        dc_info = _project_collections(dashboard_data.get("project_id")).get(dc_id)
+        if dc_info is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Data collection {dc_id} is not part of this dashboard's project.",
+            )
+        return _text_filter_matches(
+            dc_id=dc_id,
+            dc_info=dc_info,
+            column=column,
+            value=request.get("value"),
+            case_sensitive=request.get("case_sensitive"),
+            match_mode=request.get("match_mode"),
+            filter_expr=filter_expr,
+            limit=limit,
+            delta_version=_data_pins(request, dashboard_data).for_dc(dc_id),
+        )
+
+    return await run_in_threadpool(_run)
+
+
+@dashboards_endpoint_router.post("/resolve_groups/{dashboard_id}")
+async def resolve_groups_endpoint(
+    dashboard_id: PyObjectId,
+    request: dict,
+    current_user: User = Depends(get_user_or_anonymous),
+    access_token: Annotated[str | None, Depends(oauth2_scheme_optional)] = None,
+):
+    """Selection groups translated onto one data collection, for a client-side recolour.
+
+    Figures, cards and tables get their groups translated server side as part
+    of their render. An advanced viz recolours its points in the browser by
+    matching the group's values against its own point keys, so a group captured
+    on another collection (guide sequences, on a tab whose points are
+    libraries) matched nothing and the tile read "not grouped". This runs the
+    same translation (``_resolve_group_defs``, through the project's declared
+    links) and hands the rewritten groups back.
+
+    Request body:
+        {"dc_id": str, "groups": [{"name", "column_name", "values", "color",
+                                    "dc_id"}, ...]}
+
+    Response:
+        {"groups": [<group rewritten to dc_id's column and values>, ...],
+         "status": [<one verdict per input group, see resolve_group_defs_for_dc>]}
+
+    A group that cannot reach ``dc_id`` is absent from ``groups`` and says why
+    in ``status``. Viewer permission on the dashboard; ``dc_id`` must belong to
+    its project.
+    """
+    from depictio.api.v1.services.figure.groups import sanitize_group_defs
+
+    dc_id = request.get("dc_id")
+    if not isinstance(dc_id, str) or not dc_id:
+        raise HTTPException(status_code=400, detail="dc_id is required.")
+    group_defs = sanitize_group_defs(request.get("groups"))
+
+    def _run() -> dict[str, Any]:
+        dashboard_data = _viewable_dashboard(dashboard_id, current_user)
+        project_id = dashboard_data.get("project_id")
+        if dc_id not in _project_collections(project_id):
+            raise HTTPException(
+                status_code=404,
+                detail=f"Data collection {dc_id} is not part of this dashboard's project.",
+            )
+        resolved, status = _resolve_group_defs(
+            group_defs, dc_id, project_id, access_token, "advanced_viz"
+        )
+        return {"groups": resolved, "status": status}
+
+    return await run_in_threadpool(_run)
 
 
 @dashboards_endpoint_router.post("/data_version_status/{dashboard_id}")

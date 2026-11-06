@@ -767,6 +767,29 @@ class InteractiveLiteComponent(BaseLiteComponent):
           column_name: variety
           column_type: object
           filter_expr: "col('sepal.length') > 5"
+
+    Example YAML (text search on a sequence column):
+        - component_type: interactive
+          interactive_component_type: TextInput
+          workflow_tag: nf-core/crisprseq
+          data_collection_tag: guides
+          column_name: guide
+          column_type: object
+          title: Guide sequence
+          placeholder: "e.g. ^CCA or GG$"
+
+    A TextInput keeps the rows of a string column whose text matches what is
+    typed, read as a regular expression: ``GGG$`` ends with GGG, ``^ACG`` starts
+    with ACG, ``A{5,}`` holds a run of five A, and a plain substring is one too.
+    Letter case is ignored unless ``case_sensitive: true``; ``match_mode: contains``
+    matches the characters literally (``A+`` is then an A and a plus). Empty
+    text is no filter, and a pattern the server's regex engine rejects filters
+    nothing (it is logged, never an error). Null cells never match.
+
+    Linked collections: a pattern cannot be translated like a list of ids, so it
+    is resolved on its own collection. The rows whose column matches are found
+    there, and the linked collection is filtered on the link's join values of
+    those rows, as a Select on the same column would be.
     """
 
     component_type: Literal["interactive"] = "interactive"
@@ -841,7 +864,8 @@ class InteractiveLiteComponent(BaseLiteComponent):
         default=None,
         description="Value the filter starts with. Select / MultiSelect: one value or a "
         "list of values; SegmentedControl: one value; Slider: a number; Checkbox / "
-        "Switch: a boolean. RangeSlider and DateRangePicker use ``default_range``.",
+        "Switch: a boolean; TextInput: a string. RangeSlider and DateRangePicker use "
+        "``default_range``.",
     )
     default_range: list[Any] | None = Field(
         default=None,
@@ -856,6 +880,15 @@ class InteractiveLiteComponent(BaseLiteComponent):
         "and a new pick replaces the current one. For tab-local pickers feeding tiles that "
         "show one unit at a time (one structure, one family): a data-derived default that "
         "fits any run, where a ``default_value`` would name one run's unit.",
+    )
+
+    multiple: bool = Field(
+        default=False,
+        description="always_selected Select only: the filter may hold several values, "
+        "never none. It still starts on the first option of its list (or the one "
+        "``default_by`` ranks first) and takes it back when emptied. For a tab-local "
+        "picker whose tiles read one unit by default but can compare a few (one guide, "
+        "or the guides of an analysis group).",
     )
 
     default_by: str | None = Field(
@@ -898,6 +931,24 @@ class InteractiveLiteComponent(BaseLiteComponent):
         "its own name as the title. For a choice that changes what the whole tab "
         "shows (a reference database, a model), where the labels alone do not say "
         "what the reader gets.",
+    )
+
+    # TextInput-specific
+    placeholder: str | None = Field(
+        default=None,
+        description="TextInput only: hint shown in the empty box, e.g. 'e.g. ^CCA or GG$'.",
+    )
+    case_sensitive: bool | None = Field(
+        default=None,
+        description="TextInput only: match letter case exactly. Unset means False: a "
+        "sequence column is usually upper case but people type either.",
+    )
+    match_mode: Literal["regex", "contains"] | None = Field(
+        default=None,
+        description="TextInput only: 'regex' (the default when unset) reads the text as a regular "
+        "expression, a plain substring being one too ('GGG$' ends with GGG, '^ACG' starts "
+        "with ACG, 'A{5,}' is a run of five A); 'contains' matches it as literal text, "
+        "metacharacters included.",
     )
 
     # Styling (optional)
@@ -966,6 +1017,19 @@ class InteractiveLiteComponent(BaseLiteComponent):
                 raise ValueError(
                     f"Slider default_value must be a number, got {self.default_value!r}."
                 )
+        if kind == "TextInput":
+            if self.default_value is not None and not isinstance(self.default_value, str):
+                raise ValueError(
+                    f"TextInput default_value must be a string, got {self.default_value!r}."
+                )
+        else:
+            for option, is_set in (
+                ("placeholder", self.placeholder is not None),
+                ("case_sensitive", self.case_sensitive is not None),
+                ("match_mode", self.match_mode is not None),
+            ):
+                if is_set:
+                    raise ValueError(f"{option} is only valid for a TextInput, not {kind}.")
         if isinstance(self.default_value, list) and kind != "MultiSelect" and kind != "Select":
             raise ValueError(
                 f"A list default_value is only valid for Select / MultiSelect, not {kind}."
@@ -990,6 +1054,11 @@ class InteractiveLiteComponent(BaseLiteComponent):
             raise ValueError(
                 "banner_facts are read for the value an always_selected filter holds: set "
                 "always_selected too, or drop banner_facts."
+            )
+        if self.multiple and not (self.always_selected and kind == "Select"):
+            raise ValueError(
+                "multiple lets an always_selected Select hold several values: set "
+                "always_selected on a Select too, or drop multiple."
             )
         if self.always_selected:
             if kind != "Select":

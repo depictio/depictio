@@ -21,6 +21,7 @@ InteractiveComponentType = Literal[
     "Select",
     "MultiSelect",
     "SegmentedControl",
+    "TextInput",
     "Slider",
     "RangeSlider",
     "DateRangePicker",
@@ -32,6 +33,7 @@ SUPPORTED_INTERACTIVE_TYPES: list[str] = [
     "Select",
     "MultiSelect",
     "SegmentedControl",
+    "TextInput",
     "Slider",
     "RangeSlider",
     "DateRangePicker",
@@ -45,6 +47,8 @@ COMPONENT_COLUMN_COMPATIBILITY: dict[str, set[str]] = {
     "Select": {"object", "string", "category", "bool", "int64", "float64"},
     "MultiSelect": {"object", "string", "category", "bool", "int64", "float64"},
     "SegmentedControl": {"object", "string", "category", "bool"},
+    # Free text matched by a regular expression: string columns only
+    "TextInput": {"object", "string"},
     # Sliders need numeric data
     "Slider": {"int64", "int32", "float64", "float32"},
     "RangeSlider": {"int64", "int32", "float64", "float32"},
@@ -110,6 +114,8 @@ def validate_interactive_component(
             expected = "numeric (int64, float64, etc.)"
         elif interactive_type == "DateRangePicker":
             expected = "datetime or date"
+        elif interactive_type == "TextInput":
+            expected = "string (object or string)"
         else:
             expected = f"one of {sorted(compatible_types)}"
 

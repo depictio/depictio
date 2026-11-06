@@ -49,6 +49,36 @@ const roundTrip = (filters: InteractiveFilter[]) => {
   return decodeFiltersFromHash(`#filters=${hash}`);
 };
 
+describe('TextInput share links', () => {
+  const text = (value: string, metadata: InteractiveFilter['metadata'] = {}): InteractiveFilter => ({
+    index: 'guide-text',
+    value,
+    column_name: 'guide',
+    interactive_component_type: 'TextInput',
+    metadata: {
+      dc_id: 'dc1',
+      column_name: 'guide',
+      interactive_component_type: 'TextInput',
+      ...metadata,
+    },
+  });
+
+  it('round-trips regex syntax through the compact form', () => {
+    for (const pattern of ['GGG$', '^ACG', 'A{5,}', '[ACG]+;T:x', 'a=b&c~d']) {
+      const filters = [text(pattern)];
+      expect(encodeFiltersForHash(filters)).toMatch(/^2;/);
+      expect(roundTrip(filters)).toEqual(filters);
+    }
+  });
+
+  it('keeps case and match options by using the opaque form', () => {
+    const filters = [text('A+', { case_sensitive: true, match_mode: 'contains' })];
+    const hash = encodeFiltersForHash(filters);
+    expect(hash).not.toMatch(/^2;/);
+    expect(roundTrip(filters)).toEqual(filters);
+  });
+});
+
 describe('filter share encoding', () => {
   it('writes panel controls as one readable line each', () => {
     const hash = encodeFiltersForHash([panel('c1', ['Adelie', 'Gentoo']), panel('c2', [3, 7.5], 'RangeSlider')]);

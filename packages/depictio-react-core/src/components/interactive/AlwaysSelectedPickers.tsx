@@ -13,7 +13,7 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 
 import type { InteractiveFilter, StoredMetadata } from '../../api';
-import { autoPickValue, ownFilterValues } from './alwaysSelected';
+import { autoPickValue, isMultipleAlwaysSelected, ownFilterValues } from './alwaysSelected';
 import { filterEvent } from './categoricalOptions';
 import { alwaysSelectedComponents } from './scope';
 import { useScopeOptions } from './useScopeOptions';
@@ -31,17 +31,18 @@ const AlwaysSelectedPicker: React.FC<{
     loading,
     selected: ownFilterValues(filters, metadata.index),
     options: ordered,
+    multiple: isMultipleAlwaysSelected(metadata),
   });
   // Keyed on the picked value, so it fires once per such state and stays idle
   // while an offered value is held (or if the host ignores the change), which
   // rules out a loop.
-  const pickKey = pick?.[0] ?? null;
+  const pickKey = pick ? pick.join('\u0000') : null;
   const latest = useRef({ metadata, onFilterChange });
   latest.current = { metadata, onFilterChange };
   useEffect(() => {
     if (pickKey === null) return;
     const { metadata: m, onFilterChange: emit } = latest.current;
-    emit(filterEvent(m, [pickKey]));
+    emit(filterEvent(m, pickKey.split('\u0000')));
   }, [pickKey]);
   return null;
 };

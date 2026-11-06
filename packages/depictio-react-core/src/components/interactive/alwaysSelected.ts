@@ -57,6 +57,13 @@ export function isAlwaysSelected(
   return m?.interactive_component_type === 'Select' && m.always_selected === true;
 }
 
+/** True when an `always_selected` filter may hold several values (`multiple`). */
+export function isMultipleAlwaysSelected(
+  m: Pick<StoredMetadata, 'interactive_component_type' | 'always_selected' | 'multiple'> | null | undefined,
+): boolean {
+  return isAlwaysSelected(m) && m?.multiple === true;
+}
+
 /** The values a filter list holds for one control: its own, not a selection
  *  made on a chart (which carries a `source`). */
 export function ownFilterValues(filters: readonly InteractiveFilter[], index: string): string[] {
@@ -81,10 +88,17 @@ export function autoPickValue(args: {
   loading: boolean;
   selected: readonly string[];
   options: readonly PickableOption[];
+  /** The filter may hold several values: those still on offer are kept. */
+  multiple?: boolean;
 }): string[] | null {
-  const { enabled, loading, selected, options } = args;
+  const { enabled, loading, selected, options, multiple } = args;
   if (!enabled || loading || options.length === 0) return null;
   const firstEnabled = options.find((o) => !o.disabled);
+  if (multiple && selected.length > 0) {
+    const keep = selected.filter((v) => options.some((o) => o.value === v && !o.disabled));
+    if (keep.length === selected.length) return null;
+    if (keep.length > 0) return keep;
+  }
   if (selected.length > 0) {
     const offered = (o: PickableOption) => selected.includes(o.value);
     // Exactly one value, still on offer: nothing to do. Several values (a
@@ -109,7 +123,9 @@ export function autoPickValue(args: {
 export function singlePick(
   next: readonly string[],
   options: readonly PickableOption[],
+  multiple = false,
 ): string[] {
+  if (multiple && next.length > 0) return [...next];
   if (next.length > 1) return [next[next.length - 1]];
   if (next.length === 1) return [next[0]];
   return autoPickValue({ enabled: true, loading: false, selected: [], options }) ?? [];

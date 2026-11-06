@@ -39,6 +39,7 @@ from depictio.models.models.links import (
     LinkResolutionRequest,
     LinkResolutionResponse,
     LinkUpdateRequest,
+    TextMatchSpec,
     resolve_link_tag_refs,
 )
 from depictio.models.models.users import User
@@ -156,6 +157,7 @@ async def _translate_filter_values(
     filter_values: list[Any],
     link_column: str,
     range_filter: bool = False,
+    text_match: TextMatchSpec | None = None,
 ) -> list[Any]:
     """Translate filter values from one column to another via source DC query.
 
@@ -164,6 +166,10 @@ async def _translate_filter_values(
     column's dtype. Without it a position range ``[26000000, 26300000]`` was
     an ``is_in`` on two coordinates, matched nothing, and emptied every linked
     tile (atacseq AT-D26, 2026-09-23).
+
+    ``text_match`` reads ``filter_values[0]`` as the pattern of a TextInput and
+    keeps the rows whose ``filter_column`` matches it (same predicate as the
+    component's own filter, so the two cannot disagree).
 
     When filtering by column A but the link is defined on column B, this function
     queries the source DC to translate values from column A to column B.
@@ -239,7 +245,22 @@ async def _translate_filter_values(
         is_pair = isinstance(filter_values, list) and len(filter_values) == 2
         is_date_range = is_pair and schema[filter_column] in [pl.Date, pl.Datetime]
 
-        if range_filter and is_pair and not is_date_range:
+        if text_match is not None:
+            from depictio.api.v1.deltatables_utils import text_filter_predicate
+
+            text_predicate = text_filter_predicate(
+                filter_column,
+                filter_values[0] if filter_values else None,
+                text_match.case_sensitive,
+                text_match.match_mode,
+                schema[filter_column],
+            )
+            if text_predicate is None:
+                # An empty or invalid pattern filters nothing on its own collection
+                # either, so the link must not narrow the target.
+                return lf.select(pl.col(link_column).unique()).collect()[link_column].to_list()
+            predicate = text_predicate
+        elif range_filter and is_pair and not is_date_range:
             low, high = filter_values
             logger.info(f"Range filter on column '{filter_column}': [{low}, {high}]")
             predicate = (pl.col(filter_column) >= low) & (pl.col(filter_column) <= high)
@@ -696,13 +717,14 @@ async def _resolve_link_reverse(
 
     join_column = link.link_config.target_field or link.source_column
     values_to_resolve = request.filter_values
-    if request.source_column != join_column or request.range_filter:
+    if request.source_column != join_column or request.range_filter or request.text_match:
         values_to_resolve = await _translate_filter_values(
             source_dc_id=request.source_dc_id,
             filter_column=request.source_column,
             filter_values=request.filter_values,
             link_column=join_column,
             range_filter=request.range_filter,
+            text_match=request.text_match,
         )
 
     resolved_values, unmapped_values = get_resolver(link.link_config.resolver).resolve(
@@ -785,7 +807,7 @@ async def resolve_link(
     # or when the values are a range: a range on the join column itself still
     # has to become the join values it spans.
     values_to_resolve = request.filter_values
-    if request.source_column != link.source_column or request.range_filter:
+    if request.source_column != link.source_column or request.range_filter or request.text_match:
         logger.info(
             f"Filter column '{request.source_column}' differs from link column '{link.source_column}' "
             f"or is a range. Translating filter values via source DC query."
@@ -797,6 +819,7 @@ async def resolve_link(
             filter_values=request.filter_values,
             link_column=link.source_column,
             range_filter=request.range_filter,
+            text_match=request.text_match,
         )
         logger.info(
             f"Translated {len(request.filter_values)} {request.source_column} values "

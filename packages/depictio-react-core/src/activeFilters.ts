@@ -10,6 +10,7 @@
 
 import type { InteractiveFilter, StoredMetadata } from './api';
 import { formatSliderValue } from './components/interactive/numericScale';
+import { formatTextFilterValue } from './components/interactive/textFilter';
 
 /** True when the filter carries a value that actually narrows the data. */
 export function isFilterActive(filter: InteractiveFilter): boolean {
@@ -20,7 +21,7 @@ export function isFilterActive(filter: InteractiveFilter): boolean {
     // A range control that was reset emits [null, null].
     return v.some((item) => item != null);
   }
-  if (typeof v === 'string') return v.length > 0;
+  if (typeof v === 'string') return v.trim().length > 0;
   return true;
 }
 
@@ -55,6 +56,12 @@ const MAX_LABEL_CHARS = 28;
 export function formatFilterValue(filter: InteractiveFilter): string {
   const v = filter.value;
   if (v == null) return '';
+
+  // A pattern reads as typed (in quotes when matched literally), whole: the
+  // chip truncates it like any other value.
+  if (filter.interactive_component_type === 'TextInput' && typeof v === 'string') {
+    return truncate(formatTextFilterValue(filter));
+  }
 
   if (Array.isArray(v)) {
     const present = v.filter((item) => item != null);
