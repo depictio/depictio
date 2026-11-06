@@ -39,6 +39,7 @@ import polars as pl
 
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.services.multiqc.themes import get_theme_template
+from depictio.recipes.lib.contigs import sort_by_axis
 
 # Reducing visualisations this module can serve. Everything else (the scatter
 # family, line/area) is a mark-per-row plot handled by sampling in figure_builder.
@@ -622,7 +623,7 @@ def _build_box(scan: pl.LazyFrame, plan: AggPlan, render_stats: dict | None) -> 
         pl.min_horizontal(pl.col("_q3") + 1.5 * pl.col("_iqr"), pl.col("_max")).alias("_uf"),
     )
     if plan.x:
-        stats = stats.sort(plan.x, nulls_last=True)
+        stats = sort_by_axis(stats, plan.x)
 
     fig = go.Figure()
     # One trace per colour value so the legend and grouping match px.box.
@@ -850,7 +851,7 @@ def _build_groupby(
         )
         return None
     if plan.x:
-        frame = frame.sort(plan.x, nulls_last=True)
+        frame = sort_by_axis(frame, plan.x)
 
     kwargs = _px_kwargs(plan, template)
     kwargs["y"] = plan.y or "count"

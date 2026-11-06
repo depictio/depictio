@@ -874,12 +874,13 @@ function markFor(
   if (mark === 'point') return { type: 'point', size: (config.point_size ?? 5) ** 2 };
   // A bar has to stay visible when a call is a fraction of a pixel wide (a
   // narrow peak on a chromosome, or on a megabase), hence the clamped minimum
-  // width, wide enough to read as a tick, and the opacity floor that keeps the
-  // clamping from fading it away entirely.
-  if (mark === 'bar') return { type: 'rect', minWidth: 3, minOpacity: 0.4 };
+  // width, wide enough to read as a tick. The opacity floor is 1: GenomeSpy
+  // fades a clamped mark in proportion to how far it was widened, so a window
+  // under a pixel at whole-genome zoom came out pale and the lane looked empty.
+  if (mark === 'bar') return { type: 'rect', minWidth: 3, minOpacity: 1 };
   // An interval is drawn as a level segment at its score (see `y2` in
   // `unitLayer`), so it needs a floor on its height as well as its width.
-  return { type: 'rect', minWidth: 0.5, minHeight: 2, minOpacity: 0.4 };
+  return { type: 'rect', minWidth: 0.5, minHeight: 2, minOpacity: 1 };
 }
 
 /**

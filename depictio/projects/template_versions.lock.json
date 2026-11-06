@@ -7,8 +7,8 @@
       "content_hash": "369ff13f44f44a779cb07e3f46149b97861d9b659b4b1aebde3af1d40c51695c"
     },
     "init/catalog_conformance": {
-      "version": "2.1.0",
-      "content_hash": "5ab62e06e7c48f21d71eb97d769e3188483f6cf9e098080b0fe3507980ea3170",
+      "version": "2.2.1",
+      "content_hash": "d28dc246ba0172f0bce801273b0f4e8429ca8d2f6de14c9b60d8e58885452150",
       "catalog": {
         "adapterremoval": "1.0.0",
         "agat": "1.0.0",
@@ -85,7 +85,7 @@
         "mhcquant": "1.0.0",
         "mirdeep2": "1.0.0",
         "mirtop": "1.0.0",
-        "mosdepth": "1.0.0",
+        "mosdepth": "1.1.0",
         "multiqc": "1.0.0",
         "nanoplot": "1.0.0",
         "neo": "1.0.0",
@@ -125,7 +125,7 @@
         "sidle": "1.0.0",
         "sigs": "1.0.0",
         "simpleaf": "1.0.0",
-        "snpeff": "1.0.0",
+        "snpeff": "1.0.1",
         "sompy": "1.0.0",
         "stableexpression": "1.0.0",
         "star": "1.0.0",
@@ -577,37 +577,37 @@
       }
     },
     "nf-core/rnavar/1.3.0": {
-      "version": "1.1.1",
-      "content_hash": "19c8187a2effc1078e68b414495830d37655ef3051296cea86f51d7e37085ba7",
+      "version": "1.1.2",
+      "content_hash": "ca40f232caf5be7630610df8a854a67630961791c1379839dea401a24d29b2bd",
       "catalog": {
         "multiqc": "1.0.0",
         "picard": "1.1.0",
         "samtools": "1.1.0",
-        "snpeff": "1.0.0",
+        "snpeff": "1.0.1",
         "star": "1.0.0",
         "vcf": "1.0.0"
       }
     },
     "nf-core/sarek/3.10.0": {
-      "version": "2.1.0",
-      "content_hash": "ae5145298f1de19c6d129adff46b32f25a896316866440715a137b15627488f9",
+      "version": "2.2.1",
+      "content_hash": "435e30cd334231e9f3d6be98645e22b83330f5a5c51fc4cd92505302bcef1941",
       "catalog": {
         "bcftools": "1.0.0",
-        "mosdepth": "1.0.0",
+        "mosdepth": "1.1.0",
         "multiqc": "1.0.0",
-        "snpeff": "1.0.0",
+        "snpeff": "1.0.1",
         "vcf": "1.0.0",
         "vcftools": "1.0.0"
       }
     },
     "nf-core/sarek/3.11.0": {
-      "version": "3.0.0",
-      "content_hash": "3bd8b49b81a2808f1d51b5277ca22573a93166cd5bffcbe8d2a2330081018c3e",
+      "version": "3.2.0",
+      "content_hash": "1ca632941c25e32258aea28ac38394633c0c63b6253c8fea85c8552f583e9bbd",
       "catalog": {
         "bcftools": "1.0.0",
-        "mosdepth": "1.0.0",
+        "mosdepth": "1.1.0",
         "multiqc": "1.0.0",
-        "snpeff": "1.0.0",
+        "snpeff": "1.0.1",
         "vcf": "1.0.0",
         "vcftools": "1.0.0"
       }
@@ -689,22 +689,22 @@
       }
     },
     "nf-core/viralmetagenome/1.2.0": {
-      "version": "1.2.0",
-      "content_hash": "ec999af3369067e8b425b5dd87d88c6402fceb80a3b2003df36ee4ea76840c38",
+      "version": "1.3.0",
+      "content_hash": "c72d3e80ec10d14b99501da686173b45195bd9e9cf5ef425498639c9cae59d36",
       "catalog": {
         "checkv": "1.0.0",
         "ivar": "1.0.0",
-        "mosdepth": "1.0.0",
+        "mosdepth": "1.1.0",
         "multiqc": "1.0.0",
         "viralmetagenome": "1.0.0"
       }
     },
     "nf-core/viralrecon/3.0.0": {
-      "version": "2.1.0",
-      "content_hash": "c2bd8cc9e172ab56e97d2bd818e866b932b9edf6d195421aeae28a31f1aebad2",
+      "version": "2.2.0",
+      "content_hash": "3238c8171910069ae0d91da52a331cafc7d31213b60e2bfa25145d0f293cf759",
       "catalog": {
         "ivar": "1.0.0",
-        "mosdepth": "1.0.0",
+        "mosdepth": "1.1.0",
         "multiqc": "1.0.0",
         "nextclade": "1.0.0",
         "pangolin": "1.0.0"

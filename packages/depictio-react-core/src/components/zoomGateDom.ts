@@ -74,6 +74,8 @@ function hintState(): ZoomHintState {
 }
 
 let hintEl: HTMLElement | null = null;
+/** The figure the visible hint is centred on, so a scroll can move the hint with it. */
+let hintTarget: Element | null = null;
 let hideTimer: ReturnType<typeof setTimeout> | undefined;
 let clearTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -105,24 +107,37 @@ function dismissHint(): void {
   const el = hintEl;
   if (!el || !el.hasAttribute('data-visible')) return;
   el.removeAttribute('data-visible');
+  hintTarget = null;
   clearTimeout(clearTimer);
   clearTimer = setTimeout(() => {
     if (!el.hasAttribute('data-visible')) el.textContent = '';
   }, FADE_MS + 40);
 }
 
-function showHint(target: Element, touch: boolean, visibleMs = ZOOM_HINT_VISIBLE_MS, extra?: string): void {
-  const el = hintElement();
-  if (!el) return;
-  const at = visibleCenter(target.getBoundingClientRect(), {
+/** Centres the visible hint on the visible part of its figure; hides it once the figure is out of view. */
+function placeHint(): void {
+  const el = hintEl;
+  if (!el || !hintTarget) return;
+  const at = visibleCenter(hintTarget.getBoundingClientRect(), {
     width: window.innerWidth,
     height: window.innerHeight,
   });
-  if (!at) return;
-  clearTimeout(clearTimer);
-  clearTimeout(hideTimer);
+  if (!at) {
+    dismissHint();
+    return;
+  }
   el.style.left = `${at.x}px`;
   el.style.top = `${at.y}px`;
+}
+
+function showHint(target: Element, touch: boolean, visibleMs = ZOOM_HINT_VISIBLE_MS, extra?: string): void {
+  const el = hintElement();
+  if (!el) return;
+  hintTarget = target;
+  placeHint();
+  if (!hintTarget) return;
+  clearTimeout(clearTimer);
+  clearTimeout(hideTimer);
   el.textContent = extra ? `${zoomHintText(touch)} \u00b7 ${extra}` : zoomHintText(touch);
   // Flush the idle (transparent) style first, or a hint that was just added to
   // the page appears without fading in.
@@ -130,6 +145,14 @@ function showHint(target: Element, touch: boolean, visibleMs = ZOOM_HINT_VISIBLE
   el.setAttribute('data-visible', '');
   lastShownAt = Date.now();
   hideTimer = setTimeout(dismissHint, visibleMs);
+}
+
+// The hint is fixed to the viewport, so a page scroll (the very gesture that
+// raises it) would leave it behind while its figure moves on. Scrolling in
+// any container is caught in the capture phase, as scroll does not bubble.
+if (typeof window !== 'undefined') {
+  window.addEventListener('scroll', placeHint, { capture: true, passive: true });
+  window.addEventListener('resize', placeHint, { passive: true });
 }
 
 function insideSelector(target: EventTarget | null, selector: string | undefined): boolean {

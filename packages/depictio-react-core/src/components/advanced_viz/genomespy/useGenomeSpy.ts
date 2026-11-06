@@ -28,7 +28,7 @@ import { isZoomWheel } from '../../zoomGate';
 import { scrollLanesBy, wheelPixels } from './laneScroll';
 import { BRUSH_PARAM, DATASET_NAME, GENOME_SCALE_NAME } from './genomeSpySpec';
 import type { Contig } from './genomeSpySpec';
-import { attachInteractionMode, wheelZooms } from './interactionMode';
+import { attachInteractionMode } from './interactionMode';
 import type { InteractionMode } from './interactionMode';
 import { hasMarkEvents, launchWithRetry, toError } from './embedLaunch';
 import { attachDragTracker, brushToPublish } from './pointerGesture';
@@ -169,12 +169,10 @@ export function useGenomeSpy(
     // GenomeSpy zooms the genome axis on a plain wheel. The gate on its host
     // keeps that wheel from the canvas: the page scrolls, Ctrl / Cmd + wheel
     // and a two-finger pinch zoom. Its hint shows on this axis's first hover,
-    // long enough to read, with what a drag does. In pan mode the reader asked
-    // for the wheel: it zooms, and there is nothing to hint.
-    const zoomsOnWheel = wheelZooms(interactionMode);
+    // long enough to read, with what a drag does. The same rule in every mode.
     const detachZoomGate = attachZoomGate(el, {
-      block: !zoomsOnWheel,
-      canZoom: () => !zoomsOnWheel,
+      block: true,
+      canZoom: () => true,
       ownHint: { visibleMs: 6000, extra: dragHintRef.current },
     });
     // The pointer mode keeps a drag from panning (see `attachInteractionMode`).

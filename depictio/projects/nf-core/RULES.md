@@ -651,6 +651,18 @@ same table is never drawn twice on a genomic axis.
 follower `genome_view`, no table drawn twice on a genomic axis, no GenomeSpy toggle beside a
 browser).
 
+### Contig order
+
+An axis, a bar list or a table that runs over contigs is in karyotype order: 1 to 22 by number,
+then X, Y, the mitochondrion, then the unplaced and alternate contigs by name, and a `total`
+roll-up last. A text sort puts `chr10` before `chr2`. The `chr` prefix and the case are read
+through, so a UCSC and an Ensembl reference sort alike.
+
+- Sort in the recipe, with `sort_contigs` or `contig_rank` from `depictio.recipes.lib.contigs`,
+  not in the figure: the table, the bar and the filter options then agree.
+- A tile that sorts by a value (depth, count) says so in its description; the default is the
+  karyotype order.
+
 ### Linking the navigator and the browser
 
 GenomeSpy and JBrowse on one tab read as one instrument, so the reader never has to guess how

@@ -5,10 +5,13 @@
  * apart from the Settings panel because they are a tool the reader picks up and
  * puts down, not a property of the figure:
  *
- *  - `pointer`: hover tooltips and clicks. A drag does nothing, the wheel
- *    scrolls the page (Cmd / Ctrl + wheel still zooms, as on every figure).
- *  - `pan` (the default): a drag moves the view, the wheel zooms; hover
- *    tooltips and clicks work as in `pointer`.
+ *  - `pointer`: hover tooltips and clicks. A drag does nothing.
+ *  - `pan` (the default): a drag moves the view; hover tooltips and clicks
+ *    work as in `pointer`.
+ *
+ * In every mode the wheel scrolls the page and Cmd / Ctrl + wheel zooms, as on
+ * every other figure: a plain wheel over a tile in the middle of a dashboard
+ * used to be taken by the zoom, and the page stopped scrolling under the cursor.
  *  - `select`: a drag draws the region brush, which publishes the region.
  *
  * GenomeSpy ties panning to a plain drag and the brush to a drag the interval
@@ -76,12 +79,6 @@ export function laneCursor(mode: InteractionMode): string | undefined {
   return undefined;
 }
 
-/** Whether a plain wheel zooms the axis (otherwise the page scrolls and only
- *  Cmd / Ctrl + wheel zooms). */
-export function wheelZooms(mode: InteractionMode): boolean {
-  return mode === 'pan';
-}
-
 /** What the zoom hint adds after "Cmd + scroll to zoom". */
 export function modeHint(mode: InteractionMode, brushEnabled: boolean): string {
   if (mode === 'select') return brushEnabled ? 'drag to select a region' : 'select is off on this tile';
@@ -93,12 +90,12 @@ export function modeHint(mode: InteractionMode, brushEnabled: boolean): string {
 export const MODE_LABELS: Record<InteractionMode, { label: string; tooltip: string; icon: string }> = {
   pointer: {
     label: 'Pointer',
-    tooltip: 'Pointer (V): hover for details, click a mark. The wheel scrolls the page.',
+    tooltip: 'Pointer (V): hover for details, click a mark. Cmd / Ctrl + scroll zooms.',
     icon: 'tabler:pointer',
   },
   pan: {
     label: 'Pan',
-    tooltip: 'Pan (H): drag moves the view, the wheel zooms.',
+    tooltip: 'Pan (H): drag moves the view. Cmd / Ctrl + scroll zooms.',
     icon: 'tabler:hand-grab',
   },
   select: {

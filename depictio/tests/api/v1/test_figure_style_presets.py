@@ -117,11 +117,12 @@ def test_payload_header_title_follows_the_components_title():
 # the overlay
 
 
-def test_default_style_returns_the_figure_untouched():
+def test_default_style_keeps_the_drawing():
     fig = _scatter()
-    assert apply_figure_style(fig, "default") is fig
-    assert apply_figure_style(fig, None) is fig
-    assert apply_figure_style(fig, "unknown") is fig
+    before = copy.deepcopy(fig)
+    for style in ("default", None, "unknown"):
+        assert apply_figure_style(fig, style) == fig
+    assert fig == before
 
 
 def test_overlay_does_not_mutate_its_input():
@@ -430,3 +431,95 @@ def test_minimal_leaves_an_authors_bar_text_weight():
     fig = _bars()
     fig["data"][0]["textfont"] = {"weight": 700}
     assert apply_figure_style(fig, "minimal")["data"][0]["textfont"]["weight"] == 700
+
+
+# ---------------------------------------------------------------------------
+# hover labels follow their series
+
+
+def _bar(colour):
+    return {
+        "data": [
+            {"type": "bar", "name": "HIGH", "x": ["a"], "y": [1], "marker": {"color": colour}}
+        ],
+        "layout": {},
+    }
+
+
+def test_a_series_hover_label_wears_the_series_colour():
+    out = apply_figure_style(_bar("#e03131"), "minimal")
+    label = out["data"][0]["hoverlabel"]
+    assert label["bgcolor"] == "#e03131"
+    assert label["bordercolor"] == "#ffffff"
+    # Dark red: white ink.
+    assert label["font"]["color"] == "#ffffff"
+
+
+def test_a_light_series_gets_dark_ink_on_its_hover_label():
+    label = apply_figure_style(_bar("#fab005"), "minimal")["data"][0]["hoverlabel"]
+    assert label["font"]["color"] == "#212529"
+
+
+def test_rgb_colours_count_as_colours():
+    label = apply_figure_style(_bar("rgb(34, 139, 230)"), "minimal")["data"][0]["hoverlabel"]
+    assert label["bgcolor"] == "rgb(34, 139, 230)"
+
+
+def test_stacked_segments_each_answer_in_their_own_colour():
+    out = apply_figure_style(_stacked_bars(), "minimal")
+    colours = [t["marker"]["color"] for t in out["data"]]
+    assert len(set(colours)) == 2
+    assert [t["hoverlabel"]["bgcolor"] for t in out["data"]] == colours
+
+
+def test_per_point_colours_give_per_point_hover_colours():
+    fig = _bar(["#e03131", "#fab005"])
+    fig["data"][0].update(x=["a", "b"], y=[1, 2])
+    label = apply_figure_style(fig, "minimal")["data"][0]["hoverlabel"]
+    assert label["bgcolor"] == ["#e03131", "#fab005"]
+    assert label["font"]["color"] == ["#ffffff", "#212529"]
+
+
+@pytest.mark.parametrize("colour", [[0.1, 0.9], "tomato", "hsl(10, 50%, 50%)", None])
+def test_a_scale_a_name_or_no_colour_keeps_the_neutral_hover_label(colour):
+    out = apply_figure_style(_bar(colour), "minimal")
+    assert "hoverlabel" not in out["data"][0]
+    assert out["layout"]["hoverlabel"]["bgcolor"] == "#ffffff"
+
+
+def test_a_line_only_scatter_takes_its_line_colour():
+    fig = {
+        "data": [
+            {
+                "type": "scatter",
+                "mode": "lines",
+                "x": [0, 1],
+                "y": [0, 1],
+                "line": {"color": "#1c7ed6"},
+            }
+        ],
+        "layout": {},
+    }
+    assert apply_figure_style(fig, "minimal")["data"][0]["hoverlabel"]["bgcolor"] == "#1c7ed6"
+
+
+def test_the_default_style_colours_hover_labels_too():
+    fig = _bar("#e03131")
+    before = copy.deepcopy(fig)
+    out = apply_figure_style(fig, "default")
+    assert out["data"][0]["hoverlabel"]["bgcolor"] == "#e03131"
+    assert out["layout"] == fig["layout"]
+    assert fig == before
+
+
+def test_a_hover_line_without_a_name_is_dropped():
+    fig = _bar("#e03131")
+    fig["data"][0]["hovertemplate"] = "Impact class=HIGH<br>=%{x}<br>Share (%)=%{y}<extra></extra>"
+    out = apply_figure_style(fig, "minimal")
+    assert out["data"][0]["hovertemplate"] == "Impact class=HIGH<br>Share (%)=%{y}<extra></extra>"
+    # A figure that never had the line is left alone.
+    fig["data"][0]["hovertemplate"] = "a=%{x}<br>b=%{y}<extra></extra>"
+    assert (
+        apply_figure_style(fig, "minimal")["data"][0]["hovertemplate"]
+        == fig["data"][0]["hovertemplate"]
+    )
