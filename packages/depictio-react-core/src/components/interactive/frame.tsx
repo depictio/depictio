@@ -74,6 +74,7 @@ const TYPE_ICONS: Record<string, string> = {
   Checkbox: 'mdi:checkbox-marked-outline',
   Switch: 'mdi:toggle-switch',
   Timeline: 'mdi:timeline-clock-outline',
+  TextInput: 'mdi:magnify',
 };
 
 // The default titles live in a module of their own, free of React, so plain

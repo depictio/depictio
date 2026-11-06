@@ -40,6 +40,7 @@ FilterType = Literal[
     "Select",
     "MultiSelect",
     "SegmentedControl",
+    "TextInput",
 ]
 
 # Default fallback values when dynamic discovery fails
@@ -217,7 +218,7 @@ VALIDATION_RULES = ValidationRules(
         "object": ColumnTypeRules(
             column_type="object",
             allowed_aggregations={"count", "mode", "nunique"},
-            allowed_filters={"Select", "MultiSelect", "SegmentedControl"},
+            allowed_filters={"Select", "MultiSelect", "SegmentedControl", "TextInput"},
         ),
     },
 )

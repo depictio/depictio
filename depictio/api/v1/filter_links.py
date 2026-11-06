@@ -115,6 +115,43 @@ def _is_range_filter(source_filter: dict) -> bool:
     return component in _RANGE_COMPONENTS and isinstance(value, list) and len(value) == 2
 
 
+def _is_text_filter(source_filter: dict) -> bool:
+    """True for a TextInput filter."""
+    meta = source_filter.get("metadata") or {}
+    return (
+        meta.get("interactive_component_type") or source_filter.get("interactive_component_type")
+    ) == "TextInput"
+
+
+def _text_match_spec(source_filter: dict) -> dict | None:
+    """``{case_sensitive, match_mode}`` for a TextInput filter worth resolving, else ``None``.
+
+    A text pattern cannot be translated like a list of ids, so it is resolved the
+    way a range is: the origin collection keeps the rows whose column matches, and
+    the link's join values of those rows are what the target is filtered on. An
+    empty pattern, or one the regex engine rejects, filters nothing on the origin
+    either, so it contributes nothing here.
+    """
+    from depictio.api.v1.deltatables_utils import (
+        is_valid_text_pattern,
+        normalize_text_filter_options,
+    )
+
+    if not _is_text_filter(source_filter):
+        return None
+    meta = source_filter.get("metadata") or {}
+    value = source_filter.get("value")
+    if not isinstance(value, str) or not value.strip():
+        return None
+    case_sensitive, match_mode = normalize_text_filter_options(
+        meta.get("case_sensitive", source_filter.get("case_sensitive")),
+        meta.get("match_mode", source_filter.get("match_mode")),
+    )
+    if not is_valid_text_pattern(value, match_mode):
+        return None
+    return {"case_sensitive": case_sensitive, "match_mode": match_mode}
+
+
 def _is_region_link(link: dict) -> bool:
     """True for a link that renames a genomic region rather than resolving values."""
     return (link.get("link_config") or {}).get("resolver") == "region"
@@ -267,12 +304,15 @@ def _walk_link_path(
     access_token: str,
     component_type: str,
     range_filter: bool = False,
+    text_match: dict | None = None,
 ) -> tuple[str | None, list]:
     """Resolve a filter along a chain of links, hop by hop.
 
     ``range_filter`` applies to the first hop only: the origin values are the
     slider's ``[low, high]``, every later hop receives the discrete join values
-    the previous one resolved.
+    the previous one resolved. ``text_match`` is the same for a TextInput: the
+    origin value is ``[pattern]``, matched against the origin column on the first
+    hop.
 
     Each hop translates the values it receives into the next DC's join column;
     that output becomes the next hop's input.
@@ -307,6 +347,7 @@ def _walk_link_path(
             token=access_token,
             reverse=_is_reversed(link),
             range_filter=range_filter and hop == 0,
+            text_match=text_match if hop == 0 else None,
         )
         final_column = _hop_target_column(path[-1])
         if resolved is None:
@@ -368,6 +409,7 @@ def resolve_link_values(
     use_cache: bool = True,
     reverse: bool = False,
     range_filter: bool = False,
+    text_match: dict | None = None,
 ) -> Optional[Dict[str, Any]]:
     """Resolve filtered values from source DC to target DC via link.
 
@@ -377,6 +419,8 @@ def resolve_link_values(
 
     ``range_filter`` says ``filter_values`` is a ``[low, high]`` pair to read as
     a span on ``source_column`` (see ``LinkResolutionRequest.range_filter``).
+    ``text_match`` says ``filter_values`` is ``[pattern]``, matched against
+    ``source_column`` (see ``LinkResolutionRequest.text_match``).
     """
     if not token:
         logger.warning("No token provided for link resolution")
@@ -393,6 +437,8 @@ def resolve_link_values(
     versions = f"{_agg_hash(source_dc_id)}_{_agg_hash(target_dc_id)}"
     direction = "rev" if reverse else "fwd"
     shape = "range" if range_filter else "set"
+    if text_match:
+        shape = f"text{int(bool(text_match.get('case_sensitive')))}{text_match.get('match_mode')}"
     cache_key = (
         f"link_{project_id}_{source_dc_id}_{target_dc_id}_{direction}_{shape}_{versions}_"
         f"{hash(tuple(sorted(str(v) for v in filter_values)))}"
@@ -412,6 +458,7 @@ def resolve_link_values(
         "target_dc_id": target_dc_id,
         "reverse": reverse,
         "range_filter": range_filter,
+        **({"text_match": text_match} if text_match else {}),
     }
 
     try:
@@ -795,6 +842,12 @@ def extend_filters_via_links(
                     continue
                 filter_values = filter_value if isinstance(filter_value, list) else [filter_value]
                 origin_column = source_filter.get("metadata", {}).get("column_name", "")
+                text_match = _text_match_spec(source_filter)
+                if text_match is None and _is_text_filter(source_filter):
+                    # An unusable pattern filters nothing on its own collection, so it
+                    # must not narrow this one (resolved as a value set it would
+                    # match no id at all and empty the target).
+                    continue
 
                 target_column, resolved_values = _walk_link_path(
                     path=path,
@@ -804,6 +857,7 @@ def extend_filters_via_links(
                     access_token=access_token,
                     component_type=component_type,
                     range_filter=_is_range_filter(source_filter),
+                    text_match=text_match,
                 )
                 if not target_column:
                     continue  # unusable chain — not a result, so claim nothing

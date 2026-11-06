@@ -95,6 +95,7 @@ import {
   groupUnreachableReasons,
 } from '../../groupStatus';
 import type { AdvancedVizGroupBadge } from '../../groupStatus';
+import { useGroupsForDc } from './groupsForDc';
 import {
   GroupColouringReportContext,
   groupColouringActive,
@@ -158,6 +159,10 @@ interface AdvancedVizDispatchProps {
    *  the aggregating ones (UpSet, sunburst, stacked taxonomy) ignore it,
    *  because a group cannot be attributed to a bar that is already a sum. */
   groupRender?: GroupRenderState;
+  /** The dashboard this tile belongs to. With `groupRender`, it lets a group
+   *  captured on another collection be translated onto this tile's own
+   *  (`useGroupsForDc`); without it the groups are read as they come. */
+  dashboardId?: string;
 }
 
 // 3Dmol.js is heavy and only a protein tab needs it, so the molecule_3d
@@ -314,6 +319,7 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
   showDragHandle,
   sourceLink,
   groupRender,
+  dashboardId,
 }) => {
   const [published, setPublished] = React.useState<AdvancedVizExtrasPayload | null>(null);
   // Where a `popover` tile docks its controls (`controls_placement` on the
@@ -508,7 +514,10 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
     groupRender?.display === 'facet' && groupingModeForKind(vizKind) === 'none';
   // Not handed the groups either, so the tile matches its badge: a renderer
   // that could still colour on its own would otherwise contradict it.
-  const wholeGroupRender = kindDeclinesSplit ? undefined : groupRender;
+  // A group captured on another collection is translated through the project's
+  // links first, or a tile of libraries would match nothing in a group of guides.
+  const linkedGroupRender = useGroupsForDc(groupRender, dashboardId, metadata.dc_id);
+  const wholeGroupRender = kindDeclinesSplit ? undefined : linkedGroupRender;
 
   // What the renderer drawn whole reported after recolouring its figure by the
   // groups (see `useReportGroupColouring`): whether any point belonged to one.

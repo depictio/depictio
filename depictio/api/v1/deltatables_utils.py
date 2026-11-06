@@ -5,6 +5,7 @@ import sys
 import threading
 import warnings
 from collections.abc import Callable
+from functools import lru_cache
 
 import httpx
 import polars as pl
@@ -13,6 +14,7 @@ from bson import ObjectId
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.s3 import polars_s3_config
+from depictio.models.components.constants import TEXT_MATCH_MODES
 
 # FEATURE FLAGS
 ENABLE_CACHING = True  # Global toggle for caching system
@@ -117,6 +119,15 @@ def _generate_filter_hash(metadata: list[dict] | None) -> str:
 
         # Create stable representation
         filter_dict = {"col": column_name, "type": component_type, "val": value}
+        # A text pattern means something different per option, so the options are
+        # part of the filter's identity (same text, other case rule, other rows).
+        if component_type == "TextInput":
+            options = {**component, **(component.get("metadata") or {})}
+            filter_dict["txt"] = list(
+                normalize_text_filter_options(
+                    options.get("case_sensitive"), options.get("match_mode")
+                )
+            )
         # A region pair compares chromosome names loosely (see GENOME_SELECTION_SOURCE).
         if component.get("source") == GENOME_SELECTION_SOURCE:
             filter_dict["src"] = GENOME_SELECTION_SOURCE
@@ -266,6 +277,118 @@ def _slider_predicate(column_name: str, value, slider_mode: str | None) -> pl.Ex
     }[mode]
 
 
+#: ``TEXT_MATCH_MODES``: ``regex`` reads a TextInput value as a regular expression
+#: (a plain substring is one too), ``contains`` as literal text.
+DEFAULT_TEXT_MATCH_MODE = "regex"
+
+# Characters the Rust ``regex`` crate (Polars' engine) treats as syntax.
+_REGEX_META = frozenset("\\.+*?()|[]{}^$#&-~")
+
+
+def escape_regex(text: str) -> str:
+    """Escape ``text`` so the Rust regex engine matches it literally."""
+    return "".join(f"\\{ch}" if ch in _REGEX_META else ch for ch in text)
+
+
+def normalize_text_filter_options(
+    case_sensitive: object = None, match_mode: object = None
+) -> tuple[bool, str]:
+    """``(case_sensitive, match_mode)`` with defaults filled and junk replaced.
+
+    The options arrive from the client, so an unknown ``match_mode`` falls back to
+    ``regex`` rather than failing the render.
+    """
+    mode = str(match_mode).lower() if match_mode else DEFAULT_TEXT_MATCH_MODE
+    if mode not in TEXT_MATCH_MODES:
+        mode = DEFAULT_TEXT_MATCH_MODE
+    return bool(case_sensitive), mode
+
+
+#: A pattern longer than this is not a filter: a person types a few characters, and
+#: the regex engine compiles whatever it is given for every query.
+MAX_TEXT_PATTERN_LENGTH = 512
+
+
+def text_filter_pattern(
+    value: object, case_sensitive: object = None, match_mode: object = None
+) -> tuple[str, bool] | None:
+    """The ``(pattern, literal)`` a TextInput value compiles to, or ``None`` for no filter.
+
+    ``None`` covers an empty or whitespace-only value and a pattern the regex
+    engine rejects: both mean "do not filter", never an error. Surrounding
+    whitespace is trimmed (a pasted sequence often carries a trailing space).
+    Case-insensitive matching is the ``(?i)`` flag, so a literal match in that
+    mode is a regex with its metacharacters escaped. Polars' engine is a
+    linear-time automaton, so no pattern can backtrack catastrophically.
+    """
+    if value is None or isinstance(value, list | tuple | dict):
+        return None
+    text = str(value).strip()
+    if not text or len(text) > MAX_TEXT_PATTERN_LENGTH:
+        return None
+    sensitive, mode = normalize_text_filter_options(case_sensitive, match_mode)
+    literal = mode == "contains"
+    if literal and sensitive:
+        return text, True
+    if literal:
+        text = escape_regex(text)
+    pattern = text if sensitive else f"(?i){text}"
+    if not _is_valid_regex(pattern):
+        return None
+    return pattern, False
+
+
+@lru_cache(maxsize=512)
+def _is_valid_regex(pattern: str) -> bool:
+    """Whether Polars' regex engine accepts ``pattern`` (compiled once, then cached)."""
+    try:
+        pl.Series([""]).str.contains(pattern)
+    except Exception:
+        return False
+    return True
+
+
+def is_valid_text_pattern(value: object, match_mode: object = None) -> bool:
+    """False when ``value`` is a pattern that cannot filter: over the length cap, or a regex
+    the engine rejects (a literal under the cap always compiles)."""
+    _, mode = normalize_text_filter_options(None, match_mode)
+    text = "" if value is None else str(value).strip()
+    if len(text) > MAX_TEXT_PATTERN_LENGTH:
+        return False
+    if mode == "contains" or not text:
+        return True
+    return _is_valid_regex(text)
+
+
+def text_filter_predicate(
+    column_name: str,
+    value: object,
+    case_sensitive: object = None,
+    match_mode: object = None,
+    dtype: pl.DataType | None = None,
+) -> pl.Expr | None:
+    """The predicate of a ``TextInput`` filter, or ``None`` when it should not filter.
+
+    A null cell never matches (``str.contains`` yields null and the filter keeps
+    only true). The column is read as text, so a categorical or numeric column
+    that reaches here is matched on its string form rather than failing the render;
+    a column already of the string dtype stays bare.
+    """
+    compiled = text_filter_pattern(value, case_sensitive, match_mode)
+    if compiled is None:
+        if not is_valid_text_pattern(value, match_mode):
+            logger.warning(
+                f"TextInput filter on column {column_name!r} ignored: {str(value)!r} "
+                "cannot be used as a pattern (invalid regex or too long)"
+            )
+        return None
+    pattern, literal = compiled
+    column = pl.col(column_name)
+    if dtype != pl.String:
+        column = column.cast(pl.Utf8, strict=False)
+    return column.str.contains(pattern, literal=literal)
+
+
 def add_filter(
     filter_list: list,
     interactive_component_type: str,
@@ -275,6 +398,8 @@ def add_filter(
     max_value=None,
     dtype: pl.DataType | None = None,
     slider_mode: str | None = None,
+    case_sensitive: bool | None = None,
+    match_mode: str | None = None,
 ) -> None:
     """Add filter criteria to a filter list based on component type.
 
@@ -284,6 +409,9 @@ def add_filter(
 
     ``slider_mode`` only affects ``Slider``: one of ``SLIDER_MODES`` (``gte``
     by default, i.e. a threshold; ``eq`` restores the old equality filter).
+
+    ``case_sensitive`` / ``match_mode`` only affect ``TextInput`` (see
+    ``text_filter_predicate``): case-insensitive regex unless they say otherwise.
     """
     if interactive_component_type == LINK_NO_MATCH:
         # A cross-DC link resolved to zero target values: the user's filter is
@@ -306,8 +434,11 @@ def add_filter(
             filter_list.append(_categorical_predicate(column_name, value, dtype))
 
     elif interactive_component_type == "TextInput":
-        if value:
-            filter_list.append(pl.col(column_name).str.contains(value))
+        # An empty value, or a pattern the regex engine rejects, adds nothing:
+        # the frame comes back unfiltered rather than failing the whole render.
+        predicate = text_filter_predicate(column_name, value, case_sensitive, match_mode, dtype)
+        if predicate is not None:
+            filter_list.append(predicate)
 
     elif interactive_component_type == "Slider":
         # `is not None`, not truthiness: 0 is a real threshold / value.
@@ -429,11 +560,13 @@ def process_metadata_and_filter(
             column_name = meta["column_name"]
             filter_expr = meta.get("filter_expr") or component.get("filter_expr")
             slider_mode = meta.get("slider_mode") or component.get("slider_mode")
+            text_source = {**component, **meta}
         else:
             interactive_component_type = component["interactive_component_type"]
             column_name = component["column_name"]
             filter_expr = component.get("filter_expr")
             slider_mode = component.get("slider_mode")
+            text_source = component
 
         value = component["value"]
         if (
@@ -452,6 +585,8 @@ def process_metadata_and_filter(
             value=value,
             dtype=schema.get(column_name) if schema else None,
             slider_mode=slider_mode,
+            case_sensitive=text_source.get("case_sensitive"),
+            match_mode=text_source.get("match_mode"),
         )
 
         if filter_expr:
@@ -1368,6 +1503,12 @@ def clean_filter_payload(filters: list[dict] | None) -> list[dict]:
             entry["filter_expr"] = filter_expr
         if (f.get("source") or meta.get("source")) == GENOME_SELECTION_SOURCE:
             entry["source"] = GENOME_SELECTION_SOURCE
+        if entry["interactive_component_type"] == "TextInput":
+            # The options change which rows a pattern keeps, so they travel with it.
+            for key in ("case_sensitive", "match_mode"):
+                option = f.get(key) if f.get(key) is not None else meta.get(key)
+                if option is not None:
+                    entry[key] = option
         out.append(entry)
     return out
 

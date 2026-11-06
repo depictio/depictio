@@ -33,7 +33,7 @@ import {
   selectedValues,
   toggleChip,
 } from '../categoricalOptions';
-import { isAlwaysSelected } from '../alwaysSelected';
+import { isAlwaysSelected, isMultipleAlwaysSelected } from '../alwaysSelected';
 import { coerceBool } from '../CheckboxSwitchRenderer';
 import DatePickerRenderer from '../DatePickerRenderer';
 import {
@@ -42,6 +42,7 @@ import {
   rangeSliderBounds,
   sliderBounds,
 } from '../numericScale';
+import { TextFilterBox } from '../TextInputRenderer';
 import { useColumnRange, useUniqueValues } from '../useInteractiveData';
 import { isFullRange } from './stripLayout';
 
@@ -109,7 +110,11 @@ export const StripCategorical: React.FC<StripControlProps> = ({
   const selected = selectedValues(filterValueOf(filters, metadata.index));
   // `always_selected` (`one`): a click picks that value and never clears it,
   // and the picker offers no Clear. The host makes the automatic pick.
-  const mode = chipSelectionMode(type, isAlwaysSelected(metadata));
+  // A `multiple` one picks like any multi filter; the host refills it if emptied.
+  const mode = chipSelectionMode(
+    type,
+    isAlwaysSelected(metadata) && !isMultipleAlwaysSelected(metadata),
+  );
   const emit = (next: string[]) =>
     onFilterChange?.(filterEvent(metadata, chipFilterValue(next, type)));
 
@@ -514,6 +519,27 @@ export const StripToggle: React.FC<StripControlProps & { accent: string }> = ({
     />
   );
 };
+
+/** The panel's search box itself, small: a pattern that does not compile turns
+ *  the border red, and says why on hover, since the bar's row has no room for
+ *  the message. */
+export const StripText: React.FC<StripControlProps> = ({
+  metadata,
+  filters,
+  onFilterChange,
+  label,
+}) => (
+  <div className="depictio-strip-text">
+    <TextFilterBox
+      metadata={metadata}
+      filters={filters}
+      onChange={onFilterChange}
+      label={label}
+      size="sm"
+      bareError
+    />
+  </div>
+);
 
 /** The panel's date-range picker itself, bare and small. */
 export const StripDate: React.FC<StripControlProps> = ({ metadata, filters, onFilterChange }) => (

@@ -3,13 +3,15 @@
  *
  * A dashboard YAML can give a filter a `default_value` (Select, MultiSelect,
  * SegmentedControl, Slider, Checkbox / Switch) or a `default_range`
- * (RangeSlider, DateRangePicker). Both reach the viewer as the stored
+ * (RangeSlider, DateRangePicker); a TextInput takes its default_value as the
+ * pattern. Both reach the viewer as the stored
  * component's `default_state`. They used to be ignored: the viewer's filter
  * state started empty, so a tab meant to open on "Q10 reads" opened on
  * everything. `withInteractiveDefaults` turns them into filter entries, in the
  * value shape each renderer emits, so the first render is already filtered.
  */
 import type { InteractiveFilter, StoredMetadata } from './api';
+import { normalizeTextFilterValue, regexError, textFilterOptions } from './components/interactive/textFilter';
 
 const RANGE_TYPES = new Set(['RangeSlider', 'DateRangePicker', 'DatePicker']);
 const LIST_TYPES = new Set(['Select', 'MultiSelect']);
@@ -45,6 +47,12 @@ export function defaultFilterValue(m: StoredMetadata): unknown {
     return Boolean(v);
   }
   if (kind === 'SegmentedControl') return String(v);
+  if (kind === 'TextInput') {
+    // A pattern that cannot compile would be sent as is by no renderer; seeding
+    // it would filter the first render by something the box then flags.
+    const text = normalizeTextFilterValue(typeof v === 'string' ? v : String(v));
+    return text !== null && !regexError(text, m.match_mode) ? text : undefined;
+  }
   return undefined;
 }
 
@@ -73,6 +81,7 @@ export function withInteractiveDefaults(
         column_name: m.column_name,
         interactive_component_type: m.interactive_component_type,
         ...(m.slider_mode ? { slider_mode: m.slider_mode } : {}),
+        ...(m.interactive_component_type === 'TextInput' ? textFilterOptions(m) : {}),
       },
     });
   }
