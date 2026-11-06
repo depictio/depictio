@@ -204,6 +204,7 @@ const CreateDashboardModal: React.FC<CreateDashboardModalProps> = ({
     <Modal
       opened={opened}
       onClose={onClose}
+      className="depictio-form-modal"
       withCloseButton
       centered
       closeOnClickOutside={false}
