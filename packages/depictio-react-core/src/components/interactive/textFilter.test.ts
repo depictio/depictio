@@ -6,7 +6,9 @@ import {
   INVALID_REGEX_MESSAGE,
   MAX_PATTERN_LENGTH,
   PATTERN_TOO_LONG_MESSAGE,
-  firstMatchSpan,
+  countAlternativeHits,
+  markMatches,
+  splitAlternatives,
   formatTextFilterValue,
   normalizeTextFilterValue,
   regexError,
@@ -121,23 +123,49 @@ describe('active filter chips', () => {
   });
 });
 
-describe('firstMatchSpan', () => {
-  it('marks where a regex lands, ignoring case by default', () => {
-    expect(firstMatchSpan('ccaGGt', '^CCA')).toEqual([0, 3]);
-    expect(firstMatchSpan('AAGGG', 'GG$')).toEqual([3, 5]);
+describe('splitAlternatives', () => {
+  it('splits on top-level bars only', () => {
+    expect(splitAlternatives('^CCA|GG$')).toEqual(['^CCA', 'GG$']);
+    expect(splitAlternatives('(A|C)GG|T[|]T|a\\|b')).toEqual(['(A|C)GG', 'T[|]T', 'a\\|b']);
+  });
+
+  it('drops empty alternatives and keeps literal text whole', () => {
+    expect(splitAlternatives('A||B|')).toEqual(['A', 'B']);
+    expect(splitAlternatives('A|B', 'contains')).toEqual(['A|B']);
+    expect(splitAlternatives('')).toEqual([]);
+  });
+});
+
+describe('markMatches', () => {
+  const plain = (pieces: { text: string; alt: number | null }[]) =>
+    pieces.map((p) => (p.alt === null ? p.text : `[${p.alt}:${p.text}]`)).join('');
+
+  it('marks every match of every alternative, ignoring case by default', () => {
+    expect(plain(markMatches('ccaTTgg', ['^CCA', 'GG$']))).toBe('[0:cca]TT[1:gg]');
+    expect(plain(markMatches('AAxAA', ['A+']))).toBe('[0:AA]x[0:AA]');
+  });
+
+  it('lets the earlier match win an overlap', () => {
+    expect(plain(markMatches('ACGT', ['AC', 'CG']))).toBe('[0:AC]GT');
   });
 
   it('respects case when asked', () => {
-    expect(firstMatchSpan('ccaGG', '^CCA', 'regex', true)).toBeNull();
+    expect(plain(markMatches('ccaGG', ['^CCA'], 'regex', true))).toBe('ccaGG');
   });
 
   it('reads literal text as is', () => {
-    expect(firstMatchSpan('a+b', '+', 'contains')).toEqual([1, 2]);
+    expect(plain(markMatches('a+b', ['+'], 'contains'))).toBe('a[0:+]b');
   });
 
-  it('marks nothing for an empty match or a pattern the browser rejects', () => {
-    expect(firstMatchSpan('ACG', 'X*')).toBeNull();
-    expect(firstMatchSpan('ACG', '(')).toBeNull();
+  it('marks nothing for an empty match or an alternative the browser rejects', () => {
+    expect(plain(markMatches('ACG', ['X*']))).toBe('ACG');
+    expect(plain(markMatches('ACG', ['(']))).toBe('ACG');
+  });
+});
+
+describe('countAlternativeHits', () => {
+  it('counts the values each alternative catches', () => {
+    expect(countAlternativeHits(['CCAGG', 'CCATT', 'AAGG'], ['^CCA', 'GG$'])).toEqual([2, 2]);
   });
 });
 
