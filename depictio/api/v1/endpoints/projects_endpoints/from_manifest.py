@@ -189,8 +189,28 @@ def _refuse_a_taken_project_name(name: str, current_user) -> None:
         raise HTTPException(status_code=409, detail=_project_taken("name")["message"])
 
 
-def _new_project_document(resolved_config: dict[str, Any], current_user) -> dict[str, Any]:
+def _stamp_origin(project_config: dict[str, Any], kind: str, location: str) -> None:
+    """Record ``DataOrigin(kind, location)`` on every data collection of ``project_config``."""
+    from depictio.api.v1.endpoints.datacollections_endpoints.utils import origin_now
+
+    for workflow in project_config.get("workflows") or []:
+        for dc in workflow.get("data_collections") or []:
+            config = dc.get("config")
+            if isinstance(config, dict):
+                config["origin"] = origin_now(kind, location)
+
+
+def _new_project_document(
+    resolved_config: dict[str, Any],
+    current_user,
+    *,
+    origin_kind: str | None = None,
+    origin_location: str | None = None,
+) -> dict[str, Any]:
     """The document a resolved template is inserted as, owned by ``current_user``.
+
+    ``origin_kind`` / ``origin_location`` stamp every data collection with
+    where its data came from (``DataOrigin``); left None, origin stays unset.
 
     With the identity and uniqueness rules of ``POST /projects/create``: a
     taken name is a 409 (:func:`_refuse_a_taken_project_name`), a config the
@@ -212,6 +232,8 @@ def _new_project_document(resolved_config: dict[str, Any], current_user) -> dict
         "editors": [],
         "viewers": [],
     }
+    if origin_kind is not None:
+        _stamp_origin(project_config, origin_kind, origin_location or "")
     try:
         project = Project(**project_config)
     except Exception as exc:
@@ -430,7 +452,12 @@ def _create_project_from_manifest(
         report.success = True
         return report
 
-    create_payload = _new_project_document(resolved_config, current_user)
+    create_payload = _new_project_document(
+        resolved_config,
+        current_user,
+        origin_kind="manifest",
+        origin_location=manifest_url,
+    )
     projects_collection.insert_one(create_payload)
     project_oid = create_payload["_id"]
     report.project_id = str(project_oid)

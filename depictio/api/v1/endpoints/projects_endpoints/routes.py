@@ -1720,3 +1720,28 @@ async def toggle_public_private(
         "message": f"Project '{project['name']}' with ID '{project_id}' is now {'public' if is_public_bool else 'private'}.",
         **cascade_counts,
     }
+
+
+# Routes whose handlers live in their own module (they import helpers from this
+# one inside the handler, so they are registered here, after it is loaded).
+from depictio.api.v1.endpoints.projects_endpoints.attach_run import (  # noqa: E402
+    AttachRunReport,
+    attach_run,
+)
+from depictio.api.v1.endpoints.projects_endpoints.from_folder_tables import (  # noqa: E402
+    FolderTablesReport,
+    add_tables_from_folder,
+)
+
+projects_endpoint_router.add_api_route(
+    "/{project_id}/add_tables_from_folder",
+    add_tables_from_folder,
+    methods=["POST"],
+    response_model=FolderTablesReport,
+)
+projects_endpoint_router.add_api_route(
+    "/{project_id}/attach_run",
+    attach_run,
+    methods=["POST"],
+    response_model=AttachRunReport,
+)

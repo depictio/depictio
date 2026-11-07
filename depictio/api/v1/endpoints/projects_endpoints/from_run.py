@@ -1003,7 +1003,12 @@ def _create_project_from_run(
         report.success = True
         return report
 
-    create_payload = _new_project_document(resolved_config, current_user)
+    create_payload = _new_project_document(
+        resolved_config,
+        current_user,
+        origin_kind="run",
+        origin_location=root.location,
+    )
     projects_collection.insert_one(create_payload)
     project_oid = create_payload["_id"]
 
