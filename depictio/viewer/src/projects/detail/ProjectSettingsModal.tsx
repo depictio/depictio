@@ -17,6 +17,7 @@ import ManifestRefreshPanel, {
 } from './ManifestRefreshPanel';
 import { summarizeManifestRun } from '../manifestRun';
 import ExportTemplatePanel from './ExportTemplatePanel';
+import ExportZipPanel from './ExportZipPanel';
 import SendPanel from './SendPanel';
 import { useMigrationUi } from '../../hooks/useMigrationUi';
 import type { PublishedLock } from 'depictio-react-core';
@@ -143,6 +144,14 @@ const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
           onReloadProject={onReloadProject}
         />
       ),
+    },
+    {
+      key: 'zip',
+      icon: 'mdi:export',
+      title: 'Export as a ZIP file',
+      navLabel: 'Export',
+      subtitle: 'Download this project with its data and dashboards, to import it elsewhere',
+      body: <ExportZipPanel projectId={projectId} />,
     },
     {
       key: 'export',
