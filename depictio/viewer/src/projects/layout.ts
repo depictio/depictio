@@ -89,11 +89,19 @@ function engineName(wf: WorkflowLike): string {
   return '';
 }
 
-/** A workflow the UI did not make up: it names a pipeline engine or a catalog. */
+/** A workflow the UI did not make up. The browser wraps every collection it
+ *  creates in a synthetic python workflow with a flat layout; anything else
+ *  (a pipeline engine, a catalog, or a layout of several runs, which the
+ *  browser never writes) describes real results. */
 export function isRealWorkflow(wf: WorkflowLike | null | undefined): boolean {
   if (!wf) return false;
   const engine = engineName(wf);
-  return Boolean(wf.catalog) || (engine !== '' && engine !== 'python');
+  const structure = wf.data_location?.structure;
+  return (
+    Boolean(wf.catalog) ||
+    (engine !== '' && engine !== 'python') ||
+    structure === 'sequencing-runs'
+  );
 }
 
 function workflowName(wf: WorkflowLike): string {
