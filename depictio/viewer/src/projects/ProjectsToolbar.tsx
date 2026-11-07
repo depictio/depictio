@@ -18,7 +18,6 @@ import { Icon } from '@iconify/react';
 import type {
   ProjectFilters,
   ProjectViewPrefs,
-  ProjectTypeFilter,
   VisibilityFilter,
 } from './hooks/useProjectViewPrefs';
 import { emptyProjectFilters } from './hooks/useProjectViewPrefs';
@@ -46,11 +45,6 @@ export interface ProjectsToolbarProps {
   tableDisplay?: React.ReactNode;
 }
 
-const TYPE_DATA = [
-  { value: 'basic', label: 'Basic' },
-  { value: 'advanced', label: 'Advanced' },
-];
-
 const VISIBILITY_DATA = [
   { value: 'all', label: 'All' },
   { value: 'public', label: 'Public only' },
@@ -64,7 +58,6 @@ const FilterPopover: React.FC<{
 }> = ({ prefs, templateOptions, setFilters }) => {
   const accent = useListingAccents('projects');
   const activeCount =
-    prefs.filters.types.length +
     prefs.filters.templates.length +
     (prefs.filters.visibility !== 'all' ? 1 : 0);
 
@@ -108,18 +101,6 @@ const FilterPopover: React.FC<{
             )}
           </Group>
 
-          <MultiSelect
-            label="Type"
-            placeholder="Any type"
-            data={TYPE_DATA}
-            value={prefs.filters.types}
-            onChange={(v) =>
-              setFilters({ ...prefs.filters, types: v as ProjectTypeFilter[] })
-            }
-            clearable
-            comboboxProps={{ withinPortal: false }}
-          />
-
           <Select
             label="Visibility"
             data={VISIBILITY_DATA}
@@ -136,11 +117,11 @@ const FilterPopover: React.FC<{
           />
 
           <MultiSelect
-            label="Template"
+            label="Pipeline"
             placeholder={
               templateOptions.length === 0
                 ? 'No templated projects loaded'
-                : 'Any template'
+                : 'Any pipeline'
             }
             description="Pick a source for every pipeline under it, or one pipeline on its own."
             data={templateOptions}
@@ -173,17 +154,6 @@ const ProjectsToolbar: React.FC<ProjectsToolbarProps> = ({
   const accent = useListingAccents('projects');
   const activeFilterChips: { key: string; label: string; onRemove: () => void }[] =
     [];
-  for (const t of prefs.filters.types) {
-    activeFilterChips.push({
-      key: `t:${t}`,
-      label: t === 'basic' ? 'Basic' : 'Advanced',
-      onRemove: () =>
-        setFilters({
-          ...prefs.filters,
-          types: prefs.filters.types.filter((x) => x !== t),
-        }),
-    });
-  }
   for (const s of prefs.filters.templates) {
     const opt = templateOptions.find((o) => o.value === s);
     activeFilterChips.push({
