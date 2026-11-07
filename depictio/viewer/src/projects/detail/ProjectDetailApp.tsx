@@ -12,6 +12,7 @@ import {
   Group,
   Loader,
   LoadingOverlay,
+  Menu,
   Paper,
   ScrollArea,
   SegmentedControl,
@@ -58,7 +59,7 @@ import {
   TextInput,
 } from '@mantine/core';
 
-import { checkMultiQCUniformity, createDataCollectionFromUpload, createDataCollectionFromUrl, createMultiQCDataCollection, deleteDataCollection, fetchDataCollectionPreview, fetchDeltaHistory, fetchMultiQCByDataCollection, fetchProject, fetchVizSuggestions, renameDataCollection, useBrandAccents } from 'depictio-react-core';
+import { checkMultiQCUniformity, createDataCollectionFromUpload, createDataCollectionFromUrl, createMultiQCDataCollection, deleteDataCollection, fetchDataCollectionPreview, fetchDeltaHistory, fetchMultiQCByDataCollection, fetchProject, fetchVizSuggestions, renameDataCollection, updateProject, useBrandAccents } from 'depictio-react-core';
 import type {
   ProjectListEntry,
   PreviewResult,
@@ -66,6 +67,8 @@ import type {
   DCLink,
   VizSuggestionsResponse,
 } from 'depictio-react-core';
+import { LAYOUT_COPY, LAYOUT_KINDS, layoutDetail, layoutFacets, projectLayout } from '../layout';
+import type { LayoutFacet, ProjectLayout, ProjectLayoutKind } from '../layout';
 import LinksSection from './LinksSection';
 import type { ProjectJoin } from './ConnectionsMap';
 import ManageDataCollectionModal, {
@@ -459,8 +462,12 @@ const ProjectDetailApp: React.FC = () => {
     [dataCollections, selectedDcId],
   );
 
-  const projectType: 'basic' | 'advanced' =
-    project?.project_type === 'advanced' ? 'advanced' : 'basic';
+  // What the project is made of, detected from its workflows and runs (or as
+  // the owner set it). Anything but plain tables has real pipeline workflows,
+  // which is what the workflow panel, the Aggregate badge and the workflow
+  // scope hang on; `project_type` no longer decides it.
+  const layout = useMemo(() => projectLayout(project ?? {}), [project]);
+  const projectType: 'basic' | 'advanced' = layout.kind === 'tables' ? 'basic' : 'advanced';
 
   // Tag → DC id, so identified ingestion rows can lazily list their files.
   const dcIdByTag = useMemo(() => {
@@ -607,7 +614,23 @@ const ProjectDetailApp: React.FC = () => {
             .join(' · ');
           return (
             <Stack gap="xl">
-              <ProjectHeader project={project} projectType={projectType} />
+              <ProjectHeader
+                project={project}
+                layout={layout}
+                canChangeLayout={isOwner}
+                onLayoutChange={async (next) => {
+                  try {
+                    await updateProject(projectId as string, { layout: next });
+                    refresh();
+                  } catch (err) {
+                    notifications.show({
+                      color: 'red',
+                      title: 'Could not change the layout',
+                      message: err instanceof Error ? err.message : String(err),
+                    });
+                  }
+                }}
+              />
               {projectId && <ProjectDashboardsPanel projectId={projectId} />}
               <ProjectPart id="data" icon={Database} title="Data" summary={dataSummary}>
                 <Stack gap="lg">
@@ -2269,12 +2292,18 @@ const DeleteDataCollectionModal: React.FC<{
   );
 };
 
-/** Basic / Advanced as one calm tag: the kind is the icon, never a hue. */
-const ProjectTypeTag: React.FC<{
-  projectType: 'basic' | 'advanced';
+const LAYOUT_GLYPH: Record<ProjectLayoutKind, LucideIcon> = {
+  runs: Layers,
+  pipeline: Workflow,
+  tables: Table2,
+};
+
+/** What the project is made of: the kind is the icon, never a hue. */
+const ProjectLayoutTag: React.FC<{
+  kind: ProjectLayoutKind;
   size?: 'sm' | 'md';
-}> = ({ projectType, size = 'sm' }) => {
-  const Glyph = projectType === 'advanced' ? Workflow : Table2;
+}> = ({ kind, size = 'sm' }) => {
+  const Glyph = LAYOUT_GLYPH[kind];
   return (
     <Badge
       variant="light"
@@ -2282,36 +2311,133 @@ const ProjectTypeTag: React.FC<{
       size={size}
       leftSection={<Glyph size={12} strokeWidth={2} aria-hidden />}
     >
-      {projectType === 'advanced' ? 'Advanced' : 'Basic'}
+      {LAYOUT_COPY[kind].label}
     </Badge>
   );
 };
 
+/** The layout, what it was read from, and (for an owner) a way to correct it. */
+const LayoutFacetChip: React.FC<{ facet: LayoutFacet }> = ({ facet }) => (
+  <Group
+    gap={6}
+    wrap="nowrap"
+    px="sm"
+    py={4}
+    maw="100%"
+    data-testid={`project-facet-${facet.key}`}
+    style={{
+      borderRadius: 'var(--mantine-radius-md)',
+      background: facet.strong
+        ? 'var(--mantine-primary-color-light)'
+        : 'var(--mantine-color-default-hover)',
+    }}
+  >
+    <Text size="xs" c="dimmed" tt="uppercase" fw={600} style={{ letterSpacing: '0.05em' }}>
+      {facet.label}
+    </Text>
+    <Text size="sm" fw={600}>
+      {facet.value}
+    </Text>
+    {facet.detail && (
+      <Text size="xs" c="dimmed" truncate="end" title={facet.detail} maw={320}>
+        {facet.detail}
+      </Text>
+    )}
+  </Group>
+);
+
+const ProjectLayoutControl: React.FC<{
+  layout: ProjectLayout;
+  facets: LayoutFacet[];
+  canChange: boolean;
+  onChange: (next: ProjectLayoutKind | null) => void;
+}> = ({ layout, facets, canChange, onChange }) => (
+  <Stack gap={8} data-testid="project-layout">
+    <Group gap="xs" wrap="nowrap">
+      <Text size="sm" c="dimmed" fw={600}>
+        Contents
+      </Text>
+      <ProjectLayoutTag kind={layout.kind} size="md" />
+      <Text size="sm" fw={600} visibleFrom="sm" data-testid="project-layout-detail">
+        {layoutDetail(layout)}
+        {layout.overridden ? ' (set by the owner)' : ''}
+      </Text>
+      {canChange && (
+        <Menu position="bottom-start" withinPortal>
+          <Menu.Target>
+            <Tooltip label="Not what you expected? Correct it" withArrow>
+              <ActionIcon
+                variant="subtle"
+                color="gray"
+                size="sm"
+                aria-label="Change what this project contains"
+                data-testid="project-layout-change"
+              >
+                <Icon icon="mdi:pencil-outline" width={15} />
+              </ActionIcon>
+            </Tooltip>
+          </Menu.Target>
+          <Menu.Dropdown>
+            <Menu.Label>This project is made of</Menu.Label>
+            {LAYOUT_KINDS.map((kind) => (
+              <Menu.Item
+                key={kind}
+                onClick={() => onChange(kind)}
+                rightSection={
+                  layout.overridden && layout.kind === kind ? (
+                    <Icon icon="mdi:check" width={14} />
+                  ) : null
+                }
+              >
+                {LAYOUT_COPY[kind].label}
+                <Text size="xs" c="dimmed">
+                  {LAYOUT_COPY[kind].hint}
+                </Text>
+              </Menu.Item>
+            ))}
+            {layout.overridden && (
+              <>
+                <Menu.Divider />
+                <Menu.Item onClick={() => onChange(null)}>Detect automatically</Menu.Item>
+              </>
+            )}
+          </Menu.Dropdown>
+        </Menu>
+      )}
+    </Group>
+    <Group gap="xs" wrap="wrap">
+      {facets.map((f) => (
+        <LayoutFacetChip key={f.key} facet={f} />
+      ))}
+    </Group>
+  </Stack>
+);
+
 const ProjectHeader: React.FC<{
   project: ProjectListEntry;
-  projectType: 'basic' | 'advanced';
-}> = ({ project, projectType }) => {
+  layout: ProjectLayout;
+  canChangeLayout: boolean;
+  onLayoutChange: (next: ProjectLayoutKind | null) => void;
+}> = ({ project, layout, canChangeLayout, onLayoutChange }) => {
   const accent = useBrandAccents();
   const tmpl = parseTemplate(project);
   const glass = useGlassPages();
+  const facets = useMemo(() => layoutFacets(project, layout), [project, layout]);
   // Glass: the page head already names the project, so the card keeps only
   // its facts, on one row.
   if (glass) {
     return (
       <Paper withBorder radius="md" px="lg" py="md">
         <Group gap="lg" wrap="wrap" align="center">
+          <ProjectLayoutControl
+            layout={layout}
+            facets={facets}
+            canChange={canChangeLayout}
+            onChange={onLayoutChange}
+          />
           <Group gap="xs" wrap="nowrap">
-            <Text size="sm" c="dimmed" fw={600}>
-              Type
-            </Text>
-            <ProjectTypeTag projectType={projectType} size="md" />
             <ProvenanceBadge provenance={project.provenance} />
             <PublishedLockBadge lock={project.published_lock} />
-            <Text size="sm" c="dimmed" visibleFrom="sm">
-              {projectType === 'advanced'
-                ? 'CLI-driven, with workflows and pipelines'
-                : 'Data collections managed here directly'}
-            </Text>
           </Group>
           {tmpl && (
             <Group gap="xs" wrap="wrap">
@@ -2346,31 +2472,16 @@ const ProjectHeader: React.FC<{
           Manage workflows and data collections for your project
         </Text>
         <Group justify="space-between" mt="xs">
+          <ProjectLayoutControl
+            layout={layout}
+            facets={facets}
+            canChange={canChangeLayout}
+            onChange={onLayoutChange}
+          />
           <Group gap="xs">
-            <Icon
-              icon="mdi:source-branch"
-              width={18}
-              color="var(--mantine-color-teal-6)"
-            />
-            <Text fw={600} size="sm">
-              Project Type:
-            </Text>
-            <Badge
-              color={projectType === 'advanced' ? 'orange' : 'cyan'}
-              variant="light"
-              radius="sm"
-              size="md"
-            >
-              {projectType === 'advanced' ? 'Advanced' : 'Basic'}
-            </Badge>
             <ProvenanceBadge provenance={project.provenance} />
             <PublishedLockBadge lock={project.published_lock} />
           </Group>
-          <Text size="sm" c="dimmed">
-            {projectType === 'advanced'
-              ? 'CLI-driven project with workflows and pipelines'
-              : 'Simple project with direct data collection management'}
-          </Text>
         </Group>
         {tmpl && (
           <Group gap="xs" mt="xs" wrap="nowrap">
@@ -2792,14 +2903,6 @@ const DataCollectionsManagerSection: React.FC<{
               color="var(--mantine-color-dark-6)"
             />
             <Title order={4}>Data Collections Manager</Title>
-            <Badge
-              color={projectType === 'advanced' ? 'orange' : 'cyan'}
-              variant="light"
-              radius="sm"
-              size="sm"
-            >
-              {projectType === 'advanced' ? 'Advanced Project' : 'Basic Project'}
-            </Badge>
             <Badge variant="light" color="dark" size="sm">
               {dataCollections.length}
             </Badge>
@@ -2840,7 +2943,7 @@ const DataCollectionsManagerSection: React.FC<{
         <ScrollArea.Autosize mah={640} type="auto" offsetScrollbars pt="sm">
           <Stack gap="md" pr="sm">
             <Text size="sm" c="dimmed">
-              Managing data collections for this {projectType} project
+              Managing this project's data collections
             </Text>
 
             <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">

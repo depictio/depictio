@@ -2,19 +2,22 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { asEnum, asList, asScalar } from 'depictio-react-core';
 
+import { LAYOUT_KINDS } from '../layout';
+import type { ProjectLayoutKind } from '../layout';
 import {
   arrivedWithParams,
   readListingParams,
   replaceListingParams,
 } from '../../lib/listingUrl';
 
-export type ProjectTypeFilter = 'basic' | 'advanced';
+/** What a project contains (see `../layout`); the URL parameter stays `type`. */
+export type ProjectTypeFilter = ProjectLayoutKind;
 /** Row height for the projects table. Mirrors the dashboards table's setting
  *  so both listings offer the same compact/cozy choice. */
 export type Density = 'compact' | 'cozy';
 export type VisibilityFilter = 'all' | 'public' | 'private';
 
-const PROJECT_TYPES: readonly ProjectTypeFilter[] = ['basic', 'advanced'];
+const PROJECT_TYPES: readonly ProjectTypeFilter[] = LAYOUT_KINDS;
 const VISIBILITIES: readonly VisibilityFilter[] = ['all', 'public', 'private'];
 
 export interface ProjectFilters {

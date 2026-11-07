@@ -46,6 +46,12 @@ class Project(MongoModel):
     # UI manages data collections of both. Kept so existing projects, exports
     # and the CLI keep validating; new code should not branch on it.
     project_type: Literal["basic", "advanced"] = "basic"
+    # What the owner says the project is made of, when the viewer's detection
+    # (from its workflows and ingested runs) gets it wrong: "runs" (many runs of
+    # one or more pipelines), "pipeline" (the output of a single pipeline run) or
+    # "tables" (files added by hand). None means detect; only the viewer's
+    # `projectLayout` reads it.
+    layout: Literal["runs", "pipeline", "tables"] | None = None
     realtime: RealtimeConfig | None = None  # Optional real-time event configuration
     template_origin: TemplateOrigin | None = None  # Tracks if project was created from a template
     # Server-written only (never taken from a create/update payload): which

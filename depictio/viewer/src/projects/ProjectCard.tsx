@@ -16,6 +16,7 @@ import { Icon } from '@iconify/react';
 import { exportProjectZip, useBrandAccents } from 'depictio-react-core';
 import type { ProjectListEntry } from 'depictio-react-core';
 
+import { LAYOUT_COPY, projectLayout } from './layout';
 import { parseTemplate, TemplateChip, type ParsedTemplate } from './template';
 
 /** Single-line row that navigates on click. Replaces the previous
@@ -85,7 +86,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
 }) => {
   const accent = useBrandAccents();
   const projectId = (project._id ?? project.id) as string;
-  const isAdvanced = project.project_type === 'advanced';
+  const layout = projectLayout(project);
   const isPublic = Boolean(project.is_public);
   const role = determineRole(project, currentUserId);
   const tmpl = parseTemplate(project);
@@ -122,13 +123,8 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
            *  badge sits centered under its column header, matching the
            *  Dash visual. */}
           <Box style={{ width: 100, flexShrink: 0, textAlign: 'center' }}>
-            <Badge
-              color={isAdvanced ? 'orange' : 'cyan'}
-              variant="light"
-              radius="sm"
-              size="sm"
-            >
-              {isAdvanced ? 'Advanced' : 'Basic'}
+            <Badge color="gray" variant="light" radius="sm" size="sm">
+              {LAYOUT_COPY[layout.kind].label}
             </Badge>
           </Box>
 
@@ -329,15 +325,10 @@ const ProjectDetailsPanel: React.FC<{
       </Group>
       <Group gap="xs">
         <Text size="sm" fw={600}>
-          Project type:
+          Contents:
         </Text>
-        <Badge
-          color={project.project_type === 'advanced' ? 'orange' : 'cyan'}
-          variant="light"
-          radius="sm"
-          size="sm"
-        >
-          {project.project_type === 'advanced' ? 'Advanced' : 'Basic'}
+        <Badge color="gray" variant="light" radius="sm" size="sm">
+          {LAYOUT_COPY[projectLayout(project).kind].label}
         </Badge>
       </Group>
     </Stack>

@@ -22,6 +22,7 @@ import type {
   VisibilityFilter,
 } from './hooks/useProjectViewPrefs';
 import { emptyProjectFilters } from './hooks/useProjectViewPrefs';
+import { LAYOUT_COPY, LAYOUT_KINDS } from './layout';
 import { useListingAccents } from '../lib/useListingAccents';
 import ShareViewButton from '../components/listing/ShareViewButton';
 import GlassTray from '../chrome/variants/glass/pages/GlassTray';
@@ -46,10 +47,7 @@ export interface ProjectsToolbarProps {
   tableDisplay?: React.ReactNode;
 }
 
-const TYPE_DATA = [
-  { value: 'basic', label: 'Basic' },
-  { value: 'advanced', label: 'Advanced' },
-];
+const TYPE_DATA = LAYOUT_KINDS.map((kind) => ({ value: kind, label: LAYOUT_COPY[kind].label }));
 
 const VISIBILITY_DATA = [
   { value: 'all', label: 'All' },
@@ -109,8 +107,8 @@ const FilterPopover: React.FC<{
           </Group>
 
           <MultiSelect
-            label="Type"
-            placeholder="Any type"
+            label="Contents"
+            placeholder="Anything"
             data={TYPE_DATA}
             value={prefs.filters.types}
             onChange={(v) =>
@@ -176,7 +174,7 @@ const ProjectsToolbar: React.FC<ProjectsToolbarProps> = ({
   for (const t of prefs.filters.types) {
     activeFilterChips.push({
       key: `t:${t}`,
-      label: t === 'basic' ? 'Basic' : 'Advanced',
+      label: LAYOUT_COPY[t].label,
       onRemove: () =>
         setFilters({
           ...prefs.filters,

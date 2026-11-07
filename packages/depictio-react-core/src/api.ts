@@ -4627,6 +4627,8 @@ export interface ProjectListEntry {
   id?: string;
   name: string;
   project_type?: 'basic' | 'advanced';
+  /** The owner's override of the detected layout; absent or null = detect. */
+  layout?: 'runs' | 'pipeline' | 'tables' | null;
   is_public?: boolean;
   /** Creation time, UTC "YYYY-MM-DD HH:MM:SS". */
   registration_time?: string;
@@ -5609,6 +5611,7 @@ export async function listProjectTemplates(): Promise<TemplateInfo[]> {
 export interface EditProjectInput {
   name?: string;
   data_management_platform_project_url?: string | null;
+  layout?: 'runs' | 'pipeline' | 'tables' | null;
 }
 
 /** Update a project. Fetches current project, merges editable fields, PUTs

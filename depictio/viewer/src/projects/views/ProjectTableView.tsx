@@ -10,11 +10,14 @@ import {
   UnstyledButton,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
-import { Globe, Lock, Table2, Workflow } from 'lucide-react';
+import { Globe, Layers, Lock, Table2, Workflow } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 
 import type { ProjectListEntry } from 'depictio-react-core';
 
 import ProjectActionsMenu from '../ProjectActionsMenu';
+import { LAYOUT_COPY, LAYOUT_KINDS, projectLayout } from '../layout';
+import type { ProjectLayout, ProjectLayoutKind } from '../layout';
 import { parseTemplate, TemplateChip } from '../template';
 import { determineRole } from '../lib/projectRole';
 import type { Density } from '../hooks/useProjectViewPrefs';
@@ -70,7 +73,7 @@ type SortDir = 'asc' | 'desc';
  *  keeps the extra metadata columns opt-in so the default table stays readable. */
 const ALL_COLUMNS: ColumnDef<ProjectColumnKey>[] = [
   { key: 'name', label: 'Name', alwaysVisible: true },
-  { key: 'type', label: 'Type' },
+  { key: 'type', label: 'Contents' },
   { key: 'visibility', label: 'Visibility' },
   { key: 'template', label: 'Template' },
   { key: 'owner', label: 'Owner' },
@@ -100,10 +103,16 @@ export function useProjectTableColumns(): UseTableColumnsResult<ProjectColumnKey
   return useTableColumns<ProjectColumnKey>(STORAGE_KEY, ALL_COLUMNS);
 }
 
+const LAYOUT_GLYPH: Record<ProjectLayoutKind, LucideIcon> = {
+  runs: Layers,
+  pipeline: Workflow,
+  tables: Table2,
+};
+
 interface Row {
   id: string;
   project: ProjectListEntry;
-  isAdvanced: boolean;
+  layout: ProjectLayout;
   isPublic: boolean;
   ownerEmail: string;
   role: string;
@@ -186,7 +195,7 @@ function compareRows(a: Row, b: Row, key: ProjectColumnKey, dir: SortDir): numbe
     case 'name':
       return mul * a.project.name.localeCompare(b.project.name);
     case 'type':
-      return mul * Number(a.isAdvanced) - mul * Number(b.isAdvanced);
+      return mul * (LAYOUT_KINDS.indexOf(a.layout.kind) - LAYOUT_KINDS.indexOf(b.layout.kind));
     case 'visibility':
       return mul * Number(b.isPublic) - mul * Number(a.isPublic);
     case 'template':
@@ -330,19 +339,15 @@ const ProjectTableView: React.FC<ProjectTableViewProps> = ({
     const list: Row[] = projects.map((p) => {
       const role = determineRole(p, currentUserId);
       const tmpl = parseTemplate(p);
-      const isAdvanced = p.project_type === 'advanced';
-      // Basic projects don't expose user-managed workflows (they wrap a single
-      // implicit one), so the count would always be 0/1 and read as wrong —
-      // surface it as "NA" instead.
-      const workflowCount = isAdvanced
-        ? Array.isArray(p.workflows)
-          ? p.workflows.length
-          : 0
-        : null;
+      const layout = projectLayout(p);
+      // Tables wrap each collection in an implicit workflow, so the count
+      // would read as wrong ("1" for one file): surface "NA" instead.
+      const workflowCount =
+        layout.kind !== 'tables' ? (Array.isArray(p.workflows) ? p.workflows.length : 0) : null;
       return {
         id: String(p._id ?? p.id ?? ''),
         project: p,
-        isAdvanced,
+        layout,
         isPublic: Boolean(p.is_public),
         ownerEmail: p.permissions?.owners?.[0]?.email ?? '',
         role: role ?? '',
@@ -403,7 +408,7 @@ const ProjectTableView: React.FC<ProjectTableViewProps> = ({
       case 'type': {
         // Glass: told apart by glyph and word, not by hue.
         if (glass) {
-          const TypeIcon = r.isAdvanced ? Workflow : Table2;
+          const TypeIcon = LAYOUT_GLYPH[r.layout.kind];
           return (
             <Badge
               color="gray"
@@ -412,13 +417,13 @@ const ProjectTableView: React.FC<ProjectTableViewProps> = ({
               leftSection={<TypeIcon size={12} strokeWidth={2} aria-hidden />}
               styles={{ root: { maxWidth: 'none' }, label: { overflow: 'visible' } }}
             >
-              {r.isAdvanced ? 'Advanced' : 'Basic'}
+              {LAYOUT_COPY[r.layout.kind].label}
             </Badge>
           );
         }
         return (
           <Badge
-            color={r.isAdvanced ? 'orange' : 'cyan'}
+            color="gray"
             variant="light"
             size="sm"
             // Mantine clamps the INNER `.mantine-Badge-label` with
@@ -426,7 +431,7 @@ const ProjectTableView: React.FC<ProjectTableViewProps> = ({
             // alone still renders "ADVAN…". These labels are short and fixed.
             styles={{ root: { maxWidth: 'none' }, label: { overflow: 'visible' } }}
           >
-            {r.isAdvanced ? 'Advanced' : 'Basic'}
+            {LAYOUT_COPY[r.layout.kind].label}
           </Badge>
         );
       }

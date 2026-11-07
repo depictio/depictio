@@ -21,6 +21,7 @@ import TableDisplayMenu from '../components/TableDisplayMenu';
 import { DEFAULT_DENSITY, useProjectViewPrefs } from './hooks/useProjectViewPrefs';
 import { useProjectPins } from './hooks/useProjectPins';
 import { parseTemplate } from './template';
+import { LAYOUT_COPY, projectLayout } from './layout';
 import SharedViewBanner from '../components/listing/SharedViewBanner';
 import type { SharedViewScope } from '../components/listing/SharedViewBanner';
 import { listingUrl } from '../lib/listingUrl';
@@ -111,8 +112,7 @@ const ProjectsList: React.FC<ProjectsListProps> = ({
         if (!haystack.includes(q)) return false;
       }
       if (prefs.filters.types.length > 0) {
-        const t = p.project_type === 'advanced' ? 'advanced' : 'basic';
-        if (!prefs.filters.types.includes(t)) return false;
+        if (!prefs.filters.types.includes(projectLayout(p).kind)) return false;
       }
       if (prefs.filters.visibility === 'public' && !p.is_public) return false;
       if (prefs.filters.visibility === 'private' && p.is_public) return false;
@@ -210,7 +210,7 @@ const ProjectsList: React.FC<ProjectsListProps> = ({
   for (const t of prefs.filters.types) {
     scopeChips.push({
       key: `y:${t}`,
-      label: t === 'basic' ? 'Basic' : 'Advanced',
+      label: LAYOUT_COPY[t].label,
       onRemove: () =>
         setFilters({
           ...prefs.filters,
