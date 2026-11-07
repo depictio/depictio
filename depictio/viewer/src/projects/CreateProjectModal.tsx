@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
+  Anchor,
   Badge,
   Button,
   Center,
@@ -38,10 +39,11 @@ import IngestionResultTable from './IngestionResultTable';
 import { useStepSettling } from './hooks/useStepSettling';
 import { DisabledReason, GatedButton } from '../components/settings/SettingsSections';
 import { RunFolderTab } from './fromRun';
+import { FilesFlow } from './create/FilesFlow';
 import type { RunCreatedContext } from './fromRun';
 
 /** Where a new project starts from; null is the chooser. */
-type Tab = 'create' | 'manifest' | 'run';
+type Tab = 'create' | 'manifest' | 'files' | 'folder';
 
 /** A required template variable with a declared default is filled in
  *  server-side, so only the ones without a default must be typed here. */
@@ -59,7 +61,14 @@ interface CreateProjectModalProps {
   opened: boolean;
   existingNames: string[];
   onClose: () => void;
-  onCreate: (input: CreateProjectInput) => Promise<CreateProjectResult>;
+  /** `keepOpen`: create the project only; the dialog stays for what follows. */
+  onCreate: (
+    input: CreateProjectInput,
+    options?: { keepOpen?: boolean },
+  ) => Promise<CreateProjectResult>;
+  /** A project started from data is complete (or the reader chose to open it
+   *  despite problems): close the dialog and go to its page. */
+  onProjectReady: (projectId: string, name: string) => void;
   onCreateFromManifest: (input: FromManifestRequest) => Promise<FromManifestReport>;
   onCreateFromRun: (input: FromRunRequest, context: RunCreatedContext) => Promise<FromRunReport>;
   /** The server reads run folders from its own disk (`depictio local`): the
@@ -78,6 +87,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
   existingNames,
   onClose,
   onCreate,
+  onProjectReady,
   onCreateFromManifest,
   onCreateFromRun,
   localDataRootsEnabled = false,
@@ -135,7 +145,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
         if (!cancelled) setTemplates(all);
       })
       .catch((err: Error) => {
-        if (!cancelled) setTemplatesError(err.message || 'Failed to load templates.');
+        if (!cancelled) setTemplatesError(err.message || 'Failed to load the list of pipelines.');
       });
     return () => {
       cancelled = true;
@@ -283,7 +293,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
       centered
       // The run tab shows a detection card, a two-column summary and the
       // grouped plan, which the other tabs' width would wrap into noise.
-      size={tab === 'run' ? 1160 : 980}
+      size={tab === 'folder' ? 1160 : 980}
       withCloseButton
       closeOnClickOutside={false}
       closeOnEscape={!submitting}
@@ -312,35 +322,51 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
 
         {tab === null ? (
           <Stack gap="md" data-testid="create-project-chooser">
-            <Text ta="center" fw={500} size="lg">
-              Start a project from:
-            </Text>
-            <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="lg">
+            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="lg">
               <SourceCard
-                icon="mdi:folder-plus-outline"
-                title="An empty project"
-                description="Name it, then add data collections from the project page: drop a folder or files, or link a bucket."
-                onClick={() => setTab('create')}
-                testId="create-source-empty"
+                icon="mdi:file-upload-outline"
+                title="Upload files"
+                description="Tables from your computer: CSV, TSV, Parquet."
+                onClick={() => setTab('files')}
+                testId="create-source-files"
               />
               <SourceCard
-                icon="mdi:link-variant"
-                title="A data manifest"
-                description="Point to a manifest URL and pick a template: the data collections and dashboards are built from it."
-                onClick={() => setTab('manifest')}
-                testId="create-source-manifest"
-              />
-              <SourceCard
-                icon="mdi:folder-search-outline"
-                title="A run folder"
-                description="Point to a pipeline run folder: Depictio detects what it holds and plans the project."
-                onClick={() => setTab('run')}
-                testId="create-source-run"
+                icon="mdi:folder-outline"
+                title="A folder or bucket"
+                description="A folder on the server or an s3:// location: a pipeline's output or plain tables. Depictio works out what it is."
+                onClick={() => setTab('folder')}
+                testId="create-source-folder"
               />
             </SimpleGrid>
+            <Group gap={6} justify="center" data-testid="create-source-other">
+              <Text size="sm" c="dimmed">
+                Other:
+              </Text>
+              <Anchor
+                component="button"
+                type="button"
+                size="sm"
+                onClick={() => setTab('manifest')}
+                data-testid="create-source-manifest"
+              >
+                A data manifest (technical)
+              </Anchor>
+              <Text size="sm" c="dimmed">
+                ·
+              </Text>
+              <Anchor
+                component="button"
+                type="button"
+                size="sm"
+                onClick={() => setTab('create')}
+                data-testid="create-source-empty"
+              >
+                An empty project
+              </Anchor>
+            </Group>
           </Stack>
         ) : (
-        <Tabs value={tab} variant="unstyled" color={accent.secondary}>
+        <Tabs value={tab} keepMounted={false} variant="unstyled" color={accent.secondary}>
           <Button
             variant="subtle"
             color="gray"
@@ -426,7 +452,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                 size="sm"
                 allowNextStepsSelect={false}
               >
-                <Stepper.Step label="Source" description="Manifest & template">
+                <Stepper.Step label="Source" description="Manifest & type">
                   <Stack gap="md" pt="md">
                     <TextInput
                       label="Manifest URL"
@@ -439,13 +465,13 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                       data-testid="manifest-url-input"
                     />
                     <Select
-                      label="Template"
+                      label="Kind of data"
                       description={
                         selectedTemplate?.description ||
-                        'Choose a manifest-capable project template'
+                        'Choose a manifest-capable project type'
                       }
                       required
-                      placeholder="Select a template"
+                      placeholder="Select a project type"
                       data={manifestTemplates.map((t) => ({
                         value: t.template_id,
                         label: t.name,
@@ -457,8 +483,8 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                         <Icon icon="mdi:file-document-outline" width={16} />
                       }
                       error={templatesError ?? undefined}
-                      // Show the template_id under each name so near-identical
-                      // templates stay distinguishable in the dropdown.
+                      // Show the id under each name so near-identical
+                      // entries stay distinguishable in the dropdown.
                       renderOption={({ option }) => (
                         <Stack gap={0}>
                           <Text size="sm">{option.label}</Text>
@@ -471,7 +497,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                     />
                     <TextInput
                       label="Project Name (Optional)"
-                      description="Defaults to a name derived from the template"
+                      description="Defaults to a name derived from the project type"
                       placeholder="Enter project name"
                       value={manifestProjectName}
                       onChange={(e) => setManifestProjectName(e.currentTarget.value)}
@@ -547,7 +573,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                             ? `${plural(preview.manifest_entries, 'manifest entry', 'manifest entries')} → ` +
                               `${plural(preview.ingestion.length, 'data collection')}, ` +
                               `${plural(preview.dashboards.length, 'dashboard')}.`
-                            : 'The manifest will be ingested and the template dashboards imported.'}
+                            : 'The manifest will be ingested and the dashboards imported.'}
                         </Text>
                       </Stack>
                     </Paper>
@@ -590,7 +616,19 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
             </Stack>
           </Tabs.Panel>
 
-          <Tabs.Panel value="run" pt="md">
+          <Tabs.Panel value="files" pt="md">
+            <FilesFlow
+              opened={opened}
+              existingNames={existingNames}
+              onCreate={onCreate}
+              onProjectReady={onProjectReady}
+              submitting={submitting}
+              setSubmitting={setSubmitting}
+              onBack={() => setTab(null)}
+            />
+          </Tabs.Panel>
+
+          <Tabs.Panel value="folder" pt="md">
             <RunFolderTab
               opened={opened}
               existingNames={existingNames}
@@ -600,6 +638,8 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
               remoteBrowseEnabled={remoteBrowseEnabled}
               privateBucketDisabledReason={privateBucketDisabledReason}
               onCreateFromRun={onCreateFromRun}
+              onCreateProject={onCreate}
+              onProjectReady={onProjectReady}
               submitting={submitting}
               setSubmitting={setSubmitting}
               onBack={() => setTab(null)}
@@ -672,13 +712,13 @@ export const ManifestPreviewReport: React.FC<{ report: FromManifestReport }> = (
       {(report.manifest_entries === 0 || report.dashboards.length === 0) && (
         <Text size="xs" c="dimmed">
           {report.manifest_entries === 0 ? 'The manifest lists no entry. ' : ''}
-          {report.dashboards.length === 0 ? 'The template has no dashboard to import.' : ''}
+          {report.dashboards.length === 0 ? 'There is no dashboard to import.' : ''}
         </Text>
       )}
       <IngestionResultTable
         rows={report.ingestion}
         rowTestIdPrefix="manifest-preview"
-        emptyText="The template matched no data collection in this manifest."
+        emptyText="No data collection matched this manifest."
       />
       <TagList label="Unmatched manifest types:" tags={report.unmatched_manifest_types} />
       <TagList label="Skipped optional collections:" tags={report.pruned_optional_dcs} />

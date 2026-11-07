@@ -139,8 +139,11 @@ const ProjectsApp: React.FC = () => {
   const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
 
   const handleCreate = useCallback(
-    async (input: CreateProjectInput) => {
+    async (input: CreateProjectInput, options?: { keepOpen?: boolean }) => {
       const result = await createProject(input);
+      // A project started from data gets its tables next: the dialog stays
+      // until `handleProjectReady`.
+      if (options?.keepOpen) return result;
       notifications.show({
         color: 'teal',
         title: 'Project created',
@@ -150,6 +153,21 @@ const ProjectsApp: React.FC = () => {
       closeCreate();
       refresh();
       return result;
+    },
+    [closeCreate, refresh],
+  );
+
+  const handleProjectReady = useCallback(
+    (projectId: string, name: string) => {
+      notifications.show({
+        color: 'teal',
+        title: 'Project created',
+        message: `"${name}" is ready.`,
+        autoClose: 2500,
+      });
+      closeCreate();
+      refresh();
+      window.location.assign(`/projects/${projectId}`);
     },
     [closeCreate, refresh],
   );
@@ -286,6 +304,7 @@ const ProjectsApp: React.FC = () => {
         existingNames={projects.map((p) => p.name).filter(Boolean) as string[]}
         onClose={closeCreate}
         onCreate={handleCreate}
+        onProjectReady={handleProjectReady}
         onCreateFromManifest={handleCreateFromManifest}
         onCreateFromRun={handleCreateFromRun}
         localDataRootsEnabled={localDataRootsEnabled}

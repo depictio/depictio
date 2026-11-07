@@ -155,6 +155,17 @@ async function openWithFolder(page: Page, folder = DATA_ROOT): Promise<void> {
   await page.locator("[data-testid='run-data-root-input']").fill(folder);
 }
 
+/** Open the pipeline and version pickers under the folder field: "Change"
+ *  when a pipeline was recognised, "I know the pipeline" when not. */
+async function openPipelinePicker(page: Page): Promise<void> {
+  const change = page.locator("[data-testid='folder-change-pipeline']");
+  const know = page.locator("[data-testid='folder-know-pipeline']");
+  await expect(change.or(know)).toBeVisible({ timeout: 20_000 });
+  if (await change.isVisible()) await change.click();
+  else await know.click();
+  await expect(page.locator("[data-testid='run-pipeline-select']")).toBeVisible();
+}
+
 /** The version field: a button showing the chosen version, opening the list. */
 const versionField = (page: Page) => page.locator("[data-testid='run-version-control']");
 
@@ -193,12 +204,13 @@ test.describe("Create project from a run folder", () => {
     await loginAsAdmin();
     await openRunTab(page);
 
-    // Nothing typed: no detection card, the pipeline is left to detection.
+    // Nothing typed: no detection card, no pipeline line, no picker.
     const card = page.locator("[data-testid='run-detection-card']");
     await expect(card).toHaveCount(0);
     const pipelineSelect = page.locator("[data-testid='run-pipeline-select']");
-    await expect(pipelineSelect).toHaveValue("");
-    await expect(page.locator("[data-testid='run-version-empty']")).toBeVisible();
+    await expect(pipelineSelect).toHaveCount(0);
+    await expect(page.locator("[data-testid='folder-pipeline-line']")).toHaveCount(0);
+    await expect(page.locator("[data-testid='folder-know-pipeline']")).toHaveCount(0);
     await expect(page.locator("[data-testid='run-browse-local']")).toHaveCount(0);
 
     await page.locator("[data-testid='run-data-root-input']").fill(DATA_ROOT);
@@ -211,14 +223,14 @@ test.describe("Create project from a run folder", () => {
     );
     await expect(card.locator("[data-testid='run-detected-version']")).toHaveText("v2.16.0");
     await expect(card.locator("[data-testid='run-detected-engine']")).toHaveText("Nextflow");
-    await expect(card.locator("[data-testid='run-detected-template']")).toHaveText(AMPLISEQ);
+    await expect(card.locator("[data-testid='run-detected-template']")).toHaveText("nf-core/ampliseq 2.16.0");
     await expect(card.locator("[data-testid='run-detected-template']")).toHaveAttribute(
       "data-template-id",
       TEMPLATE_ID,
     );
     await expect(card.locator("[data-testid='run-detected-template-version']")).toHaveCount(0);
     await expect(card.locator("[data-testid='run-detected-check-version']")).toContainText(
-      "the version the template was written for",
+      "the version Depictio's definition was written for",
     );
     const match = card.locator("[data-testid='run-detected-match']");
     await expect(match).toHaveAttribute("data-match", "exact");
@@ -232,7 +244,14 @@ test.describe("Create project from a run folder", () => {
       );
     }
 
-    // Both fields are filled in from the folder and say so.
+    // The pipeline line says what was recognised; the picker opens on Change
+    // and both fields are filled in from the folder and say so.
+    const pipelineLine = page.locator("[data-testid='folder-pipeline-line']");
+    await expect(pipelineLine).toContainText("nf-core/ampliseq");
+    await expect(pipelineLine).toContainText("v2.16.0");
+    await expect(pipelineLine).toContainText("Detected");
+    await expect(pipelineSelect).toHaveCount(0);
+    await openPipelinePicker(page);
     await expect(pipelineSelect).toHaveValue(AMPLISEQ);
     await expect(page.locator("[data-testid='run-pipeline-detected']")).toBeVisible();
     await expect(page.locator("[data-testid='run-version-detected']")).toBeVisible();
@@ -290,7 +309,7 @@ test.describe("Create project from a run folder", () => {
     const settings = page.locator("[data-testid='run-template-settings']");
     const settingsToggle = page.locator("[data-testid='run-template-settings-toggle']");
     await expect(settingsToggle).toHaveAttribute("aria-expanded", "false");
-    await expect(settingsToggle).toContainText("Advanced: template settings (1)");
+    await expect(settingsToggle).toContainText("More pipeline settings (1)");
     await expect(settingsToggle).toContainText("works these out from the run folder");
     await settingsToggle.click();
     const groupCol = page.locator("[data-testid='run-variable-input-GROUP_COL']");
@@ -341,6 +360,7 @@ test.describe("Create project from a run folder", () => {
 
     const card = page.locator("[data-testid='run-detection-card']");
     await expect(card).toHaveAttribute("data-state", "ready", { timeout: 20_000 });
+    await openPipelinePicker(page);
     await expect(versionField(page)).toHaveAttribute("data-template-id", TEMPLATE_ID);
 
     await pickVersion(page, "2.14.0");
@@ -359,9 +379,11 @@ test.describe("Create project from a run folder", () => {
       "differs",
     );
     await expect(card.locator("[data-testid='run-detected-match-detail']")).toHaveText(
-      "The template you picked was written for another version.",
+      "The pipeline version you picked was written for another version.",
     );
-    // The pipeline is still the detected one; the version no longer is.
+    // The pipeline is still the detected one; the version no longer is. A
+    // version picked by the reader makes the line say "Chosen", with a way back.
+    await expect(page.locator("[data-testid='folder-pipeline-line']")).toContainText("Chosen");
     await expect(page.locator("[data-testid='run-pipeline-detected']")).toBeVisible();
     await expect(page.locator("[data-testid='run-version-detected']")).toHaveCount(0);
 
@@ -420,6 +442,7 @@ test.describe("Create project from a run folder", () => {
     await expect(card.locator("[data-testid='run-detected-template-version']")).toHaveText(
       "v2.16.0",
     );
+    await openPipelinePicker(page);
     const match = card.locator("[data-testid='run-detected-match']");
     await expect(match).toHaveAttribute("data-match", "closest");
     await expect(match).toHaveText("Closest available version");
@@ -496,17 +519,16 @@ test.describe("Create project from a run folder", () => {
     const preview = page.locator("[data-testid='run-preview-report']");
     await expect(preview).toBeVisible({ timeout: 20_000 });
 
-    // The header names the run folder once, in full on hover and copy.
-    await expect(preview.locator("[data-testid='run-summary-title']")).toHaveText(AMPLISEQ);
-    await expect(preview.locator("[data-testid='run-preview-data-root']")).toHaveAttribute(
-      "data-full-path",
-      DATA_ROOT,
-    );
+    // The facts card names the pipeline and the run folder once.
+    await expect(preview.locator("[data-testid='run-found-pipeline']")).toContainText("nf-core/ampliseq 2.16.0");
+    await expect(
+      preview.locator("[data-testid='run-found-card-row-source']"),
+    ).toContainText(DATA_ROOT);
     await expect(preview.locator("[data-testid='run-match-summary']")).toHaveText(
       "0 of 2 collections ready",
     );
 
-    // Both collections sit in the open "Not found" section.
+    // Both collections sit in the open "Empty for now" section.
     const missingSection = preview.locator("[data-testid='run-section-missing']");
     await expect(missingSection).toBeVisible();
     await expect(preview.locator("[data-testid='run-section-ready']")).toHaveCount(0);
@@ -534,7 +556,7 @@ test.describe("Create project from a run folder", () => {
     const settings = preview.locator("[data-testid='run-resolved-variables']");
     const settingsToggle = preview.locator("[data-testid='run-resolved-variables-toggle']");
     await expect(settingsToggle).toHaveAttribute("aria-expanded", "false");
-    await expect(settingsToggle).toContainText("Template settings (3)");
+    await expect(settingsToggle).toContainText("Pipeline settings (3)");
     await settingsToggle.click();
     await expect(settingsToggle).toHaveAttribute("aria-expanded", "true");
     const groupRow = settings.locator("[data-testid='run-resolved-variable-GROUP_COL']");
@@ -563,6 +585,8 @@ test.describe("Create project from a run folder", () => {
     // The folder check says how many runs were read and that the listing
     // was cut short (so the counts are a lower bound); the runs are listed
     // under it.
+    // The checks are folded in the facts card: open them first.
+    await preview.locator("[data-testid='run-found-checks-toggle']").click();
     const folderCheck = preview.locator("[data-testid='run-summary-check-folder']");
     await expect(folderCheck).toHaveAttribute("data-status", "warn");
     await expect(folderCheck).toContainText("read together");
@@ -647,7 +671,7 @@ test.describe("Create project from a run folder", () => {
 
     // The pruned collection does not count; the optional missing one does.
     await expect(preview.locator("[data-testid='run-match-summary']")).toHaveText(
-      "2 of 4 collections ready",
+      "2 of 3 collections ready \u00b7 1 optional one not in this run",
     );
 
     await expect(
@@ -688,7 +712,7 @@ test.describe("Create project from a run folder", () => {
     await expect(submit).toBeEnabled();
   });
 
-  test("a folder no template matches asks for the pipeline before going on", async ({
+  test("a folder no pipeline matches is plain tables until the reader names the pipeline", async ({
     loginAsAdmin,
     page,
   }) => {
@@ -711,19 +735,22 @@ test.describe("Create project from a run folder", () => {
     await loginAsAdmin();
     await openWithFolder(page);
 
+    // Nothing names a pipeline: the plain-tables path, with a quiet way to
+    // name the pipeline.
     const card = page.locator("[data-testid='run-detection-card']");
-    await expect(card).toHaveAttribute("data-state", "ready", { timeout: 20_000 });
-    await expect(card).toContainText("No pipeline recognised in this folder");
-
-    // Previewing would only come back with "not recognised": the pipeline is
-    // asked for now.
+    await expect(page.locator("[data-testid='folder-no-pipeline']")).toContainText(
+      "No pipeline recognised",
+    );
+    await expect(card).toHaveCount(0);
     const submit = page.locator("[data-testid='create-from-run-submit']");
     await expect(submit).toBeDisabled();
     await expect(page.locator("[data-testid='run-submit-disabled-reason']")).toContainText(
-      "No template matches this folder: pick the pipeline below.",
+      "No pipeline recognised and no table files in this folder.",
     );
 
-    // A pipeline with a single template version: picked, it is the choice.
+    // "I know the pipeline" opens the picker. A pipeline with a single
+    // template version: picked, it is the choice and the pipeline path is on.
+    await page.locator("[data-testid='folder-know-pipeline']").click();
     await page.locator("[data-testid='run-pipeline-select']").click();
     await page.locator("[data-testid='run-pipeline-option-nf-core/rnaseq']").click();
     await expect(page.locator("[data-testid='run-pipeline-select']")).toHaveValue(
@@ -731,6 +758,17 @@ test.describe("Create project from a run folder", () => {
     );
     await expect(page.locator("[data-testid='run-pipeline-detected']")).toHaveCount(0);
     await expect(versionField(page)).toHaveAttribute("data-template-id", "nf-core/rnaseq/3.26.0");
+    await expect(page.locator("[data-testid='folder-no-pipeline']")).toHaveCount(0);
+    await expect(page.locator("[data-testid='folder-pipeline-line']")).toContainText("Chosen");
+    await expect(submit).toBeEnabled();
+
+    // Clear returns to detection: plain tables again.
+    await page.locator("[data-testid='folder-clear-pipeline']").click();
+    await expect(page.locator("[data-testid='folder-no-pipeline']")).toBeVisible();
+    await expect(submit).toBeDisabled();
+    await page.locator("[data-testid='folder-know-pipeline']").click();
+    await page.locator("[data-testid='run-pipeline-select']").click();
+    await page.locator("[data-testid='run-pipeline-option-nf-core/rnaseq']").click();
     await expect(submit).toBeEnabled();
 
     await submit.click();
@@ -781,7 +819,7 @@ test.describe("Create project from a run folder", () => {
     await expect(page.locator("[data-testid='run-preview-error']")).toHaveCount(0);
     await expect(submit).toBeDisabled();
     await expect(page.locator("[data-testid='run-submit-disabled-reason']")).toContainText(
-      "pick a template",
+      "pick one first",
     );
 
     // The way out leads back to the pipeline picker, still empty.
@@ -863,7 +901,7 @@ test.describe("Create project from a run folder", () => {
       timeout: 20_000,
     });
     await expect(page.locator("[data-testid='run-match-summary']")).toHaveText(
-      "2 of 2 collections ready",
+      "2 collections ready",
     );
     await expect(submit).toBeEnabled();
 
@@ -894,7 +932,7 @@ test.describe("Create project from a run folder", () => {
     }
 
     // The plan is restated with the run's identity.
-    await expect(modal.locator("[data-testid='run-summary-title']")).toHaveText(AMPLISEQ);
+    await expect(modal.locator("[data-testid='run-summary-title']")).toHaveText("nf-core/ampliseq 2.16.0");
     await expect(modal.locator("[data-testid='run-summary-pipeline']")).toHaveText(
       "nf-core/ampliseq",
     );
@@ -1080,13 +1118,14 @@ test.describe("Create project from a run folder", () => {
     const card = page.locator("[data-testid='run-detection-card']");
     await expect(card).toHaveAttribute("data-state", "ready", { timeout: 20_000 });
 
-    // A readable folder: the switch is there, the section is not.
+    // A readable folder: only a small link is there, not the section.
+    await expect(page.locator("[data-testid='run-private-bucket-link']")).toBeVisible();
     const toggle = page.locator("[data-testid='run-private-bucket-toggle']");
     const section = page.locator("[data-testid='run-private-bucket-section']");
-    await expect(toggle).not.toBeChecked();
+    await expect(toggle).toHaveCount(0);
     await expect(section).toHaveCount(0);
 
-    await page.getByText("This bucket needs credentials", { exact: true }).click();
+    await page.locator("[data-testid='run-private-bucket-link']").click();
     await expect(section).toBeVisible();
     await expect(section.locator("[data-testid='run-private-bucket-explanation']")).toContainText(
       "if it is not public",
@@ -1099,7 +1138,7 @@ test.describe("Create project from a run folder", () => {
     // Another bucket: the details are forgotten and never sent to it.
     await page.locator("[data-testid='run-data-root-input']").fill(OTHER_ROOT);
     await expect(section).toHaveCount(0);
-    await expect(toggle).not.toBeChecked();
+    await expect(toggle).toHaveCount(0);
     await expect
       .poll(() => inspects.some((call) => call.value === OTHER_ROOT), { timeout: 20_000 })
       .toBe(true);
@@ -1108,7 +1147,7 @@ test.describe("Create project from a run folder", () => {
     ]);
 
     // Opening it again starts empty.
-    await page.getByText("This bucket needs credentials", { exact: true }).click();
+    await page.locator("[data-testid='run-private-bucket-link']").click();
     await expect(section.locator("[data-testid='run-private-bucket-name']")).toHaveText(
       "other-runs",
     );
