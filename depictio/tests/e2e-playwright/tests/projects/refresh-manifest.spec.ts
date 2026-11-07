@@ -28,7 +28,7 @@ const MANIFEST_TEMPLATE_ID = "generic/manifest-tables/1";
 async function createManifestProject(page: Page, name: string): Promise<void> {
   await page.goto("/projects");
   await page.locator("[data-tour-id='projects-create']").click();
-  await page.getByRole("tab", { name: "From Manifest" }).click();
+  await page.getByTestId("create-source-manifest").click();
 
   await page
     .locator("[data-testid='manifest-url-input']")

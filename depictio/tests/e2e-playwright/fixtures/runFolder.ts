@@ -200,9 +200,9 @@ export async function stubFolderRoute(
   return calls;
 }
 
-/** Open /projects, launch the create modal and switch to the run tab. */
+/** Open /projects, launch the create modal and pick the run folder source. */
 export async function openRunTab(page: Page): Promise<void> {
   await page.goto("/projects");
   await page.locator("[data-tour-id='projects-create']").click();
-  await page.getByRole("tab", { name: "From a run folder" }).click();
+  await page.getByTestId("create-source-run").click();
 }
