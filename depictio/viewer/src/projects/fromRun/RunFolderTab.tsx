@@ -1,6 +1,6 @@
 /**
- * The "From a run folder" tab of the create-project dialog: Source, Preview,
- * Create.
+ * The "A folder or bucket" flow of the create-project dialog: Source, What
+ * Depictio found, Create.
  *
  * Source takes the run folder (typed, or picked in the folder browser) and
  * reads it as soon as it is known: the detection card says which pipeline
@@ -14,11 +14,24 @@
  * `privateBucket.ts`.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Box, Button, Group, Stack, Stepper, TextInput } from '@mantine/core';
+import {
+  Alert,
+  Anchor,
+  Box,
+  Button,
+  Group,
+  Stack,
+  Stepper,
+  Switch,
+  Text,
+  TextInput,
+} from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import {
+  addTablesFromFolder,
   apiErrorCode,
+  bareVersion,
   createProjectFromRun,
   defaultVersionFor,
   EMPTY_RUN_STORAGE_FIELDS,
@@ -29,6 +42,7 @@ import {
   isPrivateBucketRefusal,
   isS3Location,
   runFoundNothing,
+  runStorageFieldsBlank,
   runStorageFieldErrors,
   runStorageFromFields,
   runTemplateMatch,
@@ -37,14 +51,20 @@ import {
   useBrandAccents,
 } from 'depictio-react-core';
 import type {
+  CreateProjectInput,
+  CreateProjectResult,
   FromRunReport,
   FromRunRequest,
   RunStorageBinding,
   TemplateInfo,
 } from 'depictio-react-core';
 
-import { DisabledReason, GatedButton } from '../../components/settings/SettingsSections';
+import { GatedButton } from '../../components/settings/SettingsSections';
 import { useStepSettling } from '../hooks/useStepSettling';
+import { FolderTablesFound } from '../create/FolderTablesFound';
+import { TableResults } from '../create/TableResults';
+import type { TableResultRow } from '../create/TableResults';
+import { baseName, classifyTableName } from '../create/tableFiles';
 import FolderBrowserModal from './browser/FolderBrowserModal';
 import { DetectionCard } from './DetectionCard';
 import type { DetectionState } from './DetectionCard';
@@ -56,6 +76,7 @@ import {
   openSection,
 } from './privateBucket';
 import type { OpenPrivateBucketOptions, PrivateBucketState } from './privateBucket';
+import { pipelineLabel } from './pipelineLabel';
 import { PrivateBucketSection } from './PrivateBucketSection';
 import { rememberRunFolder } from './recentFolders';
 import type { RunCreatedContext } from './RunCreatedModal';
@@ -75,6 +96,26 @@ function isReadableRoot(location: string, localEnabled: boolean): boolean {
   return isS3Location(location) || (localEnabled && isLocalFolderPath(location));
 }
 
+/** The server has the bucket in its settings but no credentials for it: only
+ *  its administrator can fix that, so the reader is never asked for keys. */
+const SERVER_CREDENTIALS_MISSING = 's3_server_credentials_missing';
+
+/** True when a read was refused for want of the reader's own connection
+ *  details for the bucket. */
+function needsOwnCredentials(code: string | null | undefined): boolean {
+  return code !== SERVER_CREDENTIALS_MISSING && isPrivateBucketRefusal(code);
+}
+
+/** `base`, or `base 2`, `base 3`, ... the first not among `taken`. */
+function uniqueName(base: string, taken: string[]): string {
+  const used = new Set(taken.map((n) => n.toLowerCase()));
+  if (!used.has(base.toLowerCase())) return base;
+  for (let n = 2; ; n += 1) {
+    const candidate = `${base} ${n}`;
+    if (!used.has(candidate.toLowerCase())) return candidate;
+  }
+}
+
 /** The template choice, and where it came from: detection may replace its
  *  own choice when the folder changes, never one the reader made. */
 interface Choice {
@@ -85,6 +126,13 @@ interface Choice {
 const NO_CHOICE: Choice = { templateId: null, from: null };
 
 interface RunFolderTabProps {
+  /** Creates the project only; the dialog stays open (plain tables). */
+  onCreateProject?: (
+    input: CreateProjectInput,
+    options?: { keepOpen?: boolean },
+  ) => Promise<CreateProjectResult>;
+  /** The project is complete: leave for its page. */
+  onProjectReady?: (projectId: string, name: string) => void;
   /** The create dialog is open: every opening starts afresh. */
   opened: boolean;
   existingNames: string[];
@@ -105,6 +153,8 @@ interface RunFolderTabProps {
 }
 
 const RunFolderTab: React.FC<RunFolderTabProps> = ({
+  onCreateProject,
+  onProjectReady,
   opened,
   existingNames,
   templates,
@@ -126,6 +176,7 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
   const [detection, setDetection] = useState<DetectionState>({ status: 'idle' });
   const [choice, setChoice] = useState<Choice>(NO_CHOICE);
   const [projectName, setProjectName] = useState('');
+  const [isPublic, setIsPublic] = useState(false);
   const [variables, setVariables] = useState<Record<string, string>>({});
   const [preview, setPreview] = useState<FromRunReport | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -134,6 +185,8 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
    *  `template_not_detected`): a "pick a template" state, not a failure. */
   const [notDetected, setNotDetected] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /** The pipeline and version pickers are shown under the folder field. */
+  const [pipelinePickerOpen, setPipelinePickerOpen] = useState(false);
   const [browseOpened, setBrowseOpened] = useState(false);
   const [privateBucket, setPrivateBucket] = useState<PrivateBucketState>(NO_PRIVATE_BUCKET);
   /** The preview was refused for want of the bucket's connection details. */
@@ -147,15 +200,26 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
   const [browseBinding, setBrowseBinding] = useState<RunStorageBinding | null>(null);
   /** Bumped by a test in the browser that connected. */
   const [browseEpoch, setBrowseEpoch] = useState(0);
+  /** Plain tables: the files ticked, and what became of them. */
+  const [tickedTables, setTickedTables] = useState<Set<string>>(new Set());
+  const [tableRows, setTableRows] = useState<TableResultRow[]>([]);
+  const [createdProjectId, setCreatedProjectId] = useState<string | null>(null);
+  const [tableError, setTableError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!opened) return;
     setStep(0);
     setDataRoot('');
     setInspectTarget('');
+    setPipelinePickerOpen(false);
+    setTickedTables(new Set());
+    setTableRows([]);
+    setCreatedProjectId(null);
+    setTableError(null);
     setDetection({ status: 'idle' });
     setChoice(NO_CHOICE);
     setProjectName('');
+    setIsPublic(false);
     setVariables({});
     setPreview(null);
     setPreviewError(null);
@@ -260,6 +324,31 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
     // field; in the browser, details typed for another bucket never show
     // under this one (its switch opens a section of its own).
     const mine = !inBrowser || privateBucket.bucket === bucket;
+    // Under the field the section is for buckets the server cannot read on
+    // its own: shown once a read was refused for want of the reader's
+    // credentials, they asked for it, or details are already filled in.
+    // Otherwise a small link offers it.
+    if (
+      !inBrowser &&
+      !privateBucket.open &&
+      !privateBucket.refused &&
+      runStorageFieldsBlank(privateBucket.fields)
+    ) {
+      if (privateBucketDisabledReason) return null;
+      return (
+        <Anchor
+          component="button"
+          type="button"
+          size="xs"
+          c="dimmed"
+          style={{ alignSelf: 'flex-start' }}
+          onClick={() => handlePrivateBucketToggle(true, location)}
+          data-testid="run-private-bucket-link"
+        >
+          Use my own credentials
+        </Anchor>
+      );
+    }
     return (
       <PrivateBucketSection
         location={location}
@@ -323,7 +412,7 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
           error: err.message || 'This folder could not be read.',
           code,
         });
-        if (isPrivateBucketRefusal(code)) openPrivateBucket(location, { refused: true });
+        if (needsOwnCredentials(code)) openPrivateBucket(location, { refused: true });
       });
     return () => controller.abort();
     // The connection details are read through a ref (see `storageEpoch`).
@@ -341,7 +430,13 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
   // section above the card, not the pipeline picker.
   let detectionErrorHint: string | null = null;
   let detectionErrorMessage: string | null = null;
-  if (detectionView.status === 'error' && isPrivateBucketRefusal(detectionView.code)) {
+  const readFailed = detectionView.status === 'error';
+  const readCode = detectionView.status === 'error' ? detectionView.code : null;
+  if (readFailed && readCode === SERVER_CREDENTIALS_MISSING) {
+    // The server's own message says what is missing; the reader has no keys
+    // to type for this bucket.
+    detectionErrorHint = 'Ask the administrator of this server.';
+  } else if (readFailed && needsOwnCredentials(readCode)) {
     // Read without connection details, the server's reason is written for
     // every caller; this one is the run tab's.
     if (!rootStorage) {
@@ -360,9 +455,33 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
     }
   }
 
+  // A folder that cannot be read and that no connection details would open
+  // (outside the allowed roots, missing, a server without keys): Next waits.
+  const folderUnreadable = readFailed && !needsOwnCredentials(readCode);
+
   const inspection = detectionView.status === 'ready' ? detectionView.result : null;
   const detected = inspection?.detected ?? null;
   const detectedId = detected?.template_id ?? null;
+
+  // A folder of plain tables: nothing in it names a pipeline, nothing was
+  // picked. Listed from the inspection (direct children), classified by
+  // extension; the project is created with the ticked ones.
+  const tablesMode =
+    inspection !== null && !detected?.pipeline && !choice.templateId;
+  const folderFileNames = useMemo(() => inspection?.files.names ?? [], [inspection]);
+  const tableNames = useMemo(
+    () => folderFileNames.filter((n) => classifyTableName(n).table),
+    [folderFileNames],
+  );
+  const inspectedLocation = inspection?.location ?? null;
+  // Every table starts ticked, again for each folder read.
+  useEffect(() => {
+    setTickedTables(new Set(tableNames));
+    // The folder decides, not the identity of the array.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inspectedLocation, tableNames.join('\n')]);
+  const tickedList = tableNames.filter((n) => tickedTables.has(n));
+  const folderBase = baseName(trimmedRoot.replace(/\/+$/, '')) || 'tables';
 
   const groups = useMemo(
     () =>
@@ -400,9 +519,13 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
     setChoice((prev) => (prev.from === 'detected' ? NO_CHOICE : prev));
   };
 
+  /** Back to what detection found, or to plain tables when it found nothing. */
+  const clearPipelineChoice = () =>
+    setChoice(detectedId ? { templateId: detectedId, from: 'detected' } : NO_CHOICE);
+
   const handlePipelineChange = (key: string | null) => {
     if (!key) {
-      setChoice(NO_CHOICE);
+      clearPipelineChoice();
       return;
     }
     const picked = groups.flatMap((g) => g.pipelines).find((p) => p.key === key);
@@ -415,9 +538,14 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
   };
 
   const trimmedName = projectName.trim();
+  // What the project is called when the field stays empty: the run folder's
+  // name, made unique among the projects that exist.
+  const defaultBase = usedTemplateId ? folderBase : null;
+  const defaultName = defaultBase ? uniqueName(defaultBase, existingNames) : null;
+  const effectiveName = trimmedName || defaultName || '';
   const nameUsed =
-    trimmedName.length > 0 &&
-    existingNames.some((n) => n.toLowerCase() === trimmedName.toLowerCase());
+    effectiveName.length > 0 &&
+    existingNames.some((n) => n.toLowerCase() === effectiveName.toLowerCase());
 
   const buildRequest = (dryRun: boolean): FromRunRequest => {
     const values: Record<string, string> = {};
@@ -428,7 +556,8 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
     return {
       dataRoot: trimmedRoot,
       templateId: choice.templateId,
-      projectName: trimmedName || null,
+      projectName: effectiveName || null,
+      isPublic,
       ...(Object.keys(values).length > 0 ? { variables: values } : {}),
       dryRun,
       ...(rootStorage ? { storage: rootStorage } : {}),
@@ -438,7 +567,7 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
   // Dry-run plan, re-fetched every time the Preview step is entered so a
   // Previous then Next round-trip picks up edited inputs.
   useEffect(() => {
-    if (!opened || step !== 1 || !trimmedRoot) return undefined;
+    if (!opened || step !== 1 || !trimmedRoot || tablesMode) return undefined;
     let cancelled = false;
     const detecting = choice.templateId === null;
     setPreview(null);
@@ -463,7 +592,7 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
           setNotDetected(err.message || 'The pipeline that produced this folder was not recognised.');
         } else {
           setPreviewError(err.message || 'Failed to preview the run folder.');
-          if (isPrivateBucketRefusal(code) && s3BucketOf(trimmedRoot)) {
+          if (needsOwnCredentials(code) && s3BucketOf(trimmedRoot)) {
             setPreviewNeedsBucket(true);
             openPrivateBucket(trimmedRoot, { refused: true });
           }
@@ -481,14 +610,19 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
   }, [opened, step]);
 
   const foundNothing = step > 0 && !!preview && runFoundNothing(preview.data_collections);
-  // The folder was read and nothing in it names a template: previewing would
-  // only come back with "not recognised", so ask for the pipeline now.
-  const noTemplateForFolder =
-    step === 0 && !choice.templateId && inspection !== null && !detectedId;
 
   // Disabled with a visible reason rather than hidden (project convention).
   let disabledReason: string | null = null;
-  if (trimmedRoot.length === 0) {
+  const tablesName = trimmedName || uniqueName(folderBase, existingNames);
+  if (tablesMode && step === 1) {
+    if (existingNames.some((n) => n.toLowerCase() === tablesName.toLowerCase())) {
+      disabledReason = 'A project with this name already exists.';
+    } else if (tickedList.length === 0) {
+      disabledReason = 'Tick at least one table.';
+    }
+  } else if (step === 0 && !prefixInvalid && trimmedRoot && detectionView.status === 'loading') {
+    disabledReason = 'Reading the folder.';
+  } else if (trimmedRoot.length === 0) {
     disabledReason = browseEnabled
       ? 'Enter or browse to the run folder.'
       : 'Enter the location of the run folder.';
@@ -496,6 +630,9 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
     disabledReason = localDataRootsEnabled
       ? 'The run folder must be a folder path or an s3:// location.'
       : 'The run folder must be an s3:// location.';
+  } else if (step === 0 && folderUnreadable) {
+    disabledReason =
+      (detectionView.status === 'error' && detectionView.error) || 'The run folder could not be read.';
   } else if (nameUsed) {
     disabledReason = 'A project with this name already exists.';
   } else if (
@@ -506,8 +643,8 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
     storageProblem
   ) {
     disabledReason = `Private bucket: ${storageProblem}`;
-  } else if (noTemplateForFolder) {
-    disabledReason = 'No template matches this folder: pick the pipeline below.';
+  } else if (tablesMode && step === 0 && tableNames.length === 0) {
+    disabledReason = 'No pipeline recognised and no table files in this folder.';
   } else if (
     step === 1 &&
     (previewLoading || (!preview && !previewError && !notDetected))
@@ -516,7 +653,7 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
     // and no error yet: that is still "loading", not a failure.
     disabledReason = 'Reading the run folder.';
   } else if (step === 1 && notDetected) {
-    disabledReason = 'The pipeline was not recognised: pick a template first.';
+    disabledReason = 'The pipeline was not recognised: pick one first.';
   } else if (step === 1 && previewError) {
     disabledReason = 'The run folder could not be read.';
   } else if (foundNothing) {
@@ -528,8 +665,67 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
   // stops on the Create step instead of creating straight away.
   const stepSettling = useStepSettling(step);
 
+  const createTables = async () => {
+    if (!onCreateProject || !inspection) return;
+    const location = inspection.location;
+    setStep(2);
+    setSubmitting(true);
+    setError(null);
+    setTableError(null);
+    setCreatedProjectId(null);
+    const pending: TableResultRow[] = tickedList.map((n) => ({
+      key: n,
+      label: n,
+      status: 'pending',
+    }));
+    setTableRows(pending);
+    try {
+      const result = await onCreateProject(
+        {
+          name: tablesName,
+          // Legacy field: the type no longer changes what a project can do.
+          project_type: 'basic',
+          is_public: isPublic,
+        } as CreateProjectInput,
+        { keepOpen: true },
+      );
+      const projectId = result.project_id ?? null;
+      if (!projectId) throw new Error(result.message || 'The project could not be created.');
+      setCreatedProjectId(projectId);
+      const report = await addTablesFromFolder(projectId, {
+        location,
+        files: tickedList,
+        dryRun: false,
+        ...(rootStorage ? { storage: rootStorage } : {}),
+      });
+      const rows: TableResultRow[] = tickedList.map((n) => {
+        const made = report.created.find((c) => c.path === n);
+        if (made && made.status === 'ingested') return { key: n, label: n, status: 'created' };
+        return {
+          key: n,
+          label: n,
+          status: 'failed',
+          error: made?.error ?? 'This file was not turned into a table.',
+        };
+      });
+      setTableRows(rows);
+      if (rows.every((r) => r.status === 'created')) onProjectReady?.(projectId, tablesName);
+    } catch (err) {
+      setTableError((err as Error).message || 'Failed to create the project.');
+      setTableRows((prev) =>
+        prev.map((r) => (r.status === 'pending' ? { ...r, status: 'failed' } : r)),
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const handleSubmit = async () => {
     if (disabledReason || stepSettling) return;
+    if (tablesMode && step === 1) {
+      await createTables();
+      return;
+    }
     if (step === 0) rememberRunFolder(trimmedRoot);
     if (step < 2) {
       setStep(step + 1);
@@ -550,7 +746,7 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
   };
 
   const displayName =
-    preview?.project_name || trimmedName || selectedTemplate?.name || 'project';
+    preview?.project_name || effectiveName || 'project';
   const previewTitle = preview ? titleOf(preview.template_id) : null;
   // A preview refused for want of the bucket's details: back to the Source
   // step, with the section open.
@@ -561,6 +757,110 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
           setStep(0);
         }
       : null;
+
+  const publicSwitch = (
+    <Switch
+      size="md"
+      label="Make this project public"
+      description="Public projects are visible to all users"
+      checked={isPublic}
+      onChange={(e) => setIsPublic(e.currentTarget.checked)}
+      color={accent.secondary}
+      data-testid="run-public-switch"
+    />
+  );
+
+  const plainTablesNote = tablesMode ? (
+    <Alert
+      color="blue"
+      variant="light"
+      icon={<Icon icon="mdi:information-outline" width={18} />}
+      data-testid="folder-no-pipeline"
+    >
+      <Text size="sm">
+        No pipeline recognised: these look like plain tables.
+      </Text>
+    </Alert>
+  ) : null;
+
+  const pickerBlock = (
+    <TemplatePicker
+      groups={groups}
+      pipeline={pipeline}
+      templateId={choice.templateId}
+      runVersion={detected?.version ?? null}
+      closestTemplateId={detected?.match === 'closest' ? detectedId : null}
+      pipelineDetected={Boolean(pipeline && detectedPipeline && pipeline.key === detectedPipeline.key)}
+      versionDetected={Boolean(choice.templateId && choice.templateId === detectedId)}
+      onPipelineChange={handlePipelineChange}
+      onVersionChange={(templateId) => setChoice({ templateId, from: 'user' })}
+      error={templatesError}
+    />
+  );
+
+  // The pipeline is optional: shown once the folder was read (or a pipeline
+  // was picked), as a line with a way to correct it.
+  const chosenVersion = pipeline?.versions.find((v) => v.templateId === choice.templateId)?.version;
+  let pipelineText: string | null = null;
+  if (choice.from === 'user' && choice.templateId) {
+    const name = pipeline?.pipeline ?? titleOf(choice.templateId);
+    pipelineText = [name, chosenVersion ? bareVersion(chosenVersion) : null]
+      .filter(Boolean)
+      .join(' ');
+  } else if (detected?.pipeline) {
+    pipelineText = [detected.pipeline, detected.version ? bareVersion(detected.version) : null]
+      .filter(Boolean)
+      .join(' ');
+  }
+  const showPipelineLine = inspection !== null || choice.from === 'user';
+  const pipelineLine = !showPipelineLine ? null : usedTemplateId ? (
+    <Group gap="xs" wrap="wrap" data-testid="folder-pipeline-line">
+      <Text size="sm" c="dimmed">
+        Pipeline:
+      </Text>
+      <Text size="sm" fw={500}>
+        {pipelineText ?? pipelineLabel(usedTemplateId) ?? usedTemplateId}
+      </Text>
+      <Text size="sm" c="dimmed">
+        {'\u00b7'} {choice.from === 'user' ? 'Chosen' : 'Detected'}
+      </Text>
+      <Anchor
+        component="button"
+        type="button"
+        size="sm"
+        onClick={() => setPipelinePickerOpen((open) => !open)}
+        data-testid="folder-change-pipeline"
+      >
+        {pipelinePickerOpen ? 'Hide' : 'Change'}
+      </Anchor>
+      {choice.from === 'user' && (
+        <Anchor
+          component="button"
+          type="button"
+          size="sm"
+          onClick={() => {
+            clearPipelineChoice();
+            setPipelinePickerOpen(false);
+          }}
+          data-testid="folder-clear-pipeline"
+        >
+          Clear
+        </Anchor>
+      )}
+    </Group>
+  ) : (
+    <Group gap="xs" wrap="wrap">
+      <Anchor
+        component="button"
+        type="button"
+        size="sm"
+        onClick={() => setPipelinePickerOpen((open) => !open)}
+        data-testid="folder-know-pipeline"
+      >
+        {pipelinePickerOpen ? 'Hide the pipeline picker' : 'I know the pipeline'}
+      </Anchor>
+    </Group>
+  );
 
   let rootError: string | undefined;
   if (prefixInvalid) {
@@ -578,14 +878,17 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
         size="sm"
         allowNextStepsSelect={false}
       >
-        <Stepper.Step label="Source" description="Run folder & template">
+        <Stepper.Step
+          label="Source"
+          description="Folder or bucket"
+        >
           <Stack gap="md" pt="md">
             <TextInput
-              label="Run folder"
+              label="Folder or bucket"
               description={
                 localDataRootsEnabled
-                  ? 'The output folder of one pipeline run: a folder on this computer (a full path, or one starting with ~/) or an s3:// location.'
-                  : "The s3:// location of one pipeline run's output folder."
+                  ? 'A folder of results or tables: a folder on this computer (a full path, or one starting with ~/) or an s3:// location.'
+                  : 'The s3:// location of a folder of results or tables.'
               }
               required
               placeholder={localDataRootsEnabled ? '~/results/run42' : 's3://bucket/results/run42/'}
@@ -618,10 +921,16 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
 
             {renderPrivateBucket(trimmedRoot, false)}
 
+            {plainTablesNote}
+
+            {pipelineLine}
+            {pipelinePickerOpen && pickerBlock}
+
+            {!tablesMode && (
             <DetectionCard
               state={detectionView}
               templateId={usedTemplateId}
-              templateTitle={titleOf(usedTemplateId)}
+              templateTitle={pipelineLabel(usedTemplateId)}
               templateEngine={engineOf(usedTemplateId)}
               match={match}
               storage={rootStorage}
@@ -631,24 +940,13 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
               errorHint={detectionErrorHint}
               errorMessage={detectionErrorMessage}
             />
+            )}
 
-            <TemplatePicker
-              groups={groups}
-              pipeline={pipeline}
-              templateId={choice.templateId}
-              runVersion={detected?.version ?? null}
-              closestTemplateId={detected?.match === 'closest' ? detectedId : null}
-              pipelineDetected={Boolean(pipeline && detectedPipeline && pipeline.key === detectedPipeline.key)}
-              versionDetected={Boolean(choice.templateId && choice.templateId === detectedId)}
-              onPipelineChange={handlePipelineChange}
-              onVersionChange={(templateId) => setChoice({ templateId, from: 'user' })}
-              error={templatesError}
-            />
-
+            {!tablesMode && (
             <TextInput
               label="Project Name (Optional)"
-              description="Defaults to a name derived from the template"
-              placeholder="Enter project name"
+              description="Defaults to a name derived from the pipeline"
+              placeholder={defaultName ?? 'Enter project name'}
               value={projectName}
               onChange={(e) => {
                 setProjectName(e.currentTarget.value);
@@ -659,6 +957,7 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
               error={nameUsed ? 'A project with this name already exists.' : undefined}
               data-testid="run-project-name-input"
             />
+            )}
             {extraVariables.length > 0 && (
               <TemplateSettingsSection
                 variables={extraVariables}
@@ -669,12 +968,48 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
           </Stack>
         </Stepper.Step>
 
-        <Stepper.Step label="Preview" description="What each collection gets">
+        <Stepper.Step label="What Depictio found" description="Facts and checks">
+          {tablesMode ? (
+            <Stack gap="md" pt="md">
+              {plainTablesNote}
+              <FolderTablesFound
+                location={inspection?.location ?? trimmedRoot}
+                names={folderFileNames}
+                moreCount={Math.max(0, (inspection?.files.count ?? 0) - folderFileNames.length)}
+                ticked={tickedTables}
+                onToggle={(name, checked) =>
+                  setTickedTables((prev) => {
+                    const next = new Set(prev);
+                    if (checked) next.add(name);
+                    else next.delete(name);
+                    return next;
+                  })
+                }
+              />
+              <TextInput
+                label="Project name"
+                placeholder={uniqueName(folderBase, existingNames)}
+                value={projectName}
+                onChange={(e) => setProjectName(e.currentTarget.value)}
+                leftSection={<Icon icon="mdi:folder-outline" width={16} />}
+                error={
+                  existingNames.some((n) => n.toLowerCase() === tablesName.toLowerCase())
+                    ? 'A project with this name already exists.'
+                    : undefined
+                }
+                data-testid="folder-project-name-input"
+              />
+              {publicSwitch}
+            </Stack>
+          ) : (
           <RunPreviewStep
             loading={previewLoading}
             detecting={!choice.templateId}
             notDetected={notDetected}
-            onPickTemplate={() => setStep(0)}
+            onPickTemplate={() => {
+              setPipelinePickerOpen(true);
+              setStep(0);
+            }}
             error={previewError}
             onGiveBucketDetails={giveBucketDetails}
             foundNothing={foundNothing}
@@ -683,10 +1018,25 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
             templateEngine={engineOf(preview?.template_id)}
             detection={detected}
             storage={rootStorage}
+            chosenFrom={choice.from}
           />
+          )}
         </Stepper.Step>
 
         <Stepper.Step label="Create" description="Confirm & ingest">
+          {tablesMode ? (
+            <TableResults
+              projectName={tablesName}
+              rows={tableRows}
+              error={tableError}
+              working={submitting}
+              onOpen={
+                createdProjectId && onProjectReady
+                  ? () => onProjectReady(createdProjectId, tablesName)
+                  : null
+              }
+            />
+          ) : (
           <RunCreateStep
             report={preview}
             templateTitle={previewTitle}
@@ -695,7 +1045,9 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
             storage={rootStorage}
             projectName={displayName}
             savesStorage={Boolean(rootStorage)}
+            visibility={publicSwitch}
           />
+          )}
         </Stepper.Step>
       </Stepper>
 
@@ -710,6 +1062,7 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
         </Alert>
       )}
 
+      {!(tablesMode && step === 2) && (
       <Group justify="space-between" align="flex-start" wrap="nowrap">
         <Button
           variant="default"
@@ -719,7 +1072,7 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
         >
           {step === 0 && onBack ? 'Back' : 'Previous'}
         </Button>
-        <Stack gap={4} align="flex-end" style={{ minWidth: 0 }}>
+        <Stack gap={4} align="flex-end" style={{ minWidth: 0, flex: '1 1 auto' }} ml="md">
           <GatedButton
             aria-disabled={stepSettling || undefined}
             color={accent.secondary}
@@ -728,15 +1081,34 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
             reason={disabledReason}
             data-testid="create-from-run-submit"
           >
-            {step === 2 ? 'Create Project' : 'Next'}
+            {tablesMode && step === 1
+              ? `Create project with ${tickedList.length} ${tickedList.length === 1 ? 'table' : 'tables'}`
+              : step === 2
+                ? 'Create Project'
+                : 'Next'}
           </GatedButton>
-          <DisabledReason
-            reason={disabledReason}
-            icon="mdi:information-outline"
-            testId="run-submit-disabled-reason"
-          />
+          {disabledReason && (
+            <Group
+              gap={6}
+              wrap="nowrap"
+              align="flex-start"
+              justify="flex-end"
+              c="dimmed"
+              data-testid="run-submit-disabled-reason"
+            >
+              <Icon
+                icon="mdi:information-outline"
+                width={16}
+                style={{ flexShrink: 0, marginTop: 2 }}
+              />
+              <Text size="sm" c="dimmed" ta="right" style={{ wordBreak: 'break-word' }}>
+                {disabledReason}
+              </Text>
+            </Group>
+          )}
         </Stack>
       </Group>
+      )}
 
       {browseEnabled && (
         <FolderBrowserModal

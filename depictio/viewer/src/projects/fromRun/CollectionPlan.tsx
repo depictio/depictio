@@ -1,6 +1,6 @@
 /**
  * The data collections of a run-folder plan, one line each, grouped by what
- * needs a look first: "Not found" and "Found" open, "Optional, not found"
+ * needs a look first: "Empty for now" and "Found" open, "Optional, not found"
  * folded (it informs, it is not a problem).
  *
  * A line says what the collection is, where it looks (relative to the run
@@ -46,10 +46,10 @@ const SECTIONS: Record<
   { title: string; icon: string; color: string; hint: string | null }
 > = {
   missing: {
-    title: 'Not found',
-    icon: 'mdi:alert-circle-outline',
-    color: 'red',
-    hint: 'The project can still be created: these stay empty until their files exist.',
+    title: 'Empty for now',
+    icon: 'mdi:tray-remove',
+    color: 'gray',
+    hint: 'The collection stays empty until its files exist.',
   },
   ready: {
     title: 'Found',
@@ -80,13 +80,13 @@ function rowStatus(dc: FromRunDCPreview, section: RunCollectionSection): RowStat
       ? {
           icon: 'mdi:debug-step-over',
           color: 'gray',
-          label: 'Left out: a template setting turns it off for this run',
+          label: 'Left out: a pipeline setting turns it off for this run',
         }
       : { icon: 'mdi:minus-circle-outline', color: 'gray', label: 'Optional, not found' };
   }
   return dc.status === 'empty'
-    ? { icon: 'mdi:folder-alert-outline', color: 'orange', label: 'Its folder holds no matching file' }
-    : { icon: 'mdi:close-circle', color: 'red', label: 'Not found' };
+    ? { icon: 'mdi:folder-outline', color: 'gray', label: 'Empty for now: its folder holds no matching file' }
+    : { icon: 'mdi:tray-remove', color: 'gray', label: 'Empty for now: no file found in this run yet' };
 }
 
 function countText(dc: FromRunDCPreview, unit: 'file' | 'input'): string {

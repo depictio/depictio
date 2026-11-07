@@ -42,7 +42,7 @@ const FLOW_STATUS: Record<FlowStatus, { color: string; icon: string; label: stri
   closest: { color: 'yellow', icon: 'mdi:approximately-equal', label: 'Closest available version' },
   'other-version': { color: 'yellow', icon: 'mdi:swap-horizontal', label: 'Different version' },
   'other-pipeline': { color: 'orange', icon: 'mdi:alert-outline', label: 'Different pipeline' },
-  'no-template': { color: 'red', icon: 'mdi:help-circle-outline', label: 'No matching template' },
+  'no-template': { color: 'red', icon: 'mdi:help-circle-outline', label: 'No matching pipeline version' },
   latest: { color: 'gray', icon: 'mdi:star-outline', label: 'Newest' },
   'matches-run': { color: 'green', icon: 'mdi:check', label: 'Matches this run' },
   'closest-to-run': { color: 'yellow', icon: 'mdi:approximately-equal', label: 'Closest to this run' },
