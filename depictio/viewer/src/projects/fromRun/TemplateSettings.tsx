@@ -48,7 +48,7 @@ export const TemplateSettingsSection: React.FC<TemplateSettingsSectionProps> = (
           <SectionHeader
             icon="mdi:tune-variant"
             color="gray"
-            title="Advanced: template settings"
+            title="More pipeline settings"
             count={variables.length}
             note={overridden > 0 ? `${overridden} overridden` : undefined}
             description="Depictio works these out from the run folder. Give one a value only to override it."
@@ -155,9 +155,9 @@ export const ResolvedSettings: React.FC<{ settings: Array<[string, string]>; dat
         <SectionHeader
           icon="mdi:tune-variant"
           color="gray"
-          title="Template settings"
+          title="Pipeline settings"
           count={settings.length}
-          description="What the template resolved for this run folder. Override one in Advanced: template settings, on the Source step."
+          description="What Depictio resolved for this run folder. Override one in More pipeline settings, on the Source step."
         />
       </Accordion.Control>
       <Accordion.Panel>

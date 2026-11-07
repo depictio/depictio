@@ -572,7 +572,7 @@ export const FolderDetailPane: React.FC<FolderDetailPaneProps> = ({
           ) : (
             <Text size="sm" c="dimmed" data-testid="browse-detail-not-recognised">
               {result.looks_like_run
-                ? 'This folder has a pipeline_info folder or a MultiQC report, but neither names a pipeline Depictio has a template for.'
+                ? 'This folder has a pipeline_info folder or a MultiQC report, but neither names a pipeline Depictio knows.'
                 : 'Depictio recognises no pipeline run here.'}
             </Text>
           )}

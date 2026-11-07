@@ -92,10 +92,10 @@ function agreement(
 /** Why a template other than the run's own is used, without repeating the
  *  versions the line already shows. */
 const MATCH_REASON: Partial<Record<RunTemplateMatch, string>> = {
-  closest: 'No template exists for the run’s version; the closest one is used.',
-  'other-version': 'The template you picked was written for another version.',
-  'other-pipeline': 'The template you picked was written for another pipeline.',
-  none: 'No installed template matches this run. Pick one yourself.',
+  closest: 'No version exists for the run’s version; the closest one is used.',
+  'other-version': 'The pipeline version you picked was written for another version.',
+  'other-pipeline': 'The pipeline you picked is another pipeline.',
+  none: 'No installed pipeline matches this run. Pick one yourself.',
 };
 
 const Mark: React.FC<{
@@ -279,13 +279,14 @@ function collectionsCheck(report: FromRunReport): { status: CheckStatus; text: s
   const missing = groups.missing.length;
   const optional = groups.optional.length;
   if (ready + missing + optional === 0) {
-    return { status: 'unknown', text: 'The template looks for no collection here' };
+    return { status: 'unknown', text: 'Depictio looks for no collection here' };
   }
   const parts = [`${ready} found`];
-  if (missing > 0) parts.push(`${missing} not found`);
-  if (optional > 0) parts.push(`${optional} optional absent`);
+  if (missing > 0) parts.push(`${missing} empty for now`);
+  if (optional > 0) parts.push(`${optional} optional not in this run`);
+  // A collection without files stays empty, it does not fail the project.
   let status: CheckStatus = 'ok';
-  if (missing > 0) status = ready === 0 ? 'fail' : 'warn';
+  if (missing > 0) status = ready === 0 ? 'warn' : 'info';
   return { status, text: parts.join(' · ') };
 }
 
@@ -447,7 +448,7 @@ export const RunChecks: React.FC<RunChecksProps> = ({
                   )}
                   {templateId ? (
                     <Dim>
-                      {pipelineAgreement === 'conflict' ? `template ${templatePipeline}: ` : 'read with '}
+                      {pipelineAgreement === 'conflict' ? `chosen ${templatePipeline}: ` : 'read with '}
                       <Text
                         span
                         size="sm"
@@ -460,7 +461,7 @@ export const RunChecks: React.FC<RunChecksProps> = ({
                       </Text>
                     </Dim>
                   ) : (
-                    <Dim testId={`${p}-template`}>no template chosen yet</Dim>
+                    <Dim testId={`${p}-template`}>no pipeline chosen yet</Dim>
                   )}
                 </Group>
               </Check>
@@ -480,7 +481,7 @@ export const RunChecks: React.FC<RunChecksProps> = ({
                         <Text span size="sm" ff="monospace" data-testid={`${p}-version`}>
                           {formatVersion(run?.version as string)}
                         </Text>
-                        <Dim>the version the template was written for</Dim>
+                        <Dim>the version Depictio's definition was written for</Dim>
                       </>
                     ) : (
                       <>
@@ -490,7 +491,7 @@ export const RunChecks: React.FC<RunChecksProps> = ({
                         </Text>
                         {templateId && (
                           <>
-                            <Dim>· template</Dim>
+                            <Dim>· chosen</Dim>
                             <Text span size="sm" ff="monospace" data-testid={`${p}-template-version`}>
                               {templateVersion ? formatVersion(templateVersion) : 'single version'}
                             </Text>
@@ -511,7 +512,7 @@ export const RunChecks: React.FC<RunChecksProps> = ({
                 check="engine"
                 label="Engine"
                 status={AGREEMENT_STATUS[engineAgreement]}
-                statusLabel={engineAgreement === 'unknown' ? 'The template does not say' : undefined}
+                statusLabel={engineAgreement === 'unknown' ? 'Not stated' : undefined}
                 testIdPrefix={p}
                 markTestId={`${p}-engine-agreement`}
                 agreementValue={engineAgreement}
@@ -530,7 +531,7 @@ export const RunChecks: React.FC<RunChecksProps> = ({
                   )}
                   {templateEngine && engineAgreement !== 'same' && (
                     <Dim>
-                      · template written for{' '}
+                      · written for{' '}
                       <Text span size="sm" c="dimmed" data-testid={`${p}-template-engine`}>
                         {engineLabel(templateEngine)}
                       </Text>
@@ -617,7 +618,7 @@ export const RunChecks: React.FC<RunChecksProps> = ({
                     </Text>
                   ) : (
                     <Text size="sm" data-testid={`${p}-findings-summary`}>
-                      {collections?.text ?? 'Previewing the folder with the template...'}
+                      {collections?.text ?? 'Previewing the folder...'}
                     </Text>
                   )}
                 </Check>

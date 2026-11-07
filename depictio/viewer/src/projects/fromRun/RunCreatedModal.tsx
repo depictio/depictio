@@ -50,6 +50,12 @@ export interface RunCreatedContext {
  *  outcome comes from the rows (`manifestRunOutcome`). */
 type WatchState = 'idle' | 'running' | ManifestRunOutcome;
 
+/** `summarizeManifestRun`, with collections the run did not produce read as
+ *  that rather than as a shortfall ("21 ingested, 2 not in this run"). */
+function summarizeRun(report: ManifestRefreshReport): string {
+  return summarizeManifestRun(report).replace(/(\d+) skipped/, '$1 not in this run');
+}
+
 /** Words for the run once the watcher stopped (`elapsed` is then fixed). */
 function describeEndedRun(
   state: ManifestRunOutcome,
@@ -72,7 +78,7 @@ function watchText(
   progress: ManifestRefreshReport | null,
 ): string {
   const elapsed = formatElapsed(elapsedMs);
-  const summary = progress ? summarizeManifestRun(progress) : null;
+  const summary = progress ? summarizeRun(progress) : null;
   if (state === 'idle') return 'No ingestion run to watch.';
   if (state === 'running') return `Ingesting (${elapsed} elapsed)` + (summary ? `: ${summary}` : '');
   return describeEndedRun(state, summary, elapsed);
@@ -91,7 +97,7 @@ function announceRun(
   const elapsed = formatElapsed(
     startedAt == null || finishedAt == null ? 0 : finishedAt - startedAt,
   );
-  return describeEndedRun(state, progress ? summarizeManifestRun(progress) : null, elapsed);
+  return describeEndedRun(state, progress ? summarizeRun(progress) : null, elapsed);
 }
 
 /** What creating the project did, worded from the report: how many of the

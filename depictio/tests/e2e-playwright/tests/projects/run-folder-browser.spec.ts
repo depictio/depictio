@@ -464,6 +464,11 @@ test.describe("Browse for a run folder", () => {
     await expect(card.locator("[data-testid='run-detected-pipeline']")).toHaveText(
       "nf-core/ampliseq",
     );
+    // The pipeline line says what was recognised; the picker is one click away.
+    const pipelineLine = page.locator("[data-testid='folder-pipeline-line']");
+    await expect(pipelineLine).toContainText("nf-core/ampliseq");
+    await expect(pipelineLine).toContainText("Detected");
+    await page.locator("[data-testid='folder-change-pipeline']").click();
     await expect(page.locator("[data-testid='run-pipeline-detected']")).toBeVisible();
   });
 

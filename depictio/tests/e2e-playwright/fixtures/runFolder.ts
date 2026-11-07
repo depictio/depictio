@@ -200,9 +200,16 @@ export async function stubFolderRoute(
   return calls;
 }
 
-/** Open /projects, launch the create modal and pick the run folder source. */
+/** Open /projects, launch the create modal and pick "A folder or bucket": the
+ *  folder field, the optional pipeline line, the detection card and the three
+ *  steps (Source, What Depictio found, Create). */
 export async function openRunTab(page: Page): Promise<void> {
   await page.goto("/projects");
   await page.locator("[data-tour-id='projects-create']").click();
-  await page.getByTestId("create-source-run").click();
+  await page.getByTestId("create-source-folder").click();
+}
+
+/** Same entry point as `openRunTab`; kept for the specs that name the door. */
+export async function openFolderDoor(page: Page): Promise<void> {
+  await openRunTab(page);
 }
