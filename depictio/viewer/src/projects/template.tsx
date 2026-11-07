@@ -247,7 +247,7 @@ export const TemplateRevisionBadge: React.FC<{ origin: unknown }> = ({ origin })
       withinPortal
       multiline
       w={260}
-      label={`${revision.templateId}, revision ${revision.version}. The template's own version, bumped when its data collections or dashboards change; the version in the chip is the pipeline's.`}
+      label={`${revision.templateId}, revision ${revision.version}. The pipeline setup's own version, bumped when its data collections or dashboards change; the version in the chip is the pipeline's.`}
     >
       <Badge
         variant="outline"

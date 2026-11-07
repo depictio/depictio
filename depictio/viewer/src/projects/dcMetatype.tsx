@@ -28,14 +28,14 @@ export interface MetatypeMeta {
  *  same badge. */
 export function dcMetatypeMeta(
   dc: DcClassifiable,
-  projectType: 'basic' | 'advanced',
+  fromPipeline: boolean,
 ): MetatypeMeta | null {
   const type = (dc.config?.type as string | undefined)?.toLowerCase();
   const metatype = (dc.config?.metatype as string | undefined) || '';
   if (metatype.toLowerCase().startsWith('metadat')) {
     return { label: 'Metadata', color: METADATA_COLOR, icon: 'mdi:tag-outline' };
   }
-  if (projectType === 'advanced' && type === 'table') {
+  if (fromPipeline && type === 'table') {
     return {
       label: 'Aggregate',
       color: AGGREGATE_COLOR,
@@ -49,10 +49,11 @@ export function dcMetatypeMeta(
  *  (an image DC in a basic project has no meaningful metatype). */
 export const DcMetatypeBadge: React.FC<{
   dc: DcClassifiable;
-  projectType: 'basic' | 'advanced';
-}> = ({ dc, projectType }) => {
+  /** The collection belongs to a pipeline workflow (not one made by hand). */
+  fromPipeline: boolean;
+}> = ({ dc, fromPipeline }) => {
   const glass = useGlassPages();
-  const meta = dcMetatypeMeta(dc, projectType);
+  const meta = dcMetatypeMeta(dc, fromPipeline);
   if (!meta) return null;
   // Glass spends no hue here: the aggregate is the page's teal, metadata grey.
   const color = glass ? (meta.label === 'Metadata' ? 'gray' : undefined) : meta.color;
