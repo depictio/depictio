@@ -691,3 +691,65 @@ class TestDataCollectionIntegration:
             data_collection.config.scan.scan_parameters.filename  # type: ignore[union-attr]
             == "/app/depictio/projects/init/iris/data/iris.csv"
         )
+
+
+class TestDataOrigin:
+    """DataOrigin and the optional ``origin`` of DataCollectionConfig."""
+
+    @pytest.fixture(autouse=True)
+    def set_depictio_context(self, monkeypatch):
+        monkeypatch.setattr("depictio.models.models.data_collections.DEPICTIO_CONTEXT", "server")
+
+    _CONFIG = {
+        "type": "table",
+        "scan": {"mode": "single", "scan_parameters": {"filename": "test.txt"}},
+        "dc_specific_properties": {"format": "csv"},
+    }
+
+    @pytest.mark.parametrize("kind", ["upload", "url", "folder", "run", "manifest"])
+    def test_valid_kinds(self, kind):
+        from depictio.models.models.data_collections import DataOrigin
+
+        origin = DataOrigin(kind=kind)  # type: ignore[arg-type]
+        assert origin.kind == kind
+        assert origin.location is None
+        assert origin.added_at is None
+
+    def test_invalid_kind_rejected(self):
+        from depictio.models.models.data_collections import DataOrigin
+
+        with pytest.raises(ValidationError):
+            DataOrigin(kind="cli")  # type: ignore[arg-type]
+
+    def test_extra_field_forbidden(self):
+        from depictio.models.models.data_collections import DataOrigin
+
+        with pytest.raises(ValidationError):
+            DataOrigin(kind="url", surprise=1)  # type: ignore[call-arg]
+
+    def test_config_without_origin_still_valid(self):
+        config = DataCollectionConfig(**self._CONFIG)  # type: ignore[arg-type]
+        assert config.origin is None
+
+    def test_config_with_origin_round_trips(self):
+        config = DataCollectionConfig(
+            **self._CONFIG,  # type: ignore[arg-type]
+            origin={"kind": "upload", "location": "a.csv", "added_at": "2026-01-02T03:04:05"},  # type: ignore[arg-type]
+        )
+        assert config.origin is not None
+        assert config.origin.location == "a.csv"
+        again = DataCollectionConfig(**config.model_dump())
+        assert again.origin == config.origin
+
+    def test_stored_hash_unchanged_without_origin(self):
+        """``hash`` is a stored string, never derived from the content, so a
+        document with no origin keeps the exact hash it was stored with."""
+        data_collection = DataCollection(
+            data_collection_tag="t",
+            config=self._CONFIG,  # type: ignore[arg-type]
+            hash="abc123",
+        )
+        assert data_collection.hash == "abc123"
+        dumped = data_collection.model_dump()
+        assert dumped["hash"] == "abc123"
+        assert DataCollection(**dumped).hash == "abc123"

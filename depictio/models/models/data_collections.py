@@ -1,4 +1,5 @@
 import re
+from datetime import datetime
 from enum import Enum
 from pathlib import Path
 from typing import Literal
@@ -299,6 +300,19 @@ def _scan_mode_mismatch(mode: str, actual_mode: str | None) -> str:
     )
 
 
+class DataOrigin(BaseModel):
+    """Where a data collection's data came from, recorded by the route that created it."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["upload", "url", "folder", "run", "manifest"]
+    # Original file name for an upload (never the temp dir), the URL, the folder
+    # or s3:// prefix, the run's data_root, or the manifest URL.
+    location: str | None = None
+    # Naive UTC, like every API timestamp.
+    added_at: datetime | None = None
+
+
 class Scan(BaseModel):
     mode: str
     scan_parameters: ScanParameters
@@ -387,6 +401,8 @@ class DataCollectionConfig(MongoModel):
     )
     join: TableJoinConfig | None = None
     transform: TransformConfig | None = None
+    # Explicit provenance of the data; None for CLI-made and older collections.
+    origin: DataOrigin | None = None
 
     model_config = ConfigDict(extra="forbid", use_enum_values=True)
 

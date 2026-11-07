@@ -178,6 +178,8 @@ GUARDED: set[tuple[str, str]] = {
     (_VER, "restore_component_from_version"),
     # project document, its storage and its ingestion
     (_PROJ, "trigger_project_ingestion"),
+    ("projects_endpoints.from_folder_tables", "add_tables_from_folder"),
+    ("projects_endpoints.attach_run", "attach_run"),
     (_PROJ, "ingest_manifest"),
     (_PROJ, "refresh_manifest"),
     (_PROJ, "set_project_storage"),

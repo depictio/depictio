@@ -105,3 +105,36 @@ class TestMergeProjectDataCollections:
 
     def test_none_on_either_side(self):
         assert merge_project_data_collections(None, None) == []
+
+
+def test_a_round_trip_without_origin_keeps_the_stored_origin():
+    """An older CLI round-trips a data collection without ``config.origin``:
+    the origin the creating route recorded must survive."""
+    origin = {"kind": "upload", "location": "samples.csv", "added_at": None}
+    stored = [
+        {
+            "_id": "wf1",
+            "data_collections": [{"_id": "dc1", "config": {"type": "table", "origin": origin}}],
+        }
+    ]
+    incoming = [
+        {
+            "_id": "wf1",
+            "data_collections": [{"_id": "dc1", "config": {"type": "table", "origin": None}}],
+        }
+    ]
+    merged = merge_project_workflows(stored, incoming)
+    assert merged[0]["data_collections"][0]["config"]["origin"] == origin
+    # The payload itself is not mutated.
+    assert incoming[0]["data_collections"][0]["config"]["origin"] is None
+
+
+def test_an_incoming_origin_wins():
+    stored = [
+        {"_id": "wf1", "data_collections": [{"_id": "dc1", "config": {"origin": {"kind": "url"}}}]}
+    ]
+    incoming = [
+        {"_id": "wf1", "data_collections": [{"_id": "dc1", "config": {"origin": {"kind": "run"}}}]}
+    ]
+    merged = merge_project_workflows(stored, incoming)
+    assert merged[0]["data_collections"][0]["config"]["origin"] == {"kind": "run"}
