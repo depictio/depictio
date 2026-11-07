@@ -10,11 +10,11 @@ import { test, expect, getAuthMode } from "@fixtures/auth";
 
 const MANIFEST_TEMPLATE_ID = "generic/manifest-tables/1";
 
-/** Open /projects, launch the create modal, switch to the manifest tab. */
+/** Open /projects, launch the create modal, pick the manifest source. */
 async function openManifestTab(page: Page): Promise<void> {
   await page.goto("/projects");
   await page.locator("[data-tour-id='projects-create']").click();
-  await page.getByRole("tab", { name: "From Manifest" }).click();
+  await page.getByTestId("create-source-manifest").click();
 }
 
 test.describe("Create project from a Data Manifest", () => {
