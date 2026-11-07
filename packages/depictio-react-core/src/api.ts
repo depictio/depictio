@@ -3393,6 +3393,14 @@ export async function createTab(
 // These back the React component-creation stepper and edit page. They wrap
 // existing FastAPI endpoints used by the Dash editor; no schema changes.
 
+/** Where a data collection's data came from, recorded by the creating route.
+ *  Absent on CLI-made and older collections. `added_at` is naive UTC. */
+export interface DataOrigin {
+  kind: 'upload' | 'url' | 'folder' | 'run' | 'manifest';
+  location?: string | null;
+  added_at?: string | null;
+}
+
 export interface WorkflowEntry {
   _id: string;
   name?: string;
@@ -3401,7 +3409,7 @@ export interface WorkflowEntry {
   data_collections?: Array<{
     _id: string;
     data_collection_tag?: string;
-    config?: { type?: string; [k: string]: unknown };
+    config?: { type?: string; origin?: DataOrigin | null; [k: string]: unknown };
     [k: string]: unknown;
   }>;
   project_id?: string;
@@ -4628,6 +4636,8 @@ export interface ProjectListEntry {
   id?: string;
   name: string;
   project_type?: 'basic' | 'advanced';
+  /** User override of the detected layout; null/absent = detect. */
+  layout?: 'runs' | 'pipeline' | 'tables' | null;
   is_public?: boolean;
   /** Creation time, UTC "YYYY-MM-DD HH:MM:SS". */
   registration_time?: string;
@@ -6702,6 +6712,124 @@ export async function createDataCollectionFromUrl(
   });
   if (!res.ok) await throwHttpDetailError(res, 'Failed to create data collection from URL');
   return res.json();
+}
+
+/** One file of a folder read by `addTablesFromFolder`. */
+export interface FolderTableFile {
+  /** Relative to the folder. */
+  path: string;
+  /** Suggested collection name, unique within the project. */
+  name: string;
+  format: string | null;
+  size: number | null;
+  /** False for a file that cannot become a table; `reason` says why. */
+  table: boolean;
+  reason: string | null;
+  compression: string | null;
+}
+
+/** One collection created by a real `addTablesFromFolder`. */
+export interface FolderTableCreated {
+  path: string;
+  data_collection_id: string | null;
+  data_collection_tag: string | null;
+  status: 'ingested' | 'failed';
+  error: string | null;
+}
+
+/** Response of POST /projects/{id}/add_tables_from_folder. */
+export interface FolderTablesReport {
+  location: string;
+  source: 'local' | 's3';
+  files: FolderTableFile[];
+  truncated: boolean;
+  /** Empty on a dry run. */
+  created: FolderTableCreated[];
+  dry_run: boolean;
+  storage_saved?: boolean;
+}
+
+/** List the table files of a folder (dry run), or create one table
+ *  collection per listed `files` path in an existing project. The folder is
+ *  read with the same rules as a run folder: an `s3://` prefix, or an allowed
+ *  folder on the server's own disk; `storage` for a private bucket. */
+export async function addTablesFromFolder(
+  projectId: string,
+  input: {
+    location: string;
+    files?: string[] | null;
+    dryRun: boolean;
+    storage?: RunStorageIn | null;
+    recursive?: boolean;
+  },
+  options: { signal?: AbortSignal } = {},
+): Promise<FolderTablesReport> {
+  const res = await authFetch(
+    `${API_BASE}/projects/${encodeURIComponent(projectId)}/add_tables_from_folder`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        location: input.location,
+        files: input.files ?? null,
+        dry_run: input.dryRun,
+        storage: input.storage ?? null,
+        recursive: input.recursive ?? false,
+      }),
+      signal: options.signal,
+    },
+  );
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to read the folder');
+  return (await res.json()) as FolderTablesReport;
+}
+
+/** How a run folder relates to the pipeline of the project it is added to. */
+export type AttachRunMatch = 'exact' | 'closest' | 'none' | 'other_pipeline';
+
+/** Response of POST /projects/{id}/attach_run. */
+export interface AttachRunReport {
+  project_id: string;
+  data_root: string;
+  /** The project's own pipeline version. */
+  template_id: string;
+  detected: DetectedTemplate | null;
+  match: AttachRunMatch;
+  new_runs: string[];
+  existing_runs: string[];
+  /** What each collection would get from the new folder. */
+  data_collections: Array<{
+    tag: string;
+    matched: number;
+    status: 'ok' | 'kept' | 'empty' | 'missing' | 'pruned' | string;
+  }>;
+  /** Ingestion to poll with `getManifestRefreshRun`; null on a dry run. */
+  run_id: string | null;
+  dry_run: boolean;
+  warnings: string[];
+}
+
+/** Check (dry run) or add another run folder of the project's pipeline to a
+ *  project made from a pipeline. Refusals come back as `{detail, code}`
+ *  (`not_a_pipeline_project`, `other_pipeline`, `already_attached`,
+ *  `cannot_attach`, `run_name_clash`); read the code with `apiErrorCode`. */
+export async function attachRun(
+  projectId: string,
+  input: { dataRoot: string; dryRun: boolean; storage?: RunStorageIn | null },
+  options: { signal?: AbortSignal } = {},
+): Promise<AttachRunReport> {
+  const res = await authFetch(
+    `${API_BASE}/projects/${encodeURIComponent(projectId)}/attach_run`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        data_root: input.dataRoot,
+        dry_run: input.dryRun,
+        storage: input.storage ?? null,
+      }),
+      signal: options.signal,
+    },
+  );
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to add the run');
+  return (await res.json()) as AttachRunReport;
 }
 
 /** Fields the management Create-modal collects. Matches the allowlist on

@@ -374,3 +374,29 @@ def test_a_failed_remote_read_rolls_back_then_answers_with_its_status(mock_db, e
     assert response.json() == {"detail": str(error), "code": code}
     assert modes == ["scan", "process"]
     assert mock_db["projects"].find_one({"_id": project_id})["workflows"] == []
+
+
+def test_created_dc_records_url_origin(mock_db):
+    user = _user()
+    project_id = _owned_project_with_token(mock_db, user)
+    url = "https://example.org/data.csv"
+
+    with (
+        patch(f"{STORAGE}.project_storage_for", return_value=None),
+        patch(CLI_HELPER, return_value={"result": "success"}),
+    ):
+        _call(url, project_id=str(project_id), user=user)
+
+    stored = mock_db["projects"].find_one({"_id": project_id})
+    dc = stored["workflows"][0]["data_collections"][0]
+    origin = dc["config"]["origin"]
+    assert origin["kind"] == "url"
+    assert origin["location"] == url
+    assert origin["added_at"] is not None
+
+
+def test_origin_now_is_naive_utc():
+    origin = dc_utils.origin_now("folder", "s3://bucket/prefix")
+    assert origin.kind == "folder"
+    assert origin.location == "s3://bucket/prefix"
+    assert origin.added_at is not None and origin.added_at.tzinfo is None

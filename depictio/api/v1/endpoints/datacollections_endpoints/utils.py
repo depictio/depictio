@@ -14,8 +14,10 @@ from depictio.api.v1.db import projects_collection, tokens_collection
 from depictio.api.v1.endpoints.projects_endpoints.publish_lock import assert_project_unlocked
 from depictio.api.v1.permissions import build_access_query, get_user_group_ids, has_permission
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
+from depictio.models.models.data_collections import DataOrigin
 from depictio.models.s3_access import ProjectS3Config
 from depictio.models.s3_utils import delete_keys
+from depictio.models.timestamps import utc_now_naive
 
 
 def generate_join_dict(workflow: dict, project: dict | None = None) -> dict[str, dict[str, dict]]:
@@ -581,6 +583,20 @@ def _editable_project_and_token(project_id: str, current_user) -> tuple[ObjectId
     return project_oid, full_token
 
 
+def origin_now(kind: str, location: str | None = None) -> DataOrigin:
+    """Build a ``DataOrigin`` stamped with the current naive-UTC time.
+
+    Shared by every route that creates a data collection, so ``added_at`` is
+    always set the same way. ``kind`` is one of ``upload``, ``url``,
+    ``folder``, ``run`` or ``manifest`` (validated by the model).
+    """
+    return DataOrigin(
+        kind=kind,  # type: ignore[arg-type]
+        location=location,
+        added_at=utc_now_naive(),
+    )
+
+
 def _build_table_workflow(
     *,
     name: str,
@@ -592,8 +608,11 @@ def _build_table_workflow(
     lon_column: str | None,
     scan,
     location: str,
+    origin: DataOrigin | None = None,
 ):
     """Construct a single-DC Workflow wrapping a table DC read through ``scan``.
+
+    ``origin`` records where the data came from (see ``origin_now``).
 
     ``lat_column`` and ``lon_column`` together make it a coordinates table.
     Returns ``(workflow, data_collection)``.
@@ -631,6 +650,7 @@ def _build_table_workflow(
         metatype="metadata",
         scan=scan,
         dc_specific_properties=dc_table_config,
+        origin=origin,
     )
     data_collection = DataCollection(
         data_collection_tag=name.strip(),
@@ -804,6 +824,10 @@ def _create_dc_from_upload(
             lon_column=lon_column,
             scan=Scan(mode="single", scan_parameters=ScanSingle(filename=temp_file_path)),
             location=temp_dir,
+            # The original name, never the temp path the bytes were written to.
+            origin=origin_now(
+                "upload", os.path.basename((filename or "").replace("\\", "/")) or None
+            ),
         )
 
         return _push_workflow_and_ingest(
@@ -887,6 +911,7 @@ def _create_dc_from_url(
         lon_column=lon_column,
         scan=Scan(mode="url", scan_parameters=ScanURL(url=url)),
         location=url,
+        origin=origin_now("url", url),
     )
 
     return _push_workflow_and_ingest(
@@ -995,7 +1020,9 @@ def _save_multiqc_uploads_to_temp_dir(
     return folder_assignments, skipped_names
 
 
-def _build_multiqc_workflow(name: str, description: str, temp_dir: str):
+def _build_multiqc_workflow(
+    name: str, description: str, temp_dir: str, origin: DataOrigin | None = None
+):
     """Construct a single-DC Workflow wrapping a MultiQC DC pointed at temp_dir."""
     from depictio.models.models.data_collections import (
         DataCollection,
@@ -1013,6 +1040,7 @@ def _build_multiqc_workflow(name: str, description: str, temp_dir: str):
         type="multiqc",
         metatype="metadata",
         dc_specific_properties=DCMultiQC(),
+        origin=origin,
     )
     data_collection = DataCollection(
         data_collection_tag=name.strip(),
@@ -1205,7 +1233,15 @@ def _create_multiqc_dc_from_uploads(
         folder_assignments, skipped_names = _save_multiqc_uploads_to_temp_dir(
             decoded_files, temp_dir
         )
-        workflow, data_collection = _build_multiqc_workflow(name, description, temp_dir)
+        # One upload: its file name; several: a short count, since the
+        # per-report names are folder paths of no use as a single location.
+        upload_names = [fname for _, fname in decoded_files]
+        multiqc_location = (
+            upload_names[0] if len(upload_names) == 1 else f"{len(upload_names)} files"
+        )
+        workflow, data_collection = _build_multiqc_workflow(
+            name, description, temp_dir, origin=origin_now("upload", multiqc_location)
+        )
 
         # Atomically attach the new workflow before processing so the API can
         # locate the DC via its $push'd entry. Roll back on processor failure.
