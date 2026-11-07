@@ -58,7 +58,7 @@ function loadAdhocEnabled(): Promise<boolean> {
 
 export type PublishStatus = 'loading' | 'available' | 'unavailable';
 
-/** Whether "Send to another instance…" has anywhere to go for this user: a registered target,
+/** Whether "Send to another instance" has anywhere to go for this user: a registered target,
  *  or a destination URL + invite code (when the instance allows it).
  *  `loading` until both answers are in, so a control never flashes disabled. */
 export function usePublishStatus(enabled = true): PublishStatus {
@@ -85,6 +85,6 @@ export function usePublishAvailable(enabled = true): boolean {
   return usePublishStatus(enabled) === 'available';
 }
 
-/** Why "Send to another instance…" is disabled when migration is shown but nothing is set up. */
+/** Why "Send to another instance" is disabled when migration is shown but nothing is set up. */
 export const NO_DESTINATION_REASON =
   'No destination is configured. An administrator must add a push target or allow sending with a destination URL and invite code.';

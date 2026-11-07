@@ -1061,9 +1061,13 @@ button.gp-status:focus-visible {
 :root[data-chrome='glass'] .gp-main .mantine-Table-tr[data-hover]:hover > .mantine-Table-td {
   background-color: color-mix(in srgb, var(--gl-well) 55%, transparent);
 }
-/* The sticky actions cell stays opaque, so it gets the tint already blended. */
+/* The sticky actions cell has its own backdrop (a blurred, near-opaque body
+ * colour). Blending the tint with the translucent glass surface left it a
+ * different, lighter shade than the rest of the row, so on hover it gets the
+ * very same tint and no blur. */
 :root[data-chrome='glass'] .gp-main .mantine-Table-tr[data-hover]:hover > .mantine-Table-td.dc-actions-col {
-  background-color: color-mix(in srgb, var(--gl-well) 55%, var(--gl-surface));
+  background-color: color-mix(in srgb, var(--gl-well) 55%, transparent);
+  backdrop-filter: none;
 }
 :root[data-chrome='glass'] .gp-main .mantine-Table-tr[data-hover] > .mantine-Table-td:first-child {
   border-radius: 10px 0 0 10px;

@@ -96,7 +96,7 @@ const ProjectActionsMenu: React.FC<ProjectActionsMenuProps> = ({
           disabled={exporting}
           onClick={handleExport}
         >
-          {exporting ? 'Exporting…' : 'Export'}
+          {exporting ? 'Exporting…' : 'Export as ZIP'}
         </Menu.Item>
         {showPush &&
           (canPush ? (
@@ -105,7 +105,7 @@ const ProjectActionsMenu: React.FC<ProjectActionsMenuProps> = ({
               onClick={() => window.location.assign(`/projects/${projectId}?settings=send`)}
               data-testid="project-push-menu-item"
             >
-              Send to another instance…
+              Send to another instance
             </Menu.Item>
           ) : (
             <Tooltip label={NO_DESTINATION_REASON} multiline w={260} position="left" withinPortal>
@@ -115,7 +115,7 @@ const ProjectActionsMenu: React.FC<ProjectActionsMenuProps> = ({
                   disabled
                   data-testid="project-push-menu-item"
                 >
-                  Send to another instance…
+                  Send to another instance
                 </Menu.Item>
               </div>
             </Tooltip>
