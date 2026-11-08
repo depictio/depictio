@@ -206,7 +206,7 @@ def test_a_real_run_creates_one_dc_per_file_with_folder_origin(db, admin, local_
     for dc in dcs:
         origin = dc["config"]["origin"]
         assert origin["kind"] == "folder"
-        assert origin["location"].endswith("tables")
+        assert origin["location"].endswith(("tables/counts.csv", "tables/data.parquet"))
         assert origin["added_at"] is not None
     # The real file is scanned in place, not a temp copy.
     scan = dcs[0]["config"]["scan"]
@@ -270,3 +270,24 @@ def test_unsupported_location_is_422(db, admin):
     response = _call(_project(db), admin, location="https://example.org/x")
     assert response.status_code == 422
     assert b"location_unsupported" in response.body
+
+
+def test_adding_the_same_file_twice_is_skipped(db, admin, local_home, ingest_ok):
+    pid = _project(db)
+    first = _call(pid, admin, location=str(local_home), dry_run=False, files=["counts.csv"])
+    assert first.created[0].status == "ingested"
+    dry = _call(pid, admin, location=str(local_home))
+    by_path = {f.path: f for f in dry.files}
+    assert by_path["deg.tsv"].existing is None
+    existing = by_path["counts.csv"].existing
+    assert existing is not None
+    assert existing.data_collection_id == first.created[0].data_collection_id
+    assert existing.data_collection_tag == "counts"
+
+    again = _call(
+        pid, admin, location=str(local_home), dry_run=False, files=["counts.csv", "deg.tsv"]
+    )
+    assert [c.status for c in again.created] == ["skipped", "ingested"]
+    assert again.created[0].error == "Already in this project"
+    assert again.created[0].data_collection_id == first.created[0].data_collection_id
+    assert len(db["projects"].find_one()["workflows"]) == 2

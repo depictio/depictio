@@ -206,8 +206,12 @@ def _new_project_document(
     *,
     origin_kind: str | None = None,
     origin_location: str | None = None,
+    is_public: bool = False,
 ) -> dict[str, Any]:
     """The document a resolved template is inserted as, owned by ``current_user``.
+
+    ``is_public`` decides the visibility, whatever the template says: a project
+    is private unless the request asks otherwise.
 
     ``origin_kind`` / ``origin_location`` stamp every data collection with
     where its data came from (``DataOrigin``); left None, origin stays unset.
@@ -232,6 +236,7 @@ def _new_project_document(
         "editors": [],
         "viewers": [],
     }
+    project_config["is_public"] = bool(is_public)
     if origin_kind is not None:
         _stamp_origin(project_config, origin_kind, origin_location or "")
     try:
