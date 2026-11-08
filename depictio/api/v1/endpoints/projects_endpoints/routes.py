@@ -1048,6 +1048,7 @@ async def create_project_from_run(
         dry_run=payload.dry_run,
         request=request,
         storage=payload.storage,
+        is_public=payload.is_public,
     )
 
 

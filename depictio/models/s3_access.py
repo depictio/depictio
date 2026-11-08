@@ -237,6 +237,13 @@ class S3AccessFailed(S3AccessError):
         if isinstance(exc, ClientError):
             return cls.from_client_error(exc, target)
         if isinstance(exc, NoCredentialsError | PartialCredentialsError):
+            if target.kind == "ambient" and target.server_configured:
+                return cls(
+                    f"This server is set up to read s3://{target.bucket}/ but has no "
+                    "credentials for it. Ask the administrator of this server.",
+                    code="s3_server_credentials_missing",
+                    status_code=422,
+                )
             return cls(
                 f"No credentials are available to read {target.location} "
                 f"{_credentials_phrase(target)}.",
@@ -453,6 +460,9 @@ class S3Target(BaseModel):
     unsigned: bool = False
     verify_tls: bool = True
     timeout_s: float = DEFAULT_TIMEOUT_S
+    # An ambient target the administrator listed (``credentialed_s3_buckets``):
+    # a read it cannot sign is the server's gap, not something a user can fix.
+    server_configured: bool = False
 
     @property
     def location(self) -> str:
@@ -671,7 +681,13 @@ def resolve_s3_target(
         return project_target(project_storage, bucket, key, timeout_s=timeout_s)
     if server:
         if bucket_list_matches(policy.credentialed_s3_buckets, bucket, key):
-            return S3Target(kind="ambient", bucket=bucket, key=key, timeout_s=timeout_s)
+            return S3Target(
+                kind="ambient",
+                bucket=bucket,
+                key=key,
+                timeout_s=timeout_s,
+                server_configured=True,
+            )
         raise S3AccessRefused(
             f"{url} cannot be read by the server: the bucket is not one this instance "
             "allows, and no credentials were given for it. Give the bucket's endpoint "

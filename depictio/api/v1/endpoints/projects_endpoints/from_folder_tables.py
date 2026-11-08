@@ -103,6 +103,11 @@ class FolderTablesRequest(BaseModel):
     recursive: bool = False
 
 
+class ExistingCollection(BaseModel):
+    data_collection_id: str
+    data_collection_tag: str
+
+
 class FolderTableFile(BaseModel):
     path: str
     name: str
@@ -111,13 +116,15 @@ class FolderTableFile(BaseModel):
     table: bool
     reason: str | None = None
     compression: Literal["none", "gzip"] = "none"
+    # The project's collection already made from this same file, if any.
+    existing: ExistingCollection | None = None
 
 
 class FolderTableCreated(BaseModel):
     path: str
     data_collection_id: str | None = None
     data_collection_tag: str | None = None
-    status: Literal["ingested", "failed"]
+    status: Literal["ingested", "failed", "skipped"]
     error: str | None = None
 
 
@@ -241,6 +248,25 @@ def _project_tags(project_dict: dict[str, Any]) -> set[str]:
         for dc in wf.get("data_collections") or []
         if dc.get("data_collection_tag")
     }
+
+
+def _existing_by_location(project_dict: dict[str, Any]) -> dict[str, ExistingCollection]:
+    """Collections of the project made from a folder file, by the file's full location."""
+    found: dict[str, ExistingCollection] = {}
+    for wf in project_dict.get("workflows") or []:
+        for dc in wf.get("data_collections") or []:
+            origin = (dc.get("config") or {}).get("origin") or {}
+            location = origin.get("location")
+            if origin.get("kind") != "folder" or not location:
+                continue
+            found.setdefault(
+                str(location),
+                ExistingCollection(
+                    data_collection_id=str(dc.get("_id") or dc.get("id") or ""),
+                    data_collection_tag=str(dc.get("data_collection_tag") or ""),
+                ),
+            )
+    return found
 
 
 def _assign_unique_names(files: list[FolderTableFile], taken: set[str]) -> None:
@@ -383,7 +409,7 @@ def _ingest_one(
         lon_column=None,
         scan=scan,
         location=wf_location,
-        origin=origin_now("folder", source.location),
+        origin=origin_now("folder", location),
     )
     return _push_workflow_and_ingest(
         project_oid=project_oid,
@@ -446,7 +472,11 @@ def _add_tables(
     project_dict = _editable_project(project_id, current_user)
     source = _open_source(payload, request, current_user)
     files, truncated = source.list(payload.recursive)
-    _assign_unique_names(files, _project_tags(project_dict))
+    existing = _existing_by_location(project_dict)
+    for f in files:
+        f.existing = existing.get(source.file_location(f.path))
+    # Files already in the project keep their name; only new ones need a free one.
+    _assign_unique_names([f for f in files if f.existing is None], _project_tags(project_dict))
     report = FolderTablesReport(
         location=source.location,
         source=source.kind,
@@ -479,6 +509,17 @@ def _add_tables(
     remote_options, typed = _remote_options(source, payload, project_oid)
     for path in dict.fromkeys(requested):
         file = by_path[path]
+        if file.existing is not None:
+            report.created.append(
+                FolderTableCreated(
+                    path=path,
+                    data_collection_id=file.existing.data_collection_id,
+                    data_collection_tag=file.existing.data_collection_tag,
+                    status="skipped",
+                    error="Already in this project",
+                )
+            )
+            continue
         try:
             result = _ingest_one(
                 source=source,

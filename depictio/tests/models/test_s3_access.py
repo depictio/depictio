@@ -770,6 +770,25 @@ class TestErrorMapping:
         assert (unreachable.code, unreachable.status_code) == ("s3_unreachable", 502)
         assert (no_credentials.code, no_credentials.status_code) == ("s3_access_denied", 422)
 
+    def test_a_configured_bucket_the_server_cannot_sign_has_its_own_code(self):
+        configured = _resolve(
+            "s3://lab-shared/results/x.csv",
+            policy=_Policy(credentialed_s3_buckets="lab-shared/results"),
+        )
+        error = S3AccessFailed.from_exception(NoCredentialsError(), configured)
+        assert (error.code, error.status_code) == ("s3_server_credentials_missing", 422)
+        assert error.detail == (
+            "This server is set up to read s3://lab-shared/ but has no credentials for it. "
+            "Ask the administrator of this server."
+        )
+        # A bucket nobody configured, or any other kind, keeps the generic refusal.
+        other = _resolve("s3://lab/x", project=_project())
+        assert S3AccessFailed.from_exception(NoCredentialsError(), other).code == "s3_access_denied"
+        ambient = S3Target(kind="ambient", bucket="lab", key="x")
+        assert S3AccessFailed.from_exception(NoCredentialsError(), ambient).code == (
+            "s3_access_denied"
+        )
+
 
 class TestListing:
     def _paginate(self, stubbed_s3):

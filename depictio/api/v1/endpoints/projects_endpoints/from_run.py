@@ -120,6 +120,8 @@ class FromRunRequest(BaseModel):
     # run folder is read with them alone, and they become the new project's
     # storage settings. Ignored for a folder on this computer.
     storage: RunStorageIn | None = None
+    # Projects are private unless the request asks otherwise, whatever the template says.
+    is_public: bool = False
 
     @field_validator("template_id")
     @classmethod
@@ -738,6 +740,11 @@ class _Preflight:
     skipped: list[tuple[str, str, str]]
 
 
+_NO_MULTIQC_REPORT = (
+    "No MultiQC report in this run yet: the collection stays empty until its files exist."
+)
+
+
 def _preflight_split(project_dict: dict[str, Any], preview_rows) -> _Preflight:
     """Split a project's collections on the preview of its run folder.
 
@@ -750,8 +757,9 @@ def _preflight_split(project_dict: dict[str, Any], preview_rows) -> _Preflight:
     still close clean around it. A required one that misses nothing but such
     collections is skipped too
     (``manifest_ingest._skip_dependants_of_absent_collections``, from the
-    rows' ``missing_collections``). Everything else is dispatched, ``empty``
-    rows included: the scan's own verdict on those arrives from the worker.
+    rows' ``missing_collections``). A MultiQC collection whose scan matches
+    no report is skipped as well (nothing to ingest, not an error). Everything
+    else is dispatched, other ``empty`` rows included: the scan's own verdict on those arrives from the worker.
 
     Decided over every collection of the project, so a caller refreshing
     only some of them still sees each absent optional collection their
@@ -774,6 +782,17 @@ def _preflight_split(project_dict: dict[str, Any], preview_rows) -> _Preflight:
                     )
                 else:
                     failed.append((tag, dc_id, _skip_reason(row)))
+                continue
+            if (
+                row is not None
+                and row.status == "empty"
+                and not row.matched
+                and str((dc_dict.get("config") or {}).get("type") or "").lower() == "multiqc"
+            ):
+                # The scan found no report: the collection stays empty until
+                # there is one. A worker would fail it ("No MultiQC parquet
+                # files found"), which contradicts that promise.
+                skipped.append((tag, dc_id, _NO_MULTIQC_REPORT))
                 continue
             to_dispatch.append((tag, dc_id, wf_index, row.matched if row else 0))
     failed, skipped = _skip_dependants_of_absent_collections(
@@ -908,6 +927,7 @@ def _create_project_from_run(
     dry_run: bool = False,
     request=None,
     storage: RunStorageIn | None = None,
+    is_public: bool = False,
 ) -> FromRunReport:
     """The full run folder → project + dashboards + dispatched ingestion flow.
 
@@ -1008,6 +1028,7 @@ def _create_project_from_run(
         current_user,
         origin_kind="run",
         origin_location=root.location,
+        is_public=is_public,
     )
     projects_collection.insert_one(create_payload)
     project_oid = create_payload["_id"]
