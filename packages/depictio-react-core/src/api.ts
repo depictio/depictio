@@ -5050,6 +5050,9 @@ export interface FromRunRequest {
    *  project's storage settings (`FromRunReport.storage_saved`), a dry run
    *  stores nothing. */
   storage?: RunStorageIn | null;
+  /** Visibility of the new project. Private (false) unless set: the template
+   *  never decides it. */
+  isPublic?: boolean;
 }
 
 /** Connection settings typed in for a private bucket, before the project
@@ -5161,6 +5164,7 @@ export async function createProjectFromRun(
       project_name: input.projectName ?? null,
       variables: input.variables ?? {},
       dry_run: Boolean(input.dryRun),
+      is_public: Boolean(input.isPublic),
       ...(input.storage ? { storage: input.storage } : {}),
     }),
     signal: options.signal,
@@ -6726,6 +6730,8 @@ export interface FolderTableFile {
   table: boolean;
   reason: string | null;
   compression: string | null;
+  /** The project's collection already made from this same file, if any. */
+  existing?: { data_collection_id: string; data_collection_tag: string } | null;
 }
 
 /** One collection created by a real `addTablesFromFolder`. */
@@ -6733,7 +6739,9 @@ export interface FolderTableCreated {
   path: string;
   data_collection_id: string | null;
   data_collection_tag: string | null;
-  status: 'ingested' | 'failed';
+  /** `skipped`: the file is already a collection of the project
+   *  (`error` is "Already in this project", `data_collection_id` the existing one). */
+  status: 'ingested' | 'failed' | 'skipped';
   error: string | null;
 }
 

@@ -67,6 +67,7 @@ def _call(
     variables: dict[str, str] | None = None,
     dry_run: bool = False,
     request=None,
+    **extra,
 ):
     return from_run._create_project_from_run(
         data_root=data_root,
@@ -76,6 +77,7 @@ def _call(
         variables=variables,
         dry_run=dry_run,
         request=request,
+        **extra,
     )
 
 
@@ -386,7 +388,7 @@ def _imported_dashboard():
     )
 
 
-def _run_from_folder(mock_db, user=None, project_name: str = "run42"):
+def _run_from_folder(mock_db, user=None, project_name: str = "run42", **extra):
     """Create the project for real, with the dashboard import and broker stubbed."""
     from depictio.api.v1.monitoring import store as monitoring_store
 
@@ -396,7 +398,7 @@ def _run_from_folder(mock_db, user=None, project_name: str = "run42"):
         patch.object(monitoring_store, "ingestion_runs_collection", mock_db["ingestion_runs"]),
         patch("depictio.api.v1.celery_tasks.manifest_refresh_dc_task") as task,
     ):
-        report = _call(user=user, project_name=project_name)
+        report = _call(user=user, project_name=project_name, **extra)
     return report, user, importer, task
 
 
@@ -479,6 +481,16 @@ def test_a_real_run_creates_the_project_and_dispatches_one_task_per_collection(
     assert modes["multiqc_data"] == "s3_prefix"
     assert modes["samplesheet"] == "url"
     assert modes["taxonomy_composition"] == "recipe"
+
+
+def test_the_project_is_private_unless_the_request_asks_otherwise(mock_db, megatest_s3):
+    assert from_run.FromRunRequest(data_root=S3_ROOT).is_public is False
+    megatest_s3()
+    report, *_ = _run_from_folder(mock_db)
+    assert mock_db["projects"].find_one({"_id": ObjectId(report.project_id)})["is_public"] is False
+
+    report, *_ = _run_from_folder(mock_db, project_name="run43", is_public=True)
+    assert mock_db["projects"].find_one({"_id": ObjectId(report.project_id)})["is_public"] is True
 
 
 def test_a_pruned_collection_is_absent_from_the_project_and_the_run(mock_db, megatest_s3):
