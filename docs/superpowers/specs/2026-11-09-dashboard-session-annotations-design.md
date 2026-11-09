@@ -86,8 +86,9 @@ into them.
 - For the active column, one group per distinct non-empty label:
   `{name: label, dcId, columnName: keyColumn, values: keys}`. A label keeps its colour and
   `filterActive` across recomputation.
-- A column with more distinct labels than the server's `MAX_GROUPS` cannot be the active column;
-  the control says why.
+- The server keeps at most `MAX_GROUPS` (24) groups in all, lasso and table groups included, and
+  drops the rest without saying so (`sanitize_group_defs`). A column cannot be the active column
+  when its distinct labels plus the other groups exceed 24; the control says why.
 
 The derivation is a pure function in `packages/depictio-react-core/src/annotationGroups.ts`.
 
@@ -102,18 +103,25 @@ Keyed on the dashboard family's main tab, since annotations belong to the whole 
   `(user_id, dashboard_id)`.
   - `GET`, `PUT`, `DELETE /dashboards/annotations/{dashboard_id}`.
   - Only the caller's own document. Requires read access to the dashboard, re-checked on every
-    call. 403 for a temporary or anonymous account outside single-user mode.
-  - Pydantic model with `extra="forbid"`. Caps: 1 MB request body, 20 columns, 10,000 keys per
-    column, 200 characters per label.
+    call. 403 for a temporary or anonymous account outside single-user mode. Single-user mode
+    resolves every call to the shared anonymous user, which is then accepted.
+  - The id is normalised to the family main tab, so a child tab's id reaches the same document.
+  - Pydantic model with `extra="forbid"`. Caps: 1 MB of serialised payload (a model
+    validator, as for filter state: the API has no body-size middleware), 20 columns, 10,000 keys
+    per column, 80 characters per label. 80 is the server's group `MAX_NAME_LENGTH`: a longer
+    label would be cut, and two labels sharing their first 80 characters would collapse into one
+    group.
   - Deletion follows the cascades of `filter_state_cascade.py` (dashboard, project), plus user
-    deletion and the temporary user cleanup.
+    deletion and the temporary user cleanup. No user-keyed cascade existed before, so
+    `delete_annotations_for_user` is added and called from both.
   - Classified `EXEMPT` in `test_publish_lock_routes.py` through the module-level per-viewer rule.
 - Saving is debounced. A failed account save keeps the panel's state and shows a warning; it is
   never silently dropped.
 
 ## Reading the grid
 
-- Rows come from `fetchDataCollectionPreview`, limit 10,000. A table with more rows is refused
+- Rows come from `fetchDataCollectionPreview`, limit 10,000. The preview task clamped `limit` to
+  1,000; the clamp is raised to 10,000 (callers default to 100, so none of them reads more). A table with more rows is refused
   with a message asking for a smaller table, because a truncated list of samples would look
   complete.
 - A table with several rows per key shows the first row per key, and only the context columns
@@ -125,7 +133,9 @@ Keyed on the dashboard family's main tab, since annotations belong to the whole 
 
 ## Input in the browser
 
-- A dropped CSV or TSV is parsed in the browser, with a 5 MB limit. No request carries the file.
+- A dropped CSV or TSV is parsed in the browser with `papaparse` (already locked for
+  `packages/tool-studio`; declared in `depictio-react-core`), with a 5 MB limit. The delimiter
+  follows the extension, else the header line, as in `tool-studio`'s `parseFixture.ts`. No request carries the file.
   Excel and Parquet are out of scope.
 - A dropped file is matched on the key column by the same rule as `table_merge.py`: text
   comparison, integer floats as integers, file values unique. Each other column of the file
@@ -143,7 +153,8 @@ Keyed on the dashboard family's main tab, since annotations belong to the whole 
   surfaces the report's `reason`. On success the annotation is removed from the session.
 - Both are disabled on a pinned view, with the reason: a write would not appear there.
 - After a real write on a live view the dashboard's components re-render through the existing
-  refresh path.
+  refresh path (`triggerRefresh` in `App.tsx`; the write bumps `aggregation_version`, which salts
+  the caches).
 
 ## Error handling
 
@@ -178,11 +189,11 @@ Keyed on the dashboard family's main tab, since annotations belong to the whole 
 
 One PR, stacked on the table editing work it reuses.
 
-## To confirm during implementation
+## Settled during implementation
 
-- The value of `MAX_GROUPS` and whether the label cap should surface it directly.
-- Whether a CSV parser is already a dependency of the viewer. If not, write a small one rather than
-  add a dependency.
-- How a live view is told to re-render after a real write.
-- Whether `POST /data_version_status/{id}` returns the pinned Delta version number, or the grid
-  needs it added. The fail-closed rule under "Pinned views" applies either way.
+- `MAX_GROUPS` is 24 and counts every group; the label cap is the group name cap, 80.
+- No CSV parser in the viewer; `papaparse` is reused from the workspace lock.
+- A live view re-renders through `triggerRefresh`.
+- `POST /data_version_status/{id}` already returns `delta_version`; no server change.
+- Annotate and Analysis are not shown at once: both are right-hand panels. Annotate shows the
+  derived groups and opens Analysis.
