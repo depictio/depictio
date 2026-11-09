@@ -20,6 +20,7 @@ from depictio.api.v1.endpoints.catalog_endpoints.routes import catalog_endpoint_
 from depictio.api.v1.endpoints.celery_endpoints.routes import celery_endpoint_router
 from depictio.api.v1.endpoints.cli_endpoints.routes import cli_endpoint_router
 from depictio.api.v1.endpoints.comments_endpoints.routes import comments_endpoint_router
+from depictio.api.v1.endpoints.dashboards_endpoints.annotation_routes import annotation_router
 from depictio.api.v1.endpoints.dashboards_endpoints.filter_state_routes import filter_state_router
 from depictio.api.v1.endpoints.dashboards_endpoints.routes import dashboards_endpoint_router
 from depictio.api.v1.endpoints.dashboards_endpoints.versions_routes import (
@@ -152,6 +153,13 @@ router.include_router(
 router.include_router(
     filter_state_router,
     prefix="/dashboards/filter_state",
+    tags=["Dashboards"],
+)
+
+# Same reasoning: no dashboards route has a literal `annotations` segment.
+router.include_router(
+    annotation_router,
+    prefix="/dashboards/annotations",
     tags=["Dashboards"],
 )
 
