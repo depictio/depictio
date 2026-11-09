@@ -23,6 +23,7 @@ from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import dashboards_collection, projects_collection
 from depictio.api.v1.endpoints.comments_endpoints.cascade import delete_threads_for_dashboards
 from depictio.api.v1.endpoints.dashboards_endpoints import version_store, versioning
+from depictio.api.v1.endpoints.dashboards_endpoints.code_figures import refuse_new_figure_code
 from depictio.api.v1.endpoints.dashboards_endpoints.core_functions import (
     effective_category_colors,
     family_brand_theme,
@@ -1085,6 +1086,7 @@ async def save_dashboard(
     # browsers then keep showing the stale thumbnail PNG. (The Dash save path
     # bumps the same field; see dashboards_endpoints/routes.py:3705 etc.)
     save_payload = data.mongo()
+    refuse_new_figure_code(save_payload.get("stored_metadata"), current_user)
     save_payload["last_saved_ts"] = utc_now_str()
 
     # `_id` is immutable in MongoDB, and `MongoModel.ensure_id` mints a fresh
@@ -9055,6 +9057,12 @@ async def import_dashboard_from_yaml(
             detail="Dashboard import is disabled in public/demo mode",
         )
 
+    try:
+        parsed_for_code = yaml.safe_load(yaml_content)
+    except yaml.YAMLError:
+        parsed_for_code = None  # The import below answers with the parse error.
+    refuse_new_figure_code(parsed_for_code, current_user)
+
     # Allow anonymous users in single-user mode (they have admin privileges)
     if hasattr(current_user, "is_anonymous") and current_user.is_anonymous:
         if not settings.auth.is_single_user_mode:
@@ -9617,6 +9625,8 @@ async def import_dashboard_from_json(
             status_code=403,
             detail="Dashboard import is disabled in public/demo mode",
         )
+
+    refuse_new_figure_code(json_content, current_user)
 
     # Validate export version
     export_version = json_content.get("_depictio_export_version")

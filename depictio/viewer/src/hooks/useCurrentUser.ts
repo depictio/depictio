@@ -80,6 +80,8 @@ export interface UseCurrentUserResult {
   /** True when the component export API answers: every tile then offers
    *  "Export / embed". False on older backends that do not send the flag. */
   embedEnabled: boolean;
+  /** Non-admin users are kept from writing figure code on this server. */
+  codeFiguresLocked: boolean;
   /** True when some site may frame an embed. False means an iframe snippet
    *  would be refused by the embed's own CSP. */
   embedFramingEnabled: boolean;
@@ -102,6 +104,7 @@ export function useCurrentUser(): UseCurrentUserResult {
   const [localDataRootsEnabled, setLocalDataRootsEnabled] = useState<boolean>(false);
   const [remoteBrowseEnabled, setRemoteBrowseEnabled] = useState<boolean>(false);
   const [embedEnabled, setEmbedEnabled] = useState<boolean>(false);
+  const [codeFiguresLocked, setCodeFiguresLocked] = useState<boolean>(false);
   const [embedFramingEnabled, setEmbedFramingEnabled] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
 
@@ -123,6 +126,7 @@ export function useCurrentUser(): UseCurrentUserResult {
         setLocalDataRootsEnabled(Boolean(data.local_data_roots_enabled));
         setRemoteBrowseEnabled(Boolean(data.remote_browse_enabled));
         setEmbedEnabled(Boolean(data.embed_enabled));
+        setCodeFiguresLocked(Boolean(data.code_figures_locked));
         setEmbedFramingEnabled(Boolean(data.embed_framing_enabled));
         setDashboardsDefaultView(
           typeof data.dashboards_default_view === 'string'
@@ -176,6 +180,7 @@ export function useCurrentUser(): UseCurrentUserResult {
     localDataRootsEnabled,
     remoteBrowseEnabled,
     embedEnabled,
+    codeFiguresLocked,
     embedFramingEnabled,
     loading,
   };

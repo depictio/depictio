@@ -25,6 +25,7 @@ from depictio.api.v1.celery_tasks import (
     build_figure_preview as build_figure_preview_task,
 )
 from depictio.api.v1.configs.config import settings
+from depictio.api.v1.endpoints.dashboards_endpoints.code_figures import refuse_new_figure_code
 from depictio.api.v1.endpoints.user_endpoints.routes import get_user_or_anonymous
 from depictio.models.models.users import User
 
@@ -182,6 +183,7 @@ async def preview_figure(
     # Permission gate — before any data is loaded or any user code runs. The
     # caller must have read access to the project that owns this workflow/DC.
     _authorize_preview_dc(wf_id, dc_id, current_user)
+    refuse_new_figure_code(metadata, current_user)
 
     # The DC's Delta location is authoritative in Mongo (resolved by the worker
     # from dc_id). A client-supplied ``dc_config.delta_location`` would let an
