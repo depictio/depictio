@@ -263,8 +263,14 @@ the target's S3 user **read-only** access to the source bucket, for example:
 }
 ```
 
+A push lands on the target's public URL, the one the *Import* dialog shows, which is
+the viewer's. The viewer's nginx passes the bundle upload (`POST
+/depictio/api/v1/migrate/inbound/requests`) to the API unbuffered and without its
+200 MB cap; the API enforces `MAX_BUNDLE_BYTES`. The ingress in front of that host
+still has to let the bundle through.
+
 For `inline` pushes behind an ingress, raise the body size limit to at least
-`MAX_BUNDLE_BYTES`. With nginx, that is `client_max_body_size`; with
+`MAX_BUNDLE_BYTES` (or `"0"` and let the API enforce it). With nginx, that is `client_max_body_size`; with
 ingress-nginx, the annotation is `nginx.ingress.kubernetes.io/proxy-body-size`.
 
 A bundle of several GB also needs time. The target answers only once it has staged
