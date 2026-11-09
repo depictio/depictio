@@ -2,13 +2,15 @@
 
 ## Résumé (FR)
 
-Depuis un dashboard aux données figées, un panneau latéral ouvre une grille où l'on ajoute des
+Depuis un dashboard aux données figées, le bouton « Metadata » du dock ouvre une grille sur les
+tables de métadonnées du projet (samplesheet, metadata sheet), où l'on ajoute des
 annotations par échantillon (par exemple `réponse` = *répondeur* / *non-répondeur*). Chaque valeur
 devient un groupe du panneau Analysis existant, qui sait déjà filtrer, colorer et scinder les
 graphiques. La vraie table ne change pas. Les annotations restent dans le navigateur pour un compte
 temporaire, et sur le compte pour une vraie connexion. Un fichier déposé sur le dashboard est lu
 dans le navigateur et n'est jamais envoyé au serveur. Les owners et editors peuvent aussi écrire
-réellement : onglet « Edit table » et bouton « Save to table ».
+réellement : édition des cellules et bouton « Save to table ». Seule une table de métadonnées
+liée aux données par un Link (pas un Join), de 10 000 lignes au plus, peut être annotée.
 
 ## Goal
 
@@ -38,24 +40,67 @@ the server.
 
 No change is needed in the render pipeline, the cache keys or the Delta tables for session use.
 
+## Scope: which tables
+
+Revised after review: labels on any table were confusing, and a table built by a CLI join
+cannot follow labels keyed on one of its inputs. Only a **metadata table linked to the data**
+can be labelled. The rule lives in one function, `classify_tables` in
+`dashboards_endpoints/annotation_tables.py`. A table is eligible when all of these hold:
+
+1. it is a table;
+2. it is the `source_dc_id` of at least one enabled link; its key columns are the distinct
+   `source_column`s of those links (labels reach the charts through those links);
+3. it is not derived: no `config.join` or `config.transform`, `source` absent or `native`,
+   and not named as a join's `result_dc_id` or `id`;
+4. it is not a join input: its tag (or `workflow.tag` when the join reference is scoped) is in
+   no `project.joins[].left_dc` / `right_dc`;
+5. its `metatype` is absent or "metadata", case-insensitive. A pipeline samplesheet often
+   declares none (ampliseq); "Aggregate" tables are results, not metadata;
+6. it has at most `MAX_EDITABLE_ROWS` (10,000) rows, the size the grid loads whole.
+
+A project can have several eligible tables: nf-core pipelines such as ampliseq have a
+mandatory `samplesheet` and an optional `metadata` sheet, both link sources. Each label
+column belongs to one table.
+
+`GET /dashboards/annotations/{dashboard_id}/tables` lists every table of the project with
+`eligible`, a stable `code` (`not_linked`, `derived_table`, `join_input`, `not_metadata`,
+`no_data`, `table_too_large`) and a `reason` to show. It is open to every reader, temporary
+and anonymous ones included, since they label in the browser. A `PUT` naming an ineligible
+table, or a key column none of its links uses, is a 422; it checks structure only and reads no
+table.
+
+## Levels
+
+- **N0 (this PR):** labels become selection groups, which filter, colour and split the
+  dashboard's existing charts.
+- **N2 (this PR):** owners and editors write labels or cell edits into the table
+  (**Save to table**), where the table's own rules allow it.
+- **N1 (follow-up issue):** temporary comparison figures built from labels, from a closed list
+  of types with validated parameters; no free definition and no code mode.
+
 ## User experience
 
-Revised after review: the first panel (its own header button, a toolbar of controls, an Edit
-table tab) was too heavy. The labels now live where groups live, and the grid is the whole UI.
+Revised after review: tabs inside Analysis (Groups / Labels) were hard to read, and a panel
+that edits a table is not the place for groups. The two are separate again.
 
-1. The **Analysis** panel has two tabs, **Groups** and **Labels**. Labels widens the panel for a
-   grid; there is no separate button, so no name to clash with the per-chart Annotate action.
-2. A context line reads `table · key column`, with **Change** to pick another table or key
-   (defaults: the first table the dashboard reads with a column unique per row; that column).
-   **Import** picks a file; a file can also be dropped anywhere on the tab.
-3. One grid: the key, the label columns, a **+** column that adds one, then the table's columns.
-   Each label column's header holds a menu with every action on it: compare in the charts
-   (one at a time; a dot marks it; the 24-group budget disables it with the reason), rename,
-   keep on my account (for a label column from a file), save to table, delete.
-4. Owners and editors of a table a user added edit its cells in place. Changed cells turn
+1. A **Metadata** button in the dock, shown only when the project has an eligible table. It
+   opens a docked, non-modal drawer (760 px) built like Analysis. Metadata and Analysis share
+   the right edge, so opening one closes the other. Escape does not close it: in a grid cell it
+   cancels the edit. The button's badge counts label columns.
+2. **Analysis** is groups only. A group derived from labels shows a tag icon; it cannot be
+   renamed or deleted there ("Rename the label in Metadata.").
+3. The panel's header row: the table (a segmented control when there are several, else its
+   name), the key column (a select when its links use several, else "by {key}"), an info icon
+   listing the project's other tables and why they cannot be labelled, and **Import**. A file
+   can also be dropped on the panel.
+4. One grid: the key, the label columns of that table, a **+** column that adds one, then the
+   table's columns. Each label column's header holds a menu with every action on it: compare in
+   the charts (one at a time; a dot marks it; the 24-group budget disables it with the reason),
+   rename, keep on my account (for a label column from a file), save to table, delete.
+5. Owners and editors of a table a user added edit its cells in place. Changed cells turn
    yellow and a bar under the grid offers Discard or **Save to table**, which writes them in one
    version and re-renders the dashboard. Everyone else sees those columns read-only.
-5. Text appears only when it says something: browser storage, labels compared from a file, an
+6. Text appears only when it says something: browser storage, labels compared from a file, an
    error, a refusal.
 
 | | Labels stored | Typing and paste | Import |
@@ -69,13 +114,20 @@ table tab) was too heavy. The labels now live where groups live, and the grid is
 
 ```ts
 interface DashboardAnnotations {
-  version: 1;
-  dcId: string;
-  keyColumn: string;
-  columns: { id: string; name: string; values: Record<string, string> }[];
+  version: 2;
+  columns: {
+    id: string;
+    name: string;        // unique across tables
+    dcId: string;        // the metadata table
+    keyColumn: string;   // one of its links' source columns
+    values: Record<string, string>;
+  }[];
   activeColumnId: string | null;
 }
 ```
+
+Version 1 (one table per dashboard) was never merged; a stored version 1 document reads as
+absent and the next save replaces it. Caps count columns across all tables.
 
 The annotations are the source of truth. Groups are derived from them and are never edited back
 into them.
@@ -86,7 +138,7 @@ into them.
 - Changing a label or the active column replaces only the groups carrying an
   `annotationColumnId`. Groups made by lasso or table selection are left alone.
 - For the active column, one group per distinct non-empty label:
-  `{name: label, dcId, columnName: keyColumn, values: keys}`. A label keeps its colour and
+  `{name: label, dcId, columnName: keyColumn, values: keys}`, taken from that column. A label keeps its colour and
   `filterActive` across recomputation.
 - The server keeps at most `MAX_GROUPS` (24) groups in all, lasso and table groups included, and
   drops the rest without saying so (`sanitize_group_defs`). A column cannot be the active column
@@ -159,7 +211,9 @@ Keyed on the dashboard family's main tab, since annotations belong to the whole 
 
 ## Real writes
 
-- The **Edit table** tab mounts `TableEditor`, shown when `fetchTableEditStatus` answers `can_edit`.
+- Cell edits in the Metadata grid, enabled when `fetchTableEditStatus` answers `can_edit`. A
+  pipeline table answers `pipeline_table`, so on nf-core projects only N0 is offered, and the
+  menu says why.
 - **Save to table** builds a CSV of `key,label` in the browser and calls `mergeTableFile` with
   `mode: add_columns`: dry run, a confirmation showing the report, then apply. Server rules are
   unchanged (owners and editors, a table a user added, not published). A name that already exists
@@ -197,6 +251,8 @@ Keyed on the dashboard family's main tab, since annotations belong to the whole 
 - Carrying a temporary account's annotations over when it signs in.
 - The dashboard editor (`EditorApp`); the viewer only.
 - Excel and Parquet in the browser.
+- Tables produced by a join, or used as an input of one, and tables without a link.
+- Temporary comparison figures (N1), tracked in a follow-up issue.
 
 ## Delivery
 
@@ -208,5 +264,8 @@ One PR, stacked on the table editing work it reuses.
 - No CSV parser in the viewer; `papaparse` is reused from the workspace lock.
 - A live view re-renders through `triggerRefresh`.
 - `POST /data_version_status/{id}` already returns `delta_version`; no server change.
-- Annotate and Analysis are not shown at once: both are right-hand panels. Annotate shows the
-  derived groups and opens Analysis.
+- Metadata and Analysis are not shown at once: both are right-hand panels. Opening one closes
+  the other, and the second opens after the first has closed (280 ms), so the grid reflows once
+  per swing.
+- A dropped file is matched only against the selected table's label columns; a file column named
+  like another table's labels is skipped and reported.

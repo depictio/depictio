@@ -12,13 +12,23 @@ temporary account keeps its annotations in the browser.
 
 Read access is re-checked on every call, so a viewer who loses access to the
 dashboard can no longer read what they stored on it.
+
+Only a metadata table linked to the data can carry labels
+(``annotation_tables``): ``GET /{dashboard_id}/tables`` lists the project's
+tables with that verdict, and a save naming any other table, or a key column
+that is not one of its links' source columns, is refused with 422.
 """
 
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, Response
+from pydantic import ValidationError
 
 from depictio.api.v1.configs.config import settings
-from depictio.api.v1.db import dashboards_collection
+from depictio.api.v1.db import dashboards_collection, projects_collection
+from depictio.api.v1.endpoints.dashboards_endpoints.annotation_tables import (
+    annotatable_tables,
+    classify_tables,
+)
 from depictio.api.v1.endpoints.dashboards_endpoints.routes import check_project_permission
 from depictio.api.v1.endpoints.user_endpoints.routes import get_user_or_anonymous
 from depictio.models.models.base import PyObjectId
@@ -47,9 +57,18 @@ def _refuse_unstorable(user: User) -> None:
         )
 
 
-async def _family_id(dashboard_id: PyObjectId, user: User) -> ObjectId:
-    """The family main tab id. 404 if the dashboard is missing, 403 without read access."""
+async def _family(dashboard_id: PyObjectId, user: User) -> tuple[ObjectId, ObjectId]:
+    """``(family main tab id, project id)``. 404 if the dashboard is missing, 403
+    without read access."""
     _refuse_unstorable(user)
+    return await _readable_family(dashboard_id, user)
+
+
+async def _readable_project(dashboard_id: PyObjectId, user: User) -> ObjectId:
+    return (await _readable_family(dashboard_id, user))[1]
+
+
+async def _readable_family(dashboard_id: PyObjectId, user: User) -> tuple[ObjectId, ObjectId]:
     dashboard = dashboards_collection.find_one(
         {"dashboard_id": ObjectId(str(dashboard_id))},
         {"project_id": 1, "parent_dashboard_id": 1},
@@ -62,11 +81,56 @@ async def _family_id(dashboard_id: PyObjectId, user: User) -> ObjectId:
             status_code=403, detail="You don't have permission to view this dashboard."
         )
     parent = dashboard.get("parent_dashboard_id")
-    return ObjectId(str(parent)) if parent else ObjectId(str(dashboard_id))
+    family_id = ObjectId(str(parent)) if parent else ObjectId(str(dashboard_id))
+    return family_id, ObjectId(str(project_id))
+
+
+async def _family_id(dashboard_id: PyObjectId, user: User) -> ObjectId:
+    return (await _family(dashboard_id, user))[0]
+
+
+def _project(project_id: ObjectId) -> dict:
+    project = projects_collection.find_one(
+        {"_id": project_id}, {"workflows": 1, "links": 1, "joins": 1}
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found.")
+    return project
+
+
+def _check_tables(payload: DashboardAnnotationsPayload, project: dict) -> None:
+    """422 when a column names a table that cannot carry labels, or a key column
+    none of its links uses. Row counts are left to ``/tables``: a save only
+    checks the structure, so it reads no table."""
+    tables = {t["dc_id"]: t for t in classify_tables(project, lambda _dc_id: 0)}
+    for column in payload.columns:
+        table = tables.get(column.dc_id)
+        if table is None or not table["eligible"]:
+            reason = table["reason"] if table else "This table is not in the project."
+            raise HTTPException(status_code=422, detail=f"{column.name}: {reason}")
+        if column.key_column not in table["key_columns"]:
+            raise HTTPException(
+                status_code=422,
+                detail=f"{column.name}: {column.key_column} is not a key column of this table.",
+            )
 
 
 def _key(user: User, family_id: ObjectId) -> dict:
     return {"user_id": ObjectId(str(user.id)), "dashboard_id": family_id}
+
+
+@annotation_router.get("/{dashboard_id}/tables")
+async def get_annotation_tables(
+    dashboard_id: PyObjectId,
+    current_user: User = Depends(get_user_or_anonymous),
+) -> dict:
+    """The project's tables, each with whether labels can be put on it and why not.
+
+    Open to every reader of the dashboard, a temporary or anonymous one
+    included: they label in the browser, on the same tables.
+    """
+    project_id = await _readable_project(dashboard_id, current_user)
+    return {"tables": annotatable_tables(_project(project_id))}
 
 
 @annotation_router.get("/{dashboard_id}")
@@ -76,15 +140,20 @@ async def get_annotations(
 ) -> dict:
     """The caller's annotations on this dashboard. Absence is a normal answer."""
     family_id = await _family_id(dashboard_id, current_user)
-    doc = await DashboardAnnotationsBeanie.find_one(
-        DashboardAnnotationsBeanie.user_id == ObjectId(str(current_user.id)),
-        DashboardAnnotationsBeanie.dashboard_id == family_id,
+    raw = await DashboardAnnotationsBeanie.get_pymongo_collection().find_one(
+        _key(current_user, family_id)
     )
-    if not doc:
+    if not raw:
+        return dict(_EMPTY)
+    try:
+        annotations = DashboardAnnotationsPayload.model_validate(raw.get("annotations"))
+    except ValidationError:
+        # A document of an older shape (one table per dashboard, version 1)
+        # reads as absent; the next save replaces it.
         return dict(_EMPTY)
     return {
-        "annotations": doc.annotations.model_dump(by_alias=True),
-        "updated_at": doc.updated_at.isoformat(),
+        "annotations": annotations.model_dump(by_alias=True),
+        "updated_at": raw["updated_at"].isoformat(),
         "persisted": True,
     }
 
@@ -96,7 +165,8 @@ async def put_annotations(
     current_user: User = Depends(get_user_or_anonymous),
 ) -> dict:
     """Replace the caller's annotations (last write wins)."""
-    family_id = await _family_id(dashboard_id, current_user)
+    family_id, project_id = await _family(dashboard_id, current_user)
+    _check_tables(payload, _project(project_id))
     updated_at = utc_now_naive()
     # Race-safe upsert against the unique (user_id, dashboard_id) index: two
     # debounced tabs writing at once would break a find + save pair.

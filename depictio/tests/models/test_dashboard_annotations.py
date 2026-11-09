@@ -10,13 +10,24 @@ from depictio.models.models.dashboard_annotations import (
     DashboardAnnotationsPayload,
 )
 
+DC = "646b0f3c1e4a2d7f5c8e9a01"
+
+
+def _col(cid, name, values=None, **extra):
+    return {
+        "id": cid,
+        "name": name,
+        "dcId": DC,
+        "keyColumn": "sample",
+        "values": values or {},
+        **extra,
+    }
+
 
 def _payload(**overrides):
     body = {
-        "version": 1,
-        "dcId": "646b0f3c1e4a2d7f5c8e9a01",
-        "keyColumn": "sample",
-        "columns": [{"id": "c1", "name": "response", "values": {"S1": "responder"}}],
+        "version": 2,
+        "columns": [_col("c1", "response", {"S1": "responder"})],
         "activeColumnId": "c1",
     }
     body.update(overrides)
@@ -25,7 +36,7 @@ def _payload(**overrides):
 
 def test_round_trips_in_the_client_shape():
     model = DashboardAnnotationsPayload.model_validate(_payload())
-    assert model.key_column == "sample"
+    assert model.columns[0].key_column == "sample"
     assert model.model_dump(by_alias=True) == _payload()
 
 
@@ -35,14 +46,22 @@ def test_unknown_field_is_refused():
 
 
 def test_unknown_column_field_is_refused():
-    cols = [{"id": "c1", "name": "r", "values": {}, "color": "red"}]
+    cols = [_col("c1", "r", color="red")]
     with pytest.raises(ValidationError):
         DashboardAnnotationsPayload.model_validate(_payload(columns=cols))
 
 
-def test_only_version_one():
+def test_only_version_two():
     with pytest.raises(ValidationError):
-        DashboardAnnotationsPayload.model_validate(_payload(version=2))
+        DashboardAnnotationsPayload.model_validate(_payload(version=1))
+
+
+def test_a_column_names_its_table_and_key():
+    for missing in ("dcId", "keyColumn"):
+        col = _col("c1", "r")
+        del col[missing]
+        with pytest.raises(ValidationError):
+            DashboardAnnotationsPayload.model_validate(_payload(columns=[col]))
 
 
 def test_active_column_must_exist():
@@ -56,24 +75,22 @@ def test_no_active_column_is_fine():
 
 
 def test_column_ids_and_names_unique():
-    dup_id = [{"id": "c1", "name": "a", "values": {}}, {"id": "c1", "name": "b", "values": {}}]
-    dup_name = [{"id": "c1", "name": "a", "values": {}}, {"id": "c2", "name": "a", "values": {}}]
+    dup_id = [_col("c1", "a"), _col("c1", "b")]
+    dup_name = [_col("c1", "a"), _col("c2", "a")]
     for cols in (dup_id, dup_name):
         with pytest.raises(ValidationError):
             DashboardAnnotationsPayload.model_validate(_payload(columns=cols, activeColumnId=None))
 
 
 def test_column_cap():
-    cols = [
-        {"id": f"c{i}", "name": f"n{i}", "values": {}} for i in range(MAX_ANNOTATION_COLUMNS + 1)
-    ]
+    cols = [_col(f"c{i}", f"n{i}") for i in range(MAX_ANNOTATION_COLUMNS + 1)]
     with pytest.raises(ValidationError):
         DashboardAnnotationsPayload.model_validate(_payload(columns=cols, activeColumnId=None))
 
 
 def test_key_cap():
     values = {f"S{i}": "x" for i in range(MAX_ANNOTATION_KEYS + 1)}
-    cols = [{"id": "c1", "name": "r", "values": values}]
+    cols = [_col("c1", "r", values)]
     with pytest.raises(ValidationError):
         DashboardAnnotationsPayload.model_validate(_payload(columns=cols))
 
@@ -82,9 +99,9 @@ def test_label_cap_is_the_group_name_cap():
     from depictio.api.v1.services.figure.groups import MAX_NAME_LENGTH
 
     assert MAX_LABEL_LENGTH == MAX_NAME_LENGTH
-    ok = [{"id": "c1", "name": "r", "values": {"S1": "x" * MAX_LABEL_LENGTH}}]
+    ok = [_col("c1", "r", {"S1": "x" * MAX_LABEL_LENGTH})]
     DashboardAnnotationsPayload.model_validate(_payload(columns=ok))
-    long = [{"id": "c1", "name": "r", "values": {"S1": "x" * (MAX_LABEL_LENGTH + 1)}}]
+    long = [_col("c1", "r", {"S1": "x" * (MAX_LABEL_LENGTH + 1)})]
     with pytest.raises(ValidationError):
         DashboardAnnotationsPayload.model_validate(_payload(columns=long))
 
@@ -92,6 +109,6 @@ def test_label_cap_is_the_group_name_cap():
 def test_total_size_cap():
     # 20 columns x 10,000 keys of long keys and labels: within the per-field caps, over 1 MB.
     values = {f"{'k' * 40}{i}": "y" * MAX_LABEL_LENGTH for i in range(MAX_ANNOTATION_KEYS)}
-    cols = [{"id": "c1", "name": "r", "values": values}]
+    cols = [_col("c1", "r", values)]
     with pytest.raises(ValidationError, match="too large"):
         DashboardAnnotationsPayload.model_validate(_payload(columns=cols))

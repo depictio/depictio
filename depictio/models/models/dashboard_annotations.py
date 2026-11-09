@@ -1,7 +1,9 @@
 """Per-user session annotations on a dashboard.
 
-A viewer labels the rows of one table (``key_column`` -> label) to compare the
-resulting groups, without changing the table. The client derives selection
+A viewer labels the rows of a metadata table (key -> label) to compare the
+resulting groups, without changing the table. Each label column belongs to one
+table and its key column, so a samplesheet and a metadata sheet can both carry
+labels on the same dashboard. The client derives selection
 groups from these labels; the server only stores them, one document per
 (user, dashboard family main tab).
 
@@ -45,6 +47,8 @@ class _ClientShape(BaseModel):
 class AnnotationColumn(_ClientShape):
     id: str = Field(min_length=1, max_length=64)
     name: str = Field(min_length=1, max_length=MAX_LABEL_LENGTH)
+    dc_id: str = Field(min_length=1, max_length=64)
+    key_column: str = Field(min_length=1, max_length=1_000)
     values: dict[str, str] = Field(default_factory=dict)
 
     @field_validator("values")
@@ -63,9 +67,7 @@ class AnnotationColumn(_ClientShape):
 class DashboardAnnotationsPayload(_ClientShape):
     """Body of ``PUT /dashboards/annotations/{dashboard_id}``."""
 
-    version: Literal[1] = 1
-    dc_id: str = Field(min_length=1, max_length=64)
-    key_column: str = Field(min_length=1, max_length=1_000)
+    version: Literal[2] = 2
     columns: list[AnnotationColumn] = Field(default_factory=list)
     active_column_id: str | None = None
 

@@ -12,12 +12,10 @@ import type { SelectionGroup } from './selectionGroups';
 const PALETTE = ['#a', '#b', '#c', '#d'];
 
 const annotations = (values: Record<string, string>, active: string | null = 'c1'): DashboardAnnotations => ({
-  version: 1,
-  dcId: 'dc1',
-  keyColumn: 'sample',
+  version: 2,
   columns: [
-    { id: 'c1', name: 'response', values },
-    { id: 'c2', name: 'batch', values: { S1: 'b1', S2: 'b2' } },
+    { id: 'c1', name: 'response', dcId: 'dc1', keyColumn: 'sample', values },
+    { id: 'c2', name: 'batch', dcId: 'dc1', keyColumn: 'sample', values: { S1: 'b1', S2: 'b2' } },
   ],
   activeColumnId: active,
 });
@@ -34,6 +32,15 @@ const lasso: SelectionGroup = {
 };
 
 describe('deriveAnnotationGroups', () => {
+  it('keys groups on the compared column own table and key', () => {
+    const a: DashboardAnnotations = {
+      version: 2,
+      columns: [{ id: 'm', name: 'site', dcId: 'dc2', keyColumn: 'sample_id', values: { A: 'x' } }],
+      activeColumnId: 'm',
+    };
+    expect(deriveAnnotationGroups(a, [], PALETTE, 1)[0]).toMatchObject({ dcId: 'dc2', columnName: 'sample_id' });
+  });
+
   it('makes one group per distinct label, keyed on the key column', () => {
     const out = deriveAnnotationGroups(annotations({ S1: 'yes', S2: 'no', S3: 'yes' }), [], PALETTE, 5);
     expect(out.map((g) => [g.name, g.values, g.columnName, g.dcId])).toEqual([
@@ -88,6 +95,8 @@ describe('annotationColumnBudget', () => {
   const column = (n: number) => ({
     id: 'c1',
     name: 'r',
+    dcId: 'dc1',
+    keyColumn: 'sample',
     values: Object.fromEntries(Array.from({ length: n }, (_, i) => [`S${i}`, `L${i}`])),
   });
   it('counts the other groups against the 24 the server keeps', () => {
@@ -108,7 +117,7 @@ describe('annotationColumnBudget', () => {
 
 describe('helpers', () => {
   it('sorts labels naturally', () => {
-    expect(distinctLabels({ id: 'c', name: 'n', values: { a: 'L10', b: 'L2', c: 'L2' } })).toEqual(['L2', 'L10']);
+    expect(distinctLabels({ id: 'c', name: 'n', dcId: 'dc1', keyColumn: 'sample', values: { a: 'L10', b: 'L2', c: 'L2' } })).toEqual(['L2', 'L10']);
   });
   it('sameGroups compares content', () => {
     const a = deriveAnnotationGroups(annotations({ S1: 'yes' }), [], PALETTE, 1);

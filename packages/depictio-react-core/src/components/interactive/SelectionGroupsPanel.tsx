@@ -535,6 +535,9 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
                     <TextInput
                       size="xs"
                       label="Group name"
+                      // A label group is named after its label: rename the label in Metadata.
+                      disabled={Boolean(g.annotationColumnId)}
+                      description={g.annotationColumnId ? 'Rename the label in Metadata.' : undefined}
                       value={editName}
                       onChange={(e) => setEditName(e.currentTarget.value)}
                       onKeyDown={(e) => {
@@ -585,20 +588,33 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
                   <Icon icon="mdi:filter-variant" width={14} height={14} />
                 </ActionIcon>
               </Tooltip>
-              <ActionIcon
-                className="dc-ap-act dc-ap-act--danger"
-                variant="subtle"
-                color="gray"
-                size="sm"
-                ml={2}
-                aria-label={`Delete group ${g.name}`}
-                onClick={() => onDeleteGroup(g.id)}
-                style={{ flexShrink: 0 }}
-              >
-                <Icon icon="mdi:close" width={14} height={14} />
-              </ActionIcon>
+              {!g.annotationColumnId && (
+                <ActionIcon
+                  className="dc-ap-act dc-ap-act--danger"
+                  variant="subtle"
+                  color="gray"
+                  size="sm"
+                  ml={2}
+                  aria-label={`Delete group ${g.name}`}
+                  onClick={() => onDeleteGroup(g.id)}
+                  style={{ flexShrink: 0 }}
+                >
+                  <Icon icon="mdi:close" width={14} height={14} />
+                </ActionIcon>
+              )}
             </Group>
             <Text size="xs" c="dimmed" mt={4} truncate className="dc-ap-meta">
+              {g.annotationColumnId && (
+                <>
+                  <Icon
+                    icon="mdi:tag-outline"
+                    width={11}
+                    style={{ verticalAlign: 'middle', marginRight: 2 }}
+                    aria-hidden
+                  />
+                  {'label, '}
+                </>
+              )}
               on <Text span size="xs" fw={600} c="dimmed">{preview.columnName}</Text>
               {preview.datasetLabel && (
                 <>

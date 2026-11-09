@@ -13,8 +13,8 @@ import {
 } from './sessionAnnotations';
 
 const base = () => ({
-  ...emptyAnnotations('dc1', 'sample'),
-  columns: [{ id: 'c1', name: 'response', values: { S1: 'yes' } }],
+  ...emptyAnnotations(),
+  columns: [{ id: 'c1', name: 'response', dcId: 'dc1', keyColumn: 'sample', values: { S1: 'yes' } }],
   activeColumnId: 'c1',
 });
 
@@ -36,13 +36,14 @@ afterEach(() => {
 });
 
 describe('parseAnnotations', () => {
-  it('accepts version 1 and drops an active id that names nothing', () => {
+  it('accepts version 2 and drops an active id that names nothing', () => {
     expect(parseAnnotations(base())).toEqual(base());
     expect(parseAnnotations({ ...base(), activeColumnId: 'zz' })?.activeColumnId).toBeNull();
   });
   it('refuses other shapes', () => {
-    expect(parseAnnotations({ ...base(), version: 2 })).toBeNull();
-    expect(parseAnnotations({ ...base(), columns: [{ id: 'c1', name: 'r', values: { a: 1 } }] })).toBeNull();
+    expect(parseAnnotations({ ...base(), version: 1 })).toBeNull();
+    expect(parseAnnotations({ ...base(), columns: [{ id: 'c1', name: 'r', values: {} }] })).toBeNull();
+    expect(parseAnnotations({ ...base(), columns: [{ id: 'c1', name: 'r', dcId: 'dc1', keyColumn: 'sample', values: { a: 1 } }] })).toBeNull();
     expect(parseAnnotations(null)).toBeNull();
   });
 });
@@ -92,8 +93,8 @@ describe('account and browser halves', () => {
   const both = () => ({
     ...base(),
     columns: [
-      { id: 'c1', name: 'response', values: { S1: 'yes' } },
-      { id: 'c2', name: 'cohort', values: { S1: 'early' }, local: true as const },
+      { id: 'c1', name: 'response', dcId: 'dc1', keyColumn: 'sample', values: { S1: 'yes' } },
+      { id: 'c2', name: 'cohort', dcId: 'dc1', keyColumn: 'sample', values: { S1: 'early' }, local: true as const },
     ],
     activeColumnId: 'c2',
   });
@@ -119,9 +120,15 @@ describe('account and browser halves', () => {
     expect(mergeAccountAndLocal(account, local)?.activeColumnId).toBe('c1');
   });
 
-  it('drops a browser half made on another table or key', () => {
+  it('keeps browser labels of another table, drops a column whose name the account uses', () => {
     const { account, local } = splitForAccount(both());
-    expect(mergeAccountAndLocal(account, { ...local!, keyColumn: 'other' })).toEqual(account);
+    const other = { ...local!.columns[0], dcId: 'dc2', keyColumn: 'id' };
+    expect(mergeAccountAndLocal(account, { ...local!, columns: [other] })?.columns[1]).toMatchObject({
+      dcId: 'dc2',
+      local: true,
+    });
+    const clash = { ...local!.columns[0], id: 'c9', name: 'response' };
+    expect(mergeAccountAndLocal(account, { ...local!, columns: [clash] })?.columns).toHaveLength(1);
   });
 
   it('reads a browser half alone as local annotations', () => {

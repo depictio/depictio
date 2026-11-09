@@ -2,7 +2,7 @@
  * Selection groups derived from session annotations.
  *
  * For the active annotation, each distinct non-empty label becomes one group
- * `{name: label, dcId, columnName: keyColumn, values: keys}`, so the Analysis
+ * `{name: label, dcId: column.dcId, columnName: column.keyColumn, values: keys}`, so the Analysis
  * panel filters, colours and splits by it like any other group. Derived groups
  * carry `annotationColumnId`; recomputing replaces exactly those and leaves
  * groups made by lasso or table selection alone. A label keeps its colour and
@@ -87,8 +87,8 @@ export function deriveAnnotationGroups(
       id: prev?.id ?? `annotation:${column.id}:${label}`,
       name: uniqueGroupName(label, [...out, reserved]),
       color: prev?.color ?? nextGroupColor(out, palette),
-      dcId: annotations.dcId,
-      columnName: annotations.keyColumn,
+      dcId: column.dcId,
+      columnName: column.keyColumn,
       values,
       createdAt: prev?.createdAt ?? now,
       filterActive: prev?.filterActive ?? false,

@@ -2,6 +2,9 @@
  * Applying a dropped file to session annotations, with the three modes of the
  * table editor's file merge (`TableMergePanel`): add columns, fill missing,
  * replace. Pure: the panel shows `report` before the reader applies `next`.
+ * A drop applies to the labels of one table (`target`); labels of other
+ * tables are kept, and a file column named like one of them is left out
+ * (names are unique across tables).
  *
  * Every annotation a file writes into is marked `local`: its values came from
  * the file, so they stay in the browser until the reader keeps it on the account.
@@ -10,8 +13,10 @@
 import type { DropMatch } from './annotationInput';
 import {
   type AnnotationColumn,
+  type AnnotationTarget,
   type DashboardAnnotations,
   annotationsProblem,
+  columnsFor,
   newAnnotationId,
 } from './sessionAnnotations';
 
@@ -38,9 +43,10 @@ export interface AnnotationMergeReport {
 /** The mode a drop opens with: fill the annotations the file names when it names only those. */
 export function suggestedMergeMode(
   current: DashboardAnnotations,
+  target: AnnotationTarget,
   match: DropMatch,
 ): AnnotationMergeMode {
-  const names = new Set(current.columns.map((c) => c.name));
+  const names = new Set(columnsFor(current, target).map((c) => c.name));
   return match.annotations.length > 0 && match.annotations.every((a) => names.has(a.name))
     ? 'fill_missing'
     : 'add_columns';
@@ -48,6 +54,7 @@ export function suggestedMergeMode(
 
 export function planAnnotationMerge(
   current: DashboardAnnotations,
+  target: AnnotationTarget,
   match: DropMatch,
   mode: AnnotationMergeMode,
   makeId: () => string = newAnnotationId,
@@ -65,24 +72,37 @@ export function planAnnotationMerge(
   const fresh = (name: string, values: Record<string, string>): AnnotationColumn => ({
     id: makeId(),
     name,
+    dcId: target.dcId,
+    keyColumn: target.keyColumn,
     values: { ...values },
     local: true,
+  });
+  const mine = new Set(columnsFor(current, target).map((c) => c.id));
+  const otherNames = new Set(current.columns.filter((c) => !mine.has(c.id)).map((c) => c.name));
+  const fileColumns = match.annotations.filter((a) => {
+    if (!otherNames.has(a.name)) return true;
+    report.ignored.push({ name: a.name, reason: 'name used by labels of another table' });
+    return false;
   });
   let columns: AnnotationColumn[];
   let activeColumnId = current.activeColumnId;
 
   if (mode === 'replace') {
-    columns = match.annotations.map((a) => fresh(a.name, a.values));
-    report.newAnnotations = match.annotations.map((a) => a.name);
-    report.removedAnnotations = current.columns.map((c) => c.name);
-    report.labels = match.annotations.reduce((n, a) => n + Object.keys(a.values).length, 0);
-    // Keep comparing by the same name if the file brings it back.
-    const activeName = current.columns.find((c) => c.id === current.activeColumnId)?.name;
-    activeColumnId = columns.find((c) => c.name === activeName)?.id ?? null;
+    const replaced = current.columns.filter((c) => mine.has(c.id));
+    const added = fileColumns.map((a) => fresh(a.name, a.values));
+    columns = [...current.columns.filter((c) => !mine.has(c.id)), ...added];
+    report.newAnnotations = fileColumns.map((a) => a.name);
+    report.removedAnnotations = replaced.map((c) => c.name);
+    report.labels = fileColumns.reduce((n, a) => n + Object.keys(a.values).length, 0);
+    if (activeColumnId && mine.has(activeColumnId)) {
+      // Keep comparing by the same name if the file brings it back.
+      const activeName = replaced.find((c) => c.id === activeColumnId)?.name;
+      activeColumnId = added.find((c) => c.name === activeName)?.id ?? null;
+    }
   } else {
     columns = current.columns.map((c) => ({ ...c, values: { ...c.values } }));
-    for (const a of match.annotations) {
-      const existing = columns.find((c) => c.name === a.name);
+    for (const a of fileColumns) {
+      const existing = columns.find((c) => mine.has(c.id) && c.name === a.name);
       if (mode === 'add_columns') {
         if (existing) {
           report.ignored.push({ name: a.name, reason: 'already an annotation' });

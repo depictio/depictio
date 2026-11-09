@@ -37,6 +37,7 @@ const SHORT: Partial<Record<ChromeIconName, string>> = {
   filters: 'Filters',
   comments: 'Comments',
   analysis: 'Analysis',
+  metadata: 'Metadata',
   settings: 'Settings',
   add: 'Add',
   view: 'Exit edit',

@@ -342,6 +342,7 @@ export {
   SIDEBAR_TOGGLE_EVENT,
   FILTER_PANEL_TOGGLE_EVENT,
   ANALYSIS_PANEL_TOGGLE_EVENT,
+  METADATA_PANEL_TOGGLE_EVENT,
   INSPECTOR_TOGGLE_EVENT,
   dispatchPanelToggle,
   PANEL_RESIZE_END_EVENT,
@@ -920,6 +921,7 @@ export {
   emptyAnnotations,
   mergeAccountAndLocal,
   MAX_ANNOTATION_COLUMNS,
+  columnsFor,
   MAX_ANNOTATION_KEYS,
   MAX_ANNOTATION_ROWS,
   MAX_LABEL_LENGTH,
@@ -932,8 +934,14 @@ export {
   splitForAccount,
   writeBrowserAnnotations,
 } from './sessionAnnotations';
-export type { AnnotationColumn, BrowserRead, DashboardAnnotations } from './sessionAnnotations';
-export { fetchDashboardAnnotations, saveDashboardAnnotations } from './api';
+export type {
+  AnnotationColumn,
+  AnnotationTarget,
+  BrowserRead,
+  DashboardAnnotations,
+} from './sessionAnnotations';
+export { fetchAnnotationTables, fetchDashboardAnnotations, saveDashboardAnnotations } from './api';
+export type { AnnotationTable, AnnotationTablesLoad } from './api';
 export type { AnnotationsLoad, AnnotationsSave } from './api';
 export {
   annotationColumnBudget,

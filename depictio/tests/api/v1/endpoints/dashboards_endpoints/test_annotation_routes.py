@@ -17,6 +17,7 @@ from pymongo.asynchronous.database import AsyncDatabase
 from depictio.api.v1.endpoints.dashboards_endpoints import annotation_routes
 from depictio.api.v1.endpoints.dashboards_endpoints.annotation_routes import (
     delete_annotations,
+    get_annotation_tables,
     get_annotations,
     put_annotations,
 )
@@ -32,6 +33,8 @@ CHILD_ID = PyObjectId()
 FORBIDDEN_ID = PyObjectId()
 PROJECT_ID = ObjectId()
 FORBIDDEN_PROJECT_ID = ObjectId()
+SHEET_ID = "646b0f3c1e4a2d7f5c8e9a01"
+STATS_ID = "646b0f3c1e4a2d7f5c8e9a02"
 
 
 def beanie_setup(func):
@@ -63,6 +66,37 @@ class _FakeDashboards:
         return {"dashboard_id": query["dashboard_id"], **doc} if doc else None
 
 
+class _FakeProjects:
+    doc = {
+        "_id": PROJECT_ID,
+        "workflows": [
+            {
+                "name": "wf",
+                "data_collections": [
+                    {
+                        "_id": SHEET_ID,
+                        "data_collection_tag": "samplesheet",
+                        "config": {"type": "table"},
+                    },
+                    {
+                        "_id": STATS_ID,
+                        "data_collection_tag": "stats",
+                        "config": {"type": "table", "metatype": "Aggregate"},
+                    },
+                ],
+            }
+        ],
+        "links": [
+            {"source_dc_id": SHEET_ID, "source_column": "sample", "target_dc_id": STATS_ID},
+            {"source_dc_id": STATS_ID, "source_column": "sample", "target_dc_id": SHEET_ID},
+        ],
+        "joins": [],
+    }
+
+    def find_one(self, query, projection=None):
+        return self.doc if query.get("_id") == PROJECT_ID else None
+
+
 class _Settings:
     class auth:
         is_single_user_mode = False
@@ -71,6 +105,12 @@ class _Settings:
 @pytest.fixture(autouse=True)
 def environment(monkeypatch):
     monkeypatch.setattr(annotation_routes, "dashboards_collection", _FakeDashboards())
+    monkeypatch.setattr(annotation_routes, "projects_collection", _FakeProjects())
+    monkeypatch.setattr(
+        annotation_routes,
+        "annotatable_tables",
+        lambda project: annotation_routes.classify_tables(project, lambda _dc_id: 12),
+    )
     monkeypatch.setattr(
         annotation_routes,
         "check_project_permission",
@@ -86,13 +126,19 @@ def _user(email="alice@example.com", **kwargs) -> UserBase:
     return UserBase(id=PyObjectId(), email=email, **kwargs)
 
 
-def _payload(label="responder") -> DashboardAnnotationsPayload:
+def _payload(label="responder", dc_id=SHEET_ID, key="sample") -> DashboardAnnotationsPayload:
     return DashboardAnnotationsPayload.model_validate(
         {
-            "version": 1,
-            "dcId": "646b0f3c1e4a2d7f5c8e9a01",
-            "keyColumn": "sample",
-            "columns": [{"id": "c1", "name": "response", "values": {"S1": label}}],
+            "version": 2,
+            "columns": [
+                {
+                    "id": "c1",
+                    "name": "response",
+                    "dcId": dc_id,
+                    "keyColumn": key,
+                    "values": {"S1": label},
+                }
+            ],
             "activeColumnId": "c1",
         }
     )
@@ -111,7 +157,7 @@ class TestRoundTrip:
         assert put["persisted"] is True
         out = await get_annotations(MAIN_ID, user)
         assert out["persisted"] is True
-        assert out["annotations"]["keyColumn"] == "sample"
+        assert out["annotations"]["columns"][0]["keyColumn"] == "sample"
         assert out["annotations"]["columns"][0]["values"] == {"S1": "responder"}
 
     @beanie_setup
@@ -131,6 +177,61 @@ class TestRoundTrip:
         assert out["persisted"] is True
         doc = await DashboardAnnotationsBeanie.find_one()
         assert doc is not None and str(doc.dashboard_id) == str(MAIN_ID)
+
+    @beanie_setup
+    async def test_old_shape_reads_as_absent(self):
+        user = _user()
+        await DashboardAnnotationsBeanie.get_pymongo_collection().insert_one(
+            {
+                "user_id": ObjectId(str(user.id)),
+                "dashboard_id": ObjectId(str(MAIN_ID)),
+                "annotations": {"version": 1, "dc_id": SHEET_ID, "key_column": "s", "columns": []},
+                "updated_at": None,
+            }
+        )
+        out = await get_annotations(MAIN_ID, user)
+        assert out["persisted"] is False
+
+
+class TestTables:
+    @beanie_setup
+    async def test_lists_tables_with_their_verdict(self):
+        out = await get_annotation_tables(MAIN_ID, _user())
+        tables = {t["tag"]: t for t in out["tables"]}
+        assert tables["samplesheet"]["eligible"] is True
+        assert tables["samplesheet"]["key_columns"] == ["sample"]
+        assert tables["stats"]["code"] == "not_metadata"
+
+    @beanie_setup
+    async def test_open_to_a_temporary_account(self):
+        out = await get_annotation_tables(CHILD_ID, _user(is_temporary=True))
+        assert len(out["tables"]) == 2
+
+    @beanie_setup
+    async def test_needs_read_access(self):
+        with pytest.raises(HTTPException) as exc:
+            await get_annotation_tables(FORBIDDEN_ID, _user())
+        assert exc.value.status_code == 403
+
+    @beanie_setup
+    async def test_put_refuses_a_table_that_cannot_be_labelled(self):
+        with pytest.raises(HTTPException) as exc:
+            await put_annotations(MAIN_ID, _payload(dc_id=STATS_ID), _user())
+        assert exc.value.status_code == 422
+        assert "metadata table" in exc.value.detail
+
+    @beanie_setup
+    async def test_put_refuses_an_unknown_table(self):
+        with pytest.raises(HTTPException) as exc:
+            await put_annotations(MAIN_ID, _payload(dc_id="0" * 24), _user())
+        assert exc.value.status_code == 422
+
+    @beanie_setup
+    async def test_put_refuses_a_key_no_link_uses(self):
+        with pytest.raises(HTTPException) as exc:
+            await put_annotations(MAIN_ID, _payload(key="other"), _user())
+        assert exc.value.status_code == 422
+        assert await DashboardAnnotationsBeanie.find_all().count() == 0
 
 
 class TestOwnDocumentOnly:
@@ -231,3 +332,18 @@ def test_path_resolves_to_the_annotation_routes(method):
         app.dependency_overrides.pop(get_user_or_anonymous, None)
     assert resp.status_code == 403
     assert resp.json()["detail"] == "A temporary account keeps its annotations in the browser."
+
+
+def test_tables_path_resolves_to_the_annotation_routes():
+    from fastapi.testclient import TestClient
+
+    from depictio.api.main import app
+    from depictio.api.v1.endpoints.user_endpoints.routes import get_user_or_anonymous
+
+    app.dependency_overrides[get_user_or_anonymous] = lambda: _user(is_temporary=True)
+    try:
+        resp = TestClient(app).get(f"/depictio/api/v1/dashboards/annotations/{MAIN_ID}/tables")
+    finally:
+        app.dependency_overrides.pop(get_user_or_anonymous, None)
+    assert resp.status_code == 200
+    assert {t["tag"] for t in resp.json()["tables"]} == {"samplesheet", "stats"}

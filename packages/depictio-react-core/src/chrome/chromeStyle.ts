@@ -47,6 +47,7 @@ export type ChromeIconName =
   | 'feedback'
   | 'comments'
   | 'analysis'
+  | 'metadata'
   | 'filters'
   | 'reset'
   | 'more'
@@ -188,6 +189,7 @@ export const BASE_CHROME_ICONS: Record<ChromeIconName, string> = {
   feedback: 'mdi:comment-quote-outline',
   comments: 'mdi:comment-text-multiple-outline',
   analysis: 'mdi:select-group',
+  metadata: 'mdi:table-edit',
   filters: 'mdi:filter-variant',
   reset: 'mdi:filter-remove-outline',
   more: 'mdi:dots-vertical',

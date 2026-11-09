@@ -1,8 +1,11 @@
 /**
  * Session annotations on a dashboard.
  *
- * A reader labels the rows of one table, keyed on one of its columns, to
- * compare groups of samples without changing the data. The labels are the
+ * A reader labels the rows of a metadata table (a samplesheet or a metadata
+ * sheet linked to the data), keyed on a link's source column, to compare
+ * groups of samples without changing the data. Each label column belongs to
+ * one table, so several tables can carry labels on one dashboard. Which tables
+ * qualify is the server's call (`/dashboards/annotations/{id}/tables`). The labels are the
  * source of truth; the selection groups the Analysis panel shows are derived
  * from them (`annotationGroups.ts`) and never edited back.
  *
@@ -24,6 +27,9 @@ export const MAX_ANNOTATION_ROWS = 10_000;
 export interface AnnotationColumn {
   id: string;
   name: string;
+  /** The table it labels, and the key column of that table it is keyed on. */
+  dcId: string;
+  keyColumn: string;
   /** key value -> label. A key without a label is absent. */
   values: Record<string, string>;
   /** Kept in this browser only, even for an account that stores annotations:
@@ -33,15 +39,30 @@ export interface AnnotationColumn {
 }
 
 export interface DashboardAnnotations {
-  version: 1;
-  dcId: string;
-  keyColumn: string;
+  version: 2;
   columns: AnnotationColumn[];
+  /** The compared column, whichever table it labels. */
   activeColumnId: string | null;
 }
 
-export function emptyAnnotations(dcId: string, keyColumn: string): DashboardAnnotations {
-  return { version: 1, dcId, keyColumn, columns: [], activeColumnId: null };
+/** A table and key column labels are put on. */
+export interface AnnotationTarget {
+  dcId: string;
+  keyColumn: string;
+}
+
+export function emptyAnnotations(): DashboardAnnotations {
+  return { version: 2, columns: [], activeColumnId: null };
+}
+
+/** The columns labelling one table on one key. */
+export function columnsFor(
+  a: DashboardAnnotations | null,
+  target: AnnotationTarget,
+): AnnotationColumn[] {
+  return (a?.columns ?? []).filter(
+    (c) => c.dcId === target.dcId && c.keyColumn === target.keyColumn,
+  );
 }
 
 function isRecordOfStrings(v: unknown): v is Record<string, string> {
@@ -49,32 +70,30 @@ function isRecordOfStrings(v: unknown): v is Record<string, string> {
   return Object.values(v as Record<string, unknown>).every((x) => typeof x === 'string');
 }
 
-/** A stored or received value, or null when it is not annotations of version 1. */
+/** A stored or received value, or null when it is not annotations of version 2. */
 export function parseAnnotations(raw: unknown): DashboardAnnotations | null {
   if (typeof raw !== 'object' || raw === null) return null;
   const r = raw as Record<string, unknown>;
-  if (r.version !== 1 || typeof r.dcId !== 'string' || typeof r.keyColumn !== 'string') {
-    return null;
-  }
-  if (!Array.isArray(r.columns)) return null;
+  if (r.version !== 2 || !Array.isArray(r.columns)) return null;
   const columns: AnnotationColumn[] = [];
   for (const c of r.columns as unknown[]) {
     if (typeof c !== 'object' || c === null) return null;
     const col = c as Record<string, unknown>;
     if (typeof col.id !== 'string' || typeof col.name !== 'string') return null;
+    if (typeof col.dcId !== 'string' || typeof col.keyColumn !== 'string') return null;
     if (!isRecordOfStrings(col.values)) return null;
     columns.push({
       id: col.id,
       name: col.name,
+      dcId: col.dcId,
+      keyColumn: col.keyColumn,
       values: { ...col.values },
       ...(col.local === true ? { local: true as const } : {}),
     });
   }
   const active = typeof r.activeColumnId === 'string' ? r.activeColumnId : null;
   return {
-    version: 1,
-    dcId: r.dcId,
-    keyColumn: r.keyColumn,
+    version: 2,
     columns,
     activeColumnId: active && columns.some((c) => c.id === active) ? active : null,
   };
@@ -163,10 +182,10 @@ export function splitForAccount(a: DashboardAnnotations | null): {
 }
 
 /**
- * The account's annotations and the browser's, as one set. The browser half
- * is dropped when it was made on another table or key (it could not be shown
- * against this one). Its active annotation wins: it was picked more recently
- * than anything the account could have known about.
+ * The account's annotations and the browser's, as one set. A browser column
+ * whose id or name the account already uses is dropped (names are unique
+ * across tables). The browser's active annotation wins: it was picked more
+ * recently than anything the account could have known about.
  */
 export function mergeAccountAndLocal(
   account: DashboardAnnotations | null,
@@ -174,9 +193,7 @@ export function mergeAccountAndLocal(
 ): DashboardAnnotations | null {
   const localCols = (local?.columns ?? []).map((c) => ({ ...c, local: true as const }));
   if (!account) return local ? { ...local, columns: localCols } : null;
-  if (!local || local.dcId !== account.dcId || local.keyColumn !== account.keyColumn) {
-    return account;
-  }
+  if (!local) return account;
   const ids = new Set(account.columns.map((c) => c.id));
   const names = new Set(account.columns.map((c) => c.name));
   const extra = localCols.filter((c) => !ids.has(c.id) && !names.has(c.name));

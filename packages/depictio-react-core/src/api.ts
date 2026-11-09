@@ -4191,6 +4191,35 @@ export async function fetchDashboardAnnotations(dashboardId: string): Promise<An
   }
 }
 
+/** A project table, and whether a reader can put labels on it
+ *  (`GET /dashboards/annotations/{id}/tables`). */
+export interface AnnotationTable {
+  dc_id: string;
+  tag: string;
+  workflow_name: string | null;
+  /** The link source columns labels may be keyed on, first one by default. */
+  key_columns: string[];
+  row_count: number | null;
+  eligible: boolean;
+  code: string | null;
+  reason: string | null;
+}
+
+export type AnnotationTablesLoad =
+  | { ok: true; tables: AnnotationTable[] }
+  | { ok: false; status: number; detail: string | null };
+
+export async function fetchAnnotationTables(dashboardId: string): Promise<AnnotationTablesLoad> {
+  try {
+    const res = await authFetch(`${API_BASE}/dashboards/annotations/${dashboardId}/tables`);
+    if (!res.ok) return { ok: false, status: res.status, detail: await readErrorDetail(res) };
+    const body = (await res.json()) as { tables: AnnotationTable[] };
+    return { ok: true, tables: body.tables ?? [] };
+  } catch {
+    return { ok: false, status: 0, detail: null };
+  }
+}
+
 export type AnnotationsSave = { ok: true } | { ok: false; status: number; detail: string | null };
 
 export async function saveDashboardAnnotations(

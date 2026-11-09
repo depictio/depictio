@@ -1,39 +1,62 @@
 /**
- * Session labels: the Labels tab of the Analysis panel.
+ * Session labels: the Metadata panel.
  *
- * Against the seeded Penguins dashboard, whose table (`penguins_complete`) is
- * keyed by `individual_id`:
+ * Only a metadata table linked to the data carries labels. Against the seeded
+ * ampliseq dashboard, whose `samplesheet` (no metatype, keyed by `sampleID`)
+ * and `metadata` sheet both link to the data:
+ *   - the Metadata button opens a grid on a metadata table; Analysis keeps its
+ *     groups only (no tabs);
  *   - a reader adds a label column with "+", types labels, picks "Compare in
  *     the charts" in the column menu, and each label becomes an Analysis group;
  *   - a reload keeps the labels (account storage for a signed-in user);
- *   - a CSV dropped on the tab opens a preview, is read in the browser, and its
- *     labels stay there (no request carries them) until kept on the account;
+ *   - labels belong to their table: switching table shows that table's own;
+ *   - a CSV dropped on the panel opens a preview, is read in the browser, and
+ *     its labels stay there (no request carries them) until kept on the account;
  *   - "Save to table" in a column menu runs the add_columns merge;
  *   - a table cell edited in the grid is saved to the table from the bar below;
+ *   - the Penguins dashboard, whose tables are joined, has no Metadata button;
  *   - a temporary account (public mode only) keeps labels in the browser.
  *
- * The seeded table is a join, which no one may edit, so the write tests answer
- * as for a table a user added and stub the writes: the stack's data never changes.
- * Skips itself when the Penguins dashboard is not seeded.
+ * The write tests answer as for a table a user added and stub the writes, so
+ * the stack's data never changes (the ampliseq tables come from a pipeline,
+ * which no one may edit). Skips itself when the dashboard has no metadata
+ * table. `SESSION_LABELS_DASHBOARD` points the suite at another dashboard
+ * whose project has a linked metadata table (a stack without ampliseq); the
+ * first metadata table and its first key column are read from the server.
  */
 
 import { Page, Request, Route } from "@playwright/test";
 import { test, expect, API_URL, API_PREFIX, apiOnlyToken, getAuthMode } from "@fixtures/auth";
 
-const PENGUINS = "6824cb3b89d2b72169309738";
-const ANNOTATIONS_URL = `${API_URL}${API_PREFIX}/dashboards/annotations/${PENGUINS}`;
+const AMPLISEQ = "646b0f3c1e4a2d7f8e5b8ca2";
+const DASHBOARD = process.env.SESSION_LABELS_DASHBOARD || AMPLISEQ;
+/** Iris: one table and no link, so no metadata table to label. */
+const IRIS = "6824cb3b89d2b72169309737";
+const ANNOTATIONS_URL = `${API_URL}${API_PREFIX}/dashboards/annotations/${DASHBOARD}`;
+
+interface Sheet {
+  tag: string;
+  key_columns: string[];
+  row_count: number | null;
+}
+/** The dashboard's metadata tables, in the order the panel offers them. */
+let sheets: Sheet[] = [];
 
 type Api = Parameters<typeof apiOnlyToken>[0];
 
-/** Headers for API calls as the admin, or null when the dashboard is not seeded.
+/** Headers for API calls as the admin, or null when the dashboard has no
+ *  metadata table. Fills `sheets`.
  *  Single-user mode needs no token: every call is the one user's. */
 async function seeded(request: Api): Promise<Record<string, string> | null> {
   try {
     const headers: Record<string, string> = (await getAuthMode()).is_single_user_mode
       ? {}
       : { Authorization: `Bearer ${(await apiOnlyToken(request, "adminUser")).access_token}` };
-    const res = await request.get(`${API_URL}${API_PREFIX}/dashboards/get/${PENGUINS}`, { headers });
-    return res.ok() ? headers : null;
+    const res = await request.get(`${ANNOTATIONS_URL}/tables`, { headers });
+    if (!res.ok()) return null;
+    const body = (await res.json()) as { tables: (Sheet & { eligible: boolean })[] };
+    sheets = body.tables.filter((t) => t.eligible);
+    return sheets.length > 0 ? headers : null;
   } catch {
     return null;
   }
@@ -43,7 +66,7 @@ async function seeded(request: Api): Promise<Record<string, string> | null> {
  *  single-user mode the SPA holds the admin's token, while a call without one
  *  is the anonymous user's, so only the page reaches the document it wrote. */
 async function clearAnnotations(page: Page): Promise<void> {
-  if (!page.url().includes("/dashboard/")) await page.goto(`/dashboard/${PENGUINS}`);
+  if (!page.url().includes("/dashboard/")) await page.goto(`/dashboard/${DASHBOARD}`);
   const status = await page.evaluate(async (url) => {
     let token = "";
     try {
@@ -82,14 +105,38 @@ async function noWalkthrough(page: Page): Promise<void> {
 
 async function openPanel(page: Page): Promise<void> {
   await noWalkthrough(page);
-  await page.goto(`/dashboard/${PENGUINS}`);
-  const button = page.locator("[data-testid='analysis-button']");
+  await page.goto(`/dashboard/${DASHBOARD}`);
+  const button = page.locator("[data-testid='metadata-button']");
   await expect(button).toBeVisible({ timeout: 30_000 });
   await button.click();
-  await page.locator("[data-testid='analysis-tabs']").getByText("Labels", { exact: true }).click();
   await expect(page.locator("[data-testid='annotation-grid'] .ag-row").first()).toBeVisible({
     timeout: 30_000,
   });
+}
+
+/** Show the grid of the table tagged `tag` (the panel opens on the first one). */
+async function pickTable(page: Page, tag: string): Promise<void> {
+  await page.locator("[data-testid='annotation-table-select']").getByText(tag, { exact: true }).click();
+  await expect(page.locator("[data-testid='annotation-grid'] .ag-row").first()).toBeVisible({
+    timeout: 30_000,
+  });
+}
+
+/** The key of the grid row at `rowIndex` (a real sample id of the seeded table). */
+async function keyAt(page: Page, rowIndex: number): Promise<string> {
+  const cell = page.locator(
+    `[data-testid='annotation-grid'] .ag-pinned-left-cols-container [row-index='${rowIndex}'] [col-id='__key']`,
+  );
+  return ((await cell.textContent()) ?? "").trim();
+}
+
+/** A table column shown in the grid (after the key, the labels and "+"). */
+async function editableColumn(page: Page): Promise<string> {
+  const headers = page.locator("[data-testid='annotation-grid'] .ag-header-cell");
+  const ids = await headers.evaluateAll((els) => els.map((e) => e.getAttribute("col-id") ?? ""));
+  const id = ids.find((c) => c && c !== "__key" && c !== "__add" && !c.startsWith("ann:"));
+  expect(id, "no table column in the grid").toBeTruthy();
+  return id!;
 }
 
 async function addLabelColumn(page: Page, name: string): Promise<void> {
@@ -168,7 +215,7 @@ test.describe("Session labels", () => {
   test("labels become Analysis groups and survive a reload", async ({ page, request, loginAsAdmin }) => {
     test.setTimeout(120_000);
     const api = await seeded(request);
-    test.skip(!api, "Penguins dashboard not seeded on this stack");
+    test.skip(!api, "no metadata table on this dashboard");
     await signIn(loginAsAdmin);
     await noWalkthrough(page);
     await clearAnnotations(page);
@@ -188,10 +235,13 @@ test.describe("Session labels", () => {
     await saved;
     await expect(page.locator("[data-testid='label-compared']")).toHaveCount(1);
 
-    await page.locator("[data-testid='analysis-tabs']").getByText("Groups", { exact: true }).click();
+    // Analysis lists them, as groups only: the panels share the right edge.
+    await page.locator("[data-testid='analysis-button']").click();
+    await expect(page.locator("[data-testid='metadata-panel']")).toBeHidden();
     const analysis = page.getByRole("dialog", { name: /^Analysis/ });
     await expect(analysis).toContainText("responder");
     await expect(analysis).toContainText("non-responder");
+    await expect(page.locator("[data-testid='analysis-tabs']")).toHaveCount(0);
 
     // Account storage: a reload (a fresh read) brings them back.
     await openPanel(page);
@@ -204,18 +254,18 @@ test.describe("Session labels", () => {
   test("a dropped CSV stays in the browser until kept on the account", async ({ page, request, loginAsAdmin }) => {
     test.setTimeout(120_000);
     const api = await seeded(request);
-    test.skip(!api, "Penguins dashboard not seeded on this stack");
+    test.skip(!api, "no metadata table on this dashboard");
     await signIn(loginAsAdmin);
     await noWalkthrough(page);
     await clearAnnotations(page);
 
-    const csv = "individual_id,cohort_from_file\nadelie_1,early\nadelie_2,late\nnot_a_penguin,early\n";
     const sent: Request[] = [];
     page.on("request", (r) => {
       if (r.method() !== "GET") sent.push(r);
     });
 
     await openPanel(page);
+    const csv = `${sheets[0].key_columns[0]},cohort_from_file\n${await keyAt(page, 0)},early\n${await keyAt(page, 1)},late\nnot_a_sample,early\n`;
     await page.locator("[data-testid='annotation-drop-zone']").evaluate((zone, text) => {
       const dt = new DataTransfer();
       dt.items.add(new File([text], "cohorts.csv", { type: "text/csv" }));
@@ -226,7 +276,7 @@ test.describe("Session labels", () => {
     const preview = page.locator("[data-testid='annotation-drop-preview']");
     await expect(preview).toContainText("Read in your browser");
     await expect(preview).toContainText("2 rows");
-    await expect(preview).toContainText("not_a_penguin");
+    await expect(preview).toContainText("not_a_sample");
     await expect(preview).toContainText("New: cohort_from_file");
     await expect(page.locator("[data-testid='label-menu-cohort_from_file']")).toHaveCount(0);
     await page.locator("[data-testid='annotation-drop-apply']").click();
@@ -242,7 +292,7 @@ test.describe("Session labels", () => {
     }
     const stored = await page.evaluate(
       (id) => window.localStorage.getItem(`depictio.annotations.${id}`),
-      PENGUINS,
+      DASHBOARD,
     );
     expect(stored).toContain("cohort_from_file");
 
@@ -251,11 +301,12 @@ test.describe("Session labels", () => {
     await expect(page.locator("[data-testid='label-menu-cohort_from_file']")).toBeVisible();
 
     // Kept on the account only on the reader's explicit choice.
-    const kept = page.waitForRequest(
+    const kept = page.waitForResponse(
       (r) =>
         r.url().startsWith(ANNOTATIONS_URL) &&
-        r.method() === "PUT" &&
-        (r.postData() ?? "").includes("cohort_from_file"),
+        r.request().method() === "PUT" &&
+        (r.request().postData() ?? "").includes("cohort_from_file") &&
+        r.ok(),
     );
     await columnMenu(page, "cohort_from_file", "Keep on my account");
     await kept;
@@ -266,7 +317,7 @@ test.describe("Session labels", () => {
   test("Save to table merges a label column as a new column", async ({ page, request, loginAsAdmin }) => {
     test.setTimeout(120_000);
     const api = await seeded(request);
-    test.skip(!api, "Penguins dashboard not seeded on this stack");
+    test.skip(!api, "no metadata table on this dashboard");
     await signIn(loginAsAdmin);
     await noWalkthrough(page);
     await clearAnnotations(page);
@@ -282,12 +333,12 @@ test.describe("Session labels", () => {
           dry_run: field("dry_run") === "true",
           mode: "add_columns",
           suggested_mode: "add_columns",
-          key: "individual_id",
+          key: sheets[0].key_columns[0],
           key_candidates: [],
           delta_version: 7,
-          table_rows: 344,
+          table_rows: sheets[0].row_count,
           file_rows: 2,
-          row_count: 344,
+          row_count: sheets[0].row_count,
           matched_rows: 2,
           unmatched_file_rows: 0,
           unmatched_file_sample: [],
@@ -307,12 +358,13 @@ test.describe("Session labels", () => {
     });
 
     await openPanel(page);
+    const first = await keyAt(page, 0);
     await addLabelColumn(page, "status");
     await typeCell(page, "status", 0, "kept");
     await typeCell(page, "status", 1, "dropped");
 
     await columnMenu(page, "status", "Save to table");
-    await expect(page.locator("[data-testid='annotation-save-modal']")).toContainText("2 of 344 rows");
+    await expect(page.locator("[data-testid='annotation-save-modal']")).toContainText(`2 of ${sheets[0].row_count} rows`);
     await page.locator("[data-testid='annotation-save-apply']").click();
 
     await expect.poll(() => merges.length).toBe(2);
@@ -321,8 +373,8 @@ test.describe("Session labels", () => {
       ["add_columns", "false"],
     ]);
     expect(merges[1].body).toContain('name="base_version"\r\n\r\n7');
-    expect(merges[1].body).toContain("individual_id,status");
-    expect(merges[1].body).toContain("adelie_1,kept");
+    expect(merges[1].body).toContain(`${sheets[0].key_columns[0]},status`);
+    expect(merges[1].body).toContain(`${first},kept`);
     // The column is now the table's: it leaves the session.
     await expect(page.locator("[data-testid='label-menu-status']")).toHaveCount(0);
 
@@ -333,7 +385,7 @@ test.describe("Session labels", () => {
   test("a table cell edited in the grid is saved to the table", async ({ page, request, loginAsAdmin }) => {
     test.setTimeout(120_000);
     const api = await seeded(request);
-    test.skip(!api, "Penguins dashboard not seeded on this stack");
+    test.skip(!api, "no metadata table on this dashboard");
     await signIn(loginAsAdmin);
     await noWalkthrough(page);
     await clearAnnotations(page);
@@ -346,7 +398,8 @@ test.describe("Session labels", () => {
     });
 
     await openPanel(page);
-    await typeCell(page, "bill_length_mm", 0, "41.5");
+    const column = await editableColumn(page);
+    await typeCell(page, column, 0, "edited-value");
     const bar = page.locator("[data-testid='annotation-cell-bar']");
     await expect(bar).toContainText("1 change to the table");
 
@@ -354,10 +407,61 @@ test.describe("Session labels", () => {
     await page.locator("[data-testid='annotation-cell-save']").click();
     await expect.poll(() => patched).not.toBeNull();
     expect(patched!.base_version).toBe(7);
-    expect(patched!.edits).toEqual([{ row: 0, column: "bill_length_mm", value: "41.5" }]);
+    expect(patched!.edits).toEqual([{ row: 0, column, value: "edited-value" }]);
     // The table is read again after the write.
     await refreshed;
     await page.unrouteAll({ behavior: "ignoreErrors" });
+  });
+
+  test("labels belong to their table", async ({ page, request, loginAsAdmin }) => {
+    test.setTimeout(120_000);
+    const api = await seeded(request);
+    test.skip(!api, "no metadata table on this dashboard");
+    test.skip(sheets.length < 2, "this dashboard has a single metadata table");
+    const [first, second] = sheets.map((t) => t.tag);
+    await signIn(loginAsAdmin);
+    await noWalkthrough(page);
+    await clearAnnotations(page);
+
+    await openPanel(page);
+    await addLabelColumn(page, "on_sheet");
+    await pickTable(page, second);
+    await expect(page.locator("[data-testid='label-menu-on_sheet']")).toHaveCount(0);
+    // Waited for, so the cleanup below is not undone by a save still pending.
+    const saved = page.waitForResponse(
+      (r) =>
+        r.url().startsWith(ANNOTATIONS_URL) &&
+        r.request().method() === "PUT" &&
+        (r.request().postData() ?? "").includes("on_meta") &&
+        r.ok(),
+    );
+    await addLabelColumn(page, "on_meta");
+    await saved;
+    await pickTable(page, first);
+    await expect(page.locator("[data-testid='label-menu-on_sheet']")).toBeVisible();
+    await expect(page.locator("[data-testid='label-menu-on_meta']")).toHaveCount(0);
+    // Both are counted on the button.
+    await expect(page.locator("[data-testid='metadata-panel']")).toContainText("2 label columns");
+
+    await clearAnnotations(page);
+  });
+
+  test("a dashboard without a linked metadata table has no Metadata button", async ({
+    page,
+    loginAsAdmin,
+  }) => {
+    test.setTimeout(60_000);
+    await signIn(loginAsAdmin);
+    await noWalkthrough(page);
+    await page.goto(`/dashboard/${IRIS}`);
+    const analysis = page.locator("[data-testid='analysis-button']");
+    // `isVisible` does not wait; the dashboard takes a moment to render.
+    const seededIris = await analysis
+      .waitFor({ state: "visible", timeout: 30_000 })
+      .then(() => true)
+      .catch(() => false);
+    test.skip(!seededIris, "Iris dashboard not seeded on this stack");
+    await expect(page.locator("[data-testid='metadata-button']")).toHaveCount(0);
   });
 
   test("a temporary account keeps labels in the browser", async ({ page }) => {
@@ -367,12 +471,14 @@ test.describe("Session labels", () => {
 
     // Public mode hands the visitor a temporary account on arrival.
     await noWalkthrough(page);
-    await page.goto(`/dashboard/${PENGUINS}`);
-    const button = page.locator("[data-testid='analysis-button']");
-    const visible = await button.isVisible({ timeout: 30_000 }).catch(() => false);
-    test.skip(!visible, "the Penguins dashboard is not public on this stack");
+    await page.goto(`/dashboard/${DASHBOARD}`);
+    const button = page.locator("[data-testid='metadata-button']");
+    const visible = await button
+      .waitFor({ state: "visible", timeout: 30_000 })
+      .then(() => true)
+      .catch(() => false);
+    test.skip(!visible, "the dashboard is not public on this stack");
     await button.click();
-    await page.locator("[data-testid='analysis-tabs']").getByText("Labels", { exact: true }).click();
 
     await expect(page.locator("[data-testid='annotation-storage-note']")).toContainText("in this browser");
     await addLabelColumn(page, "mine");
@@ -380,7 +486,7 @@ test.describe("Session labels", () => {
 
     const stored = await page.evaluate(
       (id) => window.localStorage.getItem(`depictio.annotations.${id}`),
-      PENGUINS,
+      DASHBOARD,
     );
     expect(stored).toContain('"mine"');
   });

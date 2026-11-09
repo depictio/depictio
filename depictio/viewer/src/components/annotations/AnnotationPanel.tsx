@@ -28,6 +28,7 @@ import type { ColDef, GridApi, ValueSetterParams } from 'ag-grid-community';
 import {
   annotationColumnBudget,
   asKey,
+  columnsFor,
   emptyAnnotations,
   fetchDataCollectionPreview,
   fetchDataVersionStatus,
@@ -51,6 +52,8 @@ import {
 } from 'depictio-react-core';
 import type {
   AnnotationMergeMode,
+  AnnotationTable,
+  AnnotationTarget,
   DashboardAnnotations,
   DataPinFields,
   DataVersionCollectionStatus,
@@ -93,23 +96,11 @@ type Load =
   | { kind: 'ready'; table: TableRead }
   | { kind: 'refused'; message: string };
 
-/** Columns whose values are present and distinct on every row. */
-function uniqueColumns(read: TableRead): string[] {
-  return read.columns.filter((col) => {
-    const seen = new Set<string>();
-    for (const row of read.rows) {
-      const k = asKey(row[col]);
-      if (k === null || seen.has(k)) return false;
-      seen.add(k);
-    }
-    return read.rows.length > 0;
-  });
-}
-
-function tableLabel(entry: DataVersionCollectionStatus, all: DataVersionCollectionStatus[]): string {
-  const tag = entry.data_collection_tag || entry.dc_id;
-  const clash = all.filter((e) => e.data_collection_tag === entry.data_collection_tag).length > 1;
-  return clash && entry.workflow_tag ? `${entry.workflow_tag} / ${tag}` : tag;
+/** A table's name, with its workflow when another table has the same tag. */
+export function annotationTableLabel(entry: AnnotationTable, all: AnnotationTable[]): string {
+  const tag = entry.tag || entry.dc_id;
+  const clash = all.filter((e) => e.tag === entry.tag).length > 1;
+  return clash && entry.workflow_name ? `${entry.workflow_name} / ${tag}` : tag;
 }
 
 function csvCell(v: string): string {
@@ -141,6 +132,8 @@ const AddLabelHeader: React.FC<{ onAdd: () => void; disabled: boolean }> = ({ on
 export interface AnnotationPanelProps {
   /** The rendered tab: the data-version status call reads the whole family from it. */
   dashboardId: string;
+  /** The project's tables with whether each can carry labels (server rule). */
+  tables: AnnotationTable[];
   /** Data pins of a past-version view, or null on a live view. */
   pins: DataPinFields | null;
   state: DashboardAnnotationsState;
@@ -151,13 +144,16 @@ export interface AnnotationPanelProps {
 }
 
 /**
- * The Labels tab of the Analysis panel: one grid. Label columns hold session
- * labels (each label of the compared one is a group); the table's own columns
- * can be edited in place by whoever may write to the table, saved in one go
- * from the bar under the grid. Every column action is in its header menu.
+ * The Metadata panel: one grid per metadata table (a samplesheet or a
+ * metadata sheet linked to the data). Label columns hold session labels, each
+ * belonging to its table (each label of the compared one is a group in
+ * Analysis); the table's own columns can be edited in place by whoever may
+ * write to the table, saved in one go from the bar under the grid. Every
+ * column action is in its header menu.
  */
 const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
   dashboardId,
+  tables: allTables,
   pins,
   state,
   groups,
@@ -190,10 +186,7 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
     // pinsKey is the stable identity of pins.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dashboardId, pinsKey]);
-  const tables = useMemo(
-    () => (collections ?? []).filter((c) => (c.dc_type || '').toLowerCase() === 'table'),
-    [collections],
-  );
+  const tables = useMemo(() => allTables.filter((t) => t.eligible), [allTables]);
 
   // ---- Who may write, per table -------------------------------------------
   const statusCache = useRef(new Map<string, TableEditStatus | null>());
@@ -278,39 +271,25 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
   );
 
   // ---- Which table and key -------------------------------------------------
-  const [choice, setChoice] = useState<{ dcId: string; keyColumn: string } | null>(null);
+  // Labels belong to a table, so switching table loses nothing: each shows its own.
+  const [choice, setChoice] = useState<AnnotationTarget | null>(null);
   const [load, setLoad] = useState<Load>({ kind: 'idle' });
-  const [changing, setChanging] = useState(false);
 
-  // The stored annotations decide; otherwise the first table with a unique column.
+  // Opens on the table of the compared labels, else the first metadata table.
   useEffect(() => {
-    if (!collections || choice) return;
-    if (annotations) {
-      setChoice({ dcId: annotations.dcId, keyColumn: annotations.keyColumn });
-      return;
-    }
-    let cancelled = false;
-    (async () => {
-      for (const t of tables) {
-        const l = await readTable(t.dc_id);
-        if (cancelled) return;
-        if (l.kind === 'ready') {
-          const unique = uniqueColumns(l.table);
-          if (unique.length > 0) {
-            setChoice({ dcId: t.dc_id, keyColumn: unique[0] });
-            return;
-          }
-        }
-      }
-      if (!cancelled && tables[0]) setChoice({ dcId: tables[0].dc_id, keyColumn: '' });
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [collections, tables, annotations, choice, readTable]);
+    if (choice || tables.length === 0) return;
+    const active = annotations?.columns.find((c) => c.id === annotations.activeColumnId);
+    const anyCol = active ?? annotations?.columns[0];
+    const entry = tables.find((t) => t.dc_id === anyCol?.dcId) ?? tables[0];
+    const keyColumn =
+      anyCol && anyCol.dcId === entry.dc_id && entry.key_columns.includes(anyCol.keyColumn)
+        ? anyCol.keyColumn
+        : entry.key_columns[0];
+    if (keyColumn) setChoice({ dcId: entry.dc_id, keyColumn });
+  }, [tables, annotations, choice]);
 
   useEffect(() => {
-    if (!choice) return;
+    if (!choice || !collections) return;
     let cancelled = false;
     setLoad({ kind: 'loading' });
     void readTable(choice.dcId).then((l) => {
@@ -319,48 +298,28 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [choice, readTable]);
+  }, [choice, collections, readTable]);
 
   const table = load.kind === 'ready' ? load.table : null;
   const keyColumn = choice?.keyColumn ?? '';
-  const keyOptions = useMemo(() => (table ? uniqueColumns(table) : []), [table]);
-  const currentLabel = (() => {
-    const entry = tables.find((t) => t.dc_id === choice?.dcId);
-    return entry ? tableLabel(entry, tables) : (choice?.dcId ?? '');
-  })();
-
-  // Labels of another table or key would be lost by a switch: ask first.
-  const [pendingChoice, setPendingChoice] = useState<{ dcId: string; keyColumn: string } | null>(null);
-  const requestChoice = (next: { dcId: string; keyColumn: string }) => {
-    const bound = annotations && annotations.columns.length > 0;
-    if (bound && (annotations.dcId !== next.dcId || annotations.keyColumn !== next.keyColumn)) {
-      setPendingChoice(next);
-    } else {
-      setChoice(next);
-    }
-  };
-  const confirmSwitch = () => {
-    if (!pendingChoice) return;
-    setAnnotations(null);
-    setChoice(pendingChoice);
-    setPendingChoice(null);
-  };
-  const onTableChange = async (dcId: string | null) => {
-    if (!dcId) return;
-    const l = await readTable(dcId);
-    const unique = l.kind === 'ready' ? uniqueColumns(l.table) : [];
-    requestChoice({ dcId, keyColumn: unique[0] ?? '' });
+  const chosenEntry = tables.find((t) => t.dc_id === choice?.dcId) ?? null;
+  const keyOptions = chosenEntry?.key_columns ?? [];
+  const onTableChange = (dcId: string) => {
+    const entry = tables.find((t) => t.dc_id === dcId);
+    if (!entry || !entry.key_columns[0]) return;
+    // Back on a table: its labels' key if it has some, else the first link's.
+    const own = annotations?.columns.find((c) => c.dcId === dcId);
+    setChoice({ dcId, keyColumn: own?.keyColumn ?? entry.key_columns[0] });
   };
 
-  // The annotations bound to what is on screen (created on first edit).
+  // What is on screen: the labels of this table on this key. Edits apply to
+  // the whole set (`ensureBound`), which keeps the labels of other tables.
   const bound: DashboardAnnotations | null =
-    choice && keyColumn
-      ? annotations && annotations.dcId === choice.dcId && annotations.keyColumn === keyColumn
-        ? annotations
-        : null
+    choice && keyColumn && annotations
+      ? { ...annotations, columns: columnsFor(annotations, choice) }
       : null;
   const ensureBound = (): DashboardAnnotations | null =>
-    bound ?? (choice && keyColumn ? emptyAnnotations(choice.dcId, keyColumn) : null);
+    choice && keyColumn ? (annotations ?? emptyAnnotations()) : null;
 
   // ---- Writing to the table: who, and unsaved cells -------------------------
   const writeBlocked: string | null = pinned
@@ -472,22 +431,29 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
       return;
     }
     if (others.some((c) => c.name === name) || name === keyColumn || contextColumns.includes(name)) {
-      setNaming({ ...naming, error: `"${name}" is already a column here.` });
+      setNaming({
+        ...naming,
+        error: others.some((c) => c.name === name && c.dcId !== choice?.dcId)
+          ? `"${name}" already names labels of another table.`
+          : `"${name}" is already a column here.`,
+      });
       return;
     }
     if (naming.id) {
       commit({ ...base, columns: base.columns.map((c) => (c.id === naming.id ? { ...c, name } : c)) });
     } else {
-      commit({ ...base, columns: [...base.columns, { id: newAnnotationId(), name, values: {} }] });
+      const column = { id: newAnnotationId(), name, dcId: choice!.dcId, keyColumn, values: {} };
+      commit({ ...base, columns: [...base.columns, column] });
     }
     setNaming(null);
   };
 
   const keepOnAccount = (id: string) => {
-    if (!bound) return;
+    const base = ensureBound();
+    if (!base) return;
     commit({
-      ...bound,
-      columns: bound.columns.map((c) => {
+      ...base,
+      columns: base.columns.map((c) => {
         if (c.id !== id) return c;
         const { local: _local, ...shared } = c;
         return shared;
@@ -495,16 +461,18 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
     });
   };
   const removeLabelColumn = (id: string) => {
-    if (!bound) return;
+    const base = ensureBound();
+    if (!base) return;
     commit({
-      ...bound,
-      columns: bound.columns.filter((c) => c.id !== id),
-      activeColumnId: bound.activeColumnId === id ? null : bound.activeColumnId,
+      ...base,
+      columns: base.columns.filter((c) => c.id !== id),
+      activeColumnId: base.activeColumnId === id ? null : base.activeColumnId,
     });
   };
   const toggleCompare = (id: string) => {
-    if (!bound) return;
-    commit({ ...bound, activeColumnId: bound.activeColumnId === id ? null : id });
+    const base = ensureBound();
+    if (!base) return;
+    commit({ ...base, activeColumnId: base.activeColumnId === id ? null : id });
   };
 
   // ---- Paste ------------------------------------------------------------------
@@ -695,7 +663,7 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
       file,
       destination: 'labels',
       match,
-      mode: 'error' in match ? 'add_columns' : suggestedMergeMode(base, match),
+      mode: 'error' in match || !choice ? 'add_columns' : suggestedMergeMode(base, choice, match),
       tableReport: null,
       tableBusy: false,
       tableApplying: false,
@@ -704,8 +672,8 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
   };
   const labelsPlan = useMemo(() => {
     const base = ensureBound();
-    return importing && base && !('error' in importing.match)
-      ? planAnnotationMerge(base, importing.match, importing.mode)
+    return importing && base && choice && !('error' in importing.match)
+      ? planAnnotationMerge(base, choice, importing.match, importing.mode)
       : null;
     // ensureBound reads bound and choice.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -874,7 +842,8 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
         ? 'This browser keeps nothing: your labels last until you leave the page.'
         : 'Labels are kept in this browser. Sign in to keep them on your account.'
       : null;
-  const activeLocal = bound?.columns.some((c) => c.local && c.id === bound.activeColumnId);
+  const activeLocal = annotations?.columns.some((c) => c.local && c.id === annotations.activeColumnId);
+  const otherTables = allTables.filter((t) => !t.eligible);
 
   if (collectionsError) {
     return (
@@ -884,8 +853,12 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
     );
   }
   if (!collections) return <Loader size="sm" />;
-  if (tables.length === 0 && !annotations) {
-    return <Text size="sm">This dashboard reads no table to label.</Text>;
+  if (tables.length === 0) {
+    return (
+      <Text size="sm" data-testid="annotation-no-table">
+        This project has no metadata table linked to the data, so there is nothing to label.
+      </Text>
+    );
   }
 
   return (
@@ -917,24 +890,67 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
       )}
 
       <Group justify="space-between" gap="xs" wrap="nowrap">
-        <Group gap={6} wrap="nowrap" style={{ minWidth: 0 }}>
-          <Text size="sm" fw={500} truncate data-testid="annotation-context">
-            {currentLabel}
-            {keyColumn && (
-              <Text span c="dimmed">
-                {' '}
-                · {keyColumn}
+        <Group gap="xs" wrap="nowrap" style={{ minWidth: 0 }}>
+          {tables.length > 1 ? (
+            <SegmentedControl
+              size="xs"
+              data={tables.map((t) => ({ value: t.dc_id, label: annotationTableLabel(t, tables) }))}
+              value={choice?.dcId ?? ''}
+              onChange={onTableChange}
+              data-testid="annotation-table-select"
+            />
+          ) : (
+            <Text size="sm" fw={500} truncate data-testid="annotation-context">
+              {chosenEntry ? annotationTableLabel(chosenEntry, tables) : ''}
+            </Text>
+          )}
+          {keyOptions.length > 1 ? (
+            <Select
+              size="xs"
+              w={160}
+              aria-label="Key column"
+              data={keyOptions}
+              value={keyColumn || null}
+              onChange={(v) => v && choice && setChoice({ dcId: choice.dcId, keyColumn: v })}
+              allowDeselect={false}
+              data-testid="annotation-key-select"
+            />
+          ) : (
+            <Tooltip withinPortal label="Labels are keyed on this column, the one the table links by">
+              <Text size="sm" c="dimmed" truncate data-testid="annotation-key">
+                by {keyColumn}
               </Text>
-            )}
-          </Text>
-          <Anchor
-            component="button"
-            size="sm"
-            onClick={() => setChanging((v) => !v)}
-            data-testid="annotation-change"
-          >
-            {changing ? 'Done' : 'Change'}
-          </Anchor>
+            </Tooltip>
+          )}
+          {otherTables.length > 0 && (
+            <Tooltip
+              withinPortal
+              multiline
+              w={320}
+              label={
+                <Stack gap={2}>
+                  <Text size="xs" fw={600}>
+                    Not labelled here
+                  </Text>
+                  {otherTables.map((t) => (
+                    <Text size="xs" key={t.dc_id}>
+                      {annotationTableLabel(t, allTables)}: {t.reason}
+                    </Text>
+                  ))}
+                </Stack>
+              }
+            >
+              <ActionIcon
+                size="xs"
+                variant="subtle"
+                color="gray"
+                aria-label="Why other tables are not listed"
+                data-testid="annotation-other-tables"
+              >
+                <Icon icon="mdi:information-outline" width={14} />
+              </ActionIcon>
+            </Tooltip>
+          )}
         </Group>
         <FileButton
           onChange={(f) => f && void openImport(f)}
@@ -955,53 +971,6 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
           )}
         </FileButton>
       </Group>
-
-      {changing && (
-        <Group gap="sm" wrap="wrap">
-          <Select
-            size="xs"
-            w={240}
-            aria-label="Table"
-            data={tables.map((t) => ({ value: t.dc_id, label: tableLabel(t, tables) }))}
-            value={choice?.dcId ?? null}
-            onChange={(v) => void onTableChange(v)}
-            allowDeselect={false}
-            data-testid="annotation-table-select"
-          />
-          <Select
-            size="xs"
-            w={200}
-            aria-label="Key column"
-            data={keyOptions}
-            value={keyColumn || null}
-            onChange={(v) => v && choice && requestChoice({ dcId: choice.dcId, keyColumn: v })}
-            allowDeselect={false}
-            disabled={!table}
-            placeholder={table && keyOptions.length === 0 ? 'No column is unique per row' : undefined}
-            data-testid="annotation-key-select"
-          />
-        </Group>
-      )}
-
-      {pendingChoice && (
-        <Alert color="orange" py={6}>
-          <Group justify="space-between" gap="xs">
-            <Text size="sm">
-              Your {annotations?.columns.length} label column
-              {annotations?.columns.length === 1 ? '' : 's'} belong to another table or key and would
-              be discarded.
-            </Text>
-            <Group gap="xs">
-              <Button size="xs" color="orange" onClick={confirmSwitch}>
-                Discard and switch
-              </Button>
-              <Button size="xs" variant="default" onClick={() => setPendingChoice(null)}>
-                Keep
-              </Button>
-            </Group>
-          </Group>
-        </Alert>
-      )}
 
       {storageNote && (
         <Text size="xs" c="dimmed" data-testid="annotation-storage-note">
@@ -1041,9 +1010,6 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
         <Alert color="orange" data-testid="annotation-refused">
           {load.message}
         </Alert>
-      )}
-      {table && !keyColumn && (
-        <Text size="sm">This table has no column unique per row to label rows by.</Text>
       )}
       {table && keyColumn && (
         <>
