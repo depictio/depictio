@@ -7,6 +7,12 @@ from pydantic import BaseModel
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import db, projects_collection
+from depictio.api.v1.endpoints.datacollections_endpoints.table_edit import (
+    CellEditsRequest,
+    apply_cell_edits,
+    read_table_for_edit,
+    table_edit_status,
+)
 from depictio.api.v1.endpoints.datacollections_endpoints.utils import (
     _check_multiqc_uniformity_from_uploads,
     _create_dc_from_upload,
@@ -350,6 +356,89 @@ async def clear_table_dc(
     return await asyncio.to_thread(
         clear_table_data,
         data_collection_id=data_collection_id,
+        current_user=current_user,
+    )
+
+
+@datacollections_endpoint_router.get("/{data_collection_id}/edit_status")
+async def table_edit_status_route(
+    data_collection_id: str,
+    current_user=Depends(get_user_or_anonymous),
+):
+    """Whether this Table DC is one a user added (editable) and whether the caller may edit it.
+
+    Reads Mongo only. ``code``/``reason`` say why a table is read-only (a pipeline
+    table, a URL table, ...), for the disabled state of the edit control.
+    """
+    return await asyncio.to_thread(table_edit_status, data_collection_id, current_user)
+
+
+@datacollections_endpoint_router.get("/{data_collection_id}/edit_data")
+async def table_edit_data_route(
+    data_collection_id: str,
+    current_user=Depends(get_current_user),
+):
+    """The whole table plus the Delta version it was read at (owners/editors only)."""
+    return await asyncio.to_thread(read_table_for_edit, data_collection_id, current_user)
+
+
+@datacollections_endpoint_router.patch("/{data_collection_id}/cells")
+async def patch_table_cells(
+    data_collection_id: str,
+    body: CellEditsRequest,
+    current_user=Depends(get_current_user),
+):
+    """Edit cells of a table a user added, writing one new Delta version.
+
+    Body: ``{"base_version": <delta_version read>, "edits": [{"row", "column",
+    "value"}]}``. 403 for a viewer or a pipeline table, 409 when the project is
+    published or the table moved past ``base_version``, 422 (naming row and
+    column) when a value does not fit its column, 413 above the row limit.
+    """
+    return await asyncio.to_thread(apply_cell_edits, data_collection_id, body, current_user)
+
+
+@datacollections_endpoint_router.post("/{data_collection_id}/merge_file")
+async def merge_table_file_route(
+    data_collection_id: str,
+    file: UploadFile = File(...),
+    mode: str = Form("auto"),
+    key: str | None = Form(None),
+    base_version: int | None = Form(None),
+    dry_run: bool = Form(True),
+    current_user=Depends(get_current_user),
+):
+    """Preview or apply a file on a table a user added.
+
+    ``mode``: ``replace``, ``fill_missing``, ``add_columns`` or ``auto``. Rows are
+    matched on ``key``, or the best shared column when omitted. ``dry_run`` writes
+    nothing and answers with the resulting rows. 403 for a viewer or a pipeline
+    table, 409 when published or past ``base_version``, 422 (with a ``code``) for
+    a file or key that cannot be used, 413 above the row limit.
+    """
+    from depictio.api.v1.endpoints.datacollections_endpoints import table_edit, table_manage
+    from depictio.api.v1.endpoints.datacollections_endpoints.table_merge import merge_table_file
+
+    # Before the bytes come into memory: anyone signed in can reach this route.
+    await asyncio.to_thread(table_edit._require_editable, data_collection_id, current_user)
+    if file.size is not None and file.size > table_manage._MAX_PER_FILE_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail={
+                "code": "file_too_large",
+                "message": f"{file.filename}: this file is too large to update a table from.",
+            },
+        )
+    content = await file.read()
+    return await asyncio.to_thread(
+        merge_table_file,
+        data_collection_id=data_collection_id,
+        content=content,
+        filename=file.filename or "upload.csv",
+        mode=mode,
+        key=key,
+        base_version=base_version,
+        dry_run=dry_run,
         current_user=current_user,
     )
 

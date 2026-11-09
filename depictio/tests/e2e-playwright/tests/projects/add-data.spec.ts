@@ -44,13 +44,13 @@ async function shapeProject(page: Page, pipeline: boolean): Promise<void> {
   });
 }
 
-async function openMenu(page: Page): Promise<void> {
+async function openModal(page: Page): Promise<void> {
   const button = page.getByTestId("add-data-btn").first();
   await expect(button).toBeEnabled({ timeout: 20_000 });
   await button.click();
 }
 
-test.describe("Add data menu", () => {
+test.describe("Add data", () => {
   test.beforeEach(async ({ page, request }) => {
     const { is_public_mode } = await getAuthMode();
     test.skip(is_public_mode, "Adding data needs a project owner account.");
@@ -58,55 +58,15 @@ test.describe("Add data menu", () => {
     await setRunFolderFlags(page, { local: false, remote: false });
   });
 
-  test("lists Files, folder and Add a run on a pipeline project", async ({ page }) => {
-    await shapeProject(page, true);
-    await page.goto(PROJECT_URL);
-    await openMenu(page);
-    await expect(page.getByTestId("add-data-files")).toBeVisible();
-    await expect(page.getByTestId("add-data-folder")).toBeVisible();
-    await expect(page.getByTestId("add-data-multiqc")).toBeVisible();
-    await expect(page.getByTestId("add-data-run")).toBeVisible();
-    await expect(page.getByTestId("add-data-run")).toContainText("nf-core/rnaseq");
-  });
-
-  test("does not offer Add a run when the project's run folder is on S3", async ({ page }) => {
-    await shapeProject(page, true);
-    await page.route("**/projects/get/from_id**", async (route: Route) => {
-      const response = await route.fetch();
-      const body = (await response.json()) as { project: Record<string, unknown> };
-      body.project = {
-        ...body.project,
-        template_origin: {
-          template_id: "nf-core/rnaseq/3.14.0",
-          template_version: "3.14.0",
-          data_root: "s3://lab-bucket/rnaseq/run_01/",
-        },
-      };
-      await route.fulfill({ response, json: body });
-    });
-    await page.goto(PROJECT_URL);
-    await openMenu(page);
-    await expect(page.getByTestId("add-data-folder")).toBeVisible();
-    await expect(page.getByTestId("add-data-run")).toHaveCount(0);
-  });
-
-  test("lists only Files and folder on a tables project", async ({ page }) => {
+  test("offers files and a folder on one screen, whatever the project", async ({ page }) => {
     await shapeProject(page, false);
     await page.goto(PROJECT_URL);
-    await openMenu(page);
-    await expect(page.getByTestId("add-data-files")).toBeVisible();
-    await expect(page.getByTestId("add-data-folder")).toBeVisible();
-    await expect(page.getByTestId("add-data-run")).toHaveCount(0);
-  });
-
-  test("Files opens the multi-file dialog", async ({ page }) => {
-    await shapeProject(page, false);
-    await page.goto(PROJECT_URL);
-    await openMenu(page);
-    await page.getByTestId("add-data-files").click();
-    await expect(page.getByTestId("files-modal")).toBeVisible();
+    await openModal(page);
     await expect(page.getByTestId("files-dropzone")).toBeVisible();
-    await expect(page.getByTestId("files-modal-submit")).toHaveAttribute("aria-disabled", "true");
+    await expect(page.getByTestId("add-data-location-input")).toBeVisible();
+    await expect(page.getByTestId("add-data-multiqc")).toBeVisible();
+    await expect(page.getByTestId("add-data-submit")).toHaveAttribute("aria-disabled", "true");
+    await expect(page.getByTestId("add-data-reason")).toContainText("Drop files");
   });
 
   test("folder dialog disables tables already in the project and keeps results until Done", async ({ page }) => {
@@ -140,15 +100,14 @@ test.describe("Add data menu", () => {
       });
     });
     await page.goto(PROJECT_URL);
-    await openMenu(page);
-    await page.getByTestId("add-data-folder").click();
-    await page.getByTestId("folder-tables-location-input").fill(FOLDER);
+    await openModal(page);
+    await page.getByTestId("add-data-location-input").fill(FOLDER);
     await expect(page.getByTestId("folder-tables-file-samples.csv")).toBeDisabled({ timeout: 10_000 });
-    await expect(page.getByTestId("add-tables-submit")).toHaveText("Add 1 table");
-    await page.getByTestId("add-tables-submit").click();
+    await expect(page.getByTestId("add-data-submit")).toHaveText("Add 1 table");
+    await page.getByTestId("add-data-submit").click();
     await expect(page.getByTestId("folder-tables-results")).toBeVisible();
-    await page.getByTestId("folder-tables-done").click();
-    await expect(page.getByTestId("folder-tables-modal")).toHaveCount(0);
+    await page.getByTestId("add-data-done").click();
+    await expect(page.getByTestId("add-data-modal")).toHaveCount(0);
   });
 
   test("folder dialog lists the files and sends the ticked paths", async ({ page }) => {
@@ -189,19 +148,18 @@ test.describe("Add data menu", () => {
     });
 
     await page.goto(PROJECT_URL);
-    await openMenu(page);
-    await page.getByTestId("add-data-folder").click();
-    await page.getByTestId("folder-tables-location-input").fill(FOLDER);
+    await openModal(page);
+    await page.getByTestId("add-data-location-input").fill(FOLDER);
 
     const samples = page.getByTestId("folder-tables-file-samples.csv");
     await expect(samples).toBeVisible({ timeout: 10_000 });
     await expect(page.getByTestId("folder-tables-file-notes.txt")).toBeDisabled();
-    await expect(page.getByTestId("add-tables-submit")).toHaveText("Add 2 tables");
+    await expect(page.getByTestId("add-data-submit")).toHaveText("Add 2 tables");
 
     // Untick one table: the button follows and only the other path is sent.
     await samples.uncheck();
-    await expect(page.getByTestId("add-tables-submit")).toHaveText("Add 1 table");
-    await page.getByTestId("add-tables-submit").click();
+    await expect(page.getByTestId("add-data-submit")).toHaveText("Add 1 table");
+    await page.getByTestId("add-data-submit").click();
 
     await expect(page.getByTestId("folder-tables-result-measurements.tsv")).toHaveAttribute(
       "data-status",
@@ -217,18 +175,23 @@ test.describe("Add data menu", () => {
     await page.route("**/projects/*/attach_run", (route: Route) =>
       route.fulfill({ status: 422, json: { detail: message, code: "cannot_attach" } }),
     );
+    // Not a run, and no table to offer instead: the refusal is the answer.
+    await page.route("**/projects/*/add_tables_from_folder", (route: Route) =>
+      route.fulfill({
+        json: { location: "s3://lab-bucket/rnaseq/run_13/", source: "s3", truncated: false, created: [], dry_run: true, files: [] },
+      }),
+    );
 
     await page.goto(PROJECT_URL);
-    await openMenu(page);
-    await page.getByTestId("add-data-run").click();
-    await page.getByTestId("attach-run-location-input").fill("s3://lab-bucket/rnaseq/run_13/");
+    await openModal(page);
+    await page.getByTestId("add-data-location-input").fill("s3://lab-bucket/rnaseq/run_13/");
 
     await expect(page.getByTestId("attach-run-refusal")).toContainText(message, { timeout: 10_000 });
     await expect(page.getByTestId("attach-run-refusal")).toHaveAttribute("data-code", "cannot_attach");
     // Shown once: the alert carries the message, not the line under the button.
-    await expect(page.getByTestId("attach-run-reason")).toHaveCount(0);
+    await expect(page.getByTestId("add-data-reason")).toHaveCount(0);
     await expect(page.getByTestId("use-own-credentials")).toBeVisible();
     await expect(page.getByTestId("run-private-bucket-toggle")).toHaveCount(0);
-    await expect(page.getByTestId("attach-run-submit")).toHaveAttribute("aria-disabled", "true");
+    await expect(page.getByTestId("add-data-submit")).toHaveAttribute("aria-disabled", "true");
   });
 });

@@ -8,7 +8,7 @@
  * S3 bucket nor a folder on the runner's disk.
  */
 
-import { Page, Route } from "@playwright/test";
+import { expect, Page, Route } from "@playwright/test";
 
 export const AMPLISEQ = "Ampliseq Microbial Community Analysis";
 
@@ -206,7 +206,7 @@ export async function stubFolderRoute(
 export async function openRunTab(page: Page): Promise<void> {
   await page.goto("/projects");
   await page.locator("[data-tour-id='projects-create']").click();
-  await page.getByTestId("create-source-folder").click();
+  await expect(page.getByTestId("run-data-root-input")).toBeVisible();
 }
 
 /** Same entry point as `openRunTab`; kept for the specs that name the door. */

@@ -1,0 +1,43 @@
+/* Pending and refused cells of the table editor. Mantine's theme variables, so
+ * the highlights follow the colour scheme and the primary theme. */
+.dc-table-editor .ag-cell.dc-cell-edited {
+  background-color: var(--mantine-color-yellow-light);
+  font-weight: 600;
+}
+
+.dc-table-editor .ag-cell.dc-cell-error {
+  background-color: var(--mantine-color-red-light);
+  box-shadow: inset 0 0 0 1px var(--mantine-color-red-filled);
+}
+
+/* What a dropped file would change, before it is applied. */
+.dc-table-editor .ag-cell.dc-cell-merged {
+  background-color: var(--mantine-color-teal-light);
+  font-weight: 600;
+}
+
+.dc-table-editor .ag-cell.dc-cell-new {
+  background-color: var(--mantine-color-blue-light);
+}
+
+.dc-table-editor .ag-header-cell.dc-col-new {
+  background-color: var(--mantine-color-blue-light);
+}
+
+.dc-table-editor {
+  position: relative;
+}
+
+.dc-table-drop-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  background-color: var(--mantine-color-body);
+  border: 2px dashed var(--mantine-primary-color-filled);
+  border-radius: var(--mantine-radius-md);
+  opacity: 0.92;
+}
