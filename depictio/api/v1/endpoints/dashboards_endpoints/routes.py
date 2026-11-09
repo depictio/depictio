@@ -1110,6 +1110,10 @@ async def save_dashboard(
     # Read-time only too: the lock lives on the project, and a save must never
     # write one (or clear one) onto the dashboard.
     save_payload.pop("published_lock", None)
+    # Written only by the shared-labels route: the editor round-trips the
+    # whole document, so saving it here would undo labels shared since the
+    # editor loaded the dashboard.
+    save_payload.pop("shared_labels", None)
 
     # `creation_time` is write-once: the client round-trips the whole dashboard
     # document, so trusting its payload would let a save clobber (or invent) the

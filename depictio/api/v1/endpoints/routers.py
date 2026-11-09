@@ -23,6 +23,9 @@ from depictio.api.v1.endpoints.comments_endpoints.routes import comments_endpoin
 from depictio.api.v1.endpoints.dashboards_endpoints.annotation_routes import annotation_router
 from depictio.api.v1.endpoints.dashboards_endpoints.filter_state_routes import filter_state_router
 from depictio.api.v1.endpoints.dashboards_endpoints.routes import dashboards_endpoint_router
+from depictio.api.v1.endpoints.dashboards_endpoints.shared_labels_routes import (
+    shared_labels_router,
+)
 from depictio.api.v1.endpoints.dashboards_endpoints.versions_routes import (
     dashboard_versions_endpoint_router,
 )
@@ -159,6 +162,14 @@ router.include_router(
 # Same reasoning: no dashboards route has a literal `annotations` segment.
 router.include_router(
     annotation_router,
+    prefix="/dashboards/annotations",
+    tags=["Dashboards"],
+)
+
+# Shares the prefix; its only route, `PUT /{id}/shared`, has a literal segment
+# the per-viewer routes never use.
+router.include_router(
+    shared_labels_router,
     prefix="/dashboards/annotations",
     tags=["Dashboards"],
 )

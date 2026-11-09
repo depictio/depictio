@@ -235,6 +235,8 @@ def build_tab_snapshots(family_docs: list[dict[str, Any]]) -> list[TabSnapshot]:
                 advanced_viz_controls=doc.get("advanced_viz_controls") or "popover",
                 autofit=doc.get("autofit") is not False,
                 brand_theme=_jsonify(doc.get("brand_theme")) or None,
+                # Read from the main tab for the whole family, as the viewer does.
+                shared_labels=_jsonify(doc.get("shared_labels") or []) if is_main_tab else [],
                 source_key=doc.get("source_key"),
             )
         )

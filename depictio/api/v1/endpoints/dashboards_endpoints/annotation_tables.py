@@ -61,7 +61,9 @@ def _join_refs(project: dict[str, Any]) -> tuple[set[str], list[tuple[str, str |
     return results, inputs
 
 
-def _is_join_input(tag: str, workflow_name: str | None, inputs: list[tuple[str, str | None]]) -> bool:
+def _is_join_input(
+    tag: str, workflow_name: str | None, inputs: list[tuple[str, str | None]]
+) -> bool:
     for ref, join_workflow in inputs:
         if "." in ref:
             if workflow_name and ref == f"{workflow_name}.{tag}":

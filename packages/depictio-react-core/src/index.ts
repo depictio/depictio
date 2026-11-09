@@ -926,22 +926,31 @@ export {
   MAX_ANNOTATION_ROWS,
   MAX_LABEL_LENGTH,
   MAX_SERVER_GROUPS,
+  copyName,
   newAnnotationId,
   normaliseLabel,
   parseAnnotations,
+  parseSharedColumns,
   readBrowserAnnotations,
   setLabel,
   splitForAccount,
+  withShared,
   writeBrowserAnnotations,
 } from './sessionAnnotations';
+export { buildMetadataSheet, metadataSheetName } from './metadataSheet';
 export type {
   AnnotationColumn,
   AnnotationTarget,
   BrowserRead,
   DashboardAnnotations,
 } from './sessionAnnotations';
-export { fetchAnnotationTables, fetchDashboardAnnotations, saveDashboardAnnotations } from './api';
-export type { AnnotationTable, AnnotationTablesLoad } from './api';
+export {
+  fetchAnnotationTables,
+  fetchDashboardAnnotations,
+  saveDashboardAnnotations,
+  saveSharedLabels,
+} from './api';
+export type { AnnotationTable, AnnotationTablesLoad, SharedLabelsSave } from './api';
 export type { AnnotationsLoad, AnnotationsSave } from './api';
 export {
   annotationColumnBudget,

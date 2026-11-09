@@ -14,17 +14,19 @@ from fastapi import HTTPException
 from mongomock_motor import AsyncMongoMockClient
 from pymongo.asynchronous.database import AsyncDatabase
 
-from depictio.api.v1.endpoints.dashboards_endpoints import annotation_routes
+from depictio.api.v1.endpoints.dashboards_endpoints import annotation_routes, shared_labels_routes
 from depictio.api.v1.endpoints.dashboards_endpoints.annotation_routes import (
     delete_annotations,
     get_annotation_tables,
     get_annotations,
     put_annotations,
 )
+from depictio.api.v1.endpoints.dashboards_endpoints.shared_labels_routes import put_shared_labels
 from depictio.models.models.base import PyObjectId
 from depictio.models.models.dashboard_annotations import (
     DashboardAnnotationsBeanie,
     DashboardAnnotationsPayload,
+    SharedLabelsPayload,
 )
 from depictio.models.models.users import UserBase
 
@@ -64,6 +66,9 @@ class _FakeDashboards:
     def find_one(self, query, projection=None):
         doc = self.docs.get(query.get("dashboard_id"))
         return {"dashboard_id": query["dashboard_id"], **doc} if doc else None
+
+    def update_one(self, query, update):
+        self.docs[query["dashboard_id"]].update(update["$set"])
 
 
 class _FakeProjects:
@@ -119,7 +124,47 @@ def environment(monkeypatch):
     settings = _Settings()
     settings.auth.is_single_user_mode = False
     monkeypatch.setattr(annotation_routes, "settings", settings)
+    dashboards = annotation_routes.dashboards_collection
+    monkeypatch.setattr(shared_labels_routes, "dashboards_collection", dashboards)
+    monkeypatch.setattr(shared_labels_routes, "settings", settings)
+    # Who may change the dashboard: an editor (EDITORS) or a document owner.
+    EDITORS.clear()
+    LOCKED.clear()
+    VERSIONS.clear()
+    monkeypatch.setattr(
+        shared_labels_routes,
+        "check_dashboard_mutation_permission",
+        lambda doc, user, level: user.email in EDITORS,
+    )
+    monkeypatch.setattr(
+        shared_labels_routes,
+        "dashboard_lock",
+        lambda doc: {"locked": True} if doc["dashboard_id"] in LOCKED else None,
+    )
+
+    def assert_unlocked(doc):
+        if doc["dashboard_id"] in LOCKED:
+            raise HTTPException(status_code=409, detail="locked")
+
+    monkeypatch.setattr(shared_labels_routes, "assert_dashboard_unlocked", assert_unlocked)
+    monkeypatch.setattr(
+        shared_labels_routes,
+        "_ensure_baseline_quietly",
+        lambda dashboard_id, user: VERSIONS.append(("baseline", str(dashboard_id))),
+    )
+    monkeypatch.setattr(
+        shared_labels_routes,
+        "_capture_version_quietly",
+        lambda dashboard_id, user, kind="auto": VERSIONS.append(
+            (f"capture:{kind}", str(dashboard_id))
+        ),
+    )
     return settings
+
+
+EDITORS: set[str] = set()
+LOCKED: set[ObjectId] = set()
+VERSIONS: list[tuple[str, str]] = []
 
 
 def _user(email="alice@example.com", **kwargs) -> UserBase:
@@ -196,7 +241,7 @@ class TestRoundTrip:
 class TestTables:
     @beanie_setup
     async def test_lists_tables_with_their_verdict(self):
-        out = await get_annotation_tables(MAIN_ID, _user())
+        out = await get_annotation_tables(MAIN_ID, None, _user())
         tables = {t["tag"]: t for t in out["tables"]}
         assert tables["samplesheet"]["eligible"] is True
         assert tables["samplesheet"]["key_columns"] == ["sample"]
@@ -204,13 +249,13 @@ class TestTables:
 
     @beanie_setup
     async def test_open_to_a_temporary_account(self):
-        out = await get_annotation_tables(CHILD_ID, _user(is_temporary=True))
+        out = await get_annotation_tables(CHILD_ID, None, _user(is_temporary=True))
         assert len(out["tables"]) == 2
 
     @beanie_setup
     async def test_needs_read_access(self):
         with pytest.raises(HTTPException) as exc:
-            await get_annotation_tables(FORBIDDEN_ID, _user())
+            await get_annotation_tables(FORBIDDEN_ID, None, _user())
         assert exc.value.status_code == 403
 
     @beanie_setup
@@ -347,3 +392,129 @@ def test_tables_path_resolves_to_the_annotation_routes():
         app.dependency_overrides.pop(get_user_or_anonymous, None)
     assert resp.status_code == 200
     assert {t["tag"] for t in resp.json()["tables"]} == {"samplesheet", "stats"}
+
+
+def _shared(name="response", dc_id=SHEET_ID, key="sample") -> SharedLabelsPayload:
+    return SharedLabelsPayload.model_validate(
+        {
+            "columns": [
+                {"id": "s1", "name": name, "dcId": dc_id, "keyColumn": key, "values": {"S1": "a"}}
+            ]
+        }
+    )
+
+
+class TestSharedLabels:
+    @beanie_setup
+    async def test_editor_shares_on_the_main_tab_and_a_version_is_recorded(self):
+        EDITORS.add("alice@example.com")
+        out = await put_shared_labels(CHILD_ID, _shared(), _user())
+        assert out["shared"][0]["dcId"] == SHEET_ID
+        main = annotation_routes.dashboards_collection.docs[ObjectId(str(MAIN_ID))]
+        assert main["shared_labels"][0]["key_column"] == "sample"
+        # Sharing a column is a step of its own in the timeline.
+        assert VERSIONS == [("baseline", str(MAIN_ID)), ("capture:explicit", str(MAIN_ID))]
+
+    @beanie_setup
+    async def test_an_edit_of_shared_labels_folds_into_the_autosave(self):
+        EDITORS.add("alice@example.com")
+        await put_shared_labels(MAIN_ID, _shared(), _user())
+        edited = _shared()
+        edited.columns[0].values = {"S1": "b"}
+        VERSIONS.clear()
+        await put_shared_labels(MAIN_ID, edited, _user())
+        assert VERSIONS == [("baseline", str(MAIN_ID)), ("capture:auto", str(MAIN_ID))]
+        VERSIONS.clear()
+        await put_shared_labels(MAIN_ID, SharedLabelsPayload(columns=[]), _user())
+        assert VERSIONS == [("baseline", str(MAIN_ID)), ("capture:explicit", str(MAIN_ID))]
+
+    @beanie_setup
+    async def test_every_reader_sees_them_with_whether_they_may_share(self):
+        EDITORS.add("alice@example.com")
+        await put_shared_labels(MAIN_ID, _shared(), _user())
+        editor = await get_annotation_tables(CHILD_ID, None, _user())
+        reader = await get_annotation_tables(CHILD_ID, None, _user("bob@example.com"))
+        temporary = await get_annotation_tables(MAIN_ID, None, _user(is_temporary=True))
+        assert editor["can_share"] is True
+        assert reader["can_share"] is False
+        assert [c["name"] for c in reader["shared"]] == ["response"]
+        assert temporary["shared"] == reader["shared"]
+
+    @beanie_setup
+    async def test_a_reader_cannot_share(self):
+        with pytest.raises(HTTPException) as exc:
+            await put_shared_labels(MAIN_ID, _shared(), _user("bob@example.com"))
+        assert exc.value.status_code == 403
+        assert VERSIONS == []
+
+    @beanie_setup
+    async def test_anonymous_cannot_share_outside_single_user_mode(self):
+        EDITORS.add("anon@example.com")
+        with pytest.raises(HTTPException) as exc:
+            await put_shared_labels(
+                MAIN_ID, _shared(), _user("anon@example.com", is_anonymous=True)
+            )
+        assert exc.value.status_code == 403
+
+    @beanie_setup
+    async def test_locked_dashboard_is_refused(self):
+        EDITORS.add("alice@example.com")
+        LOCKED.add(ObjectId(str(MAIN_ID)))
+        with pytest.raises(HTTPException) as exc:
+            await put_shared_labels(MAIN_ID, _shared(), _user())
+        assert exc.value.status_code == 409
+        tables = await get_annotation_tables(MAIN_ID, None, _user())
+        assert tables["can_share"] is False
+
+    @beanie_setup
+    async def test_a_table_that_cannot_be_labelled_is_refused(self):
+        EDITORS.add("alice@example.com")
+        with pytest.raises(HTTPException) as exc:
+            await put_shared_labels(MAIN_ID, _shared(dc_id=STATS_ID), _user())
+        assert exc.value.status_code == 422
+
+    @beanie_setup
+    async def test_restored_object_ids_read_back_as_strings(self):
+        main = annotation_routes.dashboards_collection.docs[ObjectId(str(MAIN_ID))]
+        main["shared_labels"] = [
+            {
+                "id": "s1",
+                "name": "r",
+                "dc_id": ObjectId(SHEET_ID),
+                "key_column": "sample",
+                "values": {"S1": "a"},
+            },
+            {"id": "broken"},
+        ]
+        out = await get_annotation_tables(MAIN_ID, None, _user())
+        assert out["shared"] == [
+            {
+                "id": "s1",
+                "name": "r",
+                "dcId": SHEET_ID,
+                "keyColumn": "sample",
+                "values": {"S1": "a"},
+            }
+        ]
+
+    @beanie_setup
+    async def test_a_version_shows_the_labels_it_held_read_only(self, monkeypatch):
+        from depictio.api.v1.endpoints.dashboards_endpoints import version_store
+
+        EDITORS.add("alice@example.com")
+        record = {
+            "family_id": str(MAIN_ID),
+            "tabs": [
+                {"is_main_tab": True, "shared_labels": _shared("then").model_dump()["columns"]}
+            ],
+        }
+        monkeypatch.setattr(
+            version_store, "get_version", lambda vid: record if vid == "v1" else None
+        )
+        out = await get_annotation_tables(CHILD_ID, "v1", _user())
+        assert [c["name"] for c in out["shared"]] == ["then"]
+        assert out["can_share"] is False
+        record["family_id"] = "other"
+        with pytest.raises(HTTPException) as exc:
+            await get_annotation_tables(CHILD_ID, "v1", _user())
+        assert exc.value.status_code == 404

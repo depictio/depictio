@@ -64,7 +64,9 @@ def test_join_result_and_join_input_are_refused():
 
 
 def test_join_result_named_by_the_join_is_refused():
-    project = _project(joins=[{"name": "j", "left_dc": "x", "right_dc": "y", "result_dc_id": SHEET}])
+    project = _project(
+        joins=[{"name": "j", "left_dc": "x", "right_dc": "y", "result_dc_id": SHEET}]
+    )
     assert _by_tag(project)["samplesheet"]["code"] == "derived_table"
 
 

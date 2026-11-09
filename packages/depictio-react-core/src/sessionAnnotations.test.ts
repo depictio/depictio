@@ -8,7 +8,10 @@ import {
   parseAnnotations,
   readBrowserAnnotations,
   setLabel,
+  copyName,
+  parseSharedColumns,
   splitForAccount,
+  withShared,
   writeBrowserAnnotations,
 } from './sessionAnnotations';
 
@@ -36,9 +39,9 @@ afterEach(() => {
 });
 
 describe('parseAnnotations', () => {
-  it('accepts version 2 and drops an active id that names nothing', () => {
+  it('accepts version 2 and keeps an active id it cannot resolve (a shared column)', () => {
     expect(parseAnnotations(base())).toEqual(base());
-    expect(parseAnnotations({ ...base(), activeColumnId: 'zz' })?.activeColumnId).toBeNull();
+    expect(parseAnnotations({ ...base(), activeColumnId: 'zz' })?.activeColumnId).toBe('zz');
   });
   it('refuses other shapes', () => {
     expect(parseAnnotations({ ...base(), version: 1 })).toBeNull();
@@ -78,7 +81,7 @@ describe('browser storage', () => {
     expect(writeBrowserAnnotations('d1', base())).toBe(true);
     expect(store.data.has('depictio.annotations.d1')).toBe(true);
     expect(readBrowserAnnotations('d1')).toEqual({ ok: true, value: base() });
-    writeBrowserAnnotations('d1', { ...base(), columns: [] });
+    writeBrowserAnnotations('d1', { ...base(), columns: [], activeColumnId: null });
     expect(readBrowserAnnotations('d1')).toEqual({ ok: true, value: null });
   });
   it('treats unreadable stored text as nothing stored, not as a failure', () => {
@@ -139,5 +142,51 @@ describe('account and browser halves', () => {
 
   it('round-trips the local flag through parsing', () => {
     expect(parseAnnotations(both())?.columns[1].local).toBe(true);
+  });
+});
+
+describe('shared labels', () => {
+  const shared = parseSharedColumns([
+    { id: 's1', name: 'cohort', dcId: 'dc1', keyColumn: 'sample', values: { S1: 'A' } },
+  ]);
+
+  it('reads the server shape and marks the columns shared', () => {
+    expect(shared).toHaveLength(1);
+    expect(shared[0].shared).toBe(true);
+    expect(parseSharedColumns('nope')).toEqual([]);
+  });
+
+  it('shows shared columns first, then the reader\'s own', () => {
+    const view = withShared(base(), shared)!;
+    expect(view.columns.map((c) => c.id)).toEqual(['s1', 'c1']);
+    expect(view.activeColumnId).toBe('c1');
+  });
+
+  it('lets a reader compare by a shared column, and keeps that choice stored', () => {
+    const personal = { ...base(), activeColumnId: 's1' };
+    expect(withShared(personal, shared)!.activeColumnId).toBe('s1');
+    // The choice survives a round trip through storage and the account split.
+    expect(parseAnnotations(JSON.parse(JSON.stringify(personal)))!.activeColumnId).toBe('s1');
+    expect(splitForAccount(personal).account!.activeColumnId).toBe('s1');
+    const none = { ...emptyAnnotations(), activeColumnId: 's1' };
+    expect(splitForAccount(none).account).toEqual(none);
+  });
+
+  it('drops an active id that names no column at all', () => {
+    expect(withShared({ ...base(), activeColumnId: 'gone' }, shared)!.activeColumnId).toBeNull();
+  });
+
+  it('shows a personal column named like a shared one as "(mine)"', () => {
+    const personal = { ...base(), columns: [{ ...base().columns[0], name: 'cohort' }] };
+    expect(withShared(personal, shared)!.columns.map((c) => c.name)).toEqual(['cohort', 'cohort (mine)']);
+  });
+
+  it('is null when there is nothing to show', () => {
+    expect(withShared(null, [])).toBeNull();
+  });
+
+  it('names a copy so that it clashes with nothing', () => {
+    expect(copyName('cohort', ['cohort'])).toBe('cohort (copy)');
+    expect(copyName('cohort', ['cohort', 'cohort (copy)'])).toBe('cohort (copy 2)');
   });
 });

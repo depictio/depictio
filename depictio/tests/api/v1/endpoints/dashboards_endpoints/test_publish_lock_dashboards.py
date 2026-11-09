@@ -346,3 +346,20 @@ def test_a_save_round_tripping_the_get_payload_is_accepted_and_stores_no_lock(en
     stored = env["dashboards"].find_one({"dashboard_id": did})
     assert stored is not None
     assert "published_lock" not in stored
+
+
+def test_a_save_never_writes_the_shared_labels(env, editor) -> None:
+    """The editor sends the whole document back; labels shared since it loaded
+    would be undone. Only the shared-labels route writes them."""
+    project = _project(env, owner=editor, locked=False)
+    did, data = _save_new(project, editor)
+    asyncio.run(dash_routes.save_dashboard(dashboard_id=did, data=data, current_user=editor))
+    shared = [{"id": "s1", "name": "r", "dc_id": "x", "key_column": "k", "values": {}}]
+    env["dashboards"].update_one({"dashboard_id": did}, {"$set": {"shared_labels": shared}})
+
+    data.shared_labels = []
+    asyncio.run(dash_routes.save_dashboard(dashboard_id=did, data=data, current_user=editor))
+
+    stored = env["dashboards"].find_one({"dashboard_id": did})
+    assert stored is not None
+    assert stored["shared_labels"] == shared

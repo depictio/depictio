@@ -74,23 +74,47 @@ class DashboardAnnotationsPayload(_ClientShape):
     @field_validator("columns")
     @classmethod
     def validate_columns(cls, v: list[AnnotationColumn]) -> list[AnnotationColumn]:
-        if len(v) > MAX_ANNOTATION_COLUMNS:
-            raise ValueError(f"too many annotations (max {MAX_ANNOTATION_COLUMNS})")
-        if len({c.id for c in v}) != len(v):
-            raise ValueError("annotation ids must be unique")
-        if len({c.name for c in v}) != len(v):
-            raise ValueError("annotation names must be unique")
-        return v
+        return _check_column_set(v)
 
     @model_validator(mode="after")
     def validate_whole(self) -> "DashboardAnnotationsPayload":
-        if self.active_column_id is not None and all(
-            c.id != self.active_column_id for c in self.columns
-        ):
-            raise ValueError("activeColumnId names no annotation")
+        # The active column may be one shared on the dashboard rather than one
+        # of the reader's own; the client drops an id that names neither.
+        if self.active_column_id is not None and len(self.active_column_id) > 64:
+            raise ValueError("activeColumnId is too long")
         size = len(json.dumps(self.model_dump(by_alias=True)).encode())
         if size > MAX_ANNOTATIONS_JSON_BYTES:
             raise ValueError(f"annotations too large (max {MAX_ANNOTATIONS_JSON_BYTES} bytes)")
+        return self
+
+
+def _check_column_set(columns: list[AnnotationColumn]) -> list[AnnotationColumn]:
+    if len(columns) > MAX_ANNOTATION_COLUMNS:
+        raise ValueError(f"too many annotations (max {MAX_ANNOTATION_COLUMNS})")
+    if len({c.id for c in columns}) != len(columns):
+        raise ValueError("annotation ids must be unique")
+    if len({c.name for c in columns}) != len(columns):
+        raise ValueError("annotation names must be unique")
+    return columns
+
+
+class SharedLabelsPayload(_ClientShape):
+    """Body of ``PUT /dashboards/annotations/{dashboard_id}/shared``: the label
+    columns every reader of the dashboard sees, read-only. Same caps as a
+    reader's own labels."""
+
+    columns: list[AnnotationColumn] = Field(default_factory=list)
+
+    @field_validator("columns")
+    @classmethod
+    def validate_columns(cls, v: list[AnnotationColumn]) -> list[AnnotationColumn]:
+        return _check_column_set(v)
+
+    @model_validator(mode="after")
+    def validate_size(self) -> "SharedLabelsPayload":
+        size = len(json.dumps(self.model_dump(by_alias=True)).encode())
+        if size > MAX_ANNOTATIONS_JSON_BYTES:
+            raise ValueError(f"labels too large (max {MAX_ANNOTATIONS_JSON_BYTES} bytes)")
         return self
 
 

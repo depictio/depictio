@@ -7,7 +7,12 @@
  * recovery. Do not attach the bearer by hand — see its docstring for why.
  */
 
-import { type DashboardAnnotations, parseAnnotations } from './sessionAnnotations';
+import {
+  type AnnotationColumn,
+  type DashboardAnnotations,
+  parseAnnotations,
+  parseSharedColumns,
+} from './sessionAnnotations';
 import type { BrandTheme } from './brandTheme';
 import { enqueueFetch } from './fetchQueue';
 import type { GroupStatusEntry } from './groupStatus';
@@ -4206,15 +4211,67 @@ export interface AnnotationTable {
 }
 
 export type AnnotationTablesLoad =
-  | { ok: true; tables: AnnotationTable[] }
+  | {
+      ok: true;
+      tables: AnnotationTable[];
+      /** Label columns shared on the dashboard (as `versionId` held them, when given). */
+      shared: AnnotationColumn[];
+      /** Whether the caller may change the shared labels (never on a past version). */
+      canShare: boolean;
+    }
   | { ok: false; status: number; detail: string | null };
 
-export async function fetchAnnotationTables(dashboardId: string): Promise<AnnotationTablesLoad> {
+export async function fetchAnnotationTables(
+  dashboardId: string,
+  versionId?: string | null,
+): Promise<AnnotationTablesLoad> {
   try {
-    const res = await authFetch(`${API_BASE}/dashboards/annotations/${dashboardId}/tables`);
+    const query = versionId ? `?version_id=${encodeURIComponent(versionId)}` : '';
+    const res = await authFetch(`${API_BASE}/dashboards/annotations/${dashboardId}/tables${query}`);
     if (!res.ok) return { ok: false, status: res.status, detail: await readErrorDetail(res) };
-    const body = (await res.json()) as { tables: AnnotationTable[] };
-    return { ok: true, tables: body.tables ?? [] };
+    const body = (await res.json()) as {
+      tables: AnnotationTable[];
+      shared?: unknown;
+      can_share?: boolean;
+    };
+    return {
+      ok: true,
+      tables: body.tables ?? [],
+      shared: parseSharedColumns(body.shared ?? []),
+      canShare: body.can_share === true,
+    };
+  } catch {
+    return { ok: false, status: 0, detail: null };
+  }
+}
+
+export type SharedLabelsSave =
+  | { ok: true; shared: AnnotationColumn[] }
+  | { ok: false; status: number; detail: string | null };
+
+/** Replace the label columns shared on a dashboard. */
+export async function saveSharedLabels(
+  dashboardId: string,
+  columns: AnnotationColumn[],
+): Promise<SharedLabelsSave> {
+  try {
+    const body = {
+      columns: columns.map((c) => ({
+        id: c.id,
+        name: c.name,
+        dcId: c.dcId,
+        keyColumn: c.keyColumn,
+        values: c.values,
+      })),
+    };
+    const res = await authFetch(`${API_BASE}/dashboards/annotations/${dashboardId}/shared`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) return { ok: false, status: res.status, detail: await readErrorDetail(res) };
+    const out = (await res.json()) as { shared?: unknown };
+    return { ok: true, shared: parseSharedColumns(out.shared ?? []) };
   } catch {
     return { ok: false, status: 0, detail: null };
   }
@@ -4234,7 +4291,9 @@ export async function saveDashboardAnnotations(
     // large set can still be lost there; the debounced save is the real path.
     const keep = opts?.keepalive ? { keepalive: true } : {};
     const res =
-      annotations === null || annotations.columns.length === 0
+      // A set with no column of the reader's own still holds their choice of
+      // a shared column to compare by; only an empty one is deleted.
+      annotations === null || (annotations.columns.length === 0 && !annotations.activeColumnId)
         ? await authFetch(url, { method: 'DELETE', ...keep })
         : await authFetch(url, { method: 'PUT', body: JSON.stringify(annotations), ...keep });
     if (!res.ok) return { ok: false, status: res.status, detail: await readErrorDetail(res) };

@@ -11,6 +11,12 @@ temporaire, et sur le compte pour une vraie connexion. Un fichier déposé sur l
 dans le navigateur et n'est jamais envoyé au serveur. Les owners et editors peuvent aussi écrire
 réellement : édition des cellules et bouton « Save to table ». Seule une table de métadonnées
 liée aux données par un Link (pas un Join), de 10 000 lignes au plus, peut être annotée.
+Une colonne de labels peut être **partagée sur le dashboard** : tous ses lecteurs la voient en
+lecture seule et peuvent la copier dans leurs propres labels ; seuls un editor du projet ou le
+propriétaire du dashboard (une copie, par exemple) la modifient. Pour une table de pipeline,
+**Export** télécharge la table avec les colonnes de labels, à remettre dans la feuille de
+métadonnées du pipeline. Le panneau Analysis reste une vue temporaire : couleurs, groupes et
+comparaisons dans les cartes ne sont jamais enregistrés avec le dashboard.
 
 ## Goal
 
@@ -209,6 +215,49 @@ Keyed on the dashboard family's main tab, since annotations belong to the whole 
   uses Community. The panel handles the `paste` event and writes tab-separated values from the
   focused cell downward.
 
+## Sharing on the dashboard
+
+Labels are personal by default. A column can be **shared on the dashboard**: it is stored in the
+main tab's `shared_labels` (same shape and caps as a reader's own column), and every reader of
+the dashboard sees it, read-only.
+
+| | Own labels | Share / edit shared | Copy shared to mine | Export | Save to table |
+| --- | --- | --- | --- | --- | --- |
+| Anonymous / temporary | browser | no | yes (browser) | yes | no |
+| Viewer | account | no | yes | yes | no |
+| Owner of the dashboard, no project role (a copy) | account | yes | yes | yes | no |
+| Editor / owner of the project | account | yes | yes | yes | table a user added only |
+
+- **Write path:** `PUT /dashboards/annotations/{id}/shared` replaces the family's shared
+  columns. It needs `check_dashboard_mutation_permission(main_tab, user, "editor")` and an
+  unlocked dashboard (409 when published; a copy of a published dashboard can share). Anonymous
+  users outside single-user mode get 403. Tables are checked like a reader's own labels.
+- **Read path:** `GET /dashboards/annotations/{id}/tables` returns `shared` and `can_share`.
+  With `version_id` it returns that version's shared labels, read-only (404 for another
+  family's version).
+- **Read-only for readers (option A):** a reader compares by a shared column, or copies it into
+  their own labels ("<name> (copy)") to change it. The choice of column to compare by stays
+  personal, so `activeColumnId` may name a shared column (and is kept on the account even when
+  the reader has no column of their own).
+- **Versioning:** the route seeds a baseline and captures a version. Sharing, unsharing or
+  deleting a column is an `explicit` version, so the state before it is restorable; an edit of a
+  shared column's labels folds into the autosave window. `/save` never writes `shared_labels`,
+  so the editor cannot overwrite labels shared meanwhile. `TabSnapshot.shared_labels` is recorded
+  on the main tab only and hashed only when non-empty.
+- **Migration:** bundles copy the raw documents, so shared labels travel with the dashboard.
+- **No companion table.** A table Depictio writes beside a pipeline's would drift from it, and
+  the pipeline's own statistics (ANCOM-BC, adonis) would never see its columns.
+- **Export** downloads the selected table's rows with the chosen label columns, as a TSV built in
+  the browser (no request carries it). Columns Depictio adds at ingest (`depictio_*`,
+  `aggregation_time`) are left out. A table whose data lives elsewhere (a pipeline run, a URL,
+  an ingest of unknown origin) refuses Save to table and points to Export: the columns go into
+  the source sheet, and a re-run brings them in with the pipeline's statistics.
+- **Analysis is temporary.** Its panel says so at the top: colors, groups and card comparisons
+  stay in this browser and are never saved with the dashboard. "Compare in the charts" says the
+  same.
+- **Limitation:** the YAML (Lite) export does not carry shared labels; they hold collection ids,
+  while Lite refers to collections by tag.
+
 ## Real writes
 
 - Cell edits in the Metadata grid, enabled when `fetchTableEditStatus` answers `can_edit`. A
@@ -247,7 +296,7 @@ Keyed on the dashboard family's main tab, since annotations belong to the whole 
 ## Out of scope
 
 - Multi-column keys.
-- Sharing annotations with other users.
+- Shared labels in the YAML (Lite) export.
 - Carrying a temporary account's annotations over when it signs in.
 - The dashboard editor (`EditorApp`); the viewer only.
 - Excel and Parquet in the browser.

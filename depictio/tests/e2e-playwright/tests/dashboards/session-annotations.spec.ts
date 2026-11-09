@@ -14,6 +14,11 @@
  *     its labels stay there (no request carries them) until kept on the account;
  *   - "Save to table" in a column menu runs the add_columns merge;
  *   - a table cell edited in the grid is saved to the table from the bar below;
+ *   - a label column shared on the dashboard comes back after a reload, is
+ *     read-only for a reader who may not change it (who can copy it to their
+ *     own), and goes back to its editor's own on "Stop sharing";
+ *   - Export downloads the table's rows with the label columns, built in the
+ *     browser;
  *   - the Penguins dashboard, whose tables are joined, has no Metadata button;
  *   - a temporary account (public mode only) keeps labels in the browser.
  *
@@ -83,6 +88,37 @@ async function clearAnnotations(page: Page): Promise<void> {
     return res.status;
   }, ANNOTATIONS_URL);
   expect(status).toBe(204);
+}
+
+/** Replace the labels shared on the dashboard (none by default). Through the
+ *  page, for the same reason as `clearAnnotations`. */
+async function resetShared(page: Page): Promise<void> {
+  if (!page.url().includes("/dashboard/")) await page.goto(`/dashboard/${DASHBOARD}`);
+  const status = await page.evaluate(async (url) => {
+    let token = "";
+    try {
+      token = JSON.parse(window.localStorage.getItem("local-store") ?? "{}").access_token ?? "";
+    } catch {
+      token = "";
+    }
+    const res = await fetch(`${url}/shared`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify({ columns: [] }),
+    });
+    return res.status;
+  }, ANNOTATIONS_URL);
+  expect(status).toBe(200);
+}
+
+/** Answer `/tables` as for a reader who may not change the shared labels. */
+const TABLES_ROUTE = `**/dashboards/annotations/${DASHBOARD}/tables**`;
+async function asReader(page: Page): Promise<void> {
+  await page.route(TABLES_ROUTE, async (route) => {
+    const response = await route.fetch();
+    const body = (await response.json()) as Record<string, unknown>;
+    await route.fulfill({ response, json: { ...body, can_share: false } });
+  });
 }
 
 /** Sign in as the admin, except in single-user mode, where there is no sign-in. */
@@ -219,6 +255,7 @@ test.describe("Session labels", () => {
     await signIn(loginAsAdmin);
     await noWalkthrough(page);
     await clearAnnotations(page);
+    await resetShared(page);
 
     await openPanel(page);
     // A signed-in account says nothing about storage: it is the normal case.
@@ -241,6 +278,8 @@ test.describe("Session labels", () => {
     const analysis = page.getByRole("dialog", { name: /^Analysis/ });
     await expect(analysis).toContainText("responder");
     await expect(analysis).toContainText("non-responder");
+    // Said once at the top: the comparison is the reader's own, never saved.
+    await expect(analysis.locator("[data-testid='analysis-temporary-note']")).toContainText("Temporary view");
     await expect(page.locator("[data-testid='analysis-tabs']")).toHaveCount(0);
 
     // Account storage: a reload (a fresh read) brings them back.
@@ -442,6 +481,131 @@ test.describe("Session labels", () => {
     await expect(page.locator("[data-testid='label-menu-on_meta']")).toHaveCount(0);
     // Both are counted on the button.
     await expect(page.locator("[data-testid='metadata-panel']")).toContainText("2 label columns");
+
+    await clearAnnotations(page);
+  });
+
+  test("a label shared on the dashboard is seen by every reader, read-only", async ({
+    page,
+    request,
+    loginAsAdmin,
+  }) => {
+    test.setTimeout(180_000);
+    const api = await seeded(request);
+    test.skip(!api, "no metadata table on this dashboard");
+    await signIn(loginAsAdmin);
+    await noWalkthrough(page);
+    await clearAnnotations(page);
+    await resetShared(page);
+
+    await openPanel(page);
+    await addLabelColumn(page, "response");
+    await typeCell(page, "response", 0, "responder");
+    await typeCell(page, "response", 1, "non-responder");
+
+    // Asked first, then written to the dashboard: the column leaves the reader's own.
+    const shared = page.waitForResponse(
+      (r) => r.url() === `${ANNOTATIONS_URL}/shared` && r.request().method() === "PUT" && r.ok(),
+    );
+    await columnMenu(page, "response", "Share on this dashboard");
+    await expect(page.locator("[data-testid='annotation-confirm']")).toContainText("Everyone who can open");
+    await page.locator("[data-testid='annotation-confirm-apply']").click();
+    const body = (await (await shared).json()) as { shared: { name: string; values: Record<string, string> }[] };
+    expect(body.shared.map((c) => c.name)).toEqual(["response"]);
+    expect(Object.values(body.shared[0].values).sort()).toEqual(["non-responder", "responder"]);
+    await expect(page.locator("[data-testid='label-kind-shared']")).toHaveCount(1);
+
+    // A reload reads it from the dashboard; it can drive the comparison.
+    await openPanel(page);
+    await expect(page.locator("[data-testid='label-kind-shared']")).toHaveCount(1);
+    const compared = page.waitForResponse(
+      (r) =>
+        r.url() === ANNOTATIONS_URL &&
+        r.request().method() === "PUT" &&
+        (r.request().postData() ?? "").includes('"activeColumnId":"') &&
+        r.ok(),
+    );
+    await columnMenu(page, "response", "Compare in the charts");
+    // Kept on the account although the reader has no column of their own.
+    await compared;
+    await expect(page.locator("[data-testid='label-compared']")).toHaveCount(1);
+
+    // A reader without the right sees it read-only and may copy it.
+    await asReader(page);
+    await openPanel(page);
+    await expect(page.locator("[data-testid='label-kind-shared-readonly']")).toHaveCount(1);
+    await expect(page.locator("[data-testid='label-compared']")).toHaveCount(1);
+    const id = await columnId(page, "response");
+    const cell = page.locator(
+      `[data-testid='annotation-grid'] .ag-center-cols-container [row-index='0'] [col-id='${id}']`,
+    );
+    await cell.dblclick();
+    await expect(page.locator("[data-testid='annotation-grid'] .ag-cell-inline-editing")).toHaveCount(0);
+    await page.locator("[data-testid='label-menu-response']").click();
+    await expect(page.getByRole("menuitem", { name: /^Rename/ })).toHaveCount(0);
+    await expect(page.getByRole("menuitem", { name: /^Delete/ })).toHaveCount(0);
+    await expect(page.getByRole("menuitem", { name: /^Stop sharing/ })).toHaveCount(0);
+    const copied = page.waitForResponse(
+      (r) =>
+        r.url() === ANNOTATIONS_URL &&
+        r.request().method() === "PUT" &&
+        (r.request().postData() ?? "").includes("response (copy)") &&
+        r.ok(),
+    );
+    await page.getByRole("menuitem", { name: /^Copy to my labels/ }).click();
+    await copied;
+    await expect(page.locator("[data-testid='label-menu-response (copy)']")).toBeVisible();
+    await expect(page.locator("[data-testid='label-kind-mine']")).toHaveCount(1);
+    await page.unroute(TABLES_ROUTE);
+
+    // Its editor stops sharing it: it is one of their own again.
+    await clearAnnotations(page);
+    await openPanel(page);
+    const stopped = page.waitForResponse(
+      (r) => r.url() === `${ANNOTATIONS_URL}/shared` && r.request().method() === "PUT" && r.ok(),
+    );
+    await columnMenu(page, "response", "Stop sharing");
+    await page.locator("[data-testid='annotation-confirm-apply']").click();
+    expect(((await (await stopped).json()) as { shared: unknown[] }).shared).toEqual([]);
+    await expect(page.locator("[data-testid='label-kind-shared']")).toHaveCount(0);
+    await expect(page.locator("[data-testid='label-kind-mine']")).toHaveCount(1);
+
+    await resetShared(page);
+    await clearAnnotations(page);
+  });
+
+  test("Export downloads the table's rows with the label columns", async ({ page, request, loginAsAdmin }) => {
+    test.setTimeout(120_000);
+    const api = await seeded(request);
+    test.skip(!api, "no metadata table on this dashboard");
+    await signIn(loginAsAdmin);
+    await noWalkthrough(page);
+    await clearAnnotations(page);
+
+    const sent: Request[] = [];
+    await openPanel(page);
+    const first = await keyAt(page, 0);
+    await addLabelColumn(page, "cohort");
+    await typeCell(page, "cohort", 0, "early");
+
+    page.on("request", (r) => sent.push(r));
+    await page.locator("[data-testid='annotation-export']").click();
+    await expect(page.locator("[data-testid='annotation-export-modal']")).toContainText("cohort");
+    const download = page.waitForEvent("download");
+    await page.locator("[data-testid='annotation-export-apply']").click();
+    const file = await download;
+    expect(file.suggestedFilename()).toBe(`${sheets[0].tag}_with_labels.tsv`);
+    const text = await (await import("node:fs/promises")).readFile((await file.path())!, "utf8");
+    const [header, ...lines] = text.trim().split("\n");
+    const columns = header.split("\t");
+    expect(columns).toContain(sheets[0].key_columns[0]);
+    expect(columns[columns.length - 1]).toBe("cohort");
+    // Every row of the table, the labelled one carrying its label.
+    expect(lines).toHaveLength(sheets[0].row_count!);
+    const row = lines.find((l) => l.split("\t")[columns.indexOf(sheets[0].key_columns[0])] === first)!;
+    expect(row.split("\t").at(-1)).toBe("early");
+    // Built in the browser: no request carries it.
+    expect(sent.filter((r) => (r.postData() ?? "").includes("early"))).toHaveLength(0);
 
     await clearAnnotations(page);
   });

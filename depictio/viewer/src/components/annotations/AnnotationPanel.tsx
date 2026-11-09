@@ -5,6 +5,7 @@ import {
   Anchor,
   Box,
   Button,
+  Checkbox,
   FileButton,
   Group,
   Loader,
@@ -28,7 +29,9 @@ import type { ColDef, GridApi, ValueSetterParams } from 'ag-grid-community';
 import {
   annotationColumnBudget,
   asKey,
+  buildMetadataSheet,
   columnsFor,
+  copyName,
   emptyAnnotations,
   fetchDataCollectionPreview,
   fetchDataVersionStatus,
@@ -40,6 +43,7 @@ import {
   MAX_DROP_BYTES,
   MAX_LABEL_LENGTH,
   mergeTableFile,
+  metadataSheetName,
   newAnnotationId,
   parseDroppedTable,
   parsePastedBlock,
@@ -48,9 +52,11 @@ import {
   setLabel,
   suggestedMergeMode,
   TableEditError,
+  withShared,
   Z_LAYERS,
 } from 'depictio-react-core';
 import type {
+  AnnotationColumn,
   AnnotationMergeMode,
   AnnotationTable,
   AnnotationTarget,
@@ -67,9 +73,19 @@ import type {
 import TableMergePanel from '../../projects/detail/TableMergePanel';
 // The drop overlay is the table editor's, so both drops look the same.
 import '../../projects/detail/TableEditor.css';
-import LabelColumnHeader, { type LabelColumnActions } from './LabelColumnHeader';
+import LabelColumnHeader, {
+  LABEL_KIND,
+  type LabelColumnActions,
+  type LabelColumnKind,
+} from './LabelColumnHeader';
 import './AnnotationPanel.css';
+import type { AnnotationTablesState } from './useAnnotationTables';
 import type { DashboardAnnotationsState } from './useDashboardAnnotations';
+
+/** Edit-status codes of a table whose data lives outside Depictio (a pipeline
+ *  run, a URL, an ingest of unknown origin): the labels go back through that
+ *  source, so the refusal points to Export. */
+const SOURCE_ELSEWHERE = new Set(['pipeline_table', 'url_table', 'not_user_added']);
 
 /** One grid row: the key, its row in the table when it can be edited, the
  *  table's columns and one field per label column. */
@@ -134,6 +150,8 @@ export interface AnnotationPanelProps {
   dashboardId: string;
   /** The project's tables with whether each can carry labels (server rule). */
   tables: AnnotationTable[];
+  /** The labels shared on the dashboard, and whether this reader may change them. */
+  sharing: Pick<AnnotationTablesState, 'shared' | 'canShare' | 'saveShared'>;
   /** Data pins of a past-version view, or null on a live view. */
   pins: DataPinFields | null;
   state: DashboardAnnotationsState;
@@ -154,6 +172,7 @@ export interface AnnotationPanelProps {
 const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
   dashboardId,
   tables: allTables,
+  sharing,
   pins,
   state,
   groups,
@@ -162,6 +181,23 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
   const scheme = useComputedColorScheme('light');
   const { annotations, setAnnotations } = state;
   const pinned = pins !== null;
+  // The reader's own labels (`annotations`) and the dashboard's shared ones,
+  // as one set: what the grid shows. Own labels are written through
+  // `setAnnotations`, shared ones through `saveShared`.
+  const { shared, saveShared } = sharing;
+  const canShare = sharing.canShare && !pinned;
+  const view = useMemo(() => withShared(annotations, shared), [annotations, shared]);
+  const isShared = useCallback((id: string) => shared.some((c) => c.id === id), [shared]);
+  const writeShared = useCallback(
+    async (next: AnnotationColumn[]): Promise<boolean> => {
+      const error = await saveShared(next);
+      if (error) notifications.show({ color: 'red', message: error });
+      return error === null;
+    },
+    [saveShared],
+  );
+  const setSharedLabel = (cols: AnnotationColumn[], id: string, key: string, label: unknown) =>
+    setLabel({ version: 2, columns: cols, activeColumnId: null }, id, key, label).columns;
 
   // ---- Tables the dashboard reads -----------------------------------------
   const [collections, setCollections] = useState<DataVersionCollectionStatus[] | null>(null);
@@ -278,15 +314,15 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
   // Opens on the table of the compared labels, else the first metadata table.
   useEffect(() => {
     if (choice || tables.length === 0) return;
-    const active = annotations?.columns.find((c) => c.id === annotations.activeColumnId);
-    const anyCol = active ?? annotations?.columns[0];
+    const active = view?.columns.find((c) => c.id === view.activeColumnId);
+    const anyCol = active ?? view?.columns[0];
     const entry = tables.find((t) => t.dc_id === anyCol?.dcId) ?? tables[0];
     const keyColumn =
       anyCol && anyCol.dcId === entry.dc_id && entry.key_columns.includes(anyCol.keyColumn)
         ? anyCol.keyColumn
         : entry.key_columns[0];
     if (keyColumn) setChoice({ dcId: entry.dc_id, keyColumn });
-  }, [tables, annotations, choice]);
+  }, [tables, view, choice]);
 
   useEffect(() => {
     if (!choice || !collections) return;
@@ -308,16 +344,14 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
     const entry = tables.find((t) => t.dc_id === dcId);
     if (!entry || !entry.key_columns[0]) return;
     // Back on a table: its labels' key if it has some, else the first link's.
-    const own = annotations?.columns.find((c) => c.dcId === dcId);
+    const own = view?.columns.find((c) => c.dcId === dcId);
     setChoice({ dcId, keyColumn: own?.keyColumn ?? entry.key_columns[0] });
   };
 
   // What is on screen: the labels of this table on this key. Edits apply to
   // the whole set (`ensureBound`), which keeps the labels of other tables.
   const bound: DashboardAnnotations | null =
-    choice && keyColumn && annotations
-      ? { ...annotations, columns: columnsFor(annotations, choice) }
-      : null;
+    choice && keyColumn && view ? { ...view, columns: columnsFor(view, choice) } : null;
   const ensureBound = (): DashboardAnnotations | null =>
     choice && keyColumn ? (annotations ?? emptyAnnotations()) : null;
 
@@ -327,7 +361,9 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
     : !table
       ? 'The table is not loaded.'
       : !table.edit
-        ? statusCache.current.get(table.dcId)?.reason || 'You cannot change this table.'
+        ? SOURCE_ELSEWHERE.has(statusCache.current.get(table.dcId)?.code ?? '')
+          ? `${statusCache.current.get(table.dcId)?.reason ?? ''} Export gives you its rows with your labels added, to put in that source.`.trim()
+          : statusCache.current.get(table.dcId)?.reason || 'You cannot change this table.'
         : null;
   const [cellEdits, setCellEdits] = useState<
     Map<string, { row: number; column: string; value: string | null }>
@@ -386,14 +422,19 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
       const field = params.colDef.field ?? '';
       const base = ensureBound();
       if (!base || !field.startsWith(ANN_PREFIX)) return false;
+      const id = field.slice(ANN_PREFIX.length);
       const label = String(params.newValue ?? '').slice(0, MAX_LABEL_LENGTH);
-      commit(setLabel(base, field.slice(ANN_PREFIX.length), params.data.__key, label));
-      // The row is rebuilt from the annotations, which are the source of truth.
+      if (isShared(id)) {
+        if (canShare) void writeShared(setSharedLabel(shared, id, params.data.__key, label));
+      } else {
+        commit(setLabel(base, id, params.data.__key, label));
+      }
+      // The row is rebuilt from the labels, which are the source of truth.
       return false;
     },
     // ensureBound reads bound and choice.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [bound, choice, keyColumn, commit],
+    [bound, choice, keyColumn, commit, shared, canShare, isShared, writeShared],
   );
 
   const setTableCell = useCallback(
@@ -425,7 +466,7 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
     const base = ensureBound();
     const name = naming.value.trim();
     if (!base || !name) return;
-    const others = base.columns.filter((c) => c.id !== naming.id);
+    const others = (view?.columns ?? []).filter((c) => c.id !== naming.id);
     if (name.length > MAX_LABEL_LENGTH) {
       setNaming({ ...naming, error: `At most ${MAX_LABEL_LENGTH} characters.` });
       return;
@@ -439,7 +480,9 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
       });
       return;
     }
-    if (naming.id) {
+    if (naming.id && isShared(naming.id)) {
+      void writeShared(shared.map((c) => (c.id === naming.id ? { ...c, name } : c)));
+    } else if (naming.id) {
       commit({ ...base, columns: base.columns.map((c) => (c.id === naming.id ? { ...c, name } : c)) });
     } else {
       const column = { id: newAnnotationId(), name, dcId: choice!.dcId, keyColumn, values: {} };
@@ -463,6 +506,11 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
   const removeLabelColumn = (id: string) => {
     const base = ensureBound();
     if (!base) return;
+    if (isShared(id)) {
+      void writeShared(shared.filter((c) => c.id !== id));
+      if (base.activeColumnId === id) commit({ ...base, activeColumnId: null });
+      return;
+    }
     commit({
       ...base,
       columns: base.columns.filter((c) => c.id !== id),
@@ -473,6 +521,98 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
     const base = ensureBound();
     if (!base) return;
     commit({ ...base, activeColumnId: base.activeColumnId === id ? null : id });
+  };
+
+  // ---- Sharing on the dashboard --------------------------------------------------
+  // Asked first: who will see it, and that it is read-only for them.
+  const [confirm, setConfirm] = useState<{
+    title: string;
+    body: string;
+    action: string;
+    color?: string;
+    run: () => void;
+  } | null>(null);
+  const shareColumn = (id: string) => {
+    const base = ensureBound();
+    const column = base?.columns.find((c) => c.id === id);
+    if (!base || !column) return;
+    setConfirm({
+      title: `Share "${column.name}" on this dashboard`,
+      body: 'Everyone who can open this dashboard will see these labels and can compare by them. They cannot change them; you and the other editors can.',
+      action: 'Share',
+      run: () => {
+        const { local: _local, shared: _shared, ...plain } = column;
+        void writeShared([...shared, plain]).then((ok) => {
+          if (ok) commit({ ...base, columns: base.columns.filter((c) => c.id !== id) });
+        });
+      },
+    });
+  };
+  const stopSharing = (id: string) => {
+    const base = ensureBound();
+    const column = shared.find((c) => c.id === id);
+    if (!base || !column) return;
+    setConfirm({
+      title: `Stop sharing "${column.name}"`,
+      body: 'It becomes one of your own labels again. The other readers of this dashboard no longer see it.',
+      action: 'Stop sharing',
+      run: () => {
+        void writeShared(shared.filter((c) => c.id !== id)).then((ok) => {
+          if (!ok) return;
+          const { shared: _shared, ...plain } = column;
+          commit({ ...base, columns: [...base.columns, plain] });
+        });
+      },
+    });
+  };
+  const copyToMine = (id: string) => {
+    const base = ensureBound();
+    const column = shared.find((c) => c.id === id);
+    if (!base || !column) return;
+    if ((view?.columns.length ?? 0) >= MAX_ANNOTATION_COLUMNS) {
+      notifications.show({ color: 'orange', message: `At most ${MAX_ANNOTATION_COLUMNS} label columns.` });
+      return;
+    }
+    const name = copyName(column.name, (view?.columns ?? []).map((c) => c.name));
+    const copy = {
+      id: newAnnotationId(),
+      name,
+      dcId: column.dcId,
+      keyColumn: column.keyColumn,
+      values: { ...column.values },
+    };
+    commit({ ...base, columns: [...base.columns, copy] });
+    notifications.show({ color: 'teal', message: `"${name}" is one of your labels now.` });
+  };
+  const askDelete = (id: string) => {
+    if (!isShared(id)) {
+      removeLabelColumn(id);
+      return;
+    }
+    const column = shared.find((c) => c.id === id);
+    setConfirm({
+      title: `Delete "${column?.name ?? 'labels'}"`,
+      body: 'It is shared on this dashboard: deleting it removes it for everyone. A past version of the dashboard still holds it.',
+      action: 'Delete for everyone',
+      color: 'red',
+      run: () => removeLabelColumn(id),
+    });
+  };
+
+  // ---- Export as metadata sheet ---------------------------------------------------
+  // Built here from the rows on screen and downloaded: no request carries it.
+  const [exporting, setExporting] = useState<Set<string> | null>(null);
+  const exportSheet = () => {
+    if (!table || !keyColumn || !exporting || !chosenEntry) return;
+    const labels = (bound?.columns ?? []).filter((c) => exporting.has(c.id));
+    const text = buildMetadataSheet(table.columns, table.rows, keyColumn, labels);
+    const url = URL.createObjectURL(new Blob([text], { type: 'text/tab-separated-values' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = metadataSheetName(chosenEntry.tag || 'metadata');
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setExporting(null);
   };
 
   // ---- Paste ------------------------------------------------------------------
@@ -498,7 +638,9 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
       .filter((id) => id.startsWith(ANN_PREFIX));
     const firstCol = labelCols.indexOf(startCol);
     let next = base;
+    let nextShared = shared;
     let skipped = 0;
+    let readOnly = 0;
     block.forEach((cells, i) => {
       const row = api.getDisplayedRowAtIndex(focused.rowIndex + i);
       if (!row?.data) {
@@ -508,15 +650,24 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
       cells.forEach((cell, j) => {
         const colId = labelCols[firstCol + j];
         if (!colId) return;
-        next = setLabel(
-          next,
-          colId.slice(ANN_PREFIX.length),
-          row.data!.__key,
-          cell.slice(0, MAX_LABEL_LENGTH),
-        );
+        const id = colId.slice(ANN_PREFIX.length);
+        const label = cell.slice(0, MAX_LABEL_LENGTH);
+        if (isShared(id)) {
+          if (canShare) nextShared = setSharedLabel(nextShared, id, row.data!.__key, label);
+          else readOnly += 1;
+          return;
+        }
+        next = setLabel(next, id, row.data!.__key, label);
       });
     });
     commit(next);
+    if (nextShared !== shared) void writeShared(nextShared);
+    if (readOnly > 0) {
+      notifications.show({
+        color: 'orange',
+        message: `${readOnly} pasted value${readOnly === 1 ? '' : 's'} fell on shared labels, which are read-only, and were left out.`,
+      });
+    }
     if (skipped > 0) {
       notifications.show({
         color: 'orange',
@@ -753,25 +904,37 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
     () => {
       const labelCols = (bound?.columns ?? []).map<ColDef<GridRow>>((c) => {
         const budget = annotationColumnBudget(c, groups);
+        const kind: LabelColumnKind = c.shared
+          ? canShare
+            ? 'shared'
+            : 'shared-readonly'
+          : c.local
+            ? 'local'
+            : 'mine';
         const actions: LabelColumnActions = {
           name: c.name,
+          kind,
           active: c.id === bound?.activeColumnId,
-          local: Boolean(c.local),
           compareBlocked: budget.ok ? null : budget.reason,
           canKeepOnAccount: Boolean(c.local) && state.storage === 'account',
+          canShare,
           saveBlocked: writeBlocked,
           onCompare: () => toggleCompare(c.id),
           onRename: () => setNaming({ id: c.id, value: c.name, error: null }),
           onKeepOnAccount: () => keepOnAccount(c.id),
+          onShare: () => shareColumn(c.id),
+          onStopSharing: () => stopSharing(c.id),
+          onCopy: () => copyToMine(c.id),
           onSaveToTable: () => void startSave(c.id),
-          onDelete: () => removeLabelColumn(c.id),
+          onDelete: () => askDelete(c.id),
         };
         return {
           field: ANN_PREFIX + c.id,
           headerName: c.name,
           headerComponent: LabelColumnHeader,
           headerComponentParams: { actions },
-          editable: true,
+          editable: kind !== 'shared-readonly',
+          cellClass: kind === 'shared-readonly' ? 'dc-label-cell-readonly' : undefined,
           valueSetter: setLabelCell,
           sortable: false,
           minWidth: 150,
@@ -832,6 +995,8 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
       writeBlocked,
       state.storage,
       labelColumnCount,
+      canShare,
+      shared,
     ],
   );
 
@@ -842,7 +1007,7 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
         ? 'This browser keeps nothing: your labels last until you leave the page.'
         : 'Labels are kept in this browser. Sign in to keep them on your account.'
       : null;
-  const activeLocal = annotations?.columns.some((c) => c.local && c.id === annotations.activeColumnId);
+  const activeLocal = view?.columns.some((c) => c.local && c.id === view.activeColumnId);
   const otherTables = allTables.filter((t) => !t.eligible);
 
   if (collectionsError) {
@@ -952,6 +1117,29 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
             </Tooltip>
           )}
         </Group>
+        <Group gap={4} wrap="nowrap">
+        <Tooltip
+          withinPortal
+          multiline
+          w={300}
+          label={
+            writeBlocked && SOURCE_ELSEWHERE.has(statusCache.current.get(table?.dcId ?? '')?.code ?? '')
+              ? "This table's rows with your label columns added, as a TSV. Add the columns to the sheet this table comes from (for a pipeline, its metadata sheet) and ingest it again: the pipeline's statistics will include them."
+              : "This table's rows with label columns added, as a TSV built in your browser."
+          }
+        >
+          <Button
+            size="xs"
+            variant="subtle"
+            color="gray"
+            disabled={!table || !keyColumn || labelColumnCount === 0}
+            leftSection={<Icon icon="mdi:tray-arrow-down" width={14} />}
+            onClick={() => setExporting(new Set((bound?.columns ?? []).map((c) => c.id)))}
+            data-testid="annotation-export"
+          >
+            Export
+          </Button>
+        </Tooltip>
         <FileButton
           onChange={(f) => f && void openImport(f)}
           accept=".csv,.tsv,.txt,.tab,text/csv,text/tab-separated-values"
@@ -970,6 +1158,7 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
             </Button>
           )}
         </FileButton>
+        </Group>
       </Group>
 
       {storageNote && (
@@ -1267,6 +1456,89 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
             )}
           </Stack>
         )}
+      </Modal>
+
+      <Modal
+        opened={confirm !== null}
+        onClose={() => setConfirm(null)}
+        title={confirm?.title ?? ''}
+        size="sm"
+        zIndex={Z_LAYERS.nestedOverlay}
+      >
+        <Stack gap="sm" data-testid="annotation-confirm">
+          <Text size="sm">{confirm?.body}</Text>
+          <Group justify="flex-end" gap="xs">
+            <Button size="xs" variant="default" onClick={() => setConfirm(null)}>
+              Cancel
+            </Button>
+            <Button
+              size="xs"
+              color={confirm?.color}
+              onClick={() => {
+                confirm?.run();
+                setConfirm(null);
+              }}
+              data-testid="annotation-confirm-apply"
+            >
+              {confirm?.action}
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      <Modal
+        opened={exporting !== null}
+        onClose={() => setExporting(null)}
+        title="Export as metadata sheet"
+        size="sm"
+        zIndex={Z_LAYERS.nestedOverlay}
+      >
+        <Stack gap="sm" data-testid="annotation-export-modal">
+          <Text size="sm">
+            Every row of {chosenEntry ? annotationTableLabel(chosenEntry, tables) : 'this table'}, with
+            these label columns added. The file is built in your browser.
+          </Text>
+          <Stack gap={6}>
+            {(bound?.columns ?? []).map((c) => (
+              <Checkbox
+                key={c.id}
+                size="xs"
+                checked={exporting?.has(c.id) ?? false}
+                onChange={(e) => {
+                  if (!exporting) return;
+                  const next = new Set(exporting);
+                  if (e.currentTarget.checked) next.add(c.id);
+                  else next.delete(c.id);
+                  setExporting(next);
+                }}
+                label={
+                  <Group gap={6} wrap="nowrap">
+                    <Icon
+                      icon={LABEL_KIND[c.shared ? 'shared' : c.local ? 'local' : 'mine'].icon}
+                      width={14}
+                      style={{ color: 'var(--mantine-color-dimmed)' }}
+                    />
+                    <Text size="sm">{c.name}</Text>
+                  </Group>
+                }
+              />
+            ))}
+          </Stack>
+          <Group justify="flex-end" gap="xs">
+            <Button size="xs" variant="default" onClick={() => setExporting(null)}>
+              Cancel
+            </Button>
+            <Button
+              size="xs"
+              disabled={!exporting || exporting.size === 0}
+              onClick={exportSheet}
+              leftSection={<Icon icon="mdi:tray-arrow-down" width={14} />}
+              data-testid="annotation-export-apply"
+            >
+              Download TSV
+            </Button>
+          </Group>
+        </Stack>
       </Modal>
 
       <Modal

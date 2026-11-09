@@ -2524,6 +2524,13 @@ class DashboardData(MongoModel):
     # whole family; a child tab's own copy is ignored.
     show_guide: bool = True
     guide_intro: str = ""
+    # Label columns shared on the dashboard: every reader sees them as
+    # read-only groups. Read from the main tab for the whole family, and
+    # written only by `PUT /dashboards/annotations/{id}/shared` (never by
+    # `/save`). Plain dicts in the `AnnotationColumn` shape, which that route
+    # validates; typed loosely here so a stored ObjectId-looking value can
+    # never make a dashboard unloadable.
+    shared_labels: list[dict[str, Any]] = []
     # Dashboard-wide default for where advanced-viz tiles draw their controls.
     # `popover` for every dashboard saved before this existed, which is what
     # they already did; a tile's own `controls_placement` still wins.

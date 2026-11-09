@@ -226,6 +226,24 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
 
   return (
     <Box className="dc-ap">
+      {/* Said once, at the top: nothing here changes the dashboard. */}
+      <Group
+        gap={6}
+        wrap="nowrap"
+        align="flex-start"
+        mb={10}
+        className="dc-ap-note"
+        data-testid="analysis-temporary-note"
+      >
+        <Icon icon="mdi:timer-sand" width={14} height={14} style={{ flexShrink: 0, marginTop: 2, opacity: 0.7 }} />
+        <Text size="xs" c="dimmed">
+          <Text span size="xs" fw={600} c="dimmed">
+            Temporary view.
+          </Text>{' '}
+          Colors, groups and card comparisons stay in this browser: the dashboard is not saved
+          with them, and no one else sees them.
+        </Text>
+      </Group>
       {/* ── Section 1: what every figure is coloured (or split) by ──────── */}
       <Group gap={6} wrap="nowrap" align="center" className="dc-ap-caption-row">
         <Divider
@@ -339,7 +357,7 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
         <Text size="xs" c="dimmed" mt={6} className="dc-ap-note">
           {colorBy.kind === 'column'
             ? 'Recolors every figure whose data carries this column.'
-            : 'Your groups below, on this dashboard only.'}
+            : 'Recolors every figure that can take the groups below.'}
         </Text>
       ) : (
         <Box mt={10}>

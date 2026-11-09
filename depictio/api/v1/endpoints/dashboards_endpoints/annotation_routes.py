@@ -35,6 +35,7 @@ from depictio.models.models.base import PyObjectId
 from depictio.models.models.dashboard_annotations import (
     DashboardAnnotationsBeanie,
     DashboardAnnotationsPayload,
+    SharedLabelsPayload,
 )
 from depictio.models.models.users import User
 from depictio.models.timestamps import utc_now_naive
@@ -62,10 +63,6 @@ async def _family(dashboard_id: PyObjectId, user: User) -> tuple[ObjectId, Objec
     without read access."""
     _refuse_unstorable(user)
     return await _readable_family(dashboard_id, user)
-
-
-async def _readable_project(dashboard_id: PyObjectId, user: User) -> ObjectId:
-    return (await _readable_family(dashboard_id, user))[1]
 
 
 async def _readable_family(dashboard_id: PyObjectId, user: User) -> tuple[ObjectId, ObjectId]:
@@ -98,7 +95,9 @@ def _project(project_id: ObjectId) -> dict:
     return project
 
 
-def _check_tables(payload: DashboardAnnotationsPayload, project: dict) -> None:
+def _check_tables(
+    payload: DashboardAnnotationsPayload | SharedLabelsPayload, project: dict
+) -> None:
     """422 when a column names a table that cannot carry labels, or a key column
     none of its links uses. Row counts are left to ``/tables``: a save only
     checks the structure, so it reads no table."""
@@ -122,15 +121,45 @@ def _key(user: User, family_id: ObjectId) -> dict:
 @annotation_router.get("/{dashboard_id}/tables")
 async def get_annotation_tables(
     dashboard_id: PyObjectId,
+    version_id: str | None = None,
     current_user: User = Depends(get_user_or_anonymous),
 ) -> dict:
-    """The project's tables, each with whether labels can be put on it and why not.
+    """The project's tables, each with whether labels can be put on it and why
+    not, plus the labels shared on this dashboard and whether the caller may
+    change them.
 
     Open to every reader of the dashboard, a temporary or anonymous one
     included: they label in the browser, on the same tables.
+
+    ``version_id`` reads the shared labels as that version of the family held
+    them (404 for another family's version), for a ``?version=`` view, which
+    is read-only.
     """
-    project_id = await _readable_project(dashboard_id, current_user)
-    return {"tables": annotatable_tables(_project(project_id))}
+    from depictio.api.v1.endpoints.dashboards_endpoints import version_store
+    from depictio.api.v1.endpoints.dashboards_endpoints.shared_labels_routes import (
+        can_share,
+        main_tab_doc,
+        shared_columns,
+    )
+
+    family_id, project_id = await _readable_family(dashboard_id, current_user)
+    main_tab = main_tab_doc(family_id)
+    if version_id:
+        record = version_store.get_version(version_id)
+        if not record or record.get("family_id") != str(family_id):
+            raise HTTPException(
+                status_code=404, detail="That version does not belong to this dashboard."
+            )
+        stored_main = next((t for t in record.get("tabs") or [] if t.get("is_main_tab")), {})
+        shared, sharing = shared_columns(stored_main.get("shared_labels")), False
+    else:
+        shared = shared_columns(main_tab.get("shared_labels"))
+        sharing = can_share(main_tab, current_user)
+    return {
+        "tables": annotatable_tables(_project(project_id)),
+        "shared": shared,
+        "can_share": sharing,
+    }
 
 
 @annotation_router.get("/{dashboard_id}")

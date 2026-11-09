@@ -64,9 +64,24 @@ def test_a_column_names_its_table_and_key():
             DashboardAnnotationsPayload.model_validate(_payload(columns=[col]))
 
 
-def test_active_column_must_exist():
+def test_active_column_may_name_a_shared_column():
+    """A reader compares by a column shared on the dashboard, which is not in
+    their own labels."""
+    model = DashboardAnnotationsPayload.model_validate(_payload(activeColumnId="shared-1"))
+    assert model.active_column_id == "shared-1"
     with pytest.raises(ValidationError):
-        DashboardAnnotationsPayload.model_validate(_payload(activeColumnId="nope"))
+        DashboardAnnotationsPayload.model_validate(_payload(activeColumnId="x" * 65))
+
+
+def test_shared_labels_payload_caps():
+    from depictio.models.models.dashboard_annotations import SharedLabelsPayload
+
+    ok = SharedLabelsPayload.model_validate({"columns": [_col("c1", "r")]})
+    assert ok.columns[0].key_column
+    with pytest.raises(ValidationError):
+        SharedLabelsPayload.model_validate({"columns": [_col("c1", "r"), _col("c2", "r")]})
+    with pytest.raises(ValidationError):
+        SharedLabelsPayload.model_validate({"columns": [_col("c1", "r")], "extra": 1})
 
 
 def test_no_active_column_is_fine():

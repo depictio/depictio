@@ -36,12 +36,17 @@ export interface AnnotationColumn {
    *  set on an annotation read from a dropped file, whose values must not
    *  reach the server unless the reader asks. Never sent (see `splitForAccount`). */
   local?: true;
+  /** Shared on the dashboard: every reader sees it, read-only. Never part of
+   *  the reader's own labels (see `withShared`); changed only through
+   *  `PUT /dashboards/annotations/{id}/shared` by whoever may share. */
+  shared?: true;
 }
 
 export interface DashboardAnnotations {
   version: 2;
   columns: AnnotationColumn[];
-  /** The compared column, whichever table it labels. */
+  /** The compared column, whichever table it labels. It may name a shared
+   *  column: which column a reader compares by is always their own choice. */
   activeColumnId: string | null;
 }
 
@@ -91,12 +96,54 @@ export function parseAnnotations(raw: unknown): DashboardAnnotations | null {
       ...(col.local === true ? { local: true as const } : {}),
     });
   }
+  // Kept even when it names none of these columns: it may name a shared one,
+  // which `withShared` resolves (and drops when it names nothing at all).
   const active = typeof r.activeColumnId === 'string' ? r.activeColumnId : null;
+  return { version: 2, columns, activeColumnId: active };
+}
+
+/** Shared columns as the server sends them, or [] for anything else. */
+export function parseSharedColumns(raw: unknown): AnnotationColumn[] {
+  const parsed = parseAnnotations({ version: 2, columns: raw, activeColumnId: null });
+  return (parsed?.columns ?? []).map(({ local: _l, ...c }) => ({ ...c, shared: true as const }));
+}
+
+/**
+ * What a reader sees: their own label columns and the dashboard's shared ones,
+ * as one set. The active column is the reader's choice, kept only when it names
+ * a column of the set. A personal column named like a shared one is shown as
+ * "<name> (mine)", since names are group names and must stay distinct; its
+ * stored name is left as it is.
+ */
+export function withShared(
+  personal: DashboardAnnotations | null,
+  shared: AnnotationColumn[],
+): DashboardAnnotations | null {
+  const sharedCols = shared.map((c) => ({ ...c, shared: true as const }));
+  const sharedIds = new Set(sharedCols.map((c) => c.id));
+  const sharedNames = new Set(sharedCols.map((c) => c.name));
+  const own = (personal?.columns ?? [])
+    .filter((c) => !sharedIds.has(c.id))
+    .map((c) => (sharedNames.has(c.name) ? { ...c, name: `${c.name} (mine)` } : c));
+  const columns = [...sharedCols, ...own];
+  if (columns.length === 0) return null;
+  const active = personal?.activeColumnId ?? null;
   return {
     version: 2,
     columns,
     activeColumnId: active && columns.some((c) => c.id === active) ? active : null,
   };
+}
+
+/** A name for a copy of `name` that no column of `taken` uses. */
+export function copyName(name: string, taken: Iterable<string>): string {
+  const used = new Set(taken);
+  const base = `${name} (copy)`.slice(0, MAX_LABEL_LENGTH);
+  if (!used.has(base)) return base;
+  for (let n = 2; ; n += 1) {
+    const candidate = `${name} (copy ${n})`.slice(0, MAX_LABEL_LENGTH);
+    if (!used.has(candidate)) return candidate;
+  }
 }
 
 /** Why the server would refuse these annotations, or null when it would take them. */
@@ -160,7 +207,7 @@ const withColumns = (
   columns: AnnotationColumn[],
   activeColumnId: string | null,
 ): DashboardAnnotations | null =>
-  columns.length === 0 ? null : { ...a, columns, activeColumnId };
+  columns.length === 0 && !activeColumnId ? null : { ...a, columns, activeColumnId };
 
 /**
  * Split annotations for an account that stores them: `account` is what may be
@@ -174,6 +221,7 @@ export function splitForAccount(a: DashboardAnnotations | null): {
   if (!a) return { account: null, local: null };
   const shared = a.columns.filter((c) => !c.local).map(({ local: _l, ...c }) => c);
   const local = a.columns.filter((c) => c.local);
+  // An active id naming a shared column goes with the account half.
   const activeIsLocal = local.some((c) => c.id === a.activeColumnId);
   return {
     account: withColumns(a, shared, activeIsLocal ? null : a.activeColumnId),
@@ -239,7 +287,9 @@ export function writeBrowserAnnotations(
   if (!store) return false;
   try {
     const key = STORAGE_PREFIX + dashboardId;
-    if (value === null || value.columns.length === 0) store.removeItem(key);
+    if (value === null || (value.columns.length === 0 && !value.activeColumnId)) {
+      store.removeItem(key);
+    }
     else store.setItem(key, JSON.stringify(value));
     return true;
   } catch {

@@ -34,6 +34,7 @@ import {
   TopPanel,
   mergeFiltersBySource,
   withInteractiveDefaults,
+  withShared,
   enrichFilterWithDcId,
   useDataCollectionUpdates,
   RealtimeIndicator,
@@ -1465,14 +1466,24 @@ const App: React.FC = () => {
       ? 'account'
       : 'browser';
   const annotationsState = useDashboardAnnotations(groupingScopeId, annotationStorage);
+  // Only a metadata table linked to the data can carry labels: no such table,
+  // no Metadata button. The same call brings the labels shared on the
+  // dashboard (as the previewed version held them, on a `?version=` view).
+  const annotationTablesState = useAnnotationTables(
+    dashboard && dashboardId ? dashboardId : undefined,
+    previewVersionId,
+  );
+  const annotationTables = annotationTablesState.tables;
+  const hasMetadataTable = annotationTables.some((t) => t.eligible);
+  // What the reader sees and compares by: their own labels and the shared ones.
+  const annotationView = useMemo(
+    () => withShared(annotationsState.annotations, annotationTablesState.shared),
+    [annotationsState.annotations, annotationTablesState.shared],
+  );
   const { syncAnnotationGroups } = groupsApi;
   useEffect(() => {
-    if (annotationsState.loaded) syncAnnotationGroups(annotationsState.annotations);
-  }, [annotationsState.loaded, annotationsState.annotations, syncAnnotationGroups]);
-  // Only a metadata table linked to the data can carry labels: no such table,
-  // no Metadata button.
-  const annotationTables = useAnnotationTables(dashboard && dashboardId ? dashboardId : undefined);
-  const hasMetadataTable = annotationTables.some((t) => t.eligible);
+    if (annotationsState.loaded) syncAnnotationGroups(annotationView);
+  }, [annotationsState.loaded, annotationView, syncAnnotationGroups]);
   const annotationPins = useMemo(
     () => (previewRequest ? dataPinBody(previewRequest) : null),
     [previewRequest],
@@ -1629,7 +1640,7 @@ const App: React.FC = () => {
       group: 'read',
       node: (
         <MetadataHeaderControl
-          labelCount={annotationsState.annotations?.columns.length ?? 0}
+          labelCount={annotationView?.columns.length ?? 0}
           opened={metadataOpen}
           onOpenedChange={handleMetadataOpenChange}
           pushesContent={!isNarrow}
@@ -1637,6 +1648,7 @@ const App: React.FC = () => {
           <AnnotationPanel
             dashboardId={dashboardId}
             tables={annotationTables}
+            sharing={annotationTablesState}
             pins={annotationPins}
             state={annotationsState}
             groups={groupsApi.groups}

@@ -4,3 +4,8 @@
 .dc-label-cell-pending {
   background-color: var(--mantine-color-yellow-light);
 }
+
+/* A label shared on the dashboard that this reader cannot change. */
+.dc-label-cell-readonly {
+  color: var(--mantine-color-dimmed);
+}

@@ -173,6 +173,8 @@ GUARDED: set[tuple[str, str]] = {
     (_DASH, "reorder_tabs"),
     (_DASH, "import_dashboard_from_yaml"),
     (_DASH, "import_dashboard_from_json"),
+    # labels shared on a dashboard are part of its content
+    ("dashboards_endpoints.shared_labels_routes", "put_shared_labels"),
     # versions: rewriting a published dashboard from its history
     (_VER, "delete_dashboard_version"),
     (_VER, "restore_dashboard_version"),
