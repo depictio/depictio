@@ -44,6 +44,10 @@ import { RunPreview } from './RunPreview';
 export interface RunCreatedContext {
   templateTitle: string | null;
   detection: DetectedTemplate | null;
+  /** Tables dropped next to the run folder: uploaded once the project exists. */
+  extraFiles?: File[];
+  /** Collection names the run takes, so the uploads do not clash with them. */
+  takenTableNames?: string[];
 }
 
 /** `idle`: the report names no run to watch. Once the watcher stops, the

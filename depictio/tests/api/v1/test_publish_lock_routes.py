@@ -195,6 +195,8 @@ GUARDED: set[tuple[str, str]] = {
     (_DC, "append_table_dc"),
     (_DC, "replace_table_dc"),
     (_DC, "clear_table_dc"),
+    (_DC, "patch_table_cells"),
+    (_DC, "merge_table_file_route"),
     (_DC, "create_data_collection_from_upload"),
     (_DC, "create_data_collection_from_url"),
     (_DC, "create_multiqc_data_collection_from_upload"),

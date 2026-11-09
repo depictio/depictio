@@ -6612,6 +6612,218 @@ export async function deleteDataCollection(dcId: string): Promise<void> {
   if (!res.ok) await throwHttpError(res, 'Failed to delete data collection');
 }
 
+// ── Editing a table a user added ─────────────────────────────────────────
+
+/** Whether a table can be edited in place, and whether the caller may. */
+export interface TableEditStatus {
+  data_collection_id: string;
+  /** The table is one a user added (an upload or a plain table from a folder). */
+  table_editable: boolean;
+  /** `table_editable`, the caller is an owner or editor, and the project is not published. */
+  can_edit: boolean;
+  /** The caller is an owner or editor of the project: worth showing a disabled control with `reason`. */
+  role_can_edit: boolean;
+  /** Why the table cannot be edited now, as a machine-readable code (`pipeline_table`, `url_table`, `published_lock`, …). */
+  code: string | null;
+  /** Why the table is read-only, for the user. */
+  reason: string | null;
+  max_rows: number;
+}
+
+export type TableColumnKind =
+  | 'string'
+  | 'integer'
+  | 'float'
+  | 'boolean'
+  | 'date'
+  | 'datetime'
+  | 'time'
+  | 'other';
+
+export interface TableEditColumn {
+  name: string;
+  dtype: string;
+  kind: TableColumnKind;
+  /** False for a column of a type that is shown but cannot be edited. */
+  editable: boolean;
+}
+
+/** The whole table with the Delta version it was read at. */
+export interface TableEditData {
+  data_collection_id: string;
+  delta_version: number;
+  row_count: number;
+  max_rows: number;
+  columns: TableEditColumn[];
+  rows: Record<string, unknown>[];
+}
+
+/** One edited cell. `row` is the 0-based position in the version that was read;
+ *  a null or blank `value` clears the cell. */
+export interface TableCellEdit {
+  row: number;
+  column: string;
+  value: string | number | boolean | null;
+}
+
+export interface TableCellError {
+  row: number;
+  column: string;
+  message: string;
+}
+
+export interface TableEditResult {
+  success: boolean;
+  data_collection_id: string;
+  changed_cells: number;
+  delta_version: number;
+  aggregation_version: number | null;
+  row_count: number;
+}
+
+/** A refused table edit. `code` is `stale_version` (409, someone else saved
+ *  first), `invalid_cells` (422, see `cellErrors`), `table_too_large` (413) or
+ *  one of the read-only codes (403). */
+export class TableEditError extends ApiDetailError {
+  readonly cellErrors: TableCellError[];
+  /** The table's current Delta version, on `stale_version`. */
+  readonly currentVersion: number | null;
+
+  constructor(
+    message: string,
+    status: number,
+    code: string | null,
+    cellErrors: TableCellError[] = [],
+    currentVersion: number | null = null,
+  ) {
+    super(message, status, code, message);
+    this.name = 'TableEditError';
+    this.cellErrors = cellErrors;
+    this.currentVersion = currentVersion;
+  }
+}
+
+async function throwTableEditError(res: Response, prefix: string): Promise<never> {
+  let detail: unknown = null;
+  try {
+    detail = (await res.json())?.detail;
+  } catch {
+    // non-JSON body
+  }
+  const body = (detail && typeof detail === 'object' ? detail : {}) as {
+    code?: unknown;
+    message?: unknown;
+    errors?: unknown;
+    current_version?: unknown;
+  };
+  const message =
+    typeof detail === 'string'
+      ? detail
+      : typeof body.message === 'string'
+        ? body.message
+        : `${prefix}: ${res.status}`;
+  throw new TableEditError(
+    message,
+    res.status,
+    typeof body.code === 'string' ? body.code : null,
+    Array.isArray(body.errors) ? (body.errors as TableCellError[]) : [],
+    typeof body.current_version === 'number' ? body.current_version : null,
+  );
+}
+
+/** Can this table be edited in place, and may the caller? Cheap (no table read). */
+export async function fetchTableEditStatus(dcId: string): Promise<TableEditStatus> {
+  const res = await authFetch(`${API_BASE}/datacollections/${dcId}/edit_status`);
+  if (!res.ok) await throwTableEditError(res, 'Failed to read the table edit state');
+  return res.json();
+}
+
+/** The whole table, with the Delta version that `patchTableCells` must be given. */
+export async function fetchTableForEdit(dcId: string): Promise<TableEditData> {
+  const res = await authFetch(`${API_BASE}/datacollections/${dcId}/edit_data`);
+  if (!res.ok) await throwTableEditError(res, 'Failed to load the table');
+  return res.json();
+}
+
+/** Save cell edits in one new table version, or none. Throws `TableEditError`. */
+export async function patchTableCells(
+  dcId: string,
+  baseVersion: number,
+  edits: TableCellEdit[],
+): Promise<TableEditResult> {
+  const res = await authFetch(`${API_BASE}/datacollections/${dcId}/cells`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ base_version: baseVersion, edits }),
+  });
+  if (!res.ok) await throwTableEditError(res, 'Failed to save the changes');
+  return res.json();
+}
+
+export type TableMergeMode = 'replace' | 'fill_missing' | 'add_columns';
+
+export interface TableMergeColumn extends TableEditColumn {
+  is_new: boolean;
+}
+
+export interface TableMergeKeyCandidate {
+  column: string;
+  matched_rows: number;
+  unique_in_table: boolean;
+}
+
+/** What a file does to a table: the same report for a preview and for an apply. */
+export interface TableMergeReport {
+  dry_run: boolean;
+  mode: TableMergeMode;
+  suggested_mode: TableMergeMode;
+  key: string | null;
+  key_candidates: TableMergeKeyCandidate[];
+  delta_version: number;
+  table_rows: number;
+  file_rows: number;
+  row_count: number;
+  matched_rows: number;
+  unmatched_file_rows: number;
+  unmatched_file_sample: string[];
+  filled_cells: number;
+  conflicts: number;
+  new_columns: string[];
+  ignored_columns: string[];
+  removed_columns: string[];
+  warnings: string[];
+  can_apply: boolean;
+  reason: string | null;
+  changed: { row: number; column: string }[];
+  columns: TableMergeColumn[];
+  rows: Record<string, unknown>[];
+}
+
+/** Preview (`dryRun`, the default) or apply a file on a table. Throws `TableEditError`. */
+export async function mergeTableFile(
+  dcId: string,
+  file: File,
+  options: {
+    mode?: TableMergeMode | 'auto';
+    key?: string | null;
+    baseVersion: number;
+    dryRun?: boolean;
+  },
+): Promise<TableMergeReport> {
+  const form = new FormData();
+  form.append('file', file);
+  form.append('mode', options.mode ?? 'auto');
+  if (options.key) form.append('key', options.key);
+  form.append('base_version', String(options.baseVersion));
+  form.append('dry_run', String(options.dryRun ?? true));
+  const res = await authFetch(`${API_BASE}/datacollections/${dcId}/merge_file`, {
+    method: 'POST',
+    body: form,
+  });
+  if (!res.ok) await throwTableEditError(res, 'Failed to read the file');
+  return res.json();
+}
+
 export interface CreateDataCollectionUploadInput {
   projectId: string;
   name: string;

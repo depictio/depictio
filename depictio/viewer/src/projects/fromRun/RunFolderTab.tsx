@@ -64,7 +64,9 @@ import { useStepSettling } from '../hooks/useStepSettling';
 import { FolderTablesFound } from '../create/FolderTablesFound';
 import { TableResults } from '../create/TableResults';
 import type { TableResultRow } from '../create/TableResults';
-import { baseName, classifyTableName } from '../create/tableFiles';
+import { baseName, classifyTableName, stemOf } from '../create/tableFiles';
+import { DataSourceFields, FilesFoundCard, uploadTableFiles, useTableDropzone } from '../create/FilesDropArea';
+import type { TableUploadOutcome } from '../create/FilesDropArea';
 import FolderBrowserModal from './browser/FolderBrowserModal';
 import { DetectionCard } from './DetectionCard';
 import type { DetectionState } from './DetectionCard';
@@ -132,7 +134,7 @@ interface RunFolderTabProps {
     options?: { keepOpen?: boolean },
   ) => Promise<CreateProjectResult>;
   /** The project is complete: leave for its page. */
-  onProjectReady?: (projectId: string, name: string) => void;
+  onProjectReady?: (projectId: string, name: string, tableId?: string | null) => void;
   /** The create dialog is open: every opening starts afresh. */
   opened: boolean;
   existingNames: string[];
@@ -148,8 +150,8 @@ interface RunFolderTabProps {
   onCreateFromRun: (input: FromRunRequest, context: RunCreatedContext) => Promise<FromRunReport>;
   submitting: boolean;
   setSubmitting: (submitting: boolean) => void;
-  /** Leave the tab for the list of sources: the first step's Previous. */
-  onBack?: () => void;
+  /** Under the source fields: the rarer ways to start a project. */
+  sourceFooter?: React.ReactNode;
 }
 
 const RunFolderTab: React.FC<RunFolderTabProps> = ({
@@ -165,9 +167,11 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
   onCreateFromRun,
   submitting,
   setSubmitting,
-  onBack,
+  sourceFooter,
 }) => {
   const accent = useBrandAccents();
+  const { dropzone, files: localFiles } = useTableDropzone();
+  const { clear: clearLocalFiles } = dropzone;
   const [step, setStep] = useState(0);
   const [dataRoot, setDataRoot] = useState('');
   /** The folder last read, `INSPECT_DELAY_MS` after typing stops (at once
@@ -176,6 +180,8 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
   const [detection, setDetection] = useState<DetectionState>({ status: 'idle' });
   const [choice, setChoice] = useState<Choice>(NO_CHOICE);
   const [projectName, setProjectName] = useState('');
+  /** Once the reader typed a name, the suggestion no longer replaces it. */
+  const nameTouched = useRef(false);
   const [isPublic, setIsPublic] = useState(false);
   const [variables, setVariables] = useState<Record<string, string>>({});
   const [preview, setPreview] = useState<FromRunReport | null>(null);
@@ -204,11 +210,13 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
   const [tickedTables, setTickedTables] = useState<Set<string>>(new Set());
   const [tableRows, setTableRows] = useState<TableResultRow[]>([]);
   const [createdProjectId, setCreatedProjectId] = useState<string | null>(null);
+  const [createdTableId, setCreatedTableId] = useState<string | null>(null);
   const [tableError, setTableError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!opened) return;
     setStep(0);
+    clearLocalFiles();
     setDataRoot('');
     setInspectTarget('');
     setPipelinePickerOpen(false);
@@ -219,6 +227,7 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
     setDetection({ status: 'idle' });
     setChoice(NO_CHOICE);
     setProjectName('');
+    nameTouched.current = false;
     setIsPublic(false);
     setVariables({});
     setPreview(null);
@@ -229,6 +238,8 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
     setPrivateBucket(NO_PRIVATE_BUCKET);
     setPreviewNeedsBucket(false);
     setBrowseBinding(null);
+    // `clearLocalFiles` is stable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [opened]);
 
   const trimmedRoot = dataRoot.trim();
@@ -466,8 +477,9 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
   // A folder of plain tables: nothing in it names a pipeline, nothing was
   // picked. Listed from the inspection (direct children), classified by
   // extension; the project is created with the ticked ones.
-  const tablesMode =
-    inspection !== null && !detected?.pipeline && !choice.templateId;
+  const filesOnly = localFiles.length > 0 && !trimmedRoot;
+  const plainFolder = inspection !== null && !detected?.pipeline && !choice.templateId;
+  const tablesMode = filesOnly || plainFolder;
   const folderFileNames = useMemo(() => inspection?.files.names ?? [], [inspection]);
   const tableNames = useMemo(
     () => folderFileNames.filter((n) => classifyTableName(n).table),
@@ -482,6 +494,10 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
   }, [inspectedLocation, tableNames.join('\n')]);
   const tickedList = tableNames.filter((n) => tickedTables.has(n));
   const folderBase = baseName(trimmedRoot.replace(/\/+$/, '')) || 'tables';
+  const singleFileStem = localFiles.length === 1 ? stemOf(localFiles[0].name) : '';
+  /** What a project of tables is called by default. */
+  const tablesBase = trimmedRoot ? folderBase : singleFileStem || 'uploads';
+  const tableCount = (plainFolder ? tickedList.length : 0) + localFiles.length;
 
   const groups = useMemo(
     () =>
@@ -609,23 +625,35 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [opened, step]);
 
+  // The name comes after the data, already filled in: the folder's or the
+  // file's, or the one the server derived for a run it recognised.
+  useEffect(() => {
+    if (!opened || step !== 1) return;
+    const suggested = tablesMode ? uniqueName(tablesBase, existingNames) : defaultName ?? preview?.project_name;
+    if (suggested && !nameTouched.current) setProjectName(suggested);
+    // Offered on each visit to the step; the reader's own name stays.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [opened, step, preview?.project_name]);
+
   const foundNothing = step > 0 && !!preview && runFoundNothing(preview.data_collections);
 
   // Disabled with a visible reason rather than hidden (project convention).
   let disabledReason: string | null = null;
-  const tablesName = trimmedName || uniqueName(folderBase, existingNames);
+  const tablesName = trimmedName || uniqueName(tablesBase, existingNames);
   if (tablesMode && step === 1) {
     if (existingNames.some((n) => n.toLowerCase() === tablesName.toLowerCase())) {
       disabledReason = 'A project with this name already exists.';
-    } else if (tickedList.length === 0) {
+    } else if (tableCount === 0) {
       disabledReason = 'Tick at least one table.';
     }
+  } else if (filesOnly) {
+    // Files are all it takes.
   } else if (step === 0 && !prefixInvalid && trimmedRoot && detectionView.status === 'loading') {
     disabledReason = 'Reading the folder.';
   } else if (trimmedRoot.length === 0) {
     disabledReason = browseEnabled
-      ? 'Enter or browse to the run folder.'
-      : 'Enter the location of the run folder.';
+      ? 'Drop files, or enter or browse to a folder.'
+      : 'Drop files, or enter the location of a folder.';
   } else if (prefixInvalid) {
     disabledReason = localDataRootsEnabled
       ? 'The run folder must be a folder path or an s3:// location.'
@@ -633,7 +661,7 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
   } else if (step === 0 && folderUnreadable) {
     disabledReason =
       (detectionView.status === 'error' && detectionView.error) || 'The run folder could not be read.';
-  } else if (nameUsed) {
+  } else if (step >= 1 && nameUsed) {
     disabledReason = 'A project with this name already exists.';
   } else if (
     step === 0 &&
@@ -643,7 +671,7 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
     storageProblem
   ) {
     disabledReason = `Private bucket: ${storageProblem}`;
-  } else if (tablesMode && step === 0 && tableNames.length === 0) {
+  } else if (plainFolder && step === 0 && tableNames.length === 0 && localFiles.length === 0) {
     disabledReason = 'No pipeline recognised and no table files in this folder.';
   } else if (
     step === 1 &&
@@ -665,19 +693,25 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
   // stops on the Create step instead of creating straight away.
   const stepSettling = useStepSettling(step);
 
+  /** Create the project, then its tables: the folder's ticked ones and the
+   *  dropped files. One that fails is reported on its row and the project stays. */
   const createTables = async () => {
-    if (!onCreateProject || !inspection) return;
-    const location = inspection.location;
+    if (!onCreateProject) return;
+    const folderTables = plainFolder && inspection ? tickedList : [];
+    const location = inspection?.location ?? null;
     setStep(2);
     setSubmitting(true);
     setError(null);
     setTableError(null);
     setCreatedProjectId(null);
-    const pending: TableResultRow[] = tickedList.map((n) => ({
-      key: n,
-      label: n,
-      status: 'pending',
-    }));
+    const pending: TableResultRow[] = [
+      ...folderTables.map((n) => ({ key: n, label: n, status: 'pending' as const })),
+      ...localFiles.map((f, i) => ({
+        key: `file-${i}`,
+        label: baseName(f.name),
+        status: 'pending' as const,
+      })),
+    ];
     setTableRows(pending);
     try {
       const result = await onCreateProject(
@@ -692,24 +726,54 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
       const projectId = result.project_id ?? null;
       if (!projectId) throw new Error(result.message || 'The project could not be created.');
       setCreatedProjectId(projectId);
-      const report = await addTablesFromFolder(projectId, {
-        location,
-        files: tickedList,
-        dryRun: false,
-        ...(rootStorage ? { storage: rootStorage } : {}),
+
+      let folderRows: TableResultRow[] = [];
+      let firstTableId: string | null = null;
+      if (location && folderTables.length > 0) {
+        const report = await addTablesFromFolder(projectId, {
+          location,
+          files: folderTables,
+          dryRun: false,
+          ...(rootStorage ? { storage: rootStorage } : {}),
+        });
+        folderRows = folderTables.map((n) => {
+          const made = report.created.find((c) => c.path === n);
+          if (made && made.status === 'ingested') {
+            firstTableId = firstTableId ?? made.data_collection_id ?? null;
+            return { key: n, label: n, status: 'created' };
+          }
+          return {
+            key: n,
+            label: n,
+            status: 'failed',
+            error: made?.error ?? 'This file was not turned into a table.',
+          };
+        });
+        setTableRows([...folderRows, ...pending.slice(folderRows.length)]);
+      }
+
+      const toRow = (o: TableUploadOutcome, i: number): TableResultRow => ({
+        key: `file-${i}`,
+        label: baseName(o.file.name),
+        status: o.error ? 'failed' : 'created',
+        error: o.error,
       });
-      const rows: TableResultRow[] = tickedList.map((n) => {
-        const made = report.created.find((c) => c.path === n);
-        if (made && made.status === 'ingested') return { key: n, label: n, status: 'created' };
-        return {
-          key: n,
-          label: n,
-          status: 'failed',
-          error: made?.error ?? 'This file was not turned into a table.',
-        };
-      });
-      setTableRows(rows);
-      if (rows.every((r) => r.status === 'created')) onProjectReady?.(projectId, tablesName);
+      const uploads = await uploadTableFiles(
+        projectId,
+        localFiles,
+        folderTables.map(stemOf),
+        (outcomes) =>
+          setTableRows([
+            ...folderRows,
+            ...outcomes.map(toRow),
+            ...pending.slice(folderRows.length + outcomes.length),
+          ]),
+      );
+      firstTableId = firstTableId ?? uploads.find((u) => u.dataCollectionId)?.dataCollectionId ?? null;
+      setCreatedTableId(firstTableId);
+      const allCreated =
+        folderRows.every((r) => r.status === 'created') && uploads.every((u) => !u.error);
+      if (allCreated) onProjectReady?.(projectId, tablesName, firstTableId);
     } catch (err) {
       setTableError((err as Error).message || 'Failed to create the project.');
       setTableRows((prev) =>
@@ -726,7 +790,7 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
       await createTables();
       return;
     }
-    if (step === 0) rememberRunFolder(trimmedRoot);
+    if (step === 0 && trimmedRoot) rememberRunFolder(trimmedRoot);
     if (step < 2) {
       setStep(step + 1);
       return;
@@ -737,6 +801,8 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
       await onCreateFromRun(buildRequest(false), {
         templateTitle: titleOf(choice.templateId ?? preview?.template_id),
         detection: detected,
+        extraFiles: localFiles,
+        takenTableNames: (preview?.data_collections ?? []).map((dc) => dc.data_collection_tag),
       });
     } catch (err) {
       setError((err as Error).message || 'Failed to create project from run folder.');
@@ -745,8 +811,7 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
     }
   };
 
-  const displayName =
-    preview?.project_name || effectiveName || 'project';
+  const displayName = effectiveName || preview?.project_name || 'project';
   const previewTitle = preview ? titleOf(preview.template_id) : null;
   // A preview refused for want of the bucket's details: back to the Source
   // step, with the section open.
@@ -770,7 +835,7 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
     />
   );
 
-  const plainTablesNote = tablesMode ? (
+  const plainTablesNote = plainFolder ? (
     <Alert
       color="blue"
       variant="light"
@@ -879,10 +944,11 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
         allowNextStepsSelect={false}
       >
         <Stepper.Step
-          label="Source"
-          description="Folder or bucket"
+          label="Your data"
+          description="Files, a folder, or both"
         >
           <Stack gap="md" pt="md">
+          <DataSourceFields dropzone={dropzone} files={localFiles} submitting={submitting}>
             <TextInput
               label="Folder or bucket"
               description={
@@ -890,7 +956,6 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
                   ? 'A folder of results or tables: a folder on this computer (a full path, or one starting with ~/) or an s3:// location.'
                   : 'The s3:// location of a folder of results or tables.'
               }
-              required
               placeholder={localDataRootsEnabled ? '~/results/run42' : 's3://bucket/results/run42/'}
               value={dataRoot}
               onChange={(e) => changeDataRoot(e.currentTarget.value)}
@@ -926,7 +991,7 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
             {pipelineLine}
             {pipelinePickerOpen && pickerBlock}
 
-            {!tablesMode && (
+            {!tablesMode && trimmedRoot && (
             <DetectionCard
               state={detectionView}
               templateId={usedTemplateId}
@@ -942,22 +1007,6 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
             />
             )}
 
-            {!tablesMode && (
-            <TextInput
-              label="Project Name (Optional)"
-              description="Defaults to a name derived from the pipeline"
-              placeholder={defaultName ?? 'Enter project name'}
-              value={projectName}
-              onChange={(e) => {
-                setProjectName(e.currentTarget.value);
-                // A refusal of the previous name (taken already) no longer applies.
-                setError(null);
-              }}
-              leftSection={<Icon icon="mdi:folder-outline" width={16} />}
-              error={nameUsed ? 'A project with this name already exists.' : undefined}
-              data-testid="run-project-name-input"
-            />
-            )}
             {extraVariables.length > 0 && (
               <TemplateSettingsSection
                 variables={extraVariables}
@@ -965,6 +1014,8 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
                 onChange={(name, value) => setVariables((prev) => ({ ...prev, [name]: value }))}
               />
             )}
+          </DataSourceFields>
+          {sourceFooter}
           </Stack>
         </Stepper.Step>
 
@@ -972,6 +1023,7 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
           {tablesMode ? (
             <Stack gap="md" pt="md">
               {plainTablesNote}
+              {plainFolder && (
               <FolderTablesFound
                 location={inspection?.location ?? trimmedRoot}
                 names={folderFileNames}
@@ -986,11 +1038,16 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
                   })
                 }
               />
+              )}
+              {localFiles.length > 0 && <FilesFoundCard files={localFiles} />}
               <TextInput
                 label="Project name"
-                placeholder={uniqueName(folderBase, existingNames)}
+                placeholder={uniqueName(tablesBase, existingNames)}
                 value={projectName}
-                onChange={(e) => setProjectName(e.currentTarget.value)}
+                onChange={(e) => {
+                  nameTouched.current = true;
+                  setProjectName(e.currentTarget.value);
+                }}
                 leftSection={<Icon icon="mdi:folder-outline" width={16} />}
                 error={
                   existingNames.some((n) => n.toLowerCase() === tablesName.toLowerCase())
@@ -1002,6 +1059,7 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
               {publicSwitch}
             </Stack>
           ) : (
+          <Stack gap="md">
           <RunPreviewStep
             loading={previewLoading}
             detecting={!choice.templateId}
@@ -1020,6 +1078,23 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
             storage={rootStorage}
             chosenFrom={choice.from}
           />
+          {preview && (
+            <TextInput
+              label="Project name"
+              value={projectName}
+              onChange={(e) => {
+                nameTouched.current = true;
+                setProjectName(e.currentTarget.value);
+                // A refusal of the previous name (taken already) no longer applies.
+                setError(null);
+              }}
+              leftSection={<Icon icon="mdi:folder-outline" width={16} />}
+              error={nameUsed ? 'A project with this name already exists.' : undefined}
+              data-testid="run-project-name-input"
+            />
+          )}
+          {localFiles.length > 0 && <FilesFoundCard files={localFiles} />}
+          </Stack>
           )}
         </Stepper.Step>
 
@@ -1032,7 +1107,7 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
               working={submitting}
               onOpen={
                 createdProjectId && onProjectReady
-                  ? () => onProjectReady(createdProjectId, tablesName)
+                  ? () => onProjectReady(createdProjectId, tablesName, createdTableId)
                   : null
               }
             />
@@ -1064,14 +1139,18 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
 
       {!(tablesMode && step === 2) && (
       <Group justify="space-between" align="flex-start" wrap="nowrap">
-        <Button
-          variant="default"
-          onClick={() => (step === 0 ? onBack?.() : setStep((s) => Math.max(0, s - 1)))}
-          disabled={(step === 0 && !onBack) || submitting}
-          data-testid="run-previous"
-        >
-          {step === 0 && onBack ? 'Back' : 'Previous'}
-        </Button>
+        {step > 0 ? (
+          <Button
+            variant="default"
+            onClick={() => setStep((s) => Math.max(0, s - 1))}
+            disabled={submitting}
+            data-testid="run-previous"
+          >
+            Previous
+          </Button>
+        ) : (
+          <span />
+        )}
         <Stack gap={4} align="flex-end" style={{ minWidth: 0, flex: '1 1 auto' }} ml="md">
           <GatedButton
             aria-disabled={stepSettling || undefined}
@@ -1082,7 +1161,7 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
             data-testid="create-from-run-submit"
           >
             {tablesMode && step === 1
-              ? `Create project with ${tickedList.length} ${tickedList.length === 1 ? 'table' : 'tables'}`
+              ? `Create project with ${tableCount} ${tableCount === 1 ? 'table' : 'tables'}`
               : step === 2
                 ? 'Create Project'
                 : 'Next'}

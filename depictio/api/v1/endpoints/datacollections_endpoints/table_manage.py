@@ -194,15 +194,18 @@ def _bump_table_dc_aggregation(
     current_user,
     delta_location: str,
     combined_df: pl.DataFrame,
+    *,
+    write_mode: str | None = None,
+    trigger: str | None = None,
+    delta_version: int | None = None,
+    columns_specs: list | None = None,
 ) -> int:
     """Append a new Aggregation row + return the new aggregation_version.
 
     Mirrors the upsert path in deltatables_endpoints/routes.py:upsert_deltatable
     so render_multiqc / render_table cache keys (which salt with the latest
-    aggregation_version) bump correctly. We skip ``precompute_columns_specs``
-    here — the CLI flow recomputes it on the next full process. For the
-    realtime invalidation path it's enough to bump the version + replace the
-    aggregation row.
+    aggregation_version) bump correctly. ``columns_specs`` is empty unless the
+    caller changed the columns: readers then keep the latest entry that has some.
     """
     dc_oid = ObjectId(data_collection_id)
     query_dt = deltatables_collection.find_one({"data_collection_id": dc_oid})
@@ -234,7 +237,11 @@ def _bump_table_dc_aggregation(
             aggregation_by=userbase,
             aggregation_version=version,
             aggregation_hash=final_hash,
-            aggregation_columns_specs=[],
+            aggregation_columns_specs=columns_specs or [],
+            write_mode=write_mode,
+            trigger=trigger,
+            delta_version=delta_version,
+            rows_total=combined_df.height,
         )
     )
 
@@ -270,6 +277,84 @@ def _invalidate_table_caches_for_dc(dc_id: str) -> None:
         get_cache().delete_pattern(f"dc={dc_id}")
     except Exception as exc:
         logger.warning(f"Figure cache invalidation failed for dc={dc_id}: {exc}")
+
+
+def commit_table_frame(
+    *,
+    data_collection_id: str,
+    frame: pl.DataFrame,
+    current_user,
+    write_mode: str,
+    trigger: str | None = None,
+    dc_for_specs: dict | None = None,
+) -> tuple[int, int | None]:
+    """Overwrite a Table DC's Delta table with ``frame`` and publish the change.
+
+    The one write path of the table-management routes (append, replace, cell
+    edits): write a new Delta commit, record an aggregation entry (which
+    salts every DataFrame cache key with the new ``aggregation_version``), and
+    drop the cached frames. Returns ``(aggregation_version, delta_version)``.
+
+    ``dc_for_specs``, the data collection document, also records the columns of
+    the new table: without it the entry holds no specs and readers of the schema
+    (the dashboard builder) keep the previous columns.
+    """
+    from deltalake import DeltaTable
+
+    delta_loc = _delta_location_for(data_collection_id)
+    frame.write_delta(
+        delta_loc,
+        storage_options=polars_s3_config,
+        delta_write_options={"schema_mode": "overwrite"},
+        mode="overwrite",
+    )
+    try:
+        delta_version: int | None = DeltaTable(
+            delta_loc, storage_options=polars_s3_config
+        ).version()
+    except Exception as exc:
+        logger.debug(f"Delta version of {delta_loc} unreadable after write: {exc}")
+        delta_version = None
+
+    new_version = _bump_table_dc_aggregation(
+        data_collection_id,
+        current_user,
+        delta_loc,
+        frame,
+        write_mode=write_mode,
+        trigger=trigger,
+        delta_version=delta_version,
+        columns_specs=_columns_specs(data_collection_id, frame, dc_for_specs),
+    )
+    _invalidate_table_caches_for_dc(data_collection_id)
+    return new_version, delta_version
+
+
+def _columns_specs(data_collection_id: str, frame: pl.DataFrame, dc: dict | None) -> list | None:
+    """The specs of ``frame``, or None: a table written without them stays readable."""
+    if dc is None:
+        return None
+    from depictio.api.v1.endpoints.deltatables_endpoints.utils import (
+        precompute_columns_specs,
+        previous_column_types,
+    )
+    from depictio.api.v1.utils import agg_functions
+
+    try:
+        properties = (dc.get("config") or {}).get("dc_specific_properties") or {}
+        return precompute_columns_specs(
+            frame.lazy(),
+            agg_functions,
+            {"config": {"dc_specific_properties": properties}},
+            previous_types=previous_column_types(
+                deltatables_collection.find_one(
+                    {"data_collection_id": ObjectId(data_collection_id)}
+                )
+            ),
+        )
+    except Exception as exc:
+        logger.warning(f"Column specs not recorded for dc={data_collection_id}: {exc}")
+        return None
 
 
 def _process_table_uploads(
@@ -430,17 +515,13 @@ def _write_table_upload(
     frames.extend(new_dfs)
     combined_df = _align_and_concat(frames)
 
-    combined_df.write_delta(
-        delta_loc,
-        storage_options=polars_s3_config,
-        delta_write_options={"schema_mode": "overwrite"},
-        mode="overwrite",
+    new_version, _ = commit_table_frame(
+        data_collection_id=data_collection_id,
+        frame=combined_df,
+        current_user=current_user,
+        write_mode="append" if mode == "append" else "overwrite",
+        trigger="ui",
     )
-
-    new_version = _bump_table_dc_aggregation(
-        data_collection_id, current_user, delta_loc, combined_df
-    )
-    _invalidate_table_caches_for_dc(data_collection_id)
 
     rows_added = combined_df.height - rows_before
     return {

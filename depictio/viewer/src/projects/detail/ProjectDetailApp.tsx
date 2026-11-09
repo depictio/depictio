@@ -60,11 +60,13 @@ import {
   fetchDeltaHistory,
   fetchMultiQCByDataCollection,
   fetchProject,
+  fetchTableEditStatus,
   fetchVizSuggestions,
   renameDataCollection,
   useBrandAccents,
 } from 'depictio-react-core';
 import type {
+  TableEditStatus,
   ProjectListEntry,
   PreviewResult,
   MultiQCReportSummary,
@@ -85,6 +87,7 @@ import IngestionReportPanel from './IngestionReportPanel';
 import ProjectIngestionHistoryPanel from './ProjectIngestionHistoryPanel';
 import ProjectIngestionTrigger from './ProjectIngestionTrigger';
 import { DeltaVersionHistory } from './DeltaVersionHistory';
+import TableEditor from './TableEditor';
 import ProjectSettingsModal, { type ProjectSettingsSectionKey } from './ProjectSettingsModal';
 import { parseTemplate } from '../template';
 import {
@@ -302,6 +305,12 @@ function readProjectIdFromPath(): string | null {
   return m?.[1] || null;
 }
 
+/** `?table={dc_id}`: the data collection a link asks the page to open. */
+function readTableFromQuery(): string | null {
+  if (typeof window === 'undefined') return null;
+  return new URLSearchParams(window.location.search).get('table') || null;
+}
+
 /** Flatten DCs across all workflows. The workflows are the project's own
  *  (a pipeline's, plus one wrapped around each hand-added collection). */
 function flattenDataCollections(
@@ -318,6 +327,10 @@ const ProjectDetailApp: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<{ error: unknown } | null>(null);
   const [selectedDcId, setSelectedDcId] = useState<string | null>(null);
+  // `/projects/{id}?table={dc_id}` opens that table: the Data part unfolds, the
+  // collection is selected and its rows load. Applied once per visit.
+  const requestedTableId = useMemo(readTableFromQuery, []);
+  const requestedTableHandled = useRef(false);
   // Active project-detail tab. Honors `#ingestion` deep links (e.g. from the
   // dashboard banner / settings drawer) and is controlled so the ingestion
   // report can switch back to Overview when previewing a data collection.
@@ -472,6 +485,23 @@ const ProjectDetailApp: React.FC = () => {
     return wf?.data_collections || [];
   }, [allDataCollections, selectedWorkflowId, workflows]);
 
+  useEffect(() => {
+    if (!requestedTableId || requestedTableHandled.current || !project) return;
+    requestedTableHandled.current = true;
+    const known = allDataCollections.some((dc) => (dc._id ?? dc.id) === requestedTableId);
+    if (!known) {
+      notifications.show({
+        color: 'yellow',
+        message: 'The table in this link is not in this project (it may have been deleted).',
+      });
+      return;
+    }
+    setSelectedWorkflowId(null);
+    setActiveTab('overview');
+    scrollToDcRef.current = true;
+    setSelectedDcId(requestedTableId);
+  }, [requestedTableId, project, allDataCollections]);
+
   const selectedDc = useMemo(
     () =>
       dataCollections.find((dc) => (dc._id ?? dc.id) === selectedDcId) || null,
@@ -622,6 +652,7 @@ const ProjectDetailApp: React.FC = () => {
                         | undefined) || []
                     }
                     links={projectLinks}
+                    autoLoadPreview={requestedTableId === selectedDcId}
                   />
                 )}
               </Box>
@@ -651,7 +682,13 @@ const ProjectDetailApp: React.FC = () => {
                 refreshKey={refreshKey}
               />
               {projectId && <ProjectDashboardsPanel projectId={projectId} />}
-              <ProjectPart id="data" icon={Database} title="Data" summary={dataSummary}>
+              <ProjectPart
+                id="data"
+                icon={Database}
+                title="Data"
+                summary={dataSummary}
+                forceOpen={requestedTableId != null}
+              >
                 <Stack gap="lg">
                   {workflowsPanel}
                   {projectId ? (
@@ -835,6 +872,19 @@ const ProjectDetailApp: React.FC = () => {
     </>
   );
 
+  // After adding data the next thing to do: open the dialog on this project.
+  const createDashboardButton = (
+    <Button
+      component="a"
+      href={`/dashboards?create_for_project=${encodeURIComponent(projectId ?? '')}`}
+      leftSection={<Icon icon="mdi:view-dashboard-outline" width={16} />}
+      data-disabled={!project ? true : undefined}
+      data-testid="project-create-dashboard"
+    >
+      Create a dashboard
+    </Button>
+  );
+
   if (glass) {
     const name = project?.name || 'Project';
     return (
@@ -846,6 +896,7 @@ const ProjectDetailApp: React.FC = () => {
           crumbs={[{ label: name }]}
           actions={
             <Group gap="xs">
+              {createDashboardButton}
               {/* Open to every reader once the project has loaded: the sections
                   inside disable what the reader may not change and say why. */}
               <Button
@@ -920,6 +971,7 @@ const ProjectDetailApp: React.FC = () => {
             </Title>
           </Group>
           <Group gap="xs">
+            {createDashboardButton}
             {/* Open to every reader once the project has loaded: the sections
                 inside disable what the reader may not change and say why. */}
             <Button
@@ -2032,7 +2084,9 @@ const DataCollectionViewer: React.FC<{
     target_field?: string;
     enabled?: boolean;
   }>;
-}> = ({ dc, fromPipeline, allDataCollections, joins, links }) => {
+  /** Load the rows on mount instead of waiting for "Load Data". */
+  autoLoadPreview?: boolean;
+}> = ({ dc, fromPipeline, allDataCollections, joins, links, autoLoadPreview = false }) => {
   const dcId = (dc._id ?? dc.id) as string;
   const type = (dc.config?.type as string | undefined) || 'unknown';
   const format =
@@ -2047,6 +2101,8 @@ const DataCollectionViewer: React.FC<{
     : null;
   const isCoordTable = dcHasCoordinates(dc);
   const deltaVersion = getDcDeltaVersion(dc);
+  // Bumped when the table is edited, so the version history reloads.
+  const [editTick, setEditTick] = useState(0);
 
   // Ranked viz-kind fit scores for this DC — surfaced in the viewer as
   // "compatible advanced visualizations" chips so users discover the affinity
@@ -2283,17 +2339,15 @@ const DataCollectionViewer: React.FC<{
         {!isMultiQC && (isTable || isTracks) && (
           <>
             <Card withBorder radius="md" p="md">
-              <Group gap="xs" mb="md">
-                <Icon
-                  icon="mdi:table"
-                  width={20}
-                  color="var(--mantine-color-teal-6)"
-                />
-                <Text fw={600}>Data Preview</Text>
-              </Group>
-              <DataPreviewPanel key={dcId} dcId={dcId} />
+              <TableDataSection
+                key={dcId}
+                dcId={dcId}
+                checkEditable={isTable}
+                autoLoad={autoLoadPreview}
+                onEdited={() => setEditTick((n) => n + 1)}
+              />
             </Card>
-            <DeltaVersionHistory key={`history-${dcId}`} dcId={dcId} />
+            <DeltaVersionHistory key={`history-${dcId}-${editTick}`} dcId={dcId} />
           </>
         )}
 
@@ -2763,7 +2817,109 @@ const DetailRow: React.FC<{
   </Group>
 );
 
-const DataPreviewPanel: React.FC<{ dcId: string }> = ({ dcId }) => {
+/** The table card's body. Owners and editors of a table a user added get one
+ *  editable grid straight away, with the read-only view behind "Past versions".
+ *  Everyone else gets the read-only view; someone who could edit the project is
+ *  also told why this table cannot be edited. */
+const TableDataSection: React.FC<{
+  dcId: string;
+  /** Only tables can be edited; other Delta-backed types skip the lookup. */
+  checkEditable: boolean;
+  autoLoad: boolean;
+  onEdited: () => void;
+}> = ({ dcId, checkEditable, autoLoad, onEdited }) => {
+  const accent = useBrandAccents();
+  const glass = useGlassPages();
+  const [status, setStatus] = useState<TableEditStatus | null>(null);
+  // Until the answer is in, neither grid: one would flash and give way to the other.
+  const [statusKnown, setStatusKnown] = useState(!checkEditable);
+  const [readOnlyView, setReadOnlyView] = useState(false);
+  // Bumped after an edit: remounts the preview, which then reloads its rows.
+  const [previewKey, setPreviewKey] = useState(0);
+
+  useEffect(() => {
+    setStatus(null);
+    setStatusKnown(!checkEditable);
+    if (!checkEditable) return;
+    let cancelled = false;
+    fetchTableEditStatus(dcId)
+      .then((s) => {
+        if (!cancelled) setStatus(s);
+      })
+      .catch(() => {
+        // No edit control rather than a broken one.
+        if (!cancelled) setStatus(null);
+      })
+      .finally(() => {
+        if (!cancelled) setStatusKnown(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [dcId, checkEditable]);
+
+  const disabledReason =
+    status && !status.can_edit && status.role_can_edit ? status.reason : null;
+  const editing = !!status?.can_edit && !readOnlyView;
+
+  if (!statusKnown) {
+    return (
+      <Center py="md">
+        <Loader size="sm" />
+      </Center>
+    );
+  }
+
+  return (
+    <>
+      <Group gap="xs" mb="md" justify="space-between" wrap="wrap">
+        <Group gap="xs">
+          <Icon icon="mdi:table" width={20} color="var(--mantine-color-teal-6)" />
+          <Text fw={600}>{editing ? 'Table' : 'Data Preview'}</Text>
+        </Group>
+        {!editing && (status?.can_edit || disabledReason) && (
+          <Button
+            size="xs"
+            variant="light"
+            color={glass ? undefined : accent.secondary}
+            disabled={!status?.can_edit}
+            onClick={() => setReadOnlyView(false)}
+            leftSection={<Icon icon="mdi:table-edit" width={16} />}
+            data-testid="table-edit-button"
+          >
+            Edit table
+          </Button>
+        )}
+      </Group>
+      {!editing && disabledReason && (
+        <Text size="xs" c="dimmed" mb="xs" data-testid="table-edit-disabled-reason">
+          Editing is off for this table: {disabledReason}
+        </Text>
+      )}
+      {editing ? (
+        <TableEditor
+          dcId={dcId}
+          onSaved={() => {
+            setPreviewKey((k) => k + 1);
+            onEdited();
+          }}
+          onShowReadOnly={() => setReadOnlyView(true)}
+        />
+      ) : (
+        <DataPreviewPanel
+          key={`${dcId}-${previewKey}`}
+          dcId={dcId}
+          autoLoad={autoLoad || previewKey > 0 || readOnlyView}
+        />
+      )}
+    </>
+  );
+};
+
+const DataPreviewPanel: React.FC<{ dcId: string; autoLoad?: boolean }> = ({
+  dcId,
+  autoLoad = false,
+}) => {
   const accent = useBrandAccents();
   const glass = useGlassPages();
   const [preview, setPreview] = useState<PreviewResult | null>(null);
@@ -2806,6 +2962,12 @@ const DataPreviewPanel: React.FC<{ dcId: string }> = ({ dcId }) => {
       .catch(() => undefined);
     await load(null);
   };
+
+  useEffect(() => {
+    if (autoLoad) void handleLoad();
+    // Once, on mount: `autoLoad` only says whether the rows were asked for up front.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Pre-first-load states replace the whole panel. Once a preview exists the
   // panel keeps its chrome (version picker, staleness warning) while a

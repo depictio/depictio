@@ -1,22 +1,10 @@
 import React, { useState } from 'react';
-import { Button, Menu, Text } from '@mantine/core';
+import { Button } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import type { ProjectListEntry } from 'depictio-react-core';
 import CreateDataCollectionModal from '../CreateDataCollectionModal';
 import { projectLayout, projectPipeline, projectRunFolders } from '../../layout';
-import FilesModal from './FilesModal';
-import AttachRunModal from './AttachRunModal';
-import FolderTablesModal from './FolderTablesModal';
-
-export interface AddDataItem {
-  key: string;
-  label: string;
-  description: string;
-  icon: string;
-  testId: string;
-  /** Called when the item is picked; opens whatever dialog it owns. */
-  onSelect: () => void;
-}
+import AddDataModal from './AddDataModal';
 
 interface AddDataButtonProps {
   projectId: string | null;
@@ -32,8 +20,8 @@ interface AddDataButtonProps {
   color?: string;
 }
 
-/** The one entry point for putting data into a project. Each way of adding
- *  data is an item below; a new one is one more entry in `items`. */
+/** The one entry point for putting data into a project: `AddDataModal`, the
+ *  same screen a new project starts from. */
 export const AddDataButton: React.FC<AddDataButtonProps> = ({
   projectId,
   project,
@@ -44,11 +32,13 @@ export const AddDataButton: React.FC<AddDataButtonProps> = ({
   size = 'xs',
   color,
 }) => {
-  const [filesOpened, setFilesOpened] = useState(false);
+  const [opened, setOpened] = useState(false);
   // The single-collection dialog: MultiQC reports, and one table from a URL.
   const [singleType, setSingleType] = useState<'table' | 'multiqc' | null>(null);
-  const [folderOpened, setFolderOpened] = useState(false);
-  const [runOpened, setRunOpened] = useState(false);
+  const openSingle = (type: 'table' | 'multiqc') => {
+    setOpened(false);
+    setSingleType(type);
+  };
 
   // "Add a run" only makes sense for a project made from a pipeline: one with
   // real workflows and the origin the server checks a new run against.
@@ -60,7 +50,6 @@ export const AddDataButton: React.FC<AddDataButtonProps> = ({
     projectLayout(project).realWorkflows.length > 0 &&
     !runFolderIsS3;
   const pipeline = isPipelineProject ? projectPipeline(project) : null;
-  const pipelineName = pipeline?.name ?? 'this pipeline';
 
   const existingNames = (
     Array.isArray(project?.workflows) ? (project?.workflows as Array<Record<string, unknown>>) : []
@@ -72,101 +61,33 @@ export const AddDataButton: React.FC<AddDataButtonProps> = ({
       : [],
   );
 
-  const items: AddDataItem[] = [
-    {
-      key: 'files',
-      label: 'Files',
-      description: 'Upload one or several tables (CSV, TSV, Parquet).',
-      icon: 'mdi:file-upload-outline',
-      testId: 'add-data-files',
-      onSelect: () => {
-        onOpen?.();
-        setFilesOpened(true);
-      },
-    },
-    {
-      key: 'folder',
-      label: 'From a folder or bucket',
-      description: 'Pick tables in a folder, an s3:// location or a URL.',
-      icon: 'mdi:folder-outline',
-      testId: 'add-data-folder',
-      onSelect: () => {
-        onOpen?.();
-        setFolderOpened(true);
-      },
-    },
-    {
-      key: 'multiqc',
-      label: 'MultiQC report',
-      description: 'Upload a multiqc.parquet file or a folder of runs.',
-      icon: 'mdi:chart-box-outline',
-      testId: 'add-data-multiqc',
-      onSelect: () => {
-        onOpen?.();
-        setSingleType('multiqc');
-      },
-    },
-    ...(isPipelineProject
-      ? [
-          {
-            key: 'run',
-            label: 'Add a run',
-            description: `Another output folder of ${pipelineName}. Checked against this project's pipeline before it is added.`,
-            icon: 'mdi:flag-outline',
-            testId: 'add-data-run',
-            onSelect: () => {
-              onOpen?.();
-              setRunOpened(true);
-            },
-          } as AddDataItem,
-        ]
-      : []),
-  ];
-
   return (
     <>
-      <Menu
-        position="bottom-end"
-        withinPortal
-        middlewares={{ flip: true, shift: true }}
-        disabled={!canMutate} shadow="md" width={320}>
-        <Menu.Target>
-          <Button
-            data-testid="add-data-btn"
-            size={size}
-            color={color}
-            leftSection={<Icon icon="mdi:plus" width={16} />}
-            rightSection={<Icon icon="mdi:chevron-down" width={16} />}
-            disabled={!canMutate}
-            title={canMutate ? 'Add data to this project' : disabledReason}
-          >
-            Add data
-          </Button>
-        </Menu.Target>
-        <Menu.Dropdown style={{ maxHeight: 'calc(100vh - 96px)', overflowY: 'auto' }}>
-          {items.map((item) => (
-            <Menu.Item
-              key={item.key}
-              data-testid={item.testId}
-              leftSection={<Icon icon={item.icon} width={18} />}
-              onClick={item.onSelect}
-            >
-              <Text size="sm" fw={500}>
-                {item.label}
-              </Text>
-              <Text size="xs" c="dimmed" style={{ whiteSpace: 'normal' }}>
-                {item.description}
-              </Text>
-            </Menu.Item>
-          ))}
-        </Menu.Dropdown>
-      </Menu>
-      <FilesModal
-        opened={filesOpened}
+      <Button
+        data-testid="add-data-btn"
+        size={size}
+        color={color}
+        leftSection={<Icon icon="mdi:plus" width={16} />}
+        disabled={!canMutate}
+        title={canMutate ? 'Add data to this project' : disabledReason}
+        onClick={() => {
+          onOpen?.();
+          setOpened(true);
+        }}
+      >
+        Add data
+      </Button>
+      <AddDataModal
+        opened={opened}
         projectId={projectId}
+        project={project}
         existingNames={existingNames}
-        onClose={() => setFilesOpened(false)}
+        takesRuns={isPipelineProject}
+        pipelineLabel={pipeline ? `${pipeline.name}${pipeline.version ? ` ${pipeline.version}` : ''}` : null}
+        onClose={() => setOpened(false)}
         onAdded={onAdded}
+        onMultiqc={() => openSingle('multiqc')}
+        onSingleUrl={() => openSingle('table')}
       />
       <CreateDataCollectionModal
         opened={singleType !== null}
@@ -179,27 +100,6 @@ export const AddDataButton: React.FC<AddDataButtonProps> = ({
           onAdded();
         }}
       />
-      <FolderTablesModal
-        opened={folderOpened}
-        projectId={projectId}
-        project={project}
-        onClose={() => setFolderOpened(false)}
-        onAdded={onAdded}
-        onUseFiles={() => {
-          setFolderOpened(false);
-          setSingleType('table');
-        }}
-      />
-      {isPipelineProject && (
-        <AttachRunModal
-          opened={runOpened}
-          projectId={projectId}
-          projectName={project?.name ?? null}
-          pipelineLabel={pipeline ? `${pipeline.name}${pipeline.version ? ` ${pipeline.version}` : ''}` : null}
-          onClose={() => setRunOpened(false)}
-          onAdded={onAdded}
-        />
-      )}
     </>
   );
 };

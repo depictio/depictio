@@ -21,7 +21,6 @@ import '../chrome/variants/glass/pages/listing.css';
 
 import {
   createProject,
-  createProjectFromManifest,
   createProjectFromRun,
   deleteProject as apiDeleteProject,
   importProjectZip,
@@ -32,8 +31,6 @@ import {
 import type {
   CreateProjectInput,
   EditProjectInput,
-  FromManifestReport,
-  FromManifestRequest,
   FromRunReport,
   FromRunRequest,
   ProjectListEntry,
@@ -42,14 +39,12 @@ import type {
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import { useAuthMode } from '../auth/hooks/useAuthMode';
 import TourButton from '../walkthrough/TourButton';
-import { ImportProjectButton } from './ImportProjectButton';
+import { ImportProjectDialog } from './ImportProjectDialog';
+import { uploadTableFiles } from './create/FilesDropArea';
 import { MigrationRequestsBanner } from './MigrationRequestsBanner';
 import { AppSidebar, LoadErrorCard } from '../chrome';
 import ProjectsList from './ProjectsList';
-import CreateProjectModal, {
-  ManifestCreatedModal,
-  manifestReportNeedsReview,
-} from './CreateProjectModal';
+import CreateProjectModal from './CreateProjectModal';
 import { RunCreatedModal } from './fromRun';
 import type { RunCreatedContext } from './fromRun';
 import EditProjectModal from './EditProjectModal';
@@ -85,6 +80,10 @@ function useProjectsSidebar(): [boolean, () => void] {
   return [opened, toggle];
 }
 
+/** The reference projects seeded with Depictio (iris, Palmer penguins): what
+ *  "See an example" opens when the reader can see one on this server. */
+const EXAMPLE_PROJECT_IDS = ['646b0f3c1e4a2d7f8e5b8c9a', '646b0f3c1e4a2d7f8e5b8c9d'];
+
 const ProjectsApp: React.FC = () => {
   const accent = useBrandAccents();
   const [projects, setProjects] = useState<ProjectListEntry[]>([]);
@@ -95,9 +94,7 @@ const ProjectsApp: React.FC = () => {
   const [createOpened, { open: openCreate, close: closeCreate }] = useDisclosure(false);
   const [editTarget, setEditTarget] = useState<ProjectListEntry | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ProjectListEntry | null>(null);
-  /** Real from-manifest report held back for review (unmatched types, pruned
-   *  or failed collections) instead of redirecting past it. */
-  const [createdReport, setCreatedReport] = useState<FromManifestReport | null>(null);
+  const [importOpened, setImportOpened] = useState(false);
   /** From-run report whose ingestion is still running on the workers, with
    *  what the create dialog knew about the run (template name, what was read
    *  in the folder). Kept so the user can watch it finish instead of being
@@ -121,6 +118,9 @@ const ProjectsApp: React.FC = () => {
   // public/demo deployment. Mirrored server-side in
   // `projects_endpoints.routes.create_project`.
   const createDisabled = isPublic && !user?.is_admin;
+
+  const exampleProject = projects.find((p) => EXAMPLE_PROJECT_IDS.includes(String(p._id ?? p.id)));
+  const exampleHref = exampleProject ? `/projects/${exampleProject._id ?? exampleProject.id}` : null;
 
   usePageTitle('Projects');
   const glass = useGlassPages();
@@ -158,7 +158,7 @@ const ProjectsApp: React.FC = () => {
   );
 
   const handleProjectReady = useCallback(
-    (projectId: string, name: string) => {
+    (projectId: string, name: string, tableId?: string | null) => {
       notifications.show({
         color: 'teal',
         title: 'Project created',
@@ -167,7 +167,8 @@ const ProjectsApp: React.FC = () => {
       });
       closeCreate();
       refresh();
-      window.location.assign(`/projects/${projectId}`);
+      const query = tableId ? `?table=${encodeURIComponent(tableId)}` : '';
+      window.location.assign(`/projects/${projectId}${query}`);
     },
     [closeCreate, refresh],
   );
@@ -187,41 +188,30 @@ const ProjectsApp: React.FC = () => {
     [closeCreate, refresh],
   );
 
-  const handleCreateFromManifest = useCallback(
-    async (input: FromManifestRequest) => {
-      const report = await createProjectFromManifest(input);
-      closeCreate();
-      if (manifestReportNeedsReview(report)) {
-        // Something was skipped, unmatched or failed: the project exists, so
-        // refresh the list, but keep the user here with the full report
-        // rather than redirecting to a dashboard that hides it.
-        refresh();
-        setCreatedReport(report);
-        return report;
-      }
-      const dashboardId = report.dashboards[0]?.dashboard_id;
-      notifications.show({
-        color: 'teal',
-        title: 'Project created from manifest',
-        message: dashboardId
-          ? `"${report.project_name}" is ready: opening its dashboard.`
-          : `"${report.project_name}" is ready.`,
-        autoClose: 2500,
-      });
-      if (dashboardId) window.location.assign(`/dashboard/${dashboardId}`);
-      else refresh();
-      return report;
-    },
-    [closeCreate, refresh],
-  );
-
-  // Unlike the from-manifest flow, this one answers as soon as the project and
-  // its dashboards exist: the collections are still being ingested on the
+  // This one answers as soon as the project and its dashboards exist: the collections are still being ingested on the
   // workers. So there is never a redirect: the list refreshes behind a modal
   // that watches the run and offers the dashboard once the user is ready.
   const handleCreateFromRun = useCallback(
     async (input: FromRunRequest, context: RunCreatedContext) => {
       const report = await createProjectFromRun(input);
+      // Tables dropped next to the run go in once the project exists; the
+      // collections are appended, so this does not wait for the ingestion.
+      if (report.project_id && context.extraFiles?.length) {
+        const outcomes = await uploadTableFiles(
+          report.project_id,
+          context.extraFiles,
+          context.takenTableNames ?? [],
+        );
+        const failed = outcomes.filter((o) => o.error);
+        if (failed.length > 0) {
+          notifications.show({
+            color: 'red',
+            title: 'Some tables were not added',
+            message: failed.map((o) => `${o.file.name}: ${o.error}`).join('\n'),
+            autoClose: false,
+          });
+        }
+      }
       notifications.show({
         color: 'teal',
         title: 'Project created from run folder',
@@ -305,7 +295,11 @@ const ProjectsApp: React.FC = () => {
         onClose={closeCreate}
         onCreate={handleCreate}
         onProjectReady={handleProjectReady}
-        onCreateFromManifest={handleCreateFromManifest}
+        onOpenImport={() => {
+          closeCreate();
+          setImportOpened(true);
+        }}
+        exampleHref={exampleHref}
         onCreateFromRun={handleCreateFromRun}
         localDataRootsEnabled={localDataRootsEnabled}
         remoteBrowseEnabled={remoteBrowseEnabled}
@@ -317,7 +311,11 @@ const ProjectsApp: React.FC = () => {
             : null
         }
       />
-      <ManifestCreatedModal report={createdReport} onClose={() => setCreatedReport(null)} />
+      <ImportProjectDialog
+        opened={importOpened}
+        onClose={() => setImportOpened(false)}
+        onImport={handleImport}
+      />
       <RunCreatedModal
         report={createdRun?.report ?? null}
         context={createdRun?.context ?? null}
@@ -349,7 +347,6 @@ const ProjectsApp: React.FC = () => {
           actions={
             <>
               <TourButton />
-              <ImportProjectButton onImport={handleImport} disabled={createDisabled} />
               <Tooltip
                 label="Project creation is disabled in public or demo mode for non-admin users"
                 disabled={!createDisabled}
@@ -421,7 +418,6 @@ const ProjectsApp: React.FC = () => {
           </Group>
           <Group gap="sm" wrap="nowrap">
             <TourButton />
-            <ImportProjectButton onImport={handleImport} disabled={createDisabled} />
             {/* Visitors in public/demo mode see the button visibly disabled
                 rather than hidden — keeps the affordance discoverable while
                 making it obvious that login/elevated permissions are needed.

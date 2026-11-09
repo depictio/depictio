@@ -1,68 +1,69 @@
 /**
- * The create-project chooser: two large cards (Upload files, A folder or
- * bucket), a quiet "Other" row, and the optional pipeline line of the folder
- * flow. UI only: no project is created.
+ * The new-project dialog: one screen for files and a folder, a quiet "Other"
+ * row, the pipeline offered only once a folder was read. UI only, except the
+ * last test, where a dropped file becomes a project.
  */
 
 import { Page } from "@playwright/test";
 import { test, expect, getAuthMode } from "@fixtures/auth";
 
-async function openChooser(page: Page): Promise<void> {
+async function openDialog(page: Page): Promise<void> {
   await page.goto("/projects");
   await page.locator("[data-tour-id='projects-create']").click();
+  await expect(page.getByTestId("data-source-fields")).toBeVisible();
 }
 
-test.describe("Create project chooser", () => {
+test.describe("New project dialog", () => {
   test.beforeEach(async () => {
     const { is_public_mode } = await getAuthMode();
     test.skip(is_public_mode, "Project creation is not exercised in public mode.");
   });
 
-  test("offers files and folder cards, with manifest and empty project in a quiet row", async ({
+  test("asks for files or a folder on one screen; manifests are gone", async ({
     loginAsAdmin,
     page,
   }) => {
     await loginAsAdmin();
-    await openChooser(page);
-    await expect(page.getByTestId("create-source-files")).toBeVisible();
-    await expect(page.getByTestId("create-source-folder")).toBeVisible();
-    await expect(page.getByTestId("create-source-data")).toHaveCount(0);
-    await expect(page.getByTestId("create-source-pipeline")).toHaveCount(0);
-    await expect(page.getByTestId("create-source-manifest")).toBeVisible();
-    await expect(page.getByTestId("create-source-empty")).toBeVisible();
-    await expect(page.getByTestId("create-source-run")).toHaveCount(0);
-  });
-
-  test("the two cards open the files flow and the folder flow", async ({
-    loginAsAdmin,
-    page,
-  }) => {
-    await loginAsAdmin();
-    await openChooser(page);
-    await page.getByTestId("create-source-files").click();
-
-    // Files: a drop zone, and Next waits for at least one file.
+    await openDialog(page);
     await expect(page.getByTestId("files-dropzone")).toBeVisible();
-    await expect(page.getByTestId("files-next")).toHaveAttribute("aria-disabled", "true");
-
-    await expect(page.getByTestId("data-mode-folder")).toHaveCount(0);
-
-    await page.getByTestId("create-source-back").click();
-    await page.getByTestId("create-source-folder").click();
     await expect(page.getByTestId("run-data-root-input")).toBeVisible();
-    // The pipeline is optional: no picker until the folder was read.
-    await expect(page.getByTestId("run-pipeline-select")).toHaveCount(0);
+    await expect(page.getByTestId("create-source-empty")).toBeVisible();
+    await expect(page.getByTestId("create-source-import")).toBeVisible();
+    await expect(page.getByTestId("create-source-manifest")).toHaveCount(0);
+    // Nothing given yet: Next waits, and says for what.
+    await expect(page.getByTestId("create-from-run-submit")).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+    await expect(page.getByTestId("run-submit-disabled-reason")).toContainText("Drop files");
   });
 
-  test("the folder flow offers the pipeline only after the folder was read", async ({
-    loginAsAdmin,
-    page,
-  }) => {
+  test("Import has moved from the page header to the dialog", async ({ loginAsAdmin, page }) => {
     await loginAsAdmin();
-    await openChooser(page);
-    await page.getByTestId("create-source-folder").click();
-    await expect(page.getByTestId("run-data-root-input")).toBeVisible();
+    await page.goto("/projects");
+    await expect(page.locator("[data-tour-id='projects-create']")).toBeVisible();
+    await expect(page.getByTestId("import-project-button")).toHaveCount(0);
+  });
+
+  test("the pipeline is offered only after a folder was read", async ({ loginAsAdmin, page }) => {
+    await loginAsAdmin();
+    await openDialog(page);
     await expect(page.getByTestId("folder-know-pipeline")).toHaveCount(0);
     await expect(page.getByTestId("run-pipeline-select")).toHaveCount(0);
+  });
+
+  test("a dropped file suggests the name, and needs no folder", async ({ loginAsAdmin, page }) => {
+    await loginAsAdmin();
+    await openDialog(page);
+    await page.getByTestId("files-input").setInputFiles({
+      name: "sample_sheet.csv",
+      mimeType: "text/csv",
+      buffer: Buffer.from("sample,condition\nS1,treated\nS2,control\n"),
+    });
+    await expect(page.getByTestId("files-item-0")).toContainText("sample_sheet.csv");
+    await page.getByTestId("create-from-run-submit").click();
+    await expect(page.getByTestId("files-found-card")).toBeVisible();
+    await expect(page.getByTestId("files-found-0")).toContainText("2 columns");
+    await expect(page.getByTestId("folder-project-name-input")).toHaveValue(/^sample_sheet/);
   });
 });
