@@ -262,6 +262,14 @@ class ViewerConfig(ServiceConfig):
         "popovers and drawers they live in today.",
     )
 
+    code_figures_locked: bool = Field(
+        default=False,
+        description="Refuse new figure code from non-admin users: Code Mode is off in "
+        "the builder and the API refuses code it does not already trust. The code "
+        "figures a dashboard already has keep rendering, and so do catalogue figures. "
+        "For a deployment open to people it does not know.",
+    )
+
     dashboards_default_view: Literal["thumbnails", "table"] = Field(
         default="table",
         description="Which view /dashboards opens in for someone who has never "

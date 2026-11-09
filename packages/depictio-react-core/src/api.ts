@@ -4249,6 +4249,7 @@ export interface AuthStatusResponse {
    *  every tile offers "Export / embed". Older backends omit it: treat absent
    *  as `false`. */
   embed_enabled?: boolean;
+  code_figures_locked?: boolean;
   /** At least one site may frame an embed (a non-empty
    *  `DEPICTIO_FASTAPI_EMBED_ALLOWED_ORIGINS`). The origins themselves are not
    *  sent. False means an `<iframe>` of an embed is refused by its own CSP. */
