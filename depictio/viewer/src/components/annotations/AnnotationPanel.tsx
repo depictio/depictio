@@ -43,6 +43,7 @@ import {
   parsePastedBlock,
   setLabel,
   TableEditError,
+  Z_LAYERS,
 } from 'depictio-react-core';
 import type {
   DashboardAnnotations,
@@ -903,6 +904,8 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
         onClose={() => setSaving(null)}
         title="Save to table"
         size="lg"
+        // Opened from inside the Annotate drawer.
+        zIndex={Z_LAYERS.nestedOverlay}
         data-testid="annotation-save-modal"
       >
         <LoadingOverlay visible={Boolean(saving?.busy)} />
