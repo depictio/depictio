@@ -6,7 +6,8 @@
  *   - a reader adds an annotation, labels rows, picks it in "Compare by", and
  *     each label becomes a group of the Analysis panel;
  *   - a reload keeps the annotations (account storage for a signed-in user);
- *   - a CSV dropped on the grid is read in the browser: no request carries it;
+ *   - a CSV dropped on the grid is read in the browser, and its annotations stay
+ *     there (no request carries them) until the reader keeps one on the account;
  *   - Save to table runs the add_columns merge (dry run, then apply) and takes
  *     the annotation out of the session — the merge route is stubbed, because
  *     the seeded table is a join, which no one may edit;
@@ -50,6 +51,8 @@ async function clearAnnotations(page: Page): Promise<void> {
     } catch {
       token = "";
     }
+    // Annotations from a dropped file live in the browser.
+    window.localStorage.removeItem(`depictio.annotations.${url.split("/").pop()}`);
     const res = await fetch(url, {
       method: "DELETE",
       headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -153,7 +156,7 @@ test.describe("Session annotations", () => {
     await clearAnnotations(page);
   });
 
-  test("a dropped CSV is read in the browser and never sent", async ({ page, request, loginAsAdmin }) => {
+  test("a dropped CSV stays in the browser until kept on the account", async ({ page, request, loginAsAdmin }) => {
     test.setTimeout(120_000);
     const api = await seeded(request);
     test.skip(!api, "Penguins dashboard not seeded on this stack");
@@ -168,11 +171,6 @@ test.describe("Session annotations", () => {
     });
 
     await openPanel(page);
-    // Armed before the drop: the debounced account save may land quickly.
-    const saved = page.waitForResponse(
-      (r) => r.url().startsWith(ANNOTATIONS_URL) && r.request().method() === "PUT",
-      { timeout: 15_000 },
-    );
     await page.locator("[data-testid='annotation-drop-zone']").evaluate((zone, text) => {
       const dt = new DataTransfer();
       dt.items.add(new File([text], "cohorts.csv", { type: "text/csv" }));
@@ -183,16 +181,33 @@ test.describe("Session annotations", () => {
     await expect(report).toContainText("in your browser");
     await expect(report).toContainText("2 rows");
     await expect(report).toContainText("not_a_penguin");
-    await expect(page.locator("[data-testid='annotation-panel']")).toContainText("cohort_from_file · 2");
+    await expect(page.locator("[data-testid='annotation-badge-local']")).toContainText("cohort_from_file · 2");
 
-    // Let the debounced account save go out, then look at everything sent.
-    await saved;
+    // Past the save debounce: nothing of the file left the browser.
+    await page.waitForTimeout(2_500);
     for (const r of sent) {
-      const headers = r.headers();
-      expect(headers["content-type"] ?? "", `${r.url()} sent a form`).not.toContain("multipart/form-data");
-      expect(r.postData() ?? "", `${r.url()} carried the file`).not.toContain("individual_id,cohort_from_file");
+      const body = r.postData() ?? "";
+      expect(r.headers()["content-type"] ?? "", `${r.url()} sent a form`).not.toContain("multipart/form-data");
+      expect(body, `${r.url()} carried the file`).not.toContain("cohort_from_file");
       expect(r.url()).not.toContain("merge_file");
     }
+    const stored = await page.evaluate(
+      (id) => window.localStorage.getItem(`depictio.annotations.${id}`),
+      PENGUINS,
+    );
+    expect(stored).toContain("cohort_from_file");
+
+    // A reload brings it back from the browser.
+    await openPanel(page);
+    await expect(page.locator("[data-testid='annotation-badge-local']")).toContainText("cohort_from_file · 2");
+
+    // Kept on the account only on the reader's explicit choice.
+    const kept = page.waitForRequest(
+      (r) => r.url().startsWith(ANNOTATIONS_URL) && r.method() === "PUT" && (r.postData() ?? "").includes("cohort_from_file"),
+    );
+    await page.locator("[data-testid='annotation-keep-on-account']").click();
+    await kept;
+    await expect(page.locator("[data-testid='annotation-badge-local']")).toHaveCount(0);
 
     await clearAnnotations(page);
   });

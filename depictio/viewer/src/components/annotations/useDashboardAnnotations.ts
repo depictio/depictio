@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   fetchDashboardAnnotations,
+  mergeAccountAndLocal,
   readBrowserAnnotations,
   saveDashboardAnnotations,
+  splitForAccount,
   writeBrowserAnnotations,
 } from 'depictio-react-core';
 import type { DashboardAnnotations } from 'depictio-react-core';
@@ -46,6 +48,9 @@ export function useDashboardAnnotations(
   const [pending, setPending] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latest = useRef<DashboardAnnotations | null>(null);
+  // The account half the server holds, as sent: a change that only touches
+  // the browser half (an annotation from a dropped file) sends nothing.
+  const sentKey = useRef('null');
 
   useEffect(() => {
     setLoaded(false);
@@ -67,8 +72,13 @@ export function useDashboardAnnotations(
     void fetchDashboardAnnotations(scopeId).then((res) => {
       if (cancelled) return;
       if (res.ok) {
-        latest.current = res.annotations;
-        setState(res.annotations);
+        // Annotations read from a dropped file live in this browser only.
+        const read = readBrowserAnnotations(scopeId);
+        setBrowserUnavailable(!read.ok);
+        const merged = mergeAccountAndLocal(res.annotations, read.ok ? read.value : null);
+        sentKey.current = JSON.stringify(splitForAccount(merged).account);
+        latest.current = merged;
+        setState(merged);
       } else {
         setLoadError(
           res.status === 403
@@ -86,7 +96,14 @@ export function useDashboardAnnotations(
   const flush = useCallback(async () => {
     if (!scopeId) return;
     const value = latest.current;
-    const res = await saveDashboardAnnotations(scopeId, value);
+    const account = splitForAccount(value).account;
+    const key = JSON.stringify(account);
+    if (key === sentKey.current) {
+      setPending(false);
+      return;
+    }
+    const res = await saveDashboardAnnotations(scopeId, account);
+    if (res.ok) sentKey.current = key;
     // A newer change may have landed while this one was in flight; its own
     // timer saves it.
     if (latest.current !== value) return;
@@ -107,7 +124,9 @@ export function useDashboardAnnotations(
       if (!timer.current) return;
       clearTimeout(timer.current);
       timer.current = null;
-      void saveDashboardAnnotations(scopeId, latest.current, { keepalive: true });
+      const account = splitForAccount(latest.current).account;
+      if (JSON.stringify(account) === sentKey.current) return;
+      void saveDashboardAnnotations(scopeId, account, { keepalive: true });
     };
     window.addEventListener('pagehide', onHide);
     return () => {
@@ -125,6 +144,8 @@ export function useDashboardAnnotations(
         setBrowserUnavailable(!writeBrowserAnnotations(scopeId, next));
         return;
       }
+      // The browser half is written now; only the account half is sent.
+      setBrowserUnavailable(!writeBrowserAnnotations(scopeId, splitForAccount(next).local));
       setPending(true);
       if (timer.current) clearTimeout(timer.current);
       timer.current = setTimeout(() => {

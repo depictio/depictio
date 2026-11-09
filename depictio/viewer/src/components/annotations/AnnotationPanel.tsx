@@ -391,6 +391,18 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
     setNewName('');
     setAddError(null);
   };
+  /** Send a file's annotation to the account: the reader's explicit choice. */
+  const keepOnAccount = (id: string) => {
+    if (!bound) return;
+    commit({
+      ...bound,
+      columns: bound.columns.map((c) => {
+        if (c.id !== id) return c;
+        const { local: _local, ...shared } = c;
+        return shared;
+      }),
+    });
+  };
   const removeAnnotation = (id: string) => {
     if (!bound) return;
     commit({
@@ -475,15 +487,25 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
     let next = base;
     for (const a of match.annotations) {
       const existing = next.columns.find((c) => c.name === a.name);
+      // Values from a file stay in this browser: an annotation that takes
+      // them becomes local, even one that was kept on the account before.
       if (existing) {
         next = {
           ...next,
           columns: next.columns.map((c) =>
-            c.id === existing.id ? { ...c, values: { ...c.values, ...a.values } } : c,
+            c.id === existing.id
+              ? { ...c, values: { ...c.values, ...a.values }, local: true as const }
+              : c,
           ),
         };
       } else {
-        next = { ...next, columns: [...next.columns, { id: newAnnotationId(), name: a.name, values: a.values }] };
+        next = {
+          ...next,
+          columns: [
+            ...next.columns,
+            { id: newAnnotationId(), name: a.name, values: a.values, local: true as const },
+          ],
+        };
       }
     }
     const problem = annotationsProblem(next);
@@ -496,9 +518,13 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
       match.unmatchedRows > 0
         ? ` ${match.unmatchedRows} row${match.unmatchedRows === 1 ? ' is' : 's are'} not in the table and ${match.unmatchedRows === 1 ? 'was' : 'were'} left out (${match.unmatchedSample.join(', ')}${match.unmatchedRows > match.unmatchedSample.length ? ', …' : ''}).`
         : '';
+    const kept =
+      state.storage === 'account'
+        ? ' Its annotations stay in this browser; use the cloud icon on one to keep it on your account.'
+        : '';
     setDropReport({
       color: match.unmatchedRows > 0 ? 'orange' : 'teal',
-      text: `Read ${file.name} in your browser, matched on "${match.fileKeyColumn}": ${match.matchedRows} row${match.matchedRows === 1 ? '' : 's'}.${unmatched}`,
+      text: `Read ${file.name} in your browser, matched on "${match.fileKeyColumn}": ${match.matchedRows} row${match.matchedRows === 1 ? '' : 's'}.${unmatched}${kept}`,
     });
   };
 
@@ -622,7 +648,9 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
         : 'Kept in this browser. A temporary account cannot keep annotations on an account; sign in to keep them anywhere.'
       : state.pending
         ? 'Saving to your account…'
-        : 'Kept on your account. Only you see them.';
+        : annotations?.columns.some((c) => c.local)
+          ? 'Kept on your account, except annotations from a dropped file, which stay in this browser. Only you see them.'
+          : 'Kept on your account. Only you see them.';
 
   if (collectionsError) {
     return (
@@ -796,6 +824,12 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
                 </Menu>
               </Group>
 
+              {bound?.columns.some((c) => c.local && c.id === bound.activeColumnId) && (
+                <Text size="xs" c="dimmed" data-testid="annotation-local-compare-note">
+                  This annotation stays in your browser. To colour and split the charts, its labels
+                  and keys go with each chart request; nothing is stored on the server.
+                </Text>
+              )}
               {blocked.map((c) => {
                 const b = budgets.get(c.id);
                 return b && !b.ok ? (
@@ -808,21 +842,47 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
               {(bound?.columns.length ?? 0) > 0 && (
                 <Group gap={6} wrap="wrap">
                   {bound!.columns.map((c) => (
-                    <Badge
+                    <Tooltip
                       key={c.id}
-                      variant={c.id === bound!.activeColumnId ? 'filled' : 'light'}
-                      rightSection={
-                        <Icon
-                          icon="mdi:close"
-                          width={12}
-                          style={{ cursor: 'pointer' }}
-                          aria-label={`Remove ${c.name}`}
-                          onClick={() => removeAnnotation(c.id)}
-                        />
+                      disabled={!c.local}
+                      withinPortal
+                      label={
+                        state.storage === 'account'
+                          ? 'From a dropped file: kept in this browser only. The cloud icon keeps it on your account.'
+                          : 'From a dropped file: kept in this browser only.'
                       }
                     >
-                      {c.name} · {Object.keys(c.values).length}
-                    </Badge>
+                      <Badge
+                        variant={c.id === bound!.activeColumnId ? 'filled' : c.local ? 'outline' : 'light'}
+                        data-testid={c.local ? 'annotation-badge-local' : 'annotation-badge'}
+                        leftSection={c.local ? <Icon icon="mdi:monitor" width={12} /> : undefined}
+                        rightSection={
+                          <Group gap={4} wrap="nowrap">
+                            {c.local && state.storage === 'account' && (
+                              <Icon
+                                icon="mdi:cloud-upload-outline"
+                                width={13}
+                                style={{ cursor: 'pointer' }}
+                                role="button"
+                                aria-label={`Keep ${c.name} on my account`}
+                                data-testid="annotation-keep-on-account"
+                                onClick={() => keepOnAccount(c.id)}
+                              />
+                            )}
+                            <Icon
+                              icon="mdi:close"
+                              width={12}
+                              style={{ cursor: 'pointer' }}
+                              role="button"
+                              aria-label={`Remove ${c.name}`}
+                              onClick={() => removeAnnotation(c.id)}
+                            />
+                          </Group>
+                        }
+                      >
+                        {c.name} · {Object.keys(c.values).length}
+                      </Badge>
+                    </Tooltip>
                   ))}
                 </Group>
               )}

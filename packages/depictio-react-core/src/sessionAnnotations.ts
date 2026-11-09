@@ -26,6 +26,10 @@ export interface AnnotationColumn {
   name: string;
   /** key value -> label. A key without a label is absent. */
   values: Record<string, string>;
+  /** Kept in this browser only, even for an account that stores annotations:
+   *  set on an annotation read from a dropped file, whose values must not
+   *  reach the server unless the reader asks. Never sent (see `splitForAccount`). */
+  local?: true;
 }
 
 export interface DashboardAnnotations {
@@ -59,7 +63,12 @@ export function parseAnnotations(raw: unknown): DashboardAnnotations | null {
     const col = c as Record<string, unknown>;
     if (typeof col.id !== 'string' || typeof col.name !== 'string') return null;
     if (!isRecordOfStrings(col.values)) return null;
-    columns.push({ id: col.id, name: col.name, values: { ...col.values } });
+    columns.push({
+      id: col.id,
+      name: col.name,
+      values: { ...col.values },
+      ...(col.local === true ? { local: true as const } : {}),
+    });
   }
   const active = typeof r.activeColumnId === 'string' ? r.activeColumnId : null;
   return {
@@ -123,6 +132,59 @@ export function setLabel(
 
 export function newAnnotationId(): string {
   return `ann-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+// --- Account and browser halves --------------------------------------------
+
+const withColumns = (
+  a: DashboardAnnotations,
+  columns: AnnotationColumn[],
+  activeColumnId: string | null,
+): DashboardAnnotations | null =>
+  columns.length === 0 ? null : { ...a, columns, activeColumnId };
+
+/**
+ * Split annotations for an account that stores them: `account` is what may be
+ * sent (no `local` annotation, and no active id naming one), `local` is what
+ * stays in the browser. Either is null when it holds no annotation.
+ */
+export function splitForAccount(a: DashboardAnnotations | null): {
+  account: DashboardAnnotations | null;
+  local: DashboardAnnotations | null;
+} {
+  if (!a) return { account: null, local: null };
+  const shared = a.columns.filter((c) => !c.local).map(({ local: _l, ...c }) => c);
+  const local = a.columns.filter((c) => c.local);
+  const activeIsLocal = local.some((c) => c.id === a.activeColumnId);
+  return {
+    account: withColumns(a, shared, activeIsLocal ? null : a.activeColumnId),
+    local: withColumns(a, local, activeIsLocal ? a.activeColumnId : null),
+  };
+}
+
+/**
+ * The account's annotations and the browser's, as one set. The browser half
+ * is dropped when it was made on another table or key (it could not be shown
+ * against this one). Its active annotation wins: it was picked more recently
+ * than anything the account could have known about.
+ */
+export function mergeAccountAndLocal(
+  account: DashboardAnnotations | null,
+  local: DashboardAnnotations | null,
+): DashboardAnnotations | null {
+  const localCols = (local?.columns ?? []).map((c) => ({ ...c, local: true as const }));
+  if (!account) return local ? { ...local, columns: localCols } : null;
+  if (!local || local.dcId !== account.dcId || local.keyColumn !== account.keyColumn) {
+    return account;
+  }
+  const ids = new Set(account.columns.map((c) => c.id));
+  const names = new Set(account.columns.map((c) => c.name));
+  const extra = localCols.filter((c) => !ids.has(c.id) && !names.has(c.name));
+  const active =
+    local.activeColumnId && extra.some((c) => c.id === local.activeColumnId)
+      ? local.activeColumnId
+      : account.activeColumnId;
+  return { ...account, columns: [...account.columns, ...extra], activeColumnId: active };
 }
 
 // --- Browser storage ---------------------------------------------------------

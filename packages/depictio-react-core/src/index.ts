@@ -918,6 +918,7 @@ export type { SelectionGroupsApi } from './hooks/useSelectionGroups';
 export {
   annotationsProblem,
   emptyAnnotations,
+  mergeAccountAndLocal,
   MAX_ANNOTATION_COLUMNS,
   MAX_ANNOTATION_KEYS,
   MAX_ANNOTATION_ROWS,
@@ -928,6 +929,7 @@ export {
   parseAnnotations,
   readBrowserAnnotations,
   setLabel,
+  splitForAccount,
   writeBrowserAnnotations,
 } from './sessionAnnotations';
 export type { AnnotationColumn, BrowserRead, DashboardAnnotations } from './sessionAnnotations';

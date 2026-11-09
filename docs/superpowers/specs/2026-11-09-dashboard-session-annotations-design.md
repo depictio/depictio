@@ -57,7 +57,7 @@ No change is needed in the render pipeline, the cache keys or the Delta tables f
 | | Annotations stored | Typing and paste | Drop on the dashboard |
 | --- | --- | --- | --- |
 | Temporary or anonymous account | browser | yes | yes, browser only |
-| Signed-in account | account | yes | yes, browser only |
+| Signed-in account | account (file annotations: browser, until kept) | yes | yes, browser only |
 
 "Signed-in" means any non-temporary, non-anonymous account (OIDC, password) and single-user mode.
 
@@ -137,6 +137,12 @@ Keyed on the dashboard family's main tab, since annotations belong to the whole 
   `packages/tool-studio`; declared in `depictio-react-core`), with a 5 MB limit. The delimiter
   follows the extension, else the header line, as in `tool-studio`'s `parseFixture.ts`. No request carries the file.
   Excel and Parquet are out of scope.
+- **What a dropped file yields stays in the browser**, for every account. Its annotations are
+  marked `local` and kept under the browser key even when the account stores annotations; the
+  account copy never holds them, and a file merged into an account annotation makes it local.
+  A cloud icon on one sends it to the account, the reader's explicit choice. While a local
+  annotation drives Compare by, its labels and keys go with each chart request (colouring and
+  splitting are server-side), and the panel says so; nothing is stored there.
 - A dropped file is matched on the key column by the same rule as `table_merge.py`: text
   comparison, integer floats as integers, file values unique. Each other column of the file
   becomes an annotation. Unmatched rows are reported and left out.

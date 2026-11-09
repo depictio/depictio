@@ -3,10 +3,12 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   annotationsProblem,
   emptyAnnotations,
+  mergeAccountAndLocal,
   MAX_LABEL_LENGTH,
   parseAnnotations,
   readBrowserAnnotations,
   setLabel,
+  splitForAccount,
   writeBrowserAnnotations,
 } from './sessionAnnotations';
 
@@ -83,5 +85,52 @@ describe('browser storage', () => {
     store.setItem('depictio.annotations.d1', '{"version":9}');
     (globalThis as { localStorage?: unknown }).localStorage = store;
     expect(readBrowserAnnotations('d1')).toEqual({ ok: true, value: null });
+  });
+});
+
+describe('account and browser halves', () => {
+  const both = () => ({
+    ...base(),
+    columns: [
+      { id: 'c1', name: 'response', values: { S1: 'yes' } },
+      { id: 'c2', name: 'cohort', values: { S1: 'early' }, local: true as const },
+    ],
+    activeColumnId: 'c2',
+  });
+
+  it('never puts a local annotation, or an active id naming one, in the account half', () => {
+    const { account, local } = splitForAccount(both());
+    expect(account).toEqual({ ...base(), activeColumnId: null });
+    expect(JSON.stringify(account)).not.toContain('early');
+    expect(local?.columns.map((c) => c.id)).toEqual(['c2']);
+    expect(local?.activeColumnId).toBe('c2');
+  });
+
+  it('merges back to the same set', () => {
+    const { account, local } = splitForAccount(both());
+    expect(mergeAccountAndLocal(account, local)).toEqual(both());
+  });
+
+  it('keeps the account active id when the active one is shared', () => {
+    const a = { ...both(), activeColumnId: 'c1' };
+    const { account, local } = splitForAccount(a);
+    expect(account?.activeColumnId).toBe('c1');
+    expect(local?.activeColumnId).toBeNull();
+    expect(mergeAccountAndLocal(account, local)?.activeColumnId).toBe('c1');
+  });
+
+  it('drops a browser half made on another table or key', () => {
+    const { account, local } = splitForAccount(both());
+    expect(mergeAccountAndLocal(account, { ...local!, keyColumn: 'other' })).toEqual(account);
+  });
+
+  it('reads a browser half alone as local annotations', () => {
+    const { local } = splitForAccount(both());
+    expect(mergeAccountAndLocal(null, local)?.columns.every((c) => c.local)).toBe(true);
+    expect(splitForAccount(null)).toEqual({ account: null, local: null });
+  });
+
+  it('round-trips the local flag through parsing', () => {
+    expect(parseAnnotations(both())?.columns[1].local).toBe(true);
   });
 });
