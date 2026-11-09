@@ -149,6 +149,26 @@ server {
         add_header Strict-Transport-Security $depictio_hsts always;
     }
 
+    # Project bundle pushed by another instance (Send / Receive). The sender uses
+    # this instance's public URL, i.e. this nginx, so the server-wide 200m cap
+    # above would refuse any bundle above 200 MB whatever the ingress allows. No cap
+    # here: the API enforces DEPICTIO_MIGRATION_MAX_BUNDLE_BYTES (413 above it).
+    # Unbuffered, so a multi-GB body streams to the API instead of landing on this
+    # pod's disk first. Exact match: only the upload, not the small status calls.
+    location = /depictio/api/v1/migrate/inbound/requests {
+        set $upstream ${DEPICTIO_API_UPSTREAM}; proxy_pass http://$upstream;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        client_max_body_size 0;
+        proxy_request_buffering off;
+        proxy_buffering off;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+    }
+
     # API + WebSocket. Upgrade headers cover the realtime events channel.
     # proxy_buffering off keeps SSE / chunked responses flowing without
     # nginx holding them until the buffer fills.
