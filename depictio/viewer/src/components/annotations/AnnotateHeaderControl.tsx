@@ -1,5 +1,5 @@
 import React from 'react';
-import { Badge, Drawer, Group, Text } from '@mantine/core';
+import { Drawer, Group, Text } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import { ChromeButton, getChromeStyle, Z_LAYERS } from 'depictio-react-core';
 
@@ -57,9 +57,9 @@ const AnnotateHeaderControl: React.FC<{
             Annotate
           </Text>
           {count > 0 && (
-            <Badge size="sm" variant="light">
+            <Text size="sm" c="dimmed">
               {count} annotation{count === 1 ? '' : 's'}
-            </Badge>
+            </Text>
           )}
         </Group>
       }

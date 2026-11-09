@@ -1,14 +1,17 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ActionIcon,
   Alert,
-  Badge,
   Box,
   Button,
   Group,
   Loader,
   LoadingOverlay,
+  FileButton,
   Menu,
   Modal,
+  Paper,
+  SegmentedControl,
   Select,
   Stack,
   Tabs,
@@ -25,7 +28,6 @@ import 'ag-grid-community/styles/ag-theme-alpine.css';
 import type { ColDef, GridApi, ValueSetterParams } from 'ag-grid-community';
 import {
   annotationColumnBudget,
-  annotationsProblem,
   asKey,
   distinctLabels,
   emptyAnnotations,
@@ -41,12 +43,16 @@ import {
   newAnnotationId,
   parseDroppedTable,
   parsePastedBlock,
+  planAnnotationMerge,
   setLabel,
+  suggestedMergeMode,
   TableEditError,
   Z_LAYERS,
 } from 'depictio-react-core';
 import type {
+  AnnotationMergeMode,
   DashboardAnnotations,
+  DropMatch,
   DataPinFields,
   DataVersionCollectionStatus,
   SelectionGroup,
@@ -55,6 +61,8 @@ import type {
 } from 'depictio-react-core';
 
 import TableEditor from '../../projects/detail/TableEditor';
+// The drop overlay is the table editor's, so both drops look the same.
+import '../../projects/detail/TableEditor.css';
 import type { DashboardAnnotationsState } from './useDashboardAnnotations';
 
 /** One grid row: the key, the read-only context, one field per annotation. */
@@ -456,16 +464,20 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
     }
   };
 
-  // Drop: read in the browser, never uploaded.
+  // Drop or pick a file: read in the browser, never uploaded. Like the table
+  // editor's file merge, it opens a preview with three modes; nothing changes
+  // until the reader applies it.
   const [dropReport, setDropReport] = useState<{ color: string; text: string } | null>(null);
   const [dragging, setDragging] = useState(false);
-  const onDrop = async (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragging(false);
-    const file = e.dataTransfer.files?.[0];
+  const [pendingDrop, setPendingDrop] = useState<{
+    fileName: string;
+    match: DropMatch;
+    mode: AnnotationMergeMode;
+  } | null>(null);
+  const readFile = async (file: File) => {
     const base = ensureBound();
-    if (!file || !base) return;
+    if (!base) return;
+    setDropReport(null);
     if (!/\.(csv|tsv|txt|tab)$/i.test(file.name)) {
       setDropReport({ color: 'red', text: 'Drop a CSV or TSV file. Excel and Parquet are not read here.' });
       return;
@@ -484,47 +496,39 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
       setDropReport({ color: 'red', text: match.error });
       return;
     }
-    let next = base;
-    for (const a of match.annotations) {
-      const existing = next.columns.find((c) => c.name === a.name);
-      // Values from a file stay in this browser: an annotation that takes
-      // them becomes local, even one that was kept on the account before.
-      if (existing) {
-        next = {
-          ...next,
-          columns: next.columns.map((c) =>
-            c.id === existing.id
-              ? { ...c, values: { ...c.values, ...a.values }, local: true as const }
-              : c,
-          ),
-        };
-      } else {
-        next = {
-          ...next,
-          columns: [
-            ...next.columns,
-            { id: newAnnotationId(), name: a.name, values: a.values, local: true as const },
-          ],
-        };
-      }
-    }
-    const problem = annotationsProblem(next);
-    if (problem) {
-      setDropReport({ color: 'red', text: problem });
+    setPendingDrop({ fileName: file.name, match, mode: suggestedMergeMode(base, match) });
+  };
+  const carriesFiles = (e: React.DragEvent) => Array.from(e.dataTransfer.types).includes('Files');
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragging(false);
+    const files = Array.from(e.dataTransfer.files ?? []);
+    if (files.length !== 1) {
+      setDropReport({ color: 'orange', text: 'Drop one file at a time.' });
       return;
     }
-    commit(next);
-    const unmatched =
-      match.unmatchedRows > 0
-        ? ` ${match.unmatchedRows} row${match.unmatchedRows === 1 ? ' is' : 's are'} not in the table and ${match.unmatchedRows === 1 ? 'was' : 'were'} left out (${match.unmatchedSample.join(', ')}${match.unmatchedRows > match.unmatchedSample.length ? ', …' : ''}).`
-        : '';
-    const kept =
-      state.storage === 'account'
-        ? ' Its annotations stay in this browser; use the cloud icon on one to keep it on your account.'
-        : '';
+    void readFile(files[0]);
+  };
+  const plan = useMemo(() => {
+    const base = ensureBound();
+    return pendingDrop && base
+      ? planAnnotationMerge(base, pendingDrop.match, pendingDrop.mode)
+      : null;
+    // ensureBound reads bound and choice.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingDrop, bound, choice, keyColumn]);
+  const applyDrop = () => {
+    if (!plan || !pendingDrop || plan.report.reason) return;
+    commit(plan.next);
+    setPendingDrop(null);
     setDropReport({
-      color: match.unmatchedRows > 0 ? 'orange' : 'teal',
-      text: `Read ${file.name} in your browser, matched on "${match.fileKeyColumn}": ${match.matchedRows} row${match.matchedRows === 1 ? '' : 's'}.${unmatched}${kept}`,
+      color: 'teal',
+      text:
+        `${pendingDrop.fileName} applied: ${plan.report.labels} label${plan.report.labels === 1 ? '' : 's'}.` +
+        (state.storage === 'account'
+          ? ' What it wrote stays in this browser; use the cloud icon to keep an annotation on your account.'
+          : ''),
     });
   };
 
@@ -775,6 +779,22 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
                 >
                   Add annotation
                 </Button>
+                <FileButton
+                  onChange={(f) => f && void readFile(f)}
+                  accept=".csv,.tsv,.txt,.tab,text/csv,text/tab-separated-values"
+                  inputProps={{ 'data-testid': 'annotation-file-input' } as React.ComponentProps<'input'>}
+                >
+                  {(props) => (
+                    <Button
+                      {...props}
+                      size="xs"
+                      variant="default"
+                      leftSection={<Icon icon="mdi:file-upload-outline" width={14} />}
+                    >
+                      Annotate from file
+                    </Button>
+                  )}
+                </FileButton>
                 <Select
                   size="xs"
                   label="Compare by"
@@ -840,51 +860,155 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
               })}
 
               {(bound?.columns.length ?? 0) > 0 && (
-                <Group gap={6} wrap="wrap">
-                  {bound!.columns.map((c) => (
-                    <Tooltip
-                      key={c.id}
-                      disabled={!c.local}
-                      withinPortal
-                      label={
-                        state.storage === 'account'
-                          ? 'From a dropped file: kept in this browser only. The cloud icon keeps it on your account.'
-                          : 'From a dropped file: kept in this browser only.'
-                      }
-                    >
-                      <Badge
-                        variant={c.id === bound!.activeColumnId ? 'filled' : c.local ? 'outline' : 'light'}
-                        data-testid={c.local ? 'annotation-badge-local' : 'annotation-badge'}
-                        leftSection={c.local ? <Icon icon="mdi:monitor" width={12} /> : undefined}
-                        rightSection={
-                          <Group gap={4} wrap="nowrap">
-                            {c.local && state.storage === 'account' && (
+                <Group gap={6} wrap="wrap" data-testid="annotation-list">
+                  {bound!.columns.map((c) => {
+                    const active = c.id === bound!.activeColumnId;
+                    return (
+                      <Paper
+                        key={c.id}
+                        withBorder
+                        radius="sm"
+                        px={8}
+                        py={2}
+                        data-testid={c.local ? 'annotation-item-local' : 'annotation-item'}
+                        data-active={active || undefined}
+                        style={
+                          active ? { borderColor: 'var(--mantine-primary-color-filled)' } : undefined
+                        }
+                      >
+                        <Group gap={6} wrap="nowrap">
+                          {c.local && (
+                            <Tooltip
+                              withinPortal
+                              label="From a dropped file: kept in this browser only."
+                            >
                               <Icon
-                                icon="mdi:cloud-upload-outline"
+                                icon="mdi:monitor"
                                 width={13}
-                                style={{ cursor: 'pointer' }}
-                                role="button"
+                                aria-label="Kept in this browser"
+                                style={{ color: 'var(--mantine-color-dimmed)' }}
+                              />
+                            </Tooltip>
+                          )}
+                          <Text size="xs" fw={active ? 600 : 500}>
+                            {c.name}
+                          </Text>
+                          <Text size="xs" c="dimmed">
+                            {Object.keys(c.values).length}
+                          </Text>
+                          {c.local && state.storage === 'account' && (
+                            <Tooltip withinPortal label="Keep on my account (its labels are sent to the server)">
+                              <ActionIcon
+                                size="xs"
+                                variant="subtle"
+                                color="gray"
                                 aria-label={`Keep ${c.name} on my account`}
                                 data-testid="annotation-keep-on-account"
                                 onClick={() => keepOnAccount(c.id)}
-                              />
-                            )}
-                            <Icon
-                              icon="mdi:close"
-                              width={12}
-                              style={{ cursor: 'pointer' }}
-                              role="button"
-                              aria-label={`Remove ${c.name}`}
-                              onClick={() => removeAnnotation(c.id)}
-                            />
-                          </Group>
-                        }
-                      >
-                        {c.name} · {Object.keys(c.values).length}
-                      </Badge>
-                    </Tooltip>
-                  ))}
+                              >
+                                <Icon icon="mdi:cloud-upload-outline" width={13} />
+                              </ActionIcon>
+                            </Tooltip>
+                          )}
+                          <ActionIcon
+                            size="xs"
+                            variant="subtle"
+                            color="gray"
+                            aria-label={`Remove ${c.name}`}
+                            onClick={() => removeAnnotation(c.id)}
+                          >
+                            <Icon icon="mdi:close" width={12} />
+                          </ActionIcon>
+                        </Group>
+                      </Paper>
+                    );
+                  })}
                 </Group>
+              )}
+
+              {pendingDrop && plan && (
+                <Paper withBorder radius="md" p="sm" data-testid="annotation-drop-preview">
+                  <Stack gap="xs">
+                    <Group justify="space-between" wrap="wrap" gap="xs">
+                      <Text size="sm" fw={600}>
+                        {pendingDrop.fileName}
+                        <Text span size="xs" c="dimmed" fw={400}>
+                          {' '}· read in your browser, matched on &quot;{pendingDrop.match.fileKeyColumn}&quot;:{' '}
+                          {pendingDrop.match.matchedRows} row{pendingDrop.match.matchedRows === 1 ? '' : 's'}
+                        </Text>
+                      </Text>
+                      <SegmentedControl
+                        size="xs"
+                        value={pendingDrop.mode}
+                        onChange={(m) => setPendingDrop({ ...pendingDrop, mode: m as AnnotationMergeMode })}
+                        data={[
+                          { value: 'add_columns', label: 'Add columns' },
+                          { value: 'fill_missing', label: 'Fill missing' },
+                          { value: 'replace', label: 'Replace' },
+                        ]}
+                        data-testid="annotation-drop-mode"
+                      />
+                    </Group>
+                    <Text size="xs">
+                      {pendingDrop.mode === 'add_columns' &&
+                        'Each new column of the file becomes an annotation; existing annotations are left as they are.'}
+                      {pendingDrop.mode === 'fill_missing' &&
+                        'Labels go into the annotations of the same name, only where a row has none.'}
+                      {pendingDrop.mode === 'replace' &&
+                        'The file replaces all your annotations on this table.'}
+                    </Text>
+                    <Stack gap={2}>
+                      {plan.report.newAnnotations.length > 0 && (
+                        <Text size="xs">New: {plan.report.newAnnotations.join(', ')}</Text>
+                      )}
+                      {plan.report.updatedAnnotations.length > 0 && (
+                        <Text size="xs">Filled: {plan.report.updatedAnnotations.join(', ')}</Text>
+                      )}
+                      {plan.report.removedAnnotations.length > 0 && (
+                        <Text size="xs" c="orange">
+                          Removed: {plan.report.removedAnnotations.join(', ')}
+                        </Text>
+                      )}
+                      <Text size="xs" c="dimmed">
+                        {plan.report.labels} label{plan.report.labels === 1 ? '' : 's'} written
+                        {plan.report.conflicts > 0 &&
+                          ` · ${plan.report.conflicts} differing label${plan.report.conflicts === 1 ? '' : 's'} kept as they are`}
+                        {plan.report.ignored.length > 0 &&
+                          ` · left out: ${plan.report.ignored.map((x) => `${x.name} (${x.reason})`).join(', ')}`}
+                      </Text>
+                      {pendingDrop.match.unmatchedRows > 0 && (
+                        <Text size="xs" c="orange">
+                          {pendingDrop.match.unmatchedRows} row{pendingDrop.match.unmatchedRows === 1 ? '' : 's'} not in
+                          the table, left out ({pendingDrop.match.unmatchedSample.join(', ')}
+                          {pendingDrop.match.unmatchedRows > pendingDrop.match.unmatchedSample.length ? ', …' : ''})
+                        </Text>
+                      )}
+                    </Stack>
+                    {plan.report.reason && (
+                      <Alert color="red" py={6} data-testid="annotation-drop-reason">
+                        {plan.report.reason}
+                      </Alert>
+                    )}
+                    <Group justify="flex-end" gap="xs">
+                      <Button
+                        size="xs"
+                        variant="default"
+                        onClick={() => setPendingDrop(null)}
+                        data-testid="annotation-drop-cancel"
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        size="xs"
+                        onClick={applyDrop}
+                        disabled={Boolean(plan.report.reason)}
+                        data-testid="annotation-drop-apply"
+                      >
+                        Apply
+                      </Button>
+                    </Group>
+                  </Stack>
+                </Paper>
               )}
 
               {dropReport && (
@@ -902,18 +1026,30 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
               <Box
                 onPaste={onPaste}
                 onDragOver={(e) => {
+                  if (!carriesFiles(e)) return;
                   e.preventDefault();
+                  e.dataTransfer.dropEffect = 'copy';
                   setDragging(true);
                 }}
-                onDragLeave={() => setDragging(false)}
-                onDrop={(e) => void onDrop(e)}
-                data-testid="annotation-drop-zone"
-                style={{
-                  position: 'relative',
-                  outline: dragging ? '2px dashed var(--mantine-primary-color-filled)' : undefined,
-                  outlineOffset: 2,
+                onDragLeave={(e) => {
+                  if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragging(false);
                 }}
+                onDrop={onDrop}
+                data-testid="annotation-drop-zone"
+                style={{ position: 'relative' }}
               >
+                {dragging && (
+                  <Box className="dc-table-drop-overlay" data-testid="annotation-drop-overlay">
+                    <Stack gap={4} align="center">
+                      <Icon icon="mdi:file-table-outline" width={32} />
+                      <Text fw={600}>Drop to annotate</Text>
+                      <Text size="sm" c="dimmed">
+                        Add columns, fill missing labels or replace them. Read in your browser; you
+                        see the result first.
+                      </Text>
+                    </Stack>
+                  </Box>
+                )}
                 <Box
                   className={scheme === 'dark' ? 'ag-theme-alpine-dark' : 'ag-theme-alpine'}
                   style={{ height: 'calc(100vh - 420px)', minHeight: 280, width: '100%' }}
@@ -937,7 +1073,7 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
                 {rows.length.toLocaleString()} rows
                 {missingKeys > 0 &&
                   ` · ${missingKeys} labelled key${missingKeys === 1 ? ' is' : 's are'} not in the table now; kept, not shown`}
-                {' · '}Drop a CSV or TSV on the grid: it is read in your browser and never uploaded.
+                {' · '}Drop a CSV or TSV on the grid, or use Annotate from file: it is read in your browser and never uploaded.
               </Text>
             </Stack>
           )}

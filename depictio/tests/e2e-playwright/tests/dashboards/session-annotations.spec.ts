@@ -150,7 +150,7 @@ test.describe("Session annotations", () => {
 
     // Account storage: a reload (a fresh read) brings them back.
     await openPanel(page);
-    await expect(page.locator("[data-testid='annotation-panel']")).toContainText("response · 3");
+    await expect(page.locator("[data-testid='annotation-item']")).toContainText("response3");
     await expect(page.locator("[data-testid='annotation-compare-by']")).toHaveValue(/^response/);
 
     await clearAnnotations(page);
@@ -177,11 +177,15 @@ test.describe("Session annotations", () => {
       zone.dispatchEvent(new DragEvent("drop", { dataTransfer: dt, bubbles: true, cancelable: true }));
     }, csv);
 
-    const report = page.locator("[data-testid='annotation-drop-report']");
-    await expect(report).toContainText("in your browser");
-    await expect(report).toContainText("2 rows");
-    await expect(report).toContainText("not_a_penguin");
-    await expect(page.locator("[data-testid='annotation-badge-local']")).toContainText("cohort_from_file · 2");
+    // A preview first, with the table editor's modes; nothing changes before Apply.
+    const preview = page.locator("[data-testid='annotation-drop-preview']");
+    await expect(preview).toContainText("read in your browser");
+    await expect(preview).toContainText("2 rows");
+    await expect(preview).toContainText("not_a_penguin");
+    await expect(preview).toContainText("New: cohort_from_file");
+    await expect(page.locator("[data-testid='annotation-item-local']")).toHaveCount(0);
+    await page.locator("[data-testid='annotation-drop-apply']").click();
+    await expect(page.locator("[data-testid='annotation-item-local']")).toContainText("cohort_from_file2");
 
     // Past the save debounce: nothing of the file left the browser.
     await page.waitForTimeout(2_500);
@@ -199,7 +203,7 @@ test.describe("Session annotations", () => {
 
     // A reload brings it back from the browser.
     await openPanel(page);
-    await expect(page.locator("[data-testid='annotation-badge-local']")).toContainText("cohort_from_file · 2");
+    await expect(page.locator("[data-testid='annotation-item-local']")).toContainText("cohort_from_file2");
 
     // Kept on the account only on the reader's explicit choice.
     const kept = page.waitForRequest(
@@ -207,7 +211,7 @@ test.describe("Session annotations", () => {
     );
     await page.locator("[data-testid='annotation-keep-on-account']").click();
     await kept;
-    await expect(page.locator("[data-testid='annotation-badge-local']")).toHaveCount(0);
+    await expect(page.locator("[data-testid='annotation-item-local']")).toHaveCount(0);
 
     await clearAnnotations(page);
   });
@@ -280,7 +284,7 @@ test.describe("Session annotations", () => {
     expect(merges[1].body).toContain("individual_id,status");
     expect(merges[1].body).toContain("adelie_1,kept");
     // The column is now the table's: it leaves the session.
-    await expect(page.locator("[data-testid='annotation-panel']")).not.toContainText("status · 2");
+    await expect(page.locator("[data-testid='annotation-item']", { hasText: "status" })).toHaveCount(0);
 
     await clearAnnotations(page);
   });

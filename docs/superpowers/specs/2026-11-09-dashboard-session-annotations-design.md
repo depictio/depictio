@@ -137,6 +137,11 @@ Keyed on the dashboard family's main tab, since annotations belong to the whole 
   `packages/tool-studio`; declared in `depictio-react-core`), with a 5 MB limit. The delimiter
   follows the extension, else the header line, as in `tool-studio`'s `parseFixture.ts`. No request carries the file.
   Excel and Parquet are out of scope.
+- A file is dropped on the grid or picked with **Annotate from file**. Like the table editor's
+  file merge, it opens a preview with three modes before anything changes: **Add columns** (new
+  columns become annotations), **Fill missing** (labels go into same-named annotations where a
+  row has none; differing labels are counted and kept) and **Replace** (the file becomes the
+  whole set). The drop overlay is the editor's.
 - **What a dropped file yields stays in the browser**, for every account. Its annotations are
   marked `local` and kept under the browser key even when the account stores annotations; the
   account copy never holds them, and a file merged into an account annotation makes it local.

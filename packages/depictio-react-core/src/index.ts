@@ -951,6 +951,8 @@ export {
   parsePastedBlock,
 } from './annotationInput';
 export type { DropMatch, ParsedTable } from './annotationInput';
+export { planAnnotationMerge, suggestedMergeMode } from './annotationMerge';
+export type { AnnotationMergeMode, AnnotationMergeReport } from './annotationMerge';
 export { useCategoricalColumns, useColorByColumnRender } from './hooks/useColorByColumns';
 export { defaultFilterValue, withInteractiveDefaults } from './interactiveDefaults';
 export type { ColorByColumn, ColorByColumnRender } from './hooks/useColorByColumns';
