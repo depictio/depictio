@@ -2018,6 +2018,15 @@ class MigrationConfig(BaseSettings):
     pending_ttl_days: int = Field(default=14, ge=1)
     spool_dir: Optional[str] = Field(default=None)
     http_timeout_s: float = Field(default=60.0, gt=0)
+    upload_timeout_s: float = Field(
+        default=1800.0,
+        gt=0,
+        description=(
+            "How long the source waits for the target's answer after sending a bundle."
+            " The target stages the whole bundle on S3 before it answers, so a multi-GB"
+            " push needs far more than http_timeout_s"
+        ),
+    )
 
     @field_validator("staging_prefix")
     @classmethod

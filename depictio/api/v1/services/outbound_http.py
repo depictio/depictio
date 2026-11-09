@@ -252,7 +252,11 @@ class TargetClient:
                 "/requests",
                 data=data,
                 files={"file": ("bundle.zip", fh, "application/zip")},
-                timeout=httpx.Timeout(self._timeout, write=None),
+                # No write limit (the bundle may take hours), and a long wait for the
+                # answer: the target stages the bundle on S3 before it replies.
+                timeout=httpx.Timeout(
+                    self._timeout, read=float(settings.migration.upload_timeout_s), write=None
+                ),
             )
 
     def request_status(self, request_id: str) -> dict[str, Any]:

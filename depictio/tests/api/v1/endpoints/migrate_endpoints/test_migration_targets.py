@@ -197,3 +197,30 @@ def test_remote_error_detail_has_no_key():
         with pytest.raises(outbound_http.RemoteError) as exc:
             client.info()
     assert seen["key"] == KEY and exc.value.status_code == 403 and KEY not in str(exc.value)
+
+
+def test_bundle_upload_waits_longer_than_short_calls(monkeypatch, tmp_path):
+    """The target stages a whole bundle on S3 before it answers, so the upload may
+    not inherit the 60 s of the short calls (a multi-GB bundle would time out on
+    the source while the target went on to accept it)."""
+    import httpx
+
+    monkeypatch.setattr(settings.migration, "http_timeout_s", 60.0)
+    monkeypatch.setattr(settings.migration, "upload_timeout_s", 1800.0)
+    bundle = tmp_path / "bundle.zip"
+    bundle.write_bytes(b"zip")
+    seen: dict[str, dict] = {}
+
+    def handler(request):
+        seen[request.url.path] = dict(request.extensions["timeout"])
+        return httpx.Response(200, json={"ok": True})
+
+    target = outbound_http.ResolvedTarget("1", "t", "http://x", KEY, True)
+    with outbound_http.TargetClient(target, transport=httpx.MockTransport(handler)) as client:
+        client.info()
+        client.submit(bundle, {"sha256": "0" * 64, "transfer_mode": "inline"})
+
+    assert seen["/depictio/api/v1/migrate/inbound/info"]["read"] == 60.0
+    upload = seen["/depictio/api/v1/migrate/inbound/requests"]
+    assert upload["read"] == 1800.0
+    assert upload["write"] is None

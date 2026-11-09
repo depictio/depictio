@@ -193,6 +193,7 @@ List settings take JSON.
 | `PENDING_TTL_DAYS` | target | `14` | Pending requests older than this expire, and their bundle is deleted |
 | `SPOOL_DIR` | both | system temp | Where bundles are written while in flight |
 | `HTTP_TIMEOUT_S` | source | `60` | Timeout for calls to a target |
+| `UPLOAD_TIMEOUT_S` | source | `1800` | How long the source waits for the target's answer after sending a bundle (the target stages it on S3 first) |
 
 Pairing keys are at least 32 characters. Both sides hold the same key: it is in
 the source's `TARGETS` entry and in the target's `INBOUND_SOURCES` entry. The
@@ -265,6 +266,14 @@ the target's S3 user **read-only** access to the source bucket, for example:
 For `inline` pushes behind an ingress, raise the body size limit to at least
 `MAX_BUNDLE_BYTES`. With nginx, that is `client_max_body_size`; with
 ingress-nginx, the annotation is `nginx.ingress.kubernetes.io/proxy-body-size`.
+
+A bundle of several GB also needs time. The target answers only once it has staged
+the whole bundle on S3, so every hop between the two APIs must wait that long:
+`UPLOAD_TIMEOUT_S` on the source, and on the target's ingress
+`nginx.ingress.kubernetes.io/proxy-read-timeout` and `proxy-send-timeout` (seconds,
+for example `"1800"`). Without it the ingress answers 504 after 60 s while the
+target is still working, and the source records a failed push for a bundle the
+target may go on to accept.
 
 ## On the target
 
