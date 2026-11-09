@@ -178,6 +178,11 @@ def delete_user_from_db(
 
     result = users_collection.delete_one({"_id": user_id})
     if result.deleted_count == 1:
+        from depictio.api.v1.endpoints.dashboards_endpoints.annotation_cascade import (
+            delete_annotations_for_user,
+        )
+
+        delete_annotations_for_user(user_id)
         return {"success": True, "message": "User deleted successfully"}
     return {"success": False, "message": "Error deleting user"}
 

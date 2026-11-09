@@ -19,8 +19,13 @@ from fastapi.testclient import TestClient
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.endpoints.comments_endpoints import cascade
 from depictio.api.v1.endpoints.comments_endpoints import routes as cr
+from depictio.api.v1.endpoints.dashboards_endpoints import (
+    annotation_cascade,
+    filter_state_cascade,
+    version_store,
+    versioning,
+)
 from depictio.api.v1.endpoints.dashboards_endpoints import routes as dash_routes
-from depictio.api.v1.endpoints.dashboards_endpoints import version_store, versioning
 from depictio.api.v1.endpoints.user_endpoints.routes import get_user_or_anonymous
 from depictio.models.models.comments import (
     CommentCreate,
@@ -58,6 +63,7 @@ def world():
         # that waits out the real Mongo's server-selection timeout.
         patch.object(versioning, "dashboards_collection", database["dashboards"]),
         patch.object(versioning, "deltatables_collection", database["deltatables"]),
+        patch.object(versioning, "projects_collection", database["projects"]),
         patch.object(
             version_store, "dashboard_versions_collection", database["dashboard_versions"]
         ),
@@ -65,6 +71,17 @@ def world():
             version_store,
             "dashboard_version_counters_collection",
             database["dashboard_version_counters"],
+        ),
+        # Same for the per-viewer state the dashboard deletes take with them.
+        patch.object(
+            filter_state_cascade,
+            "dashboard_filter_states_collection",
+            database["dashboard_filter_states"],
+        ),
+        patch.object(
+            annotation_cascade,
+            "dashboard_annotations_collection",
+            database["dashboard_annotations"],
         ),
         patch.object(cr, "_get_aggregation_hash", side_effect=lambda dc: hashes.get(dc)),
         patch.object(settings.auth, "single_user_mode", False),
@@ -923,6 +940,24 @@ class TestCascade:
         ):
             run(dash_routes.delete_dashboard(ObjectId(world.main), current_user=world.owner))
         assert world.db["comment_threads"].count_documents({}) == 0
+
+    def test_delete_dashboard_drops_the_familys_annotations(self, world):
+        notes = world.db["dashboard_annotations"]
+        notes.insert_one({"user_id": world.viewer.id, "dashboard_id": ObjectId(world.main)})
+        notes.insert_one({"user_id": world.viewer.id, "dashboard_id": ObjectId()})
+        with (
+            patch.object(dash_routes, "check_dashboard_mutation_permission", return_value=True),
+            patch.object(dash_routes, "delete_logo_asset"),
+        ):
+            run(dash_routes.delete_dashboard(ObjectId(world.main), current_user=world.owner))
+        assert notes.count_documents({}) == 1
+
+    def test_delete_child_tab_keeps_the_familys_annotations(self, world):
+        notes = world.db["dashboard_annotations"]
+        notes.insert_one({"user_id": world.viewer.id, "dashboard_id": ObjectId(world.main)})
+        with patch.object(dash_routes, "check_dashboard_mutation_permission", return_value=True):
+            run(dash_routes.delete_tab(ObjectId(world.child), current_user=world.editor))
+        assert notes.count_documents({}) == 1
 
     def test_delete_tab_drops_its_threads_only(self, world):
         create(world)

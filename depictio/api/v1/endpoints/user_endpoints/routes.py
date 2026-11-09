@@ -1507,6 +1507,11 @@ def delete_user(user_id: str, current_user=Depends(get_current_user)):
     # Delete the user from the database
     result = users_collection.delete_one({"_id": user_id})
     if result.deleted_count == 1:
+        from depictio.api.v1.endpoints.dashboards_endpoints.annotation_cascade import (
+            delete_annotations_for_user,
+        )
+
+        delete_annotations_for_user(user_id)
         # The picture lives in its own collection; without this it would
         # outlive the account it belongs to.
         try:
