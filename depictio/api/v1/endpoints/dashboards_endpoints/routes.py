@@ -4,7 +4,9 @@ import sys
 import threading
 import time
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Collection, Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Annotated, Any, Literal
@@ -5045,6 +5047,24 @@ def get_cross_tab_components(
 # ============================================================================
 
 
+# The collections a project creation has just queued for ingestion: an import
+# running before the workers finds them empty, and must not read that as "this
+# run has no such data".
+_dc_tags_being_ingested: ContextVar[frozenset[str]] = ContextVar(
+    "_dc_tags_being_ingested", default=frozenset()
+)
+
+
+@contextmanager
+def dcs_being_ingested(tags: Collection[str]) -> Iterator[None]:
+    """Import dashboards as if the collections tagged ``tags`` were already populated."""
+    token = _dc_tags_being_ingested.set(frozenset(tags))
+    try:
+        yield
+    finally:
+        _dc_tags_being_ingested.reset(token)
+
+
 def _is_unpopulated_optional_dc(dc: dict) -> bool:
     """An optional, delta-backed table that holds no data: the run lacked its inputs.
 
@@ -5053,6 +5073,8 @@ def _is_unpopulated_optional_dc(dc: dict) -> bool:
     must pass over it, or a `locus_from` naming it reads a table that is not there.
     """
     if not dc.get("optional") or str((dc.get("config") or {}).get("type") or "").lower() != "table":
+        return False
+    if dc.get("data_collection_tag") in _dc_tags_being_ingested.get():
         return False
     from depictio.api.v1.db import deltatables_collection
 
@@ -7449,6 +7471,7 @@ def _build_dc_meta(project_id: PyObjectId | None) -> dict[str, dict]:
                 "type": dc.get("config", {}).get("type"),
                 "metatype": dc.get("config", {}).get("metatype"),
                 "optional": dc.get("optional", False),
+                "ingesting": tag in _dc_tags_being_ingested.get(),
             }
             # MultiQC DCs: record which modules + plots actually parsed at
             # ingestion so module/plot-pinned components for absent modules or
@@ -7470,7 +7493,8 @@ def _component_has_data(component: dict, dc_meta: dict[str, dict]) -> bool:
       - DC tag did not resolve (dc_id unset) -> DC was removed by template
         conditionals / optional-file pruning -> absent -> DROP.
       - DC present but declared `optional` AND a delta-backed Table AND has no
-        deltatables record (processing skipped it, no data) -> DROP.
+        deltatables record (processing skipped it, no data) AND not queued for
+        ingestion (see `dcs_being_ingested`) -> DROP.
       - Otherwise KEEP. In particular a NON-optional DC is always kept so a genuine
         gap renders a visible error instead of being silently hidden, and
         MultiQC / phylogeny DCs (which don't register a delta table) are kept.
@@ -7513,6 +7537,8 @@ def _component_has_data(component: dict, dc_meta: dict[str, dict]) -> bool:
     # Stored config.type is normalised lower-case (e.g. "table"); MultiQC/phylogeny
     # types don't register delta tables, so only delta-backed Table DCs are checked.
     if not info.get("optional") or (info.get("type") or "").lower() != "table":
+        return True
+    if info.get("ingesting"):
         return True
 
     from depictio.api.v1.db import deltatables_collection

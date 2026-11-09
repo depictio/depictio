@@ -500,6 +500,36 @@ def test_a_pruned_collection_is_absent_from_the_project_and_the_run(mock_db, meg
     assert "phylogenetic_tree_canonical" not in dispatched
 
 
+def test_the_import_knows_which_collections_are_about_to_be_ingested(
+    mock_db, megatest_s3, monkeypatch
+):
+    """Tiles on an optional collection the run has must survive the import.
+
+    The import runs before the workers, when no collection has data: without
+    this, every tab built on optional collections was dropped.
+    """
+    from depictio.api.v1.endpoints.dashboards_endpoints import routes as dashboards_routes
+    from depictio.api.v1.endpoints.projects_endpoints import from_run as from_run_module
+
+    seen: list[frozenset[str]] = []
+
+    def record(*_args, **_kwargs):
+        seen.append(dashboards_routes._dc_tags_being_ingested.get())
+        return []
+
+    monkeypatch.setattr(from_run_module, "_import_template_dashboards", record)
+    megatest_s3()
+    report, _user_, _importer, _task = _run_from_folder(mock_db)
+
+    rows = _rows(report)
+    found_optional = {tag for tag, row in rows.items() if row.optional and row.status == "ok"}
+    absent_optional = {tag for tag, row in rows.items() if row.optional and row.status == "missing"}
+    assert found_optional and absent_optional
+    assert found_optional <= seen[0]
+    assert not absent_optional & seen[0]
+    assert dashboards_routes._dc_tags_being_ingested.get() == frozenset()
+
+
 def test_dashboards_are_keyed_as_the_cli_keys_them(mock_db, megatest_s3):
     """A later ``depictio ingest`` of this project with the template finds them.
 

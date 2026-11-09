@@ -1014,25 +1014,31 @@ def _create_project_from_run(
         report.storage_saved = True
     report.project_id = str(project_oid)
 
+    stored = projects_collection.find_one({"_id": project_oid}) or {}
+    # The report's rows carry a pruned collection's reason; it has no step.
+    preflight = _preflight_split(stored, preview.data_collections)
+
     # Import the template's dashboards in-process, before the workers start:
     # the shared import handler binds DC tags to the ids just persisted and
-    # drops components whose optional DC was pruned (self-adapting import).
-    report.dashboards = _import_template_dashboards(
-        dashboard_paths,
-        template_id=template_metadata.template_id,
-        template_version=template_metadata.version,
-        project_id=project_oid,
-        variables=resolved_vars,
-        current_user=current_user,
-    )
+    # drops components whose optional DC was pruned (self-adapting import). No
+    # collection has data yet, so the ones about to be ingested are named, or
+    # every tile on an optional collection would go with the absent ones.
+    from depictio.api.v1.endpoints.dashboards_endpoints.routes import dcs_being_ingested
+
+    with dcs_being_ingested({tag for tag, *_ in preflight.to_dispatch}):
+        report.dashboards = _import_template_dashboards(
+            dashboard_paths,
+            template_id=template_metadata.template_id,
+            template_version=template_metadata.version,
+            project_id=project_oid,
+            variables=resolved_vars,
+            current_user=current_user,
+        )
     all_ok = all(entry.success for entry in report.dashboards)
 
     # Fan the ingestion out. Everything the workers need is on the project
     # document, which they re-read for themselves; the run document in Mongo is
     # the durable status of record.
-    stored = projects_collection.find_one({"_id": project_oid}) or {}
-    # The report's rows carry a pruned collection's reason; it has no step.
-    preflight = _preflight_split(stored, preview.data_collections)
     if preflight.to_dispatch or preflight.failed or preflight.skipped:
         run_id, all_dispatched, _results = _dispatch_refresh_tasks(
             project_dict=stored,
