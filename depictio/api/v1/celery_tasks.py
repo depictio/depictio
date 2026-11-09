@@ -902,6 +902,11 @@ def build_multiqc_preview(payload: dict) -> dict:
     }
 
 
+# The most rows one preview returns. The annotation panel reads a whole sample
+# table (up to this many keys) in one call; every other caller asks for 500 or fewer.
+MAX_PREVIEW_ROWS = 10_000
+
+
 @celery_app.task(name="depictio.deltatables.preview", soft_time_limit=60, time_limit=120)
 def preview_deltatable(payload: dict) -> dict:
     """Heavy body of `GET`/`POST /deltatables/preview/{id}`.
@@ -926,7 +931,7 @@ def preview_deltatable(payload: dict) -> dict:
     from depictio.api.v1.s3 import polars_s3_config
 
     delta_loc = payload["delta_table_location"]
-    limit = max(1, min(int(payload.get("limit", 100)), 1000))
+    limit = max(1, min(int(payload.get("limit", 100)), MAX_PREVIEW_ROWS))
     filter_metadata = payload.get("filter_metadata") or []
     raw_version = payload.get("version")
     version = int(raw_version) if raw_version is not None else None
