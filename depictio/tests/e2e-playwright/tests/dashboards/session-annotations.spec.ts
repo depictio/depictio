@@ -1,23 +1,23 @@
 /**
- * Session annotations: the Annotate panel on a dashboard.
+ * Session labels: the Labels tab of the Analysis panel.
  *
  * Against the seeded Penguins dashboard, whose table (`penguins_complete`) is
  * keyed by `individual_id`:
- *   - a reader adds an annotation, labels rows, picks it in "Compare by", and
- *     each label becomes a group of the Analysis panel;
- *   - a reload keeps the annotations (account storage for a signed-in user);
- *   - a CSV dropped on the grid is read in the browser, and its annotations stay
- *     there (no request carries them) until the reader keeps one on the account;
- *   - Save to table runs the add_columns merge (dry run, then apply) and takes
- *     the annotation out of the session — the merge route is stubbed, because
- *     the seeded table is a join, which no one may edit;
- *   - a temporary account (public mode only) keeps annotations in the browser
- *     and sees the account-only controls disabled.
+ *   - a reader adds a label column with "+", types labels, picks "Compare in
+ *     the charts" in the column menu, and each label becomes an Analysis group;
+ *   - a reload keeps the labels (account storage for a signed-in user);
+ *   - a CSV dropped on the tab opens a preview, is read in the browser, and its
+ *     labels stay there (no request carries them) until kept on the account;
+ *   - "Save to table" in a column menu runs the add_columns merge;
+ *   - a table cell edited in the grid is saved to the table from the bar below;
+ *   - a temporary account (public mode only) keeps labels in the browser.
  *
+ * The seeded table is a join, which no one may edit, so the write tests answer
+ * as for a table a user added and stub the writes: the stack's data never changes.
  * Skips itself when the Penguins dashboard is not seeded.
  */
 
-import { Page, Request } from "@playwright/test";
+import { Page, Request, Route } from "@playwright/test";
 import { test, expect, API_URL, API_PREFIX, apiOnlyToken, getAuthMode } from "@fixtures/auth";
 
 const PENGUINS = "6824cb3b89d2b72169309738";
@@ -39,7 +39,7 @@ async function seeded(request: Api): Promise<Record<string, string> | null> {
   }
 }
 
-/** Drop the page session's annotations. Through the page, not `request`: in
+/** Drop the page session's labels. Through the page, not `request`: in
  *  single-user mode the SPA holds the admin's token, while a call without one
  *  is the anonymous user's, so only the page reaches the document it wrote. */
 async function clearAnnotations(page: Page): Promise<void> {
@@ -51,7 +51,7 @@ async function clearAnnotations(page: Page): Promise<void> {
     } catch {
       token = "";
     }
-    // Annotations from a dropped file live in the browser.
+    // Labels from a dropped file live in the browser.
     window.localStorage.removeItem(`depictio.annotations.${url.split("/").pop()}`);
     const res = await fetch(url, {
       method: "DELETE",
@@ -83,40 +83,86 @@ async function noWalkthrough(page: Page): Promise<void> {
 async function openPanel(page: Page): Promise<void> {
   await noWalkthrough(page);
   await page.goto(`/dashboard/${PENGUINS}`);
-  const button = page.locator("[data-testid='session-annotate-button']");
+  const button = page.locator("[data-testid='analysis-button']");
   await expect(button).toBeVisible({ timeout: 30_000 });
   await button.click();
+  await page.locator("[data-testid='analysis-tabs']").getByText("Labels", { exact: true }).click();
   await expect(page.locator("[data-testid='annotation-grid'] .ag-row").first()).toBeVisible({
     timeout: 30_000,
   });
 }
 
-async function addAnnotation(page: Page, name: string): Promise<void> {
-  await page.locator("[data-testid='annotation-new-name']").fill(name);
-  await page.locator("[data-testid='annotation-add']").click();
-  await expect(page.locator("[data-testid='annotation-grid'] .ag-header-cell-text", { hasText: name })).toBeVisible();
+async function addLabelColumn(page: Page, name: string): Promise<void> {
+  await page.locator("[data-testid='label-add']").click();
+  await page.locator("[data-testid='label-name-input']").fill(name);
+  await page.locator("[data-testid='label-name-save']").click();
+  await expect(page.locator(`[data-testid='label-menu-${name}']`)).toBeVisible();
 }
 
-/** Type a label into the annotation `column` of the row at `rowIndex`. */
-async function label(page: Page, column: string, rowIndex: number, value: string): Promise<void> {
+/** The AG Grid column id of the column whose header reads `name`. */
+async function columnId(page: Page, name: string): Promise<string> {
   const grid = page.locator("[data-testid='annotation-grid']");
-  const colId = await grid
-    .locator(".ag-header-cell", { has: page.locator(".ag-header-cell-text", { hasText: new RegExp(`^${column}$`) }) })
+  const id = await grid
+    .locator(".ag-header-cell", { hasText: new RegExp(`^\\s*${name}\\s*$`) })
+    .first()
     .getAttribute("col-id");
-  const cell = grid.locator(`.ag-center-cols-container [row-index='${rowIndex}'] [col-id='${colId}']`);
+  expect(id, `no column ${name}`).toBeTruthy();
+  return id!;
+}
+
+/** Type `value` into the `column` cell of the row at `rowIndex`. */
+async function typeCell(page: Page, column: string, rowIndex: number, value: string): Promise<void> {
+  const grid = page.locator("[data-testid='annotation-grid']");
+  const id = await columnId(page, column);
+  const cell = grid.locator(`.ag-center-cols-container [row-index='${rowIndex}'] [col-id='${id}']`);
   await cell.click();
+  await page.keyboard.press("Control+A");
   await page.keyboard.type(value);
   await page.keyboard.press("Enter");
   await expect(cell).toHaveText(value);
 }
 
-async function compareBy(page: Page, name: string): Promise<void> {
-  await page.locator("[data-testid='annotation-compare-by']").click();
-  await page.getByRole("option", { name: new RegExp(`^${name} \\(`) }).click();
+async function columnMenu(page: Page, name: string, item: string): Promise<void> {
+  await page.locator(`[data-testid='label-menu-${name}']`).click();
+  await page.getByRole("menuitem", { name: new RegExp(`^${item}`) }).click();
 }
 
-test.describe("Session annotations", () => {
-  // One account's annotations on one dashboard: the tests must not overlap.
+/** Answer as for a table a user added: editable, read whole by the edit route
+ *  (built from the real preview so the rows are the seeded ones). */
+async function editableTable(page: Page, deltaVersion: number): Promise<void> {
+  await page.route("**/datacollections/*/edit_status", (route) =>
+    route.fulfill({
+      json: { table_editable: true, can_edit: true, role_can_edit: true, code: null, reason: null, max_rows: 100000 },
+    }),
+  );
+  await page.route("**/datacollections/*/edit_data", async (route: Route) => {
+    const dcId = route.request().url().split("/datacollections/")[1].split("/")[0];
+    // The table is read again after each write; the test may have ended by then.
+    let body: { columns: string[]; rows: Record<string, unknown>[] };
+    try {
+      const preview = await route.fetch({
+        url: `${API_URL}${API_PREFIX}/deltatables/preview/${dcId}?limit=10000`,
+        method: "GET",
+      });
+      body = (await preview.json()) as typeof body;
+    } catch {
+      return;
+    }
+    await route.fulfill({
+      json: {
+        data_collection_id: dcId,
+        delta_version: deltaVersion,
+        row_count: body.rows.length,
+        max_rows: 100000,
+        columns: body.columns.map((name) => ({ name, dtype: "String", kind: "text", editable: true })),
+        rows: body.rows,
+      },
+    });
+  });
+}
+
+test.describe("Session labels", () => {
+  // One account's labels on one dashboard: the tests must not overlap.
   test.describe.configure({ mode: "serial" });
 
   test("labels become Analysis groups and survive a reload", async ({ page, request, loginAsAdmin }) => {
@@ -128,30 +174,29 @@ test.describe("Session annotations", () => {
     await clearAnnotations(page);
 
     await openPanel(page);
-    await expect(page.locator("[data-testid='annotation-storage-note']")).toContainText(
-      "Kept on your account",
-    );
-    await addAnnotation(page, "response");
-    await label(page, "response", 0, "responder");
-    await label(page, "response", 1, "non-responder");
-    await label(page, "response", 2, "responder");
+    // A signed-in account says nothing about storage: it is the normal case.
+    await expect(page.locator("[data-testid='annotation-storage-note']")).toHaveCount(0);
+    await addLabelColumn(page, "response");
+    await typeCell(page, "response", 0, "responder");
+    await typeCell(page, "response", 1, "non-responder");
+    await typeCell(page, "response", 2, "responder");
 
     const saved = page.waitForResponse(
       (r) => r.url().startsWith(ANNOTATIONS_URL) && r.request().method() === "PUT" && r.ok(),
     );
-    await compareBy(page, "response");
+    await columnMenu(page, "response", "Compare in the charts");
     await saved;
+    await expect(page.locator("[data-testid='label-compared']")).toHaveCount(1);
 
-    await page.locator("[data-testid='annotation-open-analysis']").click();
+    await page.locator("[data-testid='analysis-tabs']").getByText("Groups", { exact: true }).click();
     const analysis = page.getByRole("dialog", { name: /^Analysis/ });
-    await expect(analysis).toBeVisible();
     await expect(analysis).toContainText("responder");
     await expect(analysis).toContainText("non-responder");
 
     // Account storage: a reload (a fresh read) brings them back.
     await openPanel(page);
-    await expect(page.locator("[data-testid='annotation-item']")).toContainText("response3");
-    await expect(page.locator("[data-testid='annotation-compare-by']")).toHaveValue(/^response/);
+    await expect(page.locator("[data-testid='label-menu-response']")).toBeVisible();
+    await expect(page.locator("[data-testid='label-compared']")).toHaveCount(1);
 
     await clearAnnotations(page);
   });
@@ -179,13 +224,13 @@ test.describe("Session annotations", () => {
 
     // A preview first, with the table editor's modes; nothing changes before Apply.
     const preview = page.locator("[data-testid='annotation-drop-preview']");
-    await expect(preview).toContainText("read in your browser");
+    await expect(preview).toContainText("Read in your browser");
     await expect(preview).toContainText("2 rows");
     await expect(preview).toContainText("not_a_penguin");
     await expect(preview).toContainText("New: cohort_from_file");
-    await expect(page.locator("[data-testid='annotation-item-local']")).toHaveCount(0);
+    await expect(page.locator("[data-testid='label-menu-cohort_from_file']")).toHaveCount(0);
     await page.locator("[data-testid='annotation-drop-apply']").click();
-    await expect(page.locator("[data-testid='annotation-item-local']")).toContainText("cohort_from_file2");
+    await expect(page.locator("[data-testid='label-menu-cohort_from_file']")).toBeVisible();
 
     // Past the save debounce: nothing of the file left the browser.
     await page.waitForTimeout(2_500);
@@ -203,20 +248,22 @@ test.describe("Session annotations", () => {
 
     // A reload brings it back from the browser.
     await openPanel(page);
-    await expect(page.locator("[data-testid='annotation-item-local']")).toContainText("cohort_from_file2");
+    await expect(page.locator("[data-testid='label-menu-cohort_from_file']")).toBeVisible();
 
     // Kept on the account only on the reader's explicit choice.
     const kept = page.waitForRequest(
-      (r) => r.url().startsWith(ANNOTATIONS_URL) && r.method() === "PUT" && (r.postData() ?? "").includes("cohort_from_file"),
+      (r) =>
+        r.url().startsWith(ANNOTATIONS_URL) &&
+        r.method() === "PUT" &&
+        (r.postData() ?? "").includes("cohort_from_file"),
     );
-    await page.locator("[data-testid='annotation-keep-on-account']").click();
+    await columnMenu(page, "cohort_from_file", "Keep on my account");
     await kept;
-    await expect(page.locator("[data-testid='annotation-item-local']")).toHaveCount(0);
 
     await clearAnnotations(page);
   });
 
-  test("Save to table merges the labels as a new column", async ({ page, request, loginAsAdmin }) => {
+  test("Save to table merges a label column as a new column", async ({ page, request, loginAsAdmin }) => {
     test.setTimeout(120_000);
     const api = await seeded(request);
     test.skip(!api, "Penguins dashboard not seeded on this stack");
@@ -224,13 +271,7 @@ test.describe("Session annotations", () => {
     await noWalkthrough(page);
     await clearAnnotations(page);
 
-    // The seeded table is a join, which no one may edit: answer as for a table
-    // a user added, and stub the merge so the stack's data stays as it is.
-    await page.route("**/datacollections/*/edit_status", (route) =>
-      route.fulfill({
-        json: { table_editable: true, can_edit: true, role_can_edit: true, code: null, reason: null, max_rows: 100000 },
-      }),
-    );
+    await editableTable(page, 7);
     const merges: { dryRun: string | null; mode: string | null; body: string }[] = [];
     await page.route("**/datacollections/*/merge_file", async (route) => {
       const body = route.request().postData() ?? "";
@@ -266,12 +307,11 @@ test.describe("Session annotations", () => {
     });
 
     await openPanel(page);
-    await addAnnotation(page, "status");
-    await label(page, "status", 0, "kept");
-    await label(page, "status", 1, "dropped");
+    await addLabelColumn(page, "status");
+    await typeCell(page, "status", 0, "kept");
+    await typeCell(page, "status", 1, "dropped");
 
-    await page.locator("[data-testid='annotation-save-to-table']").click();
-    await page.getByRole("menuitem", { name: "status" }).click();
+    await columnMenu(page, "status", "Save to table");
     await expect(page.locator("[data-testid='annotation-save-modal']")).toContainText("2 of 344 rows");
     await page.locator("[data-testid='annotation-save-apply']").click();
 
@@ -284,12 +324,43 @@ test.describe("Session annotations", () => {
     expect(merges[1].body).toContain("individual_id,status");
     expect(merges[1].body).toContain("adelie_1,kept");
     // The column is now the table's: it leaves the session.
-    await expect(page.locator("[data-testid='annotation-item']", { hasText: "status" })).toHaveCount(0);
+    await expect(page.locator("[data-testid='label-menu-status']")).toHaveCount(0);
 
+    await page.unrouteAll({ behavior: "ignoreErrors" });
     await clearAnnotations(page);
   });
 
-  test("a temporary account keeps annotations in the browser", async ({ page }) => {
+  test("a table cell edited in the grid is saved to the table", async ({ page, request, loginAsAdmin }) => {
+    test.setTimeout(120_000);
+    const api = await seeded(request);
+    test.skip(!api, "Penguins dashboard not seeded on this stack");
+    await signIn(loginAsAdmin);
+    await noWalkthrough(page);
+    await clearAnnotations(page);
+
+    await editableTable(page, 7);
+    let patched: { base_version: number; edits: { row: number; column: string; value: unknown }[] } | null = null;
+    await page.route("**/datacollections/*/cells", async (route) => {
+      patched = JSON.parse(route.request().postData() ?? "{}");
+      await route.fulfill({ json: { success: true, data_collection_id: "x", delta_version: 8 } });
+    });
+
+    await openPanel(page);
+    await typeCell(page, "bill_length_mm", 0, "41.5");
+    const bar = page.locator("[data-testid='annotation-cell-bar']");
+    await expect(bar).toContainText("1 change to the table");
+
+    const refreshed = page.waitForRequest((r) => r.url().includes("/edit_data"));
+    await page.locator("[data-testid='annotation-cell-save']").click();
+    await expect.poll(() => patched).not.toBeNull();
+    expect(patched!.base_version).toBe(7);
+    expect(patched!.edits).toEqual([{ row: 0, column: "bill_length_mm", value: "41.5" }]);
+    // The table is read again after the write.
+    await refreshed;
+    await page.unrouteAll({ behavior: "ignoreErrors" });
+  });
+
+  test("a temporary account keeps labels in the browser", async ({ page }) => {
     test.setTimeout(120_000);
     const mode = await getAuthMode();
     test.skip(!mode.is_public_mode, "temporary accounts exist in public mode only");
@@ -297,18 +368,15 @@ test.describe("Session annotations", () => {
     // Public mode hands the visitor a temporary account on arrival.
     await noWalkthrough(page);
     await page.goto(`/dashboard/${PENGUINS}`);
-    const button = page.locator("[data-testid='session-annotate-button']");
+    const button = page.locator("[data-testid='analysis-button']");
     const visible = await button.isVisible({ timeout: 30_000 }).catch(() => false);
     test.skip(!visible, "the Penguins dashboard is not public on this stack");
     await button.click();
+    await page.locator("[data-testid='analysis-tabs']").getByText("Labels", { exact: true }).click();
 
-    await expect(page.locator("[data-testid='annotation-storage-note']")).toContainText(
-      "Kept in this browser",
-    );
-    await expect(page.locator("[data-testid='annotation-edit-tab']")).toBeDisabled();
-    await addAnnotation(page, "mine");
-    await label(page, "mine", 0, "a");
-    await expect(page.locator("[data-testid='annotation-save-to-table']")).toBeDisabled();
+    await expect(page.locator("[data-testid='annotation-storage-note']")).toContainText("in this browser");
+    await addLabelColumn(page, "mine");
+    await typeCell(page, "mine", 0, "a");
 
     const stored = await page.evaluate(
       (id) => window.localStorage.getItem(`depictio.annotations.${id}`),

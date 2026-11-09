@@ -143,9 +143,9 @@ import {
 } from './lib/filterStateStorage';
 import { FILTER_PANEL_RESIZER_WIDTH } from './components/FilterPanelResizer';
 import GroupingHeaderControl, {
-  ANALYSIS_PANEL_WIDTH_PX,
+  type AnalysisTab,
+  analysisPanelWidthPx,
 } from './components/GroupingHeaderControl';
-import AnnotateHeaderControl from './components/annotations/AnnotateHeaderControl';
 import AnnotationPanel from './components/annotations/AnnotationPanel';
 import {
   type AnnotationStorage,
@@ -1407,15 +1407,12 @@ const App: React.FC = () => {
   // arrival would be worse than closing it.
   const [analysisOpen, setAnalysisOpen] = useState(false);
   const { analysisArmed, setAnalysisArmed } = groupsApi;
-  // The Annotate panel sits on the right too: one of the two at a time.
-  const [annotateOpen, setAnnotateOpen] = useState(false);
+  // Groups, or the Labels grid that session labels are made in.
+  const [analysisTab, setAnalysisTab] = useState<AnalysisTab>('groups');
   const handleAnalysisOpenChange = useCallback(
     (next: boolean) => {
       setAnalysisOpen(next);
-      if (next) {
-        setAnalysisArmed(true);
-        setAnnotateOpen(false);
-      }
+      if (next) setAnalysisArmed(true);
     },
     [setAnalysisArmed],
   );
@@ -1423,12 +1420,7 @@ const App: React.FC = () => {
     const next = !analysisOpen;
     setAnalysisOpen(next);
     setAnalysisArmed(next);
-    if (next) setAnnotateOpen(false);
   }, [analysisOpen, setAnalysisArmed]);
-  const handleAnnotateOpenChange = useCallback((next: boolean) => {
-    setAnnotateOpen(next);
-    if (next) setAnalysisOpen(false);
-  }, []);
 
   // Session annotations: kept on the account for a signed-in account (and the
   // single user), in the browser for a temporary or anonymous one. Each label
@@ -1546,10 +1538,7 @@ const App: React.FC = () => {
   }, [guide, isNarrow, mobileOpened, toggleMobile]);
   // The Analysis panel is docked beside the canvas: the Guide takes its place.
   useEffect(() => {
-    if (guide.open) {
-      setAnalysisOpen(false);
-      setAnnotateOpen(false);
-    }
+    if (guide.open) setAnalysisOpen(false);
   }, [guide.open]);
   // Before the dashboard search lands on something of this tab: the Guide and,
   // on a phone, the tab list both cover the canvas, and a filter lives in a
@@ -1588,33 +1577,24 @@ const App: React.FC = () => {
           armed={analysisArmed}
           onToggle={handleAnalysisToggle}
           pushesContent={!isNarrow}
+          tab={analysisTab}
+          onTabChange={setAnalysisTab}
+          labels={
+            dashboardId ? (
+              <AnnotationPanel
+                dashboardId={dashboardId}
+                pins={annotationPins}
+                state={annotationsState}
+                groups={groupsApi.groups}
+                onDataWritten={triggerRefresh}
+              />
+            ) : undefined
+          }
         >
           {groupsSection}
         </GroupingHeaderControl>
       ),
     });
-    if (dashboardId) {
-      headerActions.push({
-        id: 'annotate',
-        group: 'read',
-        node: (
-          <AnnotateHeaderControl
-            opened={annotateOpen}
-            onOpenedChange={handleAnnotateOpenChange}
-            count={annotationsState.annotations?.columns.length ?? 0}
-          >
-            <AnnotationPanel
-              dashboardId={dashboardId}
-              pins={annotationPins}
-              state={annotationsState}
-              groups={groupsApi.groups}
-              onOpenAnalysis={() => handleAnalysisOpenChange(true)}
-              onDataWritten={triggerRefresh}
-            />
-          </AnnotateHeaderControl>
-        ),
-      });
-    }
   }
   if (realtimeEnabled) {
     headerActions.push({
@@ -2249,7 +2229,10 @@ const App: React.FC = () => {
           node: <Inspector dashboard={dashboard} dashboardId={dashboardId} />,
           aside: inspectorAside,
         }}
-        analysis={{ open: analysisOpen, widthPx: ANALYSIS_PANEL_WIDTH_PX }}
+        analysis={{
+          open: analysisOpen,
+          widthPx: analysisPanelWidthPx(dashboardId ? analysisTab : 'groups'),
+        }}
         guideOpen={guide.open}
       />
       </CommentsProvider>

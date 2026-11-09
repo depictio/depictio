@@ -40,28 +40,30 @@ No change is needed in the render pipeline, the cache keys or the Delta tables f
 
 ## User experience
 
-1. An **Annotate** button in the dashboard header opens a wide panel on the right. It does not
-   block the page, so the charts stay visible and react.
-2. The panel picks a table and a key column. Defaults: the first table the dashboard's components
-   reference that has a column unique per row; that column as key. Both can be changed.
-3. The grid has one row per key value, the table's columns as read-only context, and one column
-   per annotation. The grid is AG Grid, as in the table editor.
-4. **+ Add annotation** names a column. It is filled by typing, by pasting from a spreadsheet, or
-   by dropping a CSV or TSV.
-5. **Compare by** selects the annotation that drives the comparison; only one at a time, because a
-   sample must not sit in two groups. Each distinct label becomes a group in the Analysis panel,
-   where the existing controls filter, colour or split.
-6. Owners and editors of a table a user added also get an **Edit table** tab (the table editor,
-   real writes) and **Save to table** (the annotation becomes a real column).
+Revised after review: the first panel (its own header button, a toolbar of controls, an Edit
+table tab) was too heavy. The labels now live where groups live, and the grid is the whole UI.
 
-| | Annotations stored | Typing and paste | Drop on the dashboard |
+1. The **Analysis** panel has two tabs, **Groups** and **Labels**. Labels widens the panel for a
+   grid; there is no separate button, so no name to clash with the per-chart Annotate action.
+2. A context line reads `table · key column`, with **Change** to pick another table or key
+   (defaults: the first table the dashboard reads with a column unique per row; that column).
+   **Import** picks a file; a file can also be dropped anywhere on the tab.
+3. One grid: the key, the label columns, a **+** column that adds one, then the table's columns.
+   Each label column's header holds a menu with every action on it: compare in the charts
+   (one at a time; a dot marks it; the 24-group budget disables it with the reason), rename,
+   keep on my account (for a label column from a file), save to table, delete.
+4. Owners and editors of a table a user added edit its cells in place. Changed cells turn
+   yellow and a bar under the grid offers Discard or **Save to table**, which writes them in one
+   version and re-renders the dashboard. Everyone else sees those columns read-only.
+5. Text appears only when it says something: browser storage, labels compared from a file, an
+   error, a refusal.
+
+| | Labels stored | Typing and paste | Import |
 | --- | --- | --- | --- |
-| Temporary or anonymous account | browser | yes | yes, browser only |
-| Signed-in account | account (file annotations: browser, until kept) | yes | yes, browser only |
+| Temporary or anonymous account | browser | yes | as labels, browser only |
+| Signed-in account | account (file labels: browser, until kept) | yes | as labels, or into the table for owners and editors |
 
 "Signed-in" means any non-temporary, non-anonymous account (OIDC, password) and single-user mode.
-
-Controls a temporary account cannot use are disabled, not hidden, with the reason shown.
 
 ## Data model
 

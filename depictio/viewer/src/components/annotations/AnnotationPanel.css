@@ -1,0 +1,6 @@
+/* A table cell changed in the Labels grid and not yet saved. A class, not an
+   inline style: AG Grid removes a class rule that stops matching, but leaves an
+   inline style in place once `cellStyle` returns nothing. */
+.dc-label-cell-pending {
+  background-color: var(--mantine-color-yellow-light);
+}
