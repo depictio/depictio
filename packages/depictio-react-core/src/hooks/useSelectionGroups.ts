@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { deriveAnnotationGroups, sameGroups } from '../annotationGroups';
-import type { DashboardAnnotations } from '../annotations';
+import type { DashboardAnnotations } from '../sessionAnnotations';
 import type { BulkComputeOptions, InteractiveFilter } from '../api';
 import type { GroupSummaryRow } from '../components/interactive/ActiveFilterSummary';
 import {

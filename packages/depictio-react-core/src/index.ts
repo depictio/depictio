@@ -929,8 +929,10 @@ export {
   readBrowserAnnotations,
   setLabel,
   writeBrowserAnnotations,
-} from './annotations';
-export type { AnnotationColumn, BrowserRead, DashboardAnnotations } from './annotations';
+} from './sessionAnnotations';
+export type { AnnotationColumn, BrowserRead, DashboardAnnotations } from './sessionAnnotations';
+export { fetchDashboardAnnotations, saveDashboardAnnotations } from './api';
+export type { AnnotationsLoad, AnnotationsSave } from './api';
 export {
   annotationColumnBudget,
   deriveAnnotationGroups,

@@ -9,7 +9,7 @@
 
 import Papa from 'papaparse';
 
-import { MAX_ANNOTATION_COLUMNS, MAX_LABEL_LENGTH, normaliseLabel } from './annotations';
+import { MAX_ANNOTATION_COLUMNS, MAX_LABEL_LENGTH, normaliseLabel } from './sessionAnnotations';
 
 export const MAX_DROP_BYTES = 5 * 1024 * 1024;
 

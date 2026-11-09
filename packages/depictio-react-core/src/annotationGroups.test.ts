@@ -6,7 +6,7 @@ import {
   distinctLabels,
   sameGroups,
 } from './annotationGroups';
-import type { DashboardAnnotations } from './annotations';
+import type { DashboardAnnotations } from './sessionAnnotations';
 import type { SelectionGroup } from './selectionGroups';
 
 const PALETTE = ['#a', '#b', '#c', '#d'];

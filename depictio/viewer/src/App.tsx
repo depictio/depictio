@@ -25,6 +25,7 @@ import {
   AvailableFilterValuesProvider,
   DataVersionProvider,
   HttpStatusError,
+  dataPinBody,
   dataVersionBody,
   isCurrentDataOnlyType,
   DashboardGrid,
@@ -144,6 +145,12 @@ import { FILTER_PANEL_RESIZER_WIDTH } from './components/FilterPanelResizer';
 import GroupingHeaderControl, {
   ANALYSIS_PANEL_WIDTH_PX,
 } from './components/GroupingHeaderControl';
+import AnnotateHeaderControl from './components/annotations/AnnotateHeaderControl';
+import AnnotationPanel from './components/annotations/AnnotationPanel';
+import {
+  type AnnotationStorage,
+  useDashboardAnnotations,
+} from './components/annotations/useDashboardAnnotations';
 import Inspector from './chrome/inspector/Inspector';
 import { useInspectorChrome } from './chrome/inspector/useInspectorChrome';
 import InspectorProviders from './chrome/inspector/InspectorProviders';
@@ -294,6 +301,7 @@ const App: React.FC = () => {
     embedFramingEnabled,
     isPublicMode,
     isDemoMode,
+    isSingleUserMode,
     loading: userLoading,
   } = useCurrentUser();
   const isOwner = isDashboardOwner(dashboard, currentUser?.email ?? null);
@@ -1399,10 +1407,15 @@ const App: React.FC = () => {
   // arrival would be worse than closing it.
   const [analysisOpen, setAnalysisOpen] = useState(false);
   const { analysisArmed, setAnalysisArmed } = groupsApi;
+  // The Annotate panel sits on the right too: one of the two at a time.
+  const [annotateOpen, setAnnotateOpen] = useState(false);
   const handleAnalysisOpenChange = useCallback(
     (next: boolean) => {
       setAnalysisOpen(next);
-      if (next) setAnalysisArmed(true);
+      if (next) {
+        setAnalysisArmed(true);
+        setAnnotateOpen(false);
+      }
     },
     [setAnalysisArmed],
   );
@@ -1410,7 +1423,31 @@ const App: React.FC = () => {
     const next = !analysisOpen;
     setAnalysisOpen(next);
     setAnalysisArmed(next);
+    if (next) setAnnotateOpen(false);
   }, [analysisOpen, setAnalysisArmed]);
+  const handleAnnotateOpenChange = useCallback((next: boolean) => {
+    setAnnotateOpen(next);
+    if (next) setAnalysisOpen(false);
+  }, []);
+
+  // Session annotations: kept on the account for a signed-in account (and the
+  // single user), in the browser for a temporary or anonymous one. Each label
+  // of the active annotation becomes a group; groups follow the annotations,
+  // never the other way round.
+  const annotationStorage: AnnotationStorage | null = userLoading
+    ? null
+    : isSingleUserMode || (currentUser && !currentUser.is_temporary)
+      ? 'account'
+      : 'browser';
+  const annotationsState = useDashboardAnnotations(groupingScopeId, annotationStorage);
+  const { syncAnnotationGroups } = groupsApi;
+  useEffect(() => {
+    if (annotationsState.loaded) syncAnnotationGroups(annotationsState.annotations);
+  }, [annotationsState.loaded, annotationsState.annotations, syncAnnotationGroups]);
+  const annotationPins = useMemo(
+    () => (previewRequest ? dataPinBody(previewRequest) : null),
+    [previewRequest],
+  );
 
   const saveGroupApi = useMemo(
     () => ({
@@ -1509,7 +1546,10 @@ const App: React.FC = () => {
   }, [guide, isNarrow, mobileOpened, toggleMobile]);
   // The Analysis panel is docked beside the canvas: the Guide takes its place.
   useEffect(() => {
-    if (guide.open) setAnalysisOpen(false);
+    if (guide.open) {
+      setAnalysisOpen(false);
+      setAnnotateOpen(false);
+    }
   }, [guide.open]);
   // Before the dashboard search lands on something of this tab: the Guide and,
   // on a phone, the tab list both cover the canvas, and a filter lives in a
@@ -1553,6 +1593,28 @@ const App: React.FC = () => {
         </GroupingHeaderControl>
       ),
     });
+    if (dashboardId) {
+      headerActions.push({
+        id: 'annotate',
+        group: 'read',
+        node: (
+          <AnnotateHeaderControl
+            opened={annotateOpen}
+            onOpenedChange={handleAnnotateOpenChange}
+            count={annotationsState.annotations?.columns.length ?? 0}
+          >
+            <AnnotationPanel
+              dashboardId={dashboardId}
+              pins={annotationPins}
+              state={annotationsState}
+              groups={groupsApi.groups}
+              onOpenAnalysis={() => handleAnalysisOpenChange(true)}
+              onDataWritten={triggerRefresh}
+            />
+          </AnnotateHeaderControl>
+        ),
+      });
+    }
   }
   if (realtimeEnabled) {
     headerActions.push({

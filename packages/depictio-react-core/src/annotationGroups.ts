@@ -13,7 +13,7 @@ import {
   type AnnotationColumn,
   type DashboardAnnotations,
   MAX_SERVER_GROUPS,
-} from './annotations';
+} from './sessionAnnotations';
 import { TAB10_PALETTE } from './colors';
 import { nextGroupColor, type SelectionGroup, uniqueGroupName } from './selectionGroups';
 

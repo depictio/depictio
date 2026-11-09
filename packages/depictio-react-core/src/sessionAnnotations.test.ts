@@ -8,7 +8,7 @@ import {
   readBrowserAnnotations,
   setLabel,
   writeBrowserAnnotations,
-} from './annotations';
+} from './sessionAnnotations';
 
 const base = () => ({
   ...emptyAnnotations('dc1', 'sample'),
