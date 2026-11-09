@@ -915,6 +915,38 @@ export {
 export type { GroupStatusEntry, GroupStatusSummary } from './groupStatus';
 export { useSelectionGroups } from './hooks/useSelectionGroups';
 export type { SelectionGroupsApi } from './hooks/useSelectionGroups';
+export {
+  annotationsProblem,
+  emptyAnnotations,
+  MAX_ANNOTATION_COLUMNS,
+  MAX_ANNOTATION_KEYS,
+  MAX_ANNOTATION_ROWS,
+  MAX_LABEL_LENGTH,
+  MAX_SERVER_GROUPS,
+  newAnnotationId,
+  normaliseLabel,
+  parseAnnotations,
+  readBrowserAnnotations,
+  setLabel,
+  writeBrowserAnnotations,
+} from './annotations';
+export type { AnnotationColumn, BrowserRead, DashboardAnnotations } from './annotations';
+export {
+  annotationColumnBudget,
+  deriveAnnotationGroups,
+  distinctLabels,
+  sameGroups,
+} from './annotationGroups';
+export type { Budget } from './annotationGroups';
+export {
+  asKey,
+  fileColumnKeys,
+  matchDroppedTable,
+  MAX_DROP_BYTES,
+  parseDroppedTable,
+  parsePastedBlock,
+} from './annotationInput';
+export type { DropMatch, ParsedTable } from './annotationInput';
 export { useCategoricalColumns, useColorByColumnRender } from './hooks/useColorByColumns';
 export { defaultFilterValue, withInteractiveDefaults } from './interactiveDefaults';
 export type { ColorByColumn, ColorByColumnRender } from './hooks/useColorByColumns';

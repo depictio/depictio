@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { deriveAnnotationGroups, sameGroups } from '../annotationGroups';
+import type { DashboardAnnotations } from '../annotations';
 import type { BulkComputeOptions, InteractiveFilter } from '../api';
 import type { GroupSummaryRow } from '../components/interactive/ActiveFilterSummary';
 import {
@@ -50,6 +52,10 @@ export interface SelectionGroupsApi {
   updateGroup: (id: string, patch: { name?: string; color?: string }) => void;
   deleteGroup: (id: string) => void;
   toggleGroupFilter: (id: string) => void;
+  /** Replace the groups derived from session annotations with those of
+   *  `annotations` (null: none). Lasso and table groups are left alone; a
+   *  label keeps its colour and filter toggle. A no-op when nothing changes. */
+  syncAnnotationGroups: (annotations: DashboardAnnotations | null) => void;
   /** Turn off every group's filter participation (dashboard "Reset all"). */
   deactivateAllGroupFilters: () => void;
   /** Back to defaults for every analysis mode (coloring, display, card
@@ -208,6 +214,15 @@ export function useSelectionGroups(dashboardId: string | undefined): SelectionGr
     );
   }, []);
 
+  const syncAnnotationGroups = useCallback((annotations: DashboardAnnotations | null) => {
+    // The stamp is taken outside the updater, which must stay pure.
+    const now = Date.now();
+    setGroups((prev) => {
+      const next = deriveAnnotationGroups(annotations, prev, undefined, now);
+      return sameGroups(prev, next) ? prev : next;
+    });
+  }, []);
+
   const deactivateAllGroupFilters = useCallback(() => {
     setGroups((prev) =>
       prev.some((g) => g.filterActive) ? prev.map((g) => ({ ...g, filterActive: false })) : prev,
@@ -264,6 +279,7 @@ export function useSelectionGroups(dashboardId: string | undefined): SelectionGr
       updateGroup,
       deleteGroup,
       toggleGroupFilter,
+      syncAnnotationGroups,
       deactivateAllGroupFilters,
       resetAnalysis,
       // React state setters are identity-stable — expose them directly.
@@ -290,6 +306,7 @@ export function useSelectionGroups(dashboardId: string | undefined): SelectionGr
       updateGroup,
       deleteGroup,
       toggleGroupFilter,
+      syncAnnotationGroups,
       deactivateAllGroupFilters,
       resetAnalysis,
       groupFilters,
