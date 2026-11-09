@@ -80,7 +80,7 @@ async function noWalkthrough(page: Page): Promise<void> {
 async function openPanel(page: Page): Promise<void> {
   await noWalkthrough(page);
   await page.goto(`/dashboard/${PENGUINS}`);
-  const button = page.locator("[data-testid='annotate-button']");
+  const button = page.locator("[data-testid='session-annotate-button']");
   await expect(button).toBeVisible({ timeout: 30_000 });
   await button.click();
   await expect(page.locator("[data-testid='annotation-grid'] .ag-row").first()).toBeVisible({
@@ -278,7 +278,7 @@ test.describe("Session annotations", () => {
     // Public mode hands the visitor a temporary account on arrival.
     await noWalkthrough(page);
     await page.goto(`/dashboard/${PENGUINS}`);
-    const button = page.locator("[data-testid='annotate-button']");
+    const button = page.locator("[data-testid='session-annotate-button']");
     const visible = await button.isVisible({ timeout: 30_000 }).catch(() => false);
     test.skip(!visible, "the Penguins dashboard is not public on this stack");
     await button.click();

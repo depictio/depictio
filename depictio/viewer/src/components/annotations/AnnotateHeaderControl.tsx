@@ -35,7 +35,7 @@ const AnnotateHeaderControl: React.FC<{
       badge={count}
       aria-pressed={opened}
       onClick={() => onOpenedChange(!opened)}
-      data-testid="annotate-button"
+      data-testid="session-annotate-button"
     />
     <Drawer
       opened={opened}
