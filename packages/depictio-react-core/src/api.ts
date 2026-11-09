@@ -6301,6 +6301,31 @@ export async function previewGroupMembers(
   return res.json();
 }
 
+/** A person a project could be shared with: only what the dialog needs. */
+export interface ShareCandidate {
+  id: string;
+  email: string;
+  display_name?: string | null;
+}
+
+/** Fewer characters than this are never searched (the server returns nothing). */
+export const SHARE_CANDIDATE_MIN_QUERY = 3;
+
+/** People matching part of an email, name or login, for the sharing dialog.
+ *  Open to whoever manages the project's sharing, unlike the admin-only user
+ *  list, so a non-admin owner or P.I. can find someone in another group. */
+export async function searchShareCandidates(
+  projectId: string,
+  query: string,
+): Promise<ShareCandidate[]> {
+  const res = await authFetch(
+    `${API_BASE}/projects/share_candidates/${projectId}?q=${encodeURIComponent(query)}`,
+  );
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to search users');
+  const data = await res.json();
+  return Array.isArray(data) ? data : [];
+}
+
 export async function createGroup(input: {
   name: string;
   description?: string;
