@@ -45,6 +45,7 @@ from depictio.models.local_access import LocalPathRefused
 from depictio.models.models.base import convert_objectid_to_str
 from depictio.models.models.cli import CLIConfig
 from depictio.models.models.data_collections import DataCollection
+from depictio.models.models.data_collections_types.geojson import geojson_s3_key
 from depictio.models.models.data_collections_types.indexed_file import (
     DCIndexedFileConfig,
     indexed_file_s3_key,
@@ -1602,7 +1603,7 @@ def process_geojson_data_collection(
             s3_client = _s3_client(CLI_config)
 
             # Upload to S3 under the DC ID
-            s3_key = f"{dc_id}/geojson_data.geojson"
+            s3_key = geojson_s3_key(str(dc_id))
             logger.info(f"Uploading GeoJSON to S3: {file_path} -> {s3_key}")
             s3_client.upload_file(file_path, CLI_config.s3_storage.bucket, s3_key)
             s3_location = f"s3://{CLI_config.s3_storage.bucket}/{s3_key}"

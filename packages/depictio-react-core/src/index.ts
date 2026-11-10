@@ -74,6 +74,8 @@ export type {
 export { default as FigureRenderer } from './components/FigureRenderer';
 export { default as TableRenderer } from './components/TableRenderer';
 export { default as ImageRenderer } from './components/ImageRenderer';
+export { default as PhylogeneticRenderer } from './components/advanced_viz/PhylogeneticRenderer';
+export { imageServeUrl } from './components/advanced_viz/spatial_cells/spatialLayout';
 export { default as MapRenderer } from './components/MapRenderer';
 export { default as TextRenderer } from './components/TextRenderer';
 export { default as Glyph, glyphColorVar, isImagePath, isMultiqcIcon, themedIconSrc } from './components/Glyph';
@@ -503,6 +505,7 @@ export {
   fetchImagePaths,
   renderMap,
   fetchJBrowseSession,
+  fetchTracksPreview,
   fetchUcscTracks,
   renderMultiQC,
   renderMultiQCGeneralStats,
@@ -599,6 +602,7 @@ export {
   // Project management
   fetchProject,
   fetchIngestionReport,
+  fetchProjectRuns,
   fetchIngestionHealth,
   fetchDataCollectionFiles,
   createProject,
@@ -608,6 +612,7 @@ export {
   listS3Dirs,
   inspectFolder,
   previewRunFile,
+  previewRemoteUrl,
   findRunFolders,
   testRunStorage,
   ApiDetailError,
@@ -654,6 +659,13 @@ export {
   deleteDataCollection,
   createDataCollectionFromUpload,
   createDataCollectionFromUrl,
+  fetchTableEditStatus,
+  setTableEditLock,
+  fetchTableForEdit,
+  patchTableCells,
+  restoreTableVersion,
+  mergeTableFile,
+  TableEditError,
   addTablesFromFolder,
   attachRun,
   // Groups (membership, group admins, project sharing)
@@ -721,11 +733,13 @@ export {
   updateProjectLink,
   deleteProjectLink,
   listLinkResolvers,
+  fetchLinkSuggestions,
   fetchMultiQCSampleMappings,
   fetchLinkMappingPreview,
   // Funnel filtering (issue #939)
   fetchFunnelValues,
   // MultiQC management (multipart uploads)
+  createAssetDataCollection,
   createMultiQCDataCollection,
   checkMultiQCUniformity,
   appendMultiQCFiles,
@@ -741,6 +755,7 @@ export {
   fetchPolarsSchema,
   fetchVizSuggestions,
   fetchPhylogenyNewick,
+  fetchGeojson,
   dispatchComputeEmbedding,
   pollComputeEmbedding,
   dispatchComplexHeatmap,
@@ -762,6 +777,9 @@ export type {
   TableMutationResult,
   RoleDtypeSpec,
   IngestionReport,
+  RecipeInput,
+  ProjectRun,
+  RunScan,
   IngestionDataCollection,
   IngestionRun,
   IngestionSummary,
@@ -1020,6 +1038,9 @@ export {
 
 export type {
   StoredMetadata,
+  LinkSuggestion,
+  GeoJsonCollection,
+  GeoJsonFeature,
   TextValueSpec,
   DashboardData,
   FilterSectionSpec,
@@ -1148,6 +1169,18 @@ export type {
   MultiQCReportsList,
   CreateDataCollectionUploadInput,
   CreateDataCollectionResult,
+  TableEditStatus,
+  TableEditColumn,
+  TableColumnKind,
+  TableEditData,
+  TableCellEdit,
+  TableCellError,
+  TableEditResult,
+  TableRestoreResult,
+  TableMergeMode,
+  TableMergeColumn,
+  TableMergeKeyCandidate,
+  TableMergeReport,
   // Admin types
   AdminUser,
   AdminCreateUserInput,

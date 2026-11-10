@@ -44,6 +44,7 @@ import {
 } from 'depictio-react-core';
 import type { FolderInspection, RunStorageIn, TemplateInfo } from 'depictio-react-core';
 
+import { classifyTableName } from '../../create/tableFiles';
 import { FilePreviewPanel, FilePreviewToggle, RunFileScope } from '../FilePreview';
 import { FlowBadge } from '../FlowBadge';
 import { FolderPath } from '../FolderPath';
@@ -126,10 +127,7 @@ function fileIcon(name: string): string {
 
 /** The run records of the folder, each said in words; `pipeline_info` opens
  *  onto what the engine wrote about the run. */
-const RunRecords: React.FC<{
-  result: FolderInspection;
-  onOpen: (name: string) => void;
-}> = ({ result, onOpen }) => {
+const RunRecords: React.FC<{ result: FolderInspection }> = ({ result }) => {
   const [previewOpen, setPreviewOpen] = useState(false);
   const previewId = useId();
   if (result.markers.length === 0) {
@@ -161,31 +159,20 @@ const RunRecords: React.FC<{
                     {meta?.description ?? 'A record of the run.'}
                   </Text>
                 </Stack>
-                <Group gap={4} wrap="nowrap" style={{ flexShrink: 0 }}>
-                  {isInfo && runInfo && (
-                    <Button
-                      size="compact-xs"
-                      variant="light"
-                      leftSection={<Icon icon={previewOpen ? 'mdi:eye-off-outline' : 'mdi:eye-outline'} width={14} />}
-                      onClick={() => setPreviewOpen((o) => !o)}
-                      aria-expanded={previewOpen}
-                      aria-controls={previewId}
-                      data-testid="browse-detail-pipeline-info-toggle"
-                    >
-                      {previewOpen ? 'Hide' : 'Preview'}
-                    </Button>
-                  )}
+                {isInfo && runInfo && (
                   <Button
                     size="compact-xs"
-                    variant="subtle"
-                    color="gray"
-                    rightSection={<Icon icon="mdi:chevron-right" width={14} />}
-                    onClick={() => onOpen(marker)}
-                    data-testid={`browse-detail-open-${marker}`}
+                    variant="light"
+                    style={{ flexShrink: 0 }}
+                    leftSection={<Icon icon={previewOpen ? 'mdi:eye-off-outline' : 'mdi:eye-outline'} width={14} />}
+                    onClick={() => setPreviewOpen((o) => !o)}
+                    aria-expanded={previewOpen}
+                    aria-controls={previewId}
+                    data-testid="browse-detail-pipeline-info-toggle"
                   >
-                    Open
+                    {previewOpen ? 'Hide' : 'Preview'}
                   </Button>
-                </Group>
+                )}
               </Group>
               {isInfo && !runInfo && (
                 <Text size="xs" c="dimmed">
@@ -202,6 +189,86 @@ const RunRecords: React.FC<{
         );
       })}
     </Stack>
+  );
+};
+
+/** One table file, as a quiet chip: its name and its format. */
+export const TableChip: React.FC<{ name: string }> = ({ name }) => (
+  <Group
+    gap={6}
+    wrap="nowrap"
+    px={8}
+    py={3}
+    style={{
+      border: '1px solid var(--mantine-color-default-border)',
+      borderRadius: 'var(--mantine-radius-sm)',
+      maxWidth: '100%',
+    }}
+  >
+    <Icon icon="mdi:table" width={14} style={{ flexShrink: 0, opacity: 0.7 }} />
+    <Text size="xs" ff="monospace" truncate>
+      {name}
+    </Text>
+  </Group>
+);
+
+/** No pipeline named here: what the folder still offers. Tables directly in
+ *  it can be added as they are, which is a valid outcome, not a failure. */
+const NoPipelineSummary: React.FC<{ result: FolderInspection }> = ({ result }) => {
+  const tables = result.files.names.filter((n) => classifyTableName(n).table);
+  if (tables.length === 0) {
+    return (
+      <Paper withBorder radius="md" p="sm" data-testid="browse-detail-not-recognised">
+        <Group gap="sm" wrap="nowrap" align="flex-start">
+          <ThemeIcon variant="light" color="gray" size="lg" radius="md">
+            <Icon icon="mdi:folder-question-outline" width={18} />
+          </ThemeIcon>
+          <Stack gap={2}>
+            <Text size="sm" fw={600}>
+              {result.looks_like_run ? 'A run of a pipeline Depictio does not know' : 'Nothing to read directly here'}
+            </Text>
+            <Text size="xs" c="dimmed">
+              {result.looks_like_run
+                ? 'This folder has a pipeline_info folder or a MultiQC report, but neither names a pipeline Depictio knows.'
+                : result.folders.count > 0
+                  ? `No pipeline run and no table in this folder itself. Its ${plural(result.folders.count, 'subfolder')} may hold some: open one, or search them for runs below.`
+                  : 'No pipeline run and no table in this folder.'}
+            </Text>
+          </Stack>
+        </Group>
+      </Paper>
+    );
+  }
+  const shown = tables.slice(0, 8);
+  return (
+    <Paper withBorder radius="md" p="sm" data-testid="browse-detail-not-recognised" data-tables={tables.length}>
+      <Stack gap="xs">
+        <Group gap="sm" wrap="nowrap" align="flex-start">
+          <ThemeIcon variant="light" color="teal" size="lg" radius="md">
+            <Icon icon="mdi:table-multiple" width={18} />
+          </ThemeIcon>
+          <Stack gap={2}>
+            <Text size="sm" fw={600}>
+              {plural(tables.length, 'table')} ready to add
+            </Text>
+            <Text size="xs" c="dimmed">
+              No pipeline run here, and none is needed: each table becomes a data collection of the
+              project. You pick which ones on the next step.
+            </Text>
+          </Stack>
+        </Group>
+        <Group gap={6}>
+          {shown.map((name) => (
+            <TableChip key={name} name={name} />
+          ))}
+          {tables.length > shown.length && (
+            <Text size="xs" c="dimmed">
+              +{tables.length - shown.length} more
+            </Text>
+          )}
+        </Group>
+      </Stack>
+    </Paper>
   );
 };
 
@@ -570,25 +637,26 @@ export const FolderDetailPane: React.FC<FolderDetailPaneProps> = ({
               storage={storageFor?.(result.location) ?? null}
             />
           ) : (
-            <Text size="sm" c="dimmed" data-testid="browse-detail-not-recognised">
-              {result.looks_like_run
-                ? 'This folder has a pipeline_info folder or a MultiQC report, but neither names a pipeline Depictio knows.'
-                : 'Depictio recognises no pipeline run here.'}
-            </Text>
+            <NoPipelineSummary result={result} />
           )}
 
-          <Section
-            title="Why this is a run folder"
-            description="A pipeline run leaves records beside its results; Depictio looks for these two."
-          >
-            <RunRecords result={result} onOpen={openChild} />
-          </Section>
+          {result.markers.length > 0 && (
+            <Section
+              title="Why this is a run folder"
+              description="A pipeline run leaves records beside its results; Depictio looks for these two."
+            >
+              <RunRecords result={result} />
+            </Section>
+          )}
         </>
       )}
 
       <Divider />
 
-      <Section title="Run folders below this one">
+      <Section
+        title="Pipeline runs in subfolders"
+        description="When one folder holds several runs: Depictio goes through the folders below this one and lists every run it finds."
+      >
         {activeFind ? (
           <RunSearchResults
             find={activeFind}
@@ -600,12 +668,12 @@ export const FolderDetailPane: React.FC<FolderDetailPaneProps> = ({
           <Group>
             <Button
               size="xs"
-              variant="light"
+              variant="default"
               leftSection={<Icon icon="mdi:folder-search-outline" width={14} />}
               onClick={runFind}
               data-testid="browse-find-runs"
             >
-              Find run folders here
+              Search subfolders for runs
             </Button>
           </Group>
         )}

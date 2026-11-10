@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActionIcon,
   AppShell,
@@ -83,6 +83,11 @@ const DashboardsApp: React.FC = () => {
   const [refreshKey, setRefreshKey] = useState(0);
 
   const [createOpened, { open: openCreate, close: closeCreate }] = useDisclosure(false);
+  /** `?create_for_project=<id>`: a project page's "Create a dashboard" opens
+   *  the dialog on that project. */
+  const [requestedProjectId] = useState(() =>
+    new URLSearchParams(window.location.search).get('create_for_project'),
+  );
   const [editTarget, setEditTarget] = useState<DashboardListEntry | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DashboardListEntry | null>(null);
 
@@ -118,6 +123,14 @@ const DashboardsApp: React.FC = () => {
       })
       .finally(() => setLoading(false));
   }, [refreshKey]);
+
+  // Opened once the projects are in, or the dialog's project list is empty.
+  const requestHandled = useRef(false);
+  useEffect(() => {
+    if (!requestedProjectId || loading || requestHandled.current) return;
+    requestHandled.current = true;
+    openCreate();
+  }, [requestedProjectId, loading, openCreate]);
 
   const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
 
@@ -304,6 +317,7 @@ const DashboardsApp: React.FC = () => {
         onCreate={handleCreate}
         onImport={handleImport}
         disableImport={importDisabled}
+        initialProjectId={requestedProjectId}
       />
       <EditDashboardModal
         opened={Boolean(editTarget)}

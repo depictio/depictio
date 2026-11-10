@@ -366,6 +366,8 @@ interface JBrowseRendererProps {
   refreshTick?: number;
   /** Hands the header/overview/status toggles up to the chrome action row. */
   onToolbarNode?: (node: React.ReactNode) => void;
+  /** Replaces the component's render call, for a view outside a dashboard. */
+  loadSession?: () => Promise<JBrowseSessionResponse>;
 }
 
 function readToggle(key: string, fallback: boolean): boolean {
@@ -554,6 +556,7 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
   onFilterChange,
   refreshTick,
   onToolbarNode,
+  loadSession,
 }) => {
   const mantineTheme = useMantineTheme();
   const colorScheme = useComputedColorScheme('light');
@@ -729,7 +732,16 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
     setEmptyReason(null);
     // The region rides along without keying the fetch: a brush alone moves the
     // view client-side, a pick that also changes the filters is framed by it.
-    fetchJBrowseSession(dashboardId, metadata.index, fetchFilters, versionBody, selectionRegionRef.current)
+    (loadSession
+      ? loadSession()
+      : fetchJBrowseSession(
+          dashboardId,
+          metadata.index,
+          fetchFilters,
+          versionBody,
+          selectionRegionRef.current,
+        )
+    )
       .then((res) => {
         if (cancelled) return;
         payloadVersionKey.current = versionKey;

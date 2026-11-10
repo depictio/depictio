@@ -1,14 +1,28 @@
 import asyncio
 
 from bson import ObjectId
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import db, projects_collection
+from depictio.api.v1.endpoints.datacollections_endpoints.table_edit import (
+    CellEditsRequest,
+    RestoreVersionRequest,
+    apply_cell_edits,
+    read_table_for_edit,
+    restore_table_version,
+    set_edit_lock,
+    table_edit_status,
+)
+from depictio.api.v1.endpoints.datacollections_endpoints.url_preview import (
+    URLPreviewRequest,
+    preview_remote_url,
+)
 from depictio.api.v1.endpoints.datacollections_endpoints.utils import (
     _check_multiqc_uniformity_from_uploads,
+    _create_asset_dc_from_uploads,
     _create_dc_from_upload,
     _create_dc_from_url,
     _create_multiqc_dc_from_uploads,
@@ -21,6 +35,7 @@ from depictio.api.v1.endpoints.datacollections_endpoints.utils import (
     _update_dc_specific_properties,
     generate_join_dict,
 )
+from depictio.api.v1.endpoints.projects_endpoints.local_dirs import CodedHTTPException
 from depictio.api.v1.endpoints.projects_endpoints.publish_lock import (
     assert_dc_project_unlocked,
     assert_workflow_project_unlocked,
@@ -354,6 +369,123 @@ async def clear_table_dc(
     )
 
 
+@datacollections_endpoint_router.get("/{data_collection_id}/edit_status")
+async def table_edit_status_route(
+    data_collection_id: str,
+    current_user=Depends(get_user_or_anonymous),
+):
+    """Whether this Table DC is one a user added (editable) and whether the caller may edit it.
+
+    Reads Mongo only. ``code``/``reason`` say why a table is read-only (a pipeline
+    table, a URL table, ...), for the disabled state of the edit control.
+    """
+    return await asyncio.to_thread(table_edit_status, data_collection_id, current_user)
+
+
+class EditLockRequest(BaseModel):
+    unlocked: bool
+
+
+@datacollections_endpoint_router.patch("/{data_collection_id}/edit_lock")
+async def patch_table_edit_lock(
+    data_collection_id: str,
+    body: EditLockRequest,
+    current_user=Depends(get_current_user),
+):
+    """Lock or unlock cell edits on a table a user added (locked by default).
+
+    Unlocking marks it as metadata the project maintains by hand. Owners and
+    editors only (403), 409 on a published project. Answers the new edit status.
+    """
+    return await asyncio.to_thread(set_edit_lock, data_collection_id, body.unlocked, current_user)
+
+
+@datacollections_endpoint_router.get("/{data_collection_id}/edit_data")
+async def table_edit_data_route(
+    data_collection_id: str,
+    current_user=Depends(get_current_user),
+):
+    """The whole table plus the Delta version it was read at (owners/editors only)."""
+    return await asyncio.to_thread(read_table_for_edit, data_collection_id, current_user)
+
+
+@datacollections_endpoint_router.patch("/{data_collection_id}/cells")
+async def patch_table_cells(
+    data_collection_id: str,
+    body: CellEditsRequest,
+    current_user=Depends(get_current_user),
+):
+    """Edit cells of a table a user added, writing one new Delta version.
+
+    Body: ``{"base_version": <delta_version read>, "edits": [{"row", "column",
+    "value"}]}``. 403 for a viewer or a pipeline table, 409 when the project is
+    published or the table moved past ``base_version``, 422 (naming row and
+    column) when a value does not fit its column, 413 above the row limit.
+    """
+    return await asyncio.to_thread(apply_cell_edits, data_collection_id, body, current_user)
+
+
+@datacollections_endpoint_router.post("/{data_collection_id}/restore_version")
+async def restore_table_version_route(
+    data_collection_id: str,
+    body: RestoreVersionRequest,
+    current_user=Depends(get_current_user),
+):
+    """Bring a past Delta version of a table a user added back, as a new version.
+
+    Body: ``{"version": <past version>, "base_version": <delta_version read>}``.
+    Same rules as a cell edit: 403 for a viewer, a pipeline or a locked table,
+    409 when published or past ``base_version``; 422 when ``version`` is not a
+    past one, 404 when it can no longer be read.
+    """
+    return await asyncio.to_thread(restore_table_version, data_collection_id, body, current_user)
+
+
+@datacollections_endpoint_router.post("/{data_collection_id}/merge_file")
+async def merge_table_file_route(
+    data_collection_id: str,
+    file: UploadFile = File(...),
+    mode: str = Form("auto"),
+    key: str | None = Form(None),
+    base_version: int | None = Form(None),
+    dry_run: bool = Form(True),
+    current_user=Depends(get_current_user),
+):
+    """Preview or apply a file on a table a user added.
+
+    ``mode``: ``replace``, ``fill_missing``, ``add_columns`` or ``auto``. Rows are
+    matched on ``key``, or the best shared column when omitted. ``dry_run`` writes
+    nothing and answers with the resulting rows. 403 for a viewer or a pipeline
+    table, 409 when published or past ``base_version``, 422 (with a ``code``) for
+    a file or key that cannot be used, 413 above the row limit.
+    """
+    from depictio.api.v1.endpoints.datacollections_endpoints import table_edit, table_manage
+    from depictio.api.v1.endpoints.datacollections_endpoints.table_merge import merge_table_file
+
+    # Before the bytes come into memory: anyone signed in can reach this route.
+    await asyncio.to_thread(table_edit._require_editable, data_collection_id, current_user)
+    if file.size is not None and file.size > table_manage._MAX_PER_FILE_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail={
+                "code": "file_too_large",
+                "message": f"{file.filename}: this file is too large to update a table from.",
+            },
+        )
+    content = await file.read()
+    return await asyncio.to_thread(
+        merge_table_file,
+        data_collection_id=data_collection_id,
+        content=content,
+        filename=file.filename or "upload.csv",
+        mode=mode,
+        key=key,
+        base_version=base_version,
+        dry_run=dry_run,
+        current_user=current_user,
+    )
+
+
 @datacollections_endpoint_router.post("/create_from_upload")
 async def create_data_collection_from_upload(
     project_id: str = Form(...),
@@ -452,6 +584,29 @@ async def create_data_collection_from_url(
     )
 
 
+@datacollections_endpoint_router.post("/url_preview")
+async def post_url_preview(
+    payload: URLPreviewRequest,
+    request: Request,
+    current_user=Depends(get_user_or_anonymous),
+):
+    """Show the start of the file at a remote URL, before a table is made from it.
+
+    For the "One file URL" source of Add data and New project: the
+    first rows of a table, or in plain words why it is not shown. Read-only and bounded; the
+    URL passes the same gateway ``/create_from_url`` uses. Refusals answer
+    ``{detail, code}``.
+    """
+    if not current_user:
+        raise HTTPException(status_code=401, detail="User not found.")
+    try:
+        return await asyncio.to_thread(
+            preview_remote_url, payload, request=request, current_user=current_user
+        )
+    except CodedHTTPException as exc:
+        return exc.response()
+
+
 @datacollections_endpoint_router.post("/multiqc_uniformity_check")
 async def multiqc_uniformity_check(
     files: list[UploadFile] = File(...),
@@ -480,6 +635,42 @@ async def multiqc_uniformity_check(
         decoded_files.append((body, upload.filename or "upload.parquet"))
 
     return await asyncio.to_thread(_check_multiqc_uniformity_from_uploads, decoded_files)
+
+
+@datacollections_endpoint_router.post("/create_asset_from_upload")
+async def create_asset_data_collection_from_upload(
+    project_id: str = Form(...),
+    name: str = Form(...),
+    kind: str = Form(...),
+    description: str = Form(""),
+    files: list[UploadFile] = File(...),
+    current_user=Depends(get_user_or_anonymous),
+):
+    """Create a GeoJSON, phylogeny or image data collection from uploaded files.
+
+    ``kind`` is ``geojson`` or ``phylogeny`` (one file) or ``image`` (one
+    collection holding every file). Per-file cap 50MB, total 500MB. Write access
+    and the publish lock are checked in ``_create_asset_dc_from_uploads``.
+    """
+    decoded: list[tuple[bytes, str]] = []
+    total = 0
+    for upload in files:
+        body = await upload.read()
+        total += len(body)
+        if total > 500 * 1024 * 1024:
+            raise HTTPException(status_code=413, detail="Total upload size exceeds 500MB.")
+        decoded.append((body, upload.filename or "upload.dat"))
+
+    await _ensure_user_cli_token(current_user)
+    return await asyncio.to_thread(
+        _create_asset_dc_from_uploads,
+        project_id=project_id,
+        name=name,
+        description=description,
+        kind=kind,
+        files=decoded,
+        current_user=current_user,
+    )
 
 
 @datacollections_endpoint_router.post("/create_multiqc_from_upload")

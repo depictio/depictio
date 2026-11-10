@@ -248,7 +248,7 @@ test.describe("Create project from a run folder", () => {
     // and both fields are filled in from the folder and say so.
     const pipelineLine = page.locator("[data-testid='folder-pipeline-line']");
     await expect(pipelineLine).toContainText("nf-core/ampliseq");
-    await expect(pipelineLine).toContainText("v2.16.0");
+    await expect(pipelineLine).toContainText("2.16.0");
     await expect(pipelineLine).toContainText("Detected");
     await expect(pipelineSelect).toHaveCount(0);
     await openPipelinePicker(page);
@@ -739,7 +739,7 @@ test.describe("Create project from a run folder", () => {
     // name the pipeline.
     const card = page.locator("[data-testid='run-detection-card']");
     await expect(page.locator("[data-testid='folder-no-pipeline']")).toContainText(
-      "No pipeline recognised",
+      "No pipeline run was recognised",
     );
     await expect(card).toHaveCount(0);
     const submit = page.locator("[data-testid='create-from-run-submit']");

@@ -111,7 +111,8 @@ function tableFooter(preview: RunFilePreview): string {
   return parts.join(' · ');
 }
 
-const PreviewBody: React.FC<{ preview: RunFilePreview }> = ({ preview }) => {
+/** The preview itself: a table, the first lines, or why it is not shown. */
+export const PreviewBody: React.FC<{ preview: RunFilePreview }> = ({ preview }) => {
   if (preview.format === 'none') {
     return (
       <Text size="xs" c="dimmed" data-testid="file-preview-none">

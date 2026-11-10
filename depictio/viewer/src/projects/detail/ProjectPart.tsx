@@ -33,10 +33,12 @@ export const ProjectPart: React.FC<{
   title: string;
   /** Short summary beside the title, e.g. "3 dashboards". */
   summary?: React.ReactNode;
+  /** Open on mount whatever the viewer last chose (a link to something inside). */
+  forceOpen?: boolean;
   children: React.ReactNode;
-}> = ({ id, icon: PartIcon, title, summary, children }) => {
+}> = ({ id, icon: PartIcon, title, summary, forceOpen = false, children }) => {
   const glass = useGlassPages();
-  const [open, setOpen] = useState(() => readOpen(id));
+  const [open, setOpen] = useState(() => forceOpen || readOpen(id));
   const toggle = () => {
     setOpen((o) => {
       writeOpen(id, !o);

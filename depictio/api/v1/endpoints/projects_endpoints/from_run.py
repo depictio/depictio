@@ -122,6 +122,7 @@ class FromRunRequest(BaseModel):
     storage: RunStorageIn | None = None
     # Projects are private unless the request asks otherwise, whatever the template says.
     is_public: bool = False
+    description: str | None = None
 
     @field_validator("template_id")
     @classmethod
@@ -699,10 +700,16 @@ def _skip_reason(row) -> str:
     never from this text.
     """
     if row.missing_sources:
-        return (
-            "Not ingested: source(s) not found under the data root: "
-            f"{', '.join(row.missing_sources)}."
-        )
+        needed = [
+            s[len("collection ") :] for s in row.missing_sources if s.startswith("collection ")
+        ]
+        files = [s for s in row.missing_sources if not s.startswith("collection ")]
+        parts = []
+        if files:
+            parts.append(f"source(s) not found under the data root: {', '.join(files)}")
+        if needed:
+            parts.append(f"needs collection(s) that could not be built: {', '.join(needed)}")
+        return f"Not ingested: {'; '.join(parts)}."
     return f"Not ingested: '{row.location}' is not present under the data root."
 
 
@@ -928,6 +935,7 @@ def _create_project_from_run(
     request=None,
     storage: RunStorageIn | None = None,
     is_public: bool = False,
+    description: str | None = None,
 ) -> FromRunReport:
     """The full run folder → project + dashboards + dispatched ingestion flow.
 
@@ -1030,6 +1038,7 @@ def _create_project_from_run(
         origin_location=root.location,
         is_public=is_public,
     )
+    create_payload["description"] = description
     projects_collection.insert_one(create_payload)
     project_oid = create_payload["_id"]
 

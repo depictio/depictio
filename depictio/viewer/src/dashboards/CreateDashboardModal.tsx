@@ -70,6 +70,8 @@ interface CreateDashboardModalProps {
    *  inert. Set in public/demo deployments where importing user-supplied
    *  YAML/JSON would let an anonymous visitor write into shared projects. */
   disableImport?: boolean;
+  /** The project already chosen when the dialog opens (from a project page). */
+  initialProjectId?: string | null;
 }
 
 const projectOptions = (projects: ProjectListEntry[]) =>
@@ -88,6 +90,7 @@ const CreateDashboardModal: React.FC<CreateDashboardModalProps> = ({
   onCreate,
   onImport,
   disableImport = false,
+  initialProjectId = null,
 }) => {
   const accent = useListingAccents('dashboards');
   const [tab, setTab] = useState<'create' | 'import'>('create');
@@ -113,7 +116,7 @@ const CreateDashboardModal: React.FC<CreateDashboardModalProps> = ({
     setTab('create');
     setTitle('');
     setSubtitle('');
-    setProjectId('');
+    setProjectId(initialProjectId ?? '');
     setIcon(DEFAULT_ICON);
     setIconColor(DEFAULT_COLOR);
     setWorkflowSystem('none');
@@ -125,6 +128,8 @@ const CreateDashboardModal: React.FC<CreateDashboardModalProps> = ({
     setValidateIntegrity(true);
     setImportSubmitting(false);
     setImportError(null);
+    // A new opening is what resets the form, not a later change of the prop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [opened]);
 
   const trimmedTitle = title.trim();

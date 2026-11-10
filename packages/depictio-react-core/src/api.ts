@@ -2422,6 +2422,23 @@ export async function pollGroupCompare(jobId: string): Promise<GroupCompareJob> 
 }
 
 
+export interface GeoJsonFeature {
+  geometry?: { type?: string; coordinates?: unknown } | null;
+  properties?: Record<string, unknown> | null;
+}
+
+export interface GeoJsonCollection {
+  type: string;
+  features: GeoJsonFeature[];
+}
+
+/** Fetch the file of a GeoJSON-type DC. */
+export async function fetchGeojson(dcId: string): Promise<GeoJsonCollection> {
+  const res = await authFetch(`${API_BASE}/advanced_viz/geojson/${dcId}`);
+  if (!res.ok) throw new Error(`Failed to fetch GeoJSON: ${res.status}`);
+  return (await res.json()) as GeoJsonCollection;
+}
+
 /** Fetch the raw Newick string for a phylogeny-type DC. */
 export async function fetchPhylogenyNewick(dcId: string): Promise<string> {
   const res = await authFetch(`${API_BASE}/advanced_viz/phylogeny/${dcId}/newick`);
@@ -2945,6 +2962,13 @@ export async function fetchJBrowseSession(
     },
   );
   if (!res.ok) await throwRenderError(res, 'Failed to render JBrowse', dataVersions);
+  return res.json();
+}
+
+/** Genome view of a `genomic_tracks` collection alone, for its project page. */
+export async function fetchTracksPreview(dcId: string): Promise<JBrowseSessionResponse> {
+  const res = await authFetch(`${API_BASE}/jbrowse/preview/${dcId}`);
+  if (!res.ok) await throwHttpError(res, 'Failed to preview the tracks');
   return res.json();
 }
 
@@ -4738,6 +4762,17 @@ export interface IngestionDataCollection {
   recipe: string | null;
   /** GitHub link to the recipe source file. */
   recipe_url: string | null;
+  /** What the recipe computes: its docstring's title and first paragraph. */
+  recipe_summary?: string | null;
+  recipe_description?: string | null;
+  /** The recipe's inputs: collections by tag, files by name and location. */
+  recipe_inputs?: RecipeInput[];
+}
+
+export interface RecipeInput {
+  kind: 'collection' | 'file' | string;
+  name: string;
+  path?: string | null;
 }
 
 export interface IngestionRun {
@@ -4825,6 +4860,39 @@ export async function fetchIngestionReport(
   return (await res.json()) as IngestionReport;
 }
 
+export interface RunScan {
+  scan_time: string | null;
+  files_total: number;
+  files_new: number;
+  files_updated: number;
+  files_skipped: number;
+  files_failed: number;
+}
+
+/** One pipeline run of a project. `status`: `ok`, `incomplete` (a collection
+ *  found nothing in it), `partial` (files failed) or `no_scan`. */
+export interface ProjectRun {
+  run_tag: string;
+  workflow: string | null;
+  run_location: string | null;
+  folder_created: string | null;
+  folder_modified: string | null;
+  registered: string | null;
+  run_hash: string | null;
+  status: 'ok' | 'incomplete' | 'partial' | 'no_scan' | string;
+  files: number;
+  dc_files: Record<string, number>;
+  scans: RunScan[];
+}
+
+/** The project's runs, their scans and the files each collection found in
+ *  each. Backend: GET /projects/project-runs/{id}. */
+export async function fetchProjectRuns(projectId: string): Promise<{ runs: ProjectRun[] }> {
+  const res = await authFetch(`${API_BASE}/projects/project-runs/${projectId}`);
+  if (!res.ok) await throwHttpError(res, `Failed to fetch the runs of project ${projectId}`);
+  return (await res.json()) as { runs: ProjectRun[] };
+}
+
 /** Lightweight ingestion-health summary for the dashboard banner. Backend:
  *  GET /projects/ingestion-health/{id}. */
 export async function fetchIngestionHealth(
@@ -4841,6 +4909,8 @@ export interface RegisteredFile {
   file_location?: string;
   filesize?: number;
   run_tag?: string | null;
+  /** When the file itself last changed (server's local time). */
+  modification_time?: string | null;
 }
 
 /** List the files registered for a data collection. Backend:
@@ -4864,6 +4934,7 @@ export interface CreateProjectInput {
   is_public: boolean;
   data_collections?: string[];
   yaml_config_path?: string | null;
+  description?: string | null;
   data_management_platform_project_url?: string | null;
 }
 
@@ -4891,6 +4962,7 @@ export async function createProject(
     project_type: input.project_type,
     is_public: input.is_public,
     yaml_config_path: input.yaml_config_path ?? null,
+    description: input.description ?? null,
     data_management_platform_project_url:
       input.data_management_platform_project_url ?? null,
     permissions: { owners: [ownerEntry], editors: [], viewers: [] },
@@ -5043,6 +5115,7 @@ export interface FromRunRequest {
    *  folder it cannot recognise is a 422 with code `template_not_detected`. */
   templateId?: string | null;
   projectName?: string | null;
+  description?: string | null;
   variables?: Record<string, string>;
   dryRun?: boolean;
   /** Connection settings of the private bucket `dataRoot` is in. The run
@@ -5165,6 +5238,7 @@ export async function createProjectFromRun(
       variables: input.variables ?? {},
       dry_run: Boolean(input.dryRun),
       is_public: Boolean(input.isPublic),
+      description: input.description ?? null,
       ...(input.storage ? { storage: input.storage } : {}),
     }),
     signal: options.signal,
@@ -5376,6 +5450,22 @@ export async function previewRunFile(
     signal: options.signal,
   });
   if (!res.ok) await throwHttpDetailError(res, 'Failed to preview the file');
+  return (await res.json()) as RunFilePreview;
+}
+
+/** Read the start of the file at a remote `s3://` or `https://` URL, before a
+ *  table is made from it. The server fetches it through the same gateway as
+ *  `createDataCollectionFromUrl`, so a refused host is refused here first. */
+export async function previewRemoteUrl(
+  url: string,
+  options: { signal?: AbortSignal; maxRows?: number } = {},
+): Promise<RunFilePreview> {
+  const res = await authFetch(`${API_BASE}/datacollections/url_preview`, {
+    method: 'POST',
+    body: JSON.stringify({ url, max_rows: options.maxRows ?? 10 }),
+    signal: options.signal,
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to preview the URL');
   return (await res.json()) as RunFilePreview;
 }
 
@@ -6636,6 +6726,255 @@ export async function deleteDataCollection(dcId: string): Promise<void> {
     method: 'DELETE',
   });
   if (!res.ok) await throwHttpError(res, 'Failed to delete data collection');
+}
+
+// ── Editing a table a user added ─────────────────────────────────────────
+
+/** Whether a table can be edited in place, and whether the caller may. */
+export interface TableEditStatus {
+  data_collection_id: string;
+  /** The table is one a user added (an upload or a plain table from a folder). */
+  table_editable: boolean;
+  /** `table_editable`, the caller is an owner or editor, and the project is not published. */
+  can_edit: boolean;
+  /** The caller is an owner or editor of the project: worth showing a disabled control with `reason`. */
+  role_can_edit: boolean;
+  /** Why the table cannot be edited now, as a machine-readable code (`pipeline_table`, `url_table`, `published_lock`, …). */
+  code: string | null;
+  /** Why the table is read-only, for the user. */
+  reason: string | null;
+  max_rows: number;
+  /** Cell edits are unlocked: the table is metadata the project maintains by hand. */
+  unlocked: boolean;
+  /** The caller may lock or unlock it: an owner or editor, an editable kind of
+   *  table, a project that is not published. */
+  can_toggle_lock: boolean;
+}
+
+export type TableColumnKind =
+  | 'string'
+  | 'integer'
+  | 'float'
+  | 'boolean'
+  | 'date'
+  | 'datetime'
+  | 'time'
+  | 'other';
+
+export interface TableEditColumn {
+  name: string;
+  dtype: string;
+  kind: TableColumnKind;
+  /** False for a column of a type that is shown but cannot be edited. */
+  editable: boolean;
+}
+
+/** The whole table with the Delta version it was read at. */
+export interface TableEditData {
+  data_collection_id: string;
+  delta_version: number;
+  row_count: number;
+  max_rows: number;
+  columns: TableEditColumn[];
+  rows: Record<string, unknown>[];
+}
+
+/** One edited cell. `row` is the 0-based position in the version that was read;
+ *  a null or blank `value` clears the cell. */
+export interface TableCellEdit {
+  row: number;
+  column: string;
+  value: string | number | boolean | null;
+}
+
+export interface TableCellError {
+  row: number;
+  column: string;
+  message: string;
+}
+
+export interface TableEditResult {
+  success: boolean;
+  data_collection_id: string;
+  changed_cells: number;
+  delta_version: number;
+  aggregation_version: number | null;
+  row_count: number;
+}
+
+/** A refused table edit. `code` is `stale_version` (409, someone else saved
+ *  first), `invalid_cells` (422, see `cellErrors`), `table_too_large` (413) or
+ *  one of the read-only codes (403). */
+export class TableEditError extends ApiDetailError {
+  readonly cellErrors: TableCellError[];
+  /** The table's current Delta version, on `stale_version`. */
+  readonly currentVersion: number | null;
+
+  constructor(
+    message: string,
+    status: number,
+    code: string | null,
+    cellErrors: TableCellError[] = [],
+    currentVersion: number | null = null,
+  ) {
+    super(message, status, code, message);
+    this.name = 'TableEditError';
+    this.cellErrors = cellErrors;
+    this.currentVersion = currentVersion;
+  }
+}
+
+async function throwTableEditError(res: Response, prefix: string): Promise<never> {
+  let detail: unknown = null;
+  try {
+    detail = (await res.json())?.detail;
+  } catch {
+    // non-JSON body
+  }
+  const body = (detail && typeof detail === 'object' ? detail : {}) as {
+    code?: unknown;
+    message?: unknown;
+    errors?: unknown;
+    current_version?: unknown;
+  };
+  const message =
+    typeof detail === 'string'
+      ? detail
+      : typeof body.message === 'string'
+        ? body.message
+        : `${prefix}: ${res.status}`;
+  throw new TableEditError(
+    message,
+    res.status,
+    typeof body.code === 'string' ? body.code : null,
+    Array.isArray(body.errors) ? (body.errors as TableCellError[]) : [],
+    typeof body.current_version === 'number' ? body.current_version : null,
+  );
+}
+
+/** Can this table be edited in place, and may the caller? Cheap (no table read). */
+export async function fetchTableEditStatus(dcId: string): Promise<TableEditStatus> {
+  const res = await authFetch(`${API_BASE}/datacollections/${dcId}/edit_status`);
+  if (!res.ok) await throwTableEditError(res, 'Failed to read the table edit state');
+  return res.json();
+}
+
+/** Lock or unlock cell edits on a table a user added (locked by default).
+ *  Answers the new edit status. Throws `TableEditError`. */
+export async function setTableEditLock(dcId: string, unlocked: boolean): Promise<TableEditStatus> {
+  const res = await authFetch(`${API_BASE}/datacollections/${dcId}/edit_lock`, {
+    method: 'PATCH',
+    body: JSON.stringify({ unlocked }),
+  });
+  if (!res.ok) await throwTableEditError(res, 'Failed to change the table lock');
+  return res.json();
+}
+
+/** The whole table, with the Delta version that `patchTableCells` must be given. */
+export async function fetchTableForEdit(dcId: string): Promise<TableEditData> {
+  const res = await authFetch(`${API_BASE}/datacollections/${dcId}/edit_data`);
+  if (!res.ok) await throwTableEditError(res, 'Failed to load the table');
+  return res.json();
+}
+
+/** Save cell edits in one new table version, or none. Throws `TableEditError`. */
+export async function patchTableCells(
+  dcId: string,
+  baseVersion: number,
+  edits: TableCellEdit[],
+): Promise<TableEditResult> {
+  const res = await authFetch(`${API_BASE}/datacollections/${dcId}/cells`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ base_version: baseVersion, edits }),
+  });
+  if (!res.ok) await throwTableEditError(res, 'Failed to save the changes');
+  return res.json();
+}
+
+export interface TableRestoreResult {
+  restored_version: number;
+  delta_version: number | null;
+  row_count: number;
+}
+
+/** Bring past version `version` back as a new version of the table. Throws `TableEditError`. */
+export async function restoreTableVersion(
+  dcId: string,
+  version: number,
+  baseVersion: number,
+): Promise<TableRestoreResult> {
+  const res = await authFetch(`${API_BASE}/datacollections/${dcId}/restore_version`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ version, base_version: baseVersion }),
+  });
+  if (!res.ok) await throwTableEditError(res, 'Failed to restore this version');
+  return res.json();
+}
+
+export type TableMergeMode = 'replace' | 'fill_missing' | 'add_columns';
+
+export interface TableMergeColumn extends TableEditColumn {
+  is_new: boolean;
+}
+
+export interface TableMergeKeyCandidate {
+  column: string;
+  matched_rows: number;
+  unique_in_table: boolean;
+}
+
+/** What a file does to a table: the same report for a preview and for an apply. */
+export interface TableMergeReport {
+  dry_run: boolean;
+  mode: TableMergeMode;
+  suggested_mode: TableMergeMode;
+  key: string | null;
+  key_candidates: TableMergeKeyCandidate[];
+  delta_version: number;
+  table_rows: number;
+  file_rows: number;
+  row_count: number;
+  matched_rows: number;
+  unmatched_file_rows: number;
+  unmatched_file_sample: string[];
+  filled_cells: number;
+  conflicts: number;
+  new_columns: string[];
+  ignored_columns: string[];
+  removed_columns: string[];
+  warnings: string[];
+  can_apply: boolean;
+  reason: string | null;
+  changed: { row: number; column: string }[];
+  columns: TableMergeColumn[];
+  rows: Record<string, unknown>[];
+}
+
+/** Preview (`dryRun`, the default) or apply a file on a table. Throws `TableEditError`. */
+export async function mergeTableFile(
+  dcId: string,
+  file: File,
+  options: {
+    mode?: TableMergeMode | 'auto';
+    key?: string | null;
+    baseVersion: number;
+    dryRun?: boolean;
+  },
+): Promise<TableMergeReport> {
+  const form = new FormData();
+  form.append('file', file);
+  form.append('mode', options.mode ?? 'auto');
+  if (options.key) form.append('key', options.key);
+  form.append('base_version', String(options.baseVersion));
+  form.append('dry_run', String(options.dryRun ?? true));
+  const res = await authFetch(`${API_BASE}/datacollections/${dcId}/merge_file`, {
+    method: 'POST',
+    body: form,
+  });
+  if (!res.ok) await throwTableEditError(res, 'Failed to read the file');
+  return res.json();
 }
 
 export interface CreateDataCollectionUploadInput {
@@ -8187,6 +8526,33 @@ export async function listLinkResolvers(projectId: string): Promise<ResolverInfo
 
 /** Aggregated canonical → variants map for a MultiQC DC's reports. Used to
  *  populate the ``sample_mapping`` resolver editor. */
+export interface LinkSuggestion {
+  source_dc_id: string;
+  source_dc_tag: string;
+  source_column: string;
+  target_dc_id: string;
+  target_dc_tag: string;
+  target_type: LinkTargetType;
+  resolver: LinkResolverName;
+  target_field?: string | null;
+  /** Distinct source values found in the target, out of `total`. */
+  matched: number;
+  total: number;
+  /** A few source values and what the link reaches with each; empty: missed. */
+  examples?: Array<{ source: string; targets: string[] }>;
+}
+
+/** Links the given tables could have, from the values they share. */
+export async function fetchLinkSuggestions(
+  projectId: string,
+  sourceDcIds: string[],
+): Promise<LinkSuggestion[]> {
+  const params = new URLSearchParams(sourceDcIds.map((id) => ['source', id]));
+  const res = await authFetch(`${API_BASE}/links/${projectId}/suggestions?${params}`);
+  if (!res.ok) await throwHttpError(res, 'Failed to suggest links');
+  return (await res.json()) as LinkSuggestion[];
+}
+
 export async function fetchMultiQCSampleMappings(
   projectId: string,
   dcId: string,
@@ -8279,6 +8645,31 @@ async function postMultiQCUpload(
   const res = await authFetch(url, { method: 'POST', body: fd });
   if (!res.ok) await throwHttpDetailError(res, 'MultiQC upload failed');
   return (await res.json()) as MultiQCMutationResult;
+}
+
+export interface CreateAssetDCInput {
+  projectId: string;
+  name: string;
+  /** One file for a map or a tree; any number of images make one collection. */
+  kind: 'geojson' | 'phylogeny' | 'image';
+  files: File[];
+}
+
+/** Create a GeoJSON, phylogeny or image collection from uploaded files. */
+export async function createAssetDataCollection(
+  input: CreateAssetDCInput,
+): Promise<{ data_collection_id?: string }> {
+  const fd = new FormData();
+  fd.append('project_id', input.projectId);
+  fd.append('name', input.name);
+  fd.append('kind', input.kind);
+  for (const file of input.files) fd.append('files', file, file.name);
+  const res = await authFetch(`${API_BASE}/datacollections/create_asset_from_upload`, {
+    method: 'POST',
+    body: fd,
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Upload failed');
+  return (await res.json()) as { data_collection_id?: string };
 }
 
 export async function createMultiQCDataCollection(

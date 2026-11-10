@@ -1,7 +1,7 @@
 /**
  * Inline scatter-map preview for coordinate-table DCs in the Project Data
  * Manager. Reads the first 100 preview rows via fetchDataCollectionPreview
- * and renders a Plotly scattermapbox where hovering a marker shows the row's
+ * and renders a Plotly scattermap where hovering a marker shows the row's
  * non-coord columns — same hover UX as the dashboard's Map component.
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -34,7 +34,7 @@ interface DcLike {
 /** Escape HTML so user-controlled column names can't break out of the static
  *  parts of a Plotly hovertemplate. Per-point values come in via customdata
  *  and are escaped by Plotly. */
-function escapeHtml(s: string): string {
+export function escapeHtml(s: string): string {
   return s
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -42,7 +42,7 @@ function escapeHtml(s: string): string {
     .replace(/"/g, '&quot;');
 }
 
-const MAP_HEIGHT = 360;
+export const MAP_HEIGHT = 360;
 // Leave a margin so edge points aren't flush against the frame.
 const ZOOM_PADDING = 0.5;
 // Keep a lone point (or tightly-clustered points) from zooming to street level.
@@ -51,7 +51,7 @@ const SINGLE_POINT_ZOOM = 9;
 
 /**
  * Web-Mercator "fit these bounds into a WxH viewport" zoom — Plotly's
- * scattermapbox has no fitBounds, so we derive the zoom that frames every
+ * scattermap has no fitBounds, so we derive the zoom that frames every
  * point. Mirrors the classic Google Maps getBoundsZoom, using mapbox-gl's
  * 512px world tile. Returns the tighter of the lat/lon fits so both axes stay
  * inside the viewport.
@@ -77,6 +77,29 @@ function fitBoundsZoom(
   const latZoom = Math.log2(heightPx / WORLD / (latFraction || Number.EPSILON));
   const lonZoom = Math.log2(widthPx / WORLD / (lonFraction || Number.EPSILON));
   return Math.min(latZoom, lonZoom);
+}
+
+/** Centre and zoom that frame every point, padded and clamped. */
+export function fitMapView(
+  lats: number[],
+  lons: number[],
+  width: number,
+): { center: { lat: number; lon: number }; zoom: number } {
+  if (!lats.length) return { center: { lat: 0, lon: 0 }, zoom: 1 };
+  // A loop: spreading a large geometry into Math.min overflows the stack.
+  let [minLat, maxLat, minLon, maxLon] = [lats[0], lats[0], lons[0], lons[0]];
+  lats.forEach((lat, i) => {
+    minLat = Math.min(minLat, lat);
+    maxLat = Math.max(maxLat, lat);
+    minLon = Math.min(minLon, lons[i]);
+    maxLon = Math.max(maxLon, lons[i]);
+  });
+  const center = { lat: (minLat + maxLat) / 2, lon: (minLon + maxLon) / 2 };
+  // All points coincident (or a single point): no span to fit.
+  if (minLat === maxLat && minLon === maxLon) return { center, zoom: SINGLE_POINT_ZOOM };
+  let zoom = fitBoundsZoom(minLat, maxLat, minLon, maxLon, width || 600, MAP_HEIGHT) - ZOOM_PADDING;
+  if (!Number.isFinite(zoom)) zoom = SINGLE_POINT_ZOOM;
+  return { center, zoom: Math.max(0, Math.min(zoom, MAX_ZOOM)) };
 }
 
 const CoordinatesMapPreview: React.FC<{ dc: DcLike }> = ({ dc }) => {
@@ -172,24 +195,10 @@ const CoordinatesMapPreview: React.FC<{ dc: DcLike }> = ({ dc }) => {
   // Frame the view to the points' bounding box: center on the bbox midpoint and
   // pick the zoom that fits every point (padded + clamped), instead of a fixed
   // world-scale zoom.
-  const { center, zoom } = useMemo(() => {
-    if (!lats.length) return { center: { lat: 0, lon: 0 }, zoom: 1 };
-    const minLat = Math.min(...lats);
-    const maxLat = Math.max(...lats);
-    const minLon = Math.min(...lons);
-    const maxLon = Math.max(...lons);
-    const center = { lat: (minLat + maxLat) / 2, lon: (minLon + maxLon) / 2 };
-    // All points coincident (or a single point): no span to fit.
-    if (minLat === maxLat && minLon === maxLon) {
-      return { center, zoom: SINGLE_POINT_ZOOM };
-    }
-    const width = mapWidth || 600;
-    const raw = fitBoundsZoom(minLat, maxLat, minLon, maxLon, width, MAP_HEIGHT);
-    let z = raw - ZOOM_PADDING;
-    if (!Number.isFinite(z)) z = SINGLE_POINT_ZOOM;
-    z = Math.max(0, Math.min(z, MAX_ZOOM));
-    return { center, zoom: z };
-  }, [lats, lons, mapWidth]);
+  const { center, zoom } = useMemo(
+    () => fitMapView(lats, lons, mapWidth),
+    [lats, lons, mapWidth],
+  );
 
   if (!latCol || !lonCol) {
     return (
@@ -266,7 +275,7 @@ const CoordinatesMapPreview: React.FC<{ dc: DcLike }> = ({ dc }) => {
         <Plot
           data={[
             {
-              type: 'scattermapbox',
+              type: 'scattermap',
               mode: 'markers',
               lat: lats,
               lon: lons,
@@ -283,7 +292,7 @@ const CoordinatesMapPreview: React.FC<{ dc: DcLike }> = ({ dc }) => {
           layout={{
             autosize: true,
             margin: { l: 0, r: 0, t: 0, b: 0 },
-            mapbox: {
+            map: {
               style: mapStyle,
               center,
               zoom,

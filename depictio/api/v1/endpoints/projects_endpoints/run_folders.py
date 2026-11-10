@@ -750,6 +750,22 @@ def _inspection(
     )
 
 
+def _holds_run_traces(root) -> bool:
+    """Whether a connector's records are in the folder or a sub-folder of it.
+
+    A connector's search for a legacy report walks the whole tree, which on a
+    home folder takes minutes, for a folder that is plainly not a run.
+    """
+    from depictio.models.models.run_info import registered_readers
+
+    return any(
+        root.glob(pattern)
+        for reader in registered_readers()
+        for pattern in (*reader.footprint, *reader.markers)
+        if "**" not in pattern
+    )
+
+
 def inspect_folder(
     location: str,
     *,
@@ -800,8 +816,9 @@ def inspect_folder(
         from depictio.cli.cli.utils.data_root import LocalDataRoot
 
         root = LocalDataRoot(real)
-        detected, info = _detect_with_info(root)
-        run_info = _run_info_summary(info, root, policy)
+        if _holds_run_traces(root):
+            detected, info = _detect_with_info(root)
+            run_info = _run_info_summary(info, root, policy)
     return _inspection(
         location=real,
         source="local",

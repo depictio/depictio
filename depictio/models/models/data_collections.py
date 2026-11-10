@@ -403,6 +403,9 @@ class DataCollectionConfig(MongoModel):
     transform: TransformConfig | None = None
     # Explicit provenance of the data; None for CLI-made and older collections.
     origin: DataOrigin | None = None
+    # A table a user added is locked against cell edits until an owner or
+    # editor unlocks it, marking it as metadata the project maintains by hand.
+    edit_unlocked: bool = False
 
     model_config = ConfigDict(extra="forbid", use_enum_values=True)
 

@@ -1,27 +1,26 @@
 /**
- * "Add a run": another output folder of the project's pipeline.
+ * Another output folder of the project's pipeline.
  *
  * The folder is checked as a dry run (`attachRun`) once typing pauses, and the
  * answer is shown as a "What Depictio found" card. The server refuses what it
  * cannot add with a code (`not_a_pipeline_project`, `other_pipeline`,
- * `already_attached`, `cannot_attach`, `run_name_clash`): the message goes in
- * a yellow alert (shown once; the button's tooltip repeats it). The real
- * call returns an ingestion run, followed with `getManifestRefreshRun`.
+ * `already_attached`, `cannot_attach`, `run_name_clash`). The real call returns
+ * an ingestion run, followed with `getManifestRefreshRun`.
  */
 import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, Button, Group, Loader, Modal, Stack, Text } from '@mantine/core';
+import { Alert, Group, Loader, Stack, Text } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import { apiErrorCode, attachRun, isS3Location } from 'depictio-react-core';
 import type { AttachRunReport, ManifestRefreshReport } from 'depictio-react-core';
 
-import { DisabledReason, GatedButton } from '../../../components/settings/SettingsSections';
 import { plural } from '../../fromRun/plural';
 import { formatElapsed, manifestRunOutcome, summarizeManifestRun, useElapsedMs, useManifestRunPoll } from '../../manifestRun';
 import type { ManifestRunOutcome } from '../../manifestRun';
 import { FoundCard, RunChips, SourceValue } from '../FoundCard';
 import type { FoundRow } from '../FoundCard';
-import { refusalText, SERVER_CREDENTIALS_MISSING, useLocationPicker } from './useLocationPicker';
+import { refusalText, SERVER_CREDENTIALS_MISSING } from './useLocationPicker';
+import type { LocationPicker } from './useLocationPicker';
 
 /** Refusals the server explains with a message worth showing as is. */
 const REFUSAL_CODES = new Set([
@@ -33,13 +32,14 @@ const REFUSAL_CODES = new Set([
   SERVER_CREDENTIALS_MISSING,
 ]);
 
-interface AttachRunModalProps {
+interface Options {
+  /** False on a project with no pipeline to add a run of: nothing is read. */
+  enabled: boolean;
   opened: boolean;
   projectId: string | null;
-  projectName?: string | null;
   /** "nf-core/rnaseq 3.14.0": the project's pipeline, for the card. */
   pipelineLabel: string | null;
-  onClose: () => void;
+  picker: LocationPicker;
   /** A run was added (its ingestion ended): reload the project. */
   onAdded: () => void;
 }
@@ -118,22 +118,8 @@ function foundRows(report: AttachRunReport, location: string, pipelineLabel: str
   ];
 }
 
-export const AttachRunModal: React.FC<AttachRunModalProps> = ({
-  opened,
-  projectId,
-  projectName,
-  pipelineLabel,
-  onClose,
-  onAdded,
-}) => {
-  const picker = useLocationPicker({
-    opened,
-    label: 'Run folder',
-    description: "The output folder of one more run of this project's pipeline.",
-    testIdPrefix: 'attach-run-location',
-  });
+export function useAttachRun({ enabled, opened, projectId, pipelineLabel, picker, onAdded }: Options) {
   const { target, epoch, storageFor, noteRefusal } = picker;
-
   const [report, setReport] = useState<AttachRunReport | null>(null);
   const [loading, setLoading] = useState(false);
   const [refusal, setRefusal] = useState<Refusal | null>(null);
@@ -154,7 +140,7 @@ export const AttachRunModal: React.FC<AttachRunModalProps> = ({
   useEffect(() => {
     if (busy || added) return undefined;
     setSubmitError(null);
-    if (!opened || !projectId || !target || picker.invalid) {
+    if (!enabled || !opened || !projectId || !target || picker.invalid) {
       setReport(null);
       setRefusal(null);
       setLoading(false);
@@ -187,7 +173,7 @@ export const AttachRunModal: React.FC<AttachRunModalProps> = ({
       });
     return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [opened, projectId, target, epoch, picker.invalid, busy, added]);
+  }, [enabled, opened, projectId, target, epoch, picker.invalid, busy, added]);
 
   // Every opening starts afresh, unless a run is still being followed.
   useEffect(() => {
@@ -225,8 +211,7 @@ export const AttachRunModal: React.FC<AttachRunModalProps> = ({
   const elapsed = useElapsedMs(following, startedAt, finishedAt);
 
   let reason: string | null = null;
-  if (!picker.trimmed) reason = 'Enter or browse to the run folder.';
-  else if (picker.invalid) reason = 'Enter a folder path or an s3:// location.';
+  if (picker.invalid) reason = 'Enter a folder path or an s3:// location.';
   else if (picker.storageProblem) reason = `Private bucket: ${picker.storageProblem}`;
   else if (loading || (!report && !refusal)) reason = 'Checking the run folder.';
   else if (refusal) reason = refusal.known ? refusal.message : 'The run folder could not be checked.';
@@ -234,7 +219,7 @@ export const AttachRunModal: React.FC<AttachRunModalProps> = ({
     reason = 'This folder holds no run that is not in the project yet.';
 
   const submit = async () => {
-    if (reason || !projectId) return;
+    if (!projectId) return;
     setSubmitting(true);
     setSubmitError(null);
     try {
@@ -264,26 +249,12 @@ export const AttachRunModal: React.FC<AttachRunModalProps> = ({
   const summary = progress ? summarizeManifestRun(progress) : null;
   const showFollow = following || added;
 
-  return (
+  const isNewRun = Boolean(report && report.new_runs.length > 0);
+
+  /** What the folder is, before anything is added. */
+  const view = (
     <>
-      <Modal
-        opened={opened}
-        onClose={onClose}
-        title="Add a run"
-        size="lg"
-        centered
-        data-testid="attach-run-modal"
-      >
-        <Stack gap="md">
-          {projectName && (
-            <Text size="sm" c="dimmed">
-              Project: {projectName}
-            </Text>
-          )}
-
-          {!showFollow && picker.field}
-
-          {!showFollow && loading && (
+          {loading && (
             <Group gap="xs" data-testid="attach-run-loading">
               <Loader size="xs" />
               <Text size="sm" c="dimmed">
@@ -292,7 +263,7 @@ export const AttachRunModal: React.FC<AttachRunModalProps> = ({
             </Group>
           )}
 
-          {!showFollow && refusal && !loading && (
+          {refusal && !loading && (
             <Alert
               color={refusal.known ? 'yellow' : 'red'}
               icon={<Icon icon="mdi:alert-outline" width={18} />}
@@ -303,7 +274,7 @@ export const AttachRunModal: React.FC<AttachRunModalProps> = ({
             </Alert>
           )}
 
-          {!showFollow && report && !loading && (
+          {report && !loading && (
             <>
               <FoundCard rows={foundRows(report, picker.trimmed, pipelineLabel)} testId="attach-run-found" />
               {report.warnings.length > 0 && (
@@ -320,6 +291,12 @@ export const AttachRunModal: React.FC<AttachRunModalProps> = ({
             </>
           )}
 
+    </>
+  );
+
+  /** The run being followed, once it was sent. */
+  const followView = (
+    <>
           {showFollow && (
             <Stack gap="xs" data-testid="attach-run-progress" data-state={following ? 'running' : (outcome ?? 'done')}>
               <Group gap="xs">
@@ -361,30 +338,20 @@ export const AttachRunModal: React.FC<AttachRunModalProps> = ({
             </Alert>
           )}
 
-          <Stack gap={6} align="flex-end">
-            <Group gap="sm">
-              <Button variant="default" onClick={onClose} data-testid="attach-run-cancel">
-                {added || following ? 'Close' : 'Cancel'}
-              </Button>
-              {!showFollow && (
-                <GatedButton
-                  reason={reason}
-                  loading={submitting}
-                  onClick={submit}
-                  data-testid="attach-run-submit"
-                >
-                  Add run
-                </GatedButton>
-              )}
-            </Group>
-            {/* A refusal is already shown by its alert: do not repeat it. */}
-            {!showFollow && <DisabledReason reason={refusal ? null : reason} testId="attach-run-reason" />}
-          </Stack>
-        </Stack>
-      </Modal>
-      {picker.browser}
     </>
   );
-};
 
-export default AttachRunModal;
+  return {
+    reason,
+    refusal,
+    loading,
+    isNewRun,
+    submitting,
+    following,
+    added,
+    showFollow,
+    submit,
+    view,
+    followView,
+  };
+}

@@ -28,6 +28,7 @@ export const FolderTablesFound: React.FC<FolderTablesFoundProps> = ({
   onToggle,
 }) => (
   <FoundCard
+    embedded
     testId="folder-tables-found-card"
     rows={[
       {

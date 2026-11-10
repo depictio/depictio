@@ -8,11 +8,14 @@ import {
   Card,
   Center,
   Code,
+  Collapse,
   CopyButton,
   Divider,
   Group,
   Loader,
   Paper,
+  SegmentedControl,
+  ScrollArea,
   SimpleGrid,
   Stack,
   Switch,
@@ -34,12 +37,14 @@ import {
 } from 'depictio-react-core';
 import { DcTypeIcon } from '../dcTypeIcon';
 import RunProvenanceCard from './RunProvenanceCard';
+import { SortableTh, formatTimestamp } from './DcViewerParts';
+import DerivedLineage from './DerivedLineage';
 
 /** Visual treatment per DC display-status. Colors are Mantine palette names
  *  (theme tokens), not literals — they recolor with the active theme. */
 const STATUS_META: Record<string, { color: string; icon: string; label: string }> = {
   identified: { color: 'green', icon: 'mdi:check-circle', label: 'Identified' },
-  aggregated: { color: 'teal', icon: 'mdi:database-check', label: 'Aggregated' },
+  aggregated: { color: 'teal', icon: 'mdi:source-branch', label: 'Derived' },
   found_zero: { color: 'yellow', icon: 'mdi:alert', label: 'No files found' },
   gated_out: { color: 'gray', icon: 'mdi:filter-remove-outline', label: 'Gated out' },
 };
@@ -48,7 +53,7 @@ const STATUS_META: Record<string, { color: string; icon: string; label: string }
  *  icons shown in the Status column. */
 const LEGEND: Array<{ key: string; desc: string }> = [
   { key: 'identified', desc: 'Source files matched (expand to list them)' },
-  { key: 'aggregated', desc: 'Table derived from other collections (expand for inputs + path)' },
+  { key: 'aggregated', desc: 'Computed by a recipe from other collections, with no files of its own (expand to see how)' },
   { key: 'found_zero', desc: 'Expected, but nothing was found' },
   { key: 'gated_out', desc: 'Excluded by a template condition (hover for the reason)' },
 ];
@@ -70,42 +75,6 @@ const TRIGGER_ENGINES: Record<string, { label: string; color: string; icon: stri
 };
 
 const RUN_STATUS_COLOR: Record<string, string> = { ok: 'green', partial: 'yellow' };
-
-/** Plain list of monospace paths that wrap instead of widening their container. */
-const PathsList: React.FC<{ paths: string[] }> = ({ paths }) => (
-  <Stack gap={2}>
-    {paths.map((p, i) => (
-      <Code key={`${p}-${i}`} block style={{ fontSize: 11, overflowWrap: 'anywhere' }}>
-        {p}
-      </Code>
-    ))}
-  </Stack>
-);
-
-/** One monospace path with a copy button — used for the aggregated table path. */
-const PathLine: React.FC<{ path: string }> = ({ path }) => (
-  <Group gap={4} wrap="nowrap" mt={6} style={{ maxWidth: 360, minWidth: 0 }}>
-    <Icon icon="mdi:database-outline" width={13} color="var(--mantine-color-gray-6)" />
-    <Tooltip label={path} withArrow withinPortal multiline maw={420}>
-      <Text size="xs" ff="monospace" truncate>
-        {path}
-      </Text>
-    </Tooltip>
-    <CopyButton value={path} timeout={1500}>
-      {({ copied, copy }) => (
-        <ActionIcon
-          variant="subtle"
-          color={copied ? 'teal' : 'gray'}
-          size="xs"
-          onClick={copy}
-          style={{ flexShrink: 0 }}
-        >
-          <Icon icon={copied ? 'mdi:check' : 'mdi:content-copy'} width={13} />
-        </ActionIcon>
-      )}
-    </CopyButton>
-  </Group>
-);
 
 /** "identified but 0 files + aggregated" is reported by the backend as
  *  `identified`; surface it as a distinct "Aggregated" display status so a
@@ -173,56 +142,166 @@ const InlineMeta: React.FC<{ icon: string; label: string; value?: string | null 
   </Group>
 );
 
-/** Expandable file list for one identified data collection. Lazily fetches the
- *  registered files the first time the row is expanded and shows their full
- *  paths (falling back to filename when no location was recorded). */
-/** Lazily fetches and lists a DC's registered file paths. Rendered only when its
- *  details row is expanded, so the fetch happens on demand. */
-const DcFileList: React.FC<{ dcId: string | null; tag: string }> = ({ dcId, tag }) => {
+const FILE_SEARCH_FROM = 9;
+
+const formatSize = (bytes?: number | null): string => {
+  if (bytes == null) return '—';
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ['KB', 'MB', 'GB', 'TB'];
+  let v = bytes / 1024;
+  let i = 0;
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024;
+    i += 1;
+  }
+  return `${v.toFixed(v < 10 ? 1 : 0)} ${units[i]}`;
+};
+
+const trimSlash = (p: string) => p.replace(/\/+$/, '');
+
+/** The run a file was read from, by its location, and the file's folder
+ *  inside that run ("" at its root). */
+function placeInRun(
+  location: string,
+  runs: Array<{ run_tag: string; run_location?: string | null }>,
+): { run: string | null; folder: string } {
+  const dir = location.includes('/') ? location.slice(0, location.lastIndexOf('/')) : '';
+  for (const r of runs) {
+    const root = r.run_location ? trimSlash(r.run_location) : null;
+    if (root && (dir === root || dir.startsWith(`${root}/`))) {
+      return { run: r.run_tag, folder: dir.slice(root.length + 1) };
+    }
+  }
+  return { run: null, folder: dir };
+}
+
+/** The files a collection registered: one row each, with the run it came
+ *  from and where in that run, its size and when it changed. Fetched when the
+ *  row is first unfolded. */
+const DcFileList: React.FC<{
+  dcId: string | null;
+  tag: string;
+  runs: Array<{ run_tag: string; run_location?: string | null }>;
+}> = ({ dcId, tag, runs }) => {
   const [files, setFiles] = useState<RegisteredFile[] | null>(null);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
 
   useEffect(() => {
     if (!dcId) return;
     let cancelled = false;
-    setLoading(true);
     fetchDataCollectionFiles(dcId)
       .then((f) => !cancelled && setFiles(f))
-      .catch((e) => !cancelled && setError(e instanceof Error ? e.message : String(e)))
-      .finally(() => !cancelled && setLoading(false));
+      .catch((e) => !cancelled && setError(e instanceof Error ? e.message : String(e)));
     return () => {
       cancelled = true;
     };
   }, [dcId]);
 
   if (!dcId) return null;
+  if (error) {
+    return (
+      <Text size="xs" c="red">
+        {error}
+      </Text>
+    );
+  }
+  if (!files) return <Loader size="xs" />;
+  if (files.length === 0) {
+    return (
+      <Text size="xs" c="dimmed">
+        No files registered for {tag}.
+      </Text>
+    );
+  }
+  const rows = files
+    .map((f) => {
+      const location = f.file_location || f.filename || '';
+      return { f, location, ...placeInRun(location, runs) };
+    })
+    .sort((a, b) => (a.run ?? '').localeCompare(b.run ?? '', undefined, { numeric: true }) || a.location.localeCompare(b.location));
+  const showRun = rows.some((r) => r.run);
+  const needle = query.trim().toLowerCase();
+  const shown = needle ? rows.filter((r) => r.location.toLowerCase().includes(needle)) : rows;
+
   return (
-    <Stack gap={2}>
-      {loading && <Loader size="xs" />}
-      {error && (
-        <Text size="xs" c="red">
-          {error}
-        </Text>
+    <Stack gap="xs" data-testid={`ingestion-files-${tag}`}>
+      {rows.length >= FILE_SEARCH_FROM && (
+        <TextInput
+          size="xs"
+          maw={300}
+          placeholder="Search files"
+          aria-label={`Search the files of ${tag}`}
+          leftSection={<Icon icon="mdi:magnify" width={14} />}
+          value={query}
+          onChange={(e) => setQuery(e.currentTarget.value)}
+        />
       )}
-      {files && files.length === 0 && (
-        <Text size="xs" c="dimmed">
-          No files registered for {tag}.
-        </Text>
-      )}
-      {files && files.length > 0 && (
-        <Stack gap={2}>
-          {files.map((f, i) => (
-            <Code
-              key={`${f.file_location ?? f.filename ?? i}`}
-              block
-              style={{ fontSize: 11, overflowWrap: 'anywhere' }}
-            >
-              {f.file_location || f.filename || '(unnamed)'}
-            </Code>
-          ))}
-        </Stack>
-      )}
+      <ScrollArea.Autosize mah={320} type="auto">
+        <Table verticalSpacing={4} horizontalSpacing="sm" fz="sm" layout="auto">
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th fz="xs" c="dimmed" w="100%">File</Table.Th>
+              {showRun && <Table.Th fz="xs" c="dimmed">Run</Table.Th>}
+              <Table.Th fz="xs" c="dimmed" ta="right">Size</Table.Th>
+              <Table.Th fz="xs" c="dimmed">Modified</Table.Th>
+              <Table.Th />
+            </Table.Tr>
+          </Table.Thead>
+          <Table.Tbody>
+            {shown.map(({ f, location, run, folder }, i) => (
+              <Table.Tr key={`${location}-${i}`}>
+                <Table.Td>
+                  <Group gap={8} wrap="nowrap" align="flex-start">
+                    <Icon icon="mdi:file-outline" width={15} style={{ opacity: 0.55, marginTop: 2, flexShrink: 0 }} />
+                    <div style={{ minWidth: 0 }}>
+                      <Text size="sm" fw={600} style={{ overflowWrap: 'anywhere' }}>
+                        {f.filename || location.split('/').pop()}
+                      </Text>
+                      {folder && (
+                        <Text size="xs" c="dimmed" ff="monospace" style={{ overflowWrap: 'anywhere' }}>
+                          {folder}/
+                        </Text>
+                      )}
+                    </div>
+                  </Group>
+                </Table.Td>
+                {showRun && (
+                  <Table.Td style={{ whiteSpace: 'nowrap' }}>
+                    <Text size="sm" ff="monospace">
+                      {run ?? '—'}
+                    </Text>
+                  </Table.Td>
+                )}
+                <Table.Td ta="right" style={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
+                  {formatSize(f.filesize)}
+                </Table.Td>
+                <Table.Td style={{ whiteSpace: 'nowrap' }}>
+                  <Text size="sm" c="dimmed">
+                    {formatTimestamp(f.modification_time, { utc: false }) ?? '—'}
+                  </Text>
+                </Table.Td>
+                <Table.Td>
+                  <CopyButton value={location} timeout={1500}>
+                    {({ copied, copy }) => (
+                      <Tooltip label={copied ? 'Copied' : 'Copy the full path'} withArrow>
+                        <ActionIcon size="sm" variant="subtle" color="gray" onClick={copy} aria-label="Copy the full path">
+                          <Icon icon={copied ? 'mdi:check' : 'mdi:content-copy'} width={14} />
+                        </ActionIcon>
+                      </Tooltip>
+                    )}
+                  </CopyButton>
+                </Table.Td>
+              </Table.Tr>
+            ))}
+          </Table.Tbody>
+        </Table>
+        {shown.length === 0 && (
+          <Text size="sm" c="dimmed">
+            No file matches.
+          </Text>
+        )}
+      </ScrollArea.Autosize>
     </Stack>
   );
 };
@@ -292,7 +371,9 @@ const DcRow: React.FC<{
   dc: IngestionDataCollection;
   dcId: string | null;
   onPreviewDc?: (dcId: string) => void;
-}> = ({ dc, dcId, onPreviewDc }) => {
+  runs: Array<{ run_tag: string; run_location?: string | null }>;
+  lineage: LineageContext;
+}> = ({ dc, dcId, onPreviewDc, runs, lineage }) => {
   const status = displayStatus(dc);
   const meta = STATUS_META[status] ?? STATUS_META.found_zero;
   const canPreview = Boolean(dcId && onPreviewDc && dc.status !== 'gated_out');
@@ -303,18 +384,45 @@ const DcRow: React.FC<{
   const showFiles = dc.status === 'identified' && dc.files_found > 0 && Boolean(dcId);
   const showAgg =
     status === 'aggregated' &&
-    (dc.source_inputs.length > 0 || Boolean(dc.table_location) || Boolean(dc.recipe));
+    ((dc.recipe_inputs?.length ?? 0) > 0 ||
+      dc.source_inputs.length > 0 ||
+      Boolean(dc.table_location) ||
+      Boolean(dc.recipe));
   const hasDetails = showFiles || showAgg;
 
   return (
     <>
-    <Table.Tr>
+    <Table.Tr
+      onClick={hasDetails ? () => setExpanded((e) => !e) : undefined}
+      style={hasDetails ? { cursor: 'pointer' } : undefined}
+      data-testid={`ingestion-dc-row-${dc.data_collection_tag}`}
+    >
+      <Table.Td w={28}>
+        {hasDetails && (
+          <ActionIcon
+            variant="subtle"
+            color="gray"
+            size="sm"
+            aria-label={expanded ? 'Hide the files' : 'Show the files'}
+            aria-expanded={expanded}
+          >
+            <Icon icon={expanded ? 'mdi:chevron-down' : 'mdi:chevron-right'} width={16} />
+          </ActionIcon>
+        )}
+      </Table.Td>
       <Table.Td>
         <Group gap={8} wrap="nowrap">
           <DcTypeIcon type={dc.type} />
           {canPreview ? (
             <Tooltip label="Open data collection preview" withArrow withinPortal>
-              <Anchor component="button" type="button" onClick={() => onPreviewDc!(dcId!)}>
+              <Anchor
+                component="button"
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onPreviewDc!(dcId!);
+                }}
+              >
                 <Group gap={4} wrap="nowrap">
                   <Text fw={600} size="sm">
                     {dc.data_collection_tag}
@@ -376,70 +484,38 @@ const DcRow: React.FC<{
               color={`var(--mantine-color-${dc.ingested ? 'green' : 'gray'}-6)`}
             />
           )}
-          {hasDetails && (
-            <UnstyledButton onClick={() => setExpanded((e) => !e)}>
-              <Group gap={2} wrap="nowrap">
-                <Icon icon={expanded ? 'mdi:chevron-up' : 'mdi:chevron-down'} width={16} />
-                <Text size="xs" c="dimmed">
-                  {showFiles ? 'files' : 'details'}
-                </Text>
-              </Group>
-            </UnstyledButton>
-          )}
         </Group>
       </Table.Td>
     </Table.Tr>
     {expanded && hasDetails && (
       <Table.Tr>
-        <Table.Td colSpan={6} style={{ background: 'var(--mantine-color-default-hover)' }}>
-          <div style={{ padding: '4px 0 4px 28px' }}>
-            {showFiles && <DcFileList dcId={dcId} tag={dc.data_collection_tag} />}
+        <Table.Td />
+        <Table.Td colSpan={6}>
+          <div style={{ padding: '4px 0 8px' }}>
+            {showFiles && <DcFileList dcId={dcId} tag={dc.data_collection_tag} runs={runs} />}
             {showAgg && (
-              <Stack gap={8}>
-                {dc.recipe && (
-                  <Group gap={6} wrap="nowrap">
-                    <Icon
-                      icon="mdi:flask-outline"
-                      width={14}
-                      color="var(--mantine-color-grape-6)"
-                    />
-                    <Text size="xs" fw={600} c="dimmed">
-                      Recipe
-                    </Text>
-                    {dc.recipe_url ? (
-                      <Anchor
-                        href={dc.recipe_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        size="xs"
-                      >
-                        <Group gap={3} wrap="nowrap">
-                          <Code style={{ fontSize: 11 }}>{dc.recipe}</Code>
-                          <Icon icon="mdi:github" width={14} />
-                        </Group>
-                      </Anchor>
-                    ) : (
-                      <Code style={{ fontSize: 11 }}>{dc.recipe}</Code>
-                    )}
-                  </Group>
-                )}
-                {dc.source_inputs.length > 0 && (
-                  <div>
-                    <Text size="xs" fw={600} c="dimmed" mb={2}>
-                      Aggregation inputs
-                    </Text>
-                    <PathsList paths={dc.source_inputs} />
-                  </div>
-                )}
-                {dc.table_location && (
-                  <div>
-                    <Text size="xs" fw={600} c="dimmed" mb={2}>
-                      Output table
-                    </Text>
-                    <PathLine path={dc.table_location} />
-                  </div>
-                )}
-              </Stack>
+              <DerivedLineage
+                inputs={
+                  dc.recipe_inputs?.length
+                    ? dc.recipe_inputs
+                    : dc.source_inputs.map((p) => ({ kind: 'file', name: p.split('/').pop() || p, path: p }))
+                }
+                recipe={dc.recipe}
+                recipeUrl={dc.recipe_url}
+                summary={dc.recipe_summary}
+                description={dc.recipe_description}
+                result={{
+                  tag: dc.data_collection_tag,
+                  type: (dc.type ?? 'table').toLowerCase(),
+                  location: dc.table_location,
+                  ...(lineage.shapeByTag[dc.data_collection_tag] ?? {}),
+                }}
+                typeByTag={lineage.typeByTag}
+                emptyInputs={lineage.emptyTags}
+                idByTag={lineage.idByTag}
+                onOpenDc={onPreviewDc}
+                onOpenResult={canPreview ? () => onPreviewDc!(dcId!) : undefined}
+              />
             )}
           </div>
         </Table.Td>
@@ -449,20 +525,184 @@ const DcRow: React.FC<{
   );
 };
 
+/** What a derived row needs to know about the other collections. */
+interface LineageContext {
+  typeByTag: Record<string, string>;
+  emptyTags: Set<string>;
+  idByTag: Record<string, string>;
+  shapeByTag: Record<string, { rows: number | null; columns: number | null }>;
+}
+
+/** Order a problem first: what needs looking at sorts to the top ascending. */
+const STATUS_RANK: Record<string, number> = { found_zero: 0, gated_out: 1, identified: 2, aggregated: 3 };
+
+type IngestionSortKey = 'report' | 'tag' | 'requirement' | 'status' | 'files' | 'changes' | 'ingested';
+
+const sortValue = (dc: IngestionDataCollection, key: IngestionSortKey): string | number => {
+  switch (key) {
+    case 'tag':
+      return dc.data_collection_tag.toLowerCase();
+    case 'requirement':
+      return dc.optional ? 1 : 0;
+    case 'status':
+      return STATUS_RANK[displayStatus(dc)] ?? 9;
+    case 'files':
+      return dc.status === 'gated_out' || displayStatus(dc) === 'aggregated' ? -1 : dc.files_found;
+    case 'changes':
+      return dc.files_new + dc.files_updated + dc.files_failed;
+    case 'ingested':
+      return dc.ingested ? 1 : 0;
+    default:
+      return 0;
+  }
+};
+
+/** The collections table: search and status filter once there are enough rows
+ *  to hunt through, every column sortable. Report order is the default. */
+const DcTable: React.FC<{
+  dcs: IngestionDataCollection[];
+  dcIdByTag: Record<string, string>;
+  onPreviewDc?: (dcId: string) => void;
+  runs: Array<{ run_tag: string; run_location?: string | null }>;
+  lineage: LineageContext;
+}> = ({ dcs, dcIdByTag, onPreviewDc, runs, lineage }) => {
+  const [query, setQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [sortKey, setSortKey] = useState<IngestionSortKey>('report');
+  const [dir, setDir] = useState<'asc' | 'desc'>('asc');
+
+  const counts = useMemo(() => {
+    const c: Record<string, number> = {};
+    for (const dc of dcs) c[displayStatus(dc)] = (c[displayStatus(dc)] ?? 0) + 1;
+    return c;
+  }, [dcs]);
+  const statuses = Object.keys(STATUS_META).filter((k) => counts[k]);
+
+  const rows = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const filtered = dcs.filter((dc) => {
+      if (statusFilter !== 'all' && displayStatus(dc) !== statusFilter) return false;
+      if (!q) return true;
+      return [dc.data_collection_tag, dc.type, dc.recipe].some((v) => v?.toLowerCase().includes(q));
+    });
+    if (sortKey === 'report') return filtered;
+    const sign = dir === 'asc' ? 1 : -1;
+    return [...filtered].sort((a, b) => {
+      const va = sortValue(a, sortKey);
+      const vb = sortValue(b, sortKey);
+      if (va === vb) return a.data_collection_tag.localeCompare(b.data_collection_tag);
+      return va < vb ? -sign : sign;
+    });
+  }, [dcs, query, statusFilter, sortKey, dir]);
+
+  const onSort = (k: string) => {
+    if (k === sortKey) setDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    else {
+      setSortKey(k as IngestionSortKey);
+      // Counts read best largest first; names and statuses top-down.
+      setDir(k === 'files' || k === 'changes' ? 'desc' : 'asc');
+    }
+  };
+  const th = (label: string, k: IngestionSortKey) => (
+    <SortableTh label={label} sortKey={k} activeKey={sortKey} dir={dir} onSort={onSort} />
+  );
+  const showTools = dcs.length >= 8;
+
+  return (
+    <Stack gap="sm">
+      {showTools && (
+        <Group gap="sm" wrap="wrap" justify="space-between">
+          <Group gap="sm" wrap="wrap">
+            <TextInput
+              size="xs"
+              w={240}
+              placeholder="Search collections, types, recipes"
+              leftSection={<Icon icon="mdi:magnify" width={14} />}
+              value={query}
+              onChange={(e) => setQuery(e.currentTarget.value)}
+              data-testid="ingestion-dc-search"
+            />
+            {statuses.length > 1 && (
+              <SegmentedControl
+                size="xs"
+                value={statusFilter}
+                onChange={setStatusFilter}
+                data-testid="ingestion-dc-status-filter"
+                data={[
+                  { value: 'all', label: `All ${dcs.length}` },
+                  ...statuses.map((k) => ({ value: k, label: `${STATUS_META[k].label} ${counts[k]}` })),
+                ]}
+              />
+            )}
+          </Group>
+          {rows.length !== dcs.length && (
+            <Text size="xs" c="dimmed">
+              {rows.length} of {dcs.length}
+            </Text>
+          )}
+        </Group>
+      )}
+      <Table.ScrollContainer minWidth={640}>
+        <Table verticalSpacing="xs" striped highlightOnHover>
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th />
+              {th('Data collection', 'tag')}
+              {th('Requirement', 'requirement')}
+              {th('Status', 'status')}
+              {th('Files', 'files')}
+              {th('Changes', 'changes')}
+              {th('Aggregated', 'ingested')}
+            </Table.Tr>
+          </Table.Thead>
+          <Table.Tbody>
+            {rows.map((dc) => (
+              <DcRow
+                key={dc.data_collection_tag}
+                dc={dc}
+                dcId={dcIdByTag[dc.data_collection_tag] ?? null}
+                onPreviewDc={onPreviewDc}
+                runs={runs}
+                lineage={lineage}
+              />
+            ))}
+            {rows.length === 0 && (
+              <Table.Tr>
+                <Table.Td colSpan={7}>
+                  <Text size="sm" c="dimmed" ta="center" py="sm">
+                    No collection matches.
+                  </Text>
+                </Table.Td>
+              </Table.Tr>
+            )}
+          </Table.Tbody>
+        </Table>
+      </Table.ScrollContainer>
+    </Stack>
+  );
+};
+
 interface IngestionReportPanelProps {
   projectId: string;
   /** Map of DC tag → DC id, so identified rows can fetch their file lists. */
   dcIdByTag: Record<string, string>;
   /** Select a data collection in the Overview tab to preview its table. */
   onPreviewDc?: (dcId: string) => void;
+  /** Open the project's Runs tab, where each run is shown in full. */
+  onShowRuns?: () => void;
+  /** Rows and columns per collection tag, for a derived collection's result. */
+  shapeByTag?: Record<string, { rows: number | null; columns: number | null }>;
 }
 
 const IngestionReportPanel: React.FC<IngestionReportPanelProps> = ({
   projectId,
   dcIdByTag,
   onPreviewDc,
+  onShowRuns,
+  shapeByTag = {},
 }) => {
   const [report, setReport] = useState<IngestionReport | null>(null);
+  const [runsOpen, setRunsOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -508,6 +748,19 @@ const IngestionReportPanel: React.FC<IngestionReportPanelProps> = ({
   // so "gated out" is unknown here — not zero — and the expected-vs-found
   // framing has no baseline to compare against.
   const isLive = report.manifest_source === 'live_project';
+  const lineage: LineageContext = {
+    typeByTag: Object.fromEntries(
+      report.data_collections.map((d) => [d.data_collection_tag, (d.type ?? 'table').toLowerCase()]),
+    ),
+    // A collection that matched nothing, or was left out, feeds nothing.
+    emptyTags: new Set(
+      report.data_collections
+        .filter((d) => d.status === 'found_zero' || d.status === 'gated_out')
+        .map((d) => d.data_collection_tag),
+    ),
+    idByTag: dcIdByTag,
+    shapeByTag,
+  };
   // A template project predating the manifest is a different story from a
   // project that never had a template: only the former can be re-imported.
   const isLegacyTemplate = isLive && !!template;
@@ -742,30 +995,13 @@ const IngestionReportPanel: React.FC<IngestionReportPanelProps> = ({
         <Title order={5} mb="sm">
           Data collections
         </Title>
-        <Table.ScrollContainer minWidth={640}>
-          <Table verticalSpacing="xs" striped highlightOnHover>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>Data collection</Table.Th>
-                <Table.Th>Requirement</Table.Th>
-                <Table.Th>Status</Table.Th>
-                <Table.Th>Files</Table.Th>
-                <Table.Th>Changes</Table.Th>
-                <Table.Th>Aggregated</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {report.data_collections.map((dc) => (
-                <DcRow
-                  key={dc.data_collection_tag}
-                  dc={dc}
-                  dcId={dcIdByTag[dc.data_collection_tag] ?? null}
-                  onPreviewDc={onPreviewDc}
-                />
-              ))}
-            </Table.Tbody>
-          </Table>
-        </Table.ScrollContainer>
+        <DcTable
+          dcs={report.data_collections}
+          dcIdByTag={dcIdByTag}
+          onPreviewDc={onPreviewDc}
+          runs={report.runs}
+          lineage={lineage}
+        />
       </Card>
 
       {/* Parameters / variables */}
@@ -801,13 +1037,24 @@ const IngestionReportPanel: React.FC<IngestionReportPanelProps> = ({
         />
       )}
 
-      {/* Runs */}
+      {/* Runs: what the last ingestion scanned. The Runs tab shows each run in full. */}
       {report.runs.length > 0 && (
-        <Card withBorder padding="md" radius="md">
-          <Title order={5} mb="sm">
-            Runs identified ({report.runs.length})
-          </Title>
-          <Table verticalSpacing="sm" striped highlightOnHover>
+        <Card withBorder padding="md" radius="md" data-testid="ingestion-runs-card">
+          <Group justify="space-between" wrap="nowrap" gap="sm">
+            <UnstyledButton onClick={() => setRunsOpen((o) => !o)} aria-expanded={runsOpen}>
+              <Group gap={6} wrap="nowrap">
+                <Icon icon={runsOpen ? 'mdi:chevron-down' : 'mdi:chevron-right'} width={18} />
+                <Title order={5}>Runs scanned ({report.runs.length})</Title>
+              </Group>
+            </UnstyledButton>
+            {onShowRuns && (
+              <Anchor component="button" type="button" size="sm" onClick={onShowRuns}>
+                Open the Runs tab
+              </Anchor>
+            )}
+          </Group>
+          <Collapse in={runsOpen}>
+          <Table verticalSpacing="sm" striped highlightOnHover mt="sm">
             <Table.Thead>
               <Table.Tr>
                 <Table.Th>Run</Table.Th>
@@ -863,6 +1110,7 @@ const IngestionReportPanel: React.FC<IngestionReportPanelProps> = ({
               ))}
             </Table.Tbody>
           </Table>
+          </Collapse>
         </Card>
       )}
 

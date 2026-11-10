@@ -17,7 +17,6 @@ import {
   Alert,
   Badge,
   Center,
-  Code,
   Group,
   Loader,
   Stack,
@@ -193,10 +192,12 @@ export const DeltaVersionHistory: React.FC<{ dcId: string }> = ({ dcId }) => {
     <Accordion variant="separated" radius="md" onChange={(v) => v === 'history' && load()}>
       <Accordion.Item value="history">
         <Accordion.Control
-          icon={<Icon icon="mdi:history" width={18} color="var(--mantine-color-green-6)" />}
+          icon={<Icon icon="mdi:history" width={18} />}
         >
           <Group gap={8}>
-            <Text fw={600}>Version history</Text>
+            <Text fw={600} size="sm">
+              Version history
+            </Text>
             {history && (
               <Text size="xs" c="dimmed">
                 {summary.commits} commit{summary.commits === 1 ? '' : 's'}
@@ -267,9 +268,6 @@ export const DeltaVersionHistory: React.FC<{ dcId: string }> = ({ dcId }) => {
                   Showing the first {HISTORY_LIMIT} entries: the history may be longer.
                 </Text>
               )}
-              <Code style={{ fontSize: 11, overflowWrap: 'anywhere' }}>
-                {history.delta_table_location}
-              </Code>
             </Stack>
           )}
         </Accordion.Panel>

@@ -27,6 +27,7 @@ class ProjectPermissionRequest(BaseModel):
 
 class Project(MongoModel):
     name: str
+    description: str | None = None
     data_management_platform_project_url: str | None = None
     workflows: list[Workflow] = []  # Optional for basic projects
     data_collections: list[DataCollection] = []  # Direct data collections for basic projects

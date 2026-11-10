@@ -75,7 +75,7 @@ const MapBuilder: React.FC = () => {
   const dcId = useBuilderStore((s) => s.dcId);
 
   // When the picked DC has lat_column / lon_column hints (because it was
-  // created via the Coordinates tab in CreateDataCollectionModal), pre-fill
+  // set when the collection was created), pre-fill
   // the Latitude / Longitude pickers — only if the user hasn't already chosen
   // values. Mirrors how the MultiQC builder reads DC-level config defaults.
   const [autofilledFromDc, setAutofilledFromDc] = useState(false);

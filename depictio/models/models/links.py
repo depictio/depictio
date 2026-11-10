@@ -506,3 +506,26 @@ def resolve_link_tag_refs(project: dict) -> dict:
             if (not raw or raw.startswith("tag:")) and tag and tag in tag_to_id:
                 link[id_field] = tag_to_id[tag]
     return project
+
+
+class LinkValueExample(BaseModel):
+    """One source value and what a link would reach with it (nothing: not found)."""
+
+    source: str
+    targets: list[str] = Field(default_factory=list)
+
+
+class LinkSuggestion(BaseModel):
+    """A link worth proposing: a source column whose values the target holds."""
+
+    source_dc_id: str
+    source_dc_tag: str
+    source_column: str
+    target_dc_id: str
+    target_dc_tag: str
+    target_type: Literal["table", "multiqc", "image", "genomic_tracks"]
+    resolver: Literal["direct", "sample_mapping"]
+    target_field: str | None = None
+    matched: int = Field(..., description="Distinct source values found in the target")
+    total: int = Field(..., description="Distinct source values read")
+    examples: list[LinkValueExample] = Field(default_factory=list)

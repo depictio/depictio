@@ -82,6 +82,7 @@ export interface LocationPicker {
 
 interface Options {
   opened: boolean;
+  /** Named for screen readers: the box around the field titles it. */
   label: string;
   description?: string;
   placeholder?: string;
@@ -249,7 +250,7 @@ export function useLocationPicker({
   const field = (
     <>
       <TextInput
-        label={label}
+        aria-label={label}
         description={description}
         placeholder={placeholder ?? (localDataRootsEnabled ? '~/data/survey' : 's3://bucket/folder/')}
         value={location}
