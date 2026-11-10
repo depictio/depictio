@@ -12,7 +12,6 @@ import {
   LoadingOverlay,
   Modal,
   Paper,
-  Popover,
   SegmentedControl,
   Select,
   Stack,
@@ -1259,7 +1258,6 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
         : 'Labels are kept in this browser. Sign in to keep them on your account.'
       : null;
   const activeLocal = view?.columns.some((c) => c.local && c.id === view.activeColumnId);
-  const otherTables = allTables.filter((t) => !t.eligible);
 
   if (collectionsError) {
     return (
@@ -1358,59 +1356,13 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
               target="_blank"
               rel="noopener noreferrer"
               size="xs"
-              variant="light"
-              color="gray"
+              variant="subtle"
               style={{ flexShrink: 0 }}
               leftSection={<Icon icon="mdi:open-in-new" width={14} />}
               data-testid="annotation-open-table"
             >
               Open in project
             </Button>
-          )}
-          {otherTables.length > 0 && (
-            <Popover withinPortal width={340} position="bottom-start" shadow="md" zIndex={Z_LAYERS.nestedOverlay}>
-              <Popover.Target>
-                <Button
-                  size="xs"
-                  variant="subtle"
-                  color="gray"
-                  style={{ flexShrink: 0 }}
-                  rightSection={<Icon icon="mdi:chevron-down" width={14} />}
-                  data-testid="annotation-other-tables"
-                >
-                  {otherTables.length} other table{otherTables.length === 1 ? '' : 's'}
-                </Button>
-              </Popover.Target>
-              <Popover.Dropdown>
-                <Stack gap={8}>
-                  <Text size="xs" c="dimmed">
-                    Other tables of the project. Only a metadata table linked to the data can carry labels.
-                  </Text>
-                  {otherTables.map((t) => (
-                    <Box key={t.dc_id}>
-                      <Group gap={4} wrap="nowrap">
-                        <Text size="sm" fw={600} truncate style={{ flex: 1, minWidth: 0 }}>
-                          {annotationTableLabel(t, allTables)}
-                        </Text>
-                        {projectId && (
-                          <Anchor
-                            size="xs"
-                            href={`/projects/${projectId}?table=${t.dc_id}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                          >
-                            Open in project
-                          </Anchor>
-                        )}
-                      </Group>
-                      <Text size="xs" c="dimmed">
-                        {t.reason}
-                      </Text>
-                    </Box>
-                  ))}
-                </Stack>
-              </Popover.Dropdown>
-            </Popover>
           )}
         </Group>
         <Group gap={4} wrap="nowrap">

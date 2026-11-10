@@ -262,12 +262,19 @@ const MetadataHeaderControl: React.FC<{
             zIndex: RIGHT_PANEL_Z + 1,
             display: 'flex',
             justifyContent: 'center',
+            alignItems: 'center',
           }}
         >
-          {/* A hairline grip on a wider hit area. */}
+          {/* A short grip on a full-height hit area: a hairline the height of
+              the window ran past the panel card's rounded corners. */}
           <div
             aria-hidden
-            style={{ width: 3, height: '100%', background: 'var(--mantine-color-default-border)' }}
+            style={{
+              width: 4,
+              height: 48,
+              borderRadius: 2,
+              background: 'var(--mantine-color-default-border)',
+            }}
           />
         </div>,
         document.body,
