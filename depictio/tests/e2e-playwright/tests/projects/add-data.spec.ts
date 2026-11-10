@@ -58,6 +58,11 @@ test.describe("Add data", () => {
     await setRunFolderFlags(page, { local: false, remote: false });
   });
 
+  // Done reloads the project: stubbed requests may still be in flight at teardown.
+  test.afterEach(async ({ page }) => {
+    await page.unrouteAll({ behavior: "ignoreErrors" });
+  });
+
   test("offers files and a folder on one screen, whatever the project", async ({ page }) => {
     await shapeProject(page, false);
     await page.goto(PROJECT_URL);
