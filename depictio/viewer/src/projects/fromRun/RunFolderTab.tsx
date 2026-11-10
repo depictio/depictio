@@ -91,6 +91,10 @@ import { RunCreateStep, RunPreviewStep } from './RunFolderSteps';
 import { TemplatePicker } from './TemplatePicker';
 import { TemplateSettingsSection } from './TemplateSettings';
 
+/** Read failures that say nothing about the folder itself, only that the
+ *  storage did not answer: they do not stop Next. */
+const TRANSIENT_READ_CODES = new Set(['s3_unreachable']);
+
 /** Stack id of the folder browser, which opens above the create dialog. */
 const BROWSE_STACK_ID = 'run-folder-browser';
 
@@ -477,7 +481,10 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
 
   // A folder that cannot be read and that no connection details would open
   // (outside the allowed roots, missing, a server without keys): Next waits.
-  const folderUnreadable = readFailed && !needsOwnCredentials(readCode);
+  // A storage that did not answer in time is not a refusal: Next goes on and
+  // the server tries again when it previews the plan.
+  const folderUnreadable =
+    readFailed && !needsOwnCredentials(readCode) && !TRANSIENT_READ_CODES.has(readCode ?? '');
 
   const inspection = detectionView.status === 'ready' ? detectionView.result : null;
   const detected = inspection?.detected ?? null;

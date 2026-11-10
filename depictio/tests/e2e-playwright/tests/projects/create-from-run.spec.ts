@@ -739,7 +739,7 @@ test.describe("Create project from a run folder", () => {
     // name the pipeline.
     const card = page.locator("[data-testid='run-detection-card']");
     await expect(page.locator("[data-testid='folder-no-pipeline']")).toContainText(
-      "No pipeline recognised",
+      "No pipeline run was recognised",
     );
     await expect(card).toHaveCount(0);
     const submit = page.locator("[data-testid='create-from-run-submit']");
