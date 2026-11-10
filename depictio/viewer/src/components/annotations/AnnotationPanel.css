@@ -53,6 +53,45 @@
   box-shadow: 0 3px 10px color-mix(in srgb, var(--dc-panel-accent) 40%, transparent);
 }
 
+/* The same buttons as icons, beside the table picker: round, the picker's
+   height, with the text buttons' border, hover and main-action colours. */
+.dc-analysis-panel .mantine-ActionIcon-root.dc-mp-icon {
+  --ai-size: 30px;
+  --ai-radius: 999px;
+  --ai-bg: transparent !important;
+  --ai-hover: var(--dc-panel-accent-soft) !important;
+  --ai-color: var(--mantine-color-text) !important;
+  --ai-bd: 1px solid var(--mantine-color-default-border) !important;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    box-shadow 120ms ease,
+    transform 120ms ease;
+}
+.dc-analysis-panel .mantine-ActionIcon-root.dc-mp-icon:not(:disabled):not([data-disabled]):hover {
+  border-color: color-mix(in srgb, var(--dc-panel-accent) 55%, transparent);
+  color: var(--dc-panel-accent-ink);
+}
+.dc-analysis-panel .mantine-ActionIcon-root.dc-mp-icon:not(:disabled):not([data-disabled]):active {
+  transform: translateY(1px);
+}
+.dc-analysis-panel .mantine-ActionIcon-root.dc-mp-icon:is(:disabled, [data-disabled]) {
+  opacity: 0.45;
+  background: transparent;
+}
+.dc-analysis-panel .mantine-ActionIcon-root.dc-mp-icon--primary {
+  --ai-bg: var(--dc-panel-accent) !important;
+  --ai-hover: color-mix(in srgb, var(--dc-panel-accent) 88%, black) !important;
+  --ai-color: var(--mantine-color-white) !important;
+  --ai-bd: 1px solid transparent !important;
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--dc-panel-accent) 45%, transparent);
+}
+.dc-analysis-panel .mantine-ActionIcon-root.dc-mp-icon--primary:not(:disabled):not([data-disabled]):hover {
+  color: var(--mantine-color-white);
+  border-color: transparent;
+  box-shadow: 0 3px 10px color-mix(in srgb, var(--dc-panel-accent) 40%, transparent);
+}
+
 /* The table picker, a pill like the buttons. */
 .dc-analysis-panel .dc-mp-select {
   border-radius: 999px;

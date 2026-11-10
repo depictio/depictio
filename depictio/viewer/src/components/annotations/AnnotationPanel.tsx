@@ -1360,9 +1360,7 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
               }
             >
               <ActionIcon
-                size="sm"
-                variant="filled"
-                style={{ background: 'var(--dc-panel-accent, var(--mantine-color-teal-6))' }}
+                className="dc-mp-icon dc-mp-icon--primary"
                 aria-label="Add column"
                 disabled={!table || !keyColumn || labelColumnCount >= MAX_ANNOTATION_COLUMNS}
                 onClick={() => setNaming({ id: null, value: '', error: null })}
@@ -1373,8 +1371,7 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
             </Tooltip>
             <Tooltip withinPortal label="Fit every column to its content">
               <ActionIcon
-                size="sm"
-                variant="default"
+                className="dc-mp-icon"
                 aria-label="Fit columns"
                 disabled={!table}
                 onClick={() => gridApi.current?.autoSizeAllColumns()}
@@ -1394,8 +1391,7 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
               }
             >
               <ActionIcon
-                size="sm"
-                variant="default"
+                className="dc-mp-icon"
                 aria-label="Export"
                 disabled={!table || !keyColumn}
                 onClick={startExport}
@@ -1413,8 +1409,7 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
                 <Tooltip withinPortal label="Import: a CSV or TSV as labels or into the table">
                   <ActionIcon
                     {...props}
-                    size="sm"
-                    variant="default"
+                    className="dc-mp-icon"
                     aria-label="Import"
                     disabled={!table || !keyColumn}
                   >
@@ -1437,8 +1432,7 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
                   href={`/projects/${projectId}?table=${choice.dcId}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  size="sm"
-                  variant="default"
+                  className="dc-mp-icon"
                   aria-label="Open the table's page in the project"
                   data-testid="annotation-open-table"
                 >
