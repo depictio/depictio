@@ -44,6 +44,7 @@ import {
 } from 'depictio-react-core';
 import type { FolderInspection, RunStorageIn, TemplateInfo } from 'depictio-react-core';
 
+import { classifyTableName } from '../../create/tableFiles';
 import { FilePreviewPanel, FilePreviewToggle, RunFileScope } from '../FilePreview';
 import { FlowBadge } from '../FlowBadge';
 import { FolderPath } from '../FolderPath';
@@ -188,6 +189,86 @@ const RunRecords: React.FC<{ result: FolderInspection }> = ({ result }) => {
         );
       })}
     </Stack>
+  );
+};
+
+/** One table file, as a quiet chip: its name and its format. */
+export const TableChip: React.FC<{ name: string }> = ({ name }) => (
+  <Group
+    gap={6}
+    wrap="nowrap"
+    px={8}
+    py={3}
+    style={{
+      border: '1px solid var(--mantine-color-default-border)',
+      borderRadius: 'var(--mantine-radius-sm)',
+      maxWidth: '100%',
+    }}
+  >
+    <Icon icon="mdi:table" width={14} style={{ flexShrink: 0, opacity: 0.7 }} />
+    <Text size="xs" ff="monospace" truncate>
+      {name}
+    </Text>
+  </Group>
+);
+
+/** No pipeline named here: what the folder still offers. Tables directly in
+ *  it can be added as they are, which is a valid outcome, not a failure. */
+const NoPipelineSummary: React.FC<{ result: FolderInspection }> = ({ result }) => {
+  const tables = result.files.names.filter((n) => classifyTableName(n).table);
+  if (tables.length === 0) {
+    return (
+      <Paper withBorder radius="md" p="sm" data-testid="browse-detail-not-recognised">
+        <Group gap="sm" wrap="nowrap" align="flex-start">
+          <ThemeIcon variant="light" color="gray" size="lg" radius="md">
+            <Icon icon="mdi:folder-question-outline" width={18} />
+          </ThemeIcon>
+          <Stack gap={2}>
+            <Text size="sm" fw={600}>
+              {result.looks_like_run ? 'A run of a pipeline Depictio does not know' : 'Nothing to read directly here'}
+            </Text>
+            <Text size="xs" c="dimmed">
+              {result.looks_like_run
+                ? 'This folder has a pipeline_info folder or a MultiQC report, but neither names a pipeline Depictio knows.'
+                : result.folders.count > 0
+                  ? `No pipeline run and no table in this folder itself. Its ${plural(result.folders.count, 'subfolder')} may hold some: open one, or search them for runs below.`
+                  : 'No pipeline run and no table in this folder.'}
+            </Text>
+          </Stack>
+        </Group>
+      </Paper>
+    );
+  }
+  const shown = tables.slice(0, 8);
+  return (
+    <Paper withBorder radius="md" p="sm" data-testid="browse-detail-not-recognised" data-tables={tables.length}>
+      <Stack gap="xs">
+        <Group gap="sm" wrap="nowrap" align="flex-start">
+          <ThemeIcon variant="light" color="teal" size="lg" radius="md">
+            <Icon icon="mdi:table-multiple" width={18} />
+          </ThemeIcon>
+          <Stack gap={2}>
+            <Text size="sm" fw={600}>
+              {plural(tables.length, 'table')} ready to add
+            </Text>
+            <Text size="xs" c="dimmed">
+              No pipeline run here, and none is needed: each table becomes a data collection of the
+              project. You pick which ones on the next step.
+            </Text>
+          </Stack>
+        </Group>
+        <Group gap={6}>
+          {shown.map((name) => (
+            <TableChip key={name} name={name} />
+          ))}
+          {tables.length > shown.length && (
+            <Text size="xs" c="dimmed">
+              +{tables.length - shown.length} more
+            </Text>
+          )}
+        </Group>
+      </Stack>
+    </Paper>
   );
 };
 
@@ -556,19 +637,17 @@ export const FolderDetailPane: React.FC<FolderDetailPaneProps> = ({
               storage={storageFor?.(result.location) ?? null}
             />
           ) : (
-            <Text size="sm" c="dimmed" data-testid="browse-detail-not-recognised">
-              {result.looks_like_run
-                ? 'This folder has a pipeline_info folder or a MultiQC report, but neither names a pipeline Depictio knows.'
-                : 'Depictio recognises no pipeline run here.'}
-            </Text>
+            <NoPipelineSummary result={result} />
           )}
 
-          <Section
-            title="Why this is a run folder"
-            description="A pipeline run leaves records beside its results; Depictio looks for these two."
-          >
-            <RunRecords result={result} />
-          </Section>
+          {result.markers.length > 0 && (
+            <Section
+              title="Why this is a run folder"
+              description="A pipeline run leaves records beside its results; Depictio looks for these two."
+            >
+              <RunRecords result={result} />
+            </Section>
+          )}
         </>
       )}
 
@@ -589,7 +668,7 @@ export const FolderDetailPane: React.FC<FolderDetailPaneProps> = ({
           <Group>
             <Button
               size="xs"
-              variant="light"
+              variant="default"
               leftSection={<Icon icon="mdi:folder-search-outline" width={14} />}
               onClick={runFind}
               data-testid="browse-find-runs"

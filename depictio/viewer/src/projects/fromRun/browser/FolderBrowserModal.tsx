@@ -52,6 +52,8 @@ import type {
 } from 'depictio-react-core';
 
 import { DisabledReason, GatedButton } from '../../../components/settings/SettingsSections';
+import { classifyTableName } from '../../create/tableFiles';
+import { plural } from '../plural';
 import { readRecentRunFolders, rememberRunFolder } from '../recentFolders';
 import type { RecentRunFolders } from '../recentFolders';
 import { FolderDetailPane } from './FolderDetailPane';
@@ -155,6 +157,8 @@ const FolderBrowserModal: React.FC<FolderBrowserModalProps> = ({
   const [recent, setRecent] = useState<RecentRunFolders>({ local: [], s3: [] });
   /** Run markers read by the detail pane, by location. */
   const [inspected, setInspected] = useState<Record<string, boolean>>({});
+  /** Tables directly in each inspected folder, for the footer's wording. */
+  const [tableCounts, setTableCounts] = useState<Record<string, number>>({});
   const treeRef = useRef<HTMLUListElement>(null);
   /** Bumped by every new selection, revealed or clicked: a reveal answering
    *  after a newer one is dropped, so the latest selection wins. */
@@ -285,6 +289,10 @@ const FolderBrowserModal: React.FC<FolderBrowserModalProps> = ({
     (location: string, result: FolderInspection | null) => {
       if (!result) return;
       setInspected((prev) => ({ ...prev, [location]: result.looks_like_run }));
+      setTableCounts((prev) => ({
+        ...prev,
+        [location]: result.files.names.filter((n) => classifyTableName(n).table).length,
+      }));
       folderTree.markRun(location, result.looks_like_run);
     },
     [folderTree],
@@ -296,6 +304,7 @@ const FolderBrowserModal: React.FC<FolderBrowserModalProps> = ({
   const selectedLooksLikeRun = selected ? looksLikeRun(selected) : false;
   const selectedInspected = selected ? selected in inspected : false;
   const selectReason = selected ? null : 'Select a folder first.';
+  const selectedTables = selected ? tableCounts[selected] ?? 0 : 0;
 
   const confirm = () => {
     if (!selected) return;
@@ -347,7 +356,7 @@ const FolderBrowserModal: React.FC<FolderBrowserModalProps> = ({
         <Group gap="xs" wrap="nowrap" justify="space-between">
           <Group gap="xs" wrap="nowrap">
             <Icon icon="mdi:folder-open-outline" width={20} />
-            <Text fw={600}>Choose the run folder</Text>
+            <Text fw={600}>Choose a folder</Text>
           </Group>
           <Tooltip label={expanded ? 'Restore the size' : 'Fill the window'} withArrow zIndex={Z_LAYERS.tooltip}>
             <ActionIcon
@@ -366,8 +375,8 @@ const FolderBrowserModal: React.FC<FolderBrowserModalProps> = ({
     >
       <Stack gap="sm" data-testid="browse-modal">
         <Text size="sm" c="dimmed">
-          Pick the output folder of one pipeline run. Folders marked &ldquo;Run folder&rdquo;
-          hold the run&rsquo;s own records.
+          Pick a folder of tables, or the output folder of a pipeline run. Folders marked
+          &ldquo;Run folder&rdquo; hold the run&rsquo;s own records.
         </Text>
 
         <PathBar
@@ -436,10 +445,15 @@ const FolderBrowserModal: React.FC<FolderBrowserModalProps> = ({
           <Stack gap={4} style={{ minWidth: 0, flex: 1 }}>
             {selected && selectedInspected && !selectedLooksLikeRun && (
               <Group gap={6} wrap="nowrap" align="flex-start" data-testid="browse-not-run-hint">
-                <Icon icon="mdi:information-outline" width={14} style={{ flexShrink: 0, marginTop: 2 }} />
+                <Icon
+                  icon={selectedTables > 0 ? 'mdi:table-check' : 'mdi:information-outline'}
+                  width={14}
+                  style={{ flexShrink: 0, marginTop: 2 }}
+                />
                 <Text size="xs" c="dimmed">
-                  This folder does not look like a run folder (no pipeline_info folder or
-                  MultiQC report in it). You can still select it.
+                  {selectedTables > 0
+                    ? `${plural(selectedTables, 'table')} here, no pipeline run: select the folder to add ${selectedTables === 1 ? 'it' : 'them'} as tables.`
+                    : 'No pipeline run and no table directly in this folder. Look in its subfolders, or select it anyway.'}
                 </Text>
               </Group>
             )}

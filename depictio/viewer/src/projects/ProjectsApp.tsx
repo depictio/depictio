@@ -81,9 +81,15 @@ function useProjectsSidebar(): [boolean, () => void] {
   return [opened, toggle];
 }
 
-/** The reference projects seeded with Depictio (iris, Palmer penguins): what
- *  "See an example" opens when the reader can see one on this server. */
-const EXAMPLE_PROJECT_IDS = ['646b0f3c1e4a2d7f8e5b8c9a', '646b0f3c1e4a2d7f8e5b8c9d'];
+/** The reference projects seeded with Depictio, in order of preference: what
+ *  "See an example" opens, the first one the reader can see on this server.
+ *  nf-core/ampliseq shows a real pipeline run end to end; iris and Palmer
+ *  penguins are the small fallbacks (the published wheel ships only those). */
+const EXAMPLE_PROJECT_IDS = [
+  '646b0f3c1e4a2d7f8e5b8ca2', // nf-core/ampliseq
+  '646b0f3c1e4a2d7f8e5b8c9a', // iris
+  '646b0f3c1e4a2d7f8e5b8c9d', // Palmer penguins
+];
 
 const ProjectsApp: React.FC = () => {
   const accent = useBrandAccents();
@@ -124,7 +130,9 @@ const ProjectsApp: React.FC = () => {
   // `projects_endpoints.routes.create_project`.
   const createDisabled = isPublic && !user?.is_admin;
 
-  const exampleProject = projects.find((p) => EXAMPLE_PROJECT_IDS.includes(String(p._id ?? p.id)));
+  const exampleProject = EXAMPLE_PROJECT_IDS.map((id) =>
+    projects.find((p) => String(p._id ?? p.id) === id),
+  ).find(Boolean);
   const exampleHref = exampleProject ? `/projects/${exampleProject._id ?? exampleProject.id}` : null;
 
   usePageTitle('Projects');
