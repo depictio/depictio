@@ -62,6 +62,7 @@ import {
   fetchMultiQCByDataCollection,
   fetchProject,
   fetchTableEditStatus,
+  setTableEditLock,
   fetchIngestionReport,
   fetchVizSuggestions,
   listLinkResolvers,
@@ -3046,6 +3047,26 @@ const TableDataSection: React.FC<{
   }, [dcId, checkEditable]);
 
   const editing = !!status?.can_edit && !readOnlyView;
+  const [toggling, setToggling] = useState(false);
+  const toggleLock = async (unlocked: boolean) => {
+    setToggling(true);
+    try {
+      setStatus(await setTableEditLock(dcId, unlocked));
+      // Unlocking opens the editor; locking shows the table read-only.
+      setReadOnlyView(false);
+    } catch (err) {
+      notifications.show({
+        color: 'red',
+        title: unlocked ? 'Could not unlock the table' : 'Could not lock the table',
+        message: (err as Error).message,
+      });
+    } finally {
+      setToggling(false);
+    }
+  };
+  // The lock is shown to whoever could flip it, and, read-only, to an owner or
+  // editor of a published project, so the state is never a mystery.
+  const showLock = !!status?.table_editable && !!status?.role_can_edit;
 
   if (!statusKnown) {
     return (
@@ -3056,7 +3077,19 @@ const TableDataSection: React.FC<{
   }
 
   return (
-    <>
+    <Box
+      className="dc-table-section"
+      data-mode={editing ? 'editing' : 'locked'}
+      data-testid="table-data-section"
+    >
+      {showLock && status && (
+        <TableEditLock
+          status={status}
+          busy={toggling}
+          onToggle={toggleLock}
+          editing={editing}
+        />
+      )}
       {/* The viewer's "Data" section names it; editing shows only when allowed. */}
       {!editing && status?.can_edit && (
         <Group justify="flex-end" mb="xs">
@@ -3088,7 +3121,74 @@ const TableDataSection: React.FC<{
           autoLoad={autoLoad || previewKey > 0 || readOnlyView}
         />
       )}
-    </>
+    </Box>
+  );
+};
+
+/** Whether cells of this table may be edited by hand: locked by default,
+ *  unlocked to keep it as metadata (a sample sheet) maintained in Depictio. */
+const TableEditLock: React.FC<{
+  status: TableEditStatus;
+  busy: boolean;
+  onToggle: (unlocked: boolean) => void;
+  /** The editor is open (unlocked, and not showing past versions). */
+  editing: boolean;
+}> = ({ status, busy, onToggle, editing }) => {
+  const { unlocked } = status;
+  const published = status.code === 'published_lock';
+  return (
+    <Group
+      justify="space-between"
+      wrap="nowrap"
+      gap="sm"
+      mb="xs"
+      px="sm"
+      py={6}
+      style={{
+        border: '1px solid var(--mantine-color-default-border)',
+        borderRadius: 'var(--mantine-radius-md)',
+      }}
+      data-testid="table-edit-lock"
+      data-unlocked={unlocked ? 'true' : 'false'}
+    >
+      <Group gap="xs" wrap="nowrap" style={{ minWidth: 0 }}>
+        <Icon
+          icon={unlocked ? 'mdi:pencil-outline' : 'mdi:lock-outline'}
+          width={16}
+          color={
+            unlocked ? 'var(--mantine-primary-color-filled)' : 'var(--mantine-color-dimmed)'
+          }
+        />
+        <Stack gap={0} style={{ minWidth: 0 }}>
+          <Group gap={6} wrap="nowrap">
+            <Text size="sm" fw={500}>
+              {unlocked ? 'Edit mode' : 'Locked, read-only'}
+            </Text>
+            {unlocked && !editing && (
+              <Text size="xs" c="dimmed">
+                (showing a past version)
+              </Text>
+            )}
+          </Group>
+          <Text size="xs" c="dimmed">
+            {published
+              ? status.reason
+              : unlocked
+                ? 'Click a cell to change it; every save is a new version. Columns marked ✎ can be edited.'
+                : 'Unlock to maintain this table by hand, like a sample sheet.'}
+          </Text>
+        </Stack>
+      </Group>
+      <Switch
+        checked={unlocked}
+        onChange={(e) => onToggle(e.currentTarget.checked)}
+        disabled={busy || !status.can_toggle_lock}
+        label={unlocked ? 'Unlocked' : 'Unlock'}
+        labelPosition="left"
+        aria-label={unlocked ? 'Lock cell edits' : 'Unlock cell edits'}
+        data-testid="table-edit-lock-switch"
+      />
+    </Group>
   );
 };
 

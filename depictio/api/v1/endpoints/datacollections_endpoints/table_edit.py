@@ -205,7 +205,65 @@ def _require_editable(data_collection_id: str, user: Any) -> dict[str, Any]:
             status_code=403,
             detail={"code": verdict["code"], "message": verdict["reason"]},
         )
+    if not edit_unlocked(dc):
+        raise HTTPException(
+            status_code=403, detail={"code": EDIT_LOCKED, "message": EDIT_LOCKED_REASON}
+        )
     return project
+
+
+EDIT_LOCKED = "edit_locked"
+EDIT_LOCKED_REASON = "Editing is locked for this table. Unlock it to edit it as metadata."
+
+
+def edit_unlocked(dc: dict[str, Any]) -> bool:
+    """An owner or editor unlocked this table for cell edits (locked by default)."""
+    return bool((dc.get("config") or {}).get("edit_unlocked"))
+
+
+def set_edit_lock(data_collection_id: str, unlocked: bool, user: Any) -> dict[str, Any]:
+    """Lock or unlock cell edits on a table a user added; answers the new edit status.
+
+    Owners and editors only (403), not on a published project (409), and only a
+    table whose kind can be edited (403 with the verdict's code).
+    """
+    project, dc, can_edit = _resolve(data_collection_id, user)
+    if not can_edit:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "read_only_role",
+                "message": "Only project owners and editors can lock or unlock a table.",
+            },
+        )
+    assert_project_unlocked(project)
+    verdict = table_edit_verdict(dc)
+    if not verdict["editable"]:
+        raise HTTPException(
+            status_code=403,
+            detail={"code": verdict["code"], "message": verdict["reason"]},
+        )
+    # The collection's position in the document just read; the filter re-checks
+    # its id there, so a project rewritten in between changes nothing.
+    path = next(
+        f"workflows.{w}.data_collections.{d}"
+        for w, workflow in enumerate(project.get("workflows") or [])
+        for d, candidate in enumerate(workflow.get("data_collections") or [])
+        if candidate is dc
+    )
+    result = projects_collection.update_one(
+        {"_id": project["_id"], f"{path}._id": dc["_id"]},
+        {"$set": {f"{path}.config.edit_unlocked": unlocked}},
+    )
+    if result.matched_count == 0:
+        raise HTTPException(
+            status_code=409, detail="The project changed meanwhile. Reload it and try again."
+        )
+    logger.info(
+        f"Table edit: {data_collection_id} {'unlocked' if unlocked else 'locked'} by "
+        f"{getattr(user, 'email', None)}"
+    )
+    return table_edit_status(data_collection_id, user)
 
 
 # ----------------------------------------------------------------------------
@@ -263,18 +321,27 @@ def table_edit_status(data_collection_id: str, user: Any) -> dict[str, Any]:
     """
     project, dc, role_can_edit = _resolve(data_collection_id, user)
     verdict = table_edit_verdict(dc)
+    unlocked = edit_unlocked(dc)
+    published = is_project_locked(project)
     code: str | None = None
     reason: str | None = None
     can_edit = bool(verdict["editable"] and role_can_edit)
     if not verdict["editable"]:
         code, reason = verdict["code"], verdict["reason"]
-    elif role_can_edit and is_project_locked(project):
+    elif role_can_edit and published:
         can_edit, code, reason = False, "published_lock", LOCKED_DETAIL
+    elif not unlocked:
+        can_edit, code, reason = False, EDIT_LOCKED, EDIT_LOCKED_REASON
     return {
         "data_collection_id": data_collection_id,
         "table_editable": verdict["editable"],
         "can_edit": can_edit,
         "role_can_edit": role_can_edit,
+        # Cell edits are unlocked for this table; ``can_toggle_lock``: the
+        # caller may flip that (an owner/editor, a table of an editable kind,
+        # a project that is not published).
+        "unlocked": unlocked,
+        "can_toggle_lock": bool(verdict["editable"] and role_can_edit and not published),
         "code": code,
         "reason": reason,
         "max_rows": MAX_EDITABLE_ROWS,

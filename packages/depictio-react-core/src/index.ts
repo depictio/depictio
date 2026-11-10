@@ -660,6 +660,7 @@ export {
   createDataCollectionFromUpload,
   createDataCollectionFromUrl,
   fetchTableEditStatus,
+  setTableEditLock,
   fetchTableForEdit,
   patchTableCells,
   mergeTableFile,

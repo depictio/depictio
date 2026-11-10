@@ -41,3 +41,40 @@
   border-radius: var(--mantine-radius-md);
   opacity: 0.92;
 }
+
+/* Edit mode: a thin frame in the theme colour, nothing louder, so the
+ * editable table reads differently from the locked one. Theme variables only. */
+.dc-table-section {
+  border-radius: var(--mantine-radius-md);
+}
+
+.dc-table-section[data-mode='editing'] {
+  padding: var(--mantine-spacing-xs);
+  box-shadow: inset 0 0 0 1px var(--mantine-primary-color-light-hover);
+}
+
+/* Cells: an editable one takes a text cursor and a faint tint on hover; a
+ * read-only one keeps its cursor and is slightly dimmed. */
+/* A pencil cursor, its tip on the hot spot; dark with a white outline so it
+ * reads on light and dark themes alike (a cursor image cannot take theme
+ * variables). The text cursor is the fallback. */
+.dc-table-editor .ag-cell.dc-cell-editable {
+  cursor:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24'%3E%3Cpath d='M20.71 7.04c.39-.39.39-1.04 0-1.41l-2.34-2.34c-.37-.39-1.02-.39-1.41 0l-1.84 1.83 3.75 3.75M3 17.25V21h3.75L17.81 9.93l-3.75-3.75L3 17.25Z' fill='%23222' stroke='%23fff' stroke-width='1.6' stroke-linejoin='round'/%3E%3C/svg%3E")
+      2 14,
+    text;
+}
+
+.dc-table-editor .ag-cell.dc-cell-editable:hover {
+  background-color: var(--mantine-primary-color-light);
+}
+
+.dc-table-editor .ag-cell.dc-cell-readonly {
+  color: var(--mantine-color-dimmed);
+}
+
+.dc-table-editor .ag-header-cell.dc-col-editable .ag-header-cell-text::after {
+  content: ' \270E';
+  font-size: 0.85em;
+  color: var(--mantine-color-dimmed);
+}

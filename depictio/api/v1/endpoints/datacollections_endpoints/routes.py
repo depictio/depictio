@@ -11,6 +11,7 @@ from depictio.api.v1.endpoints.datacollections_endpoints.table_edit import (
     CellEditsRequest,
     apply_cell_edits,
     read_table_for_edit,
+    set_edit_lock,
     table_edit_status,
 )
 from depictio.api.v1.endpoints.datacollections_endpoints.utils import (
@@ -377,6 +378,24 @@ async def table_edit_status_route(
     table, a URL table, ...), for the disabled state of the edit control.
     """
     return await asyncio.to_thread(table_edit_status, data_collection_id, current_user)
+
+
+class EditLockRequest(BaseModel):
+    unlocked: bool
+
+
+@datacollections_endpoint_router.patch("/{data_collection_id}/edit_lock")
+async def patch_table_edit_lock(
+    data_collection_id: str,
+    body: EditLockRequest,
+    current_user=Depends(get_current_user),
+):
+    """Lock or unlock cell edits on a table a user added (locked by default).
+
+    Unlocking marks it as metadata the project maintains by hand. Owners and
+    editors only (403), 409 on a published project. Answers the new edit status.
+    """
+    return await asyncio.to_thread(set_edit_lock, data_collection_id, body.unlocked, current_user)
 
 
 @datacollections_endpoint_router.get("/{data_collection_id}/edit_data")

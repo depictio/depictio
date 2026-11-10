@@ -204,6 +204,10 @@ const TableEditor: React.FC<{
           ? `${col.kind} column`
           : `${col.dtype} column: shown here, not editable`,
         editable: col.editable,
+        // Hover says which cells take a click: a text cursor and a pencil on
+        // editable ones, a not-allowed cursor on the others.
+        cellClass: col.editable ? 'dc-cell-editable' : 'dc-cell-readonly',
+        headerClass: col.editable ? 'dc-col-editable' : 'dc-col-readonly',
         sortable: true,
         filter: true,
         resizable: true,

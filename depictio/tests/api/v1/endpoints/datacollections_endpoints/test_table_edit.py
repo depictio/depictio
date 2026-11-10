@@ -64,7 +64,10 @@ class Env:
         self.app.dependency_overrides[get_user_or_anonymous] = lambda: self.current
         self.client = TestClient(self.app)
 
-    def project(self, *, origin=UPLOAD_ORIGIN, config=None, locked=False, **roles):
+    def project(self, *, origin=UPLOAD_ORIGIN, config=None, locked=False, unlocked=True, **roles):
+        config = config if config is not None else {"type": "table", "source": "native", "origin": origin}
+        if unlocked:
+            config = {**config, "edit_unlocked": True}
         doc = {
             "_id": PROJECT_ID,
             "is_public": False,
@@ -81,9 +84,7 @@ class Env:
                         {
                             "_id": DC_ID,
                             "data_collection_tag": "samples",
-                            "config": config
-                            if config is not None
-                            else {"type": "table", "source": "native", "origin": origin},
+                            "config": config,
                         }
                     ],
                 }
@@ -387,3 +388,55 @@ class TestPublishLockAndLimits:
         env.project(owners=[env.user])
         with patch.object(table_edit, "_delta_location_for", lambda _dc: env.location + "-none"):
             assert env.client.get(f"/datacollections/{DC_ID}/edit_data").status_code == 404
+
+
+class TestEditLock:
+    """A table a user added is locked until an owner or editor unlocks it."""
+
+    def test_a_locked_table_is_refused_and_says_so(self, env):
+        env.project(owners=[env.user], unlocked=False)
+        before = env.version()
+
+        response = env.patch([_cell(0, "age", 1)])
+
+        assert response.status_code == 403
+        assert response.json()["detail"]["code"] == table_edit.EDIT_LOCKED
+        assert env.client.get(f"/datacollections/{DC_ID}/edit_data").status_code == 403
+        assert env.version() == before
+        status = env.client.get(f"/datacollections/{DC_ID}/edit_status").json()
+        assert status["table_editable"] is True
+        assert (status["can_edit"], status["unlocked"]) == (False, False)
+        assert status["can_toggle_lock"] is True
+        assert status["code"] == table_edit.EDIT_LOCKED
+
+    def test_unlocking_lets_cells_be_edited_and_locking_stops_them_again(self, env):
+        env.project(owners=[env.user], unlocked=False)
+
+        unlocked = env.client.patch(f"/datacollections/{DC_ID}/edit_lock", json={"unlocked": True})
+        assert unlocked.status_code == 200
+        assert (unlocked.json()["unlocked"], unlocked.json()["can_edit"]) == (True, True)
+        assert env.patch([_cell(0, "age", 11)]).status_code == 200
+
+        locked = env.client.patch(f"/datacollections/{DC_ID}/edit_lock", json={"unlocked": False})
+        assert locked.json()["can_edit"] is False
+        assert env.patch([_cell(0, "age", 12)]).status_code == 403
+        assert env.read()["age"].to_list()[0] == 11
+
+    def test_a_viewer_cannot_unlock(self, env):
+        env.project(viewers=[env.user], unlocked=False)
+        response = env.client.patch(f"/datacollections/{DC_ID}/edit_lock", json={"unlocked": True})
+        assert response.status_code == 403
+        status = env.client.get(f"/datacollections/{DC_ID}/edit_status").json()
+        assert status["unlocked"] is False
+        assert status["can_toggle_lock"] is False
+
+    def test_a_pipeline_table_cannot_be_unlocked(self, env):
+        env.project(owners=[env.user], origin={"kind": "run", "location": "x"}, unlocked=False)
+        response = env.client.patch(f"/datacollections/{DC_ID}/edit_lock", json={"unlocked": True})
+        assert response.status_code == 403
+        assert response.json()["detail"]["code"] == "pipeline_table"
+
+    def test_a_published_project_cannot_be_unlocked(self, env):
+        env.project(owners=[env.user], locked=True, unlocked=False)
+        response = env.client.patch(f"/datacollections/{DC_ID}/edit_lock", json={"unlocked": True})
+        assert response.status_code == 409

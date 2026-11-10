@@ -6744,6 +6744,11 @@ export interface TableEditStatus {
   /** Why the table is read-only, for the user. */
   reason: string | null;
   max_rows: number;
+  /** Cell edits are unlocked: the table is metadata the project maintains by hand. */
+  unlocked: boolean;
+  /** The caller may lock or unlock it: an owner or editor, an editable kind of
+   *  table, a project that is not published. */
+  can_toggle_lock: boolean;
 }
 
 export type TableColumnKind =
@@ -6851,6 +6856,17 @@ async function throwTableEditError(res: Response, prefix: string): Promise<never
 export async function fetchTableEditStatus(dcId: string): Promise<TableEditStatus> {
   const res = await authFetch(`${API_BASE}/datacollections/${dcId}/edit_status`);
   if (!res.ok) await throwTableEditError(res, 'Failed to read the table edit state');
+  return res.json();
+}
+
+/** Lock or unlock cell edits on a table a user added (locked by default).
+ *  Answers the new edit status. Throws `TableEditError`. */
+export async function setTableEditLock(dcId: string, unlocked: boolean): Promise<TableEditStatus> {
+  const res = await authFetch(`${API_BASE}/datacollections/${dcId}/edit_lock`, {
+    method: 'PATCH',
+    body: JSON.stringify({ unlocked }),
+  });
+  if (!res.ok) await throwTableEditError(res, 'Failed to change the table lock');
   return res.json();
 }
 
