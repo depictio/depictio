@@ -20,7 +20,10 @@ WF_ID = ObjectId()
 DC_ID = ObjectId()
 
 
-def _run_cascade(delete_project_versions: MagicMock | None = None):
+def _run_cascade(
+    delete_project_versions: MagicMock | None = None,
+    delete_annotations: MagicMock | None = None,
+):
     """Run the cascade against mocked collections; return the runs and storage mocks."""
     from depictio.api.v1.endpoints.projects_endpoints.routes import _cascade_delete_project
 
@@ -44,6 +47,9 @@ def _run_cascade(delete_project_versions: MagicMock | None = None):
         # Mongo's server-selection timeout.
         patch(f"{MODULE}.delete_threads_for_project", MagicMock()),
         patch(f"{MODULE}.delete_project_versions", delete_project_versions or MagicMock()),
+        # Same: each lists the project's tabs on the real Mongo.
+        patch(f"{MODULE}.delete_filter_states_for_project", MagicMock()),
+        patch(f"{MODULE}.delete_annotations_for_project", delete_annotations or MagicMock()),
     ):
         _cascade_delete_project(PROJECT_ID, "demo")
     return runs, storage
@@ -54,6 +60,13 @@ def test_dashboard_version_ledgers_follow_the_project():
     family's ledger, so the cascade has to drop the project's ledgers itself."""
     cleanup = MagicMock()
     _run_cascade(delete_project_versions=cleanup)
+    cleanup.assert_called_once_with(PROJECT_ID)
+
+
+def test_session_annotations_follow_the_project():
+    """Before the dashboards go: an annotation only knows its dashboard id."""
+    cleanup = MagicMock()
+    _run_cascade(delete_annotations=cleanup)
     cleanup.assert_called_once_with(PROJECT_ID)
 
 

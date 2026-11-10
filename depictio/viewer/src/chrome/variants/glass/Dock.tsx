@@ -243,6 +243,55 @@ export const Dock: React.FC<{
     // Once, on arrival.
   }, []);
 
+  // The centred anchors stay centred on the window while the dock clears the
+  // open panel and the notes button beside it, and fall back to the middle of
+  // what the panel leaves when it would not: the panel is drawn over the page,
+  // so a dock under it is hidden. A dock wider than what is left (the editor's
+  // keys) is pushed left, off the notes button, rather than under it. CSS cannot
+  // compare the widths, so the fit is set here (`data-clear`, and the push as
+  // `--gl-dock-shift`, both read by the centred anchors in layout.css).
+  React.useLayoutEffect(() => {
+    const el = nav.current;
+    const host = el?.parentElement;
+    const shell = host?.closest<HTMLElement>('.hy-shell') ?? host;
+    if (!el || !host || !shell || typeof ResizeObserver === 'undefined') return;
+    const root = document.documentElement;
+    // The notes button: 46px wide, 20px off the visible edge, and a gap.
+    const NOTES_RESERVE_PX = 76;
+    const measure = () => {
+      const css = getComputedStyle(shell);
+      const padR = parseFloat(css.getPropertyValue('--gl-pad-r')) || 0;
+      const gutter = parseFloat(css.getPropertyValue('--gl-gutter')) || 16;
+      const width = host.clientWidth;
+      const half = el.offsetWidth / 2;
+      const limit = width - padR - (root.hasAttribute('data-notes-toggle') ? NOTES_RESERVE_PX : gutter);
+      const clear = width / 2 + half <= limit;
+      const centre = clear ? width / 2 : (width - padR) / 2;
+      let shift = Math.min(0, limit - (centre + half));
+      shift += Math.max(0, gutter - (centre - half + shift));
+      if (clear) el.setAttribute('data-clear', '');
+      else el.removeAttribute('data-clear');
+      el.style.setProperty('--gl-dock-shift', `${Math.round(shift)}px`);
+      // Still over the notes button once pushed as far left as it goes: the
+      // button rises above the dock instead of sitting on it.
+      const crowded = centre + half + shift > limit;
+      if (crowded) root.setAttribute('data-dock-crowded', '');
+      else root.removeAttribute('data-dock-crowded');
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    ro.observe(host);
+    const mo = new MutationObserver(measure);
+    mo.observe(shell, { attributes: true, attributeFilter: ['style'] });
+    mo.observe(root, { attributes: true, attributeFilter: ['data-notes-toggle'] });
+    return () => {
+      ro.disconnect();
+      mo.disconnect();
+      root.removeAttribute('data-dock-crowded');
+    };
+  }, []);
+
   /** Bring the dock from where it was (`from`) to its anchor (`base`, the
    *  untransformed position there) with a spring. */
   const settle = (from: Point, base: Point) => {

@@ -36,6 +36,12 @@ export interface SelectionGroup {
   createdAt: number;
   /** When true the group participates in the projected dashboard filter. */
   filterActive: boolean;
+  /** Set on groups derived from a session annotation (`annotationGroups.ts`):
+   *  the annotation they come from. Recomputing replaces exactly these. */
+  annotationColumnId?: string;
+  /** The label a derived group stands for; its name may differ when the label
+   *  collides with another group's name. */
+  annotationLabel?: string;
 }
 
 /** Payload sent to the figure render endpoint when "color by group" is on. */

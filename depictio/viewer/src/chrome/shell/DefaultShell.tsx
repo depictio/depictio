@@ -4,6 +4,7 @@ import { FILTER_PANEL_RAIL_WIDTH, useChromeStyle, Z_LAYERS } from 'depictio-reac
 
 import FilterPanelResizer, { FILTER_PANEL_RESIZER_WIDTH } from '../../components/FilterPanelResizer';
 import type { DashboardShellProps } from './types';
+import { usePanelRoom } from './usePanelRoom';
 
 /**
  * The page height left under the header (and above a bottom action bar).
@@ -34,6 +35,11 @@ const DefaultShell: React.FC<DashboardShellProps> = ({
 }) => {
   const chrome = useChromeStyle();
   const { docked } = filters;
+  // A right panel borrows the sidebar's and the filter panel's room while open.
+  usePanelRoom(analysis.open, {
+    nav: { opened: nav.desktopOpened, fold: nav.fold },
+    filters: { opened: docked.opened, fold: docked.fold },
+  });
   return (
     <AppShell
       data-testid="app-shell"

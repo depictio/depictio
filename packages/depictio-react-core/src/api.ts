@@ -7,6 +7,12 @@
  * recovery. Do not attach the bearer by hand — see its docstring for why.
  */
 
+import {
+  type AnnotationColumn,
+  type DashboardAnnotations,
+  parseAnnotations,
+  parseSharedColumns,
+} from './sessionAnnotations';
 import type { BrandTheme } from './brandTheme';
 import { enqueueFetch } from './fetchQueue';
 import type { GroupStatusEntry } from './groupStatus';
@@ -4168,6 +4174,137 @@ export async function deleteDashboardFilterState(dashboardId: string): Promise<v
   }
 }
 
+// ---- Per-user session annotations -----------------------------------------
+//
+// One document per (user, dashboard family). Unlike filter state a failure is
+// reported, not swallowed: the panel keeps its state and warns rather than let
+// a reader believe their labels were kept. A temporary or anonymous account is
+// refused (403) outside single-user mode and keeps its labels in the browser.
+
+export type AnnotationsLoad =
+  | { ok: true; annotations: DashboardAnnotations | null }
+  | { ok: false; status: number; detail: string | null };
+
+export async function fetchDashboardAnnotations(dashboardId: string): Promise<AnnotationsLoad> {
+  try {
+    const res = await authFetch(`${API_BASE}/dashboards/annotations/${dashboardId}`);
+    if (!res.ok) return { ok: false, status: res.status, detail: await readErrorDetail(res) };
+    const body = (await res.json()) as { annotations: unknown };
+    return { ok: true, annotations: parseAnnotations(body.annotations) };
+  } catch {
+    return { ok: false, status: 0, detail: null };
+  }
+}
+
+/** A project table, and whether a reader can put labels on it
+ *  (`GET /dashboards/annotations/{id}/tables`). */
+export interface AnnotationTable {
+  dc_id: string;
+  tag: string;
+  workflow_name: string | null;
+  /** The link source columns labels may be keyed on, first one by default. */
+  key_columns: string[];
+  /** How many collections this table's labels reach through links. */
+  link_targets?: number;
+  row_count: number | null;
+  eligible: boolean;
+  code: string | null;
+  reason: string | null;
+}
+
+export type AnnotationTablesLoad =
+  | {
+      ok: true;
+      tables: AnnotationTable[];
+      /** Label columns shared on the dashboard (as `versionId` held them, when given). */
+      shared: AnnotationColumn[];
+      /** Whether the caller may change the shared labels (never on a past version). */
+      canShare: boolean;
+    }
+  | { ok: false; status: number; detail: string | null };
+
+export async function fetchAnnotationTables(
+  dashboardId: string,
+  versionId?: string | null,
+): Promise<AnnotationTablesLoad> {
+  try {
+    const query = versionId ? `?version_id=${encodeURIComponent(versionId)}` : '';
+    const res = await authFetch(`${API_BASE}/dashboards/annotations/${dashboardId}/tables${query}`);
+    if (!res.ok) return { ok: false, status: res.status, detail: await readErrorDetail(res) };
+    const body = (await res.json()) as {
+      tables: AnnotationTable[];
+      shared?: unknown;
+      can_share?: boolean;
+    };
+    return {
+      ok: true,
+      tables: body.tables ?? [],
+      shared: parseSharedColumns(body.shared ?? []),
+      canShare: body.can_share === true,
+    };
+  } catch {
+    return { ok: false, status: 0, detail: null };
+  }
+}
+
+export type SharedLabelsSave =
+  | { ok: true; shared: AnnotationColumn[] }
+  | { ok: false; status: number; detail: string | null };
+
+/** Replace the label columns shared on a dashboard. */
+export async function saveSharedLabels(
+  dashboardId: string,
+  columns: AnnotationColumn[],
+): Promise<SharedLabelsSave> {
+  try {
+    const body = {
+      columns: columns.map((c) => ({
+        id: c.id,
+        name: c.name,
+        dcId: c.dcId,
+        keyColumn: c.keyColumn,
+        values: c.values,
+      })),
+    };
+    const res = await authFetch(`${API_BASE}/dashboards/annotations/${dashboardId}/shared`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) return { ok: false, status: res.status, detail: await readErrorDetail(res) };
+    const out = (await res.json()) as { shared?: unknown };
+    return { ok: true, shared: parseSharedColumns(out.shared ?? []) };
+  } catch {
+    return { ok: false, status: 0, detail: null };
+  }
+}
+
+export type AnnotationsSave = { ok: true } | { ok: false; status: number; detail: string | null };
+
+export async function saveDashboardAnnotations(
+  dashboardId: string,
+  annotations: DashboardAnnotations | null,
+  opts?: { keepalive?: boolean },
+): Promise<AnnotationsSave> {
+  try {
+    const url = `${API_BASE}/dashboards/annotations/${dashboardId}`;
+    // `keepalive` lets a save started on pagehide outlive the page (tab
+    // switches are full navigations). Browsers cap such a body at 64 KB, so a
+    // large set can still be lost there; the debounced save is the real path.
+    const keep = opts?.keepalive ? { keepalive: true } : {};
+    const res =
+      // A set with no column of the reader's own still holds their choice of
+      // a shared column to compare by; only an empty one is deleted.
+      annotations === null || (annotations.columns.length === 0 && !annotations.activeColumnId)
+        ? await authFetch(url, { method: 'DELETE', ...keep })
+        : await authFetch(url, { method: 'PUT', body: JSON.stringify(annotations), ...keep });
+    if (!res.ok) return { ok: false, status: res.status, detail: await readErrorDetail(res) };
+    return { ok: true };
+  } catch {
+    return { ok: false, status: 0, detail: null };
+  }
+}
+
 export async function fetchCurrentUser(): Promise<CurrentUser | null> {
   const res = await authFetch(`${API_BASE}/auth/me/optional`);
   if (!res.ok) return null;
@@ -6959,7 +7096,9 @@ export async function mergeTableFile(
   options: {
     mode?: TableMergeMode | 'auto';
     key?: string | null;
-    baseVersion: number;
+    /** The Delta version the caller read. Required to apply; a dry run without
+     *  it previews against the current table (its report names that version). */
+    baseVersion?: number;
     dryRun?: boolean;
   },
 ): Promise<TableMergeReport> {
@@ -6967,7 +7106,7 @@ export async function mergeTableFile(
   form.append('file', file);
   form.append('mode', options.mode ?? 'auto');
   if (options.key) form.append('key', options.key);
-  form.append('base_version', String(options.baseVersion));
+  if (options.baseVersion != null) form.append('base_version', String(options.baseVersion));
   form.append('dry_run', String(options.dryRun ?? true));
   const res = await authFetch(`${API_BASE}/datacollections/${dcId}/merge_file`, {
     method: 'POST',

@@ -48,13 +48,17 @@ function writeCollapsed(scopeId: string | null, collapsed: boolean): void {
 }
 
 /**
- * Returns `[opened, toggle]`, matching the shape of `useDisclosure(false)`'s
- * `[value, { toggle }]` API but with persistence baked in.
+ * Returns `[opened, toggle, fold]`. `toggle` matches the shape of
+ * `useDisclosure(false)`'s `[value, { toggle }]` API with persistence baked in.
+ * `fold(open)` sets the state for now only: nothing is stored, so a panel that
+ * borrows the room and gives it back leaves the reader's own choice alone.
  *
  * @param scopeId - scopes persistence (the dashboard family id, in practice;
  *   see above); `null` falls back to a shared key.
  */
-export function useSidebarOpen(scopeId: string | null): [boolean, () => void] {
+export function useSidebarOpen(
+  scopeId: string | null,
+): [boolean, () => void, (open: boolean) => void] {
   const [opened, setOpened] = useState<boolean>(() => !readCollapsed(scopeId));
   const flagTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // The next state is derived here rather than inside a `setOpened` updater:
@@ -75,7 +79,7 @@ export function useSidebarOpen(scopeId: string | null): [boolean, () => void] {
     setOpened(next);
   }, [scopeId]);
 
-  const toggle = useCallback(() => {
+  const apply = useCallback((next: boolean, persist: boolean) => {
     // Mark `<body>` so width-aware grids can swap their item transition
     // duration to match the parent (`300ms`) — see `app.css`.
     document.body.classList.add('sidebar-transitioning');
@@ -85,9 +89,8 @@ export function useSidebarOpen(scopeId: string | null): [boolean, () => void] {
       flagTimerRef.current = null;
     }, TRANSITION_MS + 20); // 300ms + 20ms slack so the final frame settles
 
-    const next = !openedRef.current;
     openedRef.current = next;
-    writeCollapsed(scopeRef.current, !next);
+    if (persist) writeCollapsed(scopeRef.current, !next);
     // Tell the dashboard grid the predicted final container delta so it
     // can `setContainerWidth` to the destination value once at the start
     // of the transition. RGL then computes new item transforms once,
@@ -104,6 +107,14 @@ export function useSidebarOpen(scopeId: string | null): [boolean, () => void] {
     setOpened(next);
   }, []);
 
+  const toggle = useCallback(() => apply(!openedRef.current, true), [apply]);
+  const fold = useCallback(
+    (open: boolean) => {
+      if (open !== openedRef.current) apply(open, false);
+    },
+    [apply],
+  );
+
   useEffect(
     () => () => {
       if (flagTimerRef.current) clearTimeout(flagTimerRef.current);
@@ -112,5 +123,5 @@ export function useSidebarOpen(scopeId: string | null): [boolean, () => void] {
     [],
   );
 
-  return [opened, toggle];
+  return [opened, toggle, fold];
 }

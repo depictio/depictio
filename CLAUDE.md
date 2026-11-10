@@ -98,8 +98,8 @@ Route dispatch is plain regex in `depictio/viewer/src/main.tsx` +
 ### Dashboard Versioning
 - Every save snapshots the whole tab family into `dashboard_versions` (`dashboards_endpoints/versioning.py`)
 - **`/save` is not the only route that captures.** `POST /edit`, `PATCH /tab`,
-  `DELETE /tab`, `/tabs/reorder`, `PATCH /appearance` and a child-tab `DELETE /delete`
-  all change content, so each seeds a baseline *before* its write and captures *after*
+  `DELETE /tab`, `/tabs/reorder`, `PATCH /appearance`, a child-tab `DELETE /delete` and
+  `PUT /dashboards/annotations/{id}/shared` all change content, so each seeds a baseline *before* its write and captures *after*
   it. A tab delete anchors on the parent (the deleted tab can no longer resolve its own
   family) and is `explicit`, so it never coalesces into a neighbouring autosave. Every
   import records the state it replaces, then an `import` version. `/upload_logo` is not
@@ -119,6 +119,9 @@ Route dispatch is plain regex in `depictio/viewer/src/main.tsx` +
   pre-edit state is restorable; capture otherwise only ever records states already left
 - `tab_count`/`component_count` are **stored**, not derived: the list endpoint projects
   `tabs` away, so a timeline row has nothing left to count
+- Shared session labels (`shared_labels`, main tab only) are written only by
+  `PUT /dashboards/annotations/{id}/shared`; `/save` pops the field so the editor never
+  overwrites them. Sharing or unsharing a column is an `explicit` version, a label edit an autosave
 - Snapshots are content-only: `permissions`/`is_public`/`project_id` always come from the live doc
 - `TabSnapshot` is `extra="forbid"` and must cover every content field of `DashboardData`.
   A new dashboard field goes into `TabSnapshot` or one of the `SNAPSHOT_*_FIELDS` sets in

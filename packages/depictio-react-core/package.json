@@ -52,6 +52,7 @@
     "@mantine/core": "^7.14.0",
     "@mantine/dates": "^7.14.0",
     "@mantine/hooks": "^7.14.0",
+    "@types/papaparse": "^5.3.14",
     "@types/plotly.js": "^2.33.0",
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
@@ -80,6 +81,7 @@
     "@jbrowse/react-linear-genome-view2": "4.3.0",
     "@mui/material": "7.3.11",
     "mobx": "6.16.1",
-    "mobx-react": "9.2.2"
+    "mobx-react": "9.2.2",
+    "papaparse": "^5.4.1"
   }
 }

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useMantineColorScheme, useMantineTheme } from '@mantine/core';
 import { useElementSize } from '@mantine/hooks';
 import Plot from './LegendAwarePlot';
@@ -21,6 +21,7 @@ import { columnCategoryColors } from '../../categoryColors';
 import { resolveCategoricalPalette, stableColorMap } from '../../colors';
 import { useCategoryColorSource } from '../../hooks/useCategoryColors';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import { InSplitPanelContext } from './AdvancedVizExtras';
 import { usePlotAnnotationLayer } from '../annotations/usePlotAnnotationLayer';
 import { supportsAdvancedVizAnnotation } from '../../annotations/plotDecorate';
 import { usePersistedVizControl } from './usePersistedVizControl';
@@ -60,6 +61,9 @@ const TAXONOMY_PLOT_PX = 300;
 /** One bar of a horizontal chart (`orientation: h`), where the bar count is
  *  the tile's height problem. */
 const BAR_ROW_PX = 18;
+/** Below this plot width a strip's key is dropped rather than drawn over the bars. */
+const STRIP_KEY_MIN_WIDTH_PX = 460;
+
 /** What a horizontal chart spends outside its rows: top margin, value axis
  *  ticks and title. */
 const H_PLOT_CHROME_PX = 90;
@@ -69,6 +73,8 @@ const LEGEND_ITEM_PX = 16;
 /** Entries per row of a legend drawn in rows (`legend_pos: bottom`), roughly:
  *  a 10 px taxon name and its swatch across a w8 tile. */
 const LEGEND_ROW_ITEMS = 5;
+/** One legend entry in a panel of a split, swatch and a phylum name at 10 px. */
+const LEGEND_SPLIT_ITEM_W_PX = 135;
 /** The legend's title and its padding. */
 const LEGEND_CHROME_PX = 30;
 /** One annotation strip: tall enough for its 10 px labels. */
@@ -222,6 +228,8 @@ const StackedBarRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
   // labels. Rounded so a sub-pixel reflow does not rebuild the figure. A
   // horizontal chart's strips are columns, sized from its width.
   const { ref: plotBoxRef, height: plotBoxPx, width: plotBoxW } = useElementSize();
+  const narrow = plotBoxW > 0 && plotBoxW < STRIP_KEY_MIN_WIDTH_PX;
+  const inSplit = useContext(InSplitPanelContext);
   const plotAreaPx = horizontal
     ? Math.max(120, plotBoxW - H_PLOT_CHROME_W_PX)
     : Math.max(120, plotBoxPx - PLOT_CHROME_PX);
@@ -433,7 +441,9 @@ const StackedBarRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
         canZoom: false,
         axisBreak: null as { axis: 'x' | 'y'; normalise: boolean } | null,
       };
-    const legendPos = config.legend_pos ?? 'right';
+    // A panel of a split is too narrow for a column of taxa beside its bars:
+    // the key goes under them and the bars keep the width.
+    const legendPos = inSplit ? 'bottom' : (config.legend_pos ?? 'right');
     const melted = wide
       ? meltWideRows(rows, config.sample_id_col, valueCols, config.value_labels)
       : null;
@@ -593,7 +603,9 @@ const StackedBarRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
     const totals = slots.map((_, i) => series.reduce((acc, [, arr]) => acc + (arr[i] ?? 0), 0));
     const zoomCandidate =
       !normalise && logY ? null : zoomedValueRange(series[0]?.[1] ?? [], totals, normalise);
-    const zoom = yZoom === 'auto' ? zoomCandidate : null;
+    // Not in a split: each panel would start its axis where its own bottom
+    // segment does, and panels read side by side would not compare.
+    const zoom = yZoom === 'auto' && !inSplit ? zoomCandidate : null;
 
     // Annotation strips — one row of per-sample coloured cells per configured
     // strip, each a one-row heatmap on its own y-axis sharing the bars' x-axis
@@ -711,7 +723,10 @@ const StackedBarRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
               font: { size: 10, color: textOn(stripPalette.get(c)) },
             });
           }
-        } else {
+        } else if (!narrow && !inSplit) {
+          // A tile too narrow for a key beside its bars, or a panel of a split
+          // (its key stacked over the bars, one entry per sample for a column
+          // like Name), keeps the strip and drops the key: hovering a cell names it.
           stripKey = true;
           categories.forEach((c) =>
             stripTraces.push({
@@ -873,7 +888,7 @@ const StackedBarRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
       },
       allRanks,
     };
-  }, [rows, rowsRank, rankUniverse, config, rankCol, wide, valueCols, horizontal, rank, topN, normalise, sampleSort, sortCategory, activeGroupCol, yZoom, showLegend, logY, isDark, theme, taxonUniverse, categorySource, stripBand, stripGap, groupLabelBand]);
+  }, [narrow, inSplit, rows, rowsRank, rankUniverse, config, rankCol, wide, valueCols, horizontal, rank, topN, normalise, sampleSort, sortCategory, activeGroupCol, yZoom, showLegend, logY, isDark, theme, taxonUniverse, categorySource, stripBand, stripGap, groupLabelBand]);
 
   // Memoised so AdvancedVizFrame's `extras` useMemo stays stable — an unmemoised
   // element re-fires the frame's publish effect and loops it against
@@ -1013,7 +1028,13 @@ const StackedBarRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
   // strips take off it.
   // A legend in rows (`legend_pos: bottom`) adds its rows to the plot area
   // instead. Horizontal bars turn the count into a height: one row per bar.
-  const legendRows = config.legend_pos === 'bottom';
+  const legendRows = inSplit || config.legend_pos === 'bottom';
+  // A panel of a split is a few hundred px wide: Plotly wraps its legend to
+  // what fits, so the rows it takes follow the width (stepped, so a pixel of
+  // reflow does not republish the demand), not the w8 tile the constant guesses.
+  const legendRowItems = inSplit
+    ? Math.max(1, Math.floor(Math.round((plotBoxW || 280) / 40) * 40 / LEGEND_SPLIT_ITEM_W_PX))
+    : LEGEND_ROW_ITEMS;
   const contentDemand = useMemo(() => {
     if (!figure) return undefined;
     const plotPx = horizontal
@@ -1023,7 +1044,7 @@ const StackedBarRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
       (legendRows
         ? plotPx +
           (showLegend
-            ? LEGEND_CHROME_PX + Math.ceil(seriesCount / LEGEND_ROW_ITEMS) * LEGEND_ITEM_PX
+            ? LEGEND_CHROME_PX + Math.ceil(seriesCount / legendRowItems) * LEGEND_ITEM_PX
             : 0)
         : Math.max(
             plotPx,
@@ -1032,7 +1053,7 @@ const StackedBarRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
               : 0,
           )) + (horizontal ? 0 : stripCount * (STRIP_BAND_PX + STRIP_GAP_PX)),
     );
-  }, [figure, showLegend, seriesCount, stripCount, legendRows, horizontal, slotCount]);
+  }, [figure, showLegend, seriesCount, stripCount, legendRows, legendRowItems, horizontal, slotCount]);
 
   // Themed once per figure so the annotation layer can memoise on them.
   const plotData = useMemo(() => {

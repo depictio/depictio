@@ -570,6 +570,15 @@ SCHEMA_2_VALUES: dict[str, Any] = {
     "advanced_viz_controls": "rail",
     "autofit": False,
     "brand_theme": {"primary": "#1a4f8f", "logo_mode": "none"},
+    "shared_labels": [
+        {
+            "id": "s1",
+            "name": "response",
+            "dc_id": "sheet",
+            "key_column": "sample",
+            "values": {"S1": "responder"},
+        }
+    ],
 }
 
 
@@ -659,6 +668,18 @@ def test_a_child_tabs_own_guide_copy_is_not_recorded(store) -> None:
 
     tabs = {t["title"]: t for t in store["versions"].find_one({})["tabs"]}
     assert tabs["Tab 2"]["show_guide"] is True
+
+
+def test_a_child_tabs_own_shared_labels_are_not_recorded(store) -> None:
+    """Shared labels are read from the main tab, like the Guide."""
+    main = _make_dashboard(store, title="Main")
+    child = _make_dashboard(store, title="Tab 2", parent=main, is_main_tab=False, tab_order=1)
+    store["dashboards"].update_one({"_id": child}, {"$set": {"shared_labels": [{"id": "x"}]}})
+
+    _capture(main, kind="explicit", author=ALICE, now=BASE)
+
+    tabs = {t["title"]: t for t in store["versions"].find_one({})["tabs"]}
+    assert tabs["Tab 2"]["shared_labels"] == []
 
 
 def test_source_key_is_kept_but_never_hashed(store) -> None:

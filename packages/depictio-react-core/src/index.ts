@@ -229,7 +229,10 @@ export { default as FilterPanel } from './components/interactive/FilterPanel';
 export { FILTER_PANEL_RAIL_WIDTH } from './components/interactive/FilterPanel';
 export type { FilterPanelProps } from './components/interactive/FilterPanel';
 export { default as SelectionGroupsPanel } from './components/interactive/SelectionGroupsPanel';
-export type { SelectionGroupsPanelProps } from './components/interactive/SelectionGroupsPanel';
+export type {
+  SelectionGroupsPanelProps,
+  LabelColumnChoice,
+} from './components/interactive/SelectionGroupsPanel';
 export { SaveGroupContext } from './components/chrome/SaveGroupAction';
 export type { SaveGroupApi } from './components/chrome/SaveGroupAction';
 export { default as InteractiveGroupCard } from './components/InteractiveGroupCard';
@@ -342,6 +345,7 @@ export {
   SIDEBAR_TOGGLE_EVENT,
   FILTER_PANEL_TOGGLE_EVENT,
   ANALYSIS_PANEL_TOGGLE_EVENT,
+  METADATA_PANEL_TOGGLE_EVENT,
   INSPECTOR_TOGGLE_EVENT,
   dispatchPanelToggle,
   PANEL_RESIZE_END_EVENT,
@@ -918,6 +922,63 @@ export {
 export type { GroupStatusEntry, GroupStatusSummary } from './groupStatus';
 export { useSelectionGroups } from './hooks/useSelectionGroups';
 export type { SelectionGroupsApi } from './hooks/useSelectionGroups';
+export {
+  annotationsProblem,
+  emptyAnnotations,
+  mergeAccountAndLocal,
+  MAX_ANNOTATION_COLUMNS,
+  columnsFor,
+  MAX_ANNOTATION_KEYS,
+  MAX_ANNOTATION_ROWS,
+  LABEL_SCOPE,
+  MAX_LABEL_LENGTH,
+  MAX_SERVER_GROUPS,
+  copyName,
+  labelScope,
+  newAnnotationId,
+  normaliseLabel,
+  parseAnnotations,
+  parseSharedColumns,
+  readBrowserAnnotations,
+  setLabel,
+  splitForAccount,
+  withShared,
+  writeBrowserAnnotations,
+} from './sessionAnnotations';
+export { buildMetadataSheet, metadataSheetName } from './metadataSheet';
+export type {
+  AnnotationColumn,
+  AnnotationTarget,
+  BrowserRead,
+  DashboardAnnotations,
+  LabelScope,
+} from './sessionAnnotations';
+export {
+  fetchAnnotationTables,
+  fetchDashboardAnnotations,
+  saveDashboardAnnotations,
+  saveSharedLabels,
+} from './api';
+export type { AnnotationTable, AnnotationTablesLoad, SharedLabelsSave } from './api';
+export type { AnnotationsLoad, AnnotationsSave } from './api';
+export {
+  annotationColumnBudget,
+  deriveAnnotationGroups,
+  distinctLabels,
+  sameGroups,
+} from './annotationGroups';
+export type { Budget } from './annotationGroups';
+export {
+  asKey,
+  fileColumnKeys,
+  matchDroppedTable,
+  MAX_DROP_BYTES,
+  parseDroppedTable,
+  parsePastedBlock,
+} from './annotationInput';
+export type { DropMatch, ParsedTable } from './annotationInput';
+export { planAnnotationMerge, suggestedMergeMode } from './annotationMerge';
+export type { AnnotationMergeMode, AnnotationMergeReport } from './annotationMerge';
 export { useCategoricalColumns, useColorByColumnRender } from './hooks/useColorByColumns';
 export { defaultFilterValue, withInteractiveDefaults } from './interactiveDefaults';
 export type { ColorByColumn, ColorByColumnRender } from './hooks/useColorByColumns';

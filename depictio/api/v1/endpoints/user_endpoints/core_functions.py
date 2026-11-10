@@ -298,6 +298,12 @@ async def _cleanup_expired_temporary_users() -> dict:
                         )
 
                         delete_threads_for_dashboards([dashboard.get("dashboard_id")])
+                        from depictio.api.v1.endpoints.dashboards_endpoints.annotation_cascade import (
+                            delete_annotations_for_dashboards,
+                        )
+
+                        # Other viewers' annotations on it would be unreachable.
+                        delete_annotations_for_dashboards([dashboard.get("dashboard_id")])
                         # A main tab takes its family's version ledger with it,
                         # as the dashboard delete route does; a child tab's
                         # versions belong to a family that may outlive it.
@@ -331,7 +337,12 @@ async def _cleanup_expired_temporary_users() -> dict:
                 await token.delete()
                 tokens_deleted += 1
 
-            # 6. Delete the user
+            # 6. Delete the user, and anything it annotated on other dashboards
+            from depictio.api.v1.endpoints.dashboards_endpoints.annotation_cascade import (
+                delete_annotations_for_user,
+            )
+
+            delete_annotations_for_user(user.id)
             await user.delete()
             users_deleted += 1
 

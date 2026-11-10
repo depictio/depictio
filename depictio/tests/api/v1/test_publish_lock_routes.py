@@ -132,6 +132,7 @@ EXEMPT_MODULES: dict[str, str] = {
     "auth_endpoints.oidc_routes": "login",
     "comments_endpoints.routes": "comments are conversation about a release, not part of it",
     "dashboards_endpoints.filter_state_routes": "per-viewer filter state",
+    "dashboards_endpoints.annotation_routes": "per-viewer session annotations",
     "figure_endpoints.routes": "renders a preview, writes nothing",
     "advanced_viz_endpoints.routes": "computes a render, writes nothing",
     "advanced_viz_endpoints.structure_resolver": "resolves a structure for rendering",
@@ -172,6 +173,8 @@ GUARDED: set[tuple[str, str]] = {
     (_DASH, "reorder_tabs"),
     (_DASH, "import_dashboard_from_yaml"),
     (_DASH, "import_dashboard_from_json"),
+    # labels shared on a dashboard are part of its content
+    ("dashboards_endpoints.shared_labels_routes", "put_shared_labels"),
     # versions: rewriting a published dashboard from its history
     (_VER, "delete_dashboard_version"),
     (_VER, "restore_dashboard_version"),

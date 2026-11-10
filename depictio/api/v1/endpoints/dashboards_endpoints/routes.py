@@ -25,6 +25,9 @@ from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import dashboards_collection, projects_collection
 from depictio.api.v1.endpoints.comments_endpoints.cascade import delete_threads_for_dashboards
 from depictio.api.v1.endpoints.dashboards_endpoints import version_store, versioning
+from depictio.api.v1.endpoints.dashboards_endpoints.annotation_cascade import (
+    delete_annotations_for_dashboards,
+)
 from depictio.api.v1.endpoints.dashboards_endpoints.code_figures import refuse_new_figure_code
 from depictio.api.v1.endpoints.dashboards_endpoints.core_functions import (
     effective_category_colors,
@@ -1107,6 +1110,10 @@ async def save_dashboard(
     # Read-time only too: the lock lives on the project, and a save must never
     # write one (or clear one) onto the dashboard.
     save_payload.pop("published_lock", None)
+    # Written only by the shared-labels route: the editor round-trips the
+    # whole document, so saving it here would undo labels shared since the
+    # editor loaded the dashboard.
+    save_payload.pop("shared_labels", None)
 
     # `creation_time` is write-once: the client round-trips the whole dashboard
     # document, so trusting its payload would let a save clobber (or invent) the
@@ -1461,6 +1468,7 @@ async def delete_dashboard(
         delete_logo_asset(dashboard_logo_key(dashboard_id))
         delete_threads_for_dashboards(tab_ids_for_threads)
         delete_filter_states_for_dashboards(tab_ids_for_threads)
+        delete_annotations_for_dashboards(tab_ids_for_threads)
         # Drop the version ledger with the dashboard. Versions are keyed on the
         # family id, so without this every deleted dashboard leaves its whole
         # history — and its sequence counter — behind with nothing able to
@@ -1676,6 +1684,7 @@ async def delete_tab(
     if result.deleted_count > 0:
         delete_threads_for_dashboards([dashboard_id])
         delete_filter_states_for_dashboards([dashboard_id])
+        delete_annotations_for_dashboards([dashboard_id])
         # Anchored on the *parent*: the tab is gone, so it can no longer resolve
         # its own family, and a capture addressed to it would find nothing.
         #

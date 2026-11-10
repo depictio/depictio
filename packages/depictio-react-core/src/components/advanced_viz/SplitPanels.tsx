@@ -3,7 +3,12 @@ import React from 'react';
 import type { InteractiveFilter } from '../../api';
 import { panelFilters } from '../../splitPanels';
 import type { PanelSpec } from '../../splitPanels';
-import { AdvancedVizExtrasContext, AdvancedVizExtrasProvider } from './AdvancedVizExtras';
+import {
+  AdvancedVizExtrasContext,
+  AdvancedVizExtrasProvider,
+  InSplitPanelContext,
+  SplitRowsContext,
+} from './AdvancedVizExtras';
 import type { AdvancedVizExtrasPayload } from './AdvancedVizExtras';
 
 /**
@@ -129,46 +134,52 @@ const SplitPanels: React.FC<SplitPanelsProps> = ({
   // needing to know how many dimensions produced the cells.
   const columns = Math.min(panels.length, PANEL_COL_WRAP);
 
+  const panelRows = Math.ceil(panels.length / columns);
+
   return (
-    <div
-      style={{
-        display: 'grid',
-        gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
-        gridTemplateRows: `repeat(${Math.ceil(panels.length / columns)}, minmax(0, 1fr))`,
-        gap: 8,
-        width: '100%',
-        height: '100%',
-        minHeight: 0,
-      }}
-    >
-      {panels.map((panel, i) => (
-        <div
-          key={panel.name}
-          style={{ display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 }}
-        >
+    <SplitRowsContext.Provider value={panelRows}>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
+          gridTemplateRows: `repeat(${panelRows}, minmax(0, 1fr))`,
+          gap: 8,
+          width: '100%',
+          height: '100%',
+          minHeight: 0,
+        }}
+      >
+        {panels.map((panel, i) => (
           <div
-            style={{
-              fontSize: 11,
-              fontWeight: 600,
-              color: panel.color ?? 'inherit',
-              textAlign: 'center',
-              paddingBottom: 2,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
-            title={panel.name}
+            key={panel.name}
+            style={{ display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 }}
           >
-            {panel.name}
+            <div
+              style={{
+                fontSize: 11,
+                fontWeight: 600,
+                color: panel.color ?? 'inherit',
+                textAlign: 'center',
+                paddingBottom: 2,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+              title={panel.name}
+            >
+              {panel.name}
+            </div>
+            <div style={{ flex: 1, minHeight: 0 }}>
+              <AdvancedVizExtrasProvider onChange={publishers[i]}>
+                <InSplitPanelContext.Provider value>
+                  {renderPanel(panelFilters(filters, panel), panel.name)}
+                </InSplitPanelContext.Provider>
+              </AdvancedVizExtrasProvider>
+            </div>
           </div>
-          <div style={{ flex: 1, minHeight: 0 }}>
-            <AdvancedVizExtrasProvider onChange={publishers[i]}>
-              {renderPanel(panelFilters(filters, panel), panel.name)}
-            </AdvancedVizExtrasProvider>
-          </div>
-        </div>
-      ))}
-    </div>
+        ))}
+      </div>
+    </SplitRowsContext.Provider>
   );
 };
 

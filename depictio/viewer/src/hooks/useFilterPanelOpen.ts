@@ -56,13 +56,14 @@ function writeCollapsed(dashboardId: string | null, collapsed: boolean): void {
  *   is accounted for.
  * @param defaultCollapsed - the dashboard's `filter_panel_default`, used
  *   only while nothing is stored for this family.
- * @returns `[open, toggle]`, matching `useSidebarOpen`.
+ * @returns `[open, toggle, fold]`, matching `useSidebarOpen`: `fold(open)`
+ *   changes the state for now without storing it.
  */
 export function useFilterPanelOpen(
   dashboardId: string | null,
   swingPx: number,
   defaultCollapsed = false,
-): [boolean, () => void] {
+): [boolean, () => void, (open: boolean) => void] {
   const [opened, setOpened] = useState<boolean>(
     () => !readCollapsed(dashboardId, defaultCollapsed),
   );
@@ -95,7 +96,7 @@ export function useFilterPanelOpen(
     setOpened(next);
   }, [dashboardId, defaultCollapsed]);
 
-  const toggle = useCallback(() => {
+  const apply = useCallback((next: boolean, persist: boolean) => {
     // Mark `<body>` so the dashboard grid matches its item transition duration
     // to the panel's — see `app.css`.
     document.body.classList.add('panel-transitioning');
@@ -105,9 +106,8 @@ export function useFilterPanelOpen(
       flagTimerRef.current = null;
     }, FILTER_PANEL_TRANSITION_MS + 20); // slack so the final frame settles
 
-    const next = !openedRef.current;
     openedRef.current = next;
-    writeCollapsed(dashboardRef.current, !next);
+    if (persist) writeCollapsed(dashboardRef.current, !next);
     dispatchPanelToggle(FILTER_PANEL_TOGGLE_EVENT, {
       willBeOpen: next,
       swingPx: swingRef.current,
@@ -115,6 +115,14 @@ export function useFilterPanelOpen(
     });
     setOpened(next);
   }, []);
+
+  const toggle = useCallback(() => apply(!openedRef.current, true), [apply]);
+  const fold = useCallback(
+    (open: boolean) => {
+      if (open !== openedRef.current) apply(open, false);
+    },
+    [apply],
+  );
 
   useEffect(
     () => () => {
@@ -124,7 +132,7 @@ export function useFilterPanelOpen(
     [],
   );
 
-  return [opened, toggle];
+  return [opened, toggle, fold];
 }
 
 export default useFilterPanelOpen;

@@ -469,6 +469,38 @@ def _log_rank_sample(scan: Any, roles: dict[str, str], available: set[str], cap:
     return scan.filter(pl.col(rank_col).is_in(keep)).collect()
 
 
+def _match_spelling(available_cols, column: str) -> str | None:
+    """The one column of ``available_cols`` that is ``column`` spelled differently.
+
+    Case first (`habitat` / `Habitat`), then ignoring separators as well
+    (`sampleID` / `sample_id`). None unless exactly one column matches, so an
+    ambiguous name never picks a column for the user.
+    """
+    import re
+
+    def squash(name: str) -> str:
+        return re.sub(r"[^0-9a-z]", "", str(name).lower())
+
+    for key in (lambda n: str(n).lower(), squash):
+        matches = [c for c in available_cols if key(c) == key(column)]
+        if len(matches) == 1:
+            return matches[0]
+        if matches:
+            return None
+    return None
+
+
+def _with_column(filter_dict: dict, column: str) -> dict:
+    """A copy of ``filter_dict`` pointing at ``column``, top level and nested."""
+    out = dict(filter_dict)
+    if "column_name" in out:
+        out["column_name"] = column
+    nested = out.get("metadata")
+    if isinstance(nested, dict):
+        out["metadata"] = {**nested, "column_name": column}
+    return out
+
+
 def _aggregate_frame(df, aggregate: Any):
     """Sum ``aggregate["sum"]`` per distinct ``aggregate["group_by"]`` combination.
 
@@ -816,6 +848,21 @@ def fetch_advanced_viz_data(
                     dc_id,
                 )
                 continue
+            if available_cols is not None and col not in available_cols and isinstance(f, dict):
+                # A Split/Colour-by group names the dashboard's column as the
+                # first collection spells it (`habitat`); a canonical recipe
+                # often capitalises it (`Habitat`). The user picked the concept,
+                # not the spelling, so a single match ignoring case and
+                # separators (`sampleID` / `sample_id`) is the same column. Scoped to group filters: a hand-set filter that
+                # misses the column still drops, as before.
+                match = (
+                    _match_spelling(available_cols, col)
+                    if f.get("source") == "group_filter"
+                    else None
+                )
+                if match:
+                    f = _with_column(f, match)
+                    col = match
             if available_cols is not None and col not in available_cols:
                 logger.info(
                     "advanced_viz/data: dropping cross-DC filter on column %r — not in DC %s",

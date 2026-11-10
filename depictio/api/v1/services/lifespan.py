@@ -38,6 +38,7 @@ from depictio.api.v1.tasks.backup_tasks import start_backup_tasks
 from depictio.api.v1.tasks.cleanup_tasks import start_cleanup_tasks
 from depictio.api.v1.utils import clean_screenshots
 from depictio.models.models.analytics import UserActivity, UserSession
+from depictio.models.models.dashboard_annotations import DashboardAnnotationsBeanie
 from depictio.models.models.dashboard_filter_state import DashboardFilterStateBeanie
 from depictio.models.models.oauth_state import OAuthStateBeanie
 from depictio.models.models.projects import ProjectBeanie
@@ -81,6 +82,7 @@ async def init_pymongo_beanie() -> AsyncMongoClient:
             UserSession,
             UserActivity,
             DashboardFilterStateBeanie,
+            DashboardAnnotationsBeanie,
         ],
     )
     return client
