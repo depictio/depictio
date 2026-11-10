@@ -15,6 +15,7 @@ from depictio.api.v1.endpoints.datacollections_endpoints.table_edit import (
 )
 from depictio.api.v1.endpoints.datacollections_endpoints.utils import (
     _check_multiqc_uniformity_from_uploads,
+    _create_asset_dc_from_uploads,
     _create_dc_from_upload,
     _create_dc_from_url,
     _create_multiqc_dc_from_uploads,
@@ -569,6 +570,42 @@ async def multiqc_uniformity_check(
         decoded_files.append((body, upload.filename or "upload.parquet"))
 
     return await asyncio.to_thread(_check_multiqc_uniformity_from_uploads, decoded_files)
+
+
+@datacollections_endpoint_router.post("/create_asset_from_upload")
+async def create_asset_data_collection_from_upload(
+    project_id: str = Form(...),
+    name: str = Form(...),
+    kind: str = Form(...),
+    description: str = Form(""),
+    files: list[UploadFile] = File(...),
+    current_user=Depends(get_user_or_anonymous),
+):
+    """Create a GeoJSON, phylogeny or image data collection from uploaded files.
+
+    ``kind`` is ``geojson`` or ``phylogeny`` (one file) or ``image`` (one
+    collection holding every file). Per-file cap 50MB, total 500MB. Write access
+    and the publish lock are checked in ``_create_asset_dc_from_uploads``.
+    """
+    decoded: list[tuple[bytes, str]] = []
+    total = 0
+    for upload in files:
+        body = await upload.read()
+        total += len(body)
+        if total > 500 * 1024 * 1024:
+            raise HTTPException(status_code=413, detail="Total upload size exceeds 500MB.")
+        decoded.append((body, upload.filename or "upload.dat"))
+
+    await _ensure_user_cli_token(current_user)
+    return await asyncio.to_thread(
+        _create_asset_dc_from_uploads,
+        project_id=project_id,
+        name=name,
+        description=description,
+        kind=kind,
+        files=decoded,
+        current_user=current_user,
+    )
 
 
 @datacollections_endpoint_router.post("/create_multiqc_from_upload")

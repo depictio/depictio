@@ -200,12 +200,14 @@ export async function stubFolderRoute(
   return calls;
 }
 
-/** Open /projects, launch the create modal and pick "A folder or bucket": the
+/** Open /projects, launch the create modal, name the project and go on: the
  *  folder field, the optional pipeline line, the detection card and the three
  *  steps (Source, What Depictio found, Create). */
 export async function openRunTab(page: Page): Promise<void> {
   await page.goto("/projects");
   await page.locator("[data-tour-id='projects-create']").click();
+  await page.getByTestId("create-project-name").fill(`e2e-run-${Date.now()}`);
+  await page.getByTestId("create-project-next").click();
   await expect(page.getByTestId("run-data-root-input")).toBeVisible();
 }
 

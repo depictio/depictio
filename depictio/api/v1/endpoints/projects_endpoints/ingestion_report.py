@@ -127,6 +127,14 @@ class ProvenanceReportGroup(BaseModel):
     entries: list[ProvenanceReportEntry] = Field(default_factory=list)
 
 
+class RecipeInput(BaseModel):
+    """One input of a derived collection: another collection, or a file."""
+
+    kind: str  # collection | file
+    name: str  # the collection's tag, or the file's name
+    path: str | None = None  # the file's full location
+
+
 class IngestionDataCollection(BaseModel):
     data_collection_tag: str
     type: str | None = None
@@ -146,6 +154,10 @@ class IngestionDataCollection(BaseModel):
     source_inputs: list[str] = Field(default_factory=list)
     recipe: str | None = None  # recipe ref for transformed/derived DCs
     recipe_url: str | None = None  # GitHub link to the recipe source
+    # What the recipe computes: its docstring's title, then its first paragraph.
+    recipe_summary: str | None = None
+    recipe_description: str | None = None
+    recipe_inputs: list[RecipeInput] = Field(default_factory=list)
 
 
 class IngestionRun(BaseModel):
@@ -309,6 +321,59 @@ def _dc_source_inputs(config: dict, data_root: str | None) -> list[str]:
     return out
 
 
+def _recipe_doc(recipe_ref: str | None) -> tuple[str | None, str | None]:
+    """A recipe's docstring as a title and a first paragraph, each on one line.
+    Best-effort: (None, None) when the recipe cannot be read."""
+    if not recipe_ref:
+        return None, None
+    try:
+        from depictio.recipes import load_recipe
+
+        doc = (load_recipe(recipe_ref).__doc__ or "").strip()
+    except Exception:
+        return None, None
+    paragraphs = [" ".join(p.split()) for p in doc.split("\n\n") if p.strip()]
+    title = paragraphs[0] if paragraphs else None
+    body = paragraphs[1] if len(paragraphs) > 1 else None
+    return title, body
+
+
+def _recipe_inputs(config: dict, data_root: str | None) -> list[RecipeInput]:
+    """The inputs of a derived collection, structured: the collections it reads
+    by tag, and the files by name and location. Mirrors ``_dc_source_inputs``."""
+    if (config.get("source") or "") != "transformed":
+        return []
+    transform = config.get("transform") or {}
+    recipe = transform.get("recipe")
+    if not recipe:
+        return []
+    overrides = transform.get("source_overrides") or {}
+    out: list[RecipeInput] = []
+    try:
+        from depictio.recipes import load_recipe
+
+        for src in getattr(load_recipe(recipe), "SOURCES", []):
+            dc_ref = getattr(src, "dc_ref", None)
+            if dc_ref:
+                out.append(RecipeInput(kind="collection", name=dc_ref))
+                continue
+            if transform.get("materialized"):
+                continue
+            ref = getattr(src, "ref", None)
+            override = overrides.get(ref) if isinstance(overrides, dict) else None
+            rel = (override.get("path") if isinstance(override, dict) else override) or getattr(
+                src, "path", None
+            )
+            if rel:
+                path = _source_input_label(rel, data_root)
+                out.append(
+                    RecipeInput(kind="file", name=os.path.basename(path.rstrip("/")), path=path)
+                )
+    except Exception:
+        return out
+    return out
+
+
 def _aggregate_run_stats(
     project: dict,
 ) -> tuple[dict[str, dict[str, int]], list[IngestionRun], str | None]:
@@ -428,6 +493,9 @@ def build_ingestion_report(project: dict) -> IngestionReport:
         source_inputs: list[str] = []
         recipe: str | None = None
         recipe_url: str | None = None
+        recipe_summary: str | None = None
+        recipe_description: str | None = None
+        recipe_inputs: list[RecipeInput] = []
         if not included:
             status = STATUS_GATED_OUT
             ingested = False
@@ -443,6 +511,8 @@ def build_ingestion_report(project: dict) -> IngestionReport:
             if (cfg.get("source") or "") == "transformed":
                 recipe = (cfg.get("transform") or {}).get("recipe")
                 recipe_url = _recipe_github_url(recipe)
+                recipe_summary, recipe_description = _recipe_doc(recipe)
+                recipe_inputs = _recipe_inputs(cfg, data_root)
             # "Ingested" = a table was produced. Table DCs land a deltatable;
             # MultiQC DCs land a multiqc doc. Check both rather than trusting the
             # declared type (recipe/canonical DCs are typed "table" but some only
@@ -469,6 +539,9 @@ def build_ingestion_report(project: dict) -> IngestionReport:
                 source_inputs=source_inputs,
                 recipe=recipe,
                 recipe_url=recipe_url,
+                recipe_summary=recipe_summary,
+                recipe_description=recipe_description,
+                recipe_inputs=recipe_inputs,
             )
         )
 

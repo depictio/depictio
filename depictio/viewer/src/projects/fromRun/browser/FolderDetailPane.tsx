@@ -126,10 +126,7 @@ function fileIcon(name: string): string {
 
 /** The run records of the folder, each said in words; `pipeline_info` opens
  *  onto what the engine wrote about the run. */
-const RunRecords: React.FC<{
-  result: FolderInspection;
-  onOpen: (name: string) => void;
-}> = ({ result, onOpen }) => {
+const RunRecords: React.FC<{ result: FolderInspection }> = ({ result }) => {
   const [previewOpen, setPreviewOpen] = useState(false);
   const previewId = useId();
   if (result.markers.length === 0) {
@@ -161,31 +158,20 @@ const RunRecords: React.FC<{
                     {meta?.description ?? 'A record of the run.'}
                   </Text>
                 </Stack>
-                <Group gap={4} wrap="nowrap" style={{ flexShrink: 0 }}>
-                  {isInfo && runInfo && (
-                    <Button
-                      size="compact-xs"
-                      variant="light"
-                      leftSection={<Icon icon={previewOpen ? 'mdi:eye-off-outline' : 'mdi:eye-outline'} width={14} />}
-                      onClick={() => setPreviewOpen((o) => !o)}
-                      aria-expanded={previewOpen}
-                      aria-controls={previewId}
-                      data-testid="browse-detail-pipeline-info-toggle"
-                    >
-                      {previewOpen ? 'Hide' : 'Preview'}
-                    </Button>
-                  )}
+                {isInfo && runInfo && (
                   <Button
                     size="compact-xs"
-                    variant="subtle"
-                    color="gray"
-                    rightSection={<Icon icon="mdi:chevron-right" width={14} />}
-                    onClick={() => onOpen(marker)}
-                    data-testid={`browse-detail-open-${marker}`}
+                    variant="light"
+                    style={{ flexShrink: 0 }}
+                    leftSection={<Icon icon={previewOpen ? 'mdi:eye-off-outline' : 'mdi:eye-outline'} width={14} />}
+                    onClick={() => setPreviewOpen((o) => !o)}
+                    aria-expanded={previewOpen}
+                    aria-controls={previewId}
+                    data-testid="browse-detail-pipeline-info-toggle"
                   >
-                    Open
+                    {previewOpen ? 'Hide' : 'Preview'}
                   </Button>
-                </Group>
+                )}
               </Group>
               {isInfo && !runInfo && (
                 <Text size="xs" c="dimmed">
@@ -581,14 +567,17 @@ export const FolderDetailPane: React.FC<FolderDetailPaneProps> = ({
             title="Why this is a run folder"
             description="A pipeline run leaves records beside its results; Depictio looks for these two."
           >
-            <RunRecords result={result} onOpen={openChild} />
+            <RunRecords result={result} />
           </Section>
         </>
       )}
 
       <Divider />
 
-      <Section title="Run folders below this one">
+      <Section
+        title="Pipeline runs in subfolders"
+        description="When one folder holds several runs: Depictio goes through the folders below this one and lists every run it finds."
+      >
         {activeFind ? (
           <RunSearchResults
             find={activeFind}
@@ -605,7 +594,7 @@ export const FolderDetailPane: React.FC<FolderDetailPaneProps> = ({
               onClick={runFind}
               data-testid="browse-find-runs"
             >
-              Find run folders here
+              Search subfolders for runs
             </Button>
           </Group>
         )}

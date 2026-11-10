@@ -64,7 +64,6 @@ test.describe("Add data", () => {
     await openModal(page);
     await expect(page.getByTestId("files-dropzone")).toBeVisible();
     await expect(page.getByTestId("add-data-location-input")).toBeVisible();
-    await expect(page.getByTestId("add-data-multiqc")).toBeVisible();
     await expect(page.getByTestId("add-data-submit")).toHaveAttribute("aria-disabled", "true");
     await expect(page.getByTestId("add-data-reason")).toContainText("Drop files");
   });

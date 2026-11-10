@@ -306,7 +306,8 @@ function baseSource(project: LayoutInput | null | undefined): ProjectSource {
     if (o.kind === 'folder' && location) location = parentOf(location);
     found.push({ kind, location });
   }
-  if (found.length === 0) {
+  // Collections made before origins were recorded sit beside the ones with one.
+  if (found.length < allDataCollections(project).length) {
     for (const place of heuristicPlaces(project)) {
       const kind = classifyPlace(place);
       found.push({ kind, location: kind === 'upload' ? null : place });
@@ -379,12 +380,72 @@ export function projectPipeline(project: LayoutInput | null | undefined): Pipeli
   return { name: workflowName(wf), version: rawVersion ? rawVersion.replace(/^v/i, '') : null };
 }
 
+/** Every pipeline behind the project, one per distinct name and version. A
+ *  project made from a template is that one pipeline, however many runs. */
+export function projectPipelines(project: LayoutInput | null | undefined): PipelineInfo[] {
+  const originId = str((project?.template_origin as { template_id?: unknown } | null | undefined)?.template_id);
+  if (originId) {
+    const origin = projectPipeline(project);
+    return origin ? [origin] : [];
+  }
+  const seen = new Set<string>();
+  return workflowsOf(project)
+    .filter(isRealWorkflow)
+    .map((wf) => {
+      // The engine's version (Nextflow, Python) is not the pipeline's.
+      const raw = str(wf.version);
+      return { name: workflowName(wf), version: raw ? raw.replace(/^v/i, '') : null };
+    })
+    .filter((p) => {
+      const key = `${p.name}@${p.version ?? ''}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+/** How many collections of each type, largest first. */
+export function projectTypeCounts(
+  project: LayoutInput | null | undefined,
+): Array<{ type: string; count: number }> {
+  const counts = new Map<string, number>();
+  for (const dc of allDataCollections(project)) {
+    const type = String((dc.config as { type?: unknown } | null | undefined)?.type ?? 'unknown').toLowerCase();
+    counts.set(type, (counts.get(type) ?? 0) + 1);
+  }
+  return [...counts].map(([type, count]) => ({ type, count })).sort((a, b) => b.count - a.count);
+}
+
 export function dataCollectionCount(project: LayoutInput | null | undefined): number {
   return allDataCollections(project).length;
 }
 
 function plural(n: number, one: string, many = `${one}s`): string {
   return `${n} ${n === 1 ? one : many}`;
+}
+
+/** Collection types in the words a project's owner uses, most common first. */
+const TYPE_WORDS: Array<[string, string, string]> = [
+  ['table', 'table', 'tables'],
+  ['multiqc', 'MultiQC report', 'MultiQC reports'],
+  ['phylogeny', 'tree', 'trees'],
+  ['geojson', 'map', 'maps'],
+  ['image', 'image collection', 'image collections'],
+  ['genomic_tracks', 'genomic track collection', 'genomic track collections'],
+];
+
+/** "5 tables, 1 tree, 1 map": what the collections hold, not just how many. */
+function contentsText(project: LayoutInput | null | undefined): string {
+  const types = allDataCollections(project).map((dc) =>
+    String((dc.config as { type?: unknown } | null | undefined)?.type ?? '').toLowerCase(),
+  );
+  const named = TYPE_WORDS.flatMap(([type, one, many]) => {
+    const n = types.filter((t) => t === type).length;
+    return n > 0 ? [plural(n, one, many)] : [];
+  });
+  const others = types.filter((t) => !TYPE_WORDS.some(([type]) => type === t)).length;
+  if (others > 0) named.push(plural(others, 'other collection'));
+  return named.join(', ');
 }
 
 function sourcePhrase(source: ProjectSource): string | null {
@@ -394,14 +455,16 @@ function sourcePhrase(source: ProjectSource): string | null {
     case 'mixed':
       return 'from several sources';
     case 'manifest':
-      return source.location ? `from manifest ${source.location}` : 'from a manifest';
+      return 'from a manifest';
     case 'unknown':
       return null;
     default:
       if (source.locations && source.locations.length > 1) {
         return `from ${plural(source.locations.length, 'folder')}`;
       }
-      return source.location ? `from ${source.location}` : 'added by hand';
+      if (source.kind === 's3') return 'from S3';
+      if (source.kind === 'url') return 'from a URL';
+      return source.location ? 'from a folder' : 'added by hand';
   }
 }
 
@@ -435,7 +498,7 @@ export function projectSentence(
     if (from) parts.push(from);
   } else {
     const n = dataCollectionCount(project);
-    parts.push(n > 0 ? plural(n, 'table') : 'No data yet');
+    parts.push(n > 0 ? contentsText(project) : 'No data yet');
     if (n > 0 && from) parts.push(from);
     if (dashboardsCount && dashboardsCount > 0) parts.push(plural(dashboardsCount, 'dashboard'));
     return parts.join(' · ');

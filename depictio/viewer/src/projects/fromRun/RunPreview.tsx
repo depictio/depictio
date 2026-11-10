@@ -334,7 +334,7 @@ export const RunFoundCard: React.FC<RunSummaryCardProps & { found: RunFoundInfo 
       ),
     },
   ];
-  return <FoundCard rows={rows} testId="run-found-card" />;
+  return <FoundCard embedded rows={rows} testId="run-found-card" />;
 };
 
 export const RunPreview: React.FC<RunSummaryCardProps & { found?: RunFoundInfo | null }> = ({

@@ -53,6 +53,8 @@ interface LinksSectionProps {
   onLinksChange?: (links: DCLink[]) => void;
   /** The project's joins, drawn beside the links in Glass's map view. */
   joins?: ProjectJoin[];
+  /** Bumped by the page when a link changed elsewhere (the collection viewer). */
+  reloadKey?: number;
 }
 
 /** Sortable column header for the links table. */
@@ -92,6 +94,7 @@ const LinksSection: React.FC<LinksSectionProps> = ({
   canMutate,
   onLinksChange,
   joins = [],
+  reloadKey = 0,
 }) => {
   const glass = useGlassPages();
   // Glass opens on the map; the table stays one click away.
@@ -193,7 +196,7 @@ const LinksSection: React.FC<LinksSectionProps> = ({
         });
       })
       .finally(() => setLoading(false));
-  }, [projectId, refreshKey, onLinksChange]);
+  }, [projectId, refreshKey, reloadKey, onLinksChange]);
 
   // Resolvers list is roughly static; fetch once on mount.
   useEffect(() => {

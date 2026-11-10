@@ -14,6 +14,9 @@ import type { DetectedTemplate, FromRunReport, RunStorageIn } from 'depictio-rea
 import { collectionCounts } from './collectionCounts';
 import { plural } from './plural';
 import { RunPreview, RunSummaryCard } from './RunPreview';
+import { SourceSection } from '../create/SourceSection';
+import { pipelineLabel } from './pipelineLabel';
+import { readySummary } from './collectionCounts';
 
 /** The preview's answer when no template was picked and the server could not
  *  tell which pipeline produced the folder: say so, and send the reader back
@@ -51,6 +54,15 @@ const TemplateNotDetectedAlert: React.FC<{
   </Alert>
 );
 
+/** "nf-core/ampliseq 2.18.0 · 21 collections ready · ~/results". */
+function runSummary(report: FromRunReport): string {
+  return [
+    pipelineLabel(report.template_id) ?? report.template_id,
+    readySummary(collectionCounts(report.data_collections)),
+    report.data_root,
+  ].join(' · ');
+}
+
 interface RunPreviewStepProps {
   loading: boolean;
   /** No template is chosen: the server recognises the pipeline itself. */
@@ -74,6 +86,8 @@ interface RunPreviewStepProps {
   detection: DetectedTemplate | null;
   /** Where the pipeline came from, for the facts card. */
   chosenFrom?: 'detected' | 'user' | null;
+  /** Open the run's details: nothing else competes for the screen. */
+  sectionsOpen?: boolean;
 }
 
 export const RunPreviewStep: React.FC<RunPreviewStepProps> = ({
@@ -90,6 +104,7 @@ export const RunPreviewStep: React.FC<RunPreviewStepProps> = ({
   detection,
   storage = null,
   chosenFrom = null,
+  sectionsOpen = true,
 }) => {
   const accent = useBrandAccents();
   return (
@@ -150,14 +165,22 @@ export const RunPreviewStep: React.FC<RunPreviewStepProps> = ({
         </Alert>
       )}
       {report && (
-        <RunPreview
-          report={report}
-          templateTitle={templateTitle}
-          templateEngine={templateEngine}
-          detection={detection}
-          storage={storage}
-          found={{ chosenFrom }}
-        />
+        <SourceSection
+          icon="mdi:folder-check-outline"
+          title="Run folder"
+          summary={runSummary(report)}
+          defaultOpen={sectionsOpen}
+          testId="found-section-run"
+        >
+          <RunPreview
+            report={report}
+            templateTitle={templateTitle}
+            templateEngine={templateEngine}
+            detection={detection}
+            storage={storage}
+            found={{ chosenFrom }}
+          />
+        </SourceSection>
       )}
     </Stack>
   );
@@ -176,6 +199,8 @@ interface RunCreateStepProps {
   projectName: string;
   /** The private bucket's connection details go with the request. */
   savesStorage: boolean;
+  /** The dropped files, still in sight before creating. */
+  dropped?: React.ReactNode;
   /** The project's visibility control, shown before the button that creates. */
   visibility?: React.ReactNode;
 }
@@ -188,6 +213,7 @@ export const RunCreateStep: React.FC<RunCreateStepProps> = ({
   storage = null,
   projectName,
   savesStorage,
+  dropped = null,
   visibility = null,
 }) => {
   const accent = useBrandAccents();
@@ -203,6 +229,7 @@ export const RunCreateStep: React.FC<RunCreateStepProps> = ({
           storage={storage}
         />
       )}
+      {dropped}
       {visibility}
       <Paper withBorder radius="md" p="lg">
         <Stack gap="sm" align="center">

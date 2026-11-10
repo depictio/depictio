@@ -840,3 +840,16 @@ async def test_an_s3_refusal_reaches_the_api_handler_coded(listed, no_client):
     response = await s3_access_exception_handler(None, exc.value)
     assert response.status_code == 422
     assert json.loads(response.body)["code"] == "s3_refused"
+
+
+def test_a_folder_without_run_traces_is_not_searched(tmp_path):
+    """A connector's search for a legacy report walks everything below: on a
+    home folder that took minutes and left the browser on its skeleton."""
+    from depictio.cli.cli.utils.data_root import LocalDataRoot
+
+    (tmp_path / "docs" / "deep").mkdir(parents=True)
+    (tmp_path / "docs" / "deep" / "software_versions.yml").write_text("x: 1\n")
+    assert not run_folders._holds_run_traces(LocalDataRoot(str(tmp_path)))
+
+    (tmp_path / "pipeline_info").mkdir()
+    assert run_folders._holds_run_traces(LocalDataRoot(str(tmp_path)))
