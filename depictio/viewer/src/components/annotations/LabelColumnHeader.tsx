@@ -71,34 +71,43 @@ const LabelColumnHeader: React.FC<{ actions: LabelColumnActions }> = ({ actions:
           icon={LABEL_KIND[a.kind].icon}
           width={14}
           data-testid={`label-kind-${a.kind}`}
-          style={{ flexShrink: 0, color: 'var(--mantine-color-dimmed)' }}
+          style={{ flexShrink: 0, color: 'var(--dc-panel-accent-ink, var(--mantine-color-dimmed))' }}
         />
       </Tooltip>
-      <Text size="sm" fw={600} truncate style={{ minWidth: 0 }}>
+      <Text size="sm" fw={600} truncate style={{ minWidth: 0, flex: 1 }}>
         {a.name}
       </Text>
-      {a.active && (
-        <Tooltip withinPortal label="Compared in the charts">
-          <span
-            aria-label="Compared"
-            data-testid="label-compared"
-            style={{
-              width: 8,
-              height: 8,
-              borderRadius: '50%',
-              flexShrink: 0,
-              background: 'var(--mantine-primary-color-filled)',
-            }}
-          />
-        </Tooltip>
-      )}
+      <Tooltip
+        withinPortal
+        multiline
+        w={240}
+        label={
+          a.active
+            ? 'Comparing: the charts use these labels. Click to stop.'
+            : a.compareBlocked
+              ? a.compareBlocked
+              : 'Compare in the charts: colour or split them by these labels. A temporary view, only you see it.'
+        }
+      >
+        <button
+          type="button"
+          className="dc-label-compare"
+          data-active={a.active || undefined}
+          data-testid={a.active ? 'label-compared' : 'label-compare'}
+          aria-pressed={a.active}
+          aria-label={a.active ? 'Stop comparing by these labels' : 'Compare the charts by these labels'}
+          disabled={!a.active && Boolean(a.compareBlocked)}
+          onClick={a.onCompare}
+        >
+          <Icon icon="mdi:chart-scatter-plot" width={14} />
+        </button>
+      </Tooltip>
       <Menu withinPortal position="bottom-end" shadow="md">
         <Menu.Target>
           <ActionIcon
             size="xs"
             variant="subtle"
             color="gray"
-            ml="auto"
             aria-label={`${a.name} column menu`}
             data-testid={`label-menu-${a.name}`}
           >

@@ -915,7 +915,13 @@
 .hy-anchor[data-anchor='bottom-center'],
 .hy-anchor[data-anchor='top-center'] {
   right: auto;
-  left: calc((100% - var(--gl-pad-r, 0px)) / 2);
+  /* Centred on the canvas, panel or not: moving with the panel made the dock
+   * jump on every open. It gives way only when centred it would sit over the
+   * panel, and then by just enough to clear it. */
+  left: min(
+    50%,
+    calc(100% - var(--gl-pad-r, 0px) - var(--gl-gutter) - var(--gl-dock-half, 200px))
+  );
   translate: -50% 0;
 }
 .hy-anchor[data-anchor='bottom-left'],
@@ -1653,6 +1659,12 @@ button.hy-sheet-link {
   color: var(--gl-on-fg) !important;
   background: var(--gl-on-bg) !important;
   box-shadow: var(--gl-on-ring) !important;
+}
+/* Search lit is neutral, not the accent: it is a finder, not a mode. */
+.hy-shell[data-hy-showing~='search'] [data-hy-slot='search'] .hy-key {
+  --gl-on-fg: light-dark(var(--mantine-color-gray-8), var(--mantine-color-gray-2));
+  --gl-on-bg: color-mix(in srgb, var(--mantine-color-gray-6) 14%, var(--mantine-color-body));
+  --gl-on-ring: inset 0 0 0 1px color-mix(in srgb, var(--mantine-color-gray-6) 30%, transparent);
 }
 .hy-dock
   :is(

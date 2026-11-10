@@ -25,7 +25,13 @@ import { Icon } from '@iconify/react';
 import { AgGridReact } from 'ag-grid-react';
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-alpine.css';
-import type { ColDef, GridApi, ValueSetterParams } from 'ag-grid-community';
+import type {
+  CellMouseDownEvent,
+  CellMouseOverEvent,
+  ColDef,
+  GridApi,
+  ValueSetterParams,
+} from 'ag-grid-community';
 import {
   annotationColumnBudget,
   asKey,
@@ -33,13 +39,9 @@ import {
   columnsFor,
   copyName,
   emptyAnnotations,
-  fetchDataCollectionPreview,
   fetchDataVersionStatus,
-  fetchTableEditStatus,
-  fetchTableForEdit,
   matchDroppedTable,
   MAX_ANNOTATION_COLUMNS,
-  MAX_ANNOTATION_ROWS,
   MAX_DROP_BYTES,
   MAX_LABEL_LENGTH,
   mergeTableFile,
@@ -65,7 +67,6 @@ import type {
   DataVersionCollectionStatus,
   DropMatch,
   SelectionGroup,
-  TableEditStatus,
   TableMergeMode,
   TableMergeReport,
 } from 'depictio-react-core';
@@ -73,12 +74,20 @@ import type {
 import TableMergePanel from '../../projects/detail/TableMergePanel';
 // The drop overlay is the table editor's, so both drops look the same.
 import '../../projects/detail/TableEditor.css';
+import FillCell from './FillCell';
 import LabelColumnHeader, {
   LABEL_KIND,
   type LabelColumnActions,
   type LabelColumnKind,
 } from './LabelColumnHeader';
 import './AnnotationPanel.css';
+import {
+  cachedEditStatus,
+  defaultAnnotationTable,
+  forgetAnnotationTable,
+  readAnnotationTable,
+  type Load,
+} from './annotationTableRead';
 import type { AnnotationTablesState } from './useAnnotationTables';
 import type { DashboardAnnotationsState } from './useDashboardAnnotations';
 
@@ -90,27 +99,25 @@ const SOURCE_ELSEWHERE = new Set(['pipeline_table', 'url_table', 'not_user_added
 /** One grid row: the key, its row in the table when it can be edited, the
  *  table's columns and one field per label column. */
 type GridRow = Record<string, unknown> & { __key: string; __row: number | null };
+/** A cell in display coordinates: row index and column index. */
+type CellPos = { row: number; col: number };
 
+/** The panel's slide and the dashboard's re-flow around it (250 ms + margin). */
+const PANEL_SETTLE_MS = 300;
+
+/** What undo and redo restore (see `history` in the panel). */
+interface Snapshot {
+  annotations: DashboardAnnotations | null;
+  shared: AnnotationColumn[];
+  cellEdits: Map<string, { row: number; column: string; value: string | null }>;
+}
+/** Steps kept to go back through. */
+const UNDO_DEPTH = 100;
+
+/** At most this many rows, the grid is as tall as they are. */
+const FIT_ROWS_MAX = 40;
 const ANN_PREFIX = 'ann:';
 const KEY_FIELD = '__key';
-const ADD_FIELD = '__add';
-
-interface TableRead {
-  dcId: string;
-  columns: string[];
-  rows: Record<string, unknown>[];
-  /** Delta version read; null for the current table read through the preview. */
-  version: number | null;
-  /** Set when the reader may write to this table: the version the cells were
-   *  read at and the columns that can be edited. */
-  edit: { deltaVersion: number; editable: Set<string> } | null;
-}
-
-type Load =
-  | { kind: 'idle' }
-  | { kind: 'loading' }
-  | { kind: 'ready'; table: TableRead }
-  | { kind: 'refused'; message: string };
 
 /** A table's name, with its workflow when another table has the same tag. */
 export function annotationTableLabel(entry: AnnotationTable, all: AnnotationTable[]): string {
@@ -124,26 +131,6 @@ function csvCell(v: string): string {
 }
 
 const cellKey = (row: number, column: string) => `${row}\u0000${column}`;
-
-/** The "+" header: adds a label column. */
-const AddLabelHeader: React.FC<{ onAdd: () => void; disabled: boolean }> = ({ onAdd, disabled }) => (
-  <Tooltip
-    withinPortal
-    label={disabled ? `At most ${MAX_ANNOTATION_COLUMNS} label columns` : 'Add a label column'}
-  >
-    <ActionIcon
-      size="sm"
-      variant="subtle"
-      color="gray"
-      aria-label="Add a label column"
-      data-testid="label-add"
-      disabled={disabled}
-      onClick={onAdd}
-    >
-      <Icon icon="mdi:plus" width={16} />
-    </ActionIcon>
-  </Tooltip>
-);
 
 export interface AnnotationPanelProps {
   /** The rendered tab: the data-version status call reads the whole family from it. */
@@ -188,13 +175,32 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
   const canShare = sharing.canShare && !pinned;
   const view = useMemo(() => withShared(annotations, shared), [annotations, shared]);
   const isShared = useCallback((id: string) => shared.some((c) => c.id === id), [shared]);
+  // ---- Undo and redo --------------------------------------------------------
+  // What a change can touch, kept whole before it: the reader's labels, the
+  // shared ones and the table cells waiting for Save. One entry per action: a
+  // paste that lands on three kinds of cell is one step back, not three.
+  const history = useRef<{ undo: Snapshot[]; redo: Snapshot[] }>({ undo: [], redo: [] });
+  const live = useRef<Snapshot | null>(null);
+  const sameTick = useRef(false);
+  const replaying = useRef(false);
+  const remember = useCallback(() => {
+    if (replaying.current || sameTick.current || !live.current) return;
+    sameTick.current = true;
+    window.setTimeout(() => {
+      sameTick.current = false;
+    }, 0);
+    history.current.undo.push(live.current);
+    if (history.current.undo.length > UNDO_DEPTH) history.current.undo.shift();
+    history.current.redo = [];
+  }, []);
   const writeShared = useCallback(
     async (next: AnnotationColumn[]): Promise<boolean> => {
+      remember();
       const error = await saveShared(next);
       if (error) notifications.show({ color: 'red', message: error });
       return error === null;
     },
-    [saveShared],
+    [saveShared, remember],
   );
   const setSharedLabel = (cols: AnnotationColumn[], id: string, key: string, label: unknown) =>
     setLabel({ version: 2, columns: cols, activeColumnId: null }, id, key, label).columns;
@@ -222,88 +228,28 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
     // pinsKey is the stable identity of pins.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dashboardId, pinsKey]);
-  const tables = useMemo(() => allTables.filter((t) => t.eligible), [allTables]);
-
-  // ---- Who may write, per table -------------------------------------------
-  const statusCache = useRef(new Map<string, TableEditStatus | null>());
-  const editStatusOf = useCallback(async (dcId: string): Promise<TableEditStatus | null> => {
-    if (statusCache.current.has(dcId)) return statusCache.current.get(dcId) ?? null;
-    const s = await fetchTableEditStatus(dcId).catch(() => null);
-    statusCache.current.set(dcId, s);
-    return s;
-  }, []);
+  // The table whose labels reach the most collections comes first: it opens by
+  // default, and a label on it is the one the charts can follow.
+  const tables = useMemo(
+    () =>
+      allTables
+        .filter((t) => t.eligible)
+        .sort((a, b) => (b.link_targets ?? 0) - (a.link_targets ?? 0)),
+    [allTables],
+  );
 
   // ---- Reading one table ----------------------------------------------------
-  const cache = useRef(new Map<string, Load>());
+  // Held outside the panel (`annotationTableRead`): a reopening asks nothing.
   const readTable = useCallback(
-    async (dcId: string, force = false): Promise<Load> => {
-      const cached = cache.current.get(dcId);
-      if (cached && !force) return cached;
-      const entry = (collections ?? []).find((c) => c.dc_id === dcId);
-      let version: number | null = null;
-      if (pinned) {
-        // Fail closed: a past view never shows today's rows as if they were then.
-        if (!entry || entry.status !== 'pinned' || typeof entry.delta_version !== 'number') {
-          const why = entry?.reason ? ` (${entry.reason.replace(/_/g, ' ')})` : '';
-          const load: Load = {
-            kind: 'refused',
-            message: `This view shows a past version, and the version of this table it read cannot be resolved${why}. The grid stays closed rather than show the table as it is now.`,
-          };
-          cache.current.set(dcId, load);
-          return load;
-        }
-        version = entry.delta_version;
-      } else {
-        // Whoever may write reads the table as the editor does: whole, with
-        // the version its cells will be saved against.
-        const status = await editStatusOf(dcId);
-        if (status?.can_edit) {
-          try {
-            const data = await fetchTableForEdit(dcId);
-            if (data.rows.length <= MAX_ANNOTATION_ROWS) {
-              const load: Load = {
-                kind: 'ready',
-                table: {
-                  dcId,
-                  columns: data.columns.map((c) => c.name),
-                  rows: data.rows,
-                  version: null,
-                  edit: {
-                    deltaVersion: data.delta_version,
-                    editable: new Set(data.columns.filter((c) => c.editable).map((c) => c.name)),
-                  },
-                },
-              };
-              cache.current.set(dcId, load);
-              return load;
-            }
-          } catch {
-            // Falls back to the read-only preview below.
-          }
-        }
-      }
-      try {
-        const res = await fetchDataCollectionPreview(dcId, MAX_ANNOTATION_ROWS, [], version);
-        const load: Load =
-          res.total_rows > MAX_ANNOTATION_ROWS
-            ? {
-                kind: 'refused',
-                message: `This table has ${res.total_rows.toLocaleString()} rows. Labels work on tables of up to ${MAX_ANNOTATION_ROWS.toLocaleString()} rows, so that the list of samples is never cut short; pick a smaller table.`,
-              }
-            : {
-                kind: 'ready',
-                table: { dcId, columns: res.columns, rows: res.rows, version: res.version ?? null, edit: null },
-              };
-        cache.current.set(dcId, load);
-        return load;
-      } catch (err) {
-        return {
-          kind: 'refused',
-          message: err instanceof Error ? err.message : 'The table could not be read.',
-        };
-      }
-    },
-    [collections, pinned, editStatusOf],
+    (dcId: string, force = false): Promise<Load> =>
+      readAnnotationTable({
+        dashboardId,
+        dcId,
+        pinned,
+        entry: (collections ?? []).find((c) => c.dc_id === dcId),
+        force,
+      }),
+    [dashboardId, collections, pinned],
   );
 
   // ---- Which table and key -------------------------------------------------
@@ -316,7 +262,8 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
     if (choice || tables.length === 0) return;
     const active = view?.columns.find((c) => c.id === view.activeColumnId);
     const anyCol = active ?? view?.columns[0];
-    const entry = tables.find((t) => t.dc_id === anyCol?.dcId) ?? tables[0];
+    const entry = defaultAnnotationTable(tables, view?.columns, view?.activeColumnId);
+    if (!entry) return;
     const keyColumn =
       anyCol && anyCol.dcId === entry.dc_id && entry.key_columns.includes(anyCol.keyColumn)
         ? anyCol.keyColumn
@@ -325,7 +272,8 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
   }, [tables, view, choice]);
 
   useEffect(() => {
-    if (!choice || !collections) return;
+    // A live read needs no version status; a past view reads it first.
+    if (!choice || (pinned && !collections)) return;
     let cancelled = false;
     setLoad({ kind: 'loading' });
     void readTable(choice.dcId).then((l) => {
@@ -334,9 +282,17 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [choice, collections, readTable]);
+  }, [choice, collections, pinned, readTable]);
 
   const table = load.kind === 'ready' ? load.table : null;
+  // The panel opens while the dashboard re-flows to make room for it, every
+  // figure and tile resizing for that long. The grid mounts when that is done:
+  // laid out against the width it keeps, and not competing with the re-flow.
+  const [settled, setSettled] = useState(false);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setSettled(true), PANEL_SETTLE_MS);
+    return () => window.clearTimeout(timer);
+  }, []);
   const keyColumn = choice?.keyColumn ?? '';
   const chosenEntry = tables.find((t) => t.dc_id === choice?.dcId) ?? null;
   const keyOptions = chosenEntry?.key_columns ?? [];
@@ -361,14 +317,37 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
     : !table
       ? 'The table is not loaded.'
       : !table.edit
-        ? SOURCE_ELSEWHERE.has(statusCache.current.get(table.dcId)?.code ?? '')
-          ? `${statusCache.current.get(table.dcId)?.reason ?? ''} Export gives you its rows with your labels added, to put in that source.`.trim()
-          : statusCache.current.get(table.dcId)?.reason || 'You cannot change this table.'
+        ? SOURCE_ELSEWHERE.has(cachedEditStatus(table.dcId)?.code ?? '')
+          ? `${cachedEditStatus(table.dcId)?.reason ?? ''} Export gives you its rows with your labels added, to put in that source.`.trim()
+          : cachedEditStatus(table.dcId)?.reason || 'You cannot change this table.'
         : null;
   const [cellEdits, setCellEdits] = useState<
     Map<string, { row: number; column: string; value: string | null }>
   >(new Map());
-  useEffect(() => setCellEdits(new Map()), [table]);
+  useEffect(() => {
+    setCellEdits(new Map());
+    // Cells saved or another table read: the steps recorded against the old
+    // rows no longer lead anywhere.
+    history.current = { undo: [], redo: [] };
+  }, [table]);
+  live.current = { annotations, shared, cellEdits };
+  const restore = (snap: Snapshot) => {
+    replaying.current = true;
+    setAnnotations(snap.annotations);
+    if (snap.shared !== shared) void saveShared(snap.shared);
+    setCellEdits(snap.cellEdits);
+    window.setTimeout(() => {
+      replaying.current = false;
+    }, 0);
+  };
+  const step = (from: 'undo' | 'redo'): boolean => {
+    const stack = history.current[from];
+    const target = stack.pop();
+    if (!target || !live.current) return false;
+    history.current[from === 'undo' ? 'redo' : 'undo'].push(live.current);
+    restore(target);
+    return true;
+  };
 
   // ---- Grid rows ----------------------------------------------------------
   const { rows, contextColumns, tableKeys } = useMemo(() => {
@@ -414,7 +393,13 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
   }, [bound, tableKeys]);
 
   // ---- Label edits --------------------------------------------------------
-  const commit = useCallback((next: DashboardAnnotations) => setAnnotations(next), [setAnnotations]);
+  const commit = useCallback(
+    (next: DashboardAnnotations) => {
+      remember();
+      setAnnotations(next);
+    },
+    [setAnnotations, remember],
+  );
   const gridApi = useRef<GridApi<GridRow> | null>(null);
 
   const setLabelCell = useCallback(
@@ -437,14 +422,14 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
     [bound, choice, keyColumn, commit, shared, canShare, isShared, writeShared],
   );
 
-  const setTableCell = useCallback(
-    (params: ValueSetterParams<GridRow>) => {
-      const column = params.colDef.field ?? '';
-      const index = params.data.__row;
-      if (!table?.edit || index === null) return false;
+  // One edit of one table cell, kept aside until Save: typed in the grid or
+  // pasted from a spreadsheet.
+  const applyTableCell = useCallback(
+    (index: number, column: string, raw: unknown) => {
+      if (!table?.edit) return;
       const original = table.rows[index]?.[column];
-      const raw = params.newValue;
       const value = raw === null || raw === undefined || String(raw).trim() === '' ? null : String(raw);
+      remember();
       setCellEdits((prev) => {
         const next = new Map(prev);
         const same = (original ?? null) === null ? value === null : String(original) === value;
@@ -452,9 +437,16 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
         else next.set(cellKey(index, column), { row: index, column, value });
         return next;
       });
+    },
+    [table, remember],
+  );
+  const setTableCell = useCallback(
+    (params: ValueSetterParams<GridRow>) => {
+      const index = params.data.__row;
+      if (index !== null) applyTableCell(index, params.colDef.field ?? '', params.newValue);
       return false;
     },
-    [table],
+    [applyTableCell],
   );
 
   // ---- Naming a column (add / rename) ---------------------------------------
@@ -602,10 +594,20 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
   // ---- Export as metadata sheet ---------------------------------------------------
   // Built here from the rows on screen and downloaded: no request carries it.
   const [exporting, setExporting] = useState<Set<string> | null>(null);
-  const exportSheet = () => {
-    if (!table || !keyColumn || !exporting || !chosenEntry) return;
-    const labels = (bound?.columns ?? []).filter((c) => exporting.has(c.id));
-    const text = buildMetadataSheet(table.columns, table.rows, keyColumn, labels);
+  const exportSheet = (selected: Set<string> | null = exporting) => {
+    if (!table || !keyColumn || !selected || !chosenEntry) return;
+    const labels = (bound?.columns ?? []).filter((c) => selected.has(c.id));
+    // Cells changed in the grid but not yet saved to the table are in the file.
+    const rows = cellEdits.size
+      ? table.rows.map((row, i) => {
+          let out = row;
+          for (const e of cellEdits.values()) {
+            if (e.row === i) out = { ...out, [e.column]: e.value };
+          }
+          return out;
+        })
+      : table.rows;
+    const text = buildMetadataSheet(table.columns, rows, keyColumn, labels);
     const url = URL.createObjectURL(new Blob([text], { type: 'text/tab-separated-values' }));
     const a = document.createElement('a');
     a.href = url;
@@ -614,60 +616,184 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
     setTimeout(() => URL.revokeObjectURL(url), 1000);
     setExporting(null);
   };
+  // With no label column there is nothing to choose: the table goes out as it is.
+  const startExport = () => {
+    const ids = new Set((bound?.columns ?? []).map((c) => c.id));
+    if (ids.size === 0) exportSheet(ids);
+    else setExporting(ids);
+  };
 
-  // ---- Paste ------------------------------------------------------------------
-  // AG Grid Community has no clipboard, so a block pasted on a focused label
-  // cell is written from that cell down and to the right, across label columns.
-  const onPaste = (e: React.ClipboardEvent) => {
-    const api = gridApi.current;
-    const focused = api?.getFocusedCell();
+  // ---- Cell ranges, copy, paste, fill -----------------------------------------
+  // AG Grid Community has neither a cell range nor a clipboard, so both are
+  // done here: a range is two corners in display coordinates (row index,
+  // column index), drawn by a class on the cells it covers.
+  const [range, setRange] = useState<{ anchor: CellPos; head: CellPos } | null>(null);
+  const rangeRef = useRef(range);
+  rangeRef.current = range;
+  const rangeDragging = useRef(false);
+  useEffect(() => {
+    const up = (e: MouseEvent) => {
+      if (!rangeDragging.current) return;
+      rangeDragging.current = false;
+      // A quick drag can end on a cell the pointer never reported moving over:
+      // the range ends on the cell the button is released on.
+      const cell = (document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null)?.closest(
+        '.ag-cell',
+      );
+      const rowIndex = Number(cell?.closest('.ag-row')?.getAttribute('row-index'));
+      const col = cell ? (gridApi.current?.getAllDisplayedColumns() ?? []).findIndex((c) => c.getColId() === cell.getAttribute('col-id')) : -1;
+      if (!cell || Number.isNaN(rowIndex) || col < 0) return;
+      setRange((r) => (r && (r.head.row !== rowIndex || r.head.col !== col) ? { ...r, head: { row: rowIndex, col } } : r));
+    };
+    window.addEventListener('mouseup', up);
+    return () => window.removeEventListener('mouseup', up);
+  }, []);
+  const displayedIds = () => gridApi.current?.getAllDisplayedColumns().map((c) => c.getColId()) ?? [];
+  const boxOf = (r: { anchor: CellPos; head: CellPos } | null) =>
+    r
+      ? {
+          r0: Math.min(r.anchor.row, r.head.row),
+          r1: Math.max(r.anchor.row, r.head.row),
+          c0: Math.min(r.anchor.col, r.head.col),
+          c1: Math.max(r.anchor.col, r.head.col),
+        }
+      : null;
+  const isInRange = useCallback((rowIndex: number | null, colId: string): boolean => {
+    const box = boxOf(rangeRef.current);
+    if (!box || rowIndex === null) return false;
+    if (box.r0 === box.r1 && box.c0 === box.c1) return false; // one cell is just the focus
+    const col = (gridApi.current?.getAllDisplayedColumns() ?? []).findIndex((c) => c.getColId() === colId);
+    return rowIndex >= box.r0 && rowIndex <= box.r1 && col >= box.c0 && col <= box.c1;
+  }, []);
+  const rangeRules = useMemo(
+    () => ({
+      'dc-range-cell': (p: { node: { rowIndex: number | null }; column: { getColId: () => string } }) =>
+        isInRange(p.node.rowIndex, p.column.getColId()),
+    }),
+    [isInRange],
+  );
+  // Repaint the cells when the range moves: class rules are read on refresh.
+  useEffect(() => {
+    gridApi.current?.refreshCells({ force: true, suppressFlash: true });
+  }, [range]);
+
+  const takesValue = (colId: string) =>
+    colId.startsWith(ANN_PREFIX) || Boolean(!pinned && table?.edit?.editable.has(colId));
+
+  // Every write, whatever started it (paste, fill, Delete): label columns and
+  // the table's editable columns, shared labels only when this reader may.
+  const applyWrites = (writes: { row: GridRow; colId: string; value: string }[]) => {
     const base = ensureBound();
-    if (!api || !focused || !base) return;
-    const startCol = focused.column.getColId();
-    if (!startCol.startsWith(ANN_PREFIX)) return;
-    const text = e.clipboardData.getData('text/plain');
+    let next = base;
+    let nextShared = shared;
+    let readOnly = 0;
+    for (const { row, colId, value } of writes) {
+      if (!colId.startsWith(ANN_PREFIX)) {
+        if (row.__row !== null && row.__row !== undefined) applyTableCell(row.__row, colId, value);
+        continue;
+      }
+      if (!next) continue;
+      const id = colId.slice(ANN_PREFIX.length);
+      const label = value.slice(0, MAX_LABEL_LENGTH);
+      if (isShared(id)) {
+        if (canShare) nextShared = setSharedLabel(nextShared, id, row.__key, label);
+        else readOnly += 1;
+        continue;
+      }
+      next = setLabel(next, id, row.__key, label);
+    }
+    if (next && next !== base) commit(next);
+    if (nextShared !== shared) void writeShared(nextShared);
+    if (readOnly > 0) {
+      notifications.show({
+        color: 'orange',
+        message: `${readOnly} value${readOnly === 1 ? '' : 's'} fell on shared labels, which are read-only, and were left out.`,
+      });
+    }
+  };
+  const rowAt = (index: number) => gridApi.current?.getDisplayedRowAtIndex(index)?.data as GridRow | undefined;
+  const cellText = (row: GridRow | undefined, colId: string) => {
+    const v = row?.[colId];
+    return v === null || v === undefined ? '' : String(v);
+  };
+
+  // Copy: the selected range as a tab-separated block (what a spreadsheet
+  // pastes), else the focused cell, or the text of an open editor when nothing
+  // in it is selected (a click opens the editor without selecting its text).
+  const onCopy = (e: ClipboardEvent) => {
+    const api = gridApi.current;
+    if (!api) return;
+    const active = document.activeElement;
+    if (api.getEditingCells().length > 0) {
+      if (!(active instanceof HTMLInputElement) && !(active instanceof HTMLTextAreaElement)) return;
+      if (active.selectionStart !== active.selectionEnd) return; // the editor copies its selection
+      e.clipboardData?.setData('text/plain', active.value);
+      e.preventDefault();
+      return;
+    }
+    const box = boxOf(rangeRef.current);
+    if (box && (box.r1 > box.r0 || box.c1 > box.c0)) {
+      const ids = displayedIds();
+      const lines: string[] = [];
+      for (let r = box.r0; r <= box.r1; r += 1) {
+        const row = rowAt(r);
+        lines.push(ids.slice(box.c0, box.c1 + 1).map((id) => cellText(row, id)).join('\t'));
+      }
+      e.clipboardData?.setData('text/plain', lines.join('\n'));
+      e.preventDefault();
+      return;
+    }
+    const focused = api.getFocusedCell();
+    if (!focused) return;
+    e.clipboardData?.setData('text/plain', cellText(rowAt(focused.rowIndex), focused.column.getColId()));
+    e.preventDefault();
+  };
+
+  // Paste: one value goes into every selected cell; a block is written from the
+  // range's first cell (or the focused one) down and to the right, across the
+  // columns that take a value.
+  const onPaste = (e: ClipboardEvent) => {
+    const api = gridApi.current;
+    if (!api) return;
+    const ids = displayedIds();
+    const box = boxOf(rangeRef.current);
+    const focused = api.getFocusedCell();
+    const startRow = box ? box.r0 : focused?.rowIndex;
+    const startCol = box ? ids[box.c0] : focused?.column.getColId();
+    if (startRow === undefined || !startCol || !takesValue(startCol)) return;
+    const text = e.clipboardData?.getData('text/plain') ?? '';
     // A single value typed into an open editor is the editor's business.
     const editing = api.getEditingCells().length > 0;
     if (editing && !/[\t\n]/.test(text)) return;
     e.preventDefault();
     if (editing) api.stopEditing(true);
     const block = parsePastedBlock(text);
-    const labelCols = api
-      .getAllDisplayedColumns()
-      .map((c) => c.getColId())
-      .filter((id) => id.startsWith(ANN_PREFIX));
-    const firstCol = labelCols.indexOf(startCol);
-    let next = base;
-    let nextShared = shared;
+    const writes: { row: GridRow; colId: string; value: string }[] = [];
     let skipped = 0;
-    let readOnly = 0;
-    block.forEach((cells, i) => {
-      const row = api.getDisplayedRowAtIndex(focused.rowIndex + i);
-      if (!row?.data) {
-        skipped += 1;
-        return;
+    if (box && (box.r1 > box.r0 || box.c1 > box.c0) && block.length === 1 && block[0].length === 1) {
+      for (let r = box.r0; r <= box.r1; r += 1) {
+        const row = rowAt(r);
+        if (!row) continue;
+        for (let c = box.c0; c <= box.c1; c += 1) {
+          if (takesValue(ids[c])) writes.push({ row, colId: ids[c], value: block[0][0] });
+        }
       }
-      cells.forEach((cell, j) => {
-        const colId = labelCols[firstCol + j];
-        if (!colId) return;
-        const id = colId.slice(ANN_PREFIX.length);
-        const label = cell.slice(0, MAX_LABEL_LENGTH);
-        if (isShared(id)) {
-          if (canShare) nextShared = setSharedLabel(nextShared, id, row.data!.__key, label);
-          else readOnly += 1;
+    } else {
+      const cols = ids.filter(takesValue);
+      const firstCol = cols.indexOf(startCol);
+      block.forEach((cells, i) => {
+        const row = rowAt(startRow + i);
+        if (!row) {
+          skipped += 1;
           return;
         }
-        next = setLabel(next, id, row.data!.__key, label);
-      });
-    });
-    commit(next);
-    if (nextShared !== shared) void writeShared(nextShared);
-    if (readOnly > 0) {
-      notifications.show({
-        color: 'orange',
-        message: `${readOnly} pasted value${readOnly === 1 ? '' : 's'} fell on shared labels, which are read-only, and were left out.`,
+        cells.forEach((cell, j) => {
+          const colId = cols[firstCol + j];
+          if (colId) writes.push({ row, colId, value: cell });
+        });
       });
     }
+    applyWrites(writes);
     if (skipped > 0) {
       notifications.show({
         color: 'orange',
@@ -676,10 +802,132 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
     }
   };
 
+  // Delete / Backspace empties the selected cells (or the focused one).
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    const api = gridApi.current;
+    if (!api) return;
+    if (e.key === 'Escape' && rangeRef.current && api.getEditingCells().length === 0) {
+      setRange(null);
+      return;
+    }
+    // Cmd/Ctrl+Z steps back, with Shift (or Ctrl+Y) forward. An open editor
+    // keeps its own undo for the text being typed.
+    if ((e.metaKey || e.ctrlKey) && !e.altKey && ['z', 'y'].includes(e.key.toLowerCase())) {
+      if (api.getEditingCells().length > 0) return;
+      if ((e.target as HTMLElement).closest('input, textarea, [contenteditable="true"]')) return;
+      const forward = e.key.toLowerCase() === 'y' || e.shiftKey;
+      if (step(forward ? 'redo' : 'undo')) e.preventDefault();
+      return;
+    }
+    if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+    if (api.getEditingCells().length > 0) return;
+    if ((e.target as HTMLElement).closest('input, textarea, [contenteditable="true"]')) return;
+    const ids = displayedIds();
+    const box = boxOf(rangeRef.current);
+    const focused = api.getFocusedCell();
+    const r0 = box ? box.r0 : focused?.rowIndex;
+    const r1 = box ? box.r1 : focused?.rowIndex;
+    const c0 = box ? box.c0 : focused ? ids.indexOf(focused.column.getColId()) : -1;
+    const c1 = box ? box.c1 : c0;
+    if (r0 === undefined || r1 === undefined || c0 < 0) return;
+    const writes: { row: GridRow; colId: string; value: string }[] = [];
+    for (let r = r0; r <= r1; r += 1) {
+      const row = rowAt(r);
+      if (!row) continue;
+      for (let c = c0; c <= c1; c += 1) {
+        if (takesValue(ids[c]) && cellText(row, ids[c]) !== '') writes.push({ row, colId: ids[c], value: '' });
+      }
+    }
+    if (writes.length === 0) return;
+    e.preventDefault();
+    applyWrites(writes);
+  };
+
+  // Copy and paste are the document's events, not the grid's: with no text
+  // selected (cells are not selectable) the browser sends them to the page's
+  // body or to whatever holds the selection, never to the focused cell, so a
+  // handler on the grid's box was never called. They are taken here, and only
+  // while the focus is inside the grid.
+  const gridBoxRef = useRef<HTMLDivElement | null>(null);
+  const clipboardRef = useRef({ onCopy, onPaste });
+  clipboardRef.current = { onCopy, onPaste };
+  useEffect(() => {
+    const inGrid = () => {
+      const active = document.activeElement;
+      return Boolean(active && gridBoxRef.current?.contains(active));
+    };
+    const copy = (e: ClipboardEvent) => inGrid() && clipboardRef.current.onCopy(e);
+    const paste = (e: ClipboardEvent) => inGrid() && clipboardRef.current.onPaste(e);
+    document.addEventListener('copy', copy);
+    document.addEventListener('paste', paste);
+    return () => {
+      document.removeEventListener('copy', copy);
+      document.removeEventListener('paste', paste);
+    };
+  }, []);
+
+  // The grid's mouse: a press starts a range, moving over cells with the button
+  // down stretches it, Shift extends the last one. The fill handle and an open
+  // editor keep their own mouse.
+  const posOf = (e: { node: { rowIndex: number | null }; column: { getColId: () => string } }): CellPos | null => {
+    const col = displayedIds().indexOf(e.column.getColId());
+    return e.node.rowIndex === null || col < 0 ? null : { row: e.node.rowIndex, col };
+  };
+  const onCellMouseDown = (e: CellMouseDownEvent<GridRow>) => {
+    const ev = e.event as MouseEvent | null | undefined;
+    if (!ev || ev.button !== 0) return;
+    if ((ev.target as HTMLElement | null)?.closest('.dc-fill-handle')) return;
+    if (gridApi.current?.getEditingCells().length) return;
+    const pos = posOf(e);
+    if (!pos) return;
+    const focused = gridApi.current?.getFocusedCell();
+    const focusPos = focused ? posOf({ node: { rowIndex: focused.rowIndex }, column: focused.column }) : null;
+    const anchor = ev.shiftKey ? (rangeRef.current?.anchor ?? focusPos ?? pos) : pos;
+    setRange({ anchor, head: pos });
+    rangeDragging.current = true;
+  };
+  const onCellMouseOver = (e: CellMouseOverEvent<GridRow>) => {
+    if (!rangeDragging.current) return;
+    const pos = posOf(e);
+    if (!pos) return;
+    setRange((r) => (r && (r.head.row !== pos.row || r.head.col !== pos.col) ? { ...r, head: pos } : r));
+  };
+
+  // A new label column or another table: fit the columns again. Left alone
+  // otherwise, so a width the reader dragged is not undone by an edit.
+  const fitKey = `${bound?.columns.length ?? 0}|${table?.dcId ?? ''}`;
+  useEffect(() => {
+    const id = setTimeout(() => gridApi.current?.autoSizeAllColumns(), 60);
+    return () => clearTimeout(id);
+  }, [fitKey]);
+
+  // ---- Fill ---------------------------------------------------------------------
+  // The fill handle's drop: the value of the cell it started on goes into every
+  // row it crossed, the label columns and the editable table columns alike.
+  const fillRange = (colId: string, from: number, to: number) => {
+    const source = rowAt(from);
+    if (!source) return;
+    const value = cellText(source, colId);
+    const [lo, hi] = from < to ? [from + 1, to] : [to, from - 1];
+    const writes: { row: GridRow; colId: string; value: string }[] = [];
+    for (let i = lo; i <= hi; i += 1) {
+      const row = rowAt(i);
+      if (row) writes.push({ row, colId, value });
+    }
+    applyWrites(writes);
+  };
+  // The grid's column definitions are memoised; they call the latest closure.
+  const fillRef = useRef(fillRange);
+  fillRef.current = fillRange;
+  const fillParams = useMemo(
+    () => ({ onFill: (c: string, f: number, t: number) => fillRef.current(c, f, t) }),
+    [],
+  );
+
   // ---- Real writes: cells, a label column, a file -----------------------------
   const reloadTable = async () => {
     if (!choice) return;
-    statusCache.current.delete(choice.dcId);
+    forgetAnnotationTable(choice.dcId);
     setLoad(await readTable(choice.dcId, true));
   };
   const afterWrite = async () => {
@@ -934,7 +1182,11 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
           headerComponent: LabelColumnHeader,
           headerComponentParams: { actions },
           editable: kind !== 'shared-readonly',
-          cellClass: kind === 'shared-readonly' ? 'dc-label-cell-readonly' : undefined,
+          headerClass: 'dc-label-head',
+          cellClassRules: rangeRules,
+          cellRenderer: kind === 'shared-readonly' ? undefined : FillCell,
+          cellRendererParams: fillParams,
+          cellClass: ['dc-label-cell', ...(kind === 'shared-readonly' ? ['dc-label-cell-readonly'] : [])],
           valueSetter: setLabelCell,
           sortable: false,
           minWidth: 150,
@@ -942,25 +1194,16 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
       });
       const canEditCells = Boolean(table?.edit) && !pinned;
       return [
-        { field: KEY_FIELD, headerName: keyColumn || 'key', pinned: 'left', editable: false, minWidth: 140 },
-        ...labelCols,
+        // Not pinned: AG Grid lays its horizontal scrollbar under the scrolling
+        // columns only, so a pinned key made the bar start after it.
         {
-          field: ADD_FIELD,
-          headerName: '',
-          headerComponent: AddLabelHeader,
-          headerComponentParams: {
-            onAdd: () => setNaming({ id: null, value: '', error: null }),
-            disabled: labelColumnCount >= MAX_ANNOTATION_COLUMNS,
-          },
-          width: 52,
-          minWidth: 52,
-          maxWidth: 52,
+          field: KEY_FIELD,
+          headerName: keyColumn || 'key',
           editable: false,
-          sortable: false,
-          filter: false,
-          resizable: false,
-          suppressMovable: true,
+          minWidth: 140,
+          cellClassRules: rangeRules,
         },
+        ...labelCols,
         ...contextColumns.map<ColDef<GridRow>>((c) => {
           const editable = canEditCells && Boolean(table?.edit?.editable.has(c));
           return {
@@ -968,8 +1211,12 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
             headerName: c,
             editable,
             valueSetter: editable ? setTableCell : undefined,
-            headerTooltip: editable ? 'Click a cell to change the table' : undefined,
+            cellRenderer: editable ? FillCell : undefined,
+            cellRendererParams: editable ? fillParams : undefined,
+            maxWidth: 380,
+            headerTooltip: editable ? 'Double-click a cell to change the table' : undefined,
             cellClassRules: {
+              ...rangeRules,
               'dc-label-cell-pending': (p) =>
                 p.data?.__row !== null &&
                 p.data?.__row !== undefined &&
@@ -1056,12 +1303,24 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
 
       <Group justify="space-between" gap="xs" wrap="nowrap">
         <Group gap="xs" wrap="nowrap" style={{ minWidth: 0 }}>
+          <Text size="xs" c="dimmed">
+            Table
+          </Text>
           {tables.length > 1 ? (
-            <SegmentedControl
+            <Select
               size="xs"
-              data={tables.map((t) => ({ value: t.dc_id, label: annotationTableLabel(t, tables) }))}
-              value={choice?.dcId ?? ''}
-              onChange={onTableChange}
+              w={190}
+              aria-label="Table to label"
+              leftSection={<Icon icon="mdi:table" width={14} />}
+              data={tables.map((t) => ({
+                value: t.dc_id,
+                label: `${annotationTableLabel(t, tables)} · ${t.link_targets ?? 0} linked`,
+              }))}
+              value={choice?.dcId ?? null}
+              onChange={(v) => v && onTableChange(v)}
+              allowDeselect={false}
+              comboboxProps={{ withinPortal: true, zIndex: Z_LAYERS.nestedOverlay }}
+              classNames={{ input: 'dc-mp-select' }}
               data-testid="annotation-table-select"
             />
           ) : (
@@ -1082,8 +1341,8 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
             />
           ) : (
             <Tooltip withinPortal label="Labels are keyed on this column, the one the table links by">
-              <Text size="sm" c="dimmed" truncate data-testid="annotation-key">
-                by {keyColumn}
+              <Text size="xs" c="dimmed" truncate data-testid="annotation-key">
+                key: {keyColumn}
               </Text>
             </Tooltip>
           )}
@@ -1120,21 +1379,51 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
         <Group gap={4} wrap="nowrap">
         <Tooltip
           withinPortal
+          label={
+            labelColumnCount >= MAX_ANNOTATION_COLUMNS
+              ? `At most ${MAX_ANNOTATION_COLUMNS} label columns`
+              : 'A new column of your own labels, next to the table'
+          }
+        >
+          <Button
+            size="xs"
+            className="dc-mp-btn dc-mp-btn--primary"
+            disabled={!table || !keyColumn || labelColumnCount >= MAX_ANNOTATION_COLUMNS}
+            leftSection={<Icon icon="mdi:plus" width={14} />}
+            onClick={() => setNaming({ id: null, value: '', error: null })}
+            data-testid="label-add"
+          >
+            Add column
+          </Button>
+        </Tooltip>
+        <Tooltip withinPortal label="Fit every column to its content">
+          <Button
+            size="xs"
+            className="dc-mp-btn"
+            disabled={!table}
+            leftSection={<Icon icon="mdi:arrow-expand-horizontal" width={14} />}
+            onClick={() => gridApi.current?.autoSizeAllColumns()}
+            data-testid="annotation-fit-columns"
+          >
+            Fit
+          </Button>
+        </Tooltip>
+        <Tooltip
+          withinPortal
           multiline
           w={300}
           label={
-            writeBlocked && SOURCE_ELSEWHERE.has(statusCache.current.get(table?.dcId ?? '')?.code ?? '')
+            writeBlocked && SOURCE_ELSEWHERE.has(cachedEditStatus(table?.dcId ?? '')?.code ?? '')
               ? "This table's rows with your label columns added, as a TSV. Add the columns to the sheet this table comes from (for a pipeline, its metadata sheet) and ingest it again: the pipeline's statistics will include them."
               : "This table's rows with label columns added, as a TSV built in your browser."
           }
         >
           <Button
             size="xs"
-            variant="subtle"
-            color="gray"
-            disabled={!table || !keyColumn || labelColumnCount === 0}
+            className="dc-mp-btn"
+            disabled={!table || !keyColumn}
             leftSection={<Icon icon="mdi:tray-arrow-down" width={14} />}
-            onClick={() => setExporting(new Set((bound?.columns ?? []).map((c) => c.id)))}
+            onClick={startExport}
             data-testid="annotation-export"
           >
             Export
@@ -1149,8 +1438,7 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
             <Button
               {...props}
               size="xs"
-              variant="subtle"
-              color="gray"
+              className="dc-mp-btn"
               disabled={!table || !keyColumn}
               leftSection={<Icon icon="mdi:tray-arrow-up" width={14} />}
             >
@@ -1194,29 +1482,77 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
         </Alert>
       )}
 
-      {load.kind === 'loading' && <Loader size="sm" />}
+      {(load.kind === 'loading' || (table && !settled)) && <Loader size="sm" />}
       {load.kind === 'refused' && (
         <Alert color="orange" data-testid="annotation-refused">
           {load.message}
         </Alert>
       )}
-      {table && keyColumn && (
+      {table && keyColumn && settled && (
         <>
+          {labelColumnCount === 0 ? (
+            <Paper
+              withBorder
+              p="sm"
+              radius="md"
+              className="dc-mp-empty"
+              data-testid="annotation-empty-state"
+            >
+              <Group gap="sm" wrap="nowrap" align="flex-start">
+                <Icon
+                  icon="mdi:file-upload-outline"
+                  width={24}
+                  className="dc-mp-empty-icon"
+                  style={{ flexShrink: 0 }}
+                />
+                <Stack gap={2}>
+                  <Text size="sm" fw={600}>
+                    Drop a CSV or TSV here to import labels
+                  </Text>
+                  <Text size="xs" c="dimmed">
+                    One row per {keyColumn}. You see the result before anything is applied. Or use{' '}
+                    <b>Add column</b> to type labels in the grid, or paste a block from a spreadsheet
+                    onto a label cell. <b>Export</b> downloads the table, with your edits, at any time.
+                  </Text>
+                </Stack>
+              </Group>
+            </Paper>
+          ) : (
+            <Text size="xs" c="dimmed" data-testid="annotation-grid-hint">
+              Double-click a cell to edit it. Teal columns are your labels: press the chart icon in their
+              header to colour or split the charts by them. Drop a CSV or TSV anywhere to import it.
+            </Text>
+          )}
           <Box
-            onPaste={onPaste}
+            ref={gridBoxRef}
+            onKeyDown={onKeyDown}
             className={scheme === 'dark' ? 'ag-theme-alpine-dark' : 'ag-theme-alpine'}
-            style={{ height: 'calc(100vh - 260px)', minHeight: 300, width: '100%' }}
+            // A short table takes the height of its rows, so the horizontal
+            // scrollbar sits right under the last one; a long one fills the
+            // panel and scrolls inside it (autoHeight would draw every row).
+            style={
+              rows.length <= FIT_ROWS_MAX
+                ? { width: '100%' }
+                : { height: 'calc(100vh - 260px)', minHeight: 300, width: '100%' }
+            }
             data-testid="annotation-grid"
           >
             <AgGridReact<GridRow>
               rowData={rows}
+              domLayout={rows.length <= FIT_ROWS_MAX ? 'autoHeight' : 'normal'}
               columnDefs={colDefs}
               defaultColDef={{ sortable: true, filter: true, resizable: true }}
               getRowId={(p) => p.data.__key}
               onGridReady={(e) => {
                 gridApi.current = e.api;
               }}
-              singleClickEdit
+              // Columns open at their content's width, so a path or a long
+              // label is read rather than cut at a default 200 px.
+              onFirstDataRendered={(e) => e.api.autoSizeAllColumns()}
+              onCellMouseDown={onCellMouseDown}
+              onCellMouseOver={onCellMouseOver}
+              // A click only focuses (copy, paste and the fill handle work from
+              // there); a double click, Enter or F2 opens the editor.
               stopEditingWhenCellsLoseFocus
               tooltipShowDelay={200}
             />
@@ -1264,12 +1600,9 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
               )}
             </Paper>
           ) : (
-            (missingKeys > 0 || labelColumnCount === 0) && (
+            missingKeys > 0 && (
               <Text size="xs" c="dimmed">
-                {labelColumnCount === 0 &&
-                  'Add a label column with +, paste from a spreadsheet, or drop a CSV or TSV here.'}
-                {missingKeys > 0 &&
-                  ` ${missingKeys} labelled row${missingKeys === 1 ? ' is' : 's are'} no longer in the table; kept, not shown.`}
+                {`${missingKeys} labelled row${missingKeys === 1 ? ' is' : 's are'} no longer in the table; kept, not shown.`}
               </Text>
             )
           )}
@@ -1497,6 +1830,8 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
           <Text size="sm">
             Every row of {chosenEntry ? annotationTableLabel(chosenEntry, tables) : 'this table'}, with
             these label columns added. The file is built in your browser.
+            {cellEdits.size > 0 &&
+              ` It includes your ${cellEdits.size} unsaved change${cellEdits.size === 1 ? '' : 's'} to the table.`}
           </Text>
           <Stack gap={6}>
             {(bound?.columns ?? []).map((c) => (
@@ -1531,7 +1866,7 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
             <Button
               size="xs"
               disabled={!exporting || exporting.size === 0}
-              onClick={exportSheet}
+              onClick={() => exportSheet()}
               leftSection={<Icon icon="mdi:tray-arrow-down" width={14} />}
               data-testid="annotation-export-apply"
             >

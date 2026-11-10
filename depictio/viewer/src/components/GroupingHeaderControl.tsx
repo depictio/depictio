@@ -1,15 +1,15 @@
+import './panelAccents.css';
 import React from 'react';
-import { Badge, Drawer, Group, Text } from '@mantine/core';
-import { Icon } from '@iconify/react';
+import { Drawer } from '@mantine/core';
 import {
   ANALYSIS_PANEL_TOGGLE_EVENT,
   ChromeButton,
   getChromeStyle,
   dispatchPanelToggle,
-  useGroupingColor,
   Z_LAYERS,
 } from 'depictio-react-core';
 import type { ColorByState } from 'depictio-react-core';
+import PanelTitle from './PanelTitle';
 
 /**
  * Width of the docked panel, in pixels so the apps can pad their content
@@ -86,10 +86,6 @@ const GroupingHeaderControl: React.FC<{
   pushesContent,
   children,
 }) => {
-  // Tertiary under a brand, violet otherwise — either way distinct from the
-  // Edit and Save buttons beside it (see `useGroupingColor`).
-  const groupingColor = useGroupingColor();
-
   // Tell the dashboard grid the content column is about to lose (or regain)
   // this much width, so it re-lays out and pumps resize events for the length
   // of the slide — the same contract the sidebar and the filter panel use.
@@ -140,6 +136,7 @@ const GroupingHeaderControl: React.FC<{
         tooltip="Save selections as groups, color or split every figure, compare groups"
         badge={groupCount}
         aria-pressed={Boolean(modeLabel) || armed}
+        className="dc-dock--analysis"
         data-testid="analysis-button"
         onClick={onToggle}
       />
@@ -151,7 +148,7 @@ const GroupingHeaderControl: React.FC<{
         position="right"
         size={PANEL_WIDTH}
         // A layout may float or re-anchor the panel through this class.
-        classNames={{ content: 'dc-analysis-panel', inner: 'dc-analysis-panel-inner' }}
+        classNames={{ content: 'dc-analysis-panel dc-panel--analysis', inner: 'dc-analysis-panel-inner' }}
         padding="md"
         // Above the floating map card, like the other dashboard drawers.
         zIndex={Z_LAYERS.overlay}
@@ -168,17 +165,12 @@ const GroupingHeaderControl: React.FC<{
         // Analysis button in it is the way out of the mode.
         styles={{ inner: { top: dashboardHeaderHeight() } }}
         title={
-          <Group gap="xs">
-            <Icon icon="mdi:select-group" width={20} height={20} className="dc-ap-title-icon" />
-            <Text fw={600} size="md" className="dc-ap-title">
-              Analysis
-            </Text>
-            {groupCount > 0 && (
-              <Badge size="sm" variant="light" color={groupingColor} className="dc-ap-title-count">
-                {groupCount} group{groupCount === 1 ? '' : 's'}
-              </Badge>
-            )}
-          </Group>
+          <PanelTitle
+            icon="mdi:select-group"
+            title="Analysis"
+            subtitle="Save selections as groups, colour or split figures"
+            count={groupCount > 0 ? `${groupCount} group${groupCount === 1 ? '' : 's'}` : null}
+          />
         }
         data-testid="analysis-panel"
       >

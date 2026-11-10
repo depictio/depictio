@@ -243,6 +243,19 @@ export const Dock: React.FC<{
     // Once, on arrival.
   }, []);
 
+  // The centred anchors stay centred on the window whatever panel is open, and
+  // give way only as far as keeping the dock clear of that panel takes: the CSS
+  // needs the dock's half width for that (`.hy-anchor[data-anchor$='center']`).
+  React.useLayoutEffect(() => {
+    const el = nav.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const measure = () => el.style.setProperty('--gl-dock-half', `${el.offsetWidth / 2}px`);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   /** Bring the dock from where it was (`from`) to its anchor (`base`, the
    *  untransformed position there) with a spring. */
   const settle = (from: Point, base: Point) => {

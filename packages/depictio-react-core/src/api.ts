@@ -4204,6 +4204,8 @@ export interface AnnotationTable {
   workflow_name: string | null;
   /** The link source columns labels may be keyed on, first one by default. */
   key_columns: string[];
+  /** How many collections this table's labels reach through links. */
+  link_targets?: number;
   row_count: number | null;
   eligible: boolean;
   code: string | null;

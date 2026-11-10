@@ -229,7 +229,10 @@ export { default as FilterPanel } from './components/interactive/FilterPanel';
 export { FILTER_PANEL_RAIL_WIDTH } from './components/interactive/FilterPanel';
 export type { FilterPanelProps } from './components/interactive/FilterPanel';
 export { default as SelectionGroupsPanel } from './components/interactive/SelectionGroupsPanel';
-export type { SelectionGroupsPanelProps } from './components/interactive/SelectionGroupsPanel';
+export type {
+  SelectionGroupsPanelProps,
+  LabelColumnChoice,
+} from './components/interactive/SelectionGroupsPanel';
 export { SaveGroupContext } from './components/chrome/SaveGroupAction';
 export type { SaveGroupApi } from './components/chrome/SaveGroupAction';
 export { default as InteractiveGroupCard } from './components/InteractiveGroupCard';

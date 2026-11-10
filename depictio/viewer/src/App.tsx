@@ -35,6 +35,8 @@ import {
   mergeFiltersBySource,
   withInteractiveDefaults,
   withShared,
+  emptyAnnotations,
+  annotationColumnBudget,
   enrichFilterWithDcId,
   useDataCollectionUpdates,
   RealtimeIndicator,
@@ -150,9 +152,10 @@ import { FILTER_PANEL_RESIZER_WIDTH } from './components/FilterPanelResizer';
 import GroupingHeaderControl, { ANALYSIS_PANEL_WIDTH_PX } from './components/GroupingHeaderControl';
 import AnnotationPanel from './components/annotations/AnnotationPanel';
 import MetadataHeaderControl, {
-  METADATA_PANEL_WIDTH_PX,
+  useMetadataPanelWidth,
 } from './components/annotations/MetadataHeaderControl';
 import { useAnnotationTables } from './components/annotations/useAnnotationTables';
+import { defaultAnnotationTable, warmAnnotationTable } from './components/annotations/annotationTableRead';
 import {
   type AnnotationStorage,
   useDashboardAnnotations,
@@ -390,7 +393,7 @@ const App: React.FC = () => {
   const panelScopeId = crossTab.familyId ?? dashboardId;
 
   // Tab sidebar (desktop): open by default, remembered per dashboard family.
-  const [desktopOpened, toggleDesktop] = useSidebarOpen(panelScopeId);
+  const [desktopOpened, toggleDesktop, foldDesktop] = useSidebarOpen(panelScopeId);
 
   // Left filter panel chrome. Width first: the collapse swing is the width the
   // content column reclaims, which is everything but the icon rail.
@@ -404,7 +407,7 @@ const App: React.FC = () => {
   // The swing spans both variable tracks: collapsing takes the panel down to
   // the rail *and* the drag handle down to nothing. The grid gaps don't move,
   // so they cancel out.
-  const [filterPanelOpened, toggleFilterPanel] = useFilterPanelOpen(
+  const [filterPanelOpened, toggleFilterPanel, foldFilterPanel] = useFilterPanelOpen(
     panelScopeId,
     filterPanelWidth + FILTER_PANEL_RESIZER_WIDTH - FILTER_PANEL_RAIL_WIDTH,
     dashboard?.filter_panel_default === 'collapsed',
@@ -1324,33 +1327,6 @@ const App: React.FC = () => {
       </div>
     ) : null;
 
-  // The Grouping panel's body. Mounted once, inside the header "Analysis"
-  // popover (GroupingHeaderControl) — the panel is dashboard-family state and
-  // has to stay reachable when the per-tab filter panel is collapsed.
-  const groupsSection = (
-    <SelectionGroupsPanel
-      filters={filters}
-      components={summaryMetadata}
-      groups={groupsApi.groups}
-      colorBy={groupsApi.colorBy}
-      colorByColumns={colorByColumns}
-      compareInCards={groupsApi.compareInCards}
-      onCreateGroup={groupsApi.createGroupFromFilter}
-      onClearSelection={handleFilterChange}
-      onUpdateGroup={groupsApi.updateGroup}
-      onDeleteGroup={groupsApi.deleteGroup}
-      onToggleGroupFilter={groupsApi.toggleGroupFilter}
-      onColorByChange={groupsApi.setColorBy}
-      onCompareInCardsChange={groupsApi.setCompareInCards}
-      displayMode={groupsApi.displayMode}
-      onDisplayModeChange={groupsApi.setDisplayMode}
-      showOther={groupsApi.showOther}
-      onShowOtherChange={groupsApi.setShowOther}
-      showOverall={groupsApi.showOverall}
-      onShowOverallChange={groupsApi.setShowOverall}
-      onResetAnalysis={groupsApi.resetAnalysis}
-    />
-  );
   const cardComponents = useMemo(
     () => (dashboard?.stored_metadata || []).filter((m) => m.component_type === 'card'),
     [dashboard],
@@ -1417,6 +1393,7 @@ const App: React.FC = () => {
   // edge with Analysis: opening one closes the other first, and opens once
   // that slide is over, so the grid sees one width change at a time.
   const [metadataOpen, setMetadataOpen] = useState(false);
+  const [metadataWidth, setMetadataWidth] = useMetadataPanelWidth();
   const swapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => {
     if (swapTimer.current) clearTimeout(swapTimer.current);
@@ -1487,6 +1464,80 @@ const App: React.FC = () => {
   const annotationPins = useMemo(
     () => (previewRequest ? dataPinBody(previewRequest) : null),
     [previewRequest],
+  );
+  // The Metadata panel's table is read once the page is idle, not when the panel
+  // opens: the grid then fills as the dashboard makes room for it, rather than
+  // after a round trip that ends in the middle of that re-flow.
+  useEffect(() => {
+    if (!dashboardId || !hasMetadataTable || annotationPins) return;
+    const warm = () =>
+      warmAnnotationTable(
+        dashboardId,
+        defaultAnnotationTable(
+          annotationTables,
+          annotationView?.columns,
+          annotationView?.activeColumnId,
+        ),
+      );
+    if (typeof window.requestIdleCallback === 'function') {
+      const handle = window.requestIdleCallback(warm, { timeout: 4000 });
+      return () => window.cancelIdleCallback(handle);
+    }
+    const timer = window.setTimeout(warm, 1500);
+    return () => window.clearTimeout(timer);
+  }, [dashboardId, hasMetadataTable, annotationPins, annotationTables, annotationView]);
+
+  // The reader's label columns, offered in the Analysis next to the data's own
+  // columns: a column added by hand is only worth having if it can be compared.
+  const labelColumnChoices = useMemo(
+    () =>
+      (annotationView?.columns ?? []).map((c) => {
+        const budget = annotationColumnBudget(c, groupsApi.groups);
+        return {
+          id: c.id,
+          name: c.name,
+          active: c.id === annotationView?.activeColumnId,
+          blocked: budget.ok ? null : budget.reason,
+        };
+      }),
+    [annotationView, groupsApi.groups],
+  );
+  const { setAnnotations: setOwnAnnotations, annotations: ownAnnotations } = annotationsState;
+  const pickLabelColumn = useCallback(
+    (id: string | null) => {
+      setOwnAnnotations({ ...(ownAnnotations ?? emptyAnnotations()), activeColumnId: id });
+    },
+    [ownAnnotations, setOwnAnnotations],
+  );
+
+  // The Grouping panel's body. Mounted once, inside the header "Analysis"
+  // popover (GroupingHeaderControl) — the panel is dashboard-family state and
+  // has to stay reachable when the per-tab filter panel is collapsed.
+  const groupsSection = (
+    <SelectionGroupsPanel
+      filters={filters}
+      components={summaryMetadata}
+      groups={groupsApi.groups}
+      colorBy={groupsApi.colorBy}
+      colorByColumns={colorByColumns}
+      compareInCards={groupsApi.compareInCards}
+      onCreateGroup={groupsApi.createGroupFromFilter}
+      onClearSelection={handleFilterChange}
+      onUpdateGroup={groupsApi.updateGroup}
+      onDeleteGroup={groupsApi.deleteGroup}
+      onToggleGroupFilter={groupsApi.toggleGroupFilter}
+      onColorByChange={groupsApi.setColorBy}
+      onCompareInCardsChange={groupsApi.setCompareInCards}
+      displayMode={groupsApi.displayMode}
+      onDisplayModeChange={groupsApi.setDisplayMode}
+      showOther={groupsApi.showOther}
+      onShowOtherChange={groupsApi.setShowOther}
+      showOverall={groupsApi.showOverall}
+      onShowOverallChange={groupsApi.setShowOverall}
+      onResetAnalysis={groupsApi.resetAnalysis}
+      labelColumns={labelColumnChoices}
+      onPickLabelColumn={pickLabelColumn}
+    />
   );
 
   const saveGroupApi = useMemo(
@@ -1644,6 +1695,8 @@ const App: React.FC = () => {
           opened={metadataOpen}
           onOpenedChange={handleMetadataOpenChange}
           pushesContent={!isNarrow}
+          width={metadataWidth}
+          onWidthChange={setMetadataWidth}
         >
           <AnnotationPanel
             dashboardId={dashboardId}
@@ -2260,6 +2313,7 @@ const App: React.FC = () => {
           desktopOpened,
           toggleMobile,
           toggleDesktop,
+          fold: foldDesktop,
         }}
         boot={boot}
         canvas={canvas}
@@ -2275,6 +2329,7 @@ const App: React.FC = () => {
           docked: {
             opened: filterPanelOpened,
             toggle: toggleFilterPanel,
+            fold: foldFilterPanel,
             width: filterPanelWidth,
             widthVar: FILTER_PANEL_WIDTH_VAR,
             layoutRef: filterPanelLayoutRef,
@@ -2293,7 +2348,7 @@ const App: React.FC = () => {
         }}
         analysis={{
           open: analysisOpen || metadataOpen,
-          widthPx: metadataOpen ? METADATA_PANEL_WIDTH_PX : ANALYSIS_PANEL_WIDTH_PX,
+          widthPx: metadataOpen ? metadataWidth : ANALYSIS_PANEL_WIDTH_PX,
         }}
         guideOpen={guide.open}
       />

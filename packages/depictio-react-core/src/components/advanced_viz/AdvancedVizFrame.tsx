@@ -16,6 +16,7 @@ import { ComponentIndexContext, useReportLoadStatus } from '../DashboardLoadingP
 import { GRID_ROW_GAP_PX, GRID_ROW_PX, publishContentDemand, useAutofitScope } from '../autofit';
 import {
   AdvancedVizExtrasContext,
+  SplitRowsContext,
   type AdvancedVizExtrasPayload,
   type TierAnnotation,
 } from './AdvancedVizExtras';
@@ -480,6 +481,7 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
   // Published under the tile's autofit scope, so a copy drawn in the Guide
   // never resizes the tile on the canvas.
   const autofitScope = useAutofitScope();
+  const splitRows = useContext(SplitRowsContext);
   const demandRows = contentDemand?.rows;
   useEffect(() => {
     if (!componentIndex || demandRows === undefined) return;
@@ -488,9 +490,17 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
     const extraRows =
       stackedHeight > 0 ? Math.ceil(stackedHeight / (GRID_ROW_PX + GRID_ROW_GAP_PX)) : 0;
     publishContentDemand(autofitScope + String(componentIndex), {
-      rows: demandRows + extraRows,
+      rows: (demandRows + extraRows) * splitRows,
     });
-  }, [autofitScope, componentIndex, demandRows, inlineLayout, inlineHeight, captionHeight]);
+  }, [
+    autofitScope,
+    componentIndex,
+    demandRows,
+    inlineLayout,
+    inlineHeight,
+    captionHeight,
+    splitRows,
+  ]);
 
   // One dim line saying what is on screen. Derived from the reduction the
   // renderer already publishes unless it passed something better.

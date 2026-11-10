@@ -108,6 +108,9 @@ import {
   readEditorFilters,
   writeEditorFilters,
   useSelectionGroups,
+  withShared,
+  emptyAnnotations,
+  annotationColumnBudget,
   useCategoricalColumns,
   useColorByColumnRender,
   resolveGroupRender,
@@ -163,6 +166,19 @@ import SectionModal from './components/sections/SectionModal';
 import GroupingHeaderControl, {
   ANALYSIS_PANEL_WIDTH_PX,
 } from './components/GroupingHeaderControl';
+import AnnotationPanel from './components/annotations/AnnotationPanel';
+import MetadataHeaderControl, {
+  useMetadataPanelWidth,
+} from './components/annotations/MetadataHeaderControl';
+import { useAnnotationTables } from './components/annotations/useAnnotationTables';
+import {
+  defaultAnnotationTable,
+  warmAnnotationTable,
+} from './components/annotations/annotationTableRead';
+import {
+  type AnnotationStorage,
+  useDashboardAnnotations,
+} from './components/annotations/useDashboardAnnotations';
 import SectionsModal from './components/sections/SectionsModal';
 import { applySectionOp, groupWith, sectionsFor } from './components/sections/sectionMutations';
 import type { SectionKind, SectionOp } from './components/sections/sectionMutations';
@@ -194,6 +210,10 @@ import { focusComponent } from './lib/focusComponent';
 
 const API_BASE = '/depictio/api/v1';
 const SAVE_DEBOUNCE_MS = 500;
+
+/** Analysis and Metadata share the right edge: the Drawer slide (250 ms) and a
+ *  margin, before the second one opens. */
+const RIGHT_PANEL_SWAP_MS = 280;
 
 /**
  * Dash app base — the component add/edit pages live in the Dash editor on a
@@ -330,7 +350,12 @@ const EditorApp: React.FC = () => {
     target: FilterSectionSpec | null;
     fromManager: boolean;
   }>({ open: false, kind: 'grid', target: null, fromManager: false });
-  const { user: currentUser, loading: userLoading, inspectorEnabled } = useCurrentUser();
+  const {
+    user: currentUser,
+    loading: userLoading,
+    inspectorEnabled,
+    isSingleUserMode,
+  } = useCurrentUser();
   // `control` is null while the flag is off, so no provider value reaches the
   // component chrome and no inspect action is rendered anywhere.
   const { control: inspectorControl, aside: inspectorAside } =
@@ -377,7 +402,7 @@ const EditorApp: React.FC = () => {
   const panelScopeId = crossTab.familyId ?? dashboardId;
 
   // Tab sidebar: same per-family key as the viewer, so both agree.
-  const [desktopOpened, toggleDesktop] = useSidebarOpen(panelScopeId);
+  const [desktopOpened, toggleDesktop, foldDesktop] = useSidebarOpen(panelScopeId);
 
   // Left filter panel chrome — same hooks and same storage keys as the viewer,
   // so collapsing or resizing in one mode carries over to the other.
@@ -391,7 +416,7 @@ const EditorApp: React.FC = () => {
   // The swing spans both variable tracks: collapsing takes the panel down to
   // the rail *and* the drag handle down to nothing. The grid gaps don't move,
   // so they cancel out.
-  const [filterPanelOpened, toggleFilterPanel] = useFilterPanelOpen(
+  const [filterPanelOpened, toggleFilterPanel, foldFilterPanel] = useFilterPanelOpen(
     panelScopeId,
     filterPanelWidth + FILTER_PANEL_RESIZER_WIDTH - FILTER_PANEL_RAIL_WIDTH,
   );
@@ -777,18 +802,118 @@ const EditorApp: React.FC = () => {
   // arrival would be worse than closing it.
   const [analysisOpen, setAnalysisOpen] = useState(false);
   const { analysisArmed, setAnalysisArmed } = groupsApi;
+  // The Metadata panel shares the right edge with Analysis: opening one closes
+  // the other first, and opens once that slide is over (mirrors App.tsx).
+  const [metadataOpen, setMetadataOpen] = useState(false);
+  const [metadataWidth, setMetadataWidth] = useMetadataPanelWidth();
+  const swapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (swapTimer.current) clearTimeout(swapTimer.current);
+    },
+    [],
+  );
+  const openAfter = useCallback((otherWasOpen: boolean, open: () => void) => {
+    if (swapTimer.current) clearTimeout(swapTimer.current);
+    swapTimer.current = null;
+    if (otherWasOpen) swapTimer.current = setTimeout(open, RIGHT_PANEL_SWAP_MS);
+    else open();
+  }, []);
   const handleAnalysisOpenChange = useCallback(
     (next: boolean) => {
-      setAnalysisOpen(next);
-      if (next) setAnalysisArmed(true);
+      if (next) {
+        setMetadataOpen(false);
+        openAfter(metadataOpen, () => setAnalysisOpen(true));
+        setAnalysisArmed(true);
+      } else {
+        setAnalysisOpen(false);
+      }
     },
-    [setAnalysisArmed],
+    [setAnalysisArmed, metadataOpen, openAfter],
   );
   const handleAnalysisToggle = useCallback(() => {
     const next = !analysisOpen;
-    setAnalysisOpen(next);
+    handleAnalysisOpenChange(next);
     setAnalysisArmed(next);
-  }, [analysisOpen, setAnalysisArmed]);
+  }, [analysisOpen, handleAnalysisOpenChange, setAnalysisArmed]);
+  const handleMetadataOpenChange = useCallback(
+    (next: boolean) => {
+      if (next) {
+        setAnalysisOpen(false);
+        openAfter(analysisOpen, () => setMetadataOpen(true));
+      } else {
+        setMetadataOpen(false);
+      }
+    },
+    [analysisOpen, openAfter],
+  );
+
+  // Session labels on a metadata table, as in the viewer (see App.tsx): kept on
+  // the account for a signed-in account, in the browser otherwise; each label of
+  // the active column becomes a group.
+  const annotationStorage: AnnotationStorage | null = userLoading
+    ? null
+    : isSingleUserMode || (currentUser && !currentUser.is_temporary)
+      ? 'account'
+      : 'browser';
+  const annotationsState = useDashboardAnnotations(groupingScopeId, annotationStorage);
+  const annotationTablesState = useAnnotationTables(
+    dashboard && dashboardId ? dashboardId : undefined,
+    asOfVersionId ?? null,
+  );
+  const annotationTables = annotationTablesState.tables;
+  const hasMetadataTable = annotationTables.some((t) => t.eligible);
+  const annotationView = useMemo(
+    () => withShared(annotationsState.annotations, annotationTablesState.shared),
+    [annotationsState.annotations, annotationTablesState.shared],
+  );
+  const { syncAnnotationGroups } = groupsApi;
+  useEffect(() => {
+    if (annotationsState.loaded) syncAnnotationGroups(annotationView);
+  }, [annotationsState.loaded, annotationView, syncAnnotationGroups]);
+  const annotationPins = useMemo(
+    () => (timeTravelling ? dataPinBody({ asOfVersionId, pins: dataPins }) : null),
+    [timeTravelling, asOfVersionId, dataPins],
+  );
+  // The panel's table is read once the page is idle, not when it opens.
+  useEffect(() => {
+    if (!dashboardId || !hasMetadataTable || annotationPins) return;
+    const warm = () =>
+      warmAnnotationTable(
+        dashboardId,
+        defaultAnnotationTable(
+          annotationTables,
+          annotationView?.columns,
+          annotationView?.activeColumnId,
+        ),
+      );
+    if (typeof window.requestIdleCallback === 'function') {
+      const handle = window.requestIdleCallback(warm, { timeout: 4000 });
+      return () => window.cancelIdleCallback(handle);
+    }
+    const timer = window.setTimeout(warm, 1500);
+    return () => window.clearTimeout(timer);
+  }, [dashboardId, hasMetadataTable, annotationPins, annotationTables, annotationView]);
+  const labelColumnChoices = useMemo(
+    () =>
+      (annotationView?.columns ?? []).map((c) => {
+        const budget = annotationColumnBudget(c, groupsApi.groups);
+        return {
+          id: c.id,
+          name: c.name,
+          active: c.id === annotationView?.activeColumnId,
+          blocked: budget.ok ? null : budget.reason,
+        };
+      }),
+    [annotationView, groupsApi.groups],
+  );
+  const { setAnnotations: setOwnAnnotations, annotations: ownAnnotations } = annotationsState;
+  const pickLabelColumn = useCallback(
+    (id: string | null) => {
+      setOwnAnnotations({ ...(ownAnnotations ?? emptyAnnotations()), activeColumnId: id });
+    },
+    [ownAnnotations, setOwnAnnotations],
+  );
 
   const saveGroupApi = useMemo(
     () => ({
@@ -1882,6 +2007,8 @@ const EditorApp: React.FC = () => {
       showOverall={groupsApi.showOverall}
       onShowOverallChange={groupsApi.setShowOverall}
       onResetAnalysis={groupsApi.resetAnalysis}
+      labelColumns={labelColumnChoices}
+      onPickLabelColumn={pickLabelColumn}
     />
   );
 
@@ -2623,6 +2750,32 @@ const EditorApp: React.FC = () => {
       ),
     });
   }
+  if (dashboard && dashboardId && hasMetadataTable) {
+    headerActions.push({
+      id: 'metadata',
+      group: 'read',
+      node: (
+        <MetadataHeaderControl
+          labelCount={annotationView?.columns.length ?? 0}
+          opened={metadataOpen}
+          onOpenedChange={handleMetadataOpenChange}
+          pushesContent={!isNarrow}
+          width={metadataWidth}
+          onWidthChange={setMetadataWidth}
+        >
+          <AnnotationPanel
+            dashboardId={dashboardId}
+            tables={annotationTables}
+            sharing={annotationTablesState}
+            pins={annotationPins}
+            state={annotationsState}
+            groups={groupsApi.groups}
+            onDataWritten={() => setPlotThemeTick((t) => t + 1)}
+          />
+        </MetadataHeaderControl>
+      ),
+    });
+  }
   if (realtimeEnabled) {
     headerActions.push({
       id: 'realtime',
@@ -3156,6 +3309,7 @@ const EditorApp: React.FC = () => {
         desktopOpened,
         toggleMobile,
         toggleDesktop,
+        fold: foldDesktop,
       }}
       boot={boot}
       canvas={canvas}
@@ -3171,6 +3325,7 @@ const EditorApp: React.FC = () => {
         docked: {
           opened: filterPanelOpened,
           toggle: toggleFilterPanel,
+          fold: foldFilterPanel,
           width: filterPanelWidth,
           widthVar: FILTER_PANEL_WIDTH_VAR,
           layoutRef: filterPanelLayoutRef,
@@ -3187,7 +3342,10 @@ const EditorApp: React.FC = () => {
         node: <Inspector dashboard={dashboard} dashboardId={dashboardId} onNotesSaved={reloadVersions} />,
         aside: inspectorAside,
       }}
-      analysis={{ open: analysisOpen, widthPx: ANALYSIS_PANEL_WIDTH_PX }}
+      analysis={{
+        open: analysisOpen || metadataOpen,
+        widthPx: metadataOpen ? metadataWidth : ANALYSIS_PANEL_WIDTH_PX,
+      }}
       guideOpen={guide.open}
     />
       </GenomeBrowserTargetProvider>

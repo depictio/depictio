@@ -152,7 +152,8 @@ async function openPanel(page: Page): Promise<void> {
 
 /** Show the grid of the table tagged `tag` (the panel opens on the first one). */
 async function pickTable(page: Page, tag: string): Promise<void> {
-  await page.locator("[data-testid='annotation-table-select']").getByText(tag, { exact: true }).click();
+  await page.locator("[data-testid='annotation-table-select']").click();
+  await page.getByRole("option", { name: tag, exact: true }).click();
   await expect(page.locator("[data-testid='annotation-grid'] .ag-row").first()).toBeVisible({
     timeout: 30_000,
   });
@@ -198,7 +199,7 @@ async function typeCell(page: Page, column: string, rowIndex: number, value: str
   const grid = page.locator("[data-testid='annotation-grid']");
   const id = await columnId(page, column);
   const cell = grid.locator(`.ag-center-cols-container [row-index='${rowIndex}'] [col-id='${id}']`);
-  await cell.click();
+  await cell.dblclick();
   await page.keyboard.press("Control+A");
   await page.keyboard.type(value);
   await page.keyboard.press("Enter");

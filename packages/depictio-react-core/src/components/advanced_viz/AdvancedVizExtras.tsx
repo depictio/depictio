@@ -85,6 +85,17 @@ type Publisher = (payload: AdvancedVizExtrasPayload | null) => void;
 
 export const AdvancedVizExtrasContext = createContext<Publisher | null>(null);
 
+/** How many rows of panels the tile holds when it is split into small
+ *  multiples. Every panel reports the height one whole figure needs, and the
+ *  panels then share the tile: without this scale each row got a fraction of
+ *  what its legend and strips need, and the figure drew over itself. */
+export const SplitRowsContext = createContext<number>(1);
+
+/** True inside a panel of a split. Panels are read side by side, so a figure
+ *  keeps what they compare (the value axis) the same across them and trades
+ *  its side legend for one under the bars, which leaves them the width. */
+export const InSplitPanelContext = createContext<boolean>(false);
+
 interface ProviderProps {
   children: React.ReactNode;
   /** Receives the latest payload the framed renderer wants to publish. */

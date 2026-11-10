@@ -16,6 +16,7 @@ import {
   Text,
   TextInput,
   Tooltip,
+  UnstyledButton,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
@@ -76,9 +77,23 @@ export interface SelectionGroupsPanelProps {
   onShowOverallChange: (on: boolean) => void;
   /** Panel-level reset: every analysis mode back to defaults, groups kept. */
   onResetAnalysis: () => void;
+  /** The reader's label columns (Metadata panel). One of them can drive the
+   *  groups: its labels become the groups. `blocked` says why one cannot. */
+  labelColumns?: LabelColumnChoice[];
+  /** Compare by this label column, or by none (null). */
+  onPickLabelColumn?: (id: string | null) => void;
+}
+
+export interface LabelColumnChoice {
+  id: string;
+  name: string;
+  active: boolean;
+  blocked: string | null;
 }
 
 const COLOR_BY_NONE_VALUE = '__depictio_none__';
+/** Marks a label column among the data's own in the "A column" select. */
+const LABEL_VALUE_PREFIX = '__label__:';
 
 // The panel sits in a 440px drawer, not a header popover, so it reads at the
 // theme's own sizes rather than a step below them: 11px headings and labels
@@ -156,9 +171,25 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
   onShowOtherChange,
   onShowOverallChange,
   onResetAnalysis,
+  labelColumns = [],
+  onPickLabelColumn,
 }) => {
   // Per-row edit popover (name + color); null when no row is being edited.
   const [editingId, setEditingId] = useState<string | null>(null);
+  // The list of groups folds away, and a group's detail (what it is made of, the
+  // sample list) opens on its own: switching between label columns replaces the
+  // whole list, and a column of twelve groups with their samples is a screen.
+  // A label group starts compact (its detail is its label); a hand-made one
+  // starts open, since its values are the only thing telling two of them apart.
+  const [groupsOpen, setGroupsOpen] = useState(true);
+  const [detailToggled, setDetailToggled] = useState<ReadonlySet<string>>(new Set());
+  const toggleDetail = (id: string) =>
+    setDetailToggled((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   const [editName, setEditName] = useState('');
   // The last column the user coloured by. Picking "A column" on the segmented
   // control restores it rather than reopening an empty Select — flipping
@@ -190,11 +221,30 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
   // `sample`?"). Columns present in more than one DC go under "Shared
   // columns": the override applies to every figure whose frame carries the
   // column, so pinning them to one dataset would under-promise.
+  const labelItems = useMemo(
+    () =>
+      labelColumns.map((l) => ({
+        value: LABEL_VALUE_PREFIX + l.id,
+        label: l.name,
+        disabled: Boolean(l.blocked),
+      })),
+    [labelColumns],
+  );
   const columnSelectData = useMemo(() => {
     const none = { value: COLOR_BY_NONE_VALUE, label: 'None' };
     const distinctDcs = new Set(colorByColumns.flatMap((c) => c.dcIds));
-    if (distinctDcs.size <= 1) {
+    // The reader's own label columns, a group of their own: they are not in the
+    // data, they are what the reader added to it.
+    const labels = labelItems.length > 0 ? [{ group: 'Your labels', items: labelItems }] : [];
+    if (distinctDcs.size <= 1 && labels.length === 0) {
       return [none, ...colorByColumns.map((c) => ({ value: c.name, label: c.name }))];
+    }
+    if (distinctDcs.size <= 1) {
+      return [
+        none,
+        { group: 'Columns', items: colorByColumns.map((c) => ({ value: c.name, label: c.name })) },
+        ...labels,
+      ];
     }
     const dcLabel = (dcId: string): string => {
       const meta = components.find((m) => m.dc_id === dcId && m.data_collection_tag);
@@ -221,8 +271,9 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
     for (const [dcId, items] of byDc) {
       data.push({ group: dcLabel(dcId), items });
     }
+    data.push(...labels);
     return data;
-  }, [colorByColumns, components]);
+  }, [colorByColumns, components, labelItems]);
 
   return (
     <Box className="dc-ap">
@@ -313,9 +364,9 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
             label: (
               <Tooltip
                 label={
-                  colorByColumns.length === 0
+                  colorByColumns.length === 0 && labelColumns.length === 0
                     ? 'No categorical column on this dashboard to color by'
-                    : 'Color by a column that is already in your data'
+                    : 'Color by a column of your data, or by one of your own label columns'
                 }
                 withArrow
                 openDelay={400}
@@ -326,16 +377,16 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
                 </Group>
               </Tooltip>
             ),
-            disabled: colorByColumns.length === 0,
+            disabled: colorByColumns.length === 0 && labelColumns.length === 0,
           },
           {
             value: 'groups',
             label: (
               <Tooltip
                 label={
-                  groups.length === 0
+                  groups.length === 0 && labelColumns.length === 0
                     ? 'Draw a group first: lasso or box-select on a marked tile'
-                    : 'Color by the groups you drew below'
+                    : 'Color by the groups you drew, or by the labels of one of your label columns'
                 }
                 withArrow
                 openDelay={400}
@@ -346,7 +397,7 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
                 </Group>
               </Tooltip>
             ),
-            disabled: groups.length === 0,
+            disabled: groups.length === 0 && labelColumns.length === 0,
           },
         ]}
       />
@@ -387,6 +438,12 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
             placeholder="Pick a column…"
             onChange={(v) => {
               setColumnPending(false);
+              // A label column is compared through the groups its labels make.
+              if (v && v.startsWith(LABEL_VALUE_PREFIX)) {
+                onPickLabelColumn?.(v.slice(LABEL_VALUE_PREFIX.length));
+                onColorByChange({ kind: 'groups' });
+                return;
+              }
               onColorByChange(
                 !v || v === COLOR_BY_NONE_VALUE ? COLOR_BY_NONE : { kind: 'column', columnName: v },
               );
@@ -401,6 +458,26 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
             comboboxProps={{ withinPortal: true, zIndex: Z_LAYERS.tooltip }}
           />
         </Tooltip>
+      )}
+      {colorBy.kind === 'groups' && labelColumns.length > 0 && (
+        <Select
+          size="sm"
+          mt={6}
+          label="Label column"
+          description="Its labels become the groups. Add or edit them in Metadata."
+          data={labelItems}
+          value={labelColumns.find((l) => l.active)?.id
+            ? LABEL_VALUE_PREFIX + (labelColumns.find((l) => l.active) as LabelColumnChoice).id
+            : null}
+          placeholder="Pick a label column…"
+          onChange={(v) =>
+            onPickLabelColumn?.(v && v.startsWith(LABEL_VALUE_PREFIX) ? v.slice(LABEL_VALUE_PREFIX.length) : null)
+          }
+          clearable
+          allowDeselect={false}
+          comboboxProps={{ withinPortal: true, zIndex: Z_LAYERS.tooltip }}
+          data-testid="analysis-label-column"
+        />
       )}
       {colorBy.kind !== 'none' && (
         <DisplayModeControl value={displayMode} onChange={onDisplayModeChange} />
@@ -431,11 +508,35 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
       {/* ── Section 2: on-the-fly groups (creation + list) ──────────────── */}
       <Divider
         className="dc-ap-caption"
-        label={groups.length > 0 ? `Your groups (${groups.length})` : 'Your groups'}
+        label={
+          groups.length > 0 ? (
+            <UnstyledButton
+              onClick={() => setGroupsOpen((o) => !o)}
+              aria-expanded={groupsOpen}
+              data-testid="analysis-groups-toggle"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 4, font: 'inherit', color: 'inherit', letterSpacing: 'inherit', textTransform: 'inherit' }}
+            >
+              <Icon icon={groupsOpen ? 'mdi:chevron-down' : 'mdi:chevron-right'} width={14} height={14} aria-hidden />
+              {`Your groups (${groups.length})`}
+            </UnstyledButton>
+          ) : (
+            'Your groups'
+          )
+        }
         labelPosition="left"
         mt={14}
         styles={SECTION_LABEL_STYLES}
       />
+      {groups.length > 0 && !groupsOpen && (
+        // Folded: one dot per group, in the group's colour, named on hover.
+        <Group gap={5} mt={6} wrap="wrap" data-testid="analysis-groups-summary">
+          {groups.map((g) => (
+            <Tooltip key={g.id} label={g.name} withArrow openDelay={200}>
+              <ColorSwatch color={g.color} size={12} />
+            </Tooltip>
+          ))}
+        </Group>
+      )}
 
       {/* The guide runs until the first group exists — after that the ritual
           is known and the panel gives the space back to the group list. Its
@@ -467,7 +568,7 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
         )
       )}
 
-      {groups.length > 0 && (
+      {groups.length > 0 && groupsOpen && (
         <Stack
           className="dc-ap-list"
           gap={6}
@@ -484,6 +585,7 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
         >
           {groups.map((g) => {
             const preview = groupPreview(g, components);
+            const showDetail = Boolean(g.annotationColumnId) === detailToggled.has(g.id);
             return (
             // A card, not a line. A swatch plus a name plus a count made two
             // groups drawn on different columns — or on different datasets —
@@ -517,6 +619,20 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
               {/* sm, not xs: these are the panel's most-clicked controls and an
                   18px box around a 12px glyph collects near-misses, which read
                   as "the funnel does nothing" (observed in the field). */}
+              <Tooltip label={showDetail ? 'Hide what it is made of' : 'Show what it is made of'} withArrow openDelay={400}>
+                <ActionIcon
+                  className="dc-ap-act"
+                  variant="subtle"
+                  color="gray"
+                  size="sm"
+                  aria-label={`${showDetail ? 'Hide' : 'Show'} the detail of group ${g.name}`}
+                  aria-expanded={showDetail}
+                  onClick={() => toggleDetail(g.id)}
+                  style={{ flexShrink: 0 }}
+                >
+                  <Icon icon={showDetail ? 'mdi:chevron-up' : 'mdi:chevron-down'} width={14} height={14} />
+                </ActionIcon>
+              </Tooltip>
               <Popover
                 opened={editingId === g.id}
                 onChange={(open) => setEditingId(open ? g.id : null)}
@@ -621,6 +737,8 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
                 </ActionIcon>
               )}
             </Group>
+            {showDetail && (
+            <>
             <Text size="xs" c="dimmed" mt={4} truncate className="dc-ap-meta">
               {g.annotationColumnId && (
                 <>
@@ -649,6 +767,8 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
             <Box mt={4}>
               <ValueListPreview values={preview.values} rows={3} withHeader={false} />
             </Box>
+            </>
+            )}
             </Paper>
           );
           })}

@@ -55,6 +55,7 @@ import {
   ThemeTile,
   TopBar,
 } from './parts';
+import { usePanelRoom } from '../../shell/usePanelRoom';
 import { useDockAnchor } from './useDockPlacement';
 import './layout.css';
 
@@ -339,14 +340,19 @@ const DeskLayout: React.FC<DashboardShellProps> = ({
   // the drawer is open keeps it open, folding it by hand keeps it folded.
   const [sideChoice, setSideChoice] = React.useState(() => readFlag(SIDE_KEY, true));
   const [keepSide, setKeepSide] = React.useState(false);
+  // A right panel (Analysis, Metadata) takes room the same way: the filters
+  // drawer closes for it and the sidebar folds to its rail, both coming back
+  // when it closes.
+  usePanelRoom(analysis.open, { filters: { opened: filters.docked.opened, fold: filters.docked.fold } });
+  const sideCrowded = filtersOpen || analysis.open;
   React.useEffect(() => {
-    if (!filtersOpen) setKeepSide(false);
-  }, [filtersOpen]);
-  const autoFold = filtersOpen && !keepSide;
+    if (!sideCrowded) setKeepSide(false);
+  }, [sideCrowded]);
+  const autoFold = sideCrowded && !keepSide;
   const sideOpen = sideChoice && !autoFold;
   const toggleSide = () => {
     const next = !sideOpen;
-    if (next && filtersOpen) setKeepSide(true);
+    if (next && sideCrowded) setKeepSide(true);
     setSideChoice(next);
     writeFlag(SIDE_KEY, next, 'local');
   };

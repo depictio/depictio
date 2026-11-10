@@ -9,3 +9,186 @@
 .dc-label-cell-readonly {
   color: var(--mantine-color-dimmed);
 }
+
+/* The Metadata panel's own controls: pills in the panel's teal rather than
+   stock buttons. Mantine buttons are driven by --button-* variables, so
+   these set the variables and keep the component. */
+.dc-analysis-panel .mantine-Button-root.dc-mp-btn {
+  --button-height: 30px;
+  --button-radius: 999px;
+  --button-padding-x: 14px;
+  --button-bg: transparent !important;
+  --button-hover: var(--dc-panel-accent-soft) !important;
+  --button-color: var(--mantine-color-text) !important;
+  --button-bd: 1px solid var(--mantine-color-default-border) !important;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    box-shadow 120ms ease,
+    transform 120ms ease;
+}
+.dc-analysis-panel .mantine-Button-root.dc-mp-btn:not(:disabled):hover {
+  border-color: color-mix(in srgb, var(--dc-panel-accent) 55%, transparent);
+  color: var(--dc-panel-accent-ink);
+}
+.dc-analysis-panel .mantine-Button-root.dc-mp-btn:not(:disabled):active {
+  transform: translateY(1px);
+}
+.dc-analysis-panel .mantine-Button-root.dc-mp-btn:is(:disabled, [data-disabled]) {
+  opacity: 0.45;
+}
+/* The one main action of the toolbar. */
+.dc-analysis-panel .mantine-Button-root.dc-mp-btn--primary {
+  --button-bg: var(--dc-panel-accent) !important;
+  --button-hover: color-mix(in srgb, var(--dc-panel-accent) 88%, black) !important;
+  --button-color: var(--mantine-color-white) !important;
+  --button-bd: 1px solid transparent !important;
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--dc-panel-accent) 45%, transparent);
+}
+.dc-analysis-panel .mantine-Button-root.dc-mp-btn--primary:not(:disabled):hover {
+  color: var(--mantine-color-white);
+  border-color: transparent;
+  box-shadow: 0 3px 10px color-mix(in srgb, var(--dc-panel-accent) 40%, transparent);
+}
+
+/* The table picker, a pill like the buttons. */
+.dc-analysis-panel .dc-mp-select {
+  border-radius: 999px;
+  font-weight: 500;
+  border-color: var(--mantine-color-default-border);
+  background: transparent;
+}
+.dc-analysis-panel .dc-mp-select:focus,
+.dc-analysis-panel .dc-mp-select:focus-within {
+  border-color: var(--dc-panel-accent);
+}
+
+/* The empty state: a drop target that wakes up in the panel's colour while a
+   file is dragged over the panel. */
+.dc-analysis-panel .dc-mp-empty {
+  border-style: dashed;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--dc-panel-accent) 5%, transparent);
+  border-color: color-mix(in srgb, var(--dc-panel-accent) 40%, var(--mantine-color-default-border));
+}
+.dc-analysis-panel .dc-mp-empty .dc-mp-empty-icon {
+  color: var(--dc-panel-accent-ink);
+  background: var(--dc-panel-accent-soft);
+  border-radius: 12px;
+  padding: 8px;
+  box-sizing: content-box;
+}
+
+/* A label column is the reader's own, not the table's: its header and cells
+   wear the panel's teal so it cannot be mistaken for a column of the data. */
+.ag-theme-quartz .dc-label-head,
+.dc-label-head {
+  background: var(--mantine-color-teal-light);
+  box-shadow: inset 0 3px 0 var(--mantine-color-teal-6);
+}
+.dc-label-cell {
+  background: color-mix(in srgb, var(--mantine-color-teal-6) 7%, transparent);
+}
+.dc-label-cell.dc-label-cell-pending {
+  background-color: var(--mantine-color-yellow-light);
+}
+
+/* The header's Compare switch: one icon, filled while it is on. */
+.dc-label-compare {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--mantine-color-teal-6) 45%, transparent);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--mantine-color-teal-light-color);
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+.dc-label-compare:hover:not(:disabled) {
+  background: var(--mantine-color-teal-light-hover);
+}
+.dc-label-compare[data-active] {
+  border-color: transparent;
+  background: var(--mantine-color-teal-6);
+  color: var(--mantine-color-white);
+}
+.dc-label-compare:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* The grid's horizontal scrollbar. AG Grid lays it out in three parts (a
+   spacer under the pinned key column, the scroller, a right spacer), so it
+   read as a stray bar floating off the left edge. One rounded track runs the
+   panel's full width, and the thumb is the scroller's, in the panel's teal. */
+.dc-analysis-panel .ag-body-horizontal-scroll {
+  height: 14px !important;
+  min-height: 14px !important;
+  max-height: 14px !important;
+  margin-top: 8px;
+  border-radius: 7px;
+  background: var(--mantine-color-gray-light);
+}
+.dc-analysis-panel .ag-body-horizontal-scroll-viewport {
+  height: 14px !important;
+  min-height: 14px !important;
+  max-height: 14px !important;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--mantine-color-teal-6) 65%, transparent) transparent;
+}
+.dc-analysis-panel .ag-body-horizontal-scroll-viewport::-webkit-scrollbar {
+  height: 10px;
+}
+.dc-analysis-panel .ag-body-horizontal-scroll-viewport::-webkit-scrollbar-track {
+  background: transparent;
+}
+.dc-analysis-panel .ag-body-horizontal-scroll-viewport::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--mantine-color-teal-6) 65%, transparent) padding-box;
+}
+.dc-analysis-panel .ag-body-horizontal-scroll-viewport::-webkit-scrollbar-thumb:hover {
+  background: var(--mantine-color-teal-6) padding-box;
+}
+
+/* The fill handle: a square in the corner of the focused cell, dragged down
+   to copy its value. Hidden on every other cell and while the cell is edited. */
+.dc-fill-handle {
+  display: none;
+  position: absolute;
+  right: 1px;
+  bottom: 1px;
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid var(--mantine-color-body);
+  border-radius: 2px;
+  background: var(--mantine-color-teal-6);
+  cursor: crosshair;
+  z-index: 3;
+}
+.ag-cell.ag-cell-focus:not(.ag-cell-inline-editing) .dc-fill-handle {
+  display: block;
+}
+.dc-fill-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ag-cell.dc-fill-preview {
+  background-color: var(--mantine-color-teal-light-hover) !important;
+  box-shadow: inset 0 0 0 1px var(--mantine-color-teal-6);
+}
+
+/* Cells inside the selected range. */
+.ag-cell.dc-range-cell {
+  background-color: var(--mantine-color-teal-light-hover) !important;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--mantine-color-teal-6) 35%, transparent);
+}
+.dc-analysis-panel .ag-cell:not(.ag-cell-inline-editing) {
+  user-select: none;
+}
