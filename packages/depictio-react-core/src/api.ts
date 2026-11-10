@@ -6892,6 +6892,27 @@ export async function patchTableCells(
   return res.json();
 }
 
+export interface TableRestoreResult {
+  restored_version: number;
+  delta_version: number | null;
+  row_count: number;
+}
+
+/** Bring past version `version` back as a new version of the table. Throws `TableEditError`. */
+export async function restoreTableVersion(
+  dcId: string,
+  version: number,
+  baseVersion: number,
+): Promise<TableRestoreResult> {
+  const res = await authFetch(`${API_BASE}/datacollections/${dcId}/restore_version`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ version, base_version: baseVersion }),
+  });
+  if (!res.ok) await throwTableEditError(res, 'Failed to restore this version');
+  return res.json();
+}
+
 export type TableMergeMode = 'replace' | 'fill_missing' | 'add_columns';
 
 export interface TableMergeColumn extends TableEditColumn {

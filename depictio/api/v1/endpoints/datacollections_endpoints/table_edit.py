@@ -630,3 +630,69 @@ def apply_cell_edits(
         "aggregation_version": aggregation_version,
         "row_count": updated.height,
     }
+
+
+class RestoreVersionRequest(BaseModel):
+    version: int = Field(ge=0, description="Past Delta version to bring back.")
+    base_version: int = Field(ge=0, description="Delta version the client read.")
+
+
+def restore_table_version(
+    data_collection_id: str, body: RestoreVersionRequest, current_user: Any
+) -> dict[str, Any]:
+    """Write past Delta version ``body.version`` as a new version of the table.
+
+    Nothing is rewound: the restored state is one more commit, so the edits it
+    undoes stay in the history and can be restored in turn. Same rules as a cell
+    edit (403, 409 published or stale); 422 when ``version`` is not a past one,
+    404 when it can no longer be read (vacuumed).
+    """
+    _require_editable(data_collection_id, current_user)
+    _, dc = _find_dc(data_collection_id)
+    location = _delta_location_for(data_collection_id)
+
+    with _lock_for(data_collection_id):
+        current = _delta_version(location)
+        if current != body.base_version:
+            raise _stale(current, body.base_version)
+        if body.version >= current:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "not_a_past_version",
+                    "message": f"Version {body.version} is not a past version of this table.",
+                },
+            )
+        try:
+            frame = _read_frame(location, body.version)
+        except Exception as exc:
+            logger.warning(f"Table restore: v{body.version} of {location} unreadable: {exc}")
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "code": "version_gone",
+                    "message": f"Version {body.version} can no longer be read.",
+                },
+            ) from exc
+
+        aggregation_version, new_delta_version = commit_table_frame(
+            data_collection_id=data_collection_id,
+            frame=frame,
+            current_user=current_user,
+            write_mode="overwrite",
+            trigger="ui",
+            dc_for_specs=dc,
+        )
+
+    logger.info(
+        f"Table restore: {data_collection_id} v{body.version} -> v{new_delta_version} by "
+        f"{getattr(current_user, 'email', None)}"
+    )
+    return {
+        "success": True,
+        "data_collection_id": data_collection_id,
+        "restored_version": body.version,
+        "delta_version": new_delta_version,
+        "aggregation_version": aggregation_version,
+        "row_count": frame.height,
+    }

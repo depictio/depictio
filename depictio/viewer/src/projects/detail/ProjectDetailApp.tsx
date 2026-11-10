@@ -50,9 +50,11 @@ import { notifications } from '@mantine/notifications';
 import {
   Alert,
   Modal,
+  Popover,
   Select,
   Switch,
   TextInput,
+  Tooltip,
 } from '@mantine/core';
 
 import {
@@ -63,6 +65,7 @@ import {
   fetchProject,
   fetchTableEditStatus,
   setTableEditLock,
+  restoreTableVersion,
   fetchIngestionReport,
   fetchVizSuggestions,
   listLinkResolvers,
@@ -2206,6 +2209,22 @@ const DataCollectionViewer: React.FC<{
   const deltaVersion = getDcDeltaVersion(dc);
   // Bumped when the table is edited, so the version history reloads.
   const [editTick, setEditTick] = useState(0);
+  // The project document is not reloaded after an edit or a restore: read the
+  // new version from the table itself, or the "Version" fact stays behind.
+  const [editedVersion, setEditedVersion] = useState<number | null>(null);
+  useEffect(() => {
+    if (editTick === 0) return;
+    let cancelled = false;
+    fetchDeltaHistory(dcId, 1)
+      .then((h) => {
+        if (!cancelled && typeof h.current_version === 'number') setEditedVersion(h.current_version);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [dcId, editTick]);
+  const shownVersion = editedVersion ?? deltaVersion;
 
   // Ranked viz-kind fit scores for this DC — surfaced in the viewer as
   // "compatible advanced visualizations" chips so users discover the affinity
@@ -2252,7 +2271,7 @@ const DataCollectionViewer: React.FC<{
   if (sizeBytes > 0) facts.push({ label: 'Size', icon: 'mdi:harddisk', value: formatBytes(sizeBytes) });
   if (format) facts.push({ label: 'Format', icon: 'mdi:file-document-outline', value: format.toUpperCase() });
   if (tracksProps?.assembly) facts.push({ label: 'Assembly', icon: 'mdi:dna', value: tracksProps.assembly });
-  if (deltaVersion != null) facts.push({ label: 'Version', icon: 'mdi:source-commit', value: `v${deltaVersion}` });
+  if (shownVersion != null) facts.push({ label: 'Version', icon: 'mdi:source-commit', value: `v${shownVersion}` });
   // Real runs only: a one-file scan records a tag of its own, not a run.
   const runs = (Array.isArray(agg?.run_tags) ? (agg?.run_tags as unknown[]) : [])
     .filter((t): t is string => typeof t === 'string' && !t.endsWith('-single-file-scan'))
@@ -3119,6 +3138,19 @@ const TableDataSection: React.FC<{
           key={`${dcId}-${previewKey}`}
           dcId={dcId}
           autoLoad={autoLoad || previewKey > 0 || readOnlyView}
+          restore={
+            status?.can_edit
+              ? {
+                  onRestored: () => {
+                    setPreviewKey((k) => k + 1);
+                    setReadOnlyView(false);
+                    onEdited();
+                  },
+                }
+              : showLock
+                ? { blockedReason: 'Unlock the table to restore a past version.' }
+                : undefined
+          }
         />
       )}
     </Box>
@@ -3126,7 +3158,8 @@ const TableDataSection: React.FC<{
 };
 
 /** Whether cells of this table may be edited by hand: locked by default,
- *  unlocked to keep it as metadata (a sample sheet) maintained in Depictio. */
+ *  unlocked to keep it as metadata (a sample sheet) maintained in Depictio.
+ *  One quiet line; the explanation sits in the tooltip. */
 const TableEditLock: React.FC<{
   status: TableEditStatus;
   busy: boolean;
@@ -3136,55 +3169,39 @@ const TableEditLock: React.FC<{
 }> = ({ status, busy, onToggle, editing }) => {
   const { unlocked } = status;
   const published = status.code === 'published_lock';
+  const explanation = published
+    ? status.reason
+    : unlocked
+      ? 'Click a cell to change it; every save is a new version. Columns marked ✎ can be edited.'
+      : 'Unlock to maintain this table by hand, like a sample sheet.';
   return (
     <Group
-      justify="space-between"
+      justify="flex-end"
       wrap="nowrap"
-      gap="sm"
-      mb="xs"
-      px="sm"
-      py={6}
-      style={{
-        border: '1px solid var(--mantine-color-default-border)',
-        borderRadius: 'var(--mantine-radius-md)',
-      }}
+      gap="xs"
+      mb={6}
       data-testid="table-edit-lock"
       data-unlocked={unlocked ? 'true' : 'false'}
     >
-      <Group gap="xs" wrap="nowrap" style={{ minWidth: 0 }}>
-        <Icon
-          icon={unlocked ? 'mdi:pencil-outline' : 'mdi:lock-outline'}
-          width={16}
-          color={
-            unlocked ? 'var(--mantine-primary-color-filled)' : 'var(--mantine-color-dimmed)'
-          }
-        />
-        <Stack gap={0} style={{ minWidth: 0 }}>
-          <Group gap={6} wrap="nowrap">
-            <Text size="sm" fw={500}>
-              {unlocked ? 'Edit mode' : 'Locked, read-only'}
-            </Text>
-            {unlocked && !editing && (
-              <Text size="xs" c="dimmed">
-                (showing a past version)
-              </Text>
-            )}
-          </Group>
+      <Tooltip label={explanation} multiline w={280} withArrow withinPortal>
+        <Group gap={4} wrap="nowrap" style={{ cursor: 'help' }}>
+          <Icon
+            icon={unlocked ? 'mdi:pencil-outline' : 'mdi:lock-outline'}
+            width={14}
+            color={
+              unlocked ? 'var(--mantine-primary-color-filled)' : 'var(--mantine-color-dimmed)'
+            }
+          />
           <Text size="xs" c="dimmed">
-            {published
-              ? status.reason
-              : unlocked
-                ? 'Click a cell to change it; every save is a new version. Columns marked ✎ can be edited.'
-                : 'Unlock to maintain this table by hand, like a sample sheet.'}
+            {unlocked ? (editing ? 'Editable' : 'Editable · past version shown') : 'Read-only'}
           </Text>
-        </Stack>
-      </Group>
+        </Group>
+      </Tooltip>
       <Switch
+        size="xs"
         checked={unlocked}
         onChange={(e) => onToggle(e.currentTarget.checked)}
         disabled={busy || !status.can_toggle_lock}
-        label={unlocked ? 'Unlocked' : 'Unlock'}
-        labelPosition="left"
         aria-label={unlocked ? 'Lock cell edits' : 'Unlock cell edits'}
         data-testid="table-edit-lock-switch"
       />
@@ -3192,10 +3209,15 @@ const TableEditLock: React.FC<{
   );
 };
 
-const DataPreviewPanel: React.FC<{ dcId: string; autoLoad?: boolean }> = ({
-  dcId,
-  autoLoad = false,
-}) => {
+/** Restoring a past version from the preview: allowed (with what to do after),
+ *  or shown disabled with the reason. */
+type RestoreControl = { onRestored: () => void } | { blockedReason: string };
+
+const DataPreviewPanel: React.FC<{
+  dcId: string;
+  autoLoad?: boolean;
+  restore?: RestoreControl;
+}> = ({ dcId, autoLoad = false, restore }) => {
   const accent = useBrandAccents();
   const glass = useGlassPages();
   const [preview, setPreview] = useState<PreviewResult | null>(null);
@@ -3344,7 +3366,17 @@ const DataPreviewPanel: React.FC<{ dcId: string; autoLoad?: boolean }> = ({
           icon={<Icon icon="mdi:history" width={16} />}
           py={6}
         >
-          Viewing v{selectedVersion}: this is not the current data.
+          <Group justify="space-between" wrap="nowrap" gap="sm">
+            <Text size="sm">Viewing v{selectedVersion}: this is not the current data.</Text>
+            {restore && selectedVersion != null && currentVersion != null && (
+              <RestoreVersionButton
+                dcId={dcId}
+                version={selectedVersion}
+                baseVersion={currentVersion}
+                control={restore}
+              />
+            )}
+          </Group>
         </Alert>
       )}
       {error && (
@@ -3366,6 +3398,77 @@ const DataPreviewPanel: React.FC<{ dcId: string; autoLoad?: boolean }> = ({
         />
       </Box>
     </Stack>
+  );
+};
+
+/** "Restore v{N}": confirms, then writes that version back as a new one. */
+const RestoreVersionButton: React.FC<{
+  dcId: string;
+  version: number;
+  baseVersion: number;
+  control: RestoreControl;
+}> = ({ dcId, version, baseVersion, control }) => {
+  const [opened, setOpened] = useState(false);
+  const [busy, setBusy] = useState(false);
+  if ('blockedReason' in control) {
+    return (
+      <Tooltip label={control.blockedReason} withArrow withinPortal>
+        <Button size="xs" variant="default" disabled data-testid="table-restore-version">
+          Restore v{version}
+        </Button>
+      </Tooltip>
+    );
+  }
+  const run = async () => {
+    setBusy(true);
+    try {
+      const result = await restoreTableVersion(dcId, version, baseVersion);
+      notifications.show({
+        color: 'teal',
+        title: `v${version} restored`,
+        message: `Saved as v${result.delta_version ?? '?'}; the versions in between stay in the history.`,
+      });
+      setOpened(false);
+      control.onRestored();
+    } catch (err) {
+      notifications.show({
+        color: 'red',
+        title: 'Could not restore this version',
+        message: (err as Error).message,
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Popover opened={opened} onChange={setOpened} position="bottom-end" withArrow shadow="md">
+      <Popover.Target>
+        <Button
+          size="xs"
+          variant="default"
+          leftSection={<Icon icon="mdi:restore" width={14} />}
+          onClick={() => setOpened((o) => !o)}
+          data-testid="table-restore-version"
+        >
+          Restore v{version}
+        </Button>
+      </Popover.Target>
+      <Popover.Dropdown maw={300}>
+        <Stack gap="xs">
+          <Text size="sm">
+            Make v{version} the current data? It is saved as a new version, so nothing is lost.
+          </Text>
+          <Group justify="flex-end" gap="xs">
+            <Button size="xs" variant="subtle" onClick={() => setOpened(false)} disabled={busy}>
+              Cancel
+            </Button>
+            <Button size="xs" onClick={run} loading={busy} data-testid="table-restore-confirm">
+              Restore
+            </Button>
+          </Group>
+        </Stack>
+      </Popover.Dropdown>
+    </Popover>
   );
 };
 

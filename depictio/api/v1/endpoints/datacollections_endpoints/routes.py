@@ -9,8 +9,10 @@ from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import db, projects_collection
 from depictio.api.v1.endpoints.datacollections_endpoints.table_edit import (
     CellEditsRequest,
+    RestoreVersionRequest,
     apply_cell_edits,
     read_table_for_edit,
+    restore_table_version,
     set_edit_lock,
     table_edit_status,
 )
@@ -421,6 +423,22 @@ async def patch_table_cells(
     column) when a value does not fit its column, 413 above the row limit.
     """
     return await asyncio.to_thread(apply_cell_edits, data_collection_id, body, current_user)
+
+
+@datacollections_endpoint_router.post("/{data_collection_id}/restore_version")
+async def restore_table_version_route(
+    data_collection_id: str,
+    body: RestoreVersionRequest,
+    current_user=Depends(get_current_user),
+):
+    """Bring a past Delta version of a table a user added back, as a new version.
+
+    Body: ``{"version": <past version>, "base_version": <delta_version read>}``.
+    Same rules as a cell edit: 403 for a viewer, a pipeline or a locked table,
+    409 when published or past ``base_version``; 422 when ``version`` is not a
+    past one, 404 when it can no longer be read.
+    """
+    return await asyncio.to_thread(restore_table_version, data_collection_id, body, current_user)
 
 
 @datacollections_endpoint_router.post("/{data_collection_id}/merge_file")

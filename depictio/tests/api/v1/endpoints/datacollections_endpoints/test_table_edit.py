@@ -444,3 +444,68 @@ class TestEditLock:
         env.project(owners=[env.user], locked=True, unlocked=False)
         response = env.client.patch(f"/datacollections/{DC_ID}/edit_lock", json={"unlocked": True})
         assert response.status_code == 409
+
+
+class TestRestoreVersion:
+    """A past version comes back as a new version: the history keeps every step."""
+
+    def restore(self, env, version, base_version=None):
+        base = env.version() if base_version is None else base_version
+        return env.client.post(
+            f"/datacollections/{DC_ID}/restore_version",
+            json={"version": version, "base_version": base},
+        )
+
+    def test_restoring_a_past_version_writes_it_as_a_new_one(self, env):
+        env.project(owners=[env.user])
+        original = env.version()
+        env.patch([_cell(0, "age", 11)])
+        env.patch([_cell(1, "sample", "renamed")])
+        before = env.version()
+
+        response = self.restore(env, original)
+
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["restored_version"] == original
+        assert body["delta_version"] == before + 1 == env.version()
+        assert env.read().equals(_table())
+        record = env.db["deltatables"].find_one({"data_collection_id": DC_ID})
+        assert record["aggregation"][-1]["delta_version"] == env.version()
+        assert env.invalidated[-1] == str(DC_ID)
+
+    def test_the_current_version_is_not_a_past_one(self, env):
+        env.project(owners=[env.user])
+        before = env.version()
+        response = self.restore(env, before)
+        assert response.status_code == 422
+        assert response.json()["detail"]["code"] == "not_a_past_version"
+        assert env.version() == before
+
+    def test_a_stale_base_is_a_409(self, env):
+        env.project(owners=[env.user])
+        original = env.version()
+        env.patch([_cell(0, "age", 11)])
+        response = self.restore(env, original, base_version=original)
+        assert response.status_code == 409
+        assert response.json()["detail"]["code"] == "stale_version"
+
+    @pytest.mark.parametrize(
+        "setup, status",
+        [
+            ({"viewers": True}, 403),
+            ({"owners": True, "unlocked": False}, 403),
+            ({"owners": True, "locked": True}, 409),
+        ],
+    )
+    def test_only_who_may_edit_may_restore(self, env, setup, status):
+        roles = {k: [env.user] for k in ("owners", "viewers") if setup.get(k)}
+        env.project(
+            unlocked=setup.get("unlocked", True), locked=setup.get("locked", False), **roles
+        )
+        original = env.version()
+        # A second version to go back from, written straight to the table.
+        _table().with_columns(pl.lit(1).alias("age")).write_delta(env.location, mode="overwrite")
+        before = env.version()
+        assert self.restore(env, original).status_code == status
+        assert env.version() == before
