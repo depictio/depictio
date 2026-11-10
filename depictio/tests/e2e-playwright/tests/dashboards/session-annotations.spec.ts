@@ -208,7 +208,7 @@ async function typeCell(page: Page, column: string, rowIndex: number, value: str
   const id = await columnId(page, column);
   const cell = grid.locator(`.ag-center-cols-container [row-index='${rowIndex}'] [col-id='${id}']`);
   await cell.dblclick();
-  await page.keyboard.press("Control+A");
+  await page.keyboard.press("ControlOrMeta+A");
   await page.keyboard.type(value);
   await page.keyboard.press("Enter");
   await expect(cell).toHaveText(value);
