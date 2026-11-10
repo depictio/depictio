@@ -91,6 +91,10 @@ def classify_tables(
     ``None`` means no readable data.
     """
     key_columns: dict[str, list[str]] = {}
+    # How many collections each table's labels can reach: a samplesheet linked
+    # only to MultiQC labels nothing a chart draws, a metadata sheet linked to
+    # every canonical collection labels them all. The panel opens on the widest.
+    link_targets: dict[str, set[str]] = {}
     for link in project.get("links") or []:
         if link.get("enabled", True) is False:
             continue
@@ -98,6 +102,9 @@ def classify_tables(
         column = link.get("source_column")
         if source and column and column not in key_columns.setdefault(source, []):
             key_columns[source].append(column)
+        target = _id(link.get("target_dc_id"))
+        if source and target:
+            link_targets.setdefault(source, set()).add(target)
     results, inputs = _join_refs(project)
 
     tables: list[dict[str, Any]] = []
@@ -133,6 +140,7 @@ def classify_tables(
                     "tag": tag,
                     "workflow_name": workflow_name,
                     "key_columns": keys,
+                    "link_targets": len(link_targets.get(dc_id, ())),
                     "row_count": rows,
                     "eligible": code is None,
                     "code": code,
