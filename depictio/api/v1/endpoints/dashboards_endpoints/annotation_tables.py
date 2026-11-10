@@ -13,7 +13,10 @@ eligible when all of these hold:
    copy of its rows would not follow them;
 5. its ``metatype`` is absent or "metadata" (a pipeline's samplesheet often
    declares none; "Aggregate" tables are results, not metadata);
-6. it has at most ``MAX_EDITABLE_ROWS`` rows, the size the grid loads whole.
+6. it has at most ``MAX_EDITABLE_ROWS`` rows, the size the grid loads whole;
+7. its data holds at least one of the link's key columns: a table whose
+   columns drifted from the links (a samplesheet whose id column is named
+   otherwise) would show rows that no label can attach to.
 
 ``classify_tables`` holds the rule and reads nothing; ``annotatable_tables``
 adds the row counts from Delta.
@@ -36,6 +39,14 @@ _REASONS = {
     "not_metadata": "Only a metadata table (a samplesheet or a metadata sheet) can be labelled.",
     "no_data": "This table has no data yet.",
 }
+
+
+def _key_missing(keys: list[str]) -> str:
+    names = ", ".join(f"“{k}”" for k in keys)
+    return (
+        f"This table has no {names} column, which the links to the data use as the key: "
+        "labels could not be attached to its rows."
+    )
 
 
 def _too_large(rows: int) -> str:
@@ -85,11 +96,14 @@ def _is_derived(config: dict[str, Any]) -> bool:
 def classify_tables(
     project: dict[str, Any],
     row_count: Callable[[str], int | None],
+    columns: Callable[[str], set[str] | None] | None = None,
 ) -> list[dict[str, Any]]:
     """Every table of ``project`` with whether it can be labelled and why not.
 
     ``row_count(dc_id)`` is asked only for tables passing every other rule;
-    ``None`` means no readable data.
+    ``None`` means no readable data. ``columns(dc_id)`` gives the names of the
+    table's columns (``None``: unknown, the key is taken as present); a table
+    keeps only the key columns it really has.
     """
     key_columns: dict[str, list[str]] = {}
     # How many collections each table's labels can reach: a samplesheet linked
@@ -135,6 +149,14 @@ def classify_tables(
                     code, reason = "no_data", _REASONS["no_data"]
                 elif rows > MAX_EDITABLE_ROWS:
                     code, reason = "table_too_large", _too_large(rows)
+                elif columns is not None:
+                    present = columns(dc_id)
+                    if present is not None:
+                        found = [k for k in keys if k in present]
+                        if not found:
+                            code, reason = "key_missing", _key_missing(keys)
+                        else:
+                            keys = found
             tables.append(
                 {
                     "dc_id": dc_id,
@@ -151,27 +173,36 @@ def classify_tables(
     return tables
 
 
-# Row counts read from Delta, kept briefly. Reading one opens the table twice
-# over S3, and every page load asks for each candidate table: the Metadata
-# button waited on those reads. A count is only a size guard (the panel refuses
-# a table over the limit when it reads it), so a few minutes of staleness are harmless.
+# Row counts and column names read from Delta, kept briefly. Reading one opens
+# the table twice over S3, and every page load asks for each candidate table:
+# the Metadata button waited on those reads. A count is only a size guard (the
+# panel refuses a table over the limit when it reads it) and the columns only
+# vet the key, so a few minutes of staleness are harmless.
 _ROW_COUNT_TTL_S = 300.0
-_row_counts: dict[str, tuple[float, int | None]] = {}
+_row_counts: dict[str, tuple[float, int | None, set[str] | None]] = {}
 
 
-def _delta_row_count(dc_id: str) -> int | None:
+def _delta_facts(dc_id: str) -> tuple[int | None, set[str] | None]:
     hit = _row_counts.get(dc_id)
     now = time.monotonic()
     if hit is not None and now - hit[0] < _ROW_COUNT_TTL_S:
-        return hit[1]
-    rows = _read_delta_row_count(dc_id)
+        return hit[1], hit[2]
+    rows, names = _read_delta_facts(dc_id)
     # An unreadable table is asked again next time rather than held as empty.
     if rows is not None:
-        _row_counts[dc_id] = (now, rows)
-    return rows
+        _row_counts[dc_id] = (now, rows, names)
+    return rows, names
 
 
-def _read_delta_row_count(dc_id: str) -> int | None:
+def _delta_row_count(dc_id: str) -> int | None:
+    return _delta_facts(dc_id)[0]
+
+
+def _delta_columns(dc_id: str) -> set[str] | None:
+    return _delta_facts(dc_id)[1]
+
+
+def _read_delta_facts(dc_id: str) -> tuple[int | None, set[str] | None]:
     from depictio.api.v1.endpoints.datacollections_endpoints.table_edit import _row_count
     from depictio.api.v1.endpoints.datacollections_endpoints.table_manage import (
         _delta_location_for,
@@ -183,13 +214,14 @@ def _read_delta_row_count(dc_id: str) -> int | None:
         from depictio.api.v1.s3 import polars_s3_config
 
         location = _delta_location_for(dc_id)
-        version = int(DeltaTable(location, storage_options=polars_s3_config).version())
-        return _row_count(location, version)
+        table = DeltaTable(location, storage_options=polars_s3_config)
+        names = {field.name for field in table.schema().fields}
+        return _row_count(location, int(table.version())), names
     except Exception as exc:
         logger.info(f"Annotation tables: no readable Delta table for {dc_id}: {exc}")
-        return None
+        return None, None
 
 
 def annotatable_tables(project: dict[str, Any]) -> list[dict[str, Any]]:
-    """``classify_tables`` with row counts read from Delta."""
-    return classify_tables(project, _delta_row_count)
+    """``classify_tables`` with row counts and columns read from Delta."""
+    return classify_tables(project, _delta_row_count, _delta_columns)

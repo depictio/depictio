@@ -121,3 +121,32 @@ def test_rows_are_counted_only_for_candidates():
 
 def test_non_tables_are_not_listed():
     assert "multiqc_data" not in _by_tag(_project())
+
+
+def test_table_without_its_key_column_is_refused():
+    columns = {SHEET: {"sample", "fastq_1"}, META: {"sample", "treatment"}}
+    tables = {
+        t["tag"]: t
+        for t in classify_tables(_project(), lambda _dc_id: 4, lambda dc_id: columns[dc_id])
+    }
+    assert tables["samplesheet"]["code"] == "key_missing"
+    assert tables["samplesheet"]["eligible"] is False
+    assert "sampleID" in tables["samplesheet"]["reason"]
+    assert tables["metadata"]["eligible"] is True
+
+
+def test_only_the_key_columns_the_table_has_are_kept():
+    project = _project()
+    project["links"].append({"source_dc_id": SHEET, "source_column": "other", "target_dc_id": MQC})
+    tables = {
+        t["tag"]: t
+        for t in classify_tables(project, lambda _dc_id: 4, lambda _dc_id: {"sampleID", "x"})
+    }
+    assert tables["samplesheet"]["key_columns"] == ["sampleID"]
+
+
+def test_unknown_columns_leave_the_key_as_declared():
+    tables = {
+        t["tag"]: t for t in classify_tables(_project(), lambda _dc_id: 4, lambda _dc_id: None)
+    }
+    assert tables["samplesheet"]["eligible"] is True
