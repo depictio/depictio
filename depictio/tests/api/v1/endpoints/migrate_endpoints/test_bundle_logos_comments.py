@@ -121,6 +121,42 @@ def test_export_carries_this_projects_logos_and_threads_only(source, monkeypatch
     assert str(foreign["_id"]) not in {d["_id"] for d in data["comment_threads"]}
 
 
+@pytest.fixture
+def api_created_ids(source):
+    """Give every dashboard a document `_id` of its own, as the API does.
+
+    The fixture seeds `_id == dashboard_id`, which is how a logo keyed by one and looked
+    up by the other went unnoticed: the upload and logo routes use `dashboard_id`.
+    """
+    db, *_ = source
+    for doc in list(db.dashboards_collection.find({})):
+        assert doc["_id"] == doc["dashboard_id"]
+        db.dashboards_collection.delete_one({"_id": doc["_id"]})
+        db.dashboards_collection.insert_one({**doc, "_id": ObjectId()})
+    return source
+
+
+def test_export_finds_logo_keyed_by_dashboard_id(api_created_ids, monkeypatch):
+    db, ids, s3, (logo, _, _) = api_created_ids
+    docs = list(db.dashboards_collection.find({}))
+    assert all(d["_id"] != d["dashboard_id"] for d in docs)
+    _, data = _bundle(_export_zip((db, ids, s3), monkeypatch))
+    assert [d["_id"] for d in data["branding_assets"]] == [logo["_id"]]
+
+
+def test_round_trip_restores_logo_when_ids_differ(
+    api_created_ids, target_db, captures, monkeypatch
+):
+    db, ids, s3, (logo, _, _) = api_created_ids
+    payload = _export_zip((db, ids, s3), monkeypatch)
+    monkeypatch.setattr(routes.settings.s3, "bucket", "tgt-bucket")
+    result = _import_zip(payload, _admin())
+    assert result.success, result.message
+    assert result.upserted.get("branding_assets") == 1
+    got = target_db.branding_assets_collection.find_one({"_id": logo["_id"]})
+    assert got is not None and got["data_b64"] == logo["data_b64"]
+
+
 def test_round_trip_restores_logo_and_threads(source, target_db, captures, monkeypatch):
     db, ids, s3, (logo, threads, _) = source
     payload = _export_zip((db, ids, s3), monkeypatch)

@@ -233,8 +233,10 @@ def collect_bundle_docs(
         data["dashboards"] = list(
             cols["dashboards"].find({"$or": [{"project_id": pid}, {"project_id": str(pid)}]})
         )
-        # A logo is keyed by its dashboard's id, which an import keeps.
-        keys = [dashboard_logo_key(d["_id"]) for d in data["dashboards"] if d.get("_id")]
+        # A logo is keyed by its dashboard's `dashboard_id` (what the upload route and
+        # the logo route receive), which an import keeps. That is not the document's
+        # `_id`: the two differ on every dashboard created through the API.
+        keys = [dashboard_logo_key(i) for i in map(_dashboard_ref, data["dashboards"]) if i]
         data["branding_assets"] = (
             list(cols["branding_assets"].find({"_id": {"$in": keys}})) if keys else []
         )
@@ -594,6 +596,12 @@ def _doc_id(doc: dict[str, Any]) -> ObjectId | None:
     return _as_oid(doc.get("_id") or doc.get("id"))
 
 
+def _dashboard_ref(doc: dict[str, Any]) -> str | None:
+    """The id a dashboard goes by in URLs, logo keys and comment anchors."""
+    ref = doc.get("dashboard_id") or doc.get("_id") or doc.get("id")
+    return str(ref) if ref else None
+
+
 def _known_component_kinds() -> tuple[set[str], set[str]]:
     """Component types, and advanced-viz kinds, this instance can render."""
     from typing import get_args
@@ -863,9 +871,10 @@ def validate_bundle(
     for doc in data.get("comment_threads") or []:
         if str(doc.get("project_id")) != str(pid):
             report.errors.append(f"comment thread {doc.get('_id')} belongs to another project")
+    bundle_dash_refs = {r for r in map(_dashboard_ref, data.get("dashboards") or []) if r}
     for doc in data.get("branding_assets") or []:
         key = str(doc.get("_id") or doc.get("id") or "")
-        if key.removeprefix("dashboard-") not in bundle_dash_ids or not key.startswith(
+        if key.removeprefix("dashboard-") not in bundle_dash_refs or not key.startswith(
             "dashboard-"
         ):
             report.errors.append(f"logo {key!r} is not one of the bundled dashboards")
