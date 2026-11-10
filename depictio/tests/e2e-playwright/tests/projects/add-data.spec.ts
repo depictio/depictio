@@ -106,7 +106,9 @@ test.describe("Add data", () => {
     await page.getByTestId("add-data-submit").click();
     await expect(page.getByTestId("folder-tables-results")).toBeVisible();
     await page.getByTestId("add-data-done").click();
-    await expect(page.getByTestId("add-data-modal")).toHaveCount(0);
+    // Mantine keeps an empty Modal root (it carries the testid) in the portal after close.
+    await expect(page.getByRole("dialog", { name: "Add data" })).toHaveCount(0);
+    await expect(page.getByTestId("folder-tables-results")).toHaveCount(0);
   });
 
   test("folder dialog lists the files and sends the ticked paths", async ({ page }) => {
