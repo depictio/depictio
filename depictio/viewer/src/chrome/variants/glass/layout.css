@@ -919,6 +919,8 @@
    * `data-clear`); otherwise centred on what the panel leaves, since a dock
    * under the panel is hidden by it. */
   left: calc((100% - var(--gl-pad-r, 0px)) / 2);
+  /* Pushed left when it would run under the notes button (Dock.tsx). */
+  margin-left: var(--gl-dock-shift, 0px);
   translate: -50% 0;
 }
 .hy-anchor[data-clear][data-anchor='bottom-center'],
@@ -1817,6 +1819,11 @@ button.hy-sheet-link {
   }
 }
 
+/* The notes button rises above the dock when the two cannot share the foot
+ * (Dock.tsx sets `data-dock-crowded`). */
+:root[data-chrome='glass'][data-dock-crowded] .dc-notes-toggle {
+  bottom: calc(24px + 58px + var(--dc-bottom-offset, 0px)) !important;
+}
 /* The notes button: level with the dock, past its right end. */
 :root[data-chrome='glass'] .dc-notes-toggle {
   width: 46px !important;
