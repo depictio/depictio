@@ -135,6 +135,8 @@ const cellKey = (row: number, column: string) => `${row}\u0000${column}`;
 export interface AnnotationPanelProps {
   /** The rendered tab: the data-version status call reads the whole family from it. */
   dashboardId: string;
+  /** The dashboard's project: a table's own page is under it. */
+  projectId?: string;
   /** The project's tables with whether each can carry labels (server rule). */
   tables: AnnotationTable[];
   /** The labels shared on the dashboard, and whether this reader may change them. */
@@ -158,6 +160,7 @@ export interface AnnotationPanelProps {
  */
 const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
   dashboardId,
+  projectId,
   tables: allTables,
   sharing,
   pins,
@@ -1314,7 +1317,7 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
               leftSection={<Icon icon="mdi:table" width={14} />}
               data={tables.map((t) => ({
                 value: t.dc_id,
-                label: `${annotationTableLabel(t, tables)} · ${t.link_targets ?? 0} linked`,
+                label: annotationTableLabel(t, tables),
               }))}
               value={choice?.dcId ?? null}
               onChange={(v) => v && onTableChange(v)}
@@ -1344,6 +1347,24 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
               <Text size="xs" c="dimmed" truncate data-testid="annotation-key">
                 key: {keyColumn}
               </Text>
+            </Tooltip>
+          )}
+          {projectId && choice && (
+            // The table's own page: its rows, its links and where it comes from.
+            <Tooltip withinPortal label="Open this table in the project">
+              <ActionIcon
+                component="a"
+                href={`/projects/${projectId}?table=${choice.dcId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                size="xs"
+                variant="subtle"
+                color="gray"
+                aria-label="Open this table in the project"
+                data-testid="annotation-open-table"
+              >
+                <Icon icon="mdi:open-in-new" width={14} />
+              </ActionIcon>
             </Tooltip>
           )}
           {otherTables.length > 0 && (

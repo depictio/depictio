@@ -2765,6 +2765,7 @@ const EditorApp: React.FC = () => {
         >
           <AnnotationPanel
             dashboardId={dashboardId}
+            projectId={dashboard?.project_id}
             tables={annotationTables}
             sharing={annotationTablesState}
             pins={annotationPins}
