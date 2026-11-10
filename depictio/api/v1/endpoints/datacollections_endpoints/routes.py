@@ -14,6 +14,10 @@ from depictio.api.v1.endpoints.datacollections_endpoints.table_edit import (
     set_edit_lock,
     table_edit_status,
 )
+from depictio.api.v1.endpoints.datacollections_endpoints.url_preview import (
+    URLPreviewRequest,
+    preview_remote_url,
+)
 from depictio.api.v1.endpoints.datacollections_endpoints.utils import (
     _check_multiqc_uniformity_from_uploads,
     _create_asset_dc_from_uploads,
@@ -28,10 +32,6 @@ from depictio.api.v1.endpoints.datacollections_endpoints.utils import (
     _update_data_collection_name,
     _update_dc_specific_properties,
     generate_join_dict,
-)
-from depictio.api.v1.endpoints.datacollections_endpoints.url_preview import (
-    URLPreviewRequest,
-    preview_remote_url,
 )
 from depictio.api.v1.endpoints.projects_endpoints.local_dirs import CodedHTTPException
 from depictio.api.v1.endpoints.projects_endpoints.publish_lock import (
