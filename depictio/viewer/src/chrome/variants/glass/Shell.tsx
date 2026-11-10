@@ -795,6 +795,9 @@ const Sheet: React.FC<{
     opened={opened}
     onClose={onClose}
     position="bottom"
+    // The rows hold the panels they open (Analysis, Metadata): unmounted with
+    // the sheet, they closed the moment the sheet did.
+    keepMounted
     size={tall ? '88dvh' : 'auto'}
     offset={8}
     zIndex={Z_LAYERS.overlay}
