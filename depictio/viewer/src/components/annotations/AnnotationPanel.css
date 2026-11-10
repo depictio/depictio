@@ -92,6 +92,18 @@
   box-shadow: 0 3px 10px color-mix(in srgb, var(--dc-panel-accent) 40%, transparent);
 }
 
+/* A set of icons sharing one pill: what acts on the same thing reads as one. */
+.dc-analysis-panel .dc-mp-iconset {
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: 999px;
+  padding: 1px;
+  gap: 1px;
+}
+.dc-analysis-panel .dc-mp-iconset .mantine-ActionIcon-root.dc-mp-icon {
+  --ai-size: 28px;
+  --ai-bd: 1px solid transparent !important;
+}
+
 /* The table picker, a pill like the buttons. */
 .dc-analysis-panel .dc-mp-select {
   border-radius: 999px;
