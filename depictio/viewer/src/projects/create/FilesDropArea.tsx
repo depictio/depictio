@@ -7,7 +7,7 @@
  * project page (`detail/addData/AddDataModal.tsx`), so the two are one gesture.
  */
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActionIcon, Alert, Box, Divider, Flex, Group, Input, Loader, Paper, ScrollArea, Stack, Text, ThemeIcon } from '@mantine/core';
+import { ActionIcon, Alert, Box, Divider, Flex, Group, Input, Loader, Paper, ScrollArea, SegmentedControl, Stack, Text, ThemeIcon } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import {
@@ -329,9 +329,25 @@ export const DataSourceFields: React.FC<{
   folderField: React.ReactNode;
   /** One line under the folder box's title. */
   folderHint: string;
-  /** Whatever reading the folder shows under it. */
+  /** Whatever reading the folder (or the URL) shows under it. */
   children?: React.ReactNode;
-}> = ({ drop, submitting, folderField, folderHint, children }) => (
+  /** With `onLocationModeChange`, the right-hand box also takes one file at
+   *  a URL instead of a folder: `urlField` is its input. */
+  locationMode?: LocationMode;
+  onLocationModeChange?: (mode: LocationMode) => void;
+  urlField?: React.ReactNode;
+}> = ({
+  drop,
+  submitting,
+  folderField,
+  folderHint,
+  children,
+  locationMode = 'folder',
+  onLocationModeChange,
+  urlField,
+}) => {
+  const url = Boolean(onLocationModeChange) && locationMode === 'url';
+  return (
   <Flex direction={{ base: 'column', sm: 'row' }} gap="md" data-testid="data-source-fields">
     <Input.Wrapper label="Files" description="From your computer" style={{ flex: 1, minWidth: 0 }}>
       <Box mt={4}>
@@ -347,11 +363,48 @@ export const DataSourceFields: React.FC<{
     </Stack>
     <Divider hiddenFrom="sm" label="and / or" labelPosition="center" />
     <Input.Wrapper
-      label="Folder or bucket"
+      label={onLocationModeChange ? 'Folder, bucket or file URL' : 'Folder or bucket'}
       description="Read where it is, nothing to upload"
       style={{ flex: 1, minWidth: 0 }}
     >
       <Stack gap="md" mt={4}>
+        {onLocationModeChange && (
+          <SegmentedControl
+            fullWidth
+            size="xs"
+            value={locationMode}
+            onChange={(v) => onLocationModeChange(v as LocationMode)}
+            disabled={submitting}
+            data={[
+              { value: 'folder', label: 'A folder or bucket' },
+              { value: 'url', label: 'One file from its URL' },
+            ]}
+            data-testid="location-mode"
+          />
+        )}
+        {url ? (
+          <Stack
+            gap="xs"
+            justify="center"
+            p="md"
+            mih={SOURCE_BOX_HEIGHT}
+            style={{
+              border: '2px dashed var(--mantine-color-default-border)',
+              borderRadius: 8,
+            }}
+            data-testid="url-box"
+          >
+            <Stack gap={4} align="center">
+              <SourceBoxIcon icon="mdi:link-variant" />
+              <Text fw={500}>Read one table from its URL</Text>
+              <Text size="xs" c="dimmed" ta="center">
+                An https:// or s3:// file (CSV, TSV, Parquet, Feather, gzipped or not), fetched
+                by the server: nothing goes through your browser.
+              </Text>
+            </Stack>
+            {urlField}
+          </Stack>
+        ) : (
         <Stack
           gap="xs"
           justify="center"
@@ -372,11 +425,15 @@ export const DataSourceFields: React.FC<{
           </Stack>
           {folderField}
         </Stack>
+        )}
         {children}
       </Stack>
     </Input.Wrapper>
   </Flex>
-);
+  );
+};
+
+export type LocationMode = 'folder' | 'url';
 
 /** Each dropped file and how its upload went: pending until `uploads` holds it. */
 export const FileUploadResults: React.FC<{

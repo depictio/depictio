@@ -5453,6 +5453,22 @@ export async function previewRunFile(
   return (await res.json()) as RunFilePreview;
 }
 
+/** Read the start of the file at a remote `s3://` or `https://` URL, before a
+ *  table is made from it. The server fetches it through the same gateway as
+ *  `createDataCollectionFromUrl`, so a refused host is refused here first. */
+export async function previewRemoteUrl(
+  url: string,
+  options: { signal?: AbortSignal; maxRows?: number } = {},
+): Promise<RunFilePreview> {
+  const res = await authFetch(`${API_BASE}/datacollections/url_preview`, {
+    method: 'POST',
+    body: JSON.stringify({ url, max_rows: options.maxRows ?? 10 }),
+    signal: options.signal,
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to preview the URL');
+  return (await res.json()) as RunFilePreview;
+}
+
 /** Response of GET /projects/folder_inspect: what one folder holds, and the
  *  pipeline and template recognised in it. */
 export interface FolderInspection {

@@ -378,7 +378,7 @@ const LinkEditModal: React.FC<LinkEditModalProps> = ({
       withCloseButton={!submitting}
     >
       <Stack gap="md" data-testid="link-edit-modal">
-        {/* Header mirrors CreateDataCollectionModal / ManageDataCollectionModal:
+        {/* Header mirrors ManageDataCollectionModal:
             no native title, custom centered icon + Title inside the Stack so
             the visual language stays consistent across the project's modals. */}
         <Group justify="center" gap="sm">

@@ -1,7 +1,7 @@
 import asyncio
 
 from bson import ObjectId
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel
 
 from depictio.api.v1.configs.config import settings
@@ -28,6 +28,11 @@ from depictio.api.v1.endpoints.datacollections_endpoints.utils import (
     _update_dc_specific_properties,
     generate_join_dict,
 )
+from depictio.api.v1.endpoints.datacollections_endpoints.url_preview import (
+    URLPreviewRequest,
+    preview_remote_url,
+)
+from depictio.api.v1.endpoints.projects_endpoints.local_dirs import CodedHTTPException
 from depictio.api.v1.endpoints.projects_endpoints.publish_lock import (
     assert_dc_project_unlocked,
     assert_workflow_project_unlocked,
@@ -540,6 +545,29 @@ async def create_data_collection_from_url(
         lat_column=payload.lat_column,
         lon_column=payload.lon_column,
     )
+
+
+@datacollections_endpoint_router.post("/url_preview")
+async def post_url_preview(
+    payload: URLPreviewRequest,
+    request: Request,
+    current_user=Depends(get_user_or_anonymous),
+):
+    """Show the start of the file at a remote URL, before a table is made from it.
+
+    For the "One file from its URL" source of Add data and New project: the
+    first rows of a table, or in plain words why it is not shown. Read-only and bounded; the
+    URL passes the same gateway ``/create_from_url`` uses. Refusals answer
+    ``{detail, code}``.
+    """
+    if not current_user:
+        raise HTTPException(status_code=401, detail="User not found.")
+    try:
+        return await asyncio.to_thread(
+            preview_remote_url, payload, request=request, current_user=current_user
+        )
+    except CodedHTTPException as exc:
+        return exc.response()
 
 
 @datacollections_endpoint_router.post("/multiqc_uniformity_check")

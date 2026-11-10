@@ -10,10 +10,11 @@ import type { ProjectListEntry } from 'depictio-react-core';
 import { DisabledReason, GatedButton } from '../../../components/settings/SettingsSections';
 import { plural } from '../../fromRun/plural';
 import { DataSourceFields, FileUploadResults, uploadFiles, useDataDropzone } from '../../create/FilesDropArea';
-import type { TableUploadOutcome } from '../../create/FilesDropArea';
+import type { LocationMode, TableUploadOutcome } from '../../create/FilesDropArea';
 import { LinkSuggestions } from '../../create/LinkSuggestions';
 import { useAttachRun } from './useAttachRun';
-import { useFolderTables } from './useFolderTables';
+import { isSingleFileLocation, useFolderTables } from './useFolderTables';
+import { useUrlTable } from './useUrlTable';
 import { useLocationPicker } from './useLocationPicker';
 
 interface AddDataModalProps {
@@ -29,8 +30,6 @@ interface AddDataModalProps {
   onClose: () => void;
   /** Data was added: reload the project. */
   onAdded: () => void;
-  /** Leave for the single-collection dialog. */
-  onSingleUrl: () => void;
 }
 
 export const AddDataModal: React.FC<AddDataModalProps> = ({
@@ -42,7 +41,6 @@ export const AddDataModal: React.FC<AddDataModalProps> = ({
   pipelineLabel,
   onClose,
   onAdded,
-  onSingleUrl,
 }) => {
   const drop = useDataDropzone();
   const { dropzone, files, guesses } = drop;
@@ -52,8 +50,23 @@ export const AddDataModal: React.FC<AddDataModalProps> = ({
     label: 'Folder or bucket',
     testIdPrefix: 'add-data-location',
   });
-  const folder = useFolderTables({ opened, projectId, project, picker, onUseFiles: onSingleUrl });
-  const run = useAttachRun({ enabled: takesRuns, opened, projectId, pipelineLabel, picker, onAdded });
+  // The right-hand box reads a folder, or one file from its URL.
+  const [mode, setMode] = useState<LocationMode>('folder');
+  const urlTable = useUrlTable({ opened });
+  const folder = useFolderTables({
+    opened,
+    projectId,
+    project,
+    picker,
+    // A file URL typed as a folder moves over to the URL side, carried along.
+    onUseFiles: (url) => {
+      urlTable.setUrl(url);
+      setMode('url');
+    },
+  });
+  // One file is never a run, whatever the project's pipeline.
+  const runsApply = takesRuns && mode === 'folder' && !isSingleFileLocation(picker.trimmed);
+  const run = useAttachRun({ enabled: runsApply, opened, projectId, pipelineLabel, picker, onAdded });
 
   const [started, setStarted] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -63,25 +76,29 @@ export const AddDataModal: React.FC<AddDataModalProps> = ({
     if (opened) return;
     setStarted(false);
     setUploads([]);
+    setMode('folder');
     clear();
     // `clear` is stable.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [opened]);
 
-  const hasLocation = picker.trimmed.length > 0;
-  const addsRun = takesRuns && hasLocation && run.isNewRun;
-  const refusedRun = takesRuns && hasLocation && !run.loading && run.refusal && folder.tableCount === 0;
+  const hasLocation = mode === 'folder' && picker.trimmed.length > 0;
+  const hasUrl = mode === 'url' && urlTable.hasUrl;
+  const addsRun = runsApply && hasLocation && run.isNewRun;
+  const refusedRun = runsApply && hasLocation && !run.loading && run.refusal && folder.tableCount === 0;
 
   let reason: string | null = null;
   if (!projectId) reason = 'The project is not loaded yet.';
-  else if (files.length === 0 && !hasLocation) reason = 'Drop files, or enter a folder.';
-  else if (hasLocation && takesRuns && run.loading) reason = 'Checking the folder.';
+  else if (files.length === 0 && !hasLocation && !hasUrl) {
+    reason = mode === 'url' ? 'Drop files, or enter the URL of one file.' : 'Drop files, or enter a folder.';
+  } else if (hasUrl) reason = urlTable.reason;
+  else if (hasLocation && runsApply && run.loading) reason = 'Checking the folder.';
   else if (addsRun) reason = run.reason;
   else if (refusedRun) {
     reason = run.refusal?.known ? run.refusal.message : 'The folder could not be checked.';
   } else if (hasLocation) reason = folder.reason;
 
-  const tables = files.length + (hasLocation && !addsRun ? folder.count : 0);
+  const tables = files.length + (hasLocation && !addsRun ? folder.count : 0) + (hasUrl ? 1 : 0);
   // "Table" is the right word only while every file is one.
   const unit = files.every((f) => guesses.get(f)?.kind === 'table') ? 'table' : 'file';
   let submitLabel = 'Add data';
@@ -97,17 +114,18 @@ export const AddDataModal: React.FC<AddDataModalProps> = ({
       await uploadFiles(projectId, files, [...existingNames, ...folder.tickedNames], setUploads);
       setUploading(false);
     }
-    if (addsRun) await run.submit();
+    if (hasUrl) await urlTable.submit(projectId);
+    else if (addsRun) await run.submit();
     else if (hasLocation) await folder.submit();
   };
 
-  const busy = uploading || folder.submitting || run.submitting;
+  const busy = uploading || folder.submitting || run.submitting || urlTable.submitting;
   const done = started && !busy && !run.following;
   const uploaded = uploads.filter((u) => !u.error).length;
 
   const finish = () => {
     // A run reloads the project itself when its ingestion ends.
-    if (uploaded > 0 || folder.ingested > 0) onAdded();
+    if (uploaded > 0 || folder.ingested > 0 || (urlTable.result && !urlTable.result.error)) onAdded();
     onClose();
   };
   const handleClose = () => {
@@ -135,12 +153,16 @@ export const AddDataModal: React.FC<AddDataModalProps> = ({
                 folderField={picker.field}
                 folderHint={
                   takesRuns
-                    ? `A folder on the server, an s3:// location or the URL of one file. Another run of ${pipelineLabel ?? 'this pipeline'} is added as a run; any other folder offers its tables.`
-                    : 'A folder on the server, an s3:// location, or the URL of one file. Its tables become collections.'
+                    ? `A folder on the server or an s3:// prefix. Another run of ${pipelineLabel ?? 'this pipeline'} is added as a run; any other folder offers its tables.`
+                    : 'A folder on the server or an s3:// prefix. Its tables become collections.'
                 }
+                locationMode={mode}
+                onLocationModeChange={setMode}
+                urlField={urlTable.field}
               >
-                {takesRuns && hasLocation && run.view}
+                {runsApply && hasLocation && run.view}
                 {!addsRun && !refusedRun && hasLocation && folder.view}
+                {mode === 'url' && urlTable.preview}
               </DataSourceFields>
               <Stack gap={6} align="flex-end">
                 <Group gap="sm">
@@ -174,6 +196,15 @@ export const AddDataModal: React.FC<AddDataModalProps> = ({
                 />
               )}
               {folder.resultView}
+              {urlTable.result && (
+                <Alert
+                  color={urlTable.result.error ? 'red' : 'teal'}
+                  variant="light"
+                  data-testid="add-data-url-result"
+                >
+                  {urlTable.result.error ?? `"${urlTable.result.name}" was added from its URL.`}
+                </Alert>
+              )}
               {run.followView}
               {done && files.length > 0 && uploaded < files.length && (
                 <Alert color="orange" variant="light" data-testid="add-data-files-summary">

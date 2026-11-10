@@ -270,6 +270,7 @@ EXEMPT: dict[tuple[str, str], str] = {
     (_PROJ, "lock_project"): "the lock's own admin switch",
     (_PROJ, "unlock_project"): "the lock's own admin switch",
     (_DC, "multiqc_uniformity_check"): _READ,
+    (_DC, "post_url_preview"): _READ,
     (_DT, "batch_check_deltatables_exist"): _READ,
     (_DT, "get_breakdown_filtered"): _READ,
     (_DT, "get_card_metric"): _READ,

@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { Button } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import type { ProjectListEntry } from 'depictio-react-core';
-import CreateDataCollectionModal from '../CreateDataCollectionModal';
 import { projectLayout, projectPipeline, projectRunFolders } from '../../layout';
 import AddDataModal from './AddDataModal';
 
@@ -33,12 +32,6 @@ export const AddDataButton: React.FC<AddDataButtonProps> = ({
   color,
 }) => {
   const [opened, setOpened] = useState(false);
-  // The single-collection dialog, for one table from a URL.
-  const [urlOpened, setUrlOpened] = useState(false);
-  const openUrl = () => {
-    setOpened(false);
-    setUrlOpened(true);
-  };
 
   // "Add a run" only makes sense for a project made from a pipeline: one with
   // real workflows and the origin the server checks a new run against.
@@ -86,17 +79,6 @@ export const AddDataButton: React.FC<AddDataButtonProps> = ({
         pipelineLabel={pipeline ? `${pipeline.name}${pipeline.version ? ` ${pipeline.version}` : ''}` : null}
         onClose={() => setOpened(false)}
         onAdded={onAdded}
-        onSingleUrl={openUrl}
-      />
-      <CreateDataCollectionModal
-        opened={urlOpened}
-        projectId={projectId}
-        initialType="table"
-        onClose={() => setUrlOpened(false)}
-        onSuccess={() => {
-          setUrlOpened(false);
-          onAdded();
-        }}
       />
     </>
   );

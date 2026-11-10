@@ -20,6 +20,8 @@ import {
   Box,
   Button,
   Group,
+  Paper,
+  ThemeIcon,
   Stack,
   Stepper,
   Text,
@@ -61,13 +63,15 @@ import type {
 import { GatedButton } from '../../components/settings/SettingsSections';
 import { useStepSettling } from '../hooks/useStepSettling';
 import { FolderTablesFound } from '../create/FolderTablesFound';
+import { TableChip } from './browser/FolderDetailPane';
 import { TableResults } from '../create/TableResults';
 import type { TableResultRow } from '../create/TableResults';
 import { baseName, classifyTableName, stemOf } from '../create/tableFiles';
 import { plural } from './plural';
 import { SourceSection } from '../create/SourceSection';
 import { DataSourceFields, FilesFoundCard, uploadFiles, useDataDropzone } from '../create/FilesDropArea';
-import type { TableUploadOutcome } from '../create/FilesDropArea';
+import type { LocationMode, TableUploadOutcome } from '../create/FilesDropArea';
+import { useUrlTable } from '../detail/addData/useUrlTable';
 import FolderBrowserModal from './browser/FolderBrowserModal';
 import { DetectionCard } from './DetectionCard';
 import type { DetectionState } from './DetectionCard';
@@ -482,7 +486,17 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
   // A folder of plain tables: nothing in it names a pipeline, nothing was
   // picked. Listed from the inspection (direct children), classified by
   // extension; the project is created with the ticked ones.
-  const filesOnly = localFiles.length > 0 && !trimmedRoot;
+  // The right-hand box reads a folder, or one table from its URL; switching
+  // clears the other, so only one location is ever in play.
+  const [locationMode, setLocationMode] = useState<LocationMode>('folder');
+  const urlTable = useUrlTable({ opened });
+  const urlFile = locationMode === 'url' && urlTable.hasUrl;
+  const switchLocation = (mode: LocationMode) => {
+    setLocationMode(mode);
+    if (mode === 'url') changeDataRoot('');
+    else urlTable.setUrl('');
+  };
+  const filesOnly = (localFiles.length > 0 || urlFile) && !trimmedRoot;
   const plainFolder = inspection !== null && !detected?.pipeline && !choice.templateId;
   const tablesMode = filesOnly || plainFolder;
   const folderFileNames = useMemo(() => inspection?.files.names ?? [], [inspection]);
@@ -501,8 +515,10 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
   const folderBase = baseName(trimmedRoot.replace(/\/+$/, '')) || 'tables';
   const singleFileStem = localFiles.length === 1 ? stemOf(localFiles[0].name) : '';
   /** What a project of tables is called by default. */
-  const tablesBase = trimmedRoot ? folderBase : singleFileStem || 'uploads';
-  const tableCount = (plainFolder ? tickedList.length : 0) + localFiles.length;
+  const tablesBase = trimmedRoot
+    ? folderBase
+    : singleFileStem || (urlFile && localFiles.length === 0 ? urlTable.name : '') || 'uploads';
+  const tableCount = (plainFolder ? tickedList.length : 0) + localFiles.length + (urlFile ? 1 : 0);
 
   const groups = useMemo(
     () =>
@@ -642,12 +658,16 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
     } else if (tableCount === 0) {
       disabledReason = 'Tick at least one table.';
     }
+  } else if (urlFile && urlTable.reason) {
+    disabledReason = urlTable.reason;
   } else if (filesOnly) {
-    // Files are all it takes.
+    // Files (or a file URL) are all it takes.
   } else if (step === 0 && !prefixInvalid && trimmedRoot && detectionView.status === 'loading') {
     disabledReason = 'Reading the folder.';
   } else if (trimmedRoot.length === 0) {
-    disabledReason = browseEnabled
+    disabledReason = locationMode === 'url'
+      ? 'Drop files, or enter the URL of one table file.'
+      : browseEnabled
       ? 'Drop files, or enter or browse to a folder.'
       : 'Drop files, or enter the location of a folder.';
   } else if (prefixInvalid) {
@@ -707,6 +727,7 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
         label: baseName(f.name),
         status: 'pending' as const,
       })),
+      ...(urlFile ? [{ key: 'url', label: urlTable.name, status: 'pending' as const }] : []),
     ];
     setTableRows(pending);
     try {
@@ -767,9 +788,22 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
           ]),
       );
       firstTableId = firstTableId ?? uploads.find((u) => u.dataCollectionId)?.dataCollectionId ?? null;
+      let urlOk = true;
+      if (urlFile) {
+        const made = await urlTable.submit(projectId);
+        urlOk = Boolean(made && !made.error);
+        firstTableId = firstTableId ?? made?.dataCollectionId ?? null;
+        setTableRows((prev) =>
+          prev.map((r) =>
+            r.key === 'url'
+              ? { ...r, status: urlOk ? 'created' : 'failed', error: made?.error ?? undefined }
+              : r,
+          ),
+        );
+      }
       setCreatedTableId(firstTableId);
       const allCreated =
-        folderRows.every((r) => r.status === 'created') && uploads.every((u) => !u.error);
+        folderRows.every((r) => r.status === 'created') && uploads.every((u) => !u.error) && urlOk;
       if (allCreated) onProjectReady?.(projectId, tablesName, firstTableId);
     } catch (err) {
       setTableError((err as Error).message || 'Failed to create the project.');
@@ -814,17 +848,49 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
         }
       : null;
 
+  // A folder with no pipeline is a valid source, not a failed detection: say
+  // what it holds and what happens next, with the tables in view.
   const plainTablesNote = plainFolder ? (
-    <Alert
-      color="blue"
-      variant="light"
-      icon={<Icon icon="mdi:information-outline" width={18} />}
-      data-testid="folder-no-pipeline"
-    >
-      <Text size="sm">
-        No pipeline recognised: these look like plain tables.
-      </Text>
-    </Alert>
+    <Paper withBorder radius="md" p="sm" data-testid="folder-no-pipeline" data-tables={tableNames.length}>
+      <Stack gap="xs">
+        <Group gap="sm" wrap="nowrap" align="flex-start">
+          <ThemeIcon
+            variant="light"
+            color={tableNames.length > 0 ? 'teal' : 'orange'}
+            size="lg"
+            radius="md"
+          >
+            <Icon icon={tableNames.length > 0 ? 'mdi:table-multiple' : 'mdi:table-off'} width={18} />
+          </ThemeIcon>
+          <Stack gap={2} style={{ minWidth: 0 }}>
+            <Text size="sm" fw={600}>
+              {tableNames.length > 0
+                ? `${plural(tableNames.length, 'table')} found, no pipeline needed`
+                : 'No table in this folder'}
+            </Text>
+            <Text size="xs" c="dimmed">
+              {tableNames.length > 0
+                ? 'Each table becomes a data collection of the project. Next lets you choose which ones.'
+                : (inspection?.folders.count ?? 0) > 0
+                  ? `No pipeline run was recognised and the tables, if any, are in its ${plural(inspection?.folders.count ?? 0, 'subfolder')}. Browse to pick one, or name the pipeline below.`
+                  : 'No pipeline run was recognised and there is no CSV, TSV, Parquet or Excel file here.'}
+            </Text>
+          </Stack>
+        </Group>
+        {tableNames.length > 0 && (
+          <Group gap={6}>
+            {tableNames.slice(0, 8).map((name) => (
+              <TableChip key={name} name={name} />
+            ))}
+            {tableNames.length > 8 && (
+              <Text size="xs" c="dimmed">
+                +{tableNames.length - 8} more
+              </Text>
+            )}
+          </Group>
+        )}
+      </Stack>
+    </Paper>
   ) : null;
 
   const pickerBlock = (
@@ -961,12 +1027,16 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
               data-testid="run-data-root-input"
             />
             }
+            locationMode={locationMode}
+            onLocationModeChange={switchLocation}
+            urlField={urlTable.field}
             folderHint={
               localDataRootsEnabled
                 ? 'A folder on this computer (a full path, or one starting with ~/) or an s3:// location.'
                 : 'The s3:// location of a folder of results or tables.'
             }
           >
+            {locationMode === 'url' && urlTable.preview}
             {renderPrivateBucket(trimmedRoot, false)}
 
             {plainTablesNote}
@@ -1004,7 +1074,6 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
         <Stepper.Step label="What Depictio found" description="Facts and checks">
           {tablesMode ? (
             <Stack gap="md" pt="md">
-              {plainTablesNote}
               {plainFolder && (
               <SourceSection
                 icon="mdi:folder-outline"
@@ -1028,6 +1097,17 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
                 }
               />
               </SourceSection>
+              )}
+              {urlFile && (
+                <SourceSection
+                  icon="mdi:link-variant"
+                  title="File URL"
+                  summary={urlTable.url}
+                  defaultOpen
+                  testId="found-section-url"
+                >
+                  {urlTable.preview}
+                </SourceSection>
               )}
               {localFiles.length > 0 && <FilesFoundCard drop={drop} defaultOpen={!plainFolder} />}
             </Stack>

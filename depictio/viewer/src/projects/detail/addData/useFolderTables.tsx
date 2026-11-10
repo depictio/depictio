@@ -44,7 +44,7 @@ interface Options {
   project?: ProjectListEntry | null;
   picker: LocationPicker;
   /** Hand a single file URL over to the single-table dialog (From a URL). */
-  onUseFiles: () => void;
+  onUseFiles: (url: string) => void;
 }
 
 export function useFolderTables({ opened, projectId, project, picker, onUseFiles }: Options) {
@@ -169,7 +169,7 @@ export function useFolderTables({ opened, projectId, project, picker, onUseFiles
             <Text size="sm">
               This points at a single file, not a folder. Add it as one table from its URL.
             </Text>
-            <Button size="xs" variant="light" onClick={onUseFiles} data-testid="folder-tables-use-files">
+            <Button size="xs" variant="light" onClick={() => onUseFiles(target)} data-testid="folder-tables-use-files">
               Add this file
             </Button>
           </Stack>
