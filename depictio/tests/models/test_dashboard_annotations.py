@@ -110,10 +110,9 @@ def test_key_cap():
         DashboardAnnotationsPayload.model_validate(_payload(columns=cols))
 
 
-def test_label_cap_is_the_group_name_cap():
-    from depictio.api.v1.services.figure.groups import MAX_NAME_LENGTH
-
-    assert MAX_LABEL_LENGTH == MAX_NAME_LENGTH
+def test_label_cap():
+    # Equal to the server's group name cap: checked in the API tests
+    # (`test_annotation_routes.py`), since the models tests run without the server.
     ok = [_col("c1", "r", {"S1": "x" * MAX_LABEL_LENGTH})]
     DashboardAnnotationsPayload.model_validate(_payload(columns=ok))
     long = [_col("c1", "r", {"S1": "x" * (MAX_LABEL_LENGTH + 1)})]

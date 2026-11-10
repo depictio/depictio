@@ -518,3 +518,12 @@ class TestSharedLabels:
         with pytest.raises(HTTPException) as exc:
             await get_annotation_tables(CHILD_ID, "v1", _user())
         assert exc.value.status_code == 404
+
+
+def test_label_cap_is_the_group_name_cap():
+    """Every label becomes a group name: a longer cap would let two labels
+    sharing their first characters collapse into one group."""
+    from depictio.api.v1.services.figure.groups import MAX_NAME_LENGTH
+    from depictio.models.models.dashboard_annotations import MAX_LABEL_LENGTH
+
+    assert MAX_LABEL_LENGTH == MAX_NAME_LENGTH
