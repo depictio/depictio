@@ -1303,7 +1303,7 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
         </Box>
       )}
 
-      <Group justify="space-between" gap="xs" wrap="wrap">
+      <Group gap="xs" wrap="wrap">
         <Group gap="xs" wrap="wrap" style={{ minWidth: 0 }}>
           <Text size="xs" c="dimmed">
             Table
@@ -1348,93 +1348,105 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
               </Text>
             </Tooltip>
           )}
-          {projectId && choice && (
-            // The table's own page: its rows, its links and where it comes from.
-            <Button
-              component="a"
-              href={`/projects/${projectId}?table=${choice.dcId}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              size="xs"
-              variant="subtle"
-              style={{ flexShrink: 0 }}
-              leftSection={<Icon icon="mdi:open-in-new" width={14} />}
-              data-testid="annotation-open-table"
+          {/* Compact actions beside the table choice, icon only: the name is the
+              tooltip and the accessible label. */}
+          <Group gap={4} wrap="nowrap" style={{ flexShrink: 0 }}>
+            <Tooltip
+              withinPortal
+              label={
+                labelColumnCount >= MAX_ANNOTATION_COLUMNS
+                  ? `At most ${MAX_ANNOTATION_COLUMNS} label columns`
+                  : 'Add column: a new column of your own labels, next to the table'
+              }
             >
-              Open in project
-            </Button>
-          )}
-        </Group>
-        <Group gap={4} wrap="nowrap">
-        <Tooltip
-          withinPortal
-          label={
-            labelColumnCount >= MAX_ANNOTATION_COLUMNS
-              ? `At most ${MAX_ANNOTATION_COLUMNS} label columns`
-              : 'A new column of your own labels, next to the table'
-          }
-        >
-          <Button
-            size="xs"
-            className="dc-mp-btn dc-mp-btn--primary"
-            disabled={!table || !keyColumn || labelColumnCount >= MAX_ANNOTATION_COLUMNS}
-            leftSection={<Icon icon="mdi:plus" width={14} />}
-            onClick={() => setNaming({ id: null, value: '', error: null })}
-            data-testid="label-add"
-          >
-            Add column
-          </Button>
-        </Tooltip>
-        <Tooltip withinPortal label="Fit every column to its content">
-          <Button
-            size="xs"
-            className="dc-mp-btn"
-            disabled={!table}
-            leftSection={<Icon icon="mdi:arrow-expand-horizontal" width={14} />}
-            onClick={() => gridApi.current?.autoSizeAllColumns()}
-            data-testid="annotation-fit-columns"
-          >
-            Fit
-          </Button>
-        </Tooltip>
-        <Tooltip
-          withinPortal
-          multiline
-          w={300}
-          label={
-            writeBlocked && SOURCE_ELSEWHERE.has(cachedEditStatus(table?.dcId ?? '')?.code ?? '')
-              ? "This table's rows with your label columns added, as a TSV. Add the columns to the sheet this table comes from (for a pipeline, its metadata sheet) and ingest it again: the pipeline's statistics will include them."
-              : "This table's rows with label columns added, as a TSV built in your browser."
-          }
-        >
-          <Button
-            size="xs"
-            className="dc-mp-btn"
-            disabled={!table || !keyColumn}
-            leftSection={<Icon icon="mdi:tray-arrow-down" width={14} />}
-            onClick={startExport}
-            data-testid="annotation-export"
-          >
-            Export
-          </Button>
-        </Tooltip>
-        <FileButton
-          onChange={(f) => f && void openImport(f)}
-          accept=".csv,.tsv,.txt,.tab,text/csv,text/tab-separated-values"
-          inputProps={{ 'data-testid': 'annotation-file-input' } as React.ComponentProps<'input'>}
-        >
-          {(props) => (
-            <Button
-              {...props}
-              size="xs"
-              className="dc-mp-btn"
-              disabled={!table || !keyColumn}
-              leftSection={<Icon icon="mdi:tray-arrow-up" width={14} />}
+              <ActionIcon
+                size="sm"
+                variant="filled"
+                style={{ background: 'var(--dc-panel-accent, var(--mantine-color-teal-6))' }}
+                aria-label="Add column"
+                disabled={!table || !keyColumn || labelColumnCount >= MAX_ANNOTATION_COLUMNS}
+                onClick={() => setNaming({ id: null, value: '', error: null })}
+                data-testid="label-add"
+              >
+                <Icon icon="mdi:plus" width={14} />
+              </ActionIcon>
+            </Tooltip>
+            <Tooltip withinPortal label="Fit every column to its content">
+              <ActionIcon
+                size="sm"
+                variant="default"
+                aria-label="Fit columns"
+                disabled={!table}
+                onClick={() => gridApi.current?.autoSizeAllColumns()}
+                data-testid="annotation-fit-columns"
+              >
+                <Icon icon="mdi:arrow-expand-horizontal" width={14} />
+              </ActionIcon>
+            </Tooltip>
+            <Tooltip
+              withinPortal
+              multiline
+              w={300}
+              label={
+                writeBlocked && SOURCE_ELSEWHERE.has(cachedEditStatus(table?.dcId ?? '')?.code ?? '')
+                  ? "Export: this table's rows with your label columns added, as a TSV. Add the columns to the sheet this table comes from (for a pipeline, its metadata sheet) and ingest it again: the pipeline's statistics will include them."
+                  : "Export: this table's rows with label columns added, as a TSV built in your browser."
+              }
             >
-              Import
-            </Button>
-          )}
-        </FileButton>
+              <ActionIcon
+                size="sm"
+                variant="default"
+                aria-label="Export"
+                disabled={!table || !keyColumn}
+                onClick={startExport}
+                data-testid="annotation-export"
+              >
+                <Icon icon="mdi:tray-arrow-down" width={14} />
+              </ActionIcon>
+            </Tooltip>
+            <FileButton
+              onChange={(f) => f && void openImport(f)}
+              accept=".csv,.tsv,.txt,.tab,text/csv,text/tab-separated-values"
+              inputProps={{ 'data-testid': 'annotation-file-input' } as React.ComponentProps<'input'>}
+            >
+              {(props) => (
+                <Tooltip withinPortal label="Import: a CSV or TSV as labels or into the table">
+                  <ActionIcon
+                    {...props}
+                    size="sm"
+                    variant="default"
+                    aria-label="Import"
+                    disabled={!table || !keyColumn}
+                  >
+                    <Icon icon="mdi:tray-arrow-up" width={14} />
+                  </ActionIcon>
+                </Tooltip>
+              )}
+            </FileButton>
+            {projectId && choice && (
+              // The table's own page in the project: its rows, its links and
+              // where it comes from.
+              <Tooltip
+                withinPortal
+                multiline
+                w={260}
+                label={`Table page: opens ${chosenEntry ? annotationTableLabel(chosenEntry, tables) : 'this table'} in the project, with its rows, its links and where it comes from.`}
+              >
+                <ActionIcon
+                  component="a"
+                  href={`/projects/${projectId}?table=${choice.dcId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  size="sm"
+                  variant="default"
+                  aria-label="Open the table's page in the project"
+                  data-testid="annotation-open-table"
+                >
+                  <Icon icon="mdi:open-in-new" width={14} />
+                </ActionIcon>
+              </Tooltip>
+            )}
+          </Group>
         </Group>
       </Group>
 
