@@ -65,7 +65,11 @@ class Env:
         self.client = TestClient(self.app)
 
     def project(self, *, origin=UPLOAD_ORIGIN, config=None, locked=False, unlocked=True, **roles):
-        config = config if config is not None else {"type": "table", "source": "native", "origin": origin}
+        config = (
+            config
+            if config is not None
+            else {"type": "table", "source": "native", "origin": origin}
+        )
         if unlocked:
             config = {**config, "edit_unlocked": True}
         doc = {
