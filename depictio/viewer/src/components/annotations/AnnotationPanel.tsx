@@ -40,6 +40,7 @@ import {
   copyName,
   emptyAnnotations,
   fetchDataVersionStatus,
+  labelScope,
   matchDroppedTable,
   MAX_ANNOTATION_COLUMNS,
   MAX_DROP_BYTES,
@@ -1159,7 +1160,7 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
           ? canShare
             ? 'shared'
             : 'shared-readonly'
-          : c.local
+          : labelScope(c, state.storage ?? 'browser') === 'browser'
             ? 'local'
             : 'mine';
         const actions: LabelColumnActions = {

@@ -30,6 +30,7 @@ import {
   type GroupingDisplay,
   type SelectionGroup,
 } from '../../selectionGroups';
+import { LABEL_SCOPE, type LabelScope } from '../../sessionAnnotations';
 import { Z_LAYERS } from '../../zLayers';
 import GroupColorSwatches from '../GroupColorSwatches';
 import GroupingSteps from './GroupingSteps';
@@ -89,7 +90,46 @@ export interface LabelColumnChoice {
   name: string;
   active: boolean;
   blocked: string | null;
+  /** Where the column lives, shown beside its name. */
+  scope?: LabelScope;
 }
+
+/** The icon of where a label column lives, with its sentence on hover. */
+const ScopeIcon: React.FC<{ scope: LabelScope }> = ({ scope }) => (
+  <Tooltip withinPortal label={LABEL_SCOPE[scope].tip} multiline w={240} zIndex={Z_LAYERS.tooltip + 1}>
+    <span style={{ display: 'inline-flex' }} data-testid={`label-scope-${scope}`}>
+      <Icon icon={LABEL_SCOPE[scope].icon} width={14} height={14} aria-label={LABEL_SCOPE[scope].short} />
+    </span>
+  </Tooltip>
+);
+
+/** One row of the "Label column" list: the name, then where the column lives. */
+const LabelOption: React.FC<{ name: string; scope?: LabelScope; blocked: string | null }> = ({
+  name,
+  scope,
+  blocked,
+}) => (
+  <Group gap={8} wrap="nowrap" justify="space-between" style={{ width: '100%' }}>
+    <Box style={{ minWidth: 0 }}>
+      <Text size="sm" truncate>
+        {name}
+      </Text>
+      {blocked && (
+        <Text size="xs" c="dimmed">
+          {blocked}
+        </Text>
+      )}
+    </Box>
+    {scope && (
+      <Group gap={4} wrap="nowrap" style={{ flexShrink: 0, opacity: 0.75 }}>
+        <Icon icon={LABEL_SCOPE[scope].icon} width={13} height={13} />
+        <Text size="xs" c="dimmed">
+          {LABEL_SCOPE[scope].short}
+        </Text>
+      </Group>
+    )}
+  </Group>
+);
 
 const COLOR_BY_NONE_VALUE = '__depictio_none__';
 /** Marks a label column among the data's own in the "A column" select. */
@@ -221,6 +261,7 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
   // `sample`?"). Columns present in more than one DC go under "Shared
   // columns": the override applies to every figure whose frame carries the
   // column, so pinning them to one dataset would under-promise.
+  const activeLabel = labelColumns.find((l) => l.active);
   const labelItems = useMemo(
     () =>
       labelColumns.map((l) => ({
@@ -475,6 +516,11 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
           }
           clearable
           allowDeselect={false}
+          renderOption={({ option }) => {
+            const choice = labelColumns.find((l) => LABEL_VALUE_PREFIX + l.id === option.value);
+            return <LabelOption name={option.label} scope={choice?.scope} blocked={choice?.blocked ?? null} />;
+          }}
+          leftSection={activeLabel?.scope ? <ScopeIcon scope={activeLabel.scope} /> : undefined}
           comboboxProps={{ withinPortal: true, zIndex: Z_LAYERS.tooltip }}
           data-testid="analysis-label-column"
         />

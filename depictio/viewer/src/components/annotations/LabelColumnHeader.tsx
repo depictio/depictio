@@ -1,6 +1,7 @@
 import React from 'react';
 import { ActionIcon, Group, Menu, Text, Tooltip } from '@mantine/core';
 import { Icon } from '@iconify/react';
+import { LABEL_SCOPE } from 'depictio-react-core';
 
 /** Where a label column lives, which decides its icon and its actions. */
 export type LabelColumnKind =
@@ -36,17 +37,15 @@ export interface LabelColumnActions {
   onDelete: () => void;
 }
 
-/** One icon and one sentence per kind, the same everywhere. */
+/** One icon and one sentence per kind, the same everywhere: the scope's own
+ *  for where the labels live (`LABEL_SCOPE`), plus the read-only note. */
 export const LABEL_KIND: Record<LabelColumnKind, { icon: string; tip: string }> = {
-  mine: { icon: 'mdi:tag-outline', tip: 'Your labels' },
-  local: { icon: 'mdi:monitor', tip: 'Your labels from a file, kept in this browser only' },
-  shared: {
-    icon: 'mdi:account-group-outline',
-    tip: 'Shared on this dashboard: everyone who opens it sees these labels',
-  },
+  mine: LABEL_SCOPE.account,
+  local: LABEL_SCOPE.browser,
+  shared: LABEL_SCOPE.shared,
   'shared-readonly': {
-    icon: 'mdi:account-group-outline',
-    tip: 'Shared on this dashboard; read-only. Copy it to your labels to change it.',
+    icon: LABEL_SCOPE.shared.icon,
+    tip: `${LABEL_SCOPE.shared.tip}. Copy it to your labels to change it.`,
   },
 };
 

@@ -111,6 +111,7 @@ import {
   withShared,
   emptyAnnotations,
   annotationColumnBudget,
+  labelScope,
   useCategoricalColumns,
   useColorByColumnRender,
   resolveGroupRender,
@@ -903,9 +904,10 @@ const EditorApp: React.FC = () => {
           name: c.name,
           active: c.id === annotationView?.activeColumnId,
           blocked: budget.ok ? null : budget.reason,
+          scope: labelScope(c, annotationStorage ?? 'browser'),
         };
       }),
-    [annotationView, groupsApi.groups],
+    [annotationView, groupsApi.groups, annotationStorage],
   );
   const { setAnnotations: setOwnAnnotations, annotations: ownAnnotations } = annotationsState;
   const pickLabelColumn = useCallback(

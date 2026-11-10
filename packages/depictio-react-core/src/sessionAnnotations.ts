@@ -108,6 +108,39 @@ export function parseSharedColumns(raw: unknown): AnnotationColumn[] {
   return (parsed?.columns ?? []).map(({ local: _l, ...c }) => ({ ...c, shared: true as const }));
 }
 
+/** Where a label column lives, and so who can see it and how long it lasts. */
+export type LabelScope = 'browser' | 'account' | 'shared';
+
+/** Icon, short name and one sentence per scope: the same in the Metadata grid
+ *  header and the Analysis "Label column" list. */
+export const LABEL_SCOPE: Record<LabelScope, { icon: string; short: string; tip: string }> = {
+  browser: {
+    icon: 'mdi:monitor',
+    short: 'This browser',
+    tip: 'Kept in this browser only: not on your account, and gone if you clear the site data',
+  },
+  account: {
+    icon: 'mdi:account-outline',
+    short: 'Your account',
+    tip: 'Kept on your account: only you see it, in any browser you sign in from',
+  },
+  shared: {
+    icon: 'mdi:account-group-outline',
+    short: 'Shared',
+    tip: 'Shared on this dashboard: everyone who opens it sees these labels, read-only',
+  },
+};
+
+/** Scope of a label column given where the reader's own labels are stored. */
+export function labelScope(
+  column: Pick<AnnotationColumn, 'local' | 'shared'>,
+  storage: 'account' | 'browser',
+): LabelScope {
+  if (column.shared) return 'shared';
+  if (column.local || storage === 'browser') return 'browser';
+  return 'account';
+}
+
 /**
  * What a reader sees: their own label columns and the dashboard's shared ones,
  * as one set. The active column is the reader's choice, kept only when it names

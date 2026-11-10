@@ -927,9 +927,11 @@ export {
   columnsFor,
   MAX_ANNOTATION_KEYS,
   MAX_ANNOTATION_ROWS,
+  LABEL_SCOPE,
   MAX_LABEL_LENGTH,
   MAX_SERVER_GROUPS,
   copyName,
+  labelScope,
   newAnnotationId,
   normaliseLabel,
   parseAnnotations,
@@ -946,6 +948,7 @@ export type {
   AnnotationTarget,
   BrowserRead,
   DashboardAnnotations,
+  LabelScope,
 } from './sessionAnnotations';
 export {
   fetchAnnotationTables,
