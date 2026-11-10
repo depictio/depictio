@@ -40,7 +40,8 @@ import { useCurrentUser } from '../hooks/useCurrentUser';
 import { useAuthMode } from '../auth/hooks/useAuthMode';
 import TourButton from '../walkthrough/TourButton';
 import { ImportProjectDialog } from './ImportProjectDialog';
-import { uploadTableFiles } from './create/FilesDropArea';
+import { uploadFiles } from './create/FilesDropArea';
+import type { TableUploadOutcome } from './create/FilesDropArea';
 import { MigrationRequestsBanner } from './MigrationRequestsBanner';
 import { AppSidebar, LoadErrorCard } from '../chrome';
 import ProjectsList from './ProjectsList';
@@ -100,8 +101,12 @@ const ProjectsApp: React.FC = () => {
    *  in the folder). Kept so the user can watch it finish instead of being
    *  redirected to a dashboard whose collections are still empty. */
   const [createdRun, setCreatedRun] = useState<{
-    report: FromRunReport;
+    report: FromRunReport | null;
     context: RunCreatedContext;
+    /** Why the project could not be created. */
+    error: string | null;
+    uploads: TableUploadOutcome[];
+    retry: () => void;
   } | null>(null);
 
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure(false);
@@ -188,40 +193,36 @@ const ProjectsApp: React.FC = () => {
     [closeCreate, refresh],
   );
 
-  // This one answers as soon as the project and its dashboards exist: the collections are still being ingested on the
-  // workers. So there is never a redirect: the list refreshes behind a modal
-  // that watches the run and offers the dashboard once the user is ready.
+  // The waiting screen opens at once, before the server answered: creating
+  // the project and importing its dashboards takes a while, and the ingestion
+  // after it longer still. Files dropped next to the run go in once the project
+  // exists; the collections are appended, so this does not wait for the ingestion.
   const handleCreateFromRun = useCallback(
-    async (input: FromRunRequest, context: RunCreatedContext) => {
-      const report = await createProjectFromRun(input);
-      // Tables dropped next to the run go in once the project exists; the
-      // collections are appended, so this does not wait for the ingestion.
-      if (report.project_id && context.extraFiles?.length) {
-        const outcomes = await uploadTableFiles(
-          report.project_id,
-          context.extraFiles,
-          context.takenTableNames ?? [],
-        );
-        const failed = outcomes.filter((o) => o.error);
-        if (failed.length > 0) {
-          notifications.show({
-            color: 'red',
-            title: 'Some tables were not added',
-            message: failed.map((o) => `${o.file.name}: ${o.error}`).join('\n'),
-            autoClose: false,
-          });
+    (input: FromRunRequest, context: RunCreatedContext) => {
+      const launch = async () => {
+        setCreatedRun({ report: null, context, error: null, uploads: [], retry: launch });
+        let report: FromRunReport;
+        try {
+          report = await createProjectFromRun(input);
+        } catch (err) {
+          const error = (err as Error).message || 'Failed to create project from run folder.';
+          setCreatedRun((cur) => (cur ? { ...cur, error } : cur));
+          return;
         }
-      }
-      notifications.show({
-        color: 'teal',
-        title: 'Project created from run folder',
-        message: `"${report.project_name}" is ingesting in the background.`,
-        autoClose: 3000,
-      });
+        setCreatedRun((cur) => (cur ? { ...cur, report } : cur));
+        refresh();
+        if (report.project_id && context.extraFiles?.length) {
+          await uploadFiles(
+            report.project_id,
+            context.extraFiles,
+            context.takenTableNames ?? [],
+            (uploads) => setCreatedRun((cur) => (cur ? { ...cur, uploads } : cur)),
+          );
+          refresh();
+        }
+      };
       closeCreate();
-      refresh();
-      setCreatedRun({ report, context });
-      return report;
+      void launch();
     },
     [closeCreate, refresh],
   );
@@ -317,8 +318,12 @@ const ProjectsApp: React.FC = () => {
         onImport={handleImport}
       />
       <RunCreatedModal
+        opened={createdRun !== null}
         report={createdRun?.report ?? null}
         context={createdRun?.context ?? null}
+        error={createdRun?.error ?? null}
+        uploads={createdRun?.uploads ?? []}
+        onRetry={createdRun?.retry ?? null}
         onClose={() => setCreatedRun(null)}
       />
       <EditProjectModal

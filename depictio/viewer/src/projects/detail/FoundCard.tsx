@@ -30,6 +30,8 @@ export interface FoundCardProps {
   rows: FoundRow[];
   footer?: ReactNode;
   testId?: string;
+  /** Inside a section that already frames and titles it. */
+  embedded?: boolean;
 }
 
 const STATUS: Record<'ok' | 'differs' | 'warn' | 'info', { color: string; Icon: typeof Info }> = {
@@ -45,11 +47,14 @@ export const FoundCard: React.FC<FoundCardProps> = ({
   rows,
   footer,
   testId = 'found-card',
+  embedded = false,
 }) => (
-  <Paper withBorder radius="md" data-testid={testId} maw={720}>
-    <Box px="md" py="sm">
-      <Title order={5}>{title}</Title>
-    </Box>
+  <Paper withBorder={!embedded} radius="md" data-testid={testId} maw={embedded ? undefined : 720}>
+    {!embedded && (
+      <Box px="md" py="sm">
+        <Title order={5}>{title}</Title>
+      </Box>
+    )}
     {rows.map((row) => {
       const status = row.status ? STATUS[row.status] : null;
       return (
@@ -117,7 +122,7 @@ export const RunChips: React.FC<{ names: string[]; max?: number }> = ({ names, m
   );
 };
 
-const SOURCE_ICON: Record<ProjectSourceKind, typeof Info> = {
+export const SOURCE_ICON: Record<ProjectSourceKind, typeof Info> = {
   upload: Upload,
   url: LinkIcon,
   folder: Folder,
@@ -128,7 +133,7 @@ const SOURCE_ICON: Record<ProjectSourceKind, typeof Info> = {
   unknown: HelpCircle,
 };
 
-const SOURCE_TEXT: Record<ProjectSourceKind, string> = {
+export const SOURCE_TEXT: Record<ProjectSourceKind, string> = {
   upload: 'Uploaded',
   url: 'A URL',
   folder: 'A folder',

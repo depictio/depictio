@@ -21,21 +21,21 @@ def offload_enabled(monkeypatch):
 
 class TestShouldOffload:
     def test_requires_the_client_to_ask(self, offload_enabled):
-        assert _should_offload(False, is_multiqc=False) is False
+        assert _should_offload(False, no_delta_log=False) is False
 
     def test_offloads_when_asked_and_enabled(self, offload_enabled):
-        assert _should_offload(True, is_multiqc=False) is True
+        assert _should_offload(True, no_delta_log=False) is True
 
     def test_multiqc_always_runs_inline(self, offload_enabled):
         # MultiQC is parquet, not Delta: there is no table read to defer, so
         # offloading would buy a broker round-trip and nothing else.
-        assert _should_offload(True, is_multiqc=True) is False
+        assert _should_offload(True, no_delta_log=True) is False
 
     def test_disabled_ingestion_flag_keeps_it_synchronous(self, monkeypatch):
         monkeypatch.setattr(settings.ingestion, "async_deltatable_upsert", False)
         monkeypatch.setattr(settings.jobs, "enabled", True)
 
-        assert _should_offload(True, is_multiqc=False) is False
+        assert _should_offload(True, no_delta_log=False) is False
 
     def test_jobs_disabled_keeps_it_synchronous(self, monkeypatch):
         # Without the job store there is nowhere to record the work, so a
@@ -43,7 +43,7 @@ class TestShouldOffload:
         monkeypatch.setattr(settings.ingestion, "async_deltatable_upsert", True)
         monkeypatch.setattr(settings.jobs, "enabled", False)
 
-        assert _should_offload(True, is_multiqc=False) is False
+        assert _should_offload(True, no_delta_log=False) is False
 
     def test_default_configuration_never_offloads(self):
         # Both flags ship off; an upgraded deployment must behave exactly as
@@ -157,10 +157,10 @@ class TestCapabilities:
         # makes the probe worse than useless.
         monkeypatch.setattr(settings.jobs, "enabled", True)
         monkeypatch.setattr(settings.ingestion, "async_deltatable_upsert", False)
-        assert _should_offload(True, is_multiqc=False) is False
+        assert _should_offload(True, no_delta_log=False) is False
 
         monkeypatch.setattr(settings.ingestion, "async_deltatable_upsert", True)
-        assert _should_offload(True, is_multiqc=False) is True
+        assert _should_offload(True, no_delta_log=False) is True
 
     def test_limits_are_the_ones_the_request_models_enforce(self):
         """The delete limit used to be read from a setting nothing enforced.

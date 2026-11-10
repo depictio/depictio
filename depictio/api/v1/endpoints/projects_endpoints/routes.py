@@ -72,6 +72,7 @@ from depictio.api.v1.endpoints.projects_endpoints.manifest_ingest import (
     _ingest_manifest_into_project,
     _refresh_manifest_in_project,
 )
+from depictio.api.v1.endpoints.projects_endpoints.project_runs import ProjectRuns, project_runs
 from depictio.api.v1.endpoints.projects_endpoints.provenance import (
     stamp_new_project,
     strip_server_owned_fields,
@@ -424,6 +425,16 @@ async def get_ingestion_report(project_id: PyObjectId, current_user=Depends(get_
         raise HTTPException(status_code=401, detail="User not found.")
     project = _async_get_project_from_id(project_id, current_user, projects_collection)
     return build_ingestion_report(project)
+
+
+@projects_endpoint_router.get("/project-runs/{project_id}", response_model=ProjectRuns)
+async def get_project_runs(project_id: PyObjectId, current_user=Depends(get_user_or_anonymous)):
+    """The project's runs: folder, dates, every scan, and the files each
+    collection found in each run. Read-only."""
+    if not current_user:
+        raise HTTPException(status_code=401, detail="User not found.")
+    project = _async_get_project_from_id(project_id, current_user, projects_collection)
+    return project_runs(project)
 
 
 @projects_endpoint_router.get("/ingestion-health/{project_id}", response_model=IngestionSummary)
@@ -1049,6 +1060,7 @@ async def create_project_from_run(
         request=request,
         storage=payload.storage,
         is_public=payload.is_public,
+        description=payload.description,
     )
 
 

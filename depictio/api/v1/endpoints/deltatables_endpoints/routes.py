@@ -67,10 +67,14 @@ def sanitize_for_json(obj):
     return obj
 
 
-def _upsert_hash(delta_table_location: str, is_multiqc: bool) -> str:
+# Registered here too, with a location that is not a Delta table.
+_TYPES_WITHOUT_DELTA_LOG = frozenset({"multiqc", "geojson"})
+
+
+def _upsert_hash(delta_table_location: str, no_delta_log: bool) -> str:
     """The aggregation hash for this write. Reads the Delta log, never the rows."""
-    if is_multiqc:
-        # MultiQC is stored as raw parquet, not a Delta table: no log to read.
+    if no_delta_log:
+        # Raw parquet (MultiQC) or one file (GeoJSON): no log to read.
         return new_aggregation_hash(delta_table_location)
     return new_aggregation_hash(
         delta_table_location, delta_identity_hash(delta_table_location, polars_s3_config)
@@ -80,7 +84,7 @@ def _upsert_hash(delta_table_location: str, is_multiqc: bool) -> str:
 def _compute_upsert_artifacts(
     delta_table_location: str,
     dc_data: dict,
-    is_multiqc: bool,
+    no_delta_log: bool,
     previous_types: dict[str, str] | None = None,
 ) -> tuple[str, list]:
     """Aggregation hash and column specs for a data collection's table.
@@ -91,9 +95,9 @@ def _compute_upsert_artifacts(
     table, so it lives outside the request coroutine and is called via
     ``asyncio.to_thread``.
     """
-    final_hash = _upsert_hash(delta_table_location, is_multiqc)
-    if is_multiqc:
-        # Column specs are not computed for MultiQC (empty list required by Pydantic).
+    final_hash = _upsert_hash(delta_table_location, no_delta_log)
+    if no_delta_log:
+        # No columns to describe (empty list required by Pydantic).
         return final_hash, []
 
     lf = pl.scan_delta(delta_table_location, storage_options=polars_s3_config)
@@ -102,7 +106,7 @@ def _compute_upsert_artifacts(
     )
 
 
-def _should_offload(requested: bool, is_multiqc: bool) -> bool:
+def _should_offload(requested: bool, no_delta_log: bool) -> bool:
     """Whether to defer the expensive half of an upsert to a Celery task.
 
     Three conditions, all required. The client asks (``async_mode``), the
@@ -114,7 +118,7 @@ def _should_offload(requested: bool, is_multiqc: bool) -> bool:
     job document *is* the client's only handle on deferred work, so offloading
     without it would hand back a job_id pointing at nothing.
     """
-    if not requested or is_multiqc:
+    if not requested or no_delta_log:
         return False
     if not settings.ingestion.async_deltatable_upsert:
         return False
@@ -259,14 +263,14 @@ async def upsert_deltatable(
 
     # Check if this is a MultiQC data collection (stored as parquet, not delta table)
     dc_type = dc_data.get("config", {}).get("type", "")
-    is_multiqc = dc_type.lower() == "multiqc"
+    no_delta_log = dc_type.lower() in _TYPES_WITHOUT_DELTA_LOG
 
     query_dt = deltatables_collection.find_one({"data_collection_id": data_collection_oid})
     previous_types = previous_column_types(query_dt)
 
     # MultiQC has no Delta table to read, so offloading it would cost a broker
     # round-trip to save nothing: it always runs inline.
-    offload = _should_offload(payload.async_mode, is_multiqc)
+    offload = _should_offload(payload.async_mode, no_delta_log)
 
     if offload:
         # Record the aggregation now with no column specs; a Celery task fills
@@ -277,7 +281,9 @@ async def upsert_deltatable(
         # stay synchronous regardless: it is the salt for every DataFrame cache
         # key (`_generate_cache_keys`), so deferring it would let readers keep
         # serving pre-write data under an unchanged key.
-        final_hash = await asyncio.to_thread(_upsert_hash, payload.delta_table_location, is_multiqc)
+        final_hash = await asyncio.to_thread(
+            _upsert_hash, payload.delta_table_location, no_delta_log
+        )
         results = []
     else:
         # Off the event loop: the column specs scan the whole Delta table. Run
@@ -289,7 +295,7 @@ async def upsert_deltatable(
             _compute_upsert_artifacts,
             payload.delta_table_location,
             dc_data,
-            is_multiqc,
+            no_delta_log,
             previous_types,
         )
 
@@ -331,7 +337,7 @@ async def upsert_deltatable(
         )
     )
 
-    if payload.deltatable_size_bytes is not None and not is_multiqc:
+    if payload.deltatable_size_bytes is not None and not no_delta_log:
         projects_collection.update_one(
             {
                 "workflows.data_collections._id": data_collection_oid,
@@ -363,7 +369,7 @@ async def upsert_deltatable(
 
     if payload.update:
         # First ensure flexible_metadata is not null (MongoDB can't set nested fields on null)
-        if payload.deltatable_size_bytes is not None and not is_multiqc:
+        if payload.deltatable_size_bytes is not None and not no_delta_log:
             deltatables_collection.update_one(
                 {"data_collection_id": data_collection_oid, "flexible_metadata": None},
                 {"$set": {"flexible_metadata": {}}},
@@ -376,7 +382,7 @@ async def upsert_deltatable(
             }
         }
         # Add size to deltatable's flexible_metadata if provided
-        if payload.deltatable_size_bytes is not None and not is_multiqc:
+        if payload.deltatable_size_bytes is not None and not no_delta_log:
             update_doc["$set"]["flexible_metadata.deltatable_size_bytes"] = (
                 payload.deltatable_size_bytes
             )
@@ -418,7 +424,7 @@ async def upsert_deltatable(
         logger.warning(f"upsert_deltatable: cache invalidation failed: {e}")
 
         # Add size to deltatable's flexible_metadata if provided
-        if payload.deltatable_size_bytes is not None and not is_multiqc:
+        if payload.deltatable_size_bytes is not None and not no_delta_log:
             # First ensure flexible_metadata is not null (MongoDB can't set nested fields on null)
             deltatables_collection.update_one(
                 {"data_collection_id": data_collection_oid, "flexible_metadata": None},
@@ -471,7 +477,7 @@ async def upsert_deltatable(
             _compute_upsert_artifacts,
             payload.delta_table_location,
             dc_data,
-            is_multiqc,
+            no_delta_log,
             previous_types,
         )
         deltatables_collection.update_one(

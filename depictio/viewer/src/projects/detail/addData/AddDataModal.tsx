@@ -4,15 +4,14 @@
  * pipeline is added as a run; any other folder offers its tables.
  */
 import React, { useEffect, useState } from 'react';
-import { Alert, Anchor, Button, Group, Loader, Modal, Paper, Stack, Text, ThemeIcon } from '@mantine/core';
-import { Icon } from '@iconify/react';
+import { Alert, Button, Group, Modal, Paper, Stack } from '@mantine/core';
 import type { ProjectListEntry } from 'depictio-react-core';
 
 import { DisabledReason, GatedButton } from '../../../components/settings/SettingsSections';
 import { plural } from '../../fromRun/plural';
-import { DataSourceFields, uploadTableFiles, useTableDropzone } from '../../create/FilesDropArea';
+import { DataSourceFields, FileUploadResults, uploadFiles, useDataDropzone } from '../../create/FilesDropArea';
 import type { TableUploadOutcome } from '../../create/FilesDropArea';
-import { baseName } from '../../create/tableFiles';
+import { LinkSuggestions } from '../../create/LinkSuggestions';
 import { useAttachRun } from './useAttachRun';
 import { useFolderTables } from './useFolderTables';
 import { useLocationPicker } from './useLocationPicker';
@@ -31,7 +30,6 @@ interface AddDataModalProps {
   /** Data was added: reload the project. */
   onAdded: () => void;
   /** Leave for the single-collection dialog. */
-  onMultiqc: () => void;
   onSingleUrl: () => void;
 }
 
@@ -44,17 +42,14 @@ export const AddDataModal: React.FC<AddDataModalProps> = ({
   pipelineLabel,
   onClose,
   onAdded,
-  onMultiqc,
   onSingleUrl,
 }) => {
-  const { dropzone, files } = useTableDropzone();
+  const drop = useDataDropzone();
+  const { dropzone, files, guesses } = drop;
   const { clear } = dropzone;
   const picker = useLocationPicker({
     opened,
     label: 'Folder or bucket',
-    description: takesRuns
-      ? `A folder on the server, an s3:// location or the URL of one file. Another run of ${pipelineLabel ?? 'this pipeline'} is added as a run; any other folder offers its tables.`
-      : 'A folder on the server, an s3:// location, or the URL of one file. Its tables become collections.',
     testIdPrefix: 'add-data-location',
   });
   const folder = useFolderTables({ opened, projectId, project, picker, onUseFiles: onSingleUrl });
@@ -87,17 +82,19 @@ export const AddDataModal: React.FC<AddDataModalProps> = ({
   } else if (hasLocation) reason = folder.reason;
 
   const tables = files.length + (hasLocation && !addsRun ? folder.count : 0);
+  // "Table" is the right word only while every file is one.
+  const unit = files.every((f) => guesses.get(f)?.kind === 'table') ? 'table' : 'file';
   let submitLabel = 'Add data';
-  if (addsRun && tables > 0) submitLabel = `Add run and ${plural(tables, 'table')}`;
+  if (addsRun && tables > 0) submitLabel = `Add run and ${plural(tables, unit)}`;
   else if (addsRun) submitLabel = 'Add run';
-  else if (tables > 0) submitLabel = `Add ${plural(tables, 'table')}`;
+  else if (tables > 0) submitLabel = `Add ${plural(tables, unit)}`;
 
   const submit = async () => {
     if (reason || !projectId) return;
     setStarted(true);
     if (files.length > 0) {
       setUploading(true);
-      await uploadTableFiles(projectId, files, [...existingNames, ...folder.tickedNames], setUploads);
+      await uploadFiles(projectId, files, [...existingNames, ...folder.tickedNames], setUploads);
       setUploading(false);
     }
     if (addsRun) await run.submit();
@@ -125,32 +122,26 @@ export const AddDataModal: React.FC<AddDataModalProps> = ({
         opened={opened}
         onClose={handleClose}
         title="Add data"
-        size="lg"
+        size={1000}
         centered
         data-testid="add-data-modal"
       >
         <Stack gap="md">
           {!started && !run.showFollow ? (
             <>
-              <DataSourceFields dropzone={dropzone} files={files} submitting={busy}>
-                {picker.field}
+              <DataSourceFields
+                drop={drop}
+                submitting={busy}
+                folderField={picker.field}
+                folderHint={
+                  takesRuns
+                    ? `A folder on the server, an s3:// location or the URL of one file. Another run of ${pipelineLabel ?? 'this pipeline'} is added as a run; any other folder offers its tables.`
+                    : 'A folder on the server, an s3:// location, or the URL of one file. Its tables become collections.'
+                }
+              >
                 {takesRuns && hasLocation && run.view}
                 {!addsRun && !refusedRun && hasLocation && folder.view}
               </DataSourceFields>
-              <Group gap={6} justify="center">
-                <Text size="sm" c="dimmed">
-                  Other:
-                </Text>
-                <Anchor
-                  component="button"
-                  type="button"
-                  size="sm"
-                  onClick={onMultiqc}
-                  data-testid="add-data-multiqc"
-                >
-                  A MultiQC report
-                </Anchor>
-              </Group>
               <Stack gap={6} align="flex-end">
                 <Group gap="sm">
                   <Button variant="default" onClick={onClose} data-testid="add-data-cancel">
@@ -171,51 +162,22 @@ export const AddDataModal: React.FC<AddDataModalProps> = ({
             <>
               {files.length > 0 && (
                 <Paper withBorder radius="md" p="md" data-testid="add-data-files-results">
-                  <Stack gap="xs">
-                    {files.map((f, i) => {
-                      const outcome = uploads[i];
-                      return (
-                        <Group
-                          key={`${f.name}-${i}`}
-                          gap="xs"
-                          wrap="nowrap"
-                          align="flex-start"
-                          data-testid={`add-data-file-result-${i}`}
-                          data-status={!outcome ? 'pending' : outcome.error ? 'failed' : 'created'}
-                        >
-                          {!outcome ? (
-                            <Loader size={14} mt={3} />
-                          ) : (
-                            <ThemeIcon
-                              variant="light"
-                              size="sm"
-                              radius="xl"
-                              color={outcome.error ? 'red' : 'green'}
-                            >
-                              <Icon icon={outcome.error ? 'mdi:alert-circle' : 'mdi:check'} width={12} />
-                            </ThemeIcon>
-                          )}
-                          <Stack gap={0} style={{ minWidth: 0 }}>
-                            <Text size="sm" ff="monospace" style={{ wordBreak: 'break-all' }}>
-                              {baseName(f.name)}
-                            </Text>
-                            {outcome?.error && (
-                              <Text size="xs" c="red">
-                                {outcome.error}
-                              </Text>
-                            )}
-                          </Stack>
-                        </Group>
-                      );
-                    })}
-                  </Stack>
+                  <FileUploadResults files={files} uploads={uploads} testIdPrefix="add-data-file-result" />
                 </Paper>
+              )}
+              {projectId && (
+                <LinkSuggestions
+                  projectId={projectId}
+                  uploads={uploads}
+                  ready={done}
+                  testId="add-data-section-links"
+                />
               )}
               {folder.resultView}
               {run.followView}
               {done && files.length > 0 && uploaded < files.length && (
                 <Alert color="orange" variant="light" data-testid="add-data-files-summary">
-                  {`${plural(uploaded, 'table')} added, ${files.length - uploaded} failed.`}
+                  {`${plural(uploaded, unit)} added, ${files.length - uploaded} failed.`}
                 </Alert>
               )}
               <Group justify="flex-end">

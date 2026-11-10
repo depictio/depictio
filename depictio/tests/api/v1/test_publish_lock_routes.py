@@ -199,6 +199,7 @@ GUARDED: set[tuple[str, str]] = {
     (_DC, "merge_table_file_route"),
     (_DC, "create_data_collection_from_upload"),
     (_DC, "create_data_collection_from_url"),
+    (_DC, "create_asset_data_collection_from_upload"),
     (_DC, "create_multiqc_data_collection_from_upload"),
     (_DT, "upsert_deltatable"),
     (_DT, "delete_deltatable"),

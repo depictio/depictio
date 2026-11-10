@@ -8,8 +8,10 @@ import { Page } from "@playwright/test";
 import { test, expect, getAuthMode } from "@fixtures/auth";
 
 async function openDialog(page: Page): Promise<void> {
-  await page.goto("/projects");
+  await page.goto("/projects?no-walkthrough=1");
   await page.locator("[data-tour-id='projects-create']").click();
+  await page.getByTestId("create-project-name").fill(`e2e-data-${Date.now()}`);
+  await page.getByTestId("create-project-next").click();
   await expect(page.getByTestId("data-source-fields")).toBeVisible();
 }
 
@@ -27,8 +29,6 @@ test.describe("New project dialog", () => {
     await openDialog(page);
     await expect(page.getByTestId("files-dropzone")).toBeVisible();
     await expect(page.getByTestId("run-data-root-input")).toBeVisible();
-    await expect(page.getByTestId("create-source-empty")).toBeVisible();
-    await expect(page.getByTestId("create-source-import")).toBeVisible();
     await expect(page.getByTestId("create-source-manifest")).toHaveCount(0);
     // Nothing given yet: Next waits, and says for what.
     await expect(page.getByTestId("create-from-run-submit")).toHaveAttribute(
@@ -52,7 +52,7 @@ test.describe("New project dialog", () => {
     await expect(page.getByTestId("run-pipeline-select")).toHaveCount(0);
   });
 
-  test("a dropped file suggests the name, and needs no folder", async ({ loginAsAdmin, page }) => {
+  test("a dropped file needs no folder", async ({ loginAsAdmin, page }) => {
     await loginAsAdmin();
     await openDialog(page);
     await page.getByTestId("files-input").setInputFiles({
@@ -64,6 +64,5 @@ test.describe("New project dialog", () => {
     await page.getByTestId("create-from-run-submit").click();
     await expect(page.getByTestId("files-found-card")).toBeVisible();
     await expect(page.getByTestId("files-found-0")).toContainText("2 columns");
-    await expect(page.getByTestId("folder-project-name-input")).toHaveValue(/^sample_sheet/);
   });
 });

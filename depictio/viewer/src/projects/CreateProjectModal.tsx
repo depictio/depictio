@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import {
   Alert,
-  Anchor,
   Button,
   Center,
+  Divider,
   Group,
   Modal,
+  SimpleGrid,
   Stack,
   Switch,
   Text,
@@ -45,7 +46,7 @@ interface CreateProjectModalProps {
    *  despite problems): close the dialog and go to its page, on `tableId` when
    *  it holds a table to show. */
   onProjectReady: (projectId: string, name: string, tableId?: string | null) => void;
-  onCreateFromRun: (input: FromRunRequest, context: RunCreatedContext) => Promise<FromRunReport>;
+  onCreateFromRun: (input: FromRunRequest, context: RunCreatedContext) => void;
   /** Leave for the import dialog (a project that exists elsewhere). */
   onOpenImport: () => void;
   /** Where "See an example" goes; null when this server holds no example. */
@@ -61,8 +62,8 @@ interface CreateProjectModalProps {
   privateBucketDisabledReason?: string | null;
 }
 
-/** "New project": one screen asking where the results are. What they are, and
- *  the project's name, come after; the rarer ways in stay in a quiet row. */
+/** "New project", in two screens: what the project is (a name, and whatever
+ *  else scopes it), then its data. The rarer ways in stay in a quiet row. */
 const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
   opened,
   existingNames,
@@ -77,8 +78,8 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
   privateBucketDisabledReason = null,
 }) => {
   const accent = useListingAccents('projects');
-  /** The empty-project form replaces the data screen. */
-  const [emptyProject, setEmptyProject] = useState(false);
+  /** Past the first screen: the project is described, its data comes next. */
+  const [onData, setOnData] = useState(false);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [isPublic, setIsPublic] = useState(false);
@@ -90,7 +91,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
   // Reset everything whenever the modal opens.
   useEffect(() => {
     if (!opened) return;
-    setEmptyProject(false);
+    setOnData(false);
     setName('');
     setDescription('');
     setIsPublic(false);
@@ -130,8 +131,8 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
         // Legacy field: the type no longer changes what a project can do.
         project_type: 'basic',
         is_public: isPublic,
-        ...(description.trim() ? { description: description.trim() } : {}),
-      } as CreateProjectInput);
+        description: description.trim() || null,
+      });
     } catch (err) {
       setError((err as Error).message || 'Failed to create project.');
     } finally {
@@ -145,38 +146,52 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
     if (!submitting) onClose();
   };
 
-  const otherLink = (label: string, testId: string, props: Record<string, unknown>) => (
-    <Anchor size="sm" data-testid={testId} {...props}>
-      {label}
-    </Anchor>
+  const tinted = `var(--mantine-color-${accent.secondary}-6)`;
+  /** A big two-line button: what it does, and what that means. */
+  const choice = (icon: string, title: string, detail: string, iconColor?: string) => (
+    <Stack gap={2} align="center">
+      <Icon icon={icon} width={26} color={iconColor} />
+      <Text fw={600} size="md" inherit>
+        {title}
+      </Text>
+      <Text size="xs" inherit style={{ opacity: 0.8, fontWeight: 400, whiteSpace: 'normal' }}>
+        {detail}
+      </Text>
+    </Stack>
   );
+  const CHOICE_STYLES = { label: { whiteSpace: 'normal' as const }, inner: { justifyContent: 'center' } };
+
   const otherRow = (
-    <Group gap={6} justify="center" data-testid="create-source-other">
-      <Text size="sm" c="dimmed">
-        Other:
-      </Text>
-      {otherLink('An empty project', 'create-source-empty', {
-        component: 'button',
-        type: 'button',
-        onClick: () => setEmptyProject(true),
-      })}
-      <Text size="sm" c="dimmed">
-        ·
-      </Text>
-      {otherLink('Import a project', 'create-source-import', {
-        component: 'button',
-        type: 'button',
-        onClick: onOpenImport,
-      })}
-      {exampleHref && (
-        <>
-          <Text size="sm" c="dimmed">
-            ·
-          </Text>
-          {otherLink('See an example', 'create-source-example', { href: exampleHref })}
-        </>
-      )}
-    </Group>
+    <Stack gap="sm" data-testid="create-source-other">
+      <Divider label="Or start from" labelPosition="center" />
+      <SimpleGrid cols={exampleHref ? 2 : 1}>
+        <Button
+          variant="default"
+          h={92}
+                radius="md"
+          fullWidth
+          styles={CHOICE_STYLES}
+          onClick={onOpenImport}
+          data-testid="create-source-import"
+        >
+          {choice('mdi:package-down', 'Import a project', 'One exported from Depictio', tinted)}
+        </Button>
+        {exampleHref && (
+          <Button
+            component="a"
+            href={exampleHref}
+            variant="default"
+            h={92}
+                radius="md"
+            fullWidth
+            styles={CHOICE_STYLES}
+            data-testid="create-source-example"
+          >
+            {choice('mdi:compass-outline', 'See an example', 'A finished project to explore', tinted)}
+          </Button>
+        )}
+      </SimpleGrid>
+    </Stack>
   );
 
   const createDialog = (
@@ -188,7 +203,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
       centered
       // What Depictio found: a detection card, a two-column summary and the
       // grouped plan, which a narrower dialog would wrap into noise.
-      size={1160}
+      size={onData ? 1160 : 640}
       withCloseButton
       closeOnClickOutside={false}
       closeOnEscape={!submitting}
@@ -214,48 +229,36 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
               </Title>
             </Group>
           </Center>
-          {!emptyProject && (
-            <Text size="sm" c="dimmed" ta="center" data-testid="create-project-intro">
-              Show Depictio your results: it works out what they are, and you explore them.
-            </Text>
-          )}
+          <Text size="sm" c="dimmed" ta="center" data-testid="create-project-intro">
+            {onData
+              ? `Add data to “${trimmedName}”: Depictio works out what each file or folder is.`
+              : 'Tell Depictio what this project is. You add its data next.'}
+          </Text>
         </Stack>
 
-        {emptyProject ? (
-          <Stack gap="md" data-testid="create-project-empty-form">
-            <Button
-              variant="subtle"
-              color="gray"
-              size="compact-sm"
-              leftSection={<Icon icon="mdi:arrow-left" width={16} />}
-              onClick={() => setEmptyProject(false)}
-              disabled={submitting}
-              style={{ alignSelf: 'flex-start' }}
-              data-testid="create-source-back"
-            >
-              Start from my data
-            </Button>
+        {!onData ? (
+          <Stack gap="md" data-testid="create-project-info">
             <TextInput
               size="md"
-              label="Project Name"
-              description="Give your project a descriptive name"
+              label="Project name"
               required
               placeholder="Enter project name"
               value={name}
               onChange={(e) => setName(e.currentTarget.value)}
               leftSection={<Icon icon="mdi:folder-outline" width={16} />}
               error={nameAlreadyUsed ? 'A project with this name already exists.' : undefined}
+              data-testid="create-project-name"
             />
             <Textarea
               size="md"
-              label="Project Description (Optional)"
-              description="Describe what this project is about"
-              placeholder="Enter project description..."
+              label="Description"
+              description="Optional. What this project is about"
               value={description}
               onChange={(e) => setDescription(e.currentTarget.value)}
               autosize
               minRows={2}
               maxRows={5}
+              data-testid="create-project-description"
             />
             <Switch
               size="md"
@@ -270,20 +273,54 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                 {error}
               </Alert>
             )}
-            <Group justify="flex-end">
+            <SimpleGrid cols={2}>
               <Button
-                size="md"
                 color={accent.secondary}
+                h={92}
+                radius="md"
+                fullWidth
+                styles={CHOICE_STYLES}
+                onClick={() => setOnData(true)}
+                disabled={!canSubmit}
+                data-testid="create-project-next"
+              >
+                {choice('mdi:database-plus-outline', 'Add data', 'Files, a folder or a pipeline run')}
+              </Button>
+              <Button
+                variant="default"
+                h={92}
+                radius="md"
+                fullWidth
+                styles={CHOICE_STYLES}
                 onClick={handleCreate}
                 loading={submitting}
                 disabled={!canSubmit}
                 data-testid="create-project-submit"
               >
-                Create project
+                {choice('mdi:folder-outline', 'Create without data', 'Add data later', tinted)}
               </Button>
-            </Group>
+            </SimpleGrid>
+            {!trimmedName && (
+              <Text size="xs" c="dimmed" ta="center" data-testid="create-project-name-hint">
+                Name the project to continue.
+              </Text>
+            )}
+            {otherRow}
           </Stack>
         ) : (
+          <Stack gap="md">
+          <Button
+            variant="subtle"
+            color="gray"
+            size="compact-sm"
+            leftSection={<Icon icon="mdi:arrow-left" width={16} />}
+            onClick={() => setOnData(false)}
+            disabled={submitting}
+            style={{ alignSelf: 'flex-start' }}
+            data-testid="create-project-back"
+          >
+            Project details
+          </Button>
           <RunFolderTab
             opened={opened}
             existingNames={existingNames}
@@ -297,8 +334,13 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
             onProjectReady={onProjectReady}
             submitting={submitting}
             setSubmitting={setSubmitting}
-            sourceFooter={otherRow}
+            projectInfo={{
+              name: trimmedName,
+              description: description.trim(),
+              isPublic,
+            }}
           />
+          </Stack>
         )}
       </Stack>
     </Modal>

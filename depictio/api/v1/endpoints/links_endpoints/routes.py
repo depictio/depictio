@@ -15,7 +15,7 @@ from typing import Any
 import polars as pl
 from bson import ObjectId
 from bson.errors import InvalidId
-from fastapi import APIRouter, Depends, HTTPException, Path
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
 
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import (
@@ -38,7 +38,9 @@ from depictio.models.models.links import (
     LinkMappingPreviewRow,
     LinkResolutionRequest,
     LinkResolutionResponse,
+    LinkSuggestion,
     LinkUpdateRequest,
+    LinkValueExample,
     resolve_link_tag_refs,
 )
 from depictio.models.models.users import User
@@ -935,6 +937,161 @@ def _distinct_source_values(dc_id: str, column: str, cap: int) -> tuple[list[str
     ).collect()["_v"]
     total = int(series.len())
     return series.head(cap).to_list(), total
+
+
+#: Rows read per collection: enough to recognise a shared identifier column.
+_SUGGEST_ROWS = 2000
+_SUGGEST_MAX_SOURCES = 20
+_SUGGEST_PER_SOURCE = 5
+#: One shared value is a coincidence, and a column mostly absent from the
+#: target would filter it to almost nothing.
+_SUGGEST_MIN_MATCHED = 2
+_SUGGEST_MIN_SHARE = 0.5
+_SUGGEST_EXAMPLES_FOUND = 4
+_SUGGEST_EXAMPLES_MISSED = 2
+_SUGGEST_TARGET_TYPES = {"table", "multiqc", "image", "genomic_tracks"}
+
+
+def _text_columns(dc_id: ObjectId) -> dict[str, set[str]]:
+    """Distinct values of each text column in a DC's first rows; {} if unreadable."""
+    doc = deltatables_collection.find_one({"data_collection_id": dc_id})
+    if not doc or "delta_table_location" not in doc:
+        return {}
+
+    from depictio.api.v1.s3 import polars_s3_config
+
+    try:
+        lf = pl.scan_delta(doc["delta_table_location"], storage_options=polars_s3_config)
+        names = [n for n, t in lf.collect_schema().items() if t == pl.String]
+        if not names:
+            return {}
+        frame = lf.select(names).head(_SUGGEST_ROWS).collect()
+    except Exception as exc:
+        # One broken table must not cost the reader every other suggestion.
+        logger.warning(f"Link suggestions: DC {dc_id} not read: {exc}")
+        return {}
+    return {n: set(frame[n].drop_nulls().unique().to_list()) - {""} for n in names}
+
+
+def _best_target_column(
+    values: set[str], target_columns: dict[str, set[str]], same_name: str
+) -> tuple[int, str | None]:
+    """How many of ``values`` the best target column holds, and that column."""
+    best: tuple[int, bool, str | None] = (0, False, None)
+    for column, target_values in target_columns.items():
+        candidate = (len(values & target_values), column == same_name, column)
+        if candidate[:2] > best[:2]:
+            best = candidate
+    return best[0], best[2]
+
+
+def _link_examples(values: set[str], hits: dict[str, list[str]]) -> list[LinkValueExample]:
+    """A few values a link would reach, then a few it would miss."""
+    found = sorted(hits)[:_SUGGEST_EXAMPLES_FOUND]
+    missed = sorted(values - hits.keys())[:_SUGGEST_EXAMPLES_MISSED]
+    return [LinkValueExample(source=v, targets=hits.get(v, [])) for v in [*found, *missed]]
+
+
+def _suggestions_for_source(
+    source: dict[str, Any],
+    source_columns: dict[str, set[str]],
+    targets: list[dict[str, Any]],
+) -> list[LinkSuggestion]:
+    """The best column of ``source`` for each target, strongest targets first."""
+    from depictio.api.v1.services.multiqc.sample_matching import match_samples
+
+    found: list[LinkSuggestion] = []
+    for target in targets:
+        best: LinkSuggestion | None = None
+        for column, values in source_columns.items():
+            if not values:
+                continue
+            target_field: str | None = None
+            hits: dict[str, list[str]]
+            if target["type"] == "multiqc":
+                results = match_samples(sorted(values), target["mappings"], case_sensitive=True)
+                hits = {r.source: r.targets for r in results if r.matched}
+            else:
+                _, target_field = _best_target_column(values, target["columns"], column)
+                shared = values & target["columns"].get(target_field, set())
+                hits = {value: [value] for value in shared}
+            matched = len(hits)
+            if matched < _SUGGEST_MIN_MATCHED or matched / len(values) < _SUGGEST_MIN_SHARE:
+                continue
+            if best is None or matched > best.matched:
+                best = LinkSuggestion(
+                    source_dc_id=source["id"],
+                    source_dc_tag=source["tag"],
+                    source_column=column,
+                    target_dc_id=target["id"],
+                    target_dc_tag=target["tag"],
+                    target_type=target["type"],
+                    resolver="sample_mapping" if target["type"] == "multiqc" else "direct",
+                    target_field=target_field,
+                    matched=matched,
+                    total=len(values),
+                    examples=_link_examples(values, hits),
+                )
+        if best is not None:
+            found.append(best)
+    # On a tie the report comes first: a pipeline's many derived tables would
+    # otherwise push it past the cap.
+    found.sort(
+        key=lambda s: (
+            -s.matched / s.total,
+            s.target_type != "multiqc",
+            -s.matched,
+            s.target_dc_tag,
+        )
+    )
+    return found[:_SUGGEST_PER_SOURCE]
+
+
+@links_endpoint_router.get(
+    "/{project_id}/suggestions",
+    response_model=list[LinkSuggestion],
+    summary="Propose links for tables, from the values they share with other collections",
+)
+def suggest_links(
+    project_id: str = Path(..., description="Project ID"),
+    source: list[str] = Query(..., description="Table collections to find links for"),
+    current_user: User = Depends(get_current_user),
+) -> list[LinkSuggestion]:
+    """Links each ``source`` table could have, none of them created here.
+
+    Skips a pair that is already linked, and any ``source`` that is not a
+    table of this project.
+    """
+    project = _get_project_or_404(project_id, current_user)
+    wanted = set(source[:_SUGGEST_MAX_SOURCES])
+    linked = {
+        (str(link.get("source_dc_id")), str(link.get("target_dc_id")))
+        for link in project.get("links", [])
+    }
+    collections = [
+        {
+            "id": str(dc["_id"]),
+            "oid": dc["_id"],
+            "tag": dc.get("data_collection_tag", ""),
+            "type": dc.get("config", {}).get("type"),
+        }
+        for workflow in project.get("workflows", [])
+        for dc in workflow.get("data_collections", [])
+    ]
+    targets = [c for c in collections if c["type"] in _SUGGEST_TARGET_TYPES]
+    for target in targets:
+        if target["type"] == "multiqc":
+            target["mappings"] = _get_multiqc_sample_mappings(target["id"])
+        else:
+            target["columns"] = _text_columns(target["oid"])
+
+    suggestions: list[LinkSuggestion] = []
+    for dc in targets:
+        if dc["type"] != "table" or dc["id"] not in wanted:
+            continue
+        others = [t for t in targets if t["id"] != dc["id"] and (dc["id"], t["id"]) not in linked]
+        suggestions.extend(_suggestions_for_source(dc, dc["columns"], others))
+    return suggestions
 
 
 @links_endpoint_router.get(

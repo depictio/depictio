@@ -178,7 +178,9 @@
  * panel it opens. */
 :root[data-chrome='glass'] .gp-main .dc-project-tabs .mantine-Tabs-list {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  /* As many equal parts as there are tabs (Runs shows only with runs). */
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
   width: 100%;
   max-width: none;
   overflow: visible;

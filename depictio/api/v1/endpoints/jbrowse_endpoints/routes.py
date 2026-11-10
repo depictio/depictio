@@ -37,6 +37,7 @@ from depictio.api.v1.services.jbrowse.tracks import (
     ASSEMBLY_ROLES,
     TRACK_ROLES,
     TracksDC,
+    TracksNotIngested,
     find_tracks_dc,
     s3_base_folder,
     tracks_by_key,
@@ -68,6 +69,46 @@ def _content_type(uri: str) -> str:
         if path.endswith(ext):
             return mime
     return "text/plain; charset=utf-8"
+
+
+@jbrowse_endpoints_router.get("/preview/{data_collection_id}")
+def preview_tracks_collection(
+    data_collection_id: str,
+    current_user=Depends(get_user_or_anonymous),
+) -> dict:
+    """Genome view of a ``genomic_tracks`` DC alone, for its project page.
+
+    The payload of a ``jbrowse`` component that only names the collection: its
+    first tracks, on the assembly's opening region. 404 for anything the
+    caller may not read, so a preview never tells whether a collection exists.
+    """
+    from depictio.api.v1.services.jbrowse.render import build_jbrowse_payload
+
+    if not settings.jbrowse.enabled:
+        raise HTTPException(status_code=404, detail="The genome browser is disabled.")
+
+    uid = str(getattr(current_user, "id", ""))
+    tdc = find_tracks_dc(data_collection_id)
+    if tdc is None or not user_can_read_project(tdc.project_id, uid):
+        raise HTTPException(status_code=404, detail="Track collection not found.")
+
+    try:
+        return build_jbrowse_payload(
+            {"dc_id": data_collection_id},
+            tdc,
+            None,
+            uid=uid,
+            anonymous=bool(getattr(current_user, "is_anonymous", False))
+            and not settings.auth.is_single_user_mode,
+        )
+    except TracksNotIngested as exc:
+        raise HTTPException(status_code=404, detail="This collection holds no tracks.") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.error(f"Track preview failed for {data_collection_id}: {exc}", exc_info=True)
+        # The exception text can name storage paths: it stays in the log.
+        raise HTTPException(status_code=500, detail="Failed to build the preview.") from exc
 
 
 @jbrowse_endpoints_router.get("/assemblies")

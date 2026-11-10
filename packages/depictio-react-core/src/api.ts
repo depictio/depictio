@@ -2422,6 +2422,23 @@ export async function pollGroupCompare(jobId: string): Promise<GroupCompareJob> 
 }
 
 
+export interface GeoJsonFeature {
+  geometry?: { type?: string; coordinates?: unknown } | null;
+  properties?: Record<string, unknown> | null;
+}
+
+export interface GeoJsonCollection {
+  type: string;
+  features: GeoJsonFeature[];
+}
+
+/** Fetch the file of a GeoJSON-type DC. */
+export async function fetchGeojson(dcId: string): Promise<GeoJsonCollection> {
+  const res = await authFetch(`${API_BASE}/advanced_viz/geojson/${dcId}`);
+  if (!res.ok) throw new Error(`Failed to fetch GeoJSON: ${res.status}`);
+  return (await res.json()) as GeoJsonCollection;
+}
+
 /** Fetch the raw Newick string for a phylogeny-type DC. */
 export async function fetchPhylogenyNewick(dcId: string): Promise<string> {
   const res = await authFetch(`${API_BASE}/advanced_viz/phylogeny/${dcId}/newick`);
@@ -2945,6 +2962,13 @@ export async function fetchJBrowseSession(
     },
   );
   if (!res.ok) await throwRenderError(res, 'Failed to render JBrowse', dataVersions);
+  return res.json();
+}
+
+/** Genome view of a `genomic_tracks` collection alone, for its project page. */
+export async function fetchTracksPreview(dcId: string): Promise<JBrowseSessionResponse> {
+  const res = await authFetch(`${API_BASE}/jbrowse/preview/${dcId}`);
+  if (!res.ok) await throwHttpError(res, 'Failed to preview the tracks');
   return res.json();
 }
 
@@ -4737,6 +4761,17 @@ export interface IngestionDataCollection {
   recipe: string | null;
   /** GitHub link to the recipe source file. */
   recipe_url: string | null;
+  /** What the recipe computes: its docstring's title and first paragraph. */
+  recipe_summary?: string | null;
+  recipe_description?: string | null;
+  /** The recipe's inputs: collections by tag, files by name and location. */
+  recipe_inputs?: RecipeInput[];
+}
+
+export interface RecipeInput {
+  kind: 'collection' | 'file' | string;
+  name: string;
+  path?: string | null;
 }
 
 export interface IngestionRun {
@@ -4824,6 +4859,39 @@ export async function fetchIngestionReport(
   return (await res.json()) as IngestionReport;
 }
 
+export interface RunScan {
+  scan_time: string | null;
+  files_total: number;
+  files_new: number;
+  files_updated: number;
+  files_skipped: number;
+  files_failed: number;
+}
+
+/** One pipeline run of a project. `status`: `ok`, `incomplete` (a collection
+ *  found nothing in it), `partial` (files failed) or `no_scan`. */
+export interface ProjectRun {
+  run_tag: string;
+  workflow: string | null;
+  run_location: string | null;
+  folder_created: string | null;
+  folder_modified: string | null;
+  registered: string | null;
+  run_hash: string | null;
+  status: 'ok' | 'incomplete' | 'partial' | 'no_scan' | string;
+  files: number;
+  dc_files: Record<string, number>;
+  scans: RunScan[];
+}
+
+/** The project's runs, their scans and the files each collection found in
+ *  each. Backend: GET /projects/project-runs/{id}. */
+export async function fetchProjectRuns(projectId: string): Promise<{ runs: ProjectRun[] }> {
+  const res = await authFetch(`${API_BASE}/projects/project-runs/${projectId}`);
+  if (!res.ok) await throwHttpError(res, `Failed to fetch the runs of project ${projectId}`);
+  return (await res.json()) as { runs: ProjectRun[] };
+}
+
 /** Lightweight ingestion-health summary for the dashboard banner. Backend:
  *  GET /projects/ingestion-health/{id}. */
 export async function fetchIngestionHealth(
@@ -4840,6 +4908,8 @@ export interface RegisteredFile {
   file_location?: string;
   filesize?: number;
   run_tag?: string | null;
+  /** When the file itself last changed (server's local time). */
+  modification_time?: string | null;
 }
 
 /** List the files registered for a data collection. Backend:
@@ -4863,6 +4933,7 @@ export interface CreateProjectInput {
   is_public: boolean;
   data_collections?: string[];
   yaml_config_path?: string | null;
+  description?: string | null;
   data_management_platform_project_url?: string | null;
 }
 
@@ -4890,6 +4961,7 @@ export async function createProject(
     project_type: input.project_type,
     is_public: input.is_public,
     yaml_config_path: input.yaml_config_path ?? null,
+    description: input.description ?? null,
     data_management_platform_project_url:
       input.data_management_platform_project_url ?? null,
     permissions: { owners: [ownerEntry], editors: [], viewers: [] },
@@ -5042,6 +5114,7 @@ export interface FromRunRequest {
    *  folder it cannot recognise is a 422 with code `template_not_detected`. */
   templateId?: string | null;
   projectName?: string | null;
+  description?: string | null;
   variables?: Record<string, string>;
   dryRun?: boolean;
   /** Connection settings of the private bucket `dataRoot` is in. The run
@@ -5164,6 +5237,7 @@ export async function createProjectFromRun(
       variables: input.variables ?? {},
       dry_run: Boolean(input.dryRun),
       is_public: Boolean(input.isPublic),
+      description: input.description ?? null,
       ...(input.storage ? { storage: input.storage } : {}),
     }),
     signal: options.signal,
@@ -8373,6 +8447,33 @@ export async function listLinkResolvers(projectId: string): Promise<ResolverInfo
 
 /** Aggregated canonical → variants map for a MultiQC DC's reports. Used to
  *  populate the ``sample_mapping`` resolver editor. */
+export interface LinkSuggestion {
+  source_dc_id: string;
+  source_dc_tag: string;
+  source_column: string;
+  target_dc_id: string;
+  target_dc_tag: string;
+  target_type: LinkTargetType;
+  resolver: LinkResolverName;
+  target_field?: string | null;
+  /** Distinct source values found in the target, out of `total`. */
+  matched: number;
+  total: number;
+  /** A few source values and what the link reaches with each; empty: missed. */
+  examples?: Array<{ source: string; targets: string[] }>;
+}
+
+/** Links the given tables could have, from the values they share. */
+export async function fetchLinkSuggestions(
+  projectId: string,
+  sourceDcIds: string[],
+): Promise<LinkSuggestion[]> {
+  const params = new URLSearchParams(sourceDcIds.map((id) => ['source', id]));
+  const res = await authFetch(`${API_BASE}/links/${projectId}/suggestions?${params}`);
+  if (!res.ok) await throwHttpError(res, 'Failed to suggest links');
+  return (await res.json()) as LinkSuggestion[];
+}
+
 export async function fetchMultiQCSampleMappings(
   projectId: string,
   dcId: string,
@@ -8465,6 +8566,31 @@ async function postMultiQCUpload(
   const res = await authFetch(url, { method: 'POST', body: fd });
   if (!res.ok) await throwHttpDetailError(res, 'MultiQC upload failed');
   return (await res.json()) as MultiQCMutationResult;
+}
+
+export interface CreateAssetDCInput {
+  projectId: string;
+  name: string;
+  /** One file for a map or a tree; any number of images make one collection. */
+  kind: 'geojson' | 'phylogeny' | 'image';
+  files: File[];
+}
+
+/** Create a GeoJSON, phylogeny or image collection from uploaded files. */
+export async function createAssetDataCollection(
+  input: CreateAssetDCInput,
+): Promise<{ data_collection_id?: string }> {
+  const fd = new FormData();
+  fd.append('project_id', input.projectId);
+  fd.append('name', input.name);
+  fd.append('kind', input.kind);
+  for (const file of input.files) fd.append('files', file, file.name);
+  const res = await authFetch(`${API_BASE}/datacollections/create_asset_from_upload`, {
+    method: 'POST',
+    body: fd,
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Upload failed');
+  return (await res.json()) as { data_collection_id?: string };
 }
 
 export async function createMultiQCDataCollection(

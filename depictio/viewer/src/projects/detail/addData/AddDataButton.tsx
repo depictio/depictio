@@ -33,11 +33,11 @@ export const AddDataButton: React.FC<AddDataButtonProps> = ({
   color,
 }) => {
   const [opened, setOpened] = useState(false);
-  // The single-collection dialog: MultiQC reports, and one table from a URL.
-  const [singleType, setSingleType] = useState<'table' | 'multiqc' | null>(null);
-  const openSingle = (type: 'table' | 'multiqc') => {
+  // The single-collection dialog, for one table from a URL.
+  const [urlOpened, setUrlOpened] = useState(false);
+  const openUrl = () => {
     setOpened(false);
-    setSingleType(type);
+    setUrlOpened(true);
   };
 
   // "Add a run" only makes sense for a project made from a pipeline: one with
@@ -86,17 +86,15 @@ export const AddDataButton: React.FC<AddDataButtonProps> = ({
         pipelineLabel={pipeline ? `${pipeline.name}${pipeline.version ? ` ${pipeline.version}` : ''}` : null}
         onClose={() => setOpened(false)}
         onAdded={onAdded}
-        onMultiqc={() => openSingle('multiqc')}
-        onSingleUrl={() => openSingle('table')}
+        onSingleUrl={openUrl}
       />
       <CreateDataCollectionModal
-        opened={singleType !== null}
+        opened={urlOpened}
         projectId={projectId}
-        initialType={singleType ?? 'table'}
-        title={singleType === 'multiqc' ? 'Add a MultiQC report' : undefined}
-        onClose={() => setSingleType(null)}
+        initialType="table"
+        onClose={() => setUrlOpened(false)}
         onSuccess={() => {
-          setSingleType(null);
+          setUrlOpened(false);
           onAdded();
         }}
       />

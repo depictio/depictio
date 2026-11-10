@@ -24,11 +24,13 @@ import type {
   DCLink,
   DCLinkConfig,
   LinkResolverName,
+  LinkSuggestion,
   LinkTargetType,
   ResolverInfo,
   UpdateLinkInput,
 } from 'depictio-react-core';
 
+import { LinkExamples } from './LinkExamples';
 import { LinkMappingInspector } from './LinkMappingInspector';
 
 interface DataCollectionOption {
@@ -43,6 +45,8 @@ interface LinkEditModalProps {
   projectId: string;
   /** When set, modal is in edit mode. When null, it's create mode. */
   link: DCLink | null;
+  /** Create mode: what the form starts from, e.g. a suggested link. */
+  initial?: Partial<LinkSuggestion> | null;
   /** All DCs in the project — populates the source/target dropdowns. */
   dataCollections: DataCollectionOption[];
   /** Resolver catalog from `listLinkResolvers`. Falls back to a static list
@@ -94,6 +98,7 @@ const LinkEditModal: React.FC<LinkEditModalProps> = ({
   opened,
   projectId,
   link,
+  initial = null,
   dataCollections,
   resolvers,
   onClose,
@@ -141,18 +146,18 @@ const LinkEditModal: React.FC<LinkEditModalProps> = ({
       setDescription(link.description || '');
       setEnabled(link.enabled);
     } else {
-      setSourceDcId('');
-      setSourceColumn('');
-      setTargetDcId('');
-      setResolver('direct');
-      setTargetField('');
+      setSourceDcId(initial?.source_dc_id ?? '');
+      setSourceColumn(initial?.source_column ?? '');
+      setTargetDcId(initial?.target_dc_id ?? '');
+      setResolver(initial?.resolver ?? 'direct');
+      setTargetField(initial?.target_field ?? '');
       setPattern('');
       setMappingsJson('');
       setCaseSensitive(true);
       setDescription('');
       setEnabled(true);
     }
-  }, [opened, link]);
+  }, [opened, link, initial]);
 
   const targetDc = useMemo(
     () => dataCollections.find((d) => d.id === targetDcId),
@@ -526,6 +531,12 @@ const LinkEditModal: React.FC<LinkEditModalProps> = ({
           <LinkMappingInspector projectId={projectId} linkId={link.id} />
         )}
 
+        {initial?.examples &&
+          initial.source_column === sourceColumn &&
+          initial.target_dc_id === targetDcId &&
+          (initial.target_field ?? '') === targetField && (
+            <LinkExamples suggestion={initial as LinkSuggestion} />
+          )}
         <Textarea
           label="Description (optional)"
           value={description}

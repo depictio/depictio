@@ -1771,6 +1771,36 @@ def _phylogeny_s3_client():
     )
 
 
+@advanced_viz_endpoint_router.get("/geojson/{data_collection_id}")
+def get_geojson(
+    data_collection_id: PyObjectId,
+    current_user=Depends(get_user_or_anonymous),
+) -> Response:
+    """Return the file of a GeoJSON DC, for its preview on the project page.
+
+    Reads only the fixed key ingest writes in the instance bucket, never a
+    stored location, so no project content can steer what is read.
+    """
+    from depictio.api.v1.configs.config import settings
+    from depictio.models.models.data_collections_types.geojson import geojson_s3_key
+
+    try:
+        dc_oid = ObjectId(str(data_collection_id))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid dc_id: {exc}") from exc
+
+    _assert_dc_access(dc_oid, current_user)
+
+    key = geojson_s3_key(str(dc_oid))
+    try:
+        obj = _phylogeny_s3_client().get_object(Bucket=settings.s3.bucket, Key=key)
+        body = obj["Body"].read()
+    except Exception as exc:
+        logger.warning("geojson not read from s3://%s/%s (%s)", settings.s3.bucket, key, exc)
+        raise HTTPException(status_code=404, detail="GeoJSON file not found.") from exc
+    return Response(content=body, media_type="application/geo+json")
+
+
 @advanced_viz_endpoint_router.get(
     "/phylogeny/{data_collection_id}/newick", response_class=PlainTextResponse
 )
