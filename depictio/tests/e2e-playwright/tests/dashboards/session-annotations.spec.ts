@@ -167,9 +167,11 @@ async function pickTable(page: Page, tag: string): Promise<void> {
 
 /** The key of the grid row at `rowIndex` (a real sample id of the seeded table). */
 async function keyAt(page: Page, rowIndex: number): Promise<string> {
-  const cell = page.locator(
-    `[data-testid='annotation-grid'] .ag-pinned-left-cols-container [row-index='${rowIndex}'] [col-id='__key']`,
-  );
+  // The key column is not pinned (a pinned key pushed the horizontal scrollbar
+  // past it), so it sits with the other columns.
+  const cell = page
+    .locator(`[data-testid='annotation-grid'] .ag-row[row-index='${rowIndex}'] [col-id='__key']`)
+    .first();
   return ((await cell.textContent()) ?? "").trim();
 }
 
