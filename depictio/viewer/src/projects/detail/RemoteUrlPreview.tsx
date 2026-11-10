@@ -1,5 +1,5 @@
 /**
- * The "One file from its URL" source of Add data and New project, checked
+ * The "One file URL" source of Add data and New project, checked
  * before anything is made: `remoteUrlProblem` catches what the browser can tell alone (scheme,
  * host, a folder instead of a file), and `RemoteUrlPreview` asks the server
  * for the first rows (`previewRemoteUrl`), which also runs the server's own

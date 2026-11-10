@@ -356,7 +356,7 @@ const FolderBrowserModal: React.FC<FolderBrowserModalProps> = ({
         <Group gap="xs" wrap="nowrap" justify="space-between">
           <Group gap="xs" wrap="nowrap">
             <Icon icon="mdi:folder-open-outline" width={20} />
-            <Text fw={600}>Choose a folder</Text>
+            <Text fw={600}>Choose a folder to read in place</Text>
           </Group>
           <Tooltip label={expanded ? 'Restore the size' : 'Fill the window'} withArrow zIndex={Z_LAYERS.tooltip}>
             <ActionIcon

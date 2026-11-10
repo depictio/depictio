@@ -1,6 +1,6 @@
 """Show the start of a remote file before a table is made from it: ``POST /datacollections/url_preview``.
 
-The "One file from its URL" source of Add data and New project hands the
+The "One file URL" source of Add data and New project hands the
 server a location to fetch. This shows what that location holds first, so a wrong URL, a refused
 host or an HTML error page is caught before a data collection exists.
 

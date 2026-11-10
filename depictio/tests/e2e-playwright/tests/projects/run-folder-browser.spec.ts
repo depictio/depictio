@@ -667,7 +667,7 @@ test.describe("Browse for a run folder", () => {
     );
 
     const expand = page.locator("[data-testid='browse-expand']");
-    const dialog = page.getByRole("dialog", { name: "Choose a folder" });
+    const dialog = page.getByRole("dialog", { name: "Choose a folder to read in place" });
     const before = (await dialog.boundingBox())?.width ?? 0;
     await expand.click();
     await expect(expand).toHaveAttribute("aria-pressed", "true");

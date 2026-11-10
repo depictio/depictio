@@ -349,7 +349,11 @@ export const DataSourceFields: React.FC<{
   const url = Boolean(onLocationModeChange) && locationMode === 'url';
   return (
   <Flex direction={{ base: 'column', sm: 'row' }} gap="md" data-testid="data-source-fields">
-    <Input.Wrapper label="Files" description="From your computer" style={{ flex: 1, minWidth: 0 }}>
+    <Input.Wrapper
+      label="Upload"
+      description="Files or whole folders from your computer, copied into Depictio"
+      style={{ flex: 1, minWidth: 0 }}
+    >
       <Box mt={4}>
         <FilesDropArea drop={drop} submitting={submitting} />
       </Box>
@@ -363,8 +367,8 @@ export const DataSourceFields: React.FC<{
     </Stack>
     <Divider hiddenFrom="sm" label="and / or" labelPosition="center" />
     <Input.Wrapper
-      label={onLocationModeChange ? 'Folder, bucket or file URL' : 'Folder or bucket'}
-      description="Read where it is, nothing to upload"
+      label="Read in place"
+      description="A folder, a bucket or a file URL, read where it is: nothing is uploaded"
       style={{ flex: 1, minWidth: 0 }}
     >
       <Stack gap="md" mt={4}>
@@ -376,8 +380,8 @@ export const DataSourceFields: React.FC<{
             onChange={(v) => onLocationModeChange(v as LocationMode)}
             disabled={submitting}
             data={[
-              { value: 'folder', label: 'A folder or bucket' },
-              { value: 'url', label: 'One file from its URL' },
+              { value: 'folder', label: 'Folder or bucket' },
+              { value: 'url', label: 'One file URL' },
             ]}
             data-testid="location-mode"
           />
@@ -418,7 +422,7 @@ export const DataSourceFields: React.FC<{
         >
           <Stack gap={4} align="center">
             <SourceBoxIcon icon="mdi:folder-search-outline" />
-            <Text fw={500}>Point to a folder or bucket</Text>
+            <Text fw={500}>Point to a folder or bucket to read in place</Text>
             <Text size="xs" c="dimmed" ta="center">
               {folderHint}
             </Text>

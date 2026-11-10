@@ -574,7 +574,7 @@ async def post_url_preview(
 ):
     """Show the start of the file at a remote URL, before a table is made from it.
 
-    For the "One file from its URL" source of Add data and New project: the
+    For the "One file URL" source of Add data and New project: the
     first rows of a table, or in plain words why it is not shown. Read-only and bounded; the
     URL passes the same gateway ``/create_from_url`` uses. Refusals answer
     ``{detail, code}``.
