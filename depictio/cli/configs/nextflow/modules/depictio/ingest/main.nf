@@ -3,7 +3,7 @@ process DEPICTIO_INGEST {
     label 'process_single'
 
     conda "${moduleDir}/environment.yml"
-    container "ghcr.io/depictio/depictio-cli:1.21.0-b1"
+    container "ghcr.io/depictio/depictio-cli:1.21.0-b2"
     // The image's ENTRYPOINT is the CLI itself, so `docker run <image> /bin/bash
     // .command.run` would hand bash to the CLI as a subcommand. Singularity and
     // Apptainer `exec` ignore the entrypoint already.
