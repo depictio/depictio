@@ -12,8 +12,10 @@
 import {
   type AnnotationColumn,
   type DashboardAnnotations,
+  labelScope,
   MAX_SERVER_GROUPS,
 } from './sessionAnnotations';
+import type { LabelColumnChoice } from './components/interactive/SelectionGroupsPanel';
 import { TAB10_PALETTE } from './colors';
 import { nextGroupColor, type SelectionGroup, uniqueGroupName } from './selectionGroups';
 
@@ -48,6 +50,24 @@ export function annotationColumnBudget(
     };
   }
   return { ok: true };
+}
+
+/** The label columns of `view` as the Analysis "Label column" list offers them. */
+export function buildLabelColumnChoices(
+  view: DashboardAnnotations | null,
+  groups: SelectionGroup[],
+  storage: 'account' | 'browser' | null,
+): LabelColumnChoice[] {
+  return (view?.columns ?? []).map((column) => {
+    const budget = annotationColumnBudget(column, groups);
+    return {
+      id: column.id,
+      name: column.name,
+      active: column.id === view?.activeColumnId,
+      blocked: budget.ok ? null : budget.reason,
+      scope: labelScope(column, storage ?? 'browser'),
+    };
+  });
 }
 
 /**

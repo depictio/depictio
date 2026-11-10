@@ -36,8 +36,7 @@ import {
   withInteractiveDefaults,
   withShared,
   emptyAnnotations,
-  annotationColumnBudget,
-  labelScope,
+  buildLabelColumnChoices,
   enrichFilterWithDcId,
   useDataCollectionUpdates,
   RealtimeIndicator,
@@ -1491,17 +1490,7 @@ const App: React.FC = () => {
   // The reader's label columns, offered in the Analysis next to the data's own
   // columns: a column added by hand is only worth having if it can be compared.
   const labelColumnChoices = useMemo(
-    () =>
-      (annotationView?.columns ?? []).map((c) => {
-        const budget = annotationColumnBudget(c, groupsApi.groups);
-        return {
-          id: c.id,
-          name: c.name,
-          active: c.id === annotationView?.activeColumnId,
-          blocked: budget.ok ? null : budget.reason,
-          scope: labelScope(c, annotationStorage ?? 'browser'),
-        };
-      }),
+    () => buildLabelColumnChoices(annotationView, groupsApi.groups, annotationStorage),
     [annotationView, groupsApi.groups, annotationStorage],
   );
   const { setAnnotations: setOwnAnnotations, annotations: ownAnnotations } = annotationsState;

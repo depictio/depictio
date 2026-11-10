@@ -153,10 +153,10 @@ def classify_tables(
                     present = columns(dc_id)
                     if present is not None:
                         found = [k for k in keys if k in present]
-                        if not found:
-                            code, reason = "key_missing", _key_missing(keys)
-                        else:
+                        if found:
                             keys = found
+                        else:
+                            code, reason = "key_missing", _key_missing(keys)
             tables.append(
                 {
                     "dc_id": dc_id,
@@ -173,24 +173,26 @@ def classify_tables(
     return tables
 
 
-# Row counts and column names read from Delta, kept briefly. Reading one opens
-# the table twice over S3, and every page load asks for each candidate table:
-# the Metadata button waited on those reads. A count is only a size guard (the
-# panel refuses a table over the limit when it reads it) and the columns only
-# vet the key, so a few minutes of staleness are harmless.
-_ROW_COUNT_TTL_S = 300.0
-_row_counts: dict[str, tuple[float, int | None, set[str] | None]] = {}
+# Row counts and column names read from Delta, kept briefly: reading one opens
+# the table twice over S3 and every page load asks for each candidate table.
+# A count is only a size guard (the panel refuses an oversized table when it
+# reads it). The columns decide whether the key exists, so the entry is kept
+# only a moment: after a re-ingest that changes the id column, the verdict must
+# not outlive it for long. Nothing else invalidates it, and each API worker has
+# its own copy.
+_FACTS_TTL_S = 30.0
+_facts_cache: dict[str, tuple[float, int | None, set[str] | None]] = {}
 
 
 def _delta_facts(dc_id: str) -> tuple[int | None, set[str] | None]:
-    hit = _row_counts.get(dc_id)
     now = time.monotonic()
-    if hit is not None and now - hit[0] < _ROW_COUNT_TTL_S:
+    hit = _facts_cache.get(dc_id)
+    if hit is not None and now - hit[0] < _FACTS_TTL_S:
         return hit[1], hit[2]
     rows, names = _read_delta_facts(dc_id)
     # An unreadable table is asked again next time rather than held as empty.
     if rows is not None:
-        _row_counts[dc_id] = (now, rows, names)
+        _facts_cache[dc_id] = (now, rows, names)
     return rows, names
 
 

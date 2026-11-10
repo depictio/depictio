@@ -110,8 +110,7 @@ import {
   useSelectionGroups,
   withShared,
   emptyAnnotations,
-  annotationColumnBudget,
-  labelScope,
+  buildLabelColumnChoices,
   useCategoricalColumns,
   useColorByColumnRender,
   resolveGroupRender,
@@ -896,17 +895,7 @@ const EditorApp: React.FC = () => {
     return () => window.clearTimeout(timer);
   }, [dashboardId, hasMetadataTable, annotationPins, annotationTables, annotationView]);
   const labelColumnChoices = useMemo(
-    () =>
-      (annotationView?.columns ?? []).map((c) => {
-        const budget = annotationColumnBudget(c, groupsApi.groups);
-        return {
-          id: c.id,
-          name: c.name,
-          active: c.id === annotationView?.activeColumnId,
-          blocked: budget.ok ? null : budget.reason,
-          scope: labelScope(c, annotationStorage ?? 'browser'),
-        };
-      }),
+    () => buildLabelColumnChoices(annotationView, groupsApi.groups, annotationStorage),
     [annotationView, groupsApi.groups, annotationStorage],
   );
   const { setAnnotations: setOwnAnnotations, annotations: ownAnnotations } = annotationsState;

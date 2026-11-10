@@ -40,6 +40,7 @@ import {
   copyName,
   emptyAnnotations,
   fetchDataVersionStatus,
+  LABEL_SCOPE,
   labelScope,
   matchDroppedTable,
   MAX_ANNOTATION_COLUMNS,
@@ -77,7 +78,6 @@ import TableMergePanel from '../../projects/detail/TableMergePanel';
 import '../../projects/detail/TableEditor.css';
 import FillCell from './FillCell';
 import LabelColumnHeader, {
-  LABEL_KIND,
   type LabelColumnActions,
   type LabelColumnKind,
 } from './LabelColumnHeader';
@@ -1269,9 +1269,12 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
   }
   if (!collections) return <Loader size="sm" />;
   if (tables.length === 0) {
+    // The server says why a table is refused; with one candidate, say it.
+    const refusal = allTables.length === 1 ? allTables[0].reason : null;
     return (
       <Text size="sm" data-testid="annotation-no-table">
-        This project has no metadata table linked to the data, so there is nothing to label.
+        {refusal ??
+          'This project has no metadata table linked to the data, so there is nothing to label.'}
       </Text>
     );
   }
@@ -1349,90 +1352,102 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
               </Text>
             </Tooltip>
           )}
-          {/* Compact actions beside the table choice, icon only (the name is the
-              tooltip and the accessible label), in sets by what they act on:
-              the columns of the grid, the file going in or out, the table's
-              page. */}
+          {/* Icon-only to fit a narrow panel; the name is the tooltip and the
+              accessible label. */}
           <Group gap={6} wrap="nowrap" style={{ flexShrink: 0 }}>
             <Text size="xs" c="dimmed">
               Columns
             </Text>
-          <Group gap={0} wrap="nowrap" className="dc-mp-iconset" role="group" aria-label="Columns" style={{ flexShrink: 0 }}>
-            <Tooltip
-              withinPortal
-              label={
-                labelColumnCount >= MAX_ANNOTATION_COLUMNS
-                  ? `At most ${MAX_ANNOTATION_COLUMNS} label columns`
-                  : 'Add a column of your own labels, next to the table'
-              }
+            <Group
+              gap={0}
+              wrap="nowrap"
+              className="dc-mp-iconset"
+              role="group"
+              aria-label="Columns"
+              style={{ flexShrink: 0 }}
             >
-              <ActionIcon
-                className="dc-mp-icon dc-mp-icon--primary"
-                aria-label="Add column"
-                disabled={!table || !keyColumn || labelColumnCount >= MAX_ANNOTATION_COLUMNS}
-                onClick={() => setNaming({ id: null, value: '', error: null })}
-                data-testid="label-add"
+              <Tooltip
+                withinPortal
+                label={
+                  labelColumnCount >= MAX_ANNOTATION_COLUMNS
+                    ? `At most ${MAX_ANNOTATION_COLUMNS} label columns`
+                    : 'Add a column of your own labels, next to the table'
+                }
               >
-                <Icon icon="mdi:plus" width={14} />
-              </ActionIcon>
-            </Tooltip>
-            <Tooltip withinPortal label="Fit every column to its content">
-              <ActionIcon
-                className="dc-mp-icon"
-                aria-label="Fit columns"
-                disabled={!table}
-                onClick={() => gridApi.current?.autoSizeAllColumns()}
-                data-testid="annotation-fit-columns"
-              >
-                <Icon icon="mdi:arrow-expand-horizontal" width={14} />
-              </ActionIcon>
-            </Tooltip>
-          </Group>
+                <ActionIcon
+                  className="dc-mp-icon dc-mp-icon--primary"
+                  aria-label="Add column"
+                  disabled={!table || !keyColumn || labelColumnCount >= MAX_ANNOTATION_COLUMNS}
+                  onClick={() => setNaming({ id: null, value: '', error: null })}
+                  data-testid="label-add"
+                >
+                  <Icon icon="mdi:plus" width={14} />
+                </ActionIcon>
+              </Tooltip>
+              <Tooltip withinPortal label="Fit every column to its content">
+                <ActionIcon
+                  className="dc-mp-icon"
+                  aria-label="Fit columns"
+                  disabled={!table}
+                  onClick={() => gridApi.current?.autoSizeAllColumns()}
+                  data-testid="annotation-fit-columns"
+                >
+                  <Icon icon="mdi:arrow-expand-horizontal" width={14} />
+                </ActionIcon>
+              </Tooltip>
+            </Group>
           </Group>
           <Group gap={6} wrap="nowrap" style={{ flexShrink: 0 }}>
             <Text size="xs" c="dimmed">
               File
             </Text>
-          <Group gap={0} wrap="nowrap" className="dc-mp-iconset" role="group" aria-label="File" style={{ flexShrink: 0 }}>
-            <FileButton
-              onChange={(f) => f && void openImport(f)}
-              accept=".csv,.tsv,.txt,.tab,text/csv,text/tab-separated-values"
-              inputProps={{ 'data-testid': 'annotation-file-input' } as React.ComponentProps<'input'>}
+            <Group
+              gap={0}
+              wrap="nowrap"
+              className="dc-mp-iconset"
+              role="group"
+              aria-label="File"
+              style={{ flexShrink: 0 }}
             >
-              {(props) => (
-                <Tooltip withinPortal label="Import a CSV or TSV, as labels or into the table">
-                  <ActionIcon
-                    {...props}
-                    className="dc-mp-icon"
-                    aria-label="Import"
-                    disabled={!table || !keyColumn}
-                  >
-                    <Icon icon="mdi:tray-arrow-up" width={14} />
-                  </ActionIcon>
-                </Tooltip>
-              )}
-            </FileButton>
-            <Tooltip
-              withinPortal
-              multiline
-              w={300}
-              label={
-                writeBlocked && SOURCE_ELSEWHERE.has(cachedEditStatus(table?.dcId ?? '')?.code ?? '')
-                  ? "Export this table's rows with your label columns added, as a TSV. Add the columns to the sheet this table comes from (for a pipeline, its metadata sheet) and ingest it again: the pipeline's statistics will include them."
-                  : "Export this table's rows with label columns added, as a TSV built in your browser."
-              }
-            >
-              <ActionIcon
-                className="dc-mp-icon"
-                aria-label="Export"
-                disabled={!table || !keyColumn}
-                onClick={startExport}
-                data-testid="annotation-export"
+              <FileButton
+                onChange={(f) => f && void openImport(f)}
+                accept=".csv,.tsv,.txt,.tab,text/csv,text/tab-separated-values"
+                inputProps={{ 'data-testid': 'annotation-file-input' } as React.ComponentProps<'input'>}
               >
-                <Icon icon="mdi:tray-arrow-down" width={14} />
-              </ActionIcon>
-            </Tooltip>
-          </Group>
+                {(props) => (
+                  <Tooltip withinPortal label="Import a CSV or TSV, as labels or into the table">
+                    <ActionIcon
+                      {...props}
+                      className="dc-mp-icon"
+                      aria-label="Import"
+                      disabled={!table || !keyColumn}
+                    >
+                      <Icon icon="mdi:tray-arrow-up" width={14} />
+                    </ActionIcon>
+                  </Tooltip>
+                )}
+              </FileButton>
+              <Tooltip
+                withinPortal
+                multiline
+                w={300}
+                label={
+                  writeBlocked && SOURCE_ELSEWHERE.has(cachedEditStatus(table?.dcId ?? '')?.code ?? '')
+                    ? "Export this table's rows with your label columns added, as a TSV. Add the columns to the sheet this table comes from (for a pipeline, its metadata sheet) and ingest it again: the pipeline's statistics will include them."
+                    : "Export this table's rows with label columns added, as a TSV built in your browser."
+                }
+              >
+                <ActionIcon
+                  className="dc-mp-icon"
+                  aria-label="Export"
+                  disabled={!table || !keyColumn}
+                  onClick={startExport}
+                  data-testid="annotation-export"
+                >
+                  <Icon icon="mdi:tray-arrow-down" width={14} />
+                </ActionIcon>
+              </Tooltip>
+            </Group>
           </Group>
           <Group gap={0} wrap="nowrap" style={{ flexShrink: 0 }}>
             {projectId && choice && (
@@ -1861,7 +1876,7 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
                 label={
                   <Group gap={6} wrap="nowrap">
                     <Icon
-                      icon={LABEL_KIND[c.shared ? 'shared' : c.local ? 'local' : 'mine'].icon}
+                      icon={LABEL_SCOPE[labelScope(c, state.storage ?? 'browser')].icon}
                       width={14}
                       style={{ color: 'var(--mantine-color-dimmed)' }}
                     />

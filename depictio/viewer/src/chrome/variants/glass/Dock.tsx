@@ -274,7 +274,7 @@ export const Dock: React.FC<{
       el.style.setProperty('--gl-dock-shift', `${Math.round(shift)}px`);
       // Still over the notes button once pushed as far left as it goes: the
       // button rises above the dock instead of sitting on it.
-      const crowded = centre + half + shift > limit;
+      const crowded = anchor === 'bottom-center' && centre + half + shift > limit;
       if (crowded) root.setAttribute('data-dock-crowded', '');
       else root.removeAttribute('data-dock-crowded');
     };
@@ -290,7 +290,7 @@ export const Dock: React.FC<{
       mo.disconnect();
       root.removeAttribute('data-dock-crowded');
     };
-  }, []);
+  }, [anchor]);
 
   /** Bring the dock from where it was (`from`) to its anchor (`base`, the
    *  untransformed position there) with a spring. */

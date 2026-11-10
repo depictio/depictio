@@ -127,7 +127,7 @@ export const LABEL_SCOPE: Record<LabelScope, { icon: string; short: string; tip:
   shared: {
     icon: 'mdi:account-group-outline',
     short: 'Shared',
-    tip: 'Shared on this dashboard: everyone who opens it sees these labels, read-only',
+    tip: 'Shared on this dashboard: everyone who opens it sees these labels',
   },
 };
 

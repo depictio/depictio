@@ -962,6 +962,7 @@ export {
   annotationColumnBudget,
   deriveAnnotationGroups,
   distinctLabels,
+  buildLabelColumnChoices,
   sameGroups,
 } from './annotationGroups';
 export type { Budget } from './annotationGroups';

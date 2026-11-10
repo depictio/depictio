@@ -45,7 +45,7 @@ export const LABEL_KIND: Record<LabelColumnKind, { icon: string; tip: string }> 
   shared: LABEL_SCOPE.shared,
   'shared-readonly': {
     icon: LABEL_SCOPE.shared.icon,
-    tip: `${LABEL_SCOPE.shared.tip}. Copy it to your labels to change it.`,
+    tip: `${LABEL_SCOPE.shared.tip}; read-only. Copy it to your labels to change it.`,
   },
 };
 

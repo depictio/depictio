@@ -97,8 +97,14 @@ export interface LabelColumnChoice {
 /** The icon of where a label column lives, with its sentence on hover. */
 const ScopeIcon: React.FC<{ scope: LabelScope }> = ({ scope }) => (
   <Tooltip withinPortal label={LABEL_SCOPE[scope].tip} multiline w={240} zIndex={Z_LAYERS.tooltip + 1}>
-    <span style={{ display: 'inline-flex' }} data-testid={`label-scope-${scope}`}>
-      <Icon icon={LABEL_SCOPE[scope].icon} width={14} height={14} aria-label={LABEL_SCOPE[scope].short} />
+    <span
+      style={{ display: 'inline-flex' }}
+      tabIndex={0}
+      role="img"
+      aria-label={LABEL_SCOPE[scope].tip}
+      data-testid={`label-scope-${scope}`}
+    >
+      <Icon icon={LABEL_SCOPE[scope].icon} width={14} height={14} aria-hidden />
     </span>
   </Tooltip>
 );
@@ -261,7 +267,6 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
   // `sample`?"). Columns present in more than one DC go under "Shared
   // columns": the override applies to every figure whose frame carries the
   // column, so pinning them to one dataset would under-promise.
-  const activeLabel = labelColumns.find((l) => l.active);
   const labelItems = useMemo(
     () =>
       labelColumns.map((l) => ({
@@ -271,6 +276,7 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
       })),
     [labelColumns],
   );
+  const activeLabel = labelColumns.find((l) => l.active);
   const columnSelectData = useMemo(() => {
     const none = { value: COLOR_BY_NONE_VALUE, label: 'None' };
     const distinctDcs = new Set(colorByColumns.flatMap((c) => c.dcIds));
@@ -507,9 +513,7 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
           label="Label column"
           description="Its labels become the groups. Add or edit them in Metadata."
           data={labelItems}
-          value={labelColumns.find((l) => l.active)?.id
-            ? LABEL_VALUE_PREFIX + (labelColumns.find((l) => l.active) as LabelColumnChoice).id
-            : null}
+          value={activeLabel ? LABEL_VALUE_PREFIX + activeLabel.id : null}
           placeholder="Pick a label column…"
           onChange={(v) =>
             onPickLabelColumn?.(v && v.startsWith(LABEL_VALUE_PREFIX) ? v.slice(LABEL_VALUE_PREFIX.length) : null)
@@ -521,6 +525,7 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
             return <LabelOption name={option.label} scope={choice?.scope} blocked={choice?.blocked ?? null} />;
           }}
           leftSection={activeLabel?.scope ? <ScopeIcon scope={activeLabel.scope} /> : undefined}
+          leftSectionPointerEvents="all"
           comboboxProps={{ withinPortal: true, zIndex: Z_LAYERS.tooltip }}
           data-testid="analysis-label-column"
         />

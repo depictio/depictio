@@ -13,6 +13,7 @@ import {
   UnstyledButton,
   useMantineColorScheme,
 } from '@mantine/core';
+import { useMediaQuery } from '@mantine/hooks';
 import { Icon } from '@iconify/react';
 import {
   buildSpotlightIndex,
@@ -244,6 +245,8 @@ const SpotlightPalette: React.FC<SpotlightPaletteProps> = ({
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const shortcut = searchShortcutLabel();
+  // The close key exists only where the palette is a full page (see panelsPhone.css).
+  const phone = useMediaQuery('(max-width: 47.99em)', false, { getInitialValueInEffect: false });
 
   const index = useMemo(() => buildSpotlightIndex(tabs), [tabs]);
   const groups = useMemo(
@@ -356,22 +359,23 @@ const SpotlightPalette: React.FC<SpotlightPaletteProps> = ({
             leftSection={<Icon icon="mdi:magnify" width={22} />}
             leftSectionWidth={52}
             rightSection={
-              <Group gap={6} wrap="nowrap" pr={8}>
+              <Group gap={6} wrap="nowrap" pr={phone ? 8 : 0}>
                 {pending > 0 && <Loader size="xs" aria-label="Loading other tabs" />}
                 {/* The palette is a full page on a phone, with no backdrop to tap. */}
-                <ActionIcon
-                  variant="subtle"
-                  color="gray"
-                  hiddenFrom="sm"
-                  aria-label="Close search"
-                  onClick={onClose}
-                  data-testid="spotlight-close"
-                >
-                  <Icon icon="mdi:close" width={20} />
-                </ActionIcon>
+                {phone && (
+                  <ActionIcon
+                    variant="subtle"
+                    color="gray"
+                    aria-label="Close search"
+                    onClick={onClose}
+                    data-testid="spotlight-close"
+                  >
+                    <Icon icon="mdi:close" width={20} />
+                  </ActionIcon>
+                )}
               </Group>
             }
-            rightSectionWidth={pending > 0 ? 76 : 48}
+            rightSectionWidth={phone ? (pending > 0 ? 76 : 48) : undefined}
             rightSectionPointerEvents="all"
             classNames={{ input: 'depictio-spotlight-input' }}
           />
