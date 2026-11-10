@@ -662,6 +662,8 @@ export {
   fetchGroup,
   fetchProjectEffectiveAccess,
   previewGroupMembers,
+  searchShareCandidates,
+  SHARE_CANDIDATE_MIN_QUERY,
   createGroup,
   updateGroup,
   deleteGroup,
@@ -786,6 +788,7 @@ export type {
   EffectiveAccess,
   EffectiveAccessUser,
   GroupMemberPreview,
+  ShareCandidate,
 } from './api';
 // Selection-as-filter helpers (Plotly/AG Grid → InteractiveFilter)
 export {

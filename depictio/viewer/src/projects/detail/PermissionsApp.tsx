@@ -21,7 +21,8 @@ import {
   useMantineColorScheme,
   useMantineTheme,
 } from '@mantine/core';
-import { useDisclosure } from '@mantine/hooks';
+import type { OptionsFilter } from '@mantine/core';
+import { useDebouncedValue, useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { Icon } from '@iconify/react';
 import { AgGridReact } from 'ag-grid-react';
@@ -52,6 +53,8 @@ import {
   listAllUsers,
   listGroups,
   listMyGroups,
+  SHARE_CANDIDATE_MIN_QUERY,
+  searchShareCandidates,
   toggleProjectVisibility,
   updateProjectPermissions,
   useBrandAccents,
@@ -62,6 +65,7 @@ import type {
   MyGroup,
   PermissionsGroup,
   ProjectListEntry,
+  ShareCandidate,
 } from 'depictio-react-core';
 
 import { useCurrentUser } from '../../hooks/useCurrentUser';
@@ -383,6 +387,55 @@ const PermissionsApp: React.FC = () => {
     return myGroups.some((g) => g.is_group_admin && ownerGroupIds.has(g.id));
   }, [user, project, myGroups]);
 
+  // The full user list is admin-only, so anyone else gets suggestions from a
+  // search scoped to this project's sharing: a P.I. can find a person from
+  // another group by name or email.
+  const [candidates, setCandidates] = useState<ShareCandidate[]>([]);
+  const [debouncedInput] = useDebouncedValue(emailInput.trim(), 250);
+  const searchesCandidates = canManage && allUsers.length === 0;
+  useEffect(() => {
+    if (
+      !searchesCandidates ||
+      !projectId ||
+      debouncedInput === '*' ||
+      debouncedInput.length < SHARE_CANDIDATE_MIN_QUERY
+    ) {
+      setCandidates([]);
+      return;
+    }
+    let cancelled = false;
+    searchShareCandidates(projectId, debouncedInput)
+      .then((found) => {
+        if (!cancelled) setCandidates(found);
+      })
+      .catch(() => {
+        if (!cancelled) setCandidates([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [searchesCandidates, projectId, debouncedInput]);
+
+  /** Emails offered by the add-member field: not already on the project. */
+  const suggestionEmails = useMemo(() => {
+    const emails =
+      allUsers.length > 0 ? allUsers.map((u) => u.email) : candidates.map((c) => c.email);
+    return emails.filter((e) => e && !rows.some((r) => r.email === e));
+  }, [allUsers, candidates, rows]);
+
+  // Admins get every address and let Mantine narrow it by what is typed. The
+  // search has already narrowed everyone else's by name or email, so Mantine
+  // must not filter those again by email alone.
+  const listFiltersLocally = allUsers.length > 0;
+  const suggestionData = useMemo(() => {
+    const typed = emailInput.trim();
+    const wildcard = listFiltersLocally || typed === '' || typed === '*' ? ['*'] : [];
+    return [...wildcard, ...suggestionEmails];
+  }, [listFiltersLocally, emailInput, suggestionEmails]);
+  const suggestionFilter: OptionsFilter | undefined = listFiltersLocally
+    ? undefined
+    : ({ options }) => options;
+
   const { access: effectiveAccess, error: effectiveAccessError } = useEffectiveAccess(
     projectId,
     canManage,
@@ -466,29 +519,36 @@ const PermissionsApp: React.FC = () => {
           Viewer: true, // wildcard makes sense as a viewer default
         };
       } else {
-        // Resolve via the locally cached `allUsers` list. The auth endpoint
-        // `/auth/fetch_user/from_email` requires an internal api-key header
-        // that browser clients don't carry, so we look up by email in the
-        // admin-listed set we loaded on mount instead.
-        const u = allUsers.find(
-          (x) => (x.email || '').toLowerCase() === trimmed.toLowerCase(),
-        );
-        if (!u) {
+        // Admins resolve against the full list loaded on mount. The list is
+        // admin-only, so everyone else asks the server for exactly this
+        // address (`/auth/fetch_user/from_email` needs an internal api-key
+        // header that browser clients don't carry).
+        const wanted = trimmed.toLowerCase();
+        const listed = allUsers.find((x) => (x.email || '').toLowerCase() === wanted);
+        let found: { id?: string; email: string; is_admin?: boolean } | undefined = listed && {
+          id: (listed._id ?? listed.id) as string | undefined,
+          email: listed.email,
+          is_admin: listed.is_admin,
+        };
+        if (!found && allUsers.length === 0 && projectId) {
+          const hits = await searchShareCandidates(projectId, trimmed);
+          found = hits.find((c) => c.email.toLowerCase() === wanted);
+        }
+        if (!found) {
           throw new Error(
-            `No user with email "${trimmed}". Pick one from the suggestions or ask an admin to invite them first.`,
+            `No account with the email "${trimmed}". They need to sign in to Depictio once before you can share with them.`,
           );
         }
-        const id = (u._id ?? u.id) as string | undefined;
-        if (!id) {
+        if (!found.id) {
           throw new Error('User record has no id; cannot add.');
         }
         row = {
-          _id: id,
-          email: u.email,
+          _id: found.id,
+          email: found.email,
           Owner: false,
           Editor: false,
           Viewer: true, // default newly-added users to Viewer
-          is_admin: Boolean(u.is_admin),
+          is_admin: Boolean(found.is_admin),
         };
       }
       if (rows.some((r) => r._id === row._id || r.email === row.email)) {
@@ -988,11 +1048,7 @@ const PermissionsApp: React.FC = () => {
             <li className="pm-add">
               <Autocomplete
                 flex={1}
-                placeholder={
-                  allUsers.length > 0
-                    ? 'Search users, or * for all signed-in users'
-                    : 'user@example.com, or * for all signed-in users'
-                }
+                placeholder="Search by name or email, or * for all signed-in users"
                 value={emailInput}
                 onChange={setEmailInput}
                 onKeyDown={(e) => {
@@ -1000,10 +1056,8 @@ const PermissionsApp: React.FC = () => {
                 }}
                 disabled={adding}
                 leftSection={<UserPlus size={16} strokeWidth={STROKE} />}
-                data={[
-                  '*',
-                  ...allUsers.map((u) => u.email).filter((e) => e && !rows.some((r) => r.email === e)),
-                ]}
+                data={suggestionData}
+                filter={suggestionFilter}
                 limit={20}
                 comboboxProps={{ withinPortal: true }}
                 data-testid="permissions-add-user-input"
@@ -1268,11 +1322,7 @@ const PermissionsApp: React.FC = () => {
                     flex={1}
                     size="sm"
                     label={undefined}
-                    placeholder={
-                      allUsers.length > 0
-                        ? 'Type to search users…  (or * for all signed-in users)'
-                        : 'user@example.com  (or * for all signed-in users)'
-                    }
+                    placeholder="Search by name or email  (or * for all signed-in users)"
                     value={emailInput}
                     onChange={setEmailInput}
                     onKeyDown={(e) => {
@@ -1280,17 +1330,8 @@ const PermissionsApp: React.FC = () => {
                     }}
                     disabled={adding}
                     leftSection={<Icon icon="mdi:account-plus-outline" width={16} />}
-                    // Suggestions: every known user that isn't already a
-                    // project member, plus the wildcard. Mantine filters
-                    // by the current input value on its own.
-                    data={[
-                      '*',
-                      ...allUsers
-                        .map((u) => u.email)
-                        .filter(
-                          (e) => e && !rows.some((r) => r.email === e),
-                        ),
-                    ]}
+                    data={suggestionData}
+                    filter={suggestionFilter}
                     limit={20}
                     comboboxProps={{ withinPortal: true }}
                     data-testid="permissions-add-user-input"

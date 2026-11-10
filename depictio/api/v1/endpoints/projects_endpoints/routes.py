@@ -93,6 +93,14 @@ from depictio.api.v1.endpoints.projects_endpoints.run_folders import (
     inspect_folder,
     list_s3_dirs,
 )
+from depictio.api.v1.endpoints.projects_endpoints.share_candidates import (
+    FETCH_LIMIT,
+    USER_PROJECTION,
+    clean_query,
+    exact_email_filter,
+    partial_filter,
+    rank_candidates,
+)
 from depictio.api.v1.endpoints.projects_endpoints.storage_config import (
     ProjectStorageConfigIn,
     ProjectStorageConfigOut,
@@ -1480,6 +1488,33 @@ async def get_effective_access(project_id: str, current_user=Depends(get_current
         )
     }
     return compute_effective_access(permissions, group_docs, user_docs)
+
+
+@projects_endpoint_router.get("/share_candidates/{project_id}")
+async def find_share_candidates(
+    project_id: str,
+    q: str = Query(default="", description="Part of an email, name or login (3+ characters)"),
+    current_user=Depends(get_current_user),
+):
+    """People a project could be shared with, for the sharing dialog.
+
+    ``/auth/list`` is admin-only, so without this an owner or P.I. who is not an
+    admin cannot find a person from another group. Gated like the grant itself,
+    so only someone who manages this project's sharing can search the accounts;
+    a short query returns nothing rather than a page of the directory.
+    """
+    project = _async_get_project_from_id(PyObjectId(project_id), current_user, projects_collection)
+    if not _can_manage_project_sharing(project, current_user):
+        raise HTTPException(
+            status_code=403,
+            detail="User does not have permission to update permissions for this project.",
+        )
+    query = clean_query(q)
+    if query is None:
+        return []
+    exact = list(users_collection.find(exact_email_filter(query), USER_PROJECTION).limit(2))
+    partial = list(users_collection.find(partial_filter(query), USER_PROJECTION).limit(FETCH_LIMIT))
+    return rank_candidates([*exact, *partial], query)
 
 
 @projects_endpoint_router.get("/group_members_preview/{project_id}/{group_id}")
