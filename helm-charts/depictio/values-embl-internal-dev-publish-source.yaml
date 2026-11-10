@@ -1,0 +1,42 @@
+# dev.depictio.embl.org as the SOURCE of "Publish to..." (#1303), standing in for
+# depictio.embl.org (prod). Layer it after values-embl-internal-dev.yaml.
+#
+# Unlike the target, the source can set any key: this is the side that must be told
+# which destinations it may dial. An invitation code is used with a typed destination
+# URL, which has to pass two gates (depictio/api/v1/services/outbound_http.py):
+#   - DESTINATION_DOMAINS: the host equals, or is under, one of these suffixes;
+#   - the host is in UI_TARGET_HOST_ALLOWLIST, or is https and resolves to a public
+#     address. An allowlisted host may use http and a private address.
+# For a Serve target both lists hold Serve's domain; for the IP-only test instance
+# they hold its address. The address is NOT in this file (it changes with every
+# install): pass it from an untracked values file, e.g.
+#
+#   backend:
+#     env:
+#       DEPICTIO_MIGRATION_DESTINATION_DOMAINS: '["10.133.x.x"]'
+#       DEPICTIO_MIGRATION_UI_TARGET_HOST_ALLOWLIST: '["10.133.x.x"]'
+#
+# Also lighter than values-embl-internal-dev.yaml (single replicas, smaller
+# requests) so the shared nodes stay free for the showcases instance. MongoDB
+# (Percona, 3 replicas) is left alone on purpose.
+
+backend:
+  replicas: 1
+  resources:
+    requests:
+      memory: "1Gi"
+      cpu: "250m"
+    limits:
+      memory: "3Gi"
+      cpu: "2"
+  env:
+    DEPICTIO_MIGRATION_UI_ENABLED: "true"
+    DEPICTIO_MIGRATION_INSTANCE_LABEL: "dev (prod stand-in)"
+    DEPICTIO_FASTAPI_WORKERS: "2"
+
+celery:
+  replicas: 1
+
+viewer:
+  replicas: 1
+  strategy: "Recreate"
