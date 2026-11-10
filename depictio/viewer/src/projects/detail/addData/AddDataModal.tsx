@@ -4,7 +4,9 @@
  * pipeline is added as a run; any other folder offers its tables.
  */
 import React, { useEffect, useState } from 'react';
-import { Alert, Button, Group, Modal, Paper, Stack } from '@mantine/core';
+import { Alert, Button, Center, Group, Modal, Paper, Stack, Text, Title } from '@mantine/core';
+import { Icon } from '@iconify/react';
+import { useBrandAccents } from 'depictio-react-core';
 import type { ProjectListEntry } from 'depictio-react-core';
 
 import { DisabledReason, GatedButton } from '../../../components/settings/SettingsSections';
@@ -42,6 +44,7 @@ export const AddDataModal: React.FC<AddDataModalProps> = ({
   onClose,
   onAdded,
 }) => {
+  const accent = useBrandAccents();
   const drop = useDataDropzone();
   const { dropzone, files, guesses } = drop;
   const { clear } = dropzone;
@@ -139,12 +142,40 @@ export const AddDataModal: React.FC<AddDataModalProps> = ({
       <Modal
         opened={opened}
         onClose={handleClose}
-        title="Add data"
-        size={1000}
+        // Same header as New project: this is the screen a new project adds data from.
+        title={null}
+        withCloseButton
+        size={1160}
         centered
+        padding="xl"
+        overlayProps={{ blur: 3, backgroundOpacity: 0.55 }}
+        aria-label="Add data"
         data-testid="add-data-modal"
       >
         <Stack gap="md">
+          <Stack gap={4} align="center">
+            <Center>
+              <Group gap="xs">
+                <Icon
+                  icon="mdi:database-plus-outline"
+                  width={28}
+                  color={`var(--mantine-color-${accent.secondary}-6)`}
+                />
+                <Title
+                  order={2}
+                  c={accent.secondary}
+                  style={{ fontFamily: 'Virgil', fontWeight: 400 }}
+                >
+                  Add data
+                </Title>
+              </Group>
+            </Center>
+            <Text size="sm" c="dimmed" ta="center" data-testid="add-data-intro">
+              {project?.name
+                ? `Add data to “${project.name}”: Depictio works out what each file or folder is.`
+                : 'Depictio works out what each file or folder is.'}
+            </Text>
+          </Stack>
           {!started && !run.showFollow ? (
             <>
               <DataSourceFields

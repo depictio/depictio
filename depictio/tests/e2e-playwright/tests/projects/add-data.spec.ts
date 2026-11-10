@@ -112,7 +112,7 @@ test.describe("Add data", () => {
     await expect(page.getByTestId("folder-tables-results")).toBeVisible();
     await page.getByTestId("add-data-done").click();
     // Mantine keeps an empty Modal root (it carries the testid) in the portal after close.
-    await expect(page.getByRole("dialog", { name: "Add data" })).toHaveCount(0);
+    await expect(page.getByTestId("add-data-intro")).toHaveCount(0);
     await expect(page.getByTestId("folder-tables-results")).toHaveCount(0);
   });
 
