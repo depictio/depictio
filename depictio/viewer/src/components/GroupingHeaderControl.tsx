@@ -151,7 +151,7 @@ const GroupingHeaderControl: React.FC<{
         classNames={{ content: 'dc-analysis-panel dc-panel--analysis', inner: 'dc-analysis-panel-inner' }}
         padding="md"
         // Above the floating map card, like the other dashboard drawers.
-        zIndex={Z_LAYERS.overlay}
+        zIndex={Z_LAYERS.mapPanel + 10}
         // The four props that make it a dock rather than a modal. Without the
         // first, the dashboard would be dimmed and unclickable; without the
         // last, the mousedown that starts a lasso would close the panel —

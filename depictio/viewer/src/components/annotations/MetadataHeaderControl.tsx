@@ -22,6 +22,9 @@ const METADATA_PANEL_MAX_WIDTH_PX = 1600;
 /** Share of the window the panel may take: past it the dashboard is gone. */
 const MAX_WIDTH_FRACTION = 0.8;
 const WIDTH_KEY = 'metadata-panel-width';
+/** The right-hand panels (Analysis, Metadata) sit between the map card and the
+ *  modals. */
+export const RIGHT_PANEL_Z = Z_LAYERS.mapPanel + 10;
 /** Arrow-key step of the resize handle. */
 const KEYBOARD_STEP_PX = 24;
 
@@ -202,7 +205,9 @@ const MetadataHeaderControl: React.FC<{
         size={panelWidth(shown)}
         classNames={{ content: 'dc-analysis-panel dc-panel--metadata', inner: 'dc-analysis-panel-inner' }}
         padding="md"
-        zIndex={Z_LAYERS.overlay}
+        // Above the figures and the map card, below Settings and the other
+        // modals: opened over this panel they were hidden behind it.
+        zIndex={RIGHT_PANEL_Z}
         // A dock, not a modal: the charts stay live while labels change.
         withOverlay={false}
         trapFocus={false}
@@ -254,7 +259,7 @@ const MetadataHeaderControl: React.FC<{
             width: 10,
             cursor: 'col-resize',
             touchAction: 'none',
-            zIndex: Z_LAYERS.overlay + 1,
+            zIndex: RIGHT_PANEL_Z + 1,
             display: 'flex',
             justifyContent: 'center',
           }}

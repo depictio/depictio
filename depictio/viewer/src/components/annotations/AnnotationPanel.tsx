@@ -12,6 +12,7 @@ import {
   LoadingOverlay,
   Modal,
   Paper,
+  Popover,
   SegmentedControl,
   Select,
   Stack,
@@ -1304,8 +1305,8 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
         </Box>
       )}
 
-      <Group justify="space-between" gap="xs" wrap="nowrap">
-        <Group gap="xs" wrap="nowrap" style={{ minWidth: 0 }}>
+      <Group justify="space-between" gap="xs" wrap="wrap">
+        <Group gap="xs" wrap="wrap" style={{ minWidth: 0 }}>
           <Text size="xs" c="dimmed">
             Table
           </Text>
@@ -1351,50 +1352,65 @@ const AnnotationPanel: React.FC<AnnotationPanelProps> = ({
           )}
           {projectId && choice && (
             // The table's own page: its rows, its links and where it comes from.
-            <Tooltip withinPortal label="Open this table in the project">
-              <ActionIcon
-                component="a"
-                href={`/projects/${projectId}?table=${choice.dcId}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                size="xs"
-                variant="subtle"
-                color="gray"
-                aria-label="Open this table in the project"
-                data-testid="annotation-open-table"
-              >
-                <Icon icon="mdi:open-in-new" width={14} />
-              </ActionIcon>
-            </Tooltip>
+            <Button
+              component="a"
+              href={`/projects/${projectId}?table=${choice.dcId}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              size="xs"
+              variant="light"
+              color="gray"
+              style={{ flexShrink: 0 }}
+              leftSection={<Icon icon="mdi:open-in-new" width={14} />}
+              data-testid="annotation-open-table"
+            >
+              Open in project
+            </Button>
           )}
           {otherTables.length > 0 && (
-            <Tooltip
-              withinPortal
-              multiline
-              w={320}
-              label={
-                <Stack gap={2}>
-                  <Text size="xs" fw={600}>
-                    Not labelled here
+            <Popover withinPortal width={340} position="bottom-start" shadow="md" zIndex={Z_LAYERS.nestedOverlay}>
+              <Popover.Target>
+                <Button
+                  size="xs"
+                  variant="subtle"
+                  color="gray"
+                  style={{ flexShrink: 0 }}
+                  rightSection={<Icon icon="mdi:chevron-down" width={14} />}
+                  data-testid="annotation-other-tables"
+                >
+                  {otherTables.length} other table{otherTables.length === 1 ? '' : 's'}
+                </Button>
+              </Popover.Target>
+              <Popover.Dropdown>
+                <Stack gap={8}>
+                  <Text size="xs" c="dimmed">
+                    Other tables of the project. Only a metadata table linked to the data can carry labels.
                   </Text>
                   {otherTables.map((t) => (
-                    <Text size="xs" key={t.dc_id}>
-                      {annotationTableLabel(t, allTables)}: {t.reason}
-                    </Text>
+                    <Box key={t.dc_id}>
+                      <Group gap={4} wrap="nowrap">
+                        <Text size="sm" fw={600} truncate style={{ flex: 1, minWidth: 0 }}>
+                          {annotationTableLabel(t, allTables)}
+                        </Text>
+                        {projectId && (
+                          <Anchor
+                            size="xs"
+                            href={`/projects/${projectId}?table=${t.dc_id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            Open in project
+                          </Anchor>
+                        )}
+                      </Group>
+                      <Text size="xs" c="dimmed">
+                        {t.reason}
+                      </Text>
+                    </Box>
                   ))}
                 </Stack>
-              }
-            >
-              <ActionIcon
-                size="xs"
-                variant="subtle"
-                color="gray"
-                aria-label="Why other tables are not listed"
-                data-testid="annotation-other-tables"
-              >
-                <Icon icon="mdi:information-outline" width={14} />
-              </ActionIcon>
-            </Tooltip>
+              </Popover.Dropdown>
+            </Popover>
           )}
         </Group>
         <Group gap={4} wrap="nowrap">

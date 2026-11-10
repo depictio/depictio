@@ -408,7 +408,13 @@ const DeskLayout: React.FC<DashboardShellProps> = ({
   const padR = analysis.open ? analysis.widthPx + 12 : 0;
   const navOffset = `calc(${sideW}px + ${drawerCol})`;
 
-  useRootOffsets({ '--gl-top-offset': `${topH}px`, '--gl-nav-offset': navOffset });
+  // `--gl-pad-r` is also on the root: the notes button is fixed outside the shell
+  // and reads it to stay clear of the open Analysis / Metadata panel.
+  useRootOffsets({
+    '--gl-top-offset': `${topH}px`,
+    '--gl-nav-offset': navOffset,
+    '--gl-pad-r': `${padR}px`,
+  });
 
   const shellStyle = {
     '--gl-pad-r': `${padR}px`,

@@ -21,6 +21,7 @@ adds the row counts from Delta.
 
 from __future__ import annotations
 
+import time
 from collections.abc import Callable
 from typing import Any
 
@@ -150,7 +151,27 @@ def classify_tables(
     return tables
 
 
+# Row counts read from Delta, kept briefly. Reading one opens the table twice
+# over S3, and every page load asks for each candidate table: the Metadata
+# button waited on those reads. A count is only a size guard (the panel refuses
+# a table over the limit when it reads it), so a few minutes of staleness are harmless.
+_ROW_COUNT_TTL_S = 300.0
+_row_counts: dict[str, tuple[float, int | None]] = {}
+
+
 def _delta_row_count(dc_id: str) -> int | None:
+    hit = _row_counts.get(dc_id)
+    now = time.monotonic()
+    if hit is not None and now - hit[0] < _ROW_COUNT_TTL_S:
+        return hit[1]
+    rows = _read_delta_row_count(dc_id)
+    # An unreadable table is asked again next time rather than held as empty.
+    if rows is not None:
+        _row_counts[dc_id] = (now, rows)
+    return rows
+
+
+def _read_delta_row_count(dc_id: str) -> int | None:
     from depictio.api.v1.endpoints.datacollections_endpoints.table_edit import _row_count
     from depictio.api.v1.endpoints.datacollections_endpoints.table_manage import (
         _delta_location_for,

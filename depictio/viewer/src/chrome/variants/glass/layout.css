@@ -915,14 +915,15 @@
 .hy-anchor[data-anchor='bottom-center'],
 .hy-anchor[data-anchor='top-center'] {
   right: auto;
-  /* Centred on the canvas, panel or not: moving with the panel made the dock
-   * jump on every open. It gives way only when centred it would sit over the
-   * panel, and then by just enough to clear it. */
-  left: min(
-    50%,
-    calc(100% - var(--gl-pad-r, 0px) - var(--gl-gutter) - var(--gl-dock-half, 200px))
-  );
+  /* Centred on the window while the dock clears the open panel (Dock.tsx sets
+   * `data-clear`); otherwise centred on what the panel leaves, since a dock
+   * under the panel is hidden by it. */
+  left: calc((100% - var(--gl-pad-r, 0px)) / 2);
   translate: -50% 0;
+}
+.hy-anchor[data-clear][data-anchor='bottom-center'],
+.hy-anchor[data-clear][data-anchor='top-center'] {
+  left: 50%;
 }
 .hy-anchor[data-anchor='bottom-left'],
 .hy-anchor[data-anchor='bottom-right'] {

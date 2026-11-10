@@ -243,17 +243,33 @@ export const Dock: React.FC<{
     // Once, on arrival.
   }, []);
 
-  // The centred anchors stay centred on the window whatever panel is open, and
-  // give way only as far as keeping the dock clear of that panel takes: the CSS
-  // needs the dock's half width for that (`.hy-anchor[data-anchor$='center']`).
+  // The centred anchors stay centred on the window while the dock clears the
+  // open panel, and fall back to the middle of what the panel leaves when it
+  // would sit under it: the panel is drawn over the page, so a dock under it is
+  // hidden. CSS cannot compare the two, so the fit is set here
+  // (`data-clear`, read by `.hy-anchor[data-anchor$='center']`).
   React.useLayoutEffect(() => {
     const el = nav.current;
-    if (!el || typeof ResizeObserver === 'undefined') return;
-    const measure = () => el.style.setProperty('--gl-dock-half', `${el.offsetWidth / 2}px`);
+    const host = el?.parentElement;
+    const shell = host?.closest<HTMLElement>('.hy-shell') ?? host;
+    if (!el || !host || !shell || typeof ResizeObserver === 'undefined') return;
+    const measure = () => {
+      const padR = parseFloat(getComputedStyle(shell).getPropertyValue('--gl-pad-r')) || 0;
+      const gutter = parseFloat(getComputedStyle(shell).getPropertyValue('--gl-gutter')) || 16;
+      const clear = host.clientWidth / 2 + el.offsetWidth / 2 <= host.clientWidth - padR - gutter;
+      if (clear) el.setAttribute('data-clear', '');
+      else el.removeAttribute('data-clear');
+    };
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
-    return () => ro.disconnect();
+    ro.observe(host);
+    const mo = new MutationObserver(measure);
+    mo.observe(shell, { attributes: true, attributeFilter: ['style'] });
+    return () => {
+      ro.disconnect();
+      mo.disconnect();
+    };
   }, []);
 
   /** Bring the dock from where it was (`from`) to its anchor (`base`, the

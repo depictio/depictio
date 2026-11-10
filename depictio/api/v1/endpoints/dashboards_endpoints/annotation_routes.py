@@ -19,6 +19,8 @@ tables with that verdict, and a save naming any other table, or a key column
 that is not one of its links' source columns, is refused with 422.
 """
 
+import asyncio
+
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import ValidationError
@@ -156,7 +158,8 @@ async def get_annotation_tables(
         shared = shared_columns(main_tab.get("shared_labels"))
         sharing = can_share(main_tab, current_user)
     return {
-        "tables": annotatable_tables(_project(project_id)),
+        # Blocking Delta reads: off the event loop, or every request waits on them.
+        "tables": await asyncio.to_thread(annotatable_tables, _project(project_id)),
         "shared": shared,
         "can_share": sharing,
     }
