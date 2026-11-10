@@ -189,6 +189,7 @@ def _read_source_file(
     source: RecipeSource,
     storage_options: dict | None = None,
     rel_path: str | None = None,
+    root: DataRoot | None = None,
 ) -> pl.DataFrame:
     """Read a single source file into a DataFrame.
 
@@ -214,7 +215,16 @@ def _read_source_file(
     holding ``rel_path``, the file's path relative to the data root (the full
     location when the caller has none, e.g. an absolute override outside the
     root), so the recipe can derive a key the content lacks.
+
+    A source declared as a CSV/TSV file, repointed at a YAML or JSON
+    samplesheet (``--var SAMPLESHEET_FILE=sheet.yaml``), is read as a list of
+    records (``record_sheets``), through ``root`` when the file is under it.
     """
+    if _repointed_at_record_sheet(source, rel_path or location):
+        return _with_source_path(
+            _read_record_source(location, source, root, rel_path), source, location, rel_path
+        )
+
     kwargs = dict(source.read_kwargs or {})
     remote = _is_remote_location(location)
     if remote and storage_options is not None:
@@ -226,6 +236,41 @@ def _read_source_file(
     else:
         df = read(location, **format_kwargs, **kwargs)
     return _with_source_path(df, source, location, rel_path)
+
+
+def _repointed_at_record_sheet(source: RecipeSource, location: str | Path) -> bool:
+    """Whether ``location`` is a YAML/JSON samplesheet standing in for a CSV/TSV ``source``.
+
+    Only a repointed ``path`` source qualifies. Recipes that read their own
+    ``.json`` outputs as one text column (isoseq, crisprseq, pairgenomealign)
+    declare that ``.json`` path or glob themselves, and keep that read.
+    """
+    # Lazily, for the same reason as in ``_as_data_root``.
+    from depictio.cli.cli.utils.record_sheets import is_record_sheet
+
+    return (
+        source.format in ("csv", "tsv")
+        and source.glob_pattern is None
+        and source.path is not None
+        and not is_record_sheet(source.path)
+        and is_record_sheet(location)
+    )
+
+
+def _read_record_source(
+    location: str | Path, source: RecipeSource, root: DataRoot | None, rel_path: str | None
+) -> pl.DataFrame:
+    """A YAML/JSON samplesheet ``source`` points at, read through ``root`` when under it."""
+    from depictio.cli.cli.utils.record_sheets import RecordSheetError, read_record_sheet
+
+    if root is not None and rel_path is not None:
+        data = root.read_bytes(rel_path)
+    else:
+        data = Path(location).read_bytes()
+    try:
+        return read_record_sheet(data, str(location))
+    except RecordSheetError as exc:
+        raise RecipeError(f"Source '{source.ref}': {exc}") from exc
 
 
 def _format_readers(source: RecipeSource) -> tuple[Any, Any, dict]:
@@ -278,14 +323,21 @@ def _read_source_outside_root(
     """
     if _is_remote_location(location):
         from depictio.cli.cli.utils.deltatables import _read_remote_file_lazy
+        from depictio.cli.cli.utils.record_sheets import RecordSheetError
 
         _scan, _read, format_kwargs = _format_readers(source)
         kwargs = {**format_kwargs, **(source.read_kwargs or {})}
-        if source.format == "csv":
+        if _repointed_at_record_sheet(source, location):
+            # No CSV options, so the remote reader reads it as records.
+            kwargs = {}
+        elif source.format == "csv":
             # The format the recipe declared, as on every other read of it: the
             # remote reader would otherwise pick tabs for a ``.tsv`` name.
             kwargs.setdefault("separator", ",")
-        frame = _read_remote_file_lazy(location, source.format, kwargs, root.CLI_config)
+        try:
+            frame = _read_remote_file_lazy(location, source.format, kwargs, root.CLI_config)
+        except RecordSheetError as exc:
+            raise RecipeError(f"Source '{source.ref}': {exc}") from exc
         return _with_source_path(frame.collect(), source, location, None)
 
     from depictio.cli.cli.utils.templates import _local_fallback_allowed
@@ -333,7 +385,9 @@ def _resolve_glob_source(
         # A zero-byte output has no header for polars to parse; it holds no rows.
         if root.size(rel_path) == 0:
             continue
-        df = _read_source_file(root.url(rel_path), source, storage_options, rel_path=rel_path)
+        df = _read_source_file(
+            root.url(rel_path), source, storage_options, rel_path=rel_path, root=root
+        )
         if not df.is_empty():
             frames.append(df)
 
@@ -418,7 +472,9 @@ def resolve_sources(
                     sources[source.ref] = None  # type: ignore[assignment]
                     continue
                 raise RecipeError(f"Source '{source.ref}': file not found: {file_location}")
-            df = _read_source_file(file_location, source, storage_options, rel_path=rel_path)
+            df = _read_source_file(
+                file_location, source, storage_options, rel_path=rel_path, root=root
+            )
 
         if df.is_empty():
             raise RecipeError(f"Source '{source.ref}' loaded 0 rows from {file_location}")

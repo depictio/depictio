@@ -22,6 +22,12 @@ from typing import Annotated, Optional
 import typer
 from rich.console import Console
 
+from depictio.cli.cli.utils.record_sheets import (
+    RecordSheetError,
+    is_record_sheet,
+    parse_record_sheet,
+)
+
 app = typer.Typer()
 console = Console()
 
@@ -51,10 +57,25 @@ _FILE_HINTS = (
 
 
 def _read_table(path: Path) -> tuple[list[str], list[dict]]:
-    """Read a CSV/TSV into (fieldnames, rows). Delimiter from extension, then sniffing."""
+    """Read a CSV/TSV into (fieldnames, rows). Delimiter from extension, then sniffing.
+
+    A YAML/JSON samplesheet (a list of records) is read as its records, every
+    cell as the text a CSV cell would hold.
+    """
     text = path.read_text()
     if not text.strip():
         raise typer.BadParameter(f"{path} is empty")
+    if is_record_sheet(path):
+        try:
+            records = parse_record_sheet(text, str(path))
+        except RecordSheetError as exc:
+            raise typer.BadParameter(str(exc)) from exc
+        fieldnames = list(dict.fromkeys(key for record in records for key in record))
+        rows = [
+            {name: "" if record.get(name) is None else str(record[name]) for name in fieldnames}
+            for record in records
+        ]
+        return fieldnames, rows
     delimiter = "\t" if path.suffix.lower() in (".tsv", ".tab") else ","
     first_line = text.splitlines()[0]
     if delimiter not in first_line:
@@ -103,7 +124,8 @@ def _detect_file_columns(fieldnames: list[str], rows: list[dict], id_col: str) -
 @app.command("from-table")
 def from_table(
     table: Annotated[
-        Path, typer.Argument(help="Wide table to pivot (nf-core samplesheet, CSV/TSV)")
+        Path,
+        typer.Argument(help="Wide table to pivot (nf-core samplesheet, CSV/TSV/YAML/JSON)"),
     ],
     out: Annotated[
         Path, typer.Option("--out", "-o", help="Output manifest (.json or .csv)")
