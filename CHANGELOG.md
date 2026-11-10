@@ -3,6 +3,62 @@
 ### Docker Images 🐳
 
 ```plaintext
+ghcr.io/depictio/depictio:1.21.0-b2
+ghcr.io/depictio/depictio:latest
+ghcr.io/depictio/depictio:stable
+ghcr.io/depictio/depictio:edge
+```
+
+
+<details>
+<summary>Click to expand the changelog for 1.21.0-b2</summary>
+
+### Changes 📜
+
+#### Other Changes 📝
+
+* Bump version: 1.21.0-b1 → 1.21.0-b2 [7907ad6b1]
+* feat(viewer): add tables from a folder, or another run, from the project page [a751538e3]
+* feat(viewer): start a project from the data, the pipeline as an optional correction [29897dbe5]
+* fix(viewer): a layout of several runs is a real workflow whatever its engine [44c0c8b9a]
+* feat(viewer): say what a project holds in its header, drop Basic/Advanced [9ad870227]
+* fix(api): no duplicate tables from a folder, an empty MultiQC collection is skipped, new projects are private, a configured bucket without server credentials says so [a895b31cc]
+* feat(api): record where a data collection's data came from, add tables from a folder, attach a run [578e8394f]
+* fix(ci): stop tracking two node_modules symlinks that broke pnpm install [ab50098e7]
+* feat(viewer): export a project as a ZIP from its settings, and an even row hover [5861bc504]
+* test(e2e): open the create dialog sources through their cards [efc9f4cc2]
+* fix(viewer): Send dialog says so when the project has no data files [dbd4b503a]
+* fix(viewer): clearer Send dialog (steps, icons, one blocked message) and calmer projects table hover [ed98d3837]
+* fix(viewer): one type scale for fields in the create project and create dashboard dialogs [b7e1f3b51]
+* fix(viewer): wider New project dialog, flat dialog tabs, no double top line on buttons, back from run folder and manifest [4577712e2]
+* feat(viewer): start a project from a source, no basic/advanced choice [196c0d178]
+* feat(viewer): one Import dialog for another instance or a ZIP file [33830d57a]
+* fix(viewer): Send opens above the settings dialog, lock switch in Send, consistent section buttons [74ff003f0]
+* fix(viewer): dashboard icons on the project page, readable Send section, accent on settings tabs [9c78c50ab]
+* feat(publish): Send / Receive wording, Send lives in the project settings, folded Receive options [174529b42]
+* fix(publish): banner buttons in the banner colour, fixed footer and scroll hint in the request sheet [bc2d66e9c]
+* feat(publish): richer migration request sheet, Projects banner, manual thumbnails [c5901dd07]
+* feat(publish): disabled Publish with a reason, Publication section in project settings [e75077088]
+* fix(publish): let the viewer's nginx pass a project bundle to the API [64328ce7a]
+* fix(publish): wait for the target's answer as long as a multi-GB bundle needs [1649bc492]
+* fix(sharing): let owners and P.I.s who are not admins find people to share a project with [624407e7f]
+* fix(publish): send the files of an image collection with the project [3ff9d12ec]
+* fix(ingestion): register a GeoJSON collection without reading a Delta log [2e91c81dd]
+* feat(figures): option to refuse new figure code from non-admin users ([#1374](https://github.com/depictio/depictio/pull/1374)) [4be5e8b13]
+* fix(from-run): keep the tiles of optional collections queued for ingestion ([#1373](https://github.com/depictio/depictio/pull/1373)) [c0d0a5f4e]
+* feat(devcontainer): add a Codespace for the hands-on workshop ([#1372](https://github.com/depictio/depictio/pull/1372)) [977cc0082]
+* Update CHANGELOG.md for v1.21.0-b1 [90c362b01]
+
+
+</details>
+
+### Documentation 📖
+
+For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
+
+### Docker Images 🐳
+
+```plaintext
 ghcr.io/depictio/depictio:1.21.0-b1
 ghcr.io/depictio/depictio:latest
 ghcr.io/depictio/depictio:stable
