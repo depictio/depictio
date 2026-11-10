@@ -1,4 +1,5 @@
 import './panelAccents.css';
+import './panelsPhone.css';
 import React from 'react';
 import { Drawer } from '@mantine/core';
 import {

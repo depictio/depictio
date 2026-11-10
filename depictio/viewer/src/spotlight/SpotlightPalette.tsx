@@ -1,5 +1,6 @@
 import React, { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ActionIcon,
   Badge,
   Box,
   Group,
@@ -33,6 +34,7 @@ import { resolveTabColor, resolveTabIcon, tabImageSrc } from '../chrome/Sidebar'
 import { dashboardLinkClickHandler } from '../dashboards/lib/dashboardLinks';
 import { searchShortcutLabel } from './shortcut';
 import './spotlight.css';
+import '../components/panelsPhone.css';
 
 /**
  * The search palette: one field, results as you type, grouped by tab.
@@ -354,8 +356,23 @@ const SpotlightPalette: React.FC<SpotlightPaletteProps> = ({
             leftSection={<Icon icon="mdi:magnify" width={22} />}
             leftSectionWidth={52}
             rightSection={
-              pending > 0 ? <Loader size="xs" aria-label="Loading other tabs" /> : undefined
+              <Group gap={6} wrap="nowrap" pr={8}>
+                {pending > 0 && <Loader size="xs" aria-label="Loading other tabs" />}
+                {/* The palette is a full page on a phone, with no backdrop to tap. */}
+                <ActionIcon
+                  variant="subtle"
+                  color="gray"
+                  hiddenFrom="sm"
+                  aria-label="Close search"
+                  onClick={onClose}
+                  data-testid="spotlight-close"
+                >
+                  <Icon icon="mdi:close" width={20} />
+                </ActionIcon>
+              </Group>
             }
+            rightSectionWidth={pending > 0 ? 76 : 48}
+            rightSectionPointerEvents="all"
             classNames={{ input: 'depictio-spotlight-input' }}
           />
           <Box

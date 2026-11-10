@@ -20,6 +20,7 @@ import {
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import { notifications } from '@mantine/notifications';
+import '../panelsPhone.css';
 import {
   componentTypeVisual,
   createCommentThread,

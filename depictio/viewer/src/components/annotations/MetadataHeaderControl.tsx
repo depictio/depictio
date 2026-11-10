@@ -2,6 +2,7 @@ import React from 'react';
 import { createPortal } from 'react-dom';
 import { Drawer } from '@mantine/core';
 import '../panelAccents.css';
+import '../panelsPhone.css';
 import PanelTitle from '../PanelTitle';
 import {
   beginPanelResize,
