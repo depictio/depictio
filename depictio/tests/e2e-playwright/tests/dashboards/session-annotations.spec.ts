@@ -38,6 +38,12 @@ const DASHBOARD = process.env.SESSION_LABELS_DASHBOARD || AMPLISEQ;
 /** Iris: one table and no link, so no metadata table to label. */
 const IRIS = "6824cb3b89d2b72169309737";
 const ANNOTATIONS_URL = `${API_URL}${API_PREFIX}/dashboards/annotations/${DASHBOARD}`;
+// What the page itself calls: the SPA's API is same-origin (the viewer proxies
+// it), so a fetch from the page, or a response it waits for, goes by the path.
+// The API's own origin differs in CI (5080 vs 8058) and a page fetch to it
+// fails CORS.
+const ANNOTATIONS_PATH = `${API_PREFIX}/dashboards/annotations/${DASHBOARD}`;
+const pathOf = (url: string): string => new URL(url).pathname;
 
 interface Sheet {
   tag: string;
@@ -86,7 +92,7 @@ async function clearAnnotations(page: Page): Promise<void> {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
     return res.status;
-  }, ANNOTATIONS_URL);
+  }, ANNOTATIONS_PATH);
   expect(status).toBe(204);
 }
 
@@ -107,7 +113,7 @@ async function resetShared(page: Page): Promise<void> {
       body: JSON.stringify({ columns: [] }),
     });
     return res.status;
-  }, ANNOTATIONS_URL);
+  }, ANNOTATIONS_PATH);
   expect(status).toBe(200);
 }
 
@@ -148,9 +154,11 @@ async function openPanel(page: Page): Promise<void> {
   await expect(page.locator("[data-testid='annotation-grid'] .ag-row").first()).toBeVisible({
     timeout: 30_000,
   });
+  // The panel opens on whichever table it prefers; the tests read sheets[0].
+  if (sheets.length > 1) await pickTable(page, sheets[0].tag);
 }
 
-/** Show the grid of the table tagged `tag` (the panel opens on the first one). */
+/** Show the grid of the table tagged `tag`. */
 async function pickTable(page: Page, tag: string): Promise<void> {
   await page.locator("[data-testid='annotation-table-select']").click();
   await page.getByRole("option", { name: tag, exact: true }).click();
@@ -161,9 +169,11 @@ async function pickTable(page: Page, tag: string): Promise<void> {
 
 /** The key of the grid row at `rowIndex` (a real sample id of the seeded table). */
 async function keyAt(page: Page, rowIndex: number): Promise<string> {
-  const cell = page.locator(
-    `[data-testid='annotation-grid'] .ag-pinned-left-cols-container [row-index='${rowIndex}'] [col-id='__key']`,
-  );
+  // The key column is not pinned (a pinned key pushed the horizontal scrollbar
+  // past it), so it sits with the other columns.
+  const cell = page
+    .locator(`[data-testid='annotation-grid'] .ag-row[row-index='${rowIndex}'] [col-id='__key']`)
+    .first();
   return ((await cell.textContent()) ?? "").trim();
 }
 
@@ -200,7 +210,7 @@ async function typeCell(page: Page, column: string, rowIndex: number, value: str
   const id = await columnId(page, column);
   const cell = grid.locator(`.ag-center-cols-container [row-index='${rowIndex}'] [col-id='${id}']`);
   await cell.dblclick();
-  await page.keyboard.press("Control+A");
+  await page.keyboard.press("ControlOrMeta+A");
   await page.keyboard.type(value);
   await page.keyboard.press("Enter");
   await expect(cell).toHaveText(value);
@@ -267,7 +277,7 @@ test.describe("Session labels", () => {
     await typeCell(page, "response", 2, "responder");
 
     const saved = page.waitForResponse(
-      (r) => r.url().startsWith(ANNOTATIONS_URL) && r.request().method() === "PUT" && r.ok(),
+      (r) => pathOf(r.url()).startsWith(ANNOTATIONS_PATH) && r.request().method() === "PUT" && r.ok(),
     );
     await columnMenu(page, "response", "Compare in the charts");
     await saved;
@@ -343,7 +353,7 @@ test.describe("Session labels", () => {
     // Kept on the account only on the reader's explicit choice.
     const kept = page.waitForResponse(
       (r) =>
-        r.url().startsWith(ANNOTATIONS_URL) &&
+        pathOf(r.url()).startsWith(ANNOTATIONS_PATH) &&
         r.request().method() === "PUT" &&
         (r.request().postData() ?? "").includes("cohort_from_file") &&
         r.ok(),
@@ -470,7 +480,7 @@ test.describe("Session labels", () => {
     // Waited for, so the cleanup below is not undone by a save still pending.
     const saved = page.waitForResponse(
       (r) =>
-        r.url().startsWith(ANNOTATIONS_URL) &&
+        pathOf(r.url()).startsWith(ANNOTATIONS_PATH) &&
         r.request().method() === "PUT" &&
         (r.request().postData() ?? "").includes("on_meta") &&
         r.ok(),
@@ -506,7 +516,7 @@ test.describe("Session labels", () => {
 
     // Asked first, then written to the dashboard: the column leaves the reader's own.
     const shared = page.waitForResponse(
-      (r) => r.url() === `${ANNOTATIONS_URL}/shared` && r.request().method() === "PUT" && r.ok(),
+      (r) => pathOf(r.url()) === `${ANNOTATIONS_PATH}/shared` && r.request().method() === "PUT" && r.ok(),
     );
     await columnMenu(page, "response", "Share on this dashboard");
     await expect(page.locator("[data-testid='annotation-confirm']")).toContainText("Everyone who can open");
@@ -521,7 +531,7 @@ test.describe("Session labels", () => {
     await expect(page.locator("[data-testid='label-kind-shared']")).toHaveCount(1);
     const compared = page.waitForResponse(
       (r) =>
-        r.url() === ANNOTATIONS_URL &&
+        pathOf(r.url()) === ANNOTATIONS_PATH &&
         r.request().method() === "PUT" &&
         (r.request().postData() ?? "").includes('"activeColumnId":"') &&
         r.ok(),
@@ -548,7 +558,7 @@ test.describe("Session labels", () => {
     await expect(page.getByRole("menuitem", { name: /^Stop sharing/ })).toHaveCount(0);
     const copied = page.waitForResponse(
       (r) =>
-        r.url() === ANNOTATIONS_URL &&
+        pathOf(r.url()) === ANNOTATIONS_PATH &&
         r.request().method() === "PUT" &&
         (r.request().postData() ?? "").includes("response (copy)") &&
         r.ok(),
@@ -563,7 +573,7 @@ test.describe("Session labels", () => {
     await clearAnnotations(page);
     await openPanel(page);
     const stopped = page.waitForResponse(
-      (r) => r.url() === `${ANNOTATIONS_URL}/shared` && r.request().method() === "PUT" && r.ok(),
+      (r) => pathOf(r.url()) === `${ANNOTATIONS_PATH}/shared` && r.request().method() === "PUT" && r.ok(),
     );
     await columnMenu(page, "response", "Stop sharing");
     await page.locator("[data-testid='annotation-confirm-apply']").click();
