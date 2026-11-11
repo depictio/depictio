@@ -476,6 +476,8 @@ test.describe("Session labels", () => {
     await clearAnnotations(page);
 
     await openPanel(page);
+    // The panel opens on the table it prefers, which may be `second`.
+    await pickTable(page, first);
     await addLabelColumn(page, "on_sheet");
     await pickTable(page, second);
     await expect(page.locator("[data-testid='label-menu-on_sheet']")).toHaveCount(0);
