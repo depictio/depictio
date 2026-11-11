@@ -1,0 +1,136 @@
+# serve-sim: a stand-in for a Serve-hosted target of "Publish to..." (#1303).
+#
+# Serve lets an app set values.yaml and nothing else: no custom chart keys, no
+# extraEnv, no DEPICTIO_MIGRATION_INBOUND_SOURCES. This overlay therefore uses ONLY
+# keys that already exist in values.yaml, and adds no migration setting at all:
+# receiving stays at the chart defaults (INBOUND_ENABLED / UI_ENABLED = "true"), and
+# the only way in is an invitation code issued by an admin of this instance
+# (Admin > Migrations > Invitations).
+#
+# Sources of the cluster-specific values (all unrelated to publishing, shared with
+# values-embl-internal-dev.yaml): clusterDomain, storageClass, pull policies.
+#
+# No ingress and no domain, as for an instance reached by IP only. The publishing
+# instance reaches this one at http://<ClusterIP of the backend Service>:80, so the
+# source needs the host in DEPICTIO_MIGRATION_DESTINATION_DOMAINS and
+# DEPICTIO_MIGRATION_UI_TARGET_HOST_ALLOWLIST (see values-embl-internal-dev-publish-source.yaml).
+#
+# Credentials are NOT in this file. Pass them at install time, never commit them:
+#   --set secrets.bootstrapAdminEmail=... --set secrets.bootstrapAdminPassword=...
+#
+#   helm upgrade --install serve-sim ./helm-charts/depictio -n datasci-depictio-internal-dev \
+#     -f ./helm-charts/depictio/values.yaml \
+#     -f ./helm-charts/depictio/values-embl-internal-serve-sim.yaml \
+#     --set secrets.bootstrapAdminEmail=<email> --set secrets.bootstrapAdminPassword=<>=16 chars>
+#
+# Open it with: kubectl port-forward svc/serve-sim-depictio-viewer 8080:80 -n datasci-depictio-internal-dev
+
+clusterDomain: "ops-k1.embl.de"
+storageClass: basic-csi
+
+ingress:
+  enabled: false
+
+global:
+  domain: ""
+
+persistence:
+  mongo:
+    size: 1Gi
+    accessMode: ReadWriteOnce
+  s3:
+    size: 2Gi
+    accessMode: ReadWriteOnce
+  screenshots:
+    size: 100Mi
+    accessMode: ReadWriteMany
+  keys:
+    size: 1Mi
+    accessMode: ReadWriteMany
+  config:
+    size: 10Mi
+    accessMode: ReadWriteMany
+  uploads:
+    size: 1Gi
+    accessMode: ReadWriteMany
+
+initContainerResources:
+  requests:
+    memory: "64Mi"
+    cpu: "10m"
+  limits:
+    memory: "128Mi"
+    cpu: "100m"
+
+# One replica of everything, small requests. Limits are required by the tenant quota.
+backend:
+  replicas: 1
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "100m"
+    limits:
+      memory: "2Gi"
+      cpu: "1"
+  env:
+    # No domain and no OAuth: single-user mode needs neither.
+    DEPICTIO_AUTH_SINGLE_USER_MODE: "true"
+    # Reached through `kubectl port-forward` of the viewer (it proxies /depictio/api,
+    # so the browser stays on one origin).
+    DEPICTIO_FASTAPI_PUBLIC_URL: "http://localhost:8080"
+    DEPICTIO_VIEWER_PUBLIC_URL: "http://localhost:8080"
+    DEPICTIO_FASTAPI_WORKERS: "2"
+    DEPICTIO_TELEMETRY_ENABLED: "false"
+
+celery:
+  replicas: 1
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "1Gi"
+      cpu: "1"
+
+viewer:
+  replicas: 1
+
+mongo:
+  useOperator: false
+  replicas: 1
+  image:
+    pullPolicy: Always # EMBL Capsule admission requires Always, as for redis in the dev overlay
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "1Gi"
+      cpu: "1"
+
+redis:
+  enabled: true
+  image:
+    pullPolicy: Always # required by the EMBL Capsule admission controller
+  resources:
+    requests:
+      memory: "64Mi"
+      cpu: "50m"
+    limits:
+      memory: "256Mi"
+      cpu: "500m"
+
+# Bundled SeaweedFS: enough for table collections. Its public URL is built from a
+# domain this instance does not have, so image/JBrowse rendering in the browser needs
+# another S3 setup (later phase).
+s3:
+  enabled: true
+  image:
+    pullPolicy: Always
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "1Gi"
+      cpu: "1"
