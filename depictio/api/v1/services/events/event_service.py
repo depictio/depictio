@@ -42,8 +42,14 @@ class EventService:
         """Get the connection manager instance."""
         return self._connection_manager
 
-    async def start(self) -> None:
-        """Start all event sources and the connection manager."""
+    async def start(self, watch_mongodb: bool = True) -> None:
+        """Start the event sources and the connection manager.
+
+        Every API worker must run this: a WebSocket lives in the process that
+        accepted it, so each worker needs its own Redis listener and heartbeat
+        to reach its own clients. Only one of them should pass
+        ``watch_mongodb=True``, or every change is announced once per worker.
+        """
         if not settings.events.enabled:
             logger.info("Real-time events disabled (DEPICTIO_EVENTS_ENABLED=false)")
             return
@@ -55,7 +61,7 @@ class EventService:
         await self._connection_manager.start_pubsub_listener()
 
         # Start MongoDB change watcher
-        if settings.events.mongodb_change_streams_enabled:
+        if watch_mongodb and settings.events.mongodb_change_streams_enabled:
             self._mongodb_watcher = MongoDBChangeWatcher(
                 on_change_callback=self._handle_dc_change,
             )

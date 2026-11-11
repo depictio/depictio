@@ -40,6 +40,7 @@ data:
   DEPICTIO_CELERY_RESULT_BACKEND_HOST: {{ printf "%s-redis" .Release.Name | quote }}
   DEPICTIO_CELERY_RESULT_BACKEND_PORT: {{ .Values.backend.env.DEPICTIO_CELERY_RESULT_BACKEND_PORT | default "6379" | quote }}
   DEPICTIO_CELERY_RESULT_BACKEND_DB: {{ .Values.backend.env.DEPICTIO_CELERY_RESULT_BACKEND_DB | default "2" | quote }}
+  {{- include "depictio.eventsEnv" . | nindent 2 }}
   {{- else }}
   DEPICTIO_CACHE_ENABLE_REDIS_CACHE: "false"
   {{- end }}
@@ -296,6 +297,7 @@ data:
   DEPICTIO_CACHE_REDIS_PORT: {{ .Values.backend.env.DEPICTIO_CACHE_REDIS_PORT | default "6379" | quote }}
   DEPICTIO_CACHE_REDIS_DB: {{ .Values.backend.env.DEPICTIO_CACHE_REDIS_DB | default "0" | quote }}
   DEPICTIO_CACHE_ENABLE_REDIS_CACHE: {{ .Values.backend.env.DEPICTIO_CACHE_ENABLE_REDIS_CACHE | default "true" | quote }}
+  {{- include "depictio.eventsEnv" . | nindent 2 }}
   {{- else }}
   DEPICTIO_CACHE_ENABLE_REDIS_CACHE: "false"
   {{- end }}

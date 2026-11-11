@@ -303,3 +303,20 @@ Drives the deprecation warning in NOTES.txt.
 {{- end -}}
 {{- join ", " $found -}}
 {{- end }}
+
+{{/*
+Realtime events (WebSocket + Redis pub/sub), opt-in. The ConfigMaps forward only
+the variables they list, so setting DEPICTIO_EVENTS_ENABLED in backend.env did
+nothing, and the default Redis host ("redis") is not this release's service.
+Rendered into both the backend and the celery ConfigMaps: the worker publishes
+task and ingestion events, the API publishes the rest.
+*/}}
+{{- define "depictio.eventsEnv" -}}
+{{- if eq (.Values.backend.env.DEPICTIO_EVENTS_ENABLED | default "false" | toString) "true" }}
+DEPICTIO_EVENTS_ENABLED: "true"
+DEPICTIO_EVENTS_REDIS_HOST: {{ printf "%s-redis" .Release.Name | quote }}
+DEPICTIO_EVENTS_REDIS_PORT: {{ .Values.backend.env.DEPICTIO_EVENTS_REDIS_PORT | default "6379" | quote }}
+DEPICTIO_EVENTS_REDIS_DB: {{ .Values.backend.env.DEPICTIO_EVENTS_REDIS_DB | default "3" | quote }}
+DEPICTIO_EVENTS_MONGODB_CHANGE_STREAMS_ENABLED: {{ .Values.backend.env.DEPICTIO_EVENTS_MONGODB_CHANGE_STREAMS_ENABLED | default "true" | quote }}
+{{- end }}
+{{- end }}

@@ -187,9 +187,33 @@ def bundle_dc_ids(opened: project_bundle.OpenedBundle) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
+def announce_request(request_doc: dict[str, Any], status: str) -> None:
+    """Push a status change of an inbound request to admin browsers. Never raises."""
+    try:
+        from depictio.api.v1.monitoring.publish import publish_migration_event
+
+        publish_migration_event(
+            str(request_doc["_id"]),
+            status,
+            request_doc.get("project_name"),
+            request_doc.get("source_url") or request_doc.get("source_instance"),
+        )
+    except Exception as exc:  # pragma: no cover - live push is best-effort
+        logger.debug(
+            "migration request %s: live push failed (non-fatal): %s", request_doc.get("_id"), exc
+        )
+
+
 def _set_request(request_id: ObjectId, **fields: Any) -> None:
     fields["updated_at"] = utc_now_str()
-    _db().migration_requests_collection.update_one({"_id": request_id}, {"$set": fields})
+    col = _db().migration_requests_collection
+    col.update_one({"_id": request_id}, {"$set": fields})
+    if "status" in fields:
+        doc = col.find_one(
+            {"_id": request_id}, {"project_name": 1, "source_url": 1, "source_instance": 1}
+        )
+        if doc:
+            announce_request(doc, fields["status"])
 
 
 def _fail(request_id: ObjectId, request_doc: dict[str, Any], message: str) -> None:

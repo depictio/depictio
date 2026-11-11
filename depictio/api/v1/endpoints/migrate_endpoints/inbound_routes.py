@@ -453,6 +453,7 @@ async def inbound_create_request(
     col = _db().migration_requests_collection
     if invite is None:
         col.insert_one(doc)
+        migration_import.announce_request(doc, "pending")
         _supersede_older(source, report.project_id, request_id)
         logger.info(
             "inbound request %s from %s: project %s", request_id, source.name, report.project_id
@@ -475,6 +476,7 @@ async def inbound_create_request(
         "reason": f"invite {invite['_id']}",
     }
     col.insert_one(doc)
+    migration_import.announce_request(doc, "importing")
     logger.info(
         "inbound request %s via invite %s: project %s, importing",
         request_id,
