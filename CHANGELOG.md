@@ -3,6 +3,39 @@
 ### Docker Images 🐳
 
 ```plaintext
+ghcr.io/depictio/depictio:1.21.0-b4
+ghcr.io/depictio/depictio:latest
+ghcr.io/depictio/depictio:stable
+ghcr.io/depictio/depictio:edge
+```
+
+
+<details>
+<summary>Click to expand the changelog for 1.21.0-b4</summary>
+
+### Changes 📜
+
+#### Improvements 🚀
+
+* style: ruff format the public-mode import tests [538188c04]
+
+#### Other Changes 📝
+
+* Bump version: 1.21.0-b3 → 1.21.0-b4 [c4827ab1e]
+* feat(api): let admins and project editors import dashboards in public mode ([#1335](https://github.com/depictio/depictio/pull/1335)) [a8595dddd]
+* feat(migration): let every chart-deployed instance publish to any public https host [0ef6dd3dd]
+* Update CHANGELOG.md for v1.21.0-b3 [b39a3c202]
+
+
+</details>
+
+### Documentation 📖
+
+For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
+
+### Docker Images 🐳
+
+```plaintext
 ghcr.io/depictio/depictio:1.21.0-b3
 ghcr.io/depictio/depictio:latest
 ghcr.io/depictio/depictio:stable
