@@ -67,8 +67,8 @@ interface CreateDashboardModalProps {
     opts: ImportDashboardOptions,
   ) => Promise<void>;
   /** When true, the Import tab is disabled and the import button stays
-   *  inert. Set in public/demo deployments where importing user-supplied
-   *  YAML/JSON would let an anonymous visitor write into shared projects. */
+   *  inert. Set for visitors of public/demo deployments, where importing
+   *  user-supplied YAML/JSON would let them write into shared projects. */
   disableImport?: boolean;
   /** The project already chosen when the dialog opens (from a project page). */
   initialProjectId?: string | null;

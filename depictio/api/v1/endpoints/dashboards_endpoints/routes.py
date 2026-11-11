@@ -8996,6 +8996,33 @@ def import_dashboard_yaml_content(
     }
 
 
+def refuse_visitor_import(current_user: User) -> None:
+    """403 for a visitor on the dashboard import routes (#1335).
+
+    In public/demo mode every visitor is auto-minted as a temporary user that
+    passes `get_current_user`, so "authenticated" does not tell a visitor from
+    an admin. The thing to refuse is the visitor, not the mode: an admin (e.g.
+    a long-lived CLI token) or an editor of the target project keeps importing
+    on a public instance, through the usual project-permission check that
+    `import_dashboard_yaml_content` and the JSON route run next.
+
+    The anonymous user is refused too, except in single-user mode, where it is
+    the admin.
+    """
+    if getattr(current_user, "is_temporary", False):
+        raise HTTPException(
+            status_code=403,
+            detail="Dashboard import is disabled in public/demo mode",
+        )
+    if getattr(current_user, "is_anonymous", False) and not settings.auth.is_single_user_mode:
+        detail = (
+            "Dashboard import is disabled in public/demo mode"
+            if settings.auth.is_public_mode
+            else "Anonymous users cannot import dashboards. Please login to continue."
+        )
+        raise HTTPException(status_code=403, detail=detail)
+
+
 @dashboards_endpoint_router.post("/import/yaml")
 async def import_dashboard_from_yaml(
     yaml_content: str = Body(..., media_type="text/plain"),
@@ -9083,28 +9110,13 @@ async def import_dashboard_from_yaml(
     Returns:
         Created/updated dashboard information including dashboard_id
     """
-    # Public/demo mode hard-blocks imports: visitors are auto-minted temp
-    # users that pass `get_current_user`, so the frontend disable on the
-    # Import tab is the only client-side gate. Mirror it here.
-    if settings.auth.is_public_mode:
-        raise HTTPException(
-            status_code=403,
-            detail="Dashboard import is disabled in public/demo mode",
-        )
+    refuse_visitor_import(current_user)
 
     try:
         parsed_for_code = yaml.safe_load(yaml_content)
     except yaml.YAMLError:
         parsed_for_code = None  # The import below answers with the parse error.
     refuse_new_figure_code(parsed_for_code, current_user)
-
-    # Allow anonymous users in single-user mode (they have admin privileges)
-    if hasattr(current_user, "is_anonymous") and current_user.is_anonymous:
-        if not settings.auth.is_single_user_mode:
-            raise HTTPException(
-                status_code=403,
-                detail="Anonymous users cannot import dashboards. Please login to continue.",
-            )
 
     if bool(template_id) != bool(template_version):
         raise HTTPException(
@@ -9640,11 +9652,8 @@ async def import_dashboard_from_json(
     Creates a new dashboard from the provided JSON configuration.
     Optionally validates that data collection schemas match the export.
 
-    Public/demo mode hard-blocks imports: visitors are auto-minted as
-    authenticated temp users, so `get_current_user` doesn't stop them from
-    POSTing user-supplied JSON that bypasses the project-permission model.
-    The frontend disables the Import tab in `CreateDashboardModal` and the
-    Dash equivalent — this check is the matching server-side enforcement.
+    Visitors (temporary and anonymous users) are refused, see
+    `refuse_visitor_import`; anyone else needs editor rights on the project.
 
     Args:
         json_content: The JSON content defining the dashboard
@@ -9655,11 +9664,7 @@ async def import_dashboard_from_json(
     Returns:
         Import result with dashboard ID and any validation warnings
     """
-    if settings.auth.is_public_mode:
-        raise HTTPException(
-            status_code=403,
-            detail="Dashboard import is disabled in public/demo mode",
-        )
+    refuse_visitor_import(current_user)
 
     refuse_new_figure_code(json_content, current_user)
 

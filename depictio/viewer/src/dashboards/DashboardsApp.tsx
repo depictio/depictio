@@ -100,12 +100,14 @@ const DashboardsApp: React.FC = () => {
     dashboardsDefaultView,
     loading: authLoading,
   } = useCurrentUser();
-  // Public/demo deployments don't allow importing user-supplied dashboard
-  // JSON — that would let an anonymous visitor write into shared projects.
-  // Mirrors the Dash gate added in `layouts_toolbox.create_dashboard_modal`.
+  // Public/demo deployments refuse imports from visitors (temporary users):
+  // user-supplied dashboard JSON would let them write into shared projects.
+  // A signed-in user keeps the tab; the API (`refuse_visitor_import`) then
+  // requires editor rights on the target project, as on any instance.
   // Fail closed while auth is loading so the import tab can't be reached on
   // the first frame before `/auth/me/optional` resolves.
-  const importDisabled = authLoading || isPublicMode || isDemoMode;
+  const importDisabled =
+    authLoading || ((isPublicMode || isDemoMode) && (!user || Boolean(user.is_temporary)));
 
   usePageTitle('Dashboards');
   const glass = useGlassPages();
