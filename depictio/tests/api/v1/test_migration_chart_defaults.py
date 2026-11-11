@@ -76,6 +76,19 @@ def test_the_code_defaults_stay_off(monkeypatch):
     assert config.destination_domains == []
 
 
+def test_the_chart_lets_every_instance_send_to_any_public_host(backend_env):
+    """The wildcard is the chart default; the SSRF guard and https still apply."""
+    assert backend_env["DEPICTIO_MIGRATION_DESTINATION_DOMAINS"] == '["*"]'
+
+
+def test_the_chart_wildcard_is_read_by_the_config(monkeypatch, backend_env):
+    monkeypatch.setenv(
+        "DEPICTIO_MIGRATION_DESTINATION_DOMAINS",
+        backend_env["DEPICTIO_MIGRATION_DESTINATION_DOMAINS"],
+    )
+    assert MigrationConfig().destination_domains == ["*"]
+
+
 def test_the_chart_env_names_are_read_by_the_config(monkeypatch, backend_env):
     for name in ("INBOUND_ENABLED", "UI_ENABLED"):
         monkeypatch.setenv(f"DEPICTIO_MIGRATION_{name}", backend_env[f"DEPICTIO_MIGRATION_{name}"])

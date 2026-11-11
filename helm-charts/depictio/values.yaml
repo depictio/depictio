@@ -360,6 +360,11 @@ backend:
     # UI_ENABLED shows those controls and the Permissions > Editing lock switch.
     DEPICTIO_MIGRATION_INBOUND_ENABLED: "true"
     DEPICTIO_MIGRATION_UI_ENABLED: "true"
+    # Sending: any public https host. The target's admin still has to issue an
+    # invite code, and the SSRF guard blocks private addresses. Restrict with a
+    # JSON list of domain suffixes (["serve.scilifelab.se"]), or "[]" to turn
+    # sending off.
+    DEPICTIO_MIGRATION_DESTINATION_DOMAINS: '["*"]'
 
     # Anonymous user configuration
     DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL: "anonymous@depict.io"

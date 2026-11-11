@@ -143,13 +143,19 @@ def check_target_url(url: str, *, trusted: bool, host_allowlist: list[str]) -> N
 
 
 def check_destination_domain(url: str, suffixes: list[str] | tuple[str, ...]) -> None:
-    """Raise ``TargetURLRejected`` unless the URL's host is, or is under, a suffix."""
+    """Raise ``TargetURLRejected`` unless the URL's host is, or is under, a suffix.
+
+    A ``"*"`` entry allows any host. Only this check is skipped: https and the
+    SSRF guard (:func:`check_target_url`) still apply to every destination.
+    """
     try:
         host = (urlsplit(url.strip()).hostname or "").lower().rstrip(".")
     except ValueError as exc:
         raise TargetURLRejected(f"Destination URL is not valid: {exc}") from exc
     if not suffixes:
         raise TargetURLRejected("Publishing to a destination URL is not enabled here")
+    if host and "*" in (suffix.strip() for suffix in suffixes):
+        return
     for suffix in suffixes:
         suffix = suffix.lower().strip(".")
         if suffix and (host == suffix or host.endswith("." + suffix)):
