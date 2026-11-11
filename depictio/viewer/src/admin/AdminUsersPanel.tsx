@@ -9,6 +9,7 @@ import {
   SegmentedControl,
   Stack,
   Text,
+  Tooltip,
   useMantineTheme,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
@@ -67,6 +68,9 @@ const NoValue: React.FC = () => (
 interface AdminUsersPanelProps {
   /** Email of the signed-in admin — used to disable destructive self-actions. */
   currentUserEmail: string | null;
+  /** Why accounts cannot be added here, or null when they can. A gated action is
+   *  disabled, not hidden, and carries the reason on its tooltip. */
+  createDisabledReason?: string | null;
 }
 
 function formatTimestamp(value: unknown): string {
@@ -81,7 +85,10 @@ function formatTimestamp(value: unknown): string {
   return `${month} ${pad(d.getDate())}, ${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-const AdminUsersPanel: React.FC<AdminUsersPanelProps> = ({ currentUserEmail }) => {
+const AdminUsersPanel: React.FC<AdminUsersPanelProps> = ({
+  currentUserEmail,
+  createDisabledReason = null,
+}) => {
   const glass = useGlassPages();
   const primary = useMantineTheme().primaryColor;
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -511,21 +518,33 @@ const AdminUsersPanel: React.FC<AdminUsersPanelProps> = ({ currentUserEmail }) =
           ),
         }}
         toolbarExtra={
-          <Button
-            size={glass ? 'sm' : 'xs'}
-            color={glass ? undefined : 'teal'}
-            leftSection={
-              glass ? (
-                <UserPlus size={15} strokeWidth={STROKE} aria-hidden />
-              ) : (
-                <Icon icon="mdi:account-plus-outline" width={14} />
-              )
-            }
-            onClick={() => setCreateOpened(true)}
-            data-testid="admin-create-user-btn"
+          <Tooltip
+            label={createDisabledReason}
+            disabled={!createDisabledReason}
+            multiline
+            w={260}
+            position="bottom-end"
+            withinPortal
           >
-            Add user
-          </Button>
+            <span>
+              <Button
+                size={glass ? 'sm' : 'xs'}
+                color={glass ? undefined : 'teal'}
+                leftSection={
+                  glass ? (
+                    <UserPlus size={15} strokeWidth={STROKE} aria-hidden />
+                  ) : (
+                    <Icon icon="mdi:account-plus-outline" width={14} />
+                  )
+                }
+                disabled={Boolean(createDisabledReason)}
+                onClick={() => setCreateOpened(true)}
+                data-testid="admin-create-user-btn"
+              >
+                Add user
+              </Button>
+            </span>
+          </Tooltip>
         }
       />
       <CreateUserModal
