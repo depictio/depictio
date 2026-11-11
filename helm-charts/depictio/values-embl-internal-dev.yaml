@@ -118,6 +118,12 @@ backend:
     # (exact host match; also allows http). Keep every internal instance in it.
     DEPICTIO_MIGRATION_UI_TARGET_HOST_ALLOWLIST: '["depictio.embl.org","dev.depictio.embl.org"]'
 
+    # Realtime events (needs the chart that renders DEPICTIO_EVENTS_*): a received
+    # project, task and ingestion changes reach open browsers without a refresh.
+    # MongoDB change streams stay off: only the Redis push channel is used here.
+    DEPICTIO_EVENTS_ENABLED: "true"
+    DEPICTIO_EVENTS_MONGODB_CHANGE_STREAMS_ENABLED: "false"
+
     # Celery Configuration - Disabled for now
     # DEPICTIO_CELERY_ENABLED: "false"
 
