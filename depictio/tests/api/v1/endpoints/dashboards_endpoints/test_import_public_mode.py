@@ -130,9 +130,7 @@ def test_a_temporary_visitor_is_refused(env, project_id, do_import) -> None:
 
 
 @IMPORTS
-def test_a_temporary_visitor_is_refused_even_with_editor_rights(
-    env, project_id, do_import
-) -> None:
+def test_a_temporary_visitor_is_refused_even_with_editor_rights(env, project_id, do_import) -> None:
     """The visitor gate runs before any project check: a role cannot reopen it."""
     visitor = _user("temp_user@example.com", is_temporary=True)
     env["projects"].update_one(
