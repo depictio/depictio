@@ -30,6 +30,9 @@ export interface AdminTableProps<T, K extends string> {
   renderDetail: (row: T) => React.ReactNode;
   /** Extra toolbar content, placed before the column menu (e.g. an "Add user" button). */
   toolbarExtra?: React.ReactNode;
+  /** Per-row actions (e.g. an actions menu), drawn in a narrow last column that
+   *  is outside the column picker. Clicks in it do not toggle the detail row. */
+  rowActions?: (row: T) => React.ReactNode;
   emptyLabel?: string;
 }
 
@@ -75,6 +78,7 @@ function AdminTable<T, K extends string>({
   searchPlaceholder,
   renderDetail,
   toolbarExtra,
+  rowActions,
   emptyLabel = 'No match',
 }: AdminTableProps<T, K>) {
   const glass = useGlassPages();
@@ -90,6 +94,8 @@ function AdminTable<T, K extends string>({
   const [debouncedSearch] = useDebouncedValue(search, 200);
   const [sortKey, setSortKey] = useState<K>(defaultSort.key);
   const [sortDir, setSortDir] = useState<SortDir>(defaultSort.dir ?? 'asc');
+  // Detail toggle column, the visible columns, and the optional actions column.
+  const totalColumns = visibleColumns.length + (rowActions ? 2 : 1);
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
 
   // A hidden column cannot stay the sort key: fall back to the default.
@@ -185,12 +191,13 @@ function AdminTable<T, K extends string>({
                     )}
                   </Table.Th>
                 ))}
+                {rowActions && <Table.Th style={{ width: 44 }} aria-label="Actions" />}
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
               {shown.length === 0 && (
                 <Table.Tr>
-                  <Table.Td colSpan={visibleColumns.length + 1}>
+                  <Table.Td colSpan={totalColumns}>
                     <Text c="dimmed" ta="center" py="md">
                       {emptyLabel}
                     </Text>
@@ -230,10 +237,15 @@ function AdminTable<T, K extends string>({
                           {col.render(row)}
                         </Table.Td>
                       ))}
+                      {rowActions && (
+                        <Table.Td onClick={(e) => e.stopPropagation()} style={{ textAlign: 'right' }}>
+                          {rowActions(row)}
+                        </Table.Td>
+                      )}
                     </Table.Tr>
                     {open && (
                       <Table.Tr className="ga-table-detail">
-                        <Table.Td colSpan={visibleColumns.length + 1}>{renderDetail(row)}</Table.Td>
+                        <Table.Td colSpan={totalColumns}>{renderDetail(row)}</Table.Td>
                       </Table.Tr>
                     )}
                   </React.Fragment>

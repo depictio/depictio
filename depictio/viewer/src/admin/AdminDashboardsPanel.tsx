@@ -1,15 +1,32 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Badge, Center, Group, List, Loader, Stack, Text } from '@mantine/core';
+import { notifications } from '@mantine/notifications';
 import { Icon } from '@iconify/react';
 import { Globe, LayoutDashboard, Lock } from 'lucide-react';
 
-import { listAllDashboards, listAllProjects } from 'depictio-react-core';
-import type { AdminDashboard, AdminProject } from 'depictio-react-core';
+import {
+  deleteDashboard as apiDeleteDashboard,
+  duplicateDashboard as apiDuplicateDashboard,
+  editDashboard as apiEditDashboard,
+  exportDashboardJson,
+  listAllDashboards,
+  listAllProjects,
+} from 'depictio-react-core';
+import type {
+  AdminDashboard,
+  AdminProject,
+  DashboardListEntry,
+  EditDashboardInput,
+} from 'depictio-react-core';
 
 import { STROKE, useGlassPages } from '../chrome/variants/glass/pages';
 import { formatDateTime, parseServerTimestamp } from '../lib/datetime';
 import AdminTable, { type AdminTableColumn } from './AdminTable';
 import Facts from './Facts';
+import DashboardActionsMenu from '../dashboards/DashboardActionsMenu';
+import EditDashboardModal from '../dashboards/EditDashboardModal';
+import DeleteDashboardModal from '../dashboards/DeleteDashboardModal';
+import { recordOpen as recordDashboardOpen } from '../dashboards/lib/dashboardRecents';
 
 type DashboardColumnKey =
   | 'title'
@@ -44,6 +61,25 @@ function dateSort(raw: unknown): number | null {
   return d ? d.getTime() : null;
 }
 
+/** The list-page entry the actions menu and modals read, built from an admin row. */
+function toDashboardEntry(d: AdminDashboard): DashboardListEntry {
+  return {
+    dashboard_id: d.dashboard_id,
+    title: d.title,
+    subtitle: d.subtitle,
+    icon: d.icon,
+    icon_color: d.icon_color,
+    is_public: d.is_public,
+    is_main_tab: d.is_main_tab,
+    parent_dashboard_id: d.parent_dashboard_id,
+    main_tab_name: d.main_tab_name,
+    project_id: d.project_id,
+    last_saved_ts: d.last_saved_ts,
+    workflow_system: d.workflow_system,
+    permissions: d.permissions,
+  };
+}
+
 const NoValue: React.FC = () => (
   <Text span size="sm" c="dimmed">
     —
@@ -56,10 +92,15 @@ const AdminDashboardsPanel: React.FC = () => {
   const [projects, setProjects] = useState<AdminProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [editTarget, setEditTarget] = useState<DashboardListEntry | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<DashboardListEntry | null>(null);
+
+  // Reloads keep the table on screen (no spinner) so search and open rows survive.
+  const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
     setError(null);
     // The project list only feeds the "Project" column: if it fails the table
     // still renders, with the column empty.
@@ -79,6 +120,93 @@ const AdminDashboardsPanel: React.FC = () => {
     return () => {
       cancelled = true;
     };
+  }, [refreshKey]);
+
+  // Same calls and notifications as the Dashboards page. An admin passes the
+  // backend's mutation check on any dashboard (admin bypass in
+  // check_project_permission), so the menu is always enabled here.
+  const handleEdit = useCallback(
+    async (dashboardId: string, input: EditDashboardInput) => {
+      await apiEditDashboard(dashboardId, input);
+      notifications.show({
+        color: 'teal',
+        title: 'Dashboard updated',
+        message: 'Changes saved.',
+        autoClose: 2000,
+      });
+      setEditTarget(null);
+      refresh();
+    },
+    [refresh],
+  );
+
+  const handleDelete = useCallback(
+    async (dashboardId: string) => {
+      await apiDeleteDashboard(dashboardId);
+      notifications.show({
+        color: 'teal',
+        title: 'Dashboard deleted',
+        message: 'Dashboard removed.',
+        autoClose: 2000,
+      });
+      setDeleteTarget(null);
+      refresh();
+    },
+    [refresh],
+  );
+
+  const handleDuplicate = useCallback(
+    async (dashboard: DashboardListEntry) => {
+      try {
+        await apiDuplicateDashboard(dashboard.dashboard_id);
+        notifications.show({
+          color: 'teal',
+          title: 'Dashboard duplicated',
+          message: `"${dashboard.title} (copy)" is ready.`,
+          autoClose: 2500,
+        });
+        refresh();
+      } catch (err) {
+        notifications.show({
+          color: 'red',
+          title: 'Duplicate failed',
+          message: (err as Error).message,
+        });
+      }
+    },
+    [refresh],
+  );
+
+  const handleView = useCallback((dashboard: DashboardListEntry) => {
+    recordDashboardOpen(String(dashboard.dashboard_id));
+    window.location.assign(`/dashboard/${dashboard.dashboard_id}`);
+  }, []);
+
+  const handleExport = useCallback(async (dashboard: DashboardListEntry) => {
+    try {
+      const payload = await exportDashboardJson(dashboard.dashboard_id);
+      const blob = new Blob([JSON.stringify(payload, null, 2)], {
+        type: 'application/json',
+      });
+      const url = URL.createObjectURL(blob);
+      const safeTitle = (dashboard.title || dashboard.dashboard_id).replace(
+        /[^a-zA-Z0-9._-]+/g,
+        '_',
+      );
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${safeTitle}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      notifications.show({
+        color: 'red',
+        title: 'Export failed',
+        message: (err as Error).message,
+      });
+    }
   }, []);
 
   const rows = useMemo<DashboardRow[]>(() => {
@@ -302,6 +430,7 @@ const AdminDashboardsPanel: React.FC = () => {
   }
 
   return (
+    <>
     <AdminTable
       rows={rows}
       rowKey={(r) => r.dashboardId}
@@ -311,7 +440,32 @@ const AdminDashboardsPanel: React.FC = () => {
       searchText={searchText}
       searchPlaceholder="Search dashboards..."
       renderDetail={renderDetail}
+      rowActions={(r) => (
+        <DashboardActionsMenu
+          dashboard={toDashboardEntry(r.dashboard)}
+          isOwner
+          onView={handleView}
+          onEdit={setEditTarget}
+          onDelete={setDeleteTarget}
+          onDuplicate={handleDuplicate}
+          onExport={handleExport}
+          triggerSize="sm"
+        />
+      )}
     />
+    <EditDashboardModal
+      opened={Boolean(editTarget)}
+      dashboard={editTarget}
+      onClose={() => setEditTarget(null)}
+      onSubmit={handleEdit}
+    />
+    <DeleteDashboardModal
+      opened={Boolean(deleteTarget)}
+      dashboard={deleteTarget}
+      onClose={() => setDeleteTarget(null)}
+      onConfirm={handleDelete}
+    />
+    </>
   );
 };
 

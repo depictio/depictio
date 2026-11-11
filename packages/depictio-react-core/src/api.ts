@@ -7690,6 +7690,9 @@ export interface AdminProject {
   registration_time?: string;
   /** Last edit, UTC; empty when never edited since creation. */
   last_modified?: string;
+  data_management_platform_project_url?: string | null;
+  /** Set while a migration/admin has frozen the published dashboards. */
+  published_lock?: PublishedLock | null;
   [key: string]: unknown;
 }
 
@@ -7705,6 +7708,9 @@ export interface AdminDashboard {
   _id?: string;
   dashboard_id: string;
   title?: string;
+  subtitle?: string;
+  icon?: string;
+  icon_color?: string;
   is_public?: boolean;
   is_main_tab?: boolean;
   parent_dashboard_id?: string | null;

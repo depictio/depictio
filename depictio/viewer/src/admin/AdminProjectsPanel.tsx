@@ -10,16 +10,30 @@ import {
   Stack,
   Text,
 } from '@mantine/core';
+import { notifications } from '@mantine/notifications';
 import { Icon } from '@iconify/react';
 import { FolderKanban, Globe, LayoutDashboard, Lock } from 'lucide-react';
 
-import { listAllProjects, listAllDashboards } from 'depictio-react-core';
-import type { AdminProject, AdminDashboard } from 'depictio-react-core';
+import {
+  deleteProject as apiDeleteProject,
+  listAllProjects,
+  listAllDashboards,
+  updateProject as apiUpdateProject,
+} from 'depictio-react-core';
+import type {
+  AdminProject,
+  AdminDashboard,
+  EditProjectInput,
+  ProjectListEntry,
+} from 'depictio-react-core';
 
 import { STROKE, useGlassPages } from '../chrome/variants/glass/pages';
 import { formatDateTime, parseServerTimestamp } from '../lib/datetime';
 import AdminTable, { type AdminTableColumn } from './AdminTable';
 import Facts from './Facts';
+import ProjectActionsMenu from '../projects/ProjectActionsMenu';
+import EditProjectModal from '../projects/EditProjectModal';
+import DeleteProjectModal from '../projects/DeleteProjectModal';
 
 type ProjectColumnKey =
   | 'name'
@@ -48,6 +62,21 @@ function dateSort(raw: unknown): number | null {
   return d ? d.getTime() : null;
 }
 
+/** The list-page entry the actions menu and modals read, built from an admin row. */
+function toProjectEntry(p: AdminProject): ProjectListEntry {
+  return {
+    _id: p._id,
+    id: p.id,
+    name: p.name,
+    is_public: p.is_public,
+    permissions: p.permissions,
+    registration_time: p.registration_time,
+    last_modified: p.last_modified,
+    data_management_platform_project_url: p.data_management_platform_project_url,
+    published_lock: p.published_lock,
+  };
+}
+
 const NoValue: React.FC = () => (
   <Text span size="sm" c="dimmed">
     —
@@ -60,10 +89,15 @@ const AdminProjectsPanel: React.FC = () => {
   const [dashboards, setDashboards] = useState<AdminDashboard[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [editTarget, setEditTarget] = useState<ProjectListEntry | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ProjectListEntry | null>(null);
+
+  // Reloads keep the table on screen (no spinner) so search and open rows survive.
+  const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
     setError(null);
     Promise.all([listAllProjects(), listAllDashboards(true)])
       .then(([projectList, dashboardList]) => {
@@ -81,7 +115,39 @@ const AdminProjectsPanel: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [refreshKey]);
+
+  // Same calls and notifications as the Projects page. An admin may edit and
+  // delete any project (backend: admin bypass in /projects/update and /delete).
+  const handleEdit = useCallback(
+    async (projectId: string, input: EditProjectInput) => {
+      await apiUpdateProject(projectId, input);
+      notifications.show({
+        color: 'teal',
+        title: 'Project updated',
+        message: 'Changes saved.',
+        autoClose: 2000,
+      });
+      setEditTarget(null);
+      refresh();
+    },
+    [refresh],
+  );
+
+  const handleDelete = useCallback(
+    async (projectId: string) => {
+      await apiDeleteProject(projectId);
+      notifications.show({
+        color: 'teal',
+        title: 'Project deleted',
+        message: 'Project and all linked dashboards removed.',
+        autoClose: 2500,
+      });
+      setDeleteTarget(null);
+      refresh();
+    },
+    [refresh],
+  );
 
   // Group dashboards by project_id so each project row can list its
   // dashboards inline. Main tabs are surfaced as top-level entries; child
@@ -158,14 +224,28 @@ const AdminProjectsPanel: React.FC = () => {
                 style={{ color: 'var(--mantine-color-logoTeal-filled)' }}
                 aria-hidden
               />
-              <Text fw={550} size="sm" truncate>
+              <Anchor
+                href={`/projects/${r.projectId}`}
+                fw={550}
+                size="sm"
+                truncate
+                c="inherit"
+                underline="hover"
+              >
                 {r.project.name}
-              </Text>
+              </Anchor>
             </Group>
           ) : (
-            <Text fw={500} size="sm" truncate>
+            <Anchor
+              href={`/projects/${r.projectId}`}
+              fw={500}
+              size="sm"
+              truncate
+              c="inherit"
+              underline="hover"
+            >
               {r.project.name}
-            </Text>
+            </Anchor>
           ),
       },
       {
@@ -435,6 +515,7 @@ const AdminProjectsPanel: React.FC = () => {
   }
 
   return (
+    <>
     <AdminTable
       rows={rows}
       rowKey={(r) => r.projectId}
@@ -444,7 +525,28 @@ const AdminProjectsPanel: React.FC = () => {
       searchText={searchText}
       searchPlaceholder="Search projects..."
       renderDetail={renderDetail}
+      rowActions={(r) => (
+        <ProjectActionsMenu
+          project={toProjectEntry(r.project)}
+          canMutate
+          onEdit={setEditTarget}
+          onDelete={setDeleteTarget}
+        />
+      )}
     />
+    <EditProjectModal
+      opened={Boolean(editTarget)}
+      project={editTarget}
+      onClose={() => setEditTarget(null)}
+      onSubmit={handleEdit}
+    />
+    <DeleteProjectModal
+      opened={Boolean(deleteTarget)}
+      project={deleteTarget}
+      onClose={() => setDeleteTarget(null)}
+      onConfirm={handleDelete}
+    />
+    </>
   );
 };
 
