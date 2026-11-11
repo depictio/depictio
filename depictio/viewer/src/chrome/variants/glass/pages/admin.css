@@ -227,3 +227,17 @@
   background: var(--gl-paper);
   border-color: var(--gl-hair);
 }
+
+/* Compact density: one line per row, tighter vertical rhythm. The clamping
+ * itself lives in admin/adminTableDensity.css. */
+:root[data-chrome='glass'] .gp-main .ga-admin .ga-table[data-density='compact'] .mantine-Table-table {
+  font-size: 13px;
+}
+:root[data-chrome='glass'] .gp-main .ga-admin .ga-table[data-density='compact'] .mantine-Table-td {
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+:root[data-chrome='glass'] .gp-main .ga-admin .ga-table[data-density='compact'] .mantine-Table-th {
+  padding-top: 6px;
+  padding-bottom: 6px;
+}

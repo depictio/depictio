@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Badge, Center, Group, List, Loader, Stack, Text } from '@mantine/core';
+import { Alert, Badge, Button, Center, Group, List, Loader, Stack, Text } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { Icon } from '@iconify/react';
 import { Globe, LayoutDashboard, Lock } from 'lucide-react';
@@ -26,6 +26,7 @@ import Facts from './Facts';
 import DashboardActionsMenu from '../dashboards/DashboardActionsMenu';
 import EditDashboardModal from '../dashboards/EditDashboardModal';
 import DeleteDashboardModal from '../dashboards/DeleteDashboardModal';
+import BulkDeleteModal from './BulkDeleteModal';
 import { recordOpen as recordDashboardOpen } from '../dashboards/lib/dashboardRecents';
 
 type DashboardColumnKey =
@@ -95,6 +96,11 @@ const AdminDashboardsPanel: React.FC = () => {
   const [refreshKey, setRefreshKey] = useState(0);
   const [editTarget, setEditTarget] = useState<DashboardListEntry | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DashboardListEntry | null>(null);
+  const [bulkTargets, setBulkTargets] = useState<DashboardRow[] | null>(null);
+  const bulkItems = useMemo(
+    () => (bulkTargets ?? []).map((r) => ({ id: r.dashboardId, label: r.title || r.dashboardId })),
+    [bulkTargets],
+  );
 
   // Reloads keep the table on screen (no spinner) so search and open rows survive.
   const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
@@ -208,6 +214,17 @@ const AdminDashboardsPanel: React.FC = () => {
       });
     }
   }, []);
+
+  // One file per dashboard, in order, like the Dashboards page.
+  const handleBulkExport = useCallback(
+    async (targets: DashboardListEntry[]) => {
+      for (const d of targets) {
+        // eslint-disable-next-line no-await-in-loop
+        await handleExport(d);
+      }
+    },
+    [handleExport],
+  );
 
   const rows = useMemo<DashboardRow[]>(() => {
     const projectNames = new Map<string, string>();
@@ -440,6 +457,36 @@ const AdminDashboardsPanel: React.FC = () => {
       searchText={searchText}
       searchPlaceholder="Search dashboards..."
       renderDetail={renderDetail}
+      selection={{
+        getId: (r) => r.dashboardId,
+        actions: (selected, clear) => (
+          <>
+            <Button
+              variant="light"
+              size="xs"
+              leftSection={<Icon icon="mdi:download" width={14} />}
+              onClick={() => {
+                void handleBulkExport(selected.map((r) => toDashboardEntry(r.dashboard)));
+              }}
+            >
+              Export selected
+            </Button>
+            <Button
+              className="gp-danger"
+              color="red"
+              variant="filled"
+              size="xs"
+              leftSection={<Icon icon="tabler:trash" width={14} />}
+              onClick={() => {
+                setBulkTargets(selected);
+                clear();
+              }}
+            >
+              Delete selected
+            </Button>
+          </>
+        ),
+      }}
       rowActions={(r) => (
         <DashboardActionsMenu
           dashboard={toDashboardEntry(r.dashboard)}
@@ -464,6 +511,15 @@ const AdminDashboardsPanel: React.FC = () => {
       dashboard={deleteTarget}
       onClose={() => setDeleteTarget(null)}
       onConfirm={handleDelete}
+    />
+    <BulkDeleteModal
+      opened={bulkTargets !== null}
+      noun="dashboards"
+      nounSingular="dashboard"
+      items={bulkItems}
+      onDelete={(id) => apiDeleteDashboard(id)}
+      onDone={refresh}
+      onClose={() => setBulkTargets(null)}
     />
     </>
   );

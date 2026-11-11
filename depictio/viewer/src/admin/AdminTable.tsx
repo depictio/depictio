@@ -1,18 +1,53 @@
-import React, { useCallback, useMemo, useState } from 'react';
-import { ActionIcon, Group, Table, Text, TextInput } from '@mantine/core';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { ActionIcon, Button, Checkbox, Group, Table, Text, TextInput, Tooltip } from '@mantine/core';
 import { useDebouncedValue } from '@mantine/hooks';
 import { Icon } from '@iconify/react';
 
 import SortHeader, { type SortDir } from '../components/SortHeader';
-import TableDisplayMenu from '../components/TableDisplayMenu';
+import TableDisplayMenu, { type TableDensity } from '../components/TableDisplayMenu';
 import { type ColumnDef, useTableColumns } from '../lib/useTableColumns';
 import { useGlassPages } from '../chrome/variants/glass/pages';
+import './adminTableDensity.css';
+
+/** One density for all admin tables, shared across Projects, Dashboards and Users. */
+const DENSITY_STORAGE_KEY = 'depictio.admin.tableDensity.v1';
+const DEFAULT_DENSITY: TableDensity = 'cozy';
+
+function loadDensity(): TableDensity {
+  try {
+    return localStorage.getItem(DENSITY_STORAGE_KEY) === 'compact' ? 'compact' : DEFAULT_DENSITY;
+  } catch {
+    return DEFAULT_DENSITY;
+  }
+}
+
+/** Compact cells are clipped to one line: hovering a clipped one shows its full text. */
+function titleIfClipped(e: React.MouseEvent<HTMLElement>) {
+  const el = e.currentTarget;
+  if (el.scrollWidth > el.clientWidth + 1) {
+    const text = (el.innerText || el.textContent || '').replace(/\s*\n+\s*/g, ', ').trim();
+    if (text) el.title = text;
+  } else if (el.title) {
+    el.removeAttribute('title');
+  }
+}
 
 /** One column of an admin table: the picker metadata plus how to sort and draw it. */
 export interface AdminTableColumn<T, K extends string> extends ColumnDef<K> {
   /** Value the column sorts by. Dates as epoch ms; null/undefined sort last. Omit for an unsortable column. */
   sortValue?: (row: T) => string | number | null | undefined;
   render: (row: T) => React.ReactNode;
+}
+
+/** Optional multi-select with a bulk-action bar. */
+export interface AdminTableSelection<T> {
+  getId: (row: T) => string;
+  /** Rows for which this returns false get a disabled checkbox. Default: all selectable. */
+  isSelectable?: (row: T) => boolean;
+  /** Tooltip on the disabled checkbox of a row that is not selectable. */
+  disabledReason?: (row: T) => string | undefined;
+  /** Bulk actions, drawn in the bar that shows while at least one row is selected. */
+  actions: (selected: T[], clear: () => void) => React.ReactNode;
 }
 
 export interface AdminTableProps<T, K extends string> {
@@ -33,6 +68,8 @@ export interface AdminTableProps<T, K extends string> {
   /** Per-row actions (e.g. an actions menu), drawn in a narrow last column that
    *  is outside the column picker. Clicks in it do not toggle the detail row. */
   rowActions?: (row: T) => React.ReactNode;
+  /** Multi-select column + bulk-action bar. Omit for a plain table. */
+  selection?: AdminTableSelection<T>;
   emptyLabel?: string;
 }
 
@@ -79,6 +116,7 @@ function AdminTable<T, K extends string>({
   renderDetail,
   toolbarExtra,
   rowActions,
+  selection,
   emptyLabel = 'No match',
 }: AdminTableProps<T, K>) {
   const glass = useGlassPages();
@@ -90,12 +128,23 @@ function AdminTable<T, K extends string>({
     [columns, isVisible],
   );
 
+  const [density, setDensityState] = useState<TableDensity>(loadDensity);
+  const setDensity = useCallback((d: TableDensity) => {
+    setDensityState(d);
+    try {
+      localStorage.setItem(DENSITY_STORAGE_KEY, d);
+    } catch {
+      // Storage blocked: the choice simply does not persist.
+    }
+  }, []);
+  const compact = density === 'compact';
+
   const [search, setSearch] = useState('');
   const [debouncedSearch] = useDebouncedValue(search, 200);
   const [sortKey, setSortKey] = useState<K>(defaultSort.key);
   const [sortDir, setSortDir] = useState<SortDir>(defaultSort.dir ?? 'asc');
   // Detail toggle column, the visible columns, and the optional actions column.
-  const totalColumns = visibleColumns.length + (rowActions ? 2 : 1);
+  const totalColumns = visibleColumns.length + (rowActions ? 2 : 1) + (selection ? 1 : 0);
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
 
   // A hidden column cannot stay the sort key: fall back to the default.
@@ -132,8 +181,48 @@ function AdminTable<T, K extends string>({
     return [...filtered].sort((a, b) => compareValues(value(a), value(b), activeDir));
   }, [rows, debouncedSearch, searchText, columns, activeKey, activeDir]);
 
+  // Selected ids. Pruned below so it only ever holds ids of rows currently
+  // shown (a delete, a reload or a new search drops the ones that left).
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const selectableRows = useMemo(
+    () =>
+      selection ? shown.filter((r) => (selection.isSelectable ? selection.isSelectable(r) : true)) : [],
+    [shown, selection],
+  );
+  useEffect(() => {
+    setSelected((prev) => {
+      if (prev.size === 0) return prev;
+      const ids = new Set(selectableRows.map((r) => selection!.getId(r)));
+      const next = new Set<string>();
+      for (const id of prev) if (ids.has(id)) next.add(id);
+      return next.size === prev.size ? prev : next;
+    });
+  }, [selectableRows, selection]);
+
+  const selectedRows = useMemo(
+    () => (selection ? selectableRows.filter((r) => selected.has(selection.getId(r))) : []),
+    [selectableRows, selected, selection],
+  );
+  const allSelected = selectableRows.length > 0 && selectedRows.length === selectableRows.length;
+  const someSelected = selectedRows.length > 0 && !allSelected;
+  const clearSelection = useCallback(() => setSelected(new Set()), []);
+  const toggleAll = useCallback(() => {
+    if (!selection) return;
+    setSelected(
+      allSelected ? new Set() : new Set(selectableRows.map((r) => selection.getId(r))),
+    );
+  }, [selection, allSelected, selectableRows]);
+  const toggleOne = useCallback((id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
   return (
-    <div className="ga-table">
+    <div className="ga-table" data-density={density}>
       <Group gap="xs" wrap="nowrap" mb="sm" className="ga-table-toolbar">
         <TextInput
           placeholder={searchPlaceholder}
@@ -159,8 +248,38 @@ function AdminTable<T, K extends string>({
           {shown.length === rows.length ? rows.length : `${shown.length} of ${rows.length}`}
         </Text>
         {toolbarExtra}
-        <TableDisplayMenu section="admin" columns={columnState} />
+        <TableDisplayMenu
+          section="admin"
+          columns={columnState}
+          density={density}
+          defaultDensity={DEFAULT_DENSITY}
+          onDensityChange={setDensity}
+        />
       </Group>
+      {selection && selectedRows.length > 0 && (
+        <Group
+          className="ga-table-bulk"
+          p="sm"
+          mb="sm"
+          gap="md"
+          justify="space-between"
+          style={{
+            border: '1px solid var(--mantine-color-default-border)',
+            borderRadius: 8,
+            background: 'var(--mantine-color-default-hover)',
+          }}
+        >
+          <Text size="sm" fw={500}>
+            {selectedRows.length} selected
+          </Text>
+          <Group gap="xs">
+            {selection.actions(selectedRows, clearSelection)}
+            <Button variant="subtle" size="xs" onClick={clearSelection}>
+              Clear
+            </Button>
+          </Group>
+        </Group>
+      )}
       <div
         className="ga-table-frame"
         style={
@@ -170,9 +289,20 @@ function AdminTable<T, K extends string>({
         }
       >
         <div style={{ overflowX: 'auto' }}>
-          <Table verticalSpacing="sm" highlightOnHover miw={Math.max(600, visibleColumns.length * 150)}>
+          <Table verticalSpacing={compact ? 4 : 'sm'} highlightOnHover miw={Math.max(600, visibleColumns.length * 150)}>
             <Table.Thead>
               <Table.Tr>
+                {selection && (
+                  <Table.Th style={{ width: 36 }}>
+                    <Checkbox
+                      checked={allSelected}
+                      indeterminate={someSelected}
+                      disabled={selectableRows.length === 0}
+                      onChange={toggleAll}
+                      aria-label="Select all"
+                    />
+                  </Table.Th>
+                )}
                 <Table.Th style={{ width: 36 }} aria-label="Details" />
                 {visibleColumns.map((col) => (
                   <Table.Th key={col.key} data-col={col.key}>
@@ -217,7 +347,32 @@ function AdminTable<T, K extends string>({
                         if (!isInteractive(e.target)) toggleRow(key);
                       }}
                     >
-                      <Table.Td>
+                      {selection && (
+                        <Table.Td className="ga-table-fixed" onClick={(e) => e.stopPropagation()}>
+                          {(() => {
+                            const selectable = selection.isSelectable
+                              ? selection.isSelectable(row)
+                              : true;
+                            const box = (
+                              <Checkbox
+                                checked={selectable && selected.has(selection.getId(row))}
+                                disabled={!selectable}
+                                onChange={() => toggleOne(selection.getId(row))}
+                                aria-label={`Select ${key}`}
+                              />
+                            );
+                            const reason = selectable ? undefined : selection.disabledReason?.(row);
+                            return reason ? (
+                              <Tooltip label={reason} withinPortal>
+                                <span style={{ display: 'inline-flex' }}>{box}</span>
+                              </Tooltip>
+                            ) : (
+                              box
+                            );
+                          })()}
+                        </Table.Td>
+                      )}
+                      <Table.Td className="ga-table-fixed">
                         <ActionIcon
                           variant="subtle"
                           color="gray"
@@ -232,13 +387,18 @@ function AdminTable<T, K extends string>({
                           />
                         </ActionIcon>
                       </Table.Td>
-                      {visibleColumns.map((col) => (
-                        <Table.Td key={col.key} data-col={col.key}>
+                      {visibleColumns.map((col, i) => (
+                        <Table.Td
+                          key={col.key}
+                          data-col={col.key}
+                          data-primary={i === 0 || undefined}
+                          onMouseEnter={compact ? titleIfClipped : undefined}
+                        >
                           {col.render(row)}
                         </Table.Td>
                       ))}
                       {rowActions && (
-                        <Table.Td onClick={(e) => e.stopPropagation()} style={{ textAlign: 'right' }}>
+                        <Table.Td onClick={(e) => e.stopPropagation()} style={{ textAlign: 'right', width: 44, whiteSpace: 'nowrap' }}>
                           {rowActions(row)}
                         </Table.Td>
                       )}

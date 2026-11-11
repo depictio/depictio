@@ -3,6 +3,7 @@ import {
   Alert,
   Anchor,
   Badge,
+  Button,
   Center,
   Group,
   List,
@@ -34,6 +35,7 @@ import Facts from './Facts';
 import ProjectActionsMenu from '../projects/ProjectActionsMenu';
 import EditProjectModal from '../projects/EditProjectModal';
 import DeleteProjectModal from '../projects/DeleteProjectModal';
+import BulkDeleteModal from './BulkDeleteModal';
 
 type ProjectColumnKey =
   | 'name'
@@ -92,6 +94,11 @@ const AdminProjectsPanel: React.FC = () => {
   const [refreshKey, setRefreshKey] = useState(0);
   const [editTarget, setEditTarget] = useState<ProjectListEntry | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ProjectListEntry | null>(null);
+  const [bulkTargets, setBulkTargets] = useState<ProjectRow[] | null>(null);
+  const bulkItems = useMemo(
+    () => (bulkTargets ?? []).map((r) => ({ id: r.projectId, label: r.project.name || r.projectId })),
+    [bulkTargets],
+  );
 
   // Reloads keep the table on screen (no spinner) so search and open rows survive.
   const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
@@ -525,6 +532,26 @@ const AdminProjectsPanel: React.FC = () => {
       searchText={searchText}
       searchPlaceholder="Search projects..."
       renderDetail={renderDetail}
+      selection={{
+        getId: (r) => r.projectId,
+        isSelectable: (r) => !r.project.published_lock,
+        disabledReason: () => 'Locked: unlock it first',
+        actions: (selected, clear) => (
+          <Button
+            className="gp-danger"
+            color="red"
+            variant="filled"
+            size="xs"
+            leftSection={<Icon icon="tabler:trash" width={14} />}
+            onClick={() => {
+              setBulkTargets(selected);
+              clear();
+            }}
+          >
+            Delete selected
+          </Button>
+        ),
+      }}
       rowActions={(r) => (
         <ProjectActionsMenu
           project={toProjectEntry(r.project)}
@@ -545,6 +572,16 @@ const AdminProjectsPanel: React.FC = () => {
       project={deleteTarget}
       onClose={() => setDeleteTarget(null)}
       onConfirm={handleDelete}
+    />
+    <BulkDeleteModal
+      opened={bulkTargets !== null}
+      noun="projects"
+      nounSingular="project"
+      items={bulkItems}
+      note="Their dashboards, data collections and S3 data are deleted too."
+      onDelete={(id) => apiDeleteProject(id)}
+      onDone={refresh}
+      onClose={() => setBulkTargets(null)}
     />
     </>
   );

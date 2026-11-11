@@ -27,6 +27,7 @@ import type { AdminUser } from 'depictio-react-core';
 import { STROKE, useGlassPages } from '../chrome/variants/glass/pages';
 import CreateUserModal from './CreateUserModal';
 import DeleteUserModal from './DeleteUserModal';
+import BulkDeleteModal from './BulkDeleteModal';
 import { parseServerTimestamp } from '../lib/datetime';
 import AdminTable, { type AdminTableColumn } from './AdminTable';
 import Facts from './Facts';
@@ -46,6 +47,8 @@ interface UserRow {
   user: AdminUser;
   userId: string;
   isSelf: boolean;
+  /** The built-in anonymous (public mode) account: never deletable. */
+  isSystem: boolean;
   groups: string[];
 }
 
@@ -85,6 +88,11 @@ const AdminUsersPanel: React.FC<AdminUsersPanelProps> = ({ currentUserEmail }) =
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<AdminUser | null>(null);
+  const [bulkTargets, setBulkTargets] = useState<UserRow[] | null>(null);
+  const bulkItems = useMemo(
+    () => (bulkTargets ?? []).map((r) => ({ id: r.userId, label: r.user.email || r.userId })),
+    [bulkTargets],
+  );
   const [createOpened, setCreateOpened] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   // user id -> names of the groups the user belongs to. Best effort: when the
@@ -190,6 +198,7 @@ const AdminUsersPanel: React.FC<AdminUsersPanelProps> = ({ currentUserEmail }) =
           userId,
           isSelf:
             !!currentUserEmail && user.email?.toLowerCase() === currentUserEmail.toLowerCase(),
+          isSystem: user.is_anonymous === true || /^anonymous@/i.test(user.email ?? ''),
           groups: groupsByUser.get(userId) ?? [],
         };
       }),
@@ -481,6 +490,26 @@ const AdminUsersPanel: React.FC<AdminUsersPanelProps> = ({ currentUserEmail }) =
         searchText={searchText}
         searchPlaceholder="Search users..."
         renderDetail={renderDetail}
+        selection={{
+          getId: (r) => r.userId,
+          isSelectable: (r) => !r.isSelf && !r.isSystem,
+          disabledReason: (r) => (r.isSelf ? 'You cannot delete yourself' : 'System account'),
+          actions: (selected, clear) => (
+            <Button
+              className="gp-danger"
+              color="red"
+              variant="filled"
+              size="xs"
+              leftSection={<Icon icon="tabler:trash" width={14} />}
+              onClick={() => {
+                setBulkTargets(selected);
+                clear();
+              }}
+            >
+              Delete selected
+            </Button>
+          ),
+        }}
         toolbarExtra={
           <Button
             size={glass ? 'sm' : 'xs'}
@@ -512,6 +541,16 @@ const AdminUsersPanel: React.FC<AdminUsersPanelProps> = ({ currentUserEmail }) =
         user={deleteTarget}
         onClose={() => setDeleteTarget(null)}
         onConfirm={handleDelete}
+      />
+      <BulkDeleteModal
+        opened={bulkTargets !== null}
+        noun="users"
+        nounSingular="user"
+        items={bulkItems}
+        note="Accounts, sessions and personal data are removed. Dashboards and projects they own remain."
+        onDelete={(id) => apiDeleteUser(id)}
+        onDone={refresh}
+        onClose={() => setBulkTargets(null)}
       />
     </>
   );
