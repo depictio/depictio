@@ -7007,6 +7007,27 @@ export async function setTableEditLock(dcId: string, unlocked: boolean): Promise
   return res.json();
 }
 
+export interface TableCoordinates {
+  lat_column: string | null;
+  lon_column: string | null;
+}
+
+/** Mark the latitude/longitude columns that make a table a Map source, or
+ *  clear them (both null). Throws `TableEditError` (422 codes: `incomplete_pair`,
+ *  `same_column`, `unknown_column`, `not_numeric`, `out_of_range`, `not_a_table`). */
+export async function setTableCoordinates(
+  dcId: string,
+  latColumn: string | null,
+  lonColumn: string | null,
+): Promise<TableCoordinates> {
+  const res = await authFetch(`${API_BASE}/datacollections/${dcId}/coordinates`, {
+    method: 'PATCH',
+    body: JSON.stringify({ lat_column: latColumn, lon_column: lonColumn }),
+  });
+  if (!res.ok) await throwTableEditError(res, 'Failed to save the map coordinates');
+  return res.json();
+}
+
 /** The whole table, with the Delta version that `patchTableCells` must be given. */
 export async function fetchTableForEdit(dcId: string): Promise<TableEditData> {
   const res = await authFetch(`${API_BASE}/datacollections/${dcId}/edit_data`);

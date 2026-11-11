@@ -57,6 +57,10 @@ It refuses any other project.
 The rule to remember: **a project can only be updated with the code that
 first brought it.** A new code for a project that is already here is refused.
 
+When the code expires, the project can no longer be updated, by design. To
+resume updates, a target admin unlocks and deletes the project, issues a new
+code, and the source sends it again.
+
 - *Valid for*: 1 day, 30 days (the default, `INVITE_TTL_DAYS`) or 1 year. The
   API accepts any lifetime up to `INVITE_MAX_TTL_DAYS`.
 - *Lock editing on import*: on by default.

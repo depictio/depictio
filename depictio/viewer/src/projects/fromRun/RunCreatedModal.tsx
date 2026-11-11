@@ -59,6 +59,8 @@ export interface RunCreatedContext {
   detection: DetectedTemplate | null;
   /** Tables dropped next to the run folder: uploaded once the project exists. */
   extraFiles?: File[];
+  /** Dropped tables whose detected map coordinates were unticked. */
+  skipCoordinates?: ReadonlySet<File>;
   /** Collection names the run takes, so the uploads do not clash with them. */
   takenTableNames?: string[];
 }

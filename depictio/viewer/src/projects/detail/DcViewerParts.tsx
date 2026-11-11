@@ -206,7 +206,7 @@ export const CopyId: React.FC<{ id: string }> = ({ id }) => (
 );
 
 /** Columns Depictio adds to every table it ingests. */
-const SYSTEM_COLUMNS = new Set(['depictio_run_id', 'aggregation_time']);
+export const SYSTEM_COLUMNS = new Set(['depictio_run_id', 'aggregation_time']);
 
 export const userColumns = (columns: ColumnSpec[]) => columns.filter((c) => !SYSTEM_COLUMNS.has(c.name));
 

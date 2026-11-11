@@ -90,9 +90,12 @@ export const AddDataModal: React.FC<AddDataModalProps> = ({
   const addsRun = runsApply && hasLocation && run.isNewRun;
   const refusedRun = runsApply && hasLocation && !run.loading && run.refusal && folder.tableCount === 0;
 
+  // Nothing picked yet: both panels already say what to do, so the line under
+  // the button stays empty (the button keeps the reason on hover).
+  const idle = files.length === 0 && !hasLocation && !hasUrl;
   let reason: string | null = null;
   if (!projectId) reason = 'The project is not loaded yet.';
-  else if (files.length === 0 && !hasLocation && !hasUrl) {
+  else if (idle) {
     reason = mode === 'url' ? 'Drop files, or enter the URL of one file.' : 'Drop files, or enter a folder.';
   } else if (hasUrl) reason = urlTable.reason;
   else if (hasLocation && runsApply && run.loading) reason = 'Checking the folder.';
@@ -114,7 +117,13 @@ export const AddDataModal: React.FC<AddDataModalProps> = ({
     setStarted(true);
     if (files.length > 0) {
       setUploading(true);
-      await uploadFiles(projectId, files, [...existingNames, ...folder.tickedNames], setUploads);
+      await uploadFiles(
+        projectId,
+        files,
+        [...existingNames, ...folder.tickedNames],
+        setUploads,
+        drop.skipCoordinates,
+      );
       setUploading(false);
     }
     if (hasUrl) await urlTable.submit(projectId);
@@ -205,7 +214,7 @@ export const AddDataModal: React.FC<AddDataModalProps> = ({
                   </GatedButton>
                 </Group>
                 <DisabledReason
-                  reason={refusedRun ? null : reason}
+                  reason={refusedRun || (idle && projectId) ? null : reason}
                   icon="mdi:information-outline"
                   testId="add-data-reason"
                 />

@@ -509,3 +509,123 @@ class TestRestoreVersion:
         before = env.version()
         assert self.restore(env, original).status_code == status
         assert env.version() == before
+
+
+class TestCoordinates:
+    """PATCH /coordinates marks the lat/lon columns that make a table a map source."""
+
+    @pytest.fixture
+    def geo(self, env, tmp_path):
+        location = str(tmp_path / "geo")
+        pl.DataFrame(
+            {
+                "site": ["a", "b", "c"],
+                "lat": [48.1, None, -33.9],
+                "lon": [11.5, 8.6, 151.2],
+                "lat_text": ["48.1", "50.2", None],
+                "far": [10.0, 95.0, -200.0],
+                "aggregation_time": ["2025-01-01 00:00:00"] * 3,
+            }
+        ).write_delta(location)
+        with patch.object(table_edit, "_delta_location_for", lambda _dc: location):
+            yield env
+
+    def project(self, env, *, props=None, **kwargs):
+        config = {
+            "type": "table",
+            "source": "native",
+            "origin": UPLOAD_ORIGIN,
+            "dc_specific_properties": {"format": "csv", **(props or {})},
+        }
+        env.project(config=kwargs.pop("config", config), **kwargs)
+
+    def mark(self, env, lat, lon):
+        return env.client.patch(
+            f"/datacollections/{DC_ID}/coordinates", json={"lat_column": lat, "lon_column": lon}
+        )
+
+    def props(self, env) -> dict:
+        project = env.db["projects"].find_one({"_id": PROJECT_ID})
+        return project["workflows"][0]["data_collections"][0]["config"]["dc_specific_properties"]
+
+    def test_marking_makes_the_table_a_coordinates_table(self, geo):
+        from depictio.models.models.data_collections_types.table_coordinates import (
+            DCTableCoordinatesConfig,
+        )
+
+        self.project(geo, owners=[geo.user])
+        response = self.mark(geo, "lat", "lon")
+
+        assert response.status_code == 200, response.text
+        assert response.json() == {"lat_column": "lat", "lon_column": "lon"}
+        props = self.props(geo)
+        assert (props["lat_column"], props["lon_column"], props["crs"]) == (
+            "lat",
+            "lon",
+            "EPSG:4326",
+        )
+        assert isinstance(DCTableCoordinatesConfig(**props), DCTableCoordinatesConfig)
+
+    def test_a_text_column_of_numbers_is_accepted(self, geo):
+        self.project(geo, owners=[geo.user])
+        assert self.mark(geo, "lat_text", "lon").status_code == 200
+
+    def test_clearing_makes_it_a_plain_table_again(self, geo):
+        self.project(geo, owners=[geo.user], props={"lat_column": "lat", "lon_column": "lon"})
+        response = self.mark(geo, None, None)
+
+        assert response.status_code == 200, response.text
+        assert response.json() == {"lat_column": None, "lon_column": None}
+        assert self.props(geo) == {"format": "csv"}
+
+    @pytest.mark.parametrize(
+        "lat, lon, code",
+        [
+            ("lat", None, "incomplete_pair"),
+            (None, "lon", "incomplete_pair"),
+            ("lat", "lat", "same_column"),
+            ("lat", "nope", "unknown_column"),
+            ("aggregation_time", "lon", "unknown_column"),
+            ("site", "lon", "not_numeric"),
+            ("far", "lon", "out_of_range"),
+            ("lat", "far", "out_of_range"),
+        ],
+    )
+    def test_a_bad_pair_is_refused_and_nothing_is_written(self, geo, lat, lon, code):
+        self.project(geo, owners=[geo.user])
+        response = self.mark(geo, lat, lon)
+
+        assert response.status_code == 422, response.text
+        assert response.json()["detail"]["code"] == code
+        assert self.props(geo) == {"format": "csv"}
+
+    def test_out_of_range_counts_the_rows(self, geo):
+        self.project(geo, owners=[geo.user])
+        detail = self.mark(geo, "far", "lon").json()["detail"]
+        assert detail["rows"] == 2
+        assert "far" in detail["message"]
+
+    def test_only_a_table_can_be_marked(self, geo):
+        self.project(geo, owners=[geo.user], config={"type": "multiqc", "origin": UPLOAD_ORIGIN})
+        response = self.mark(geo, "lat", "lon")
+        assert response.status_code == 422
+        assert response.json()["detail"]["code"] == "not_a_table"
+
+    def test_a_pipeline_table_may_be_marked(self, geo):
+        """Marking is metadata, not a cell edit: the lock and the origin do not matter."""
+        self.project(geo, owners=[geo.user], origin={"kind": "run"}, unlocked=False)
+        assert self.mark(geo, "lat", "lon").status_code == 200
+
+    def test_a_viewer_is_refused(self, geo):
+        self.project(geo, viewers=[geo.user])
+        response = self.mark(geo, "lat", "lon")
+        assert response.status_code == 403
+        assert response.json()["detail"]["code"] == "read_only_role"
+        assert self.props(geo) == {"format": "csv"}
+
+    def test_a_published_project_is_read_only(self, geo):
+        self.project(geo, owners=[geo.user], locked=True)
+        response = self.mark(geo, "lat", "lon")
+        assert response.status_code == 409
+        assert response.json()["detail"] == publish_lock.LOCKED_DETAIL
+        assert self.props(geo) == {"format": "csv"}

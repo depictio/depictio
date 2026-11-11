@@ -7,19 +7,20 @@
  * project page (`detail/addData/AddDataModal.tsx`), so the two are one gesture.
  */
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActionIcon, Alert, Box, Divider, Flex, Group, Input, Loader, Paper, ScrollArea, SegmentedControl, Stack, Text, ThemeIcon } from '@mantine/core';
+import { ActionIcon, Alert, Box, Checkbox, Divider, Flex, Group, Input, Loader, Paper, ScrollArea, SegmentedControl, Stack, Text, ThemeIcon } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import {
   createAssetDataCollection,
   createDataCollectionFromUpload,
   createMultiQCDataCollection,
+  setTableCoordinates,
 } from 'depictio-react-core';
 
 import { UnstyledDropZone } from '../../components/UnstyledDropZone';
 import { useListingAccents } from '../../lib/useListingAccents';
 import { useFolderDropzone } from '../../hooks/useFolderDropzone';
-import { DcTypeIcon } from '../dcTypeIcon';
+import { DcTypeIcon, GEO_COLOR, GEO_ICON } from '../dcTypeIcon';
 import { FoundCard, SourceValue } from '../detail/FoundCard';
 import { ACCEPTED_EXTENSIONS, identifyFile, kindsText } from './fileKinds';
 import type { FileGuess, FileKind } from './fileKinds';
@@ -65,6 +66,8 @@ export interface TableUploadOutcome {
   /** The new collection; null when the upload failed. */
   dataCollectionId: string | null;
   error: string | null;
+  /** Added, with something to say: the map coordinates were not marked. */
+  note?: string | null;
 }
 
 /** A report's file must be named `multiqc.parquet` for the server to take it. */
@@ -83,6 +86,8 @@ export async function uploadFiles(
   files: File[],
   taken: string[] = [],
   onProgress?: (outcomes: TableUploadOutcome[]) => void,
+  /** Tables whose detected coordinates the user unticked: not marked. */
+  skipCoordinates: ReadonlySet<File> = new Set(),
 ): Promise<TableUploadOutcome[]> {
   const guesses = await Promise.all(files.map(identifyFile));
   const members = (kind: FileKind) => files.filter((_, i) => guesses[i].kind === kind);
@@ -113,9 +118,10 @@ export async function uploadFiles(
   const outcomes: TableUploadOutcome[] = [];
   for (let i = 0; i < files.length; i += 1) {
     const file = files[i];
-    const { kind, table } = guesses[i];
+    const { kind, table, coordinates } = guesses[i];
     try {
       let dataCollectionId: string | null;
+      let note: string | null = null;
       if (kind === 'multiqc' || kind === 'image') {
         dataCollectionId = await uploadGroup(kind);
       } else if (kind === 'geojson' || kind === 'phylogeny') {
@@ -134,10 +140,19 @@ export async function uploadFiles(
           file,
         });
         dataCollectionId = made.data_collection_id ?? null;
+        // Marked through the route that checks the values: a refusal keeps the
+        // table and says why it is not a Map source.
+        if (dataCollectionId && coordinates && !skipCoordinates.has(file)) {
+          await setTableCoordinates(dataCollectionId, coordinates.latColumn, coordinates.lonColumn).catch(
+            (err: Error) => {
+              note = `Added without map coordinates: ${err.message}`;
+            },
+          );
+        }
       } else {
         throw new Error('Depictio cannot read this file.');
       }
-      outcomes.push({ file, dataCollectionId, error: null });
+      outcomes.push({ file, dataCollectionId, error: null, note });
     } catch (err) {
       outcomes.push({ file, dataCollectionId: null, error: (err as Error).message || 'Upload failed.' });
     }
@@ -155,6 +170,9 @@ export interface DataDrop {
   files: File[];
   rejected: File[];
   guesses: Map<File, FileGuess>;
+  /** Tables whose detected map coordinates the user unticked. */
+  skipCoordinates: ReadonlySet<File>;
+  toggleCoordinates: (file: File, use: boolean) => void;
 }
 
 /** System files a dropped folder brings along. */
@@ -187,7 +205,15 @@ export function useDataDropzone(): DataDrop {
     [sorted, guesses],
   );
   const rejected = useMemo(() => sorted.filter((f) => guesses.get(f)?.kind === 'unknown'), [sorted, guesses]);
-  return { dropzone, files, rejected, guesses };
+  const [skipCoordinates, setSkipCoordinates] = useState<Set<File>>(new Set());
+  const toggleCoordinates = (file: File, use: boolean) =>
+    setSkipCoordinates((prev) => {
+      const next = new Set(prev);
+      if (use) next.delete(file);
+      else next.add(file);
+      return next;
+    });
+  return { dropzone, files, rejected, guesses, skipCoordinates, toggleCoordinates };
 }
 
 /** The icon heading the drop zone and the folder box, in the project colour. */
@@ -202,7 +228,9 @@ const FileRow: React.FC<{
   index: number;
   submitting: boolean;
   onRemove: () => void;
-}> = ({ file, guess, index, submitting, onRemove }) => (
+  useCoordinates: boolean;
+  onToggleCoordinates: (use: boolean) => void;
+}> = ({ file, guess, index, submitting, onRemove, useCoordinates, onToggleCoordinates }) => (
   <Paper withBorder p="xs" radius="sm" data-testid={`files-item-${index}`} data-kind={guess?.kind}>
     <Group justify="space-between" wrap="nowrap" gap="xs">
       <Group gap="xs" wrap="nowrap" style={{ minWidth: 0 }}>
@@ -214,6 +242,26 @@ const FileRow: React.FC<{
           <Text size="xs" c="dimmed">
             {guess?.label}
           </Text>
+          {guess?.coordinates && (
+            <Checkbox
+              mt={4}
+              size="xs"
+              color={GEO_COLOR}
+              checked={useCoordinates}
+              onChange={(e) => onToggleCoordinates(e.currentTarget.checked)}
+              disabled={submitting}
+              label={
+                <Group gap={4} wrap="nowrap">
+                  <Icon icon={GEO_ICON} width={12} color={`var(--mantine-color-${GEO_COLOR}-6)`} />
+                  <Text size="xs">
+                    Geomap: <code>{guess.coordinates.latColumn}</code> /{' '}
+                    <code>{guess.coordinates.lonColumn}</code>
+                  </Text>
+                </Group>
+              }
+              data-testid={`files-item-${index}-coordinates`}
+            />
+          )}
         </Stack>
       </Group>
       <Group gap={4} wrap="nowrap">
@@ -287,6 +335,8 @@ export const FilesDropArea: React.FC<{ drop: DataDrop; submitting: boolean }> = 
                 index={i}
                 submitting={submitting}
                 onRemove={() => dropzone.removeFile(f)}
+                useCoordinates={!drop.skipCoordinates.has(f)}
+                onToggleCoordinates={(use) => drop.toggleCoordinates(f, use)}
               />
             ))}
           </Stack>
@@ -471,6 +521,11 @@ export const FileUploadResults: React.FC<{
             {outcome?.error && (
               <Text size="xs" c="red">
                 {outcome.error}
+              </Text>
+            )}
+            {outcome?.note && (
+              <Text size="xs" c="orange" data-testid={`${testIdPrefix}-${i}-note`}>
+                {outcome.note}
               </Text>
             )}
           </Stack>
