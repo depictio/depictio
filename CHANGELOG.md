@@ -3,6 +3,96 @@
 ### Docker Images 🐳
 
 ```plaintext
+ghcr.io/depictio/depictio:1.21.0-b3
+ghcr.io/depictio/depictio:latest
+ghcr.io/depictio/depictio:stable
+ghcr.io/depictio/depictio:edge
+```
+
+
+<details>
+<summary>Click to expand the changelog for 1.21.0-b3</summary>
+
+### Changes 📜
+
+#### New Features ✨
+
+* feat: restore a past version of an edited table, as a new version; a one-line edit lock [c4ba03486]
+* feat: lock cell edits per table, unlocked to keep it as metadata [9106d196f]
+* feat: add one table from its URL, previewed by the server; drop the create dialog [a936fb2e8]
+* feat: one Add data flow, and tables edited and updated from a file [2c1789a1f]
+
+#### Improvements 🚀
+
+* style: sort the imports of the data collection routes [499cfab64]
+* style: ruff format the table edit tests [3201eee7c]
+
+#### Chores 🧹
+
+* chore: restore the default dashboard thumbnails [756aee4fd]
+
+#### Documentation Updates 📚
+
+* docs: settle the open points of the annotations design and add its plan [9d35e3431]
+* docs: design for session annotations on dashboards [29c566f7d]
+
+#### Other Changes 📝
+
+* Bump version: 1.21.0-b2 → 1.21.0-b3 [a2377bd04]
+* test(publish): penguins_publish project and Helm overlays for a two-instance publish test [b7d439cb1]
+* fix(publish): bundle a dashboard logo under the dashboard_id it is stored by [ad571f9b3]
+* test(e2e): open the labels panel on the first eligible table in every test [896593202]
+* test(e2e): start the per-table label test on the first table [991b23c3f]
+* test(e2e): show sheets[0] before keying a file or a merge on it [1f5bd8f01]
+* test(e2e): select a cell's text with the platform's select-all key [03c5d94bd]
+* test(e2e): read a session-label row key where the unpinned key column is [3dcfc8699]
+* test(e2e): session labels call the API by its same-origin path from the page [3d970f6da]
+* test(annotations): check the label cap against the group name cap in the API tests [13135fcc3]
+* fix(annotations): a table without its key column is no longer offered for labelling [fa43602a0]
+* feat(viewer): Add data opens with the same header as New project [d182e9352]
+* test(e2e): drop Add data routes still in flight when the test ends [f872af450]
+* test(e2e): check the Add data dialog is gone, not the empty modal root Mantine keeps [8397b68fd]
+* feat(viewer): name the two sides of Add data Upload and Read in place [b9c34a29b]
+* fix(viewer): a storage that does not answer no longer blocks Next; e2e follows the new folder wording [12b10e2c5]
+* feat(viewer): label columns say where they live (this browser, your account, shared) [f7bded487]
+* feat(viewer): a folder with no pipeline says what it holds; the example is ampliseq [e5efdd761]
+* feat(viewer): Analysis, Metadata, Comments and Search fill the screen on a phone [fecf9f9c9]
+* fix(viewer): the Analysis and Metadata panels stay open on a phone [8146a0100]
+* fix(viewer): the editor's dock no longer runs under the notes button beside an open panel [76b87d7f6]
+* fix(viewer): Metadata panel actions grouped by what they act on [3997f393d]
+* fix(viewer): Metadata panel icon buttons in the panel's own button style [30d3b35d2]
+* fix(viewer): Metadata panel actions as compact icons beside the table choice [635a5f131]
+* fix(viewer): Metadata panel without the other-tables list, grip kept inside the card [ef911fe71]
+* fix(viewer): right panels below the modals, dock and notes button clear of them, Metadata button sooner [6b995f58f]
+* feat(viewer): Metadata panel links to the table's page in the project [69458b3aa]
+* feat(viewer): split panels, Metadata in the editor, copy/paste and undo in the grid [2ac977d59]
+* fix(split): a label's key column finds its column in a collection that spells it differently [78ef80afc]
+* Share session labels on a dashboard and export them as a metadata sheet [9a1fb39b0]
+* feat(annotations): label only metadata tables linked to the data, in a Metadata panel [c16767777]
+* feat(viewer): labels as a tab of the Analysis panel, edited in one grid [4f40842a7]
+* feat(viewer): annotate from a file with the table editor's three modes [b80cad51d]
+* feat(viewer): annotations from a dropped file stay in the browser [1ccc59072]
+* fix(viewer): give the Annotate header button its own test id [b3765bbf1]
+* test(e2e): session annotations from labels to groups, drop, save to table [4e65cc396]
+* feat(viewer): Annotate panel labels samples and feeds the Analysis groups [46f6b7305]
+* feat(react-core): derive selection groups from session annotations [742fb455e]
+* feat(api): session annotations go with their dashboard, project or user [e7084ef27]
+* feat(api): per-user session annotations on a dashboard [50d9d5981]
+* feat(models): session annotations a viewer keeps on a dashboard [3ce3cdb64]
+* feat(api): let one table preview return up to 10,000 rows [02cb8fa7b]
+* feat(viewer): project Runs tab, reworked collection viewer and derived lineage [58648c592]
+* Update CHANGELOG.md for v1.21.0-b2 [6cd45e6a8]
+
+
+</details>
+
+### Documentation 📖
+
+For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
+
+### Docker Images 🐳
+
+```plaintext
 ghcr.io/depictio/depictio:1.21.0-b2
 ghcr.io/depictio/depictio:latest
 ghcr.io/depictio/depictio:stable
