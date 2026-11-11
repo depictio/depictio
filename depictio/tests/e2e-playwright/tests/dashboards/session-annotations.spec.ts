@@ -154,9 +154,11 @@ async function openPanel(page: Page): Promise<void> {
   await expect(page.locator("[data-testid='annotation-grid'] .ag-row").first()).toBeVisible({
     timeout: 30_000,
   });
+  // The panel opens on whichever table it prefers; the tests read sheets[0].
+  if (sheets.length > 1) await pickTable(page, sheets[0].tag);
 }
 
-/** Show the grid of the table tagged `tag` (the panel opens on the first one). */
+/** Show the grid of the table tagged `tag`. */
 async function pickTable(page: Page, tag: string): Promise<void> {
   await page.locator("[data-testid='annotation-table-select']").click();
   await page.getByRole("option", { name: tag, exact: true }).click();
@@ -313,8 +315,6 @@ test.describe("Session labels", () => {
     });
 
     await openPanel(page);
-    // The panel opens on whichever table it prefers; the file is keyed on sheets[0].
-    if (sheets.length > 1) await pickTable(page, sheets[0].tag);
     const csv = `${sheets[0].key_columns[0]},cohort_from_file\n${await keyAt(page, 0)},early\n${await keyAt(page, 1)},late\nnot_a_sample,early\n`;
     await page.locator("[data-testid='annotation-drop-zone']").evaluate((zone, text) => {
       const dt = new DataTransfer();
@@ -408,8 +408,6 @@ test.describe("Session labels", () => {
     });
 
     await openPanel(page);
-    // The merge is checked against sheets[0]'s key: show that table, not the panel's default.
-    if (sheets.length > 1) await pickTable(page, sheets[0].tag);
     const first = await keyAt(page, 0);
     await addLabelColumn(page, "status");
     await typeCell(page, "status", 0, "kept");
@@ -476,8 +474,6 @@ test.describe("Session labels", () => {
     await clearAnnotations(page);
 
     await openPanel(page);
-    // The panel opens on the table it prefers, which may be `second`.
-    await pickTable(page, first);
     await addLabelColumn(page, "on_sheet");
     await pickTable(page, second);
     await expect(page.locator("[data-testid='label-menu-on_sheet']")).toHaveCount(0);
