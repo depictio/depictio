@@ -1023,6 +1023,7 @@ export type {
   RealtimeMode,
   RealtimeEvent,
   MonitoringLiveEvent,
+  MigrationLiveEvent,
 } from './realtime';
 export { default as RealtimeIndicator } from './components/RealtimeIndicator';
 export { useRealtimeJournal } from './hooks/useRealtimeJournal';

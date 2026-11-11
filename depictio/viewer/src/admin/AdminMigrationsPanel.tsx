@@ -17,7 +17,11 @@ import {
 import { notifications } from '@mantine/notifications';
 import { Icon } from '@iconify/react';
 
-import { listMigrationRequests, retryMigrationRequest } from 'depictio-react-core';
+import {
+  listMigrationRequests,
+  retryMigrationRequest,
+  useMonitoringEvents,
+} from 'depictio-react-core';
 import type { MigrationRequestSummary } from 'depictio-react-core';
 
 import { formatDateTime } from '../lib/datetime';
@@ -87,6 +91,9 @@ const RequestsView: React.FC = () => {
     setLoading(true);
     void load();
   }, [load]);
+
+  // A request arriving or changing status shows up without a refresh.
+  useMonitoringEvents({ onMigrationEvent: () => void load() });
 
   return (
     <Stack gap="md">
