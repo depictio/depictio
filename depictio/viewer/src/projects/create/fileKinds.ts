@@ -3,6 +3,7 @@
  * decides where the two disagree, so a `.parquet` holding a MultiQC report is
  * a report and a `.csv` separated by tabs is read with tabs.
  */
+import { detectCoordinatesColumns } from '../detail/extendedTableCategories';
 import { baseName } from './tableFiles';
 
 /** A collection type, or `unknown` for a file Depictio cannot take. */
@@ -14,6 +15,22 @@ export interface FileGuess {
   label: string;
   /** How a table is read; absent for the other kinds. */
   table?: { fileFormat: string; separator: string; compression: string };
+  /** Header columns that look like a latitude/longitude pair (plain CSV/TSV
+   *  only): the table is offered as a Map source when it is added. */
+  coordinates?: { latColumn: string; lonColumn: string };
+}
+
+/** The columns of a delimited text's first line, unquoted. */
+function headerColumns(text: string, format: 'csv' | 'tsv'): string[] {
+  const first = text.split(/\r?\n/, 1)[0] ?? '';
+  return first.split(format === 'tsv' ? '\t' : ',').map((c) => c.trim().replace(/^"(.*)"$/, '$1'));
+}
+
+/** A plain-text table, with the coordinates its header suggests. */
+function textTable(format: 'csv' | 'tsv', text: string): FileGuess {
+  const guess = asTable(format);
+  const coordinates = detectCoordinatesColumns(headerColumns(text, format));
+  return coordinates ? { ...guess, coordinates } : guess;
 }
 
 const HEAD_BYTES = 64 * 1024;
@@ -108,9 +125,9 @@ async function identify(file: File): Promise<FileGuess> {
 
   const separated = sniffSeparator(text);
   if (ext === 'csv' || ext === 'tsv' || ext === 'tab') {
-    return asTable(separated ?? (ext === 'csv' ? 'csv' : 'tsv'));
+    return textTable(separated ?? (ext === 'csv' ? 'csv' : 'tsv'), text);
   }
-  return separated ? asTable(separated) : unknown('Not a format Depictio reads');
+  return separated ? textTable(separated, text) : unknown('Not a format Depictio reads');
 }
 
 const known = new WeakMap<File, Promise<FileGuess>>();

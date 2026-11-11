@@ -9,11 +9,13 @@ from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import db, projects_collection
 from depictio.api.v1.endpoints.datacollections_endpoints.table_edit import (
     CellEditsRequest,
+    CoordinatesRequest,
     RestoreVersionRequest,
     apply_cell_edits,
     read_table_for_edit,
     restore_table_version,
     set_edit_lock,
+    set_table_coordinates,
     table_edit_status,
 )
 from depictio.api.v1.endpoints.datacollections_endpoints.url_preview import (
@@ -398,6 +400,21 @@ async def patch_table_edit_lock(
     editors only (403), 409 on a published project. Answers the new edit status.
     """
     return await asyncio.to_thread(set_edit_lock, data_collection_id, body.unlocked, current_user)
+
+
+@datacollections_endpoint_router.patch("/{data_collection_id}/coordinates")
+async def set_table_coordinates_route(
+    data_collection_id: str,
+    body: CoordinatesRequest,
+    current_user=Depends(get_current_user),
+):
+    """Mark the latitude/longitude columns of a table, or clear them (both null).
+
+    A marked table is offered as a Map source. Owners and editors only (403),
+    409 on a published project, 422 when a column is missing, not numeric or
+    out of range.
+    """
+    return await asyncio.to_thread(set_table_coordinates, data_collection_id, body, current_user)
 
 
 @datacollections_endpoint_router.get("/{data_collection_id}/edit_data")

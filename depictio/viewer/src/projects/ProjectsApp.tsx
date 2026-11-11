@@ -225,6 +225,7 @@ const ProjectsApp: React.FC = () => {
             context.extraFiles,
             context.takenTableNames ?? [],
             (uploads) => setCreatedRun((cur) => (cur ? { ...cur, uploads } : cur)),
+            context.skipCoordinates,
           );
           refresh();
         }

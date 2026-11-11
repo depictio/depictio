@@ -2,9 +2,8 @@
 // whose column shape suggests a specialized Pydantic subclass on the backend.
 //
 // Today: only coordinates (DCTableCoordinatesConfig — lat_column + lon_column).
-// A future category (e.g. volcano-plot tables → DCTableVolcanoConfig) gets its
-// own detector here + its own banner block in the Create-DC modal — matching
-// the Pydantic subclass story, no parallel registry abstraction.
+// Used to suggest the marking on a table's page and to pre-fill the
+// "Map coordinates" window; never applied without the user confirming it.
 
 export type CoordinatesGuess = { latColumn: string; lonColumn: string } | null;
 

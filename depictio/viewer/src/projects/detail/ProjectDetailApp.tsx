@@ -109,6 +109,8 @@ import ManageDataCollectionModal, {
 } from './ManageDataCollectionModal';
 import MultiQCViewerPreview from './MultiQCViewerPreview';
 import CoordinatesMapPreview from './CoordinatesMapPreview';
+import MapCoordinatesModal from './coordinates/MapCoordinatesModal';
+import { detectCoordinatesColumns } from './extendedTableCategories';
 import {
   GeoJsonPreview,
   ImagesPreview,
@@ -461,6 +463,17 @@ const ProjectDetailApp: React.FC = () => {
   }, [projectId, refreshKey]);
 
   const refresh = () => setRefreshKey((k) => k + 1);
+  // Re-read the project without the loader, so the page keeps its place (the
+  // selected collection stays open). Falls back to a full refresh on error.
+  const refreshQuietly = () => {
+    if (!projectId) return;
+    fetchProject(projectId)
+      .then(({ project, delta_locations }) => {
+        setProject(project);
+        setDeltaLocations(delta_locations || {});
+      })
+      .catch(refresh);
+  };
   // Open the ingestion report (latest run) and bring the Data part into view.
   const showIngestion = () => {
     setActiveTab('ingestion');
@@ -726,7 +739,9 @@ const ProjectDetailApp: React.FC = () => {
                     links={projectLinks}
                     projectId={projectId}
                     canMutate={canMutate}
+                    published={!!project?.published_lock}
                     onLinkSaved={() => setLinksReload((k) => k + 1)}
+                    onDcChanged={refreshQuietly}
                     onShowRuns={hasRuns ? () => showRuns() : undefined}
                     onOpenDc={(id) => {
                       scrollToDcRef.current = true;
@@ -1271,8 +1286,10 @@ const DeleteDataCollectionModal: React.FC<{
           icon={<Icon icon="mdi:alert" width={18} />}
           variant="light"
         >
-          This deletes the registered files, delta tables, runs, and MultiQC
-          metadata associated with this collection. Cannot be undone.
+          The collection, the data Depictio stored for it and its links to other
+          collections are deleted. Dashboard components that read it will have no
+          data left to show. Your original file or folder is not touched. This
+          cannot be undone.
         </Alert>
         {error && (
           <Alert color="red" variant="light">
@@ -2162,8 +2179,12 @@ const DataCollectionViewer: React.FC<{
   links: DCLink[];
   projectId: string | null;
   canMutate: boolean;
+  /** The project is published (read-only): says why mutations are disabled. */
+  published: boolean;
   /** A link was edited from here: the page reloads its links. */
   onLinkSaved: () => void;
+  /** The collection itself changed (map coordinates): the page reloads the project. */
+  onDcChanged: () => void;
   /** Open the project's Runs tab; absent for a project without runs. */
   onShowRuns?: () => void;
   /** Select another collection (an input of this one). */
@@ -2178,7 +2199,9 @@ const DataCollectionViewer: React.FC<{
   links,
   projectId,
   canMutate,
+  published,
   onLinkSaved,
+  onDcChanged,
   onShowRuns,
   onOpenDc,
   autoLoadPreview = false,
@@ -2361,6 +2384,13 @@ const DataCollectionViewer: React.FC<{
       cancelled = true;
     };
   }, [dcId, isDerived, projectId, dc.data_collection_tag]);
+  const [coordsOpen, setCoordsOpen] = useState(false);
+  // A table not yet marked whose column names look like a lat/lon pair: offer
+  // the marking, never apply it (a column called "lat" may mean something else).
+  const coordsGuess =
+    isTable && !isCoordTable && canMutate
+      ? detectCoordinatesColumns(shownColumns.map((c) => c.name))
+      : null;
   const [inspecting, setInspecting] = useState<string | null>(null);
   const [editingLink, setEditingLink] = useState<DCLink | null>(null);
   const [resolvers, setResolvers] = useState<ResolverInfo[]>([]);
@@ -2441,11 +2471,70 @@ const DataCollectionViewer: React.FC<{
               )}
             </Stack>
           </Group>
-          <CopyId id={dcId} />
+          <Group gap="xs" wrap="nowrap">
+            {isTable && (
+              <Tooltip
+                label={
+                  !canMutate
+                    ? published
+                      ? 'This project is published and read-only.'
+                      : 'Only project owners and editors can mark map coordinates.'
+                    : fromPipeline
+                      ? 'Pick the latitude and longitude columns. Syncing the pipeline’s project.yaml again may rewrite them.'
+                      : 'Pick the latitude and longitude columns, so this table can feed a Map.'
+                }
+                multiline
+                w={260}
+                withArrow
+                withinPortal
+              >
+                {/* A span: a disabled button fires no hover, so the tooltip needs a host. */}
+                <span>
+                  <Button
+                    size="xs"
+                    variant="light"
+                    color={GEO_COLOR}
+                    leftSection={<Icon icon={GEO_ICON} width={16} />}
+                    disabled={!canMutate}
+                    onClick={() => setCoordsOpen(true)}
+                    data-testid="table-coordinates-open"
+                  >
+                    Map coordinates…
+                  </Button>
+                </span>
+              </Tooltip>
+            )}
+            <CopyId id={dcId} />
+          </Group>
         </Group>
 
         {/* A report's figures come from the report itself, not the collection. */}
         {isMultiQC ? <MultiQCSummaryCard dc={dc} bare /> : facts.length > 0 && <DcFacts facts={facts} />}
+
+        {coordsGuess && (
+          <Alert
+            color={GEO_COLOR}
+            variant="light"
+            icon={<Icon icon={GEO_ICON} width={18} />}
+            data-testid="table-coordinates-suggestion"
+          >
+            <Group justify="space-between" gap="sm" wrap="nowrap">
+              <Text size="sm">
+                <code>{coordsGuess.latColumn}</code> and <code>{coordsGuess.lonColumn}</code> look
+                like coordinates. Use them to place this table on a Map?
+              </Text>
+              <Button
+                size="xs"
+                variant="light"
+                color={GEO_COLOR}
+                onClick={() => setCoordsOpen(true)}
+                data-testid="table-coordinates-suggestion-open"
+              >
+                Review…
+              </Button>
+            </Group>
+          </Alert>
+        )}
 
         {detectedVizKinds.length > 0 && (
           <DcSuggestedCharts kinds={detectedVizKinds.slice(0, 6).map((v) => v.viz_kind)} />
@@ -2529,6 +2618,15 @@ const DataCollectionViewer: React.FC<{
 
         {hasData && <DeltaVersionHistory key={`history-${dcId}-${editTick}`} dcId={dcId} />}
       </Stack>
+      {isTable && (
+        <MapCoordinatesModal
+          opened={coordsOpen}
+          onClose={() => setCoordsOpen(false)}
+          dc={dc}
+          columns={shownColumns.map((c) => c.name)}
+          onChanged={onDcChanged}
+        />
+      )}
       {projectId && (
         <LinkEditModal
           key={editingLink?.id ?? 'none'}

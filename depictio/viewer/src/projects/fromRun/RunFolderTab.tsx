@@ -793,6 +793,7 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
             ...outcomes.map(toRow),
             ...pending.slice(folderRows.length + outcomes.length),
           ]),
+        drop.skipCoordinates,
       );
       firstTableId = firstTableId ?? uploads.find((u) => u.dataCollectionId)?.dataCollectionId ?? null;
       let urlOk = true;
@@ -839,6 +840,7 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
       templateTitle: titleOf(choice.templateId ?? preview?.template_id),
       detection: detected,
       extraFiles: localFiles,
+      skipCoordinates: drop.skipCoordinates,
       takenTableNames: (preview?.data_collections ?? []).map((dc) => dc.data_collection_tag),
     });
   };

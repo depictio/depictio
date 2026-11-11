@@ -22,6 +22,7 @@ import type { PreviewResult } from 'depictio-react-core';
 import Plot from 'react-plotly.js';
 
 import { GEO_COLOR, GEO_ICON } from '../dcTypeIcon';
+import { SYSTEM_COLUMNS } from './DcViewerParts';
 
 interface DcLike {
   _id?: string;
@@ -151,7 +152,9 @@ const CoordinatesMapPreview: React.FC<{ dc: DcLike }> = ({ dc }) => {
         usableCount: 0,
       };
       if (!preview || !latCol || !lonCol) return empty;
-      const cols = preview.columns.filter((c) => c !== latCol && c !== lonCol);
+      const cols = preview.columns.filter(
+        (c) => c !== latCol && c !== lonCol && !SYSTEM_COLUMNS.has(c),
+      );
       const ls: number[] = [];
       const ns: number[] = [];
       const cd: Array<Array<string>> = [];

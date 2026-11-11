@@ -70,7 +70,8 @@ test.describe("Add data", () => {
     await expect(page.getByTestId("files-dropzone")).toBeVisible();
     await expect(page.getByTestId("add-data-location-input")).toBeVisible();
     await expect(page.getByTestId("add-data-submit")).toHaveAttribute("aria-disabled", "true");
-    await expect(page.getByTestId("add-data-reason")).toContainText("Drop files");
+    // Both panels say what to do: no line under the button until something is picked.
+    await expect(page.getByTestId("add-data-reason")).toHaveCount(0);
   });
 
   test("folder dialog disables tables already in the project and keeps results until Done", async ({ page }) => {

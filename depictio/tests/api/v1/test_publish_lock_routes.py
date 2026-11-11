@@ -200,6 +200,7 @@ GUARDED: set[tuple[str, str]] = {
     (_DC, "clear_table_dc"),
     (_DC, "patch_table_cells"),
     (_DC, "patch_table_edit_lock"),
+    (_DC, "set_table_coordinates_route"),
     (_DC, "restore_table_version_route"),
     (_DC, "merge_table_file_route"),
     (_DC, "create_data_collection_from_upload"),

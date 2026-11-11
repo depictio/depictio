@@ -267,6 +267,140 @@ def set_edit_lock(data_collection_id: str, unlocked: bool, user: Any) -> dict[st
 
 
 # ----------------------------------------------------------------------------
+# Coordinates: the lat/lon columns that make a table a map source
+# ----------------------------------------------------------------------------
+
+#: The bounds assume ``DCTableCoordinatesConfig``'s default CRS, EPSG:4326.
+_COORD_BOUNDS = {"lat_column": 90.0, "lon_column": 180.0}
+_COORD_KEYS = ("lat_column", "lon_column", "crs")
+
+
+class CoordinatesRequest(BaseModel):
+    """Both columns, or both null to clear the marking."""
+
+    lat_column: str | None = None
+    lon_column: str | None = None
+
+
+def _bad_coordinates(code: str, message: str, **extra: Any) -> HTTPException:
+    return HTTPException(status_code=422, detail={"code": code, "message": message, **extra})
+
+
+def _check_coordinate_columns(data_collection_id: str, lat: str, lon: str) -> None:
+    """422 unless both columns exist, read as numbers and stay within ±90 / ±180.
+
+    Reads only the two columns of the current version. Nulls are ignored; a text
+    column is accepted when every value it holds parses as a number.
+    """
+    location = _delta_location_for(data_collection_id)
+    version = _delta_version(location)
+    lazy = pl.scan_delta(location, version=version, storage_options=polars_s3_config)
+    schema = lazy.collect_schema()
+    for column in (lat, lon):
+        if column not in schema or column in _HIDDEN_COLUMNS:
+            raise _bad_coordinates(
+                "unknown_column", f"This table has no column '{column}'.", column=column
+            )
+    frame = lazy.select(lat, lon).collect()
+    for key, column in (("lat_column", lat), ("lon_column", lon)):
+        series = frame[column]
+        if series.dtype == pl.Boolean or not (
+            series.dtype.is_numeric() or series.dtype == pl.String
+        ):
+            raise _bad_coordinates(
+                "not_numeric", f"Column '{column}' does not hold numbers.", column=column
+            )
+        values = series.cast(pl.Float64, strict=False)
+        unparsed = int((values.is_null() & series.is_not_null()).sum())
+        if unparsed:
+            raise _bad_coordinates(
+                "not_numeric",
+                f"Column '{column}' has {unparsed} value(s) that are not numbers.",
+                column=column,
+                rows=unparsed,
+            )
+        bound = _COORD_BOUNDS[key]
+        # ``~(<= bound)`` also counts NaN and infinities.
+        outside = int((~values.drop_nulls().abs().le(bound)).sum())
+        if outside:
+            kind = "latitude" if key == "lat_column" else "longitude"
+            raise _bad_coordinates(
+                "out_of_range",
+                f"Column '{column}' has {outside} value(s) outside ±{bound:g}, "
+                f"so it cannot be a {kind}.",
+                column=column,
+                rows=outside,
+            )
+
+
+def set_table_coordinates(
+    data_collection_id: str, body: CoordinatesRequest, user: Any
+) -> dict[str, Any]:
+    """Mark (or clear) the lat/lon columns of a table; answers the new marking.
+
+    Any table, a pipeline's included: this is metadata, not a cell edit, so the
+    edit lock does not apply. Owners and editors only (403), not on a published
+    project (409); 422 for a pair that is incomplete, repeats a column, or names
+    a column that is missing, not numeric or out of range. Mongo only: a map
+    already on a dashboard keeps the columns its component names.
+    """
+    lat, lon = body.lat_column or None, body.lon_column or None
+    if (lat is None) != (lon is None):
+        raise _bad_coordinates(
+            "incomplete_pair", "Pick both a latitude and a longitude column, or neither."
+        )
+    if lat is not None and lat == lon:
+        raise _bad_coordinates(
+            "same_column", "Latitude and longitude must be two different columns."
+        )
+
+    project, dc, can_edit = _resolve(data_collection_id, user)
+    if not can_edit:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "read_only_role",
+                "message": "Only project owners and editors can mark map coordinates.",
+            },
+        )
+    assert_project_unlocked(project)
+    if str((dc.get("config") or {}).get("type") or "").lower() != "table":
+        raise _bad_coordinates("not_a_table", "Only a table can hold map coordinates.")
+    if lat is not None and lon is not None:
+        _check_coordinate_columns(data_collection_id, lat, lon)
+
+    path = next(
+        f"workflows.{w}.data_collections.{d}"
+        for w, workflow in enumerate(project.get("workflows") or [])
+        for d, candidate in enumerate(workflow.get("data_collections") or [])
+        if candidate is dc
+    )
+    props = f"{path}.config.dc_specific_properties"
+    if lat is None:
+        update: dict[str, Any] = {"$unset": {f"{props}.{key}": "" for key in _COORD_KEYS}}
+    else:
+        update = {
+            "$set": {
+                f"{props}.lat_column": lat,
+                f"{props}.lon_column": lon,
+                f"{props}.crs": "EPSG:4326",
+            }
+        }
+    result = projects_collection.update_one(
+        {"_id": project["_id"], f"{path}._id": dc["_id"]}, update
+    )
+    if result.matched_count == 0:
+        raise HTTPException(
+            status_code=409, detail="The project changed meanwhile. Reload it and try again."
+        )
+    logger.info(
+        f"Table coordinates: {data_collection_id} "
+        f"{f'lat={lat} lon={lon}' if lat else 'cleared'} by {getattr(user, 'email', None)}"
+    )
+    return {"lat_column": lat, "lon_column": lon}
+
+
+# ----------------------------------------------------------------------------
 # Reading
 # ----------------------------------------------------------------------------
 
