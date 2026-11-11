@@ -1,5 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Anchor, Button, CloseButton, Drawer, Group, Stack, Text } from '@mantine/core';
+import {
+  ActionIcon,
+  Alert,
+  Anchor,
+  Button,
+  Drawer,
+  Group,
+  Stack,
+  Text,
+  ThemeIcon,
+} from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import { listMigrationRequests } from 'depictio-react-core';
@@ -100,9 +110,13 @@ export const MigrationRequestsBanner: React.FC = () => {
 
   if (!allowed || waiting.length + failed.length + imported.length === 0) return null;
 
-  // Every row reserves the same slots, so the buttons line up whether or not a
-  // row can be dismissed.
-  const row = (r: MigrationRequestSummary, color: string, dismissable: boolean) => (
+  // One template for the three banners: a neutral surface, the status colour on
+  // the icon only, the same quiet buttons the rest of the pages use (a filled
+  // primary only where a decision is waiting), and the app's own dismiss key.
+  // Tinting the whole banner and its buttons with Mantine's raw yellow/red/green
+  // fought the page palette and left pale-on-pale text. Every row reserves the
+  // same slots, so the buttons line up whether or not a row can be dismissed.
+  const row = (r: MigrationRequestSummary, dismissable: boolean) => (
     <Group key={r.id} justify="space-between" wrap="nowrap" gap="md" data-testid="migration-banner-row">
       <Text size="sm" style={{ minWidth: 0 }} truncate>
         <b>{r.project_name}</b>
@@ -115,21 +129,9 @@ export const MigrationRequestsBanner: React.FC = () => {
         <Button
           size="sm"
           radius="md"
-          color={color}
-          variant="light"
+          variant={r.status === 'pending' ? 'filled' : 'default'}
           fw={600}
           miw={116}
-          // The glass theme paints light buttons from --gl-accent-soft / -fg:
-          // pin them to the colour of the banner this button sits in.
-          style={
-            {
-              '--button-bg': `var(--mantine-color-${color}-light)`,
-              '--button-hover': `var(--mantine-color-${color}-light-hover)`,
-              '--button-color': `var(--mantine-color-${color}-light-color)`,
-              '--gl-accent-soft': `var(--mantine-color-${color}-light)`,
-              '--gl-accent-fg': `var(--mantine-color-${color}-light-color)`,
-            } as React.CSSProperties
-          }
           leftSection={
             <Icon
               icon={r.status === 'pending' ? 'mdi:clipboard-check-outline' : 'mdi:text-box-search-outline'}
@@ -142,7 +144,15 @@ export const MigrationRequestsBanner: React.FC = () => {
         </Button>
         <div style={{ width: 28, display: 'flex', justifyContent: 'center' }}>
           {dismissable && (
-            <CloseButton size="md" c={color} aria-label="Dismiss" onClick={() => dismiss(r.id)} />
+            <ActionIcon
+              variant="subtle"
+              color="gray"
+              size="md"
+              aria-label="Dismiss"
+              onClick={() => dismiss(r.id)}
+            >
+              <Icon icon="tabler:x" width={16} />
+            </ActionIcon>
           )}
         </div>
       </Group>
@@ -155,14 +165,18 @@ export const MigrationRequestsBanner: React.FC = () => {
   ) =>
     items.length === 0 ? null : (
       <Alert
-        color={props.color}
-        variant="light"
-        icon={<Icon icon={props.icon} width={18} />}
+        variant="default"
+        radius="md"
+        icon={
+          <ThemeIcon variant="light" color={props.color} radius="xl" size={28}>
+            <Icon icon={props.icon} width={17} />
+          </ThemeIcon>
+        }
         title={props.title}
         data-testid={props.testId}
       >
         <Stack gap={6}>
-          {items.slice(0, MAX_ROWS).map((r) => row(r, props.color, props.dismissable))}
+          {items.slice(0, MAX_ROWS).map((r) => row(r, props.dismissable))}
           {items.length > MAX_ROWS && (
             <Anchor href="/admin/migrations" size="xs">
               and {items.length - MAX_ROWS} more in Admin &gt; Migrations
