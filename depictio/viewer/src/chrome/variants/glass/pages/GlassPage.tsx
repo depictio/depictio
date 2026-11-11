@@ -24,6 +24,7 @@ import { MantineThemeContext, Tooltip, useMantineTheme } from '@mantine/core';
 import type { MantineTheme } from '@mantine/core';
 import { BRAND_PALETTES, brandAccent, useBranding } from 'depictio-react-core';
 import {
+  Activity,
   ChevronRight,
   Compass,
   FolderKanban,
@@ -61,6 +62,7 @@ export const SECTION_ICON: Record<SidebarSection, LucideIcon> = {
   dashboards: LayoutDashboard,
   projects: FolderKanban,
   admin: ShieldCheck,
+  activity: Activity,
   about: Info,
   profile: UserRound,
 };
@@ -78,6 +80,7 @@ export function useSectionPalettes(): Record<SidebarSection, string> {
       dashboards: brandAccent(brand, 'tertiary', 'logoOrange'),
       projects: brandAccent(brand, 'secondary', 'logoTeal'),
       admin: BRAND_PALETTES.primary,
+      activity: BRAND_PALETTES.primary,
       about: 'gray',
       profile: BRAND_PALETTES.primary,
     }),
@@ -89,6 +92,7 @@ const SECTION_LABEL: Record<SidebarSection, string> = {
   dashboards: 'Dashboards',
   projects: 'Projects',
   admin: 'Administration',
+  activity: 'Activity',
   about: 'About',
   profile: 'Account settings',
 };

@@ -24,6 +24,18 @@ export function canSeeMonitoring(modes: AdminModes): boolean {
   return isPublicMode && !isDemoMode && Boolean(user?.is_admin) && !user?.is_temporary;
 }
 
+/**
+ * Whether the Activity page (the tasks, ingestion runs and sends of the
+ * projects the reader can access) is offered in the navigation. For the real,
+ * non-admin users of an instance with accounts: admins read the same views, and
+ * more, under Administration, and a public or demo instance has no per-user
+ * scope to show. The API enforces the same rule.
+ */
+export function canSeeActivity({ user, isPublicMode, isDemoMode }: AdminModes): boolean {
+  if (!user || isPublicMode || isDemoMode) return false;
+  return !user.is_admin && !user.is_temporary;
+}
+
 /** Whole-database backup and restore stay with trusted instances only. */
 export function canSeeBackups(modes: AdminModes): boolean {
   return isTrustedInstance(modes);

@@ -181,3 +181,49 @@
 :root[data-chrome='glass'] .gp-main .ga-admin .mantine-SegmentedControl-label[data-active] {
   color: var(--gl-fg);
 }
+
+/* ------------------------------------------------------------------ tables */
+
+/* The admin list tables: a paper frame with a hairline ring, a quiet header
+ * row, the expanded detail on the well. */
+:root[data-chrome='glass'] .gp-main .ga-admin .ga-table-frame {
+  overflow: hidden;
+  border-radius: 14px;
+  background: var(--gl-paper);
+  box-shadow:
+    0 0 0 1px var(--gl-hair),
+    0 1px 2px var(--gl-shade-a);
+}
+:root[data-chrome='glass'] .gp-main .ga-admin .ga-table .mantine-Table-table {
+  --table-border-color: var(--gl-hair);
+  --table-hover-color: var(--gl-well);
+  color: var(--gl-fg);
+  font-size: 13.5px;
+}
+:root[data-chrome='glass'] .gp-main .ga-admin .ga-table .mantine-Table-thead {
+  background: var(--gl-well);
+}
+:root[data-chrome='glass'] .gp-main .ga-admin .ga-table .mantine-Table-th {
+  color: var(--gl-muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+:root[data-chrome='glass'] .gp-main .ga-admin .ga-table .mantine-Table-th button {
+  color: inherit;
+}
+:root[data-chrome='glass'] .gp-main .ga-admin .ga-table .ga-table-row[data-open] {
+  background: var(--gl-well);
+}
+:root[data-chrome='glass'] .gp-main .ga-admin .ga-table .ga-table-detail,
+:root[data-chrome='glass'] .gp-main .ga-admin .ga-table .ga-table-detail:hover {
+  background: var(--gl-well);
+}
+:root[data-chrome='glass'] .gp-main .ga-admin .ga-table .ga-table-detail > td {
+  padding: 14px 18px 16px 52px;
+}
+:root[data-chrome='glass'] .gp-main .ga-admin .ga-table .ga-table-toolbar .mantine-TextInput-input {
+  background: var(--gl-paper);
+  border-color: var(--gl-hair);
+}

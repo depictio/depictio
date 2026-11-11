@@ -87,14 +87,53 @@ def _drain_logs(task_id: str) -> list[str]:
         return _log_buffers.pop(task_id, [])
 
 
-def _extract_refs(kwargs: dict | None, args: tuple | None) -> dict[str, Any]:
-    """Best-effort pull of dashboard_id / dc_id from task kwargs."""
+_REF_KEYS = ("dashboard_id", "dc_id", "project_id", "run_id")
+
+
+def _payload_user_id(source: dict) -> str | None:
+    """The acting user's id from a task payload, when it carries one.
+
+    Payloads name the user as a flat ``user_id``, or as a ``current_user`` /
+    ``user`` entry that is either an id or a dict holding one.
+    """
+    val = source.get("user_id")
+    if val is None:
+        for key in ("current_user", "user"):
+            entry = source.get(key)
+            if isinstance(entry, dict):
+                val = entry.get("id", entry.get("_id", entry.get("user_id")))
+            elif entry is not None:
+                val = entry
+            if val is not None:
+                break
+    return str(val) if val is not None else None
+
+
+def _extract_refs(kwargs: dict | None, args: tuple | list | None) -> dict[str, Any]:
+    """Best-effort pull of dashboard / dc / project / run / user ids from a task call.
+
+    Looks in the kwargs and in the first positional argument when that is a
+    dict: most tasks are queued as ``apply_async(args=[payload])``, so the
+    kwargs alone left almost every row without a project. Never looks anything
+    up: a row only gets the ids the caller already put in the call, and the
+    rest stay unset.
+    """
     refs: dict[str, Any] = {}
+    sources: list[dict] = []
+    if isinstance(args, (list, tuple)) and args and isinstance(args[0], dict):
+        sources.append(args[0])
     if isinstance(kwargs, dict):
-        for key in ("dashboard_id", "dc_id"):
-            val = kwargs.get(key)
+        # kwargs last, so an explicit keyword wins over a payload entry.
+        sources.append(kwargs)
+    user_id: str | None = None
+    for source in sources:
+        for key in _REF_KEYS:
+            val = source.get(key)
             if val is not None:
                 refs[key] = str(val)
+        user_id = _payload_user_id(source) or user_id
+    if user_id is not None:
+        refs["user_id"] = user_id
     return refs
 
 

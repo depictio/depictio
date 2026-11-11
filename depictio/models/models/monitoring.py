@@ -74,6 +74,9 @@ class TaskEvent(BaseModel):
     #: hunting through every task.
     run_id: Optional[str] = Field(default=None, description="Ingestion run this task belongs to")
     project_id: Optional[str] = Field(default=None, description="Project id if applicable")
+    user_id: Optional[str] = Field(
+        default=None, description="Id of the user who queued the task, when its payload names one"
+    )
     queue: Optional[str] = Field(default=None, description="Queue the task ran on")
     worker: Optional[str] = Field(default=None, description="Worker hostname that ran the task")
     started_at: Optional[datetime] = Field(default=None, description="When the task began running")

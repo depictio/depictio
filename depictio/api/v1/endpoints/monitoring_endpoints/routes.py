@@ -1,7 +1,10 @@
 """Admin "Log & Task" monitoring API.
 
-Read endpoints (admin-only) back the admin monitoring tab: Celery task history,
-CLI ingestion runs, recent application logs, and live worker health. Two write
+Read endpoints back the admin monitoring tab: Celery task history, CLI
+ingestion runs, CLI agents, recent application logs, and live worker health.
+Tasks, ingestion runs and agents are also readable by non-admin users, scoped to
+the projects they can access (see ``_reader_scope``); logs and health stay
+admin-only. Two write
 endpoints (auth-only, not admin-gated) let the CLI open/close an ingestion-run
 record — the caller is the ingesting user, identified by token + CLI headers.
 
@@ -25,9 +28,11 @@ from pydantic import BaseModel, Field, field_validator
 
 from depictio.api.celery_app import celery_app
 from depictio.api.v1.configs.config import settings
+from depictio.api.v1.db import groups_collection, projects_collection
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 from depictio.api.v1.monitoring import store
 from depictio.api.v1.monitoring.rate_limit import allow_step_update
+from depictio.api.v1.permissions import build_access_query, get_user_group_ids
 from depictio.models.models.monitoring import (
     CliAgent,
     IngestionDataCollection,
@@ -67,6 +72,123 @@ def _require_admin(current_user: User) -> None:
         raise HTTPException(status_code=403, detail="User is not an admin.")
 
 
+class _Scope:
+    """What one caller may read of the tasks / runs / agents ledgers.
+
+    ``admin`` sees everything. Anyone else sees the rows filed under a project
+    they can read, plus the rows they created themselves; of those, the ones
+    under a project they can edit (or that they created) come back in full and
+    the rest redacted.
+    """
+
+    def __init__(
+        self,
+        user_id: str,
+        admin: bool,
+        viewer_project_ids: Optional[list[str]] = None,
+        editor_project_ids: Optional[list[str]] = None,
+    ):
+        self.user_id = user_id
+        self.admin = admin
+        self.viewer_project_ids = viewer_project_ids or []
+        self._editor_project_ids = set(editor_project_ids or [])
+
+    @property
+    def query_scope(self) -> Optional[dict]:
+        """The ``scope`` argument of the store queries; None for an admin."""
+        if self.admin:
+            return None
+        return {"project_ids": self.viewer_project_ids, "user_id": self.user_id}
+
+    def can_see(self, row: dict) -> bool:
+        if self.admin or row.get("user_id") == self.user_id:
+            return True
+        return row.get("project_id") in self.viewer_project_ids
+
+    def sees_in_full(self, row: dict) -> bool:
+        if self.admin or row.get("user_id") == self.user_id:
+            return True
+        return row.get("project_id") in self._editor_project_ids
+
+
+def _reader_scope(current_user: User) -> _Scope:
+    """Who may read the task / ingestion / agent views, and how much of them.
+
+    Admins read everything (a public instance's temporary guests excepted).
+    Other real users read the rows of the projects they can access, but never
+    in public or demo mode, where the user base is anonymous or throwaway and
+    there is no per-user surface to scope to. Single-user mode is always
+    allowed.
+    """
+    single_user = settings.auth.is_single_user_mode
+    if settings.auth.is_demo_mode and not single_user:
+        raise HTTPException(status_code=404, detail="Monitoring is not available in this mode.")
+    is_admin = bool(getattr(current_user, "is_admin", False))
+    temporary = bool(getattr(current_user, "is_temporary", False))
+    public = settings.auth.is_public_mode and not single_user
+    if is_admin:
+        if public and temporary:
+            raise HTTPException(status_code=403, detail="User is not an admin.")
+        return _Scope(str(current_user.id), admin=True)
+    if (public or temporary or getattr(current_user, "is_anonymous", False)) and not single_user:
+        logger.warning(
+            f"Denied monitoring access: user {current_user.id} ({current_user.email}) "
+            "may not read it in this mode"
+        )
+        raise HTTPException(status_code=403, detail="User is not an admin.")
+    group_ids = get_user_group_ids(current_user.id, groups_collection)
+
+    def _ids(level: str) -> list[str]:
+        query = build_access_query(current_user, level, group_ids)
+        return [str(doc["_id"]) for doc in projects_collection.find(query, {"_id": 1})]
+
+    return _Scope(
+        str(current_user.id),
+        admin=False,
+        viewer_project_ids=_ids("viewer"),
+        editor_project_ids=_ids("editor"),
+    )
+
+
+# What a plain viewer of a project does not see of a task: the call's arguments,
+# its captured logs, traceback and result, and the machine it ran on.
+_TASK_DETAIL_FIELDS = ("args_repr", "traceback", "logs", "result_summary", "worker", "user_id")
+
+# The same for an agent: where the watcher runs and who runs it.
+_AGENT_OPERATOR_FIELDS = (
+    "hostname",
+    "pid",
+    "email",
+    "user_id",
+    "watching",
+    "last_error",
+    "run_requested_by",
+)
+
+
+def _redact_task(task: dict, scope: _Scope) -> dict:
+    if scope.sees_in_full(task):
+        return task
+    return {**{k: v for k, v in task.items() if k not in _TASK_DETAIL_FIELDS}, "redacted": True}
+
+
+def _redact_agent(agent: dict, scope: _Scope) -> dict:
+    if scope.sees_in_full(agent):
+        return agent
+    return {
+        **{k: v for k, v in agent.items() if k not in _AGENT_OPERATOR_FIELDS},
+        "redacted": True,
+    }
+
+
+def _redact_ingestion_run(run: dict, scope: _Scope) -> dict:
+    if scope.sees_in_full(run):
+        return run
+    from depictio.api.v1.endpoints.projects_endpoints.routes import _redact_run
+
+    return {**_redact_run(run, full=False), "redacted": True}
+
+
 # ── Tasks ───────────────────────────────────────────────────────────────────
 
 
@@ -81,24 +203,31 @@ def list_tasks(
     limit: int = Query(default=100, ge=1, le=500),
     skip: int = Query(default=0, ge=0),
 ):
-    """List Celery task events, newest-first, with optional filters."""
-    _require_admin(current_user)
+    """List Celery task events, newest-first, with optional filters.
+
+    Admins see every task; other users the tasks of their projects, redacted
+    unless they can edit the project.
+    """
+    scope = _reader_scope(current_user)
     since = store.task_event_seconds_ago(since_seconds) if since_seconds else None
-    return {
-        "tasks": store.query_task_events(
-            status=status, kind=kind, since=since, limit=limit, skip=skip
-        )
-    }
+    tasks = store.query_task_events(
+        status=status, kind=kind, since=since, limit=limit, skip=skip, scope=scope.query_scope
+    )
+    return {"tasks": [_redact_task(task, scope) for task in tasks]}
 
 
 @monitoring_endpoint_router.get("/tasks/{task_id}")
 def get_task(task_id: str, current_user: User = Depends(get_current_user)):
-    """Return a single task event including captured logs and traceback."""
-    _require_admin(current_user)
+    """Return a single task event including captured logs and traceback.
+
+    A task outside the caller's scope is a 404, not a 403: it should not be
+    possible to tell it exists.
+    """
+    scope = _reader_scope(current_user)
     event = store.get_task_event(task_id)
-    if not event:
+    if not event or not scope.can_see(event):
         raise HTTPException(status_code=404, detail="Task event not found.")
-    return event
+    return _redact_task(event, scope)
 
 
 # ── Ingestion runs ────────────────────────────────────────────────────────────
@@ -463,9 +592,10 @@ def list_agents(
     project_id: Optional[str] = Query(default=None),
     limit: int = Query(default=100, ge=1, le=500),
 ):
-    """List live CLI agents. Admin-gated, like the rest of the monitoring views."""
-    _require_admin(current_user)
-    return {"agents": store.query_cli_agents(project_id=project_id, limit=limit)}
+    """List live CLI agents: all for an admin, else those of the caller's projects."""
+    scope = _reader_scope(current_user)
+    agents = store.query_cli_agents(project_id=project_id, limit=limit, scope=scope.query_scope)
+    return {"agents": [_redact_agent(agent, scope) for agent in agents]}
 
 
 @monitoring_endpoint_router.get("/ingestion")
@@ -477,24 +607,33 @@ def list_ingestion(
     limit: int = Query(default=100, ge=1, le=500),
     skip: int = Query(default=0, ge=0),
 ):
-    """List CLI ingestion runs, newest-first, with optional filters."""
-    _require_admin(current_user)
+    """List ingestion runs, newest-first, with optional filters.
+
+    Admins see every run; other users the runs of their projects and their own,
+    redacted unless they can edit the project.
+    """
+    scope = _reader_scope(current_user)
     store.mark_stale_ingestion_runs()
-    return {
-        "runs": store.query_ingestion_runs(
-            instance=instance, status=status, project_id=project_id, limit=limit, skip=skip
-        )
-    }
+    runs = store.query_ingestion_runs(
+        instance=instance,
+        status=status,
+        project_id=project_id,
+        limit=limit,
+        skip=skip,
+        scope=scope.query_scope,
+    )
+    return {"runs": [_redact_ingestion_run(run, scope) for run in runs]}
 
 
 @monitoring_endpoint_router.get("/ingestion/{run_id}")
 def get_ingestion(run_id: str, current_user: User = Depends(get_current_user)):
-    _require_admin(current_user)
+    """One run. Outside the caller's scope it is a 404, not a 403."""
+    scope = _reader_scope(current_user)
     store.mark_stale_ingestion_runs()
     run = store.get_ingestion_run(run_id)
-    if not run:
+    if not run or not scope.can_see(run):
         raise HTTPException(status_code=404, detail="Ingestion run not found.")
-    return run
+    return _redact_ingestion_run(run, scope)
 
 
 # ── Logs ──────────────────────────────────────────────────────────────────────

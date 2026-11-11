@@ -784,7 +784,7 @@
 }
 :root[data-chrome='glass'] :is(.mantine-Modal-content, .mantine-Popover-dropdown) .mantine-Button-root[data-variant='filled']:not([data-disabled]) {
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--mantine-color-white) 30%, transparent),
-    0 8px 18px -8px color-mix(in srgb, var(--gl-accent) 80%, transparent);
+    0 8px 18px -8px color-mix(in srgb, var(--button-bg, var(--gl-accent)) 80%, transparent);
 }
 :root[data-chrome='glass'] .mantine-Modal-content .mantine-Accordion-item,
 :root[data-chrome='glass'] .mantine-Modal-content .mantine-Paper-root[data-with-border] {

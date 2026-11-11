@@ -7614,6 +7614,10 @@ export interface AdminUser {
   is_verified?: boolean;
   registration_date?: string | null;
   last_login?: string | null;
+  display_name?: string | null;
+  login?: string | null;
+  sso_provider?: string | null;
+  must_change_password?: boolean;
   [key: string]: unknown;
 }
 
@@ -7682,6 +7686,10 @@ export interface AdminProject {
   is_public?: boolean;
   workflow_system?: string;
   permissions?: DashboardPermissions;
+  /** Creation time, UTC, "YYYY-MM-DD HH:MM:SS". */
+  registration_time?: string;
+  /** Last edit, UTC; empty when never edited since creation. */
+  last_modified?: string;
   [key: string]: unknown;
 }
 
@@ -7703,6 +7711,9 @@ export interface AdminDashboard {
   main_tab_name?: string;
   project_id?: string;
   last_saved_ts?: string;
+  creation_time?: string;
+  version?: number;
+  workflow_system?: string;
   permissions?: DashboardPermissions;
   stored_metadata?: unknown[];
   [key: string]: unknown;
@@ -7940,8 +7951,12 @@ export async function restoreBackup(
 
 // ---- Admin "Log & Task" monitoring (/monitoring) ------------------------
 //
-// Back the admin Monitoring tab. All read endpoints are admin-gated server
-// side and 404 in public/demo mode; the SPA hides the tab in those modes too.
+// Back the admin Monitoring tab and the Activity page. The task, ingestion and
+// agent reads are scoped server side: an admin gets everything, any other real
+// user the rows of the projects they can access (redacted, and flagged
+// `redacted`, unless they can edit the project). Logs and health are
+// admin-only. All of it is refused in public/demo mode, where the SPA hides
+// these views too.
 
 /** A persisted Celery task lifecycle record. */
 export interface MonitoringTaskEvent {
@@ -7952,6 +7967,12 @@ export interface MonitoringTaskEvent {
   args_repr?: string;
   dashboard_id?: string | null;
   dc_id?: string | null;
+  project_id?: string | null;
+  run_id?: string | null;
+  user_id?: string | null;
+  /** True when the reader is only a viewer of the task's project: arguments,
+   *  result, logs, traceback and worker are left out. */
+  redacted?: boolean;
   queue?: string | null;
   worker?: string | null;
   started_at?: string | null;
@@ -7982,6 +8003,9 @@ export interface MonitoringIngestionRun {
   project_config_path?: string | null;
   data_root?: string | null;
   data_collections?: MonitoringIngestionDataCollection[];
+  /** True when the reader is only a viewer of the run's project: commands,
+   *  local paths, user details and step messages are left out. */
+  redacted?: boolean;
   /** `abandoned`: still `running` when no write arrived within the stale threshold. */
   status: 'running' | 'success' | 'partial' | 'failed' | 'interrupted' | 'abandoned';
   steps?: MonitoringIngestionStep[];

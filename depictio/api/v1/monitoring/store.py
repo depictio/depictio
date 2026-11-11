@@ -47,6 +47,8 @@ def ensure_monitoring_storage() -> None:
         task_events_collection.create_index(
             "created_at", expireAfterSeconds=retention_seconds, name="created_at_ttl"
         )
+        # Scoped reads filter on the project: non-admins only see their own.
+        task_events_collection.create_index("project_id")
         ingestion_runs_collection.create_index("run_id", unique=True)
         ingestion_runs_collection.create_index([("started_at", DESCENDING)])
         cli_agents_collection.create_index("agent_id", unique=True)
@@ -68,6 +70,31 @@ def ensure_monitoring_storage() -> None:
             logger.info(f"monitoring: created capped collection '{name}'")
     except Exception as exc:  # pragma: no cover - defensive
         logger.warning(f"monitoring: failed to ensure capped app_logs collection: {exc}")
+
+
+def scope_clause(scope: Optional[dict[str, Any]]) -> Optional[dict[str, Any]]:
+    """Mongo predicate for a non-admin reader, or None for no restriction.
+
+    ``scope`` is ``{"project_ids": [...], "user_id": "..."}``: a row is visible
+    when it belongs to one of the projects, or the reader created it.
+    """
+    if scope is None:
+        return None
+    clauses: list[dict[str, Any]] = []
+    project_ids = list(scope.get("project_ids") or [])
+    if project_ids:
+        clauses.append({"project_id": {"$in": project_ids}})
+    if scope.get("user_id"):
+        clauses.append({"user_id": scope["user_id"]})
+    # An empty scope must match nothing, not everything.
+    return {"$or": clauses} if clauses else {"_never": {"$exists": True}}
+
+
+def _scoped(query: dict[str, Any], scope: Optional[dict[str, Any]]) -> dict[str, Any]:
+    clause = scope_clause(scope)
+    if clause is None:
+        return query
+    return {"$and": [query, clause]} if query else clause
 
 
 # ── Task events ─────────────────────────────────────────────────────────────
@@ -112,8 +139,13 @@ def query_task_events(
     since: Optional[datetime] = None,
     limit: int = 100,
     skip: int = 0,
+    scope: Optional[dict[str, Any]] = None,
 ) -> list[dict[str, Any]]:
-    """Return task_events newest-first, with optional filters."""
+    """Return task_events newest-first, with optional filters.
+
+    ``scope`` restricts the rows to a non-admin reader's projects (see
+    ``scope_clause``); None means everything.
+    """
     query: dict[str, Any] = {}
     if status:
         query["status"] = status
@@ -122,7 +154,7 @@ def query_task_events(
     if since:
         query["updated_at"] = {"$gte": since}
     cursor = (
-        task_events_collection.find(query, {"_id": 0})
+        task_events_collection.find(_scoped(query, scope), {"_id": 0})
         .sort("updated_at", DESCENDING)
         .skip(max(0, skip))
         .limit(max(1, min(limit, 500)))
@@ -292,6 +324,7 @@ def query_ingestion_runs(
     project_id: Optional[str] = None,
     limit: int = 100,
     skip: int = 0,
+    scope: Optional[dict[str, Any]] = None,
 ) -> list[dict[str, Any]]:
     query: dict[str, Any] = {}
     if instance:
@@ -306,7 +339,7 @@ def query_ingestion_runs(
     if project_id:
         query["project_id"] = project_id
     cursor = (
-        ingestion_runs_collection.find(query, {"_id": 0})
+        ingestion_runs_collection.find(_scoped(query, scope), {"_id": 0})
         .sort("started_at", DESCENDING)
         .skip(max(0, skip))
         .limit(max(1, min(limit, 500)))
@@ -376,12 +409,17 @@ def claim_cli_agent_run(agent_id: str) -> Optional[dict[str, Any]]:
     )
 
 
-def query_cli_agents(*, project_id: Optional[str] = None, limit: int = 100) -> list[dict[str, Any]]:
+def query_cli_agents(
+    *,
+    project_id: Optional[str] = None,
+    limit: int = 100,
+    scope: Optional[dict[str, Any]] = None,
+) -> list[dict[str, Any]]:
     query: dict[str, Any] = {}
     if project_id:
         query["project_id"] = project_id
     cursor = (
-        cli_agents_collection.find(query, {"_id": 0})
+        cli_agents_collection.find(_scoped(query, scope), {"_id": 0})
         .sort("heartbeat_at", DESCENDING)
         .limit(max(1, min(limit, 500)))
     )

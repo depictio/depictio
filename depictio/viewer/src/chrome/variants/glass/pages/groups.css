@@ -36,6 +36,9 @@
   white-space: nowrap;
   color: var(--gl-fg);
 }
+:root[data-chrome='glass'] .gp-main .gg-name .mantine-Badge-root {
+  flex: none;
+}
 :root[data-chrome='glass'] .gp-main .gg-name-mark {
   flex: none;
   color: var(--gl-accent-fg);

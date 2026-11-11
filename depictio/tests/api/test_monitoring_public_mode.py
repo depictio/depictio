@@ -52,6 +52,10 @@ def api(monkeypatch):
         who["user"] = user
         return client.get("/monitoring/ingestion")
 
+    from depictio.api.v1.endpoints.monitoring_endpoints import routes as monitoring_routes
+
+    monkeypatch.setattr(monitoring_routes, "projects_collection", db.projects)
+    monkeypatch.setattr(monitoring_routes, "groups_collection", db.groups)
     return SimpleNamespace(get_as=get_as, settings=settings, monkeypatch=monkeypatch)
 
 
@@ -64,7 +68,13 @@ def test_a_temporary_guest_does_not(api):
 
 
 def test_a_non_admin_does_not(api):
+    # Scoped reading for non-admins is a multi-user feature: not on a public instance.
     assert api.get_as(_user(admin=False)).status_code == 403
+
+
+def test_a_non_admin_reads_their_own_scope_on_a_private_instance(api):
+    api.monkeypatch.setattr(api.settings.auth, "public_mode", False)
+    assert api.get_as(_user(admin=False)).status_code == 200
 
 
 def test_demo_mode_still_refuses_everyone(api):
