@@ -184,6 +184,12 @@ def _stamp(**minutes_ago) -> str:
         ("https://anything.org", [""], False),
         ("https://anything.org", ["."], False),
         ("not a url", ["serve.scilifelab.se"], False),
+        # "*" allows any host; a bare list entry that merely contains it does not.
+        ("https://anything.org", ["*"], True),
+        ("https://x.y.example.com/path", [" * "], True),
+        ("https://evil.com", ["a.org", "*"], True),
+        ("https://evil.com", ["*.org"], False),
+        ("not a url", ["*"], False),
     ],
 )
 def test_check_destination_domain_matrix(url, suffixes, ok):

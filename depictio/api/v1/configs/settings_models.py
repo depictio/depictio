@@ -1991,7 +1991,8 @@ class MigrationConfig(BaseSettings):
         default_factory=list,
         description=(
             "Source side: domain suffixes a project owner may publish to with a URL and an"
-            ' invite code (e.g. ["serve.scilifelab.se"]). Empty: no ad-hoc destination'
+            ' invite code (e.g. ["serve.scilifelab.se"]); "*" allows any public https host.'
+            " Empty: no ad-hoc destination"
         ),
     )
     invite_ttl_days: int = Field(

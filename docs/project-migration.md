@@ -86,8 +86,9 @@ first brought it.** A new code for a project that is already here is refused.
 **Source settings.** A typed destination must:
 - be under a domain suffix of `DESTINATION_DOMAINS`, for example
   `["serve.scilifelab.se", "embl.org"]`. A host matches when it equals the
-  suffix or ends with `.<suffix>`. Empty (the default) disables typed
-  destinations;
+  suffix or ends with `.<suffix>`. `"*"` allows any host (the chart default);
+  empty (the code default) disables typed destinations. An operator who keeps
+  data on site restricts the list, or sets `[]`;
 - use https;
 - pass the SSRF guard. Both checks run again before every call.
 
@@ -184,7 +185,7 @@ List settings take JSON.
 | `INBOUND_ENABLED` | target | `false` (chart: `true`) | Accept pushes from `INBOUND_SOURCES` and from valid invite codes. When off, every inbound route returns 404 |
 | `INBOUND_SOURCES` | target | `[]` | `[{"name", "pairing_key", "allowed_source_buckets", "max_pending", "max_per_day", "max_bundle_bytes"}]` |
 | `LOCK_IMPORTED_DEFAULT` | target | `true` | Initial state of *Lock editing* |
-| `DESTINATION_DOMAINS` | source | `[]` | Domain suffixes an owner may publish to with a URL + invite code |
+| `DESTINATION_DOMAINS` | source | `[]` (chart: `["*"]`) | Domain suffixes an owner may publish to with a URL + invite code. `"*"` allows any host; `[]` turns sending off |
 | `INVITE_TTL_DAYS` | target | `30` | Default lifetime of an invite code (its project's first push, then its updates) |
 | `INVITE_MAX_TTL_DAYS` | target | `365` | Longest lifetime an admin may give an invite |
 | `INTERRUPTED_AFTER_MINUTES` | both | `60` | Startup recovery threshold for pushes and imports |
