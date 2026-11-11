@@ -539,12 +539,20 @@ const GroupDetailPanel: React.FC<GroupDetailPanelProps> = ({
               color="var(--mantine-color-grape-6)"
             />
           )}
-          <Title order={4} lineClamp={1}>
-            {group.name}
-          </Title>
+          <Tooltip label={group.name} openDelay={300} withArrow>
+            <Title order={4} lineClamp={1}>
+              {group.name}
+            </Title>
+          </Tooltip>
           {group.sso_managed && (
             <Tooltip label="Synced from SSO — manual changes may be overwritten at next login.">
-              <Badge color="grape" variant="light" size="sm" radius="sm">
+              <Badge
+                color="grape"
+                variant="light"
+                size="sm"
+                radius="sm"
+                style={{ flexShrink: 0 }}
+              >
                 SSO
               </Badge>
             </Tooltip>
@@ -555,12 +563,14 @@ const GroupDetailPanel: React.FC<GroupDetailPanelProps> = ({
             size="sm"
             radius="sm"
             className={glass ? 'gp-tag-plain' : undefined}
+            style={{ flexShrink: 0 }}
           >
             {group.members.length} member{group.members.length === 1 ? '' : 's'}
           </Badge>
         </Group>
         {onDelete && (
           <Button
+            className="gp-danger"
             color="red"
             variant="light"
             size={ctl}

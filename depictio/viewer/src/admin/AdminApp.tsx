@@ -152,6 +152,11 @@ const AdminApp: React.FC = () => {
   // admin instance even if public_mode is also set; demo instances and guests
   // never see it.
   const modes = { user, isPublicMode, isDemoMode, isSingleUserMode };
+  // The API refuses to create accounts in these two modes (`/auth/admin/create_user`).
+  const createUserDisabledReason =
+    isSingleUserMode || isPublicMode
+      ? 'Accounts are not managed in single-user mode and public mode.'
+      : null;
   const showMonitoring = canSeeMonitoring(modes);
   // Full-DB backup/restore is a trusted-deployment tool only.
   const showBackups = canSeeBackups(modes);
@@ -279,7 +284,10 @@ const AdminApp: React.FC = () => {
             })}
           </Tabs.List>
           <Tabs.Panel value={view} className="ga-content">
-            {view === 'users' && <AdminUsersPanel currentUserEmail={user.email} />}
+            {view === 'users' && <AdminUsersPanel
+              currentUserEmail={user.email}
+              createDisabledReason={createUserDisabledReason}
+            />}
             {view === 'groups' && <AdminGroupsPanel />}
             {view === 'projects' && <AdminProjectsPanel />}
             {view === 'dashboards' && <AdminDashboardsPanel />}
@@ -370,7 +378,10 @@ const AdminApp: React.FC = () => {
         </Tabs.List>
 
         <Tabs.Panel value="users" pt="md">
-          <AdminUsersPanel currentUserEmail={user.email} />
+          <AdminUsersPanel
+              currentUserEmail={user.email}
+              createDisabledReason={createUserDisabledReason}
+            />
         </Tabs.Panel>
         <Tabs.Panel value="groups" pt="md">
           <AdminGroupsPanel />

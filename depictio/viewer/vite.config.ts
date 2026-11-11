@@ -17,6 +17,7 @@ const SPA_ROUTE_PREFIXES = [
   'projects',
   'about',
   'admin',
+  'activity',
   'profile',
   'groups',
   'cli-agents',

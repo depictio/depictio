@@ -68,6 +68,7 @@ const PermissionsApp = React.lazy(() => import('./projects/detail/PermissionsApp
 const AboutApp = React.lazy(() => import('./about/AboutApp'));
 const AdminApp = React.lazy(() => import('./admin/AdminApp'));
 const ProfileApp = React.lazy(() => import('./profile/ProfileApp'));
+const ActivityApp = React.lazy(() => import('./activity/ActivityApp'));
 const GroupsApp = React.lazy(() => import('./groups/GroupsApp'));
 const CreateComponentPage = React.lazy(() => import('./builder/CreateComponentPage'));
 const EditComponentPage = React.lazy(() => import('./builder/EditComponentPage'));
@@ -128,6 +129,9 @@ function resolveTree(): React.ReactElement {
   }
   if (window.location.pathname.startsWith('/profile')) {
     return <ProfileApp />;
+  }
+  if (window.location.pathname.startsWith('/activity')) {
+    return <ActivityApp />;
   }
   if (window.location.pathname.startsWith('/groups')) {
     return <GroupsApp />;

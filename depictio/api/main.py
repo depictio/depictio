@@ -446,6 +446,17 @@ if _VIEWER_DIST.is_dir() and _VIEWER_ASSETS.is_dir() and _VIEWER_INDEX.is_file()
     async def _serve_profile_spa(_path: str) -> FileResponse:
         return _spa_index()
 
+    # /activity → React Activity page (tasks, ingestion runs and sends of the
+    # projects the reader can access). Same SPA bundle; main.tsx renders
+    # <ActivityApp/>.
+    @app.get("/activity")
+    async def _serve_activity_spa_root() -> FileResponse:
+        return _spa_index()
+
+    @app.get("/activity/{_path:path}")
+    async def _serve_activity_spa(_path: str) -> FileResponse:
+        return _spa_index()
+
     # /groups → React groups page (my-groups list + group-admin management).
     # Same SPA bundle; main.tsx detects the path prefix and renders
     # <GroupsApp/>.

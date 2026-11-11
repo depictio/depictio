@@ -370,14 +370,18 @@
   box-shadow: none;
 }
 .hy-status-text {
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* Open: the dot is a flex item at the row's end, so the text gives way to it
+   whatever the length of the version tag. Folded (below) pins it to the icon. */
 .hy-status .dc-update-dot {
-  top: 50%;
-  right: 10px;
-  transform: translateY(-50%);
+  position: static;
+  flex: none;
+  margin-left: auto;
+  transform: none;
 }
 .hy-shell[data-side='folded'] .hy-status {
   width: 40px;
@@ -388,8 +392,10 @@
   display: none;
 }
 .hy-shell[data-side='folded'] .hy-status .dc-update-dot {
+  position: absolute;
   top: 6px;
   right: 6px;
+  margin-left: 0;
   transform: none;
 }
 .hy-side-spacer {

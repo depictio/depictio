@@ -20,11 +20,12 @@ export type TableDensity = 'cozy' | 'compact';
 
 export interface TableDisplayMenuProps<K extends string> {
   /** Whose accent the trigger wears once the view is customised. */
-  section: 'dashboards' | 'projects';
-  density: TableDensity;
+  section: 'dashboards' | 'projects' | 'admin';
+  /** Row density controls; omit all three to show the column picker only. */
+  density?: TableDensity;
   /** The density a fresh browser gets, so Reset can return to it. */
-  defaultDensity: TableDensity;
-  onDensityChange: (density: TableDensity) => void;
+  defaultDensity?: TableDensity;
+  onDensityChange?: (density: TableDensity) => void;
   columns: UseTableColumnsResult<K>;
 }
 
@@ -64,10 +65,12 @@ function TableDisplayMenu<K extends string>({
   onDensityChange,
   columns,
 }: TableDisplayMenuProps<K>) {
-  const accent = useListingAccents(section);
+  // Admin tables have no section palette: they wear the theme's primary colour.
+  const accent = useListingAccents(section === 'admin' ? 'projects' : section);
+  const hasDensity = density !== undefined && onDensityChange !== undefined;
   const { allColumns, visibleColumns, isVisible, toggle, reset, showAll, isCustomized } =
     columns;
-  const customised = isCustomized || density !== defaultDensity;
+  const customised = isCustomized || (hasDensity && density !== defaultDensity);
   const allShown = visibleColumns.length === allColumns.length;
 
   return (
@@ -82,7 +85,7 @@ function TableDisplayMenu<K extends string>({
         <Tooltip label="Table display" withinPortal>
           <ActionIcon
             variant={customised ? 'light' : 'default'}
-            color={customised ? accent.tertiary : undefined}
+            color={customised && section !== 'admin' ? accent.tertiary : undefined}
             size="lg"
             radius="md"
             aria-label="Table display"
@@ -93,18 +96,22 @@ function TableDisplayMenu<K extends string>({
         </Tooltip>
       </Menu.Target>
       <Menu.Dropdown className="table-display-menu">
-        <Menu.Label>Rows</Menu.Label>
-        <Box px="sm" pb="xs">
-          <SegmentedControl
-            size="xs"
-            fullWidth
-            value={density}
-            onChange={(v) => onDensityChange(v === 'compact' ? 'compact' : 'cozy')}
-            data={DENSITY_DATA}
-            aria-label="Row density"
-          />
-        </Box>
-        <Divider my={4} />
+        {hasDensity && (
+          <>
+            <Menu.Label>Rows</Menu.Label>
+            <Box px="sm" pb="xs">
+              <SegmentedControl
+                size="xs"
+                fullWidth
+                value={density}
+                onChange={(v) => onDensityChange(v === 'compact' ? 'compact' : 'cozy')}
+                data={DENSITY_DATA}
+                aria-label="Row density"
+              />
+            </Box>
+            <Divider my={4} />
+          </>
+        )}
         <Menu.Label>
           <Group justify="space-between" wrap="nowrap">
             <span>Columns</span>
@@ -177,7 +184,7 @@ function TableDisplayMenu<K extends string>({
             disabled={!customised}
             onClick={() => {
               reset();
-              onDensityChange(defaultDensity);
+              if (hasDensity && defaultDensity) onDensityChange(defaultDensity);
             }}
           >
             Reset

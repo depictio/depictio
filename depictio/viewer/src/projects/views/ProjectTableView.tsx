@@ -14,6 +14,7 @@ import { Globe, Lock } from 'lucide-react';
 
 import type { ProjectListEntry } from 'depictio-react-core';
 
+import SortHeader from '../../components/SortHeader';
 import ProjectActionsMenu from '../ProjectActionsMenu';
 import { parseTemplate, TemplateChip } from '../template';
 import { projectLayout, projectSentence } from '../layout';
@@ -220,48 +221,6 @@ function compareRows(a: Row, b: Row, key: ProjectColumnKey, dir: SortDir): numbe
       return 0;
   }
 }
-
-const SortHeader: React.FC<{
-  label: string;
-  ariaLabel?: string;
-  tooltip?: string;
-  active: boolean;
-  dir: SortDir;
-  onClick: () => void;
-}> = ({ label, ariaLabel, tooltip, active, dir, onClick }) => {
-  const button = (
-    <UnstyledButton
-      onClick={onClick}
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 4,
-        fontWeight: 600,
-      }}
-      aria-label={`Sort by ${ariaLabel ?? tooltip ?? label}`}
-    >
-      {label}
-      <Icon
-        icon={
-          active
-            ? dir === 'asc'
-              ? 'mdi:chevron-up'
-              : 'mdi:chevron-down'
-            : 'mdi:unfold-more-horizontal'
-        }
-        width={14}
-        style={{ opacity: active ? 1 : 0.4 }}
-      />
-    </UnstyledButton>
-  );
-  return tooltip ? (
-    <Tooltip label={tooltip} withinPortal>
-      {button}
-    </Tooltip>
-  ) : (
-    button
-  );
-};
 
 const Dash: React.FC = () => (
   <Text size="xs" c="dimmed">
