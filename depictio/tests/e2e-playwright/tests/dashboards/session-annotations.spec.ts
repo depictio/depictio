@@ -313,6 +313,8 @@ test.describe("Session labels", () => {
     });
 
     await openPanel(page);
+    // The panel opens on whichever table it prefers; the file is keyed on sheets[0].
+    if (sheets.length > 1) await pickTable(page, sheets[0].tag);
     const csv = `${sheets[0].key_columns[0]},cohort_from_file\n${await keyAt(page, 0)},early\n${await keyAt(page, 1)},late\nnot_a_sample,early\n`;
     await page.locator("[data-testid='annotation-drop-zone']").evaluate((zone, text) => {
       const dt = new DataTransfer();
@@ -406,6 +408,8 @@ test.describe("Session labels", () => {
     });
 
     await openPanel(page);
+    // The merge is checked against sheets[0]'s key: show that table, not the panel's default.
+    if (sheets.length > 1) await pickTable(page, sheets[0].tag);
     const first = await keyAt(page, 0);
     await addLabelColumn(page, "status");
     await typeCell(page, "status", 0, "kept");
