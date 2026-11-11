@@ -3,6 +3,38 @@
 ### Docker Images 🐳
 
 ```plaintext
+ghcr.io/depictio/depictio:1.21.0-b5
+ghcr.io/depictio/depictio:latest
+ghcr.io/depictio/depictio:stable
+ghcr.io/depictio/depictio:edge
+```
+
+
+<details>
+<summary>Click to expand the changelog for 1.21.0-b5</summary>
+
+### Changes 📜
+
+#### Other Changes 📝
+
+* Bump version: 1.21.0-b4 → 1.21.0-b5 [b2ad4421e]
+* feat(admin): disable Add user in single-user and public mode [c8a89a9e3]
+* feat(admin): multi-select with bulk delete and a compact one-line mode [430c9f0b1]
+* feat(admin): row actions in the admin Projects and Dashboards tables [4b29b901b]
+* feat(admin): admin tables, activity view for project members, UI fixes [23383cfc1]
+* Update CHANGELOG.md for v1.21.0-b4 [fd060acd7]
+* feat(tables): mark the lat/lon columns of a table from its page and from Add data [86ef861b5]
+
+
+</details>
+
+### Documentation 📖
+
+For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
+
+### Docker Images 🐳
+
+```plaintext
 ghcr.io/depictio/depictio:1.21.0-b4
 ghcr.io/depictio/depictio:latest
 ghcr.io/depictio/depictio:stable
