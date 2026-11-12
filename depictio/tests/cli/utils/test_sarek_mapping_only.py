@@ -23,8 +23,8 @@ import depictio.api.v1.endpoints.dashboards_endpoints.routes as routes  # noqa: 
 from depictio.cli.cli.utils.template_preview import preview_data_root
 from depictio.tests.cli.s3_stubs import write_tree
 
-TEMPLATE_ID = "nf-core/sarek/3.10.0"
-ROOT = Path(__file__).resolve().parents[3] / "projects/nf-core/sarek/3.10.0"
+TEMPLATE_ID = "nf-core/sarek/3.11.0"
+ROOT = Path(__file__).resolve().parents[3] / "projects/nf-core/sarek/3.11.0"
 
 _RECALIBRATED = (
     "patient,sex,status,sample,cram,crai\n"
