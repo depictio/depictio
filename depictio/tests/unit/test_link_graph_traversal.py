@@ -108,6 +108,7 @@ def test_walk_composes_hops(monkeypatch):
         token,
         reverse,
         range_filter=False,
+        text_match=None,
     ):
         seen.append((source_dc_id, source_column, tuple(filter_values), target_dc_id, reverse))
         return {"resolved_values": [f"{v}@{target_dc_id}" for v in filter_values]}
