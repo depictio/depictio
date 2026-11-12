@@ -52,6 +52,7 @@ import { Dock } from './Dock';
 import { STROKE } from './icons';
 import { useScrollOverflow } from '../../useScrollOverflow';
 import {
+  BellTile,
   DrawerHead,
   ProfileRows,
   ProfileTile,
@@ -468,6 +469,7 @@ const DeskLayout: React.FC<DashboardShellProps> = ({
                 ))}
               </ChromeButtonGroup>
               <ThemeTile place="top" />
+              <BellTile />
               <ProfileTile />
             </div>
           }

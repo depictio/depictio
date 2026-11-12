@@ -111,7 +111,23 @@ const NotificationRow: React.FC<{ item: InboxItem }> = ({ item }) => {
  * involved to show a toast. Renders nothing while the feature is off, for
  * anonymous or temporary readers, and where the server holds no marks.
  */
-const NotificationsBell: React.FC = () => {
+export interface BellTriggerProps {
+  count: number;
+  label: string;
+  onClick: () => void;
+}
+
+interface NotificationsBellProps {
+  /** Where the panel opens, from the bell. */
+  position?: 'right-end' | 'bottom-end';
+  /** A shell's own button (the glass top keys); the default is a Mantine ActionIcon. */
+  renderTrigger?: (props: BellTriggerProps) => React.ReactElement;
+}
+
+const NotificationsBell: React.FC<NotificationsBellProps> = ({
+  position = 'right-end',
+  renderTrigger,
+}) => {
   const enabledByServer = useChangesSinceEnabled();
   const { user } = useCurrentUser();
   const eligible = enabledByServer && Boolean(user) && !user?.is_temporary;
@@ -248,34 +264,50 @@ const NotificationsBell: React.FC = () => {
     <Popover
       opened={opened}
       onChange={setOpened}
-      position="right-end"
+      position={position}
       width={340}
       shadow="md"
       withArrow
     >
       <Popover.Target>
-        <Indicator
-          label={<span data-testid="notifications-count">{items.length}</span>}
-          size={16}
-          disabled={items.length === 0}
-          offset={4}
-        >
-          <ActionIcon
-            variant="subtle"
-            color="gray"
-            size="lg"
-            aria-label={
-              items.length > 0 ? `Notifications, ${items.length} new` : 'Notifications'
-            }
-            data-testid="notifications-bell"
-            onClick={() => {
-              setOpened((o) => !o);
-              void refresh();
-            }}
-          >
-            <Icon icon="mdi:bell-outline" width={22} />
-          </ActionIcon>
-        </Indicator>
+        {(() => {
+          const label = items.length > 0 ? `Notifications, ${items.length} new` : 'Notifications';
+          const onClick = () => {
+            setOpened((o) => !o);
+            void refresh();
+          };
+          if (renderTrigger) {
+            return (
+              <Indicator
+                label={<span data-testid="notifications-count">{items.length}</span>}
+                size={16}
+                disabled={items.length === 0}
+                offset={4}
+              >
+                {renderTrigger({ count: items.length, label, onClick })}
+              </Indicator>
+            );
+          }
+          return (
+            <Indicator
+              label={<span data-testid="notifications-count">{items.length}</span>}
+              size={16}
+              disabled={items.length === 0}
+              offset={4}
+            >
+              <ActionIcon
+                variant="subtle"
+                color="gray"
+                size="lg"
+                aria-label={label}
+                data-testid="notifications-bell"
+                onClick={onClick}
+              >
+                <Icon icon="mdi:bell-outline" width={22} />
+              </ActionIcon>
+            </Indicator>
+          );
+        })()}
       </Popover.Target>
       <Popover.Dropdown data-testid="notifications-panel" p="xs">
         <Text size="xs" fw={600} c="dimmed" px="xs" pb={4}>
