@@ -27,6 +27,7 @@ from depictio.api.v1.db import (
 )
 from depictio.api.v1.endpoints.dashboards_endpoints import schema_integrity
 from depictio.api.v1.services.changes import baseline as bl
+from depictio.api.v1.services.changes.clock import local_to_utc
 from depictio.models.models.comments import component_fingerprint
 from depictio.models.models.reader_marks import (
     DcSeenState,
@@ -293,7 +294,7 @@ def _delta_change(dc_id: str, before: DcSeenState) -> dict[str, Any] | None:
             {a["ingestion_run_id"] for a in newer if a.get("ingestion_run_id")}
         ),
         "by": sorted({author(a) for a in newer} - {None}),
-        "at": _iso(newer[-1].get("delta_commit_timestamp") or newer[-1].get("aggregation_time")),
+        "at": _iso(local_to_utc(newer[-1].get("aggregation_time"))),
     }
 
 
@@ -359,7 +360,8 @@ def _multiqc_change(dc_id: str, before: DcSeenState) -> dict[str, Any] | None:
             }
             - {None}
         ),
-        "at": max((bl._iso(r.get("processed_at")) for r in changed), default=None),
+        "at": max((_iso(local_to_utc(r.get("processed_at"))) or "" for r in changed), default=None)
+        or None,
     }
 
 
@@ -418,7 +420,7 @@ def failed_ingestions(project_id: Any, base: ReaderBaseline) -> list[dict[str, A
                 "status": run.get("status"),
                 "run_tags": run.get("run_tags") or [],
                 "data_collection_tags": [d.get("tag") for d in run.get("data_collections") or []],
-                "at": _iso(run.get("started_at")),
+                "at": _iso(local_to_utc(run.get("started_at"))),
             }
         )
     return out

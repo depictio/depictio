@@ -44,6 +44,7 @@ from depictio.api.v1.endpoints.user_endpoints.routes import (
 from depictio.api.v1.services.changes import baseline as bl
 from depictio.api.v1.services.changes import diff as df
 from depictio.api.v1.services.changes import store
+from depictio.api.v1.services.changes.clock import local_to_utc, utc_to_local
 from depictio.models.models.reader_marks import (
     ChangesRequest,
     DismissedComponent,
@@ -396,13 +397,15 @@ def project_timeline(
     _require_project(project_id, current_user)
     wanted = {t.strip() for t in (types or "ingestion,version,comment").split(",") if t.strip()}
     time_filter: dict[str, Any] = {"$lt": before} if before else {"$exists": True}
+    # Ingestion runs keep the host's local clock: query and show them in UTC.
+    run_filter: dict[str, Any] = {"$lt": utc_to_local(before)} if before else {"$exists": True}
     can_see_people = _project_permission(ObjectId(project_id), current_user, "editor")
     events: list[dict[str, Any]] = []
 
     if "ingestion" in wanted:
         for run in (
             ingestion_runs_collection.find(
-                {"project_id": project_id, "started_at": time_filter},
+                {"project_id": project_id, "started_at": run_filter},
                 {
                     "run_id": 1,
                     "status": 1,
@@ -422,7 +425,7 @@ def project_timeline(
             events.append(
                 {
                     "type": "ingestion",
-                    "at": run.get("started_at"),
+                    "at": local_to_utc(run.get("started_at")),
                     "id": run.get("run_id"),
                     "status": run.get("status"),
                     "command": run.get("command"),

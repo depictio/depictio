@@ -22,6 +22,7 @@ from depictio.api.v1.db import (
     runs_collection,
 )
 from depictio.api.v1.endpoints.dashboards_endpoints import schema_integrity, version_store
+from depictio.api.v1.services.changes.clock import local_to_utc, utc_to_local
 from depictio.models.models.reader_marks import (
     MAX_TRACKED_COLLECTIONS,
     MAX_TRACKED_REPORTS,
@@ -348,17 +349,19 @@ def rewind_baseline(
         def keep_report(r: dict[str, Any]) -> bool:
             return r.get("ingestion_run_id") != before_run
 
-        version_moment = run_started
+        # Versions and comments are UTC; the run's own clock is local.
+        version_moment = local_to_utc(run_started)
     else:
         assert since is not None
+        since_local = utc_to_local(since)
 
         def keep_agg(a: dict[str, Any]) -> bool:
-            when = a.get("delta_commit_timestamp") or a.get("aggregation_time")
-            return not isinstance(when, datetime) or when <= since
+            when = a.get("aggregation_time")
+            return not isinstance(when, datetime) or when <= since_local
 
         def keep_report(r: dict[str, Any]) -> bool:
             when = r.get("processed_at")
-            return not isinstance(when, datetime) or when <= since
+            return not isinstance(when, datetime) or when <= since_local
 
         version_moment = since
 
@@ -369,7 +372,7 @@ def rewind_baseline(
             for dc_id, state in now.dc_states.items()
         },
         comment_cursor_at=version_moment,
-        ingestion_cursor_at=run_started if before_run else since,
+        ingestion_cursor_at=run_started if before_run else utc_to_local(since),
         workflow_runs=(
             {wf: [t for t in tags if t not in run_tags] for wf, tags in now.workflow_runs.items()}
             if before_run
