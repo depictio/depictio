@@ -381,46 +381,69 @@
 }
 /* The open sidebar's foot (the server's state, the way home) centres its rows
    instead of hanging them off the left edge like the navigation above. */
-.hy-shell:not([data-side='folded']) .hy-side-foot :is(.hy-status, .hy-row) {
+.hy-shell:not([data-side='folded']) .hy-side-foot .hy-row {
   justify-content: center;
 }
-/* The server's state at the sidebar's foot: a quiet row, smaller than the
-   rows above it, that opens the server info popover. */
-.hy-status {
-  position: relative;
-  display: flex;
-  align-items: center;
+.hy-side-foot {
+  gap: 12px;
+}
+/* The server's state at the sidebar's foot, drawn like the landing pages'
+   footer (`.gp-side-foot`): one soft card, the live dot and "Online" with the
+   dimmed version, then the instance mode. A subgrid keeps the two leading
+   glyphs in one column. It opens the server info popover. */
+.hy-status-card {
+  flex: none;
+  display: grid;
+  grid-template-columns: 14px max-content;
+  justify-content: center;
+  align-content: center;
   gap: 12px;
   width: 100%;
-  min-height: 32px;
-  padding: 0 10px;
-  border: 0;
+  padding: 16px 16px;
   border-radius: var(--gl-key-radius);
-  background: transparent;
+  background: var(--gl-well);
   color: var(--gl-rail-muted);
+}
+.hy-status-card > .hy-status,
+.hy-status-card > .hy-mode {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: subgrid;
+  justify-items: start;
+  align-items: center;
+}
+.hy-status-card > :is(.hy-status, .hy-mode) > :first-child {
+  justify-self: center;
+}
+.hy-status {
+  position: relative;
+  min-height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--gl-rail-fg);
   font-family: inherit;
-  font-size: 12px;
-  font-weight: 550;
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   text-align: left;
   cursor: pointer;
   outline: none;
-  transition:
-    background-color 150ms ease,
-    color 150ms ease,
-    box-shadow 150ms ease;
+  column-gap: 8px;
+  transition: color 150ms ease;
 }
-.hy-status:hover {
-  color: var(--gl-rail-fg);
-  background: var(--gl-rail-hover);
+.hy-status-card > .hy-status:has(> .dc-update-dot) {
+  grid-template-columns: 14px max-content auto;
 }
 .hy-status:focus-visible {
   box-shadow: 0 0 0 2px var(--gl-ring);
 }
 .hy-status-dot {
-  width: 8px;
-  height: 8px;
+  width: 9px;
+  height: 9px;
   border-radius: 50%;
   background: var(--mantine-color-green-6);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--mantine-color-green-6) 20%, transparent);
@@ -434,32 +457,57 @@
   box-shadow: none;
 }
 .hy-status-text {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
 }
-/* Open: the dot is a flex item at the row's end, so the text gives way to it
-   whatever the length of the version tag. Folded (below) pins it to the icon. */
+.hy-status-ver {
+  font-size: 12px;
+  font-weight: 550;
+  color: var(--gl-faint);
+}
+.hy-mode {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--gl-rail-muted);
+  font-size: 12.5px;
+  font-weight: 550;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.hy-mode svg {
+  flex: none;
+  color: var(--gl-faint);
+}
+/* Open: the update dot is the third column, right after the tag whatever its
+   length. Folded (below) pins it to the corner of the dot. */
 .hy-status .dc-update-dot {
   position: static;
-  flex: none;
-  margin-left: auto;
+  align-self: center;
   transform: none;
 }
-.hy-shell[data-side='folded'] .hy-status {
-  width: 40px;
-  padding: 0;
+.hy-shell[data-side='folded'] .hy-status-card {
+  display: flex;
+  align-items: center;
   justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+}
+.hy-shell[data-side='folded'] .hy-status {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  min-height: 100%;
 }
 .hy-shell[data-side='folded'] .hy-status-text {
   display: none;
 }
 .hy-shell[data-side='folded'] .hy-status .dc-update-dot {
   position: absolute;
-  top: 6px;
-  right: 6px;
-  margin-left: 0;
+  top: 3px;
+  right: 3px;
   transform: none;
 }
 .hy-side-spacer {
