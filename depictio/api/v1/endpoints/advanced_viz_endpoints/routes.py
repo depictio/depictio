@@ -543,6 +543,7 @@ def _load_reduced(
     viz_kind: str | None = None,
     roles: dict[str, str] | None = None,
     tail: dict | None = None,
+    delta_version: int | None = None,
 ) -> tuple[Any | None, int | None, dict | None]:
     """Read the filtered frame, reduced the way ``policy`` allows.
 
@@ -580,6 +581,7 @@ def _load_reduced(
             metadata=filter_metadata or None,
             init_data=init_data,
             select_columns=projection,
+            delta_version=delta_version,
         )
         if scan is None:
             return None, None, None
@@ -711,6 +713,14 @@ def fetch_advanced_viz_data(
     roles = payload.get("roles") or {}
     tail = payload.get("tail") or None
     aggregate = payload.get("aggregate") or None
+    # A past commit of the collection, for a before/after comparison (#1397).
+    # Read through the same pinned path as every other render: the frame cache
+    # is salted with it and the local mirror is skipped.
+    delta_version = payload.get("delta_version")
+    if delta_version is not None and (
+        isinstance(delta_version, bool) or not isinstance(delta_version, int) or delta_version < 0
+    ):
+        raise HTTPException(status_code=400, detail="delta_version must be an integer >= 0")
 
     if not wf_id or not dc_id:
         raise HTTPException(status_code=400, detail="wf_id and dc_id are required")
@@ -894,6 +904,7 @@ def fetch_advanced_viz_data(
             viz_kind=viz_kind,
             roles=roles,
             tail=tail,
+            delta_version=delta_version,
         )
     if df is None:
         try:
@@ -904,6 +915,7 @@ def fetch_advanced_viz_data(
                 limit_rows=limit_rows,
                 select_columns=projection,
                 init_data=init_data,
+                delta_version=delta_version,
             )
         except Exception as exc:
             logger.warning(

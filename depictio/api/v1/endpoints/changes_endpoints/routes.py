@@ -18,8 +18,9 @@ moment / this ingestion") that never move a mark.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Optional
+from typing import Annotated, Any, Optional
 
+import polars as pl
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, Query
 
@@ -36,7 +37,10 @@ from depictio.api.v1.endpoints.dashboards_endpoints.versions_routes import (
     _require,
     _resolve_family,
 )
-from depictio.api.v1.endpoints.user_endpoints.routes import get_user_or_anonymous
+from depictio.api.v1.endpoints.user_endpoints.routes import (
+    get_user_or_anonymous,
+    oauth2_scheme_optional,
+)
 from depictio.api.v1.services.changes import baseline as bl
 from depictio.api.v1.services.changes import diff as df
 from depictio.api.v1.services.changes import store
@@ -592,4 +596,179 @@ def _inbox_item(
         "refreshed": [d.get("data_collection_tag") for d in data],
         "dashboard_versions": dashboard_versions,
         "at": max(times) if times else None,
+    }
+
+
+# ── one figure, before and after ────────────────────────────────────────────
+
+
+class ComponentDiffRequest(ChangesRequest):
+    """The change-set body, plus the filters the figure is drawn with."""
+
+    filters: list[dict[str, Any]] = []
+
+
+def _resolve_base(
+    family_id: str, now: ReaderBaseline, body: ChangesRequest, user: User
+) -> ReaderBaseline | None:
+    if body.since is not None or body.before_run:
+        return bl.rewind_baseline(now, family_id, since=body.since, before_run=body.before_run)
+    if _server_held(user):
+        mark = store.get_mark(str(user.id), "dashboard", family_id)
+        return mark.baseline if mark else None
+    return body.baseline
+
+
+def _live_component(
+    docs: list[dict[str, Any]], component_id: str
+) -> tuple[str, dict[str, Any]] | None:
+    for tab_id, component in bl.family_components(docs):
+        if str(component.get("index")) == component_id:
+            return tab_id, component
+    return None
+
+
+def _component_in_version(version_id: str | None, tab_id: str, index: str) -> dict[str, Any] | None:
+    if not version_id:
+        return None
+    record = dashboard_versions_collection.find_one(
+        {"version_id": version_id}, {"tabs": {"$elemMatch": {"dashboard_id": tab_id}}}
+    )
+    for tab in (record or {}).get("tabs") or []:
+        for component in tab.get("stored_metadata") or []:
+            if str(component.get("index")) == index:
+                return component
+    return None
+
+
+def _figure_columns(component: dict[str, Any], dc_id: str) -> list[str] | None:
+    """The columns a figure diff reads: its encodings and any row-naming column."""
+    from depictio.api.v1.services.changes.figure_diff import _ID_NAMES
+
+    aggs = bl.aggregations_of(dc_id)
+    known = [
+        c.get("name")
+        for c in ((aggs[-1] if aggs else {}).get("aggregation_columns_specs") or [])
+        if c.get("name")
+    ]
+    if not known:
+        return None
+    kwargs = component.get("dict_kwargs") or {}
+    wanted = {
+        kwargs.get("x"),
+        kwargs.get("y"),
+        kwargs.get("color"),
+        kwargs.get("hover_name"),
+        component.get("selection_column"),
+        *_ID_NAMES,
+    }
+    wanted |= {c for c in known if c.lower().endswith(("_id", "_index"))}
+    return [c for c in known if c in wanted]
+
+
+@changes_router.post("/component_diff/{dashboard_id}/{component_id}")
+def component_diff(
+    dashboard_id: str,
+    component_id: str,
+    body: ComponentDiffRequest | None = None,
+    access_token: Annotated[str | None, Depends(oauth2_scheme_optional)] = None,
+    current_user: User = Depends(get_user_or_anonymous),
+) -> dict[str, Any]:
+    """Which points, bars or samples of one component changed since the baseline.
+
+    The live definition is used for both sides so the comparison is about the
+    data; ``definition_changed`` says when the reader saw another definition
+    (the side-by-side view shows that one).
+    """
+    from depictio.api.v1.services.changes import figure_diff as fd
+
+    _enabled()
+    body = body or ComponentDiffRequest()
+    family_id, main, docs = _family(dashboard_id, current_user)
+    found = _live_component(docs, component_id)
+    if found is None:
+        raise HTTPException(status_code=404, detail="Component not found.")
+    tab_id, component = found
+    now = bl.family_baseline(family_id, docs)
+    base = _resolve_base(family_id, now, body, current_user)
+    if base is None:
+        return fd.unsupported("Nothing to compare on a first visit.")
+
+    before_def = _component_in_version(base.version_id, tab_id, component_id)
+    dc_id = str(component.get("dc_id") or "")
+    state_before = base.dc_states.get(dc_id)
+    state_now = now.dc_states.get(dc_id)
+    meta = {
+        "component_key": component_key(tab_id, component_id),
+        "baseline_version_id": base.version_id,
+        "definition_changed": before_def is not None
+        and df.definition_fingerprint(before_def) != df.definition_fingerprint(component),
+        "since": base.seen_at.isoformat(),
+    }
+    if state_before is None or state_now is None:
+        return {
+            **fd.unsupported("This collection was not on the dashboard at the baseline."),
+            **meta,
+        }
+
+    component_type = component.get("component_type")
+    if component_type == "multiqc" or state_now.dc_type == "multiqc":
+        then_ids = set(state_before.multiqc_reports)
+        samples_then: set[str] = set()
+        samples_now: set[str] = set()
+        for report in bl.multiqc_reports_of(dc_id):
+            names = {str(s) for s in (report.get("metadata") or {}).get("samples") or []}
+            samples_now |= names
+            if str(report["_id"]) in then_ids and bl._iso(report.get("processed_at")) == (
+                state_before.multiqc_reports.get(str(report["_id"]))
+            ):
+                samples_then |= names
+        return {**fd.sample_diff(samples_then, samples_now), **meta}
+
+    if component_type == "advanced_viz":
+        from depictio.api.v1.services.changes.advanced_diff import advanced_viz_diff
+
+        return {
+            **advanced_viz_diff(component, dc_id, state_before, state_now, body.filters),
+            **meta,
+        }
+
+    if component_type != "figure":
+        return {**fd.unsupported(f"{component_type} components have no before/after view."), **meta}
+    if state_before.delta_version is None or state_now.delta_version is None:
+        return {**fd.unsupported("This collection keeps no version history."), **meta}
+    if state_before.delta_version == state_now.delta_version:
+        return {
+            **fd.frame_diff(pl.DataFrame(), pl.DataFrame(), component),
+            **meta,
+            "unchanged": True,
+        }
+
+    from depictio.api.v1.deltatables_utils import load_deltatable_lite
+    from depictio.api.v1.endpoints.dashboards_endpoints.routes import (
+        _build_filter_metadata,
+        _resolve_link_filters_cached,
+    )
+
+    filters = _resolve_link_filters_cached(
+        body.filters, dc_id, main.get("project_id"), access_token, "figure"
+    )
+    metadata = _build_filter_metadata(filters)
+    columns = _figure_columns(component, dc_id)
+    wf_id = ObjectId(str(component.get("wf_id")))
+
+    def frame(version: int) -> pl.DataFrame:
+        return load_deltatable_lite(
+            wf_id, dc_id, metadata=metadata, select_columns=columns, delta_version=version
+        )
+
+    try:
+        before, after = frame(state_before.delta_version), frame(state_now.delta_version)
+    except Exception as exc:
+        return {**fd.unsupported(f"The data could not be read: {exc}"), **meta}
+    return {
+        **fd.frame_diff(before, after, component),
+        **meta,
+        "delta_from": state_before.delta_version,
+        "delta_to": state_now.delta_version,
     }
