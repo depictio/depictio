@@ -53,15 +53,23 @@ const TOASTS: Record<string, { title: string; icon: string; color: string; actio
  * editor...), and opens the request in a sheet when the toast is clicked, so no
  * trip to another page is needed. Pages that list requests reload through
  * `useMigrationPush`. Absent while the instance hides migration.
+ *
+ * Mounted on every route, `/auth` included, so it must not touch the server-info
+ * store for anyone else: that store refetches through `authFetch` when the
+ * session changes, and a refetch right after logout mints a fresh token off the
+ * still-live refresh token, signing the user back in. The identity probe below
+ * does not mint; only an admin mounts the part that reads the store.
  */
 export const MigrationPushHost: React.FC = () => {
-  const migrationUi = useMigrationUi();
   const { user, isPublicMode, isDemoMode, isSingleUserMode } = useCurrentUser();
   const allowed =
-    migrationUi &&
     Boolean(user?.is_admin) &&
     canSeeMigrations({ user, isPublicMode, isDemoMode, isSingleUserMode });
+  return allowed ? <AdminPushHost /> : null;
+};
 
+const AdminPushHost: React.FC = () => {
+  const migrationUi = useMigrationUi();
   const [selected, setSelected] = useState<string | null>(null);
 
   const onMigrationEvent = useCallback((event: MigrationLiveEvent) => {
@@ -84,9 +92,9 @@ export const MigrationPushHost: React.FC = () => {
     });
   }, []);
 
-  useMonitoringEvents({ enabled: allowed, onMigrationEvent });
+  useMonitoringEvents({ enabled: migrationUi, onMigrationEvent });
 
-  if (!allowed) return null;
+  if (!migrationUi) return null;
   return (
     <Drawer
       opened={selected !== null}
