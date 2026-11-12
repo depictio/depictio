@@ -1,8 +1,11 @@
 /**
  * The two ways to look at a project's dashboards around an ingestion:
  *
- *  - "Open dashboards as before <run>": each dashboard as it last was before
- *    the ingestion started (`?version=`), read from its version history.
+ *  - "Layout before <run>": each dashboard's definition as it last was before
+ *    the ingestion started (`?version=`), read from its version history. Not
+ *    its data: an ingestion records no dashboard version, so the preview pins
+ *    only what that version's stamps hold and its banner names the rest as
+ *    latest. The data before the run is what "Compare" shows, per component.
  *  - "Compare": the read-only view of what that ingestion changed
  *    (`?before_run=`).
  *
@@ -146,13 +149,15 @@ function useVersionsBefore(
   return resolved;
 }
 
-/** "Open dashboards as before <run>". */
+/** "Layout before <run>": the definition, not the data (see the header). */
 export const BeforeRunMenu: React.FC<
   ActionProps & { projectId: string; runTag: string; startedAt: string | null | undefined }
 > = ({ projectId, runTag, startedAt, size = 'compact-xs', testId }) => {
   const dashboards = useProjectDashboards(projectId);
   const resolved = useVersionsBefore(dashboards, startedAt);
-  const label = `Open dashboards as before ${runTag}`;
+  const label = `Layout before ${runTag}`;
+  const tip =
+    'The dashboards as they were laid out before this run. For the data this run added, use Compare.';
   const left = <Icon icon="mdi:history" width={14} />;
   const none = 'No version of this dashboard predates this run.';
 
@@ -194,16 +199,18 @@ export const BeforeRunMenu: React.FC<
       );
     }
     return (
-      <Button
-        component="a"
-        href={versionHref(only.familyId, version.version_id)}
-        size={size}
-        variant="default"
-        leftSection={left}
-        data-testid={testId}
-      >
-        {label}
-      </Button>
+      <Tooltip label={tip} withArrow multiline w={260}>
+        <Button
+          component="a"
+          href={versionHref(only.familyId, version.version_id)}
+          size={size}
+          variant="default"
+          leftSection={left}
+          data-testid={testId}
+        >
+          {label}
+        </Button>
+      </Tooltip>
     );
   }
   return (
@@ -220,7 +227,7 @@ export const BeforeRunMenu: React.FC<
         </Button>
       </Menu.Target>
       <Menu.Dropdown>
-        <Menu.Label>As it was before this run</Menu.Label>
+        <Menu.Label>Laid out as before this run</Menu.Label>
         {dashboards.map((d) => {
           const version = resolved[d.familyId];
           if (!version) {

@@ -133,8 +133,11 @@ MultiQC time travel by report set is what makes the MultiQC *Before* possible:
   dashboards.
 - The Runs tab marks new runs and shows what each run produced:
   - ingestions, Delta commits and MultiQC reports;
-  - *Open dashboards as before <run>* (`?before_run=`);
-  - *Compare*.
+  - *Compare* (`?before_run=`): the dashboard with what that run changed
+    marked, each component's *Before | Now* drawing the data just before it;
+  - *Layout before <run>* (`?version=`): the definition only. An ingestion
+    records no dashboard version, so the preview's data is whatever that
+    version's stamps pin, and its banner names the rest as latest.
 - `GET /changes/project/{id}/timeline` feeds the Timeline tab: ingestions,
   dashboard versions and comments, newest first, paged by `before`.
 
