@@ -718,15 +718,24 @@ def component_diff(
     if component_type == "multiqc" or state_now.dc_type == "multiqc":
         samples_now: set[str] = set()
         reports_then: set[str] = set()
+        # The reports the reader saw that still exist, for the Before pane's
+        # `report_sets` pin. Read from the mark: no dashboard version needs to
+        # have been saved while that report set was current.
+        ids_before: list[str] = []
         for report in bl.multiqc_reports_of(dc_id):
             names = bl.report_samples(report)
             samples_now |= names
-            if state_before.multiqc_reports.get(bl.report_identity(report)) == bl.report_signature(
-                report
-            ):
+            identity = bl.report_identity(report)
+            if identity in state_before.multiqc_reports:
+                ids_before.append(str(report["_id"]))
+            if state_before.multiqc_reports.get(identity) == bl.report_signature(report):
                 reports_then |= names
         samples_then = set(state_before.samples) if state_before.samples_complete else reports_then
-        return {**fd.sample_diff(samples_then, samples_now), **meta}
+        return {
+            **fd.sample_diff(samples_then, samples_now),
+            "report_ids_before": ids_before,
+            **meta,
+        }
 
     if component_type == "advanced_viz":
         from depictio.api.v1.services.changes.advanced_diff import advanced_viz_diff

@@ -34,8 +34,10 @@ const hasDelta = (diff: ComponentDiff | null | undefined): diff is ComponentDiff
  *    collection pinned to the Delta commit the diff compared from. Without that
  *    commit (the diff is unsupported, or the component is a card), the baseline
  *    version's own data stamps are followed instead.
- *  - MultiQC: the client has no report ids to send as `report_sets`, so the
- *    pane follows the baseline version's stamps and says so.
+ *  - MultiQC: the report set of the reader's mark (`report_ids_before`, the
+ *    reports they saw that still exist) as `report_sets`. A dashboard version
+ *    may have been saved before those reports existed, so its stamps are only
+ *    the fallback for a diff that carries no report ids.
  *  - advanced viz: its renderers fetch their data without a version, so the
  *    pane is not drawn; the rows table below says what changed.
  */
@@ -56,6 +58,20 @@ export function beforePane(
     return {
       kind: 'render',
       state: { pins: { [dcId]: diff.delta_from }, definitionVersionId },
+    };
+  }
+  if (
+    componentType === 'multiqc' &&
+    dcId &&
+    diff?.supported &&
+    diff.shape === 'samples' &&
+    Array.isArray(diff.report_ids_before) &&
+    diff.report_ids_before.length > 0
+  ) {
+    return {
+      kind: 'render',
+      state: { reportSets: { [dcId]: diff.report_ids_before }, definitionVersionId },
+      note: 'The reports you saw at your last visit.',
     };
   }
   if (!definitionVersionId) {

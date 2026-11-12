@@ -167,6 +167,9 @@ def test_the_endpoint_diffs_the_baseline_commit_against_now(ctx, monkeypatch):  
 
 
 def test_the_endpoint_lists_new_multiqc_samples(ctx):  # noqa: F811
+    seen = sorted(
+        str(r["_id"]) for r in ctx["db"]["multiqc"].find({"data_collection_id": ctx["dc_mqc"]})
+    )
     ctx["client"].put(f"{API}/dashboard/{ctx['family']}/visit")
     ctx["db"]["multiqc"].insert_one(
         {
@@ -177,6 +180,10 @@ def test_the_endpoint_lists_new_multiqc_samples(ctx):  # noqa: F811
     )
     out = ctx["client"].post(f"{API}/component_diff/{ctx['family']}/mqc-1", json={}).json()
     assert out["shape"] == "samples" and out["added"] == ["SRR3_1"]
+    # The report set the reader saw, for the Before pane's `report_sets` pin:
+    # read from their mark, not from a dashboard version, which may have been
+    # saved before those reports existed.
+    assert sorted(out["report_ids_before"]) == seen
 
 
 def test_a_first_visit_has_nothing_to_compare(ctx):  # noqa: F811

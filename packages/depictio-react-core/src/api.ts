@@ -10927,6 +10927,8 @@ export interface DiffSamples extends ComponentDiffMeta {
   counts: { added: number; removed: number; before: number; after: number };
   added: string[];
   removed: string[];
+  /** The reports the reader saw that still exist: the Before pane's `report_sets`. */
+  report_ids_before?: string[];
 }
 
 export interface DiffRow {

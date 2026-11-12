@@ -33,6 +33,8 @@ import { beforePane, diffTables, NOW_STATE, type DiffTableSection } from './comp
 import { historyHref } from './describe';
 
 const PANE_HEIGHT = 360;
+/** Mantine's modal transition is 200 ms. */
+const ENTER_MS = 250;
 const NARROW_QUERY = '(max-width: 40em)';
 
 interface Props {
@@ -187,10 +189,17 @@ const CompareModal: React.FC<Props> = ({
   const componentType = record(metadata).component_type as string | undefined;
   const dcId = record(metadata).dc_id ? String(record(metadata).dc_id) : null;
 
-  // Plotly measures its box at mount: render only once the enter transition ended.
+  // Plotly measures its box at mount: render once the enter transition is over.
+  // A timer, not `onEnterTransitionEnd`: the modal is mounted already open, so
+  // no enter transition runs and that callback never fires.
   const [ready, setReady] = useState(false);
   useEffect(() => {
-    if (!opened) setReady(false);
+    if (!opened) {
+      setReady(false);
+      return undefined;
+    }
+    const timer = window.setTimeout(() => setReady(true), ENTER_MS);
+    return () => window.clearTimeout(timer);
   }, [opened]);
 
   const diffState = useComponentDiff({
@@ -224,7 +233,6 @@ const CompareModal: React.FC<Props> = ({
       // Portaled to <body>: put back inside the dashboard's brand scope.
       className={brandScope?.className}
       data-mantine-color-scheme={brandScope?.['data-mantine-color-scheme']}
-      onEnterTransitionEnd={() => setReady(true)}
       title={
         <Group gap={8} wrap="nowrap" style={{ minWidth: 0 }}>
           <Icon icon="mdi:view-split-vertical" width={18} aria-hidden />

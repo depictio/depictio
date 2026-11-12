@@ -531,10 +531,13 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
        *  would let the tile pass for the past at rest, and the top-left is
        *  where a figure draws its title. Renders nothing on live data. */}
       <span className="depictio-current-data-badge dgl-no-drag">
-        {/* The "updated since your last visit" dot (#1397): nothing unless a
-         *  viewer mounted change marks and this component is in them. */}
-        <ChangeDot componentType={componentType} index={metadata.index} />
         <CurrentDataBadge componentType={componentType} />
+      </span>
+      {/* The "updated since your last visit" dot (#1397), in the top-left
+       *  corner over the tile's own padding: nothing unless a viewer mounted
+       *  change marks and this component is in them. */}
+      <span className="depictio-updated-dot-slot dgl-no-drag">
+        <ChangeDot componentType={componentType} index={metadata.index} />
       </span>
     </div>
   );

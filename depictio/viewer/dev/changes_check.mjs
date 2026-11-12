@@ -166,8 +166,20 @@ check(
     note: 'The data shown follows the dashboard version of your last visit.',
   },
 );
-check('multiqc follows the version stamps and says so', beforePane('multiqc', 'dc1', pointsDiff, 'ver-4').state, {
+check('multiqc without report ids follows the version stamps', beforePane('multiqc', 'dc1', pointsDiff, 'ver-4').state, {
   asOfVersionId: 'ver-4',
+  definitionVersionId: 'ver-4',
+});
+const samplesDiff = {
+  supported: true,
+  shape: 'samples',
+  counts: { added: 1, removed: 0, before: 2, after: 3 },
+  added: ['S3'],
+  removed: [],
+  report_ids_before: ['r1', 'r2'],
+};
+check('multiqc pins the report set the reader saw', beforePane('multiqc', 'dc1', samplesDiff, 'ver-4').state, {
+  reportSets: { dc1: ['r1', 'r2'] },
   definitionVersionId: 'ver-4',
 });
 check('advanced viz is not redrawn', beforePane('advanced_viz', 'dc1', pointsDiff, 'ver-4').kind, 'unavailable');

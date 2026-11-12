@@ -41,9 +41,9 @@ const ChangeDot: React.FC<{ componentType: string; index: string }> = ({ compone
       shadow="md"
       width={220}
       zIndex={Z_LAYERS.tooltip}
-      trigger="click-hover"
-      openDelay={80}
-      closeDelay={200}
+      // Click only: on hover the menu stayed open over the modal its own
+      // "Before | Now" item had just opened.
+      trigger="click"
     >
       <Menu.Target>
         <button
