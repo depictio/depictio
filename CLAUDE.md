@@ -174,8 +174,13 @@ Route dispatch is plain regex in `depictio/viewer/src/main.tsx` +
   so a round trip keeps it. `restore_component` takes `tab_id` with the index. Without
   stable ids no component-level history can match anything
 - Time-travel UI is **edit mode only** (timeline, dataset picker, component history):
-  all of it writes or re-points data. The viewer keeps only the `?version=` preview.
+  all of it writes or re-points data. The viewer keeps the `?version=` preview and the
+  read-only "changed since" compare (overlay + Before | Now modal), which renders through
+  the preview contract and never writes or re-pins the page.
   `check_served_bundle.py` asserts that split in the *served bundle*, in both directions
+- MultiQC time travel is by **report set**: `DataCollectionStamp.report_ids` at save,
+  `report_sets: {dc_id: [report ids]}` in a render request. An in-place overwrite keeps
+  its S3 key, so its past is not recoverable
 - Deleting a main tab drops its ledger + seq counter; a child tab's versions belong to
   the family and must survive. Deleting a project drops its families' ledgers
 - `depictio/projects/init/iris_versioned/` is the fixture for exercising any of this:
@@ -187,6 +192,22 @@ Route dispatch is plain regex in `depictio/viewer/src/main.tsx` +
   and all four versions stamp the newest commit: labels, counts and stamps all look
   right, and "restore v1's data" quietly shows the complete survey. `rebuild_demo.py`
   asserts the stamps ascend
+
+### Changed Since Last Visit (#1397)
+- Per-reader mark per dashboard family / project (`reader_marks`, routes under `/changes`),
+  off by default (`DEPICTIO_DASHBOARD_VERSIONS_CHANGES_SINCE_ENABLED`, `features.changes_since`).
+  Anonymous readers keep it in localStorage and send it back. **Detail**:
+  `docs/changes-since-last-visit.md`
+- A mark is a **snapshot** (version id, Delta commit per DC, MultiQC report set by S3
+  location, cursors), not a timestamp: ingestion records no dashboard version and several
+  ingestion clocks are local. Writing one records no dashboard version
+- Never written by the editor, a `?version=` preview, `?since=` or `?before_run=`. The
+  reader's own versions and comments never count as news; ingestions always do (a run is
+  asynchronous, and on a single-user instance every ingestion is the reader's)
+- MultiQC append recreates every report document: identify reports by `s3_location`, never
+  by `_id`
+- A new ingestion path must set `ingestion_run_id` (and `run_tags`, `trigger`) on what it
+  writes, or the project Runs tab cannot tell which run produced it
 
 ### Migration & Publishing (#1303)
 - One instance pushes a project to another (`/migrate/push` → target `/migrate/inbound/requests`,

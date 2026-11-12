@@ -366,6 +366,14 @@ backend:
     # sending off.
     DEPICTIO_MIGRATION_DESTINATION_DOMAINS: '["*"]'
 
+    # "Changed since your last visit" (#1397): a per-reader mark per dashboard
+    # and project, the changes pill, updated dots, figure before/after and the
+    # ingestion bell. Off by default. MARK_MODE is the default for readers who
+    # have not chosen: "sticky" (the mark stays until "Mark as seen") or
+    # "previous_visit" (every visit moves it).
+    DEPICTIO_DASHBOARD_VERSIONS_CHANGES_SINCE_ENABLED: "false"
+    DEPICTIO_DASHBOARD_VERSIONS_CHANGES_SINCE_MARK_MODE: "sticky"
+
     # Anonymous user configuration
     DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL: "anonymous@depict.io"
     DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS: "24"
