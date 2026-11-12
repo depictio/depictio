@@ -108,7 +108,9 @@ Route dispatch is plain regex in `depictio/viewer/src/main.tsx` +
   content-mutating route without both calls silently makes that change unrecoverable
 - Autosaves coalesce within an anchored window; an unchanged save writes nothing, **whatever its kind**.
   One exception: a Save click (`seal=True`) on content an autosave already holds turns that
-  autosave `explicit` and closes its window, or the click would leave no trace. A dashboard's
+  autosave `explicit` and closes its window, or the click would leave no trace. A reader's
+  mark (#1397) closes the window of the version it points at too (`close_window`), without
+  sealing it: folding into a version a reader saw would erase what changed since. A dashboard's
   creation is `explicit` too, so the creator's first edits cannot fold into and erase it
 - Version timestamps are naive UTC (`utc_now_naive`), like every other API timestamp: a local
   clock is invisible in Docker but hours off under `depictio local up`

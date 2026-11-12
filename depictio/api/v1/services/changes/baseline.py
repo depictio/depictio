@@ -245,8 +245,13 @@ def family_baseline(family_id: str, family_docs: list[dict[str, Any]]) -> Reader
     project_id = main.get("project_id")
     latest = version_store.list_versions(str(family_id), limit=1)
     version = latest[0] if latest else None
+    now = utc_now_naive()
+    if version and version.get("version_id"):
+        # The reader is seeing this version: an autosave may no longer fold
+        # into it, or the mark would point at content they never saw.
+        version_store.close_window(version["version_id"], now)
     return ReaderBaseline(
-        seen_at=utc_now_naive(),
+        seen_at=now,
         version_id=(version or {}).get("version_id"),
         version_seq=(version or {}).get("seq"),
         version_content_hash=(version or {}).get("content_hash"),

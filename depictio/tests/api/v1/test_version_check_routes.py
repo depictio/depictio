@@ -74,7 +74,13 @@ class TestServerInfo:
     def test_features_report_the_migration_ui_switch(self, world, monkeypatch, enabled):
         monkeypatch.setattr(settings.migration, "ui_enabled", enabled)
         body = world.client_as().get("/utils/server-info").json()
-        assert body["features"] == {"migration": enabled}
+        assert body["features"]["migration"] is enabled
+
+    @pytest.mark.parametrize("enabled", [False, True])
+    def test_features_report_the_changes_since_switch(self, world, monkeypatch, enabled):
+        monkeypatch.setattr(settings.dashboard_versions, "changes_since_enabled", enabled)
+        body = world.client_as().get("/utils/server-info").json()
+        assert body["features"]["changes_since"] is enabled
 
     def test_migration_ui_is_off_by_default(self):
         from depictio.api.v1.configs.settings_models import MigrationConfig

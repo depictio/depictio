@@ -330,6 +330,29 @@ def test_another_user_s_edit_is_marked_with_its_author(ctx):
     assert result["changed_components"] == {f"{ctx['family']}:fig-1": ["definition"]}
 
 
+def test_a_reader_s_visit_ends_the_author_s_autosave_window(ctx):
+    """An autosave folds into the previous one by the same author: had it
+    folded into the version the reader's mark points at, the mark would hold
+    the new content and the edit would never show (#1397, caught by e2e)."""
+    from depictio.api.v1.endpoints.dashboards_endpoints import version_store
+    from depictio.models.timestamps import utc_now_naive
+
+    versions = ctx["db"]["dashboard_versions"]
+    versions.update_one(
+        {"seq": 1}, {"$set": {"coalesce_until": utc_now_naive() + timedelta(minutes=5)}}
+    )
+    _visit(ctx)
+
+    seen = versions.find_one({"seq": 1})
+    assert seen["kind"] == "auto"  # still an autosave, only its window closed
+    assert seen["coalesce_until"] <= utc_now_naive()
+    assert versions.count_documents({}) == 1  # a mark records no version
+    assert not version_store.fold_into_version(
+        seen["version_id"], {"content_hash": "folded", "updated_at": utc_now_naive()}
+    )
+    assert versions.find_one({"seq": 1})["content_hash"] == seen["content_hash"]
+
+
 def test_the_editor_does_not_see_their_own_edit(ctx):
     _visit(ctx, EDITOR)
     _edit_component(ctx, EDITOR, "Reads per sample")

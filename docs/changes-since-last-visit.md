@@ -35,7 +35,10 @@ Comparing ids and commit numbers from one source holds where comparing clocks
 does not.
 
 A mark is per-reader state, never content: writing one records no dashboard
-version and needs only viewer permission. Deleting a dashboard or a project
+version and needs only viewer permission. It does end the coalescing window of
+the version it points at (`version_store.close_window`): an author's next
+autosave then opens a new version instead of folding into the one the reader
+saw, which would otherwise hide the edit from them. Deleting a dashboard or a project
 deletes its marks.
 
 ### Who holds it
