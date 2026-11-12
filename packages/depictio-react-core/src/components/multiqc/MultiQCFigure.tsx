@@ -5,10 +5,13 @@ import Plot from 'react-plotly.js';
 import { renderMultiQC, InteractiveFilter, StoredMetadata } from '../../api';
 import { useInView } from '../../hooks/useInView';
 import { useDataVersionRequest } from '../../dataVersions';
+import { useChangeMark } from '../../changeMarks';
+import { useFigureDiffOverlay } from '../../hooks/useComponentDiff';
 import { enqueueFetch, isStaleFetch } from '../../fetchQueue';
 import { readMultiqcSelection } from '../../utils/multiqcSelection';
 import ComponentSkeleton from '../ComponentSkeleton';
 import RefetchOverlay from '../RefetchOverlay';
+import DiffSummaryChip from '../chrome/DiffSummaryChip';
 import { useReportLoadStatus } from '../DashboardLoadingProvider';
 import { usePlotAnnotationLayer } from '../annotations/usePlotAnnotationLayer';
 import {
@@ -164,6 +167,19 @@ const MultiQCFigureBody: React.FC<MultiQCFigureProps> = ({
     () => withSampleCustomdata((figure?.data as unknown[]) || []),
     [figure],
   );
+  // "Compare with last visit" (#1397): the samples new since the reader's last
+  // visit stand out, the rest recede. Inert unless switched on from the dot.
+  const { comparing } = useChangeMark(String(metadata.index));
+  const diffView = useFigureDiffOverlay({
+    dashboardId,
+    componentId: String(metadata.index),
+    comparing,
+    filters,
+    figure,
+    rootRef: containerRef,
+    theme,
+  });
+  const shownData = useMemo(() => diffView.apply(plotData), [diffView.apply, plotData]);
   const plotLayout = useMemo(
     () => ({
       ...((figure?.layout as Record<string, unknown>) || {}),
@@ -197,7 +213,7 @@ const MultiQCFigureBody: React.FC<MultiQCFigureProps> = ({
   const annotations = usePlotAnnotationLayer({
     componentIndex: String(metadata.index),
     enabled: multiqcFigureAnnotatable(plotData),
-    data: plotData,
+    data: shownData,
     layout: plotLayout,
     pointIdIndex: 0,
     pointIdColumn: MULTIQC_SAMPLE_COLUMN,
@@ -228,6 +244,14 @@ const MultiQCFigureBody: React.FC<MultiQCFigureProps> = ({
           )}
           {annotations.badges}
         </Group>
+      )}
+      {comparing && (
+        <DiffSummaryChip
+          diff={diffView.diff}
+          loading={diffView.loading}
+          error={diffView.error}
+          matched={diffView.overlay.matched}
+        />
       )}
       {showInitialLoader && <ComponentSkeleton variant="block" />}
       {/* Paper-level, not inside the figure block: on a cold DC the backend

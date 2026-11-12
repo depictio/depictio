@@ -178,6 +178,8 @@ import { useLayoutOverride } from './layoutOverride';
 import type { SettingsSectionKey } from './chrome/SettingsDrawer';
 import VersionPreviewBanner from './versions/VersionPreviewBanner';
 import { dashboardHref } from './dashboards/lib/dashboardLinks';
+import ChangeMarksProvider from './changes/ChangeMarksProvider';
+import ChangesSincePill from './changes/ChangesSincePill';
 
 /**
  * Top-level SPA. Layout:
@@ -2266,6 +2268,19 @@ const App: React.FC = () => {
       >
       {/* Editors and owners only: for anyone else the provider renders its
           children alone, so no comment badge, button or drawer appears. */}
+      {/* "Changed since your last visit" (#1397): the change set, the marks on
+          the canvas and what the header pill reads. Always mounted so the tree
+          never remounts when the flag arrives; inert until it does. Never
+          active in a `?version=` preview. */}
+      <ChangeMarksProvider
+        dashboardId={dashboardId}
+        familyId={groupingScopeId}
+        previewVersionId={previewVersionId}
+        userLoading={userLoading}
+        canEdit={canEditNow}
+        components={summaryMetadata}
+        filters={deferredFilters}
+      >
       <CommentsProvider
         dashboardId={dashboardId}
         metadata={summaryMetadata}
@@ -2294,7 +2309,10 @@ const App: React.FC = () => {
           isOwner: canEditNow,
           titleExtras:
             dashboard && !loading && !error ? (
-              <DashboardLoadIndicator metadataList={rightComponents} cardsLoading={cardsLoading} />
+              <>
+                <DashboardLoadIndicator metadataList={rightComponents} cardsLoading={cardsLoading} />
+                <ChangesSincePill />
+              </>
             ) : undefined,
           extraActions: headerActions,
         }}
@@ -2356,6 +2374,7 @@ const App: React.FC = () => {
         guideOpen={guide.open}
       />
       </CommentsProvider>
+      </ChangeMarksProvider>
       </ComponentExportProvider>
       </GenomeBrowserTargetProvider>
       </TabLinkProvider>

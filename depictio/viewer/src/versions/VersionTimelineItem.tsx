@@ -60,6 +60,8 @@ interface VersionTimelineItemProps {
    *  Deleting it would leave every render pointing at a version that no
    *  longer exists, so Delete waits until the editor is back on current data. */
   dataActive?: boolean;
+  /** The row a link pointed at: highlighted so it can be found in the list. */
+  focused?: boolean;
   /** Draw a rule above the row: every row of a day group but its first. */
   withDivider?: boolean;
   /** Owner-level rights: delete. Erasing history is the one action a restore
@@ -120,6 +122,7 @@ const VersionTimelineItem: React.FC<VersionTimelineItemProps> = ({
   version,
   isCurrent,
   dataActive = false,
+  focused = false,
   withDivider = false,
   canDelete,
   busy,
@@ -153,6 +156,10 @@ const VersionTimelineItem: React.FC<VersionTimelineItemProps> = ({
       data-testid="version-row"
       data-version-seq={version.seq}
       data-version-kind={version.kind}
+      data-version-id={version.version_id}
+      data-focused={focused ? 'true' : undefined}
+      bg={focused ? 'var(--mantine-primary-color-light)' : undefined}
+      style={focused ? { borderRadius: 'var(--mantine-radius-sm)' } : undefined}
     >
       {withDivider && <Divider aria-hidden />}
 

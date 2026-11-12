@@ -11,6 +11,7 @@ import InspectButton from './InspectButton';
 import { useInspectorControl } from './InspectorContext';
 import CommentsButton from './CommentsButton';
 import CurrentDataBadge from './CurrentDataBadge';
+import ChangeDot from './ChangeDot';
 import { useCommentsControl } from './CommentsContext';
 import ExportButton from './ExportButton';
 import { useChromeSource, useComponentExportControl } from './ExportContext';
@@ -530,6 +531,9 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
        *  would let the tile pass for the past at rest, and the top-left is
        *  where a figure draws its title. Renders nothing on live data. */}
       <span className="depictio-current-data-badge dgl-no-drag">
+        {/* The "updated since your last visit" dot (#1397): nothing unless a
+         *  viewer mounted change marks and this component is in them. */}
+        <ChangeDot componentType={componentType} index={metadata.index} />
         <CurrentDataBadge componentType={componentType} />
       </span>
     </div>

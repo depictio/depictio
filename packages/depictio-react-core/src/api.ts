@@ -10856,3 +10856,129 @@ export async function fetchChangesInbox(): Promise<{ items: InboxItem[]; server_
   if (!res.ok) await throwHttpDetailError(res, 'Failed to fetch notifications');
   return res.json();
 }
+
+// ── One component, before and after (#1397) ────────────────────────────────
+
+/** Fields every `component_diff` answer carries. */
+export interface ComponentDiffMeta {
+  component_key?: string;
+  /** The dashboard version the baseline saw; the 'before' definition renders from it. */
+  baseline_version_id?: string | null;
+  /** The reader saw another definition of this component than the live one. */
+  definition_changed?: boolean;
+  since?: string;
+  /** Delta commits compared (figure and advanced viz). */
+  delta_from?: number;
+  delta_to?: number;
+  /** The collection did not move between the two commits. */
+  unchanged?: boolean;
+  truncated?: boolean;
+}
+
+export interface DiffPoint {
+  key: string | null;
+  x: unknown;
+  y: unknown;
+  color?: unknown;
+}
+
+export interface DiffPointsMove {
+  key: string;
+  before: DiffPoint;
+  after: DiffPoint;
+}
+
+export interface DiffPoints extends ComponentDiffMeta {
+  supported: true;
+  shape: 'points';
+  key_column: string | null;
+  x: string;
+  y: string;
+  color: string | null;
+  counts: { added: number; removed: number; changed: number; before: number; after: number };
+  added: DiffPoint[];
+  removed: DiffPoint[];
+  changed: DiffPointsMove[];
+}
+
+export interface DiffGroup {
+  /** Column -> value, for the x column and the colour column when present. */
+  group: Record<string, unknown>;
+  before: number | null;
+  after: number | null;
+  status: 'added' | 'removed' | 'changed';
+}
+
+export interface DiffGroups extends ComponentDiffMeta {
+  supported: true;
+  shape: 'groups';
+  group_columns: string[];
+  x: string | null;
+  color: string | null;
+  metric: 'sum' | 'count' | 'median';
+  value_column: string | null;
+  counts: { added: number; removed: number; changed: number; same: number };
+  groups: DiffGroup[];
+}
+
+export interface DiffSamples extends ComponentDiffMeta {
+  supported: true;
+  shape: 'samples';
+  counts: { added: number; removed: number; before: number; after: number };
+  added: string[];
+  removed: string[];
+}
+
+export interface DiffRow {
+  key: string | null;
+  values: Record<string, unknown>;
+}
+
+export interface DiffRowChange {
+  key: string;
+  before: Record<string, unknown>;
+  after: Record<string, unknown>;
+}
+
+export interface DiffRows extends ComponentDiffMeta {
+  supported: true;
+  shape: 'rows';
+  key_column: string | null;
+  value_columns: string[];
+  counts: { added: number; removed: number; changed: number; before: number; after: number };
+  added: DiffRow[];
+  removed: DiffRow[];
+  changed: DiffRowChange[];
+  viz_kind?: string;
+}
+
+export interface DiffUnsupported extends ComponentDiffMeta {
+  supported: false;
+  reason: string;
+}
+
+export type ComponentDiff = DiffPoints | DiffGroups | DiffSamples | DiffRows | DiffUnsupported;
+
+export type SupportedComponentDiff = Exclude<ComponentDiff, DiffUnsupported>;
+
+/**
+ * Which points, bars, samples or rows of one component changed since the
+ * reader's baseline. The body carries the same baseline fields as the change
+ * set (a signed-in reader sends none), plus the filters the figure is drawn
+ * with so the comparison covers the same slice.
+ */
+export async function fetchComponentDiff(
+  dashboardId: string,
+  componentId: string,
+  query: ChangesQuery & { filters?: InteractiveFilter[] | Array<Record<string, unknown>> } = {},
+  signal?: AbortSignal,
+): Promise<ComponentDiff> {
+  const body = JSON.parse(changesBody(query)) as Record<string, unknown>;
+  if (query.filters && query.filters.length) body.filters = query.filters;
+  const res = await authFetch(
+    `${API_BASE}/changes/component_diff/${encodeURIComponent(dashboardId)}/${encodeURIComponent(componentId)}`,
+    { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(body), signal },
+  );
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to compare with your last visit');
+  return (await res.json()) as ComponentDiff;
+}

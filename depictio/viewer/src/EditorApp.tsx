@@ -438,6 +438,32 @@ const EditorApp: React.FC = () => {
   // or change a version.
   const [historyComponent, setHistoryComponent] = useState<StoredMetadata | null>(null);
   const versionHistory = useVersionHistory(dashboardId, Boolean(dashboardId));
+  // `?settings=history&at=<version_id>`: a link from the viewer's "Changed
+  // since your last visit" panel. Read once on load (the initializer is a pure
+  // read), open History on that version, then drop the params so a reload or a
+  // copied address does not reopen it.
+  const [focusVersionId] = useState<string | null>(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('settings') === 'history' ? params.get('at')?.trim() || null : null;
+    } catch {
+      return null;
+    }
+  });
+  useEffect(() => {
+    if (!focusVersionId) return;
+    openSettingsAt('history');
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('settings');
+      url.searchParams.delete('at');
+      window.history.replaceState(window.history.state, '', url.toString());
+    } catch {
+      // The address stays as it was; harmless.
+    }
+    // Once, on load.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const {
     versions: familyVersions,
     loading: versionsLoading,
@@ -3124,6 +3150,7 @@ const EditorApp: React.FC = () => {
               history={versionHistory}
               canDelete={isOwner}
               dataVersionId={asOfVersionId}
+              focusVersionId={focusVersionId}
               onRestored={handleRestored}
             />
           ) : undefined

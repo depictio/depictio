@@ -20,6 +20,8 @@ import { useReportGroupReach } from '../groupReach';
 import GroupStatusBadge from './GroupStatusBadge';
 import type { GroupRenderState } from '../selectionGroups';
 import { useDataVersionRequest } from '../dataVersions';
+import { useChangeMark } from '../changeMarks';
+import { useFigureDiffOverlay } from '../hooks/useComponentDiff';
 import { renderDefinitionKey } from '../renderKey';
 import { enqueueFetch, isStaleFetch } from '../fetchQueue';
 import { extractScatterSelection, selectsByDrag, supportsPointSelection } from '../selection';
@@ -39,6 +41,7 @@ import { useChromeStyle } from '../chrome/chromeStyle';
 import { useContentDemand } from './autofit';
 import { usePlotlyFollowsBox } from './usePlotlyFollowsBox';
 import RefetchOverlay from './RefetchOverlay';
+import DiffSummaryChip from './chrome/DiffSummaryChip';
 import ComponentSkeleton from './ComponentSkeleton';
 import { useReportLoadStatus } from './DashboardLoadingProvider';
 import { LoadAllState } from './chrome/LoadAllButton';
@@ -479,12 +482,27 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
     [filters, metadata.index, metadata.dc_id, selectionColumn],
   );
 
+  // "Compare with last visit" (#1397): the previous state laid over the
+  // figure. Inert (no request, no overlay) unless the reader switched it on
+  // from the tile's change dot, so every other host is unchanged. Not for a
+  // tile that draws another tab's figure: its mark is keyed on its own index.
+  const { comparing } = useChangeMark(String(metadata.index));
+  const diffView = useFigureDiffOverlay({
+    dashboardId,
+    componentId: String(renderComponentId),
+    comparing: comparing && !renderSource,
+    filters: filtersForFetch,
+    figure,
+    rootRef: containerRef,
+    theme,
+  });
+
   const figureData = useMemo<unknown[]>(() => {
     let traces = (followSeriesHover(figure?.data ?? [], tinted.data) as PlotlyTrace[]) || [];
     if (standingSelection) traces = markSelectedPoints(traces, standingSelection, selectionColumnIndex);
-    const base = adaptGlTraces(traces, glGranted);
+    const base = diffView.apply(adaptGlTraces(traces, glGranted));
     return overlayTrace ? [...base, overlayTrace] : base;
-  }, [figure, tinted, overlayTrace, glGranted, standingSelection, selectionColumnIndex]);
+  }, [figure, tinted, overlayTrace, glGranted, standingSelection, selectionColumnIndex, diffView.apply]);
 
   const baseLayout = useMemo<Record<string, unknown>>(() => {
     // The chrome style's Plotly patch (fonts, backgrounds, grid) lands over the
@@ -730,6 +748,14 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
         <Stack style={{ flex: 1 }} justify="center" align="center">
           <Text size="sm" c="red">Figure failed: {error}</Text>
         </Stack>
+      )}
+      {comparing && !renderSource && (
+        <DiffSummaryChip
+          diff={diffView.diff}
+          loading={diffView.loading}
+          error={diffView.error}
+          matched={diffView.overlay.matched}
+        />
       )}
       {figure && (
         <div ref={plotBoxRef} style={{ flex: 1, minHeight: 0, position: 'relative' }}>

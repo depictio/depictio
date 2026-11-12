@@ -1748,6 +1748,7 @@ export {
   fetchChangesPrefs,
   saveChangesPrefs,
   fetchChangesInbox,
+  fetchComponentDiff,
 } from './api';
 export type {
   MarkMode,
@@ -1764,4 +1765,58 @@ export type {
   ChangesQuery,
   TimelineEvent,
   InboxItem,
+  ComponentDiff,
+  ComponentDiffMeta,
+  SupportedComponentDiff,
+  DiffPoint,
+  DiffPointsMove,
+  DiffPoints,
+  DiffGroup,
+  DiffGroups,
+  DiffSamples,
+  DiffRow,
+  DiffRowChange,
+  DiffRows,
+  DiffUnsupported,
 } from './api';
+
+// Change marks on the canvas, and the browser-held mark of an anonymous reader (#1397).
+export {
+  ChangeMarksContext,
+  ChangeMarksProviderBase,
+  EMPTY_CHANGE_MARKS,
+  changeKey,
+  useChangeMark,
+  useChangeMarkDetails,
+} from './changeMarks';
+export type { ChangeReason, ChangeMarksValue } from './changeMarks';
+export {
+  DIFF_HOVER,
+  DIFF_TRACE_PREFIX,
+  applyFigureDiffOverlay,
+  buildFigureDiffOverlay,
+  diffSummaryParts,
+  diffSummaryText,
+  isDiffTraceName,
+  resolveDiffColors,
+} from './figureDiffOverlay';
+export type {
+  DiffColors,
+  FigureDiffOverlay,
+  PlotlyFigureLike,
+  TracePatch,
+} from './figureDiffOverlay';
+export { useComponentDiff, useFigureDiffOverlay } from './hooks/useComponentDiff';
+export { default as DiffSummaryChip } from './components/chrome/DiffSummaryChip';
+export {
+  CHANGES_KEY_PREFIX,
+  CHANGES_MODE_KEY,
+  changesStorageKey,
+  isMarkMode,
+  mergeLocalDismissed,
+  readLocalMode,
+  readLocalReader,
+  writeLocalBaseline,
+  writeLocalMode,
+} from './changesStore';
+export type { LocalReaderState } from './changesStore';
