@@ -1885,7 +1885,7 @@ tabs:
     color: orange
     description: Share of reads at every signed indel size, mean library with its band
   - name: Guide comparison
-    icon: mdi:view-comfy
+    icon: mdi:view-dashboard-outline
     color: orange
     description: Every guide's indel size signature side by side
   - name: Position around the cut site
