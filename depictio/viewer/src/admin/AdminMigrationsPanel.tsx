@@ -17,13 +17,10 @@ import {
 import { notifications } from '@mantine/notifications';
 import { Icon } from '@iconify/react';
 
-import {
-  listMigrationRequests,
-  retryMigrationRequest,
-  useMonitoringEvents,
-} from 'depictio-react-core';
+import { listMigrationRequests, retryMigrationRequest } from 'depictio-react-core';
 import type { MigrationRequestSummary } from 'depictio-react-core';
 
+import { useMigrationPush } from '../projects/MigrationPushHost';
 import { formatDateTime } from '../lib/datetime';
 import AdminMigrationInvitesView from './AdminMigrationInvitesView';
 import AdminMigrationSentView from './AdminMigrationSentView';
@@ -93,7 +90,7 @@ const RequestsView: React.FC = () => {
   }, [load]);
 
   // A request arriving or changing status shows up without a refresh.
-  useMonitoringEvents({ onMigrationEvent: () => void load() });
+  useMigrationPush(() => void load());
 
   return (
     <Stack gap="md">

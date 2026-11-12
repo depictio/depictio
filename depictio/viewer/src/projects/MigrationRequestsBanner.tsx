@@ -10,16 +10,16 @@ import {
   Text,
   ThemeIcon,
 } from '@mantine/core';
-import { notifications } from '@mantine/notifications';
 import { Icon } from '@iconify/react';
 
-import { listMigrationRequests, useMonitoringEvents } from 'depictio-react-core';
-import type { MigrationLiveEvent, MigrationRequestSummary } from 'depictio-react-core';
+import { listMigrationRequests } from 'depictio-react-core';
+import type { MigrationRequestSummary } from 'depictio-react-core';
 
 import { canSeeMigrations } from '../admin/access';
 import { REQUEST_DRAWER_STYLES, RequestDetail } from '../admin/MigrationRequestDetail';
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import { useMigrationUi } from '../hooks/useMigrationUi';
+import { useMigrationPush } from './MigrationPushHost';
 import { formatDateTime } from '../lib/datetime';
 
 const POLL_MS = 30_000;
@@ -89,35 +89,10 @@ export const MigrationRequestsBanner: React.FC = () => {
     return () => clearInterval(t);
   }, [allowed, load]);
 
-  // The poll above stays as the fallback. A push makes a request show up the
-  // moment it arrives, without a refresh, and says so with a toast.
-  useMonitoringEvents({
-    enabled: allowed,
-    onMigrationEvent: (event: MigrationLiveEvent) => {
-      void load();
-      const { request_id: id, status, project_name: name, source } = event.payload ?? {};
-      const what = `${name ?? 'A project'}${source ? ` from ${source}` : ''}`;
-      if (status === 'pending') {
-        notifications.show({
-          id: `migration-${id}-${status}`,
-          title: 'A project needs a decision',
-          message: what,
-        });
-      } else if (status === 'imported') {
-        notifications.show({
-          id: `migration-${id}-${status}`,
-          title: 'A project was received',
-          message: what,
-        });
-      } else if (status === 'failed') {
-        notifications.show({
-          id: `migration-${id}-${status}`,
-          color: 'red',
-          title: 'An import failed',
-          message: what,
-        });
-      }
-    },
+  // The poll above stays as the fallback. The app-root host raises the toast and
+  // tells this list a request arrived or changed, so it shows at once.
+  useMigrationPush(() => {
+    if (allowed) void load();
   });
 
   const { waiting, failed, imported } = useMemo(

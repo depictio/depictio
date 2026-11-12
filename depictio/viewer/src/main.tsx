@@ -98,6 +98,7 @@ import { BrandingContext, getBranding, setBranding, subscribeBranding } from './
 import { setFeedback } from './feedback';
 import { initGoogleAnalytics } from './googleAnalytics';
 import { WalkthroughHost } from './walkthrough';
+import { MigrationPushHost } from './projects/MigrationPushHost';
 
 // Client-side route resolution. FastAPI serves index.html for all paths under
 // /dashboard/, /dashboard-edit/, /auth, /dashboards,
@@ -238,6 +239,7 @@ function ThemeRoot({ children }: { children: React.ReactNode }) {
               <Suspense fallback={<BootSplash />}>{children}</Suspense>
             </ErrorBoundary>
             <WalkthroughHost />
+            <MigrationPushHost />
           </DatesProvider>
         </MantineProvider>
       </BrandingContext.Provider>
