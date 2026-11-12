@@ -645,10 +645,13 @@ test.describe("Changed since your last visit", () => {
       const adminBefore = await changeSet(request, e.admin, id);
       expect(adminBefore.first_visit).toBe(true);
 
+      // Calls about this dashboard's mark. The bell's inbox (`GET /changes/inbox`)
+      // is an account-wide read that moves nothing, and is on every page.
       const writes: string[] = [];
       const watch = (p: Page) =>
         p.on("request", (r) => {
-          if (new URL(r.url()).pathname.includes("/changes/")) writes.push(`${r.method()} ${r.url()}`);
+          const path = new URL(r.url()).pathname;
+          if (/\/changes\/(dashboard|component_diff)\//.test(path)) writes.push(`${r.method()} ${r.url()}`);
         });
       watch(reader.page);
       watch(page);
