@@ -30,11 +30,18 @@ import type { DataPinFields } from './api';
  *  which is how a component escapes a dashboard-wide pin. */
 export type DataVersionPins = Record<string, number | null>;
 
+/** Per-MultiQC-collection report ids to read. `null` keeps one live. Used by
+ *  "since your last visit" compares: a MultiQC collection's data is the set of
+ *  reports it holds, so a baseline is a list of report ids. */
+export type DataReportSets = Record<string, string[] | null>;
+
 export interface DataVersionState {
   /** Stored dashboard version whose data stamps set the baseline. */
   asOfVersionId?: string | null;
   /** Per-collection overrides applied on top of `asOfVersionId`. */
   pins?: DataVersionPins;
+  /** MultiQC report sets per collection, applied on top of `asOfVersionId`. */
+  reportSets?: DataReportSets;
   /**
    * Stored dashboard version to read component *definitions* from, instead of
    * the live document.
@@ -64,6 +71,7 @@ export interface DataVersionProviderProps extends DataVersionState {
 export const DataVersionProvider: React.FC<DataVersionProviderProps> = ({
   asOfVersionId,
   pins,
+  reportSets,
   definitionVersionId,
   dashboardId,
   children,
@@ -71,10 +79,11 @@ export const DataVersionProvider: React.FC<DataVersionProviderProps> = ({
   // Keyed on content, not identity: callers build these inline, so a new
   // object every render would re-run every renderer's fetch effect.
   const pinKey = JSON.stringify(pins ?? {});
+  const reportSetKey = JSON.stringify(reportSets ?? {});
   const value = useMemo(
-    () => ({ asOfVersionId, pins, definitionVersionId, dashboardId }),
+    () => ({ asOfVersionId, pins, reportSets, definitionVersionId, dashboardId }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [asOfVersionId, pinKey, definitionVersionId, dashboardId],
+    [asOfVersionId, pinKey, reportSetKey, definitionVersionId, dashboardId],
   );
 
   return (
@@ -98,6 +107,8 @@ export function dataPinBody(state: DataVersionState): DataPinFields {
   if (state.asOfVersionId) body.as_of_version = state.asOfVersionId;
   const pins = state.pins;
   if (pins && Object.keys(pins).length > 0) body.data_versions = { ...pins };
+  const reportSets = state.reportSets;
+  if (reportSets && Object.keys(reportSets).length > 0) body.report_sets = { ...reportSets };
   return body;
 }
 
@@ -117,12 +128,13 @@ export function dataVersionBody(state: DataVersionState): Record<string, unknown
 /**
  * Is anything on screen read from past data?
  *
- * True under a version's data or any numeric pin. A `null` pin alone is not
- * past data: it only says "stay live", which means something only under a
- * version.
+ * True under a version's data, any numeric pin or any report set. A `null`
+ * pin alone is not past data: it only says "stay live", which means something
+ * only under a version.
  */
 export function isDataVersionActive(state: DataVersionState): boolean {
   if (state.asOfVersionId) return true;
+  if (Object.values(state.reportSets ?? {}).some((v) => Array.isArray(v))) return true;
   return Object.values(state.pins ?? {}).some((v) => typeof v === 'number');
 }
 
@@ -147,7 +159,12 @@ export function useDataVersionRequest(): {
   const body = useMemo(
     () => dataVersionBody(state),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [state.asOfVersionId, JSON.stringify(state.pins ?? {}), state.definitionVersionId],
+    [
+      state.asOfVersionId,
+      JSON.stringify(state.pins ?? {}),
+      JSON.stringify(state.reportSets ?? {}),
+      state.definitionVersionId,
+    ],
   );
   return { body, key: JSON.stringify(body), definitionVersionId: state.definitionVersionId ?? null };
 }

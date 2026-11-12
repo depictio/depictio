@@ -21,6 +21,8 @@ import {
   isStaleDataVersionDetail,
   isStaleDataVersionError,
   renderFigure,
+  renderMultiQC,
+  renderMultiQCGeneralStats,
   renderTable,
   restoreComponentFromVersion,
   type DataVersionGoneDetail,
@@ -77,6 +79,14 @@ describe('the request body', () => {
     expect(dataVersionBody({})).toEqual({});
   });
 
+  it('report sets ride beside the pins and make the view past data', () => {
+    const state = { reportSets: { [DC]: ['r1', 'r2'] } };
+    expect(dataVersionBody(state)).toEqual({ report_sets: { [DC]: ['r1', 'r2'] } });
+    expect(isDataVersionActive(state)).toBe(true);
+    expect(isDataVersionActive({ reportSets: { [DC]: null } })).toBe(false);
+    expect(dataVersionBody({ reportSets: {} })).toEqual({});
+  });
+
   it('filter options and status carry the pins, without the definition', () => {
     const state = { asOfVersionId: 'v1', pins: { [DC]: null }, definitionVersionId: 'v1' };
     expect(dataPinBody(state)).toEqual({ as_of_version: 'v1', data_versions: { [DC]: null } });
@@ -98,6 +108,21 @@ describe('render responses (contracts A and E)', () => {
     });
     expect(sent[0].url).toContain('/dashboards/render_figure/d1/c1');
     expect(sent[0].body?.definition_version).toBe('v-abc');
+  });
+
+  it('the MultiQC renders carry the version, and stay {filters, theme} when live', async () => {
+    respond = () => ({ status: 200, body: { figure: {}, metadata: {} } });
+    await renderMultiQC('d1', 'c1', [], 'light');
+    await renderMultiQC('d1', 'c1', [], 'light', { as_of_version: 'v1', report_sets: { [DC]: ['r1'] } });
+    await renderMultiQCGeneralStats('d1', 'c1', [], { as_of_version: 'v1' });
+    expect(sent[0].body).toEqual({ filters: [], theme: 'light' });
+    expect(sent[1].body).toEqual({
+      filters: [],
+      theme: 'light',
+      as_of_version: 'v1',
+      report_sets: { [DC]: ['r1'] },
+    });
+    expect(sent[2].body).toEqual({ filters: [], as_of_version: 'v1' });
   });
 
   it('a 409 says the version read another collection, on the tile', async () => {

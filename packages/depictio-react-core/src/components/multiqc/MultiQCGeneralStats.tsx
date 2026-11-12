@@ -22,6 +22,7 @@ import {
   renderMultiQCGeneralStats,
 } from '../../api';
 import { useInView } from '../../hooks/useInView';
+import { useDataVersionRequest } from '../../dataVersions';
 import { enqueueFetch, isStaleFetch } from '../../fetchQueue';
 import ComponentSkeleton from '../ComponentSkeleton';
 import RefetchOverlay from '../RefetchOverlay';
@@ -222,6 +223,8 @@ const MultiQCGeneralStats: React.FC<MultiQCGeneralStatsProps> = ({
   );
 
   const filtersSig = JSON.stringify(filters ?? []);
+  // Data time travel: the version's report set rides in the body, its key in the effect deps.
+  const { body: versionBody, key: versionKey } = useDataVersionRequest();
 
   useEffect(() => {
     if (!inView) return;
@@ -231,7 +234,7 @@ const MultiQCGeneralStats: React.FC<MultiQCGeneralStatsProps> = ({
     // Queue the fetch (vertical position = priority) so a dense dashboard paints
     // top-down instead of firing every panel at once — mirrors FigureRenderer.
     enqueueFetch(
-      () => renderMultiQCGeneralStats(dashboardId, metadata.index, filters),
+      () => renderMultiQCGeneralStats(dashboardId, metadata.index, filters, versionBody),
       metadata.layout?.y ?? 0,
     )
       .then((res) => {
@@ -252,7 +255,7 @@ const MultiQCGeneralStats: React.FC<MultiQCGeneralStatsProps> = ({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dashboardId, metadata.index, filtersSig, inView, refreshTick]);
+  }, [dashboardId, metadata.index, filtersSig, inView, refreshTick, versionKey]);
 
   const titleText = (metadata.title as string | undefined) || 'MultiQC General Statistics';
 

@@ -4,6 +4,7 @@ import Plot from 'react-plotly.js';
 
 import { renderMultiQC, InteractiveFilter, StoredMetadata } from '../../api';
 import { useInView } from '../../hooks/useInView';
+import { useDataVersionRequest } from '../../dataVersions';
 import { enqueueFetch, isStaleFetch } from '../../fetchQueue';
 import { readMultiqcSelection } from '../../utils/multiqcSelection';
 import ComponentSkeleton from '../ComponentSkeleton';
@@ -76,6 +77,8 @@ const MultiQCFigureBody: React.FC<MultiQCFigureProps> = ({
   const [preparing, setPreparing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { colorScheme } = useMantineColorScheme();
+  // Data time travel: the version's report set rides in the body, its key in the effect deps.
+  const { body: versionBody, key: versionKey } = useDataVersionRequest();
   const theme: 'light' | 'dark' = colorScheme === 'dark' ? 'dark' : 'light';
   const [containerRef, inView] = useInView<HTMLDivElement>('200px');
 
@@ -105,7 +108,7 @@ const MultiQCFigureBody: React.FC<MultiQCFigureProps> = ({
       // position = priority) instead of firing every MultiQC panel at once —
       // mirrors FigureRenderer. Each 202-poll retry re-enqueues.
       enqueueFetch(
-        () => renderMultiQC(dashboardId, metadata.index, filters, theme),
+        () => renderMultiQC(dashboardId, metadata.index, filters, theme, versionBody),
         metadata.layout?.y ?? 0,
       )
         .then((res) => {
@@ -143,7 +146,7 @@ const MultiQCFigureBody: React.FC<MultiQCFigureProps> = ({
       if (timeoutId !== null) clearTimeout(timeoutId);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dashboardId, metadata.index, JSON.stringify(filters), theme, inView, refreshTick]);
+  }, [dashboardId, metadata.index, JSON.stringify(filters), theme, inView, refreshTick, versionKey]);
 
   const titleText =
     (metadata.title as string | undefined) ||

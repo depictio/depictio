@@ -93,6 +93,7 @@ from depictio.api.v1.services.figure.figure_builder import (
     merge_dashboard_brand_theme,
 )
 from depictio.api.v1.services.figure.style_presets import figure_style_payload
+from depictio.api.v1.services.multiqc.dc_lookup import report_set_digest
 from depictio.models.components.category_palette import assign_category_colors
 from depictio.models.components.constants import FLOATING_ADVANCED_VIZ_KINDS
 from depictio.models.components.lite import (
@@ -6492,6 +6493,74 @@ def _resolve_multiqc_sample_filter(
     return sorted(surviving)
 
 
+def _pinned_multiqc_locations(
+    pins: DataVersionPins, dc_id: Any, project_id: Any
+) -> tuple[list[str], list[str]] | None:
+    """The reports a pinned MultiQC read draws from, or None for a live read.
+
+    Returns ``(s3_locations, live_locations)``: the parquets of the pinned
+    report ids that still exist, and every parquet the collection holds now
+    (so a caller can tell a pin that equals the live set from a real subset).
+    400 when none of the pinned reports exist any more: answering with today's
+    data under a past label is the failure time travel exists to prevent.
+    """
+    if not dc_id:
+        return None
+    report_ids = pins.reports_for_dc(str(dc_id))
+    if report_ids is None:
+        return None
+    from depictio.api.v1.services.multiqc.dc_lookup import (
+        fetch_s3_locations_for_reports,
+        fetch_s3_locations_from_dc,
+    )
+
+    locations = fetch_s3_locations_for_reports(str(dc_id), report_ids)
+    if not locations:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "None of the MultiQC reports of the selected data version exist any more "
+                f"(dc_id={dc_id!s})."
+            ),
+        )
+    return locations, fetch_s3_locations_from_dc(str(dc_id), str(project_id))
+
+
+def _start_pinned_multiqc_build(
+    cache: Any,
+    dc_id: Any,
+    bare_key: str,
+    s3_locations: list[str],
+    module: str,
+    plot: str,
+    dataset_id: Any,
+    theme: str,
+) -> None:
+    """Build a pinned report subset's figure in the background, once.
+
+    The Celery prerender only builds figures over every report a collection
+    holds, so a read pinned to a different set would answer 202 forever. This
+    parses the subset on a thread (``create_multiqc_plot`` caches the result
+    under the key the next poll probes). The lock is left to expire on
+    failure so a broken build is not retried on every poll.
+    """
+    lock_key = f"multiqc:pinned_build_lock:dc={dc_id}:{bare_key}"
+    if not cache.set_nx(lock_key, "building", ttl=600):
+        return
+
+    def _run() -> None:
+        try:
+            from depictio.api.v1.services.multiqc.figures import create_multiqc_plot
+
+            create_multiqc_plot(
+                s3_locations, module, plot, dataset_id, theme=theme, dc_id=str(dc_id)
+            )
+        except Exception as exc:
+            logger.warning(f"render_multiqc: pinned build failed for dc={dc_id}: {exc}")
+
+    threading.Thread(target=_run, daemon=True, name=f"multiqc-pinned-{dc_id}").start()
+
+
 @dashboards_endpoint_router.post("/render_multiqc/{dashboard_id}/{component_id}")
 def render_multiqc_endpoint(
     dashboard_id: PyObjectId,
@@ -6525,10 +6594,10 @@ def render_multiqc_endpoint(
     if not project_id or not check_project_permission(project_id, current_user, "viewer"):
         raise HTTPException(status_code=403, detail="Permission denied.")
 
-    # A past version's module and plot when the body names one. The data is
-    # not versioned (MultiQC reports are plain parquet), which
-    # `data_version_status` reports as such.
+    # A past version's module and plot when the body names one, and the set of
+    # reports it held (`manifest_pins`) when the body pins the data.
     component = _render_component(dashboard_data, component_id, "multiqc", request, label="MultiQC")
+    pins = _data_pins(request, dashboard_data)
 
     selected_module, selected_plot, selected_dataset, is_gs = _resolve_selected_keys(component)
 
@@ -6556,6 +6625,13 @@ def render_multiqc_endpoint(
         )
         if live_locations:
             s3_locations = live_locations
+
+    # Pinned to the reports a past version held: read only those parquets.
+    pinned = _pinned_multiqc_locations(pins, dc_id, project_id)
+    pinned_differs = False
+    if pinned is not None:
+        s3_locations, all_live_locations = pinned
+        pinned_differs = sorted(s3_locations) != sorted(all_live_locations)
 
     if not selected_module or not selected_plot or not s3_locations:
         missing = []
@@ -6629,6 +6705,9 @@ def render_multiqc_endpoint(
             except Exception as e:
                 logger.debug(f"render_multiqc: aggregation_version lookup failed: {e}")
         version_filter_sig = f"v={agg_version or '0'}|{filter_sig or ''}"
+        if pinned is not None:
+            # A pinned read is its own entry, never the live one.
+            version_filter_sig += f"|pin={report_set_digest(pins.reports_for_dc(str(dc_id)) or [])}"
 
         cache = get_cache()
         filter_aware_key = generate_figure_cache_key(
@@ -6677,7 +6756,9 @@ def render_multiqc_endpoint(
             dc_id=str(dc_id) if dc_id else None,
         )
 
-        if cached is None and dc_id:
+        # The prerender ledger and the Celery build cover the collection's
+        # whole report set; a read pinned to a different set has neither.
+        if cached is None and dc_id and not pinned_differs:
             # S3 prerender: the CLI may have shipped this figure at ingest
             # (``s3://{bucket}/{dc_id}/prerender/<sha>.json.gz``), keyed by the
             # same bare cache key. If so, warm the bare Redis key + disk store
@@ -6802,6 +6883,26 @@ def render_multiqc_endpoint(
                     # ``set_nx``-locked prerender task and 202 so the React poll
                     # loop retries once the figure lands on disk/Redis.
                     rebuild_lock_key = f"multiqc:prerender_build_lock:dc={dc_id}"
+                    if pinned_differs:
+                        _start_pinned_multiqc_build(
+                            cache,
+                            dc_id,
+                            bare_key,
+                            s3_locations,
+                            selected_module,
+                            selected_plot,
+                            selected_dataset,
+                            theme,
+                        )
+                        return JSONResponse(
+                            status_code=202,
+                            content={
+                                "status": "preparing",
+                                "dc_id": str(dc_id),
+                                "component_id": component_id,
+                                "message": "MultiQC figure of the selected version is being prepared.",
+                            },
+                        )
                     if dc_id and cache.get(rebuild_lock_key) is None:
                         from depictio.api.celery_app import build_multiqc_prerender
                         from depictio.api.v1.db import multiqc_prerender_collection
@@ -6918,10 +7019,10 @@ def render_multiqc_general_stats_endpoint(
     if not project_id or not check_project_permission(project_id, current_user, "viewer"):
         raise HTTPException(status_code=403, detail="Permission denied.")
 
-    # A past version's module and plot when the body names one. The data is
-    # not versioned (MultiQC reports are plain parquet), which
-    # `data_version_status` reports as such.
+    # A past version's module and plot when the body names one, and the set of
+    # reports it held when the body pins the data.
     component = _render_component(dashboard_data, component_id, "multiqc", request, label="MultiQC")
+    pins = _data_pins(request, dashboard_data)
 
     s3_locations = component.get("s3_locations") or []
     dc_id = component.get("dc_id") or component.get("data_collection_id")
@@ -6938,6 +7039,10 @@ def render_multiqc_general_stats_endpoint(
         live_locations = fetch_s3_locations_from_dc(str(dc_id), str(project_id))
         if live_locations:
             s3_locations = live_locations
+
+    pinned = _pinned_multiqc_locations(pins, dc_id, project_id)
+    if pinned is not None:
+        s3_locations = pinned[0]
 
     if not s3_locations:
         raise HTTPException(
@@ -7005,6 +7110,8 @@ def render_multiqc_general_stats_endpoint(
         # `_generate_figure_cache_key`.
         all_paths = "|".join(sorted(s3_locations))
         cache_key_str = f"{all_paths}::{filter_sig}::general_stats_payload"
+        if pinned is not None:
+            cache_key_str += f"::pin={report_set_digest(pins.reports_for_dc(str(dc_id)) or [])}"
         # Embed `dc=<id>` literally so the same `cache.delete_pattern(f"dc={dc_id}")`
         # invalidation that the figure cache uses also drops every GS payload
         # variant (theme/filter) for this DC after append/replace/clear.
@@ -10975,13 +11082,15 @@ def data_version_status_endpoint(
     not pin: a collection added since, one kept live, MultiQC reports. The
     client asks this once per selection and badges what still shows live data.
 
-    Request body: ``{"as_of_version": str, "data_versions": {"<dc_id>": int | null}}``,
-    both optional, resolved exactly as a render resolves them (same 400s).
+    Request body: ``{"as_of_version": str, "data_versions": {"<dc_id>": int | null},
+    "report_sets": {"<dc_id>": [report_id, ...] | null}}``, all optional, resolved
+    exactly as a render resolves them (same 400s).
 
     Response:
         {"collections": [{"dc_id", "workflow_tag", "data_collection_tag",
                           "dc_type", "status": "pinned" | "live" | "not_versioned",
                           "delta_version": int | null, "reason": str | null}]}
+    A pinned MultiQC collection also carries ``"report_count"``.
 
     One entry per collection the family's live components read, then per
     collection the version stamped that none of them reads any more. See

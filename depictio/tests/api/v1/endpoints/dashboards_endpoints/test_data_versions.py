@@ -286,8 +286,9 @@ def test_statuses_name_every_collection_and_why(monkeypatch):
         "reason": None,
     }
     assert (got[DC_B]["status"], got[DC_B]["reason"]) == ("live", NOT_IN_VERSION)
+    # A MultiQC stamp taken before report ids were recorded reads live data.
     assert (got[DC_C]["status"], got[DC_C]["reason"]) == (
-        "not_versioned",
+        "live",
         "manifest_versioning_not_enabled",
     )
     assert (got[DC_D]["status"], got[DC_D]["delta_version"]) == ("pinned", 7)
@@ -314,10 +315,7 @@ def test_a_collection_kept_live_says_so(monkeypatch):
 def test_without_time_travel_everything_is_live_without_a_reason():
     entries = collection_statuses(DataVersionPins(), [DC_A, DC_C], IDENTITIES)
 
-    assert [(e["status"], e["reason"]) for e in entries] == [
-        ("live", None),
-        ("not_versioned", "manifest_versioning_not_enabled"),
-    ]
+    assert [(e["status"], e["reason"]) for e in entries] == [("live", None), ("live", None)]
 
 
 def test_an_image_collection_pins_its_manifest_not_its_pixels():
@@ -339,6 +337,121 @@ def test_a_track_collection_pins_its_manifest_not_its_files():
     assert (entries[0]["status"], entries[0]["reason"]) == (
         "pinned",
         "track_files_not_versioned",
+    )
+
+
+# ── MultiQC report sets ─────────────────────────────────────────────────────
+
+R1, R2, R3 = "6b0000000000000000000a01", "6b0000000000000000000a02", "6b0000000000000000000a03"
+
+
+def _manifest_stamp(dc_id: str, report_ids: list[str]) -> dict:
+    return {
+        "dc_id": dc_id,
+        "dc_type": "multiqc",
+        "version_kind": "manifest",
+        "report_ids": report_ids,
+    }
+
+
+def test_manifest_stamps_become_report_pins():
+    pins = pins_from_stamps([_manifest_stamp(DC_C, [R1, R2])])
+
+    assert pins.reports_for_dc(DC_C) == [R1, R2]
+    assert pins.for_dc(DC_C) is None, "no Delta commit for a report set"
+    assert pins.unresolved == {}
+    assert pins.active
+
+
+def test_a_manifest_stamp_without_report_ids_stays_unresolved():
+    stamp = {"dc_id": DC_C, "version_kind": "manifest", "reason": "manifest_versioning_not_enabled"}
+
+    pins = pins_from_stamps([stamp])
+
+    assert pins.reports_for_dc(DC_C) is None
+    assert pins.unresolved == {DC_C: "manifest_versioning_not_enabled"}
+
+
+def test_as_of_a_version_pins_the_report_set(monkeypatch):
+    _stub_version(
+        monkeypatch, [_delta_stamp(DC_A, 2), _manifest_stamp(DC_C, [R1, R2])], family_id=FAMILY
+    )
+
+    pins = resolve_data_versions(
+        {"as_of_version": "abc"},
+        dashboard={"dashboard_id": FAMILY, "is_main_tab": True},
+        referenced=[DC_A, DC_C],
+    )
+
+    assert pins.for_dc(DC_A) == 2
+    assert pins.reports_for_dc(DC_C) == [R1, R2]
+    entry = _by_dc(collection_statuses(pins, [DC_C], IDENTITIES))[DC_C]
+    assert (entry["status"], entry["report_count"]) == ("pinned", 2)
+    assert entry["delta_version"] is None
+
+
+def test_report_sets_override_the_version(monkeypatch):
+    _stub_version(monkeypatch, [_manifest_stamp(DC_C, [R1, R2])], family_id=FAMILY)
+
+    pins = resolve_data_versions(
+        {"as_of_version": "abc", "report_sets": {DC_C: [R3, R3, R1]}},
+        dashboard={"dashboard_id": FAMILY, "is_main_tab": True},
+        referenced=[DC_C],
+    )
+
+    assert pins.reports_for_dc(DC_C) == [R3, R1], "overridden, deduplicated, order kept"
+
+
+def test_report_sets_work_without_a_version():
+    pins = resolve_data_versions({"report_sets": {DC_C: [R1]}})
+
+    assert pins.reports_for_dc(DC_C) == [R1]
+    (entry,) = collection_statuses(pins, [DC_C], IDENTITIES)
+    assert (entry["status"], entry["report_count"]) == ("pinned", 1)
+
+
+def test_an_empty_report_set_is_a_real_pin():
+    """A baseline that held no report pins to nothing, not to everything."""
+    pins = resolve_data_versions({"report_sets": {DC_C: []}})
+
+    assert pins.reports_for_dc(DC_C) == []
+
+
+def test_report_sets_null_keeps_a_collection_live(monkeypatch):
+    _stub_version(monkeypatch, [_manifest_stamp(DC_C, [R1])], family_id=FAMILY)
+
+    pins = resolve_data_versions(
+        {"as_of_version": "abc", "report_sets": {DC_C: None}},
+        dashboard={"dashboard_id": FAMILY, "is_main_tab": True},
+        referenced=[DC_C],
+    )
+
+    assert pins.reports_for_dc(DC_C) is None
+    (entry,) = collection_statuses(pins, [DC_C], IDENTITIES)
+    assert (entry["status"], entry["reason"]) == ("live", "kept_live")
+
+
+@pytest.mark.parametrize(
+    "report_sets",
+    [
+        [R1],
+        {DC_C: R1},
+        {DC_C: [R1, 3]},
+        {DC_C: [""]},
+        {DC_C: [R1] * 501},
+    ],
+)
+def test_malformed_report_sets_are_rejected(report_sets):
+    with pytest.raises(ValueError):
+        resolve_data_versions({"report_sets": report_sets})
+
+
+def test_a_jbrowse_collection_stays_not_versioned():
+    entries = collection_statuses(DataVersionPins(), [DC_A], {DC_A: {"dc_type": "jbrowse2"}})
+
+    assert (entries[0]["status"], entries[0]["reason"]) == (
+        "not_versioned",
+        "manifest_versioning_not_enabled",
     )
 
 

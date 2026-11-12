@@ -209,6 +209,13 @@ class DataCollectionStamp(BaseModel):
     manifest_digest: Optional[str] = None
     s3_locations: list[str] = Field(default_factory=list)
     sample_count: Optional[int] = None
+    #: MultiQC only: ids of the ``MultiQCReport`` documents the collection held,
+    #: sorted. Each report has its own content-addressed parquet, so "the data
+    #: as of this version" is the set of reports it recorded. An overwrite
+    #: re-ingest updates a report in place and keeps its S3 key, which this set
+    #: cannot reproduce. Optional with a default so records stamped before it
+    #: existed still validate.
+    report_ids: list[str] = Field(default_factory=list)
 
     # version_kind == "asset"
     asset_digest: Optional[str] = None
