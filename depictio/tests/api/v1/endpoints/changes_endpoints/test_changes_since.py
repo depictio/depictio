@@ -301,12 +301,17 @@ def test_a_delta_refresh_reports_new_run_tags_and_rows(ctx):
     assert (table["delta_from"], table["delta_to"]) == (0, 1)
 
 
-def test_the_reader_s_own_ingestion_is_not_news(ctx):
+def test_the_reader_s_own_ingestion_is_still_news(ctx):
+    """An ingestion runs on its own, often from a pipeline holding the reader's
+    token, and what it did to the figures is unseen: unlike an edit, starting it
+    is not seeing it. On a single-user instance every ingestion is the reader's."""
     _visit(ctx)
     _ingest_run_c(ctx, by=READER)
     result = _changes(ctx)
-    assert result["data"] == []
-    assert result["changed_components"] == {}
+    [table] = result["data"]
+    assert table["new_run_tags"] == ["run_c"]
+    assert table["by"] == [READER.email]
+    assert result["changed_components"]
 
 
 # ── acceptance: a component edited by someone else ──────────────────────────

@@ -147,7 +147,7 @@ def dashboard_change_set(
 
     reader = _reader(user)
     collections = bl.project_collections(project_id)
-    data = df.data_changes(base, now, collections, reader)
+    data = df.data_changes(base, now, collections)
     dashboard, changed_keys, approximate = df.dashboard_changes(family_id, base, docs, reader)
     readable, moderator = _comment_reader(project_id, user)
     comments = df.comment_changes(family_id, base, reader, moderator=moderator) if readable else []
@@ -161,7 +161,7 @@ def dashboard_change_set(
     out.update(
         approximate=approximate,
         data=data,
-        failed_ingestions=df.failed_ingestions(project_id, base, reader) if project_id else [],
+        failed_ingestions=df.failed_ingestions(project_id, base) if project_id else [],
         dashboard=dashboard,
         comments=comments,
         changed_components=marked,
@@ -274,9 +274,9 @@ def project_change_set(
         return out
     reader = _reader(user)
     collections = bl.project_collections(project_id)
-    out["data"] = df.data_changes(base, now, collections, reader)
+    out["data"] = df.data_changes(base, now, collections)
     out["new_runs"] = df.new_workflow_runs(base, now)
-    out["failed_ingestions"] = df.failed_ingestions(project_id, base, reader)
+    out["failed_ingestions"] = df.failed_ingestions(project_id, base)
     out["dashboards"] = _project_dashboard_changes(project_id, base, reader)
     return out
 
@@ -565,14 +565,14 @@ def _inbox_item(
         _require_project(scope_id, user)
         now = bl.project_baseline(scope_id)
         project = projects_collection.find_one({"_id": ObjectId(scope_id)}, {"name": 1}) or {}
-        data = df.data_changes(base, now, bl.project_collections(scope_id), reader)
+        data = df.data_changes(base, now, bl.project_collections(scope_id))
         runs = df.new_workflow_runs(base, now)
         title = project.get("name") or ""
         dashboard_versions = 0
     else:
         family_id, main, docs = _family(scope_id, user)
         now = bl.family_baseline(family_id, docs)
-        data = df.data_changes(base, now, bl.project_collections(main.get("project_id")), reader)
+        data = df.data_changes(base, now, bl.project_collections(main.get("project_id")))
         runs = []
         title = main.get("title") or ""
         dashboard_versions = dashboard_versions_collection.count_documents(

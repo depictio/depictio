@@ -4,8 +4,11 @@ Three groups, as the reader thinks of them: **data** (collections refreshed,
 new runs, new samples), **dashboard** (components and tabs added, edited or
 removed, with who and in which version) and **comments**.
 
-A reader's own changes are not news to them and are left out: dashboard
-versions they authored, ingestions they ran, comments they wrote.
+A reader's own edits are not news to them and are left out: dashboard
+versions they authored, comments they wrote. Ingestions are kept whoever ran
+them: an ingestion runs on its own (often a pipeline holding the reader's
+token), so starting one is not seeing what it did to the figures, and on a
+single-user instance every ingestion is the reader's.
 """
 
 from __future__ import annotations
@@ -251,7 +254,7 @@ def _ingestion_authors(run_ids: Iterable[str]) -> dict[str, dict[str, Any]]:
     }
 
 
-def _delta_change(dc_id: str, before: DcSeenState, reader: Reader) -> dict[str, Any] | None:
+def _delta_change(dc_id: str, before: DcSeenState) -> dict[str, Any] | None:
     aggregations = bl.aggregations_of(dc_id)
     if before.delta_version is not None:
         newer = [
@@ -267,16 +270,11 @@ def _delta_change(dc_id: str, before: DcSeenState, reader: Reader) -> dict[str, 
 
     runs = _ingestion_authors(a.get("ingestion_run_id") for a in newer)
 
-    def by_reader(agg: dict[str, Any]) -> bool:
+    def author(agg: dict[str, Any]) -> str | None:
         run = runs.get(agg.get("ingestion_run_id") or "")
-        if run is not None:
-            return reader.wrote(user_id=run.get("user_id"), email=run.get("email"))
-        by = agg.get("aggregation_by") or {}
-        return reader.wrote(user_id=by.get("id") or by.get("_id"), email=by.get("email"))
-
-    others = [a for a in newer if not by_reader(a)]
-    if not others:
-        return None
+        if run is not None and run.get("email"):
+            return run["email"]
+        return (agg.get("aggregation_by") or {}).get("email")
 
     tags = sorted({t for a in newer for t in a.get("run_tags") or [] if t})
     known = set(before.run_tags)
@@ -294,7 +292,7 @@ def _delta_change(dc_id: str, before: DcSeenState, reader: Reader) -> dict[str, 
         "ingestion_run_ids": sorted(
             {a["ingestion_run_id"] for a in newer if a.get("ingestion_run_id")}
         ),
-        "by": sorted({(a.get("aggregation_by") or {}).get("email") for a in others} - {None}),
+        "by": sorted({author(a) for a in newer} - {None}),
         "at": _iso(newer[-1].get("delta_commit_timestamp") or newer[-1].get("aggregation_time")),
     }
 
@@ -305,7 +303,7 @@ def _report_run_tag(report: dict[str, Any]) -> str | None:
     return report.get("run_tag") or None
 
 
-def _multiqc_change(dc_id: str, before: DcSeenState, reader: Reader) -> dict[str, Any] | None:
+def _multiqc_change(dc_id: str, before: DcSeenState) -> dict[str, Any] | None:
     reports = bl.multiqc_reports_of(dc_id)
     now = {bl.report_identity(r): r for r in reports}
     seen = before.multiqc_reports
@@ -317,14 +315,6 @@ def _multiqc_change(dc_id: str, before: DcSeenState, reader: Reader) -> dict[str
 
     changed = added + refreshed
     runs = _ingestion_authors(r.get("ingestion_run_id") for r in changed)
-
-    def by_reader(report: dict[str, Any]) -> bool:
-        run = runs.get(report.get("ingestion_run_id") or "")
-        return run is not None and reader.wrote(user_id=run.get("user_id"), email=run.get("email"))
-
-    others = [r for r in changed if not by_reader(r)]
-    if not others and not removed:
-        return None
 
     samples_now: set[str] = (
         set().union(*(bl.report_samples(r) for r in reports)) if reports else set()
@@ -364,7 +354,7 @@ def _multiqc_change(dc_id: str, before: DcSeenState, reader: Reader) -> dict[str
         "by": sorted(
             {
                 runs[r["ingestion_run_id"]].get("email")
-                for r in others
+                for r in changed
                 if r.get("ingestion_run_id") in runs
             }
             - {None}
@@ -377,7 +367,6 @@ def data_changes(
     base: ReaderBaseline,
     now: ReaderBaseline,
     collections: dict[str, dict[str, Any]],
-    reader: Reader,
 ) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for dc_id, state_now in now.dc_states.items():
@@ -386,9 +375,9 @@ def data_changes(
             # Newly referenced: the component that reads it is the news.
             continue
         if state_now.dc_type == "multiqc" or before.multiqc_reports:
-            change = _multiqc_change(dc_id, before, reader)
+            change = _multiqc_change(dc_id, before)
         else:
-            change = _delta_change(dc_id, before, reader)
+            change = _delta_change(dc_id, before)
         if change is None:
             continue
         info = collections.get(dc_id, {})
@@ -402,9 +391,7 @@ def data_changes(
     return out
 
 
-def failed_ingestions(
-    project_id: Any, base: ReaderBaseline, reader: Reader
-) -> list[dict[str, Any]]:
+def failed_ingestions(project_id: Any, base: ReaderBaseline) -> list[dict[str, Any]]:
     """Ingestions after the baseline that failed or partly failed."""
     if base.ingestion_cursor_at is None:
         return []
@@ -425,8 +412,6 @@ def failed_ingestions(
             "data_collections.tag": 1,
         },
     ).limit(20):
-        if reader.wrote(user_id=run.get("user_id"), email=run.get("email")):
-            continue
         out.append(
             {
                 "run_id": run.get("run_id"),
