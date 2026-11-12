@@ -3,6 +3,53 @@
 ### Docker Images 🐳
 
 ```plaintext
+ghcr.io/depictio/depictio:1.21.0-b6
+ghcr.io/depictio/depictio:latest
+ghcr.io/depictio/depictio:stable
+ghcr.io/depictio/depictio:edge
+```
+
+
+<details>
+<summary>Click to expand the changelog for 1.21.0-b6</summary>
+
+### Changes 📜
+
+#### Other Changes 📝
+
+* Bump version: 1.21.0-b5 → 1.21.0-b6 [6e70081bc]
+* test(links): the hop-composition fake accepts text_match [ddd52f0e4]
+* fix(nf-core/crisprseq): Guide comparison section uses a bundled icon (template 2.2.5) [3be82eb51]
+* fix(nf-core/crisprseq): placeholders show the pipe as the regex alternation (template 2.2.4) [5ee72dc84]
+* feat(nf-core/crisprseq): guide comparison tabs, edit quartiles, replicate agreement, indel size matrix [e06f055dd]
+* test(sarek): the mapping-only tests read the latest template (3.11.0) [88f9509a3]
+* fix(figure): hover template keeps its extra tail, translucent colours keep the neutral label [588fade01]
+* feat(sarek): genome browser in Explore, annotated burden heatmap, tooltips in series colours [7d62646f0]
+* feat(viewer): contigs in karyotype order for mosdepth, overflow cue on the sidebar tab list [6a6909113]
+* test(publish-lock): classify the text filter and group resolution routes [723380320]
+* test(links): the reverse resolve passes text_match to the translation [69bc4532a]
+* docs(interactive): TextInput placeholder example uses the pipe of a regular expression [f70179dd3]
+* feat(interactive): TextInput match list follows the typing, marks each alternative in its own colour [407cce42b]
+* feat(interactive): TextInput regex filter, multi-value always_selected, group translation for advanced viz [a24785a36]
+* fix(projects): the push host reads the server-info store for admins only [8a5ff691f]
+* feat(projects): a clickable toast for received projects, on every page [c5592092c]
+* feat(helm): turn on realtime events for the EMBL instances [2d162e5ab]
+* feat(projects): show a received project at once, with a toast [74b2ae6b5]
+* feat(migration): push a received project to admin browsers as it arrives [414a96815]
+* fix(projects): align the received-projects banner with the page palette [9f2e1ccc6]
+* fix(helm): allow the EMBL instances as send targets from the UI [c1aea3957]
+* Update CHANGELOG.md for v1.21.0-b5 [ad389453e]
+
+
+</details>
+
+### Documentation 📖
+
+For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
+
+### Docker Images 🐳
+
+```plaintext
 ghcr.io/depictio/depictio:1.21.0-b5
 ghcr.io/depictio/depictio:latest
 ghcr.io/depictio/depictio:stable
