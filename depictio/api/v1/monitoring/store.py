@@ -185,7 +185,27 @@ def finish_ingestion_run(run_id: str, **fields: Any) -> bool:
     fields.setdefault("finished_at", datetime.now())
     fields.setdefault("updated_at", datetime.now())
     result = ingestion_runs_collection.update_one({"run_id": run_id}, {"$set": fields})
+    if result.matched_count > 0:
+        _announce_finished_run(run_id)
     return result.matched_count > 0
+
+
+def _announce_finished_run(run_id: str) -> None:
+    """Tell the readers watching the run's project that it finished. Never raises.
+
+    ``finish_ingestion_run`` is where every run ends, whichever process closes
+    it: the CLI's ``/finish`` route, the browser ingestion task and the manifest
+    refresh finalizer in Celery all land here. The publisher is a plain Redis
+    publish, so it works from a worker that holds no WebSocket.
+    """
+    try:
+        from depictio.api.v1.services.events.publish import publish_ingestion_finished
+
+        publish_ingestion_finished(
+            ingestion_runs_collection.find_one({"run_id": run_id}, {"_id": 0})
+        )
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.debug(f"monitoring: ingestion_finished not announced for {run_id}: {exc}")
 
 
 ABANDONED_RUN_ERROR = (

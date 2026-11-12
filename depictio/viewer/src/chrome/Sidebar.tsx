@@ -35,6 +35,7 @@ import { useScrollOverflow } from './useScrollOverflow';
 import ServerStatusBadge from './ServerStatusBadge';
 import ProfileBadge from './ProfileBadge';
 import AuthModeBadge from './AuthModeBadge';
+import NotificationsBell from './NotificationsBell';
 import { dashboardHref, dashboardLinkClickHandler } from '../dashboards/lib/dashboardLinks';
 import './chrome.css';
 
@@ -824,6 +825,7 @@ const Sidebar: React.FC<SidebarProps> = ({
         <div className="dc-sidebar-footer-item dc-sidebar-theme">
           <ThemeToggle />
         </div>
+        <NotificationsBell />
         <div className="dc-sidebar-footer-item dc-sidebar-status">
           <ServerStatusBadge />
         </div>

@@ -124,6 +124,11 @@ class ConnectionManager:
                 # WebSocket clients exist, so the fan-out happens here rather
                 # than at the publisher, which cannot see them.
                 await self._broadcast_dc_update_local(scope_id, json.loads(data))
+            elif scope == "project":
+                # An ingestion finished (published from an API or Celery worker).
+                # Clients subscribe under ``project:<id>``, the same registry the
+                # dashboard ids live in, so the relay is the dashboard one.
+                await self._broadcast_to_dashboard_local(f"project:{scope_id}", json.loads(data))
         except Exception as e:
             logger.error(f"Error handling pub/sub message: {e}")
 

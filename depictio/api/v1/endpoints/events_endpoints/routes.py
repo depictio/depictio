@@ -36,6 +36,39 @@ async def _resolve_websocket_user(token: str | None) -> User | None:
         return None
 
 
+PROJECT_CHANNEL_PREFIX = "project:"
+
+
+def _user_can_access_project_channel(user: User | None, channel: str) -> bool:
+    """Verify the reader may subscribe to ``project:<project_id>``.
+
+    The channel announces finished ingestions of that project, so it needs the
+    project's viewer permission (public projects only, for an anonymous
+    reader). Off, and refused, while the changes-since feature is off: nothing
+    publishes on it then.
+    """
+    from bson import ObjectId
+
+    from depictio.api.v1.db import projects_collection
+    from depictio.api.v1.endpoints.dashboards_endpoints.routes import check_project_permission
+
+    if not settings.dashboard_versions.changes_since_enabled:
+        return False
+    try:
+        project = projects_collection.find_one(
+            {"_id": ObjectId(channel[len(PROJECT_CHANNEL_PREFIX) :])}
+        )
+        if not project:
+            logger.debug(f"WS subscribe denied: {channel} not found")
+            return False
+        if user is None:
+            return bool(project.get("is_public", False))
+        return bool(check_project_permission(project["_id"], user, required_permission="viewer"))
+    except Exception as e:
+        logger.warning(f"WS subscribe permission check failed for {channel}: {e}")
+        return False
+
+
 def _user_can_access_dashboard(user: User | None, dashboard_id: str) -> bool:
     """Verify the authenticated user may subscribe to ``dashboard_id``'s events.
 
@@ -53,6 +86,10 @@ def _user_can_access_dashboard(user: User | None, dashboard_id: str) -> bool:
     from depictio.api.v1.db import dashboards_collection, projects_collection
     from depictio.api.v1.endpoints.dashboards_endpoints.routes import check_project_permission
     from depictio.models.models.monitoring import ADMIN_MONITORING_CHANNEL
+
+    # A project channel is not a dashboard either: gate it on the project.
+    if dashboard_id.startswith(PROJECT_CHANNEL_PREFIX):
+        return _user_can_access_project_channel(user, dashboard_id)
 
     # Admin monitoring channel is not a real dashboard — gate it on is_admin and
     # refuse in public/demo mode (no real admin surface there).
