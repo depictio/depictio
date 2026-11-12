@@ -1735,3 +1735,33 @@ export {
   residueEntityFromFilters,
   isResidueFilter,
 } from './selection';
+
+// What changed since the reader's last visit (#1397).
+export {
+  fetchDashboardChanges,
+  recordDashboardVisit,
+  markDashboardSeen,
+  fetchProjectChanges,
+  recordProjectVisit,
+  markProjectSeen,
+  fetchProjectTimeline,
+  fetchChangesPrefs,
+  saveChangesPrefs,
+  fetchChangesInbox,
+} from './api';
+export type {
+  MarkMode,
+  ReaderBaseline,
+  DismissedComponents,
+  DataChange,
+  FailedIngestion,
+  DashboardChange,
+  CommentChange,
+  DashboardChangeSet,
+  ProjectRunChange,
+  ProjectDashboardChange,
+  ProjectChangeSet,
+  ChangesQuery,
+  TimelineEvent,
+  InboxItem,
+} from './api';

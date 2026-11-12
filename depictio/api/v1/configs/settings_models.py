@@ -1813,6 +1813,18 @@ class DashboardVersionsConfig(BaseSettings):
         description="Skip (and log) a capture larger than this rather than risk the "
         "16 MB BSON document limit. A version must never break a save.",
     )
+    changes_since_enabled: bool = Field(
+        default=False,
+        description="Show readers what changed since their last visit: the viewer pill "
+        "and panel, the marks on changed components, the figure before/after, the "
+        "project's new runs and timeline, and the notifications bell. Off by default.",
+    )
+    changes_since_mark_mode: Literal["sticky", "previous_visit"] = Field(
+        default="sticky",
+        description="Default for readers who have not chosen: 'sticky' keeps the marks "
+        "until the reader marks them as seen, 'previous_visit' shows what changed "
+        "since the visit before this one.",
+    )
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_DASHBOARD_VERSIONS_")
 

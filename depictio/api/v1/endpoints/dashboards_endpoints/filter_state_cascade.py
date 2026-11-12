@@ -16,7 +16,23 @@ from typing import Any
 from bson import ObjectId
 
 from depictio.api.v1.configs.logging_init import logger
-from depictio.api.v1.db import dashboard_filter_states_collection, dashboards_collection
+from depictio.api.v1.db import (
+    dashboard_filter_states_collection,
+    dashboards_collection,
+    reader_marks_collection,
+)
+
+
+def _delete_reader_marks(scope_kind: str, scope_ids: list[str]) -> None:
+    """Reader marks (#1397) of deleted dashboard families or a deleted project."""
+    if not scope_ids:
+        return
+    try:
+        reader_marks_collection.delete_many(
+            {"scope_kind": scope_kind, "scope_id": {"$in": scope_ids}}
+        )
+    except Exception as exc:  # noqa: BLE001 — cascade is best-effort
+        logger.warning(f"reader_marks: failed to delete {scope_kind} marks {scope_ids}: {exc}")
 
 
 def delete_filter_states_for_dashboards(dashboard_ids: Iterable[Any]) -> int:
@@ -26,6 +42,8 @@ def delete_filter_states_for_dashboards(dashboard_ids: Iterable[Any]) -> int:
     )
     if not ids:
         return 0
+    # A family's marks are keyed on its main tab; a child tab's id matches none.
+    _delete_reader_marks("dashboard", [str(i) for i in ids])
     try:
         result = dashboard_filter_states_collection.delete_many({"dashboard_id": {"$in": ids}})
         if result.deleted_count:
@@ -44,6 +62,7 @@ def delete_filter_states_for_project(project_id: Any) -> int:
     """
     if project_id is None or not ObjectId.is_valid(str(project_id)):
         return 0
+    _delete_reader_marks("project", [str(project_id)])
     try:
         tab_ids = [
             d["dashboard_id"]

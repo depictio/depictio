@@ -18,6 +18,7 @@ from depictio.api.v1.endpoints.auth_endpoints.oidc_routes import oidc_router
 from depictio.api.v1.endpoints.backup_endpoints.routes import backup_endpoint_router
 from depictio.api.v1.endpoints.catalog_endpoints.routes import catalog_endpoint_router
 from depictio.api.v1.endpoints.celery_endpoints.routes import celery_endpoint_router
+from depictio.api.v1.endpoints.changes_endpoints.routes import changes_router
 from depictio.api.v1.endpoints.cli_endpoints.routes import cli_endpoint_router
 from depictio.api.v1.endpoints.comments_endpoints.routes import comments_endpoint_router
 from depictio.api.v1.endpoints.dashboards_endpoints.annotation_routes import annotation_router
@@ -166,6 +167,9 @@ router.include_router(
     prefix="/dashboards/filter_state",
     tags=["Dashboards"],
 )
+
+# What changed since a reader's last visit (#1397). Own prefix, no overlap.
+router.include_router(changes_router, prefix="/changes", tags=["Changes"])
 
 # Same reasoning: no dashboards route has a literal `annotations` segment.
 router.include_router(
