@@ -3382,6 +3382,11 @@ def manifest_refresh_dc_task(self, payload: dict) -> dict:
                 None if sync_files else last_ingested_signature(payload["project_id"], tag, run_id)
             ),
             outcome=outcome,
+            # The run ledger entry this task belongs to, so what it writes can
+            # be joined back to the ingestion that produced it.
+            ingestion_run_id=run_id,
+            project_id=payload["project_id"],
+            trigger="ui",
             **scan_kwargs,
         )
     except ProjectStorageUnusable as exc:

@@ -767,6 +767,105 @@ def test_run_dc_ingest_threads_sync_files(mock_db):
     assert scan_call.kwargs.get("command_parameters") == {"sync_files": True}
 
 
+def test_run_dc_ingest_stamps_ingestion_run_on_process(mock_db):
+    # The aggregation a worker writes must carry the run ledger entry that
+    # produced it, the same keys the CLI and the upload task pass.
+    user = _user()
+    doc = _project_doc(user.id, tags=["counts"])
+    dc_id = str(doc["workflows"][0]["data_collections"][0]["_id"])
+
+    def _process_params(**kwargs):
+        with (
+            patch.object(dc_utils, "_build_cli_config_for_user", return_value=object()),
+            patch(
+                "depictio.cli.cli.utils.helpers.process_data_collection_helper",
+                return_value={"result": "success"},
+            ) as helper,
+        ):
+            ok, _message = manifest_ingest._run_dc_ingest(
+                doc["workflows"][0], dc_id, user, **kwargs
+            )
+        assert ok is True
+        call = next(c for c in helper.call_args_list if c.kwargs.get("mode") == "process")
+        return call.kwargs["command_parameters"]
+
+    assert _process_params() == {"overwrite": True, "keep_unchanged": True}
+    assert _process_params(ingestion_run_id="run-9", project_id="proj-1", trigger="ui") == {
+        "overwrite": True,
+        "keep_unchanged": True,
+        "ingestion_run_id": "run-9",
+        "project_id": "proj-1",
+        "trigger": "ui",
+    }
+
+
+def test_refresh_dc_task_hands_the_run_id_to_the_ingest(mock_db):
+    from depictio.api.v1 import celery_tasks
+    from depictio.api.v1.monitoring import store as monitoring_store
+
+    user = _user()
+    doc = _project_doc(user.id, tags=["counts"])
+    mock_db["projects"].insert_one(doc)
+    mock_db["ingestion_runs"].insert_one(
+        {
+            "run_id": "run123",
+            "command": "from_run",
+            "status": "running",
+            "steps": [{"name": "counts", "status": "pending", "detail": None}],
+            "data_collections": [{"tag": "counts", "file_count": 1}],
+        }
+    )
+    payload = {
+        "run_id": "run123",
+        "project_id": str(doc["_id"]),
+        "wf_index": 0,
+        "dc_id": str(doc["workflows"][0]["data_collections"][0]["_id"]),
+        "dc_tag": "counts",
+        "sync_files": True,
+        "user": {"id": str(user.id), "email": user.email, "is_admin": False},
+    }
+    with (
+        patch.object(monitoring_store, "ingestion_runs_collection", mock_db["ingestion_runs"]),
+        patch("depictio.api.v1.db.projects_collection", mock_db["projects"]),
+        patch.object(manifest_ingest, "_run_dc_ingest", return_value=(True, None)) as ingest,
+    ):
+        celery_tasks.manifest_refresh_dc_task(payload)
+
+    assert ingest.call_args.kwargs["ingestion_run_id"] == "run123"
+    assert ingest.call_args.kwargs["project_id"] == str(doc["_id"])
+    assert ingest.call_args.kwargs["trigger"] == "ui"
+
+
+def test_dispatch_records_ui_trigger_and_run_tags(mock_db):
+    from depictio.api.v1.monitoring import store as monitoring_store
+
+    user = _user()
+    doc = _project_doc(user.id, tags=["counts"])
+    dc_id = str(doc["workflows"][0]["data_collections"][0]["_id"])
+
+    def _dispatch(**kwargs):
+        with (
+            patch.object(monitoring_store, "ingestion_runs_collection", mock_db["ingestion_runs"]),
+            patch("depictio.api.v1.celery_tasks.manifest_refresh_dc_task"),
+        ):
+            run_id, _ok, _results = manifest_ingest._dispatch_refresh_tasks(
+                project_dict=doc,
+                to_dispatch=[("counts", dc_id, 0, 1)],
+                current_user=user,
+                preflight_failed=[],
+                **kwargs,
+            )
+        return mock_db["ingestion_runs"].find_one({"run_id": run_id})
+
+    plain = _dispatch()
+    assert plain["trigger"] == "ui"
+    assert plain["run_tags"] == []
+
+    attached = _dispatch(command="from_run", run_tags=["run_c"])
+    assert attached["trigger"] == "ui"
+    assert attached["run_tags"] == ["run_c"]
+
+
 # One entry on a host the gateway rejects (the other host passes).
 MANIFEST_WITH_INTERNAL_ENTRY = """
 [

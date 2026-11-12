@@ -1058,6 +1058,7 @@ def client_aggregate_data(
             overwrite,
             workflow,
             keep_unchanged=bool(command_parameters.get("keep_unchanged", False)),
+            ingestion_run_id=command_parameters.get("ingestion_run_id"),
         )
 
     # Handle GeoJSON data collections - upload file to S3 and store location

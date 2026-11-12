@@ -272,6 +272,11 @@ class IngestionRun(BaseModel):
     data_collections: list[IngestionDataCollection] = Field(
         default_factory=list, description="Per-DC summary + local scan paths for this run"
     )
+    run_tags: list[str] = Field(
+        default_factory=list,
+        description="Run tags (run folders) this ingestion brought in, e.g. the new runs of "
+        "an attach_run. Empty when the invocation is not tied to specific runs.",
+    )
     status: IngestionStatus = Field(default="running", description="Overall run status")
     steps: list[IngestionStep] = Field(default_factory=list, description="Per-step tally")
     # Written while status='running', via POST /monitoring/ingestion/{run_id}/step:
