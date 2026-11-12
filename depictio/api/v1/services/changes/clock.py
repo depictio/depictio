@@ -1,8 +1,8 @@
 """Ingestion records still stamp the host's local clock.
 
-``ingestion_runs.started_at``, ``Aggregation.aggregation_time`` and
-``MultiQCReport.processed_at`` come from ``datetime.now()``, while every other
-API timestamp is naive UTC. Under Docker the two agree; under
+``ingestion_runs.started_at``, ``Aggregation.aggregation_time``,
+``MultiQCReport.processed_at`` and a workflow run's ``registration_time`` come
+from ``datetime.now()``, while every other API timestamp is naive UTC. Under Docker the two agree; under
 ``depictio local up`` they are hours apart, so a run would read as hours in
 the future and sort after a later dashboard version. The changes views turn
 them into naive UTC before showing or ordering them: they are written by the

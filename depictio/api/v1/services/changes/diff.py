@@ -445,7 +445,7 @@ def new_workflow_runs(base: ReaderBaseline, now: ReaderBaseline) -> list[dict[st
                     "workflow_id": wf_id,
                     "run_tag": tag,
                     "run_location": run.get("run_location"),
-                    "registered": run.get("registration_time"),
+                    "registered": _iso(local_to_utc(run.get("registration_time"))),
                 }
             )
     return out
