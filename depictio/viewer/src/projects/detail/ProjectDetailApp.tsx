@@ -42,6 +42,7 @@ import {
   Settings,
   ShieldCheck,
   FolderGit,
+  History as HistoryIcon,
   Workflow,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -120,6 +121,7 @@ import {
 } from './AssetPreviews';
 
 import { useCurrentUser } from '../../hooks/useCurrentUser';
+import { useServerInfo } from '../../hooks/useServerInfo';
 import { AppSidebar, LoadErrorCard } from '../../chrome';
 import IngestionReportPanel from './IngestionReportPanel';
 import ProjectIngestionHistoryPanel from './ProjectIngestionHistoryPanel';
@@ -152,6 +154,10 @@ import { ProjectSummary } from './ProjectSummary';
 import AddDataButton from './addData/AddDataButton';
 import { isRealWorkflow } from '../layout';
 import RunsPanel from './RunsPanel';
+import { ProjectChangesPill } from './ProjectChangesPill';
+import { ProjectTimelinePanel } from './ProjectTimelinePanel';
+import { readTabRequest } from './projectChanges';
+import { useProjectChanges, type ProjectChanges } from './useProjectChanges';
 import DerivedLineage from './DerivedLineage';
 
 interface DataCollectionShape {
@@ -351,6 +357,12 @@ function readTableFromQuery(): string | null {
   return new URLSearchParams(window.location.search).get('table') || null;
 }
 
+/** `?tab=runs&run=run_c`: the project tab (and run) a link asks the page to open. */
+function readTabRequestFromQuery() {
+  if (typeof window === 'undefined') return { tab: null, run: null };
+  return readTabRequest(window.location.search);
+}
+
 /** Flatten DCs across all workflows. The workflows are the project's own
  *  (a pipeline's, plus one wrapped around each hand-added collection). */
 function flattenDataCollections(
@@ -374,16 +386,21 @@ const ProjectDetailApp: React.FC = () => {
   // Active project-detail tab. Honors `#ingestion` deep links (e.g. from the
   // dashboard banner / settings drawer) and is controlled so the ingestion
   // report can switch back to Overview when previewing a data collection.
+  // `?tab=` (overview | runs | ingestion | timeline) and `?run=<run_tag>` open
+  // a tab, and a run in it, from a link (the notifications, the timeline).
+  const tabRequest = useMemo(readTabRequestFromQuery, []);
   const [activeTab, setActiveTab] = useState<string | null>(
-    typeof window !== 'undefined' &&
-      ['#ingestion', '#ingestion-history'].includes(window.location.hash)
-      ? 'ingestion'
-      : typeof window !== 'undefined' && window.location.hash === '#runs'
-        ? 'runs'
-        : 'overview',
+    tabRequest.tab
+      ? tabRequest.tab
+      : typeof window !== 'undefined' &&
+          ['#ingestion', '#ingestion-history'].includes(window.location.hash)
+        ? 'ingestion'
+        : typeof window !== 'undefined' && window.location.hash === '#runs'
+          ? 'runs'
+          : 'overview',
   );
   // The run the Runs tab opens on, when another part of the page asked for one.
-  const [focusRun, setFocusRun] = useState<string | null>(null);
+  const [focusRun, setFocusRun] = useState<string | null>(tabRequest.run);
   // Which half of the Ingestion tab is showing. `#ingestion-history` deep-links
   // straight to the run history, which is what a "your ingestion failed" link
   // should open.
@@ -439,6 +456,10 @@ const ProjectDetailApp: React.FC = () => {
 
   const { user, isPublicMode, loading: userLoading } = useCurrentUser();
   const projectId = readProjectIdFromPath();
+  // "Changed since your last visit" and the Timeline tab (#1397): inert unless
+  // the server turns the feature on.
+  const changes = useProjectChanges(projectId);
+  const { loading: serverInfoLoading } = useServerInfo();
 
   usePageTitle('Project Data Collections');
   const glass = useGlassPages();
@@ -617,6 +638,23 @@ const ProjectDetailApp: React.FC = () => {
   }, [allDataCollections]);
   // A project made from a pipeline has runs: it gets the Runs tab.
   const hasRuns = realWorkflows.length > 0;
+  // A link may ask for a tab this project does not have (no runs, or the
+  // feature is off): show the overview rather than an empty panel. The
+  // feature flag is unknown until the server answers, so Timeline waits for it.
+  const tabValue =
+    (activeTab === 'runs' && !hasRuns) ||
+    (activeTab === 'timeline' && !changes.enabled && !serverInfoLoading)
+      ? 'overview'
+      : activeTab;
+  const newRunTags = useMemo(
+    () => new Set((changes.changeSet?.new_runs ?? []).map((r) => r.run_tag)),
+    [changes.changeSet],
+  );
+  // Open the ingestion history (a failed ingestion's link).
+  const showIngestionHistory = () => {
+    setActiveTab('ingestion');
+    setIngestionView('history');
+  };
 
   // After an ingestion-report "preview" jumps to Overview with a DC selected,
   // scroll the DC viewer (which renders the table preview) into view.
@@ -772,6 +810,8 @@ const ProjectDetailApp: React.FC = () => {
                 onShowIngestion={showIngestion}
                 onShowRuns={showRuns}
                 refreshKey={refreshKey}
+                changes={changes}
+                onShowIngestionHistory={showIngestionHistory}
               />
               {projectId && <ProjectDashboardsPanel projectId={projectId} />}
               <ProjectPart
@@ -779,13 +819,13 @@ const ProjectDetailApp: React.FC = () => {
                 icon={Database}
                 title="Data"
                 summary={dataSummary}
-                forceOpen={requestedTableId != null}
+                forceOpen={requestedTableId != null || tabRequest.tab != null}
               >
                 <Stack gap="lg">
                   {workflowsPanel}
                   {projectId ? (
                     <Tabs
-                      value={activeTab}
+                      value={tabValue}
                       onChange={setActiveTab}
                       keepMounted={false}
                       variant="pills"
@@ -837,6 +877,21 @@ const ProjectDetailApp: React.FC = () => {
                             <span className="dc-project-tab-label">Ingestion report</span>
                             <span className="dc-project-tab-meta">What each run found, and when</span>
                           </Tabs.Tab>
+                          {changes.enabled && (
+                            <Tabs.Tab
+                              value="timeline"
+                              className="dc-project-tab"
+                              data-testid="project-tab-timeline"
+                              leftSection={
+                                <span className="dc-project-tab-icon">
+                                  <HistoryIcon size={20} strokeWidth={STROKE} aria-hidden />
+                                </span>
+                              }
+                            >
+                              <span className="dc-project-tab-label">Timeline</span>
+                              <span className="dc-project-tab-meta">Ingestions, versions and comments</span>
+                            </Tabs.Tab>
+                          )}
                         </Tabs.List>
                       ) : (
                         <Tabs.List mb="md">
@@ -867,6 +922,17 @@ const ProjectDetailApp: React.FC = () => {
                           >
                             Ingestion report
                           </Tabs.Tab>
+                          {changes.enabled && (
+                            <Tabs.Tab
+                              value="timeline"
+                              fz="md"
+                              px="lg"
+                              data-testid="project-tab-timeline"
+                              leftSection={<Icon icon="mdi:timeline-clock-outline" width={18} />}
+                            >
+                              Timeline
+                            </Tabs.Tab>
+                          )}
                         </Tabs.List>
                       )}
                       <Tabs.Panel value="overview">{overviewSections}</Tabs.Panel>
@@ -876,6 +942,7 @@ const ProjectDetailApp: React.FC = () => {
                             projectId={projectId}
                             refreshKey={refreshKey}
                             focusRun={focusRun}
+                            newRunTags={newRunTags}
                             dcIdByTag={dcIdByTag}
                             dcTypeByTag={dcTypeByTag}
                             onOpenDc={(dcId) => {
@@ -884,6 +951,15 @@ const ProjectDetailApp: React.FC = () => {
                               setSelectedDcId(dcId);
                               setActiveTab('overview');
                             }}
+                          />
+                        </Tabs.Panel>
+                      )}
+                      {changes.enabled && (
+                        <Tabs.Panel value="timeline">
+                          <ProjectTimelinePanel
+                            projectId={projectId}
+                            since={changes.changeSet?.since ?? null}
+                            onShowRuns={hasRuns ? (run) => showRuns(run) : undefined}
                           />
                         </Tabs.Panel>
                       )}
@@ -1315,7 +1391,9 @@ const ProjectHeader: React.FC<{
   onShowIngestion: () => void;
   onShowRuns: (run?: string) => void;
   refreshKey: number;
-}> = ({ project, projectId, onShowIngestion, onShowRuns, refreshKey }) => {
+  changes: ProjectChanges;
+  onShowIngestionHistory: () => void;
+}> = ({ project, projectId, onShowIngestion, onShowRuns, refreshKey, changes, onShowIngestionHistory }) => {
   const accent = useBrandAccents();
   const glass = useGlassPages();
   const summary = (
@@ -1329,6 +1407,14 @@ const ProjectHeader: React.FC<{
   );
   const badges = (
     <Group gap="xs" wrap="wrap">
+      {projectId && (
+        <ProjectChangesPill
+          projectId={projectId}
+          changes={changes}
+          onShowRuns={(run) => onShowRuns(run)}
+          onShowHistory={onShowIngestionHistory}
+        />
+      )}
       <ProvenanceBadge provenance={project.provenance} />
       <PublishedLockBadge lock={project.published_lock} />
     </Group>

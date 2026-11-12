@@ -222,7 +222,9 @@ export const RunDetails: React.FC<{
   dcIdByTag: Record<string, string>;
   dcTypeByTag: Record<string, string>;
   onOpenDc?: (dcId: string) => void;
-}> = ({ projectId, run, dcIdByTag, dcTypeByTag, onOpenDc }) => {
+  /** What the run produced (changes-since only). */
+  produced?: React.ReactNode;
+}> = ({ projectId, run, dcIdByTag, dcTypeByTag, onOpenDc, produced }) => {
   const [data, setData] = useState<RunFiles | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [scan, setScan] = useState<number | null>(null);
@@ -427,6 +429,7 @@ export const RunDetails: React.FC<{
           </Group>
         )}
         {folder ? <RunFileScope dataRoot={folder}>{body}</RunFileScope> : body}
+        {produced}
       </Stack>
     </Paper>
   );

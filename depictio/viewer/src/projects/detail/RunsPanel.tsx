@@ -5,7 +5,7 @@
  * this view is for: it shows a run that is incomplete. Unfolded, a run lists
  * its files and what each scan did to them (`RunDetails`).
  */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActionIcon,
   Alert,
@@ -20,11 +20,13 @@ import {
   Tooltip,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
-import { fetchProjectRuns } from 'depictio-react-core';
-import type { ProjectRun } from 'depictio-react-core';
+import { fetchProjectIngestionRuns, fetchProjectRuns } from 'depictio-react-core';
+import type { MonitoringIngestionRun, ProjectRun } from 'depictio-react-core';
 
+import { useChangesSinceEnabled } from '../../hooks/useChangesSinceEnabled';
 import { StatusBadge } from '../badges';
 import { RunDetails, when } from './RunDetails';
+import { RunProduced } from './RunProduced';
 
 const SEARCH_FROM = 9;
 
@@ -59,7 +61,10 @@ export const RunsPanel: React.FC<{
   /** Tag → collection type, for each collection's icon. */
   dcTypeByTag: Record<string, string>;
   onOpenDc?: (dcId: string) => void;
-}> = ({ projectId, refreshKey = 0, focusRun = null, dcIdByTag, dcTypeByTag, onOpenDc }) => {
+  /** Run tags the reader has not seen yet (the project's change set). */
+  newRunTags?: ReadonlySet<string>;
+}> = ({ projectId, refreshKey = 0, focusRun = null, dcIdByTag, dcTypeByTag, onOpenDc, newRunTags }) => {
+  const changesEnabled = useChangesSinceEnabled();
   const [runs, setRuns] = useState<ProjectRun[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState(focusRun ?? '');
@@ -85,6 +90,27 @@ export const RunsPanel: React.FC<{
     setQuery(focusRun);
     setOpen(new Set([focusRun]));
   }, [focusRun]);
+
+  // Bring the focused run into view once its row exists.
+  useEffect(() => {
+    if (!focusRun || !runs) return;
+    const timer = window.setTimeout(() => {
+      document
+        .querySelector(`[data-testid="run-row-${CSS.escape(focusRun)}"]`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 80);
+    return () => window.clearTimeout(timer);
+  }, [focusRun, runs]);
+
+  // The project's ingestions, read once for all the rows that ask.
+  const ingestionsRef = useRef<Promise<{ runs: MonitoringIngestionRun[]; redacted: boolean }> | null>(null);
+  useEffect(() => {
+    ingestionsRef.current = null;
+  }, [projectId, refreshKey]);
+  const loadIngestions = useCallback(() => {
+    ingestionsRef.current ??= fetchProjectIngestionRuns(projectId, { limit: 200 });
+    return ingestionsRef.current;
+  }, [projectId]);
 
   const workflows = useMemo(() => new Set((runs ?? []).map((r) => r.workflow).filter(Boolean)), [runs]);
   if (error) {
@@ -175,7 +201,12 @@ export const RunsPanel: React.FC<{
                 <React.Fragment key={`${run.workflow ?? ''}/${run.run_tag}`}>
                   <Table.Tr
                     onClick={() => toggle(run.run_tag)}
-                    style={{ cursor: 'pointer' }}
+                    style={{
+                      cursor: 'pointer',
+                      background:
+                        focusRun === run.run_tag ? 'var(--mantine-color-blue-light)' : undefined,
+                    }}
+                    data-focused={focusRun === run.run_tag || undefined}
                     data-testid={`run-row-${run.run_tag}`}
                   >
                     <Table.Td>
@@ -190,9 +221,20 @@ export const RunsPanel: React.FC<{
                       </ActionIcon>
                     </Table.Td>
                     <Table.Td style={{ whiteSpace: 'nowrap' }}>
-                      <Text size="sm" fw={600} ff="monospace">
-                        {run.run_tag}
-                      </Text>
+                      <Group gap={8} wrap="nowrap">
+                        <Text size="sm" fw={600} ff="monospace">
+                          {run.run_tag}
+                        </Text>
+                        {changesEnabled && newRunTags?.has(run.run_tag) && (
+                          <Tooltip label="Registered since you last looked" withArrow>
+                            <span>
+                              <StatusBadge size="xs" color="blue" data-testid="run-new-badge">
+                                new
+                              </StatusBadge>
+                            </span>
+                          </Tooltip>
+                        )}
+                      </Group>
                     </Table.Td>
                     {multiWorkflow && (
                       <Table.Td style={{ whiteSpace: 'nowrap' }}>
@@ -226,6 +268,18 @@ export const RunsPanel: React.FC<{
                             dcIdByTag={dcIdByTag}
                             dcTypeByTag={dcTypeByTag}
                             onOpenDc={onOpenDc}
+                            produced={
+                              changesEnabled ? (
+                                <RunProduced
+                                  projectId={projectId}
+                                  run={run}
+                                  dcIdByTag={dcIdByTag}
+                                  dcTypeByTag={dcTypeByTag}
+                                  loadIngestions={loadIngestions}
+                                  onOpenDc={onOpenDc}
+                                />
+                              ) : null
+                            }
                           />
                         )}
                       </Collapse>
