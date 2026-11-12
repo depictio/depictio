@@ -633,6 +633,9 @@ INHERITED_SETTINGS = (
     # Push targets / inbound sources (#1303): a local instance may publish to,
     # or receive from, another one.
     "DEPICTIO_MIGRATION_",
+    # Realtime events (a WebSocket push instead of polling) are opt-in: the stack
+    # already points the events Redis at its own, only the switch is the user's.
+    "DEPICTIO_EVENTS_ENABLED",
 )
 
 

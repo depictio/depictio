@@ -20,6 +20,7 @@ import { Icon } from '@iconify/react';
 import { listMigrationRequests, retryMigrationRequest } from 'depictio-react-core';
 import type { MigrationRequestSummary } from 'depictio-react-core';
 
+import { useMigrationPush } from '../projects/MigrationPushHost';
 import { formatDateTime } from '../lib/datetime';
 import AdminMigrationInvitesView from './AdminMigrationInvitesView';
 import AdminMigrationSentView from './AdminMigrationSentView';
@@ -87,6 +88,9 @@ const RequestsView: React.FC = () => {
     setLoading(true);
     void load();
   }, [load]);
+
+  // A request arriving or changing status shows up without a refresh.
+  useMigrationPush(() => void load());
 
   return (
     <Stack gap="md">

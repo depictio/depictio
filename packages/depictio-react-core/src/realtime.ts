@@ -51,6 +51,18 @@ export type RealtimeEvent =
       dashboard_id?: string;
       payload?: Record<string, unknown>;
     }
+  | {
+      /** An inbound migration request appeared or changed status (admins only). */
+      event_type: 'migration_event';
+      timestamp?: string;
+      dashboard_id?: string;
+      payload?: {
+        request_id?: string;
+        status?: string;
+        project_name?: string | null;
+        source?: string | null;
+      };
+    }
   | { event_type: 'heartbeat'; timestamp?: string }
   | { type: 'subscribed' | 'unsubscribed' | 'pong'; dashboard_id?: string };
 
@@ -270,11 +282,15 @@ export type MonitoringLiveEvent = Extract<
   { event_type: 'task_event' | 'ingestion_event' }
 >;
 
+export type MigrationLiveEvent = Extract<RealtimeEvent, { event_type: 'migration_event' }>;
+
 interface UseMonitoringEventsOptions {
   /** Subscribe only when true (e.g. the panel is mounted/visible). */
   enabled?: boolean;
   /** Fired on each task_event / ingestion_event push. */
   onEvent?: (event: MonitoringLiveEvent) => void;
+  /** Fired when an inbound migration request appears or changes status. */
+  onMigrationEvent?: (event: MigrationLiveEvent) => void;
 }
 
 /**
@@ -289,11 +305,13 @@ interface UseMonitoringEventsOptions {
 export function useMonitoringEvents(
   opts: UseMonitoringEventsOptions = {},
 ): { status: RealtimeStatus } {
-  const { enabled = true, onEvent } = opts;
+  const { enabled = true, onEvent, onMigrationEvent } = opts;
 
   const [status, setStatus] = useState<RealtimeStatus>('disconnected');
   const onEventRef = useRef(onEvent);
   onEventRef.current = onEvent;
+  const onMigrationEventRef = useRef(onMigrationEvent);
+  onMigrationEventRef.current = onMigrationEvent;
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -349,6 +367,8 @@ export function useMonitoringEvents(
           (parsed.event_type === 'task_event' || parsed.event_type === 'ingestion_event')
         ) {
           onEventRef.current?.(parsed);
+        } else if ('event_type' in parsed && parsed.event_type === 'migration_event') {
+          onMigrationEventRef.current?.(parsed);
         }
       };
 

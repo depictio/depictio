@@ -215,7 +215,10 @@ async def start_event_services(should_initialize: bool) -> None:
     """
     Start real-time event services if enabled.
 
-    Only starts on the initializing worker to avoid duplicate MongoDB watchers.
+    Runs on every worker: a WebSocket client is held by the worker that accepted
+    it, and only that worker can push to it, so each one needs its own Redis
+    listener and heartbeat. Only the initializing worker also watches MongoDB,
+    to avoid announcing each change once per worker.
 
     Args:
         should_initialize: Whether this worker performed initialization
@@ -223,10 +226,8 @@ async def start_event_services(should_initialize: bool) -> None:
     if not settings.events.enabled:
         return
 
-    # Only start on the initializing worker (similar to YAML watcher pattern)
-    if should_initialize:
-        logger.info(f"Worker {WORKER_ID}: Starting real-time event service")
-        await event_service.start()
+    logger.info(f"Worker {WORKER_ID}: Starting real-time event service")
+    await event_service.start(watch_mongodb=should_initialize)
 
 
 async def stop_event_services() -> None:
