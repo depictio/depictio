@@ -257,6 +257,8 @@ EXEMPT: dict[tuple[str, str], str] = {
     (_DASH, "funnel_values_endpoint"): _READ,
     (_DASH, "filter_options_endpoint"): _READ,
     (_DASH, "data_version_status_endpoint"): _READ,
+    (_DASH, "text_filter_matches_endpoint"): _READ,
+    (_DASH, "resolve_groups_endpoint"): _READ,
     (_VER, "create_dashboard_version"): "records the current state; changes no content",
     (_VER, "pin_dashboard_version"): "ledger metadata; changes no content",
     (_VER, "unpin_dashboard_version"): "ledger metadata; changes no content",
