@@ -8,7 +8,6 @@ import {
   ScrollArea,
   Stack,
   Text,
-  UnstyledButton,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { Icon } from '@iconify/react';
@@ -17,8 +16,7 @@ import { fetchAllDashboards, fetchChangesInbox, type InboxItem } from 'depictio-
 
 import { useChangesSinceEnabled } from '../hooks/useChangesSinceEnabled';
 import { useCurrentUser } from '../hooks/useCurrentUser';
-import { formatRelative } from '../lib/datetime';
-import { NameChip } from '../projects/badges';
+import { FeedItem, facts, nameList } from '../changes/feed';
 import {
   useProjectIngestionEvents,
   type IngestionFinishedPayload,
@@ -43,63 +41,22 @@ export function itemHref(item: InboxItem): string {
 const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? '' : 's'}`;
 
 const NotificationRow: React.FC<{ item: InboxItem }> = ({ item }) => {
-  const shown = item.new_run_tags.slice(0, CHIPS_SHOWN);
-  const hidden = item.new_run_tags.length - shown.length;
-  const parts: string[] = [];
-  if (item.dashboard_versions > 0) {
-    parts.push(plural(item.dashboard_versions, 'dashboard change'));
-  }
-  if (item.refreshed.length > 0) {
-    parts.push(`${item.refreshed.join(', ')} refreshed`);
-  }
+  const runs = item.new_run_tags;
   return (
-    <UnstyledButton
-      component="a"
+    <FeedItem
+      kind={item.scope_kind === 'project' ? 'project' : 'dashboard'}
+      title={item.title || (item.scope_kind === 'project' ? 'Project' : 'Dashboard')}
+      summary={facts(
+        runs.length ? `${plural(runs.length, 'new run')}: ${nameList(runs, CHIPS_SHOWN)}` : null,
+        item.dashboard_versions > 0 ? plural(item.dashboard_versions, 'dashboard change') : null,
+        item.refreshed.length > 0 ? `${nameList(item.refreshed, CHIPS_SHOWN)} refreshed` : null,
+      )}
+      at={item.at}
       href={itemHref(item)}
       data-testid="notification-item"
       data-scope-kind={item.scope_kind}
       data-scope-id={item.scope_id}
-      p="xs"
-      style={{ borderRadius: 'var(--mantine-radius-sm)' }}
-    >
-      <Group gap="xs" wrap="nowrap" align="flex-start">
-        <Icon
-          icon={item.scope_kind === 'project' ? 'mdi:jira' : 'material-symbols:dashboard'}
-          width={18}
-          style={{ flexShrink: 0, marginTop: 2 }}
-        />
-        <Stack gap={4} style={{ minWidth: 0 }}>
-          <Text size="sm" fw={600} truncate>
-            {item.title || (item.scope_kind === 'project' ? 'Project' : 'Dashboard')}
-          </Text>
-          {item.new_run_tags.length > 0 && (
-            <Group gap={4} wrap="wrap">
-              <Text size="xs">{plural(item.new_run_tags.length, 'new run')}:</Text>
-              {shown.map((tag) => (
-                <NameChip key={tag} size="xs">
-                  {tag}
-                </NameChip>
-              ))}
-              {hidden > 0 && (
-                <Text size="xs" c="dimmed">
-                  +{hidden}
-                </Text>
-              )}
-            </Group>
-          )}
-          {parts.length > 0 && (
-            <Text size="xs" c="dimmed">
-              {parts.join(' · ')}
-            </Text>
-          )}
-          {item.at && (
-            <Text size="xs" c="dimmed">
-              {formatRelative(item.at)}
-            </Text>
-          )}
-        </Stack>
-      </Group>
-    </UnstyledButton>
+    />
   );
 };
 
@@ -213,18 +170,9 @@ const NotificationsBell: React.FC<NotificationsBellProps> = ({
         message: (
           <Stack gap="xs" data-testid="ingestion-toast">
             {labels.length > 0 && (
-              <Group gap={4} wrap="wrap">
-                {labels.slice(0, CHIPS_SHOWN).map((label) => (
-                  <NameChip key={label} size="xs">
-                    {label}
-                  </NameChip>
-                ))}
-                {labels.length > CHIPS_SHOWN && (
-                  <Text size="xs" c="dimmed">
-                    +{labels.length - CHIPS_SHOWN}
-                  </Text>
-                )}
-              </Group>
+              <Text size="xs" c="dimmed">
+                {nameList(labels, CHIPS_SHOWN)}
+              </Text>
             )}
             <Group gap="xs">
               <Button
@@ -310,7 +258,7 @@ const NotificationsBell: React.FC<NotificationsBellProps> = ({
         })()}
       </Popover.Target>
       <Popover.Dropdown data-testid="notifications-panel" p="xs">
-        <Text size="xs" fw={600} c="dimmed" px="xs" pb={4}>
+        <Text size="sm" fw={600} px={8} pt={4} pb={6}>
           Since your last visit
         </Text>
         {items.length === 0 ? (

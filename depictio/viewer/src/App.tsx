@@ -179,7 +179,7 @@ import type { SettingsSectionKey } from './chrome/SettingsDrawer';
 import VersionPreviewBanner from './versions/VersionPreviewBanner';
 import { dashboardHref } from './dashboards/lib/dashboardLinks';
 import ChangeMarksProvider from './changes/ChangeMarksProvider';
-import ChangesSincePill from './changes/ChangesSincePill';
+import ChangesHeaderButton from './changes/ChangesHeaderButton';
 
 /**
  * Top-level SPA. Layout:
@@ -1670,6 +1670,8 @@ const App: React.FC = () => {
   const ready = Boolean(dashboard) && !loading && !error;
   const headerActions: HeaderAction[] = [];
   if (dashboard) {
+    // Renders nothing on a first visit, when nothing changed and in a preview.
+    headerActions.push({ id: 'changes', group: 'read', node: <ChangesHeaderButton /> });
     headerActions.push({ id: 'comments', group: 'read', node: <CommentsHeaderButton /> });
     headerActions.push({
       id: 'analysis',
@@ -2311,7 +2313,6 @@ const App: React.FC = () => {
             dashboard && !loading && !error ? (
               <>
                 <DashboardLoadIndicator metadataList={rightComponents} cardsLoading={cardsLoading} />
-                <ChangesSincePill />
               </>
             ) : undefined,
           extraActions: headerActions,

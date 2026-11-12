@@ -157,7 +157,7 @@ import RunsPanel from './RunsPanel';
 import { ProjectChangesPill } from './ProjectChangesPill';
 import { ProjectTimelinePanel } from './ProjectTimelinePanel';
 import { readTabRequest } from './projectChanges';
-import { useProjectChanges, type ProjectChanges } from './useProjectChanges';
+import { useProjectChanges } from './useProjectChanges';
 import DerivedLineage from './DerivedLineage';
 
 interface DataCollectionShape {
@@ -810,8 +810,6 @@ const ProjectDetailApp: React.FC = () => {
                 onShowIngestion={showIngestion}
                 onShowRuns={showRuns}
                 refreshKey={refreshKey}
-                changes={changes}
-                onShowIngestionHistory={showIngestionHistory}
               />
               {projectId && <ProjectDashboardsPanel projectId={projectId} />}
               <ProjectPart
@@ -1085,6 +1083,19 @@ const ProjectDetailApp: React.FC = () => {
     </>
   );
 
+  // What changed since the reader's last visit (#1397); renders nothing when
+  // there is nothing new.
+  const changesButton = (variant: 'default' | 'light') =>
+    projectId ? (
+      <ProjectChangesPill
+        projectId={projectId}
+        changes={changes}
+        onShowRuns={(run) => showRuns(run)}
+        onShowHistory={showIngestionHistory}
+        variant={variant}
+      />
+    ) : null;
+
   // After adding data the next thing to do: open the dialog on this project.
   const createDashboardButton = (
     <Button
@@ -1109,6 +1120,7 @@ const ProjectDetailApp: React.FC = () => {
           crumbs={[{ label: name }]}
           actions={
             <Group gap="xs">
+              {changesButton('default')}
               {createDashboardButton}
               {/* Open to every reader once the project has loaded: the sections
                   inside disable what the reader may not change and say why. */}
@@ -1184,6 +1196,7 @@ const ProjectDetailApp: React.FC = () => {
             </Title>
           </Group>
           <Group gap="xs">
+            {changesButton('light')}
             {createDashboardButton}
             {/* Open to every reader once the project has loaded: the sections
                 inside disable what the reader may not change and say why. */}
@@ -1391,9 +1404,7 @@ const ProjectHeader: React.FC<{
   onShowIngestion: () => void;
   onShowRuns: (run?: string) => void;
   refreshKey: number;
-  changes: ProjectChanges;
-  onShowIngestionHistory: () => void;
-}> = ({ project, projectId, onShowIngestion, onShowRuns, refreshKey, changes, onShowIngestionHistory }) => {
+}> = ({ project, projectId, onShowIngestion, onShowRuns, refreshKey }) => {
   const accent = useBrandAccents();
   const glass = useGlassPages();
   const summary = (
@@ -1407,14 +1418,6 @@ const ProjectHeader: React.FC<{
   );
   const badges = (
     <Group gap="xs" wrap="wrap">
-      {projectId && (
-        <ProjectChangesPill
-          projectId={projectId}
-          changes={changes}
-          onShowRuns={(run) => onShowRuns(run)}
-          onShowHistory={onShowIngestionHistory}
-        />
-      )}
       <ProvenanceBadge provenance={project.provenance} />
       <PublishedLockBadge lock={project.published_lock} />
     </Group>

@@ -23,6 +23,7 @@ import { Icon } from '@iconify/react';
 import { fetchProjectIngestionRuns, fetchProjectRuns } from 'depictio-react-core';
 import type { MonitoringIngestionRun, ProjectRun } from 'depictio-react-core';
 
+import { NewDot } from '../../changes/feed';
 import { useChangesSinceEnabled } from '../../hooks/useChangesSinceEnabled';
 import { StatusBadge } from '../badges';
 import { RunDetails, when } from './RunDetails';
@@ -226,13 +227,7 @@ export const RunsPanel: React.FC<{
                           {run.run_tag}
                         </Text>
                         {changesEnabled && newRunTags?.has(run.run_tag) && (
-                          <Tooltip label="Registered since you last looked" withArrow>
-                            <span>
-                              <StatusBadge size="xs" color="blue" data-testid="run-new-badge">
-                                new
-                              </StatusBadge>
-                            </span>
-                          </Tooltip>
+                          <NewDot label="Registered since you last looked" testId="run-new-badge" />
                         )}
                       </Group>
                     </Table.Td>

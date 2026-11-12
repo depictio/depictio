@@ -50,7 +50,7 @@ deletes its marks.
 - **First visit**: the baseline is the current state, so a first visit shows
   nothing.
 - **Visit**: the viewer records a visit 10 s after the page opens.
-- **Mark modes** (a reader preference, set in the changes panel or in
+- **Mark modes** (a reader preference, set in the What's new panel or in
   /profile):
   - `sticky` (the server default, `..._CHANGES_SINCE_MARK_MODE`): the baseline
     stays until *Mark as seen*;
@@ -62,6 +62,19 @@ deletes its marks.
   - the editor;
   - a `?version=` preview;
   - the read-only views `?since=<iso>` and `?before_run=<ingestion run id>`.
+
+### Where the reader sees it
+
+- **Dashboard**: a *What's new* key in the header's top bar, beside settings,
+  theme and the bell, with the change count on its corner. It opens the list
+  of changes.
+- **Project page**: the same button among the page's header actions.
+- **Lists**: the dashboard's and the project's lists and the bell share one
+  look (`changes/feed.tsx`). Each change is a row: an icon for its kind, a
+  title, one line of facts and a dimmed *by … · when* line. Names are words in
+  that line, not chips.
+- **New items**: a quiet dot marks them in Runs and the Timeline, the same dot
+  as an updated tile.
 
 ## What counts as a change
 

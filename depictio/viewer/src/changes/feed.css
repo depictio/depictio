@@ -1,0 +1,57 @@
+/* What's new lists (#1397): see feed.tsx. Mantine variables only. */
+.dc-feed-section {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px 2px;
+  font-size: var(--mantine-font-size-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--mantine-color-dimmed);
+}
+
+.dc-feed-section__count {
+  font-weight: 500;
+  letter-spacing: 0;
+  opacity: 0.8;
+}
+
+.dc-feed-item {
+  display: block;
+  width: 100%;
+  padding: 8px;
+  border-radius: var(--mantine-radius-md);
+  text-align: left;
+  color: inherit;
+  text-decoration: none;
+}
+
+.dc-feed-item--interactive {
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+.dc-feed-item--interactive:hover,
+.dc-feed-item--interactive:focus-visible {
+  background-color: var(--mantine-color-default-hover);
+}
+
+.dc-feed-item__summary {
+  color: var(--mantine-color-text);
+  opacity: 0.85;
+}
+
+.dc-feed-item__detail--mono {
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 11px;
+}
+
+.dc-feed-new {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--mantine-color-blue-6);
+}

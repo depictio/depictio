@@ -75,7 +75,7 @@ REQUIRED = {
     "/src/App.tsx": [
         "DataVersionProvider",
         "definitionVersionId",
-        "ChangesSincePill",
+        "ChangesHeaderButton",
         "ChangeMarksProvider",
     ],
     f"{PKG}/components/chrome/ComponentChrome.tsx": ["ChangeDot"],
@@ -108,7 +108,7 @@ FORBIDDEN = {
     # only. An editor open must never count as a reader having looked.
     "/src/EditorApp.tsx": [
         "ChangeMarksProvider",
-        "ChangesSincePill",
+        "ChangesHeaderButton",
         "recordDashboardVisit",
         "markDashboardSeen",
     ],

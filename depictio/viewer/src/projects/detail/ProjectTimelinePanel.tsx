@@ -11,8 +11,8 @@ import { Icon } from '@iconify/react';
 import { fetchProjectTimeline } from 'depictio-react-core';
 import type { TimelineEvent } from 'depictio-react-core';
 
+import { NewDot } from '../../changes/feed';
 import { absTime, compactCount } from '../../monitoring/format';
-import { FactBadge, NameChip, StatusBadge } from '../badges';
 import { CHECK_STATUS } from '../checkStatus';
 import { CompareMenu } from './RunDashboardActions';
 import { ingestionOutcome, isNewerThan, versionHref } from './projectChanges';
@@ -36,12 +36,6 @@ const Bullet: React.FC<{ event: TimelineEvent }> = ({ event }) => {
   return <Icon icon={event.type === 'version' ? 'mdi:history' : 'mdi:comment-text-outline'} width={14} />;
 };
 
-const NewBadge: React.FC = () => (
-  <StatusBadge size="xs" color="blue" data-testid="timeline-new-badge">
-    new
-  </StatusBadge>
-);
-
 const EventBody: React.FC<{
   projectId: string;
   event: TimelineEvent;
@@ -51,29 +45,29 @@ const EventBody: React.FC<{
     const collections = event.collections ?? [];
     return (
       <Stack gap={6}>
-        <Group gap={6} wrap="wrap">
-          {(event.run_tags ?? []).map((t) => (
-            <Anchor
-              key={t}
-              href={`/projects/${projectId}?tab=runs&run=${encodeURIComponent(t)}`}
-              onClick={(e: React.MouseEvent) => {
-                if (!onShowRuns) return;
-                e.preventDefault();
-                onShowRuns(t);
-              }}
-              underline="never"
-            >
-              <NameChip size="xs" style={{ cursor: 'pointer' }}>
-                {t}
-              </NameChip>
-            </Anchor>
-          ))}
-          {event.rows_written ? (
-            <Text size="xs" c="dimmed">
-              {compactCount(event.rows_written)} rows written
-            </Text>
-          ) : null}
-        </Group>
+        {((event.run_tags ?? []).length > 0 || Boolean(event.rows_written)) && (
+          <Text size="xs" c="dimmed">
+            {(event.run_tags ?? []).map((t, i) => (
+              <React.Fragment key={t}>
+                {i > 0 && ', '}
+                <Anchor
+                  href={`/projects/${projectId}?tab=runs&run=${encodeURIComponent(t)}`}
+                  onClick={(e: React.MouseEvent) => {
+                    if (!onShowRuns) return;
+                    e.preventDefault();
+                    onShowRuns(t);
+                  }}
+                  size="xs"
+                  fw={500}
+                >
+                  {t}
+                </Anchor>
+              </React.Fragment>
+            ))}
+            {(event.run_tags ?? []).length > 0 && event.rows_written ? ' \u00b7 ' : null}
+            {event.rows_written ? `${compactCount(event.rows_written)} rows written` : null}
+          </Text>
+        )}
         {collections.length > 0 && (
           <Text size="xs" c="dimmed">
             {collections.slice(0, COLLECTIONS_SHOWN).join(', ')}
@@ -93,7 +87,11 @@ const EventBody: React.FC<{
   if (event.type === 'version') {
     return (
       <Group gap={8} wrap="wrap">
-        {event.kind && <FactBadge size="xs">{event.kind}</FactBadge>}
+        {event.kind && (
+          <Text size="xs" c="dimmed" tt="capitalize">
+            {event.kind}
+          </Text>
+        )}
         {event.label && (
           <Text size="xs" c="dimmed">
             “{event.label}”
@@ -230,7 +228,7 @@ export const ProjectTimelinePanel: React.FC<{
                     <Text size="sm" fw={600}>
                       {titleOf(e)}
                     </Text>
-                    {isNewerThan(e.at, since) && <NewBadge />}
+                    {isNewerThan(e.at, since) && <NewDot testId="timeline-new-badge" />}
                   </Group>
                 }
                 data-testid="timeline-item"

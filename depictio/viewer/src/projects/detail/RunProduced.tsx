@@ -16,7 +16,6 @@ import type {
 } from 'depictio-react-core';
 
 import { absTime, compactCount } from '../../monitoring/format';
-import { NameChip } from '../badges';
 import { CHECK_STATUS } from '../checkStatus';
 import { BeforeRunMenu, CompareMenu } from './RunDashboardActions';
 import {
@@ -157,9 +156,9 @@ export const RunProduced: React.FC<{
                         · {ing.email}
                       </Text>
                     )}
-                    <NameChip size="xs" dimmed>
+                    <Text size="xs" c="dimmed" ff="monospace">
                       {ing.run_id.slice(0, 8)}
-                    </NameChip>
+                    </Text>
                   </Group>
                 );
               })
