@@ -307,48 +307,49 @@ def _report_run_tag(report: dict[str, Any]) -> str | None:
 
 def _multiqc_change(dc_id: str, before: DcSeenState, reader: Reader) -> dict[str, Any] | None:
     reports = bl.multiqc_reports_of(dc_id)
-    now = {str(r["_id"]): r for r in reports}
+    now = {bl.report_identity(r): r for r in reports}
     seen = before.multiqc_reports
     added = [r for k, r in now.items() if k not in seen]
-    refreshed = [
-        r for k, r in now.items() if k in seen and bl._iso(r.get("processed_at")) != seen[k]
-    ]
+    refreshed = [r for k, r in now.items() if k in seen and bl.report_signature(r) != seen[k]]
     removed = [k for k in seen if k not in now]
     if not (added or refreshed or removed):
         return None
 
-    runs = _ingestion_authors(r.get("ingestion_run_id") for r in added + refreshed)
     changed = added + refreshed
-    others = [
-        r
-        for r in changed
-        if not (
-            r.get("ingestion_run_id") in runs
-            and reader.wrote(
-                user_id=runs[r["ingestion_run_id"]].get("user_id"),
-                email=runs[r["ingestion_run_id"]].get("email"),
-            )
-        )
-    ]
+    runs = _ingestion_authors(r.get("ingestion_run_id") for r in changed)
+
+    def by_reader(report: dict[str, Any]) -> bool:
+        run = runs.get(report.get("ingestion_run_id") or "")
+        return run is not None and reader.wrote(user_id=run.get("user_id"), email=run.get("email"))
+
+    others = [r for r in changed if not by_reader(r)]
     if not others and not removed:
         return None
 
-    unchanged_samples: set[str] = set()
-    for key, report in now.items():
-        if report in changed:
-            continue
-        unchanged_samples.update(
-            str(s) for s in (report.get("metadata") or {}).get("samples") or []
+    samples_now: set[str] = (
+        set().union(*(bl.report_samples(r) for r in reports)) if reports else set()
+    )
+    if before.samples_complete:
+        new_samples = samples_now - set(before.samples)
+        removed_samples = set(before.samples) - samples_now
+    else:
+        # Too many samples to have kept them all: the samples of the reports
+        # that moved, less those of the reports that did not.
+        unchanged = [r for k, r in now.items() if k in seen and r not in refreshed]
+        kept_samples: set[str] = (
+            set().union(*(bl.report_samples(r) for r in unchanged)) if unchanged else set()
         )
-    new_samples: set[str] = set()
-    for report in changed:
-        new_samples.update(str(s) for s in (report.get("metadata") or {}).get("samples") or [])
-    new_samples -= unchanged_samples
+        new_samples = (
+            set().union(*(bl.report_samples(r) for r in changed)) - kept_samples
+            if changed
+            else set()
+        )
+        removed_samples = set()
 
     known = set(before.run_tags)
     added_tags = sorted({t for t in (_report_run_tag(r) for r in added) if t})
     return {
-        "kind": "refreshed",
+        "kind": "emptied" if not reports else "refreshed",
         "new_run_tags": [t for t in added_tags if t not in known],
         "touched_run_tags": sorted({t for t in (_report_run_tag(r) for r in changed) if t}),
         "reports_added": len(added),
@@ -356,6 +357,7 @@ def _multiqc_change(dc_id: str, before: DcSeenState, reader: Reader) -> dict[str
         "reports_removed": len(removed),
         "new_samples": sorted(new_samples)[:200],
         "new_sample_count": len(new_samples),
+        "removed_samples": sorted(removed_samples)[:200],
         "ingestion_run_ids": sorted(
             {r["ingestion_run_id"] for r in changed if r.get("ingestion_run_id")}
         ),

@@ -38,12 +38,12 @@ ANON = _User("anon@example.com", anonymous=True)
 def ctx(monkeypatch: pytest.MonkeyPatch):
     from depictio.api.v1.configs.config import settings
     from depictio.api.v1.endpoints.changes_endpoints import routes as changes_routes
+    from depictio.api.v1.endpoints.dashboards_endpoints import routes as dash_routes
     from depictio.api.v1.endpoints.dashboards_endpoints import (
         version_store,
         versioning,
         versions_routes,
     )
-    from depictio.api.v1.endpoints.dashboards_endpoints import routes as dash_routes
     from depictio.api.v1.endpoints.routers import router
     from depictio.api.v1.endpoints.user_endpoints.routes import get_user_or_anonymous
     from depictio.api.v1.services.changes import baseline, diff, store
@@ -63,7 +63,15 @@ def ctx(monkeypatch: pytest.MonkeyPatch):
         "runs_collection": db["runs"],
         "reader_marks_collection": db["reader_marks"],
     }
-    for module in (baseline, diff, store, changes_routes, versioning, versions_routes, version_store):
+    for module in (
+        baseline,
+        diff,
+        store,
+        changes_routes,
+        versioning,
+        versions_routes,
+        version_store,
+    ):
         for name, coll in handles.items():
             if hasattr(module, name):
                 monkeypatch.setattr(module, name, coll)
@@ -82,8 +90,16 @@ def ctx(monkeypatch: pytest.MonkeyPatch):
                     "_id": wf_id,
                     "workflow_tag": "nf-core/rnaseq",
                     "data_collections": [
-                        {"_id": dc_table, "data_collection_tag": "samples", "config": {"type": "table"}},
-                        {"_id": dc_mqc, "data_collection_tag": "multiqc_data", "config": {"type": "multiqc"}},
+                        {
+                            "_id": dc_table,
+                            "data_collection_tag": "samples",
+                            "config": {"type": "table"},
+                        },
+                        {
+                            "_id": dc_mqc,
+                            "data_collection_tag": "multiqc_data",
+                            "config": {"type": "multiqc"},
+                        },
                     ],
                 }
             ],
@@ -196,8 +212,15 @@ def _edit_component(ctx, author, title):
 
 def _ingest_run_c(ctx, by=EDITOR):
     ctx["db"]["ingestion_runs"].insert_one(
-        {"run_id": "ing-c", "user_id": by.id, "email": by.email, "project_id": ctx["project"],
-         "status": "success", "run_tags": ["run_c"], "started_at": T0 + timedelta(hours=1)}
+        {
+            "run_id": "ing-c",
+            "user_id": by.id,
+            "email": by.email,
+            "project_id": ctx["project"],
+            "status": "success",
+            "run_tags": ["run_c"],
+            "started_at": T0 + timedelta(hours=1),
+        }
     )
     ctx["db"]["multiqc"].insert_one(
         {
@@ -396,7 +419,11 @@ def test_new_comments_by_others_are_listed(ctx):
                 "status": "open",
                 "created_at": later,
                 "comments": [
-                    {"author": {"user_id": author.id, "email": author.email}, "body": "Look", "created_at": later}
+                    {
+                        "author": {"user_id": author.id, "email": author.email},
+                        "body": "Look",
+                        "created_at": later,
+                    }
                 ],
             }
         )
@@ -419,3 +446,30 @@ def test_project_marks_list_new_runs(ctx):
 
 def _wf(ctx):
     return ctx["db"]["projects"].find_one()["workflows"][0]["_id"]
+
+
+def test_an_append_that_recreates_every_report_only_reports_the_new_samples(ctx):
+    """Appending to a MultiQC collection re-processes every report: new ids,
+    same content-addressed keys. Only the appended samples are news."""
+    reports = ctx["db"]["multiqc"]
+    for i, report in enumerate(reports.find({"data_collection_id": ctx["dc_mqc"]})):
+        reports.update_one({"_id": report["_id"]}, {"$set": {"s3_location": f"s3://b/{i}.parquet"}})
+    _visit(ctx)
+
+    old = list(reports.find({"data_collection_id": ctx["dc_mqc"]}))
+    reports.delete_many({"data_collection_id": ctx["dc_mqc"]})
+    for report in old:
+        report.pop("_id")
+        report["processed_at"] = T0 + timedelta(hours=2)
+        reports.insert_one(report)
+    reports.insert_one(
+        {
+            "data_collection_id": ctx["dc_mqc"],
+            "s3_location": "s3://b/new.parquet",
+            "processed_at": T0 + timedelta(hours=2),
+            "metadata": {"samples": ["SRR3_1"]},
+        }
+    )
+    [mqc] = _changes(ctx)["data"]
+    assert (mqc["reports_added"], mqc["reports_refreshed"], mqc["reports_removed"]) == (1, 0, 0)
+    assert mqc["new_samples"] == ["SRR3_1"]

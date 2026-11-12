@@ -30,6 +30,7 @@ MarkMode = Literal["sticky", "previous_visit"]
 MAX_TRACKED_COLLECTIONS = 200
 MAX_TRACKED_REPORTS = 500
 MAX_TRACKED_RUN_TAGS = 500
+MAX_TRACKED_SAMPLES = 5000
 MAX_DISMISSED = 500
 
 
@@ -45,9 +46,15 @@ class DcSeenState(_Strict):
     delta_version: int | None = None
     aggregation_version: int | None = None
     row_count: int | None = None
-    #: MultiQC collections: every report id and the ``processed_at`` it had,
-    #: so a report re-ingested in place (same id, new time) reads as refreshed.
+    #: MultiQC collections: every report, keyed by its content-addressed S3
+    #: location (stable across a re-processing that recreates the report
+    #: documents), with a signature of what it holds (sample set and size), so
+    #: a report rewritten in place reads as refreshed.
     multiqc_reports: dict[str, str] = Field(default_factory=dict)
+    #: MultiQC collections: the samples seen, so new samples are a set
+    #: difference rather than a guess from which reports moved.
+    samples: list[str] = Field(default_factory=list, max_length=MAX_TRACKED_SAMPLES)
+    samples_complete: bool = True
     #: Run tags already present, so a new run can be told from a refreshed one.
     run_tags: list[str] = Field(default_factory=list, max_length=MAX_TRACKED_RUN_TAGS)
 

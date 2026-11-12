@@ -6,6 +6,7 @@ each viewer open, so it must cost a handful of indexed queries.
 
 from __future__ import annotations
 
+import hashlib
 from datetime import datetime
 from typing import Any, Iterable
 
@@ -25,6 +26,7 @@ from depictio.models.models.reader_marks import (
     MAX_TRACKED_COLLECTIONS,
     MAX_TRACKED_REPORTS,
     MAX_TRACKED_RUN_TAGS,
+    MAX_TRACKED_SAMPLES,
     DcSeenState,
     ReaderBaseline,
 )
@@ -112,9 +114,31 @@ def multiqc_reports_of(dc_id: str) -> list[dict[str, Any]]:
                 "original_file_path": 1,
                 "metadata.samples": 1,
                 "report_name": 1,
+                "s3_location": 1,
+                "file_size_bytes": 1,
             },
         ).limit(MAX_TRACKED_REPORTS)
     )
+
+
+def report_identity(report: dict[str, Any]) -> str:
+    """A report's identity: its content-addressed S3 location, else its id.
+
+    Appending to a MultiQC collection re-processes every report and recreates
+    their documents, so ids change while the parquet keys do not.
+    """
+    return str(report.get("s3_location") or report.get("_id"))
+
+
+def report_samples(report: dict[str, Any]) -> set[str]:
+    return {str(s) for s in (report.get("metadata") or {}).get("samples") or []}
+
+
+def report_signature(report: dict[str, Any]) -> str:
+    """What a report holds: changes when it is rewritten with other content."""
+    samples = sorted(report_samples(report))
+    digest = hashlib.sha256("\n".join(samples).encode()).hexdigest()[:12]
+    return f"{len(samples)}:{digest}:{report.get('file_size_bytes') or ''}"
 
 
 def dc_state(dc_id: str, dc_type: str) -> DcSeenState:
@@ -122,7 +146,10 @@ def dc_state(dc_id: str, dc_type: str) -> DcSeenState:
     state = DcSeenState(dc_type=dc_type or "")
     if dc_type == "multiqc":
         reports = multiqc_reports_of(dc_id)
-        state.multiqc_reports = {str(r["_id"]): _iso(r.get("processed_at")) for r in reports}
+        state.multiqc_reports = {report_identity(r): report_signature(r) for r in reports}
+        samples = sorted(set().union(*(report_samples(r) for r in reports))) if reports else []
+        state.samples = samples[:MAX_TRACKED_SAMPLES]
+        state.samples_complete = len(samples) <= MAX_TRACKED_SAMPLES
         state.run_tags = sorted({r["run_tag"] for r in reports if r.get("run_tag")})[
             :MAX_TRACKED_RUN_TAGS
         ]
@@ -258,16 +285,21 @@ def _version_at(family_id: str, when: datetime) -> dict[str, Any] | None:
 def _rewind_state(state: DcSeenState, dc_id: str, *, keep_agg, keep_report) -> DcSeenState:
     """``state`` with the writes ``keep_*`` rejects taken back out."""
     if state.multiqc_reports:
-        reports = {r["_id"]: r for r in multiqc_reports_of(dc_id)}
+        reports = {report_identity(r): r for r in multiqc_reports_of(dc_id)}
         kept = {
             k: v
             for k, v in state.multiqc_reports.items()
-            if (_oid(k) in reports and keep_report(reports[_oid(k)]))
+            if (k in reports and keep_report(reports[k]))
         }
-        tags = sorted(
-            {reports[_oid(k)].get("run_tag") for k in kept if reports[_oid(k)].get("run_tag")}
+        tags = sorted({reports[k]["run_tag"] for k in kept if reports[k].get("run_tag")})
+        samples = sorted(set().union(*(report_samples(reports[k]) for k in kept)) if kept else [])
+        return DcSeenState(
+            dc_type=state.dc_type,
+            multiqc_reports=kept,
+            run_tags=tags,
+            samples=samples[:MAX_TRACKED_SAMPLES],
+            samples_complete=len(samples) <= MAX_TRACKED_SAMPLES,
         )
-        return DcSeenState(dc_type=state.dc_type, multiqc_reports=kept, run_tags=tags)
 
     kept_aggs = [a for a in aggregations_of(dc_id) if keep_agg(a)]
     if not kept_aggs:

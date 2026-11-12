@@ -713,16 +713,16 @@ def component_diff(
 
     component_type = component.get("component_type")
     if component_type == "multiqc" or state_now.dc_type == "multiqc":
-        then_ids = set(state_before.multiqc_reports)
-        samples_then: set[str] = set()
         samples_now: set[str] = set()
+        reports_then: set[str] = set()
         for report in bl.multiqc_reports_of(dc_id):
-            names = {str(s) for s in (report.get("metadata") or {}).get("samples") or []}
+            names = bl.report_samples(report)
             samples_now |= names
-            if str(report["_id"]) in then_ids and bl._iso(report.get("processed_at")) == (
-                state_before.multiqc_reports.get(str(report["_id"]))
+            if state_before.multiqc_reports.get(bl.report_identity(report)) == bl.report_signature(
+                report
             ):
-                samples_then |= names
+                reports_then |= names
+        samples_then = set(state_before.samples) if state_before.samples_complete else reports_then
         return {**fd.sample_diff(samples_then, samples_now), **meta}
 
     if component_type == "advanced_viz":
