@@ -95,7 +95,10 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? o
 export function dataFacts(change: DataChange): string[] {
   const facts: string[] = [];
   if (change.new_run_tags.length) facts.push(plural(change.new_run_tags.length, 'new run'));
+  const { rows_before: before, rows_after: after } = change;
   if (change.rows_added && change.rows_added > 0) facts.push(`+${change.rows_added} rows`);
+  // An overwrite reports no appended rows; the totals still say what moved.
+  else if (before != null && after != null && before !== after) facts.push(`${before} \u2192 ${after} rows`);
   const { total } = sampleSummary(change);
   if (total > 0) facts.push(plural(total, 'new sample'));
   if (change.reports_added) facts.push(plural(change.reports_added, 'new report'));

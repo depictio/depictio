@@ -120,6 +120,9 @@ check('up to five samples, then +N', sampleSummary(data), {
   total: 7,
 });
 check('count only (no names)', sampleSummary({ new_sample_count: 2 }), { shown: [], more: 2, total: 2 });
+check('an overwrite shows the totals', dataFacts({ ...data, new_run_tags: [], new_samples: [], new_sample_count: 0, rows_added: 0, rows_before: 150, rows_after: 154 }), [
+  '150 \u2192 154 rows',
+]);
 check('singular', dataFacts({ ...data, rows_added: 0, new_sample_count: 1, new_samples: ['s1'] }), [
   '1 new run',
   '1 new sample',
@@ -191,6 +194,18 @@ check('a pin works without a stored version', beforePane('table', 'dc1', pointsD
 const tables = diffTables(pointsDiff);
 check('point tables: new, gone, moved', tables.map((t) => t.id), ['added', 'removed', 'changed']);
 check('moved row shows before to after', tables[2].rows, [['m1', '3 \u2192 4', '3']]);
+const unkeyed = {
+  ...pointsDiff,
+  key_column: null,
+  color: 'variety',
+  added: [{ key: null, x: 1, y: 2, color: 'Setosa' }],
+  changed: [],
+};
+check('an unkeyed point leads with its colour', [diffTables(unkeyed)[0].columns, diffTables(unkeyed)[0].rows], [
+  ['variety', 'sepal', 'petal'],
+  [['Setosa', '1', '2']],
+]);
+check('no key, no colour: x and y alone', diffTables({ ...unkeyed, color: null })[0].columns, ['sepal', 'petal']);
 const many = { ...pointsDiff, added: Array.from({ length: 60 }, (_, i) => ({ key: `k${i}`, x: i, y: i })) };
 check('first 50 rows, then a count', [diffTables(many)[0].rows.length, diffTables(many)[0].more], [50, 10]);
 check(

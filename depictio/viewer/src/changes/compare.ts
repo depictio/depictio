@@ -12,7 +12,7 @@
  * the render endpoints already take (`definition_version`, `data_versions`,
  * `as_of_version`).
  */
-import type { ComponentDiff, DataVersionState } from 'depictio-react-core';
+import type { ComponentDiff, DataVersionState, DiffPoint } from 'depictio-react-core';
 
 export type BeforePane =
   | {
@@ -134,16 +134,21 @@ export function diffTables(
   const out: Array<DiffTableSection | null> = [];
   switch (diff.shape) {
     case 'points': {
-      const cols = [diff.key_column || 'Point', diff.x, diff.y];
+      // Lead with the key; without one, with the colour column (an unkeyed
+      // point is only its values), else with x and y alone.
+      const lead = diff.key_column ?? diff.color;
+      const head = (p: DiffPoint) => (diff.key_column ? [show(p.key)] : diff.color ? [show(p.color)] : []);
+      const cols = [...(lead ? [lead] : []), diff.x, diff.y];
+      const pointRow = (p: DiffPoint) => [...head(p), show(p.x), show(p.y)];
       out.push(
-        section('added', 'New', cols, diff.added.map((p) => [show(p.key), show(p.x), show(p.y)]), limit),
-        section('removed', 'Gone', cols, diff.removed.map((p) => [show(p.key), show(p.x), show(p.y)]), limit),
+        section('added', 'New', cols, diff.added.map(pointRow), limit),
+        section('removed', 'Gone', cols, diff.removed.map(pointRow), limit),
         section(
           'changed',
           'Moved',
           cols,
           diff.changed.map((m) => [
-            show(m.key),
+            ...head(m.after),
             change(m.before.x, m.after.x),
             change(m.before.y, m.after.y),
           ]),

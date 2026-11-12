@@ -102,6 +102,14 @@ def test_box_plots_compare_medians():
     assert (setosa["before"], setosa["after"]) == (pytest.approx(5.0), pytest.approx(5.35))
 
 
+def test_x_and_colour_on_the_same_column_group_once():
+    out = figure_diff.frame_diff(
+        BEFORE, AFTER, _figure("box", x="variety", y="sepal_length", color="variety")
+    )
+    assert out["supported"] is True
+    assert {g["group"]["variety"] for g in out["groups"]} == {"Setosa", "Versicolor", "Virginica"}
+
+
 def test_code_mode_is_not_compared():
     component = {**_figure("scatter", x="sepal_length", y="petal_length"), "mode": "code"}
     assert figure_diff.frame_diff(BEFORE, AFTER, component)["supported"] is False

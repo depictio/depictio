@@ -175,9 +175,9 @@ def group_diff(
     if visu_type in ("box", "violin") and x and x not in after.columns:
         group_axis = None
     color = kwargs.get("color") if kwargs.get("color") in after.columns else None
-    by = [c for c in (group_axis, color) if c]
-    if not by:
-        by = []
+    # dict.fromkeys: x and colour are often the same column (a box per variety,
+    # coloured by variety), and polars refuses a duplicate group key.
+    by = list(dict.fromkeys(c for c in (group_axis, color) if c))
     value = y if how != "count" else None
 
     if by:
