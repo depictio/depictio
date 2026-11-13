@@ -62,7 +62,13 @@ export interface DiffColors {
   primary: string;
   /** What used to be there. */
   ghost: string;
+  /** The ring around a new point: the text colour, so it reads over any
+   *  trace colour (the primary can be the very hue of the new points). */
+  contrast?: string;
 }
+
+/** How far the points already there fade while new ones are shown. */
+export const DIFF_DIM_OPACITY = 0.18;
 
 export { DIFF_TRACE_PREFIX };
 
@@ -95,6 +101,7 @@ export function resolveDiffColors(root?: Element): DiffColors {
     return {
       primary: read('--mantine-primary-color-filled') || FALLBACK_PRIMARY,
       ghost: read('--mantine-color-gray-5') || FALLBACK_GHOST,
+      contrast: read('--mantine-color-text') || undefined,
     };
   } catch {
     return { primary: FALLBACK_PRIMARY, ghost: FALLBACK_GHOST };
@@ -198,6 +205,47 @@ function zLookup(traces: PlotlyTraceLike[]): (x: unknown, y: unknown) => unknown
   return (x, y) => index.get(`${str(x)}|${str(y)}`);
 }
 
+const MARKER_TYPES = new Set(['scatter', 'scattergl']);
+
+/**
+ * Fade the figure's own points that are not new (or moved), so the new ones
+ * keep their colour and stand out. Per point, through `marker.opacity`; a
+ * trace with no new point fades whole. 3D markers take no per-point opacity.
+ */
+function dimOldPoints(traces: PlotlyTraceLike[], fresh: Map<string, number>): TracePatch[] {
+  if (fresh.size === 0) return [];
+  const left = new Map(fresh);
+  const patches: TracePatch[] = [];
+  traces.forEach((t, traceIndex) => {
+    if (!MARKER_TYPES.has(typeOf(t))) return;
+    const mode = typeof t.mode === 'string' ? t.mode : 'markers';
+    if (!mode.includes('markers')) return;
+    const xs = arrayOf(t.x);
+    const ys = arrayOf(t.y);
+    if (!xs || !ys) return;
+    const marker = (t.marker as Record<string, unknown> | undefined) ?? {};
+    const own = marker.opacity;
+    const base = (i: number): number => {
+      const v = Array.isArray(own) ? num(own[i]) : num(own);
+      return v === null ? 1 : v;
+    };
+    const n = Math.min(xs.length, ys.length);
+    const opacity: number[] = new Array(n);
+    for (let i = 0; i < n; i++) {
+      const k = `${str(xs[i])}|${str(ys[i])}`;
+      const c = left.get(k) ?? 0;
+      if (c > 0) {
+        left.set(k, c - 1);
+        opacity[i] = base(i);
+      } else {
+        opacity[i] = base(i) * DIFF_DIM_OPACITY;
+      }
+    }
+    patches.push({ traceIndex, patch: { marker: { ...marker, opacity } } });
+  });
+  return patches;
+}
+
 export function pointsOverlay(
   figure: PlotlyFigureLike,
   diff: DiffPoints,
@@ -226,7 +274,9 @@ export function pointsOverlay(
       hover.push(withKey(DIFF_HOVER.added, p.key));
     }
     if (xs.length) {
-      out.push(ringTrace(`${DIFF_TRACE_PREFIX}added`, dim3, xs, ys, dim3 ? zs : null, hover, colors.primary));
+      out.push(
+        ringTrace(`${DIFF_TRACE_PREFIX}added`, dim3, xs, ys, dim3 ? zs : null, hover, colors.contrast ?? colors.primary),
+      );
       matched += xs.length;
     }
   }
@@ -296,7 +346,15 @@ export function pointsOverlay(
       matched += moved.length;
     }
   }
-  return { traces: out, patches: [], matched };
+  // Fade what was already there, so the new and moved points keep their colour.
+  const fresh = new Map<string, number>();
+  if (!dim3) {
+    for (const p of [...diff.added, ...diff.changed.map((m) => m.after)]) {
+      const k = `${str(p.x)}|${str(p.y)}`;
+      fresh.set(k, (fresh.get(k) ?? 0) + 1);
+    }
+  }
+  return { traces: out, patches: dimOldPoints(traces, fresh), matched };
 }
 
 // ── groups ─────────────────────────────────────────────────────────────────
@@ -356,6 +414,32 @@ function slotOf(t: PlotlyTraceLike): Record<string, unknown> {
 const place = (horizontal: boolean, category: unknown, value: unknown) =>
   horizontal ? { x: value, y: category } : { x: category, y: value };
 
+/**
+ * With a colour column, each colour value is its own trace: the traces that
+ * hold no new, changed or removed group fade, so a new species (a new run's
+ * whole colour) reads at a glance even where a bar-by-bar mark cannot be
+ * placed (a binned histogram). Nothing fades when every trace has news.
+ */
+function dimUntouchedTraces(traces: PlotlyTraceLike[], diff: DiffGroups): { patches: TracePatch[]; touched: number } {
+  if (!diff.color) return { patches: [], touched: 0 };
+  const touched = new Set<number>();
+  for (const g of diff.groups) {
+    const found = traceFor(traces, diff, g);
+    if (found) touched.add(found.index);
+  }
+  if (touched.size === 0) return { patches: [], touched: 0 };
+  const patches: TracePatch[] = [];
+  traces.forEach((t, traceIndex) => {
+    if (touched.has(traceIndex)) return;
+    const type = typeOf(t);
+    if (!(BAR_LIKE.has(type) || type === 'box' || type === 'violin' || type.startsWith('scatter'))) return;
+    if (t.name === undefined && t.legendgroup === undefined) return;
+    const own = num(t.opacity);
+    patches.push({ traceIndex, patch: { opacity: (own ?? 1) * DIFF_DIM_OPACITY } });
+  });
+  return { patches, touched: patches.length ? touched.size : 0 };
+}
+
 export function groupsOverlay(
   figure: PlotlyFigureLike,
   diff: DiffGroups,
@@ -381,10 +465,13 @@ export function groupsOverlay(
     if (!diff.x && type !== 'box') continue;
     targets.push({ traceIndex: found.index, trace: t, group, category });
   }
-  if (targets.length === 0) return EMPTY;
+  const dimmed = dimUntouchedTraces(traces, diff);
+  if (targets.length === 0) {
+    return dimmed.touched ? { traces: [], patches: dimmed.patches, matched: dimmed.touched } : EMPTY;
+  }
 
   const out: PlotlyTraceLike[] = [];
-  const patches: TracePatch[] = [];
+  const patches: TracePatch[] = [...dimmed.patches];
   let matched = 0;
 
   // Per-trace accumulators.

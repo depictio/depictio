@@ -75,6 +75,10 @@ const NO_DIFF_QUERY: ChangeMarksValue['diffQuery'] = {};
 const NO_COMPONENTS: StoredMetadata[] = [];
 const NO_FILTERS: InteractiveFilter[] = [];
 
+/** Component types that draw what is new in place when compared. Cards and
+ *  tables have nothing to ring: their dot says it. */
+const HIGHLIGHTABLE_TYPES = new Set(['figure', 'multiqc', 'advanced_viz']);
+
 /** The set after "Mark as seen": a previous visit exists, nothing differs. */
 function clearedSet(cs: DashboardChangeSet): DashboardChangeSet {
   return {
@@ -221,6 +225,21 @@ const ChangeMarksProvider: React.FC<Props> = ({
     });
   }, []);
 
+  // The changed figures of this tab: what "Highlight on every figure" turns on.
+  const highlightKeys = useMemo(() => {
+    if (!dashboardId || !changeSet) return [] as string[];
+    const marked = changeSet.changed_components;
+    return components
+      .filter((m) => HIGHLIGHTABLE_TYPES.has(String(m.component_type)))
+      .map((m) => changeKey(dashboardId, String(m.index)))
+      .filter((key) => key in marked);
+  }, [dashboardId, changeSet, components]);
+  const highlightAll = highlightKeys.length > 0 && highlightKeys.every((key) => comparing.has(key));
+  const setHighlightAll = useCallback(
+    (on: boolean) => setComparing(on ? new Set(highlightKeys) : NO_COMPARING),
+    [highlightKeys],
+  );
+
   const openCompare = useCallback((key: string) => setCompareKey(key), []);
   const closeCompare = useCallback(() => setCompareKey(null), []);
 
@@ -292,8 +311,26 @@ const ChangeMarksProvider: React.FC<Props> = ({
       setMode,
       markAllSeen,
       seenBusy,
+      highlightable: highlightKeys.length,
+      highlightAll,
+      setHighlightAll,
     };
-  }, [active, changeSet, dashboardId, familyId, canEdit, readOnly, readOnlyQuery, mode, setMode, markAllSeen, seenBusy]);
+  }, [
+    active,
+    changeSet,
+    dashboardId,
+    familyId,
+    canEdit,
+    readOnly,
+    readOnlyQuery,
+    mode,
+    setMode,
+    markAllSeen,
+    seenBusy,
+    highlightKeys.length,
+    highlightAll,
+    setHighlightAll,
+  ]);
 
   // The component behind the open key. Opening needs marks to be live, so the
   // modal is mounted only then and never in a pinned preview or the editor.

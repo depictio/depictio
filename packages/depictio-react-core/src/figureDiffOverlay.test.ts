@@ -4,6 +4,7 @@ import type { DiffGroups, DiffPoints, DiffRows, DiffSamples } from './api';
 import {
   applyFigureDiffOverlay,
   buildFigureDiffOverlay,
+  DIFF_DIM_OPACITY,
   diffSummaryText,
   isDiffTraceName,
   type DiffColors,
@@ -69,6 +70,28 @@ describe('points', () => {
     expect(overlay.matched).toBe(3);
   });
 
+  it('dims the points already there and keeps new and moved ones at full opacity', () => {
+    const fig = {
+      data: [
+        { type: 'scatter', mode: 'markers', x: [1, 9, 4], y: [2, 9, 4], marker: { opacity: 0.8, color: 'teal' } },
+        { type: 'scatter', mode: 'markers', x: [7], y: [7] },
+        { type: 'box', y: [1, 2] },
+      ],
+      layout: {},
+    };
+    const overlay = buildFigureDiffOverlay(fig, pointsDiff(), COLORS);
+    const byIndex = new Map(overlay.patches.map((p) => [p.traceIndex, p.patch as Record<string, any>]));
+    expect([...byIndex.keys()]).toEqual([0, 1]);
+    expect(byIndex.get(0)!.marker.opacity).toEqual([0.8, 0.8 * DIFF_DIM_OPACITY, 0.8]);
+    expect(byIndex.get(0)!.marker.color).toBe('teal');
+    expect(byIndex.get(1)!.marker.opacity).toEqual([DIFF_DIM_OPACITY]);
+  });
+
+  it('rings new points in the contrast colour when the theme gives one', () => {
+    const overlay = buildFigureDiffOverlay(figure, pointsDiff(), { ...COLORS, contrast: 'text-test' });
+    expect((overlay.traces[0] as Record<string, any>).marker.color).toBe('text-test');
+  });
+
   it('does not mutate the figure', () => {
     const snapshot = JSON.stringify(figure);
     const overlay = buildFigureDiffOverlay(figure, pointsDiff(), COLORS);
@@ -80,7 +103,8 @@ describe('points', () => {
     const overlay = buildFigureDiffOverlay(figure, pointsDiff(), COLORS);
     const data = applyFigureDiffOverlay(figure.data, overlay);
     expect(data).toHaveLength(1 + overlay.traces.length);
-    expect(data[0]).toBe(figure.data[0]);
+    // The figure's own trace comes first, restyled (dimmed) over the same data.
+    expect((data[0] as Record<string, unknown>).x).toBe(figure.data[0].x);
   });
 
   it('uses scatter3d traces in a 3D figure, placing new points on their z', () => {
@@ -102,6 +126,50 @@ describe('points', () => {
 });
 
 describe('groups', () => {
+  it('fades the colour traces with no news, even on a binned histogram', () => {
+    const fig = {
+      data: [
+        { type: 'histogram', name: 'Adelie', x: [18, 19] },
+        { type: 'histogram', name: 'Gentoo', x: [14, 15], opacity: 0.5 },
+        { type: 'histogram', name: 'Chinstrap', x: [18, 18], opacity: 0.5 },
+      ],
+      layout: { barmode: 'overlay' },
+    };
+    const diff = groupsDiff({
+      x: 'bill_depth',
+      color: 'species',
+      group_columns: ['bill_depth', 'species'],
+      groups: [{ group: { bill_depth: 14, species: 'Gentoo' }, before: null, after: 3, status: 'added' }],
+    });
+    const overlay = buildFigureDiffOverlay(fig, diff, COLORS);
+    expect(overlay.patches).toEqual([
+      { traceIndex: 0, patch: { opacity: DIFF_DIM_OPACITY } },
+      { traceIndex: 2, patch: { opacity: 0.5 * DIFF_DIM_OPACITY } },
+    ]);
+    expect(overlay.matched).toBe(1);
+  });
+
+  it('fades nothing when every colour trace has news', () => {
+    const fig = {
+      data: [
+        { type: 'box', name: 'male', x: ['Adelie', 'Gentoo'], y: [40, 50] },
+        { type: 'box', name: 'female', x: ['Adelie', 'Gentoo'], y: [38, 46] },
+      ],
+      layout: {},
+    };
+    const diff = groupsDiff({
+      x: 'species',
+      color: 'sex',
+      group_columns: ['species', 'sex'],
+      groups: [
+        { group: { species: 'Gentoo', sex: 'male' }, before: null, after: 50, status: 'added' },
+        { group: { species: 'Gentoo', sex: 'female' }, before: null, after: 46, status: 'added' },
+      ],
+    });
+    const overlay = buildFigureDiffOverlay(fig, diff, COLORS);
+    expect(overlay.patches.filter((p) => 'opacity' in p.patch)).toEqual([]);
+  });
+
   it('draws a ghost bar at the previous value on a vertical bar chart', () => {
     const figure = {
       data: [

@@ -20,6 +20,11 @@ export interface ChangesSinceValue {
   setMode: (mode: MarkMode) => void;
   markAllSeen: () => Promise<void>;
   seenBusy: boolean;
+  /** How many changed figures on this tab can show what is new in place. */
+  highlightable: number;
+  /** Every one of them shows it ("Compare with last visit" on all at once). */
+  highlightAll: boolean;
+  setHighlightAll: (on: boolean) => void;
 }
 
 export const ChangesSinceContext = createContext<ChangesSinceValue | null>(null);

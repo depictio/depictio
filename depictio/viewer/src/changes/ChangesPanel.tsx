@@ -8,7 +8,7 @@
  * (everyone else) as plain links: this module imports no version-history UI.
  */
 import React from 'react';
-import { Button, Divider, ScrollArea, Stack, Text } from '@mantine/core';
+import { Button, Divider, ScrollArea, Stack, Switch, Text } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import { useCommentsControl } from 'depictio-react-core';
@@ -154,6 +154,17 @@ const ChangesPanel: React.FC<{ onClose?: () => void; subtitle?: React.ReactNode 
           )
         }
       />
+      {ctx.highlightable > 0 && (
+        <Switch
+          size="sm"
+          px={4}
+          checked={ctx.highlightAll}
+          onChange={(e) => ctx.setHighlightAll(e.currentTarget.checked)}
+          label={`Highlight what's new on ${ctx.highlightable === 1 ? 'the figure' : `all ${ctx.highlightable} figures`}`}
+          description="Marks what is new in each changed figure; points already there are dimmed."
+          data-testid="changes-highlight-all"
+        />
+      )}
       <Divider />
       <ScrollArea.Autosize mah="min(60vh, 520px)" type="auto" offsetScrollbars>
         <Stack gap="sm">
