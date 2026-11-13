@@ -632,8 +632,8 @@ const ProjectDetailApp: React.FC = () => {
   // overview rather than an empty panel.
   const tabValue = activeTab === 'runs' && !hasRuns ? 'overview' : activeTab;
   const activityMeta = changes.enabled
-    ? 'Ingestions, versions and comments'
-    : 'Each ingestion and what it found';
+    ? 'What happened, and when'
+    : 'What each ingestion found';
   const newRunTags = useMemo(
     () => new Set((changes.changeSet?.new_runs ?? []).map((r) => r.run_tag)),
     [changes.changeSet],
@@ -848,7 +848,7 @@ const ProjectDetailApp: React.FC = () => {
                               }
                             >
                               <span className="dc-project-tab-label">Runs</span>
-                              <span className="dc-project-tab-meta">Each run folder and what it holds</span>
+                              <span className="dc-project-tab-meta">Each run and what it holds</span>
                             </Tabs.Tab>
                           )}
                           <Tabs.Tab
