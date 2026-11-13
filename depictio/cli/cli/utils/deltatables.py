@@ -1052,7 +1052,13 @@ def client_aggregate_data(
 
     # Handle MultiQC data collections specially - copy parquet files to S3 and extract metadata
     if kind == "multiqc":
-        return process_multiqc_data_collection(data_collection, CLI_config, overwrite, workflow)
+        return process_multiqc_data_collection(
+            data_collection,
+            CLI_config,
+            overwrite,
+            workflow,
+            keep_unchanged=bool(command_parameters.get("keep_unchanged", False)),
+        )
 
     # Handle GeoJSON data collections - upload file to S3 and store location
     if kind == "geojson":

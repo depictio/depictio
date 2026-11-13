@@ -44,14 +44,14 @@ from depictio.cli.cli.utils.scan_utils import (
     data_collection_full_regex,
     describe_empty_scan_outcome,
     describe_unmatched_run_scan,
-    file_matches_data_collection,
     generate_file_hash,
     generate_run_hash,
     regex_match,
+    select_run_files,
 )
 from depictio.cli.cli.utils.scan_walk import (
+    ScanBounds,
     ScannedPath,
-    is_ignored,
     iter_run_files,
     run_signature,
 )
@@ -107,33 +107,16 @@ SCAN_FILE_ID_BUCKETS: tuple[str, ...] = (
 )
 
 
-@dataclass(frozen=True, slots=True)
-class _ScanBounds:
-    """A data collection's ``max_depth``/``ignore`` restrictions."""
-
-    max_depth: int | None
-    ignore: tuple[str, ...]
-
-    @property
-    def is_unbounded(self) -> bool:
-        return self.max_depth is None and not self.ignore
-
-    def allows(self, scanned: ScannedPath) -> bool:
-        if self.max_depth is not None and scanned.rel_path.count("/") > self.max_depth:
-            return False
-        return not is_ignored(scanned.match_name, scanned.rel_path, self.ignore)
-
-
-def _dc_scan_bounds(dc: DataCollection) -> _ScanBounds:
+def _dc_scan_bounds(dc: DataCollection) -> ScanBounds:
     """Read a data collection's scan bounds, defaulting to unbounded."""
     params = dc.config.scan.scan_parameters if dc.config.scan else None
-    return _ScanBounds(
+    return ScanBounds(
         max_depth=getattr(params, "max_depth", None),
         ignore=tuple(getattr(params, "ignore", None) or ()),
     )
 
 
-def _walk_bounds(data_collections: list[DataCollection]) -> _ScanBounds:
+def _walk_bounds(data_collections: list[DataCollection]) -> ScanBounds:
     """The most permissive bounds across data collections.
 
     The run tree is walked once and shared, so directory-level pruning may only
@@ -144,7 +127,7 @@ def _walk_bounds(data_collections: list[DataCollection]) -> _ScanBounds:
     """
     per_dc = [_dc_scan_bounds(dc) for dc in data_collections]
     if not per_dc:
-        return _ScanBounds(max_depth=None, ignore=())
+        return ScanBounds(max_depth=None, ignore=())
 
     depths = [bounds.max_depth for bounds in per_dc]
     walk_depth = None if any(d is None for d in depths) else max(d for d in depths if d is not None)
@@ -153,7 +136,7 @@ def _walk_bounds(data_collections: list[DataCollection]) -> _ScanBounds:
     for bounds in per_dc[1:]:
         common_ignore &= set(bounds.ignore)
 
-    return _ScanBounds(max_depth=walk_depth, ignore=tuple(sorted(common_ignore)))
+    return ScanBounds(max_depth=walk_depth, ignore=tuple(sorted(common_ignore)))
 
 
 def _warn_enforced_scan_bounds(data_collections: list[DataCollection]) -> None:
@@ -292,9 +275,11 @@ def scan_single_file(
         changed = existing_file["file_hash"] != file_hash
 
         if update_files:
-            # --sync-files: re-upload unconditionally, changed or not.
+            # --sync-files: re-upload unconditionally, changed or not. A file
+            # that did move is still told apart, as "changed": "updated" means
+            # read again with nothing to say it differs.
             logger.debug(f"Updating existing file {file_name}.")
-            scan_result = {"result": "success", "reason": "updated"}
+            scan_result = {"result": "success", "reason": "changed" if changed else "updated"}
         elif changed:
             # This comparison was already being computed and then thrown away in
             # a debug log, so a file rewritten in place stayed invisible unless
@@ -333,6 +318,14 @@ def scan_single_file(
         file=file_instance,
         scan_result=scan_result,
         scan_time=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        previous=(
+            {
+                "size": existing_file.get("filesize"),
+                "modified": existing_file.get("modification_time"),
+            }
+            if existing_file is not None and scan_result["reason"] == "changed"
+            else None
+        ),
     )
     logger.debug(f"File Scan Result: {file_scan_result}")
     return file_scan_result
@@ -390,7 +383,7 @@ def process_files(
 
     if os.path.isdir(path):
         logger.debug(f"Scanning directory: {path}")
-        bounds = _dc_scan_bounds(data_collection) if honor_scan_bounds else _ScanBounds(None, ())
+        bounds = _dc_scan_bounds(data_collection) if honor_scan_bounds else ScanBounds(None, ())
         for scanned in iter_run_files(path, max_depth=bounds.max_depth, ignore=list(bounds.ignore)):
             file_instance = scan_single_file(
                 file_location=scanned.path,
@@ -443,6 +436,7 @@ def scan_run_for_multiple_data_collections(
     sync_changed: bool = False,
     honor_scan_bounds: bool = True,
     prewalked: list[ScannedPath] | None = None,
+    prune_missing: bool = False,
     dry_run: bool = False,
     concurrency: int = 4,
     upload_chunk_size: int = 1000,
@@ -453,7 +447,11 @@ def scan_run_for_multiple_data_collections(
     ``prewalked`` lets the caller hand over a walk it already performed (the
     state-cache signature check does one), so the tree is never walked twice.
     ``dry_run`` reports what would happen without writing anything to the server.
+    ``prune_missing`` removes the records of this run's files no longer on disk,
+    as ``update_files`` does, without re-uploading the files that did not change.
     """
+    # A file gone from the run leaves the collection either way.
+    remove_missing = update_files or prune_missing
     if not os.path.exists(run_location):
         raise ValueError(f"The directory '{run_location}' does not exist.")
     if not os.path.isdir(run_location):
@@ -489,7 +487,7 @@ def scan_run_for_multiple_data_collections(
     if prewalked is not None:
         all_files_in_run: list[ScannedPath] = prewalked
     else:
-        walk_bounds = _walk_bounds(data_collections) if honor_scan_bounds else _ScanBounds(None, ())
+        walk_bounds = _walk_bounds(data_collections) if honor_scan_bounds else ScanBounds(None, ())
         all_files_in_run = list(
             iter_run_files(
                 run_location,
@@ -502,6 +500,8 @@ def scan_run_for_multiple_data_collections(
     all_processed_files = []
     dc_stats = {}  # This will store per-data-collection stats
     dc_file_ids = {}
+    # What each changed file was before: {file id: {"size": [before, after], ...}}.
+    file_changes: dict[str, dict[str, list]] = {}
 
     logger.debug(f"Processing {len(data_collections)} data collections for run {run_tag}")
 
@@ -544,19 +544,12 @@ def scan_run_for_multiple_data_collections(
         # Process files that match this data collection's regex
         # The shared walk is pruned only to what every data collection excludes,
         # so each one re-applies its own bounds here.
+        # Matched on the walked path rather than the symlink-resolved one, which
+        # is what this loop has always compared (select_run_files).
         dc_bounds = _dc_scan_bounds(dc) if honor_scan_bounds else None
-        if dc_bounds is not None and dc_bounds.is_unbounded:
-            dc_bounds = None
 
         dc_file_scan_results = []
-        for scanned in all_files_in_run:
-            if dc_bounds is not None and not dc_bounds.allows(scanned):
-                continue
-            # Matched on the walked path rather than the symlink-resolved one,
-            # which is what this loop has always compared.
-            if not file_matches_data_collection(scanned.walk_path, run_location, full_regex):
-                continue
-
+        for scanned in select_run_files(all_files_in_run, run_location, full_regex, dc_bounds):
             logger.debug(f"File {scanned.match_name} matches DC {dc.data_collection_tag}")
 
             # skip_regex=True because we already matched in the loop above
@@ -583,6 +576,12 @@ def scan_run_for_multiple_data_collections(
             by_reason[sc.scan_result["reason"]].append(sc.file.id)
 
         old_updated_files = by_reason["updated"]
+        for sc in dc_file_scan_results:
+            if sc.previous is not None:
+                file_changes[str(sc.file.id)] = {
+                    "size": [sc.previous.get("size"), sc.file.filesize],
+                    "modified": [sc.previous.get("modified"), sc.file.modification_time],
+                }
         new_files = by_reason["added"]
         files_unchanged = by_reason["unchanged"]
         files_changed = by_reason["changed"]
@@ -672,7 +671,7 @@ def scan_run_for_multiple_data_collections(
                 for file_location in missing_files_location
             ]
 
-            if missing_files and update_files:
+            if missing_files and remove_missing:
                 logger.info(f"Files to remove for DC {dc.data_collection_tag}: {missing_files}")
                 if dry_run:
                     rich_print_checked_statement(
@@ -702,8 +701,8 @@ def scan_run_for_multiple_data_collections(
             # only surviving trace. Split by fate, mirroring dc_stats below:
             # deleted_files were actually removed, missing_files merely went
             # absent from the scan while their records were left in place.
-            "deleted_files": missing_files if update_files else [],
-            "missing_files": [] if update_files else missing_files,
+            "deleted_files": missing_files if remove_missing else [],
+            "missing_files": [] if remove_missing else missing_files,
         }
 
         # Calculate missing files count.
@@ -733,8 +732,8 @@ def scan_run_for_multiple_data_collections(
             "new_files": len(new_files),
             "changed_files": len(files_changed),
             "unchanged_files": len(files_unchanged),
-            "missing_files": missing_files_count if not update_files else 0,
-            "deleted_files": missing_files_count if update_files else 0,
+            "missing_files": missing_files_count if not remove_missing else 0,
+            "deleted_files": missing_files_count if remove_missing else 0,
             "vanished_files": len(vanished_files),
             "skipped_files": len(files_skipped),
             "other_failure_files": len(files_other_failure),
@@ -770,6 +769,7 @@ def scan_run_for_multiple_data_collections(
         files_id=combined_files_id,
         dc_stats=dc_stats,  # Make sure this is set!
         scan_time=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        file_changes=file_changes or None,
     )
 
     logger.debug(f"Created WorkflowRunScan with dc_stats: {scan_result.dc_stats}")
@@ -934,7 +934,7 @@ def _resolve_pending_runs(
     existing_runs: dict[str, WorkflowRun],
     rescan_folders: bool,
     state: ProjectScanState | None = None,
-    walk_bounds: _ScanBounds | None = None,
+    walk_bounds: ScanBounds | None = None,
 ) -> list[_PendingLocation]:
     """Determine which runs need scanning, touching only the filesystem and the run list.
 
@@ -954,7 +954,7 @@ def _resolve_pending_runs(
     structure = workflow.data_location.structure
     runs_regex = workflow.data_location.runs_regex
     workflow_id = str(workflow.id)
-    bounds = walk_bounds or _ScanBounds(None, ())
+    bounds = walk_bounds or ScanBounds(None, ())
 
     def _consider(run_location: str, run_tag: str) -> _PendingRun | None:
         """Return the run to scan, or None when it can be skipped."""
@@ -1041,6 +1041,8 @@ def scan_files_for_workflow(
     rescan_folders = command_parameters.get("rescan_folders", False)
     update_files = command_parameters.get("sync_files", False)
     sync_changed = command_parameters.get("sync_changed", False)
+    # Remove the records of files gone from a run, without --sync-files.
+    prune_missing = command_parameters.get("prune_missing", False)
     rich_tables = command_parameters.get("rich_tables", True)
     honor_scan_bounds = not command_parameters.get("legacy_scan_depth", False)
     dry_run = command_parameters.get("dry_run", False)
@@ -1124,7 +1126,7 @@ def scan_files_for_workflow(
             state.mark_unsettled(dc_ids)
             save_state(state)
 
-    walk_bounds = _walk_bounds(data_collections) if honor_scan_bounds else _ScanBounds(None, ())
+    walk_bounds = _walk_bounds(data_collections) if honor_scan_bounds else ScanBounds(None, ())
 
     pending_locations = _resolve_pending_runs(
         workflow=workflow,
@@ -1196,6 +1198,7 @@ def scan_files_for_workflow(
                     rescan_folders=rescan_folders,
                     update_files=update_files,
                     sync_changed=sync_changed,
+                    prune_missing=prune_missing,
                     honor_scan_bounds=honor_scan_bounds,
                     prewalked=candidate.scanned,
                     dry_run=dry_run,
@@ -1330,7 +1333,7 @@ def scan_files_for_workflow(
     else:
         rich_print_data_collection_light(all_workflow_runs, workflow)
 
-    files_found = sum(len(run.files_id or []) for run in all_workflow_runs if run)
+    files_found = sum(_files_matched(run) for run in all_workflow_runs if run)
     empty_outcome = describe_empty_scan_outcome(
         len(all_workflow_runs), files_found, runs_skipped_as_existing
     )
@@ -1365,6 +1368,14 @@ def scan_files_for_workflow(
         "warning": empty_outcome,
         **signal,
     }
+
+
+def _files_matched(run) -> int:
+    """The files a run's last scan matched, pushed or not: one found registered
+    and unchanged is not pushed again, but it was found all the same."""
+    last = (run.scan_results or [None])[-1]
+    total = (last.stats or {}).get("total_files", 0) if last is not None else 0
+    return max(total, len(run.files_id or []))
 
 
 #: Per-data-collection counters that mean "this collection's rows changed".

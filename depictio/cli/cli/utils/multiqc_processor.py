@@ -20,10 +20,12 @@ from depictio.cli.cli.utils.api_calls import (
 )
 from depictio.cli.cli.utils.file_utils import compute_file_hash
 from depictio.cli.cli.utils.ingest_timing import record, timed
+from depictio.cli.cli.utils.multiqc_state import fresh_lock_in_child, holds_multiqc_state
 from depictio.cli.cli.utils.rich_utils import (
     rich_print_checked_statement,
     rich_print_multiqc_processing_summary,
 )
+from depictio.cli.cli.utils.scan_utils import CONTENT_HASHED_SCAN_MODES
 from depictio.cli.cli_logging import logger, multiqc_logging
 from depictio.models.models.multiqc_reports import (
     GENERAL_STATS_ANCHOR,
@@ -68,6 +70,7 @@ def _parquet_has_general_stats(parquet_path: str) -> Optional[bool]:
     return any(str(a) in known for a in anchors)
 
 
+@holds_multiqc_state
 def extract_multiqc_metadata(parquet_path: str) -> Dict[str, Any]:
     """
     Extract metadata from MultiQC parquet file using MultiQC module.
@@ -268,7 +271,9 @@ def _parse_multiqc_files(
     try:
         from concurrent.futures import ProcessPoolExecutor
 
-        with ProcessPoolExecutor(max_workers=workers) as executor:
+        # A forked child inherits the lock as it was: held for good if another
+        # thread held it at the fork. Its MultiQC state is its own anyway.
+        with ProcessPoolExecutor(max_workers=workers, initializer=fresh_lock_in_child) as executor:
             futures = [executor.submit(_parse_multiqc_worker, p) for p in file_paths]
             out: list[tuple[str, Dict[str, Any] | None]] = []
             for path, name, future in zip(file_paths, names, futures):
@@ -491,6 +496,7 @@ def _make_s3_client(storage_options):
     )
 
 
+@holds_multiqc_state
 def _prerender_multiqc_figures(
     data_collection,
     CLI_config,
@@ -618,6 +624,7 @@ def _prerender_multiqc_figures(
     )
 
 
+@holds_multiqc_state
 def validate_multiqc_parquet(parquet_path: str) -> bool:
     """
     Validate that the parquet file is a valid MultiQC report.
@@ -653,11 +660,39 @@ def validate_multiqc_parquet(parquet_path: str) -> bool:
         return False
 
 
+def _unchanged_report(data_collection, registered_file, CLI_config) -> dict | None:
+    """The stored report of a file that has not moved since it was read, if any.
+
+    Same collection, same location, and the file's registered hash is the one
+    the report was read from (``source_file_hash``): parsing and uploading it
+    again would write what is already there. A report read before the hash was
+    recorded has none and is read once more.
+    """
+    scan = getattr(getattr(data_collection, "config", None), "scan", None)
+    mode = str(getattr(scan, "mode", "") or "").lower()
+    file_hash = getattr(registered_file, "file_hash", None)
+    if mode not in CONTENT_HASHED_SCAN_MODES or not file_hash:
+        return None
+    location = registered_file.file_location
+    existing = api_check_duplicate_multiqc_report(str(data_collection.id), location, CLI_config)
+    if not existing or existing.get("source_file_hash") != file_hash:
+        return None
+    logger.info(f"Unchanged MultiQC report kept as it is: {location}")
+    return {
+        "file_path": location,
+        "report_id": existing.get("id"),
+        "s3_location": existing.get("s3_location"),
+        "file_size_bytes": existing.get("file_size_bytes"),
+        "metadata": existing.get("metadata") or {},
+    }
+
+
 def process_multiqc_data_collection(
     data_collection,  # DataCollection type hint avoided to prevent circular imports
     CLI_config,  # CLIConfig type hint avoided to prevent circular imports
     overwrite: bool = False,
     workflow=None,  # Workflow object for accessing data locations
+    keep_unchanged: bool = False,
 ) -> Dict[str, str]:
     """
     Process MultiQC data collection by copying parquet files to S3 and extracting metadata.
@@ -670,6 +705,13 @@ def process_multiqc_data_collection(
         data_collection: The MultiQC data collection object
         CLI_config: CLI configuration object containing API URL and credentials
         overwrite: Whether to overwrite existing files in S3
+        keep_unchanged: With ``overwrite``, keep a report whose file has not
+            moved since it was read (see ``_unchanged_report``) instead of
+            reading it again. A refresh sets it; a full refresh and the CLI
+            do not, so they rebuild every report.
+
+    Any report that could not be uploaded or stored makes the result an error:
+    a refresh that recorded it as a success would leave it alone next time.
 
     Returns:
         dict: Result dictionary with success/error status and message
@@ -777,6 +819,12 @@ def process_multiqc_data_collection(
         prerender_inputs: list[tuple[str, str]] = []
 
         logger.info(f"Starting to process {len(files)} MultiQC files...")
+        # Reports whose file has not moved since they were read: kept as they
+        # are, neither parsed nor uploaded again (see _unchanged_report).
+        kept: list[dict] = []
+        # The registered file hash of each location, recorded on its report.
+        hashes: dict[str, str | None] = {}
+        prerender = multiqc_prerender_enabled()
         # (registered location, the file on disk it is read from): itself, or
         # for an s3:// location its fetched copy. The location is what the
         # report is named, deduplicated and recorded by.
@@ -785,6 +833,17 @@ def process_multiqc_data_collection(
             location = f.file_location
             if not _is_parseable_multiqc_file(location):
                 continue
+            hashes[location] = getattr(f, "file_hash", None)
+            unchanged = (
+                _unchanged_report(data_collection, f, CLI_config)
+                if overwrite and keep_unchanged
+                else None
+            )
+            if unchanged is not None and not (prerender and is_s3_url(location)):
+                if prerender and unchanged.get("s3_location"):
+                    prerender_inputs.append((location, unchanged["s3_location"]))
+                kept.append(unchanged)
+                continue
             if not is_s3_url(location):
                 readable.append((location, location))
                 continue
@@ -792,8 +851,15 @@ def process_multiqc_data_collection(
             local_path = remote_reports.local_copy(
                 location, listed_size if isinstance(listed_size, int) else -1
             )
-            if local_path is not None:
-                readable.append((location, local_path))
+            if local_path is None:
+                continue
+            if unchanged is not None:
+                # Fetched only for the prerender, which reads every report.
+                if unchanged.get("s3_location"):
+                    prerender_inputs.append((local_path, unchanged["s3_location"]))
+                kept.append(unchanged)
+                continue
+            readable.append((location, local_path))
 
         with timed("parse"):
             parsed = _parse_multiqc_files(
@@ -817,20 +883,22 @@ def process_multiqc_data_collection(
             )
             processed_files += 1
 
-        if processed_files == 0:
+        if processed_files == 0 and not kept:
             return {
                 "result": "error",
                 "message": "No MultiQC parquet files were successfully processed",
             }
 
-        logger.info(f"Successfully processed {processed_files} MultiQC files")
+        logger.info(
+            f"Successfully processed {processed_files} MultiQC files, kept {len(kept)} unchanged"
+        )
         record("n_files", processed_files)
 
         # Calculate merged metadata for summary (but don't use for DB storage)
         all_samples = []
         all_modules = []
         all_plots = {}
-        for file_meta in individual_file_metadata:
+        for file_meta in [*individual_file_metadata, *kept]:
             metadata = file_meta["metadata"]
             all_samples.extend(metadata.get("samples", []))
             all_modules.extend(metadata.get("modules", []))
@@ -847,8 +915,14 @@ def process_multiqc_data_collection(
 
         # Upload files to S3 and create individual MultiQC reports
         created_reports = []
+        # Reports (or steps) that were not stored: the result is then an error.
+        failed: list[str] = []
         try:
-            from depictio.models.models.multiqc_reports import MultiQCMetadata, MultiQCReport
+            from depictio.models.models.multiqc_reports import (
+                MultiQCMetadata,
+                MultiQCReport,
+                MultiQCReportChange,
+            )
 
             # S3 client (MinIO-compatible: s3v4 + path-style addressing). Raises
             # ImportError if boto3 is unavailable — caught below like before.
@@ -954,6 +1028,11 @@ def process_multiqc_data_collection(
                                 file_size_bytes=file_size_bytes,
                                 multiqc_version=multiqc_version,
                                 report_name=f"MultiQC Report {i + 1} - {data_collection.data_collection_tag}",
+                                source_file_hash=hashes.get(file_path),
+                                # What this overwrite changed, for the runs view.
+                                last_change=MultiQCReportChange.between(
+                                    existing_report.get("metadata") or {}, metadata_for_report
+                                ),
                             )
 
                             # UPDATE existing report instead of creating new one
@@ -969,12 +1048,14 @@ def process_multiqc_data_collection(
                                     console.print("[green]✓ Updated existing report[/green]")
                                     created_reports.append(report_id)
                                 else:
+                                    failed.append(file_path)
                                     rich_print_checked_statement(
                                         f"Failed to update report {escape(str(report_id))}: "
                                         f"HTTP {response.status_code} {escape(response.text)}",
                                         "warning",
                                     )
                             except Exception as update_error:
+                                failed.append(file_path)
                                 rich_print_checked_statement(
                                     f"Error updating report {escape(str(report_id))}: "
                                     f"{escape(str(update_error))}",
@@ -1063,6 +1144,7 @@ def process_multiqc_data_collection(
                         file_size_bytes=file_size_bytes,
                         multiqc_version=multiqc_version,
                         report_name=f"MultiQC Report {i + 1} - {data_collection.data_collection_tag}",
+                        source_file_hash=hashes.get(file_path),
                     )
 
                     # Save individual MultiQC report to MongoDB via API call
@@ -1098,6 +1180,7 @@ def process_multiqc_data_collection(
                                 )
                                 logger.debug(f"Raw response: {response.text}")
                         else:
+                            failed.append(file_path)
                             rich_print_checked_statement(
                                 f"Failed to save MultiQC report {escape(file_path)}: "
                                 f"HTTP {response.status_code} {escape(response.text)}",
@@ -1105,12 +1188,14 @@ def process_multiqc_data_collection(
                             )
 
                     except Exception as e:
+                        failed.append(file_path)
                         rich_print_checked_statement(
                             f"Failed to save MultiQC report {escape(file_path)}: {escape(str(e))}",
                             "error",
                         )
 
                 except Exception as e:
+                    failed.append(file_path)
                     rich_print_checked_statement(
                         f"Failed to upload MultiQC report {escape(file_path)}: {escape(str(e))}",
                         "error",
@@ -1118,13 +1203,19 @@ def process_multiqc_data_collection(
                     continue
 
         except ImportError:
+            failed.append("every report")
             rich_print_checked_statement(
                 "MultiQC reports not uploaded: boto3 is not installed (pip install boto3)",
                 "error",
             )
         except Exception as e:
+            failed.append("every report")
             rich_print_checked_statement(f"MultiQC reports not uploaded: {escape(str(e))}", "error")
 
+        for unchanged in kept:
+            created_reports.append(unchanged["report_id"])
+            if first_s3_location is None:
+                first_s3_location = unchanged.get("s3_location")
         logger.info(f"Created {len(created_reports)} MultiQC reports in database")
 
         # Update the data collection's dc_specific_properties with extracted metadata via API
@@ -1143,8 +1234,10 @@ def process_multiqc_data_collection(
                 "modules": unique_modules,
                 "plots": all_plots,
                 "s3_location": first_s3_location,
-                "processed_files": processed_files,
-                "file_size_bytes": sum(f["file_size_bytes"] for f in individual_file_metadata),
+                "processed_files": processed_files + len(kept),
+                "file_size_bytes": sum(
+                    f["file_size_bytes"] or 0 for f in [*individual_file_metadata, *kept]
+                ),
             }
 
             response = api_update_dc_specific_properties(
@@ -1156,6 +1249,7 @@ def process_multiqc_data_collection(
             if response.status_code == 200:
                 logger.info("Updated dc_specific_properties with MultiQC metadata")
             else:
+                failed.append("the collection's samples, modules and plots")
                 rich_print_checked_statement(
                     "Failed to store the MultiQC samples, modules and plots of "
                     f"'{escape(data_collection.data_collection_tag)}': "
@@ -1164,6 +1258,7 @@ def process_multiqc_data_collection(
                 )
 
         except Exception as e:
+            failed.append("the collection's samples, modules and plots")
             rich_print_checked_statement(
                 "Failed to store the MultiQC samples, modules and plots of "
                 f"'{escape(data_collection.data_collection_tag)}': {escape(str(e))}",
@@ -1174,7 +1269,7 @@ def process_multiqc_data_collection(
         # here (the reports are already parsed) and ship them to S3 so the viewer
         # serves them without the API ever calling multiqc.parse_logs/get_plot.
         # Opt-in, best-effort — a failure never fails the ingest.
-        if multiqc_prerender_enabled():
+        if prerender:
             try:
                 with timed("prerender"):
                     _prerender_multiqc_figures(
@@ -1202,6 +1297,14 @@ def process_multiqc_data_collection(
             )
         except Exception as e:
             logger.warning(f"Failed to display rich summary table: {e}")
+
+        if failed:
+            shown = ", ".join(_report_display_path(f) if "/" in f else f for f in failed[:3])
+            more = f" and {len(failed) - 3} more" if len(failed) > 3 else ""
+            return {
+                "result": "error",
+                "message": f"Not stored: {shown}{more}. The other reports were.",
+            }
 
         return {
             "result": "success",

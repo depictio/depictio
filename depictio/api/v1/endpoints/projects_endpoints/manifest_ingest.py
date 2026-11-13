@@ -21,22 +21,31 @@ after the other; a refresh can instead fan them out to Celery workers
 """
 
 import copy
+import hashlib
+import json
 import os
 import tempfile
 from collections.abc import Callable
+from typing import Any
 from urllib.parse import urlparse
 
 from bson import ObjectId
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
 
-from depictio.api.v1.db import files_collection, projects_collection
+from depictio.api.v1.db import (
+    deltatables_collection,
+    files_collection,
+    multiqc_collection,
+    projects_collection,
+)
 from depictio.api.v1.endpoints.projects_endpoints.publish_lock import assert_project_unlocked
 from depictio.api.v1.remote_fetch import (
     RemoteURLRejected,
     bounded_download,
     validate_remote_url,
 )
+from depictio.cli.cli.utils.scan_utils import CONTENT_HASHED_SCAN_MODES
 from depictio.models.logging import logger
 from depictio.models.models.manifest import DataManifest, manifest_field_map
 from depictio.models.s3_access import ProjectS3Config
@@ -145,6 +154,10 @@ class RefreshManifestRequest(BaseModel):
     # them inline, for long manifests. The response then reports each DC as
     # "dispatched" with a run_id to poll via GET /projects/refresh_manifest/{run_id}.
     async_run: bool = False
+    # Read every file again and rebuild every collection, changed or not. By
+    # default a refresh reads what is new or changed and leaves a collection
+    # none of whose files moved as it is.
+    full: bool = False
 
 
 class ManifestRefreshReport(BaseModel):
@@ -367,6 +380,101 @@ def _scan_failure(scan_result: dict | None) -> str | None:
     return f"Scan failed: {(scan_result or {}).get('message', 'unknown error')}"
 
 
+#: The step detail of a collection a refresh left alone.
+UNCHANGED_DETAIL = "No file changed since its last ingestion: left as it was."
+
+#: Why a server that does not read its own disk uploads no image.
+IMAGES_NOT_READ = "This server does not read folders on its own disk, so it cannot upload images."
+
+
+def _dc_doc(workflow_dict: dict, dc_id: str) -> dict | None:
+    return next(
+        (
+            dc
+            for dc in workflow_dict.get("data_collections") or []
+            if str(dc.get("_id") or dc.get("id")) == dc_id
+        ),
+        None,
+    )
+
+
+def _id_variants(dc_id: str) -> list[Any]:
+    """``dc_id`` as the string and as the ObjectId it spells: collections store either."""
+    return [dc_id, ObjectId(dc_id)] if ObjectId.is_valid(dc_id) else [dc_id]
+
+
+def _scan_mode_of(dc: dict | None) -> str:
+    scan = ((dc or {}).get("config") or {}).get("scan") or {}
+    return str(scan.get("mode") or "").lower()
+
+
+def collection_inputs_signature(workflow_dict: dict, dc_id: str) -> str | None:
+    """What a collection is built from: its configuration and its files' hashes.
+
+    None when it cannot vouch for the content: a scan mode whose hash does not
+    follow the bytes (``CONTENT_HASHED_SCAN_MODES``), no file registered, or an
+    image collection, whose images folder is read apart from its files.
+    """
+    dc = _dc_doc(workflow_dict, dc_id)
+    if dc is None or _scan_mode_of(dc) not in CONTENT_HASHED_SCAN_MODES:
+        return None
+    if str((dc.get("config") or {}).get("type") or "").lower() == "image":
+        return None
+    files = sorted(
+        (str(f["_id"]), str(f.get("file_hash") or ""), str(f.get("file_location") or ""))
+        for f in files_collection.find(
+            {"data_collection_id": {"$in": _id_variants(dc_id)}},
+            {"_id": 1, "file_hash": 1, "file_location": 1},
+        )
+    )
+    if not files:
+        return None
+    config = dict(dc.get("config") or {})
+    if str(config.get("type") or "").lower() == "multiqc":
+        # What a MultiQC ingestion writes back (samples, modules, plots), not
+        # what it reads: kept in, every ingestion would look like a change.
+        config.pop("dc_specific_properties", None)
+    payload = json.dumps({"config": config, "files": files}, sort_keys=True, default=str)
+    return hashlib.sha256(payload.encode()).hexdigest()
+
+
+def collection_has_data(workflow_dict: dict, dc_id: str) -> bool:
+    """Whether the collection has what its ingestion writes: reports, or a table."""
+    dc = _dc_doc(workflow_dict, dc_id) or {}
+    kind = str((dc.get("config") or {}).get("type") or "").lower()
+    if kind == "multiqc":
+        return multiqc_collection.count_documents({"data_collection_id": dc_id}, limit=1) > 0
+    doc = deltatables_collection.find_one(
+        {"data_collection_id": {"$in": _id_variants(dc_id)}}, {"aggregation": {"$slice": -1}}
+    )
+    return bool(doc and doc.get("aggregation"))
+
+
+def last_ingested_signature(project_id: str, tag: str, exclude_run_id: str) -> str | None:
+    """The inputs a collection was last refreshed from, if that refresh succeeded.
+
+    The newest other run with a step for ``tag`` decides: a failed or skipped
+    one, or one written before signatures existed, vouches for nothing.
+    """
+    from depictio.api.v1.monitoring import store
+
+    doc = next(
+        iter(
+            store.ingestion_runs_collection.find(
+                {"project_id": project_id, "run_id": {"$ne": exclude_run_id}, "steps.name": tag},
+                {"steps": 1},
+            )
+            .sort("started_at", -1)
+            .limit(1)
+        ),
+        None,
+    )
+    step = next((s for s in (doc or {}).get("steps") or [] if s.get("name") == tag), None)
+    if not step or step.get("status") != "success":
+        return None
+    return step.get("inputs_signature")
+
+
 def _run_dc_ingest(
     workflow_dict: dict,
     dc_id: str,
@@ -377,6 +485,8 @@ def _run_dc_ingest(
     scan: bool = True,
     scan_dc_ids: list[str] | None = None,
     on_scanned: Callable[[str, str | None], None] | None = None,
+    previous_signature: str | None = None,
+    outcome: dict | None = None,
 ) -> tuple[bool, str | None]:
     """Scan + process one DC through the CLI helpers. Returns (ok, error_message).
 
@@ -399,10 +509,17 @@ def _run_dc_ingest(
     Synchronous on purpose: the helpers use a sync httpx client back into
     this same FastAPI process (see ``_push_workflow_and_ingest``).
 
-    ``sync_files=True`` forces File-record updates during the scan. The scan's
-    change detection keys on ``sha256(url|id)``, an *identity* hash, so a
-    refresh over a manifest whose URLs are unchanged but whose remote content
-    moved would otherwise skip the File metadata update.
+    ``sync_files=True`` reads every file again, changed or not. Without it a
+    collection read in one of the ``CONTENT_HASHED_SCAN_MODES`` pushes only its new
+    and changed files (``sync_changed``), drops the records of files gone from
+    a run (``prune_missing``), and is not processed at all when its inputs
+    (``collection_inputs_signature``) are those of ``previous_signature``, its
+    last successful refresh, and its data is there: the answer is then
+    ``(True, UNCHANGED_DETAIL)``. ``outcome`` receives ``inputs_signature`` and
+    ``unchanged``, for the caller to record. A manifest or a URL collection's
+    hash is ``sha256(url|id)``, an *identity* hash, so it is always read again:
+    a manifest whose URLs are unchanged but whose remote content moved would
+    otherwise skip the File metadata update.
 
     A data collection with no scan block at all (a ``source: transformed``
     recipe collection) is processed without being scanned: it registers no
@@ -471,10 +588,13 @@ def _run_dc_ingest(
                         workflow=workflow,
                         data_collections=walked,
                         CLI_config=cli_config,
-                        # A refresh re-walks the runs already registered, as it
-                        # re-reads every other source: overwrite-with-report.
+                        # A refresh re-walks the runs already registered, and
+                        # pushes only what is new or changed in them, unless
+                        # asked to read everything again.
                         command_parameters={
                             "sync_files": sync_files,
+                            "sync_changed": True,
+                            "prune_missing": True,
                             "rescan_folders": True,
                             "rich_tables": False,
                         },
@@ -485,7 +605,15 @@ def _run_dc_ingest(
                         wf=workflow,
                         dc_id=unit[0],
                         mode="scan",
-                        command_parameters={"sync_files": True} if sync_files else {},
+                        # A manifest's or a URL's hash names the source, not its
+                        # bytes: read again every time. Elsewhere, what moved.
+                        command_parameters=(
+                            {"sync_files": True}
+                            if sync_files
+                            or _scan_mode_of(_dc_doc(workflow_dict, unit[0]))
+                            not in CONTENT_HASHED_SCAN_MODES
+                            else {"sync_changed": True}
+                        ),
                     )
                 error = _scan_failure(scan_result)
             except SoftTimeLimitExceeded:
@@ -512,16 +640,83 @@ def _run_dc_ingest(
         if own_error is not None:
             return False, own_error
 
+    # Only a caller that records the inputs, or compares them, needs them read.
+    tracked = outcome is not None or previous_signature is not None
+    signature = collection_inputs_signature(workflow_dict, dc_id) if tracked else None
+    if outcome is not None:
+        outcome["inputs_signature"] = signature
+    if (
+        not sync_files
+        and signature is not None
+        and signature == previous_signature
+        and collection_has_data(workflow_dict, dc_id)
+    ):
+        if outcome is not None:
+            outcome["unchanged"] = True
+        return True, UNCHANGED_DETAIL
+
     process_result = process_data_collection_helper(
         CLI_config=cli_config,
         wf=workflow,
         dc_id=dc_id,
         mode="process",
-        command_parameters={"overwrite": True},
+        # Unchanged MultiQC reports are kept as they are, unless asked to read
+        # everything again.
+        command_parameters={"overwrite": True, "keep_unchanged": not sync_files},
     )
     if (process_result or {}).get("result") != "success":
         return False, f"Processing failed: {(process_result or {}).get('message', 'unknown error')}"
+    if target is not None:
+        image_error = _upload_collection_images(target, cli_config)
+        if image_error == IMAGES_NOT_READ:
+            # The table is rebuilt all the same: a warning, not a failure.
+            return (
+                True,
+                f"Table rebuilt; images not uploaded. {IMAGES_NOT_READ} Upload them with `depictio ingest`.",
+            )
+        if image_error is not None:
+            return False, image_error
     return True, None
+
+
+def _upload_collection_images(dc, cli_config) -> str | None:
+    """Upload an image collection's ``local_images_path`` after its table, as
+    ``depictio ingest`` does; the error message, or None (also for any other type).
+
+    The server reads that folder from its own disk, so only under ``depictio
+    local`` and only inside the folders it may read (``LocalDataPolicy``),
+    every image file included: a symlink in the folder cannot pull in another.
+    """
+    from depictio.api.v1.configs.settings_models import local_data_policy
+    from depictio.cli.cli.utils.image_upload import (
+        ImageUploadError,
+        resolve_local_images_path,
+        scan_directory_for_images,
+        upload_collection_images,
+    )
+    from depictio.models.local_access import LocalPathRefused
+
+    properties = dc.config.dc_specific_properties
+    if dc.config.type != "image" or not getattr(properties, "local_images_path", None):
+        return None
+    policy = local_data_policy()
+    if policy is None:
+        return IMAGES_NOT_READ
+    source = resolve_local_images_path(properties.local_images_path)
+    if source.is_dir():
+        refused = 0
+        for image in scan_directory_for_images(source):
+            try:
+                policy.confine(str(image), want="file")
+            except LocalPathRefused:
+                refused += 1
+        if refused:
+            return f"{refused} image file(s) are outside the folders this server may read."
+    try:
+        upload_collection_images(dc, cli_config, overwrite=False)
+    except ImageUploadError as exc:
+        return f"Image upload failed: {exc}"
+    return None
 
 
 def _run_dc_ingest_or_fail(
@@ -843,8 +1038,11 @@ def _refresh_manifest_in_project(
     dry_run: bool = False,
     async_run: bool = False,
     request=None,
+    full: bool = False,
 ) -> ManifestRefreshReport:
     """Re-run each refreshable DC's stored scan and re-ingest it in place.
+
+    Only what moved is read again (see ``_run_dc_ingest``), unless ``full``.
 
     Refresh semantics are overwrite-with-report (RFC open question 2): the scan
     prunes File records for entries that vanished from the source, ``sync_files``
@@ -1026,7 +1224,7 @@ def _refresh_manifest_in_project(
             tag,
             current_user,
             action="Refresh",
-            sync_files=True,
+            sync_files=full,
             remote_storage_options=remote_options,
         )
         if not ok:
@@ -1060,6 +1258,7 @@ def _refresh_manifest_in_project(
             preflight_skipped=preflight_skipped,
             scan_modes=scan_modes,
             data_root=data_root,
+            sync_files=full,
         )
         report.run_id = run_id
         report.refreshed.extend(dispatched)
@@ -1216,6 +1415,7 @@ def _dispatch_refresh_tasks(
     command: str = "refresh_manifest",
     scan_modes: dict[str, str] | None = None,
     data_root: str | None = None,
+    sync_files: bool = False,
 ) -> tuple[str, bool, list[ManifestIngestDCResult]]:
     """Fan the per-DC ingestions out to Celery, backed by an ingestion run.
 
@@ -1342,7 +1542,8 @@ def _dispatch_refresh_tasks(
             "wf_index": wf_i,
             "dc_id": dc_id,
             "dc_tag": tag,
-            "sync_files": True,
+            # Every file read again; otherwise only what moved (_run_dc_ingest).
+            "sync_files": sync_files,
             "user": user_ctx,
         }
         deps = [dep for dep in dependencies.get(tag, []) if dep in seeded_tags]

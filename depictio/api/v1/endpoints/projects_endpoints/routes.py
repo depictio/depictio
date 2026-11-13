@@ -837,9 +837,11 @@ async def refresh_manifest(
     Covers every data collection the server can read again: any remote
     source (manifest, url, s3_prefix), and, under ``depictio local`` only, a
     local one below a root of the local-data policy (for a loopback caller
-    who is an admin, as every local read). Overwrite-with-report semantics: File records sync to
-    the source's current files (``sync_files`` beats the identity-hash skip)
-    and each Delta table is rebuilt from the resulting file set. A manifest
+    who is an admin, as every local read). Only what moved is read again: new
+    and changed files, and the collections they belong to; a collection none of
+    whose files moved since its last successful refresh is left as it is.
+    ``full=true`` reads everything again. A manifest or URL collection is always
+    read again (its hash names the source, not its bytes). A manifest
     DC whose manifest no longer lists its type is reported failed and left
     untouched. ``dry_run=true`` reports what would refresh (per-DC entry
     counts for manifest DCs) without touching any data.
@@ -856,6 +858,7 @@ async def refresh_manifest(
         dry_run=payload.dry_run,
         async_run=payload.async_run,
         request=request,
+        full=payload.full,
     )
 
 
@@ -1073,6 +1076,9 @@ async def create_project_from_run(
         storage=payload.storage,
         is_public=payload.is_public,
         description=payload.description,
+        template=payload.template,
+        edits=payload.edits,
+        runs=payload.runs,
     )
 
 
