@@ -1,18 +1,22 @@
-import React, { createContext, useContext } from 'react';
+import React, { createContext, useContext, useEffect, useState } from 'react';
 import {
   Box,
+  ColorInput,
   Divider,
   Group,
   MultiSelect,
   NumberInput,
   Paper,
+  RangeSlider,
   SegmentedControl,
   Select,
   Slider,
   Stack,
   Switch,
   Text,
+  isColorValid,
   type MultiSelectProps,
+  type RangeSliderProps,
   type NumberInputProps,
   type SegmentedControlProps,
   type SelectProps,
@@ -273,6 +277,84 @@ export const VizSlider: React.FC<VizSliderProps> = ({
     />
   </VizInlineField>
 );
+
+export type VizRangeSliderProps = Omit<
+  RangeSliderProps,
+  'size' | 'w' | 'label' | 'thumbFromLabel' | 'thumbToLabel'
+> & {
+  /** Inline label on the left; also names both thumbs for assistive tech. */
+  label?: React.ReactNode;
+  /** Mantine's thumb tooltip, forwarded as RangeSlider `label`. */
+  thumbLabel?: React.ReactNode | ((value: number) => React.ReactNode);
+};
+
+/** A RangeSlider (a window, a contrast range) with its label inline on the left. */
+export const VizRangeSlider: React.FC<VizRangeSliderProps> = ({
+  label,
+  thumbLabel,
+  'aria-label': ariaLabel,
+  ...rest
+}) => {
+  const name = ariaFrom(label, ariaLabel);
+  return (
+    <VizInlineField label={label} controlWidth={VIZ_SLIDER_CONTROL_PX}>
+      <RangeSlider
+        {...rest}
+        {...(thumbLabel !== undefined ? { label: thumbLabel } : {})}
+        size="xs"
+        aria-label={name}
+        thumbFromLabel={name ? `${name} from` : undefined}
+        thumbToLabel={name ? `${name} to` : undefined}
+      />
+    </VizInlineField>
+  );
+};
+
+export interface VizColourInputProps {
+  label: string;
+  /** The colour in effect. */
+  value: string;
+  swatches?: string[];
+  /** A whole, valid colour: committed as soon as one is typed or picked. */
+  onCommit: (colour: string) => void;
+  disabled?: boolean;
+}
+
+/**
+ * A compact colour input, labelled inline. What is typed is held here until
+ * it is a whole colour, so a half-typed `#1` never reaches the tile (or its
+ * saved config); a valid colour is committed at once.
+ */
+export const VizColourInput: React.FC<VizColourInputProps> = ({
+  label,
+  value,
+  swatches,
+  onCommit,
+  disabled,
+}) => {
+  const portalTarget = useFullscreenPortalTarget();
+  const [draft, setDraft] = useState<string | null>(null);
+  // A colour that changes under the input (Reset, another surface) replaces the draft.
+  useEffect(() => setDraft(null), [value]);
+  return (
+    <VizInlineField label={label}>
+      <ColorInput
+        size="xs"
+        aria-label={`${label} colour`}
+        format="hex"
+        withEyeDropper={false}
+        disabled={disabled}
+        popoverProps={{ withinPortal: true, portalProps: { target: portalTarget } }}
+        swatches={swatches}
+        value={draft ?? value}
+        onChange={(v) => {
+          setDraft(v);
+          if (v && isColorValid(v)) onCommit(v);
+        }}
+      />
+    </VizInlineField>
+  );
+};
 
 export type VizSegmentedProps = Omit<SegmentedControlProps, 'size' | 'w'> & {
   /** Inline label on the left; also the control's aria-label. */
@@ -581,6 +663,8 @@ const LABELLED_CONTROLS = new Set<unknown>([
   VizSwitch,
   VizNumberInput,
   VizSlider,
+  VizRangeSlider,
+  VizColourInput,
   VizSegmented,
   VizSelect,
   VizMultiSelect,

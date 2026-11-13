@@ -1,7 +1,6 @@
 import React from 'react';
-import { Center, SegmentedControl, Tooltip } from '@mantine/core';
-import { Icon } from '@iconify/react';
 
+import PointerModeSwitch from '../controls/PointerModeSwitch';
 import { INTERACTION_MODES, MODE_LABELS } from './interactionMode';
 import type { InteractionMode } from './interactionMode';
 
@@ -14,40 +13,21 @@ interface Props {
   selectEnabled: boolean;
 }
 
-/**
- * The tile's interaction mode: what the pointer does on the genome axis.
- * Icons with a tooltip each, small enough for the header line; the mode is a
- * tool the reader switches, so it sits there and not in the Settings panel.
- */
+/** The genome view's interaction mode: what the pointer does on the genome axis. */
 const InteractionModeSwitch: React.FC<Props> = ({ value, onChange, selectEnabled }) => (
-  <SegmentedControl
-    size="xs"
-    radius="sm"
+  <PointerModeSwitch
     value={value}
-    onChange={(v) => onChange(v as InteractionMode)}
-    aria-label="Interaction mode"
-    data-testid="genome-view-interaction-mode"
-    data={INTERACTION_MODES.map((mode) => {
-      const meta = MODE_LABELS[mode];
-      const disabled = mode === 'select' && !selectEnabled;
-      return {
-        value: mode,
-        disabled,
-        label: (
-          <Tooltip
-            label={disabled ? 'Select is off: this tile does not filter on a region.' : meta.tooltip}
-            multiline
-            w={220}
-            withArrow
-            openDelay={250}
-          >
-            <Center data-testid={`genome-view-mode-${mode}`} aria-label={meta.label}>
-              <Icon icon={meta.icon} width={14} />
-            </Center>
-          </Tooltip>
-        ),
-      };
-    })}
+    onChange={onChange}
+    testId="genome-view-interaction-mode"
+    testIdPrefix="genome-view-mode"
+    modes={INTERACTION_MODES.map((mode) => ({
+      value: mode,
+      ...MODE_LABELS[mode],
+      disabledReason:
+        mode === 'select' && !selectEnabled
+          ? 'Select is off: this tile does not filter on a region.'
+          : null,
+    }))}
   />
 );
 
