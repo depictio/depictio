@@ -1,10 +1,11 @@
 /**
  * The rows a new run brought into a Delta collection (#1397), as a table.
  *
- * "Only new rows" (the default) asks the server for that run's rows alone, on
- * the run column every CLI row carries: a plain preview reads the first rows of
- * the table, where an appended run seldom is. Switched off, it shows the
- * table's first rows with those of the runs already seen faded.
+ * The same system as the dashboard's Overlay: the new runs' rows come first and
+ * stand out, the rows already seen follow, faded. "Hide what you had seen"
+ * drops them. The new rows are asked for on the run column every CLI row
+ * carries, since a plain preview reads the first rows of the table, where an
+ * appended run seldom is.
  *
  * Shared by the What's new panel (a modal) and the project page
  * (`?table=<dc>&new_runs=<run,...>`).
@@ -50,8 +51,9 @@ const NewRowsPreview: React.FC<{ dcId: string; runs: string[]; height?: number }
   runs,
   height = 400,
 }) => {
-  const [onlyNew, setOnlyNew] = useState(true);
+  const [onlyNew, setOnlyNew] = useState(false);
   const [preview, setPreview] = useState<PreviewResult | null>(null);
+  const [seenRows, setSeenRows] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const scheme = useComputedColorScheme('light');
@@ -61,9 +63,20 @@ const NewRowsPreview: React.FC<{ dcId: string; runs: string[]; height?: number }
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetchDataCollectionPreview(dcId, ROW_LIMIT, onlyNew ? [runFilter(dcId, runs)] : [])
-      .then((res) => {
-        if (!cancelled) setPreview(res);
+    const fresh = new Set(runs);
+    Promise.all([
+      fetchDataCollectionPreview(dcId, ROW_LIMIT, [runFilter(dcId, runs)]),
+      onlyNew ? Promise.resolve(null) : fetchDataCollectionPreview(dcId, ROW_LIMIT),
+    ])
+      .then(([news, all]) => {
+        if (cancelled) return;
+        setPreview(news);
+        // The rows already seen: the table's first rows, less the new ones.
+        setSeenRows(
+          ((all?.rows ?? []) as Record<string, unknown>[]).filter(
+            (r) => !fresh.has(String(r[RUN_COLUMN])),
+          ),
+        );
       })
       .catch((err) => {
         if (!cancelled) setError((err as Error).message || 'Failed to load the rows.');
@@ -77,7 +90,8 @@ const NewRowsPreview: React.FC<{ dcId: string; runs: string[]; height?: number }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dcId, runsKey, onlyNew]);
 
-  const rows = (preview?.rows ?? []) as Record<string, unknown>[];
+  const newRows = (preview?.rows ?? []) as Record<string, unknown>[];
+  const rows = useMemo(() => [...newRows, ...seenRows], [newRows, seenRows]);
   const columns = useMemo(() => {
     const names = preview?.columns?.length ? preview.columns : Object.keys(rows[0] ?? {});
     // The run column first: it is what this view is about.
@@ -88,23 +102,22 @@ const NewRowsPreview: React.FC<{ dcId: string; runs: string[]; height?: number }
   }, [preview, rows]);
   const fresh = useMemo(() => new Set(runs), [runsKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const hasRunColumn = columns.some((c) => c.field === RUN_COLUMN);
-  const total = preview?.total_rows ?? rows.length;
+  const total = preview?.total_rows ?? newRows.length;
 
   return (
     <Stack gap="xs" data-testid="new-rows-preview">
       <Group justify="space-between" wrap="nowrap">
         <Text size="xs" c="dimmed">
-          {onlyNew
-            ? `${total} new row${total === 1 ? '' : 's'} from ${runs.join(', ')}`
-            : `First ${rows.length} of ${total} rows; rows of runs already seen are faded`}
-          {rows.length < total && onlyNew ? `, first ${rows.length} shown` : ''}
+          {`${total} new row${total === 1 ? '' : 's'} from ${runs.join(', ')}`}
+          {newRows.length < total ? `, first ${newRows.length} shown` : ''}
+          {onlyNew || seenRows.length === 0 ? '' : `; below, faded, rows you had seen`}
         </Text>
         <Switch
           size="xs"
-          label="Only new rows"
+          label="Hide what you had seen"
           checked={onlyNew}
           onChange={(e) => setOnlyNew(e.currentTarget.checked)}
-          data-testid="new-rows-only"
+          data-testid="new-rows-hide-seen"
         />
       </Group>
       {error && (
@@ -126,11 +139,12 @@ const NewRowsPreview: React.FC<{ dcId: string; runs: string[]; height?: number }
           rowData={rows}
           columnDefs={columns}
           defaultColDef={{ sortable: true, filter: true, resizable: true }}
-          getRowStyle={(p: { data?: Record<string, unknown> }) => {
+          getRowStyle={(p: { data?: Record<string, unknown> }): Record<string, string> | undefined => {
             const run = p.data?.[RUN_COLUMN];
-            return !onlyNew && run != null && !fresh.has(String(run))
-              ? { opacity: SEEN_ROW_OPACITY }
-              : undefined;
+            if (run == null) return undefined;
+            return fresh.has(String(run))
+              ? { boxShadow: 'inset 3px 0 0 var(--mantine-primary-color-filled)', fontWeight: '600' }
+              : { opacity: String(SEEN_ROW_OPACITY) };
           }}
           suppressCellFocus
         />
