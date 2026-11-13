@@ -298,7 +298,7 @@ const CompareModal: React.FC<Props> = ({
           </SimpleGrid>
 
           <Group gap="sm" justify="space-between" wrap="wrap">
-            <DiffSummaryChip diff={diff} loading={loading} error={error} />
+            <DiffSummaryChip diff={diff} loading={loading} error={error} always />
             {href && (
               <Anchor href={href} size="sm" data-testid="compare-open-history">
                 <Group gap={4} wrap="nowrap">

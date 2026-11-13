@@ -31,6 +31,12 @@ export interface ChangeMarksValue {
    *  (MultiQC, on its samples): `dc_id` -> the New / Seen before groups.
    *  Empty while the view is off. */
   splitGroupsByDc: Record<string, GroupRenderDef[]>;
+  /** The tab-wide Overlay is on: every changed figure compares at once, so
+   *  the per-figure chip only speaks up when it has something to add. */
+  tabOverlay: boolean;
+  /** Under the tab-wide Overlay, by `dc_id`: the runs new since the
+   *  reader's mark. A table fades the rows of every other run. */
+  newRunsByDc: Record<string, string[]>;
 }
 
 const NO_COMPARING: ReadonlySet<string> = new Set<string>();
@@ -48,6 +54,8 @@ export const EMPTY_CHANGE_MARKS: ChangeMarksValue = {
   baselineVersionId: null,
   readOnly: false,
   splitGroupsByDc: NO_SPLIT,
+  tabOverlay: false,
+  newRunsByDc: {},
 };
 
 export const ChangeMarksContext = createContext<ChangeMarksValue>(EMPTY_CHANGE_MARKS);
@@ -63,6 +71,14 @@ const NO_GROUPS: GroupRenderDef[] = [];
 export function useNewsSplitGroups(dcId: string | null | undefined): GroupRenderDef[] {
   const { splitGroupsByDc } = useContext(ChangeMarksContext);
   return (dcId && splitGroupsByDc[dcId]) || NO_GROUPS;
+}
+
+const NO_RUNS: string[] = [];
+
+/** The runs new in one collection under the tab-wide Overlay, else empty. */
+export function useOverlayNewRuns(dcId: string | null | undefined): string[] {
+  const { newRunsByDc } = useContext(ChangeMarksContext);
+  return (dcId && newRunsByDc[dcId]) || NO_RUNS;
 }
 
 export function useChangeMark(componentIndex: string | undefined): {

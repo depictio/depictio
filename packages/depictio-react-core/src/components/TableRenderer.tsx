@@ -23,6 +23,7 @@ import type { CellMouseOverEvent, IRowNode, RowClickedEvent } from 'ag-grid-comm
 
 import { renderTable, InteractiveFilter, StoredMetadata } from '../api';
 import { useDataVersionRequest } from '../dataVersions';
+import { useOverlayNewRuns } from '../changeMarks';
 import { renderDefinitionKey } from '../renderKey';
 import {
   createTableDatasource,
@@ -745,6 +746,18 @@ const TableRenderer: React.FC<TableRendererProps> = ({
   // The rows a genome browser points at (set by `TablePickLink`).
   const pickMatcherRef = useRef<RowMatcher | null>(null);
   const publishHover = usePublishHighlight(componentIndex);
+  // What's new, Overlay (#1397): the rows of runs the reader had already seen
+  // fade, the new run's rows stay as they are. Rows carry their run in
+  // `depictio_run_id`; a table without it is left alone.
+  const overlayNewRuns = useOverlayNewRuns(metadata.dc_id as string | undefined);
+  const getRowStyle = useMemo(() => {
+    if (overlayNewRuns.length === 0) return undefined;
+    const fresh = new Set(overlayNewRuns);
+    return (params: { data?: Record<string, unknown> }) => {
+      const run = params.data?.depictio_run_id;
+      return run != null && !fresh.has(String(run)) ? { opacity: 0.35 } : undefined;
+    };
+  }, [overlayNewRuns]);
   const getRowClass = useMemo(() => {
     const legacyOn = !!rowIdColumn && highlightActive && newRowIds.size > 0;
     const batchOn =
@@ -1287,6 +1300,7 @@ const TableRenderer: React.FC<TableRendererProps> = ({
               onFirstDataRendered={(e) => fitColumns(e.api)}
               onGridSizeChanged={(e) => fitColumns(e.api)}
               getRowClass={getRowClass}
+              getRowStyle={getRowStyle}
               getRowId={
                 rowIdColumn
                   ? (params: { data?: Record<string, unknown> }) =>

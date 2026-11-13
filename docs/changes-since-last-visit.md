@@ -149,7 +149,10 @@ The "What's new" panel also shows the news on the whole tab at once, with
   Points already there fade and new ones keep their colour; with a colour
   column, the traces that hold no change fade, which reaches a binned
   histogram too. In a MultiQC figure the samples seen before fade and the
-  new ones keep their colour; in the General Stats table their rows fade.
+  new ones keep their colour; in the General Stats table their rows fade, and
+  in a table the rows of the runs already seen fade. Under Overlay a figure
+  shows its comparison chip only when it has something the panel cannot say:
+  an error, a figure that cannot be compared, or changes it could not draw.
   **Hide what you had seen**, a switch under Overlay, goes one step further:
   the new side of the split is applied as a filter, so only the new runs or
   new MultiQC samples are drawn. It needs the same sides as Split.

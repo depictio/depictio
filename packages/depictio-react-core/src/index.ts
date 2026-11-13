@@ -1789,6 +1789,7 @@ export {
   useChangeMark,
   useChangeMarkDetails,
   useNewsSplitGroups,
+  useOverlayNewRuns,
 } from './changeMarks';
 export type { ChangeReason, ChangeMarksValue } from './changeMarks';
 export { panelFilters, panelsFromGroups } from './splitPanels';

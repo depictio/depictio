@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useContext } from 'react';
 import { Badge, Group, Loader, Text } from '@mantine/core';
 
 import type { ComponentDiff } from '../../api';
+import { ChangeMarksContext } from '../../changeMarks';
 import { diffSummaryText } from '../../figureDiffOverlay';
 
 /**
@@ -12,6 +13,11 @@ import { diffSummaryText } from '../../figureDiffOverlay';
  * `matched` is how many of the diff's marks found a place in the figure; when
  * there are changes but none could be drawn, the chip says so and points at
  * the side-by-side view.
+ *
+ * Under the tab-wide Overlay every changed figure compares at once and the
+ * What's new panel already holds the counts, so the chip then shows only what
+ * the figure cannot: an error, an unsupported figure, or changes it could not
+ * draw. `always` keeps it (the Before | Now view).
  */
 const DiffSummaryChip: React.FC<{
   diff: ComponentDiff | null;
@@ -20,8 +26,15 @@ const DiffSummaryChip: React.FC<{
   matched?: number;
   /** Float over the bottom-left of the tile, for tiles with no free row. */
   floating?: boolean;
-}> = ({ diff, loading, error, matched, floating }) => {
+  always?: boolean;
+}> = ({ diff, loading, error, matched, floating, always = false }) => {
+  const { tabOverlay } = useContext(ChangeMarksContext);
   if (!diff && !loading && !error) return null;
+  if (tabOverlay && !always && !error && diff?.supported !== false) {
+    const text = diff ? diffSummaryText(diff) : null;
+    const undrawn = !!text && !text.endsWith('no differences') && matched === 0;
+    if (!undrawn) return null;
+  }
   const style: React.CSSProperties = floating
     ? { position: 'absolute', left: 8, bottom: 6, zIndex: 5, maxWidth: 'calc(100% - 16px)' }
     : { flex: 'none' };

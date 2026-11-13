@@ -328,7 +328,7 @@ const NotificationsBell: React.FC<NotificationsBellProps> = ({
             Nothing new.
           </Text>
         ) : (
-          <ScrollArea.Autosize mah={360} type="auto">
+          <ScrollArea.Autosize mah={360} type="auto" offsetScrollbars>
             <Stack gap={2}>
               {items.map((item) => (
                 <NotificationRow

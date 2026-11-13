@@ -109,6 +109,17 @@ function clearedSet(cs: DashboardChangeSet): DashboardChangeSet {
   };
 }
 
+const NO_RUNS_BY_DC: Record<string, string[]> = {};
+
+/** The runs each collection gained since the mark, for the tables' Overlay. */
+function overlayRuns(cs: DashboardChangeSet): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  for (const d of cs.data) {
+    if (d.kind === 'refreshed' && d.new_run_tags.length > 0) out[d.dc_id] = d.new_run_tags;
+  }
+  return out;
+}
+
 const ChangeMarksProvider: React.FC<Props> = ({
   dashboardId,
   familyId,
@@ -323,6 +334,8 @@ const ChangeMarksProvider: React.FC<Props> = ({
         baselineVersionId: null,
         readOnly,
         splitGroupsByDc: NO_SPLIT_BY_DC,
+        tabOverlay: false,
+        newRunsByDc: NO_RUNS_BY_DC,
       };
     }
     let diffQuery: ChangeMarksValue['diffQuery'] = NO_DIFF_QUERY;
@@ -339,6 +352,8 @@ const ChangeMarksProvider: React.FC<Props> = ({
       baselineVersionId: changeSet.baseline_version_id,
       readOnly,
       splitGroupsByDc: applied ? applied.samples : NO_SPLIT_BY_DC,
+      tabOverlay: view === 'overlay',
+      newRunsByDc: view === 'overlay' ? overlayRuns(changeSet) : NO_RUNS_BY_DC,
     };
   }, [
     active,
@@ -352,6 +367,7 @@ const ChangeMarksProvider: React.FC<Props> = ({
     readOnly,
     readOnlyQuery,
     applied,
+    view,
   ]);
 
   const details = useMemo(() => markDetails(active ? changeSet : null), [active, changeSet]);
