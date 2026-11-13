@@ -6,7 +6,7 @@
  * happen for a run nobody looks at.
  */
 import React, { useEffect, useState } from 'react';
-import { Group, Loader, Stack, Text } from '@mantine/core';
+import { Anchor, Group, Loader, Stack, Text } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import { fetchDeltaHistory, fetchMultiQCByDataCollection } from 'depictio-react-core';
 import type {
@@ -18,6 +18,7 @@ import type {
 import { absTime, compactCount } from '../../monitoring/format';
 import { CHECK_STATUS } from '../checkStatus';
 import { BeforeRunMenu, CompareMenu } from './RunDashboardActions';
+import { newRowsHref } from '../../changes/NewRowsPreview';
 import {
   commitsForRun,
   firstIngestionOf,
@@ -209,6 +210,15 @@ export const RunProduced: React.FC<{
                         {c.operation ? ` · ${c.operation.toLowerCase()}` : ''}
                       </Text>
                     ))}
+                  {w.kind === 'commits' && w.commits.length > 0 && (
+                    <Anchor
+                      size="sm"
+                      href={newRowsHref(projectId, w.dcId, [run.run_tag])}
+                      data-testid={`run-view-rows-${w.tag}`}
+                    >
+                      View rows
+                    </Anchor>
+                  )}
                 </Group>
               ))}
               {produced.skipped > 0 && (

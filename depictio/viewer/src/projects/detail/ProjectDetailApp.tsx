@@ -751,14 +751,6 @@ const ProjectDetailApp: React.FC = () => {
                 />
               )}
               <Box ref={dcViewerRef}>
-                {selectedDc && requestedNewRuns.length > 0 && requestedTableId === selectedDcId && (
-                  <Paper withBorder radius="md" p="sm" mb="sm" data-testid="project-new-rows">
-                    <Text fw={600} size="sm" mb={6}>
-                      New rows from {requestedNewRuns.join(', ')}
-                    </Text>
-                    <NewRowsPreview dcId={selectedDcId as string} runs={requestedNewRuns} />
-                  </Paper>
-                )}
                 {selectedDc && (
                   <DataCollectionViewer
                     dc={selectedDc}
@@ -785,6 +777,7 @@ const ProjectDetailApp: React.FC = () => {
                       setSelectedDcId(id);
                     }}
                     autoLoadPreview={requestedTableId === selectedDcId}
+                    highlightRuns={requestedTableId === selectedDcId ? requestedNewRuns : undefined}
                   />
                 )}
               </Box>
@@ -2256,6 +2249,8 @@ const DataCollectionViewer: React.FC<{
   onOpenDc?: (dcId: string) => void;
   /** Open on the rows (a table the URL asked for). */
   autoLoadPreview?: boolean;
+  /** `&new_runs=`: the Data table puts these runs' rows first and marks them. */
+  highlightRuns?: string[];
 }> = ({
   dc,
   fromPipeline,
@@ -2270,6 +2265,7 @@ const DataCollectionViewer: React.FC<{
   onShowRuns,
   onOpenDc,
   autoLoadPreview = false,
+  highlightRuns,
 }) => {
   const dcId = (dc._id ?? dc.id) as string;
   const type = (dc.config?.type as string | undefined) || 'unknown';
@@ -2658,6 +2654,7 @@ const DataCollectionViewer: React.FC<{
                   dcId={dcId}
                   checkEditable={isTable}
                   autoLoad
+                  highlightRuns={highlightRuns}
                   onEdited={() => setEditTick((n) => n + 1)}
                 />
               ) : null,
@@ -3196,14 +3193,17 @@ const TableDataSection: React.FC<{
   /** Only tables can be edited; other Delta-backed types skip the lookup. */
   checkEditable: boolean;
   autoLoad: boolean;
+  /** Runs whose rows come first and stand out (the What's new and Runs links). */
+  highlightRuns?: string[];
   onEdited: () => void;
-}> = ({ dcId, checkEditable, autoLoad, onEdited }) => {
+}> = ({ dcId, checkEditable, autoLoad, highlightRuns, onEdited }) => {
   const accent = useBrandAccents();
   const glass = useGlassPages();
   const [status, setStatus] = useState<TableEditStatus | null>(null);
   // Until the answer is in, neither grid: one would flash and give way to the other.
   const [statusKnown, setStatusKnown] = useState(!checkEditable);
-  const [readOnlyView, setReadOnlyView] = useState(false);
+  // Opened on a run's rows (the What's new and Runs links): read, not edit.
+  const [readOnlyView, setReadOnlyView] = useState(Boolean(highlightRuns?.length));
   // Bumped after an edit: remounts the preview, which then reloads its rows.
   const [previewKey, setPreviewKey] = useState(0);
 
@@ -3296,6 +3296,8 @@ const TableDataSection: React.FC<{
           }}
           onShowReadOnly={() => setReadOnlyView(true)}
         />
+      ) : highlightRuns && highlightRuns.length > 0 ? (
+        <NewRowsPreview dcId={dcId} runs={highlightRuns} />
       ) : (
         <DataPreviewPanel
           key={`${dcId}-${previewKey}`}

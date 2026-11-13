@@ -191,8 +191,10 @@ A Delta collection that gained runs shows **View new rows** in the panel's
 Data list: the same system as the Overlay, the rows those runs added on top
 and marked, the rows already seen below and faded, and *Hide what you had
 seen* to drop them. **Open in
-project**, the project page on that collection with the same table
-(`/projects/{id}?table=<dc_id>&new_runs=<run,...>`).
+project**, the project page on that collection
+(`/projects/{id}?table=<dc_id>&new_runs=<run,...>`): its Data table opens
+read-only with the same marking. In the Runs tab, each Delta commit a run
+wrote has **View rows**, the same link for that run.
 
 ## Projects
 
