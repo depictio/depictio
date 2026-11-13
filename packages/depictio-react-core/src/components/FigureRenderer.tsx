@@ -28,6 +28,8 @@ import { extractScatterSelection, selectsByDrag, supportsPointSelection } from '
 import { useInView } from '../hooks/useInView';
 import { useNewItemIds } from '../hooks/useNewItemIds';
 import { useTransientFlag } from '../hooks/useTransientFlag';
+import { panelsForGrouping, type PanelSpec } from '../splitPanels';
+import SplitPanels from './advanced_viz/SplitPanels';
 import { ActiveHighlight } from '../highlight';
 import { asNumberArray, extractCustomdataIds } from '../plotlyData';
 import { markSelectedPoints, standingSelectionValues } from '../standingSelection';
@@ -83,7 +85,15 @@ interface FigureRendererProps {
   styleRequest?: FigureStyleRequest;
   /** The tab the figure comes from, linked from a showcase header. */
   sourceLink?: TabLinkTarget | null;
+  /** One panel of a split: the plot alone, no frame, header or caption. */
+  bare?: boolean;
 }
+
+const NOOP = () => {};
+
+/** A code figure that does not spread the group kwargs itself. */
+const codeIgnoresGroups = (metadata: StoredMetadata): boolean =>
+  metadata.mode === 'code' && !/depictio_group|__depictio_group__/.test(String(metadata.code_content ?? ''));
 
 /**
  * Renders a Plotly figure component. Server-side path: FastAPI calls
@@ -109,7 +119,18 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
   renderSource,
   styleRequest,
   sourceLink,
+  bare = false,
 }) => {
+  // The "what's new" split of a code figure (#1397): the server never rewrites
+  // code, so the whole figure is drawn once per side instead, each from that
+  // side's rows (the advanced viz `SplitPanels`, one filter per panel). A code
+  // figure that spreads `depictio_group_kwargs` splits itself.
+  const splitPanelsKey =
+    !bare && groupRender?.keepColor && groupRender.display === 'facet' && codeIgnoresGroups(metadata)
+      ? JSON.stringify(panelsForGrouping(groupRender, filters))
+      : '[]';
+  const codePanels = useMemo(() => JSON.parse(splitPanelsKey) as PanelSpec[], [splitPanelsKey]);
+  const splitting = codePanels.length > 0;
   const [figure, setFigure] = useState<{ data?: unknown[]; layout?: Record<string, unknown> } | null>(null);
   const [renderMeta, setRenderMeta] = useState<FigureResponse['metadata'] | null>(null);
   // User opted to render every point for this component (bypasses the cap).
@@ -188,7 +209,7 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
   }, [JSON.stringify(filtersForFetch)]);
 
   useEffect(() => {
-    if (!inView) return;
+    if (!inView || splitting) return;
     let cancelled = false;
     // Abort the request itself, not just its result handling: a stale render
     // otherwise keeps its queue slot and its API worker for as long as it takes
@@ -252,13 +273,13 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
       ctrl.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [renderDashboardId, renderComponentId, JSON.stringify(filtersForFetch), theme, inView, refreshTick, fullLoad, JSON.stringify(groupRender ?? null), JSON.stringify(styleRequest ?? null), versionKey, definitionKey]);
+  }, [renderDashboardId, renderComponentId, JSON.stringify(filtersForFetch), theme, inView, refreshTick, fullLoad, JSON.stringify(groupRender ?? null), JSON.stringify(styleRequest ?? null), versionKey, definitionKey, splitting]);
 
   // First-paint loader vs refetch overlay: only show the big "Rendering…"
   // block until we have something to show; subsequent fetches keep the
   // previous content visible with a small overlay spinner.
   const isInitialLoad = figure === null;
-  const showInitialLoader = (!inView || (isInitialLoad && loading));
+  const showInitialLoader = !splitting && (!inView || (isInitialLoad && loading));
   const showRefetchOverlay = !isInitialLoad && loading;
 
   // What this figure's content says it needs, in grid rows. Server-side,
@@ -656,8 +677,9 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
   const subtitle = typeof metadata.subtitle === 'string' ? metadata.subtitle.trim() : '';
   const iconName = typeof metadata.icon_name === 'string' ? metadata.icon_name : '';
   const iconColor = typeof metadata.icon_color === 'string' ? metadata.icon_color : '';
-  const caption = typeof metadata.caption === 'string' ? metadata.caption.trim() : '';
+  const caption = !bare && typeof metadata.caption === 'string' ? metadata.caption.trim() : '';
   const showcaseHeader =
+    !bare &&
     showcase && Boolean(metadata.title || subtitle || iconName || reductionBadge || groupedBadge || sourceLink);
   // The plain header row: the title and the figure's status chips. A chrome
   // style styles the row (`data-headed` on the tile) and, when the title leads
@@ -668,16 +690,17 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
     ? String(metadata.description).trim()
     : '';
   const plainHeader =
+    !bare &&
     !showcase &&
     Boolean(metadata.title || reductionBadge || groupedBadge || missingPointsBadges.length > 0);
 
   return (
     <Paper
       ref={containerRef}
-      p={showcase ? 'md' : 'sm'}
-      withBorder={!showcase}
+      p={bare ? 0 : showcase ? 'md' : 'sm'}
+      withBorder={!showcase && !bare}
       radius="md"
-      className="dc-tile dc-tile--figure"
+      className={bare ? 'dc-tile--figure' : 'dc-tile dc-tile--figure'}
       data-showcase={showcase || undefined}
       data-headed={plainHeader || undefined}
       style={{
@@ -750,7 +773,7 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
           <Text size="sm" c="red">Figure failed: {error}</Text>
         </Stack>
       )}
-      {comparing && !renderSource && (
+      {comparing && !renderSource && !bare && !splitting && (
         <DiffSummaryChip
           diff={diffView.diff}
           loading={diffView.loading}
@@ -758,7 +781,28 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
           matched={diffView.overlay.matched}
         />
       )}
-      {figure && (
+      {splitting && (
+        <div style={{ flex: 1, minHeight: 0 }} data-testid="figure-split-panels">
+          <SplitPanels
+            panels={codePanels}
+            filters={filters}
+            onIneffective={NOOP}
+            renderPanel={(panelFilters, key) => (
+              <FigureRenderer
+                key={key}
+                dashboardId={dashboardId}
+                metadata={metadata}
+                filters={panelFilters}
+                refreshTick={refreshTick}
+                renderSource={renderSource}
+                styleRequest={styleRequest}
+                bare
+              />
+            )}
+          />
+        </div>
+      )}
+      {figure && !splitting && (
         <div ref={plotBoxRef} style={{ flex: 1, minHeight: 0, position: 'relative' }}>
           <Plot
             data={annotations.data as any[]}

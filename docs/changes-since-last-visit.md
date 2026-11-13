@@ -152,10 +152,15 @@ The "What's new" panel also shows the news on the whole tab at once, with
   sides with "Compare groups in cards". The groups are virtual: never saved
   with the reader's groups, never applied as a filter.
 
+A code-mode figure is never rewritten by the server, so in Split it is drawn
+once per side instead, each panel from that side's rows (the advanced viz
+`SplitPanels`). A code figure that spreads `depictio_group_kwargs` splits
+itself. Advanced viz follow their kind's grouping policy: panels for the
+`split` kinds, one panel coloured by side for the `colour` kinds.
+
 Split needs new runs. A run ingested again changes rows in place under the
 same run tag, so only Before | Now can show it. MultiQC rows carry no run
-column, and code-mode figures split only if their code spreads
-`depictio_group_kwargs`.
+column.
 
 MultiQC time travel by report set is what makes the MultiQC *Before* possible:
 
