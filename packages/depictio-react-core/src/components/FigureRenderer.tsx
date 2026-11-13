@@ -30,6 +30,7 @@ import { useNewItemIds } from '../hooks/useNewItemIds';
 import { useTransientFlag } from '../hooks/useTransientFlag';
 import { panelsForGrouping, type PanelSpec } from '../splitPanels';
 import SplitPanels from './advanced_viz/SplitPanels';
+import { InSplitPanelContext } from './advanced_viz/AdvancedVizExtras';
 import { ActiveHighlight } from '../highlight';
 import { asNumberArray, extractCustomdataIds } from '../plotlyData';
 import { markSelectedPoints, standingSelectionValues } from '../standingSelection';
@@ -526,6 +527,9 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
     return overlayTrace ? [...base, overlayTrace] : base;
   }, [figure, tinted, overlayTrace, glGranted, standingSelection, selectionColumnIndex, diffView.apply]);
 
+  // A split panel sits under the tile's own title and its side's label: the
+  // figure's Plotly title would only repeat the first, cut to the panel width.
+  const inSplitPanel = React.useContext(InSplitPanelContext);
   const baseLayout = useMemo<Record<string, unknown>>(() => {
     // The chrome style's Plotly patch (fonts, backgrounds, grid) lands over the
     // server template, under everything this renderer decides below.
@@ -545,6 +549,10 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
         ...((srcLayout.margin as Record<string, unknown>) || {}),
       },
     };
+    if (inSplitPanel && srcLayout.title) {
+      base.title = undefined;
+      base.margin = { ...(base.margin as Record<string, unknown>), t: 10 };
+    }
     if (effectiveFontScale !== 1) {
       // The mantine templates set font family only, so server figures land at
       // Plotly's default 12px base. Scale it with the dashboard-wide font
@@ -571,7 +579,7 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
     return base;
     // uirevision above stays tied to refreshTick only: entering or leaving
     // annotate mode, or adding an annotation, must not reset the user's zoom.
-  }, [tinted, selectionEnabled, metadata.visu_type, metadata.selection_mode, refreshTick, effectiveFontScale, theme, chromeStyle]);
+  }, [tinted, selectionEnabled, metadata.visu_type, metadata.selection_mode, refreshTick, effectiveFontScale, theme, chromeStyle, inSplitPanel]);
 
   // ── Annotation layer ──────────────────────────────────────────────────────
   // Datawrapper-style annotations (ranges, reference lines, marked points,
