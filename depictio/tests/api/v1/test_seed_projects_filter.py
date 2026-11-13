@@ -177,6 +177,20 @@ def test_bioimage_dashboards_follow_the_static_id_table():
     assert dashboards["bioimage_fluorescence"] == STATIC_IDS["bioimage_examples"]["project"]
 
 
+def test_every_bioimage_seed_file_is_a_seeded_tab():
+    """`create_initial_dashboards` seeds one tab per STATIC_IDS entry: a seed
+    JSON without one is never loaded, and an entry without a JSON points at
+    nothing."""
+    from pathlib import Path
+
+    from depictio.api.v1.db_init_reference_datasets import STATIC_IDS
+
+    seeds = Path(__file__).resolve().parents[3] / "projects/init/bioimage_examples/.db_seeds"
+    files = {f.stem.removeprefix("dashboard_") for f in seeds.glob("dashboard_*.json")}
+    names = STATIC_IDS["bioimage_examples"]["dashboards"]
+    assert files == {name.removeprefix("bioimage_") for name in names}
+
+
 @pytest.mark.parametrize(
     "only,extra,expected",
     [
@@ -232,5 +246,8 @@ def test_bioimage_dashboards_follow_the_seed_request(monkeypatch, only, extra, k
     monkeypatch.setattr(db_init, "create_dashboard_from_json", record)
     asyncio.run(db_init.create_initial_dashboards(admin_user=None, only=only, extra=extra))
 
+    from depictio.api.v1.db_init_reference_datasets import STATIC_IDS
+
     bio = [p for p in created if "bioimage_examples" in p]
-    assert len(bio) == (8 if kept else 0)
+    tabs = len(STATIC_IDS["bioimage_examples"]["dashboards"])
+    assert len(bio) == (tabs if kept else 0)

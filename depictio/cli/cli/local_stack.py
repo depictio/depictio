@@ -637,6 +637,9 @@ INHERITED_SETTINGS = (
     # already points the events Redis at its own, only the switch is the user's.
     "DEPICTIO_EVENTS_ENABLED",
     "DEPICTIO_BIOIMAGE_",
+    # Optional fixture projects (bioimage_examples, ...): seeded only when named,
+    # on a home's first run, from a source checkout that holds their data.
+    "DEPICTIO_SEED_EXTRA_PROJECTS",
 )
 
 

@@ -209,6 +209,15 @@ def test_server_env_keeps_the_bioimage_allow_lists(paths, monkeypatch):
     assert env["DEPICTIO_BIOIMAGE_REMOTE_HTTPS_HOSTS"] == "uk1s3.embassy.ebi.ac.uk"
 
 
+def test_server_env_passes_the_optional_projects_through(paths, monkeypatch):
+    """A source checkout can seed a fixture project such as bioimage_examples."""
+    monkeypatch.setenv("DEPICTIO_SEED_EXTRA_PROJECTS", "bioimage_examples")
+    ports = {"api": 1, "mongo": 2, "redis": 3, "s3": 4}
+    env = server_env(paths, ports, {"s3_password": "x", "admin_password": "y"}, "none", True)
+
+    assert env["DEPICTIO_SEED_EXTRA_PROJECTS"] == "bioimage_examples"
+
+
 def test_pick_ports_skips_a_busy_preferred_port(monkeypatch):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as busy:
         busy.bind(("127.0.0.1", 0))
