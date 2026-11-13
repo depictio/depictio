@@ -239,14 +239,22 @@ def family_dc_types(family_docs: list[dict[str, Any]], project_id: Any) -> dict[
     return out
 
 
-def family_baseline(family_id: str, family_docs: list[dict[str, Any]]) -> ReaderBaseline:
-    """What the family is at now: newest version, every collection, the discussion."""
+def family_baseline(
+    family_id: str, family_docs: list[dict[str, Any]], *, seal: bool = False
+) -> ReaderBaseline:
+    """What the family is at now: newest version, every collection, the discussion.
+
+    ``seal`` when the baseline becomes a reader's mark (a visit that moves it,
+    Mark as seen): the version it points at then stops taking autosaves. A
+    read (the changes, the bell's inbox, a figure diff) must not seal, or
+    every poll would cut the author's autosaves into a version per poll.
+    """
     main = family_docs[0] if family_docs else {}
     project_id = main.get("project_id")
     latest = version_store.list_versions(str(family_id), limit=1)
     version = latest[0] if latest else None
     now = utc_now_naive()
-    if version and version.get("version_id"):
+    if seal and version and version.get("version_id"):
         # The reader is seeing this version: an autosave may no longer fold
         # into it, or the mark would point at content they never saw.
         version_store.close_window(version["version_id"], now)

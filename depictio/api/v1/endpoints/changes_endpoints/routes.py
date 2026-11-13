@@ -180,8 +180,13 @@ def dashboard_changes_endpoint(
     _enabled()
     body = body or ChangesRequest()
     family_id, main, docs = _family(dashboard_id, current_user)
-    now = bl.family_baseline(family_id, docs)
     held = _server_held(current_user)
+    # A browser-held reader with no mark yet keeps `current_baseline` as its
+    # first mark: that answer writes a mark, so it seals like a visit.
+    first_browser_mark = (
+        not held and body.baseline is None and body.since is None and not body.before_run
+    )
+    now = bl.family_baseline(family_id, docs, seal=first_browser_mark)
 
     dismissed: dict[str, DismissedComponent] = {}
     if body.since is not None or body.before_run:
@@ -218,7 +223,11 @@ def record_dashboard_visit(
     mark = store.get_mark(user_id, "dashboard", family_id)
     if mark is None or mark.baseline is None or store.get_mark_mode(user_id) == "previous_visit":
         store.set_baseline(
-            user_id, "dashboard", family_id, bl.family_baseline(family_id, docs), visit=True
+            user_id,
+            "dashboard",
+            family_id,
+            bl.family_baseline(family_id, docs, seal=True),
+            visit=True,
         )
         return {"persisted": True, "moved": True}
     store.touch_visit(user_id, "dashboard", family_id)
@@ -235,7 +244,8 @@ def mark_dashboard_seen(
     _enabled()
     body = body or SeenRequest()
     family_id, _main, docs = _family(dashboard_id, current_user)
-    now = bl.family_baseline(family_id, docs)
+    # Everything seen moves the mark; a few components only dismiss those.
+    now = bl.family_baseline(family_id, docs, seal=body.component_keys is None)
     held = _server_held(current_user)
 
     if body.component_keys is None:

@@ -353,6 +353,25 @@ def test_a_reader_s_visit_ends_the_author_s_autosave_window(ctx):
     assert versions.find_one({"seq": 1})["content_hash"] == seen["content_hash"]
 
 
+def test_reading_the_changes_leaves_the_autosave_window_open(ctx):
+    """Only a mark that moves closes the window. The bell polls the inbox
+    every minute and every open dashboard reads its changes: had a read
+    closed it, an author's own bell would cut their autosaves into one
+    version a minute."""
+    from depictio.models.timestamps import utc_now_naive
+
+    _visit(ctx)  # the reader's mark exists: what follows only reads it
+    versions = ctx["db"]["dashboard_versions"]
+    until = utc_now_naive() + timedelta(minutes=5)
+    versions.update_one({"seq": 1}, {"$set": {"coalesce_until": until}})
+
+    _changes(ctx)
+    ctx["client"].get(f"{API}/inbox")
+    assert _visit(ctx)["moved"] is False  # sticky: a later visit moves nothing
+
+    assert versions.find_one({"seq": 1})["coalesce_until"] > utc_now_naive()  # still open
+
+
 def test_the_editor_does_not_see_their_own_edit(ctx):
     _visit(ctx, EDITOR)
     _edit_component(ctx, EDITOR, "Reads per sample")
