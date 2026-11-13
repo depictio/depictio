@@ -34,7 +34,6 @@ import { GlassPage, STROKE, useGlassPages } from '../../chrome/variants/glass/pa
 import '../../chrome/variants/glass/pages/project-detail.css';
 import {
   Check,
-  ClipboardCheck,
   Database,
   GitBranch,
   HardDrive,
@@ -121,7 +120,6 @@ import {
 } from './AssetPreviews';
 
 import { useCurrentUser } from '../../hooks/useCurrentUser';
-import { useServerInfo } from '../../hooks/useServerInfo';
 import { AppSidebar, LoadErrorCard } from '../../chrome';
 import IngestionReportPanel from './IngestionReportPanel';
 import ProjectIngestionHistoryPanel from './ProjectIngestionHistoryPanel';
@@ -156,7 +154,7 @@ import { isRealWorkflow } from '../layout';
 import RunsPanel from './RunsPanel';
 import { ProjectChangesPill } from './ProjectChangesPill';
 import { ProjectTimelinePanel } from './ProjectTimelinePanel';
-import { readTabRequest } from './projectChanges';
+import { readTabRequest, resolveTab, type ActivityView } from './projectChanges';
 import { useProjectChanges } from './useProjectChanges';
 import DerivedLineage from './DerivedLineage';
 
@@ -359,8 +357,12 @@ function readTableFromQuery(): string | null {
 
 /** `?tab=runs&run=run_c`: the project tab (and run) a link asks the page to open. */
 function readTabRequestFromQuery() {
-  if (typeof window === 'undefined') return { tab: null, run: null };
-  return readTabRequest(window.location.search);
+  if (typeof window === 'undefined') return { tab: null, view: null, run: null };
+  const fromQuery = readTabRequest(window.location.search);
+  if (fromQuery.tab) return fromQuery;
+  // `#ingestion`, `#ingestion-history`, `#runs`: the older hash links.
+  const fromHash = resolveTab(window.location.hash);
+  return fromHash ? { ...fromHash, run: null } : fromQuery;
 }
 
 /** Flatten DCs across all workflows. The workflows are the project's own
@@ -383,32 +385,21 @@ const ProjectDetailApp: React.FC = () => {
   // collection is selected and its rows load. Applied once per visit.
   const requestedTableId = useMemo(readTableFromQuery, []);
   const requestedTableHandled = useRef(false);
-  // Active project-detail tab. Honors `#ingestion` deep links (e.g. from the
-  // dashboard banner / settings drawer) and is controlled so the ingestion
-  // report can switch back to Overview when previewing a data collection.
-  // `?tab=` (overview | runs | ingestion | timeline) and `?run=<run_tag>` open
-  // a tab, and a run in it, from a link (the notifications, the timeline).
+  // Active project-detail tab, controlled so the ingestion report can switch
+  // back to Overview when previewing a data collection. `?tab=` (overview |
+  // runs | activity, plus the older ingestion | timeline) and `?run=<run_tag>`
+  // open a tab, and a run in it, from a link (the notifications, the
+  // timeline); `#ingestion` / `#ingestion-history` (the dashboard banner, the
+  // settings drawer, a failed ingestion) open Activity.
   const tabRequest = useMemo(readTabRequestFromQuery, []);
-  const [activeTab, setActiveTab] = useState<string | null>(
-    tabRequest.tab
-      ? tabRequest.tab
-      : typeof window !== 'undefined' &&
-          ['#ingestion', '#ingestion-history'].includes(window.location.hash)
-        ? 'ingestion'
-        : typeof window !== 'undefined' && window.location.hash === '#runs'
-          ? 'runs'
-          : 'overview',
-  );
+  const [activeTab, setActiveTab] = useState<string | null>(tabRequest.tab ?? 'overview');
   // The run the Runs tab opens on, when another part of the page asked for one.
   const [focusRun, setFocusRun] = useState<string | null>(tabRequest.run);
-  // Which half of the Ingestion tab is showing. `#ingestion-history` deep-links
-  // straight to the run history, which is what a "your ingestion failed" link
-  // should open.
-  const [ingestionView, setIngestionView] = useState<'report' | 'history'>(
-    typeof window !== 'undefined' && window.location.hash === '#ingestion-history'
-      ? 'history'
-      : 'report',
-  );
+  // Which view of the Activity tab is showing: the latest ingestion's report,
+  // or the history (the timeline when changes-since is on, else the ingestion
+  // runs). `#ingestion-history` opens the history, which is what a "your
+  // ingestion failed" link should open.
+  const [ingestionView, setIngestionView] = useState<ActivityView>(tabRequest.view ?? 'report');
   const [refreshKey, setRefreshKey] = useState(0);
   // Nudges the history panel off its idle 30s cadence when a browser-triggered
   // ingestion finishes, so the completed run shows up straight away.
@@ -456,10 +447,9 @@ const ProjectDetailApp: React.FC = () => {
 
   const { user, isPublicMode, loading: userLoading } = useCurrentUser();
   const projectId = readProjectIdFromPath();
-  // "Changed since your last visit" and the Timeline tab (#1397): inert unless
-  // the server turns the feature on.
+  // "Changed since your last visit" and the Activity timeline (#1397): inert
+  // unless the server turns the feature on.
   const changes = useProjectChanges(projectId);
-  const { loading: serverInfoLoading } = useServerInfo();
 
   usePageTitle('Project Data Collections');
   const glass = useGlassPages();
@@ -497,7 +487,7 @@ const ProjectDetailApp: React.FC = () => {
   };
   // Open the ingestion report (latest run) and bring the Data part into view.
   const showIngestion = () => {
-    setActiveTab('ingestion');
+    setActiveTab('activity');
     setIngestionView('report');
     window.setTimeout(() => {
       const toggle = document.querySelector<HTMLElement>('[data-testid="project-part-data-toggle"]');
@@ -638,21 +628,19 @@ const ProjectDetailApp: React.FC = () => {
   }, [allDataCollections]);
   // A project made from a pipeline has runs: it gets the Runs tab.
   const hasRuns = realWorkflows.length > 0;
-  // A link may ask for a tab this project does not have (no runs, or the
-  // feature is off): show the overview rather than an empty panel. The
-  // feature flag is unknown until the server answers, so Timeline waits for it.
-  const tabValue =
-    (activeTab === 'runs' && !hasRuns) ||
-    (activeTab === 'timeline' && !changes.enabled && !serverInfoLoading)
-      ? 'overview'
-      : activeTab;
+  // A link may ask for a tab this project does not have (no runs): show the
+  // overview rather than an empty panel.
+  const tabValue = activeTab === 'runs' && !hasRuns ? 'overview' : activeTab;
+  const activityMeta = changes.enabled
+    ? 'Ingestions, versions and comments'
+    : 'Each ingestion and what it found';
   const newRunTags = useMemo(
     () => new Set((changes.changeSet?.new_runs ?? []).map((r) => r.run_tag)),
     [changes.changeSet],
   );
   // Open the ingestion history (a failed ingestion's link).
   const showIngestionHistory = () => {
-    setActiveTab('ingestion');
+    setActiveTab('activity');
     setIngestionView('history');
   };
 
@@ -864,32 +852,18 @@ const ProjectDetailApp: React.FC = () => {
                             </Tabs.Tab>
                           )}
                           <Tabs.Tab
-                            value="ingestion"
+                            value="activity"
                             className="dc-project-tab"
+                            data-testid="project-tab-activity"
                             leftSection={
                               <span className="dc-project-tab-icon">
-                                <ClipboardCheck size={20} strokeWidth={STROKE} aria-hidden />
+                                <HistoryIcon size={20} strokeWidth={STROKE} aria-hidden />
                               </span>
                             }
                           >
-                            <span className="dc-project-tab-label">Ingestion report</span>
-                            <span className="dc-project-tab-meta">What each run found, and when</span>
+                            <span className="dc-project-tab-label">Activity</span>
+                            <span className="dc-project-tab-meta">{activityMeta}</span>
                           </Tabs.Tab>
-                          {changes.enabled && (
-                            <Tabs.Tab
-                              value="timeline"
-                              className="dc-project-tab"
-                              data-testid="project-tab-timeline"
-                              leftSection={
-                                <span className="dc-project-tab-icon">
-                                  <HistoryIcon size={20} strokeWidth={STROKE} aria-hidden />
-                                </span>
-                              }
-                            >
-                              <span className="dc-project-tab-label">Timeline</span>
-                              <span className="dc-project-tab-meta">Ingestions, versions and comments</span>
-                            </Tabs.Tab>
-                          )}
                         </Tabs.List>
                       ) : (
                         <Tabs.List mb="md">
@@ -913,24 +887,14 @@ const ProjectDetailApp: React.FC = () => {
                             </Tabs.Tab>
                           )}
                           <Tabs.Tab
-                            value="ingestion"
+                            value="activity"
                             fz="md"
                             px="lg"
-                            leftSection={<Icon icon="mdi:clipboard-check-outline" width={18} />}
+                            data-testid="project-tab-activity"
+                            leftSection={<Icon icon="mdi:timeline-clock-outline" width={18} />}
                           >
-                            Ingestion report
+                            Activity
                           </Tabs.Tab>
-                          {changes.enabled && (
-                            <Tabs.Tab
-                              value="timeline"
-                              fz="md"
-                              px="lg"
-                              data-testid="project-tab-timeline"
-                              leftSection={<Icon icon="mdi:timeline-clock-outline" width={18} />}
-                            >
-                              Timeline
-                            </Tabs.Tab>
-                          )}
                         </Tabs.List>
                       )}
                       <Tabs.Panel value="overview">{overviewSections}</Tabs.Panel>
@@ -952,27 +916,19 @@ const ProjectDetailApp: React.FC = () => {
                           />
                         </Tabs.Panel>
                       )}
-                      {changes.enabled && (
-                        <Tabs.Panel value="timeline">
-                          <ProjectTimelinePanel
-                            projectId={projectId}
-                            since={changes.changeSet?.since ?? null}
-                            onShowRuns={hasRuns ? (run) => showRuns(run) : undefined}
-                          />
-                        </Tabs.Panel>
-                      )}
-                      <Tabs.Panel value="ingestion">
+                      <Tabs.Panel value="activity">
                         <Stack gap="md">
                           <Group justify="space-between" wrap="wrap" gap="sm">
                             <SegmentedControl
                               size="xs"
                               w="fit-content"
                               value={ingestionView}
-                              onChange={(v: string) => setIngestionView(v as 'report' | 'history')}
+                              onChange={(v: string) => setIngestionView(v as ActivityView)}
                               data={[
-                                { value: 'report', label: 'Latest run' },
+                                { value: 'report', label: 'Latest ingestion' },
                                 { value: 'history', label: 'History' },
                               ]}
+                              data-testid="activity-view"
                             />
                             <ProjectIngestionTrigger
                               projectId={projectId}
@@ -997,6 +953,15 @@ const ProjectDetailApp: React.FC = () => {
                               }}
                               onShowRuns={hasRuns ? () => showRuns() : undefined}
                               shapeByTag={shapeByTag}
+                            />
+                          ) : changes.enabled ? (
+                            // The timeline holds the ingestions too, with the
+                            // dashboard versions and comments around them.
+                            <ProjectTimelinePanel
+                              projectId={projectId}
+                              since={changes.changeSet?.since ?? null}
+                              onShowRuns={hasRuns ? (run) => showRuns(run) : undefined}
+                              refreshSignal={ingestionHistorySignal}
                             />
                           ) : (
                             <ProjectIngestionHistoryPanel

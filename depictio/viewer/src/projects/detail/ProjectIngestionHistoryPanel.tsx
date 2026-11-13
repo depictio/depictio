@@ -26,6 +26,7 @@ import {
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import { fetchProjectIngestionRuns } from 'depictio-react-core';
+import type { MonitoringIngestionRun } from 'depictio-react-core';
 
 import { absTime, formatDuration, matchesQuery, spanMs, stepTally } from '../../monitoring/format';
 import { Field, PaneHeader, SearchInput, TimeText } from '../../monitoring/primitives';
@@ -36,6 +37,30 @@ import { TriggerBadge } from '../../monitoring/TriggerBadge';
 
 const ACTIVE_POLL_MS = 3000;
 const IDLE_POLL_MS = 30000;
+
+/** One ingestion run in full: where it ran, its steps, and its error. Shared
+ *  with the Activity timeline, which lists the same runs. */
+export const IngestionRunDetails: React.FC<{ run: MonitoringIngestionRun }> = ({ run: r }) => (
+  <Stack gap="sm">
+    <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="md" verticalSpacing="xs">
+      <Field label="Instance">{r.cli_instance_label || '—'}</Field>
+      <Field label="CLI version">{r.cli_version ? `v${r.cli_version}` : '—'}</Field>
+      <Field label="Started">{absTime(r.started_at)}</Field>
+      <Field label="Steps">{stepTally(r.steps)}</Field>
+    </SimpleGrid>
+    {r.steps && r.steps.length > 0 && (
+      <IngestionStepTimeline
+        steps={r.steps}
+        currentStep={r.status === 'running' ? r.current_step : null}
+      />
+    )}
+    {r.error && (
+      <Alert color="red" variant="light" p="xs">
+        <Text size="xs">{r.error}</Text>
+      </Alert>
+    )}
+  </Stack>
+);
 
 const ProjectIngestionHistoryPanel: React.FC<{
   projectId: string;
@@ -156,27 +181,7 @@ const ProjectIngestionHistoryPanel: React.FC<{
                 </Group>
               </Accordion.Control>
               <Accordion.Panel>
-                {open.includes(r.run_id) && (
-                  <Stack gap="sm">
-                    <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="md" verticalSpacing="xs">
-                      <Field label="Instance">{r.cli_instance_label || '—'}</Field>
-                      <Field label="CLI version">{r.cli_version ? `v${r.cli_version}` : '—'}</Field>
-                      <Field label="Started">{absTime(r.started_at)}</Field>
-                      <Field label="Steps">{stepTally(r.steps)}</Field>
-                    </SimpleGrid>
-                    {r.steps && r.steps.length > 0 && (
-                      <IngestionStepTimeline
-                        steps={r.steps}
-                        currentStep={r.status === 'running' ? r.current_step : null}
-                      />
-                    )}
-                    {r.error && (
-                      <Alert color="red" variant="light" p="xs">
-                        <Text size="xs">{r.error}</Text>
-                      </Alert>
-                    )}
-                  </Stack>
-                )}
+                {open.includes(r.run_id) && <IngestionRunDetails run={r} />}
               </Accordion.Panel>
             </Accordion.Item>
           ))}

@@ -1,23 +1,31 @@
 /**
- * The project's timeline (#1397): ingestions, dashboard versions and comments
- * in one newest-first list, so "what happened around that run" reads in one
- * place. Items newer than the reader's mark carry a "new" badge; an ingestion
- * offers "Compare" (what it changed in a dashboard), a version links to its
+ * The project's timeline (#1397), the History view of the Activity tab:
+ * ingestions, dashboard versions and comments in one newest-first list, so
+ * "what happened around that run" reads in one place. Items newer than the
+ * reader's mark carry a "new" dot; an ingestion opens its steps and offers
+ * "Compare" (what it changed in a dashboard), a version links to its
  * read-only preview.
+ *
+ * It stands in for the ingestion history, so it keeps what that list did: a
+ * run's steps and error, and a quiet refresh every few seconds while one is
+ * still running.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Anchor, Button, Center, Chip, Group, Loader, Stack, Text, Timeline } from '@mantine/core';
 import { Icon } from '@iconify/react';
-import { fetchProjectTimeline } from 'depictio-react-core';
-import type { TimelineEvent } from 'depictio-react-core';
+import { fetchProjectIngestionRuns, fetchProjectTimeline } from 'depictio-react-core';
+import type { MonitoringIngestionRun, TimelineEvent } from 'depictio-react-core';
 
 import { NewDot } from '../../changes/feed';
 import { absTime, compactCount } from '../../monitoring/format';
 import { CHECK_STATUS } from '../checkStatus';
+import { IngestionRunDetails } from './ProjectIngestionHistoryPanel';
 import { CompareMenu } from './RunDashboardActions';
 import { ingestionOutcome, isNewerThan, versionHref } from './projectChanges';
 
 const PAGE = 25;
+/** While an ingestion runs, the list refreshes this often. */
+const RUNNING_POLL_MS = 3000;
 const COLLECTIONS_SHOWN = 4;
 
 type EventType = TimelineEvent['type'];
@@ -36,11 +44,20 @@ const Bullet: React.FC<{ event: TimelineEvent }> = ({ event }) => {
   return <Icon icon={event.type === 'version' ? 'mdi:history' : 'mdi:comment-text-outline'} width={14} />;
 };
 
+/** A run's steps, below its ingestion event. */
+interface StepsToggle {
+  open: boolean;
+  /** undefined while loading; null when the run is past the loaded history. */
+  run: MonitoringIngestionRun | null | undefined;
+  onToggle: () => void;
+}
+
 const EventBody: React.FC<{
   projectId: string;
   event: TimelineEvent;
   onShowRuns?: (run: string) => void;
-}> = ({ projectId, event, onShowRuns }) => {
+  steps?: StepsToggle;
+}> = ({ projectId, event, onShowRuns, steps }) => {
   if (event.type === 'ingestion') {
     const collections = event.collections ?? [];
     return (
@@ -80,7 +97,29 @@ const EventBody: React.FC<{
             ingestionRunId={event.id}
             testId={`timeline-compare-${event.id}`}
           />
+          {steps && (
+            <Button
+              size="compact-xs"
+              variant="subtle"
+              color="gray"
+              leftSection={<Icon icon={steps.open ? 'mdi:chevron-up' : 'mdi:chevron-down'} width={14} />}
+              onClick={steps.onToggle}
+              data-testid={`timeline-steps-${event.id}`}
+            >
+              {steps.open ? 'Hide steps' : 'Steps'}
+            </Button>
+          )}
         </Group>
+        {steps?.open &&
+          (steps.run === undefined ? (
+            <Loader size="xs" />
+          ) : steps.run === null ? (
+            <Text size="xs" c="dimmed">
+              This run is older than the loaded ingestion history.
+            </Text>
+          ) : (
+            <IngestionRunDetails run={steps.run} />
+          ))}
       </Stack>
     );
   }
@@ -148,13 +187,57 @@ export const ProjectTimelinePanel: React.FC<{
   /** The reader's mark (the change set's `since`): newer items are "new". */
   since: string | null;
   onShowRuns?: (run: string) => void;
-}> = ({ projectId, since, onShowRuns }) => {
+  /** Bumped by the parent when an ingestion it started finishes. */
+  refreshSignal?: number;
+}> = ({ projectId, since, onShowRuns, refreshSignal = 0 }) => {
   const [types, setTypes] = useState<EventType[]>(FILTERS.map((f) => f.value));
   const [events, setEvents] = useState<TimelineEvent[] | null>(null);
   const [next, setNext] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const generation = useRef(0);
+  // Steps of the ingestions the reader opened, from the project's run history.
+  const [openSteps, setOpenSteps] = useState<string[]>([]);
+  const [runs, setRuns] = useState<Map<string, MonitoringIngestionRun>>(new Map());
+  const [runsLoading, setRunsLoading] = useState(false);
+
+  const loadRuns = useCallback(() => {
+    setRunsLoading(true);
+    fetchProjectIngestionRuns(projectId, { limit: 50 })
+      .then((r) => setRuns(new Map(r.runs.map((run) => [run.run_id, run]))))
+      .catch(() => {
+        /* the steps say the run is not in the loaded history */
+      })
+      .finally(() => setRunsLoading(false));
+  }, [projectId]);
+
+  const toggleSteps = (id: string) => {
+    setOpenSteps((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+    if (!runs.has(id)) loadRuns();
+  };
+
+  // Newest page again, keeping the older pages already loaded: a run that
+  // started or finished shows without the list flashing back to a loader.
+  const refreshHead = useCallback(() => {
+    if (types.length === 0) return;
+    const gen = generation.current;
+    fetchProjectTimeline(projectId, { types, limit: PAGE })
+      .then((r) => {
+        if (gen !== generation.current) return;
+        setEvents((prev) => {
+          const head = new Set(r.events.map((e) => `${e.type}-${e.id}`));
+          const oldest = r.events.length ? r.events[r.events.length - 1].at : null;
+          const older = (prev ?? []).filter(
+            (e) => !head.has(`${e.type}-${e.id}`) && oldest != null && e.at < oldest,
+          );
+          return [...r.events, ...older];
+        });
+      })
+      .catch(() => {
+        /* the next refresh tries again */
+      });
+    if (openSteps.length) loadRuns();
+  }, [projectId, types, openSteps.length, loadRuns]);
 
   useEffect(() => {
     const gen = ++generation.current;
@@ -175,6 +258,21 @@ export const ProjectTimelinePanel: React.FC<{
         if (gen === generation.current) setError(e.message || 'The timeline could not be loaded.');
       });
   }, [projectId, types]);
+
+  const firstSignal = useRef(refreshSignal);
+  useEffect(() => {
+    if (refreshSignal === firstSignal.current) return;
+    refreshHead();
+    // Only a new signal refreshes; refreshHead changing alone does not.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshSignal]);
+
+  const running = (events ?? []).some((e) => e.type === 'ingestion' && e.status === 'running');
+  useEffect(() => {
+    if (!running) return;
+    const timer = window.setTimeout(refreshHead, RUNNING_POLL_MS);
+    return () => window.clearTimeout(timer);
+  }, [running, events, refreshHead]);
 
   const loadOlder = useCallback(async () => {
     if (!next) return;
@@ -238,7 +336,20 @@ export const ProjectTimelinePanel: React.FC<{
                   {absTime(e.at)}
                   {e.by ? ` · ${e.by}` : ''}
                 </Text>
-                <EventBody projectId={projectId} event={e} onShowRuns={onShowRuns} />
+                <EventBody
+                  projectId={projectId}
+                  event={e}
+                  onShowRuns={onShowRuns}
+                  steps={
+                    e.type === 'ingestion'
+                      ? {
+                          open: openSteps.includes(e.id),
+                          run: runs.get(e.id) ?? (runsLoading ? undefined : null),
+                          onToggle: () => toggleSteps(e.id),
+                        }
+                      : undefined
+                  }
+                />
               </Timeline.Item>
             ))}
           </Timeline>

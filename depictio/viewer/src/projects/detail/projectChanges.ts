@@ -264,16 +264,43 @@ export const compareHref = (familyId: string, ingestionRunId: string) =>
 export const versionHref = (familyId: string, versionId: string) =>
   `/dashboard/${familyId}?version=${encodeURIComponent(versionId)}`;
 
-/** `?tab=` values the project page accepts. */
-export const PROJECT_TABS = ['overview', 'runs', 'ingestion', 'timeline'] as const;
+/** The project page's tabs. */
+export const PROJECT_TABS = ['overview', 'runs', 'activity'] as const;
 export type ProjectTab = (typeof PROJECT_TABS)[number];
 
-/** `?tab=runs&run=run_c`: the tab and run a link asks the page to open. */
-export function readTabRequest(search: string): { tab: ProjectTab | null; run: string | null } {
+/** The two views of the Activity tab: the latest ingestion's report, and what
+ *  happened before it. */
+export type ActivityView = 'report' | 'history';
+
+/** Older names still in links: the Ingestion report and Timeline tabs became
+ *  the two views of Activity. */
+const TAB_ALIASES: Record<string, { tab: ProjectTab; view: ActivityView }> = {
+  activity: { tab: 'activity', view: 'report' },
+  ingestion: { tab: 'activity', view: 'report' },
+  timeline: { tab: 'activity', view: 'history' },
+};
+
+/** A tab (and view) from a name or a hash: `ingestion`, `#ingestion-history`. */
+export function resolveTab(name: string | null | undefined): {
+  tab: ProjectTab;
+  view: ActivityView | null;
+} | null {
+  const key = (name ?? '').replace(/^#/, '');
+  if (key === 'ingestion-history') return { tab: 'activity', view: 'history' };
+  if (TAB_ALIASES[key]) return TAB_ALIASES[key];
+  if ((PROJECT_TABS as readonly string[]).includes(key)) return { tab: key as ProjectTab, view: null };
+  return null;
+}
+
+/** `?tab=runs&run=run_c`: the tab (and run, or Activity view) a link asks the page to open. */
+export function readTabRequest(search: string): {
+  tab: ProjectTab | null;
+  view: ActivityView | null;
+  run: string | null;
+} {
   const params = new URLSearchParams(search);
-  const tab = params.get('tab');
   const run = params.get('run') || null;
-  const known = (PROJECT_TABS as readonly string[]).includes(tab ?? '') ? (tab as ProjectTab) : null;
+  const known = resolveTab(params.get('tab'));
   // A run named without a tab still means the Runs tab.
-  return { tab: known ?? (run ? 'runs' : null), run };
+  return { tab: known?.tab ?? (run ? 'runs' : null), view: known?.view ?? null, run };
 }

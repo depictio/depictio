@@ -76,7 +76,7 @@ deletes its marks.
   look (`changes/feed.tsx`). Each change is a row: an icon for its kind, a
   title, one line of facts and a dimmed *by … · when* line. Names are words in
   that line, not chips.
-- **New items**: a quiet dot marks them in Runs and the Timeline, the same dot
+- **New items**: a quiet dot marks them in Runs and in Activity, the same dot
   as an updated tile.
 
 ## What counts as a change
@@ -154,8 +154,14 @@ MultiQC time travel by report set is what makes the MultiQC *Before* possible:
   - *Layout before <run>* (`?version=`): the definition only. An ingestion
     records no dashboard version, so the preview's data is whatever that
     version's stamps pin, and its banner names the rest as latest.
-- `GET /changes/project/{id}/timeline` feeds the Timeline tab: ingestions,
-  dashboard versions and comments, newest first, paged by `before`.
+- `GET /changes/project/{id}/timeline` feeds the Activity tab's History view:
+  ingestions, dashboard versions and comments, newest first, paged by
+  `before`. An ingestion opens its steps; the list refreshes every 3 s while
+  one is running.
+- Activity replaces the Ingestion report and Timeline tabs. Its other view is
+  the latest ingestion's report. With the feature off, History is the
+  ingestion run list it always was. `?tab=ingestion`, `?tab=timeline`,
+  `#ingestion` and `#ingestion-history` still open it.
 
 Runs are told apart because ingestion now records which run wrote what:
 
