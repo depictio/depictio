@@ -116,7 +116,7 @@ def _scan_one(path: str):
     return scan.scan_single_file(
         file_location=path,
         run=SimpleNamespace(id=ObjectId(), run_tag="run42"),
-        data_collection=SimpleNamespace(id=ObjectId()),
+        data_collection=SimpleNamespace(id=ObjectId(), config=SimpleNamespace(type="table")),
         permissions=Permission(owners=[UserBase(id=ObjectId(), email="me@example.com")]),
         existing_files={},
         update_files=False,
@@ -144,7 +144,9 @@ def test_the_recursive_walk_registers_only_what_stays(local_on):
         path=str(local_on.run / "tables"),
         run=SimpleNamespace(id=ObjectId(), run_tag="run42"),
         # No scan block: the walk applies no depth or exclusion bounds.
-        data_collection=SimpleNamespace(id=ObjectId(), config=SimpleNamespace(scan=None)),
+        data_collection=SimpleNamespace(
+            id=ObjectId(), config=SimpleNamespace(type="table", scan=None)
+        ),
         permissions=Permission(owners=[UserBase(id=ObjectId(), email="me@example.com")]),
         existing_files={},
         skip_regex=True,

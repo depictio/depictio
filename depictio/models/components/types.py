@@ -145,6 +145,9 @@ AdvancedVizKind = Literal[
     # fields behind a row (top variants of nf-core/raredisease, outlier genes
     # of DROP).
     "ranked_table",
+    # Multiscale OME-Zarr image (NGFF 0.4) from a `bioimage` DC, with an
+    # optional cell-points overlay from a table DC.
+    "bioimage_viewer",
 ]
 
 # Map visualization types

@@ -1,0 +1,4 @@
+sample,condition,replicate,tissue,stain,crop_y,crop_x,n_cells,mitotic_fraction
+sample_A,control,1,cultured human cells,DNA,0,0,54,0.074
+sample_B,treated,1,cultured human cells,DNA,0,256,47,0.128
+sample_C,treated,2,cultured human cells,DNA,256,0,89,0.067

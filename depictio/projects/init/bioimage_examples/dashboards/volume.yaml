@@ -1,0 +1,217 @@
+# 3D stack over time: one tab of the bioimage examples.
+#
+# Regenerate the seed after editing:
+#   uv run python -m depictio.dev_scripts.generate_dashboard_seeds bioimage_examples
+#
+# The component `index` values are pinned rather than auto-generated: they are
+# what keeps a regenerated seed byte-identical to the shipped one.
+title: '3D + time'
+subtitle: 'A kidney volume with a z axis and five timepoints'
+icon: 'mdi:cube-outline'
+icon_color: 'teal'
+icon_variant: filled
+workflow_system: python
+dashboard_id: '646b0f3c1e4a2d7f8e5b8f11'
+is_main_tab: false
+tab_order: 2
+parent_dashboard_tag: fluorescence
+tab_icon: 'mdi:cube-outline'
+tab_icon_color: 'teal'
+
+filter_sections:
+  - name: 'Nuclei'
+    icon: 'mdi:filter-variant'
+    color: 'teal'
+    description: 'Narrows the nuclei drawn over the volume, the table and the cards'
+
+grid_sections:
+  - name: 'Volume nuclei'
+    icon: 'mdi:counter'
+    color: 'teal'
+    description: 'The nuclei of the first timepoint in numbers'
+  - name: 'Volume'
+    icon: 'mdi:microscope'
+    color: 'teal'
+    description: 'Step through z and t; lasso nuclei to filter the table'
+
+components:
+  - tag: text-volume
+    index: omz-vol-text
+    component_type: text
+    title: '3D stack over time'
+    order: 3
+    alignment: left
+    vertical_alignment: top
+    section: 'Volume nuclei'
+    body: >
+      Eight planes of a kidney volume (2.5 um apart) in two channels, over five timepoints.
+      The time course is synthetic: each frame is the same volume seen through a window
+      that drifts a few pixels and loses 8 % of its signal, as a bleaching acquisition
+      would. Use the z and t sliders of the viewer. The points are the nuclei of the first
+      timepoint, segmented in 3D; the depth filter keeps the upper, middle or lower third.
+    layout: { x: 0, y: 0, w: 8, h: 2 }
+
+  - tag: card-volume-nuclei
+    index: omz-vol-card-count
+    component_type: card
+    section: 'Volume nuclei'
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: kidney_3d_timelapse_nuclei
+    aggregation: count
+    column_name: cell_id
+    column_type: object
+    icon_name: mdi:counter
+    title_font_size: md
+    value_font_size: xl
+    title: 'Nuclei'
+    layout: { x: 0, y: 2, w: 2, h: 2 }
+
+  - tag: card-volume-depth
+    index: omz-vol-card-depth
+    component_type: card
+    section: 'Volume nuclei'
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: kidney_3d_timelapse_nuclei
+    aggregation: nunique
+    column_name: depth_band
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: depth_band
+    top_n_count: 3
+    icon_name: mdi:chart-donut
+    title_font_size: md
+    value_font_size: xl
+    title: 'Depth bands'
+    layout: { x: 2, y: 2, w: 2, h: 2 }
+
+  - tag: card-volume-size
+    index: omz-vol-card-size
+    component_type: card
+    section: 'Volume nuclei'
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: kidney_3d_timelapse_nuclei
+    aggregation: median
+    secondary_layout: histogram
+    column_name: volume_um3
+    column_type: float64
+    icon_name: mdi:chart-histogram
+    title_font_size: md
+    value_font_size: xl
+    title: 'Nucleus volume (um3)'
+    layout: { x: 4, y: 2, w: 2, h: 2 }
+
+  - tag: card-volume-intensity
+    index: omz-vol-card-intensity
+    component_type: card
+    section: 'Volume nuclei'
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: kidney_3d_timelapse_nuclei
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: mean_intensity
+    column_type: float64
+    icon_name: mdi:chart-box-outline
+    title_font_size: md
+    value_font_size: xl
+    title: 'Nuclear intensity'
+    layout: { x: 6, y: 2, w: 2, h: 2 }
+
+  - tag: viz-volume
+    index: omz-vol-viewer
+    component_type: advanced_viz
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: kidney_3d_timelapse_image
+    title: 'Kidney volume, 5 timepoints'
+    description: '192 x 192 x 8 voxels (1.24 x 1.24 x 2.5 um) per frame, 60 s apart. Points are nuclei of the first frame, coloured by depth band.'
+    section: 'Volume'
+    viz_kind: bioimage_viewer
+    config:
+      viz_kind: bioimage_viewer
+      image_dc_tag: kidney_3d_timelapse_image
+      image_wf_id: '646b0f3c1e4a2d7f8e5b8f01'
+      image_dc_id: '646b0f3c1e4a2d7f8e5b8f06'
+      # Overrides of the store's own channel metadata (names, colours), to show
+      # the knob: the store says blue and magenta.
+      channels:
+        - index: 0
+          name: 'Nuclei (450 nm)'
+          color: '#00bfff'
+        - index: 1
+          name: '605 nm'
+          color: '#ffb000'
+      points_dc_tag: kidney_3d_timelapse_nuclei
+      points_wf_id: '646b0f3c1e4a2d7f8e5b8f01'
+      points_dc_id: '646b0f3c1e4a2d7f8e5b8f07'
+      cell_id_col: cell_id
+      x_col: x
+      y_col: y
+      color_col: depth_band
+      points_sample_col: sample
+      point_radius: 3
+      show_scalebar: true
+      selection_enabled: true
+    layout: { x: 0, y: 0, w: 8, h: 9 }
+
+  - tag: table-volume-nuclei
+    index: omz-vol-table
+    component_type: table
+    section: 'Volume'
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: kidney_3d_timelapse_nuclei
+    title: 'Nuclei'
+    description: 'One row per nucleus of the first timepoint. A lasso on the image narrows it.'
+    columns: [cell_id, z, depth_band, volume_um3, mean_intensity]
+    page_size: 50
+    layout: { x: 0, y: 9, w: 8, h: 5 }
+
+  - tag: filter-volume-depth
+    index: omz-vol-f-depth
+    component_type: interactive
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: kidney_3d_timelapse_nuclei
+    interactive_component_type: MultiSelect
+    column_name: depth_band
+    column_type: object
+    title: 'Depth band'
+    placement: left
+    section: 'Nuclei'
+    group: 'Nucleus filters'
+    display:
+      title_size: md
+      icon_name: 'mdi:shape-outline'
+    layout: { x: 0, y: 0, w: 1, h: 3 }
+
+  - tag: filter-volume-z
+    index: omz-vol-f-z
+    component_type: interactive
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: kidney_3d_timelapse_nuclei
+    interactive_component_type: RangeSlider
+    column_name: z
+    column_type: float64
+    title: 'Plane (z)'
+    placement: left
+    section: 'Nuclei'
+    group: 'Nucleus filters'
+    display:
+      title_size: md
+      icon_name: 'mdi:ruler'
+    layout: { x: 0, y: 3, w: 1, h: 3 }
+
+  - tag: filter-volume-size
+    index: omz-vol-f-size
+    component_type: interactive
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: kidney_3d_timelapse_nuclei
+    interactive_component_type: RangeSlider
+    column_name: volume_um3
+    column_type: float64
+    title: 'Nucleus volume (um3)'
+    placement: left
+    section: 'Nuclei'
+    group: 'Nucleus filters'
+    display:
+      title_size: md
+      icon_name: 'mdi:gauge'
+    layout: { x: 0, y: 6, w: 1, h: 3 }

@@ -35,6 +35,7 @@ import type {
   DashboardSummary,
   AdvancedVizDataResponse,
   AdvancedVizKindDescriptor,
+  BioimageStoreInfo,
   BreakdownPayloadDTO,
   BulkComputeResponse,
   ColumnRange,
@@ -584,6 +585,13 @@ export async function fetchPhylogenyNewick(): Promise<string> {
     'A phylogenetic tree needs its newick file, which the Studio has not been given. ' +
       'The render exports correctly and previews in depictio.',
   );
+}
+
+/** An OME-Zarr image is a directory of chunks streamed from depictio, which the
+ *  Studio's single-file fixture cannot hold: no stores, so the viewer shows its
+ *  empty state. */
+export async function fetchBioimageStores(): Promise<BioimageStoreInfo[]> {
+  return [];
 }
 
 // ---- the Celery-computed kinds --------------------------------------------

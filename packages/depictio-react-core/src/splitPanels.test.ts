@@ -133,6 +133,7 @@ describe('splitPanels', () => {
       'gene_arrow_track',
       'gsea_running_score',
       'sashimi',
+      'bioimage_viewer',
       'contact_map',
       'knee_plot',
       'damage_profile',

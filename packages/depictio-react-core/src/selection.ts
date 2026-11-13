@@ -243,6 +243,14 @@ export function advancedVizSelectionColumn(metadata: StoredMetadata): string | u
       // A box and its lollipop are one feature, and its id is what the other
       // tiles join on; the display label may repeat across features.
       return named ?? configColumn('feature_id_col') ?? 'feature_id';
+    case 'bioimage_viewer': {
+      // The cell id of the points overlay: a lasso over the image catches
+      // cells, and the overlay only exists when its table and coordinates are
+      // bound, so without them there is nothing to select.
+      const hasPoints = ['points_dc_id', 'x_col', 'y_col'].every((key) => configColumn(key));
+      if (!hasPoints) return undefined;
+      return configColumn('cell_id_col');
+    }
     default:
       // `ideogram` lands here on purpose: a karyotype emits a region, not a
       // value selection. A click on a chromosome or a drag along it publishes

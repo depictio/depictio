@@ -1,0 +1,693 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8f00"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8f00"
+  },
+  "version": 1,
+  "stored_metadata": [
+    {
+      "index": "omz-fl-text",
+      "component_type": "text",
+      "title": "Multichannel fluorescence",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Kidney nuclei",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "A mouse kidney section imaged in three fluorescence channels, projected along z and stored as a three-level pyramid. Each point is a nucleus segmented on the 450 nm channel. Toggle channels and adjust their contrast in the viewer, then draw a lasso around some nuclei: the table and the cards follow the selection.\n",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-fl-card-count",
+      "component_type": "card",
+      "title": "Nuclei",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "kidney_2d_cells",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f03"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Nuclei segmented on the 450 nm channel of the kidney projection",
+        "data_collection_tag": "kidney_2d_cells",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f03"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Kidney nuclei",
+      "aggregation": "count",
+      "column_name": "cell_id",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "vertical",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:counter",
+      "title_font_size": "md",
+      "value_font_size": "xl",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-fl-card-area",
+      "component_type": "card",
+      "title": "Nucleus area (um2)",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "kidney_2d_cells",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f03"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Nuclei segmented on the 450 nm channel of the kidney projection",
+        "data_collection_tag": "kidney_2d_cells",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f03"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Kidney nuclei",
+      "aggregation": "median",
+      "column_name": "area_um2",
+      "column_type": "float64",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "histogram",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:chart-histogram",
+      "title_font_size": "md",
+      "value_font_size": "xl",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-fl-card-dominant",
+      "component_type": "card",
+      "title": "Dominant channel",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "kidney_2d_cells",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f03"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Nuclei segmented on the 450 nm channel of the kidney projection",
+        "data_collection_tag": "kidney_2d_cells",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f03"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Kidney nuclei",
+      "aggregation": "nunique",
+      "column_name": "dominant_channel",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "donut",
+      "breakdown_col": "dominant_channel",
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:chart-donut",
+      "title_font_size": "md",
+      "value_font_size": "xl",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-fl-card-em605",
+      "component_type": "card",
+      "title": "605 nm intensity",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "kidney_2d_cells",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f03"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Nuclei segmented on the 450 nm channel of the kidney projection",
+        "data_collection_tag": "kidney_2d_cells",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f03"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Kidney nuclei",
+      "aggregation": "median",
+      "column_name": "mean_em605",
+      "column_type": "float64",
+      "value": null,
+      "aggregations": [
+        "box_plot_stats"
+      ],
+      "filter_expr": null,
+      "secondary_layout": "box_plot",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:chart-box-outline",
+      "title_font_size": "md",
+      "value_font_size": "xl",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-fl-viewer",
+      "component_type": "advanced_viz",
+      "title": "Mouse kidney, 3 channels",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "kidney_2d_image",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f02"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Mouse kidney, 3-channel confocal fluorescence, maximum projection (512 x 512)",
+        "data_collection_tag": "kidney_2d_image",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f02"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "Maximum projection of a confocal stack (1.24 um pixels). Points are segmented nuclei, coloured by their dominant channel.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Image",
+      "viz_kind": "bioimage_viewer",
+      "config": {
+        "viz_kind": "bioimage_viewer",
+        "image_wf_id": "646b0f3c1e4a2d7f8e5b8f01",
+        "image_dc_id": "646b0f3c1e4a2d7f8e5b8f02",
+        "image_dc_tag": "kidney_2d_image",
+        "store": null,
+        "sample_wf_id": null,
+        "sample_dc_id": null,
+        "sample_dc_tag": null,
+        "sample_column": null,
+        "channels": [],
+        "show_scalebar": true,
+        "points_wf_id": "646b0f3c1e4a2d7f8e5b8f01",
+        "points_dc_id": "646b0f3c1e4a2d7f8e5b8f03",
+        "points_dc_tag": "kidney_2d_cells",
+        "cell_id_col": "cell_id",
+        "x_col": "x",
+        "y_col": "y",
+        "color_col": "dominant_channel",
+        "points_scale": 1.0,
+        "points_offset_x": 0.0,
+        "points_offset_y": 0.0,
+        "point_radius": 3.0,
+        "points_sample_col": "sample",
+        "selection_enabled": true
+      },
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-fl-table",
+      "component_type": "table",
+      "title": "Nuclei",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "kidney_2d_cells",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f03"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Nuclei segmented on the 450 nm channel of the kidney projection",
+        "data_collection_tag": "kidney_2d_cells",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f03"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "One row per nucleus. A lasso on the image narrows it to the nuclei inside.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Image",
+      "columns": [
+        "cell_id",
+        "area_um2",
+        "mean_em450",
+        "mean_em515",
+        "mean_em605",
+        "dominant_channel"
+      ],
+      "page_size": 50,
+      "sortable": true,
+      "filterable": true,
+      "compact": false,
+      "row_selection_enabled": false,
+      "row_selection_column": null,
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-fl-f-dominant",
+      "component_type": "interactive",
+      "title": "Dominant channel",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "kidney_2d_cells",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f03"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Nuclei segmented on the 450 nm channel of the kidney projection",
+        "data_collection_tag": "kidney_2d_cells",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f03"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Nuclei",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "dominant_channel",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Nucleus filters",
+      "timescale": null,
+      "show_marks": null,
+      "icon_name": "mdi:palette",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-fl-f-area",
+      "component_type": "interactive",
+      "title": "Nucleus area (um2)",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "kidney_2d_cells",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f03"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Nuclei segmented on the 450 nm channel of the kidney projection",
+        "data_collection_tag": "kidney_2d_cells",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f03"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Nuclei",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "area_um2",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Nucleus filters",
+      "timescale": null,
+      "show_marks": null,
+      "icon_name": "mdi:ruler",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-fl-f-em515",
+      "component_type": "interactive",
+      "title": "515 nm intensity",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "kidney_2d_cells",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f03"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Nuclei segmented on the 450 nm channel of the kidney projection",
+        "data_collection_tag": "kidney_2d_cells",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f03"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Nuclei",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "mean_em515",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Nucleus filters",
+      "timescale": null,
+      "show_marks": null,
+      "icon_name": "mdi:gauge",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-about",
+      "component_type": "text",
+      "title": "About these examples",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "About these examples",
+      "order": 4,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "Each tab shows one kind of OME-Zarr image: several fluorescence channels, a stained tissue section with spatial spots, a 3D stack over time, and one store per sample. The images are scikit-image sample datasets (CC0 or without known restrictions) converted to NGFF 0.4. The cells and spots are computed from the pixels, and the time course, spot counts and sample conditions are synthetic. Nothing here is a result.\n",
+      "wf_tag": "python/bioimage_demo"
+    }
+  ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-omz-fl-f-dominant",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-omz-fl-f-area",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-omz-fl-f-em515",
+      "x": 0,
+      "y": 6,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-omz-fl-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 2,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-omz-fl-card-count",
+      "x": 0,
+      "y": 2,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-omz-fl-card-area",
+      "x": 2,
+      "y": 2,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-omz-fl-card-dominant",
+      "x": 4,
+      "y": 2,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-omz-fl-card-em605",
+      "x": 6,
+      "y": 2,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-omz-fl-viewer",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 9,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-omz-fl-table",
+      "x": 0,
+      "y": 9,
+      "w": 8,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-omz-about",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 2,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "Bioimage Examples",
+  "subtitle": "Multiscale NGFF images with cell and spot overlays, from scikit-image sample data",
+  "icon": "mdi:microscope",
+  "icon_color": "grape",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-12 00:00:00",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8f00"
+  },
+  "is_main_tab": true,
+  "parent_dashboard_id": null,
+  "tab_order": 0,
+  "main_tab_name": "Fluorescence",
+  "tab_icon": "mdi:microscope",
+  "tab_icon_color": "grape",
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Nuclei",
+      "icon": "mdi:filter-variant",
+      "color": "grape",
+      "description": "Narrows the nuclei drawn over the image, the table and the cards",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Kidney nuclei",
+      "icon": "mdi:counter",
+      "color": "grape",
+      "description": "The segmented nuclei in numbers",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    },
+    {
+      "name": "Image",
+      "icon": "mdi:microscope",
+      "color": "grape",
+      "description": "The three channels, with one point per nucleus; lasso points to filter the table",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    },
+    {
+      "name": "About these examples",
+      "icon": "mdi:information-outline",
+      "color": "gray",
+      "description": "Where the images come from, and what is synthetic",
+      "collapsed": true,
+      "persistent": true,
+      "pin": "bottom"
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null
+}
