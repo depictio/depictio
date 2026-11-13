@@ -100,7 +100,8 @@ def test_negative_channel_index_is_rejected():
 
 
 @pytest.mark.parametrize(
-    "column", ["cell_id_col", "x_col", "color_col", "points_sample_col", "points_well_col"]
+    "column",
+    ["cell_id_col", "x_col", "color_col", "points_sample_col", "points_well_col", "z_col", "t_col"],
 )
 def test_points_columns_need_a_points_dc(column):
     with pytest.raises(ValidationError, match="no points DC is bound"):

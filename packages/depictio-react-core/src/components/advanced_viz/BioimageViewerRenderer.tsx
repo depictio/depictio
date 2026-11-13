@@ -71,10 +71,12 @@ import {
   type LabelStyle,
 } from './bioimage/labels';
 import {
+  axesProblem,
   containerImagePath,
   firstLabelPath,
   normaliseWellName,
   openContainer,
+  readNgffAttrs,
   subStore,
   wellForValue,
   type NgffContainer,
@@ -101,6 +103,9 @@ interface BioimageViewerConfig {
   cell_id_col?: string | null;
   x_col?: string | null;
   y_col?: string | null;
+  z_col?: string | null;
+  t_col?: string | null;
+  points_all_planes?: boolean;
   color_col?: string | null;
   points_scale?: number;
   points_offset_x?: number;
@@ -364,6 +369,8 @@ const BioimageViewerRenderer: React.FC<Props> = ({
   const colorCol = config.color_col ?? null;
   const sampleCol = config.points_sample_col ?? null;
   const wellCol = config.points_well_col ?? null;
+  const zCol = config.z_col ?? null;
+  const tCol = config.t_col ?? null;
   const pointsEnabled = Boolean(pointsWfId && pointsDcId && xCol && yCol);
 
   // The viewer's own ROI selection is stripped before anything reads the
@@ -501,13 +508,14 @@ const BioimageViewerRenderer: React.FC<Props> = ({
     if (!containerValue) return;
     let cancelled = false;
     const wellPath = activeWell?.path ?? null;
-    containerImagePath(
-      createBioimageZarrStore(imageDcId, activeStoreName),
-      containerValue,
-      wellPath,
-    )
-      .then((path) => {
-        if (!cancelled) setTarget({ key: `${storeKey}\u0000${path}`, path });
+    const root = createBioimageZarrStore(imageDcId, activeStoreName);
+    containerImagePath(root, containerValue, wellPath)
+      .then(async (path) => {
+        // Axes outside NGFF's t, c, z, y, x get a sentence, not a reader stack trace.
+        const problem = axesProblem(await readNgffAttrs(root, path));
+        if (cancelled) return;
+        if (problem) setTargetError(`${activeStoreName}: ${problem}`);
+        else setTarget({ key: `${storeKey}\u0000${path}`, path });
       })
       .catch((err: unknown) => {
         if (!cancelled) setTargetError(`Could not open ${activeStoreName}: ${errorText(err)}`);
@@ -703,12 +711,12 @@ const BioimageViewerRenderer: React.FC<Props> = ({
     () =>
       Array.from(
         new Set(
-          [cellIdCol, keyCol, xCol, yCol, colorCol, sampleCol, wellCol].filter(
+          [cellIdCol, keyCol, xCol, yCol, zCol, tCol, colorCol, sampleCol, wellCol].filter(
             (c): c is string => !!c,
           ),
         ),
       ),
-    [cellIdCol, keyCol, xCol, yCol, colorCol, sampleCol, wellCol],
+    [cellIdCol, keyCol, xCol, yCol, zCol, tCol, colorCol, sampleCol, wellCol],
   );
   const pointColsKey = pointCols.join('|');
   const [pointRows, setPointRows] = useState<Record<string, unknown[]> | null>(null);
@@ -793,6 +801,10 @@ const BioimageViewerRenderer: React.FC<Props> = ({
     return stableColorMap(values, palette);
   }, [colorCol, pointRows, palette, continuous]);
 
+  const [allPlanes, setAllPlanes] = usePersistedVizControl(metadata, 'points_all_planes', false);
+  const stacked = Boolean(
+    (zCol && info && info.sizes.z > 1) || (tCol && info && info.sizes.t > 1),
+  );
   const overlay = useMemo<OverlayPoint[]>(() => {
     if (!pointRows || !xCol || !yCol || !activeStore) return [];
     const xs = pointRows[xCol] ?? [];
@@ -803,6 +815,9 @@ const BioimageViewerRenderer: React.FC<Props> = ({
     const samples = sampleCol ? (pointRows[sampleCol] ?? []) : null;
     // On a plate, a cell belongs to the shown image when its well is the one open.
     const rowWells = wellCol && activeWell ? (pointRows[wellCol] ?? []) : null;
+    // In a stack, a cell sits on its plane: only the shown z and t draw.
+    const rowZ = zCol && !allPlanes && info && info.sizes.z > 1 ? (pointRows[zCol] ?? []) : null;
+    const rowT = tCol && !allPlanes && info && info.sizes.t > 1 ? (pointRows[tCol] ?? []) : null;
     const scale = config.points_scale ?? 1;
     const ox = config.points_offset_x ?? 0;
     const oy = config.points_offset_y ?? 0;
@@ -813,6 +828,8 @@ const BioimageViewerRenderer: React.FC<Props> = ({
       if (rowWells && activeWell && normaliseWellName(String(rowWells[i] ?? '')) !== activeWell.name) {
         continue;
       }
+      if (rowZ && Math.round(Number(rowZ[i])) !== plane.z) continue;
+      if (rowT && Math.round(Number(rowT[i])) !== plane.t) continue;
       const x = Number(xs[i]) * scale + ox;
       const y = Number(ys[i]) * scale + oy;
       if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
@@ -842,6 +859,12 @@ const BioimageViewerRenderer: React.FC<Props> = ({
     colorCol,
     sampleCol,
     wellCol,
+    zCol,
+    tCol,
+    allPlanes,
+    plane.z,
+    plane.t,
+    info,
     activeWell,
     activeStore,
     config.points_scale,
@@ -1179,6 +1202,14 @@ const BioimageViewerRenderer: React.FC<Props> = ({
         ) : null}
         {pointsEnabled ? (
           <VizControlGroup title="Cells">
+            {stacked ? (
+              <VizSwitch
+                label="All planes"
+                title="Draw every cell, not only the shown plane's"
+                checked={allPlanes}
+                onChange={(e) => setAllPlanes(e.currentTarget.checked)}
+              />
+            ) : null}
             <VizSlider
               label="Point size"
               min={1}
@@ -1194,7 +1225,7 @@ const BioimageViewerRenderer: React.FC<Props> = ({
       </>
     ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [channels, integerDtype, visibleChannels, labelsDcId, embeddedLabelsFound, labelsWanted, labelsVisible, labelsOutline, labelsOpacity, pointsEnabled, pointRadius, labelsShown],
+    [channels, integerDtype, visibleChannels, labelsDcId, embeddedLabelsFound, labelsWanted, labelsVisible, labelsOutline, labelsOpacity, pointsEnabled, pointRadius, labelsShown, stacked, allPlanes],
   );
 
   // ---- Notices ------------------------------------------------------------

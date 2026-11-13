@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { BioimageZarrStore } from '../../../api';
 import {
+  axesProblem,
   firstLabelPath,
   normaliseWellName,
   openContainer,
@@ -155,5 +156,31 @@ describe('subStore', () => {
   it('is the store itself for an empty prefix', () => {
     const root = memoryStore({});
     expect(subStore(root, '')).toBe(root);
+  });
+});
+
+describe('axesProblem', () => {
+  const ms = (axes: unknown[]) => ({ multiscales: [{ axes }] });
+  it.each([
+    [['y', 'x']],
+    [['c', 'y', 'x']],
+    [['z', 'y', 'x']],
+    [['t', 'y', 'x']],
+    [[{ name: 't' }, { name: 'c' }, { name: 'z' }, { name: 'y' }, { name: 'x' }]],
+  ])('reads %j', (axes) => {
+    expect(axesProblem(ms(axes))).toBeNull();
+  });
+
+  it('names an axis it does not draw', () => {
+    expect(axesProblem(ms(['angle', 'y', 'x']))).toMatch(/axes angle, y, x.*angle is not/);
+  });
+
+  it('needs y then x last', () => {
+    expect(axesProblem(ms(['x', 'y', 'c']))).toMatch(/y then x last/);
+  });
+
+  it('leaves a store without axes to the reader', () => {
+    expect(axesProblem({ multiscales: [{}] })).toBeNull();
+    expect(axesProblem(null)).toBeNull();
   });
 });

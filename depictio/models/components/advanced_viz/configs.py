@@ -1557,6 +1557,21 @@ class BioimageViewerConfig(_BaseVizConfig):
     )
     x_col: str | None = Field(default=None, description="Point x coordinate column")
     y_col: str | None = Field(default=None, description="Point y coordinate column")
+    z_col: str | None = Field(
+        default=None,
+        description=(
+            "Point z plane column (0-based plane index): only the shown plane's points are "
+            "drawn, unless points_all_planes"
+        ),
+    )
+    t_col: str | None = Field(
+        default=None,
+        description="Point time point column (0-based index): only the shown time's points",
+    )
+    points_all_planes: bool = Field(
+        default=False,
+        description="Draw every point whatever its z / t, instead of the shown plane's only",
+    )
     color_col: str | None = Field(default=None, description="Optional point colour column")
     points_scale: float = Field(
         default=1.0, gt=0, description="Multiplier from table coordinates to level-0 pixels"
@@ -1624,6 +1639,8 @@ class BioimageViewerConfig(_BaseVizConfig):
             self.color_col,
             self.points_sample_col,
             self.points_well_col,
+            self.z_col,
+            self.t_col,
             self.selection_column,
         )
         if any(points_cols) and not points_dc:

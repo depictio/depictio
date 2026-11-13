@@ -182,3 +182,26 @@ export async function firstLabelPath(store: BioimageZarrStore): Promise<string |
   const first = names.find((n): n is string => typeof n === 'string' && n.length > 0);
   return first ? `labels/${first}` : null;
 }
+
+/** The axis names the viewer draws (NGFF's own: time, channel, then space). */
+const VIEWER_AXES = new Set(['t', 'c', 'z', 'y', 'x']);
+
+/** Why the viewer cannot draw the image whose attributes are `attrs`, by its
+ *  axes, or null. NGFF allows custom axis names and orders; the viewer reads
+ *  the spec's t, c, z, y, x, ending in y, x. A store without axes (NGFF 0.3)
+ *  is left to the image reader. */
+export function axesProblem(attrs: Attrs | null): string | null {
+  const multiscales = attrs && Array.isArray(attrs.multiscales) ? attrs.multiscales[0] : null;
+  const axes = isRecord(multiscales) && Array.isArray(multiscales.axes) ? multiscales.axes : null;
+  if (!axes || axes.length === 0) return null;
+  const names = axes.map((a) => String(isRecord(a) ? a.name : a));
+  const shown = names.join(', ');
+  const odd = names.filter((n) => !VIEWER_AXES.has(n.toLowerCase()));
+  if (odd.length) {
+    return `This image has axes ${shown}: the viewer reads t, c, z, y and x only (${odd.join(', ')} ${odd.length === 1 ? 'is' : 'are'} not among them). Open it in napari or vizarr.`;
+  }
+  if (names.slice(-2).join('').toLowerCase() !== 'yx') {
+    return `This image has axes ${shown}: the viewer needs y then x last, as NGFF orders them.`;
+  }
+  return null;
+}
