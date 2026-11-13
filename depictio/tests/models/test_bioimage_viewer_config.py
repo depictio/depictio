@@ -99,7 +99,9 @@ def test_negative_channel_index_is_rejected():
         BioimageChannel(index=-1)
 
 
-@pytest.mark.parametrize("column", ["cell_id_col", "x_col", "color_col", "points_sample_col"])
+@pytest.mark.parametrize(
+    "column", ["cell_id_col", "x_col", "color_col", "points_sample_col", "points_well_col"]
+)
 def test_points_columns_need_a_points_dc(column):
     with pytest.raises(ValidationError, match="no points DC is bound"):
         BioimageViewerConfig.model_validate({column: "c", "x_col": "x", "y_col": "y"})
@@ -190,3 +192,8 @@ class TestSelectionColumn:
             selection_column="cell_key",
         )
         assert config.selection_column == "cell_key"
+
+
+def test_well_column_is_a_plain_filter_column():
+    """Any filter on the column picks the well: no DC is needed to name it."""
+    assert BioimageViewerConfig(well_column="well").well_column == "well"

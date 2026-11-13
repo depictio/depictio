@@ -1,8 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { Badge, Box, Code, Group, Stack, Text } from '@mantine/core';
+import { Badge, Box, Code, Group, List, Stack, Text } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
-import { fetchBioimageProvenance, type BioimageProvenance } from '../../api';
+import {
+  fetchBioimageProvenance,
+  type BioimageNgffValidation,
+  type BioimageProvenance,
+} from '../../api';
+import { axesWord } from './bioimage/BioimageBadges';
 import { useImageInfo, type PublishedImageInfo } from './bioimage/imageInfoRegistry';
 
 interface BioimageImageSectionProps {
@@ -60,7 +65,7 @@ const bytes = (n: number): string => {
 };
 
 const ImageRows: React.FC<{ published: PublishedImageInfo }> = ({ published }) => {
-  const { store, info } = published;
+  const { store, info, layout, imagePath } = published;
   const x = info.labels.indexOf('x');
   const y = info.labels.indexOf('y');
   const axes = info.labels.map((label, i) => `${label} ${info.shape[i]}`).join(' · ');
@@ -72,7 +77,21 @@ const ImageRows: React.FC<{ published: PublishedImageInfo }> = ({ published }) =
       <Row label="Store" mono>
         {store}
       </Row>
-      <Row label="Axes">{axes}</Row>
+      {layout ? (
+        <Row label="Layout">
+          {layout === 'plate'
+            ? 'HCS plate: one image per well field'
+            : layout === 'bioformats2raw'
+              ? 'bioformats2raw container: one image per series'
+              : layout}
+        </Row>
+      ) : null}
+      {imagePath ? (
+        <Row label="Image" mono>
+          {imagePath}
+        </Row>
+      ) : null}
+      <Row label="Axes">{`${axesWord(info.labels) ?? ''} · ${axes}`}</Row>
       <Row label="Size">{`${info.width} × ${info.height} px`}</Row>
       <Row label="Data type">{info.dtype}</Row>
       <Row label="Pyramid">{`${info.levels} levels: ${pyramid}`}</Row>
@@ -104,6 +123,45 @@ const ImageRows: React.FC<{ published: PublishedImageInfo }> = ({ published }) =
     </Stack>
   );
 };
+
+/** The ingest's NGFF check of one store: its verdict, then what it found. */
+const ValidationRows: React.FC<{ validation: BioimageNgffValidation }> = ({ validation }) => (
+  <Row label="NGFF check">
+    <Stack gap={2} component="span">
+      <Text
+        size="xs"
+        component="span"
+        c={validation.ok ? 'teal' : 'orange'}
+        data-testid="bioimage-info-validation"
+      >
+        {validation.ok
+          ? `Valid${validation.ngff_version ? ` NGFF ${validation.ngff_version}` : ''} ${validation.layout}`
+          : `${validation.issues.length} issue${validation.issues.length === 1 ? '' : 's'}: other viewers may refuse it`}
+      </Text>
+      {validation.issues.length ? (
+        <List size="xs" spacing={1}>
+          {validation.issues.map((issue) => (
+            <List.Item key={issue}>
+              <Code fz={10} style={{ wordBreak: 'break-word' }}>
+                {issue}
+              </Code>
+            </List.Item>
+          ))}
+        </List>
+      ) : null}
+      {validation.labels.length ? (
+        <Text size="xs" component="span" c="dimmed">
+          Labels: {validation.labels.join(', ')}
+        </Text>
+      ) : null}
+      {validation.validator ? (
+        <Text size="xs" component="span" c="dimmed">
+          {validation.validator}
+        </Text>
+      ) : null}
+    </Stack>
+  </Row>
+);
 
 const ProvenanceRows: React.FC<{ provenance: BioimageProvenance }> = ({ provenance }) => {
   const format = [
@@ -156,6 +214,7 @@ const ProvenanceRows: React.FC<{ provenance: BioimageProvenance }> = ({ provenan
             {store.filesize !== null && store.filesize > 0 && (
               <Row label="Size">{bytes(store.filesize)}</Row>
             )}
+            {store.validation ? <ValidationRows validation={store.validation} /> : null}
           </Stack>
         </Box>
       ))}

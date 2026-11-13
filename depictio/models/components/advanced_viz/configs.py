@@ -1526,6 +1526,13 @@ class BioimageViewerConfig(_BaseVizConfig):
             "(matched against the store name without '.zarr')"
         ),
     )
+    well_column: str | None = Field(
+        default=None,
+        description=(
+            "Column whose filtered value names the well to show when the store is an "
+            "HCS plate (A1, A01 and A/1 all match well A/1); else the reader picks one"
+        ),
+    )
 
     channels: list[BioimageChannel] = Field(
         default_factory=list, description="Per-channel overrides of the store's display metadata"
@@ -1560,6 +1567,10 @@ class BioimageViewerConfig(_BaseVizConfig):
     points_sample_col: str | None = Field(
         default=None,
         description="Points column holding the sample name, to keep only the shown store's points",
+    )
+    points_well_col: str | None = Field(
+        default=None,
+        description="Points column holding the well name, to keep only the shown well's points",
     )
 
     # Labels overlay: a bioimage DC with ``kind: labels`` (segmentation masks),
@@ -1612,6 +1623,7 @@ class BioimageViewerConfig(_BaseVizConfig):
             self.y_col,
             self.color_col,
             self.points_sample_col,
+            self.points_well_col,
             self.selection_column,
         )
         if any(points_cols) and not points_dc:

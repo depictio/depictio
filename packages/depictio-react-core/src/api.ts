@@ -2550,6 +2550,18 @@ export type BioimageFormat = 'ome-zarr' | 'ome-tiff' | 'spatialdata' | 'tiff';
 /** What a store's pixels are: intensities, or cell ids (a segmentation mask). */
 export type BioimageKind = 'image' | 'labels';
 
+/** The OME-NGFF metadata check run at ingest (`ome-zarr-models`): reported,
+ *  never blocking. `issues` are `<metadata path>: <message>` lines. */
+export interface BioimageNgffValidation {
+  ok: boolean;
+  ngff_version: string | null;
+  layout: 'image' | 'plate' | 'well' | 'bioformats2raw' | 'labels' | 'unknown';
+  issues: string[];
+  /** Label images the store's `labels/` group lists. */
+  labels: string[];
+  validator: string | null;
+}
+
 /** One image store registered under a `bioimage` DC. `sample` is the DC's
  *  `sample_pattern` capture on the store name, else the name without its
  *  suffix (`.zarr`, `.ome.tif`, `.tif`): the value an upstream sample filter
@@ -2563,6 +2575,9 @@ export interface BioimageStoreInfo {
   /** Absent from an API older than the labels overlay: read it as 'image'. */
   kind?: BioimageKind;
   remote: boolean;
+  /** Ingest's NGFF check; null for a remote store, an OME-TIFF, or a store
+   *  registered before the check existed. */
+  validation?: BioimageNgffValidation | null;
 }
 
 /** The stores of a `bioimage` DC, sorted by name. */
@@ -2584,6 +2599,7 @@ export interface BioimageProvenanceStore {
   registration_time: string | null;
   filesize: number | null;
   remote: boolean;
+  validation?: BioimageNgffValidation | null;
 }
 
 /** Where a `bioimage` DC's images come from (`GET .../bioimage/{dc}/provenance`). */

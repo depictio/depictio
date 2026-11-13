@@ -4,7 +4,6 @@
 // a cell id (0 = background) equal to the points table's `cell_id_col`, which
 // is how a cell's colour, filter state and selection reach its pixels.
 
-import type { BioimageZarrStore } from '../../../api';
 import { sampleColorscale } from '../../../utils/colorScale';
 import { looksContinuous } from '../colourScales';
 import type { Rgb } from './channels';
@@ -231,24 +230,10 @@ export function rampColor(
 }
 
 /** CSS gradient of a ramp, for its legend bar. */
-export function rampGradient(scale: string, steps = 6): string {
-  const stops = Array.from({ length: steps }, (_, i) => {
+/** `steps` colours sampled evenly along a named colour scale, low to high. */
+export function rampStops(scale: string, steps = 6): string[] {
+  return Array.from({ length: steps }, (_, i) => {
     const [r, g, b] = sampleColorscale(scale, i / (steps - 1));
-    return `rgb(${r}, ${g}, ${b}) ${Math.round((i / (steps - 1)) * 100)}%`;
+    return `rgb(${r}, ${g}, ${b})`;
   });
-  return `linear-gradient(to right, ${stops.join(', ')})`;
-}
-
-/** Where an OME-Zarr image store keeps its first label image (NGFF `labels/<name>`). */
-const LABEL_PREFIX = 'labels/0';
-
-/** The store seen from inside its first label image (`labels/0`), so the image
- *  reader finds that group's metadata: an image store's own labels, drawn with
- *  `setLabels` like a separate labels collection. */
-export function labelsSubStore(store: BioimageZarrStore): BioimageZarrStore {
-  const at = (key: string) => `${LABEL_PREFIX}/${key.replace(/^\/+/, '')}`;
-  return {
-    get: (key, opts) => store.get(at(key), opts),
-    getRange: (key, range, opts) => store.getRange(at(key), range, opts),
-  };
 }

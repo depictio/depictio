@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react';
 
+import type { NgffContainerLayout } from './layout';
 import type { BioimageInfo } from './viewer';
 
 /** What the viewer read from the image it has open for one component: the
@@ -8,6 +9,10 @@ import type { BioimageInfo } from './viewer';
 export interface PublishedImageInfo {
   store: string;
   info: BioimageInfo;
+  /** What the store's root is, when it is not a plain image (a plate). */
+  layout?: NgffContainerLayout;
+  /** The image group drawn inside the store (`B/2/0`), when not its root. */
+  imagePath?: string;
 }
 
 // Module-level, not React state: the renderer that loads an image and the

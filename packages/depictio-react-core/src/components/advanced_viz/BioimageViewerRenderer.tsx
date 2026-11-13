@@ -2,18 +2,14 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActionIcon,
   Badge,
+  Box,
   Center,
-  Checkbox,
-  ColorInput,
-  ColorSwatch,
+  CloseButton,
   Group,
   Loader,
   Paper,
-  RangeSlider,
-  Select,
   Slider,
   Stack,
-  Switch,
   Text,
   Tooltip,
   useMantineColorScheme,
@@ -27,6 +23,7 @@ import {
   fetchAdvancedVizData,
   fetchBioimageStores,
   InteractiveFilter,
+  BioimageSource,
   BioimageStoreInfo,
   StoredMetadata,
 } from '../../api';
@@ -38,12 +35,26 @@ import {
   filtersExcludingOwn,
 } from '../../selection';
 import { useWebglSlot } from '../../webglBudget';
+import ColourKey from '../jbrowse/ColourKey';
+import { foldByColour, keyTitle, type LegendRamp } from '../jbrowse/trackLegend';
 import AdvancedVizFrame from './AdvancedVizFrame';
-import { useVizConfigWriter } from './usePersistedVizControl';
+import PointerModeSwitch, { type PointerMode } from './controls/PointerModeSwitch';
+import {
+  VizColourInput,
+  VizControlGroup,
+  VizInlineField,
+  VizRangeSlider,
+  VizSelect,
+  VizSlider,
+  VizSwitch,
+  VIZ_SLIDER_CONTROL_PX,
+} from './controls/VizControls';
+import { usePersistedVizControl, useVizConfigWriter } from './usePersistedVizControl';
+import BioimageBadges from './bioimage/BioimageBadges';
 import {
   formatLength,
   hexToRgb,
-  normaliseHex,
+  MAX_RENDERED_CHANNELS,
   type ChannelState,
   type ConfigChannel,
   type Rgb,
@@ -53,12 +64,20 @@ import { pointsInPolygon, scaleBarLength, type Polygon } from './bioimage/geomet
 import {
   buildLabelLut,
   cellColouring,
-  labelsSubStore,
   pairLabelsStore,
   rampColor,
-  rampGradient,
+  rampStops,
   type LabelStyle,
 } from './bioimage/labels';
+import {
+  containerImagePath,
+  firstLabelPath,
+  normaliseWellName,
+  openContainer,
+  subStore,
+  wellForValue,
+  type NgffContainer,
+} from './bioimage/layout';
 // Types only: the adapter module pulls deck.gl + viv and is imported lazily.
 import type {
   BioimageInfo,
@@ -73,6 +92,7 @@ interface BioimageViewerConfig {
   store?: string | null;
   sample_dc_id?: string | null;
   sample_column?: string | null;
+  well_column?: string | null;
   channels?: ConfigChannel[];
   show_scalebar?: boolean;
   points_wf_id?: string | null;
@@ -86,6 +106,7 @@ interface BioimageViewerConfig {
   points_offset_y?: number;
   point_radius?: number;
   points_sample_col?: string | null;
+  points_well_col?: string | null;
   selection_enabled?: boolean;
   selection_column?: string | null;
   labels_wf_id?: string | null;
@@ -183,56 +204,115 @@ function emptyStoreMessage(
   return undefined;
 }
 
+/** Milliseconds per time point while the T axis plays. */
+const PLAY_STEP_MS = 600;
+
+/** What the pointer does on the image. Pan is always there; the selection
+ *  modes need cells to select and a dashboard to filter. */
+const POINTER_MODES: ReadonlyArray<Omit<PointerMode<SelectionMode>, 'disabledReason'>> = [
+  {
+    value: 'pan',
+    label: 'Pan',
+    icon: 'tabler:hand-grab',
+    tooltip: 'Pan: drag moves the image. Ctrl / Cmd + scroll zooms; click a cell to select it.',
+  },
+  {
+    value: 'lasso',
+    label: 'Lasso',
+    icon: 'tabler:lasso',
+    tooltip: 'Lasso: draw around cells to select them and filter the dashboard.',
+  },
+  {
+    value: 'rect',
+    label: 'Rectangle',
+    icon: 'tabler:marquee-2',
+    tooltip: 'Rectangle: drag a box around cells to select them and filter the dashboard.',
+  },
+];
+
 interface PlaneSliderProps {
   label: string;
   value: number;
   size: number;
   onChange: (value: number) => void;
+  /** Set for the T axis: a play button steps through the time points. */
+  playing?: boolean;
+  onTogglePlay?: () => void;
 }
 
-/** A 1-based slider over the planes of one non-spatial axis (z or t). */
-function PlaneSlider({ label, value, size, onChange }: PlaneSliderProps): React.ReactElement {
-  return (
-    <div>
-      <Text size="xs" fw={500} mb={4}>
-        {label}: {value + 1} / {size}
-      </Text>
-      <Slider
-        size="xs"
+/** A 1-based slider over the planes of one non-spatial axis (Z or T), inline
+ *  like every other control; T gets a play button before its track. */
+function PlaneSlider({
+  label,
+  value,
+  size,
+  onChange,
+  playing,
+  onTogglePlay,
+}: PlaneSliderProps): React.ReactElement {
+  if (!onTogglePlay) {
+    return (
+      <VizSlider
+        label={`${label} ${value + 1}/${size}`}
+        aria-label={label}
         min={0}
         max={size - 1}
         step={1}
         value={value}
-        label={(v) => v + 1}
+        thumbLabel={(v) => v + 1}
         onChange={onChange}
       />
-    </div>
-  );
-}
-
-interface OverlayButtonProps {
-  label: string;
-  icon: string;
-  /** Set for the ROI mode toggles: filled and `aria-pressed` while active. */
-  active?: boolean;
-  onClick: () => void;
-}
-
-function OverlayButton({ label, icon, active, onClick }: OverlayButtonProps): React.ReactElement {
+    );
+  }
   return (
-    <Tooltip label={label} withArrow openDelay={300}>
-      <ActionIcon
-        size="sm"
-        variant={active ? 'filled' : 'default'}
-        aria-label={label}
-        aria-pressed={active}
-        onClick={onClick}
-      >
-        <Icon icon={icon} width={14} />
-      </ActionIcon>
-    </Tooltip>
+    <VizInlineField label={`${label} ${value + 1}/${size}`} controlWidth={VIZ_SLIDER_CONTROL_PX + 28}>
+      <Group gap={6} wrap="nowrap">
+        <Tooltip label={playing ? 'Pause' : 'Play through time'} withArrow openDelay={300}>
+          <ActionIcon
+            size="sm"
+            variant={playing ? 'filled' : 'default'}
+            aria-label={playing ? 'Pause' : 'Play'}
+            aria-pressed={playing}
+            onClick={onTogglePlay}
+          >
+            <Icon icon={playing ? 'tabler:player-pause' : 'tabler:player-play'} width={12} />
+          </ActionIcon>
+        </Tooltip>
+        <Slider
+          size="xs"
+          style={{ flex: 1 }}
+          aria-label={label}
+          min={0}
+          max={size - 1}
+          step={1}
+          value={value}
+          label={(v) => v + 1}
+          onChange={onChange}
+        />
+      </Group>
+    </VizInlineField>
   );
 }
+
+/** A notice under the image: a part of the tile that could not draw, said
+ *  where the reader sees it rather than inside the Settings popover. */
+interface Notice {
+  key: string;
+  tone: 'error' | 'warning' | 'info';
+  text: string;
+}
+
+const NOTICE_COLOURS: Record<Notice['tone'], string> = {
+  error: 'red',
+  warning: 'orange',
+  info: 'dimmed',
+};
+
+const NOTICE_ICONS: Record<Notice['tone'], string> = {
+  error: 'tabler:alert-circle',
+  warning: 'tabler:alert-triangle',
+  info: 'tabler:info-circle',
+};
 
 /**
  * Pyramidal image viewer (viz_kind "bioimage_viewer") for OME-Zarr (NGFF 0.4/0.5),
@@ -282,6 +362,7 @@ const BioimageViewerRenderer: React.FC<Props> = ({
   const yCol = config.y_col ?? null;
   const colorCol = config.color_col ?? null;
   const sampleCol = config.points_sample_col ?? null;
+  const wellCol = config.points_well_col ?? null;
   const pointsEnabled = Boolean(pointsWfId && pointsDcId && xCol && yCol);
 
   // The viewer's own ROI selection is stripped before anything reads the
@@ -356,6 +437,85 @@ const BioimageViewerRenderer: React.FC<Props> = ({
     }
     return stores.find((s) => s.name === pickedStore) ?? stores[0];
   }, [stores, sampleValue, pickedStore]);
+  const activeStoreName = activeStore?.name ?? null;
+  const activeStoreFormat = activeStore?.format ?? 'ome-zarr';
+  const activeStoreRemote = Boolean(activeStore?.remote);
+  // Every format but OME-TIFF is read as a zarr key tree.
+  const isZarr = activeStoreFormat !== 'ome-tiff';
+  const storeKey = imageDcId && activeStoreName ? `${imageDcId}\u0000${activeStoreName}` : null;
+
+  // ---- Container: plate wells, bioformats2raw series ----------------------
+  // An OME-Zarr root may hold more than one image: an HCS plate (one image per
+  // well field) or a bioformats2raw container (one per series). The image
+  // drawn is the first field of the well an upstream filter on `well_column`
+  // names, else the reader's pick, else the plate's first well.
+  const [container, setContainer] = useState<{ key: string; value: NgffContainer } | null>(null);
+  useEffect(() => {
+    if (!storeKey || !isZarr || !imageDcId || !activeStoreName) {
+      setContainer(null);
+      return;
+    }
+    let cancelled = false;
+    const unknown: NgffContainer = { layout: 'unknown', version: null, wells: [] };
+    openContainer(createBioimageZarrStore(imageDcId, activeStoreName))
+      .then((value) => {
+        if (!cancelled) setContainer({ key: storeKey, value });
+      })
+      .catch(() => {
+        // The image reader then says why the store cannot be opened.
+        if (!cancelled) setContainer({ key: storeKey, value: unknown });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [storeKey, isZarr, imageDcId, activeStoreName, refreshTick]);
+  const containerValue = container && container.key === storeKey ? container.value : null;
+  const wells = containerValue?.wells ?? [];
+  const wellValue = useMemo(
+    () => sampleFromFilters(activeFetchFilters, config.well_column, null),
+    [activeFetchFilters, config.well_column],
+  );
+  const [pickedWell, setPickedWell] = useState<string | null>(null);
+  useEffect(() => setPickedWell(null), [storeKey]);
+  const activeWell = useMemo(() => {
+    if (!wells.length) return null;
+    if (wellValue != null) return wellForValue(wells, wellValue);
+    return wells.find((w) => w.path === pickedWell) ?? wells[0];
+  }, [wells, wellValue, pickedWell]);
+  const wellMissing = wellValue != null && wells.length > 0 && activeWell === null;
+
+  // The image group to open inside the store, once the container is known.
+  const [target, setTarget] = useState<{ key: string; path: string } | null>(null);
+  const [targetError, setTargetError] = useState<string | null>(null);
+  useEffect(() => {
+    setTargetError(null);
+    if (!storeKey || !imageDcId || !activeStoreName || wellMissing) {
+      setTarget(null);
+      return;
+    }
+    if (!isZarr) {
+      setTarget({ key: storeKey, path: '' });
+      return;
+    }
+    if (!containerValue) return;
+    let cancelled = false;
+    const wellPath = activeWell?.path ?? null;
+    containerImagePath(
+      createBioimageZarrStore(imageDcId, activeStoreName),
+      containerValue,
+      wellPath,
+    )
+      .then((path) => {
+        if (!cancelled) setTarget({ key: `${storeKey}\u0000${path}`, path });
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setTargetError(`Could not open ${activeStoreName}: ${errorText(err)}`);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [storeKey, isZarr, imageDcId, activeStoreName, containerValue, activeWell, wellMissing]);
+  const imagePath = target?.path ?? null;
 
   // ---- Labels stores --------------------------------------------------------
   // A labels DC (segmentation masks) holds one store per sample; the one of
@@ -452,14 +612,11 @@ const BioimageViewerRenderer: React.FC<Props> = ({
   // viewer is a refresh: the image reloads in place, and the reader's view,
   // channel edits and plane carry over.
   const loadedRef = useRef<{ viewer: BioimageViewer; key: string } | null>(null);
-  const activeStoreName = activeStore?.name ?? null;
-  const activeStoreFormat = activeStore?.format ?? 'ome-zarr';
-  const activeStoreRemote = Boolean(activeStore?.remote);
 
   useEffect(() => {
-    if (!viewer || !activeStoreName || !imageDcId) return;
+    if (!viewer || !activeStoreName || !imageDcId || !target) return;
     let cancelled = false;
-    const key = `${imageDcId}\u0000${activeStoreName}`;
+    const key = target.key;
     const refresh = loadedRef.current?.viewer === viewer && loadedRef.current.key === key;
     loadedRef.current = { viewer, key };
     setImageError(null);
@@ -468,16 +625,22 @@ const BioimageViewerRenderer: React.FC<Props> = ({
       setImageLoading(true);
       setInfo(null);
     }
+    const source: BioimageSource = isZarr
+      ? { kind: 'zarr', store: subStore(createBioimageZarrStore(imageDcId, activeStoreName), target.path) }
+      : createBioimageSource(imageDcId, { name: activeStoreName, format: activeStoreFormat });
     viewer
-      .load(
-        createBioimageSource(imageDcId, { name: activeStoreName, format: activeStoreFormat }),
-        configChannelsRef.current,
-        { keepView: refresh },
-      )
+      .load(source, configChannelsRef.current, { keepView: refresh })
       .then((loaded) => {
         if (cancelled) return;
         setInfo(loaded);
-        publishImageInfo(componentKey, { store: activeStoreName, info: loaded });
+        publishImageInfo(componentKey, {
+          store: activeStoreName,
+          info: loaded,
+          ...(containerValue && containerValue.layout !== 'image'
+            ? { layout: containerValue.layout }
+            : {}),
+          ...(target.path ? { imagePath: target.path } : {}),
+        });
         if (refresh) {
           // Keep the reader's channel state, including an unsaved edit.
           setChannels((prev) => (prev.length === loaded.channels.length ? prev : loaded.channels));
@@ -499,14 +662,16 @@ const BioimageViewerRenderer: React.FC<Props> = ({
     return () => {
       cancelled = true;
     };
-  }, [viewer, activeStoreName, activeStoreFormat, activeStoreRemote, imageDcId, refreshTick]);
+    // `target` changes identity on every resolve; its key and path say what it opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewer, target?.key, target?.path, activeStoreFormat, activeStoreRemote, imageDcId, refreshTick]);
 
   // An image error replaces the host (and so the viewer) with the message.
   // Another store, or a refresh, deserves a fresh attempt: clearing the error
   // remounts the host, which recreates the viewer, which loads the new store.
   useEffect(() => {
     setImageError(null);
-  }, [activeStoreName, refreshTick]);
+  }, [activeStoreName, imagePath, refreshTick]);
 
   useEffect(() => {
     if (viewer && info) viewer.setChannels(channels);
@@ -537,10 +702,12 @@ const BioimageViewerRenderer: React.FC<Props> = ({
     () =>
       Array.from(
         new Set(
-          [cellIdCol, keyCol, xCol, yCol, colorCol, sampleCol].filter((c): c is string => !!c),
+          [cellIdCol, keyCol, xCol, yCol, colorCol, sampleCol, wellCol].filter(
+            (c): c is string => !!c,
+          ),
         ),
       ),
-    [cellIdCol, keyCol, xCol, yCol, colorCol, sampleCol],
+    [cellIdCol, keyCol, xCol, yCol, colorCol, sampleCol, wellCol],
   );
   const pointColsKey = pointCols.join('|');
   const [pointRows, setPointRows] = useState<Record<string, unknown[]> | null>(null);
@@ -578,7 +745,9 @@ const BioimageViewerRenderer: React.FC<Props> = ({
 
   // The cells the dashboard filters keep, by id. Null means nothing filters.
   const [keptIds, setKeptIds] = useState<Set<string> | null>(null);
+  const [keptIdsFailed, setKeptIdsFailed] = useState(false);
   useEffect(() => {
+    setKeptIdsFailed(false);
     if (!pointsEnabled || !pointsWfId || !pointsDcId || !keyCol || !activeFetchFilters.length) {
       setKeptIds(null);
       return;
@@ -596,8 +765,10 @@ const BioimageViewerRenderer: React.FC<Props> = ({
         setKeptIds(new Set((res.rows[keyCol] ?? []).map((v) => String(v))));
       })
       .catch(() => {
-        // Best effort: without the filtered set every cell draws unfaded.
-        if (!cancelled) setKeptIds(null);
+        // Without the filtered set every cell draws unfaded, and the tile says so.
+        if (cancelled) return;
+        setKeptIds(null);
+        setKeptIdsFailed(true);
       });
     return () => {
       cancelled = true;
@@ -629,6 +800,8 @@ const BioimageViewerRenderer: React.FC<Props> = ({
     const keys = keyCol && keyCol !== cellIdCol ? (pointRows[keyCol] ?? []) : null;
     const cats = colorCol ? (pointRows[colorCol] ?? []) : null;
     const samples = sampleCol ? (pointRows[sampleCol] ?? []) : null;
+    // On a plate, a cell belongs to the shown image when its well is the one open.
+    const rowWells = wellCol && activeWell ? (pointRows[wellCol] ?? []) : null;
     const scale = config.points_scale ?? 1;
     const ox = config.points_offset_x ?? 0;
     const oy = config.points_offset_y ?? 0;
@@ -636,6 +809,9 @@ const BioimageViewerRenderer: React.FC<Props> = ({
     const out: OverlayPoint[] = [];
     for (let i = 0; i < xs.length; i += 1) {
       if (samples && !isRowOfStore(samples[i], activeStore)) continue;
+      if (rowWells && activeWell && normaliseWellName(String(rowWells[i] ?? '')) !== activeWell.name) {
+        continue;
+      }
       const x = Number(xs[i]) * scale + ox;
       const y = Number(ys[i]) * scale + oy;
       if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
@@ -664,6 +840,8 @@ const BioimageViewerRenderer: React.FC<Props> = ({
     keyCol,
     colorCol,
     sampleCol,
+    wellCol,
+    activeWell,
     activeStore,
     config.points_scale,
     config.points_offset_x,
@@ -677,10 +855,8 @@ const BioimageViewerRenderer: React.FC<Props> = ({
 
   // ---- Labels overlay -----------------------------------------------------
   const [labelsVisible, setLabelsVisible] = useState(true);
-  const [labelsOutline, setLabelsOutline] = useState(config.labels_outline ?? true);
-  const [labelsOpacity, setLabelsOpacity] = useState(config.labels_opacity ?? 0.5);
-  useEffect(() => setLabelsOutline(config.labels_outline ?? true), [config.labels_outline]);
-  useEffect(() => setLabelsOpacity(config.labels_opacity ?? 0.5), [config.labels_opacity]);
+  const [labelsOutline, setLabelsOutline] = usePersistedVizControl(metadata, 'labels_outline', true);
+  const [labelsOpacity, setLabelsOpacity] = usePersistedVizControl(metadata, 'labels_opacity', 0.5);
   const [labelsSize, setLabelsSize] = useState<{ width: number; height: number } | null>(null);
 
   // Open the paired store once the image is up; drop it when unpaired. Hiding
@@ -697,14 +873,16 @@ const BioimageViewerRenderer: React.FC<Props> = ({
     setLabelsError(null);
     setLabelsSize(null);
     setEmbeddedLabelsFound(false);
-    const store =
-      labelsDcId && pairedLabelsName
-        ? createBioimageZarrStore(labelsDcId, pairedLabelsName)
-        : embeddedLabels && imageDcId && activeStoreName
-          ? labelsSubStore(createBioimageZarrStore(imageDcId, activeStoreName))
-          : null;
-    viewer
-      .setLabels(store)
+    const open = async () => {
+      if (labelsDcId && pairedLabelsName) return createBioimageZarrStore(labelsDcId, pairedLabelsName);
+      if (!embeddedLabels || !imageDcId || !activeStoreName) return null;
+      // The image's own `labels/` group: its first label image, by the name it lists.
+      const image = subStore(createBioimageZarrStore(imageDcId, activeStoreName), imagePath ?? '');
+      const path = await firstLabelPath(image);
+      return path ? subStore(image, path) : null;
+    };
+    open()
+      .then((store) => (cancelled ? null : viewer.setLabels(store)))
       .then((opened) => {
         if (cancelled || !opened) return;
         setLabelsSize({ width: opened.width, height: opened.height });
@@ -712,9 +890,11 @@ const BioimageViewerRenderer: React.FC<Props> = ({
       })
       .catch((err: unknown) => {
         if (cancelled || (err instanceof Error && err.name === 'LoadSupersededError')) return;
-        // An image without a labels group is the common case, not an error.
-        if (embeddedLabels) return;
-        setLabelsError(`Could not open the labels of ${pairedLabelsName}: ${errorText(err)}`);
+        setLabelsError(
+          embeddedLabels
+            ? `Could not open the labels of ${activeStoreName}: ${errorText(err)}`
+            : `Could not open the labels of ${pairedLabelsName}: ${errorText(err)}`,
+        );
       });
     return () => {
       cancelled = true;
@@ -728,6 +908,7 @@ const BioimageViewerRenderer: React.FC<Props> = ({
     embeddedLabels,
     imageDcId,
     activeStoreName,
+    imagePath,
     refreshTick,
   ]);
 
@@ -761,7 +942,7 @@ const BioimageViewerRenderer: React.FC<Props> = ({
 
   // The masks show the cells, so their centroids stay undrawn (a lasso still
   // selects on them).
-  const pointRadius = config.point_radius ?? 6;
+  const [pointRadius, setPointRadius] = usePersistedVizControl(metadata, 'point_radius', 6);
   useEffect(() => {
     if (viewer && info) viewer.setPoints(labelsShown ? [] : overlay, pointRadius);
   }, [viewer, info, overlay, pointRadius, labelsShown]);
@@ -772,9 +953,24 @@ const BioimageViewerRenderer: React.FC<Props> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewer, ownSelectionKey]);
 
-  const legend = useMemo(() => {
-    // `colorScale` is null for a continuous colouring (its ramp has its own legend).
-    if (!colorScale || !colorCol || overlay.length === 0 || !pointRows) return null;
+  // The key to the cell colours, as the genome browser keys its tracks: one
+  // swatch per category on the shown image, or the ramp of a numeric column.
+  const colourKey = useMemo<{ entries: ReturnType<typeof foldByColour>; ramp: LegendRamp | null }>(() => {
+    const none = { entries: [], ramp: null };
+    if (!colorCol || overlay.length === 0 || !pointRows) return none;
+    if (continuous) {
+      const fmt = (v: number) => v.toLocaleString(undefined, { maximumSignificantDigits: 3 });
+      return {
+        entries: [],
+        ramp: {
+          stops: rampStops(continuous.scale),
+          from: fmt(continuous.min),
+          to: fmt(continuous.max),
+          values: [fmt(continuous.min), fmt(continuous.max)],
+        },
+      };
+    }
+    if (!colorScale) return none;
     const present = new Set<string>();
     const cats = pointRows[colorCol] ?? [];
     const samples = sampleCol ? (pointRows[sampleCol] ?? []) : null;
@@ -782,9 +978,11 @@ const BioimageViewerRenderer: React.FC<Props> = ({
       if (samples && activeStore && !isRowOfStore(samples[i], activeStore)) continue;
       present.add(String(cats[i] ?? ''));
     }
-    const entries = colorScale.universe.filter((v) => present.has(v));
-    return { entries: entries.slice(0, LEGEND_MAX), more: Math.max(0, entries.length - LEGEND_MAX) };
-  }, [colorScale, colorCol, overlay.length, pointRows, sampleCol, activeStore]);
+    const items = colorScale.universe
+      .filter((v) => present.has(v))
+      .map((v) => ({ label: v || '(empty)', color: colorScale.get(v) ?? '' }));
+    return { entries: foldByColour(items), ramp: null };
+  }, [colorScale, continuous, colorCol, overlay.length, pointRows, sampleCol, activeStore]);
 
   // ---- ROI selection ------------------------------------------------------
   const roiEnabled = Boolean(selectionColumn && pointsDcId && overlay.length > 0);
@@ -825,191 +1023,297 @@ const BioimageViewerRenderer: React.FC<Props> = ({
   };
 
   // ---- Controls -----------------------------------------------------------
-  const updateChannel = (index: number, patch: Partial<ChannelState>, persist: boolean) => {
+  const updateChannel = (index: number, patch: Partial<ChannelState>) => {
     const next = channels.map((c) => (c.index === index ? { ...c, ...patch } : c));
     setChannels(next);
-    if (persist) writeConfig({ channels: toConfigChannels(next) });
+    return next;
   };
+  const persistChannels = (next: readonly ChannelState[]) =>
+    writeConfig({ channels: toConfigChannels(next) });
   const integerDtype = info ? !/^Float/.test(info.dtype) : true;
+  const visibleChannels = channels.filter((c) => c.visible).length;
 
-  // Memoised so a zoom (which re-renders for the scale bar) does not hand the
-  // frame a new controls node and re-publish the Settings popover.
-  const controls = useMemo(() => (
-    <Stack gap="xs">
-      {stores && stores.length > 1 ? (
-        <Select
-          size="xs"
-          label="Image"
-          data={stores.map((s) => ({ value: s.name, label: s.sample }))}
-          value={activeStore?.name ?? null}
-          disabled={sampleValue != null}
-          description={
-            sampleValue != null ? `Follows the ${config.sample_column} filter` : undefined
-          }
-          onChange={(v) => {
-            if (!v) return;
-            setPickedStore(v);
-            writeConfig({ store: v });
-          }}
-          allowDeselect={false}
-        />
-      ) : null}
-      {info && info.sizes.z > 1 ? (
-        <PlaneSlider
-          label="Z plane"
-          value={plane.z}
-          size={info.sizes.z}
-          onChange={(v) => setPlane((p) => ({ ...p, z: v }))}
-        />
-      ) : null}
-      {info && info.sizes.t > 1 ? (
-        <PlaneSlider
-          label="Time point"
-          value={plane.t}
-          size={info.sizes.t}
-          onChange={(v) => setPlane((p) => ({ ...p, t: v }))}
-        />
-      ) : null}
-      {channels.length ? (
-        <div>
-          <Text size="xs" fw={500} mb={4}>
-            Channels
-          </Text>
-          <Stack gap="sm">
-            {channels.map((c) => {
-              const [lo, hi] = c.domain;
-              const step = integerDtype ? 1 : Math.max((hi - lo) / 500, Number.EPSILON);
-              return (
-                <Stack key={c.index} gap={4}>
-                  <Group gap="xs" wrap="nowrap" justify="space-between">
-                    <Checkbox
-                      size="xs"
-                      label={c.name}
-                      checked={c.visible}
-                      onChange={(e) =>
-                        updateChannel(c.index, { visible: e.currentTarget.checked }, true)
-                      }
-                    />
-                    <ColorInput
-                      size="xs"
-                      w={110}
-                      format="hex"
-                      value={c.color}
-                      onChange={(v) => {
-                        const hex = normaliseHex(v);
-                        if (hex) updateChannel(c.index, { color: hex }, false);
-                      }}
-                      onChangeEnd={(v) => {
-                        const hex = normaliseHex(v);
-                        if (hex) updateChannel(c.index, { color: hex }, true);
-                      }}
-                    />
-                  </Group>
-                  <RangeSlider
-                    size="xs"
-                    min={lo}
-                    max={hi}
-                    step={step}
-                    minRange={0}
-                    value={c.contrastLimits}
-                    disabled={!c.visible}
-                    onChange={(v) => updateChannel(c.index, { contrastLimits: v }, false)}
-                    onChangeEnd={(v) => updateChannel(c.index, { contrastLimits: v }, true)}
-                  />
-                </Stack>
-              );
-            })}
-          </Stack>
-        </div>
-      ) : null}
-      {labelsDcId ? (
-        <div>
-          <Text size="xs" fw={500} mb={4}>
-            Cell masks
-          </Text>
-          <Stack gap={6}>
-            <Switch
-              size="xs"
-              label="Show masks"
+  // T plays by stepping the plane; any other plane change (the slider, a new
+  // image) leaves it as the reader set it.
+  const [playing, setPlaying] = useState(false);
+  const sizeT = info?.sizes.t ?? 1;
+  useEffect(() => {
+    if (!playing || sizeT <= 1) return;
+    const id = window.setInterval(
+      () => setPlane((p) => ({ ...p, t: (p.t + 1) % sizeT })),
+      PLAY_STEP_MS,
+    );
+    return () => window.clearInterval(id);
+  }, [playing, sizeT]);
+  useEffect(() => setPlaying(false), [target?.key]);
+
+  // The encoding tier: what is drawn (which sample, well, plane).
+  const primaryControls = useMemo(
+    () => (
+      <>
+        {stores && stores.length > 1 ? (
+          <VizSelect
+            label="Sample"
+            data={stores.map((s) => ({ value: s.name, label: s.sample }))}
+            value={activeStore?.name ?? null}
+            disabled={sampleValue != null}
+            description={
+              sampleValue != null ? `Follows the ${config.sample_column} filter` : undefined
+            }
+            onChange={(v) => {
+              if (!v) return;
+              setPickedStore(v);
+              writeConfig({ store: v });
+            }}
+            allowDeselect={false}
+          />
+        ) : null}
+        {wells.length > 1 ? (
+          <VizSelect
+            label="Well"
+            searchable
+            data={wells.map((w) => ({ value: w.path, label: w.name }))}
+            value={activeWell?.path ?? null}
+            disabled={wellValue != null}
+            description={wellValue != null ? `Follows the ${config.well_column} filter` : undefined}
+            onChange={(v) => v && setPickedWell(v)}
+            allowDeselect={false}
+          />
+        ) : null}
+        {info && info.sizes.z > 1 ? (
+          <PlaneSlider
+            label="Z"
+            value={plane.z}
+            size={info.sizes.z}
+            onChange={(v) => setPlane((p) => ({ ...p, z: v }))}
+          />
+        ) : null}
+        {info && info.sizes.t > 1 ? (
+          <PlaneSlider
+            label="Time"
+            value={plane.t}
+            size={info.sizes.t}
+            playing={playing}
+            onTogglePlay={() => setPlaying((p) => !p)}
+            onChange={(v) => {
+              setPlaying(false);
+              setPlane((p) => ({ ...p, t: v }));
+            }}
+          />
+        ) : null}
+      </>
+    ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [stores, activeStore, sampleValue, config.sample_column, wells, activeWell, wellValue, config.well_column, info, plane, playing],
+  );
+
+  // The cosmetic tier: how it is drawn. One group per channel, then the labels
+  // and the cells; memoised so a zoom (which re-renders for the scale bar)
+  // does not hand the frame a new node and re-publish the Settings popover.
+  const controls = useMemo(
+    () => (
+      <>
+        {channels.map((c) => {
+          const [lo, hi] = c.domain;
+          const step = integerDtype ? 1 : Math.max((hi - lo) / 500, Number.EPSILON);
+          // viv shades a fixed number of channels at once: past it, another
+          // one is offered greyed out with the reason.
+          const full = !c.visible && visibleChannels >= MAX_RENDERED_CHANNELS;
+          return (
+            <VizControlGroup key={c.index} title={c.name}>
+              <VizSwitch
+                label="Show"
+                checked={c.visible}
+                disabled={full}
+                title={full ? `At most ${MAX_RENDERED_CHANNELS} channels show at once` : undefined}
+                onChange={(e) =>
+                  persistChannels(updateChannel(c.index, { visible: e.currentTarget.checked }))
+                }
+              />
+              <VizColourInput
+                label="Colour"
+                value={c.color}
+                disabled={!c.visible}
+                onCommit={(hex) => persistChannels(updateChannel(c.index, { color: hex }))}
+              />
+              <VizRangeSlider
+                label="Contrast"
+                min={lo}
+                max={hi}
+                step={step}
+                minRange={0}
+                value={c.contrastLimits}
+                disabled={!c.visible}
+                onChange={(v) => updateChannel(c.index, { contrastLimits: v })}
+                onChangeEnd={(v) => persistChannels(updateChannel(c.index, { contrastLimits: v }))}
+              />
+            </VizControlGroup>
+          );
+        })}
+        {labelsDcId || embeddedLabelsFound ? (
+          <VizControlGroup title="Labels">
+            <VizSwitch
+              label="Show labels"
               checked={labelsVisible}
               disabled={!labelsWanted}
               onChange={(e) => setLabelsVisible(e.currentTarget.checked)}
             />
-            <Switch
-              size="xs"
+            <VizSwitch
               label="Outlines"
               checked={labelsOutline}
               disabled={!labelsWanted || !labelsVisible}
-              onChange={(e) => {
-                const next = e.currentTarget.checked;
-                setLabelsOutline(next);
-                writeConfig({ labels_outline: next });
-              }}
+              onChange={(e) => setLabelsOutline(e.currentTarget.checked)}
             />
-            <div>
-              <Text size="xs" mb={2}>
-                Fill opacity
-              </Text>
-              <Slider
-                size="xs"
-                min={0}
-                max={1}
-                step={0.05}
-                value={labelsOpacity}
-                disabled={!labelsWanted || !labelsVisible}
-                label={(v) => `${Math.round(v * 100)}%`}
-                onChange={setLabelsOpacity}
-                onChangeEnd={(v) => writeConfig({ labels_opacity: v })}
-              />
-            </div>
-            {labelStores && !labelsWanted && activeStore ? (
-              <Text size="xs" c="dimmed">
-                No mask for sample "{activeStore.sample}"
-              </Text>
-            ) : null}
-            {labelsMisaligned && labelsSize && info ? (
-              <Text size="xs" c="orange">
-                Mask is {labelsSize.width} x {labelsSize.height} px, the image {info.width} x{' '}
-                {info.height} px: they should share one pixel grid.
-              </Text>
-            ) : null}
-            {labelStoresError || labelsError ? (
-              <Text size="xs" c="red">
-                {labelStoresError ? `Labels: ${labelStoresError}` : labelsError}
-              </Text>
-            ) : null}
-          </Stack>
-        </div>
-      ) : null}
-      {pointsError ? (
-        <Text size="xs" c="red">
-          Points overlay: {pointsError}
-        </Text>
-      ) : null}
-    </Stack>
+            <VizSlider
+              label="Fill opacity"
+              min={0}
+              max={1}
+              step={0.05}
+              value={labelsOpacity}
+              disabled={!labelsWanted || !labelsVisible}
+              thumbLabel={(v) => `${Math.round(v * 100)}%`}
+              onChange={setLabelsOpacity}
+            />
+          </VizControlGroup>
+        ) : null}
+        {pointsEnabled ? (
+          <VizControlGroup title="Cells">
+            <VizSlider
+              label="Point size"
+              min={1}
+              max={20}
+              step={1}
+              value={pointRadius}
+              disabled={labelsShown}
+              thumbLabel={(v) => `${v} px`}
+              onChange={setPointRadius}
+            />
+          </VizControlGroup>
+        ) : null}
+      </>
+    ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  ), [stores, activeStore, sampleValue, config.sample_column, info, plane, channels, integerDtype, pointsError, labelsDcId, labelStores, labelsWanted, labelsVisible, labelsOutline, labelsOpacity, labelsSize, labelsMisaligned, labelStoresError, labelsError]);
+    [channels, integerDtype, visibleChannels, labelsDcId, embeddedLabelsFound, labelsWanted, labelsVisible, labelsOutline, labelsOpacity, pointsEnabled, pointRadius, labelsShown],
+  );
+
+  // ---- Notices ------------------------------------------------------------
+  const notices: Notice[] = [];
+  if (pointsError) notices.push({ key: 'points', tone: 'error', text: `Cells: ${pointsError}` });
+  if (labelStoresError) {
+    notices.push({ key: 'label-stores', tone: 'error', text: `Labels: ${labelStoresError}` });
+  }
+  if (labelsError) notices.push({ key: 'labels', tone: 'error', text: labelsError });
+  if (labelsMisaligned && labelsSize && info) {
+    notices.push({
+      key: 'misaligned',
+      tone: 'warning',
+      text:
+        `Labels are ${labelsSize.width} × ${labelsSize.height} px, the image ` +
+        `${info.width} × ${info.height} px: they should share one pixel grid.`,
+    });
+  }
+  if (labelsDcId && labelStores && !labelsWanted && activeStore) {
+    notices.push({ key: 'no-mask', tone: 'info', text: `No labels for sample "${activeStore.sample}"` });
+  }
+  if (keptIdsFailed) {
+    notices.push({
+      key: 'kept',
+      tone: 'warning',
+      text: 'Could not read which cells the filters keep: every cell is drawn.',
+    });
+  }
 
   // ---- Overlay chrome -----------------------------------------------------
   const physical = config.show_scalebar === false ? null : (info?.physicalSize ?? null);
   const bar = physical ? scaleBarLength(physical.value, zoom, 120) : null;
-
-  const toolButton = (value: SelectionMode, label: string, icon: string) => (
-    <OverlayButton
-      label={label}
-      icon={icon}
-      active={mode === value}
-      onClick={() => setMode(value)}
-    />
-  );
   const hasSelection = roiEnabled && ownSelection.length > 0;
+
+  const pointerModes = useMemo<PointerMode<SelectionMode>[]>(
+    () =>
+      POINTER_MODES.map((m) => ({
+        ...m,
+        disabledReason:
+          m.value === 'pan' || roiEnabled
+            ? null
+            : onFilterChange
+              ? 'Selection needs cells on the shown image.'
+              : 'Selection is off in this read-only view.',
+      })),
+    [roiEnabled, onFilterChange],
+  );
+
+  const validation = activeStore?.validation ?? null;
+  const headerBadges: React.ReactNode[] = [
+    ...(pointsEnabled
+      ? [
+          <PointerModeSwitch
+            key="mode"
+            value={mode}
+            modes={pointerModes}
+            onChange={setMode}
+            aria-label="Pointer mode"
+            testId="bioimage-pointer-mode"
+            testIdPrefix="bioimage-mode"
+          />,
+        ]
+      : []),
+    ...(hasSelection
+      ? [
+          <Badge
+            key="selection"
+            size="xs"
+            variant="filled"
+            radius="sm"
+            tt="none"
+            data-testid="bioimage-selection-badge"
+            rightSection={
+              <CloseButton
+                size="xs"
+                variant="transparent"
+                c="inherit"
+                aria-label="Clear selection"
+                onClick={() => emitSelection([])}
+              />
+            }
+          >
+            {ownSelection.length.toLocaleString()} selected
+          </Badge>,
+        ]
+      : []),
+    ...(activeStore
+      ? [
+          <BioimageBadges
+            key="store"
+            format={activeStore.format}
+            validation={validation}
+            ngffVersion={containerValue?.version ?? null}
+            axes={info?.labels ?? null}
+            layout={containerValue?.layout ?? null}
+            labels={labelsShown}
+            remote={activeStore.remote}
+          />,
+        ]
+      : []),
+  ];
+
+  // What is on screen, under the title: the sample, the well, the plane.
+  const echo = activeStore
+    ? [
+        stores && stores.length > 1 ? activeStore.sample : null,
+        activeWell ? `well ${activeWell.name}` : null,
+      ]
+        .filter(Boolean)
+        .join(' · ') || undefined
+    : undefined;
 
   const noStoreMessage =
     !storesLoading && !storesError && stores
-      ? emptyStoreMessage(stores, activeStore, sampleValue)
+      ? wellMissing && wellValue != null
+        ? `No well "${wellValue}" in this plate`
+        : emptyStoreMessage(stores, activeStore, sampleValue)
       : undefined;
 
-  const frameError = storesError ?? imageError;
+  const frameError = storesError ?? targetError ?? imageError;
   // A bound labels DC holds the thumbnail until its tiles are drawn too, unless
   // it has no mask for this sample or failed (the image alone is then final).
   const labelsPending =
@@ -1026,6 +1330,43 @@ const BioimageViewerRenderer: React.FC<Props> = ({
         ? 'true'
         : 'false';
 
+  const showKey = colourKey.ramp !== null || colourKey.entries.length > 0;
+  const statusStrip =
+    showKey || notices.length ? (
+      <Group
+        gap="xs"
+        justify="space-between"
+        wrap="wrap"
+        mt={4}
+        data-testid="bioimage-status-strip"
+        style={{ minWidth: 0 }}
+      >
+        {showKey ? (
+          <ColourKey
+            title={colorCol ? keyTitle(colorCol) : undefined}
+            entries={colourKey.entries}
+            ramp={colourKey.ramp}
+            testId="bioimage-colour-key"
+            rampTestId="bioimage-colour-ramp"
+          />
+        ) : (
+          <span />
+        )}
+        {notices.length ? (
+          <Stack gap={2} style={{ minWidth: 0, flex: '1 1 200px' }} align="flex-end">
+            {notices.map((n) => (
+              <Group key={n.key} gap={4} wrap="nowrap" data-testid={`bioimage-notice-${n.key}`}>
+                <Icon icon={NOTICE_ICONS[n.tone]} width={12} color={`var(--mantine-color-${n.tone === 'info' ? 'dimmed' : NOTICE_COLOURS[n.tone] + '-6'})`} />
+                <Text size="xs" c={NOTICE_COLOURS[n.tone]} lineClamp={2}>
+                  {n.text}
+                </Text>
+              </Group>
+            ))}
+          </Stack>
+        ) : null}
+      </Group>
+    ) : null;
+
   // The screenshot capture waits on `data-bioimage-ready`. It sits on a
   // wrapper rather than the host because the frame swaps its children for a
   // skeleton, an alert or an empty state, and every branch must report.
@@ -1035,7 +1376,10 @@ const BioimageViewerRenderer: React.FC<Props> = ({
       <AdvancedVizFrame
         title={metadata.title || 'Bioimage'}
         subtitle={(metadata as any).description || (metadata as any).subtitle}
+        primaryControls={primaryControls}
         controls={controls}
+        echo={echo}
+        badges={headerBadges}
         loading={storesLoading}
         error={frameError}
         emptyMessage={noStoreMessage}
@@ -1044,136 +1388,69 @@ const BioimageViewerRenderer: React.FC<Props> = ({
         estimated={pointsEstimated}
       >
         {glGranted ? (
-          <div style={{ position: 'relative', width: '100%', height: '100%', minHeight: 240 }}>
-            <div
-              ref={setHostEl}
-              style={{
-                position: 'absolute',
-                inset: 0,
-                overflow: 'hidden',
-                borderRadius: 'var(--mantine-radius-sm)',
-                touchAction: 'none',
-              }}
-            />
-            <Group gap={4} style={{ position: 'absolute', top: 6, left: 6 }} wrap="nowrap">
-              <ActionIcon.Group>
-                {roiEnabled ? (
-                  <>
-                    {toolButton('pan', 'Pan and zoom', 'mdi:hand-back-right-outline')}
-                    {toolButton('lasso', 'Lasso select cells', 'mdi:lasso')}
-                    {toolButton('rect', 'Rectangle select cells', 'mdi:selection-drag')}
-                  </>
-                ) : null}
-                <OverlayButton
-                  label="Reset view"
-                  icon="mdi:fit-to-screen"
-                  onClick={() => viewer?.resetView()}
-                />
-                {hasSelection ? (
-                  <OverlayButton
-                    label="Clear selection"
-                    icon="mdi:selection-off"
-                    onClick={() => emitSelection([])}
-                  />
-                ) : null}
-              </ActionIcon.Group>
-              {hasSelection ? (
-                <Badge size="xs" variant="filled">
-                  {ownSelection.length.toLocaleString()} selected
-                </Badge>
+          <Box
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              width: '100%',
+              height: '100%',
+              minHeight: 240,
+            }}
+          >
+            <div style={{ position: 'relative', flex: '1 1 auto', minHeight: 200 }}>
+              <div
+                ref={setHostEl}
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  overflow: 'hidden',
+                  borderRadius: 'var(--mantine-radius-sm)',
+                  touchAction: 'none',
+                }}
+              />
+              <Box style={{ position: 'absolute', right: 6, top: 6, zIndex: 2 }}>
+                <Tooltip label="Reset view" withArrow openDelay={300}>
+                  <ActionIcon
+                    size="sm"
+                    variant="default"
+                    aria-label="Reset view"
+                    data-testid="bioimage-reset-view"
+                    onClick={() => viewer?.resetView()}
+                  >
+                    <Icon icon="tabler:focus-centered" width={14} height={14} />
+                  </ActionIcon>
+                </Tooltip>
+              </Box>
+              {bar && physical ? (
+                <Paper
+                  px={6}
+                  py={4}
+                  radius="sm"
+                  shadow="xs"
+                  style={{ position: 'absolute', bottom: 8, right: 8, opacity: 0.92 }}
+                >
+                  <Stack gap={2} align="center">
+                    <Text size="xs" lh={1}>
+                      {formatLength(bar.value, physical.unit)}
+                    </Text>
+                    <div
+                      style={{
+                        width: bar.screenPx,
+                        height: 3,
+                        background: 'var(--mantine-color-text)',
+                      }}
+                    />
+                  </Stack>
+                </Paper>
               ) : null}
-            </Group>
-            {stores && stores.length > 1 && activeStore ? (
-              <Badge
-                size="xs"
-                variant="default"
-                style={{ position: 'absolute', top: 8, right: 8 }}
-              >
-                {activeStore.sample}
-              </Badge>
-            ) : null}
-            {legend && legend.entries.length ? (
-              <Paper
-                p={6}
-                radius="sm"
-                shadow="xs"
-                style={{ position: 'absolute', bottom: 8, left: 8, maxWidth: '45%', opacity: 0.92 }}
-              >
-                <Stack gap={2}>
-                  {legend.entries.map((v) => (
-                    <Group key={v} gap={6} wrap="nowrap">
-                      <ColorSwatch color={colorScale!.get(v)} size={10} withShadow={false} />
-                      <Text size="xs" lineClamp={1}>
-                        {v || '(empty)'}
-                      </Text>
-                    </Group>
-                  ))}
-                  {legend.more ? (
-                    <Text size="xs" c="dimmed">
-                      +{legend.more} more
-                    </Text>
-                  ) : null}
-                </Stack>
-              </Paper>
-            ) : null}
-            {continuous && colorCol && overlay.length ? (
-              <Paper
-                p={6}
-                radius="sm"
-                shadow="xs"
-                style={{ position: 'absolute', bottom: 8, left: 8, maxWidth: '45%', opacity: 0.92 }}
-              >
-                <Stack gap={2}>
-                  <Text size="xs" lineClamp={1}>
-                    {colorCol}
-                  </Text>
-                  <div
-                    style={{
-                      width: 120,
-                      height: 8,
-                      borderRadius: 'var(--mantine-radius-xs)',
-                      background: rampGradient(continuous.scale),
-                    }}
-                  />
-                  <Group justify="space-between" gap={8} wrap="nowrap">
-                    <Text size="xs" c="dimmed">
-                      {continuous.min.toLocaleString(undefined, { maximumSignificantDigits: 3 })}
-                    </Text>
-                    <Text size="xs" c="dimmed">
-                      {continuous.max.toLocaleString(undefined, { maximumSignificantDigits: 3 })}
-                    </Text>
-                  </Group>
-                </Stack>
-              </Paper>
-            ) : null}
-            {bar && physical ? (
-              <Paper
-                px={6}
-                py={4}
-                radius="sm"
-                shadow="xs"
-                style={{ position: 'absolute', bottom: 8, right: 8, opacity: 0.92 }}
-              >
-                <Stack gap={2} align="center">
-                  <Text size="xs" lh={1}>
-                    {formatLength(bar.value, physical.unit)}
-                  </Text>
-                  <div
-                    style={{
-                      width: bar.screenPx,
-                      height: 3,
-                      background: 'var(--mantine-color-text)',
-                    }}
-                  />
-                </Stack>
-              </Paper>
-            ) : null}
-            {imageLoading ? (
-              <Center style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
-                <Loader size="sm" />
-              </Center>
-            ) : null}
-          </div>
+              {imageLoading ? (
+                <Center style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+                  <Loader size="sm" />
+                </Center>
+              ) : null}
+            </div>
+            {statusStrip}
+          </Box>
         ) : (
           <Center h="100%" mih={240}>
             <Stack gap={4} align="center">
