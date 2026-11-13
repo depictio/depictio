@@ -370,7 +370,8 @@ def test_a_spec_violation_is_a_finding_not_an_unreadable_array(tmp_path):
 
     assert ok.ok, ok.issues
     assert not bad.ok
-    assert any("version" in issue for issue in bad.issues)
+    # Located in the labels group, not on the image that holds it.
+    assert bad.issues == ["labels/version: Field required"]
     assert bad.checked is None
 
 

@@ -220,6 +220,10 @@ class _Check:
             spec_error = _validation_error_in(exc)
             if spec_error is not None:
                 # The metadata breaks the spec: a finding, wherever it sits.
+                # An image's labels group is validated with it, and its error
+                # carries no path of its own: the model's name says where.
+                if getattr(spec_error, "title", "") == "LabelsAttrs":
+                    where = f"{where}labels/"
                 self.issues += [f"{where}{line}" for line in _format_errors(spec_error)]
                 return
             errors = _format_errors(exc)
