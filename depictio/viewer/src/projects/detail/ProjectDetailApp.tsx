@@ -2465,6 +2465,10 @@ const DataCollectionViewer: React.FC<{
   const [coordsOpen, setCoordsOpen] = useState(false);
   // A table not yet marked whose column names look like a lat/lon pair: offer
   // the marking, never apply it (a column called "lat" may mean something else).
+  // Map coordinates only where it means something: a table already marked,
+  // or one whose columns look like a lat/lon pair.
+  const showCoordsButton =
+    isTable && (isCoordTable || detectCoordinatesColumns(shownColumns.map((c) => c.name)) != null);
   const coordsGuess =
     isTable && !isCoordTable && canMutate
       ? detectCoordinatesColumns(shownColumns.map((c) => c.name))
@@ -2550,7 +2554,7 @@ const DataCollectionViewer: React.FC<{
             </Stack>
           </Group>
           <Group gap="xs" wrap="nowrap">
-            {isTable && (
+            {showCoordsButton && (
               <Tooltip
                 label={
                   !canMutate

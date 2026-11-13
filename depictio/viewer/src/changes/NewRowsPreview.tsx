@@ -12,6 +12,7 @@
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import { Button, Group, LoadingOverlay, Stack, Switch, Text, useComputedColorScheme } from '@mantine/core';
+import { Icon } from '@iconify/react';
 import { AgGridReact } from 'ag-grid-react';
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-alpine.css';
@@ -116,8 +117,14 @@ const NewRowsPreview: React.FC<{
         </Text>
         <Group gap="sm" wrap="nowrap">
         {onClear && (
-          <Button size="compact-xs" variant="subtle" color="gray" onClick={onClear} data-testid="new-rows-clear">
-            Clear
+          <Button
+            size="xs"
+            variant="light"
+            leftSection={<Icon icon="tabler:filter-off" width={16} />}
+            onClick={onClear}
+            data-testid="new-rows-clear"
+          >
+            Back to full table
           </Button>
         )}
         <Switch
