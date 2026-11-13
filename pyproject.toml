@@ -33,6 +33,10 @@ dependencies = [
   "pyyaml>=6.0.3",
   "rich==15.0.0",
   "typer==0.27.0",
+  # Reads AnnData tables out of SpatialData stores (zarr v2 and v3, sharded).
+  # zarr 3.2+ needs Python 3.12; 3.1.6 is the last release for 3.11.
+  "zarr==3.4.0; python_version >= '3.12'",
+  "zarr==3.1.6; python_version < '3.12'",
 ]
 authors = [{ name = "Thomas Weber", email = "thomas.weber@embl.de" }]
 urls = { Homepage = "https://github.com/depictio/depictio", Documentation = "https://depictio.github.io/depictio-docs/latest/" }
