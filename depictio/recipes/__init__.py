@@ -34,6 +34,14 @@ class RecipeError(Exception):
     """Raised when a recipe fails validation."""
 
 
+class RecipeSourceMissing(RecipeError):
+    """A required input file of the recipe is not in the data root.
+
+    Raised apart so a project with several runs can tell a run where that
+    pipeline step did not run (skipped) from a recipe that is broken (fails).
+    """
+
+
 # Pre-#863 constant names. A recipe still using them fails loudly instead of
 # half-working: the optional schema is read with a ``None`` default, so a module
 # that only renamed the required schema would silently skip optional validation.
@@ -298,7 +306,7 @@ def _read_source_outside_root(
     if not Path(location).is_file():
         if source.optional:
             return None
-        raise RecipeError(f"Source '{source.ref}': file not found: {location}")
+        raise RecipeSourceMissing(f"Source '{source.ref}': file not found: {location}")
     return _read_source_file(location, source)
 
 
@@ -323,7 +331,7 @@ def _resolve_glob_source(
     if not matched_files:
         if source.optional:
             return None
-        raise RecipeError(
+        raise RecipeSourceMissing(
             f"Source '{source.ref}': no files matched glob '{pattern}' in {root.location}"
         )
 
@@ -417,7 +425,7 @@ def resolve_sources(
                 if source.optional:
                     sources[source.ref] = None  # type: ignore[assignment]
                     continue
-                raise RecipeError(f"Source '{source.ref}': file not found: {file_location}")
+                raise RecipeSourceMissing(f"Source '{source.ref}': file not found: {file_location}")
             df = _read_source_file(file_location, source, storage_options, rel_path=rel_path)
 
         if df.is_empty():

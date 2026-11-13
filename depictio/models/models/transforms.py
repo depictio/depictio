@@ -86,6 +86,10 @@ class TransformConfig(BaseModel):
     # a ``params`` keyword (e.g. ``marker_panel: "{MARKER_PANEL}"``). Values still
     # holding an unresolved ``{VAR}`` placeholder are dropped before the call.
     params: dict[str, str] | None = None
+    # ``params`` resolved per run location, when the runs of a project were
+    # resolved with different template variables. ``params`` stays the first
+    # location's. Written by the CLI on --attach-run and refresh.
+    run_params: dict[str, dict[str, str]] | None = None
 
     model_config = ConfigDict(extra="forbid")
 

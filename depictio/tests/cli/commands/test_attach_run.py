@@ -143,7 +143,8 @@ class TestLocationMerge:
         local = _project(["/data/run_b"], "/data/run_b/metadata.tsv")
         report = attach_run_to_project(local, {})
         assert local.workflows[0].data_location.locations == ["/data/run_b"]
-        assert report["kept_single"] == []
+        assert report["bindings"].per_run_single == []
+        assert local.workflows[0].data_collections[1].config.scan.scan_parameters.run_files is None
 
 
 class TestAttachedRecord:
@@ -182,19 +183,40 @@ class TestAttachedRecord:
 
 
 class TestSingleFileBindingIsPreserved:
-    """A `scan.mode: single` collection points at ONE absolute path.
+    """A `scan.mode: single` collection points at ONE absolute path per run.
 
-    The template resolved it against the NEW run, but the next scan deletes files
-    whose location no longer matches the config, so re-pointing it would silently
-    drop the file ingested from the original run. Attaching must not do that.
+    The template resolved it against the NEW run. The first run's file stays the
+    project-level ``filename``, and each run's file is kept in ``run_files``, so
+    neither run's file is dropped by the next scan (epic #1399).
     """
 
-    def test_single_file_collection_keeps_the_original_binding(self, remote):
+    def test_first_run_file_stays_project_level(self, remote):
         local = _project(["/data/run_b"], "/data/run_b/metadata.tsv")
         report = attach_run_to_project(local, remote)
-        metadata_dc = local.workflows[0].data_collections[1]
-        assert metadata_dc.config.scan.scan_parameters.filename == "/data/run_a/metadata.tsv"
-        assert report["kept_single"] == ["metadata"]
+        params = local.workflows[0].data_collections[1].config.scan.scan_parameters
+        assert params.filename == "/data/run_a/metadata.tsv"
+        # Not on this host: the new run keeps the file of the run before it.
+        assert params.run_files == {
+            "/data/run_a": "/data/run_a/metadata.tsv",
+            "/data/run_b": "/data/run_a/metadata.tsv",
+        }
+        assert report["bindings"].missing_single == ["metadata"]
+
+    def test_each_run_binds_its_own_file(self, tmp_path):
+        run_a, run_b = tmp_path / "run_a", tmp_path / "run_b"
+        for run, body in ((run_a, "s\ta\n"), (run_b, "s\tb\n")):
+            run.mkdir()
+            (run / "metadata.tsv").write_text(body)
+        remote = _remote_doc(_project([str(run_a)], str(run_a / "metadata.tsv")))
+        local = _project([str(run_b)], str(run_b / "metadata.tsv"))
+        report = attach_run_to_project(local, remote)
+        params = local.workflows[0].data_collections[1].config.scan.scan_parameters
+        assert params.filename == str(run_a / "metadata.tsv")
+        assert params.run_files == {
+            str(run_a): str(run_a / "metadata.tsv"),
+            str(run_b): str(run_b / "metadata.tsv"),
+        }
+        assert report["bindings"].per_run_single == ["metadata"]
 
     def test_recursive_collection_is_left_alone(self, remote):
         local = _project(["/data/run_b"], "/data/run_b/metadata.tsv")
@@ -203,19 +225,20 @@ class TestSingleFileBindingIsPreserved:
         after = local.workflows[0].data_collections[0].config.scan.model_dump()
         assert after == before
 
-    def test_unchanged_binding_is_not_reported_as_kept(self, remote):
+    def test_same_path_is_not_reported_as_per_run(self, remote):
         local = _project(["/data/run_b"], "/data/run_a/metadata.tsv")
         report = attach_run_to_project(local, remote)
-        assert report["kept_single"] == []
+        assert report["bindings"].per_run_single == []
 
-    def test_collection_absent_from_the_remote_keeps_this_run_binding(self, remote):
+    def test_collection_absent_from_the_remote_binds_this_run(self, remote):
         remote["workflows"][0]["data_collections"] = [
             dc
             for dc in remote["workflows"][0]["data_collections"]
             if dc["data_collection_tag"] != "metadata"
         ]
         local = _project(["/data/run_b"], "/data/run_b/metadata.tsv")
-        report = attach_run_to_project(local, remote)
-        metadata_dc = local.workflows[0].data_collections[1]
-        assert metadata_dc.config.scan.scan_parameters.filename == "/data/run_b/metadata.tsv"
-        assert report["kept_single"] == []
+        attach_run_to_project(local, remote)
+        params = local.workflows[0].data_collections[1].config.scan.scan_parameters
+        assert params.filename == "/data/run_b/metadata.tsv"
+        # Bound to run_b explicitly, or the scan would read it as run_a's.
+        assert params.run_files == {"/data/run_b": "/data/run_b/metadata.tsv"}
