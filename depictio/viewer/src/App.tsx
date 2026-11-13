@@ -180,6 +180,8 @@ import VersionPreviewBanner from './versions/VersionPreviewBanner';
 import { dashboardHref } from './dashboards/lib/dashboardLinks';
 import ChangeMarksProvider from './changes/ChangeMarksProvider';
 import ChangesHeaderButton from './changes/ChangesHeaderButton';
+import type { NewsSplit } from './changes/newsSplit';
+import type { BulkComputeOptions } from 'depictio-react-core';
 
 /**
  * Top-level SPA. Layout:
@@ -249,6 +251,16 @@ const App: React.FC = () => {
     return id ? String(id) : undefined;
   }, [dashboard]);
   const groupsApi = useSelectionGroups(groupingScopeId);
+  // "What's new" in Split view (#1397): virtual New / Seen before groups that
+  // stand in for the reader's own groups while it is on, never stored.
+  const [newsSplit, setNewsSplit] = useState<NewsSplit | null>(null);
+  const bulkOptions = useMemo<BulkComputeOptions | undefined>(
+    () =>
+      newsSplit
+        ? { groups: newsSplit.groups, compareGroups: true, showOther: newsSplit.showOther, showOverall: true }
+        : groupsApi.bulkOptions,
+    [newsSplit, groupsApi.bulkOptions],
+  );
   const combinedFilters = useMemo(
     () =>
       groupsApi.groupFilters.length > 0 ? [...filters, ...groupsApi.groupFilters] : filters,
@@ -614,7 +626,7 @@ const App: React.FC = () => {
           dashboardId,
           req.filters,
           req.ids,
-          groupsApi.bulkOptions,
+          bulkOptions,
           // Wired to the abort above: without it a slow superseded response
           // (e.g. compare-on forces real Delta loads) could land after a fast
           // newer one and resurrect stale card strips.
@@ -649,7 +661,7 @@ const App: React.FC = () => {
     filterScopes,
     refreshTick,
     // Undefined while compare is off, so group edits don't refire the fetch.
-    JSON.stringify(groupsApi.bulkOptions ?? null),
+    JSON.stringify(bulkOptions ?? null),
     versionKey,
   ]);
 
@@ -1288,7 +1300,15 @@ const App: React.FC = () => {
   // identity, so a fresh one per render would rebuild every cell.
   const groupRender = useMemo(
     () =>
-      resolveGroupRender(
+      newsSplit
+        ? {
+            groups: newsSplit.groups,
+            colorByGroup: true,
+            display: 'facet' as const,
+            showOther: newsSplit.showOther,
+            keepColor: true,
+          }
+        : resolveGroupRender(
         groupsApi.colorBy,
         groupsApi.renderGroups,
         colorByColumnRender,
@@ -1301,6 +1321,7 @@ const App: React.FC = () => {
       colorByColumnRender,
       groupsApi.displayMode,
       groupsApi.showOther,
+      newsSplit,
     ],
   );
 
@@ -1322,7 +1343,7 @@ const App: React.FC = () => {
           onFilterChange={handleFilterChange}
           refreshTick={refreshTick}
           groupRender={groupRender}
-          bulkOptions={groupsApi.bulkOptions}
+          bulkOptions={bulkOptions}
           onResetFilters={handleResetAllFilters}
           onResetBarFilters={handleResetFilterIndices}
           autofit={dashboard?.autofit !== false}
@@ -2062,7 +2083,7 @@ const App: React.FC = () => {
               onFilterChange={handleFilterChange}
               refreshTick={refreshTick}
               groupRender={groupRender}
-              bulkOptions={groupsApi.bulkOptions}
+              bulkOptions={bulkOptions}
               onResetFilters={handleResetAllFilters}
               autofit={dashboard?.autofit !== false}
             />
@@ -2282,6 +2303,7 @@ const App: React.FC = () => {
         canEdit={canEditNow}
         components={summaryMetadata}
         filters={deferredFilters}
+        onSplitChange={setNewsSplit}
       >
       <CommentsProvider
         dashboardId={dashboardId}

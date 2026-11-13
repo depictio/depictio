@@ -284,6 +284,9 @@ def _delta_change(dc_id: str, before: DcSeenState) -> dict[str, Any] | None:
         "kind": "emptied" if rows_after == 0 else "refreshed",
         "new_run_tags": [t for t in tags if t not in known],
         "touched_run_tags": tags,
+        # The runs the reader had seen: with the new ones, the two sides of
+        # the "what's new" split (rows carry their run in `depictio_run_id`).
+        "seen_run_tags": sorted(known),
         "rows_before": before.row_count,
         "rows_after": rows_after,
         "rows_added": sum(int(a.get("rows_added") or 0) for a in newer),

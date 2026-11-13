@@ -8,7 +8,7 @@
  * (everyone else) as plain links: this module imports no version-history UI.
  */
 import React from 'react';
-import { Button, Divider, ScrollArea, Stack, Switch, Text } from '@mantine/core';
+import { Button, ColorSwatch, Divider, Group, ScrollArea, SegmentedControl, Stack, Text } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import { useCommentsControl } from 'depictio-react-core';
@@ -16,6 +16,7 @@ import type { CommentChange, DashboardChange, DataChange, FailedIngestion } from
 
 import ChangesModeSelect from './ChangesModeSelect';
 import { useChangesSince, type ChangesSinceValue } from './ChangesSinceContext';
+import type { NewsView } from './newsSplit';
 import {
   changeCounts,
   commentTarget,
@@ -25,6 +26,48 @@ import {
   sampleSummary,
 } from './describe';
 import { FeedHeader, FeedItem, FeedSection, facts, nameList } from './feed';
+
+const VIEW_HINT: Record<NewsView, string> = {
+  off: 'The figures as they are now.',
+  overlay: 'Each changed figure marks what is new; what was already there fades.',
+  split: 'Figures split into the new runs and the runs you had seen; cards compare the two.',
+};
+
+/** Off | Overlay | Split: how the news shows on the figures and cards. */
+const NewsViewControl: React.FC<{ ctx: ChangesSinceValue }> = ({ ctx }) => (
+  <Stack gap={6} px={4}>
+    <Text size="xs" c="dimmed">
+      Show on the dashboard
+    </Text>
+    <SegmentedControl
+      size="xs"
+      fullWidth
+      value={ctx.view}
+      onChange={(v) => ctx.setView(v as NewsView)}
+      data={[
+        { value: 'off', label: 'Off' },
+        { value: 'overlay', label: 'Overlay', disabled: ctx.highlightable === 0 },
+        { value: 'split', label: 'Split', disabled: !ctx.splitAvailable },
+      ]}
+      aria-label="Show what is new on the dashboard"
+      data-testid="changes-view"
+    />
+    <Text size="xs" c="dimmed">
+      {VIEW_HINT[ctx.view]}
+      {!ctx.splitAvailable && ' Split needs new runs: a run ingested again changes in place, see Before | Now.'}
+    </Text>
+    {ctx.splitGroups && (
+      <Group gap="md" data-testid="changes-split-legend">
+        {ctx.splitGroups.map((g) => (
+          <Group key={g.name} gap={6} wrap="nowrap">
+            <ColorSwatch color={g.color} size={10} withShadow={false} />
+            <Text size="xs">{g.name}</Text>
+          </Group>
+        ))}
+      </Group>
+    )}
+  </Stack>
+);
 
 /** "1 new run" becomes "1 new run: run_c": the names are what a reader looks for. */
 function dataSummary(change: DataChange): string {
@@ -154,17 +197,7 @@ const ChangesPanel: React.FC<{ onClose?: () => void; subtitle?: React.ReactNode 
           )
         }
       />
-      {ctx.highlightable > 0 && (
-        <Switch
-          size="sm"
-          px={4}
-          checked={ctx.highlightAll}
-          onChange={(e) => ctx.setHighlightAll(e.currentTarget.checked)}
-          label={`Highlight what's new on ${ctx.highlightable === 1 ? 'the figure' : `all ${ctx.highlightable} figures`}`}
-          description="Marks what is new in each changed figure; points already there are dimmed."
-          data-testid="changes-highlight-all"
-        />
-      )}
+      {(ctx.highlightable > 0 || ctx.splitAvailable) && <NewsViewControl ctx={ctx} />}
       <Divider />
       <ScrollArea.Autosize mah="min(60vh, 520px)" type="auto" offsetScrollbars>
         <Stack gap="sm">

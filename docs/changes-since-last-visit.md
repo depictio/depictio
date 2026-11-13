@@ -137,6 +137,26 @@ In the viewer, the dot's menu offers two views:
 
 The viewer never writes and never changes the page's own pins.
 
+The "What's new" panel also shows the news on the whole tab at once, with
+**Off | Overlay | Split**:
+
+- **Overlay** turns "Compare with last visit" on for every changed figure.
+  Points already there fade and new ones keep their colour; with a colour
+  column, the traces that hold no change fade, which reaches a binned
+  histogram too.
+- **Split** compares the new runs with the runs the reader had seen. Every
+  Delta row carries its run in `depictio_run_id`, so the two sides are two
+  selection groups on that column (`seen_run_tags` on a data change names the
+  runs seen). Figures split into one panel per side and keep their own
+  colours (`group_keep_color` on a render request); cards compare the two
+  sides with "Compare groups in cards". The groups are virtual: never saved
+  with the reader's groups, never applied as a filter.
+
+Split needs new runs. A run ingested again changes rows in place under the
+same run tag, so only Before | Now can show it. MultiQC rows carry no run
+column, and code-mode figures split only if their code spreads
+`depictio_group_kwargs`.
+
 MultiQC time travel by report set is what makes the MultiQC *Before* possible:
 
 - `DataCollectionStamp.report_ids` records the set at save time;

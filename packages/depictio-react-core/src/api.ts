@@ -1722,6 +1722,9 @@ export interface RenderFigureOptions {
   display?: GroupingDisplay;
   /** Groups mode only: false drops ungrouped ("Other") rows from figures. */
   showOther?: boolean;
+  /** Groups in "facet": split into one panel per group but keep the figure's
+   *  own colours (the "what's new" split, #1397). */
+  keepColor?: boolean;
   /** Draw the figure in this style rather than its own (a highlight showing a
    *  figure from another tab). Sent only when set. */
   style?: FigureStyleRequest;
@@ -1763,6 +1766,7 @@ export async function renderFigure(
   }
   if (Object.keys(groupBody).length > 0 && options?.display === 'facet') {
     groupBody.grouping_display = 'facet';
+    if (options.keepColor && groupBody.color_by_group) groupBody.group_keep_color = true;
   }
   if (options?.style) groupBody.style = options.style;
   const res = await authFetch(
@@ -10602,6 +10606,8 @@ export interface DataChange {
   kind: 'refreshed' | 'emptied';
   new_run_tags: string[];
   touched_run_tags: string[];
+  /** Delta collections: the runs the reader had seen (absent on MultiQC). */
+  seen_run_tags?: string[];
   rows_before?: number | null;
   rows_after?: number | null;
   rows_added?: number;

@@ -24,6 +24,7 @@ import {
   sampleSummary,
 } from '../src/changes/describe.ts';
 import { beforePane, diffTables } from '../src/changes/compare.ts';
+import { newsSplitGroups } from '../src/changes/newsSplit.ts';
 
 let failures = 0;
 function check(label, actual, expected) {
@@ -218,6 +219,39 @@ check(
   [['s1']],
 );
 check('unsupported has no table', diffTables({ supported: false, reason: 'x' }), []);
+
+// The "what's new" split: new runs against the runs seen before.
+const COLORS = { fresh: '#159090', seen: '#adb5bd' };
+const delta = (over) => ({
+  dc_id: 'dc1',
+  dc_type: 'table',
+  kind: 'refreshed',
+  new_run_tags: ['run_3'],
+  touched_run_tags: ['run_1', 'run_2', 'run_3'],
+  seen_run_tags: ['run_1', 'run_2'],
+  ingestion_run_ids: [],
+  by: [],
+  at: null,
+  ...over,
+});
+check('split: new run against the runs seen', newsSplitGroups({ ...empty, data: [delta({})] }, COLORS), {
+  groups: [
+    { name: 'New: run_3', column_name: 'depictio_run_id', values: ['run_3'], color: '#159090' },
+    { name: 'Seen before', column_name: 'depictio_run_id', values: ['run_1', 'run_2'], color: '#adb5bd' },
+  ],
+  showOther: false,
+});
+check('split: no new run, no split', newsSplitGroups({ ...empty, data: [delta({ new_run_tags: [] })] }, COLORS), null);
+check(
+  'split: MultiQC (no seen runs) is left out',
+  newsSplitGroups({ ...empty, data: [delta({ seen_run_tags: undefined })] }, COLORS),
+  null,
+);
+check(
+  'split: nothing seen keeps the rest as Other',
+  newsSplitGroups({ ...empty, data: [delta({ seen_run_tags: [], new_run_tags: ['a', 'b'] })] }, COLORS),
+  { groups: [{ name: 'New: 2 runs', column_name: 'depictio_run_id', values: ['a', 'b'], color: '#159090' }], showOther: true },
+);
 
 console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

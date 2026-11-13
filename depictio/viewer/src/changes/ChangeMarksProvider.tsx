@@ -38,6 +38,7 @@ import type {
   ChangeMarksValue,
   ChangeReason,
   DashboardChangeSet,
+  GroupRenderDef,
   InteractiveFilter,
   MarkMode,
   StoredMetadata,
@@ -47,6 +48,7 @@ import { useChangesSinceEnabled } from '../hooks/useChangesSinceEnabled';
 import CompareModal from './CompareModal';
 import { ChangesSinceContext, type ChangesSinceValue } from './ChangesSinceContext';
 import { isReadOnlyQuery, markDetails, parseReadOnlyQuery } from './describe';
+import { newsSplitGroups, type NewsSplit, type NewsView } from './newsSplit';
 
 /** How long a reader stays on the page before it counts as a visit. */
 export const VISIT_DELAY_MS = 10_000;
@@ -66,7 +68,21 @@ interface Props {
   components?: StoredMetadata[];
   /** The filters the dashboard is drawn with, for the side-by-side panes. */
   filters?: InteractiveFilter[];
+  /** The "Split" view: the virtual New / Seen before groups the dashboard
+   *  draws its figures and cards with, or null to draw them as usual. */
+  onSplitChange?: (split: NewsSplit | null) => void;
   children: React.ReactNode;
+}
+
+/** A colour of the dashboard's brand, as a hex the group payload accepts. */
+function brandHex(variable: string, fallback: string): string {
+  try {
+    const el = document.querySelector('.depictio-dashboard-brand') ?? document.documentElement;
+    const v = getComputedStyle(el).getPropertyValue(variable).trim();
+    return /^#[0-9a-f]{6}$/i.test(v) ? v : fallback;
+  } catch {
+    return fallback;
+  }
 }
 
 const EMPTY_MARKED: Record<string, ChangeReason[]> = {};
@@ -100,6 +116,7 @@ const ChangeMarksProvider: React.FC<Props> = ({
   canEdit,
   components = NO_COMPONENTS,
   filters = NO_FILTERS,
+  onSplitChange,
   children,
 }) => {
   const flagOn = useChangesSinceEnabled();
@@ -185,6 +202,7 @@ const ChangeMarksProvider: React.FC<Props> = ({
       if (!changeSet.server_held && res.baseline) writeLocalBaseline(familyId, res.baseline);
       setChangeSet((prev) => (prev ? clearedSet(prev) : prev));
       setComparing(NO_COMPARING);
+      setViewState('off');
     } catch (err) {
       fail('Could not mark the changes as seen.', err);
     } finally {
@@ -225,7 +243,7 @@ const ChangeMarksProvider: React.FC<Props> = ({
     });
   }, []);
 
-  // The changed figures of this tab: what "Highlight on every figure" turns on.
+  // The changed figures of this tab: what "Overlay" turns on.
   const highlightKeys = useMemo(() => {
     if (!dashboardId || !changeSet) return [] as string[];
     const marked = changeSet.changed_components;
@@ -234,11 +252,33 @@ const ChangeMarksProvider: React.FC<Props> = ({
       .map((m) => changeKey(dashboardId, String(m.index)))
       .filter((key) => key in marked);
   }, [dashboardId, changeSet, components]);
-  const highlightAll = highlightKeys.length > 0 && highlightKeys.every((key) => comparing.has(key));
-  const setHighlightAll = useCallback(
-    (on: boolean) => setComparing(on ? new Set(highlightKeys) : NO_COMPARING),
+
+  // How the news shows on the canvas: off, marked in place, or split by run.
+  const [view, setViewState] = useState<NewsView>('off');
+  const split = useMemo<NewsSplit | null>(
+    () =>
+      active && changeSet && !changeSet.first_visit
+        ? newsSplitGroups(changeSet, {
+            fresh: brandHex('--mantine-primary-color-filled', '#228be6'),
+            seen: brandHex('--mantine-color-gray-5', '#adb5bd'),
+          })
+        : null,
+    [active, changeSet],
+  );
+  const setView = useCallback(
+    (next: NewsView) => {
+      setViewState(next);
+      setComparing(next === 'overlay' ? new Set(highlightKeys) : NO_COMPARING);
+    },
     [highlightKeys],
   );
+  const splitOn = view === 'split' && split !== null;
+  const splitGroups: GroupRenderDef[] | null = splitOn ? split.groups : null;
+  useEffect(() => {
+    onSplitChange?.(splitOn ? split : null);
+  }, [onSplitChange, splitOn, split]);
+  // Gone (marked seen, flag off): the canvas goes back to normal.
+  useEffect(() => () => onSplitChange?.(null), [onSplitChange]);
 
   const openCompare = useCallback((key: string) => setCompareKey(key), []);
   const closeCompare = useCallback(() => setCompareKey(null), []);
@@ -312,8 +352,10 @@ const ChangeMarksProvider: React.FC<Props> = ({
       markAllSeen,
       seenBusy,
       highlightable: highlightKeys.length,
-      highlightAll,
-      setHighlightAll,
+      view,
+      setView,
+      splitAvailable: split !== null,
+      splitGroups,
     };
   }, [
     active,
@@ -328,8 +370,10 @@ const ChangeMarksProvider: React.FC<Props> = ({
     markAllSeen,
     seenBusy,
     highlightKeys.length,
-    highlightAll,
-    setHighlightAll,
+    view,
+    setView,
+    split,
+    splitGroups,
   ]);
 
   // The component behind the open key. Opening needs marks to be live, so the

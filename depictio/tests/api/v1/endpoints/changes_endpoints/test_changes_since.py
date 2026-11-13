@@ -297,6 +297,8 @@ def test_a_delta_refresh_reports_new_run_tags_and_rows(ctx):
     )
     [table] = _changes(ctx)["data"]
     assert table["new_run_tags"] == ["run_c"]
+    # The other side of the "what's new" split: the runs the reader had seen.
+    assert table["seen_run_tags"] == ["run_a", "run_b"]
     assert (table["rows_before"], table["rows_after"], table["rows_added"]) == (10, 15, 5)
     assert (table["delta_from"], table["delta_to"]) == (0, 1)
 

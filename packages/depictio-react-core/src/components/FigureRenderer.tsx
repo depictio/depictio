@@ -208,6 +208,7 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
                   colorByColumn: groupRender.colorByColumn,
                   display: groupRender.display,
                   showOther: groupRender.showOther,
+                  keepColor: groupRender.keepColor,
                 }
               : {}),
             ...(styleRequest ? { style: styleRequest } : {}),

@@ -447,6 +447,22 @@ def apply_facet_kwargs(dict_kwargs: dict, column: str) -> dict:
     return out
 
 
+def apply_group_split_kwargs(dict_kwargs: dict, groups: list[dict], include_other: bool) -> dict:
+    """Copy of ``dict_kwargs`` split into one panel per group, colours kept.
+
+    The "what's new" split (#1397): the panels are the reader's runs (new
+    ones, the ones seen before), and inside each panel the figure keeps its
+    own colour encoding, so a species is the same colour on both sides. Only
+    the panel order is set, in group order with ``Other`` last.
+    """
+    out = dict(dict_kwargs)
+    out["category_orders"] = {
+        **(out.get("category_orders") if isinstance(out.get("category_orders"), dict) else {}),
+        GROUP_COLUMN: [g["name"] for g in groups] + ([OTHER_LABEL] if include_other else []),
+    }
+    return apply_facet_kwargs(out, GROUP_COLUMN)
+
+
 def tidy_facet_layout(fig: Any) -> Any:
     """Make a faceted figure readable inside a dashboard tile.
 
