@@ -23,7 +23,9 @@ from depictio.api.v1.remote_fetch import (
     RemoteURLRejected,
     S3AccessRefused,
     bounded_download,
+    direct_fetch_bytes,
     direct_probe,
+    fetch_validated_bytes,
     fetch_validated_text,
     is_public_s3_location,
     is_server_context,
@@ -33,6 +35,7 @@ from depictio.api.v1.remote_fetch import (
     public_s3_storage_options,
     remote_policy,
     s3_read_target,
+    stream_to_bytes,
     validate_remote_url,
 )
 from depictio.models import s3_access
@@ -257,6 +260,8 @@ class TestValidateRemoteURL:
 # ---------------------------------------------------------------------------
 
 PAYLOAD = b"depictio-remote-fetch-test-payload\n" * 64  # ~2.2 KB
+# Every byte value, so a read that decodes text would change it (a PNG is not UTF-8).
+BINARY = bytes(range(256)) * 8
 ETAG = '"abc123"'
 
 
@@ -274,6 +279,13 @@ class _Handler(BaseHTTPRequestHandler):
             self.end_headers()
             if include_body:
                 self.wfile.write(PAYLOAD)
+        elif self.path == "/binary":
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(BINARY)))
+            self.send_header("Content-Type", "image/png")
+            self.end_headers()
+            if include_body:
+                self.wfile.write(BINARY)
         elif self.path == "/nosize":
             self.send_response(200)
             self.send_header("ETag", ETAG)
@@ -564,6 +576,110 @@ class TestFetchValidatedText:
     def test_http_error_status_sanitized(self, loopback_env, http_server):
         with pytest.raises(RemoteFetchFailed, match="Could not fetch"):
             fetch_validated_text(f"{http_server}/missing", timeout=5)
+
+
+class TestStreamToBytes:
+    @staticmethod
+    def _response(*chunks: bytes):
+        return SimpleNamespace(iter_bytes=lambda chunk_size=None: iter(chunks))
+
+    def test_the_chunks_are_joined_untouched(self):
+        assert stream_to_bytes(self._response(b"\x89PNG", b"\x00\xff", b""), 100) == (
+            b"\x89PNG\x00\xff"
+        )
+
+    def test_an_empty_body_is_empty_bytes(self):
+        assert stream_to_bytes(self._response(), 10) == b""
+
+    def test_a_body_exactly_at_the_cap_is_kept(self):
+        assert stream_to_bytes(self._response(b"abcd", b"ef"), 6) == b"abcdef"
+
+    def test_a_body_past_the_cap_is_rejected_as_soon_as_it_is_known(self):
+        read: list[bytes] = []
+
+        def chunks(chunk_size=None):
+            for chunk in (b"abcd", b"efgh", b"ijkl"):
+                read.append(chunk)
+                yield chunk
+
+        with pytest.raises(RemoteURLRejected, match="exceeds the download cap \\(6 bytes\\)"):
+            stream_to_bytes(SimpleNamespace(iter_bytes=chunks), 6)
+        assert read == [b"abcd", b"efgh"]
+
+    def test_a_cap_overrun_is_not_a_fetch_failure(self):
+        with pytest.raises(RemoteURLRejected) as excinfo:
+            stream_to_bytes(self._response(b"abcdef"), 3)
+        assert not isinstance(excinfo.value, RemoteFetchFailed)
+
+
+class TestFetchValidatedBytes:
+    def test_roundtrip_is_byte_exact(self, loopback_env, http_server):
+        assert fetch_validated_bytes(f"{http_server}/binary", timeout=5) == BINARY
+        assert fetch_validated_bytes(f"{http_server}/data.bin", timeout=5) == PAYLOAD
+
+    def test_follows_redirect(self, loopback_env, http_server):
+        assert fetch_validated_bytes(f"{http_server}/redirect", timeout=5) == PAYLOAD
+
+    def test_cap_exceeded(self, loopback_env, http_server):
+        with pytest.raises(RemoteURLRejected, match="exceeds the download cap"):
+            fetch_validated_bytes(f"{http_server}/data.bin", max_bytes=len(PAYLOAD) - 1, timeout=5)
+
+    def test_a_body_exactly_at_the_cap_is_returned(self, loopback_env, http_server):
+        got = fetch_validated_bytes(f"{http_server}/data.bin", max_bytes=len(PAYLOAD), timeout=5)
+        assert got == PAYLOAD
+
+    def test_cap_from_env_when_none_is_given(self, loopback_env, http_server, monkeypatch):
+        monkeypatch.setenv("DEPICTIO_REMOTE_MAX_DOWNLOAD_BYTES", str(len(PAYLOAD) - 1))
+        with pytest.raises(RemoteURLRejected, match="exceeds the download cap"):
+            fetch_validated_bytes(f"{http_server}/data.bin", timeout=5)
+
+    def test_an_explicit_cap_wins_over_the_policys(self, loopback_env, http_server, monkeypatch):
+        monkeypatch.setenv("DEPICTIO_REMOTE_MAX_DOWNLOAD_BYTES", "10")
+        got = fetch_validated_bytes(f"{http_server}/data.bin", max_bytes=len(PAYLOAD), timeout=5)
+        assert got == PAYLOAD
+
+    def test_policy_rejection_propagates(self, loopback_env, http_server):
+        with pytest.raises(RemoteURLRejected, match="not in the administrator allowlist") as exc:
+            fetch_validated_bytes(f"{http_server}/redirect-evil", timeout=5)
+        assert not isinstance(exc.value, RemoteFetchFailed)
+
+    def test_a_host_outside_the_policy_is_rejected_before_any_request(self):
+        with pytest.raises(RemoteURLRejected):
+            fetch_validated_bytes("http://127.0.0.1:1/x.png", timeout=2)
+
+    def test_http_error_status_sanitized(self, loopback_env, http_server):
+        with pytest.raises(RemoteFetchFailed, match="Could not fetch") as exc:
+            fetch_validated_bytes(f"{http_server}/missing", timeout=5)
+        assert "404" not in str(exc.value) and http_server not in str(exc.value)
+
+    def test_unreachable_host_sanitized(self, loopback_env):
+        with pytest.raises(RemoteFetchFailed, match="Could not fetch"):
+            fetch_validated_bytes("http://127.0.0.1:1/x.png", timeout=2)
+
+
+class TestDirectFetchBytes:
+    """CLI counterpart of fetch_validated_bytes: no host gating, the same caps."""
+
+    def test_roundtrip_is_byte_exact(self, loopback_env, http_server):
+        assert direct_fetch_bytes(f"{http_server}/binary") == BINARY
+
+    def test_follows_redirect(self, loopback_env, http_server):
+        assert direct_fetch_bytes(f"{http_server}/redirect") == PAYLOAD
+
+    def test_cap_exceeded(self, loopback_env, http_server):
+        with pytest.raises(RemoteURLRejected, match="exceeds the download cap"):
+            direct_fetch_bytes(f"{http_server}/data.bin", max_bytes=len(PAYLOAD) - 1)
+
+    def test_cap_from_env_when_none_is_given(self, loopback_env, http_server, monkeypatch):
+        monkeypatch.setenv("DEPICTIO_REMOTE_MAX_DOWNLOAD_BYTES", str(len(PAYLOAD) - 1))
+        with pytest.raises(RemoteURLRejected, match="exceeds the download cap"):
+            direct_fetch_bytes(f"{http_server}/data.bin")
+
+    def test_an_error_status_is_httpxs_own(self, loopback_env, http_server):
+        import httpx
+
+        with pytest.raises(httpx.HTTPStatusError):
+            direct_fetch_bytes(f"{http_server}/missing")
 
 
 class TestPublicS3Allowlist:

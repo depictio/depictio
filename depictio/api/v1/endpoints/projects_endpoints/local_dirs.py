@@ -27,7 +27,12 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from depictio.api.v1.configs.settings_models import local_data_policy
-from depictio.models.local_access import LocalDataPolicy, LocalPathRefused
+from depictio.models.local_access import (
+    LocalDataPolicy,
+    LocalPathRefused,
+    is_hidden_name,
+    is_multiqc_output,
+)
 from depictio.models.logging import logger
 
 # More sub-directories than this and the listing says ``truncated``.
@@ -44,9 +49,6 @@ RUN_MARKERS = (PIPELINE_INFO, MULTIQC)
 # (``multiqc/star_salmon/multiqc_report.html``), one level down at most.
 MULTIQC_MAX_SUB_FOLDERS = 10
 
-# Never listed, never searched: caches and archive debris, not data. Dot-names
-# are left out as well (see :func:`is_hidden_name`).
-NOISE_DIRS = frozenset({"__pycache__", "node_modules", "__MACOSX"})
 
 LOCAL_FOLDERS_OFF = "Local folders are not enabled on this server."
 NON_LOOPBACK_HOST = (
@@ -140,21 +142,6 @@ def active_local_policy() -> LocalDataPolicy:
     if policy is None:
         raise CodedHTTPException(404, LOCAL_FOLDERS_OFF, "local_folders_off")
     return policy
-
-
-def is_hidden_name(name: str) -> bool:
-    """Whether a sub-directory named ``name`` is left out of every listing and
-    search: a dot-name, or one of :data:`NOISE_DIRS`."""
-    return name.startswith(".") or name in NOISE_DIRS
-
-
-def is_multiqc_output(name: str, *, is_dir: bool) -> bool:
-    """Whether an entry named ``name`` is MultiQC's own output: its data folder
-    (``multiqc_data``, ``<title>_multiqc_report_data``), its parquet, or its
-    HTML report (``multiqc_report.html``, ``<title>_multiqc_report.html``)."""
-    if is_dir:
-        return name == "multiqc_data" or name.endswith("multiqc_report_data")
-    return name == "multiqc.parquet" or name.endswith("multiqc_report.html")
 
 
 def _scan_multiqc_folder(folder: str) -> tuple[bool, list[str]]:
@@ -266,8 +253,8 @@ def visible_sub_directories(policy: LocalDataPolicy, folder: str) -> Iterator[tu
     """``(name, real path)`` of each sub-directory of real folder ``folder`` the
     policy would list, in name order, lazily.
 
-    Hidden: dot-names, the noise folders of :data:`NOISE_DIRS`, and anything
-    the policy would refuse to open (a symlink that leaves the roots, a folder
+    Hidden: dot-names, the noise folders of ``NOISE_DIRS`` (``models.local_access``),
+    and anything the policy would refuse to open (a symlink that leaves the roots, a folder
     Depictio keeps for itself). A folder the server may not read yields nothing.
     """
     for name in sub_directory_names(folder) or ():

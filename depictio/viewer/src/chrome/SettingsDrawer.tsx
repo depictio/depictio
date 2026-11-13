@@ -771,11 +771,12 @@ const AccordionLayout: React.FC<{
 // Nav layout (the shared `SettingsNavModal`)
 // ---------------------------------------------------------------------------
 
-/** The section a surface opens on before the reader has picked one: a
- *  viewer's own display options, or the editor's tab defaults (what an author
- *  most often comes here to change; About is one click up the rail). */
+/** The section a surface opens on before the reader has picked one: for a
+ *  viewer, what the dashboard is (About), their own display options one click
+ *  down the rail; for the editor, the tab defaults (what an author most often
+ *  comes here to change). */
 const DEFAULT_ACTIVE: Record<Surface, SectionKey> = {
-  viewer: 'view',
+  viewer: 'about',
   editor: 'tab-defaults',
 };
 

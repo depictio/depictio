@@ -24,6 +24,12 @@ async function scaleVarOn(page: Page, selector: string): Promise<string> {
   );
 }
 
+/** Open the viewer's Settings on "Your view", where the control lives. */
+async function openViewSettings(page: Page): Promise<void> {
+  await page.getByRole("button", { name: "Settings" }).click();
+  await page.locator("[data-testid='settings-nav-view']").click();
+}
+
 test.describe("Font size control", () => {
   test.skip(
     process.env.UNAUTHENTICATED_MODE === "true",
@@ -51,8 +57,9 @@ test.describe("Font size control", () => {
       .click();
     await expect(page).toHaveURL(/\/dashboard\//, { timeout: 15_000 });
 
-    // The control moved out of the header into the Settings drawer.
-    await page.getByRole("button", { name: "Settings" }).click();
+    // The control moved out of the header into the Settings drawer, under
+    // "Your view" (a viewer's Settings opens on About).
+    await openViewSettings(page);
     const control = page.locator("[data-testid='font-size-control']");
     await expect(control).toBeVisible({ timeout: 15_000 });
 
@@ -73,7 +80,7 @@ test.describe("Font size control", () => {
     expect(await scaleVarOn(page, "[data-testid='dashboard-content']")).toBe("1.15");
 
     // Reset from the drawer brings the content back to 100%.
-    await page.getByRole("button", { name: "Settings" }).click();
+    await openViewSettings(page);
     await expect(control).toBeVisible({ timeout: 15_000 });
     await page.locator("[data-testid='font-size-reset']").click();
     expect(

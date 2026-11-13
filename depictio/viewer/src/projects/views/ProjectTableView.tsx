@@ -183,6 +183,17 @@ function compareNullable(a: number | null, b: number | null, dir: SortDir): numb
   return mul * (a - b);
 }
 
+/** A project's workflows as named in the Project Builder: every one of
+ *  them, a Python workflow included. */
+function builderWorkflows(project: ProjectListEntry): { name: string; engine: string | null }[] {
+  const list = Array.isArray(project.workflows) ? project.workflows : [];
+  return list.map((w) => {
+    const raw = w as { name?: unknown; engine?: unknown };
+    const engine = raw.engine && typeof raw.engine === 'object' ? (raw.engine as { name?: unknown }).name : raw.engine;
+    return { name: typeof raw.name === 'string' ? raw.name : '', engine: typeof engine === 'string' ? engine : null };
+  });
+}
+
 function compareRows(a: Row, b: Row, key: ProjectColumnKey, dir: SortDir): number {
   const mul = dir === 'asc' ? 1 : -1;
   switch (key) {
@@ -393,7 +404,16 @@ const ProjectTableView: React.FC<ProjectTableViewProps> = ({
           </Badge>
         );
       case 'template':
-        return r.templateParsed ? <TemplateChip parsed={r.templateParsed} verbose plain={glass} /> : <Dash />;
+        return r.templateParsed ? (
+          <TemplateChip
+            parsed={r.templateParsed}
+            verbose
+            plain={glass}
+            workflows={builderWorkflows(r.project)}
+          />
+        ) : (
+          <Dash />
+        );
       case 'owner':
         return r.ownerEmail ? <Text size="sm">{r.ownerEmail}</Text> : <Dash />;
       case 'role':

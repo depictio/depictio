@@ -3,8 +3,8 @@
  * collection the run did not produce never reads as a shortfall: it is
  * reported on its own, and the ready ratio is over the required ones.
  */
-import { groupRunCollections } from 'depictio-react-core';
-import type { RunCollectionEntry } from 'depictio-react-core';
+import { collectionFolderStatus, groupRunCollections, scopeRemovals } from 'depictio-react-core';
+import type { BuilderTemplateDescription, RunCollectionEntry } from 'depictio-react-core';
 
 import { plural } from './plural';
 
@@ -41,4 +41,36 @@ export function readySummary(c: CollectionCounts): string {
       : `${c.ready} of ${plural(c.required, 'collection')} ready`;
   const tail = optionalAbsentText(c.optionalAbsent);
   return tail ? `${head} · ${tail}` : head;
+}
+
+/** "Only the found" against "Whole template" for one folder: what the first
+ *  takes out (`scopeRemovals`, the rule the builder applies too) and how the
+ *  collections it leaves out split. */
+export interface TemplateScope {
+  /** Collections the folder has files for. */
+  found: number;
+  /** What "Only the found" removes. */
+  remove: string[];
+  /** Of those, required ones without files: the whole template creates them
+   *  empty, filled at a later refresh. */
+  empty: number;
+  /** Of those, optional ones this run did not produce. */
+  absent: number;
+}
+
+export function templateScope(
+  template: BuilderTemplateDescription,
+  collections: ReadonlyArray<RunCollectionEntry>,
+): TemplateScope {
+  const status = collectionFolderStatus(collections);
+  const remove = scopeRemovals(template, status);
+  let found = 0;
+  for (const s of status.values()) if (s === 'found') found += 1;
+  return {
+    found,
+    remove,
+    empty: remove.filter((t) => status.get(t) === 'empty').length,
+    // Optional ones absent, and those the plan does not name (left out here).
+    absent: remove.filter((t) => status.get(t) !== 'empty').length,
+  };
 }

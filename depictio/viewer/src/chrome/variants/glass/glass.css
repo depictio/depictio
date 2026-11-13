@@ -699,6 +699,11 @@
 :root[data-chrome='glass'] .mantine-SegmentedControl-label {
   font-weight: 600;
 }
+/* The indicator above is always the pale glass pill, so a coloured control
+   (`color=`) must not keep Mantine's white label on it: white on white. */
+:root[data-chrome='glass'] .mantine-SegmentedControl-label[data-active] {
+  color: var(--mantine-color-text);
+}
 :root[data-chrome='glass'] .mantine-SegmentedControl-control::before {
   display: none;
 }

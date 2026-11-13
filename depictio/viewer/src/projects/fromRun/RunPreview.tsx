@@ -9,6 +9,10 @@
  *
  * Renders the dry-run plan on the Preview step and, unchanged, the real report
  * after creation (where dashboards that failed to import are listed too).
+ *
+ * A project defined in the Project Builder (`custom`) is no pipeline's run:
+ * its header names the project and the folder, without the pipeline, version
+ * and engine checks, which have nothing to compare against.
  */
 import React, { useState } from 'react';
 import {
@@ -38,7 +42,7 @@ import type {
 } from 'depictio-react-core';
 
 import { TemplateSourceLogo } from '../template';
-import { FoundCard, RunChips, SourceValue } from '../detail/FoundCard';
+import { FoundCard, SourceValue } from '../detail/FoundCard';
 import type { FoundRow } from '../detail/FoundCard';
 import { CollectionPlan } from './CollectionPlan';
 import { collectionCounts, readySummary } from './collectionCounts';
@@ -125,6 +129,60 @@ interface RunSummaryCardProps {
   detection: DetectedTemplate | null;
   /** The private bucket's connection details, to preview its files. */
   storage?: RunStorageIn | null;
+  /** Defined in the Project Builder: custom workflows, no pipeline. */
+  custom?: boolean;
+}
+
+/** The header of a Project Builder project's plan: its name, what is ready,
+ *  and the folder. */
+const CustomSummaryCard: React.FC<{ report: FromRunReport }> = ({ report }) => {
+  const counts = collectionCounts(report.data_collections);
+  return (
+    <Paper withBorder radius="md" p="md" data-testid="run-summary-card" data-kind="custom">
+      <Group justify="space-between" align="center" wrap="wrap" gap="sm">
+        <Group gap="sm" wrap="nowrap" style={{ minWidth: 0 }}>
+          <ThemeIcon variant="light" size={40} radius="md" color="gray">
+            <Icon icon="mdi:folder-cog-outline" width={24} />
+          </ThemeIcon>
+          <Stack gap={0} style={{ minWidth: 0 }}>
+            <Text fw={700} size="lg" style={{ wordBreak: 'break-word' }} data-testid="run-summary-title">
+              {report.project_name}
+            </Text>
+            <Text size="sm" c="dimmed">
+              Custom workflows, defined in the Project Builder
+            </Text>
+          </Stack>
+        </Group>
+        <ReadyRing counts={counts} />
+      </Group>
+      <Group gap="xs" mt="sm" wrap="nowrap" style={{ minWidth: 0 }}>
+        <Text size="xs" fw={700} c="dimmed" tt="uppercase" style={{ flexShrink: 0 }}>
+          Folder
+        </Text>
+        <FolderPath location={report.data_root} testId="run-preview-data-root" />
+      </Group>
+    </Paper>
+  );
+};
+
+/** A folder of runs: several run folders named in the request, read together. */
+export function readsSeveralRuns(report: FromRunReport): boolean {
+  return (report.runs?.length ?? 0) > 1;
+}
+
+/** "run_a, run_b", "+N more" past the first eight. */
+function runsLine(names: string[]): string {
+  const shown = names.slice(0, 8);
+  const rest = names.length - shown.length;
+  return shown.join(', ') + (rest > 0 ? `, +${rest} more` : '');
+}
+
+/** The folder read: the run, or for several runs the folder holding them (the
+ *  report's data root names the first run, read first). */
+export function runsParent(report: FromRunReport): string {
+  const first = readsSeveralRuns(report) ? report.runs?.[0] ?? '' : '';
+  const root = report.data_root.replace(/\/+$/, '');
+  return first && root.endsWith(`/${first}`) ? root.slice(0, -(first.length + 1)) : report.data_root;
 }
 
 /** The header of the plan: the template used, the ready count, the checks
@@ -139,9 +197,11 @@ export const RunSummaryCard: React.FC<RunSummaryCardProps> = ({
   const run = reportRunInfo(report, detection);
   const match = reportMatch(report, detection);
   const counts = collectionCounts(report.data_collections);
-  const { ready, required: considered } = counts;
   const source = splitTemplateId(report.template_id).source;
   const label = pipelineLabel(report.template_id) ?? report.template_id;
+  // A folder of runs: the folder holding them, and their names.
+  const severalRuns = readsSeveralRuns(report);
+  const shownFolder = runsParent(report);
   return (
     <Paper withBorder radius="md" p="md" data-testid="run-summary-card">
       <Group justify="space-between" align="center" wrap="wrap" gap="sm">
@@ -178,9 +238,14 @@ export const RunSummaryCard: React.FC<RunSummaryCardProps> = ({
       />
       <Group gap="xs" mt="sm" wrap="nowrap" style={{ minWidth: 0 }}>
         <Text size="xs" fw={700} c="dimmed" tt="uppercase" style={{ flexShrink: 0 }}>
-          Run folder
+          {severalRuns ? 'Runs folder' : 'Run folder'}
         </Text>
-        <FolderPath location={report.data_root} testId="run-preview-data-root" />
+        <FolderPath location={shownFolder} testId="run-preview-data-root" />
+        {severalRuns && (
+          <Text size="xs" c="dimmed" truncate data-testid="run-preview-runs">
+            {report.runs?.join(', ')}
+          </Text>
+        )}
       </Group>
     </Paper>
   );
@@ -227,7 +292,9 @@ export const RunFoundCard: React.FC<RunSummaryCardProps & { found: RunFoundInfo 
   const { ready, required: considered } = counts;
   const parts = splitTemplateId(report.template_id);
   const hint = pipelineHint(match);
-  const runs = report.detected_runs ?? [];
+  // Several run folders named in the request: they are the runs, read from the first.
+  const severalRuns = readsSeveralRuns(report);
+  const runs = severalRuns ? (report.runs ?? []) : (report.detected_runs ?? []);
   const sourceKind = isS3Location(report.data_root) ? 's3' : 'folder';
   const label = pipelineLabel(report.template_id) ?? report.template_id;
   const rows: FoundRow[] = [
@@ -268,21 +335,22 @@ export const RunFoundCard: React.FC<RunSummaryCardProps & { found: RunFoundInfo 
           {
             key: 'runs',
             label: 'Runs',
+            // The names, on one line like every other row; how they are read under them.
             value: (
-              <Stack gap={4}>
-                <Text size="sm" data-testid="run-found-runs">
-                  {plural(runs.length, 'run')}
-                </Text>
-                <RunChips names={runs} />
-              </Stack>
+              <Text size="sm" style={{ wordBreak: 'break-word' }} data-testid="run-found-runs">
+                {runsLine(runs)}
+              </Text>
             ),
+            hint: severalRuns
+              ? `${plural(runs.length, 'run')}, read together: the counts below add them up`
+              : undefined,
           } satisfies FoundRow,
         ]
       : []),
     {
       key: 'source',
       label: 'Source',
-      value: <SourceValue kind={sourceKind} location={report.data_root} />,
+      value: <SourceValue kind={sourceKind} location={severalRuns ? runsParent(report) : report.data_root} />,
     },
     {
       key: 'contents',
@@ -344,6 +412,7 @@ export const RunPreview: React.FC<RunSummaryCardProps & { found?: RunFoundInfo |
   detection,
   storage = null,
   found = null,
+  custom = false,
 }) => {
   const failedDashboards = report.dashboards.filter((d) => !d.success);
   const settings = Object.entries(report.resolved_variables ?? {}).filter(
@@ -352,7 +421,9 @@ export const RunPreview: React.FC<RunSummaryCardProps & { found?: RunFoundInfo |
 
   return (
     <Stack gap="md" data-testid="run-preview-report">
-      {found ? (
+      {custom ? (
+        <CustomSummaryCard report={report} />
+      ) : found ? (
         <RunFoundCard
           report={report}
           templateTitle={templateTitle}
@@ -381,7 +452,12 @@ export const RunPreview: React.FC<RunSummaryCardProps & { found?: RunFoundInfo |
           </Text>
         </Group>
       ) : (
-        <CollectionPlan rows={report.data_collections} dataRoot={report.data_root} storage={storage} />
+        <CollectionPlan
+          rows={report.data_collections}
+          dataRoot={report.data_root}
+          storage={storage}
+          folderWord={custom ? 'folder' : 'run folder'}
+        />
       )}
 
       {settings.length > 0 && <ResolvedSettings settings={settings} dataRoot={report.data_root} />}

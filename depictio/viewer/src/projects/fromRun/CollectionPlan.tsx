@@ -14,7 +14,7 @@
  * Shared by the checks of a folder ("Collections"), the Preview step and the
  * report after creation.
  */
-import React, { useState } from 'react';
+import React, { createContext, useContext, useState } from 'react';
 import {
   Accordion,
   ActionIcon,
@@ -49,7 +49,7 @@ const SECTIONS: Record<
     title: 'Empty for now',
     icon: 'mdi:tray-remove',
     color: 'gray',
-    hint: 'The collection stays empty until its files exist.',
+    hint: 'Created empty, and filled at the next refresh once its files exist.',
   },
   ready: {
     title: 'Found',
@@ -203,6 +203,7 @@ const RecipeSourceRow: React.FC<{ source: FromRunRecipeSource }> = ({ source }) 
 
 /** What a collection looked for and what it found. */
 const CollectionDetails: React.FC<{ dc: FromRunDCPreview; dataRoot: string }> = ({ dc, dataRoot }) => {
+  const folderWord = useContext(FolderWordContext);
   const samples = dc.samples ?? [];
   const missing =
     dc.missing_sources.length > 0 && !dc.recipe ? (
@@ -219,7 +220,7 @@ const CollectionDetails: React.FC<{ dc: FromRunDCPreview; dataRoot: string }> = 
                 title={source}
                 style={{ wordBreak: 'break-all' }}
               >
-                {relative === '' ? '(the run folder itself)' : relative ?? source}
+                {relative === '' ? `(the ${folderWord} itself)` : relative ?? source}
               </Text>
             );
           })}
@@ -347,6 +348,7 @@ const WhereCell: React.FC<{ dc: FromRunDCPreview; dataRoot: string; foundIn: str
   dataRoot,
   foundIn,
 }) => {
+  const folderWord = useContext(FolderWordContext);
   if (dc.status === 'pruned' || !dc.location) return null;
   const relative = relativeToRunFolder(dataRoot, dc.location);
   if (relative === '') {
@@ -354,16 +356,16 @@ const WhereCell: React.FC<{ dc: FromRunDCPreview; dataRoot: string; foundIn: str
       return (
         <Text size="xs" c="dimmed" truncate>
           {foundIn === ''
-            ? 'the run folder'
+            ? `the ${folderWord}`
             : dc.kind === 'recipe'
-              ? 'files across the run folder'
-              : 'the whole run folder'}
+              ? `files across the ${folderWord}`
+              : `the whole ${folderWord}`}
         </Text>
       );
     }
     return (
       <Tooltip
-        label={`It searches the whole run folder; every file it found is in ${foundIn}/`}
+        label={`It searches the whole ${folderWord}; every file it found is in ${foundIn}/`}
         withArrow
         multiline
         maw={360}
@@ -577,41 +579,49 @@ const CollectionSection: React.FC<{
   );
 };
 
+/** What the read folder is called: a pipeline's run folder, or just the
+ *  folder of a project defined in the Project Builder. */
+const FolderWordContext = createContext('run folder');
+
 export const CollectionPlan: React.FC<{
   rows: FromRunDCPreview[];
   dataRoot: string;
   /** The private bucket's connection details, to preview its files. */
   storage?: RunStorageIn | null;
-}> = ({ rows, dataRoot, storage = null }) => {
+  /** "run folder" (default), or "folder" for a Project Builder project. */
+  folderWord?: string;
+}> = ({ rows, dataRoot, storage = null, folderWord = 'run folder' }) => {
   const groups = groupRunCollections(rows);
   const present = SECTION_ORDER.filter((s) => groups[s].length > 0);
   const byTag = new Map(rows.map((dc) => [dc.data_collection_tag, dc]));
   return (
-    <RunFileScope dataRoot={dataRoot} storage={storage}>
-      <Accordion
-        multiple
-        variant="contained"
-        radius="md"
-        // What needs a look, and what was found, start open; the optional
-        // collections that found nothing start folded.
-        defaultValue={present.filter((s) => s !== 'optional')}
-        chevronPosition="right"
-        styles={{
-          control: { paddingInlineStart: 'var(--mantine-spacing-xs)' },
-          label: { paddingBlock: 6 },
-          content: { padding: 0 },
-        }}
-      >
-        {present.map((section) => (
-          <CollectionSection
-            key={section}
-            section={section}
-            rows={groups[section]}
-            dataRoot={dataRoot}
-            byTag={byTag}
-          />
-        ))}
-      </Accordion>
-    </RunFileScope>
+    <FolderWordContext.Provider value={folderWord}>
+      <RunFileScope dataRoot={dataRoot} storage={storage}>
+        <Accordion
+          multiple
+          variant="contained"
+          radius="md"
+          // What needs a look, and what was found, start open; the optional
+          // collections that found nothing start folded.
+          defaultValue={present.filter((s) => s !== 'optional')}
+          chevronPosition="right"
+          styles={{
+            control: { paddingInlineStart: 'var(--mantine-spacing-xs)' },
+            label: { paddingBlock: 6 },
+            content: { padding: 0 },
+          }}
+        >
+          {present.map((section) => (
+            <CollectionSection
+              key={section}
+              section={section}
+              rows={groups[section]}
+              dataRoot={dataRoot}
+              byTag={byTag}
+            />
+          ))}
+        </Accordion>
+      </RunFileScope>
+    </FolderWordContext.Provider>
   );
 };

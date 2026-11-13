@@ -9,6 +9,7 @@ import React from 'react';
 import { Button, Group, Loader, Paper, Stack, Text, ThemeIcon } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
+import { useBrandAccents } from 'depictio-react-core';
 import type { FolderInspection, RunStorageIn, RunTemplateMatch } from 'depictio-react-core';
 
 import { RunChecks } from './RunChecks';
@@ -67,7 +68,8 @@ const DetectedChecks: React.FC<{
   match: RunTemplateMatch | null;
   storage: RunStorageIn | null;
 }> = ({ result, templateId, templateTitle, templateEngine, match, storage }) => {
-  const plan = useRunPlan(result.location, templateId, storage);
+  const childRuns = result.looks_like_run ? null : (result.child_runs ?? null);
+  const plan = useRunPlan(result.location, templateId, storage, childRuns);
   return (
     <RunChecks
       location={result.location}
@@ -96,6 +98,7 @@ export const DetectionCard: React.FC<DetectionCardProps> = ({
   errorHint,
   errorMessage,
 }) => {
+  const accent = useBrandAccents();
   if (state.status === 'idle') return null;
 
   let body: React.ReactNode;
@@ -175,7 +178,8 @@ export const DetectionCard: React.FC<DetectionCardProps> = ({
           {onUseDetected && detectedId && templateId && templateId !== detectedId && (
             <Group>
               <Button
-                size="xs"
+                color={accent.secondary}
+                size="sm"
                 variant="light"
                 leftSection={<Icon icon="mdi:auto-fix" width={14} />}
                 onClick={onUseDetected}

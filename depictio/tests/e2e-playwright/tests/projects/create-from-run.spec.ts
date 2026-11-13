@@ -156,13 +156,16 @@ async function openWithFolder(page: Page, folder = DATA_ROOT): Promise<void> {
 }
 
 /** Open the pipeline and version pickers under the folder field: "Change"
- *  when a pipeline was recognised, "I know the pipeline" when not. */
+ *  when a pipeline was recognised, the "Pipeline template" tile's "Choose the
+ *  pipeline" button when not. */
 async function openPipelinePicker(page: Page): Promise<void> {
   const change = page.locator("[data-testid='folder-change-pipeline']");
-  const know = page.locator("[data-testid='folder-know-pipeline']");
-  await expect(change.or(know)).toBeVisible({ timeout: 20_000 });
+  const pick = page.locator("[data-testid='read-level-template-pick']");
+  await expect(change.or(pick)).toBeVisible({ timeout: 20_000 });
   if (await change.isVisible()) await change.click();
-  else await know.click();
+  // The button sits inside the locked tile (aria-disabled): Playwright counts
+  // a descendant of one as disabled, a reader's click still reaches it.
+  else await pick.click({ force: true });
   await expect(page.locator("[data-testid='run-pipeline-select']")).toBeVisible();
 }
 
@@ -211,9 +214,17 @@ test.describe("Create project from a run folder", () => {
     await expect(pipelineSelect).toHaveCount(0);
     await expect(page.locator("[data-testid='folder-pipeline-line']")).toHaveCount(0);
     await expect(page.locator("[data-testid='folder-know-pipeline']")).toHaveCount(0);
+    await expect(page.locator("[data-testid='read-level-choice']")).toHaveCount(0);
     await expect(page.locator("[data-testid='run-browse-local']")).toHaveCount(0);
 
     await page.locator("[data-testid='run-data-root-input']").fill(DATA_ROOT);
+
+    // The folder was read: the three ways to read it, the template preselected.
+    await expect(page.locator("[data-testid='read-level-template']")).toHaveAttribute(
+      "data-active",
+      "true",
+      { timeout: 20_000 },
+    );
 
     // The card checks the run against the template, one line each: one
     // version when both sides agree.
@@ -712,7 +723,7 @@ test.describe("Create project from a run folder", () => {
     await expect(submit).toBeEnabled();
   });
 
-  test("a folder no pipeline matches is plain tables until the reader names the pipeline", async ({
+  test("a folder no pipeline matches reads as custom workflows until the reader names the pipeline", async ({
     loginAsAdmin,
     page,
   }) => {
@@ -735,22 +746,36 @@ test.describe("Create project from a run folder", () => {
     await loginAsAdmin();
     await openWithFolder(page);
 
-    // Nothing names a pipeline: the plain-tables path, with a quiet way to
-    // name the pipeline.
+    // Nothing names a pipeline and no table sits in the folder: the pipeline
+    // template and flat tables are locked, with the reason; custom workflows
+    // (the builder) are the level left, and the tile names a way to pick the pipeline.
     const card = page.locator("[data-testid='run-detection-card']");
-    await expect(page.locator("[data-testid='folder-no-pipeline']")).toContainText(
-      "No pipeline run was recognised",
-    );
-    await expect(card).toHaveCount(0);
     const submit = page.locator("[data-testid='create-from-run-submit']");
-    await expect(submit).toBeDisabled();
-    await expect(page.locator("[data-testid='run-submit-disabled-reason']")).toContainText(
-      "No pipeline recognised and no table files in this folder.",
+    const template = page.locator("[data-testid='read-level-template']");
+    const custom = page.locator("[data-testid='read-level-custom']");
+    await expect(page.locator("[data-testid='read-level-choice']")).toBeVisible({ timeout: 20_000 });
+    await expect(custom).toHaveAttribute("data-active", "true");
+    await expect(template).toHaveAttribute("aria-disabled", "true");
+    await expect(page.locator("[data-testid='read-level-template-reason']")).toContainText(
+      "No pipeline recognised.",
     );
+    await expect(page.locator("[data-testid='read-level-flat']")).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+    await expect(page.locator("[data-testid='read-level-flat-reason']")).toContainText(
+      "No table file",
+    );
+    await expect(page.locator("[data-testid='folder-no-pipeline']")).toHaveCount(0);
+    await expect(page.locator("[data-testid='folder-pipeline-line']")).toHaveCount(0);
+    await expect(card).toHaveCount(0);
+    await expect(submit).toHaveText("Open the Project Builder");
+    await expect(submit).toBeEnabled();
 
-    // "I know the pipeline" opens the picker. A pipeline with a single
-    // template version: picked, it is the choice and the pipeline path is on.
-    await page.locator("[data-testid='folder-know-pipeline']").click();
+    // "Choose the pipeline" opens the picker. A pipeline with a single
+    // template version: picked, it is the choice and the template level is on.
+    const pick = page.locator("[data-testid='read-level-template-pick']");
+    await pick.click({ force: true });
     await page.locator("[data-testid='run-pipeline-select']").click();
     await page.locator("[data-testid='run-pipeline-option-nf-core/rnaseq']").click();
     await expect(page.locator("[data-testid='run-pipeline-select']")).toHaveValue(
@@ -758,17 +783,23 @@ test.describe("Create project from a run folder", () => {
     );
     await expect(page.locator("[data-testid='run-pipeline-detected']")).toHaveCount(0);
     await expect(versionField(page)).toHaveAttribute("data-template-id", "nf-core/rnaseq/3.26.0");
-    await expect(page.locator("[data-testid='folder-no-pipeline']")).toHaveCount(0);
+    await expect(template).toHaveAttribute("data-active", "true");
+    await expect(template).not.toHaveAttribute("aria-disabled", "true");
+    await expect(page.locator("[data-testid='read-level-template-edit']")).toBeVisible();
     await expect(page.locator("[data-testid='folder-pipeline-line']")).toContainText("Chosen");
+    await expect(submit).toHaveText("Next");
     await expect(submit).toBeEnabled();
 
-    // Clear returns to detection: plain tables again.
+    // Clear returns to detection: nothing recognised, custom workflows again.
     await page.locator("[data-testid='folder-clear-pipeline']").click();
-    await expect(page.locator("[data-testid='folder-no-pipeline']")).toBeVisible();
-    await expect(submit).toBeDisabled();
-    await page.locator("[data-testid='folder-know-pipeline']").click();
+    await expect(custom).toHaveAttribute("data-active", "true");
+    await expect(template).toHaveAttribute("aria-disabled", "true");
+    await expect(page.locator("[data-testid='folder-pipeline-line']")).toHaveCount(0);
+    await expect(submit).toHaveText("Open the Project Builder");
+    await pick.click({ force: true });
     await page.locator("[data-testid='run-pipeline-select']").click();
     await page.locator("[data-testid='run-pipeline-option-nf-core/rnaseq']").click();
+    await expect(submit).toHaveText("Next");
     await expect(submit).toBeEnabled();
 
     await submit.click();

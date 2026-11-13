@@ -424,6 +424,12 @@ class TemplateOrigin(BaseModel):
         "manifest-driven instantiations, where MANIFEST_URL in `variables` plays "
         "the equivalent provenance role.",
     )
+    runs: list[str] | None = Field(
+        default=None,
+        description="Set when the project was made from a folder of several runs: "
+        "`data_root` is that folder and this lists the names of its sub-folders read as "
+        "runs, in order. None for a project made from one run folder.",
+    )
     applied_at: str = Field(
         default_factory=lambda: datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         description="Timestamp when template was applied",
