@@ -234,6 +234,35 @@ def test_bioformats2raw_is_checked_on_its_first_series(tmp_path):
     assert report.checked == "bioformats2raw metadata and the first 3 series"
 
 
+def test_bioformats2raw_reads_the_series_its_ome_group_lists(tmp_path):
+    """A container may name its series in ``OME/.zattrs`` ``series`` instead of
+    numbering them 0, 1, 2 (Platynereis: ``setup0/timepoint0``)."""
+    root_path = tmp_path / "named.zarr"
+    root = zarr.open_group(str(root_path), mode="w", zarr_format=2)
+    root.attrs["bioformats2raw.layout"] = 3
+    names = [f"setup{i}/timepoint0" for i in range(5)]
+    root.create_group("OME").attrs["series"] = names
+    for name in names:
+        _image(root_path / name)
+
+    report = validate_ngff_store(str(root_path))
+
+    assert report.ok, report.issues
+    assert report.checked == "bioformats2raw metadata and 3 of 5 series"
+
+
+def test_a_listed_series_that_is_missing_is_an_issue(tmp_path):
+    root_path = tmp_path / "gap.zarr"
+    root = zarr.open_group(str(root_path), mode="w", zarr_format=2)
+    root.attrs["bioformats2raw.layout"] = 3
+    root.create_group("OME").attrs["series"] = ["a", "b"]
+    _image(root_path / "a")
+
+    report = validate_ngff_store(str(root_path))
+
+    assert "b: listed in OME/series but missing" in report.issues
+
+
 def test_an_array_zarr_python_cannot_read_is_not_an_ngff_error(tmp_path):
     """``>u1`` is a valid Zarr v2 dtype (IDR writes it) that zarr-python 3
     refuses. The metadata is checked alone, and the report says the arrays
@@ -311,3 +340,48 @@ def test_a_callback_store_that_misses_everything_is_not_a_zarr_group():
 
     assert not report.ok
     assert report.issues[0].startswith("not a zarr group")
+
+
+def _image_v05(path: Path, labels_group_version: bool) -> Path:
+    group = zarr.open_group(str(path), mode="w", zarr_format=3)
+    group.create_array("0", shape=(8, 8), chunks=(8, 8), dtype="uint16", dimension_names=["y", "x"])
+    axes = [{"name": "y", "type": "space"}, {"name": "x", "type": "space"}]
+    group.attrs["ome"] = {"version": "0.5", "multiscales": _multiscales(axes, "0.5")}
+    group.attrs["ome"]["multiscales"][0].pop("version")
+    labels = group.create_group("labels")
+    labels.attrs["ome"] = {"labels": ["0"], **({"version": "0.5"} if labels_group_version else {})}
+    label = labels.create_group("0")
+    label.create_array("0", shape=(8, 8), chunks=(8, 8), dtype="uint32", dimension_names=["y", "x"])
+    label.attrs["ome"] = {
+        "version": "0.5",
+        "image-label": {"colors": [{"label-value": 1, "rgba": [255, 0, 0, 255]}]},
+        "multiscales": _multiscales(axes, "0.5"),
+    }
+    label.attrs["ome"]["multiscales"][0].pop("version")
+    return path
+
+
+def test_a_spec_violation_is_a_finding_not_an_unreadable_array(tmp_path):
+    """NGFF 0.5 wants a version in every group's `ome` block: a labels group
+    without one is a finding (the official validator flags it), never
+    "zarr-python could not read the arrays"."""
+    ok = validate_ngff_store(str(_image_v05(tmp_path / "ok.zarr", labels_group_version=True)))
+    bad = validate_ngff_store(str(_image_v05(tmp_path / "bad.zarr", labels_group_version=False)))
+
+    assert ok.ok, ok.issues
+    assert not bad.ok
+    assert any("version" in issue for issue in bad.issues)
+    assert bad.checked is None
+
+
+def test_a_spec_violation_wrapped_by_the_models_is_still_a_finding(tmp_path):
+    """ome-zarr-models wraps a nested group's validation error in a ValueError
+    ("Error validating the label path ..."): the cause decides, not the type."""
+    store = _image_v05(tmp_path / "wrapped.zarr", labels_group_version=True)
+    label = zarr.open_group(str(store / "labels" / "0"), mode="a")
+    label.attrs["ome"] = {**label.attrs["ome"], "image-label": {"colors": "not a list"}}
+
+    report = validate_ngff_store(str(store))
+
+    assert not report.ok
+    assert report.checked is None

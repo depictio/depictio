@@ -747,6 +747,23 @@ class TestIngest:
 
         assert result["result"] == "success", result["message"]
 
+    def test_a_bioformats2raw_container_opens_the_first_series_its_ome_group_lists(
+        self, tmp_path, monkeypatch, cli_config, s3_client
+    ):
+        store = tmp_path / "named.zarr"
+        (store / "OME").mkdir(parents=True)
+        (store / ".zgroup").write_text(json.dumps({"zarr_format": 2}))
+        (store / ".zattrs").write_text(json.dumps({"bioformats2raw.layout": 3}))
+        (store / "OME" / ".zgroup").write_text(json.dumps({"zarr_format": 2}))
+        (store / "OME" / ".zattrs").write_text(json.dumps({"series": ["setup0/timepoint0"]}))
+        (store / "setup0").mkdir()
+        make_store(store / "setup0", "timepoint0")
+        _registered(monkeypatch, store)
+
+        result = process_bioimage_data_collection(_ingest_dc(), cli_config)  # type: ignore[arg-type]
+
+        assert result["result"] == "success", result["message"]
+
     def test_missing_zattrs_is_an_error(self, tmp_path, monkeypatch, cli_config, s3_client):
         store = make_store(tmp_path, "sample_A.zarr")
         (store / ".zattrs").unlink()

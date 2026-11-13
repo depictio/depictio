@@ -2022,6 +2022,11 @@ def _first_image_path(store_path: str, ome: dict) -> str | None:
         field = _safe_subpath(images[0].get("path"), f"{well_dir} well.images[0]")
         return f"{well}/{field}"
     if "bioformats2raw.layout" in ome:
+        # The OME group may name the series (``setup0/timepoint0``); without
+        # a list they are numbered from 0.
+        listed = (_ngff_attributes(os.path.join(store_path, "OME")) or {}).get("series")
+        if isinstance(listed, list) and listed and isinstance(listed[0], str):
+            return _safe_subpath(listed[0], f"{store_path} OME series[0]")
         return "0"
     return None
 

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { BioimageZarrStore } from '../../../api';
 import {
+  containerImagePath,
   axesProblem,
   firstLabelPath,
   normaliseWellName,
@@ -116,6 +117,24 @@ describe('openContainer', () => {
 
   it('says unknown for a group without NGFF metadata', async () => {
     expect((await openContainer(memoryStore({}))).layout).toBe('unknown');
+  });
+});
+
+describe('containerImagePath', () => {
+  const b2r = { layout: 'bioformats2raw' as const, version: '0.4', wells: [] };
+
+  it('opens series 0 when the OME group lists none', async () => {
+    const store = memoryStore({ '.zattrs': { 'bioformats2raw.layout': 3 } });
+    expect(await containerImagePath(store, b2r, null)).toBe('0');
+  });
+
+  it('opens the first series the OME group lists', async () => {
+    const v04 = memoryStore({ 'OME/.zattrs': { series: ['setup0/timepoint0', 'setup1/timepoint0'] } });
+    expect(await containerImagePath(v04, b2r, null)).toBe('setup0/timepoint0');
+    const v05 = memoryStore({
+      'OME/zarr.json': { zarr_format: 3, node_type: 'group', attributes: { ome: { version: '0.5', series: ['s'] } } },
+    });
+    expect(await containerImagePath(v05, b2r, null)).toBe('s');
   });
 });
 

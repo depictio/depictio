@@ -153,6 +153,37 @@ def _spread(items: list, n: int = SAMPLED_MEMBERS) -> list:
     return [items[i] for i in picks]
 
 
+def _listed_series(group) -> list[str] | None:
+    """The series paths a bioformats2raw container's ``OME`` group lists
+    (0.4 ``OME/.zattrs`` ``series``, 0.5 ``OME/zarr.json`` ``ome.series``),
+    or None when it lists none and the series are numbered from ``0``."""
+    try:
+        attrs = dict(group["OME"].attrs) if "OME" in group else {}
+    except Exception:
+        return None
+    ome = attrs.get("ome")
+    series = (ome if isinstance(ome, dict) else attrs).get("series")
+    if isinstance(series, list) and series and all(isinstance(p, str) and p for p in series):
+        return series
+    return None
+
+
+def _validation_error_in(exc: BaseException):
+    """The pydantic ValidationError behind ``exc``, if any: a spec violation,
+    even when ome-zarr-models re-raised it as a ValueError for a nested group.
+    None means something else failed (zarr-python reading an array)."""
+    from pydantic import ValidationError
+
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    while current is not None and id(current) not in seen:
+        if isinstance(current, ValidationError):
+            return current
+        seen.add(id(current))
+        current = current.__cause__ or current.__context__
+    return None
+
+
 def _quiet(call) -> None:
     with warnings.catch_warnings():
         # The models warn on SHOULD-level findings too; those are not errors.
@@ -186,6 +217,11 @@ class _Check:
             _quiet(lambda: model.from_zarr(group))
             return
         except Exception as exc:
+            spec_error = _validation_error_in(exc)
+            if spec_error is not None:
+                # The metadata breaks the spec: a finding, wherever it sits.
+                self.issues += [f"{where}{line}" for line in _format_errors(spec_error)]
+                return
             errors = _format_errors(exc)
         before = len(self.issues)
         ome, _ = _ome_attributes(dict(group.attrs))
@@ -230,9 +266,18 @@ class _Check:
         return len(paths)
 
     def bioformats2raw(self, group, ome: dict[str, Any]) -> str:
-        # bioformats2raw lists no series: they are 0, 1, 2... until one is
-        # missing. Counting them all is a read per series, so only the first few.
         self.attrs("bioformats2raw", ome)
+        listed = _listed_series(group)
+        if listed is not None:
+            # The OME group names the series: check a spread of them.
+            for path in _spread(listed):
+                if path in group:
+                    self.group(group[path], "image", f"{path}/")
+                else:
+                    self.issues.append(f"{path}: listed in OME/series but missing")
+            return f"bioformats2raw metadata and {min(len(listed), SAMPLED_MEMBERS)} of {len(listed)} series"
+        # No list: the series are 0, 1, 2... until one is missing. Counting
+        # them all is a read per series, so only the first few.
         series = 0
         while series < SAMPLED_MEMBERS and str(series) in group:
             self.group(group[str(series)], "image", f"{series}/")
@@ -371,8 +416,9 @@ def validate_ngff_store(store_path, image_path: str | None = None) -> NgffValida
     layout = _layout_of(ome)
     if layout == "bioformats2raw" and version is None:
         # 0.4 puts no version on a bioformats2raw root: its series carry it.
+        first = (_listed_series(group) or ["0"])[0]
         try:
-            version = _ome_attributes(dict(group["0"].attrs))[1]
+            version = _ome_attributes(dict(group[first].attrs))[1]
         except Exception:
             pass
     if layout == "unknown":

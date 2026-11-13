@@ -1093,6 +1093,21 @@ class TestRemoteHttps:
 
         assert resp.status_code == 404
 
+    def test_upstream_403_on_a_key_is_a_404(self, tmp_path):
+        """A bucket readers may not list answers 403 for a key that does not
+        exist (radosgw, S3 without s3:ListBucket). Zarr readers probe for keys
+        (``.zattrs`` on a v3 store), so that 403 has to read as absent."""
+        env = Env(
+            tmp_path,
+            props={"remote_stores": [REMOTE_ZARR]},
+            bioimage=ALLOW_HTTPS,
+            http_handler=lambda req: httpx.Response(403),
+        )
+        with env as client:
+            resp = client.get(key_url("sample_R.zarr", ".zattrs"), headers=AUTH)
+
+        assert resp.status_code == 404
+
     def test_upstream_timeout_is_502(self, tmp_path):
         def timeout(req):
             raise httpx.ConnectTimeout("slow", request=req)

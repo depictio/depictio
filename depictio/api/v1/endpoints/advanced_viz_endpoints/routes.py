@@ -2513,9 +2513,9 @@ def _bioimage_s3_size(bucket: str, key: str) -> int:
     return int(head["ContentLength"])
 
 
-def _check_https_status(response, url: str) -> None:
+def _check_https_status(response, url: str, forbidden_is_miss: bool = False) -> None:
     status = response.status_code
-    if status in (404, 410):
+    if status in (404, 410) or (status == 403 and forbidden_is_miss):
         raise _BioimageMiss(url)
     if status == 416:
         raise HTTPException(
@@ -2532,8 +2532,15 @@ def _check_https_status(response, url: str) -> None:
         raise _BioimageUpstreamError(f"GET {url}: HTTP {status}")
 
 
-def _bioimage_https_read(url: str, byte_range: str | None = None) -> _Blob:
-    """One remote object (or byte range of it), streamed in up to the relay limit."""
+def _bioimage_https_read(
+    url: str, byte_range: str | None = None, forbidden_is_miss: bool = False
+) -> _Blob:
+    """One remote object (or byte range of it), streamed in up to the relay limit.
+
+    ``forbidden_is_miss``: a 403 means the object is absent. A bucket its
+    readers may not list (radosgw, S3 without ``s3:ListBucket``) answers 403
+    for a missing key, and zarr readers probe for keys that may not exist.
+    """
     import httpx
 
     headers = {"Accept-Encoding": "identity"}
@@ -2544,7 +2551,7 @@ def _bioimage_https_read(url: str, byte_range: str | None = None) -> _Blob:
         with _bioimage_http_client().stream(
             "GET", url, headers=headers, follow_redirects=False
         ) as response:
-            _check_https_status(response, url)
+            _check_https_status(response, url, forbidden_is_miss)
             declared = response.headers.get("content-length", "")
             if declared.isdigit() and int(declared) > max_bytes:
                 raise _bioimage_too_large()
@@ -2620,8 +2627,12 @@ def _bioimage_remote_read(url: str, rel: str | None, byte_range: str | None = No
     if target.scheme == "s3":
         key = f"{target.key}/{rel}" if rel else target.key
         return _bioimage_s3_read(target.bucket, key, byte_range)
-    full_url = f"{target.url}/{quote(rel, safe='/')}" if rel else target.url
-    return _bioimage_https_read(full_url, byte_range)
+    if not rel:
+        return _bioimage_https_read(target.url, byte_range)
+    # A key inside a store: a 403 there is a key that does not exist.
+    return _bioimage_https_read(
+        f"{target.url}/{quote(rel, safe='/')}", byte_range, forbidden_is_miss=True
+    )
 
 
 def _bioimage_remote_size(url: str) -> int:

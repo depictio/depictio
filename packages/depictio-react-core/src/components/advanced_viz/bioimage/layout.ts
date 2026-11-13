@@ -152,7 +152,7 @@ export async function wellImagePath(
 }
 
 /** The image group under a container root: a well's first field, a
- *  bioformats2raw container's first series; `''` when the root is the image. */
+ *  bioformats2raw container's first series (listed in `OME`, else `0`); `''` when the root is the image. */
 export async function containerImagePath(
   store: BioimageZarrStore,
   container: NgffContainer,
@@ -166,8 +166,13 @@ export async function containerImagePath(
     }
     case 'well':
       return wellImagePath(store, '');
-    case 'bioformats2raw':
-      return '0';
+    case 'bioformats2raw': {
+      // The OME group may name the series (`setup0/timepoint0`); without a
+      // list they are numbered from 0.
+      const ome = await readNgffAttrs(store, 'OME');
+      const series = ome && Array.isArray(ome.series) ? ome.series[0] : null;
+      return typeof series === 'string' && series ? series.replace(/^\/+|\/+$/g, '') : '0';
+    }
     default:
       return '';
   }
