@@ -89,6 +89,10 @@ export const AddDataModal: React.FC<AddDataModalProps> = ({
   const hasUrl = mode === 'url' && urlTable.hasUrl;
   const addsRun = runsApply && hasLocation && run.isNewRun;
   const refusedRun = runsApply && hasLocation && !run.loading && run.refusal && folder.tableCount === 0;
+  // Not a run, but its tables can still come in: said as a note, not as a
+  // refusal of the whole folder.
+  const tablesInstead =
+    runsApply && hasLocation && !run.loading && Boolean(run.refusal?.known) && folder.tableCount > 0;
 
   // Nothing picked yet: both panels already say what to do, so the line under
   // the button stays empty (the button keeps the reason on hover).
@@ -200,7 +204,20 @@ export const AddDataModal: React.FC<AddDataModalProps> = ({
                 onLocationModeChange={setMode}
                 urlField={urlTable.field}
               >
-                {runsApply && hasLocation && run.view}
+                {tablesInstead ? (
+                  <Alert
+                    color={accent.secondary}
+                    variant="light"
+                    icon={<Icon icon="mdi:information-outline" width={18} />}
+                    data-testid="attach-run-tables-instead"
+                    data-code={run.refusal?.code ?? undefined}
+                  >
+                    This folder is not a run of {pipelineLabel ?? "the project's pipeline"}, so it is not added as
+                    one. Its tables can be added as data collections below.
+                  </Alert>
+                ) : (
+                  runsApply && hasLocation && run.view
+                )}
                 {!addsRun && !refusedRun && hasLocation && folder.view}
                 {mode === 'url' && urlTable.preview}
               </DataSourceFields>

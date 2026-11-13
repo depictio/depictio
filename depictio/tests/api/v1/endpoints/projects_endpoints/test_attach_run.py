@@ -96,6 +96,9 @@ def env(monkeypatch, tmp_path):
         SimpleNamespace(tag="samplesheet", matched=1, status="ok", mode="single"),
     ]
     preview = SimpleNamespace(data_collections=rows, detected_runs=[])
+    state.rows = rows
+    # The samples the new run's MultiQC reports name.
+    state.new_samples = set()
 
     async def _no_token(_user, _dry_run):
         return None
@@ -103,6 +106,9 @@ def env(monkeypatch, tmp_path):
     with (
         patch.object(attach_run, "projects_collection", database["projects"]),
         patch.object(attach_run, "runs_collection", database["runs"]),
+        patch.object(attach_run, "multiqc_collection", database["multiqc"]),
+        patch.object(attach_run, "files_collection", database["files"]),
+        patch.object(attach_run, "_report_sample_names", lambda _root, _row: state.new_samples),
         patch.object(
             publish_lock, "_db", lambda: SimpleNamespace(projects_collection=database["projects"])
         ),
@@ -223,3 +229,98 @@ def test_locked_project_409(env):
     status, _body = _call(project, env.new, dry_run=False)
     assert status == 409
     assert env.dispatch.call_count == 0
+
+
+def test_a_run_added_beside_the_runs_of_a_folder_of_runs_joins_them(env):
+    """The refresh pre-flight reads the run names the origin holds, so a run
+    attached from the same folder has to be one of them."""
+    import os
+
+    parent = os.path.dirname(env.old)
+    project = _project(env.old)
+    project["template_origin"]["data_root"] = parent
+    project["template_origin"]["runs"] = ["run1"]
+    _store(env, project)
+    status, _body = _call(project, env.new, dry_run=False)
+    assert status == 200
+    stored = env.db["projects"].find_one({"_id": project["_id"]})
+    assert stored["template_origin"]["runs"] == ["run1", "run2"]
+    assert stored["template_origin"]["data_root"] == parent
+
+
+def test_a_single_run_project_gains_no_run_names_when_one_is_attached(env):
+    project = _store(env, _project(env.old))
+    _call(project, env.new, dry_run=False)
+    stored = env.db["projects"].find_one({"_id": project["_id"]})
+    assert "runs" not in stored["template_origin"]
+
+
+def _with_multiqc(env, project: dict, samples_by_run: dict[str, list[str]]) -> dict:
+    """``project`` with a MultiQC collection whose ingested reports name these samples."""
+    dc_id = ObjectId()
+    project["workflows"][0]["data_collections"].append(
+        {
+            "_id": dc_id,
+            "data_collection_tag": "multiqc_data",
+            "config": {"type": "MultiQC", "scan": {"mode": "recursive", "scan_parameters": {}}},
+        }
+    )
+    for run, samples in samples_by_run.items():
+        path = f"/data/{run}/multiqc/multiqc_data/multiqc.parquet"
+        env.db["multiqc"].insert_one(
+            {
+                "data_collection_id": str(dc_id),
+                "metadata": {"samples": samples},
+                "original_file_path": path,
+            }
+        )
+        env.db["files"].insert_one({"file_location": path, "run_tag": run})
+    env.rows.append(
+        SimpleNamespace(tag="multiqc_data", matched=1, status="ok", mode="recursive", samples=[])
+    )
+    return _store(env, project)
+
+
+def test_a_run_whose_reports_name_samples_already_in_the_project_is_flagged(env):
+    project = _with_multiqc(env, _project(env.old), {"run1": ["S1", "S2", "S3"]})
+    env.new_samples = {"S2", "S3", "S9"}
+    status, body = _call(project, env.new, dry_run=True)
+    assert status == 200
+    assert body["shared_samples"] == [
+        {
+            "data_collection_tag": "multiqc_data",
+            "runs": ["run1", "run2"],
+            "count": 2,
+            "samples": ["S2", "S3"],
+        }
+    ]
+
+
+def test_samples_are_compared_by_their_canonical_ids(env):
+    # A report lists each module's variants of a sample; the check names the sample once.
+    project = _with_multiqc(env, _project(env.old), {"run1": ["S1", "S1 - First read: Adapter 1"]})
+    env.db["multiqc"].update_one({}, {"$set": {"metadata.canonical_samples": ["S1"]}})
+    env.new_samples = {"S1"}
+    status, body = _call(project, env.new, dry_run=True)
+    assert status == 200
+    assert [(s["count"], s["samples"]) for s in body["shared_samples"]] == [(1, ["S1"])]
+
+
+def test_a_run_sharing_samples_is_refused_and_nothing_is_written(env):
+    project = _with_multiqc(env, _project(env.old), {"run1": ["S1"]})
+    env.new_samples = {"S1"}
+    before = env.db["projects"].find_one({"_id": project["_id"]})
+    status, body = _call(project, env.new, dry_run=False)
+    assert (status, body["code"]) == (422, "runs_share_samples")
+    assert "S1" in body["detail"]
+    assert env.db["projects"].find_one({"_id": project["_id"]}) == before
+    assert env.dispatch.call_count == 0
+
+
+def test_a_run_with_its_own_samples_passes(env):
+    project = _with_multiqc(env, _project(env.old), {"run1": ["S1", "S2"]})
+    env.new_samples = {"S3"}
+    status, body = _call(project, env.new, dry_run=False)
+    assert status == 200
+    assert body["shared_samples"] == []
+    assert body["run_id"] == "run-123"

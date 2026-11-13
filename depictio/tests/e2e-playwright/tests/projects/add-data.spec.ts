@@ -195,10 +195,89 @@ test.describe("Add data", () => {
 
     await expect(page.getByTestId("attach-run-refusal")).toContainText(message, { timeout: 10_000 });
     await expect(page.getByTestId("attach-run-refusal")).toHaveAttribute("data-code", "cannot_attach");
+    await expect(page.getByTestId("attach-run-tables-instead")).toHaveCount(0);
     // Shown once: the alert carries the message, not the line under the button.
     await expect(page.getByTestId("add-data-reason")).toHaveCount(0);
     await expect(page.getByTestId("use-own-credentials")).toBeVisible();
     await expect(page.getByTestId("run-private-bucket-toggle")).toHaveCount(0);
     await expect(page.getByTestId("add-data-submit")).toHaveAttribute("aria-disabled", "true");
+  });
+
+  test("run dialog offers the tables of a folder that is not a run, instead of a refusal", async ({ page }) => {
+    await shapeProject(page, true);
+    const folder = "s3://lab-bucket/rnaseq/run_14/";
+    await page.route("**/projects/*/attach_run", (route: Route) =>
+      route.fulfill({
+        status: 422,
+        json: { detail: "This folder holds no collection of this project's pipeline.", code: "cannot_attach" },
+      }),
+    );
+    // Not a run, but it holds tables: they can still come in.
+    await page.route("**/projects/*/add_tables_from_folder", (route: Route) =>
+      route.fulfill({
+        json: {
+          location: folder,
+          source: "s3",
+          truncated: false,
+          created: [],
+          dry_run: true,
+          files: [
+            { path: "samples.csv", name: "samples", format: "csv", size: 2048, table: true, reason: null, compression: null, existing: null },
+          ],
+        },
+      }),
+    );
+
+    await page.goto(PROJECT_URL);
+    await openModal(page);
+    await page.getByTestId("add-data-location-input").fill(folder);
+
+    // An information note replaces the refusal; the folder's tables are listed below it.
+    const note = page.getByTestId("attach-run-tables-instead");
+    await expect(note).toBeVisible({ timeout: 10_000 });
+    await expect(note).toHaveAttribute("data-code", "cannot_attach");
+    await expect(note).toContainText("is not added as one");
+    await expect(page.getByTestId("attach-run-refusal")).toHaveCount(0);
+    await expect(page.getByTestId("folder-tables-file-samples.csv")).toBeVisible();
+    await expect(page.getByTestId("add-data-submit")).toHaveText("Add 1 table");
+  });
+
+  test("run dialog holds back a run whose reports name samples already in the project", async ({ page }) => {
+    await shapeProject(page, true);
+    const folder = "s3://lab-bucket/rnaseq/run_15/";
+    await page.route("**/projects/*/attach_run", (route: Route) =>
+      route.fulfill({
+        json: {
+          project_id: IRIS_PROJECT_ID,
+          data_root: folder,
+          template_id: "nf-core/rnaseq/3.14.0",
+          detected: { template_id: "nf-core/rnaseq/3.14.0", pipeline: "nf-core/rnaseq", version: "3.14.0" },
+          match: "exact",
+          new_runs: ["run_15"],
+          existing_runs: ["run_01"],
+          data_collections: [{ tag: "multiqc_data", matched: 1, status: "ok" }],
+          shared_samples: [
+            { data_collection_tag: "multiqc_data", runs: ["run_01", "run_15"], count: 2, samples: ["S1", "S2"] },
+          ],
+          run_id: null,
+          dry_run: true,
+          warnings: [],
+        },
+      }),
+    );
+    await page.route("**/projects/*/add_tables_from_folder", (route: Route) =>
+      route.fulfill({
+        json: { location: folder, source: "s3", truncated: false, created: [], dry_run: true, files: [] },
+      }),
+    );
+
+    await page.goto(PROJECT_URL);
+    await openModal(page);
+    await page.getByTestId("add-data-location-input").fill(folder);
+
+    await expect(page.getByTestId("attach-run-shared-samples")).toContainText("S1, S2", { timeout: 10_000 });
+    await expect(page.getByTestId("attach-run-shared-samples")).toContainText("run_01");
+    await expect(page.getByTestId("add-data-submit")).toHaveAttribute("aria-disabled", "true");
+    await expect(page.getByTestId("add-data-reason")).toContainText("samples already in the project");
   });
 });

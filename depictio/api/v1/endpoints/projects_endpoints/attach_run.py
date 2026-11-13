@@ -44,13 +44,22 @@ from bson import ObjectId
 from fastapi import Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from depictio.api.v1.db import projects_collection, runs_collection
+from depictio.api.v1.db import (
+    files_collection,
+    multiqc_collection,
+    projects_collection,
+    runs_collection,
+)
 from depictio.api.v1.endpoints.projects_endpoints.from_run import (
+    _SHARED_SAMPLES_SHOWN,
     DetectedTemplate,
+    SharedRunSamples,
     _build_data_root,
     _detect_run,
+    _report_sample_names,
     _request_read_config,
     _scan_modes,
+    _shared_samples_detail,
     describe_detection,
 )
 from depictio.api.v1.endpoints.projects_endpoints.local_dirs import CodedHTTPException
@@ -101,6 +110,10 @@ class AttachRunReport(BaseModel):
     new_runs: list[str] = Field(default_factory=list)
     existing_runs: list[str] = Field(default_factory=list)
     data_collections: list[AttachRunDC] = Field(default_factory=list)
+    # Per MultiQC collection, the samples the new run's reports name that a
+    # report already in the project names too. A real call refuses them
+    # (``runs_share_samples``): one MultiQC collection would merge them.
+    shared_samples: list[SharedRunSamples] = Field(default_factory=list)
     # Ingestion to poll via GET /projects/refresh_manifest/{run_id}; None on a dry run.
     run_id: str | None = None
     dry_run: bool = True
@@ -234,6 +247,83 @@ def _storage_for_request(
         if saved is not None:
             reads = _run_folder_read_config(saved)
     return settings_in, reads
+
+
+def _project_multiqc_dcs(project: dict[str, Any], indexes: list[int]) -> dict[str, str]:
+    """Tag -> id of the MultiQC collections of the workflows that take the run."""
+    workflows = project.get("workflows") or []
+    found: dict[str, str] = {}
+    for index in indexes:
+        for dc in workflows[index].get("data_collections") or []:
+            if str((dc.get("config") or {}).get("type") or "").lower() != "multiqc":
+                continue
+            dc_id = dc.get("_id") or dc.get("id")
+            tag = str(dc.get("data_collection_tag") or "")
+            if dc_id and tag:
+                found[tag] = str(dc_id)
+    return found
+
+
+def _samples_in_project(dc_id: str) -> dict[str, str]:
+    """Sample -> the run whose report names it, over the reports already ingested.
+
+    The run is the run tag of the file the report was read from; "this project"
+    when that file is not recorded.
+    """
+    reports = list(
+        multiqc_collection.find(
+            {"data_collection_id": dc_id},
+            {"metadata.canonical_samples": 1, "metadata.samples": 1, "original_file_path": 1},
+        )
+    )
+    paths = [str(r.get("original_file_path") or "") for r in reports]
+    run_of = {
+        str(f.get("file_location")): str(f.get("run_tag") or "")
+        for f in files_collection.find(
+            {"file_location": {"$in": [p for p in paths if p]}},
+            {"file_location": 1, "run_tag": 1},
+        )
+    }
+    owner: dict[str, str] = {}
+    for report, path in zip(reports, paths, strict=True):
+        run = run_of.get(path) or "this project"
+        metadata = report.get("metadata") or {}
+        # Canonical ids, as the new run's reports are read (``_multiqc_samples_of``).
+        for sample in metadata.get("canonical_samples") or metadata.get("samples") or []:
+            owner.setdefault(str(sample), run)
+    return owner
+
+
+def samples_shared_with_project(
+    multiqc_dcs: dict[str, str], new_run: str, root: Any, rows: dict[str, Any]
+) -> list[SharedRunSamples]:
+    """Per MultiQC collection, the samples of the new run a report in the project names.
+
+    ``rows`` are the new folder's preview rows by tag. A report of the new run
+    that cannot be read is not checked (``_report_sample_names`` says None).
+    """
+    shared: list[SharedRunSamples] = []
+    for tag, dc_id in sorted(multiqc_dcs.items()):
+        row = rows.get(tag)
+        if row is None or not row.matched:
+            continue
+        names = _report_sample_names(root, row)
+        if not names:
+            continue
+        owner = _samples_in_project(dc_id)
+        both = sorted(name for name in names if name in owner)
+        if not both:
+            continue
+        runs = sorted({owner[name] for name in both})
+        shared.append(
+            SharedRunSamples(
+                data_collection_tag=tag,
+                runs=[*runs, new_run],
+                count=len(both),
+                samples=both[:_SHARED_SAMPLES_SHOWN],
+            )
+        )
+    return shared
 
 
 # ── the work (sync, run off the event loop) ──────────────────────────────────
@@ -387,8 +477,21 @@ def _attach_run_sync(
         if clash:
             raise CodedHTTPException(422, clash, "run_name_clash")
 
+    multiqc_dcs = _project_multiqc_dcs(project, indexes)
+    if multiqc_dcs:
+        new_name = (
+            report.new_runs[0]
+            if len(report.new_runs) == 1
+            else os.path.basename(os.path.normpath(new_location))
+        )
+        report.shared_samples = samples_shared_with_project(multiqc_dcs, new_name, root, rows)
+
     if payload.dry_run:
         return report
+    if report.shared_samples:
+        raise CodedHTTPException(
+            422, _shared_samples_detail(report.shared_samples), "runs_share_samples"
+        )
 
     # ---- write: record the location on each real workflow, nothing else ----
     updates: dict[str, Any] = {}
@@ -401,6 +504,14 @@ def _attach_run_sync(
         )
         updates[f"workflows.{index}.data_location.locations"] = locations
         updates[f"workflows.{index}.data_location.attached_locations"] = attached
+    known_runs = list(origin.get("runs") or [])
+    new_run = os.path.basename(os.path.normpath(new_location))
+    if known_runs and new_run not in known_runs:
+        # A project made from a folder of runs reads its refresh pre-flight from
+        # that folder's run names: a run added beside them is one of them.
+        parent = str(origin.get("data_root") or "").rstrip("/")
+        if parent and os.path.dirname(os.path.normpath(new_location)) == parent:
+            updates["template_origin.runs"] = [*known_runs, new_run]
     projects_collection.update_one({"_id": project["_id"]}, {"$set": updates})
     stored = projects_collection.find_one({"_id": project["_id"]}) or project
 
@@ -456,7 +567,8 @@ async def attach_run(
     A real call records the folder on the project and starts its ingestion;
     poll ``run_id`` via ``GET /projects/refresh_manifest/{run_id}``. Errors
     answer ``{detail, code}``: ``not_a_pipeline_project``, ``other_pipeline``,
-    ``cannot_attach`` (422), ``already_attached`` (409), a published project 409.
+    ``cannot_attach``, ``runs_share_samples`` (422), ``already_attached`` (409), a
+    published project 409.
     """
     # routes.py imports this module, so its helpers are imported at call time.
     from depictio.api.v1.endpoints.projects_endpoints import routes
