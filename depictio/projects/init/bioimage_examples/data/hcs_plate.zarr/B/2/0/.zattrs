@@ -1,0 +1,81 @@
+{
+    "multiscales": [
+        {
+            "axes": [
+                {
+                    "name": "c",
+                    "type": "channel"
+                },
+                {
+                    "name": "y",
+                    "type": "space",
+                    "unit": "micrometer"
+                },
+                {
+                    "name": "x",
+                    "type": "space",
+                    "unit": "micrometer"
+                }
+            ],
+            "datasets": [
+                {
+                    "coordinateTransformations": [
+                        {
+                            "scale": [
+                                1.0,
+                                0.65,
+                                0.65
+                            ],
+                            "type": "scale"
+                        }
+                    ],
+                    "path": "0"
+                },
+                {
+                    "coordinateTransformations": [
+                        {
+                            "scale": [
+                                1.0,
+                                1.3,
+                                1.3
+                            ],
+                            "type": "scale"
+                        }
+                    ],
+                    "path": "1"
+                }
+            ],
+            "name": "0",
+            "version": "0.4"
+        }
+    ],
+    "omero": {
+        "channels": [
+            {
+                "active": true,
+                "color": "0000FF",
+                "label": "DNA",
+                "window": {
+                    "end": 3193.7949999999837,
+                    "max": 5152.0,
+                    "min": 0.0,
+                    "start": 72.0
+                }
+            },
+            {
+                "active": true,
+                "color": "00FF00",
+                "label": "GFP",
+                "window": {
+                    "end": 2463.6849999999977,
+                    "max": 3109.0,
+                    "min": 0.0,
+                    "start": 97.0
+                }
+            }
+        ],
+        "rdefs": {
+            "model": "color"
+        }
+    }
+}

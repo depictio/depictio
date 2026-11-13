@@ -4,8 +4,11 @@
 # OME-Zarr NGFF 0.5 store with sharded arrays, each with the table its points
 # overlay and its filters read. The multi-sample images also have segmentation
 # masks (a labels DC of plain TIFFs) drawn over them. Images come from scikit-image sample data;
-# tables are derived from the pixels. See data/README.md, and
-# dev/bioimage/make_examples.py to regenerate.
+# tables are derived from the pixels. Two synthetic cases test the viewer's
+# reading rather than its looks: a small HCS plate (OME-Zarr plate, a well
+# filter opens its well) and a shape gallery (one store per axis layout, plus
+# one off the spec). See data/README.md, dev/bioimage/make_examples.py and
+# dev/bioimage/make_plate_and_shapes.py to regenerate.
 #
 # Optional project: not part of the default seed set. Seed it with
 # DEPICTIO_SEED_EXTRA_PROJECTS=bioimage_examples, or
@@ -425,6 +428,108 @@ workflows:
               lamin_b1_mean: "Mean LaminB1 intensity under the nucleus (raw counts)"
               dapi_mean: "Mean Dapi intensity under the nucleus (raw counts)"
 
+      # ----------------------------------------------------------------
+      # 7. HCS plate: one OME-Zarr store, one image per well (NGFF plate)
+      # ----------------------------------------------------------------
+      - id: "646b0f3c1e4a2d7f8e5b8f20"
+        data_collection_tag: "hcs_plate_image"
+        description: "Synthetic 2 x 3 plate, one field per well, DNA and GFP (OME-Zarr NGFF 0.4 plate)"
+        config:
+          type: "bioimage"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/bioimage_examples/data/hcs_plate.zarr"
+          dc_specific_properties:
+            format: "ome-zarr"
+            ngff_version: "0.4"
+            upload: true
+
+      - id: "646b0f3c1e4a2d7f8e5b8f21"
+        data_collection_tag: "hcs_wells"
+        description: "One row per well: treatment, dose and per-well readouts"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/bioimage_examples/data/hcs_wells.csv"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              separator: ","
+            columns_description:
+              well: "Well name (row letter, column number), as the plate names it"
+              row: "Plate row"
+              column: "Plate column"
+              treatment: "Compound and dose of the column"
+              dose_um: "Dose in micromolar"
+              n_cells: "Cells in the well's field"
+              gfp_mean: "Mean GFP of the well's cells"
+
+      - id: "646b0f3c1e4a2d7f8e5b8f22"
+        data_collection_tag: "hcs_cells"
+        description: "One row per cell of the plate, with its well and field coordinates"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/bioimage_examples/data/hcs_cells.csv"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              separator: ","
+            columns_description:
+              cell_id: "Cell identifier, unique across the plate"
+              well: "Well the cell is in"
+              x: "Centroid column, level-0 pixels of the well's field"
+              y: "Centroid row, level-0 pixels of the well's field"
+              area_px: "Cell area in pixels"
+              dna_mean: "Mean DNA intensity"
+              gfp_mean: "Mean GFP intensity"
+
+      # ----------------------------------------------------------------
+      # 8. Shape gallery: one store per axis layout, one off the spec
+      # ----------------------------------------------------------------
+      - id: "646b0f3c1e4a2d7f8e5b8f23"
+        data_collection_tag: "shape_gallery_images"
+        description: "Small synthetic stores, one per axis layout (YX to TCZYX, float32, 8 channels) and one with axes off the NGFF spec"
+        config:
+          type: "bioimage"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "shape_[a-z0-9]+\\.zarr"
+          dc_specific_properties:
+            format: "ome-zarr"
+            ngff_version: "0.4"
+            upload: true
+
+      - id: "646b0f3c1e4a2d7f8e5b8f24"
+        data_collection_tag: "shape_gallery_sheet"
+        description: "One row per shape store: axes, shape, dtype and what it exercises"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/bioimage_examples/data/shapes/shapes.csv"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              separator: ","
+            columns_description:
+              sample: "Store name without .zarr"
+              axes: "Axis order of the store"
+              shape: "Array shape, in axis order"
+              dtype: "Pixel type"
+              note: "What the store exercises in the viewer"
+
 # A sample picked in the sample sheet narrows the cells table, so the cards and
 # table of the multi-sample tab follow the store the viewer is showing.
 links:
@@ -436,4 +541,13 @@ links:
       resolver: "direct"
       target_field: "sample"
     description: "Filter the cells of the multi-sample tab by the samples selected in the sheet"
+    enabled: true
+  - source_dc_tag: "hcs_wells"
+    source_column: "well"
+    target_dc_tag: "hcs_cells"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "well"
+    description: "Filter the plate's cells by the wells selected in the plate table"
     enabled: true

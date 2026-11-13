@@ -444,6 +444,11 @@ STATIC_IDS = {
             "idr_laminb1_image": "646b0f3c1e4a2d7f8e5b8f17",
             "idr_laminb1_nuclei": "646b0f3c1e4a2d7f8e5b8f19",
             "multi_sample_labels": "646b0f3c1e4a2d7f8e5b8f1a",
+            "hcs_plate_image": "646b0f3c1e4a2d7f8e5b8f20",
+            "hcs_wells": "646b0f3c1e4a2d7f8e5b8f21",
+            "hcs_cells": "646b0f3c1e4a2d7f8e5b8f22",
+            "shape_gallery_images": "646b0f3c1e4a2d7f8e5b8f23",
+            "shape_gallery_sheet": "646b0f3c1e4a2d7f8e5b8f24",
         },
         "dashboards": {
             # Main tab id equals project_id (same convention as the showcase).
@@ -455,6 +460,8 @@ STATIC_IDS = {
             "bioimage_spatialdata": "646b0f3c1e4a2d7f8e5b8f14",
             "bioimage_ngff05": "646b0f3c1e4a2d7f8e5b8f15",
             "bioimage_remote": "646b0f3c1e4a2d7f8e5b8f18",
+            "bioimage_plate": "646b0f3c1e4a2d7f8e5b8f25",
+            "bioimage_shapes": "646b0f3c1e4a2d7f8e5b8f26",
         },
     },
 }

@@ -29,6 +29,11 @@ experimental result.
 | `lily_sharded.zarr` | 3-channel fluorescence, 512 x 512, uint16 (12-bit), `c,y,x`, NGFF 0.5 with sharded arrays | `skimage.data.lily`, channels 1, 2 and 4, lower left crop |
 | `lily_sharded_cells.csv` | One row per plant cell: centroid, lumen area, mean intensity per channel, wall type | derived |
 | `manifest.json` | Generator arguments and store sizes | derived |
+| `hcs_plate.zarr` | HCS plate, NGFF 0.4: 2 rows x 3 columns, one field per well, 2 channels (DNA, GFP), 192 x 192, uint16, `c,y,x` | synthetic |
+| `hcs_wells.csv` | One row per well: treatment, dose, cell count, mean GFP | synthetic |
+| `hcs_cells.csv` | One row per cell: its well, centroid, area, mean DNA and GFP | synthetic |
+| `shapes/shape_*.zarr` | One NGFF 0.4 store per axis layout: `y,x`, `z,y,x`, `t,y,x`, `t,c,z,y,x`, float32 `c,y,x`, 8 channels, and `y,x,c` (off the spec) | synthetic |
+| `shapes/shapes.csv` | Sample sheet of the gallery: axes, shape, pixel type and what each store exercises | synthetic |
 
 All `x` / `y` columns are level-0 pixel coordinates of the matching image
 (column, row), so a viewer overlays them with `points_scale: 1`.
@@ -175,6 +180,12 @@ zarr-python 3 (the version is in `manifest.json`):
   the most hematoxylin-rich. `gene_A` follows hematoxylin, `gene_B` eosin,
   `gene_C` nuclear density and `gene_D` a top-to-bottom gradient (Poisson).
 
+- The plate and the shape gallery are drawn, not imaged: Gaussian blobs for
+  nuclei and cytoplasm, rings and moving spots for the shapes. In the plate the
+  cell count falls and the GFP signal rises with each column's dose, so the
+  wells differ visibly. `shape_yxc` puts the channel axis last on purpose: the
+  ingest's NGFF check flags it and the viewer refuses it, naming its axes.
+
 ## Licences
 
 | Dataset | Licence | Credit |
@@ -210,6 +221,15 @@ throwaway environments of their own, `uv run --with spatialdata==0.8.0` and
 `uv run --with zarr==3.4.0` (so `uv` must be on `PATH`; pass
 `--no-spatialdata` or `--no-ngff05` to skip one and keep the store already
 there).
+
+The plate and the shape gallery come from their own script, which needs only
+numpy and zarr 2:
+
+```bash
+uv run --no-project --python 3.12 --with numpy --with "zarr<3" \
+    python dev/bioimage/make_plate_and_shapes.py \
+    --out depictio/projects/init/bioimage_examples/data
+```
 
 The output is byte-identical across runs for the same `--seed` and library
 versions (generated with scikit-image 0.26.0, zarr 2.18.7, numcodecs 0.15.1,

@@ -1,0 +1,724 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8f25"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8f25"
+  },
+  "version": 1,
+  "stored_metadata": [
+    {
+      "index": "omz-plate-text",
+      "component_type": "text",
+      "title": "A plate, one well at a time",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_align": "left",
+      "section": "Plate",
+      "order": 6,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "A synthetic 2 x 3 plate written as one OME-Zarr plate store (NGFF 0.4): each column gets a dose of the same compound, so cells get fewer and brighter in GFP from column 1 to column 3. Pick a well on the left and the viewer opens that well's field; the cells drawn over it are the table's rows of that well. Open the whole plate in vizarr from the viewer's \"Open in\" menu.\n",
+      "surface": "none",
+      "accent": null,
+      "logo": null,
+      "logo_dark": null,
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-plate-card-cells",
+      "component_type": "card",
+      "title": "Cells",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "hcs_cells",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f22"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "One row per cell of the plate, with its well and field coordinates",
+        "data_collection_tag": "hcs_cells",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f22"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Plate",
+      "aggregation": "count",
+      "column_name": "cell_id",
+      "column_type": "int64",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "vertical",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "follow_region_filter": false,
+      "icon_name": "mdi:counter",
+      "title_font_size": "md",
+      "value_font_size": "xl",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-plate-card-gfp",
+      "component_type": "card",
+      "title": "GFP per cell",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "hcs_cells",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f22"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "One row per cell of the plate, with its well and field coordinates",
+        "data_collection_tag": "hcs_cells",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f22"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Plate",
+      "aggregation": "median",
+      "column_name": "gfp_mean",
+      "column_type": "float64",
+      "value": null,
+      "aggregations": [
+        "box_plot_stats"
+      ],
+      "filter_expr": null,
+      "secondary_layout": "box_plot",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "follow_region_filter": false,
+      "icon_name": "mdi:chart-box-outline",
+      "title_font_size": "md",
+      "value_font_size": "xl",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-plate-fig-cells",
+      "component_type": "figure",
+      "title": "Cells per well",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "hcs_wells",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f21"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "One row per well: treatment, dose and per-well readouts",
+        "data_collection_tag": "hcs_wells",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f21"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Plate",
+      "visu_type": "bar",
+      "dict_kwargs": {
+        "x": "well",
+        "y": "n_cells",
+        "color": "treatment"
+      },
+      "mode": "ui",
+      "code_content": null,
+      "displayed_data_count": 0,
+      "total_data_count": 0,
+      "was_sampled": false,
+      "filter_applied": false,
+      "max_points": null,
+      "selection_enabled": false,
+      "selection_column": null,
+      "font_scale": null,
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-plate-wells",
+      "component_type": "table",
+      "title": "Wells",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "hcs_wells",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f21"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "One row per well: treatment, dose and per-well readouts",
+        "data_collection_tag": "hcs_wells",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f21"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "One row per well of the plate.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Plate",
+      "columns": [],
+      "page_size": 10,
+      "sortable": true,
+      "filterable": true,
+      "compact": false,
+      "row_selection_enabled": false,
+      "row_selection_column": null,
+      "row_selection_mode": "multiple",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-plate-viewer",
+      "component_type": "advanced_viz",
+      "title": "Selected well",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "hcs_plate_image",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f20"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic 2 x 3 plate, one field per well, DNA and GFP (OME-Zarr NGFF 0.4 plate)",
+        "data_collection_tag": "hcs_plate_image",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f20"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "One 192 x 192 field per well (nominal 0.65 um pixels), DNA and GFP. Cells are coloured by their GFP and faded when filtered out.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Well image",
+      "viz_kind": "bioimage_viewer",
+      "config": {
+        "controls_placement": "popover",
+        "viz_kind": "bioimage_viewer",
+        "image_wf_id": "646b0f3c1e4a2d7f8e5b8f01",
+        "image_dc_id": "646b0f3c1e4a2d7f8e5b8f20",
+        "image_dc_tag": "hcs_plate_image",
+        "store": null,
+        "sample_wf_id": null,
+        "sample_dc_id": null,
+        "sample_dc_tag": null,
+        "sample_column": null,
+        "well_column": "well",
+        "channels": [],
+        "show_scalebar": true,
+        "points_wf_id": "646b0f3c1e4a2d7f8e5b8f01",
+        "points_dc_id": "646b0f3c1e4a2d7f8e5b8f22",
+        "points_dc_tag": "hcs_cells",
+        "cell_id_col": "cell_id",
+        "x_col": "x",
+        "y_col": "y",
+        "z_col": null,
+        "t_col": null,
+        "points_all_planes": false,
+        "color_col": "gfp_mean",
+        "points_scale": 1.0,
+        "points_offset_x": 0.0,
+        "points_offset_y": 0.0,
+        "point_radius": 6.0,
+        "points_sample_col": null,
+        "points_well_col": "well",
+        "labels_wf_id": null,
+        "labels_dc_id": null,
+        "labels_dc_tag": null,
+        "labels_opacity": 0.5,
+        "labels_outline": true,
+        "selection_enabled": true,
+        "selection_column": null
+      },
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-plate-cells",
+      "component_type": "table",
+      "title": "Cells",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "hcs_cells",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f22"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "One row per cell of the plate, with its well and field coordinates",
+        "data_collection_tag": "hcs_cells",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f22"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "One row per cell of the selected wells. A lasso on the image narrows it.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Well image",
+      "columns": [
+        "cell_id",
+        "well",
+        "area_px",
+        "dna_mean",
+        "gfp_mean"
+      ],
+      "page_size": 25,
+      "sortable": true,
+      "filterable": true,
+      "compact": false,
+      "row_selection_enabled": false,
+      "row_selection_column": null,
+      "row_selection_mode": "multiple",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-plate-f-well",
+      "component_type": "interactive",
+      "title": "Well",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "hcs_wells",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f21"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "One row per well: treatment, dose and per-well readouts",
+        "data_collection_tag": "hcs_wells",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f21"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Wells",
+      "interactive_component_type": "Select",
+      "column_name": "well",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": null,
+      "timescale": null,
+      "show_marks": null,
+      "show_mark_labels": null,
+      "show_histogram": null,
+      "slider_mode": null,
+      "icon_name": "mdi:grid",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-plate-f-treatment",
+      "component_type": "interactive",
+      "title": "Treatment",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "hcs_wells",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f21"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "One row per well: treatment, dose and per-well readouts",
+        "data_collection_tag": "hcs_wells",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f21"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Wells",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "treatment",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": null,
+      "timescale": null,
+      "show_marks": null,
+      "show_mark_labels": null,
+      "show_histogram": null,
+      "slider_mode": null,
+      "icon_name": "mdi:flask",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-plate-f-gfp",
+      "component_type": "interactive",
+      "title": "GFP per cell",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "hcs_cells",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f22"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "One row per cell of the plate, with its well and field coordinates",
+        "data_collection_tag": "hcs_cells",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f22"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Cells",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "gfp_mean",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": null,
+      "timescale": null,
+      "show_marks": null,
+      "show_mark_labels": null,
+      "show_histogram": null,
+      "slider_mode": null,
+      "icon_name": "mdi:ruler",
+      "wf_tag": "python/bioimage_demo"
+    }
+  ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-omz-plate-f-well",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-omz-plate-f-treatment",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-omz-plate-f-gfp",
+      "x": 0,
+      "y": 6,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-omz-plate-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 2,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-omz-plate-card-cells",
+      "x": 0,
+      "y": 2,
+      "w": 4,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-omz-plate-card-gfp",
+      "x": 0,
+      "y": 4,
+      "w": 4,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-omz-plate-fig-cells",
+      "x": 4,
+      "y": 2,
+      "w": 4,
+      "h": 4,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-omz-plate-wells",
+      "x": 0,
+      "y": 6,
+      "w": 8,
+      "h": 3,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-omz-plate-viewer",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 9,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-omz-plate-cells",
+      "x": 0,
+      "y": 9,
+      "w": 8,
+      "h": 4,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "HCS plate",
+  "subtitle": "One OME-Zarr plate, one image per well, picked from the plate table",
+  "icon": "mdi:grid",
+  "icon_color": "teal",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-12 00:00:00",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8f00"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8f00"
+  },
+  "tab_order": 8,
+  "main_tab_name": null,
+  "tab_icon": "mdi:grid",
+  "tab_icon_color": "teal",
+  "tab_group": null,
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Wells",
+      "icon": "mdi:table",
+      "color": "teal",
+      "description": "The well picked here is the image the viewer opens",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    },
+    {
+      "name": "Cells",
+      "icon": "mdi:filter-variant",
+      "color": "cyan",
+      "description": "Narrows the cells drawn over the image and the table",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Plate",
+      "icon": "mdi:chart-bar",
+      "color": "teal",
+      "description": "The plate at a glance: cells and GFP per well",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    },
+    {
+      "name": "Well image",
+      "icon": "mdi:microscope",
+      "color": "teal",
+      "description": "The selected well, with its cells coloured by GFP; lasso cells to filter the table",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null,
+  "category_colors": null,
+  "filter_panel_default": "open",
+  "content_width_default": "full",
+  "show_tab_header": true,
+  "open_with_defaults": false,
+  "show_guide": true,
+  "guide_intro": "",
+  "advanced_viz_controls": "popover",
+  "autofit": true
+}

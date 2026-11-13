@@ -1,0 +1,7 @@
+well,row,column,treatment,dose_um,n_cells,gfp_mean
+A1,A,1,DMSO,0.0,45,1014.4
+A2,A,2,drug 1 uM,1.0,29,1218.1
+A3,A,3,drug 10 uM,10.0,13,3400.4
+B1,B,1,DMSO,0.0,45,967.1
+B2,B,2,drug 1 uM,1.0,27,1258.9
+B3,B,3,drug 10 uM,10.0,14,3389.0
