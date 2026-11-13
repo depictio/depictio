@@ -75,7 +75,12 @@ from depictio.api.v1.endpoints.projects_endpoints.manifest_ingest import (
     _ingest_manifest_into_project,
     _refresh_manifest_in_project,
 )
-from depictio.api.v1.endpoints.projects_endpoints.project_runs import ProjectRuns, project_runs
+from depictio.api.v1.endpoints.projects_endpoints.project_runs import (
+    ProjectRuns,
+    RunFiles,
+    project_runs,
+    run_files,
+)
 from depictio.api.v1.endpoints.projects_endpoints.provenance import (
     stamp_new_project,
     strip_server_owned_fields,
@@ -447,6 +452,19 @@ async def get_project_runs(project_id: PyObjectId, current_user=Depends(get_user
         raise HTTPException(status_code=401, detail="User not found.")
     project = _async_get_project_from_id(project_id, current_user, projects_collection)
     return project_runs(project)
+
+
+@projects_endpoint_router.get("/project-runs/{project_id}/files", response_model=RunFiles)
+async def get_project_run_files(
+    project_id: PyObjectId, run_tag: str, current_user=Depends(get_user_or_anonymous)
+):
+    """The files of one run of the project, each with the scans that brought,
+    changed or failed it (``added_in``, ``changed_in``, ``failed_in``, indexes
+    into ``scans``). Read-only; read when the run is unfolded in the runs view."""
+    if not current_user:
+        raise HTTPException(status_code=401, detail="User not found.")
+    project = _async_get_project_from_id(project_id, current_user, projects_collection)
+    return run_files(project, run_tag)
 
 
 @projects_endpoint_router.get("/ingestion-health/{project_id}", response_model=IngestionSummary)
