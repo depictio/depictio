@@ -187,3 +187,25 @@ describe('NGFF 0.5 attributes', () => {
     expect(c).toMatchObject({ name: 'DAPI', color: '#0000ff', contrastLimits: [10, 200] });
   });
 });
+
+describe('resolveChannels contrast window', () => {
+  it('widens a window with no width to the data range', () => {
+    // viv's statistics of a small disc on an empty plane: every percentile is the disc.
+    const [ch] = resolveChannels({
+      sizeC: 1,
+      dtype: 'Uint8',
+      stats: [{ domain: [0, 200], contrastLimits: [200, 200] }],
+    });
+    expect(ch.contrastLimits).toEqual([0, 200]);
+  });
+
+  it('falls back to the dtype range when the data hold one value', () => {
+    const [ch] = resolveChannels({
+      sizeC: 1,
+      dtype: 'Uint8',
+      omero: { channels: [{ window: { start: 7, end: 7 } }] },
+      stats: [{ domain: [7, 7], contrastLimits: [7, 7] }],
+    });
+    expect(ch.contrastLimits).toEqual([0, 255]);
+  });
+});

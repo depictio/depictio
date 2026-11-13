@@ -514,11 +514,15 @@ const BioimageViewerRenderer: React.FC<Props> = ({
         // Axes outside NGFF's t, c, z, y, x get a sentence, not a reader stack trace.
         const problem = axesProblem(await readNgffAttrs(root, path));
         if (cancelled) return;
-        if (problem) setTargetError(`${activeStoreName}: ${problem}`);
-        else setTarget({ key: `${storeKey}\u0000${path}`, path });
+        if (problem) {
+          setTarget(null);
+          setTargetError(`${activeStoreName}: ${problem}`);
+        } else setTarget({ key: `${storeKey}\u0000${path}`, path });
       })
       .catch((err: unknown) => {
-        if (!cancelled) setTargetError(`Could not open ${activeStoreName}: ${errorText(err)}`);
+        if (cancelled) return;
+        setTarget(null);
+        setTargetError(`Could not open ${activeStoreName}: ${errorText(err)}`);
       });
     return () => {
       cancelled = true;
@@ -674,6 +678,15 @@ const BioimageViewerRenderer: React.FC<Props> = ({
     // `target` changes identity on every resolve; its key and path say what it opens.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewer, target?.key, target?.path, activeStoreFormat, activeStoreRemote, imageDcId, refreshTick]);
+
+  // No image to open (a refused store, a missing well): the last image's axes,
+  // channels and plane must not outlive it in the badges and the sliders.
+  useEffect(() => {
+    if (target) return;
+    loadedRef.current = null;
+    setInfo(null);
+    setChannels([]);
+  }, [target]);
 
   // An image error replaces the host (and so the viewer) with the message.
   // Another store, or a refresh, deserves a fresh attempt: clearing the error

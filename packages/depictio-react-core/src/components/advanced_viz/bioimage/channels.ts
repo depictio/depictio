@@ -140,6 +140,13 @@ function finitePair(a: unknown, b: unknown): [number, number] | null {
     : null;
 }
 
+/** A contrast window that shows something: `hi` above `lo`. viv's statistics
+ *  give `[v, v]` for a plane that is almost all one value (a small object on
+ *  an empty background), and such a window draws nothing at all. */
+function openWindow(pair: [number, number] | null | undefined): [number, number] | null {
+  return pair && pair[1] > pair[0] ? pair : null;
+}
+
 /**
  * The starting state of every channel.
  *
@@ -169,8 +176,10 @@ export function resolveChannels(opts: {
       st?.domain ?? finitePair(om?.window?.min, om?.window?.max) ?? range ?? [0, 1];
     const contrastLimits: [number, number] =
       finitePair(cfg?.contrast_limits?.[0], cfg?.contrast_limits?.[1]) ??
-      finitePair(om?.window?.start, om?.window?.end) ??
-      st?.contrastLimits ?? [domain[0], domain[1]];
+      openWindow(finitePair(om?.window?.start, om?.window?.end)) ??
+      openWindow(st?.contrastLimits) ??
+      openWindow(domain) ??
+      range ?? [0, 1];
     out.push({
       index: i,
       name: cfg?.name || om?.label || `Channel ${i}`,
