@@ -87,6 +87,7 @@ function brandHex(variable: string, fallback: string): string {
 
 const EMPTY_MARKED: Record<string, ChangeReason[]> = {};
 const NO_COMPARING: ReadonlySet<string> = new Set<string>();
+const NO_SPLIT_BY_DC: Record<string, GroupRenderDef[]> = {};
 const NO_DIFF_QUERY: ChangeMarksValue['diffQuery'] = {};
 const NO_COMPONENTS: StoredMetadata[] = [];
 const NO_FILTERS: InteractiveFilter[] = [];
@@ -273,7 +274,15 @@ const ChangeMarksProvider: React.FC<Props> = ({
     [highlightKeys],
   );
   const splitOn = view === 'split' && split !== null;
-  const splitGroups: GroupRenderDef[] | null = splitOn ? split.groups : null;
+  // The legend lists every side once, whichever collection it splits.
+  const splitLegend = useMemo<GroupRenderDef[] | null>(() => {
+    if (!splitOn) return null;
+    const byName = new Map<string, GroupRenderDef>();
+    for (const g of [...split.groups, ...Object.values(split.samples).flat()]) {
+      if (!byName.has(g.name)) byName.set(g.name, g);
+    }
+    return [...byName.values()];
+  }, [splitOn, split]);
   useEffect(() => {
     onSplitChange?.(splitOn ? split : null);
   }, [onSplitChange, splitOn, split]);
@@ -307,6 +316,7 @@ const ChangeMarksProvider: React.FC<Props> = ({
         diffQuery: NO_DIFF_QUERY,
         baselineVersionId: null,
         readOnly,
+        splitGroupsByDc: NO_SPLIT_BY_DC,
       };
     }
     let diffQuery: ChangeMarksValue['diffQuery'] = NO_DIFF_QUERY;
@@ -322,6 +332,7 @@ const ChangeMarksProvider: React.FC<Props> = ({
       diffQuery,
       baselineVersionId: changeSet.baseline_version_id,
       readOnly,
+      splitGroupsByDc: splitOn ? split.samples : NO_SPLIT_BY_DC,
     };
   }, [
     active,
@@ -334,6 +345,8 @@ const ChangeMarksProvider: React.FC<Props> = ({
     dismiss,
     readOnly,
     readOnlyQuery,
+    splitOn,
+    split,
   ]);
 
   const details = useMemo(() => markDetails(active ? changeSet : null), [active, changeSet]);
@@ -355,7 +368,7 @@ const ChangeMarksProvider: React.FC<Props> = ({
       view,
       setView,
       splitAvailable: split !== null,
-      splitGroups,
+      splitGroups: splitLegend,
     };
   }, [
     active,
@@ -373,7 +386,7 @@ const ChangeMarksProvider: React.FC<Props> = ({
     view,
     setView,
     split,
-    splitGroups,
+    splitLegend,
   ]);
 
   // The component behind the open key. Opening needs marks to be live, so the

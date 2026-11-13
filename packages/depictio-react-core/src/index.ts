@@ -1788,6 +1788,7 @@ export {
   changeKey,
   useChangeMark,
   useChangeMarkDetails,
+  useNewsSplitGroups,
 } from './changeMarks';
 export type { ChangeReason, ChangeMarksValue } from './changeMarks';
 export {

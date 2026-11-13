@@ -10619,6 +10619,10 @@ export interface DataChange {
   reports_removed?: number;
   new_samples?: string[];
   new_sample_count?: number;
+  /** MultiQC collections: the samples the reader had seen that are still
+   *  there, the other side of the split. Null when either side is too long
+   *  to list in full. */
+  seen_samples?: string[] | null;
   ingestion_run_ids: string[];
   by: string[];
   at: string | null;

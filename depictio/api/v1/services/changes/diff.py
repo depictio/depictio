@@ -328,6 +328,13 @@ def _delta_change(dc_id: str, before: DcSeenState) -> dict[str, Any] | None:
     }
 
 
+#: Samples listed by name in a MultiQC change (new or removed).
+MAX_LISTED_SAMPLES = 200
+#: Above this many samples seen, the split sends no list: each panel's
+#: request carries it as a filter.
+MAX_SPLIT_SAMPLES = 2000
+
+
 def _report_run_tag(report: dict[str, Any]) -> str | None:
     """Reports ingested since run tags were recorded carry one. Older ones are
     not new to any reader, so they never need a fallback here."""
@@ -369,16 +376,26 @@ def _multiqc_change(dc_id: str, before: DcSeenState) -> dict[str, Any] | None:
 
     known = set(before.run_tags)
     added_tags = sorted({t for t in (_report_run_tag(r) for r in added) if t})
+    # The other side of the "what's new" split: the samples the reader had
+    # seen that are still there. Only when both sides are known in full, since
+    # a split on a truncated list would file samples under the wrong side.
+    seen_now = samples_now - new_samples
+    split_known = (
+        before.samples_complete
+        and len(new_samples) <= MAX_LISTED_SAMPLES
+        and len(seen_now) <= MAX_SPLIT_SAMPLES
+    )
     return {
         "kind": "emptied" if not reports else "refreshed",
+        "seen_samples": sorted(seen_now) if split_known else None,
         "new_run_tags": [t for t in added_tags if t not in known],
         "touched_run_tags": sorted({t for t in (_report_run_tag(r) for r in changed) if t}),
         "reports_added": len(added),
         "reports_refreshed": len(refreshed),
         "reports_removed": len(removed),
-        "new_samples": sorted(new_samples)[:200],
+        "new_samples": sorted(new_samples)[:MAX_LISTED_SAMPLES],
         "new_sample_count": len(new_samples),
-        "removed_samples": sorted(removed_samples)[:200],
+        "removed_samples": sorted(removed_samples)[:MAX_LISTED_SAMPLES],
         "ingestion_run_ids": sorted(
             {r["ingestion_run_id"] for r in changed if r.get("ingestion_run_id")}
         ),

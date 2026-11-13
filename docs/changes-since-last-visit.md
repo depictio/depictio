@@ -163,9 +163,17 @@ once per side instead, each panel from that side's rows (the advanced viz
 itself. Advanced viz follow their kind's grouping policy: panels for the
 `split` kinds, one panel coloured by side for the `colour` kinds.
 
-Split needs new runs. A run ingested again changes rows in place under the
-same run tag, so only Before | Now can show it. MultiQC rows carry no run
-column.
+MultiQC rows carry no run column, so a MultiQC collection splits on its
+samples instead: `new_samples` against `seen_samples` (the samples seen that
+are still there, sent only when both lists are complete). Each MultiQC figure,
+General Stats included, is drawn once per side with that side's sample filter
+appended, which the render route resolves like the dashboard's own "Sample
+ID" filter. These groups stay with the MultiQC renderer
+(`ChangeMarksValue.splitGroupsByDc`) and never reach the Delta figures.
+
+Split needs something new beside something seen: a new run, or new MultiQC
+samples. A run ingested again changes rows in place under the same run tag,
+so only Before | Now can show it.
 
 MultiQC time travel by report set is what makes the MultiQC *Before* possible:
 

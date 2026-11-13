@@ -5,7 +5,9 @@ import Plot from 'react-plotly.js';
 import { renderMultiQC, InteractiveFilter, StoredMetadata } from '../../api';
 import { useInView } from '../../hooks/useInView';
 import { useDataVersionRequest } from '../../dataVersions';
-import { useChangeMark } from '../../changeMarks';
+import { useChangeMark, useNewsSplitGroups } from '../../changeMarks';
+import { panelsFromGroups } from '../../splitPanels';
+import SplitPanels from '../advanced_viz/SplitPanels';
 import { useFigureDiffOverlay } from '../../hooks/useComponentDiff';
 import { enqueueFetch, isStaleFetch } from '../../fetchQueue';
 import { readMultiqcSelection } from '../../utils/multiqcSelection';
@@ -27,7 +29,11 @@ interface MultiQCFigureProps {
   metadata: StoredMetadata;
   filters: InteractiveFilter[];
   refreshTick?: number;
+  /** One panel of a split: the figure alone, no frame, title or overlay. */
+  bare?: boolean;
 }
+
+const NOOP = (): void => {};
 
 // Plotly config / style passed by reference to keep <Plot> stable across renders.
 const PLOT_CONFIG = { displaylogo: false, responsive: true } as const;
@@ -52,11 +58,69 @@ const PLOT_STYLE = { width: '100%', height: '100%' } as const;
 // mount in that case. Reads both `selected_*` and the legacy `multiqc_*`
 // keys so pre-rename dashboards work without a re-save.
 const MultiQCFigure: React.FC<MultiQCFigureProps> = (props) => {
-  if (readMultiqcSelection(props.metadata as Record<string, unknown>).isGeneralStats) {
-    return <MultiQCGeneralStats {...props} />;
+  const isGeneralStats = readMultiqcSelection(props.metadata as Record<string, unknown>).isGeneralStats;
+  // "What's new" split (#1397): the figure once for the new samples, once for
+  // the samples seen before. Each panel is the same component with that
+  // side's sample filter appended, which the render route resolves like the
+  // dashboard's own "Sample ID" filter.
+  const meta = props.metadata as Record<string, unknown>;
+  const dcId = String(meta.dc_id ?? meta.data_collection_id ?? '');
+  const splitGroups = useNewsSplitGroups(props.bare ? null : dcId);
+  const panels = useMemo(() => panelsFromGroups(splitGroups), [splitGroups]);
+  if (panels.length > 1) {
+    return (
+      <MultiQCSplit {...props} panels={panels} isGeneralStats={isGeneralStats} />
+    );
+  }
+  if (isGeneralStats) {
+    const { bare: _bare, ...rest } = props;
+    return <MultiQCGeneralStats {...rest} />;
   }
   return <MultiQCFigureBody {...props} />;
 };
+
+const MultiQCSplit: React.FC<
+  MultiQCFigureProps & { panels: ReturnType<typeof panelsFromGroups>; isGeneralStats: boolean }
+> = ({ panels, isGeneralStats, ...props }) => {
+  const { bare: _bare, ...rest } = props;
+  // General Stats titles itself in each panel.
+  const titleText = isGeneralStats ? '' : multiqcTitle(props.metadata);
+  return (
+    <Paper
+      p="sm"
+      withBorder
+      radius="md"
+      style={{ flex: 1, minHeight: 0, height: '100%', display: 'flex', flexDirection: 'column' }}
+    >
+      {titleText && (
+        <Text fw={600} size="sm" mb="xs">
+          {titleText}
+        </Text>
+      )}
+      <div style={{ flex: 1, minHeight: 0 }}>
+        <SplitPanels
+          panels={panels}
+          filters={props.filters}
+          onIneffective={NOOP}
+          renderPanel={(filters, key) =>
+            isGeneralStats ? (
+              <MultiQCGeneralStats key={key} {...rest} filters={filters} />
+            ) : (
+              <MultiQCFigureBody key={key} {...rest} filters={filters} bare />
+            )
+          }
+        />
+      </div>
+    </Paper>
+  );
+};
+
+function multiqcTitle(metadata: StoredMetadata): string {
+  return (
+    (metadata.title as string | undefined) ||
+    [metadata.selected_module, metadata.selected_plot].filter(Boolean).join(' / ')
+  );
+}
 
 // Backend returns 202 when the figure cache is being prebuilt. The viewer
 // polls every PREPARE_POLL_INTERVAL_MS until the figure is ready or
@@ -72,6 +136,7 @@ const MultiQCFigureBody: React.FC<MultiQCFigureProps> = ({
   metadata,
   filters,
   refreshTick,
+  bare,
 }) => {
   const [figure, setFigure] = useState<
     { data?: unknown[]; layout?: Record<string, unknown> } | null
@@ -151,11 +216,7 @@ const MultiQCFigureBody: React.FC<MultiQCFigureProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dashboardId, metadata.index, JSON.stringify(filters), theme, inView, refreshTick, versionKey]);
 
-  const titleText =
-    (metadata.title as string | undefined) ||
-    [metadata.selected_module, metadata.selected_plot]
-      .filter(Boolean)
-      .join(' / ');
+  const titleText = bare ? '' : multiqcTitle(metadata);
 
   // Memoize the props passed to <Plot>. Without this, every parent re-render
   // (theme change, sibling layout shift, etc.) reconstructs `data` / `layout`
@@ -169,7 +230,8 @@ const MultiQCFigureBody: React.FC<MultiQCFigureProps> = ({
   );
   // "Compare with last visit" (#1397): the samples new since the reader's last
   // visit stand out, the rest recede. Inert unless switched on from the dot.
-  const { comparing } = useChangeMark(String(metadata.index));
+  const mark = useChangeMark(String(metadata.index));
+  const comparing = !bare && mark.comparing;
   const diffView = useFigureDiffOverlay({
     dashboardId,
     componentId: String(metadata.index),
@@ -223,8 +285,8 @@ const MultiQCFigureBody: React.FC<MultiQCFigureProps> = ({
   return (
     <Paper
       ref={containerRef}
-      p="sm"
-      withBorder
+      p={bare ? 0 : 'sm'}
+      withBorder={!bare}
       radius="md"
       style={{
         flex: 1,
@@ -329,6 +391,7 @@ export default React.memo(MultiQCFigure, (prev, next) => {
     prev.metadata.selected_module === next.metadata.selected_module &&
     prev.metadata.selected_plot === next.metadata.selected_plot &&
     prev.refreshTick === next.refreshTick &&
+    prev.bare === next.bare &&
     JSON.stringify(prev.filters) === JSON.stringify(next.filters)
   );
 });

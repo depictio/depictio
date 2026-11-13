@@ -273,6 +273,8 @@ def test_a_new_run_is_listed_and_its_components_marked(ctx):
     assert mqc["data_collection_tag"] == "multiqc_data"
     assert mqc["new_run_tags"] == ["run_c"]
     assert mqc["new_samples"] == ["SRR3_1", "SRR3_2"]
+    # The other side of the "what's new" split: the samples seen before.
+    assert mqc["seen_samples"] == ["SRR1_1", "SRR1_2", "SRR2_1", "SRR2_2"]
     assert mqc["reports_added"] == 1
     assert mqc["by"] == [EDITOR.email]
     assert result["changed_components"] == {f"{ctx['family']}:mqc-1": ["data"]}

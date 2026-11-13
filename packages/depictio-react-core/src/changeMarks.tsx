@@ -7,6 +7,8 @@
  */
 import React, { createContext, useContext } from 'react';
 
+import type { GroupRenderDef } from './selectionGroups';
+
 export type ChangeReason = 'definition' | 'data';
 
 export interface ChangeMarksValue {
@@ -25,9 +27,14 @@ export interface ChangeMarksValue {
   /** The dashboard version the baseline saw, for rendering the 'before' definition. */
   baselineVersionId: string | null;
   readOnly: boolean;
+  /** The "Split" view, for renderers that split on their own collection
+   *  (MultiQC, on its samples): `dc_id` -> the New / Seen before groups.
+   *  Empty while the view is off. */
+  splitGroupsByDc: Record<string, GroupRenderDef[]>;
 }
 
 const NO_COMPARING: ReadonlySet<string> = new Set<string>();
+const NO_SPLIT: Record<string, GroupRenderDef[]> = {};
 const noop = (): void => {};
 
 export const EMPTY_CHANGE_MARKS: ChangeMarksValue = {
@@ -40,6 +47,7 @@ export const EMPTY_CHANGE_MARKS: ChangeMarksValue = {
   diffQuery: {},
   baselineVersionId: null,
   readOnly: false,
+  splitGroupsByDc: NO_SPLIT,
 };
 
 export const ChangeMarksContext = createContext<ChangeMarksValue>(EMPTY_CHANGE_MARKS);
@@ -49,6 +57,13 @@ export const changeKey = (tabId: string, componentIndex: string): string =>
   `${tabId}:${componentIndex}`;
 
 const NO_REASONS: ChangeReason[] = [];
+const NO_GROUPS: GroupRenderDef[] = [];
+
+/** The split groups of one collection, or an empty list when it is not split. */
+export function useNewsSplitGroups(dcId: string | null | undefined): GroupRenderDef[] {
+  const { splitGroupsByDc } = useContext(ChangeMarksContext);
+  return (dcId && splitGroupsByDc[dcId]) || NO_GROUPS;
+}
 
 export function useChangeMark(componentIndex: string | undefined): {
   reasons: ChangeReason[];

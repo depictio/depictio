@@ -30,7 +30,7 @@ import { FeedHeader, FeedItem, FeedSection, facts, nameList } from './feed';
 const VIEW_HINT: Record<NewsView, string> = {
   off: 'The figures as they are now.',
   overlay: 'Each changed figure marks what is new; what was already there fades.',
-  split: 'Figures split into the new runs and the runs you had seen; cards compare the two.',
+  split: 'Figures drawn twice, what is new beside what you had seen (new runs, or new MultiQC samples); cards compare the two.',
 };
 
 /** Off | Overlay | Split: how the news shows on the figures and cards. */
@@ -54,7 +54,8 @@ const NewsViewControl: React.FC<{ ctx: ChangesSinceValue }> = ({ ctx }) => (
     />
     <Text size="xs" c="dimmed">
       {VIEW_HINT[ctx.view]}
-      {!ctx.splitAvailable && ' Split needs new runs: a run ingested again changes in place, see Before | Now.'}
+      {!ctx.splitAvailable &&
+        ' Split needs something new beside something seen: a new run, or new MultiQC samples. Data rewritten in place shows in Before | Now.'}
     </Text>
     {ctx.splitGroups && (
       <Group gap="md" data-testid="changes-split-legend">

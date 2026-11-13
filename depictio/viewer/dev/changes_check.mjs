@@ -240,17 +240,56 @@ check('split: new run against the runs seen', newsSplitGroups({ ...empty, data: 
     { name: 'Seen before', column_name: 'depictio_run_id', values: ['run_1', 'run_2'], color: '#adb5bd' },
   ],
   showOther: false,
+  samples: {},
 });
 check('split: no new run, no split', newsSplitGroups({ ...empty, data: [delta({ new_run_tags: [] })] }, COLORS), null);
 check(
-  'split: MultiQC (no seen runs) is left out',
+  'split: no seen runs and no samples, no split',
   newsSplitGroups({ ...empty, data: [delta({ seen_run_tags: undefined })] }, COLORS),
   null,
 );
 check(
   'split: nothing seen keeps the rest as Other',
   newsSplitGroups({ ...empty, data: [delta({ seen_run_tags: [], new_run_tags: ['a', 'b'] })] }, COLORS),
-  { groups: [{ name: 'New: 2 runs', column_name: 'depictio_run_id', values: ['a', 'b'], color: '#159090' }], showOther: true },
+  {
+    groups: [{ name: 'New: 2 runs', column_name: 'depictio_run_id', values: ['a', 'b'], color: '#159090' }],
+    showOther: true,
+    samples: {},
+  },
+);
+const mqc = (over) => ({
+  dc_id: 'mqc1',
+  dc_type: 'multiqc',
+  kind: 'refreshed',
+  new_run_tags: ['run_c'],
+  touched_run_tags: ['run_c'],
+  new_samples: ['S3_1'],
+  new_sample_count: 1,
+  seen_samples: ['S1_1', 'S2_1'],
+  ingestion_run_ids: [],
+  by: [],
+  at: null,
+  ...over,
+});
+check('split: MultiQC splits on its own samples', newsSplitGroups({ ...empty, data: [mqc({})] }, COLORS), {
+  groups: [],
+  showOther: false,
+  samples: {
+    mqc1: [
+      { name: 'New: run_c', column_name: 'sample', values: ['S3_1'], color: '#159090', dc_id: 'mqc1' },
+      { name: 'Seen before', column_name: 'sample', values: ['S1_1', 'S2_1'], color: '#adb5bd', dc_id: 'mqc1' },
+    ],
+  },
+});
+check(
+  'split: a truncated sample list is not split',
+  newsSplitGroups({ ...empty, data: [mqc({ new_sample_count: 300 })] }, COLORS),
+  null,
+);
+check(
+  'split: no samples seen, no MultiQC split',
+  newsSplitGroups({ ...empty, data: [mqc({ seen_samples: null })] }, COLORS),
+  null,
 );
 
 console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILURE(S)`);

@@ -254,12 +254,16 @@ const App: React.FC = () => {
   // "What's new" in Split view (#1397): virtual New / Seen before groups that
   // stand in for the reader's own groups while it is on, never stored.
   const [newsSplit, setNewsSplit] = useState<NewsSplit | null>(null);
+  // Only a split on runs reaches the Delta figures and cards. MultiQC splits
+  // on its own samples, read from the change marks by its renderer; a split
+  // with nothing on runs leaves the rest of the canvas as it was.
+  const runSplit = newsSplit && newsSplit.groups.length > 0 ? newsSplit : null;
   const bulkOptions = useMemo<BulkComputeOptions | undefined>(
     () =>
-      newsSplit
-        ? { groups: newsSplit.groups, compareGroups: true, showOther: newsSplit.showOther, showOverall: true }
+      runSplit
+        ? { groups: runSplit.groups, compareGroups: true, showOther: runSplit.showOther, showOverall: true }
         : groupsApi.bulkOptions,
-    [newsSplit, groupsApi.bulkOptions],
+    [runSplit, groupsApi.bulkOptions],
   );
   const combinedFilters = useMemo(
     () =>
@@ -1300,12 +1304,12 @@ const App: React.FC = () => {
   // identity, so a fresh one per render would rebuild every cell.
   const groupRender = useMemo(
     () =>
-      newsSplit
+      runSplit
         ? {
-            groups: newsSplit.groups,
+            groups: runSplit.groups,
             colorByGroup: true,
             display: 'facet' as const,
-            showOther: newsSplit.showOther,
+            showOther: runSplit.showOther,
             keepColor: true,
           }
         : resolveGroupRender(
@@ -1321,7 +1325,7 @@ const App: React.FC = () => {
       colorByColumnRender,
       groupsApi.displayMode,
       groupsApi.showOther,
-      newsSplit,
+      runSplit,
     ],
   );
 
