@@ -84,7 +84,12 @@ deletes its marks.
 `POST /changes/dashboard/{id}` returns three sections:
 
 - **Data**: per collection read by the family, it lists:
-  - new Delta commits (+rows, new run tags);
+  - new Delta commits (+rows, new run tags). A commit that rewrote the rows
+    the reader saw (a re-ingest or a recipe re-run on unchanged sources) is
+    not one: the CLI records an order-insensitive `content_digest` of the
+    table on each write, and equal digests mean no news. A write without a
+    digest (older CLI, a write of only some runs, a UI edit) counts as a
+    change;
   - MultiQC reports added, refreshed or removed, with new samples and new run
     tags;
   - failed ingestions.

@@ -303,6 +303,43 @@ def test_a_delta_refresh_reports_new_run_tags_and_rows(ctx):
     assert (table["delta_from"], table["delta_to"]) == (0, 1)
 
 
+@pytest.mark.parametrize(
+    ("seen", "now", "reported"),
+    [
+        ("same", "same", False),  # identical rows rewritten: no news
+        ("same", "other", True),
+        (None, "same", True),  # the seen commit has no digest: assume a change
+        ("same", None, True),  # nor does the new one
+    ],
+)
+def test_a_commit_that_rewrites_identical_rows_is_not_news(ctx, seen, now, reported):
+    db = ctx["db"]
+    if seen is not None:
+        db["deltatables"].update_one(
+            {"data_collection_id": ctx["dc_table"]},
+            {"$set": {"aggregation.0.content_digest": seen}},
+        )
+    _visit(ctx)
+    db["deltatables"].update_one(
+        {"data_collection_id": ctx["dc_table"]},
+        {
+            "$push": {
+                "aggregation": {
+                    "aggregation_version": 2,
+                    "delta_version": 1,
+                    "rows_total": 10,
+                    "run_tags": ["run_a", "run_b"],
+                    "content_digest": now,
+                    "aggregation_by": {"email": EDITOR.email},
+                }
+            }
+        },
+    )
+    result = _changes(ctx)
+    assert bool(result["data"]) is reported
+    assert bool(result["changed_components"]) is reported
+
+
 def test_the_reader_s_own_ingestion_is_still_news(ctx):
     """An ingestion runs on its own, often from a pipeline holding the reader's
     token, and what it did to the figures is unseen: unlike an edit, starting it

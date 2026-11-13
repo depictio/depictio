@@ -255,6 +255,29 @@ def _ingestion_authors(run_ids: Iterable[str]) -> dict[str, dict[str, Any]]:
     }
 
 
+def _same_content(
+    aggregations: list[dict[str, Any]], before: DcSeenState, latest: dict[str, Any]
+) -> bool:
+    """True when the newest commit holds exactly the rows the reader saw.
+
+    Compares the writers' content digests. Unknown on either side (an older
+    CLI, a write of only some runs, a UI edit) reads as changed: a spurious
+    mark is better than a missed one.
+    """
+    now = latest.get("content_digest")
+    if not now:
+        return False
+    if before.delta_version is not None:
+        seen = [a for a in aggregations if a.get("delta_version") == before.delta_version]
+    else:
+        seen = [
+            a
+            for a in aggregations
+            if (a.get("aggregation_version") or 0) == (before.aggregation_version or 0)
+        ]
+    return bool(seen) and seen[-1].get("content_digest") == now
+
+
 def _delta_change(dc_id: str, before: DcSeenState) -> dict[str, Any] | None:
     aggregations = bl.aggregations_of(dc_id)
     if before.delta_version is not None:
@@ -267,6 +290,10 @@ def _delta_change(dc_id: str, before: DcSeenState) -> dict[str, Any] | None:
         floor = before.aggregation_version or 0
         newer = [a for a in aggregations if (a.get("aggregation_version") or 0) > floor]
     if not newer:
+        return None
+    if _same_content(aggregations, before, newer[-1]):
+        # Rewritten, not changed: a re-ingest or a recipe re-run on unchanged
+        # sources commits identical rows. Nothing for the reader to look at.
         return None
 
     runs = _ingestion_authors(a.get("ingestion_run_id") for a in newer)

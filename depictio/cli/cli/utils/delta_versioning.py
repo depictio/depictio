@@ -27,6 +27,8 @@ filters by prefix.
 
 from __future__ import annotations
 
+import hashlib
+
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -87,6 +89,7 @@ class DeltaWriteResult:
     delta_version: int | None = None
     delta_timestamp: datetime | None = None
     partitioned: bool = False
+    content_digest: str | None = None
 
 
 def _delta_options(storage_options: PolarsStorageOptions) -> dict:
@@ -450,6 +453,27 @@ def plan_scoped_write(
     return ScopedWritePlan(scoped=True, run_tags=sorted(set(changed_runs)))
 
 
+def content_digest(df: pl.DataFrame) -> str | None:
+    """Digest of a frame's content, blind to row and column order.
+
+    Lets a reader tell a commit that rewrote identical rows (a re-ingest, a
+    recipe re-run on unchanged sources) from one that changed data. Rows are
+    hashed with polars' fixed default seed and sorted, so the same rows in any
+    order give the same digest; the schema is part of it. Only ever compared
+    for equality between two writes, so a polars upgrade that changes row
+    hashing shows one spurious change, never a missed one. None when a dtype
+    cannot be hashed.
+    """
+    try:
+        cols = sorted(df.columns)
+        rows = df.select(cols).hash_rows().sort().to_numpy()
+    except Exception as exc:  # unhashable dtype (Object, ...)
+        logger.debug(f"content digest skipped: {exc}")
+        return None
+    schema = "|".join(f"{c}:{df.schema[c]}" for c in cols)
+    return hashlib.sha256(schema.encode() + rows.tobytes()).hexdigest()
+
+
 def write_delta_table_versioned(
     aggregated_df: pl.DataFrame,
     destination_file: str,
@@ -537,6 +561,8 @@ def write_delta_table_versioned(
         delta_version=commit.version if commit else None,
         delta_timestamp=commit.timestamp if commit else None,
         partitioned=partition,
+        # A scoped write holds only some runs: its digest would not be the table's.
+        content_digest=None if scoped else content_digest(aggregated_df),
     )
 
 

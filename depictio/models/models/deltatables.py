@@ -60,6 +60,10 @@ class Aggregation(MongoModel):
     rows_total: int | None = None
     rows_added: int | None = None
     files_added: int | None = None
+    #: Order-insensitive digest of the whole table as written, so a reader can
+    #: tell a commit that rewrote identical rows from a real change. None for a
+    #: write that saw only part of the table, or from an older CLI.
+    content_digest: str | None = None
     run_tags: list[str] = []
     ingestion_run_id: str | None = None
     #: How the write was initiated: manual CLI run, watcher cycle, UI upload.
@@ -142,6 +146,10 @@ class UpsertDeltaTableAggregated(BaseModel):
     rows_total: int | None = None
     rows_added: int | None = None
     files_added: int | None = None
+    #: Order-insensitive digest of the whole table as written, so a reader can
+    #: tell a commit that rewrote identical rows from a real change. None for a
+    #: write that saw only part of the table, or from an older CLI.
+    content_digest: str | None = None
     run_tags: list[str] = []
     ingestion_run_id: str | None = None
     trigger: str | None = None

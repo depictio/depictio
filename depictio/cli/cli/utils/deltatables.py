@@ -853,6 +853,7 @@ def write_delta_table(
         "rows_total": None if scoped else outcome.rows_written,
         "rows_added": outcome.rows_written if scoped else None,
         "partitioned": outcome.partitioned,
+        "content_digest": outcome.content_digest,
     }
 
 
@@ -873,6 +874,7 @@ def commit_provenance(write_result: dict, *, run_tags: list[str], **extra: Any) 
         "write_mode": write_result.get("write_mode"),
         "rows_total": write_result.get("rows_total"),
         "rows_added": write_result.get("rows_added"),
+        "content_digest": write_result.get("content_digest"),
         "run_tags": run_tags[:MAX_RUN_TAGS_IN_METADATA] or None,
         **extra,
     }
