@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  onPlane,
   fitViewState,
   niceFloor,
   pointInPolygon,
@@ -131,5 +132,18 @@ describe('scale bar', () => {
   it('has nothing to draw without a physical size', () => {
     expect(scaleBarLength(0, 0)).toBeNull();
     expect(scaleBarLength(Number.NaN, 0)).toBeNull();
+  });
+});
+
+describe('onPlane', () => {
+  it('keeps a point on its nearest plane without a tolerance', () => {
+    expect(onPlane(3.4, 3)).toBe(true);
+    expect(onPlane(3.6, 3)).toBe(false);
+  });
+
+  it('keeps it on every plane within the tolerance', () => {
+    expect(onPlane(400, 460, 60)).toBe(true);
+    expect(onPlane(400, 461, 60)).toBe(false);
+    expect(onPlane(Number.NaN, 0, 60)).toBe(false);
   });
 });

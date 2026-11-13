@@ -451,6 +451,10 @@ STATIC_IDS = {
             "shape_gallery_sheet": "646b0f3c1e4a2d7f8e5b8f24",
             "registration_images": "646b0f3c1e4a2d7f8e5b8f27",
             "registration_steps": "646b0f3c1e4a2d7f8e5b8f28",
+            # The EM volume is read in place from the BioImage Archive; the LM
+            # overlay registered into it is a local store of the same DC.
+            "clem_images": "646b0f3c1e4a2d7f8e5b8f2a",
+            "clem_landmarks": "646b0f3c1e4a2d7f8e5b8f2b",
         },
         "dashboards": {
             # Main tab id equals project_id (same convention as the showcase).
@@ -465,6 +469,7 @@ STATIC_IDS = {
             "bioimage_plate": "646b0f3c1e4a2d7f8e5b8f25",
             "bioimage_shapes": "646b0f3c1e4a2d7f8e5b8f26",
             "bioimage_registration": "646b0f3c1e4a2d7f8e5b8f29",
+            "bioimage_clem": "646b0f3c1e4a2d7f8e5b8f2c",
         },
     },
 }

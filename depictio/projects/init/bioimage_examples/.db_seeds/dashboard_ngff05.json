@@ -286,6 +286,7 @@
         "y_col": "y",
         "z_col": null,
         "t_col": null,
+        "points_z_tolerance": 0.0,
         "points_all_planes": false,
         "color_col": "wall_type",
         "points_scale": 1.0,
@@ -308,6 +309,8 @@
         "steps_sample_col": null,
         "steps_reference_col": null,
         "steps_metric_cols": [],
+        "overlay_store": null,
+        "overlay_opacity": 0.6,
         "selection_enabled": true,
         "selection_column": null
       },

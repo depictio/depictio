@@ -8,9 +8,12 @@
 # reading rather than its looks: a small HCS plate (OME-Zarr plate, a well
 # filter opens its well) and a shape gallery (one store per axis layout, plus
 # one off the spec), and a registration (the steps of two image registrations,
-# one failing at its affine step, with a metrics table). See data/README.md,
+# one failing at its affine step, with a metrics table) and a CLEM case (one
+# HeLa cell, its FIB-SEM read in place and its light microscopy registered
+# into it). See data/README.md,
 # dev/bioimage/make_examples.py, dev/bioimage/make_plate_and_shapes.py and
-# dev/bioimage/make_registration_example.py to regenerate.
+# dev/bioimage/make_registration_example.py and dev/bioimage/make_clem_example.py
+# to regenerate.
 #
 # Optional project: not part of the default seed set. Seed it with
 # DEPICTIO_SEED_EXTRA_PROJECTS=bioimage_examples, or
@@ -578,6 +581,58 @@ workflows:
               tre_px: "Mean target registration error over 20 landmarks, in pixels"
               folding_pct: "Share of pixels where the Jacobian determinant of the step's displacement is <= 0 (folding)"
               runtime_s: "Synthetic runtime of the step, in seconds"
+
+      # ----------------------------------------------------------------
+      # 10. CLEM: one HeLa cell, FIB-SEM read in place, LM registered into it
+      # ----------------------------------------------------------------
+      # Two stores in one DC: the EM volume read in place from the BioImage
+      # Archive (EMPIAR-10819, bioformats2raw) and the light microscopy
+      # resampled into its frame (dev/bioimage/make_clem_example.py), which the
+      # viewer lays over the EM as an overlay.
+      - id: "646b0f3c1e4a2d7f8e5b8f2a"
+        data_collection_tag: "clem_images"
+        description: "One HeLa cell: its FIB-SEM volume (EMPIAR-10819, 5 nm, read in place) and its light microscopy (DAPI, mitochondria, Golgi, lysosomes) registered into the EM frame"
+        config:
+          type: "bioimage"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "lm_in_em\\.zarr"
+          dc_specific_properties:
+            format: "ome-zarr"
+            ngff_version: "0.4"
+            upload: true
+            remote_stores:
+              - "https://uk1s3.embassy.ebi.ac.uk/bia-integrator-data/EMPIAR-10819/IM1/IM1.zarr"
+
+      - id: "646b0f3c1e4a2d7f8e5b8f2b"
+        data_collection_tag: "clem_landmarks"
+        description: "The 150 landmark pairs placed between the light and electron microscopy of the HeLa cell, with their residual after the affine registration"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/bioimage_examples/data/clem/clem_landmarks.csv"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              separator: ","
+            columns_description:
+              landmark: "Landmark name, as placed in BigWarp"
+              set: "fit: used to fit the affine; held out: disabled by the authors, an independent check"
+              lm_x_um: "Position in the light microscopy, x (um)"
+              lm_y_um: "Position in the light microscopy, y (um)"
+              lm_z_um: "Position in the light microscopy, z (um)"
+              em_x_um: "Position in the EM, x (um)"
+              em_y_um: "Position in the EM, y (um)"
+              em_z_um: "Position in the EM, z (um)"
+              em_x_px: "Position in the EM, x (level-0 pixels, 5 nm)"
+              em_y_px: "Position in the EM, y (level-0 pixels, 5 nm)"
+              em_z_px: "Position in the EM, z (plane, 5 nm)"
+              residual_um: "Distance between the landmark's EM position and its LM position mapped by the affine (um)"
 
 # A sample picked in the sample sheet narrows the cells table, so the cards and
 # table of the multi-sample tab follow the store the viewer is showing.

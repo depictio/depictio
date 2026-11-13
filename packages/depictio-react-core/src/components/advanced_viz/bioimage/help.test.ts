@@ -38,6 +38,11 @@ describe('helpTopics', () => {
     expect(keys({ samples: true, steps: true })).toEqual(['move', 'pick', 'steps', 'channels', 'badges', 'open']);
   });
 
+  it('explains the overlay only when there is one', () => {
+    expect(keys({})).not.toContain('overlay');
+    expect(keys({ channels: 1, overlay: true })).toEqual(['move', 'channels', 'overlay', 'badges', 'open']);
+  });
+
   it('names only the plane axes that exist', () => {
     const z = helpTopics({ ...BASE, hasZ: true }).find((t) => t.key === 'planes')!;
     expect(z.text).toMatch(/^Z moves/);

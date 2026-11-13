@@ -1568,6 +1568,14 @@ class BioimageViewerConfig(_BaseVizConfig):
         default=None,
         description="Point time point column (0-based index): only the shown time's points",
     )
+    points_z_tolerance: float = Field(
+        default=0.0,
+        ge=0,
+        description=(
+            "Planes either side of the shown one whose points still draw (z_col): a "
+            "point between planes, or a stack too thin to hold one per plane"
+        ),
+    )
     points_all_planes: bool = Field(
         default=False,
         description="Draw every point whatever its z / t, instead of the shown plane's only",
@@ -1647,6 +1655,19 @@ class BioimageViewerConfig(_BaseVizConfig):
         default_factory=list,
         description="Steps columns shown as the step's metrics (e.g. ncc, tre_px)",
     )
+    # Another image registered onto this one (light microscopy over EM): a
+    # store of the same image DC, drawn over the image in its own channels and
+    # stretched to the image's extent, so it must cover the same field.
+    overlay_store: str | None = Field(
+        default=None,
+        description=(
+            "Store of the image DC drawn over the image in its own channels (e.g. LM "
+            "registered into an EM volume), covering the same field"
+        ),
+    )
+    overlay_opacity: float = Field(
+        default=0.6, ge=0, le=1, description="Opacity of the overlay image (0 hides it)"
+    )
 
     # On by default, unlike EmbeddingConfig: the kind is new, so no shipped
     # dashboard inherits a cross-filter it did not ask for, and it stays inert
@@ -1711,6 +1732,8 @@ class BioimageViewerConfig(_BaseVizConfig):
             )
         if self.sample_column and not (self.sample_dc_id or self.sample_dc_tag):
             raise ValueError("sample_column needs a sample DC: set sample_dc_id or sample_dc_tag")
+        if self.overlay_store and self.overlay_store == self.store:
+            raise ValueError("overlay_store names the image itself: pick another store")
         if self.labels_dc_id or self.labels_dc_tag:
             # Masks are drawn over the image of their sample, never on their own.
             if not (self.image_dc_id or self.image_dc_tag):

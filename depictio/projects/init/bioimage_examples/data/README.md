@@ -36,6 +36,8 @@ experimental result.
 | `shapes/shapes.csv` | Sample sheet of the gallery: axes, shape, pixel type and what each store exercises | synthetic |
 | `registration/{embryo_a,embryo_b}_{fixed,raw,rigid,affine,bspline}.zarr` | A registration in steps, NGFF 0.4, 2 channels (nuclei, membranes), 384 x 384, uint16, `c,y,x`: the fixed image and the moving image resampled into its frame after each step | synthetic |
 | `registration/registration_steps.csv` | One row per sample and step: the store it wrote, the fixed store, NCC, target registration error, folding and runtime | synthetic |
+| `clem/lm_in_em.zarr` | The light microscopy of one HeLa cell (DAPI, mitochondria, Golgi, lysosomes) resampled into the frame of its FIB-SEM volume by a landmark affine, 4 x 19 x 437 x 371, uint8, `c,z,y,x`, NGFF 0.4 | BioImage Archive S-BIAD4355 and S-BSST707, CC0 |
+| `clem/clem_landmarks.csv` | The 150 landmark pairs placed between the LM and the EM, in um and EM pixels, fitted or held out, with their residual after the affine | BioImage Archive S-BSST707 (licence not stated, see below); residuals derived |
 
 All `x` / `y` columns are level-0 pixel coordinates of the matching image
 (column, row), so a viewer overlays them with `points_scale: 1`.
@@ -200,6 +202,24 @@ zarr-python 3 (the version is in `manifest.json`):
   (its shear is fitted with the wrong sign), so its affine error is higher than
   its rigid one and its B-spline step recovers only part of it and folds.
 
+## CLEM (HeLa)
+
+The EM volume is not here: the dashboard reads EMPIAR-10819 (`IM1.zarr`, FIB-SEM,
+5 nm isotropic, 965 x 7000 x 5938, bioformats2raw) in place from the BioImage
+Archive, which needs `uk1s3.embassy.ebi.ac.uk` in
+`DEPICTIO_BIOIMAGE_REMOTE_HTTPS_HOSTS`. What is here was derived from the paper's
+public data (Krentzel et al., *CLEM-Reg*, Nature Methods 2025):
+
+* the affine (EM um from LM um) is a least-squares fit on the 145 landmarks the
+  authors enabled in BigWarp; the 5 they disabled are kept as a held-out check.
+  Its residuals are in the table rather than hidden;
+* `lm_in_em.zarr` covers exactly the EM volume, on a grid 16 times coarser in
+  plane (0.08 um) and 50 times in depth (0.25 um), so the viewer stretches it
+  over the EM tile. Each channel is scaled to 0-255 between its 0.5th and
+  99.9th percentiles.
+
+Regenerate with `dev/bioimage/make_clem_example.py` (downloads 134 MB of LM).
+
 ## Licences
 
 | Dataset | Licence | Credit |
@@ -208,6 +228,8 @@ zarr-python 3 (the version is in `manifest.json`):
 | `immunohistochemistry` | No known copyright restrictions | Center for Microscopy and Molecular Imaging (CMMI), colonic glands with FHL2 (DAB) and hematoxylin |
 | `human_mitosis` | CC0 | David Root; Moffat et al., Cell 124(6):1283-98, 2006, doi:10.1016/j.cell.2006.01.040 |
 | `lily` | CC0 | Genevieve Buckley, Monash Micro Imaging, 2018 (confocal, lily of the valley stem slide) |
+| CLEM LM (S-BIAD4355) | CC0 | Krentzel et al., *CLEM-Reg: an automated point cloud based registration algorithm for correlative light and volume electron microscopy*, Nature Methods 2025 |
+| CLEM landmarks (S-BSST707) | No licence stated in the BioStudies record (to confirm before release) | Same authors; the BigWarp landmarks between the LM and EMPIAR-10819 |
 | `skin` | Public domain | Wikipedia user Kilbad, [Normal Epidermis and Dermis with Intradermal Nevus 10x](https://en.wikipedia.org/wiki/File:Normal_Epidermis_and_Dermis_with_Intradermal_Nevus_10x.JPG) |
 
 The derived stores and tables are released under the same terms as their

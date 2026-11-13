@@ -27,6 +27,8 @@ export interface HelpContext {
   steps?: boolean;
   /** A reference image (the fixed image) to compare a step against. */
   reference?: boolean;
+  /** Another image laid over this one, in its own channels (e.g. LM over EM). */
+  overlay?: boolean;
 }
 
 export interface HelpTopic {
@@ -89,6 +91,17 @@ export function helpTopics(ctx: HelpContext): HelpTopic[] {
         (ctx.channels > MAX_RENDERED_CHANNELS ? ` (at most ${MAX_RENDERED_CHANNELS} at once)` : '') +
         '; the swatch next to it changes its colour. The slider is the contrast window: ' +
         'values left of it are black, values right of it full colour. Narrow it to bring out faint signal.',
+    });
+  }
+  if (ctx.overlay) {
+    out.push({
+      key: 'overlay',
+      title: 'Overlay',
+      text:
+        'A second image, registered onto this one, is drawn over it in its own colours. The ' +
+        'Overlay slider fades it (left hides it); its channels, under Overlay in the settings, ' +
+        'switch and contrast like the image\'s own. It covers the same field, so it follows ' +
+        'zoom, pan and Z, at its own, often coarser, resolution.',
     });
   }
   if (ctx.points) {

@@ -128,3 +128,10 @@ export function scaleBarLength(
   if (value <= 0) return null;
   return { screenPx: (value / physicalPerPixel) * screenPerPixel, value };
 }
+
+/** Whether a point at depth `z` (a plane index, maybe fractional) draws on
+ *  plane `plane`: its nearest plane, or any within `tolerance` planes. */
+export function onPlane(z: number, plane: number, tolerance = 0): boolean {
+  if (!Number.isFinite(z)) return false;
+  return tolerance > 0 ? Math.abs(z - plane) <= tolerance : Math.round(z) === plane;
+}

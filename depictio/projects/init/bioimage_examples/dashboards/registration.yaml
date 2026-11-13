@@ -13,7 +13,7 @@ icon_variant: filled
 workflow_system: python
 dashboard_id: '646b0f3c1e4a2d7f8e5b8f29'
 is_main_tab: false
-tab_order: 6
+tab_order: 10
 parent_dashboard_tag: fluorescence
 tab_icon: 'mdi:layers-triple'
 tab_icon_color: 'orange'

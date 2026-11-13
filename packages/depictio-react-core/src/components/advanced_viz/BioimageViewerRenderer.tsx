@@ -65,7 +65,7 @@ import {
   type Rgb,
 } from './bioimage/channels';
 import { clearImageInfo, publishImageInfo } from './bioimage/imageInfoRegistry';
-import { pointsInPolygon, scaleBarLength, type Polygon } from './bioimage/geometry';
+import { onPlane, pointsInPolygon, scaleBarLength, type Polygon } from './bioimage/geometry';
 import {
   buildLabelLut,
   cellColouring,
@@ -133,6 +133,9 @@ interface BioimageViewerConfig {
   steps_sample_col?: string | null;
   steps_reference_col?: string | null;
   steps_metric_cols?: string[];
+  overlay_store?: string | null;
+  points_z_tolerance?: number;
+  overlay_opacity?: number;
 }
 
 interface Props {
@@ -537,16 +540,21 @@ const BioimageViewerRenderer: React.FC<Props> = ({
     [activeFetchFilters, config.sample_column, config.sample_dc_id],
   );
   const [pickedStore, setPickedStore] = useState<string | null>(config.store ?? null);
+  // The overlay store is drawn over the image, never picked as the image.
+  const sampleStores = useMemo(
+    () => (stores ?? []).filter((s) => s.name !== config.overlay_store),
+    [stores, config.overlay_store],
+  );
   const activeStore = useMemo<BioimageStoreInfo | null>(() => {
     if (!stores || stores.length === 0) return null;
     if (stepsEnabled) {
       return activeStep ? (stores.find((s) => s.name === activeStep.store) ?? null) : null;
     }
     if (sampleValue != null) {
-      return stores.find((s) => s.sample === sampleValue || s.name === sampleValue) ?? null;
+      return sampleStores.find((s) => s.sample === sampleValue || s.name === sampleValue) ?? null;
     }
-    return stores.find((s) => s.name === pickedStore) ?? stores[0];
-  }, [stores, sampleValue, pickedStore, stepsEnabled, activeStep]);
+    return sampleStores.find((s) => s.name === pickedStore) ?? sampleStores[0] ?? null;
+  }, [stores, sampleStores, sampleValue, pickedStore, stepsEnabled, activeStep]);
   const activeStoreName = activeStore?.name ?? null;
   const activeStoreFormat = activeStore?.format ?? 'ome-zarr';
   const activeStoreRemote = Boolean(activeStore?.remote);
@@ -933,6 +941,7 @@ const BioimageViewerRenderer: React.FC<Props> = ({
     // In a stack, a cell sits on its plane: only the shown z and t draw.
     const rowZ = zCol && !allPlanes && info && info.sizes.z > 1 ? (pointRows[zCol] ?? []) : null;
     const rowT = tCol && !allPlanes && info && info.sizes.t > 1 ? (pointRows[tCol] ?? []) : null;
+    const zTolerance = config.points_z_tolerance ?? 0;
     const scale = config.points_scale ?? 1;
     const ox = config.points_offset_x ?? 0;
     const oy = config.points_offset_y ?? 0;
@@ -943,7 +952,7 @@ const BioimageViewerRenderer: React.FC<Props> = ({
       if (rowWells && activeWell && normaliseWellName(String(rowWells[i] ?? '')) !== activeWell.name) {
         continue;
       }
-      if (rowZ && Math.round(Number(rowZ[i])) !== plane.z) continue;
+      if (rowZ && !onPlane(Number(rowZ[i]), plane.z, zTolerance)) continue;
       if (rowT && Math.round(Number(rowT[i])) !== plane.t) continue;
       const x = Number(xs[i]) * scale + ox;
       const y = Number(ys[i]) * scale + oy;
@@ -983,6 +992,7 @@ const BioimageViewerRenderer: React.FC<Props> = ({
     activeWell,
     activeStore,
     config.points_scale,
+    config.points_z_tolerance,
     config.points_offset_x,
     config.points_offset_y,
     colorScale,
@@ -1115,6 +1125,37 @@ const BioimageViewerRenderer: React.FC<Props> = ({
     });
   }, [viewer, comparing, compareMode, compareOpacity, compareChannel]);
 
+  // ---- Overlay image (another modality over this one) ---------------------
+  const overlayName = config.overlay_store ?? null;
+  const overlayKnown = Boolean(overlayName && stores?.some((st) => st.name === overlayName));
+  const [overlayChannels, setOverlayChannels] = useState<ChannelState[]>([]);
+  const [overlayOpacity, setOverlayOpacity] = usePersistedVizControl(metadata, 'overlay_opacity', 0.6);
+  const [overlayError, setOverlayError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!viewer) return;
+    let cancelled = false;
+    setOverlayError(null);
+    setOverlayChannels([]);
+    const store = overlayKnown && imageDcId && overlayName ? createBioimageZarrStore(imageDcId, overlayName) : null;
+    viewer
+      .setOverlay(store)
+      .then((opened) => {
+        if (!cancelled && opened) setOverlayChannels(opened.channels);
+      })
+      .catch((err: unknown) => {
+        if (cancelled || (err instanceof Error && err.name === 'LoadSupersededError')) return;
+        setOverlayError(`Could not open the overlay ${overlayName}: ${errorText(err)}`);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [viewer, imageDcId, overlayName, overlayKnown]);
+  useEffect(() => {
+    viewer?.setOverlayStyle({ channels: overlayChannels, opacity: overlayOpacity });
+  }, [viewer, overlayChannels, overlayOpacity]);
+  const updateOverlayChannel = (index: number, patch: Partial<ChannelState>) =>
+    setOverlayChannels((prev) => prev.map((c) => (c.index === index ? { ...c, ...patch } : c)));
+
   // The masks show the cells, so their centroids stay undrawn (a lasso still
   // selects on them).
   const [pointRadius, setPointRadius] = usePersistedVizControl(metadata, 'point_radius', 6);
@@ -1238,41 +1279,45 @@ const BioimageViewerRenderer: React.FC<Props> = ({
                 allowDeselect={false}
               />
             ) : null}
-            {sampleSteps.length > 1 ? (
-              sampleSteps.length <= 5 ? (
-                <VizSegmented
-                  label="Step"
-                  data={sampleSteps.map((st) => st.label)}
-                  value={activeStep?.label ?? ''}
-                  onChange={setPickedStep}
-                  data-testid="bioimage-steps"
-                />
-              ) : (
-                <VizSelect
-                  label="Step"
-                  data={sampleSteps.map((st) => st.label)}
-                  value={activeStep?.label ?? null}
-                  onChange={(v) => v != null && setPickedStep(v)}
-                  allowDeselect={false}
-                  data-testid="bioimage-steps"
-                />
-              )
-            ) : null}
-            {activeStep && stepCols && stepCols.metrics.length ? (
-              <Text size="xs" c="dimmed" data-testid="bioimage-step-metrics">
-                {stepCols.metrics
-                  .map((m) => {
-                    const value = activeStep.metrics[m];
-                    const change = previousStep ? metricChange(value, previousStep.metrics[m]) : null;
-                    const delta =
-                      change == null || change === 0
-                        ? ''
-                        : ` (${change > 0 ? '+' : '−'}${formatMetric(Math.abs(change))} vs ${previousStep?.label})`;
-                    return `${m} ${formatMetric(value)}${delta}`;
-                  })
-                  .join(' · ')}
-              </Text>
-            ) : null}
+            {/* One unit for the docked panel: a lone line of text is folded under
+                "More options", and the metrics belong with the step they describe. */}
+            <Stack gap={4}>
+              {sampleSteps.length > 1 ? (
+                sampleSteps.length <= 5 ? (
+                  <VizSegmented
+                    label="Step"
+                    data={sampleSteps.map((st) => st.label)}
+                    value={activeStep?.label ?? ''}
+                    onChange={setPickedStep}
+                    data-testid="bioimage-steps"
+                  />
+                ) : (
+                  <VizSelect
+                    label="Step"
+                    data={sampleSteps.map((st) => st.label)}
+                    value={activeStep?.label ?? null}
+                    onChange={(v) => v != null && setPickedStep(v)}
+                    allowDeselect={false}
+                    data-testid="bioimage-steps"
+                  />
+                )
+              ) : null}
+              {activeStep && stepCols && stepCols.metrics.length ? (
+                <Text size="xs" c="dimmed" data-testid="bioimage-step-metrics">
+                  {stepCols.metrics
+                    .map((m) => {
+                      const value = activeStep.metrics[m];
+                      const change = previousStep ? metricChange(value, previousStep.metrics[m]) : null;
+                      const delta =
+                        change == null || change === 0
+                          ? ''
+                          : ` (${change > 0 ? '+' : '−'}${formatMetric(Math.abs(change))} vs ${previousStep?.label})`;
+                      return `${m} ${formatMetric(value)}${delta}`;
+                    })
+                    .join(' · ')}
+                </Text>
+              ) : null}
+            </Stack>
             {referenceKnown ? (
               <>
                 <VizSegmented
@@ -1305,10 +1350,10 @@ const BioimageViewerRenderer: React.FC<Props> = ({
             ) : null}
           </>
         ) : null}
-        {!stepsEnabled && stores && stores.length > 1 ? (
+        {!stepsEnabled && sampleStores.length > 1 ? (
           <VizSelect
             label="Sample"
-            data={stores.map((s) => ({ value: s.name, label: s.sample }))}
+            data={sampleStores.map((s) => ({ value: s.name, label: s.sample }))}
             value={activeStore?.name ?? null}
             disabled={sampleValue != null}
             description={
@@ -1355,10 +1400,21 @@ const BioimageViewerRenderer: React.FC<Props> = ({
             }}
           />
         ) : null}
+        {overlayChannels.length ? (
+          <VizSlider
+            label="Overlay"
+            min={0}
+            max={1}
+            step={0.05}
+            value={overlayOpacity}
+            onChange={setOverlayOpacity}
+            data-testid="bioimage-overlay-opacity"
+          />
+        ) : null}
       </>
     ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [stores, activeStore, sampleValue, config.sample_column, wells, activeWell, wellValue, config.well_column, info, plane, playing, stepsEnabled, steps, stepSample, sampleSteps, activeStep, previousStep, stepCols, referenceKnown, referenceName, compareMode, compareOpacity],
+    [stores, sampleStores, activeStore, sampleValue, config.sample_column, wells, activeWell, wellValue, config.well_column, info, plane, playing, stepsEnabled, steps, stepSample, sampleSteps, activeStep, previousStep, stepCols, referenceKnown, referenceName, compareMode, compareOpacity, overlayChannels.length, overlayOpacity],
   );
 
   // The cosmetic tier: how it is drawn. One group per channel, then the labels
@@ -1405,6 +1461,27 @@ const BioimageViewerRenderer: React.FC<Props> = ({
                 />
               );
             })}
+            </Stack>
+          </VizControlGroup>
+        ) : null}
+        {overlayChannels.length ? (
+          <VizControlGroup title={`Overlay · ${overlayName}`}>
+            <Stack gap={2} data-testid="bioimage-overlay-channels">
+              {overlayChannels.map((c) => (
+                <ChannelRow
+                  key={c.index}
+                  name={c.name}
+                  color={c.color}
+                  visible={c.visible}
+                  domain={c.domain}
+                  step={1}
+                  contrastLimits={c.contrastLimits}
+                  onVisibleChange={(v) => updateOverlayChannel(c.index, { visible: v })}
+                  onColourCommit={(hex) => updateOverlayChannel(c.index, { color: hex })}
+                  onContrastChange={(v) => updateOverlayChannel(c.index, { contrastLimits: v })}
+                  onContrastCommit={(v) => updateOverlayChannel(c.index, { contrastLimits: v })}
+                />
+              ))}
             </Stack>
           </VizControlGroup>
         ) : null}
@@ -1459,7 +1536,7 @@ const BioimageViewerRenderer: React.FC<Props> = ({
       </>
     ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [channels, integerDtype, visibleChannels, labelsDcId, embeddedLabelsFound, labelsWanted, labelsVisible, labelsOutline, labelsOpacity, pointsEnabled, pointRadius, labelsShown, stacked, allPlanes],
+    [channels, integerDtype, visibleChannels, labelsDcId, embeddedLabelsFound, labelsWanted, labelsVisible, labelsOutline, labelsOpacity, pointsEnabled, pointRadius, labelsShown, stacked, allPlanes, overlayChannels, overlayName],
   );
 
   // ---- Notices ------------------------------------------------------------
@@ -1471,6 +1548,14 @@ const BioimageViewerRenderer: React.FC<Props> = ({
   if (labelsError) notices.push({ key: 'labels', tone: 'error', text: labelsError });
   if (stepsError) notices.push({ key: 'steps', tone: 'error', text: `Steps: ${stepsError}` });
   if (referenceError) notices.push({ key: 'reference', tone: 'error', text: referenceError });
+  if (overlayError) notices.push({ key: 'overlay', tone: 'error', text: overlayError });
+  if (overlayName && stores && !overlayKnown) {
+    notices.push({
+      key: 'overlay-missing',
+      tone: 'warning',
+      text: `The overlay ${overlayName} is not a store of this image collection.`,
+    });
+  }
   if (referenceName && stores && !referenceKnown) {
     notices.push({
       key: 'reference-missing',
@@ -1558,6 +1643,7 @@ const BioimageViewerRenderer: React.FC<Props> = ({
     pointsFollowPlane: stacked,
     selectable: roiEnabled && Boolean(onFilterChange),
     labels: Boolean(labelsDcId || embeddedLabelsFound),
+    overlay: overlayChannels.length > 0,
   };
   const headerBadges: React.ReactNode[] = [
     ...(pointsEnabled

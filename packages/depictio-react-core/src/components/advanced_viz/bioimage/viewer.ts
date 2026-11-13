@@ -32,6 +32,7 @@ import type { BioimageSource, BioimageTiffSource, BioimageZarrStore } from '../.
 import {
   axisSizes,
   hexToRgb,
+  MAX_RENDERED_CHANNELS,
   ngffRootAttrs,
   physicalPixelSize,
   renderedChannels,
@@ -43,6 +44,7 @@ import {
   type Rgb,
 } from './channels';
 import { fitViewState, rectToPolygon, type Polygon, type Vec2 } from './geometry';
+import { overlayMatrix, overlayPlane } from './overlay';
 import {
   colorizeLabels,
   labelAt,
@@ -129,6 +131,23 @@ export interface ReferenceStyle {
   channel: number;
 }
 
+/** An overlay image (another modality registered onto this one, e.g. light
+ *  microscopy over EM): drawn over the image in its own channels, stretched
+ *  to the image's extent (see overlay.ts). */
+export interface OverlayStyle {
+  channels: readonly ChannelState[];
+  /** 0 hides it. */
+  opacity: number;
+}
+
+/** What an overlay store opened as: its starting channel state and size. */
+export interface OverlayInfo {
+  channels: ChannelState[];
+  width: number;
+  height: number;
+  depth: number;
+}
+
 /** What a reference store opened as. */
 export interface ReferenceInfo {
   width: number;
@@ -178,6 +197,10 @@ export interface BioimageViewer {
    *  or drop it with null. Rejects with `LoadSupersededError` when replaced. */
   setReference(store: BioimageZarrStore | null): Promise<ReferenceInfo | null>;
   setReferenceStyle(style: ReferenceStyle): void;
+  /** Open an overlay image (replacing any previous one), or drop it with
+   *  null. Rejects with `LoadSupersededError` when a later call replaced it. */
+  setOverlay(store: BioimageZarrStore | null): Promise<OverlayInfo | null>;
+  setOverlayStyle(style: OverlayStyle): void;
   setHighlighted(ids: ReadonlySet<string>): void;
   setSelectionMode(mode: SelectionMode): void;
   /** Theme sync. `accent` rings highlighted points and draws the ROI. */
@@ -312,6 +335,11 @@ export async function createBioimageViewer(
   let referenceChannels = 0;
   let referenceToken = 0;
   let referenceStyle: ReferenceStyle = { mode: 'off', opacity: 0.5, channel: 0 };
+  // Overlay image (another modality), drawn over the image and the reference.
+  let overlay: { pyramid: PixelSource[]; width: number; height: number; depth: number } | null =
+    null;
+  let overlayToken = 0;
+  let overlayStyle: OverlayStyle = { channels: [], opacity: 0 };
 
   const hostSize = () => ({ w: host.clientWidth, h: host.clientHeight });
 
@@ -484,6 +512,31 @@ export async function createBioimageViewer(
     return new MultiscaleImageLayer({ ...props, loader: pyramid } as never);
   };
 
+  /** The overlay over `image`: its shown channels, at the same depth. */
+  const overlayLayer = (image: BioimageInfo) => {
+    if (!overlay || overlayStyle.opacity <= 0) return null;
+    const shown = overlayStyle.channels.filter((c) => c.visible).slice(0, MAX_RENDERED_CHANNELS);
+    if (!shown.length) return null;
+    const axes = overlay.pyramid[0].labels;
+    const z = overlayPlane(plane.z, image.sizes.z, overlay.depth);
+    const matrix = overlayMatrix(image, overlay);
+    return imageLayer(overlay.pyramid, {
+      id: `bioimage-overlay-${overlayToken}`,
+      loader: overlay.pyramid,
+      selections: shown.map((c) => selectionFor(axes, { c: c.index, z, t: 0 })),
+      colors: shown.map((c) => hexToRgb(c.color) ?? [255, 255, 255]),
+      contrastLimits: shown.map((c) => c.contrastLimits),
+      channelsVisible: shown.map(() => true),
+      excludeBackground: true,
+      opacity: overlayStyle.opacity,
+      ...(matrix ? { modelMatrix: matrix } : {}),
+      onTileError: (err: unknown) => {
+        if (isBoundsError(err)) return;
+        opts.onError?.(err instanceof Error ? err : new Error(String(err)));
+      },
+    });
+  };
+
   const render = () => {
     if (disposed) return;
     const layers: unknown[] = [];
@@ -552,6 +605,8 @@ export async function createBioimageViewer(
         }
       }
     }
+    const overlayed = data && info ? overlayLayer(info) : null;
+    if (overlayed) layers.push(overlayed);
     const labelsOverlay = labelsLayer();
     if (labelsOverlay) layers.push(labelsOverlay);
     if (points.length) {
@@ -881,6 +936,41 @@ export async function createBioimageViewer(
       render();
     },
 
+    async setOverlay(store) {
+      overlayToken += 1;
+      const token = overlayToken;
+      overlay = null;
+      render();
+      if (!store) return null;
+      const opened = await openOmeZarr(store);
+      if (token !== overlayToken || disposed) throw new LoadSupersededError();
+      const base = opened.pyramid[0];
+      const lab = base.labels;
+      const size = (axis: string) => (lab.includes(axis) ? (base.shape[lab.indexOf(axis)] ?? 1) : 1);
+      overlay = {
+        pyramid: opened.pyramid,
+        width: size('x'),
+        height: size('y'),
+        depth: size('z'),
+      };
+      render();
+      return {
+        channels: resolveChannels({
+          sizeC: size('c'),
+          dtype: base.dtype,
+          omero: opened.omero as never,
+        }),
+        width: overlay.width,
+        height: overlay.height,
+        depth: overlay.depth,
+      };
+    },
+
+    setOverlayStyle(style) {
+      overlayStyle = style;
+      render();
+    },
+
     setHighlighted(ids) {
       highlighted = ids;
       highlightVersion += 1;
@@ -919,6 +1009,7 @@ export async function createBioimageViewer(
       loadToken += 1;
       labelsToken += 1;
       referenceToken += 1;
+      overlayToken += 1;
       listeners.abort();
       window.clearTimeout(hintTimer);
       try {

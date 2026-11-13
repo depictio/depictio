@@ -237,3 +237,34 @@ def test_a_steps_dc_needs_its_store_column():
 def test_steps_pick_the_store_alone(extra):
     with pytest.raises(ValidationError, match="picks the store itself"):
         VIZ_CONFIG.validate_python({**STEPS, **extra})
+
+
+def test_an_overlay_store_round_trips():
+    parsed = VIZ_CONFIG.validate_python(
+        {
+            "viz_kind": "bioimage_viewer",
+            "image_dc_tag": "clem",
+            "store": "IM1.zarr",
+            "overlay_store": "lm.zarr",
+        }
+    )
+    assert parsed.overlay_store == "lm.zarr"
+
+
+def test_the_overlay_is_not_the_image_itself():
+    with pytest.raises(ValidationError, match="overlay_store names the image itself"):
+        VIZ_CONFIG.validate_python(
+            {
+                "viz_kind": "bioimage_viewer",
+                "image_dc_tag": "clem",
+                "store": "a.zarr",
+                "overlay_store": "a.zarr",
+            }
+        )
+
+
+def test_points_z_tolerance_is_a_number_of_planes():
+    base = {"viz_kind": "bioimage_viewer", "image_dc_tag": "clem"}
+    assert VIZ_CONFIG.validate_python({**base, "points_z_tolerance": 60}).points_z_tolerance == 60
+    with pytest.raises(ValidationError):
+        VIZ_CONFIG.validate_python({**base, "points_z_tolerance": -1})
