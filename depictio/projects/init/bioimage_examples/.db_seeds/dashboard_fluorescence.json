@@ -24,13 +24,16 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
-      "title_size": "sm",
       "title_align": "left",
       "section": "Kidney nuclei",
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
       "body": "A mouse kidney section imaged in three fluorescence channels, projected along z and stored as a three-level pyramid. Each point is a nucleus segmented on the 450 nm channel. Toggle channels and adjust their contrast in the viewer, then draw a lasso around some nuclei: the table and the cards follow the selection.\n",
+      "surface": "none",
+      "accent": null,
+      "logo": null,
+      "logo_dark": null,
       "wf_tag": "python/bioimage_demo"
     },
     {
@@ -76,6 +79,7 @@
       "threshold_warn": null,
       "attrition_cols": [],
       "trend_col": null,
+      "follow_region_filter": false,
       "icon_name": "mdi:counter",
       "title_font_size": "md",
       "value_font_size": "xl",
@@ -124,6 +128,7 @@
       "threshold_warn": null,
       "attrition_cols": [],
       "trend_col": null,
+      "follow_region_filter": false,
       "icon_name": "mdi:chart-histogram",
       "title_font_size": "md",
       "value_font_size": "xl",
@@ -172,6 +177,7 @@
       "threshold_warn": null,
       "attrition_cols": [],
       "trend_col": null,
+      "follow_region_filter": false,
       "icon_name": "mdi:chart-donut",
       "title_font_size": "md",
       "value_font_size": "xl",
@@ -222,6 +228,7 @@
       "threshold_warn": null,
       "attrition_cols": [],
       "trend_col": null,
+      "follow_region_filter": false,
       "icon_name": "mdi:chart-box-outline",
       "title_font_size": "md",
       "value_font_size": "xl",
@@ -258,6 +265,7 @@
       "section": "Image",
       "viz_kind": "bioimage_viewer",
       "config": {
+        "controls_placement": "popover",
         "viz_kind": "bioimage_viewer",
         "image_wf_id": "646b0f3c1e4a2d7f8e5b8f01",
         "image_dc_id": "646b0f3c1e4a2d7f8e5b8f02",
@@ -281,7 +289,13 @@
         "points_offset_y": 0.0,
         "point_radius": 3.0,
         "points_sample_col": "sample",
-        "selection_enabled": true
+        "labels_wf_id": null,
+        "labels_dc_id": null,
+        "labels_dc_tag": null,
+        "labels_opacity": 0.5,
+        "labels_outline": true,
+        "selection_enabled": true,
+        "selection_column": null
       },
       "wf_tag": "python/bioimage_demo"
     },
@@ -328,6 +342,7 @@
       "compact": false,
       "row_selection_enabled": false,
       "row_selection_column": null,
+      "row_selection_mode": "multiple",
       "wf_tag": "python/bioimage_demo"
     },
     {
@@ -368,6 +383,9 @@
       "group": "Nucleus filters",
       "timescale": null,
       "show_marks": null,
+      "show_mark_labels": null,
+      "show_histogram": null,
+      "slider_mode": null,
       "icon_name": "mdi:palette",
       "wf_tag": "python/bioimage_demo"
     },
@@ -409,6 +427,9 @@
       "group": "Nucleus filters",
       "timescale": null,
       "show_marks": null,
+      "show_mark_labels": null,
+      "show_histogram": null,
+      "slider_mode": null,
       "icon_name": "mdi:ruler",
       "wf_tag": "python/bioimage_demo"
     },
@@ -450,6 +471,9 @@
       "group": "Nucleus filters",
       "timescale": null,
       "show_marks": null,
+      "show_mark_labels": null,
+      "show_histogram": null,
+      "slider_mode": null,
       "icon_name": "mdi:gauge",
       "wf_tag": "python/bioimage_demo"
     },
@@ -467,13 +491,16 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
-      "title_size": "sm",
       "title_align": "left",
       "section": "About these examples",
       "order": 4,
       "alignment": "left",
       "vertical_alignment": "top",
       "body": "Each tab shows one kind of image: several fluorescence channels, a stained section with spatial spots, a 3D stack over time and one store per sample (all OME-Zarr NGFF 0.4), then a pyramidal OME-TIFF, a SpatialData store and an OME-Zarr NGFF 0.5 store with sharded arrays. The images are scikit-image sample datasets (CC0, public domain or without known restrictions). Cells and spots are computed from the pixels; time courses, counts and conditions are synthetic. Nothing here is a result.\n",
+      "surface": "none",
+      "accent": null,
+      "logo": null,
+      "logo_dark": null,
       "wf_tag": "python/bioimage_demo"
     }
   ],
@@ -647,6 +674,7 @@
   "main_tab_name": "Fluorescence",
   "tab_icon": "mdi:microscope",
   "tab_icon_color": "grape",
+  "tab_group": null,
   "parent_dashboard_title": null,
   "filter_sections": [
     {
@@ -656,7 +684,14 @@
       "description": "Narrows the nuclei drawn over the image, the table and the cards",
       "collapsed": false,
       "persistent": false,
-      "pin": "top"
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
     }
   ],
   "grid_sections": [
@@ -667,7 +702,14 @@
       "description": "The segmented nuclei in numbers",
       "collapsed": false,
       "persistent": false,
-      "pin": "top"
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
     },
     {
       "name": "Image",
@@ -676,7 +718,14 @@
       "description": "The three channels, with one point per nucleus; lasso points to filter the table",
       "collapsed": false,
       "persistent": false,
-      "pin": "top"
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
     },
     {
       "name": "About these examples",
@@ -685,9 +734,25 @@
       "description": "Where the images come from, and what is synthetic",
       "collapsed": true,
       "persistent": true,
-      "pin": "bottom"
+      "pin": "bottom",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
     }
   ],
   "funnel_filtering": true,
-  "brand_theme": null
+  "brand_theme": null,
+  "category_colors": null,
+  "filter_panel_default": "open",
+  "content_width_default": "full",
+  "show_tab_header": true,
+  "open_with_defaults": false,
+  "show_guide": true,
+  "guide_intro": "",
+  "advanced_viz_controls": "popover",
+  "autofit": true
 }

@@ -37,8 +37,8 @@ from depictio.api.v1.endpoints.user_endpoints.routes import (
 from depictio.api.v1.permissions import build_access_query, get_user_group_ids
 from depictio.api.v1.services import project_bundle
 from depictio.api.v1.services.migration_push import BundleListingError, build_project_bundle_file
-from depictio.models.models.data_collections_types.genomic_tracks import genomic_tracks_s3_prefix
 from depictio.models.models.data_collections_types.bioimage import bioimage_s3_prefix
+from depictio.models.models.data_collections_types.genomic_tracks import genomic_tracks_s3_prefix
 from depictio.models.models.data_collections_types.phylogeny import phylogeny_s3_key
 from depictio.models.models.migration import ImportHop
 from depictio.models.models.users import User

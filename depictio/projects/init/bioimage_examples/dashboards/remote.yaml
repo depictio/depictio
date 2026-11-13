@@ -24,7 +24,7 @@ tab_icon_color: 'blue'
 
 grid_sections:
   - name: 'Remote image'
-    icon: 'mdi:cloud-outline'
+    icon: 'mdi:database-outline'
     color: 'blue'
     description: 'Where the image comes from, and what the viewer reads'
   - name: 'Image'

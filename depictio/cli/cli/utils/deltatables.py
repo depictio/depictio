@@ -46,7 +46,6 @@ from depictio.models.local_access import LocalPathRefused
 from depictio.models.models.base import convert_objectid_to_str
 from depictio.models.models.cli import CLIConfig
 from depictio.models.models.data_collections import DataCollection
-from depictio.models.models.data_collections_types.geojson import geojson_s3_key
 from depictio.models.models.data_collections_types.bioimage import (
     DCBioimageConfig,
     bioimage_s3_object_key,
@@ -56,6 +55,7 @@ from depictio.models.models.data_collections_types.bioimage import (
     is_single_file_format,
     remote_store_name,
 )
+from depictio.models.models.data_collections_types.geojson import geojson_s3_key
 from depictio.models.models.data_collections_types.indexed_file import (
     DCIndexedFileConfig,
     indexed_file_s3_key,

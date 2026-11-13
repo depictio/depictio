@@ -202,7 +202,8 @@
                 "spatial_cells",
                 "allele_grid",
                 "pedigree",
-                "ranked_table"
+                "ranked_table",
+                "bioimage_viewer"
               ],
               "type": "string"
             },

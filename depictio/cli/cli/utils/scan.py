@@ -841,7 +841,9 @@ def scan_run_for_multiple_data_collections(
         else:
             candidates = [
                 (scanned, scanned.path)
-                for scanned in select_run_files(all_files_in_run, run_location, full_regex, dc_bounds)
+                for scanned in select_run_files(
+                    all_files_in_run, run_location, full_regex, dc_bounds
+                )
             ]
         for scanned, scan_location in candidates:
             logger.debug(f"File {scan_location} matches DC {dc.data_collection_tag}")

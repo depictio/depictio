@@ -94,6 +94,13 @@ def no_tracks(monkeypatch):
     monkeypatch.setattr(capabilities, "genomic_tracks_model", lambda: None)
 
 
+@pytest.fixture
+def no_bioimage(monkeypatch):
+    """A Depictio without bioimage collections or SpatialData tables (older, or trimmed)."""
+    monkeypatch.setattr(capabilities, "bioimage_model", lambda: None)
+    monkeypatch.setattr(capabilities, "spatialdata_tables", lambda: False)
+
+
 def _refusal(template, *, remote: bool = False) -> str:
     with pytest.raises(BuilderRefused) as exc:
         validate_inline_template(template, remote=remote)
@@ -142,7 +149,7 @@ def _spatial_table(**source) -> DcDraft:
 
 
 class TestCapabilities:
-    def test_this_depictio_offers_the_core_six_and_tracks(self):
+    def test_this_depictio_offers_the_core_six_tracks_and_bioimages(self):
         offered = capabilities.capabilities("server", True)
         by_type = {entry["type"]: entry for entry in offered["dc_types"]}
         assert [t for t, entry in by_type.items() if entry["available"]] == [
@@ -153,13 +160,21 @@ class TestCapabilities:
             "geojson",
             "phylogeny",
             "genomic_tracks",
+            "bioimage",
         ]
-        assert by_type["bioimage"]["reason"] == capabilities.UNAVAILABLE["bioimage"]
-        assert offered["bioimage"] is None
+        assert offered["bioimage"] == {"formats": ["ome-zarr", "ome-tiff", "spatialdata"]}
         # Read from the model, never listed here: only spot-check a few.
         assert {"bigwig", "bam", "vcf"} <= set(offered["genomic_tracks"]["track_formats"])
         assert "hg38" in offered["genomic_tracks"]["assemblies"]
-        assert offered["table_formats"] == ["csv", "tsv", "parquet", "feather", "xls", "xlsx"]
+        assert offered["table_formats"] == [
+            "csv",
+            "tsv",
+            "parquet",
+            "feather",
+            "xls",
+            "xlsx",
+            "spatialdata",
+        ]
         assert offered["link_target_types"] == ["table", "multiqc", "image", "genomic_tracks"]
         assert "skip_rows" in offered["reader_options"]
 
@@ -185,11 +200,18 @@ class TestCapabilities:
         assert offered["bioimage"] == {"formats": ["ome-zarr", "ome-tiff", "spatialdata"]}
 
     def test_the_models_are_looked_for_not_assumed(self):
-        # Track collections are part of this Depictio; bioimages are not yet.
+        # Track collections and bioimages are both part of this Depictio.
         assert capabilities.genomic_tracks_model() is not None
         assert "genomic_tracks" in capabilities.available_types()
-        assert capabilities.bioimage_model() is None
-        assert capabilities.spatialdata_tables() is False
+        assert capabilities.bioimage_model() is not None
+        assert "bioimage" in capabilities.available_types()
+        assert capabilities.spatialdata_tables() is True
+
+    def test_a_depictio_without_bioimages_says_why(self, no_bioimage):
+        offered = capabilities.capabilities("server", True)
+        by_type = {entry["type"]: entry for entry in offered["dc_types"]}
+        assert by_type["bioimage"]["reason"] == capabilities.UNAVAILABLE["bioimage"]
+        assert offered["bioimage"] is None
 
 
 # ── unavailable here ─────────────────────────────────────────────────────────
@@ -200,11 +222,11 @@ class TestUnavailable:
         detail = _refusal(build_template(project(_tracks())))
         assert detail == f"'tracks': {capabilities.UNAVAILABLE['genomic_tracks']}"
 
-    def test_bioimages_are_refused_with_the_reason(self):
+    def test_bioimages_are_refused_with_the_reason(self, no_bioimage):
         detail = _refusal(build_template(project(_bioimage())))
         assert detail == f"'imgs': {capabilities.UNAVAILABLE['bioimage']}"
 
-    def test_a_spatialdata_table_is_refused(self):
+    def test_a_spatialdata_table_is_refused(self, no_bioimage):
         detail = _refusal(build_template(project(_spatial_table())))
         assert "no tables read from SpatialData stores yet" in detail
 
@@ -213,7 +235,7 @@ class TestUnavailable:
         assert suggestion["type"] == "indexed_file"
         assert suggestion["tracks"] is None
 
-    def test_a_store_is_a_bioimage_with_the_reason(self, imaging):
+    def test_a_store_is_a_bioimage_with_the_reason(self, imaging, no_bioimage):
         suggestion = infer.suggest(imaging, "stores/s1.zarr")
         assert suggestion["type"] == "bioimage"
         assert suggestion["warnings"] == [capabilities.UNAVAILABLE["bioimage"]]

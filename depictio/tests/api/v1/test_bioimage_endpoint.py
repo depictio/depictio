@@ -48,8 +48,10 @@ from depictio.api.v1.endpoints.user_endpoints.routes import (
 DC_ID = ObjectId()
 FILE_ID = ObjectId()
 PREFIX = "/depictio/api/v1/advanced_viz"
-USER = MagicMock(is_admin=False, id=ObjectId())
-OTHER_USER = MagicMock(is_admin=False, id=ObjectId())
+# `is_anonymous` spelled out: a bare MagicMock attribute is truthy, and the
+# access query treats an anonymous caller as public-only.
+USER = MagicMock(is_admin=False, is_anonymous=False, id=ObjectId())
+OTHER_USER = MagicMock(is_admin=False, is_anonymous=False, id=ObjectId())
 
 
 def make_store(parent: Path, name: str = "sample_A.zarr") -> Path:
@@ -152,6 +154,7 @@ class Env:
         self._patches = [
             patch("depictio.api.v1.db.projects_collection", self.projects),
             patch("depictio.api.v1.db.files_collection", self.files),
+            patch("depictio.api.v1.permissions.get_user_group_ids", lambda *a, **k: []),
             patch.object(routes, "_bioimage_s3_client", lambda: self.s3),
             patch.object(routes, "_bioimage_http_client", lambda: self.http),
             patch.object(config_module.settings, "bioimage", self.bioimage),

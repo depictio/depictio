@@ -91,7 +91,13 @@
         "points_offset_y": 0.0,
         "point_radius": 3.0,
         "points_sample_col": null,
-        "selection_enabled": true
+        "labels_wf_id": null,
+        "labels_dc_id": null,
+        "labels_dc_tag": null,
+        "labels_opacity": 0.5,
+        "labels_outline": true,
+        "selection_enabled": true,
+        "selection_column": null
       },
       "wf_tag": "python/bioimage_demo"
     },
@@ -236,6 +242,7 @@
       "compact": false,
       "row_selection_enabled": false,
       "row_selection_column": null,
+      "row_selection_mode": "multiple",
       "wf_tag": "python/bioimage_demo"
     }
   ],
@@ -361,7 +368,7 @@
   "grid_sections": [
     {
       "name": "Remote image",
-      "icon": "mdi:cloud-outline",
+      "icon": "mdi:database-outline",
       "color": "blue",
       "description": "Where the image comes from, and what the viewer reads",
       "collapsed": false,
@@ -414,6 +421,7 @@
   "filter_panel_default": "open",
   "content_width_default": "full",
   "show_tab_header": true,
+  "open_with_defaults": false,
   "show_guide": true,
   "guide_intro": "",
   "advanced_viz_controls": "popover",

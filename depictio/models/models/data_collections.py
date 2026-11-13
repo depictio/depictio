@@ -9,8 +9,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from depictio.models.config import DEPICTIO_CONTEXT
 from depictio.models.logging import logger
 from depictio.models.models.base import MongoModel
-from depictio.models.models.data_collections_types.genomic_tracks import DCGenomicTracksConfig
 from depictio.models.models.data_collections_types.bioimage import DCBioimageConfig
+from depictio.models.models.data_collections_types.genomic_tracks import DCGenomicTracksConfig
 from depictio.models.models.data_collections_types.geojson import DCGeoJSONConfig
 from depictio.models.models.data_collections_types.image import DCImageConfig
 from depictio.models.models.data_collections_types.indexed_file import DCIndexedFileConfig
