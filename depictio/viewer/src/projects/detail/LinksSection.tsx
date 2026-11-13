@@ -27,6 +27,7 @@ import {
   listLinkResolvers,
   listProjectLinks,
   updateProjectLink,
+  useBrandAccents,
 } from 'depictio-react-core';
 import type { DCLink, ResolverInfo } from 'depictio-react-core';
 
@@ -96,6 +97,7 @@ const LinksSection: React.FC<LinksSectionProps> = ({
   joins = [],
   reloadKey = 0,
 }) => {
+  const accent = useBrandAccents();
   const glass = useGlassPages();
   // Glass opens on the map; the table stays one click away.
   const [view, setView] = useState<'map' | 'table'>('map');
@@ -399,6 +401,7 @@ const LinksSection: React.FC<LinksSectionProps> = ({
         <Group gap="xs" wrap="nowrap">
           <Tooltip label={disabledTip} disabled={canMutate}>
             <Button
+              color={accent.secondary}
               data-testid="add-link-btn"
               leftSection={<Icon icon="mdi:plus" width={16} />}
               onClick={openCreate}

@@ -49,8 +49,12 @@ export function useRunPlan(
   location: string | null,
   templateId: string | null,
   storage: RunStorageIn | null = null,
+  /** A folder of runs: its sub-folders that are runs, read together. */
+  runs: string[] | null = null,
 ): RunPlanState | null {
-  const key = location && templateId ? `${templateId}\n${location}` : null;
+  const several = runs && runs.length > 1 ? runs : null;
+  const key =
+    location && templateId ? `${templateId}\n${location}${several ? `\n${several.join('\n')}` : ''}` : null;
   const [state, setState] = useState<{ key: string; plan: RunPlanState } | null>(null);
 
   useEffect(() => {
@@ -63,7 +67,7 @@ export function useRunPlan(
     const controller = new AbortController();
     setState({ key, plan: { status: 'loading' } });
     createProjectFromRun(
-      { dataRoot: location, templateId, dryRun: true, storage },
+      { dataRoot: location, templateId, dryRun: true, storage, ...(several ? { runs: several } : {}) },
       { signal: controller.signal },
     )
       .then((report) => {

@@ -23,9 +23,8 @@ import pytest
 from depictio.cli.cli.utils.scan import (
     _change_signal,
     _resolve_pending_runs,
-    _ScanBounds,
 )
-from depictio.cli.cli.utils.scan_walk import iter_run_files, run_signature
+from depictio.cli.cli.utils.scan_walk import ScanBounds, iter_run_files, run_signature
 from depictio.cli.cli.utils.state import ProjectScanState, RunState
 
 
@@ -219,7 +218,7 @@ class TestPresentRuns:
             existing_runs=registered_runs(root, tags),
             rescan_folders=True,
             state=warm_state(root, tags),
-            walk_bounds=_ScanBounds(None, ()),
+            walk_bounds=ScanBounds(None, ()),
         )
 
         scanned = {run.tag for location in pending for run in location.runs}
@@ -243,7 +242,7 @@ class TestPresentRuns:
             existing_runs=registered_runs(root, ("run_A", "run_B")),
             rescan_folders=True,
             state=state,
-            walk_bounds=_ScanBounds(None, ()),
+            walk_bounds=ScanBounds(None, ()),
         )
 
         present = {tag for location in pending for tag in location.present_tags}
@@ -261,7 +260,7 @@ class TestPresentRuns:
             existing_runs=registered_runs(root, ("run_A", "run_B")),
             rescan_folders=True,
             state=state,
-            walk_bounds=_ScanBounds(None, ()),
+            walk_bounds=ScanBounds(None, ()),
         )
 
         scanned = {run.tag for location in pending for run in location.runs}

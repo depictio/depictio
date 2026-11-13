@@ -3229,7 +3229,7 @@ def manifest_refresh_dc_task(self, payload: dict) -> dict:
         {
           "run_id":     ingestion-run id (steps pre-seeded, one per DC tag),
           "project_id", "wf_index", "dc_id", "dc_tag",
-          "sync_files": bool,
+          "sync_files": bool (read every file again; otherwise only what moved),
           "user": {"id", "email", "is_admin"},
           "depends_on": [dc_tag, ...] (optional; recipe DCs, see
                          ``manifest_ingest._recipe_dependencies``, and scan
@@ -3265,7 +3265,10 @@ def manifest_refresh_dc_task(self, payload: dict) -> dict:
     retrying forever against a dependency that will never finish.
     """
     from depictio.api.v1.db import projects_collection
-    from depictio.api.v1.endpoints.projects_endpoints.manifest_ingest import _run_dc_ingest
+    from depictio.api.v1.endpoints.projects_endpoints.manifest_ingest import (
+        _run_dc_ingest,
+        last_ingested_signature,
+    )
     from depictio.api.v1.endpoints.projects_endpoints.storage_config import (
         ProjectStorageUnusable,
         project_storage_for,
@@ -3278,11 +3281,16 @@ def manifest_refresh_dc_task(self, payload: dict) -> dict:
     tag = payload["dc_tag"]
     # A scan leader's scan outcomes, kept on every write of its step.
     scans: dict[str, str | None] = {}
+    # What the collection was built from, recorded on success so the next
+    # refresh can leave it alone if nothing moved (see ``_run_dc_ingest``).
+    outcome: dict = {}
 
     def _step(status: str, detail: str | None = None) -> dict:
         step: dict = {"name": tag, "status": status, "detail": detail}
         if scans:
             step["scans"] = dict(scans)
+        if status == "success" and outcome.get("inputs_signature"):
+            step["inputs_signature"] = outcome["inputs_signature"]
         return step
 
     def _close_step(ok: bool, message: str | None) -> dict:
@@ -3362,13 +3370,18 @@ def manifest_refresh_dc_task(self, payload: dict) -> dict:
             email=payload["user"]["email"],
             is_admin=bool(payload["user"].get("is_admin", False)),
         )
+        sync_files = bool(payload.get("sync_files", False))
         ok, message = _run_dc_ingest(
             workflow_dict,
             payload["dc_id"],
             user,
-            sync_files=bool(payload.get("sync_files", True)),
+            sync_files=sync_files,
             # Resolved worker-side so credentials never cross the broker.
             remote_storage_options=project_storage_for(payload["project_id"]),
+            previous_signature=(
+                None if sync_files else last_ingested_signature(payload["project_id"], tag, run_id)
+            ),
+            outcome=outcome,
             **scan_kwargs,
         )
     except ProjectStorageUnusable as exc:

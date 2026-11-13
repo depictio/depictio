@@ -26,6 +26,15 @@ import type {
   Geometry,
 } from './annotations/types';
 import type { VariantLegendPayload } from './components/jbrowse/trackLegend';
+import type {
+  BuilderDcDraft,
+  BuilderDcType,
+  BuilderProjectDraft,
+  BuilderRootSpec,
+  BuilderScanMode,
+  BuilderWildcard,
+  BuilderWorkflowStructure,
+} from './projectBuilder';
 
 const API_BASE = '/depictio/api/v1';
 
@@ -5109,6 +5118,65 @@ export async function fetchProjectRuns(projectId: string): Promise<{ runs: Proje
   return (await res.json()) as { runs: ProjectRun[] };
 }
 
+/** What one scan found changed in a file: `[before, after]` of each. */
+export interface RunFileChange {
+  scan: number;
+  size: [number | null, number | null] | null;
+  modified: [string | null, string | null] | null;
+}
+
+/** The samples and modules a MultiQC report's last overwrite added or removed. */
+export interface RunReportChange {
+  samples_added: string[];
+  samples_removed: string[];
+  modules_added: string[];
+  modules_removed: string[];
+}
+
+/** One file of a run: the scans that brought it (`added_in`), found it
+ *  changed or failed to read it, as indexes into `RunFiles.scans`. */
+export interface RunFile {
+  id: string;
+  dc_id: string;
+  dc_tag: string | null;
+  filename: string;
+  location: string;
+  size: number | null;
+  modified: string | null;
+  registered: string | null;
+  added_in: number | null;
+  changed_in: number[];
+  failed_in: number[];
+  changes: RunFileChange[];
+  /** A MultiQC report's: brought by the newest scan of `changed_in`. */
+  report_change: RunReportChange | null;
+}
+
+export interface RunScanFiles {
+  scan_time: string | null;
+  new: number;
+  changed: number;
+  failed: number;
+}
+
+export interface RunFiles {
+  run_tag: string;
+  /** Oldest first, as `ProjectRun.scans`. */
+  scans: RunScanFiles[];
+  files: RunFile[];
+  truncated: boolean;
+}
+
+/** The files of one run of a project, with what each scan did to them.
+ *  Backend: GET /projects/project-runs/{id}/files?run_tag=. */
+export async function fetchProjectRunFiles(projectId: string, runTag: string): Promise<RunFiles> {
+  const res = await authFetch(
+    `${API_BASE}/projects/project-runs/${projectId}/files?run_tag=${encodeURIComponent(runTag)}`,
+  );
+  if (!res.ok) await throwHttpError(res, `Failed to fetch the files of run ${runTag}`);
+  return (await res.json()) as RunFiles;
+}
+
 /** Lightweight ingestion-health summary for the dashboard banner. Backend:
  *  GET /projects/ingestion-health/{id}. */
 export async function fetchIngestionHealth(
@@ -5342,6 +5410,28 @@ export interface FromRunRequest {
   /** Visibility of the new project. Private (false) unless set: the template
    *  never decides it. */
   isPublic?: boolean;
+  /** An inline template (the `template` of `builderTemplate`), in place of
+   *  `templateId`: the two are mutually exclusive, so `template_id` is not
+   *  sent alongside it. */
+  template?: Record<string, unknown> | null;
+  /** `templateId` edited in the Project Builder (needs `templateId`). */
+  edits?: FromRunTemplateEdits | null;
+  /** A local `dataRoot` that holds several runs: the names of its
+   *  sub-folders that are runs (`FolderInspection.child_runs`), two or more.
+   *  The project is previewed and created from the first; the others are
+   *  added as runs before the one ingestion that reads them all. */
+  runs?: string[] | null;
+}
+
+/** Samples one MultiQC collection finds in more than one run
+ *  (`FromRunReport.shared_samples`). */
+export interface SharedRunSamples {
+  data_collection_tag: string;
+  /** The runs naming them, in the request's order. */
+  runs: string[];
+  count: number;
+  /** The first few, sorted. */
+  samples: string[];
 }
 
 /** Connection settings typed in for a private bucket, before the project
@@ -5399,6 +5489,13 @@ export interface FromRunReport {
   detected_template?: DetectedTemplate | null;
   data_root: string;
   detected_runs: string[];
+  /** The sub-folders read as runs when the request named several; the
+   *  preview is the first one's. Older backends omit it. */
+  runs?: string[] | null;
+  /** MultiQC samples named in more than one of `runs`: one collection would
+   *  merge them, so a creation is refused (`runs_share_samples`). Empty for
+   *  one run; older backends omit it. */
+  shared_samples?: SharedRunSamples[];
   resolved_variables: Record<string, string>;
   data_collections: FromRunDCPreview[];
   /** Empty on a dry run. */
@@ -5449,13 +5546,17 @@ export async function createProjectFromRun(
     method: 'POST',
     body: JSON.stringify({
       data_root: input.dataRoot,
-      template_id: input.templateId ?? null,
+      ...(input.template
+        ? { template: input.template }
+        : { template_id: input.templateId ?? null }),
+      ...(input.edits && !input.template ? { edits: input.edits } : {}),
       project_name: input.projectName ?? null,
       variables: input.variables ?? {},
       dry_run: Boolean(input.dryRun),
       is_public: Boolean(input.isPublic),
       description: input.description ?? null,
       ...(input.storage ? { storage: input.storage } : {}),
+      ...(input.runs && input.runs.length > 1 ? { runs: input.runs } : {}),
     }),
     signal: options.signal,
   });
@@ -5641,6 +5742,9 @@ export interface RunFilePreview {
   /** Rows, columns or text were cut. */
   truncated: boolean;
   reason: string | null;
+  /** column → inferred dtype, when the request asked for it (`inferTypes`)
+   *  and the file is a table. Older backends omit it. */
+  dtypes?: Record<string, string> | null;
 }
 
 /** Read the start of one file of a run folder: its first rows as a table, or
@@ -5652,6 +5756,8 @@ export async function previewRunFile(
     location: string;
     storage?: RunStorageIn | null;
     maxRows?: number;
+    /** Ask for each column's dtype (`RunFilePreview.dtypes`). */
+    inferTypes?: boolean;
   },
   options: { signal?: AbortSignal } = {},
 ): Promise<RunFilePreview> {
@@ -5662,6 +5768,7 @@ export async function previewRunFile(
       location: input.location,
       max_rows: input.maxRows ?? 20,
       ...(input.storage ? { storage: input.storage } : {}),
+      ...(input.inferTypes ? { infer_types: true } : {}),
     }),
     signal: options.signal,
   });
@@ -5704,6 +5811,9 @@ export interface FolderInspection {
   /** The run's own records, read with the detection. Null when no engine
    *  recognised the folder; older backends omit it. */
   run_info?: RunInfoSummary | null;
+  /** A local folder that is not a run itself: its sub-folders that are, by
+   *  name. Empty otherwise; older backends omit it. */
+  child_runs?: string[];
 }
 
 /** Inspect one folder: its direct contents, its run markers and, unless
@@ -5795,6 +5905,594 @@ export async function testRunStorage(
   return (await res.json()) as ProjectStorageTestResult;
 }
 
+// ── Project Builder ─────────────────────────────────────────────────────────
+//
+// `/projects/builder/*`: read a folder one level at a time, suggest a data
+// collection for a file, list the files a collection would ingest, and turn
+// the assembled draft into a template. Served by the API (authenticated, like
+// the run-folder calls) and by `depictio project-builder <dir>`, a thin local
+// server without auth where `/context`, `/plan` and `/write` stand in for
+// project creation. The draft shapes live in `projectBuilder.ts`.
+
+/** GET /projects/builder/capabilities: what this instance can build. A kind
+ *  it does not have is listed unavailable with a reason; the page shows it
+ *  disabled and never sends it. */
+export interface BuilderCapabilities {
+  mode: 'server' | 'standalone';
+  dc_types: { type: BuilderDcType; available: boolean; reason: string | null }[];
+  /** e.g. csv, tsv, parquet, feather, xls, xlsx (+ spatialdata). */
+  table_formats: string[];
+  /** The reader (polars) options allowed for csv/tsv tables. */
+  reader_options: string[];
+  /** The collection types a link may target. */
+  link_target_types: string[];
+  /** `events_enabled` null: unknown (standalone). */
+  realtime: { events_enabled: boolean | null; reason: string | null };
+  genomic_tracks: { assemblies: string[]; track_formats: string[] } | null;
+  bioimage: { formats: string[] } | null;
+}
+
+/** One entry of a builder folder listing. */
+export interface BuilderTreeEntry {
+  name: string;
+  /** Relative to the data root (POSIX). */
+  path: string;
+  is_dir: boolean;
+  /** Bytes; null for a folder or when unknown. */
+  size: number | null;
+  /** A `*.zarr` folder: one pickable leaf, never opened. */
+  store?: 'zarr' | null;
+}
+
+/** Response of POST /projects/builder/tree: one folder level. */
+export interface BuilderTreeListing {
+  /** The folder listed, relative to the data root (`''` at its top). */
+  path: string;
+  entries: BuilderTreeEntry[];
+  /** More entries exist than the server lists. */
+  truncated: boolean;
+  /** The data root is an `s3://` location. */
+  is_remote: boolean;
+  /** How to name the data root to a reader. */
+  root_label: string;
+}
+
+/** A catalog output the suggested file is recognised as. */
+export interface BuilderCatalogMatch {
+  tool_id: string;
+  output_id: string;
+  renders: string[];
+}
+
+/** Response of POST /projects/builder/suggest: a data collection for a file,
+ *  generalised over the other example files given. */
+export interface BuilderSuggestion {
+  /** The file sits under a run of a sequencing-runs workflow: the pattern is read inside each run. */
+  in_run?: boolean;
+  path: string;
+  tag: string;
+  type: BuilderDcType;
+  mode: BuilderScanMode;
+  glob: string | null;
+  regex: string | null;
+  format: string | null;
+  separator: string | null;
+  catalog: BuilderCatalogMatch[];
+  /** The file is a MultiQC parquet. */
+  multiqc: boolean;
+  /** What a `*.zarr` store holds; null for anything else. */
+  store?: BuilderStoreSummary | null;
+  /** A track file: its format and the index found next to it. */
+  tracks?: { format: string; index: string | null } | null;
+  /** A scan whose examples differ in ONE folder: the regex with that folder
+   *  as a `{sample}` placeholder, and the wildcard that reads it. */
+  path_wildcard?: { pattern: string; wildcards: BuilderWildcard[] } | null;
+  /** What the reader should know about the file, e.g. why its suggested
+   *  type is not available on this server. */
+  warnings?: string[];
+}
+
+/** What `/suggest` reads of a store: its format, NGFF version and elements. */
+export interface BuilderStoreSummary {
+  format: 'ome-zarr' | 'spatialdata';
+  ngff_version: '0.4' | '0.5' | null;
+  /** `images/<name>`. */
+  images: string[];
+  /** `tables/<name>`. */
+  tables: string[];
+}
+
+/** `/match`'s checks of a genomic tracks manifest. */
+export interface BuilderTracksCheck {
+  rows: number;
+  columns: string[];
+  missing_uri_column: boolean;
+  unknown_format: string[];
+  duplicate_uris: string[];
+  missing_files: string[];
+  missing_indexes: string[];
+  /** Only part of the manifest was checked. */
+  truncated?: boolean;
+  /** Absolute or file:// uris, which ingestion does not confine to the data
+   *  root. */
+  absolute_uris?: string[];
+}
+
+/** How one matched file's columns differ from the first file's. */
+export interface BuilderSchemaMismatch {
+  file: string;
+  missing: string[];
+  extra: string[];
+  /** column → [first file's dtype, this file's dtype]. */
+  changed: Record<string, [string, string]>;
+}
+
+/** Response of POST /projects/builder/match: exactly the files ingestion
+ *  would scan for the collection (same walk, same regex rule, same bounds). */
+export interface BuilderMatchResult {
+  /** The regex the scan uses; null in single mode. */
+  regex: string | null;
+  /** Relative to the data root, the first 500. */
+  files: string[];
+  count: number;
+  /** The run folders, for a sequencing-runs workflow. */
+  runs: string[];
+  truncated: boolean;
+  /** column → dtype of the first file; null when it could not be read. */
+  schema: Record<string, string> | null;
+  /** Every file read shares the schema; null when not checked. */
+  consistent: boolean | null;
+  mismatches: BuilderSchemaMismatch[];
+  /** Columns read as several numeric types, which ingestion widens (no conflict). */
+  widened?: Record<string, { types: string[]; as: string }>;
+  /** Indexed files whose index was not found next to them. */
+  missing_indexes: string[];
+  warnings: string[];
+  /** The matches are stores (`*.zarr` folders), not files. */
+  stores?: boolean;
+  /** Genomic tracks only: the manifest's checks. */
+  tracks?: BuilderTracksCheck | null;
+}
+
+/** Response of POST /projects/builder/template. */
+export interface BuilderTemplateResult {
+  /** The inline template: what `from_run`, `/plan` and `/write` take. When
+   *  the draft edits a shipped template, its own collections and links only
+   *  (null when it adds none). */
+  template: Record<string, unknown> | null;
+  /** The template; for an edit, the shipped template with every edit applied. */
+  yaml: string;
+  /** `custom/<slug>`, or the shipped template's id. */
+  template_id: string;
+  warnings: string[];
+  /** Collections the edits take out, with why (a dependant of one removed). */
+  removed?: Record<string, string>;
+}
+
+/** How a collection of a shipped template is read: one file, a folder scan,
+ *  a recipe built from files and other collections, or derived otherwise
+ *  (a join). */
+export type BuilderBaseCollectionKind = 'file' | 'scan' | 'recipe' | 'derived' | 'other';
+
+/** One input of a recipe, as the template points it. */
+export interface BuilderBaseSource {
+  ref: string;
+  path: string | null;
+  glob_pattern: string | null;
+  /** The input is another collection, by tag. */
+  dc_ref: string | null;
+  optional: boolean;
+  /** A file or glob input: it may be repointed. */
+  editable: boolean;
+}
+
+/** One collection of a shipped template, read-only. */
+export interface BuilderBaseCollection {
+  tag: string;
+  /** `table`, `multiqc`...; lowercase. */
+  type: string;
+  description: string | null;
+  optional: boolean;
+  kind: BuilderBaseCollectionKind;
+  /** The file (relative to the data root) or the scan's regex, as written. */
+  location: string | null;
+  /** The `{name}` wildcards a scan's regex must keep. */
+  wildcards: string[];
+  /** The template variables its location reads. */
+  variables: string[];
+  /** What may be edited of its location: a path, a regex, or nothing (a
+   *  location that is a variable is set through the variable). */
+  edit: 'path' | 'regex' | null;
+  recipe: string | null;
+  sources: BuilderBaseSource[];
+  /** The collections it is built from and cannot do without. */
+  needs: string[];
+}
+
+export interface BuilderBaseWorkflow {
+  name: string;
+  engine: string | null;
+  engine_version: string | null;
+  version: string | null;
+  repository_url: string | null;
+  catalog: { name: string; url: string } | null;
+  structure: BuilderWorkflowStructure;
+  runs_regex: string | null;
+  collections: BuilderBaseCollection[];
+}
+
+export interface BuilderBaseVariable {
+  name: string;
+  description: string | null;
+  required: boolean;
+  default: string | null;
+}
+
+/** Response of POST /projects/builder/from_template: a shipped template as
+ *  the builder shows it, to be edited as a list of changes. */
+export interface BuilderTemplateDescription {
+  template_id: string;
+  title: string | null;
+  version: string | null;
+  description: string | null;
+  workflows: BuilderBaseWorkflow[];
+  links: { source_tag: string; target_tag: string }[];
+  /** The dashboard files it imports, relative to the template. */
+  dashboards: string[];
+  variables: BuilderBaseVariable[];
+  /** How many conditional rules it carries. */
+  conditionals: number;
+}
+
+/** A new location for a file or a folder scan of a shipped template. */
+export interface BuilderScanEdit {
+  path?: string;
+  regex?: string;
+}
+
+/** A recipe input pointed at another file or files. */
+export interface BuilderSourceEdit {
+  path?: string;
+  glob_pattern?: string;
+}
+
+/** What the reader changed of a template's workflow. A new `name` is the
+ *  workflow's name in the project (its dashboards follow); an empty
+ *  `catalog_name` / `catalog_url` / `repository_url` drops it. */
+export interface BuilderWorkflowEdit {
+  name?: string;
+  version?: string;
+  catalog_name?: string;
+  catalog_url?: string;
+  repository_url?: string;
+  engine_version?: string;
+}
+
+/** The shipped template a draft edits, and the edits (`POST
+ *  /builder/template`'s `base`). */
+export interface BuilderTemplateBaseEdits {
+  template_id: string;
+  remove: string[];
+  scans: Record<string, BuilderScanEdit>;
+  sources: Record<string, Record<string, BuilderSourceEdit>>;
+  /** By workflow name. */
+  workflows: Record<string, BuilderWorkflowEdit>;
+}
+
+/** `edits` of POST /projects/from_run: the base's edits and the draft's own
+ *  collections (the `template` of `builderTemplate`). */
+export interface FromRunTemplateEdits extends Omit<BuilderTemplateBaseEdits, 'template_id'> {
+  additions: Record<string, unknown> | null;
+}
+
+/** Response of POST /projects/builder/metadata: what a workflow's repository
+ *  says about it. `sources` names where each piece came from; `blocked` means
+ *  the server may not fetch that URL. */
+export interface BuilderRepoMetadata {
+  name?: string | null;
+  engine?: string | null;
+  version?: string | null;
+  catalog?: { name: string; url: string } | null;
+  description?: string | null;
+  author?: string | null;
+  license?: string | null;
+  homepage?: string | null;
+  repository_url: string;
+  /** Data URIs. */
+  logo_light?: string | null;
+  logo_dark?: string | null;
+  sources: string[];
+  blocked?: boolean;
+}
+
+/** Response of GET /projects/builder/context (standalone server only). */
+export interface BuilderContext {
+  mode: 'standalone';
+  /** The folder the builder was launched on, absolute. */
+  data_root: string;
+  /** Where `/write` puts the template bundle. */
+  out_dir: string;
+  writable: boolean;
+  /** `depictio ingest <dir> --template <bundle>`. */
+  ingest_command?: string | null;
+  /** `depictio watch <dir> --template <bundle>`: keeps a realtime project fed. */
+  watch_command?: string | null;
+}
+
+/** Response of POST /projects/builder/write (standalone server only). */
+export interface BuilderWriteResult {
+  path: string;
+  yaml: string;
+  /** e.g. `depictio ingest <dir> --template <bundle>`. */
+  ingest_command: string;
+  /** e.g. `depictio watch <dir> --template <bundle>`. */
+  watch_command?: string | null;
+}
+
+/** Response of POST /projects/builder/tracks_manifest: a manifest for track
+ *  files (`track_id, sample, format, uri, index_uri, name`), uris relative to
+ *  the data root. */
+export interface BuilderTracksManifest {
+  columns: string[];
+  rows: Record<string, string>[];
+  tsv: string;
+  warnings: string[];
+}
+
+/** Request settings shared by the builder calls. */
+export interface BuilderRequestOptions {
+  signal?: AbortSignal;
+}
+
+async function postBuilder<T>(
+  route: string,
+  body: Record<string, unknown>,
+  fallback: string,
+  options: BuilderRequestOptions,
+): Promise<T> {
+  const res = await authFetch(`${API_BASE}/projects/builder/${route}`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+    signal: options.signal,
+  });
+  if (!res.ok) await throwHttpDetailError(res, fallback);
+  return (await res.json()) as T;
+}
+
+/** The root as the builder routes take it: connection details only for an
+ *  `s3://` location, never an empty object. */
+function builderRoot(root: BuilderRootSpec): BuilderRootSpec {
+  return root.storage ? { data_root: root.data_root, storage: root.storage } : { data_root: root.data_root };
+}
+
+/** What this instance can build (both modes). */
+export async function builderCapabilities(
+  options: BuilderRequestOptions = {},
+): Promise<BuilderCapabilities> {
+  const res = await authFetch(`${API_BASE}/projects/builder/capabilities`, { signal: options.signal });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to read what the builder supports');
+  return (await res.json()) as BuilderCapabilities;
+}
+
+/** List one folder level of the data root (`path` relative to it, `''` for
+ *  its top). A private bucket refused for want of its details throws an
+ *  `ApiDetailError` with an S3 code (`s3_refused`, `s3_access_denied`). */
+export function builderTree(
+  root: BuilderRootSpec,
+  path: string,
+  options: BuilderRequestOptions = {},
+): Promise<BuilderTreeListing> {
+  return postBuilder('tree', { root: builderRoot(root), path }, 'Failed to list the folder', options);
+}
+
+/** Suggest a data collection for `path`, generalised over `examples` (other
+ *  files of the same collection, relative to the data root). */
+export function builderSuggest(
+  root: BuilderRootSpec,
+  path: string,
+  examples: string[] = [],
+  options: BuilderRequestOptions = {},
+  workflow: { structure: BuilderWorkflowStructure; runs_regex?: string | null } = { structure: 'flat' },
+): Promise<BuilderSuggestion> {
+  return postBuilder(
+    'suggest',
+    {
+      root: builderRoot(root),
+      path,
+      ...(examples.length ? { examples } : {}),
+      ...(workflow.structure === 'sequencing-runs'
+        ? { structure: workflow.structure, ...(workflow.runs_regex?.trim() ? { runs_regex: workflow.runs_regex } : {}) }
+        : {}),
+    },
+    'Failed to read the file',
+    options,
+  );
+}
+
+/** Response of POST /projects/builder/runs_regex. */
+export interface BuilderRunsRegex {
+  /** The regex read off the first-level folders; null when they share no shape. */
+  regex: string | null;
+  /** The folders it matches, sorted. */
+  runs: string[];
+  /** First-level folders the root holds. */
+  folders: number;
+  /** Folders it leaves out (a few, by name). */
+  skipped: string[];
+  truncated: boolean;
+}
+
+/** Guess the runs regex of a `sequencing-runs` workflow from the data root's
+ *  first-level folders. */
+export function builderRunsRegex(
+  root: BuilderRootSpec,
+  options: BuilderRequestOptions = {},
+): Promise<BuilderRunsRegex> {
+  return postBuilder('runs_regex', { root: builderRoot(root) }, 'Failed to read the folders', options);
+}
+
+/** Response of POST /projects/builder/runs_overview. */
+export interface BuilderRunsOverview {
+  regex: string;
+  /** Folders of the data root the regex takes as runs. */
+  runs_total: number;
+  /** The first of them, by name. */
+  runs: string[];
+  /** How many runs were read for the layout (capped). */
+  runs_read: number;
+  /** First-level folders the regex leaves out. */
+  skipped: string[];
+  /** Files seen in the runs read. */
+  files: number;
+  /** The shapes of the files the runs hold (`*` for a name that belongs to
+   *  one run), with how many runs hold each. */
+  layout: { shape: string; runs: number }[];
+  /** Runs that hold the whole layout. */
+  consistent: number;
+  deviating: { run: string; files: number; missing: string[]; extra: string[] }[];
+  deviating_total: number;
+  /** Something was left unread (many runs, many files, a capped listing). */
+  truncated: boolean;
+}
+
+/** What a runs regex takes in: the runs, the layout their files share and the
+ *  runs that depart from it. */
+export function builderRunsOverview(
+  root: BuilderRootSpec,
+  runsRegex: string,
+  options: BuilderRequestOptions = {},
+): Promise<BuilderRunsOverview> {
+  return postBuilder(
+    'runs_overview',
+    { root: builderRoot(root), runs_regex: runsRegex },
+    'Failed to read the runs',
+    options,
+  );
+}
+
+/** The files `collection` would ingest under `workflow`'s structure. */
+export function builderMatch(
+  root: BuilderRootSpec,
+  workflow: { structure: BuilderWorkflowStructure; runs_regex?: string | null },
+  collection: BuilderDcDraft,
+  options: BuilderRequestOptions = {},
+): Promise<BuilderMatchResult> {
+  return postBuilder(
+    'match',
+    {
+      root: builderRoot(root),
+      workflow:
+        workflow.structure === 'sequencing-runs'
+          ? { structure: workflow.structure, runs_regex: workflow.runs_regex ?? null }
+          : { structure: workflow.structure },
+      collection,
+    },
+    'Failed to match the files',
+    options,
+  );
+}
+
+/** Turn the draft into a template. `remote` is true for an `s3://` root. A
+ *  draft breaking a rule is a 422 with code `inline_template_invalid`. */
+export function builderTemplate(
+  draft: BuilderProjectDraft,
+  remote: boolean,
+  options: BuilderRequestOptions = {},
+  base: BuilderTemplateBaseEdits | null = null,
+): Promise<BuilderTemplateResult> {
+  return postBuilder(
+    'template',
+    { draft, remote, ...(base ? { base } : {}) },
+    'Failed to build the template',
+    options,
+  );
+}
+
+/** A shipped template (`nf-core/viralrecon/3.0.0`, `latest` aliases
+ *  included) as the builder shows it: its collections read-only, to remove,
+ *  repoint or add to. */
+export function builderFromTemplate(
+  templateId: string,
+  options: BuilderRequestOptions = {},
+): Promise<BuilderTemplateDescription> {
+  return postBuilder(
+    'from_template',
+    { template_id: templateId },
+    'Failed to read the template',
+    options,
+  );
+}
+
+/** What a workflow repository says about the workflow. */
+export function builderMetadata(
+  repoUrl: string,
+  options: BuilderRequestOptions = {},
+): Promise<BuilderRepoMetadata> {
+  return postBuilder('metadata', { repo_url: repoUrl }, 'Failed to fetch the metadata', options);
+}
+
+/** The folder a standalone builder was launched on (`depictio
+ *  project-builder <dir>`). */
+export async function builderContext(options: BuilderRequestOptions = {}): Promise<BuilderContext> {
+  const res = await authFetch(`${API_BASE}/projects/builder/context`, { signal: options.signal });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to read the builder context');
+  return (await res.json()) as BuilderContext;
+}
+
+/** Standalone only: what ingesting the folder with `template` would find, as
+ *  a dry-run `FromRunReport` (no project id). */
+export function builderPlan(
+  template: Record<string, unknown>,
+  options: BuilderRequestOptions = {},
+): Promise<FromRunReport> {
+  return postBuilder('plan', { template }, 'Failed to plan the ingestion', options);
+}
+
+/** A manifest for `files` (track files, relative to the data root); the
+ *  sample is read with `sampleRegex` when given. Refusals: 422 `tracks_none`,
+ *  `tracks_too_many`, `sample_regex_invalid`; 404 `file_missing`. */
+export function builderTracksManifest(
+  root: BuilderRootSpec,
+  files: string[],
+  sampleRegex: string | null = null,
+  options: BuilderRequestOptions = {},
+): Promise<BuilderTracksManifest> {
+  return postBuilder(
+    'tracks_manifest',
+    { root: builderRoot(root), files, ...(sampleRegex ? { sample_regex: sampleRegex } : {}) },
+    'Failed to build the manifest',
+    options,
+  );
+}
+
+/** Standalone only: write a manifest as `<bundle dir>/<name>.tsv`; answers
+ *  its path relative to the data root. 409 `manifest_exists` unless
+ *  `overwrite`; 409 `manifest_outside_root` when the bundle folder is not
+ *  inside the data root (download it instead). */
+export function builderWriteManifest(
+  name: string,
+  tsv: string,
+  overwrite = false,
+  options: BuilderRequestOptions = {},
+): Promise<{ path: string }> {
+  return postBuilder(
+    'write_manifest',
+    { name, tsv, ...(overwrite ? { overwrite: true } : {}) },
+    'Failed to write the manifest',
+    options,
+  );
+}
+
+/** Standalone only: write the template bundle next to the data. An existing
+ *  bundle is a 409 with code `bundle_exists` unless `overwrite`. */
+export function builderWrite(
+  template: Record<string, unknown>,
+  overwrite: boolean,
+  options: BuilderRequestOptions = {},
+): Promise<BuilderWriteResult> {
+  return postBuilder('write', { template, overwrite }, 'Failed to write the template', options);
+}
+
 /** Per-DC status of a manifest refresh. A synchronous refresh reports
  *  `ingested` / `failed` (or `planned` under `dry_run`); a polled async run
  *  additionally passes through `dispatched` (queued for a worker) and
@@ -5843,6 +6541,10 @@ export interface RefreshManifestInput {
   dataCollectionTag?: string | null;
   dryRun?: boolean;
   asyncRun?: boolean;
+  /** Read every file again and rebuild every collection. By default only new
+   *  or changed files are read, and a collection none of whose files moved is
+   *  left as it is. */
+  full?: boolean;
 }
 
 /** Re-read and re-ingest the data collections whose source this server can
@@ -5859,6 +6561,7 @@ export async function refreshManifest(
       data_collection_tag: input.dataCollectionTag ?? null,
       dry_run: Boolean(input.dryRun),
       async_run: Boolean(input.asyncRun),
+      full: Boolean(input.full),
     }),
   });
   if (!res.ok) await throwHttpDetailError(res, 'Failed to refresh data');
@@ -7412,6 +8115,9 @@ export interface AttachRunReport {
     matched: number;
     status: 'ok' | 'kept' | 'empty' | 'missing' | 'pruned' | string;
   }>;
+  /** Per MultiQC collection, the samples of the new run a report already in
+   *  the project names; a real call refuses them (`runs_share_samples`). */
+  shared_samples?: SharedRunSamples[];
   /** Ingestion to poll with `getManifestRefreshRun`; null on a dry run. */
   run_id: string | null;
   dry_run: boolean;

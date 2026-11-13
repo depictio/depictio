@@ -118,6 +118,13 @@ class IngestionStep(BaseModel):
             "scan that succeeded, else its failure message"
         ),
     )
+    inputs_signature: Optional[str] = Field(
+        default=None,
+        description=(
+            "A refreshed data collection's files and configuration as it was ingested: "
+            "the next refresh leaves the collection alone when they are the same"
+        ),
+    )
 
     # Live progress. All optional, because a step reported only at completion
     # (the historical behaviour) has none of it.

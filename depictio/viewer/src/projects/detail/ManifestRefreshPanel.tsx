@@ -15,7 +15,12 @@ import { Icon } from '@iconify/react';
 import { refreshManifest, Z_LAYERS } from 'depictio-react-core';
 import type { ManifestRefreshReport } from 'depictio-react-core';
 
-import { DisabledReason, Field, GatedButton } from '../../components/settings/SettingsSections';
+import {
+  DisabledReason,
+  Field,
+  GatedButton,
+  SwitchField,
+} from '../../components/settings/SettingsSections';
 import IngestionResultTable from '../IngestionResultTable';
 import {
   formatElapsed,
@@ -70,6 +75,9 @@ export interface ManifestRefreshController {
   refreshableTags: string[];
   selectedTag: string | null;
   setSelectedTag: (tag: string | null) => void;
+  /** Read everything again instead of only what moved. */
+  full: boolean;
+  setFull: (full: boolean) => void;
   report: ManifestRefreshReport | null;
   error: string | null;
   state: RefreshState;
@@ -91,6 +99,7 @@ export function useManifestRefresh(
   const refreshableTags = useMemo(() => refreshableTagsOf(dataCollections), [dataCollections]);
 
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
+  const [full, setFull] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [report, setReport] = useState<ManifestRefreshReport | null>(null);
   /** Run being polled; null while nothing is in flight. */
@@ -137,6 +146,7 @@ export function useManifestRefresh(
         projectId,
         dataCollectionTag: selectedTag,
         asyncRun: true,
+        full,
       });
       setReport(first);
       // No run_id means the backend answered synchronously, and a run whose
@@ -171,6 +181,8 @@ export function useManifestRefresh(
     refreshableTags,
     selectedTag,
     setSelectedTag,
+    full,
+    setFull,
     report,
     error,
     state,
@@ -280,7 +292,8 @@ const ManifestRefreshPanel: React.FC<ManifestRefreshPanelProps> = ({
   publicModeReason,
   onReloadProject,
 }) => {
-  const { refreshableTags, selectedTag, setSelectedTag, report, error, state } = refresh;
+  const { refreshableTags, selectedTag, setSelectedTag, full, setFull, report, error, state } =
+    refresh;
   const inFlight = state === 'starting' || state === 'running';
   const empty = refreshableTags.length === 0;
 
@@ -297,8 +310,9 @@ const ManifestRefreshPanel: React.FC<ManifestRefreshPanelProps> = ({
       <Text size="sm" c="dimmed">
         Re-read each refreshable collection from its own source and rebuild its table: a
         manifest is fetched again and the entries it lists now are used, a URL or a prefix is
-        read again. A collection whose source no longer yields its type is reported failed and
-        left untouched.
+        read again. In a prefix, only new or changed files are read, and a collection none of
+        whose files moved is left as it is. A collection whose source no longer yields its type
+        is reported failed and left untouched.
       </Text>
 
       {empty ? (
@@ -346,6 +360,17 @@ const ManifestRefreshPanel: React.FC<ManifestRefreshPanelProps> = ({
             </Text>
           )}
         </Field>
+      )}
+
+      {!empty && (
+        <SwitchField
+          label="Read everything again"
+          description="Read every file again and rebuild every collection, changed or not: after an upgrade, or to repair a collection."
+          checked={full}
+          onChange={setFull}
+          disabled={inFlight || Boolean(gateReason)}
+          testId="manifest-refresh-full"
+        />
       )}
 
       <Stack gap={6}>

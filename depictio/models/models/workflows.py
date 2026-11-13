@@ -120,6 +120,9 @@ class WorkflowRunScan(BaseModel):
     files_id: dict[str, list[PyObjectId]]
     scan_time: str = Field(default_factory=lambda: datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
     dc_stats: Optional[Dict[str, Dict[str, int]]] = None  # Per-data-collection stats
+    #: Per file id this scan found changed: ``{"size": [before, after],
+    #: "modified": [before, after]}``, what the run's history shows for it.
+    file_changes: Optional[Dict[str, Dict[str, list]]] = None
 
 
 class WorkflowRun(MongoModel):

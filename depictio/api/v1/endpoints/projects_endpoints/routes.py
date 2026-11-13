@@ -75,7 +75,12 @@ from depictio.api.v1.endpoints.projects_endpoints.manifest_ingest import (
     _ingest_manifest_into_project,
     _refresh_manifest_in_project,
 )
-from depictio.api.v1.endpoints.projects_endpoints.project_runs import ProjectRuns, project_runs
+from depictio.api.v1.endpoints.projects_endpoints.project_runs import (
+    ProjectRuns,
+    RunFiles,
+    project_runs,
+    run_files,
+)
 from depictio.api.v1.endpoints.projects_endpoints.provenance import (
     stamp_new_project,
     strip_server_owned_fields,
@@ -447,6 +452,19 @@ async def get_project_runs(project_id: PyObjectId, current_user=Depends(get_user
         raise HTTPException(status_code=401, detail="User not found.")
     project = _async_get_project_from_id(project_id, current_user, projects_collection)
     return project_runs(project)
+
+
+@projects_endpoint_router.get("/project-runs/{project_id}/files", response_model=RunFiles)
+async def get_project_run_files(
+    project_id: PyObjectId, run_tag: str, current_user=Depends(get_user_or_anonymous)
+):
+    """The files of one run of the project, each with the scans that brought,
+    changed or failed it (``added_in``, ``changed_in``, ``failed_in``, indexes
+    into ``scans``). Read-only; read when the run is unfolded in the runs view."""
+    if not current_user:
+        raise HTTPException(status_code=401, detail="User not found.")
+    project = _async_get_project_from_id(project_id, current_user, projects_collection)
+    return run_files(project, run_tag)
 
 
 @projects_endpoint_router.get("/ingestion-health/{project_id}", response_model=IngestionSummary)
@@ -837,9 +855,11 @@ async def refresh_manifest(
     Covers every data collection the server can read again: any remote
     source (manifest, url, s3_prefix), and, under ``depictio local`` only, a
     local one below a root of the local-data policy (for a loopback caller
-    who is an admin, as every local read). Overwrite-with-report semantics: File records sync to
-    the source's current files (``sync_files`` beats the identity-hash skip)
-    and each Delta table is rebuilt from the resulting file set. A manifest
+    who is an admin, as every local read). Only what moved is read again: new
+    and changed files, and the collections they belong to; a collection none of
+    whose files moved since its last successful refresh is left as it is.
+    ``full=true`` reads everything again. A manifest or URL collection is always
+    read again (its hash names the source, not its bytes). A manifest
     DC whose manifest no longer lists its type is reported failed and left
     untouched. ``dry_run=true`` reports what would refresh (per-DC entry
     counts for manifest DCs) without touching any data.
@@ -856,6 +876,7 @@ async def refresh_manifest(
         dry_run=payload.dry_run,
         async_run=payload.async_run,
         request=request,
+        full=payload.full,
     )
 
 
@@ -1073,6 +1094,9 @@ async def create_project_from_run(
         storage=payload.storage,
         is_public=payload.is_public,
         description=payload.description,
+        template=payload.template,
+        edits=payload.edits,
+        runs=payload.runs,
     )
 
 

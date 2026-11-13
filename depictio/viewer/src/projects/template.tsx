@@ -18,10 +18,20 @@ export function parseTemplate(project: ProjectListEntry): ParsedTemplate | null 
   return parseTemplateOrigin(project.template_origin);
 }
 
+/** The source of the templates the Project Builder makes (``custom/<name>``):
+ *  defined for one project, so no docs page exists for them. */
+export const BUILDER_TEMPLATE_SOURCE = 'custom';
+
+function isBuilderTemplate(parsed: ParsedTemplate): boolean {
+  return parsed.source.toLowerCase() === BUILDER_TEMPLATE_SOURCE;
+}
+
 /** Build the depictio-docs page URL for a parsed template. Pattern:
  *  ``https://depictio.github.io/depictio-docs/stable/pipeline-templates/{source}/{repo}/``
- *  Falls back to the templates index when there's no repo segment. */
-export function templateDocsUrl(parsed: ParsedTemplate): string {
+ *  Falls back to the templates index when there's no repo segment; null for a
+ *  Project Builder template, which has no page. */
+export function templateDocsUrl(parsed: ParsedTemplate): string | null {
+  if (isBuilderTemplate(parsed)) return null;
   const base = 'https://depictio.github.io/depictio-docs/stable/pipeline-templates';
   if (parsed.source && parsed.repo) {
     return `${base}/${parsed.source}/${parsed.repo}/`;
@@ -74,6 +84,7 @@ const TEMPLATE_SOURCES: Record<string, SourceMeta> = {
   iwc: { color: 'grape', Logo: IwcLogo, initials: 'IW' },
   bioconda: { color: 'teal', initials: 'BC' },
   depictio: { color: 'grape', initials: 'DE' },
+  [BUILDER_TEMPLATE_SOURCE]: { color: 'teal', initials: 'PB' },
 };
 
 function sourceMeta(source: string): SourceMeta {
@@ -129,6 +140,7 @@ const ENGINES: Record<string, { label: string; logo?: string }> = {
   snakemake: { label: 'Snakemake', logo: 'snakemake.svg' },
   galaxy: { label: 'Galaxy', logo: 'galaxy.png' },
   cwl: { label: 'CWL' },
+  python: { label: 'Python' },
 };
 
 /** An engine as written for a reader: `Nextflow` for `nextflow`. */
@@ -156,19 +168,25 @@ export const TemplateChip: React.FC<{
   /** Quiet rendering for the Glass listings: the brand mark, then the
    *  pipeline and its version as muted monospace text, no version badge. */
   plain?: boolean;
-}> = ({ parsed, verbose, plain }) => {
+  /** The project's workflows, named in place of a Project Builder project's
+   *  internal id (`custom/<slug>`), which is no pipeline. */
+  workflows?: { name: string; engine?: string | null }[];
+}> = ({ parsed, verbose, plain, workflows }) => {
+  if (isBuilderTemplate(parsed)) {
+    return <CustomWorkflowsChip workflows={workflows ?? []} plain={plain} />;
+  }
   const meta = sourceMeta(parsed.source);
   const docsUrl = templateDocsUrl(parsed);
   const tooltipLabel = (
     <Stack gap={2}>
       <Text size="xs" fw={600}>
-        Template
+        Pipeline
       </Text>
       <Text size="xs" ff="monospace">
         {parsed.full}
       </Text>
       <Text size="xs" c="dimmed">
-        Open Depictio docs
+        Read with the Depictio template for it: open its docs
       </Text>
     </Stack>
   );
@@ -221,16 +239,20 @@ export const TemplateChip: React.FC<{
       closeDelay={120}
       events={{ hover: true, focus: true, touch: false }}
     >
-      <Anchor
-        href={docsUrl}
-        target="_blank"
-        rel="noreferrer"
-        underline="never"
-        onClick={(e) => e.stopPropagation()}
-        style={{ display: 'inline-flex', alignItems: 'center' }}
-      >
-        {chip}
-      </Anchor>
+      {docsUrl ? (
+        <Anchor
+          href={docsUrl}
+          target="_blank"
+          rel="noreferrer"
+          underline="never"
+          onClick={(e) => e.stopPropagation()}
+          style={{ display: 'inline-flex', alignItems: 'center' }}
+        >
+          {chip}
+        </Anchor>
+      ) : (
+        <Box style={{ display: 'inline-flex', alignItems: 'center' }}>{chip}</Box>
+      )}
     </Tooltip>
   );
 };
@@ -259,6 +281,52 @@ export const TemplateRevisionBadge: React.FC<{ origin: unknown }> = ({ origin })
       >
         template v{revision.version}
       </Badge>
+    </Tooltip>
+  );
+};
+
+/** A Project Builder project: its own workflows, not a pipeline's template. */
+const CustomWorkflowsChip: React.FC<{
+  workflows: { name: string; engine?: string | null }[];
+  plain?: boolean;
+}> = ({ workflows, plain }) => {
+  const named = workflows.filter((w) => w.name.trim());
+  const engine = named.find((w) => w.engine)?.engine ?? null;
+  const label = named.length ? named.map((w) => w.name).join(', ') : 'Custom workflows';
+  return (
+    <Tooltip
+      label={
+        <Stack gap={2}>
+          <Text size="xs" fw={600}>
+            Custom workflows
+          </Text>
+          {named.map((w) => (
+            <Text key={w.name} size="xs">
+              {w.name}
+              {w.engine ? ` (${engineLabel(w.engine)})` : ''}
+            </Text>
+          ))}
+          <Text size="xs" c="dimmed">
+            Defined in the Project Builder
+          </Text>
+        </Stack>
+      }
+      withArrow
+      position="top"
+      withinPortal
+      openDelay={150}
+    >
+      <Group gap={6} wrap="nowrap" className={plain ? 'dc-template' : undefined} style={{ minWidth: 0 }}>
+        {engine && ENGINES[engine.toLowerCase()]?.logo ? (
+          <WorkflowEngineLogo engine={engine} size={plain ? 16 : 18} />
+        ) : (
+          <TemplateSourceLogo source={BUILDER_TEMPLATE_SOURCE} size={plain ? 18 : 22} />
+        )}
+        <Text size="xs" c="dimmed" truncate className={plain ? 'dc-template-text' : undefined}>
+          {label}
+          {engine ? ` · ${engineLabel(engine)}` : ''}
+        </Text>
+      </Group>
     </Tooltip>
   );
 };

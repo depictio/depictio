@@ -13,7 +13,7 @@ import type { DetectedTemplate, FromRunReport, RunStorageIn } from 'depictio-rea
 
 import { collectionCounts } from './collectionCounts';
 import { plural } from './plural';
-import { RunPreview, RunSummaryCard } from './RunPreview';
+import { RunPreview, RunSummaryCard, readsSeveralRuns, runsParent } from './RunPreview';
 import { SourceSection } from '../create/SourceSection';
 import { pipelineLabel } from './pipelineLabel';
 import { readySummary } from './collectionCounts';
@@ -59,7 +59,7 @@ function runSummary(report: FromRunReport): string {
   return [
     pipelineLabel(report.template_id) ?? report.template_id,
     readySummary(collectionCounts(report.data_collections)),
-    report.data_root,
+    readsSeveralRuns(report) ? `${plural(report.runs?.length ?? 0, 'run')} in ${runsParent(report)}` : report.data_root,
   ].join(' · ');
 }
 

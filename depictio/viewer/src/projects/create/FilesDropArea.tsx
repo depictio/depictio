@@ -7,7 +7,7 @@
  * project page (`detail/addData/AddDataModal.tsx`), so the two are one gesture.
  */
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActionIcon, Alert, Box, Checkbox, Divider, Flex, Group, Input, Loader, Paper, ScrollArea, SegmentedControl, Stack, Text, ThemeIcon } from '@mantine/core';
+import { ActionIcon, Alert, Box, Checkbox, Divider, Flex, Group, Loader, Paper, ScrollArea, SegmentedControl, Stack, Text, ThemeIcon } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import {
@@ -369,7 +369,36 @@ export const FilesDropArea: React.FC<{ drop: DataDrop; submitting: boolean }> = 
 };
 
 /** Two boxes of one height, so the two ways in read as equals. */
-const SOURCE_BOX_HEIGHT = 200;
+const SOURCE_BOX_HEIGHT = 236;
+
+/** A column's head, centred over its box: what this way in is, and one line
+ *  on what it does. Both lines keep one height, so the two boxes start level. */
+const SourceHeader: React.FC<{ icon: string; label: string; description: string; testId: string }> = ({
+  icon,
+  label,
+  description,
+  testId,
+}) => {
+  const accent = useListingAccents('projects');
+  return (
+    <Stack gap={2} align="center" mb="xs" data-testid={testId}>
+      <Group gap={6} wrap="nowrap">
+        <Icon icon={icon} width={18} color={`var(--mantine-color-${accent.secondary}-6)`} />
+        <Text fw={600} size="sm">
+          {label}
+        </Text>
+      </Group>
+      <Text size="xs" c="dimmed" ta="center" mih={34}>
+        {description}
+      </Text>
+    </Stack>
+  );
+};
+
+const DASHED_BOX = {
+  border: '2px dashed var(--mantine-color-default-border)',
+  borderRadius: 8,
+} as const;
 
 /** The one screen for giving Depictio data: files beside a folder, either or both. */
 export const DataSourceFields: React.FC<{
@@ -381,6 +410,9 @@ export const DataSourceFields: React.FC<{
   folderHint: string;
   /** Whatever reading the folder (or the URL) shows under it. */
   children?: React.ReactNode;
+  /** What is decided about the data as a whole (how a folder is read):
+   *  across both boxes, under them. */
+  below?: React.ReactNode;
   /** With `onLocationModeChange`, the right-hand box also takes one file at
    *  a URL instead of a folder: `urlField` is its input. */
   locationMode?: LocationMode;
@@ -392,98 +424,94 @@ export const DataSourceFields: React.FC<{
   folderField,
   folderHint,
   children,
+  below,
   locationMode = 'folder',
   onLocationModeChange,
   urlField,
 }) => {
   const url = Boolean(onLocationModeChange) && locationMode === 'url';
   return (
-  <Flex direction={{ base: 'column', sm: 'row' }} gap="md" data-testid="data-source-fields">
-    <Input.Wrapper
-      label="Upload"
-      description="Files or whole folders from your computer, copied into Depictio"
-      style={{ flex: 1, minWidth: 0 }}
-    >
-      <Box mt={4}>
-        <FilesDropArea drop={drop} submitting={submitting} />
-      </Box>
-    </Input.Wrapper>
-    <Stack gap={6} align="center" visibleFrom="sm" data-testid="data-source-or">
-      <Divider orientation="vertical" style={{ flex: 1, alignSelf: 'center' }} />
-      <Text size="xs" c="dimmed" style={{ whiteSpace: 'nowrap' }}>
-        and / or
-      </Text>
-      <Divider orientation="vertical" style={{ flex: 1, alignSelf: 'center' }} />
-    </Stack>
-    <Divider hiddenFrom="sm" label="and / or" labelPosition="center" />
-    <Input.Wrapper
-      label="Read in place"
-      description="A folder, a bucket or a file URL, read where it is: nothing is uploaded"
-      style={{ flex: 1, minWidth: 0 }}
-    >
-      <Stack gap="md" mt={4}>
-        {onLocationModeChange && (
-          <SegmentedControl
-            fullWidth
-            size="xs"
-            value={locationMode}
-            onChange={(v) => onLocationModeChange(v as LocationMode)}
-            disabled={submitting}
-            data={[
-              { value: 'folder', label: 'Folder or bucket' },
-              { value: 'url', label: 'One file URL' },
-            ]}
-            data-testid="location-mode"
+    <Stack gap="md">
+      <Flex direction={{ base: 'column', sm: 'row' }} gap="md" data-testid="data-source-fields">
+        <Box style={{ flex: 1, minWidth: 0 }}>
+          <SourceHeader
+            icon="mdi:upload-outline"
+            label="Upload"
+            description="Files or whole folders from your computer, copied into Depictio"
+            testId="data-source-upload-head"
           />
-        )}
-        {url ? (
-          <Stack
-            gap="xs"
-            justify="center"
-            p="md"
-            mih={SOURCE_BOX_HEIGHT}
-            style={{
-              border: '2px dashed var(--mantine-color-default-border)',
-              borderRadius: 8,
-            }}
-            data-testid="url-box"
-          >
-            <Stack gap={4} align="center">
-              <SourceBoxIcon icon="mdi:link-variant" />
-              <Text fw={500}>Read one table from its URL</Text>
-              <Text size="xs" c="dimmed" ta="center">
-                An https:// or s3:// file (CSV, TSV, Parquet, Feather, gzipped or not), fetched
-                by the server: nothing goes through your browser.
-              </Text>
-            </Stack>
-            {urlField}
-          </Stack>
-        ) : (
-        <Stack
-          gap="xs"
-          justify="center"
-          p="md"
-          mih={SOURCE_BOX_HEIGHT}
-          style={{
-            border: '2px dashed var(--mantine-color-default-border)',
-            borderRadius: 8,
-          }}
-          data-testid="folder-box"
-        >
-          <Stack gap={4} align="center">
-            <SourceBoxIcon icon="mdi:folder-search-outline" />
-            <Text fw={500}>Point to a folder or bucket to read in place</Text>
-            <Text size="xs" c="dimmed" ta="center">
-              {folderHint}
-            </Text>
-          </Stack>
-          {folderField}
+          <FilesDropArea drop={drop} submitting={submitting} />
+        </Box>
+        <Stack gap={6} align="center" visibleFrom="sm" data-testid="data-source-or">
+          <Divider orientation="vertical" style={{ flex: 1, alignSelf: 'center' }} />
+          <Text size="xs" c="dimmed" style={{ whiteSpace: 'nowrap' }}>
+            and / or
+          </Text>
+          <Divider orientation="vertical" style={{ flex: 1, alignSelf: 'center' }} />
         </Stack>
-        )}
-        {children}
-      </Stack>
-    </Input.Wrapper>
-  </Flex>
+        <Divider hiddenFrom="sm" label="and / or" labelPosition="center" />
+        <Box style={{ flex: 1, minWidth: 0 }}>
+          <SourceHeader
+            icon="mdi:eye-outline"
+            label="Read in place"
+            description="A folder, a bucket or a file URL, read where it is: nothing is uploaded"
+            testId="data-source-place-head"
+          />
+          <Stack gap="md">
+            {/* The mode switch sits inside the box, so this box starts level with
+                the drop zone beside it. */}
+            <Stack
+              gap="xs"
+              p="md"
+              mih={SOURCE_BOX_HEIGHT}
+              style={DASHED_BOX}
+              data-testid={url ? 'url-box' : 'folder-box'}
+            >
+              {onLocationModeChange && (
+                <SegmentedControl
+                  fullWidth
+                  size="xs"
+                  value={locationMode}
+                  onChange={(v) => onLocationModeChange(v as LocationMode)}
+                  disabled={submitting}
+                  data={[
+                    { value: 'folder', label: 'Folder or bucket' },
+                    { value: 'url', label: 'One file URL' },
+                  ]}
+                  data-testid="location-mode"
+                />
+              )}
+              {url ? (
+                <Stack gap="xs" justify="center" style={{ flex: 1 }}>
+                  <Stack gap={4} align="center">
+                    <SourceBoxIcon icon="mdi:link-variant" />
+                    <Text fw={500}>Read one table from its URL</Text>
+                    <Text size="xs" c="dimmed" ta="center">
+                      An https:// or s3:// file (CSV, TSV, Parquet, Feather, gzipped or not), fetched
+                      by the server: nothing goes through your browser.
+                    </Text>
+                  </Stack>
+                  {urlField}
+                </Stack>
+              ) : (
+                <Stack gap="xs" justify="center" style={{ flex: 1 }}>
+                  <Stack gap={4} align="center">
+                    <SourceBoxIcon icon="mdi:folder-search-outline" />
+                    <Text fw={500}>Point to a folder or bucket to read in place</Text>
+                    <Text size="xs" c="dimmed" ta="center">
+                      {folderHint}
+                    </Text>
+                  </Stack>
+                  {folderField}
+                </Stack>
+              )}
+            </Stack>
+            {children}
+          </Stack>
+        </Box>
+      </Flex>
+      {below && <Box data-testid="data-source-below">{below}</Box>}
+    </Stack>
   );
 };
 

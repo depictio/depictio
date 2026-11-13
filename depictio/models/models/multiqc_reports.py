@@ -76,6 +76,39 @@ class MultiQCMetadata(BaseModel):
         extra = "forbid"
 
 
+class MultiQCReportChange(BaseModel):
+    """What a report's last overwrite changed: samples and modules in or out.
+
+    Samples are compared by their canonical ids when both sides have them,
+    since MultiQC names one sample many ways (read 1, read 2, adapters).
+    """
+
+    samples_added: List[str] = Field(default_factory=list)
+    samples_removed: List[str] = Field(default_factory=list)
+    modules_added: List[str] = Field(default_factory=list)
+    modules_removed: List[str] = Field(default_factory=list)
+
+    class Config:
+        extra = "forbid"
+
+    @classmethod
+    def between(cls, before: Dict[str, Any], after: Dict[str, Any]) -> "MultiQCReportChange":
+        """The change from one report metadata (as a dict) to the next."""
+        key = (
+            "canonical_samples"
+            if before.get("canonical_samples") and after.get("canonical_samples")
+            else "samples"
+        )
+        old, new = set(before.get(key) or []), set(after.get(key) or [])
+        old_mod, new_mod = set(before.get("modules") or []), set(after.get("modules") or [])
+        return cls(
+            samples_added=sorted(new - old),
+            samples_removed=sorted(old - new),
+            modules_added=sorted(new_mod - old_mod),
+            modules_removed=sorted(old_mod - new_mod),
+        )
+
+
 class MultiQCReport(MongoModel):
     """
     MongoDB document representing a MultiQC report.
@@ -109,6 +142,16 @@ class MultiQCReport(MongoModel):
 
     # Report metadata
     report_name: Optional[str] = Field(None, description="Name/identifier for this MultiQC report")
+
+    # What the report was read from and what its last overwrite changed
+    source_file_hash: Optional[str] = Field(
+        None,
+        description="The registered file's hash when this report was read: a later "
+        "ingestion whose file has the same hash keeps the report without parsing it again",
+    )
+    last_change: Optional[MultiQCReportChange] = Field(
+        None, description="Samples and modules the last overwrite of this report added or removed"
+    )
 
     class Config:
         extra = "forbid"

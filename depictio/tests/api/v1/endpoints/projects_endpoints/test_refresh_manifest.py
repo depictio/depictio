@@ -54,12 +54,14 @@ def _call(
     user=None,
     data_collection_tag: str | None = None,
     dry_run: bool = False,
+    full: bool = False,
 ):
     return manifest_ingest._refresh_manifest_in_project(
         project_id=project_id,
         current_user=user or _user(),
         data_collection_tag=data_collection_tag,
         dry_run=dry_run,
+        full=full,
     )
 
 
@@ -363,20 +365,21 @@ def test_dry_run_reports_planned_counts(mock_db, served_manifest):
     assert by_tag["annotations"].entries == 1
 
 
-def test_refresh_reingests_with_sync_files(mock_db, served_manifest):
+@pytest.mark.parametrize("full", [False, True])
+def test_refresh_reingests_reading_everything_again_only_when_full(mock_db, served_manifest, full):
     user = _user()
     doc = _project_doc(user.id, tags=["counts", "annotations"])
     mock_db["projects"].insert_one(doc)
 
     with patch.object(manifest_ingest, "_run_dc_ingest", return_value=(True, None)) as ingest:
-        report = _call(project_id=str(doc["_id"]), user=user)
+        report = _call(project_id=str(doc["_id"]), user=user, full=full)
 
     assert report.success is True
     assert all(r.status == "ingested" for r in report.refreshed)
     assert ingest.call_count == 2
-    # sync_files must be forced: the scan's sha256(url|id) identity hash would
-    # otherwise skip File updates for unchanged URLs with changed content.
-    assert all(c.kwargs.get("sync_files") is True for c in ingest.call_args_list)
+    # A manifest's files are read again either way (see _run_dc_ingest): its
+    # sha256(url|id) identity hash cannot tell a changed content.
+    assert all(c.kwargs.get("sync_files") is full for c in ingest.call_args_list)
     # Refresh never rewrites the project document.
     stored = mock_db["projects"].find_one({"_id": doc["_id"]})
     assert stored["workflows"] == doc["workflows"]
@@ -459,7 +462,7 @@ def test_async_run_dispatches_workers(mock_db, served_manifest):
         c.kwargs.get("args", c.args[0] if c.args else None)[0]
         for c in task.apply_async.call_args_list
     ]
-    assert all(p["run_id"] == report.run_id and p["sync_files"] is True for p in payloads)
+    assert all(p["run_id"] == report.run_id and p["sync_files"] is False for p in payloads)
 
     run_doc = mock_db["ingestion_runs"].find_one({"run_id": report.run_id})
     assert run_doc["status"] == "running"

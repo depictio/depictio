@@ -860,6 +860,98 @@ class TestLocalResolutionIsUnchanged:
         assert sorted(_scans_by_tag(remote)) == sorted(_scans_by_tag(local))
 
 
+class TestResolveTemplateConfig:
+    """A template already in memory resolves exactly as the same file does."""
+
+    def test_same_result_as_resolving_the_file(self, tmp_path):
+        from depictio.cli.cli.utils.templates import (
+            _load_yaml,
+            locate_template,
+            resolve_template,
+            resolve_template_config,
+        )
+
+        base = write_tree(tmp_path / "results", MEGATEST_TREE)
+        path = locate_template("nf-core/ampliseq/2.16.0")
+        from_file = resolve_template("nf-core/ampliseq/2.16.0", str(base))
+        in_memory = resolve_template_config(
+            _load_yaml(str(path)), template_dir=path.parent, data_root=str(base)
+        )
+        config_a, meta_a, origin_a, dashboards_a, variables_a = from_file
+        config_b, meta_b, origin_b, dashboards_b, variables_b = in_memory
+        for config in (config_a, config_b):
+            config["template_origin"].pop("applied_at")
+        assert config_a == config_b
+        assert meta_a == meta_b
+        assert dashboards_a == dashboards_b
+        assert variables_a == variables_b
+        assert origin_a.expected_data_collections == origin_b.expected_data_collections
+
+    def _inline(self, **section):
+        return {
+            "template": {
+                "template_id": "custom/lab-qc",
+                "description": "Lab QC",
+                "version": "1",
+                **section,
+            },
+            "name": "Lab QC",
+            "workflows": [
+                {
+                    "name": "main",
+                    "engine": {"name": "python"},
+                    "data_location": {"structure": "flat", "locations": ["{DATA_ROOT}"]},
+                    "data_collections": [
+                        {
+                            "data_collection_tag": "sheet",
+                            "config": {
+                                "type": "Table",
+                                "metatype": "Metadata",
+                                "scan": {
+                                    "mode": "single",
+                                    "scan_parameters": {
+                                        "filename": "{DATA_ROOT}/input/samplesheet.csv"
+                                    },
+                                },
+                                "dc_specific_properties": {"format": "csv"},
+                            },
+                        }
+                    ],
+                }
+            ],
+        }
+
+    def test_an_inline_template_resolves_against_a_root(self, tmp_path):
+        from depictio.cli.cli.utils.templates import resolve_template_config
+
+        base = write_tree(tmp_path / "results", MEGATEST_TREE)
+        config, meta, origin, dashboards, _ = resolve_template_config(
+            self._inline(), template_dir=None, data_root=str(base)
+        )
+        assert meta.template_id == "custom/lab-qc"
+        assert origin.template_id == "custom/lab-qc"
+        assert dashboards == []
+        assert config["workflows"][0]["data_location"]["locations"] == [str(base.absolute())]
+        scan = config["workflows"][0]["data_collections"][0]["config"]["scan"]
+        assert scan["scan_parameters"]["filename"] == str(base / "input" / "samplesheet.csv")
+
+    def test_an_inline_template_cannot_declare_dashboards(self, tmp_path):
+        from depictio.cli.cli.utils.templates import resolve_template_config
+
+        base = write_tree(tmp_path / "results", MEGATEST_TREE)
+        with pytest.raises(ValueError, match="cannot declare dashboards"):
+            resolve_template_config(
+                self._inline(dashboards=["dashboards/base.yaml"]),
+                template_dir=None,
+                data_root=str(base),
+            )
+
+    def test_variable_users_reads_an_inline_template(self):
+        from depictio.cli.cli.utils.templates import variable_users
+
+        assert variable_users(self._inline(), ["DATA_ROOT"]) == {"DATA_ROOT": ["sheet"]}
+
+
 class TestPreviewDataRoot:
     """What DATA_DIR would yield, before anything is created."""
 

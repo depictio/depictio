@@ -17,7 +17,7 @@ import type { AttachRunReport, ManifestRefreshReport } from 'depictio-react-core
 import { plural } from '../../fromRun/plural';
 import { formatElapsed, manifestRunOutcome, summarizeManifestRun, useElapsedMs, useManifestRunPoll } from '../../manifestRun';
 import type { ManifestRunOutcome } from '../../manifestRun';
-import { FoundCard, RunChips, SourceValue } from '../FoundCard';
+import { FoundCard, SourceValue } from '../FoundCard';
 import type { FoundRow } from '../FoundCard';
 import { refusalText, SERVER_CREDENTIALS_MISSING } from './useLocationPicker';
 import type { LocationPicker } from './useLocationPicker';
@@ -29,6 +29,7 @@ const REFUSAL_CODES = new Set([
   'already_attached',
   'cannot_attach',
   'run_name_clash',
+  'runs_share_samples',
   SERVER_CREDENTIALS_MISSING,
 ]);
 
@@ -49,6 +50,38 @@ interface Refusal {
   message: string;
   /** A refusal the server explains (yellow), not a failure to read (red). */
   known: boolean;
+}
+
+/** The samples of the new run that a report already in the project names:
+ *  one MultiQC collection would merge them, so the run is not added. */
+function samplesRows(report: AttachRunReport): FoundRow[] {
+  const shared = report.shared_samples ?? [];
+  if (shared.length === 0) return [];
+  return [
+    {
+      key: 'samples',
+      label: 'Samples',
+      value: (
+        <Stack gap={2} data-testid="attach-run-shared-samples">
+          {shared.map((entry) => {
+            const more = entry.count - entry.samples.length;
+            return (
+              <Text key={entry.data_collection_tag} size="sm">
+                {plural(entry.count, 'sample')} of {entry.data_collection_tag} already in{' '}
+                {entry.runs.slice(0, -1).join(', ')}:{' '}
+                <Text span ff="monospace" size="sm">
+                  {entry.samples.join(', ')}
+                  {more > 0 ? ` +${more} more` : ''}
+                </Text>
+              </Text>
+            );
+          })}
+        </Stack>
+      ),
+      status: 'warn',
+      hint: 'One MultiQC collection would merge them. Rename the samples in this run, or read it as its own project.',
+    },
+  ];
 }
 
 function foundRows(report: AttachRunReport, location: string, pipelineLabel: string | null): FoundRow[] {
@@ -76,20 +109,23 @@ function foundRows(report: AttachRunReport, location: string, pipelineLabel: str
     {
       key: 'runs',
       label: 'Runs',
-      value:
-        report.new_runs.length > 0 ? (
-          <Stack gap={4}>
-            <Text size="sm">{plural(report.new_runs.length, 'new run')}</Text>
-            <RunChips names={report.new_runs} />
-          </Stack>
-        ) : (
-          <Text size="sm">No new run</Text>
-        ),
+      // The names on one line, as the New project dialog shows runs; the counts under them.
+      value: (
+        <Text size="sm" style={{ wordBreak: 'break-word' }} data-testid="attach-run-new-runs">
+          {report.new_runs.length > 0 ? report.new_runs.join(', ') : 'No new run'}
+        </Text>
+      ),
       hint:
-        report.existing_runs.length > 0
-          ? `${report.existing_runs.length} already in the project`
-          : undefined,
+        [
+          report.new_runs.length > 0 ? plural(report.new_runs.length, 'new run') : null,
+          report.existing_runs.length > 0
+            ? `${plural(report.existing_runs.length, 'run')} already in the project (${report.existing_runs.join(', ')})`
+            : null,
+        ]
+          .filter(Boolean)
+          .join(' · ') || undefined,
     },
+    ...samplesRows(report),
     {
       key: 'source',
       label: 'Source',
@@ -135,11 +171,16 @@ export function useAttachRun({ enabled, opened, projectId, pipelineLabel, picker
   const following = runId !== null;
   const busy = submitting || following;
 
+  // A failed submit's message stays until the folder changes or is checked
+  // again: the end of the submit re-runs the check below, which must not wipe it.
+  useEffect(() => {
+    setSubmitError(null);
+  }, [target, epoch]);
+
   // Check the folder whenever it settles. Not while a run is being followed:
   // the dialog then shows that run, whatever the field holds.
   useEffect(() => {
     if (busy || added) return undefined;
-    setSubmitError(null);
     if (!enabled || !opened || !projectId || !target || picker.invalid) {
       setReport(null);
       setRefusal(null);
@@ -217,6 +258,8 @@ export function useAttachRun({ enabled, opened, projectId, pipelineLabel, picker
   else if (refusal) reason = refusal.known ? refusal.message : 'The run folder could not be checked.';
   else if (report && report.new_runs.length === 0)
     reason = 'This folder holds no run that is not in the project yet.';
+  else if (report && (report.shared_samples?.length ?? 0) > 0)
+    reason = 'Its reports name samples already in the project (see Samples above).';
 
   const submit = async () => {
     if (!projectId) return;

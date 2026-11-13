@@ -50,6 +50,7 @@ import {
   s3BucketOf,
   storageForLocation,
   useBrandAccents,
+  writeBuilderHandoff,
 } from 'depictio-react-core';
 import type {
   CreateProjectInput,
@@ -74,6 +75,8 @@ import type { LocationMode, TableUploadOutcome } from '../create/FilesDropArea';
 import { useUrlTable } from '../detail/addData/useUrlTable';
 import FolderBrowserModal from './browser/FolderBrowserModal';
 import { DetectionCard } from './DetectionCard';
+import { useRunPlan } from './runPlan';
+import { templateScope } from './collectionCounts';
 import type { DetectionState } from './DetectionCard';
 import {
   closeSection,
@@ -90,6 +93,10 @@ import type { RunCreatedContext } from './RunCreatedModal';
 import { RunCreateStep, RunPreviewStep } from './RunFolderSteps';
 import { TemplatePicker } from './TemplatePicker';
 import { TemplateSettingsSection } from './TemplateSettings';
+import { ReadLevelChoice } from './ReadLevelChoice';
+import type { ReadLevel } from './ReadLevelChoice';
+import { useTemplateDraft } from './useTemplateDraft';
+import { PROJECT_BUILDER_ROUTE } from '../builder/mode';
 
 /** Read failures that say nothing about the folder itself, only that the
  *  storage did not answer: they do not stop Next. */
@@ -228,6 +235,14 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
   const [createdProjectId, setCreatedProjectId] = useState<string | null>(null);
   const [createdTableId, setCreatedTableId] = useState<string | null>(null);
   const [tableError, setTableError] = useState<string | null>(null);
+  /** How the reader chose to read the folder (see `ReadLevelChoice`); null:
+   *  the best fit. A level that no longer fits falls back to it. */
+  const [levelPick, setLevelPick] = useState<ReadLevel | null>(null);
+  /** The template taken whole, its collections without files here included
+   *  (filled at a later refresh). Off: only the ones found are kept. */
+  const [keepAll, setKeepAll] = useState(false);
+  /** The request the Preview step showed: what Create sends. */
+  const previewedRequest = useRef<FromRunRequest | null>(null);
 
   useEffect(() => {
     if (!opened) return;
@@ -504,14 +519,64 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
     else urlTable.setUrl('');
   };
   const filesOnly = (localFiles.length > 0 || urlFile) && !trimmedRoot;
-  const plainFolder = inspection !== null && !detected?.pipeline && !choice.templateId;
-  const tablesMode = filesOnly || plainFolder;
   const folderFileNames = useMemo(() => inspection?.files.names ?? [], [inspection]);
   const tableNames = useMemo(
     () => folderFileNames.filter((n) => classifyTableName(n).table),
     [folderFileNames],
   );
+  // How the folder is read (`ReadLevelChoice`): flat tables, custom workflows
+  // in the Project Builder, or a pipeline template. The most structured level
+  // that fits is the default; custom always fits.
+  // A folder holding several runs of one pipeline: one project reads them
+  // all, created from the first and the others added as runs.
+  const childRuns = useMemo(
+    () => (inspection && !inspection.looks_like_run ? (inspection.child_runs ?? []) : []),
+    [inspection],
+  );
+  // The template that would be used: the one chosen, else the one detection
+  // picked.
+  const usedTemplateId = choice.templateId ?? detectedId;
+  // The template's dry run (shared with the checks below, cached): which of
+  // its collections this folder has files for.
+  const fitPlan = useRunPlan(
+    inspection && usedTemplateId && !filesOnly && trimmedRoot ? inspection.location : null,
+    usedTemplateId,
+    rootStorage,
+    childRuns.length > 1 ? childRuns : null,
+  );
+  // The template as the builder opens it: what its collections are built
+  // from, so "Only the found" keeps what a found one needs.
+  const templateDraft = useTemplateDraft(usedTemplateId);
+  const fitScope = useMemo(
+    () =>
+      fitPlan?.status === 'ready' && templateDraft.status === 'ready'
+        ? templateScope(templateDraft.result, fitPlan.report.data_collections)
+        : null,
+    [fitPlan, templateDraft],
+  );
+  // The plan and the template are both read (or failed): the scope is final.
+  const scopeSettled =
+    !usedTemplateId ||
+    (fitPlan !== null &&
+      fitPlan.status !== 'loading' &&
+      templateDraft.status !== 'loading' &&
+      templateDraft.status !== 'idle');
+  // The choice between the whole template and what is found: offered only
+  // when some of its collections have files here and some would come out.
+  const scopeOffered = fitScope !== null && fitScope.found > 0 && fitScope.remove.length > 0;
+  const levelFits = (level: ReadLevel) =>
+    level === 'custom' || (level === 'flat' ? tableNames.length > 0 : Boolean(usedTemplateId));
+  let recommendedLevel: ReadLevel = 'custom';
+  if (usedTemplateId) recommendedLevel = 'template';
+  else if (tableNames.length > 0) recommendedLevel = 'flat';
+  const level: ReadLevel = levelPick && levelFits(levelPick) ? levelPick : recommendedLevel;
+  const keepFound = scopeOffered && !keepAll && level === 'template';
+  const levelShown = inspection !== null && !filesOnly && Boolean(trimmedRoot);
+  const plainFolder = inspection !== null && level === 'flat';
+  const tablesMode = filesOnly || plainFolder;
+  const customLevel = levelShown && level === 'custom';
   const inspectedLocation = inspection?.location ?? null;
+  const severalRuns = level === 'template' && childRuns.length > 1;
   // Every table starts ticked, again for each folder read.
   useEffect(() => {
     setTickedTables(new Set(tableNames));
@@ -546,9 +611,6 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
   // gets a form input of its own.
   const extraVariables = (selectedTemplate?.variables ?? []).filter((v) => v.name !== 'DATA_ROOT');
 
-  // The card shows the template that would be used: the one chosen, else the
-  // one detection picked.
-  const usedTemplateId = choice.templateId ?? detectedId;
   const match = runTemplateMatch({
     runPipeline: detected?.pipeline,
     runVersion: detected?.version,
@@ -561,6 +623,8 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
     setDataRoot(value);
     // A template detection picked belongs to the folder it was detected in.
     setChoice((prev) => (prev.from === 'detected' ? NO_CHOICE : prev));
+    setLevelPick(null);
+    setKeepAll(false);
   };
 
   /** Back to what detection found, or to plain tables when it found nothing. */
@@ -579,6 +643,7 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
       runVersion: detected?.version ?? null,
     });
     setChoice({ templateId, from: 'user' });
+    setLevelPick('template');
   };
 
   const trimmedName = projectName.trim();
@@ -591,21 +656,38 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
     effectiveName.length > 0 &&
     existingNames.some((n) => n.toLowerCase() === effectiveName.toLowerCase());
 
-  const buildRequest = (dryRun: boolean): FromRunRequest => {
+  /** The template variables the reader set (blank ones keep their default). */
+  const variableValues = (): Record<string, string> => {
     const values: Record<string, string> = {};
     for (const v of extraVariables) {
       const value = (variables[v.name] ?? '').trim();
       if (value) values[v.name] = value;
     }
+    return values;
+  };
+
+  const buildRequest = (dryRun: boolean): FromRunRequest => {
+    const values = variableValues();
+    // "Only the found": the template with the others taken out, as the
+    // Project Builder would send it (edits need the template named).
+    const scopeEdits =
+      keepFound && fitScope && usedTemplateId
+        ? {
+            templateId: usedTemplateId,
+            edits: { remove: fitScope.remove, scans: {}, sources: {}, workflows: {}, additions: null },
+          }
+        : null;
     return {
       dataRoot: trimmedRoot,
       templateId: choice.templateId,
+      ...(scopeEdits ?? {}),
       projectName: effectiveName || null,
       isPublic,
       description: projectInfo.description || null,
       ...(Object.keys(values).length > 0 ? { variables: values } : {}),
       dryRun,
       ...(rootStorage ? { storage: rootStorage } : {}),
+      ...(severalRuns ? { runs: childRuns } : {}),
     };
   };
 
@@ -620,10 +702,15 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
     setNotDetected(null);
     setPreviewNeedsBucket(false);
     setPreviewLoading(true);
-    createProjectFromRun(buildRequest(true))
+    const request = buildRequest(true);
+    previewedRequest.current = null;
+    createProjectFromRun(request)
       .then((report) => {
         if (cancelled) return;
         setPreview(report);
+        // Create sends this, not a request rebuilt later from state that may
+        // have moved on (a plan or template answering after the preview).
+        previewedRequest.current = { ...request, templateId: request.templateId ?? report.template_id ?? null };
         // Show the recognised template as the choice, still editable: going
         // back lists its variables, and Create uses exactly what was previewed.
         if (detecting && report.template_id) {
@@ -656,10 +743,61 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
 
   const foundNothing = step > 0 && !!preview && runFoundNothing(preview.data_collections);
 
+  // The Project Builder takes the folder (and the private bucket's details,
+  // read once there and removed), and what the reader chose to do with it:
+  // define the collections by hand, or start from the template that fits.
+  const openBuilder = (intent: 'edit-template' | 'scratch') => {
+    if (!trimmedRoot || prefixInvalid) return;
+    rememberRunFolder(trimmedRoot);
+    const values = variableValues();
+    writeBuilderHandoff({
+      dataRoot: trimmedRoot,
+      storage: rootStorage,
+      intent,
+      templateId: intent === 'edit-template' ? usedTemplateId : null,
+      // The builder opens on what this tile says: the same removals Create
+      // would send, the same variables.
+      ...(intent === 'edit-template' && keepFound && fitScope ? { remove: fitScope.remove } : {}),
+      ...(intent === 'edit-template' && Object.keys(values).length > 0 ? { variables: values } : {}),
+      detected: detected?.pipeline
+        ? {
+            pipeline: detected.pipeline ?? null,
+            version: detected.version ?? null,
+            engine: detected.engine ?? null,
+            templateId: usedTemplateId,
+            templateTitle: titleOf(usedTemplateId),
+          }
+        : null,
+      project: trimmedName
+        ? { name: trimmedName, description: projectInfo.description || null, isPublic }
+        : null,
+    });
+    window.location.assign(PROJECT_BUILDER_ROUTE);
+  };
+  // Custom workflows are defined in the builder: Next goes there at once.
+  const leavesForBuilder = step === 0 && customLevel;
+  // Down from a template to custom workflows, with the template as the start.
+  let editTemplateReason: string | null = null;
+  if (templateDraft.status === 'loading' || templateDraft.status === 'idle') {
+    editTemplateReason = 'Reading the template.';
+  } else if (templateDraft.status === 'error') {
+    editTemplateReason = `The builder cannot open this template: ${templateDraft.error}`;
+  }
+  let templateLockedReason: string | null = null;
+  if (!usedTemplateId) {
+    templateLockedReason = detected?.pipeline
+      ? `No Depictio template for ${detected.pipeline}.`
+      : 'No pipeline recognised.';
+  }
+
   // Disabled with a visible reason rather than hidden (project convention).
   let disabledReason: string | null = null;
+  /** No file and no location yet: the reason is the boxes' own text. */
+  let nothingGiven = false;
   const tablesName = trimmedName || uniqueName(tablesBase, existingNames);
-  if (tablesMode && step === 1) {
+  if (leavesForBuilder) {
+    // The folder is read; the builder takes it from here.
+  } else if (tablesMode && step === 1) {
     if (existingNames.some((n) => n.toLowerCase() === tablesName.toLowerCase())) {
       disabledReason = 'A project with this name already exists.';
     } else if (tableCount === 0) {
@@ -671,7 +809,20 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
     // Files (or a file URL) are all it takes.
   } else if (step === 0 && !prefixInvalid && trimmedRoot && detectionView.status === 'loading') {
     disabledReason = 'Reading the folder.';
+  } else if (step === 0 && trimmedRoot && level === 'template' && !scopeSettled) {
+    // What "Only the found" removes is known only now: the preview must show
+    // what Create will send.
+    disabledReason = 'Checking which collections this folder has.';
+  } else if (
+    step === 0 &&
+    level === 'template' &&
+    fitPlan?.status === 'ready' &&
+    (fitPlan.report.shared_samples?.length ?? 0) > 0
+  ) {
+    // The rule an upload of several MultiQC reports applies too.
+    disabledReason = 'The runs name the same samples (see Samples above): read them as separate projects, or rename the samples in one.';
   } else if (trimmedRoot.length === 0) {
+    nothingGiven = true;
     disabledReason = locationMode === 'url'
       ? 'Drop files, or enter the URL of one table file.'
       : browseEnabled
@@ -694,8 +845,6 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
     storageProblem
   ) {
     disabledReason = `Private bucket: ${storageProblem}`;
-  } else if (plainFolder && step === 0 && tableNames.length === 0 && localFiles.length === 0) {
-    disabledReason = 'No pipeline recognised and no table files in this folder.';
   } else if (
     step === 1 &&
     (previewLoading || (!preview && !previewError && !notDetected))
@@ -823,8 +972,22 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
     }
   };
 
+  let submitLabel = 'Next';
+  if (tablesMode && step === 1) {
+    const noun = localFiles.every((f) => drop.guesses.get(f)?.kind === 'table') ? 'table' : 'file';
+    submitLabel = `Create project with ${plural(tableCount, noun)}`;
+  } else if (leavesForBuilder) {
+    submitLabel = 'Open the Project Builder';
+  } else if (step === 2) {
+    submitLabel = 'Create Project';
+  }
+
   const handleSubmit = async () => {
     if (disabledReason || stepSettling) return;
+    if (leavesForBuilder) {
+      openBuilder('scratch');
+      return;
+    }
     if (tablesMode && step === 1) {
       await createTables();
       return;
@@ -835,7 +998,19 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
       return;
     }
     // Hands over at once: the next screen waits for the project and says how it went.
-    onCreateFromRun(buildRequest(false), {
+    // What the preview showed, with the name and visibility as now set.
+    const previewed = previewedRequest.current;
+    const current = buildRequest(false);
+    const toCreate: FromRunRequest = previewed
+      ? {
+          ...previewed,
+          projectName: current.projectName,
+          isPublic: current.isPublic,
+          description: current.description,
+          dryRun: false,
+        }
+      : current;
+    onCreateFromRun(toCreate, {
       projectName: effectiveName,
       templateTitle: titleOf(choice.templateId ?? preview?.template_id),
       detection: detected,
@@ -912,7 +1087,10 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
       pipelineDetected={Boolean(pipeline && detectedPipeline && pipeline.key === detectedPipeline.key)}
       versionDetected={Boolean(choice.templateId && choice.templateId === detectedId)}
       onPipelineChange={handlePipelineChange}
-      onVersionChange={(templateId) => setChoice({ templateId, from: 'user' })}
+      onVersionChange={(templateId) => {
+        setChoice({ templateId, from: 'user' });
+        setLevelPick('template');
+      }}
       error={templatesError}
     />
   );
@@ -967,7 +1145,7 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
         </Anchor>
       )}
     </Group>
-  ) : (
+  ) : levelShown ? null : ( // Naming the pipeline is the "Pipeline template" tile's own button.
     <Group gap="xs" wrap="wrap">
       <Anchor
         component="button"
@@ -1044,38 +1222,77 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
                 ? 'A folder on this computer (a full path, or one starting with ~/) or an s3:// location.'
                 : 'The s3:// location of a folder of results or tables.'
             }
+            below={
+              <Stack gap="md">
+                {levelShown && (
+                  <ReadLevelChoice
+                    value={level}
+                    onChange={setLevelPick}
+                    recommended={recommendedLevel}
+                    flat={{
+                      tables: tableNames.length,
+                      lockedReason: tableNames.length > 0 ? null : 'No table file at the top of this folder.',
+                    }}
+                    template={{
+                      title: usedTemplateId ? pipelineLabel(usedTemplateId) ?? titleOf(usedTemplateId) : null,
+                      lockedReason: templateLockedReason,
+                      onEdit: () => openBuilder('edit-template'),
+                      editReason: editTemplateReason,
+                      onPick: () => setPipelinePickerOpen((open) => !open),
+                      pickOpen: pipelinePickerOpen,
+                      scope:
+                        scopeOffered && fitScope
+                          ? {
+                              found: fitScope.found,
+                              empty: fitScope.empty,
+                              absent: fitScope.absent,
+                              keepAll,
+                              onChange: (all: boolean) => {
+                                setKeepAll(all);
+                                // Choosing what the template keeps chooses the template.
+                                setLevelPick('template');
+                              },
+                            }
+                          : null,
+                    }}
+                  />
+                )}
+
+                {/* The pipeline list right under the tile that opened it. */}
+                {pipelineLine}
+                {pipelinePickerOpen && pickerBlock}
+
+                {plainTablesNote}
+
+                {trimmedRoot && (!inspection || level === 'template') && (
+                  <DetectionCard
+                    state={detectionView}
+                    templateId={usedTemplateId}
+                    templateTitle={pipelineLabel(usedTemplateId)}
+                    templateEngine={engineOf(usedTemplateId)}
+                    match={match}
+                    storage={rootStorage}
+                    onUseDetected={
+                      detectedId ? () => setChoice({ templateId: detectedId, from: 'detected' }) : undefined
+                    }
+                    errorHint={detectionErrorHint}
+                    errorMessage={detectionErrorMessage}
+                  />
+                )}
+
+                {extraVariables.length > 0 && (
+                  <TemplateSettingsSection
+                    variables={extraVariables}
+                    values={variables}
+                    onChange={(name, value) => setVariables((prev) => ({ ...prev, [name]: value }))}
+                  />
+                )}
+              </Stack>
+            }
           >
             {locationMode === 'url' && urlTable.preview}
             {renderPrivateBucket(trimmedRoot, false)}
 
-            {plainTablesNote}
-
-            {pipelineLine}
-            {pipelinePickerOpen && pickerBlock}
-
-            {!tablesMode && trimmedRoot && (
-            <DetectionCard
-              state={detectionView}
-              templateId={usedTemplateId}
-              templateTitle={pipelineLabel(usedTemplateId)}
-              templateEngine={engineOf(usedTemplateId)}
-              match={match}
-              storage={rootStorage}
-              onUseDetected={
-                detectedId ? () => setChoice({ templateId: detectedId, from: 'detected' }) : undefined
-              }
-              errorHint={detectionErrorHint}
-              errorMessage={detectionErrorMessage}
-            />
-            )}
-
-            {extraVariables.length > 0 && (
-              <TemplateSettingsSection
-                variables={extraVariables}
-                values={variables}
-                onChange={(name, value) => setVariables((prev) => ({ ...prev, [name]: value }))}
-              />
-            )}
           </DataSourceFields>
           </Stack>
         </Stepper.Step>
@@ -1142,6 +1359,23 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
             sectionsOpen={localFiles.length === 0}
           />
           {localFiles.length > 0 && <FilesFoundCard drop={drop} defaultOpen={false} />}
+          {(notDetected || foundNothing) && !previewLoading && (
+            <Group gap="sm" wrap="wrap" justify="space-between" data-testid="run-template-to-custom">
+              <Text size="xs" c="dimmed" style={{ flex: '1 1 260px' }}>
+                No template reads this folder: define your own workflows and their collections instead.
+              </Text>
+              <Button
+                size="xs"
+                variant="light"
+                color={accent.secondary}
+                leftSection={<Icon icon="mdi:folder-cog-outline" width={16} />}
+                onClick={() => openBuilder('scratch')}
+                data-testid="run-open-builder"
+              >
+                Custom workflows in the Project Builder
+              </Button>
+            </Group>
+          )}
           </Stack>
           )}
         </Stepper.Step>
@@ -1213,8 +1447,26 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
         ) : (
           <span />
         )}
-        <Stack gap={4} align="flex-end" style={{ minWidth: 0, flex: '1 1 auto' }} ml="md">
+        <Group
+          gap="sm"
+          wrap="nowrap"
+          justify="flex-end"
+          align="center"
+          style={{ minWidth: 0, flex: '1 1 auto' }}
+          ml="md"
+        >
+          {/* Why Next waits, beside it. Not before anything is given: the two
+              boxes above already say what to do (the tooltip still does). */}
+          {disabledReason && !nothingGiven && (
+            <Group gap={6} wrap="nowrap" align="center" c="dimmed" data-testid="run-submit-disabled-reason">
+              <Icon icon="mdi:information-outline" width={16} style={{ flexShrink: 0 }} />
+              <Text size="sm" c="dimmed" ta="right" style={{ wordBreak: 'break-word' }}>
+                {disabledReason}
+              </Text>
+            </Group>
+          )}
           <GatedButton
+            style={{ flexShrink: 0 }}
             aria-disabled={stepSettling || undefined}
             color={accent.secondary}
             onClick={handleSubmit}
@@ -1222,32 +1474,9 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
             reason={disabledReason}
             data-testid="create-from-run-submit"
           >
-            {tablesMode && step === 1
-              ? `Create project with ${plural(tableCount, localFiles.every((f) => drop.guesses.get(f)?.kind === 'table') ? 'table' : 'file')}`
-              : step === 2
-                ? 'Create Project'
-                : 'Next'}
+            {submitLabel}
           </GatedButton>
-          {disabledReason && (
-            <Group
-              gap={6}
-              wrap="nowrap"
-              align="flex-start"
-              justify="flex-end"
-              c="dimmed"
-              data-testid="run-submit-disabled-reason"
-            >
-              <Icon
-                icon="mdi:information-outline"
-                width={16}
-                style={{ flexShrink: 0, marginTop: 2 }}
-              />
-              <Text size="sm" c="dimmed" ta="right" style={{ wordBreak: 'break-word' }}>
-                {disabledReason}
-              </Text>
-            </Group>
-          )}
-        </Stack>
+        </Group>
       </Group>
       )}
 

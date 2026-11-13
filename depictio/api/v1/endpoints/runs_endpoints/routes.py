@@ -1,4 +1,5 @@
 import asyncio
+import json
 
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException
@@ -194,6 +195,11 @@ async def create_run(
         raise HTTPException(status_code=500, detail=bwe.details)
 
 
+def _scan_identity(scan: dict) -> str:
+    """A scan as a comparable key, its unset (None) fields left out."""
+    return json.dumps({k: v for k, v in scan.items() if v is not None}, sort_keys=True, default=str)
+
+
 def _apply_run_upserts(payload: UpsertWorkflowRunBatchRequest, workflow_oid: ObjectId) -> dict:
     """Build and apply the run upsert operations. Synchronous by design."""
     existing_runs = list(runs_collection.find({"workflow_id": workflow_oid}))
@@ -207,8 +213,12 @@ def _apply_run_upserts(payload: UpsertWorkflowRunBatchRequest, workflow_oid: Obj
         existing_doc = runs_collection.find_one({"_id": run_obj.id}, {"scan_results": 1})
         existing_scan_results = existing_doc.get("scan_results", []) if existing_doc else []
 
+        # Compared without their unset fields: a scan stored before a field was
+        # added lacks it, the same scan sent back carries it as None, and a
+        # plain comparison would append every past scan again.
+        stored = {_scan_identity(sr) for sr in existing_scan_results}
         new_scan_results = [
-            sr for sr in run_data.get("scan_results", []) if sr not in existing_scan_results
+            sr for sr in run_data.get("scan_results", []) if _scan_identity(sr) not in stored
         ]
 
         if run_obj.run_tag in existing_run_tags:

@@ -8,7 +8,7 @@
  * refreshed from its settings, and every manifest collection is expected to come back ingested.
  */
 
-import { APIRequestContext } from "@playwright/test";
+import { APIRequestContext, Route } from "@playwright/test";
 import {
   test,
   expect,
@@ -17,6 +17,7 @@ import {
   API_URL,
   API_PREFIX,
 } from "@fixtures/auth";
+import { IRIS_PROJECT_ID } from "@fixtures/projects";
 
 const MANIFEST_TEMPLATE_ID = "generic/manifest-tables/1";
 
@@ -110,5 +111,80 @@ test.describe("Refresh a project from its Data Manifest", () => {
       await expect(row).toHaveAttribute("data-status", "ingested");
       await expect(row).toContainText("Ingested");
     }
+  });
+});
+
+test.describe("Refresh: what is read again", () => {
+  test.beforeEach(async ({ page, request }) => {
+    const { is_public_mode } = await getAuthMode();
+    test.skip(is_public_mode, "Refresh is not exercised in public mode.");
+    await loginAsTestUserWithToken(page, request, "adminUser");
+  });
+
+  test.afterEach(async ({ page }) => {
+    await page.unrouteAll({ behavior: "ignoreErrors" });
+  });
+
+  test("reads only what moved, unless asked to read everything again", async ({ page }) => {
+    // The seeded Iris project, read as one with a bucket-prefix collection.
+    await page.route("**/projects/get/from_id**", async (route: Route) => {
+      const response = await route.fetch();
+      const body = (await response.json()) as { project: Record<string, unknown> };
+      body.project = {
+        ...body.project,
+        workflows: [
+          {
+            name: "lab",
+            engine: { name: "python", version: "3.12" },
+            data_collections: [
+              {
+                _id: "dc-counts",
+                data_collection_tag: "counts",
+                config: { type: "table", scan: { mode: "s3_prefix", scan_parameters: {} } },
+              },
+            ],
+          },
+        ],
+      };
+      await route.fulfill({ response, json: body });
+    });
+    const sent: Record<string, unknown>[] = [];
+    await page.route("**/projects/refresh_manifest", (route: Route) => {
+      sent.push(route.request().postDataJSON() as Record<string, unknown>);
+      return route.fulfill({
+        json: {
+          project_id: IRIS_PROJECT_ID,
+          refreshed: [
+            { data_collection_tag: "counts", data_collection_id: "dc-counts", entries: 1, status: "ingested" },
+          ],
+          run_id: null,
+          dry_run: false,
+          success: true,
+        },
+      });
+    });
+
+    await page.goto(`/projects/${IRIS_PROJECT_ID}?no-walkthrough=1`);
+    const settingsButton = page.getByTestId("project-settings-button");
+    await expect(settingsButton).toBeEnabled({ timeout: 15_000 });
+    await settingsButton.click();
+    await page.getByTestId("project-settings-nav-refresh").click();
+    const panel = page.getByTestId("manifest-refresh-panel");
+    const button = panel.getByTestId("manifest-refresh-button");
+    const full = panel.getByTestId("manifest-refresh-full");
+
+    // By default: only what moved.
+    await expect(full).not.toBeChecked();
+    await button.click();
+    await expect(panel.getByTestId("manifest-refresh-status")).toHaveAttribute("data-state", "success");
+    expect(sent.at(-1)?.full).toBe(false);
+
+    // Asked for: everything again.
+    // Mantine hides the switch's input: its label is what a reader clicks.
+    await panel.getByText("Read everything again").click();
+    await expect(full).toBeChecked();
+    await button.click();
+    await expect.poll(() => sent.length).toBe(2);
+    expect(sent.at(-1)?.full).toBe(true);
   });
 });

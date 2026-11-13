@@ -13,12 +13,11 @@ import pytest
 
 from depictio.cli.cli.utils.scan import (
     _dc_scan_bounds,
-    _ScanBounds,
     _walk_bounds,
     scan_single_file,
 )
 from depictio.cli.cli.utils.scan_utils import generate_file_hash
-from depictio.cli.cli.utils.scan_walk import ScannedPath, iter_run_files
+from depictio.cli.cli.utils.scan_walk import ScanBounds, ScannedPath, iter_run_files
 from depictio.models.models.base import PyObjectId
 from depictio.models.models.data_collections import (
     DataCollection,
@@ -148,14 +147,28 @@ class TestDetectionDecisionTable:
         assert result is not None
         assert result.scan_result == {"result": "failure", "reason": "unchanged"}
 
-    @pytest.mark.parametrize("stored_hash", [None, "0" * 64])
+    @pytest.mark.parametrize(("stored_hash", "reason"), [(None, "updated"), ("0" * 64, "changed")])
     def test_sync_files_updates_regardless_of_hash(
-        self, sample_file, run, permissions, stored_hash
+        self, sample_file, run, permissions, stored_hash, reason
     ):
+        """Pushed either way; a file that moved is still told apart from one read again."""
         existing = {sample_file.path: registry_entry(sample_file, file_hash=stored_hash)}
         result = scan(sample_file, run, make_dc(), permissions, existing, update_files=True)
         assert result is not None
-        assert result.scan_result == {"result": "success", "reason": "updated"}
+        assert result.scan_result == {"result": "success", "reason": reason}
+
+    def test_a_changed_file_carries_what_it_was(self, sample_file, run, permissions):
+        entry = registry_entry(sample_file, file_hash="0" * 64)
+        entry.update(filesize=3, modification_time="2026-01-01 00:00:00")
+        result = scan(sample_file, run, make_dc(), permissions, {sample_file.path: entry})
+        assert result is not None
+        assert result.previous == {"size": 3, "modified": "2026-01-01 00:00:00"}
+
+    def test_an_unchanged_file_carries_nothing(self, sample_file, run, permissions):
+        existing = {sample_file.path: registry_entry(sample_file)}
+        result = scan(sample_file, run, make_dc(), permissions, existing, sync_changed=True)
+        assert result is not None
+        assert result.previous is None
 
     def test_existing_file_id_is_reused(self, sample_file, run, permissions):
         entry = registry_entry(sample_file, file_hash="0" * 64)
@@ -227,7 +240,7 @@ class TestScanBounds:
             mtime=0.0,
             mtime_ns=0,
         )
-        assert _ScanBounds(max_depth=max_depth, ignore=()).allows(scanned) is expected
+        assert ScanBounds(max_depth=max_depth, ignore=()).allows(scanned) is expected
 
 
 class TestWalkBounds:

@@ -2,32 +2,29 @@
  * The project's runs: one row per run folder, with when the folder and its
  * ingestions happened, and, unfolded, how many files each collection found in
  * it and every scan of it. A collection that found nothing in a run is what
- * this view is for: it shows a run that is incomplete.
+ * this view is for: it shows a run that is incomplete. Unfolded, a run lists
+ * its files and what each scan did to them (`RunDetails`).
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActionIcon,
   Alert,
-  Badge,
   Center,
   Collapse,
-  CopyButton,
   Group,
   Loader,
-  SimpleGrid,
   Stack,
   Table,
   Text,
   TextInput,
   Tooltip,
-  UnstyledButton,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import { fetchProjectRuns } from 'depictio-react-core';
 import type { ProjectRun } from 'depictio-react-core';
 
-import { DcTypeIcon } from '../dcTypeIcon';
-import { formatTimestamp } from './DcViewerParts';
+import { StatusBadge } from '../badges';
+import { RunDetails, when } from './RunDetails';
 
 const SEARCH_FROM = 9;
 
@@ -42,181 +39,14 @@ const STATUS: Record<string, { label: string; color: string; hint: string }> = {
   no_scan: { label: 'Not scanned', color: 'gray', hint: 'This run was registered but never scanned.' },
 };
 
-/** Run times are written with the server's local clock. */
-const when = (value: string | null | undefined) => formatTimestamp(value, { utc: false }) ?? '—';
-
-const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
+const RunStatus: React.FC<{ status: string }> = ({ status }) => {
   const s = STATUS[status] ?? { label: status, color: 'gray', hint: '' };
   return (
     <Tooltip label={s.hint} withArrow disabled={!s.hint}>
-      <Badge variant="light" color={s.color} radius="sm" tt="none" fw={500}>
+      <StatusBadge color={s.color} data-testid="run-status">
         {s.label}
-      </Badge>
+      </StatusBadge>
     </Tooltip>
-  );
-};
-
-const Label: React.FC<{ icon: string; children: React.ReactNode }> = ({ icon, children }) => (
-  <Group gap={6} mb={8} wrap="nowrap">
-    <Icon icon={icon} width={14} style={{ opacity: 0.6 }} />
-    <Text size="xs" c="dimmed" fw={600} tt="uppercase">
-      {children}
-    </Text>
-  </Group>
-);
-
-const RunDetails: React.FC<{
-  run: ProjectRun;
-  dcIdByTag: Record<string, string>;
-  dcTypeByTag: Record<string, string>;
-  onOpenDc?: (dcId: string) => void;
-}> = ({ run, dcIdByTag, dcTypeByTag, onOpenDc }) => {
-  // Missing ones first: they are why the run is incomplete.
-  const dcs = Object.entries(run.dc_files).sort(
-    ([a, n], [b, m]) => Number(n > 0) - Number(m > 0) || a.localeCompare(b),
-  );
-  return (
-    <Stack gap="md" py="sm" px="xs" data-testid={`run-details-${run.run_tag}`}>
-      {run.run_location && (
-        <Group gap={6} wrap="nowrap" align="flex-start">
-          <Icon icon="mdi:folder-outline" width={16} style={{ opacity: 0.6, flexShrink: 0, marginTop: 2 }} />
-          <Text size="sm" ff="monospace" c="dimmed" style={{ overflowWrap: 'anywhere' }}>
-            {run.run_location}
-          </Text>
-          <CopyButton value={run.run_location} timeout={1500}>
-            {({ copied, copy }) => (
-              <Tooltip label={copied ? 'Copied' : 'Copy the folder path'} withArrow>
-                <ActionIcon
-                  size="sm"
-                  variant="subtle"
-                  color="gray"
-                  onClick={copy}
-                  aria-label="Copy the folder path"
-                  data-testid={`run-copy-path-${run.run_tag}`}
-                >
-                  <Icon icon={copied ? 'mdi:check' : 'mdi:content-copy'} width={14} />
-                </ActionIcon>
-              </Tooltip>
-            )}
-          </CopyButton>
-        </Group>
-      )}
-      <SimpleGrid cols={{ base: 1, md: 2 }} spacing="xl">
-        <div>
-          <Label icon="mdi:database-outline">Collections in this run</Label>
-          <Stack gap={2}>
-            {dcs.map(([tag, n]) => {
-              const id = dcIdByTag[tag];
-              const missing = n === 0;
-              const name = (
-                <Group gap={8} wrap="nowrap" style={{ minWidth: 0 }}>
-                  <DcTypeIcon type={dcTypeByTag[tag] ?? 'table'} size={16} withTooltip={false} />
-                  <Text size="sm" fw={500} truncate="end">
-                    {tag}
-                  </Text>
-                </Group>
-              );
-              return (
-                <Group
-                  key={tag}
-                  justify="space-between"
-                  wrap="nowrap"
-                  gap="sm"
-                  px="xs"
-                  py={4}
-                  style={{
-                    borderRadius: 'var(--mantine-radius-sm)',
-                    background: missing ? 'var(--mantine-color-orange-light)' : undefined,
-                  }}
-                >
-                  {id && onOpenDc ? (
-                    <Tooltip label="Open this collection" withArrow>
-                      <UnstyledButton onClick={() => onOpenDc(id)} style={{ minWidth: 0 }}>
-                        {name}
-                      </UnstyledButton>
-                    </Tooltip>
-                  ) : (
-                    name
-                  )}
-                  {missing ? (
-                    <Text size="xs" fw={600} c="orange" style={{ whiteSpace: 'nowrap' }}>
-                      <Icon icon="mdi:alert-outline" width={14} style={{ verticalAlign: '-2px', marginRight: 4 }} />
-                      Nothing found
-                    </Text>
-                  ) : (
-                    <Text size="xs" c="dimmed" style={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
-                      {n === 1 ? '1 file' : `${n} files`}
-                    </Text>
-                  )}
-                </Group>
-              );
-            })}
-            {dcs.length === 0 && (
-              <Text size="sm" c="dimmed">
-                No collection reads files per run.
-              </Text>
-            )}
-          </Stack>
-        </div>
-        <div>
-          <Label icon="mdi:history">Scans</Label>
-          {run.scans.length === 0 ? (
-            <Text size="sm" c="dimmed">
-              Never scanned.
-            </Text>
-          ) : (
-            <Stack gap={0}>
-              {[...run.scans].reverse().map((s, i) => (
-                <Group
-                  key={`${s.scan_time}-${i}`}
-                  justify="space-between"
-                  wrap="nowrap"
-                  gap="sm"
-                  py={6}
-                  style={{ borderBottom: '1px solid var(--mantine-color-default-border)' }}
-                >
-                  <Group gap={8} wrap="nowrap">
-                    <Icon
-                      icon={i === 0 ? 'mdi:circle' : 'mdi:circle-outline'}
-                      width={10}
-                      style={{ opacity: i === 0 ? 0.8 : 0.4 }}
-                    />
-                    <Text size="sm" style={{ whiteSpace: 'nowrap' }}>
-                      {when(s.scan_time)}
-                    </Text>
-                    {i === 0 && (
-                      <Text size="xs" c="dimmed">
-                        latest
-                      </Text>
-                    )}
-                  </Group>
-                  <Group gap={4} wrap="nowrap">
-                    <Text size="xs" c="dimmed" style={{ fontVariantNumeric: 'tabular-nums' }}>
-                      {s.files_total === 1 ? '1 file' : `${s.files_total} files`}
-                    </Text>
-                    {s.files_new > 0 && (
-                      <Badge size="sm" variant="light" color="blue" radius="sm" tt="none">
-                        +{s.files_new} new
-                      </Badge>
-                    )}
-                    {s.files_updated > 0 && (
-                      <Badge size="sm" variant="light" color="orange" radius="sm" tt="none">
-                        {s.files_updated} updated
-                      </Badge>
-                    )}
-                    {s.files_failed > 0 && (
-                      <Badge size="sm" variant="light" color="red" radius="sm" tt="none">
-                        {s.files_failed} failed
-                      </Badge>
-                    )}
-                  </Group>
-                </Group>
-              ))}
-            </Stack>
-          )}
-        </div>
-      </SimpleGrid>
-    </Stack>
   );
 };
 
@@ -305,16 +135,9 @@ export const RunsPanel: React.FC<{
           {Object.entries(counts)
             .filter(([status]) => status !== 'ok')
             .map(([status, n]) => (
-              <Badge
-                key={status}
-                variant="light"
-                color={STATUS[status]?.color ?? 'gray'}
-                radius="sm"
-                tt="none"
-                fw={500}
-              >
+              <StatusBadge key={status} color={STATUS[status]?.color ?? 'gray'}>
                 {n} {(STATUS[status]?.label ?? status).toLowerCase()}
-              </Badge>
+              </StatusBadge>
             ))}
         </Group>
         {runs.length >= SEARCH_FROM && (
@@ -349,7 +172,7 @@ export const RunsPanel: React.FC<{
               const isOpen = open.has(run.run_tag);
               const last = run.scans[run.scans.length - 1];
               return (
-                <React.Fragment key={run.run_tag}>
+                <React.Fragment key={`${run.workflow ?? ''}/${run.run_tag}`}>
                   <Table.Tr
                     onClick={() => toggle(run.run_tag)}
                     style={{ cursor: 'pointer' }}
@@ -389,14 +212,22 @@ export const RunsPanel: React.FC<{
                       <Text size="sm">{run.files}</Text>
                     </Table.Td>
                     <Table.Td>
-                      <StatusBadge status={run.status} />
+                      <RunStatus status={run.status} />
                     </Table.Td>
                   </Table.Tr>
                   <Table.Tr style={{ display: isOpen ? undefined : 'none' }}>
                     <Table.Td />
                     <Table.Td colSpan={multiWorkflow ? 7 : 6} pt={0}>
                       <Collapse in={isOpen}>
-                        <RunDetails run={run} dcIdByTag={dcIdByTag} dcTypeByTag={dcTypeByTag} onOpenDc={onOpenDc} />
+                        {isOpen && (
+                          <RunDetails
+                            projectId={projectId}
+                            run={run}
+                            dcIdByTag={dcIdByTag}
+                            dcTypeByTag={dcTypeByTag}
+                            onOpenDc={onOpenDc}
+                          />
+                        )}
                       </Collapse>
                     </Table.Td>
                   </Table.Tr>

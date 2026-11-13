@@ -443,7 +443,8 @@ def test_a_real_run_creates_the_project_and_dispatches_one_task_per_collection(
     assert sorted(p["dc_tag"] for p in payloads) == ingestable
     assert all(p["run_id"] == report.run_id for p in payloads)
     assert all(p["project_id"] == report.project_id for p in payloads)
-    assert all(p["dc_id"] and p["sync_files"] is True for p in payloads)
+    # Nothing is registered yet: reading what moved reads everything.
+    assert all(p["dc_id"] and p["sync_files"] is False for p in payloads)
     assert all(p["user"]["id"] == str(user.id) for p in payloads)
 
     # A recipe DC's payload waits on its own recipe's dc_ref sources, only
@@ -1061,7 +1062,13 @@ def test_a_given_template_skips_detection(mock_db, megatest_s3, monkeypatch):
     seen = _detects(monkeypatch, "nf-core/other/1")
     report = _call(dry_run=True)
     assert seen == []
-    assert report.detected_template is None
+    # The run is read for the report, not to choose a template: the named one
+    # stays, and the report carries what the run's records say (this tree names
+    # its engine but not its pipeline).
+    assert report.template_id == TEMPLATE_ID
+    assert report.detected_template is not None
+    assert report.detected_template.engine == "nextflow"
+    assert report.detected_template.template_id is None
 
 
 def test_detection_on_a_local_folder(mock_db, local_home, monkeypatch):

@@ -131,3 +131,198 @@ def project_runs(project: dict[str, Any]) -> ProjectRuns:
     if not ids:
         return ProjectRuns(runs=[])
     return build_project_runs(project, runs_collection.find({"workflow_id": {"$in": ids}}))
+
+
+# ── the files of one run ─────────────────────────────────────────────────────
+# Each scan records the ids of the files it brought, found changed or failed to
+# read (``scan_results[].files_id``), and what a changed
+# file was before (``file_changes``); each file records its run and its
+# collection. Together they say, per file, which scan brought it and which
+# changed it, so the runs view can show what a scan changed without guessing
+# from dates. A MultiQC report adds the samples and modules its last overwrite
+# brought in or dropped.
+
+#: Past this many files a run's list is cut (``truncated``).
+MAX_RUN_FILES = 5000
+
+# ``changed_files`` holds the files whose content moved since the scan before.
+# A file read again without having moved (``updated_files``: a full refresh, or
+# any refresh before changes were told apart) changed nothing and is left out.
+
+
+class RunFileChange(BaseModel):
+    """What one scan found changed in a file: [before, after] of each."""
+
+    scan: int
+    size: list[int | None] | None = None
+    modified: list[str | None] | None = None
+
+
+class RunReportChange(BaseModel):
+    """The samples and modules a MultiQC report's last overwrite added or removed."""
+
+    samples_added: list[str] = []
+    samples_removed: list[str] = []
+    modules_added: list[str] = []
+    modules_removed: list[str] = []
+
+
+class RunFile(BaseModel):
+    id: str
+    dc_id: str
+    dc_tag: str | None
+    filename: str
+    location: str
+    size: int | None = None
+    modified: str | None = None
+    registered: str | None = None
+    #: Index (in ``RunFiles.scans``) of the scan that brought it; None when no
+    #: scan lists it as new (it only ever failed, or predates the record).
+    added_in: int | None = None
+    changed_in: list[int] = []
+    failed_in: list[int] = []
+    changes: list[RunFileChange] = []
+    #: A MultiQC report's: what its last overwrite changed, which the newest
+    #: scan of ``changed_in`` brought.
+    report_change: RunReportChange | None = None
+
+
+class RunScanFiles(BaseModel):
+    scan_time: str | None
+    new: int
+    changed: int
+    failed: int
+
+
+class RunFiles(BaseModel):
+    run_tag: str
+    scans: list[RunScanFiles]
+    files: list[RunFile]
+    truncated: bool = False
+
+
+def _ids(scan: dict[str, Any], key: str) -> set[str]:
+    return {str(i) for i in (scan.get("files_id") or {}).get(key) or []}
+
+
+def build_run_files(
+    project: dict[str, Any],
+    run_docs: Iterable[dict[str, Any]],
+    file_docs: Iterable[dict[str, Any]],
+    run_tag: str,
+    report_changes: dict[str, dict[str, Any]] | None = None,
+) -> RunFiles:
+    """The files of ``run_tag`` in ``project``, each with the scans that brought,
+    changed or failed it. The scans of every workflow's run with
+    that tag are read together, oldest first. ``report_changes`` maps a
+    report's location to its ``last_change``."""
+    workflow_ids = {str(wf.get("_id") or wf.get("id")) for wf in project.get("workflows") or []}
+    tags = {
+        str(dc.get("_id") or dc.get("id")): dc.get("data_collection_tag")
+        for wf in project.get("workflows") or []
+        for dc in wf.get("data_collections") or []
+    }
+    docs = [
+        r
+        for r in run_docs
+        if r.get("run_tag") == run_tag and str(r.get("workflow_id")) in workflow_ids
+    ]
+    scans = sorted(
+        (s for r in docs for s in r.get("scan_results") or [] if isinstance(s, dict)),
+        key=lambda s: str(s.get("scan_time") or ""),
+    )
+    per_scan = [
+        (_ids(s, "new_files"), _ids(s, "changed_files"), _ids(s, "other_failure_files"))
+        for s in scans
+    ]
+    files: list[RunFile] = []
+    truncated = False
+    for doc in file_docs:
+        if len(files) >= MAX_RUN_FILES:
+            truncated = True
+            break
+        fid = str(doc.get("_id"))
+        dc_id = str(doc.get("data_collection_id") or "")
+        added = next((i for i, ids in enumerate(per_scan) if fid in ids[0]), None)
+        location = str(doc.get("file_location") or "")
+        report_change = (report_changes or {}).get(location)
+        changes = [
+            RunFileChange(scan=i, size=change.get("size"), modified=change.get("modified"))
+            for i, s in enumerate(scans)
+            if (change := (s.get("file_changes") or {}).get(fid))
+        ]
+        files.append(
+            RunFile(
+                id=fid,
+                dc_id=dc_id,
+                dc_tag=tags.get(dc_id),
+                filename=str(doc.get("filename") or ""),
+                location=location,
+                size=doc.get("filesize"),
+                modified=doc.get("modification_time"),
+                registered=doc.get("registration_time"),
+                added_in=added,
+                changed_in=[i for i, ids in enumerate(per_scan) if fid in ids[1]],
+                failed_in=[i for i, ids in enumerate(per_scan) if fid in ids[2]],
+                changes=changes,
+                report_change=RunReportChange(**report_change) if report_change else None,
+            )
+        )
+    files.sort(key=lambda f: (f.dc_tag or "", f.filename, f.location))
+    return RunFiles(
+        run_tag=run_tag,
+        scans=[
+            RunScanFiles(scan_time=s.get("scan_time"), new=len(n), changed=len(c), failed=len(f))
+            for s, (n, c, f) in zip(scans, per_scan, strict=True)
+        ],
+        files=files,
+        truncated=truncated,
+    )
+
+
+def _report_changes(project: dict[str, Any], locations: list[str]) -> dict[str, dict[str, Any]]:
+    """The ``last_change`` of the MultiQC reports read from these locations."""
+    from depictio.api.v1.db import multiqc_collection
+
+    dc_ids = [
+        str(dc.get("_id") or dc.get("id"))
+        for wf in project.get("workflows") or []
+        for dc in wf.get("data_collections") or []
+        if str(((dc.get("config") or {}).get("type") or "")).lower() == "multiqc"
+    ]
+    if not dc_ids or not locations:
+        return {}
+    return {
+        str(doc["original_file_path"]): doc["last_change"]
+        for doc in multiqc_collection.find(
+            {
+                "data_collection_id": {"$in": dc_ids},
+                "original_file_path": {"$in": locations},
+                "last_change": {"$ne": None},
+            },
+            {"original_file_path": 1, "last_change": 1},
+        )
+        if doc.get("last_change")
+    }
+
+
+def run_files(project: dict[str, Any], run_tag: str) -> RunFiles:
+    from depictio.api.v1.db import files_collection
+
+    ids = [ObjectId(wf["_id"]) for wf in project.get("workflows") or [] if wf.get("_id")]
+    docs = (
+        list(runs_collection.find({"workflow_id": {"$in": ids}, "run_tag": run_tag})) if ids else []
+    )
+    run_ids = [d["_id"] for d in docs]
+    file_docs = (
+        list(
+            files_collection.find(
+                {"run_id": {"$in": run_ids + [str(i) for i in run_ids]}},
+                {"permissions": 0},
+            ).limit(MAX_RUN_FILES + 1)
+        )
+        if run_ids
+        else []
+    )
+    locations = [str(d.get("file_location") or "") for d in file_docs]
+    return build_run_files(project, docs, file_docs, run_tag, _report_changes(project, locations))

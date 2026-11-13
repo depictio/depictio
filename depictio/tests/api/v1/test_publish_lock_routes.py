@@ -23,6 +23,8 @@ from fastapi.routing import APIRoute
 
 MUTATING = {"POST", "PUT", "PATCH", "DELETE"}
 PREFIX = "depictio.api.v1.endpoints."
+#: Packages outside ``PREFIX`` whose routers the API mounts.
+OTHER_ROUTE_PACKAGES = ("depictio.project_builder.",)
 
 #: Depth to which a route's calls are followed to find a lock check: route ->
 #: shared helper -> its helper -> the ``publish_lock`` call.
@@ -148,6 +150,10 @@ EXEMPT_MODULES: dict[str, str] = {
     "analytics_data_endpoints.routes": "usage analytics",
     "catalog_endpoints.routes": "template catalog, not a project",
     "jbrowse_endpoints.routes": "session rendering",
+    "project_builder.routes": (
+        "reads a folder and assembles a template, writes nothing; the project is "
+        "created by projects_endpoints.routes (from_run)"
+    ),
 }
 
 _DASH = "dashboards_endpoints.routes"
@@ -349,8 +355,14 @@ def _mutating_routes() -> list[tuple[str, str, str, APIRoute]]:
         if not methods:
             continue
         module = route.endpoint.__module__
-        assert module.startswith(PREFIX), module
-        found.append((module[len(PREFIX) :], route.endpoint.__name__, route.path, route))
+        if module.startswith(PREFIX):
+            key = module[len(PREFIX) :]
+        else:
+            # Routers mounted from outside the endpoints package keep their
+            # path below ``depictio.`` as the key.
+            assert module.startswith(OTHER_ROUTE_PACKAGES), module
+            key = module[len("depictio.") :]
+        found.append((key, route.endpoint.__name__, route.path, route))
     return found
 
 

@@ -331,6 +331,16 @@ def stream_to_text(response: httpx.Response, max_bytes: int) -> str:
     return bytes(buffer).decode(response.encoding or "utf-8", errors="replace")
 
 
+def stream_to_bytes(response: httpx.Response, max_bytes: int) -> bytes:
+    """Read a streamed response body as bytes, aborting past ``max_bytes``."""
+    buffer = bytearray()
+    for chunk in response.iter_bytes(chunk_size=_CHUNK_BYTES):
+        buffer.extend(chunk)
+        if len(buffer) > max_bytes:
+            raise RemoteURLRejected(f"Remote file exceeds the download cap ({max_bytes} bytes).")
+    return bytes(buffer)
+
+
 def _content_length(response: httpx.Response) -> int:
     size_header = response.headers.get("content-length")
     return int(size_header) if size_header and size_header.isdigit() else -1
@@ -418,6 +428,25 @@ def fetch_validated_text(
         raise RemoteFetchFailed("Could not fetch the provided URL.")
 
 
+def fetch_validated_bytes(
+    url: str, *, max_bytes: int | None = None, timeout: float | None = None
+) -> bytes:
+    """GET a small binary document (an image) through the gateway, in memory.
+
+    Same validation, redirect and size rules as :func:`fetch_validated_text`.
+    """
+    cap = remote_policy().max_download_bytes if max_bytes is None else max_bytes
+    try:
+        with open_validated_stream(url, timeout=timeout) as response:
+            response.raise_for_status()
+            return stream_to_bytes(response, cap)
+    except RemoteURLRejected:
+        raise
+    except Exception as exc:
+        logger.warning(f"Remote fetch failed for {url}: {exc}")
+        raise RemoteFetchFailed("Could not fetch the provided URL.")
+
+
 def _cleanup_partial(dest_path: str) -> None:
     """Never leave a partial download behind on failure."""
     try:
@@ -469,3 +498,12 @@ def direct_fetch_text(url: str) -> str:
     with _direct_client(policy) as client, client.stream("GET", url) as response:
         response.raise_for_status()
         return stream_to_text(response, policy.max_download_bytes)
+
+
+def direct_fetch_bytes(url: str, *, max_bytes: int | None = None) -> bytes:
+    """CLI counterpart of :func:`fetch_validated_bytes`."""
+    policy = remote_policy()
+    cap = policy.max_download_bytes if max_bytes is None else max_bytes
+    with _direct_client(policy) as client, client.stream("GET", url) as response:
+        response.raise_for_status()
+        return stream_to_bytes(response, cap)

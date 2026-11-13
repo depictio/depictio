@@ -63,6 +63,8 @@ export interface RunCreatedContext {
   skipCoordinates?: ReadonlySet<File>;
   /** Collection names the run takes, so the uploads do not clash with them. */
   takenTableNames?: string[];
+  /** Defined in the Project Builder: no pipeline, no dashboard to speak of. */
+  custom?: boolean;
 }
 
 /** `idle`: the report names no run to watch. Once the watcher stops, the
@@ -121,7 +123,16 @@ function announceRun(
 
 /** What creating the project did, worded from the report: how many of the
  *  template's dashboards were imported, and whether ingestion started. */
-function createdText(report: FromRunReport): string {
+function createdText(report: FromRunReport, custom: boolean, ingestionEnded: boolean): string {
+  // Once the watched run ended, the status line above says how it went.
+  const ingesting = ingestionEnded
+    ? 'Its data collections were ingested: the line above says how it went.'
+    : 'The data collections are being ingested in the background; closing this only stops watching.';
+  if (custom) {
+    // A Project Builder project has no dashboard to import: say what it has.
+    const first = `\u201c${report.project_name}\u201d exists.`;
+    return report.run_id ? `${first} ${ingesting}` : `${first} No data collection was sent for ingestion.`;
+  }
   const total = report.dashboards.length;
   const imported = report.dashboards.filter((d) => d.success).length;
   let dashboards: string;
@@ -138,9 +149,7 @@ function createdText(report: FromRunReport): string {
   }
   const parts = [`\u201c${report.project_name}\u201d exists and ${dashboards}.`];
   if (report.run_id) {
-    parts.push(
-      'The data collections are being ingested in the background; closing this only stops watching.',
-    );
+    parts.push(ingesting);
     // Every dashboard imported, and still not a success: a collection could
     // not be handed to a worker, and its row says so.
     if (!report.success && imported === total) {
@@ -253,6 +262,14 @@ export const RunCreatedModal: React.FC<{
   const name = report?.project_name ?? context?.projectName ?? '';
   // A project still being created has nowhere to open.
   const dashboardReason = report ? noDashboardReason : 'The project is being created.';
+  const custom = Boolean(context?.custom);
+  const projectOnly = Boolean(report?.project_id && !dashboardId);
+  let statusText = watchText(state, elapsedMs, progress);
+  if (creating) {
+    statusText = custom ? 'Creating the project...' : 'Creating the project and importing its dashboards...';
+  } else if (createError) {
+    statusText = 'The project could not be created.';
+  }
   let filesSummary = `${plural(files.length, 'file')} waiting for the project`;
   if (report) {
     filesSummary =
@@ -293,11 +310,7 @@ export const RunCreatedModal: React.FC<{
             <WatchIcon state={state} loaderColor={accent.secondary} />
           )}
           <Text size="sm" data-testid="run-created-status" data-state={creating ? 'creating' : state}>
-            {creating
-              ? 'Creating the project and importing its dashboards...'
-              : createError
-                ? 'The project could not be created.'
-                : watchText(state, elapsedMs, progress)}
+            {statusText}
           </Text>
         </Group>
         <VisuallyHidden role="status" aria-live="polite">
@@ -333,7 +346,7 @@ export const RunCreatedModal: React.FC<{
           <Stack gap="sm" pb="xl">
             <SourceSection
               icon="mdi:folder-check-outline"
-              title="Run folder"
+              title={custom ? 'Data collections' : 'Run folder'}
               summary={progress ? summarizeRun(progress) : report ? 'Waiting for the first results' : 'Not started yet'}
               testId="run-created-section-run"
             >
@@ -377,12 +390,16 @@ export const RunCreatedModal: React.FC<{
               <SourceSection
                 icon="mdi:text-box-search-outline"
                 title="Details of the project"
-                summary={`${plural(report.dashboards.filter((d) => d.success).length, 'dashboard')} imported`}
+                summary={
+                  custom
+                    ? plural(report.data_collections.length, 'data collection')
+                    : `${plural(report.dashboards.filter((d) => d.success).length, 'dashboard')} imported`
+                }
                 testId="run-created-section-details"
               >
                 <Stack gap="md">
                   <Text size="sm" data-testid="run-created-summary">
-                    {createdText(report)}
+                    {createdText(report, custom, finishedAt != null)}
                   </Text>
                   {report.storage_saved && (
                     <Group gap="xs" wrap="nowrap" align="flex-start" data-testid="run-created-storage-saved">
@@ -402,6 +419,7 @@ export const RunCreatedModal: React.FC<{
                     report={report}
                     templateTitle={context?.templateTitle ?? null}
                     detection={context?.detection ?? null}
+                    custom={custom}
                   />
                 </Stack>
               </SourceSection>
@@ -414,19 +432,37 @@ export const RunCreatedModal: React.FC<{
             <Button variant="default" onClick={onClose} data-testid="run-created-stay">
               Stay on projects
             </Button>
-            <GatedButton
-              color={accent.secondary}
-              leftSection={<Icon icon="mdi:view-dashboard-outline" width={16} />}
-              reason={dashboardReason}
-              onClick={() => {
-                if (dashboardId) window.location.assign(`/dashboard/${dashboardId}`);
-              }}
-              data-testid="run-created-open-dashboard"
-            >
-              Open dashboard
-            </GatedButton>
+            {projectOnly ? (
+              // A template without dashboards (the Project Builder's): the
+              // project page is where its collections and ingestion are.
+              <Button
+                color={accent.secondary}
+                leftSection={<Icon icon="mdi:folder-open-outline" width={16} />}
+                onClick={() => window.location.assign(`/projects/${report?.project_id}`)}
+                data-testid="run-created-open-project"
+              >
+                Open the project
+              </Button>
+            ) : (
+              <GatedButton
+                color={accent.secondary}
+                leftSection={<Icon icon="mdi:view-dashboard-outline" width={16} />}
+                reason={dashboardReason}
+                onClick={() => {
+                  if (dashboardId) window.location.assign(`/dashboard/${dashboardId}`);
+                }}
+                data-testid="run-created-open-dashboard"
+              >
+                Open dashboard
+              </GatedButton>
+            )}
           </Group>
-          {dashboardReason && !createError && (
+          {projectOnly && !custom && (
+            <Text size="xs" c="dimmed" ta="right" data-testid="run-created-no-dashboard">
+              No dashboard was imported: the project page lists its collections and ingestion.
+            </Text>
+          )}
+          {!projectOnly && dashboardReason && !createError && (
             <Group justify="flex-end">
               <DisabledReason reason={dashboardReason} icon="mdi:information-outline" />
             </Group>

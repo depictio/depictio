@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import {
+  ActionIcon,
   Alert,
+  Box,
   Button,
-  Center,
   Divider,
   Group,
   Modal,
@@ -13,6 +14,7 @@ import {
   Textarea,
   TextInput,
   Title,
+  Tooltip,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
@@ -21,7 +23,6 @@ import { useListingAccents } from '../lib/useListingAccents';
 import type {
   CreateProjectInput,
   CreateProjectResult,
-  FromRunReport,
   FromRunRequest,
   TemplateInfo,
 } from 'depictio-react-core';
@@ -80,6 +81,10 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
   const accent = useListingAccents('projects');
   /** Past the first screen: the project is described, its data comes next. */
   const [onData, setOnData] = useState(false);
+  /** The data screen over the whole window, when the reader asks for it
+   *  (kept across opens). The first screen stays a small dialog. */
+  const [wide, setWide] = useState(false);
+  const fullScreen = onData && wide;
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [isPublic, setIsPublic] = useState(false);
@@ -201,34 +206,59 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
       opened={opened}
       onClose={handleModalClose}
       centered
-      // What Depictio found: a detection card, a two-column summary and the
-      // grouped plan, which a narrower dialog would wrap into noise.
+      // The data screen: two source boxes, a detection card, a two-column
+      // summary and the grouped plan, which a narrow dialog wraps into noise.
       size={onData ? 1160 : 640}
+      fullScreen={fullScreen}
+      transitionProps={{ duration: onData ? 0 : undefined }}
       withCloseButton
       closeOnClickOutside={false}
       closeOnEscape={!submitting}
       overlayProps={{ blur: 3, backgroundOpacity: 0.55 }}
-      title={null}
+      // The title stays in the header, which stays at the top while the body
+      // scrolls; the size toggle sits at its right, beside the close button.
+      title={
+        <Group justify="space-between" wrap="nowrap" gap="xs">
+          {/* As wide as the toggle and the close button, so the title is centred. */}
+          <Box w={onData ? 60 : 28} style={{ flexShrink: 0 }} />
+          <Group gap="xs" wrap="nowrap" data-testid="create-project-title">
+            <Icon
+              icon="mdi:folder-plus-outline"
+              width={28}
+              color={`var(--mantine-color-${accent.secondary}-6)`}
+            />
+            <Title order={2} c={accent.secondary} style={{ fontFamily: 'Virgil', fontWeight: 400 }}>
+              Projects
+            </Title>
+          </Group>
+          <Box w={28} style={{ flexShrink: 0 }}>
+            {onData && (
+              <Tooltip label={wide ? 'Back to a dialog' : 'Use the whole window'} withArrow>
+                <ActionIcon
+                  variant="subtle"
+                  color="gray"
+                  onClick={() => setWide((w) => !w)}
+                  aria-label={wide ? 'Back to a dialog' : 'Use the whole window'}
+                  data-testid="create-project-fullscreen"
+                  data-active={wide || undefined}
+                >
+                  <Icon icon={wide ? 'mdi:fullscreen-exit' : 'mdi:fullscreen'} width={18} />
+                </ActionIcon>
+              </Tooltip>
+            )}
+          </Box>
+        </Group>
+      }
+      styles={{
+        // Opaque under the content that scrolls below it (the glass look
+        // leaves modal headers transparent).
+        header: { background: 'inherit', backdropFilter: 'blur(14px)', paddingBottom: 8 },
+        title: { flex: 1, marginRight: 4 },
+      }}
       padding="xl"
     >
       <Stack gap="md">
         <Stack gap={4} align="center">
-          <Center>
-            <Group gap="xs">
-              <Icon
-                icon="mdi:folder-plus-outline"
-                width={28}
-                color={`var(--mantine-color-${accent.secondary}-6)`}
-              />
-              <Title
-                order={2}
-                c={accent.secondary}
-                style={{ fontFamily: 'Virgil', fontWeight: 400 }}
-              >
-                Projects
-              </Title>
-            </Group>
-          </Center>
           <Text size="sm" c="dimmed" ta="center" data-testid="create-project-intro">
             {onData
               ? `Add data to “${trimmedName}”: Depictio works out what each file or folder is.`
@@ -284,7 +314,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                 disabled={!canSubmit}
                 data-testid="create-project-next"
               >
-                {choice('mdi:database-plus-outline', 'Add data', 'Files, a folder or a pipeline run')}
+                {choice('mdi:database-plus-outline', 'Add data', "Files, a folder, a pipeline run or your own pipeline's outputs")}
               </Button>
               <Button
                 variant="default"

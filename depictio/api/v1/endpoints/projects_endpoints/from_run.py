@@ -47,13 +47,14 @@ itself is not: a real run folder is minutes of work, so it goes to workers and
 the caller polls ``GET /projects/refresh_manifest/{run_id}``.
 """
 
+import copy
 import os
 from dataclasses import dataclass
 from typing import Any, Literal
 
 from bson import ObjectId
 from fastapi import HTTPException
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from depictio.api.v1.configs.settings_models import S3DepictioCLIConfig, local_data_policy
 from depictio.api.v1.db import projects_collection
@@ -78,9 +79,15 @@ from depictio.api.v1.endpoints.projects_endpoints.storage_config import (
     RunStorageIn,
     read_settings,
 )
+from depictio.cli.cli.utils.multiqc_state import MULTIQC_STATE_LOCK
+from depictio.cli.cli.utils.template_preview import FromRunDCPreview
+from depictio.cli.cli.utils.template_preview import report_rows as _report_rows
 from depictio.models.local_access import LocalPathRefused
 from depictio.models.logging import logger
 from depictio.models.s3_access import ProjectS3Config, S3AccessError, is_s3_url
+from depictio.project_builder.errors import BuilderRefused
+from depictio.project_builder.from_template import locate_shipped_template as _locate_shipped
+from depictio.project_builder.overlay import TemplateEdits, compose, renamed_workflows
 
 DATA_ROOT_RULE = (
     "data_root must be an s3:// prefix. The server cannot list a directory on the "
@@ -123,11 +130,51 @@ class FromRunRequest(BaseModel):
     # Projects are private unless the request asks otherwise, whatever the template says.
     is_public: bool = False
     description: str | None = None
+    # An ad-hoc template, as the Project Builder assembles it (``POST
+    # /projects/builder/template``), instead of one of the server's own:
+    # validated (``project_builder.validate``), never stored as a template.
+    template: dict[str, Any] | None = None
+    # ``template_id`` edited in the Project Builder: collections removed,
+    # repointed or added (``project_builder.overlay``). The shipped template
+    # is re-read and the edits applied to it; nothing else of it changes.
+    edits: TemplateEdits | None = None
+    # A folder holding several runs of one pipeline: the names of its
+    # sub-folders that are runs (``folder_inspect``'s ``child_runs``), with
+    # ``data_root`` the folder itself. Each run is resolved and previewed as
+    # its own run folder and the previews are merged; the project is created
+    # from the first, plus the collections only another run kept, and the
+    # others are recorded on its workflows as ``attach_run`` records a run,
+    # before the one ingestion that reads them all. The project remembers the
+    # folder and the run names (``template_origin.data_root`` / ``.runs``), so
+    # a refresh reads every run again. A folder on the server's disk only.
+    runs: list[str] | None = None
+
+    @field_validator("runs")
+    @classmethod
+    def _plain_distinct_runs(cls, value: list[str] | None) -> list[str] | None:
+        if value is None:
+            return None
+        if len(value) < 2 or len(set(value)) != len(value):
+            raise ValueError("runs: two or more distinct sub-folder names.")
+        if len(value) > 100:
+            raise ValueError("runs: at most 100 runs at once.")
+        for name in value:
+            if not name or name in (".", "..") or "/" in name or "\\" in name:
+                raise ValueError(f"runs: '{name}' is not the name of a sub-folder.")
+        return value
 
     @field_validator("template_id")
     @classmethod
     def _well_formed_template_id(cls, value: str | None) -> str | None:
         return None if value is None else validate_template_id(value)
+
+    @model_validator(mode="after")
+    def _one_template(self) -> "FromRunRequest":
+        if self.template is not None and self.template_id is not None:
+            raise ValueError("Give template_id or template, not both.")
+        if self.edits is not None and self.template_id is None:
+            raise ValueError("Edits are edits of a template: give its template_id.")
+        return self
 
 
 class DetectedTemplate(BaseModel):
@@ -179,104 +226,32 @@ def describe_detection(template_id: str | None, info) -> DetectedTemplate | None
     )
 
 
-class FromRunRecipeSource(BaseModel):
-    """What one source of a recipe found under the data root.
+def describe_run(template_id: str, info) -> DetectedTemplate | None:
+    """What the run's own records say, for a request that named ``template_id``.
 
-    The wire shape of ``template_preview.RecipeSourcePreview``: ``kind`` is
-    ``collection`` for a source read from another data collection, ``file``
-    for a glob or a path, and ``url`` for a URL outside the data root, which
-    is read at ingest and so is neither found nor missing here (``found`` is
-    None).
+    The facts of :func:`describe_detection` (pipeline, version, engine) without
+    choosing a template: it is the one asked for, and ``match`` says how it fits
+    the run (``exact`` for the run's version, ``closest`` for another version of
+    its pipeline, ``none`` for another pipeline, in which case no template is
+    named). None when no engine recognised the folder.
     """
-
-    ref: str
-    kind: Literal["file", "collection", "url"]
-    pattern: str | None = None
-    dc_ref: str | None = None
-    optional: bool = False
-    matched: int = 0
-    samples: list[str] = Field(default_factory=list)
-    found: bool | None = None
-    found_in: str | None = None
-
-
-class FromRunRecipePreview(BaseModel):
-    """The recipe a data collection is built with, and what each of its sources found."""
-
-    name: str
-    summary: str | None = None
-    sources: list[FromRunRecipeSource] = Field(default_factory=list)
-
-
-class FromRunDCPreview(BaseModel):
-    """What one data collection would find under the data root.
-
-    The wire shape of ``template_preview.DataCollectionPreview``: ``status`` is
-    one of ``ok`` / ``empty`` / ``missing`` / ``pruned`` and ``kind`` is
-    ``scan`` or ``recipe``. ``rule`` is what a scanning collection looks for,
-    as the template wrote it, ``samples`` the first few locations it matched,
-    ``found_in`` the deepest folder (relative to the data root) holding every
-    location it matched, and ``recipe`` is set for a recipe collection.
-    """
-
-    data_collection_tag: str
-    kind: str
-    mode: str | None = None
-    location: str = ""
-    matched: int = 0
-    missing_sources: list[str] = Field(default_factory=list)
-    optional: bool = False
-    status: str = "ok"
-    rule: str | None = None
-    samples: list[str] = Field(default_factory=list)
-    found_in: str | None = None
-    recipe: FromRunRecipePreview | None = None
-
-
-def _report_recipe(recipe) -> FromRunRecipePreview | None:
-    """A ``template_preview.RecipePreview`` in the report's shape, None for none."""
-    if recipe is None:
+    if info is None:
         return None
-    return FromRunRecipePreview(
-        name=recipe.name,
-        summary=recipe.summary,
-        sources=[
-            FromRunRecipeSource(
-                ref=source.ref,
-                kind=source.kind,
-                pattern=source.pattern,
-                dc_ref=source.dc_ref,
-                optional=source.optional,
-                matched=source.matched,
-                samples=list(source.samples),
-                found=source.found,
-                found_in=source.found_in,
-            )
-            for source in recipe.sources
-        ],
+    if template_id in info.template_ids():
+        match: Literal["exact", "closest", "none"] = "exact"
+    elif info.pipeline_name and template_id.rsplit("/", 1)[0] == info.pipeline_name:
+        match = "closest"
+    else:
+        match = "none"
+    named = template_id if match != "none" else None
+    return DetectedTemplate(
+        template_id=named,
+        template_version=template_id.rsplit("/", 1)[-1] if named else None,
+        pipeline=info.pipeline_name,
+        version=info.pipeline_version,
+        engine=info.engine,
+        match=match,
     )
-
-
-def _report_rows(preview_rows) -> list[FromRunDCPreview]:
-    """``template_preview.DataCollectionPreview`` rows in the report's shape, one per tag."""
-    rows = {
-        row.tag: FromRunDCPreview(
-            data_collection_tag=row.tag,
-            kind=row.kind,
-            mode=row.mode,
-            location=row.location,
-            matched=row.matched,
-            missing_sources=list(row.missing_sources),
-            optional=row.optional,
-            status=row.status,
-            rule=row.rule,
-            samples=list(row.samples),
-            found_in=row.found_in,
-            recipe=_report_recipe(row.recipe),
-        )
-        for row in preview_rows
-    }
-    return list(rows.values())
 
 
 class RunInputFile(BaseModel):
@@ -299,6 +274,23 @@ class RunInputFile(BaseModel):
     used_by: list[str] = Field(default_factory=list)
 
 
+class SharedRunSamples(BaseModel):
+    """Samples one MultiQC collection finds in more than one run.
+
+    The one ingestion merges the runs' reports: a sample named in two of them
+    becomes one, its values mixed. An upload of several reports refuses that
+    (``validate_multiqc_reports_uniform``), and so does a creation from several
+    runs (``runs_share_samples``); the preview names them first.
+    """
+
+    data_collection_tag: str
+    # The runs that name them, in the request's order.
+    runs: list[str]
+    count: int
+    # The first few, sorted.
+    samples: list[str]
+
+
 class FromRunReport(BaseModel):
     """Result of a from_run request: the plan, and what was created from it.
 
@@ -313,10 +305,19 @@ class FromRunReport(BaseModel):
     project_name: str
     # The template used: the one asked for, or the one detected.
     template_id: str
-    # Set whenever detection ran (no template_id in the request).
+    # What the folder said about its run: set when detection ran (no
+    # template_id in the request), and, for a request that named its
+    # template, from the run's own records when an engine recognised it (the
+    # template chosen is never replaced; ``match`` says how it fits the run).
     detected_template: DetectedTemplate | None = None
     data_root: str
     detected_runs: list[str] = Field(default_factory=list)
+    # The sub-folders read as runs when the request named several. The rows
+    # count every run together; ``data_root``, ``run_info`` and the input
+    # files are the first run's.
+    runs: list[str] | None = None
+    # MultiQC samples found in more than one of ``runs`` (empty for one run).
+    shared_samples: list[SharedRunSamples] = Field(default_factory=list)
     resolved_variables: dict[str, str] = Field(default_factory=dict)
     data_collections: list[FromRunDCPreview] = Field(default_factory=list)
     dashboards: list[DashboardImportResult] = Field(default_factory=list)
@@ -826,8 +827,13 @@ def _stored_run_folder(project_dict: dict[str, Any]):
     happens to see a CLI user's folder refreshes it as it always has, with no
     pre-flight. Raises ``S3AccessError`` when the ``s3://`` root cannot be
     listed.
+
+    For a project made from a folder of several runs (``template_origin.runs``)
+    this is that folder, not one of its runs, and its files are not counted:
+    :func:`_stored_run_roots` opens the runs.
     """
-    data_root = str((project_dict.get("template_origin") or {}).get("data_root") or "")
+    origin = project_dict.get("template_origin") or {}
+    data_root = str(origin.get("data_root") or "")
     if is_s3_url(data_root):
         from depictio.api.v1.configs.config import settings
         from depictio.api.v1.endpoints.projects_endpoints.storage_config import (
@@ -848,11 +854,44 @@ def _stored_run_folder(project_dict: dict[str, Any]):
         if policy is None:
             return None
         try:
-            return _confined_local_root(policy, data_root)
+            return _confined_local_root(policy, data_root, count_files=not origin.get("runs"))
         except CodedHTTPException as exc:
             logger.warning(f"Refresh pre-flight skipped ({exc.code}): {exc.detail}")
             return None
     return None
+
+
+def _stored_run_roots(project_dict: dict[str, Any]) -> tuple[Any, list[tuple[str, Any]]] | None:
+    """The run folder a project was made from, and the run folders it is read from.
+
+    ``(folder, [(run name, root), ...])``: one entry with an empty name for a
+    project made from one run folder (then ``folder`` is that root), one per run
+    for a project made from a folder of runs, each confined and size-capped as at
+    creation (the first one counted, as there). A run that has gone from the
+    disk since is left out with a warning, what is left is still checked; all
+    of them gone is None. None too when there is no folder to check, see
+    :func:`_stored_run_folder`.
+    """
+    folder = _stored_run_folder(project_dict)
+    if folder is None:
+        return None
+    names = [str(name) for name in (project_dict.get("template_origin") or {}).get("runs") or []]
+    if not names:
+        return folder, [("", folder)]
+    policy = local_data_policy()
+    if policy is None:  # pragma: no cover - the folder above was confined under one
+        return None
+    roots: list[tuple[str, Any]] = []
+    for name in names:
+        try:
+            run = _confined_local_root(
+                policy, os.path.join(folder.location, name), count_files=not roots
+            )
+        except CodedHTTPException as exc:
+            logger.warning(f"Refresh pre-flight: run '{name}' skipped ({exc.code}): {exc.detail}")
+            continue
+        roots.append((name, run))
+    return (folder, roots) if roots else None
 
 
 def _refresh_preflight(project_dict: dict[str, Any]) -> tuple[str, _Preflight] | None:
@@ -868,17 +907,23 @@ def _refresh_preflight(project_dict: dict[str, Any]) -> tuple[str, _Preflight] |
     collection ingested before whose files went away keeps its table as it
     was.
 
+    A project made from a folder of runs is previewed run by run and merged the
+    way its creation did (:func:`_merge_run_rows`), so a collection whose files
+    are in the second run only is as present now as it was then.
+
     None when there is no folder to check (see :func:`_stored_run_folder`):
     the refresh then dispatches as it always has.
     """
-    root = _stored_run_folder(project_dict)
-    if root is None:
+    found = _stored_run_roots(project_dict)
+    if found is None:
         return None
+    folder, runs = found
 
     from depictio.cli.cli.utils.template_preview import preview_data_collections
 
-    rows, _runs = preview_data_collections(project_dict, root)
-    return root.location, _preflight_split(project_dict, rows)
+    per_run = [preview_data_collections(project_dict, root)[0] for _name, root in runs]
+    rows = per_run[0] if len(per_run) == 1 else _merge_run_rows(per_run, [n for n, _r in runs])
+    return folder.location, _preflight_split(project_dict, rows)
 
 
 def _scan_modes(project_dict: dict[str, Any]) -> dict[str, str]:
@@ -936,14 +981,28 @@ def _create_project_from_run(
     storage: RunStorageIn | None = None,
     is_public: bool = False,
     description: str | None = None,
+    template: dict[str, Any] | None = None,
+    edits: TemplateEdits | None = None,
+    runs: list[str] | None = None,
 ) -> FromRunReport:
     """The full run folder → project + dashboards + dispatched ingestion flow.
 
-    ``template_id=None`` recognises the template from the folder. ``request``
+    ``template_id=None`` recognises the template from the folder, unless
+    ``template`` hands one in (the Project Builder's ad-hoc template), which is
+    then held to ``validate_inline_template`` and resolved from memory.
+    ``edits`` (with ``template_id``) apply the Project Builder's changes to the
+    shipped template before it is resolved (``project_builder.overlay``). ``request``
     is the HTTP request, which a local data root needs for its ``Host`` guard.
     ``storage`` (an ``s3://`` data root only) is read with alone, validated
     first as a saved config is, and stored on the created project before its
-    ingestion is dispatched; a dry run stores nothing.
+    ingestion is dispatched; a dry run stores nothing. ``runs`` names
+    sub-folders of a local ``data_root`` that are each a run. Each is resolved
+    and previewed as a run folder of its own and the previews are merged
+    (:func:`_merged_run_preview`); the project is made from the first run's
+    resolution plus the collections only another run kept
+    (:func:`_keep_collections_kept_elsewhere`), the others are added to the
+    workflows' locations before the ingestion is dispatched, and the project
+    remembers ``data_root`` and the run names as its origin.
 
     Sync: call via ``asyncio.to_thread``.
     """
@@ -955,9 +1014,73 @@ def _create_project_from_run(
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc))
 
+    if template is not None and template_id is not None:
+        raise HTTPException(status_code=422, detail="Give template_id or template, not both.")
+    if edits is not None and template_id is None:
+        raise HTTPException(
+            status_code=422, detail="Edits are edits of a template: give its template_id."
+        )
+
+    if runs:
+        if not _is_local_path(data_root):
+            raise CodedHTTPException(
+                422,
+                "Several runs are read from a folder on the server's disk only. Create "
+                "the project from one run, then add the others with Add run.",
+                "runs_need_local",
+            )
+        if template is not None:
+            raise CodedHTTPException(
+                422,
+                "Several runs are read with one of the server's templates only.",
+                "runs_need_template",
+            )
+        if edits is not None and edits.additions:
+            # The builder's collections are paths below the folder typed in,
+            # while each run is resolved as a folder of its own: they would
+            # match nothing.
+            raise CodedHTTPException(
+                422,
+                "Collections added in the builder cannot be read across several runs yet: "
+                "create the project from one run, or remove them.",
+                "runs_with_additions",
+            )
+        parent = data_root
+        data_root = os.path.join(parent, runs[0])
+
     storage_settings, read_config = _request_read_config(data_root, storage)
     root = _build_data_root(data_root, read_config, request=request, current_user=current_user)
     _assert_variables_confined(variables or {}, root)
+    other_roots = [
+        _build_data_root(
+            os.path.join(parent, name),
+            read_config,
+            request=request,
+            current_user=current_user,
+            count_files=False,
+        )
+        for name in (runs or [])[1:]
+    ]
+    other_runs = [other.location for other in other_roots]
+    # What the project remembers as the folder it was made from.
+    origin_root = root
+    if runs:
+        origin_root = _build_data_root(
+            parent, read_config, request=request, current_user=current_user, count_files=False
+        )
+
+    if template is not None:
+        return _create_project_from_inline_template(
+            template,
+            root=root,
+            read_config=read_config,
+            storage_settings=storage_settings,
+            current_user=current_user,
+            project_name=project_name,
+            dry_run=dry_run,
+            is_public=is_public,
+            description=description,
+        )
 
     detected: DetectedTemplate | None = None
     if template_id is None:
@@ -973,44 +1096,97 @@ def _create_project_from_run(
     # One root, two consumers. resolve_template gives the config the project is
     # built from; preview_data_root gives the per-collection rows the UI shows.
     # Both take a pre-built root, so this whole request costs one S3 listing.
-    from depictio.cli.cli.utils.templates import resolve_template
+    from depictio.cli.cli.utils.templates import resolve_template, resolve_template_config
 
-    try:
-        resolved_config, template_metadata, _origin, dashboard_paths, resolved_vars = (
-            resolve_template(
-                template_id=template_id,
-                data_root=root,
-                project_name=project_name,
-                extra_vars=dict(variables) if variables else None,
-                CLI_config=read_config,
+    def resolve_on(on):
+        try:
+            if edits is not None and not edits.is_empty():
+                resolution = resolve_template_config(
+                    _edited_template(template_id, edits, remote=on.is_remote),
+                    template_dir=locate_shipped_template(template_id).parent,
+                    data_root=on,
+                    project_name=project_name,
+                    extra_vars=dict(variables) if variables else None,
+                    CLI_config=read_config,
+                    source=template_id,
+                )
+            else:
+                resolution = resolve_template(
+                    template_id=template_id,
+                    data_root=on,
+                    project_name=project_name,
+                    extra_vars=dict(variables) if variables else None,
+                    CLI_config=read_config,
+                )
+        except FileNotFoundError as exc:
+            raise HTTPException(
+                status_code=404, detail=_template_not_found_detail(template_id, exc)
             )
-        )
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=_template_not_found_detail(template_id, exc))
-    except S3AccessError:
-        raise
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=f"Template resolution failed: {exc}")
+        except S3AccessError:
+            raise
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=f"Template resolution failed: {exc}")
+        return resolution
+
+    resolution = resolve_on(root)
+    other_resolutions = [resolve_on(other) for other in other_roots]
+    resolved_config, template_metadata, _origin, dashboard_paths, resolved_vars = resolution
+    if detected is None:
+        # A template was named: the run's own records are reported all the same.
+        detected = describe_run(template_metadata.template_id, run)
 
     # Before anything is previewed, let alone created: nothing this template
-    # resolved to may point outside the run folder.
+    # resolved to may point outside the run folder, each run's own.
     _assert_data_collections_confined(resolved_config, root)
+    for other, (other_config, *_rest) in zip(other_roots, other_resolutions, strict=True):
+        _assert_data_collections_confined(other_config, other)
+    if other_roots:
+        _keep_collections_kept_elsewhere(
+            resolved_config, [other_config for other_config, *_rest in other_resolutions]
+        )
+        _assert_takes_runs(resolved_config, root.location, other_runs)
+        origin = resolved_config.get("template_origin")
+        if isinstance(origin, dict):
+            origin["data_root"] = origin_root.location
+            origin["runs"] = list(runs or [])
 
     from depictio.cli.cli.utils.template_preview import preview_data_root
 
-    try:
-        preview = preview_data_root(
-            template_id=template_id,
-            data_root=root,
-            variables=dict(variables) if variables else None,
-            CLI_config=read_config,
+    def preview_on(on, on_resolution):
+        try:
+            # The resolution above, not the template again: edits live only there.
+            return preview_data_root(
+                template_id=template_id,
+                data_root=on,
+                variables=dict(variables) if variables else None,
+                CLI_config=read_config,
+                resolution=on_resolution,
+            )
+        except FileNotFoundError as exc:  # pragma: no cover - resolution already passed
+            raise HTTPException(
+                status_code=404, detail=_template_not_found_detail(template_id, exc)
+            )
+        except S3AccessError:
+            raise
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=f"Data root preview failed: {exc}")
+
+    preview = preview_on(root, resolution)
+    shared_samples: list[SharedRunSamples] = []
+    if other_roots:
+        other_previews = [
+            preview_on(other, other_resolution)
+            for other, other_resolution in zip(other_roots, other_resolutions, strict=True)
+        ]
+        shared_samples = _samples_shared_across_runs(
+            _multiqc_tags(resolved_config),
+            list(
+                zip(list(runs or []), [root, *other_roots], [preview, *other_previews], strict=True)
+            ),
         )
-    except FileNotFoundError as exc:  # pragma: no cover - resolution already passed
-        raise HTTPException(status_code=404, detail=_template_not_found_detail(template_id, exc))
-    except S3AccessError:
-        raise
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=f"Data root preview failed: {exc}")
+        # What the one ingestion will read: every run, each resolved as its own
+        # run folder, counted together.
+        preview = _merged_run_preview(preview, other_previews, list(runs or [])[1:])
 
     report = FromRunReport(
         project_name=resolved_config.get("name", ""),
@@ -1018,6 +1194,8 @@ def _create_project_from_run(
         detected_template=detected,
         data_root=root.location,
         detected_runs=list(preview.detected_runs),
+        runs=list(runs) if runs else None,
+        shared_samples=shared_samples,
         resolved_variables=dict(preview.resolved_variables),
         data_collections=_report_rows(preview.data_collections),
         pruned_optional_dcs=list(preview.pruned_optional_dcs),
@@ -1031,11 +1209,14 @@ def _create_project_from_run(
         report.success = True
         return report
 
+    if shared_samples:
+        raise CodedHTTPException(422, _shared_samples_detail(shared_samples), "runs_share_samples")
+
     create_payload = _new_project_document(
         resolved_config,
         current_user,
         origin_kind="run",
-        origin_location=root.location,
+        origin_location=origin_root.location,
         is_public=is_public,
     )
     create_payload["description"] = description
@@ -1050,6 +1231,9 @@ def _create_project_from_run(
     report.project_id = str(project_oid)
 
     stored = projects_collection.find_one({"_id": project_oid}) or {}
+    if other_runs:
+        _record_other_runs(stored, other_runs)
+        stored = projects_collection.find_one({"_id": project_oid}) or stored
     # The report's rows carry a pruned collection's reason; it has no step.
     preflight = _preflight_split(stored, preview.data_collections)
 
@@ -1068,6 +1252,7 @@ def _create_project_from_run(
             project_id=project_oid,
             variables=resolved_vars,
             current_user=current_user,
+            workflow_renames=renamed_workflows(edits),
         )
     all_ok = all(entry.success for entry in report.dashboards)
 
@@ -1083,7 +1268,7 @@ def _create_project_from_run(
             preflight_skipped=preflight.skipped,
             command="from_run",
             scan_modes=_scan_modes(stored),
-            data_root=root.location,
+            data_root=origin_root.location,
         )
         report.run_id = run_id
         all_ok = all_ok and all_dispatched
@@ -1093,5 +1278,515 @@ def _create_project_from_run(
             "data collection; no ingestion run was opened."
         )
 
+    report.success = all_ok
+    return report
+
+
+_SHARED_SAMPLES_SHOWN = 8
+
+
+def _multiqc_tags(config: dict[str, Any]) -> set[str]:
+    """The tags of a resolved template's MultiQC collections."""
+    return {
+        str(dc.get("data_collection_tag") or "")
+        for workflow in config.get("workflows") or []
+        for dc in workflow.get("data_collections") or []
+        if str((dc.get("config") or {}).get("type") or "").lower() == "multiqc"
+    }
+
+
+# MultiQC keeps its state in the module: one report is read at a time, under
+# the lock every MultiQC reader of the process takes.
+_MULTIQC_READ = MULTIQC_STATE_LOCK
+# (location, size) -> sample names, so the dialog's and the builder's previews
+# of one folder read each report once. Bounded: emptied once it holds this many.
+_SAMPLES_READ: dict[tuple[str, int], frozenset[str]] = {}
+_SAMPLES_READ_MAX = 512
+
+
+def _multiqc_samples_of(data: bytes) -> set[str]:
+    """The samples a MultiQC report names: its canonical sample ids.
+
+    Read as an upload of several reports is (``extract_multiqc_metadata``), not
+    from the parquet's ``sample`` column, which also holds sequences and other
+    keys. The canonical ids, not every name: a module's variants of a sample
+    ("S1 - First read: Adapter 1", "S1_1") are the same sample. A report with
+    no canonical ids falls back to its names.
+    """
+    import tempfile
+
+    from depictio.cli.cli.utils.multiqc_processor import extract_multiqc_metadata
+
+    with _MULTIQC_READ, tempfile.TemporaryDirectory(prefix="depictio_run_samples_") as tmp:
+        path = os.path.join(tmp, "multiqc.parquet")
+        with open(path, "wb") as handle:
+            handle.write(data)
+        metadata = extract_multiqc_metadata(path)
+    return {str(s) for s in metadata.get("canonical_samples") or metadata.get("samples") or []}
+
+
+def _report_sample_names(root, row) -> set[str] | None:
+    """The sample names of the MultiQC reports a preview row found under ``root``.
+
+    The row's ``samples`` (the first few reports: a run holds one or two). None
+    when one of them cannot be read as a report: the check then says nothing
+    rather than a half answer.
+    """
+    names: set[str] = set()
+    for location in row.samples:
+        rel = root.relative_of(location)
+        if rel is None:
+            return None
+        try:
+            key = (location, root.size(rel) or -1)
+            if key not in _SAMPLES_READ:
+                if len(_SAMPLES_READ) >= _SAMPLES_READ_MAX:
+                    _SAMPLES_READ.clear()
+                _SAMPLES_READ[key] = frozenset(_multiqc_samples_of(root.read_bytes(rel)))
+        except Exception as exc:  # noqa: BLE001 - an unreadable report is not checked
+            logger.warning(f"Shared-samples check skipped {location}: {exc}")
+            return None
+        names.update(_SAMPLES_READ[key])
+    return names
+
+
+def _samples_shared_across_runs(
+    tags: set[str], per_run: list[tuple[str, Any, Any]]
+) -> list[SharedRunSamples]:
+    """Per MultiQC collection, the samples more than one run's reports name.
+
+    ``per_run`` is ``(run name, its data root, its preview)``, in order.
+    """
+    shared_by_tag: list[SharedRunSamples] = []
+    for tag in sorted(tags):
+        owner: dict[str, str] = {}
+        shared: dict[str, list[str]] = {}
+        for name, root, preview in per_run:
+            row = next((r for r in preview.data_collections if r.tag == tag), None)
+            if row is None or not row.matched:
+                continue
+            names = _report_sample_names(root, row)
+            if names is None:
+                continue
+            for sample in names:
+                if sample in owner:
+                    shared.setdefault(sample, [owner[sample]]).append(name)
+                else:
+                    owner[sample] = name
+        if shared:
+            runs = [name for name, *_rest in per_run if any(name in v for v in shared.values())]
+            shared_by_tag.append(
+                SharedRunSamples(
+                    data_collection_tag=tag,
+                    runs=runs,
+                    count=len(shared),
+                    samples=sorted(shared)[:_SHARED_SAMPLES_SHOWN],
+                )
+            )
+    return shared_by_tag
+
+
+def _shared_samples_detail(shared: list[SharedRunSamples]) -> str:
+    """The refusal of a creation whose runs share samples."""
+    parts = []
+    for entry in shared:
+        more = entry.count - len(entry.samples)
+        names = ", ".join(entry.samples) + (f" and {more} more" if more > 0 else "")
+        parts.append(
+            f"{entry.data_collection_tag}: {entry.count} sample"
+            f"{'' if entry.count == 1 else 's'} in more than one of "
+            f"{', '.join(entry.runs)} ({names})"
+        )
+    return (
+        "The runs name the same samples, which one MultiQC collection would merge: "
+        + "; ".join(parts)
+        + ". Read the runs as separate projects, or rename the samples in one of them."
+    )
+
+
+def _merged_run_preview(first, others, names: list[str]):
+    """``first`` (the first run's preview) with what ``others`` found counted in.
+
+    ``names`` are the other runs' folder names. The rows are merged by
+    :func:`_merge_run_rows`; an optional collection pruned in every run stays
+    pruned, one that a later run kept is no longer.
+    """
+    from dataclasses import replace
+
+    rows = _merge_run_rows(
+        [first.data_collections, *(other.data_collections for other in others)], ["", *names]
+    )
+    pruned = {row.tag for row in rows if row.status == "pruned"}
+    detected_runs = list(
+        dict.fromkeys([*first.detected_runs, *(r for other in others for r in other.detected_runs)])
+    )
+    return replace(
+        first,
+        data_collections=rows,
+        pruned_optional_dcs=[tag for tag in first.pruned_optional_dcs if tag in pruned],
+        detected_runs=detected_runs,
+        truncated=first.truncated or any(other.truncated for other in others),
+    )
+
+
+_ROW_RANK = {"ok": 0, "empty": 1, "missing": 2, "pruned": 3}
+
+
+def _merge_run_rows(per_run, names: list[str]):
+    """One row per collection from each run's rows (``per_run[i]`` is run ``names[i]``'s).
+
+    What the one ingestion will read, whichever way the rows were made, a
+    creation's (each run resolved on its own) or a refresh's (the stored
+    collections over each run):
+
+    * a ``recursive`` scan reads every run: its counts add up, a collection
+      found in any run is found, and the samples name their run;
+    * a collection no run's resolution pruned from the first run's is the
+      first's row; one the first run pruned or never had is the first row of
+      a run that kept it (pruning is a union across runs, see
+      :func:`_keep_collections_kept_elsewhere`);
+    * a single file or URL is the row of the run whose folder holds it (the
+      other runs cannot judge it), a recipe keeps the first run's row;
+    * the recipes are then settled again from the merged rows, since a
+      collection that is found in the second run only satisfies the recipes
+      reading it (:func:`_settle_recipes`).
+    """
+    by_run = [{row.tag: row for row in rows} for rows in per_run]
+    tags = list(dict.fromkeys(row.tag for rows in per_run for row in rows))
+    merged = []
+    for tag in tags:
+        found = [(index, run[tag]) for index, run in enumerate(by_run) if tag in run]
+        live = [(index, row) for index, row in found if row.status != "pruned"]
+        merged.append(_merge_tag_rows(live or found[:1], names))
+    return _settle_recipes(merged)
+
+
+def _merge_tag_rows(candidates, names: list[str]):
+    """The merged row of one collection from ``(run index, row)`` candidates, first run first."""
+    from dataclasses import replace
+
+    from depictio.cli.cli.utils.template_preview import PREVIEW_SAMPLES
+
+    _first_index, row = candidates[0]
+    mode = str(row.mode or "").lower() if row.kind == "scan" else ""
+    if mode in ("single", "url"):
+        # A row that counted nothing and reported ok did not look at the file:
+        # the folder it was judged against does not hold it.
+        return next(
+            (cand for _i, cand in candidates if not (cand.status == "ok" and not cand.matched)),
+            row,
+        )
+    if mode != "recursive":
+        return row
+
+    matched = row.matched
+    samples = list(row.samples)
+    status = row.status
+    found_in = row.found_in
+    for index, other in candidates[1:]:
+        name = names[index]
+        matched += other.matched
+        # A sample relative to its run says which; a full path already does.
+        samples += [
+            sample if os.path.isabs(sample) or "://" in sample else f"{name}/{sample}"
+            for sample in other.samples
+        ]
+        if _ROW_RANK.get(other.status, 9) < _ROW_RANK.get(status, 9):
+            status = other.status
+        if not row.matched and other.matched and found_in is None:
+            found_in = f"{name}/{other.found_in}" if other.found_in else name
+    merged = replace(
+        row, matched=matched, samples=samples[:PREVIEW_SAMPLES], status=status, found_in=found_in
+    )
+    if status == "ok":
+        merged = replace(merged, missing_sources=[], missing_collections=[])
+    return merged
+
+
+def _settle_recipes(rows):
+    """``rows`` with each recipe row re-evaluated from the merged rows of the collections it reads.
+
+    A recipe row was made from one run's rows, where a collection found in
+    another run only was missing. A source of kind ``collection`` that is now
+    settled (its row is ``ok``) counts as found, which can settle the recipe
+    in turn, so this runs until nothing changes; the references form a DAG.
+    The files a recipe reads are the first run's, as before.
+    """
+    from dataclasses import replace
+
+    rows = list(rows)
+    while True:
+        settled = {row.tag for row in rows if row.status == "ok"}
+        changed = False
+        for index, row in enumerate(rows):
+            if row.kind != "recipe" or row.recipe is None:
+                continue
+            pending = {
+                source.dc_ref
+                for source in row.recipe.sources
+                if source.kind == "collection" and not source.found and source.dc_ref in settled
+            }
+            if not pending:
+                continue
+            sources = [
+                replace(source, found=True, matched=1)
+                if source.kind == "collection" and source.dc_ref in pending and not source.found
+                else source
+                for source in row.recipe.sources
+            ]
+            gone = {f"collection '{tag}'" for tag in pending}
+            missing_sources = [text for text in row.missing_sources if text not in gone]
+            rows[index] = replace(
+                row,
+                recipe=replace(row.recipe, sources=sources),
+                matched=row.matched + len(pending),
+                missing_sources=missing_sources,
+                missing_collections=[t for t in row.missing_collections if t not in pending],
+                status="missing" if missing_sources else "ok",
+            )
+            changed = True
+        if not changed:
+            return rows
+
+
+def _keep_collections_kept_elsewhere(config: dict[str, Any], others: list[dict[str, Any]]) -> None:
+    """Add to ``config`` (the first run's resolution) the collections only another run kept.
+
+    Resolution prunes a collection for one run (an optional single file the
+    run does not hold, a conditional on that run's own parameters); the project
+    reads every run, so a collection is dropped only when every run dropped it.
+    Its definition is that of the first run whose resolution kept it, appended
+    to the workflow of the same name, with the links it takes part in whose
+    other end is in the project. The template origin's manifest then lists it
+    as included. In place.
+    """
+    workflows = {
+        str(workflow.get("name")): workflow
+        for workflow in config.get("workflows") or []
+        if workflow.get("name") is not None
+    }
+    held = {
+        str(dc.get("data_collection_tag"))
+        for workflow in workflows.values()
+        for dc in workflow.get("data_collections") or []
+    }
+    added: set[str] = set()
+    for other in others:
+        for workflow in other.get("workflows") or []:
+            target = workflows.get(str(workflow.get("name")))
+            if target is None:
+                continue
+            for dc in workflow.get("data_collections") or []:
+                tag = str(dc.get("data_collection_tag"))
+                if tag in held:
+                    continue
+                target.setdefault("data_collections", []).append(copy.deepcopy(dc))
+                held.add(tag)
+                added.add(tag)
+    if not added:
+        return
+
+    links = config.setdefault("links", [])
+    for other in others:
+        for link in other.get("links") or []:
+            ends = {link.get("source_dc_tag"), link.get("target_dc_tag")}
+            if ends & added and ends <= held and link not in links:
+                links.append(copy.deepcopy(link))
+    origin = config.get("template_origin")
+    if isinstance(origin, dict):
+        for expected in origin.get("expected_data_collections") or []:
+            if expected.get("data_collection_tag") in added:
+                expected["included"] = True
+                expected["removal_reason"] = None
+
+
+def _assert_takes_runs(config: dict[str, Any], first: str, others: list[str]) -> None:
+    """Refuse several runs for a template whose workflows cannot hold a second one.
+
+    The rule ``attach_run`` applies to a project, applied to the resolved
+    template before anything is created: a workflow takes another run when one
+    of its collections is a ``recursive`` scan, and two runs of a flat workflow
+    must not share a directory name.
+    """
+    from depictio.api.v1.endpoints.projects_endpoints.attach_run import (
+        _flat_clash,
+        attach_targets,
+    )
+
+    indexes, _blockers = attach_targets(config)
+    if not indexes:
+        raise CodedHTTPException(
+            422,
+            "This template reads one run per project: none of its data collections "
+            "scans a folder of runs. Create one project per run.",
+            "runs_not_supported",
+        )
+    for index in indexes:
+        location = (config.get("workflows") or [])[index].get("data_location") or {}
+        clash = _flat_clash(location.get("structure"), [first, *others])
+        if clash:
+            raise CodedHTTPException(422, clash, "run_name_clash")
+
+
+def _record_other_runs(project: dict[str, Any], others: list[str]) -> None:
+    """Add ``others`` to the locations of each workflow that takes a run, as attach_run does."""
+    from depictio.api.v1.endpoints.projects_endpoints.attach_run import (
+        attach_targets,
+        merged_locations,
+    )
+
+    indexes, _blockers = attach_targets(project)
+    workflows = project.get("workflows") or []
+    updates: dict[str, Any] = {}
+    for index in indexes:
+        location = workflows[index].get("data_location") or {}
+        locations = list(location.get("locations") or [])
+        attached = list(location.get("attached_locations") or [])
+        for other in others:
+            locations, attached = merged_locations(locations, attached, other)
+        updates[f"workflows.{index}.data_location.locations"] = locations
+        updates[f"workflows.{index}.data_location.attached_locations"] = attached
+    if updates:
+        projects_collection.update_one({"_id": project["_id"]}, {"$set": updates})
+
+
+def _edited_template(template_id: str, edits: TemplateEdits, *, remote: bool) -> dict[str, Any]:
+    """The shipped template with the Project Builder's edits applied, as raw YAML."""
+    try:
+        raw, _path, _removed, _warnings = compose(template_id, edits, remote=remote)
+    except BuilderRefused as exc:
+        raise CodedHTTPException(exc.status, exc.detail, exc.code or "template_edits_invalid")
+    return raw
+
+
+def locate_shipped_template(template_id: str):
+    """Where a shipped template lives: its dashboards are read next to it."""
+    try:
+        return _locate_shipped(template_id)
+    except BuilderRefused as exc:
+        raise CodedHTTPException(exc.status, exc.detail, exc.code or "template_not_found")
+
+
+def _default_image_folders(config: dict[str, Any]) -> None:
+    """Give each image collection without an ``s3_base_folder`` one in the server's bucket.
+
+    The images are uploaded there at ingest, and served from there only; the
+    Project Builder cannot know the bucket, so the server picks a fresh folder.
+    """
+    from uuid import uuid4
+
+    from depictio.api.v1.configs.config import settings
+
+    for workflow in config.get("workflows") or []:
+        for dc in workflow.get("data_collections") or []:
+            dc_config = dc.get("config") or {}
+            if str(dc_config.get("type") or "").lower() != "image":
+                continue
+            properties = dc_config.setdefault("dc_specific_properties", {})
+            if not properties.get("s3_base_folder"):
+                tag = dc.get("data_collection_tag") or "images"
+                properties["s3_base_folder"] = (
+                    f"s3://{settings.s3.bucket}/images/{uuid4().hex[:12]}/{tag}"
+                )
+
+
+def _create_project_from_inline_template(
+    template: dict[str, Any],
+    *,
+    root,
+    read_config,
+    storage_settings,
+    current_user,
+    project_name: str | None,
+    dry_run: bool,
+    is_public: bool = False,
+    description: str | None = None,
+) -> FromRunReport:
+    """``from_run`` for an ad-hoc template: validate, resolve from memory, preview, create.
+
+    The same steps as a catalogue template, minus what an ad-hoc one cannot
+    have (detection, dashboards, file variables), plus the builder's rules
+    (``validate_inline_template``) before anything is resolved. Confinement to
+    the run folder is checked on the resolved config as for any template.
+    """
+    from depictio.cli.cli.utils.template_preview import preview_data_root
+    from depictio.project_builder.plan import check_project, declared_variables, resolve_inline
+    from depictio.project_builder.validate import validate_inline_template
+
+    try:
+        validate_inline_template(template, remote=root.is_remote)
+        resolution = resolve_inline(
+            template, root, project_name=project_name, CLI_config=read_config
+        )
+        resolved_config = resolution[0]
+        _assert_data_collections_confined(resolved_config, root)
+        check_project(resolved_config)
+    except BuilderRefused as exc:
+        raise CodedHTTPException(exc.status, exc.detail, exc.code or "inline_template_invalid")
+    template_metadata = resolution[1]
+    run = _read_run(root)
+
+    try:
+        preview = preview_data_root(
+            template_id=template_metadata.template_id, data_root=root, resolution=resolution
+        )
+    except S3AccessError:
+        raise
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=f"Data root preview failed: {exc}")
+
+    report = FromRunReport(
+        project_name=resolved_config.get("name", ""),
+        template_id=template_metadata.template_id,
+        data_root=root.location,
+        detected_runs=list(preview.detected_runs),
+        resolved_variables=declared_variables(preview.resolved_variables, template_metadata),
+        data_collections=_report_rows(preview.data_collections),
+        pruned_optional_dcs=list(preview.pruned_optional_dcs),
+        truncated=preview.truncated,
+        run_info=_run_info_report(run, root),
+        dry_run=dry_run,
+    )
+    if dry_run:
+        report.success = True
+        return report
+
+    _default_image_folders(resolved_config)
+    create_payload = _new_project_document(
+        resolved_config,
+        current_user,
+        origin_kind="run",
+        origin_location=root.location,
+        is_public=is_public,
+    )
+    create_payload["description"] = description
+    projects_collection.insert_one(create_payload)
+    project_oid = create_payload["_id"]
+    if storage_settings is not None:
+        _save_storage_or_roll_back(project_oid, storage_settings)
+        report.storage_saved = True
+    report.project_id = str(project_oid)
+
+    stored = projects_collection.find_one({"_id": project_oid}) or {}
+    preflight = _preflight_split(stored, preview.data_collections)
+    all_ok = True
+    if preflight.to_dispatch or preflight.failed or preflight.skipped:
+        run_id, all_dispatched, _results = _dispatch_refresh_tasks(
+            project_dict=stored,
+            to_dispatch=preflight.to_dispatch,
+            current_user=current_user,
+            preflight_failed=preflight.failed,
+            preflight_skipped=preflight.skipped,
+            command="from_run",
+            scan_modes=_scan_modes(stored),
+            data_root=root.location,
+        )
+        report.run_id = run_id
+        all_ok = all_dispatched
+    else:
+        logger.warning(
+            f"from_run created project '{report.project_name}' with no ingestable "
+            "data collection; no ingestion run was opened."
+        )
     report.success = all_ok
     return report

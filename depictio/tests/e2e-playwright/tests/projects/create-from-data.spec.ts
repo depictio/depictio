@@ -1,7 +1,8 @@
 /**
  * The new-project dialog: one screen for files and a folder, a quiet "Other"
- * row, the pipeline offered only once a folder was read. UI only, except the
- * last test, where a dropped file becomes a project.
+ * row, the ways to read a folder (flat tables, custom workflows, pipeline
+ * template) offered only once a folder was read. UI only, except the last
+ * test, where a dropped file becomes a project.
  */
 
 import { Page } from "@playwright/test";
@@ -30,12 +31,13 @@ test.describe("New project dialog", () => {
     await expect(page.getByTestId("files-dropzone")).toBeVisible();
     await expect(page.getByTestId("run-data-root-input")).toBeVisible();
     await expect(page.getByTestId("create-source-manifest")).toHaveCount(0);
-    // Nothing given yet: Next waits, and says for what.
+    // Nothing given yet: Next waits; the boxes say what to give, so no line
+    // repeats it under the button.
     await expect(page.getByTestId("create-from-run-submit")).toHaveAttribute(
       "aria-disabled",
       "true",
     );
-    await expect(page.getByTestId("run-submit-disabled-reason")).toContainText("Drop files");
+    await expect(page.getByTestId("run-submit-disabled-reason")).toHaveCount(0);
   });
 
   test("Import has moved from the page header to the dialog", async ({ loginAsAdmin, page }) => {
@@ -48,6 +50,10 @@ test.describe("New project dialog", () => {
   test("the pipeline is offered only after a folder was read", async ({ loginAsAdmin, page }) => {
     await loginAsAdmin();
     await openDialog(page);
+    // No folder yet: no choice of how to read it, no pipeline line, no picker.
+    await expect(page.getByTestId("read-level-choice")).toHaveCount(0);
+    await expect(page.getByTestId("read-level-template-pick")).toHaveCount(0);
+    await expect(page.getByTestId("folder-pipeline-line")).toHaveCount(0);
     await expect(page.getByTestId("folder-know-pipeline")).toHaveCount(0);
     await expect(page.getByTestId("run-pipeline-select")).toHaveCount(0);
   });

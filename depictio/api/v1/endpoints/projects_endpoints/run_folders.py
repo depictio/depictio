@@ -60,7 +60,6 @@ from depictio.api.v1.endpoints.projects_endpoints.from_run import (
 from depictio.api.v1.endpoints.projects_endpoints.local_dirs import (
     MAX_ENTRIES,
     MULTIQC,
-    NOISE_DIRS,
     PIPELINE_INFO,
     RUN_MARKERS,
     CodedHTTPException,
@@ -68,10 +67,11 @@ from depictio.api.v1.endpoints.projects_endpoints.local_dirs import (
     LocalDirListing,
     active_local_policy,
     is_directory,
-    is_hidden_name,
-    is_multiqc_output,
     require_local_caller,
     run_markers,
+)
+from depictio.api.v1.endpoints.projects_endpoints.local_dirs import (
+    looks_like_run as _local_looks_like_run,
 )
 from depictio.api.v1.endpoints.projects_endpoints.run_records import (
     RunInfoSummary,
@@ -83,7 +83,13 @@ from depictio.api.v1.endpoints.projects_endpoints.storage_config import (
     RunStorageIn,
     read_settings,
 )
-from depictio.models.local_access import LocalDataPolicy, LocalPathRefused
+from depictio.models.local_access import (
+    NOISE_DIRS,
+    LocalDataPolicy,
+    LocalPathRefused,
+    is_hidden_name,
+    is_multiqc_output,
+)
 from depictio.models.logging import logger
 from depictio.models.models.run_info import WorkflowRunInfo
 from depictio.models.s3_access import (
@@ -185,7 +191,8 @@ class FolderInspection(BaseModel):
 
     ``detected`` is None when detection was not asked for, or when no engine
     recognised the folder. ``run_info`` is set whenever ``detected`` is, even
-    when no installed template fits the run.
+    when no installed template fits the run. For a folder of runs
+    (``child_runs``, two or more), they describe its first run.
     """
 
     location: str
@@ -198,6 +205,9 @@ class FolderInspection(BaseModel):
     truncated: bool = False
     detected: DetectedTemplate | None = None
     run_info: RunInfoSummary | None = None
+    # A folder that is not a run itself: its direct sub-folders that are
+    # (``run_markers``), by name. Local folders only; empty otherwise.
+    child_runs: list[str] = Field(default_factory=list)
 
 
 class FoundRun(BaseModel):
@@ -395,7 +405,7 @@ def _multiqc_output_below(parts: list[str]) -> bool:
     """Whether the segments of a key below a ``multiqc/`` folder are MultiQC
     output, in that folder or one folder down: ``multiqc_data/...``,
     ``multiqc.parquet``, ``star_salmon/multiqc_report.html`` (see
-    :func:`~local_dirs.is_multiqc_output`)."""
+    :func:`~local_access.is_multiqc_output`)."""
     for depth in (0, 1):
         if depth >= len(parts):
             return False
@@ -701,7 +711,7 @@ def _local_children(policy: LocalDataPolicy, folder: str) -> tuple[list[str], li
 
     What the policy lets the server read only: no dot-names, no symlink that
     leaves the roots, no folder Depictio keeps for itself. The noise folders
-    the listing hides (:data:`~local_dirs.NOISE_DIRS`) are left out too. At
+    the listing hides (:data:`~local_access.NOISE_DIRS`) are left out too. At
     most :data:`MAX_INSPECT_ENTRIES` entries are looked at. A folder the
     server may not read holds nothing.
     """
@@ -724,6 +734,16 @@ def _local_children(policy: LocalDataPolicy, folder: str) -> tuple[list[str], li
     return sorted(folders), sorted(files), False
 
 
+# A folder of runs names at most this many of them.
+MAX_CHILD_RUNS = 100
+
+
+def _local_child_runs(policy: LocalDataPolicy, folder: str, names: list[str]) -> list[str]:
+    """The sub-folders of real folder ``folder`` (named ``names``) that are runs, in name order."""
+    runs = [name for name in names if _local_looks_like_run(os.path.join(folder, name), policy)]
+    return runs[:MAX_CHILD_RUNS]
+
+
 def _inspection(
     *,
     location: str,
@@ -735,6 +755,7 @@ def _inspection(
     truncated: bool,
     detected: DetectedTemplate | None,
     run_info: RunInfoSummary | None = None,
+    child_runs: list[str] | None = None,
 ) -> FolderInspection:
     return FolderInspection(
         location=location,
@@ -747,6 +768,7 @@ def _inspection(
         truncated=truncated,
         detected=detected,
         run_info=run_info,
+        child_runs=child_runs or [],
     )
 
 
@@ -811,12 +833,16 @@ def inspect_folder(
 
     policy, real = _local_folder(location, request=request, current_user=current_user)
     folders, files, truncated = _local_children(policy, real)
+    markers = run_markers(real, folders, policy)
+    child_runs = [] if markers else _local_child_runs(policy, real, folders)
     detected = run_info = None
     if detect:
         from depictio.cli.cli.utils.data_root import LocalDataRoot
 
-        root = LocalDataRoot(real)
-        if _holds_run_traces(root):
+        # A folder of runs has no records of its own: it is the pipeline of its
+        # first run, which ``POST /projects/from_run`` with ``runs`` reads too.
+        root = LocalDataRoot(os.path.join(real, child_runs[0]) if len(child_runs) >= 2 else real)
+        if len(child_runs) >= 2 or _holds_run_traces(root):
             detected, info = _detect_with_info(root)
             run_info = _run_info_summary(info, root, policy)
     return _inspection(
@@ -825,10 +851,11 @@ def inspect_folder(
         name=os.path.basename(real) or real,
         folders=folders,
         files=files,
-        markers=run_markers(real, folders, policy),
+        markers=markers,
         truncated=truncated,
         detected=detected,
         run_info=run_info,
+        child_runs=child_runs,
     )
 
 
@@ -837,7 +864,7 @@ def inspect_folder(
 
 def _walk_names(folder: str) -> list[str]:
     """The sub-directory names of real folder ``folder``, hidden ones left out
-    (dot-names, :data:`~local_dirs.NOISE_DIRS`): plain folders first, then
+    (dot-names, :data:`~local_access.NOISE_DIRS`): plain folders first, then
     symlinked ones, each in name order.
 
     Plain first, so a link to a folder of the same parent (``latest`` to

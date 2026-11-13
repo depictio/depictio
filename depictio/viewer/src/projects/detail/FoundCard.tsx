@@ -1,8 +1,6 @@
 import React, { type ReactNode } from 'react';
-import { Badge, Box, Group, Paper, Stack, Text, Title } from '@mantine/core';
+import { Box, Group, Paper, Stack, Text, Title } from '@mantine/core';
 import {
-  AlertTriangle,
-  CheckCircle2,
   Cloud,
   Flag,
   Folder,
@@ -13,6 +11,9 @@ import {
   Upload,
   FileText,
 } from 'lucide-react';
+import { Icon } from '@iconify/react';
+
+import { CHECK_STATUS } from '../checkStatus';
 import type { ProjectSourceKind } from '../layout';
 
 export type FoundStatus = 'ok' | 'differs' | 'warn' | 'info' | null;
@@ -34,13 +35,6 @@ export interface FoundCardProps {
   embedded?: boolean;
 }
 
-const STATUS: Record<'ok' | 'differs' | 'warn' | 'info', { color: string; Icon: typeof Info }> = {
-  ok: { color: 'green', Icon: CheckCircle2 },
-  differs: { color: 'orange', Icon: AlertTriangle },
-  warn: { color: 'orange', Icon: AlertTriangle },
-  info: { color: 'blue', Icon: Info },
-};
-
 /** Read-only facts about a project (or one about to be created), one per row. */
 export const FoundCard: React.FC<FoundCardProps> = ({
   title = 'What Depictio found',
@@ -56,7 +50,7 @@ export const FoundCard: React.FC<FoundCardProps> = ({
       </Box>
     )}
     {rows.map((row) => {
-      const status = row.status ? STATUS[row.status] : null;
+      const status = row.status ? CHECK_STATUS[row.status] : null;
       return (
         <Group
           key={row.key}
@@ -74,9 +68,10 @@ export const FoundCard: React.FC<FoundCardProps> = ({
           <Stack gap={4} style={{ flex: 1, minWidth: 0 }}>
             <Box fz="sm">{row.value}</Box>
             {row.hint && status ? (
-              <Group gap={6} wrap="nowrap" c={status.color}>
-                <status.Icon size={14} aria-hidden />
-                <Text size="xs" c={status.color} component="span">
+              // The Checks' marks: the icon carries the outcome, the text stays dimmed.
+              <Group gap={6} wrap="nowrap" align="center">
+                <Icon icon={status.icon} width={14} color={`var(--mantine-color-${status.color}-6)`} aria-hidden />
+                <Text size="xs" c="dimmed" component="span">
                   {row.hint}
                 </Text>
               </Group>
@@ -101,24 +96,17 @@ export const FoundCard: React.FC<FoundCardProps> = ({
   </Paper>
 );
 
-/** Run names as chips, with "+N more" past `max`. */
-export const RunChips: React.FC<{ names: string[]; max?: number }> = ({ names, max = 3 }) => {
+/** Run names as one line of text, "+N more" past `max`: a list to read, not
+ *  things to click, so no chips. */
+export const RunNames: React.FC<{ names: string[]; max?: number }> = ({ names, max = 6 }) => {
   if (names.length === 0) return null;
   const shown = names.slice(0, max);
   const rest = names.length - shown.length;
   return (
-    <Group gap={6} wrap="wrap" data-testid="run-chips">
-      {shown.map((n) => (
-        <Badge key={n} variant="light" color="gray" radius="sm" tt="none" ff="monospace">
-          {n}
-        </Badge>
-      ))}
-      {rest > 0 && (
-        <Badge variant="light" color="gray" radius="sm" tt="none" ff="monospace" c="dimmed">
-          +{rest} more
-        </Badge>
-      )}
-    </Group>
+    <Text size="xs" c="dimmed" ff="monospace" data-testid="run-names" style={{ wordBreak: 'break-word' }}>
+      {shown.join(' · ')}
+      {rest > 0 ? ` · +${rest} more` : ''}
+    </Text>
   );
 };
 

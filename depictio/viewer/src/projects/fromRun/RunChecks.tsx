@@ -7,6 +7,8 @@
  *    template was written for; one value when both agree, both when not;
  *  - Tasks: how the run's tasks ended, from its execution trace;
  *  - Folder: one run or several, of one pipeline version, listed in full;
+ *  - Samples (several runs): no MultiQC sample named in two runs, or the
+ *    creation is refused;
  *  - Input files: the files the template is pointed at (samplesheet, ...);
  *  - Collections: what the template finds in the folder, opening onto every
  *    data collection, where it looked and what it found.
@@ -46,6 +48,9 @@ import type {
 } from 'depictio-react-core';
 
 import { engineLabel, TemplateSourceLogo, WorkflowEngineLogo } from '../template';
+import { RunNames } from '../detail/FoundCard';
+import { CHECK_STATUS } from '../checkStatus';
+import type { CheckOutcome } from '../checkStatus';
 import { CollectionPlan } from './CollectionPlan';
 import { RunFilePath, RunFileScope } from './FilePreview';
 import { FlowBadge, matchStatus } from './FlowBadge';
@@ -59,16 +64,7 @@ export interface RunInfo {
   engine: string | null;
 }
 
-type CheckStatus = 'ok' | 'differs' | 'warn' | 'fail' | 'info' | 'unknown' | 'loading';
-
-const STATUS: Record<Exclude<CheckStatus, 'loading'>, { icon: string; color: string; label: string }> = {
-  ok: { icon: 'mdi:check-circle', color: 'green', label: 'Passes' },
-  differs: { icon: 'mdi:approximately-equal', color: 'yellow', label: 'Differs' },
-  warn: { icon: 'mdi:alert-circle', color: 'orange', label: 'Needs a look' },
-  fail: { icon: 'mdi:close-circle', color: 'red', label: 'Fails' },
-  info: { icon: 'mdi:minus-circle-outline', color: 'gray', label: 'Optional, absent' },
-  unknown: { icon: 'mdi:help-circle-outline', color: 'gray', label: 'Cannot be checked' },
-};
+type CheckStatus = CheckOutcome | 'loading';
 
 /** How the two sides of an identity row agree, as the tests and the mark
  *  read it. */
@@ -107,7 +103,7 @@ const Mark: React.FC<{
   if (status === 'loading') {
     return <Loader size={14} aria-label="Checking" data-testid={testId} />;
   }
-  const meta = STATUS[status];
+  const meta = CHECK_STATUS[status];
   return (
     <Tooltip label={label ?? meta.label} withArrow zIndex={Z_LAYERS.tooltip}>
       <ThemeIcon
@@ -243,10 +239,10 @@ function folderCheck(
     status = 'warn';
     parts.push(`Runs of more than one pipeline or version: ${identities.join(', ')}`);
   }
-  const runs = report?.detected_runs.length || runInfo?.runs_scanned || 0;
-  if (runs > 1 || (report?.detected_runs.length ?? 0) > 0) {
-    parts.push(`${plural(runs, 'run')}, read together`);
-  }
+  const named = report?.runs ?? [];
+  const runs = named.length || report?.detected_runs.length || runInfo?.runs_scanned || 0;
+  // "Read together" only says something of two or more.
+  if (runs > 1) parts.push(`${plural(runs, 'run')}, read together`);
   if (listingCut || report?.truncated) {
     status = 'warn';
     parts.push('the listing stopped early, so every count is a minimum');
@@ -254,6 +250,22 @@ function folderCheck(
   if (parts.length === 0) return { status, text: 'One run, listed in full' };
   const text = parts.join(' · ');
   return { status, text: text.charAt(0).toUpperCase() + text.slice(1) };
+}
+
+/** Several runs: does any MultiQC sample appear in two of them? Null for one. */
+function samplesCheck(report: FromRunReport | null): { status: CheckStatus; text: string } | null {
+  if (!report || (report.runs?.length ?? 0) < 2) return null;
+  const shared = report.shared_samples ?? [];
+  if (shared.length === 0) return { status: 'ok', text: 'No MultiQC sample in more than one run' };
+  const text = shared
+    .map((entry) => {
+      const more = entry.count - entry.samples.length;
+      return `${plural(entry.count, 'sample')} in ${entry.runs.join(' and ')}: ${entry.samples.join(', ')}${
+        more > 0 ? ` and ${more} more` : ''
+      }`;
+    })
+    .join(' · ');
+  return { status: 'fail', text: `${text}. One collection would merge them` };
 }
 
 const baseName = (location: string) => location.replace(/\/+$/, '').split('/').pop() || location;
@@ -399,7 +411,9 @@ export const RunChecks: React.FC<RunChecksProps> = ({
   const inputFiles = report?.input_files ?? [];
   const inputs = report && inputFiles.length > 0 ? inputsCheck(inputFiles) : null;
   const collections = report ? collectionsCheck(report) : null;
+  const samples = samplesCheck(report);
   const runs = report?.detected_runs ?? [];
+  const readRuns = report?.runs ?? [];
 
   return (
     <RunFileScope dataRoot={report?.data_root ?? location} storage={storage}>
@@ -569,15 +583,38 @@ export const RunChecks: React.FC<RunChecksProps> = ({
                   testIdPrefix={p}
                   details={
                     runs.length > 0 ? (
-                      <Group gap={6} wrap="wrap" data-testid={`${p}-detected-runs`}>
-                        {runs.map((name) => (
-                          <Code key={name}>{name}</Code>
-                        ))}
-                      </Group>
+                      <Stack gap={6}>
+                        <Group gap={6} wrap="wrap" data-testid={`${p}-detected-runs`}>
+                          {runs.map((name) => (
+                            <Code key={name}>{name}</Code>
+                          ))}
+                        </Group>
+                        {readRuns.length > 1 && (
+                          <Text size="xs" c="dimmed">
+                            Every run goes into this one project, in one ingestion. A collection read
+                            from a single file (a samplesheet, a metadata table) comes from{' '}
+                            {readRuns[0]}.
+                          </Text>
+                        )}
+                      </Stack>
                     ) : undefined
                   }
                 >
-                  <Text size="sm">{folder?.text ?? 'Reading the folder...'}</Text>
+                  <Stack gap={2}>
+                    <Text size="sm" style={{ wordBreak: 'break-word' }}>
+                      {folder?.text ?? 'Reading the folder...'}
+                    </Text>
+                    {/* The runs read, on a line of their own: a long list stays one line. */}
+                    {readRuns.length > 1 && <RunNames names={readRuns} />}
+                  </Stack>
+                </Check>
+              )}
+
+              {samples && (
+                <Check check="samples" label="Samples" status={samples.status} testIdPrefix={p}>
+                  <Text size="sm" style={{ wordBreak: 'break-word' }} data-testid={`${p}-shared-samples`}>
+                    {samples.text}
+                  </Text>
                 </Check>
               )}
 

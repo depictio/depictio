@@ -28,17 +28,19 @@ from pydantic import BaseModel, Field
 
 from depictio.api.v1.endpoints.projects_endpoints.local_dirs import CodedHTTPException
 from depictio.api.v1.endpoints.projects_endpoints.run_file_preview import (
+    RunFilePreviewRequest,
+    preview_run_file,
+)
+from depictio.api.v1.remote_fetch import RemoteURLRejected, open_validated_stream
+from depictio.cli.cli.utils.file_preview import (
     MAX_HEAD_BYTES,
     NOT_PREVIEWED,
     RunFilePreview,
-    RunFilePreviewRequest,
     _decoded_preview,
     _gunzip,
     _not_shown,
     _suffix,
-    preview_run_file,
 )
-from depictio.api.v1.remote_fetch import RemoteURLRejected, open_validated_stream
 from depictio.models.logging import logger
 
 URL_REFUSED = "url_refused"

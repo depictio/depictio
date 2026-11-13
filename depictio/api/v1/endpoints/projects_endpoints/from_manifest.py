@@ -255,6 +255,25 @@ def _new_project_document(
     return create_payload
 
 
+def _rename_workflow_tags(node: Any, renames: dict[str, str]) -> Any:
+    """``node`` with every ``workflow_tag`` naming a renamed workflow pointed at
+    its new name; an ``engine/name`` or ``catalog/name`` tag keeps its prefix."""
+    if isinstance(node, list):
+        return [_rename_workflow_tags(item, renames) for item in node]
+    if not isinstance(node, dict):
+        return node
+    out: dict[Any, Any] = {}
+    for key, value in node.items():
+        if key == "workflow_tag" and isinstance(value, str):
+            prefix, _, name = value.rpartition("/")
+            if name in renames:
+                value = f"{prefix}/{renames[name]}" if prefix else renames[name]
+            out[key] = value
+        else:
+            out[key] = _rename_workflow_tags(value, renames)
+    return out
+
+
 def _import_template_dashboards(
     dashboard_paths: list[Path],
     *,
@@ -263,6 +282,7 @@ def _import_template_dashboards(
     project_id: ObjectId,
     variables: dict[str, str],
     current_user,
+    workflow_renames: dict[str, str] | None = None,
 ) -> list[DashboardImportResult]:
     """Import a template's dashboards into a new project, keyed as ``depictio ingest`` keys them.
 
@@ -274,7 +294,8 @@ def _import_template_dashboards(
     a second copy of each. In-process, through the shared import handler, which
     binds DC tags to the ids just persisted and drops components whose optional
     DC was pruned. Each dashboard records the template revision (``template_version``)
-    it was imported from.
+    it was imported from. ``workflow_renames`` (``{shipped: new}``) points each
+    ``workflow_tag`` that names a workflow the Project Builder renamed at its new name.
     """
     import yaml
 
@@ -304,6 +325,9 @@ def _import_template_dashboards(
             parsed = yaml.safe_load(text)
             if variables:
                 parsed = substitute_template_variables(parsed, variables)
+            if workflow_renames:
+                parsed = _rename_workflow_tags(parsed, workflow_renames)
+            if variables or workflow_renames:
                 # sort_keys=False: PyYAML sorts mapping keys by default, which
                 # re-orders every dict-shaped component config.
                 text = yaml.dump(

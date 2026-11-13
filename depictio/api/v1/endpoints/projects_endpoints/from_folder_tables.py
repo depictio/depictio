@@ -51,10 +51,7 @@ from depictio.api.v1.endpoints.projects_endpoints.from_run import (
     _build_local_data_root,
     _is_local_path,
 )
-from depictio.api.v1.endpoints.projects_endpoints.local_dirs import (
-    NOISE_DIRS,
-    CodedHTTPException,
-)
+from depictio.api.v1.endpoints.projects_endpoints.local_dirs import CodedHTTPException
 from depictio.api.v1.endpoints.projects_endpoints.publish_lock import assert_project_unlocked
 from depictio.api.v1.endpoints.projects_endpoints.run_folders import (
     LOCATION_RULE,
@@ -63,6 +60,7 @@ from depictio.api.v1.endpoints.projects_endpoints.run_folders import (
 )
 from depictio.api.v1.endpoints.projects_endpoints.storage_config import RunStorageIn
 from depictio.api.v1.endpoints.user_endpoints.routes import get_user_or_anonymous
+from depictio.models.local_access import NOISE_DIRS
 from depictio.models.logging import logger
 from depictio.models.s3_access import S3AccessError, is_s3_url, iter_object_pages
 
