@@ -44,6 +44,7 @@ import PointerModeSwitch, { type PointerMode } from './controls/PointerModeSwitc
 import {
   VizControlGroup,
   VizInlineField,
+  VizSegmented,
   VizSelect,
   VizSlider,
   VizSwitch,
@@ -88,9 +89,11 @@ import {
 import type {
   BioimageInfo,
   BioimageViewer,
+  CompareMode,
   OverlayPoint,
   SelectionMode,
 } from './bioimage/viewer';
+import { formatMetric, metricChange, readSteps, type StepColumns } from './bioimage/steps';
 
 interface BioimageViewerConfig {
   image_wf_id?: string | null;
@@ -122,6 +125,14 @@ interface BioimageViewerConfig {
   labels_dc_id?: string | null;
   labels_opacity?: number;
   labels_outline?: boolean;
+  steps_wf_id?: string | null;
+  steps_dc_id?: string | null;
+  steps_store_col?: string | null;
+  steps_label_col?: string | null;
+  steps_order_col?: string | null;
+  steps_sample_col?: string | null;
+  steps_reference_col?: string | null;
+  steps_metric_cols?: string[];
 }
 
 interface Props {
@@ -436,6 +447,91 @@ const BioimageViewerRenderer: React.FC<Props> = ({
     };
   }, [imageDcId, refreshTick]);
 
+  // ---- Processing steps ---------------------------------------------------
+  // A steps table (one row per sample and step) picks the store instead of the
+  // store picker: its rows, narrowed by the dashboard filters, are the steps.
+  const stepsWfId = config.steps_wf_id ?? null;
+  const stepsDcId = config.steps_dc_id ?? null;
+  const stepCols = useMemo<StepColumns | null>(
+    () =>
+      config.steps_store_col
+        ? {
+            store: config.steps_store_col,
+            label: config.steps_label_col,
+            order: config.steps_order_col,
+            sample: config.steps_sample_col,
+            reference: config.steps_reference_col,
+            metrics: config.steps_metric_cols ?? [],
+          }
+        : null,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      config.steps_store_col,
+      config.steps_label_col,
+      config.steps_order_col,
+      config.steps_sample_col,
+      config.steps_reference_col,
+      (config.steps_metric_cols ?? []).join('|'),
+    ],
+  );
+  const stepsEnabled = Boolean(stepsWfId && stepsDcId && stepCols);
+  const [stepRows, setStepRows] = useState<Record<string, unknown[]> | null>(null);
+  const [stepsError, setStepsError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!stepsEnabled || !stepsWfId || !stepsDcId || !stepCols) {
+      setStepRows(null);
+      setStepsError(null);
+      return;
+    }
+    let cancelled = false;
+    const columns = [
+      ...new Set(
+        [stepCols.store, stepCols.label, stepCols.order, stepCols.sample, stepCols.reference, ...stepCols.metrics].filter(
+          (c): c is string => Boolean(c),
+        ),
+      ),
+    ];
+    fetchAdvancedVizData({
+      wfId: stepsWfId,
+      dcId: stepsDcId,
+      columns,
+      filters: activeFetchFilters,
+      vizKind: 'bioimage_viewer',
+    })
+      .then((res) => {
+        if (cancelled) return;
+        setStepRows(res.rows);
+        setStepsError(null);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setStepsError(errorText(err));
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stepsEnabled, stepsWfId, stepsDcId, stepCols, fetchFiltersKey, refreshTick]);
+  const steps = useMemo(
+    () => (stepRows && stepCols ? readSteps(stepRows, stepCols) : null),
+    [stepRows, stepCols],
+  );
+  const [pickedStepSample, setPickedStepSample] = useState<string | null>(null);
+  const stepSample = steps
+    ? pickedStepSample != null && steps.bySample.has(pickedStepSample)
+      ? pickedStepSample
+      : (steps.samples[0] ?? null)
+    : null;
+  const sampleSteps = useMemo(
+    () => (steps && stepSample != null ? (steps.bySample.get(stepSample) ?? []) : []),
+    [steps, stepSample],
+  );
+  const [pickedStep, setPickedStep] = useState<string | null>(null);
+  // The last step by default: the end result is what a reader checks first.
+  const pickedStepIndex = sampleSteps.findIndex((st) => st.label === pickedStep);
+  const activeStepIndex = pickedStepIndex >= 0 ? pickedStepIndex : sampleSteps.length - 1;
+  const activeStep = activeStepIndex >= 0 ? sampleSteps[activeStepIndex] : null;
+  const previousStep = activeStepIndex > 0 ? sampleSteps[activeStepIndex - 1] : null;
+
   const sampleValue = useMemo(
     () => sampleFromFilters(activeFetchFilters, config.sample_column, config.sample_dc_id),
     [activeFetchFilters, config.sample_column, config.sample_dc_id],
@@ -443,11 +539,14 @@ const BioimageViewerRenderer: React.FC<Props> = ({
   const [pickedStore, setPickedStore] = useState<string | null>(config.store ?? null);
   const activeStore = useMemo<BioimageStoreInfo | null>(() => {
     if (!stores || stores.length === 0) return null;
+    if (stepsEnabled) {
+      return activeStep ? (stores.find((s) => s.name === activeStep.store) ?? null) : null;
+    }
     if (sampleValue != null) {
       return stores.find((s) => s.sample === sampleValue || s.name === sampleValue) ?? null;
     }
     return stores.find((s) => s.name === pickedStore) ?? stores[0];
-  }, [stores, sampleValue, pickedStore]);
+  }, [stores, sampleValue, pickedStore, stepsEnabled, activeStep]);
   const activeStoreName = activeStore?.name ?? null;
   const activeStoreFormat = activeStore?.format ?? 'ome-zarr';
   const activeStoreRemote = Boolean(activeStore?.remote);
@@ -980,6 +1079,42 @@ const BioimageViewerRenderer: React.FC<Props> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewer, labelLut, labelsOpacity, labelsOutline, labelsVisible, accentKey]);
 
+  // ---- Reference image (a step's fixed image) ------------------------------
+  const referenceName = activeStep?.reference ?? null;
+  const referenceKnown = Boolean(
+    referenceName && stores?.some((st) => st.name === referenceName),
+  );
+  const [compareMode, setCompareMode] = useState<CompareMode>('colours');
+  const [compareOpacity, setCompareOpacity] = useState(0.5);
+  const [referenceError, setReferenceError] = useState<string | null>(null);
+  const comparing = referenceKnown && compareMode !== 'off';
+  useEffect(() => {
+    if (!viewer) return;
+    let cancelled = false;
+    setReferenceError(null);
+    const store =
+      comparing && imageDcId && referenceName
+        ? createBioimageZarrStore(imageDcId, referenceName)
+        : null;
+    viewer.setReference(store).catch((err: unknown) => {
+      if (cancelled || (err instanceof Error && err.name === 'LoadSupersededError')) return;
+      setReferenceError(`Could not open the reference ${referenceName}: ${errorText(err)}`);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [viewer, imageDcId, referenceName, comparing]);
+  // Colours mode compares one channel: the first one shown.
+  const compareChannel = channels.find((c) => c.visible)?.index ?? 0;
+  useEffect(() => {
+    if (!viewer) return;
+    viewer.setReferenceStyle({
+      mode: comparing ? compareMode : 'off',
+      opacity: compareOpacity,
+      channel: compareChannel,
+    });
+  }, [viewer, comparing, compareMode, compareOpacity, compareChannel]);
+
   // The masks show the cells, so their centroids stay undrawn (a lasso still
   // selects on them).
   const [pointRadius, setPointRadius] = usePersistedVizControl(metadata, 'point_radius', 6);
@@ -1091,7 +1226,86 @@ const BioimageViewerRenderer: React.FC<Props> = ({
   const primaryControls = useMemo(
     () => (
       <>
-        {stores && stores.length > 1 ? (
+        {stepsEnabled && steps ? (
+          <>
+            {steps.samples.length > 1 ? (
+              <VizSelect
+                label="Sample"
+                searchable
+                data={steps.samples}
+                value={stepSample}
+                onChange={(v) => v != null && setPickedStepSample(v)}
+                allowDeselect={false}
+              />
+            ) : null}
+            {sampleSteps.length > 1 ? (
+              sampleSteps.length <= 5 ? (
+                <VizSegmented
+                  label="Step"
+                  data={sampleSteps.map((st) => st.label)}
+                  value={activeStep?.label ?? ''}
+                  onChange={setPickedStep}
+                  data-testid="bioimage-steps"
+                />
+              ) : (
+                <VizSelect
+                  label="Step"
+                  data={sampleSteps.map((st) => st.label)}
+                  value={activeStep?.label ?? null}
+                  onChange={(v) => v != null && setPickedStep(v)}
+                  allowDeselect={false}
+                  data-testid="bioimage-steps"
+                />
+              )
+            ) : null}
+            {activeStep && stepCols && stepCols.metrics.length ? (
+              <Text size="xs" c="dimmed" data-testid="bioimage-step-metrics">
+                {stepCols.metrics
+                  .map((m) => {
+                    const value = activeStep.metrics[m];
+                    const change = previousStep ? metricChange(value, previousStep.metrics[m]) : null;
+                    const delta =
+                      change == null || change === 0
+                        ? ''
+                        : ` (${change > 0 ? '+' : '−'}${formatMetric(Math.abs(change))} vs ${previousStep?.label})`;
+                    return `${m} ${formatMetric(value)}${delta}`;
+                  })
+                  .join(' · ')}
+              </Text>
+            ) : null}
+            {referenceKnown ? (
+              <>
+                <VizSegmented
+                  label="Compare"
+                  data={[
+                    { value: 'off', label: 'Off' },
+                    { value: 'colours', label: 'Colours' },
+                    { value: 'fade', label: 'Fade' },
+                  ]}
+                  value={compareMode}
+                  onChange={(v) => setCompareMode(v as CompareMode)}
+                  data-testid="bioimage-compare"
+                />
+                {compareMode === 'fade' ? (
+                  <VizSlider
+                    label="Reference"
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    value={compareOpacity}
+                    onChange={setCompareOpacity}
+                  />
+                ) : null}
+                {compareMode === 'colours' ? (
+                  <Text size="xs" c="dimmed">
+                    {`This step in green, ${referenceName} in magenta: where they agree the image is grey-white.`}
+                  </Text>
+                ) : null}
+              </>
+            ) : null}
+          </>
+        ) : null}
+        {!stepsEnabled && stores && stores.length > 1 ? (
           <VizSelect
             label="Sample"
             data={stores.map((s) => ({ value: s.name, label: s.sample }))}
@@ -1144,7 +1358,7 @@ const BioimageViewerRenderer: React.FC<Props> = ({
       </>
     ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [stores, activeStore, sampleValue, config.sample_column, wells, activeWell, wellValue, config.well_column, info, plane, playing],
+    [stores, activeStore, sampleValue, config.sample_column, wells, activeWell, wellValue, config.well_column, info, plane, playing, stepsEnabled, steps, stepSample, sampleSteps, activeStep, previousStep, stepCols, referenceKnown, referenceName, compareMode, compareOpacity],
   );
 
   // The cosmetic tier: how it is drawn. One group per channel, then the labels
@@ -1255,6 +1469,15 @@ const BioimageViewerRenderer: React.FC<Props> = ({
     notices.push({ key: 'label-stores', tone: 'error', text: `Labels: ${labelStoresError}` });
   }
   if (labelsError) notices.push({ key: 'labels', tone: 'error', text: labelsError });
+  if (stepsError) notices.push({ key: 'steps', tone: 'error', text: `Steps: ${stepsError}` });
+  if (referenceError) notices.push({ key: 'reference', tone: 'error', text: referenceError });
+  if (referenceName && stores && !referenceKnown) {
+    notices.push({
+      key: 'reference-missing',
+      tone: 'warning',
+      text: `The reference ${referenceName} is not a store of this image collection.`,
+    });
+  }
   if (labelsMisaligned && labelsSize && info) {
     notices.push({
       key: 'misaligned',
@@ -1320,7 +1543,11 @@ const BioimageViewerRenderer: React.FC<Props> = ({
   const validation =
     activeStore?.validation ?? (activeStoreName ? remoteValidation[activeStoreName] : null) ?? null;
   const helpContext: HelpContext = {
-    samples: Boolean(stores && stores.length > 1),
+    steps: stepsEnabled && sampleSteps.length > 1,
+    reference: referenceKnown,
+    samples: stepsEnabled
+      ? Boolean(steps && steps.samples.length > 1)
+      : Boolean(stores && stores.length > 1),
     sampleFollowsFilter: sampleValue != null || wellValue != null,
     plate: wells.length > 1,
     hasZ: (info?.sizes.z ?? 1) > 1,
@@ -1397,7 +1624,15 @@ const BioimageViewerRenderer: React.FC<Props> = ({
 
   const noStoreMessage =
     !storesLoading && !storesError && stores
-      ? wellMissing && wellValue != null
+      ? stepsEnabled
+        ? !steps
+          ? undefined
+          : !activeStep
+            ? 'No processing step matches the filters'
+            : !activeStore
+              ? `Step "${activeStep.label}" names ${activeStep.store}, which is not a store of this image collection`
+              : undefined
+        : wellMissing && wellValue != null
         ? `No well "${wellValue}" in this plate`
         : emptyStoreMessage(stores, activeStore, sampleValue)
       : undefined;

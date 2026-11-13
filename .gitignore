@@ -237,6 +237,7 @@ dump.rdb
 !depictio/projects/init/bioimage_examples/data/*.csv
 !depictio/projects/init/bioimage_examples/data/multi_sample/*.csv
 !depictio/projects/init/bioimage_examples/data/shapes/*.csv
+!depictio/projects/init/bioimage_examples/data/registration/*.csv
 # ...and the SpatialData example store: its points and shapes are parquet, and
 # its AnnData table has a var/ group, both ignored globally above.
 !depictio/projects/init/bioimage_examples/data/*.zarr/**/*.parquet

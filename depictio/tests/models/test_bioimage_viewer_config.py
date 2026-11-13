@@ -198,3 +198,42 @@ class TestSelectionColumn:
 def test_well_column_is_a_plain_filter_column():
     """Any filter on the column picks the well: no DC is needed to name it."""
     assert BioimageViewerConfig(well_column="well").well_column == "well"
+
+
+STEPS = {
+    "viz_kind": "bioimage_viewer",
+    "image_dc_tag": "registration_images",
+    "steps_dc_tag": "registration_steps",
+    "steps_store_col": "store",
+    "steps_label_col": "step",
+    "steps_order_col": "step_order",
+    "steps_sample_col": "sample",
+    "steps_reference_col": "fixed_store",
+    "steps_metric_cols": ["ncc", "tre_px"],
+}
+
+
+def test_processing_steps_round_trip():
+    parsed = VIZ_CONFIG.validate_python(STEPS)
+    assert parsed.steps_store_col == "store"
+    assert parsed.steps_metric_cols == ["ncc", "tre_px"]
+
+
+def test_steps_columns_need_a_steps_dc():
+    blob = {k: v for k, v in STEPS.items() if k != "steps_dc_tag"}
+    with pytest.raises(ValidationError, match="no steps DC is bound"):
+        VIZ_CONFIG.validate_python(blob)
+
+
+def test_a_steps_dc_needs_its_store_column():
+    blob = {k: v for k, v in STEPS.items() if k != "steps_store_col"}
+    with pytest.raises(ValidationError, match="needs steps_store_col"):
+        VIZ_CONFIG.validate_python(blob)
+
+
+@pytest.mark.parametrize(
+    "extra", [{"store": "a.zarr"}, {"sample_dc_tag": "s", "sample_column": "s"}]
+)
+def test_steps_pick_the_store_alone(extra):
+    with pytest.raises(ValidationError, match="picks the store itself"):
+        VIZ_CONFIG.validate_python({**STEPS, **extra})

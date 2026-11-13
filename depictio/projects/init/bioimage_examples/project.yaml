@@ -7,8 +7,10 @@
 # tables are derived from the pixels. Two synthetic cases test the viewer's
 # reading rather than its looks: a small HCS plate (OME-Zarr plate, a well
 # filter opens its well) and a shape gallery (one store per axis layout, plus
-# one off the spec). See data/README.md, dev/bioimage/make_examples.py and
-# dev/bioimage/make_plate_and_shapes.py to regenerate.
+# one off the spec), and a registration (the steps of two image registrations,
+# one failing at its affine step, with a metrics table). See data/README.md,
+# dev/bioimage/make_examples.py, dev/bioimage/make_plate_and_shapes.py and
+# dev/bioimage/make_registration_example.py to regenerate.
 #
 # Optional project: not part of the default seed set. Seed it with
 # DEPICTIO_SEED_EXTRA_PROJECTS=bioimage_examples, or
@@ -529,6 +531,53 @@ workflows:
               shape: "Array shape, in axis order"
               dtype: "Pixel type"
               note: "What the store exercises in the viewer"
+
+      # ----------------------------------------------------------------
+      # 9. Registration: the steps of an image registration, per sample
+      # ----------------------------------------------------------------
+      # One store per sample and step (and the fixed image of each sample). No
+      # sample_pattern: every store stays its own sample name, which is what the
+      # steps table's `store` column points at.
+      - id: "646b0f3c1e4a2d7f8e5b8f27"
+        data_collection_tag: "registration_images"
+        description: "Synthetic registration of two samples: the fixed image and the moving image resampled after each step (raw, rigid, affine, B-spline), 384 x 384, 2 channels"
+        config:
+          type: "bioimage"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "embryo_[a-z]+_(?:fixed|raw|rigid|affine|bspline)\\.zarr"
+          dc_specific_properties:
+            format: "ome-zarr"
+            ngff_version: "0.4"
+            upload: true
+
+      - id: "646b0f3c1e4a2d7f8e5b8f28"
+        data_collection_tag: "registration_steps"
+        description: "One row per sample and registration step: the store it wrote, the fixed image, and its quality metrics"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/bioimage_examples/data/registration/registration_steps.csv"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              separator: ","
+            columns_description:
+              sample: "Sample the registration belongs to"
+              step: "Registration step: raw (none), rigid, affine or bspline"
+              step_order: "Position of the step, 0 for the uncorrected image"
+              transform: "Kind of transform fitted at the step"
+              store: "Store in the image collection holding the moving image after the step"
+              fixed_store: "Store of the fixed image the step aligns to"
+              ncc: "Normalised cross-correlation of channel 0 against the fixed image (1 is identical)"
+              tre_px: "Mean target registration error over 20 landmarks, in pixels"
+              folding_pct: "Share of pixels where the Jacobian determinant of the step's displacement is <= 0 (folding)"
+              runtime_s: "Synthetic runtime of the step, in seconds"
 
 # A sample picked in the sample sheet narrows the cells table, so the cards and
 # table of the multi-sample tab follow the store the viewer is showing.

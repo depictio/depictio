@@ -115,6 +115,42 @@ export interface LabelsStyle extends LabelPaint {
   visible: boolean;
 }
 
+/** How a reference image (a registration's fixed image) is laid over the
+ *  image: `colours` draws one channel of each in complementary colours,
+ *  added, so aligned structure reads grey-white and an offset shows as green
+ *  and magenta fringes; `fade` draws the reference over the image at
+ *  `opacity`, in the image's own channel colours. */
+export type CompareMode = 'off' | 'colours' | 'fade';
+
+export interface ReferenceStyle {
+  mode: CompareMode;
+  opacity: number;
+  /** Channel compared in `colours` mode. */
+  channel: number;
+}
+
+/** What a reference store opened as. */
+export interface ReferenceInfo {
+  width: number;
+  height: number;
+  channels: number;
+}
+
+// The green / magenta pair of registration overlays (ImageJ, 3D Slicer): they
+// add up to white, so it is a data encoding, not a theme colour.
+export const COMPARE_IMAGE_RGB: Rgb = [0, 255, 0];
+export const COMPARE_REFERENCE_RGB: Rgb = [255, 0, 255];
+
+const ADDITIVE_BLEND = {
+  blend: true,
+  blendColorOperation: 'add',
+  blendColorSrcFactor: 'one',
+  blendColorDstFactor: 'one',
+  blendAlphaOperation: 'add',
+  blendAlphaSrcFactor: 'one',
+  blendAlphaDstFactor: 'one',
+} as const;
+
 export interface BioimageLoadOptions {
   /** A reload of the image already shown (a data refresh): when the new image
    *  has the same size, the channel state and plane carry over, and the view
@@ -138,6 +174,10 @@ export interface BioimageViewer {
    *  Rejects with `LoadSupersededError` when a later call replaced it. */
   setLabels(store: BioimageZarrStore | null): Promise<LabelsInfo | null>;
   setLabelsStyle(style: LabelsStyle): void;
+  /** Open a reference image to compare against (replacing any previous one),
+   *  or drop it with null. Rejects with `LoadSupersededError` when replaced. */
+  setReference(store: BioimageZarrStore | null): Promise<ReferenceInfo | null>;
+  setReferenceStyle(style: ReferenceStyle): void;
   setHighlighted(ids: ReadonlySet<string>): void;
   setSelectionMode(mode: SelectionMode): void;
   /** Theme sync. `accent` rings highlighted points and draws the ROI. */
@@ -267,6 +307,11 @@ export async function createBioimageViewer(
   let labelsStyle: LabelsStyle | null = null;
   let labelsStyleVersion = 0;
   let bitmaps = new WeakMap<object, { version: number; image: ImageData }>();
+  // Reference image (a registration's fixed image), drawn over the image.
+  let reference: PixelSource[] | null = null;
+  let referenceChannels = 0;
+  let referenceToken = 0;
+  let referenceStyle: ReferenceStyle = { mode: 'off', opacity: 0.5, channel: 0 };
 
   const hostSize = () => ({ w: host.clientWidth, h: host.clientHeight });
 
@@ -427,6 +472,18 @@ export async function createBioimageViewer(
     });
   };
 
+  /** A viv image layer over `pyramid`: one plain layer for a small
+   *  single-level image (its one chunk is the whole image), else tiled. */
+  const imageLayer = (pyramid: PixelSource[], props: Record<string, unknown>) => {
+    const [base] = pyramid;
+    const lab = base.labels;
+    const px = (axis: string) => base.shape[lab.indexOf(axis)] ?? 0;
+    if (pyramid.length === 1 && px('x') * px('y') <= WHOLE_IMAGE_MAX_PIXELS) {
+      return new ImageLayer({ ...props, loader: base } as never);
+    }
+    return new MultiscaleImageLayer({ ...props, loader: pyramid } as never);
+  };
+
   const render = () => {
     if (disposed) return;
     const layers: unknown[] = [];
@@ -450,12 +507,49 @@ export async function createBioimageViewer(
           opts.onError?.(err instanceof Error ? err : new Error(String(err)));
         },
       };
-      const [base] = data;
-      const px = (axis: string) => base.shape[axes.indexOf(axis)] ?? 0;
-      if (data.length === 1 && px('x') * px('y') <= WHOLE_IMAGE_MAX_PIXELS) {
-        layers.push(new ImageLayer({ ...imageProps, loader: base } as never));
-      } else {
-        layers.push(new MultiscaleImageLayer(imageProps as never));
+      const comparing = reference !== null && referenceStyle.mode !== 'off';
+      const compared =
+        channels.find((c) => c.index === referenceStyle.channel) ?? shown[0] ?? null;
+      if (comparing && referenceStyle.mode === 'colours' && compared) {
+        // One channel of each, green and magenta: the image's own colours would
+        // not add up to white where the two agree.
+        Object.assign(imageProps, {
+          selections: [selectionFor(axes, { c: compared.index, z: plane.z, t: plane.t })],
+          colors: [COMPARE_IMAGE_RGB],
+          contrastLimits: [compared.contrastLimits],
+          channelsVisible: [true],
+        });
+      }
+      layers.push(imageLayer(data, imageProps));
+      if (comparing && reference) {
+        const refAxes = reference[0].labels;
+        const usable = (c: ChannelState) => c.index < Math.max(referenceChannels, 1);
+        const colours = referenceStyle.mode === 'colours';
+        const drawn = colours ? (compared && usable(compared) ? [compared] : []) : shown.filter(usable);
+        if (drawn.length) {
+          layers.push(
+            imageLayer(reference, {
+              id: `bioimage-reference-${referenceToken}`,
+              loader: reference,
+              selections: drawn.map((c) =>
+                selectionFor(refAxes, { c: c.index, z: plane.z, t: plane.t }),
+              ),
+              colors: colours
+                ? [COMPARE_REFERENCE_RGB]
+                : drawn.map((c) => hexToRgb(c.color) ?? [255, 255, 255]),
+              contrastLimits: drawn.map((c) => c.contrastLimits),
+              channelsVisible: drawn.map(() => true),
+              // The low-resolution backdrop under the tiles would count twice.
+              excludeBackground: true,
+              opacity: colours ? 1 : referenceStyle.opacity,
+              ...(colours ? { parameters: ADDITIVE_BLEND } : {}),
+              onTileError: (err: unknown) => {
+                if (isBoundsError(err)) return;
+                opts.onError?.(err instanceof Error ? err : new Error(String(err)));
+              },
+            }),
+          );
+        }
       }
     }
     const labelsOverlay = labelsLayer();
@@ -761,6 +855,32 @@ export async function createBioimageViewer(
       render();
     },
 
+    async setReference(store) {
+      referenceToken += 1;
+      const token = referenceToken;
+      reference = null;
+      referenceChannels = 0;
+      render();
+      if (!store) return null;
+      const opened = await openOmeZarr(store);
+      if (token !== referenceToken || disposed) throw new LoadSupersededError();
+      const base = opened.pyramid[0];
+      const lab = base.labels;
+      reference = opened.pyramid;
+      referenceChannels = lab.includes('c') ? (base.shape[lab.indexOf('c')] ?? 1) : 1;
+      render();
+      return {
+        width: base.shape[lab.indexOf('x')] ?? 0,
+        height: base.shape[lab.indexOf('y')] ?? 0,
+        channels: referenceChannels,
+      };
+    },
+
+    setReferenceStyle(style) {
+      referenceStyle = style;
+      render();
+    },
+
     setHighlighted(ids) {
       highlighted = ids;
       highlightVersion += 1;
@@ -798,6 +918,7 @@ export async function createBioimageViewer(
       disposed = true;
       loadToken += 1;
       labelsToken += 1;
+      referenceToken += 1;
       listeners.abort();
       window.clearTimeout(hintTimer);
       try {

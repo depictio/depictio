@@ -1,0 +1,9 @@
+sample,step,step_order,transform,store,fixed_store,ncc,tre_px,folding_pct,runtime_s
+embryo_a,raw,0,none,embryo_a_raw.zarr,embryo_a_fixed.zarr,0.174,30.87,0.00,0.0
+embryo_a,rigid,1,rigid,embryo_a_rigid.zarr,embryo_a_fixed.zarr,0.422,9.79,0.00,6.4
+embryo_a,affine,2,affine,embryo_a_affine.zarr,embryo_a_fixed.zarr,0.593,5.33,0.00,13.9
+embryo_a,bspline,3,bspline,embryo_a_bspline.zarr,embryo_a_fixed.zarr,0.991,0.50,0.00,98.5
+embryo_b,raw,0,none,embryo_b_raw.zarr,embryo_b_fixed.zarr,0.216,34.85,0.00,0.0
+embryo_b,rigid,1,rigid,embryo_b_rigid.zarr,embryo_b_fixed.zarr,0.480,6.25,0.00,6.7
+embryo_b,affine,2,affine,embryo_b_affine.zarr,embryo_b_fixed.zarr,0.362,11.66,0.00,12.7
+embryo_b,bspline,3,bspline,embryo_b_bspline.zarr,embryo_b_fixed.zarr,0.684,3.96,0.06,111.0

@@ -121,6 +121,7 @@ def test_bioimage_examples_is_an_optional_dataset():
         ("bioimage_remote", "bioimage_examples"),
         ("bioimage_plate", "bioimage_examples"),
         ("bioimage_shapes", "bioimage_examples"),
+        ("bioimage_registration", "bioimage_examples"),
     ],
 )
 def test_dataset_of_dashboard_mapping(dashboard_name, dataset):
@@ -171,6 +172,7 @@ def test_bioimage_dashboards_follow_the_static_id_table():
         "bioimage_remote",
         "bioimage_plate",
         "bioimage_shapes",
+        "bioimage_registration",
     }
     assert all(_dataset_of_dashboard(name) == "bioimage_examples" for name in dashboards)
     # The main tab carries the project id, as in the other multi-tab projects.

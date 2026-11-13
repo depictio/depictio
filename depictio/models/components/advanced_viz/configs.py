@@ -1609,6 +1609,45 @@ class BioimageViewerConfig(_BaseVizConfig):
         default=True, description="Draw each label's outline rather than only its fill"
     )
 
+    # Processing steps: a table DC with one row per sample and step (raw,
+    # rigid, affine, B-spline...), each naming the store that step wrote in
+    # the image DC. The tile then shows a step picker instead of the store
+    # picker, the step's metrics, and can lay the step's reference image
+    # (the fixed image of a registration) over it to judge the alignment.
+    steps_wf_id: str | None = Field(
+        default=None, description="Workflow id of the processing-steps table DC (optional)"
+    )
+    steps_dc_id: str | None = Field(
+        default=None, description="Data-collection id of the processing-steps table DC"
+    )
+    steps_dc_tag: str | None = Field(
+        default=None,
+        description="Data-collection tag of the processing-steps table DC (resolved at import)",
+    )
+    steps_store_col: str | None = Field(
+        default=None, description="Steps column naming the store (in the image DC) a step wrote"
+    )
+    steps_label_col: str | None = Field(
+        default=None, description="Steps column with the step's name (e.g. rigid, affine)"
+    )
+    steps_order_col: str | None = Field(
+        default=None, description="Steps column ordering the steps (numeric); else table order"
+    )
+    steps_sample_col: str | None = Field(
+        default=None,
+        description="Steps column holding the sample, when the table covers several samples",
+    )
+    steps_reference_col: str | None = Field(
+        default=None,
+        description=(
+            "Steps column naming a reference store (the fixed image) to lay over the step"
+        ),
+    )
+    steps_metric_cols: list[str] = Field(
+        default_factory=list,
+        description="Steps columns shown as the step's metrics (e.g. ncc, tre_px)",
+    )
+
     # On by default, unlike EmbeddingConfig: the kind is new, so no shipped
     # dashboard inherits a cross-filter it did not ask for, and it stays inert
     # until a points DC with a `cell_id_col` is bound.
@@ -1650,6 +1689,26 @@ class BioimageViewerConfig(_BaseVizConfig):
             )
         if points_dc and not (self.x_col and self.y_col):
             raise ValueError("a points DC needs both x_col and y_col")
+        steps_cols = (
+            self.steps_store_col,
+            self.steps_label_col,
+            self.steps_order_col,
+            self.steps_sample_col,
+            self.steps_reference_col,
+            *self.steps_metric_cols,
+        )
+        steps_dc = self.steps_dc_id or self.steps_dc_tag
+        if any(steps_cols) and not steps_dc:
+            raise ValueError(
+                "steps columns are set but no steps DC is bound: set steps_dc_id or steps_dc_tag"
+            )
+        if steps_dc and not self.steps_store_col:
+            raise ValueError("a steps DC needs steps_store_col: the store each step wrote")
+        if steps_dc and (self.sample_column or self.store):
+            raise ValueError(
+                "a steps DC picks the store itself: drop sample_column / store, filter the "
+                "steps table instead"
+            )
         if self.sample_column and not (self.sample_dc_id or self.sample_dc_tag):
             raise ValueError("sample_column needs a sample DC: set sample_dc_id or sample_dc_tag")
         if self.labels_dc_id or self.labels_dc_tag:

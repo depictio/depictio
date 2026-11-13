@@ -23,6 +23,10 @@ export interface HelpContext {
   /** Lasso / rectangle selection filters the dashboard. */
   selectable: boolean;
   labels: boolean;
+  /** Processing steps to step through (raw, rigid, affine...). */
+  steps?: boolean;
+  /** A reference image (the fixed image) to compare a step against. */
+  reference?: boolean;
 }
 
 export interface HelpTopic {
@@ -49,6 +53,20 @@ export function helpTopics(ctx: HelpContext): HelpTopic[] {
         (ctx.sampleFollowsFilter
           ? 'Here a dashboard filter decides: change the filter and the image follows.'
           : 'A dashboard filter on the same column picks it too.'),
+    });
+  }
+  if (ctx.steps) {
+    out.push({
+      key: 'steps',
+      title: 'Processing steps',
+      text:
+        'Step picks which stage of the processing is shown, the last one first; its metrics, ' +
+        'and how they moved since the step before, sit under it.' +
+        (ctx.reference
+          ? ' Compare lays the reference image over it: Colours draws the step in green and the ' +
+            'reference in magenta, so what lines up turns grey-white and an offset shows as ' +
+            'coloured fringes; Fade blends the reference in with the slider.'
+          : ''),
     });
   }
   if (ctx.hasZ || ctx.hasT) {

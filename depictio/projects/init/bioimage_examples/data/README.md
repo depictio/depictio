@@ -34,6 +34,8 @@ experimental result.
 | `hcs_cells.csv` | One row per cell: its well, centroid, area, mean DNA and GFP | synthetic |
 | `shapes/shape_*.zarr` | One NGFF 0.4 store per axis layout: `y,x`, `z,y,x`, `t,y,x`, `t,c,z,y,x`, float32 `c,y,x`, 8 channels, and `y,x,c` (off the spec) | synthetic |
 | `shapes/shapes.csv` | Sample sheet of the gallery: axes, shape, pixel type and what each store exercises | synthetic |
+| `registration/{embryo_a,embryo_b}_{fixed,raw,rigid,affine,bspline}.zarr` | A registration in steps, NGFF 0.4, 2 channels (nuclei, membranes), 384 x 384, uint16, `c,y,x`: the fixed image and the moving image resampled into its frame after each step | synthetic |
+| `registration/registration_steps.csv` | One row per sample and step: the store it wrote, the fixed store, NCC, target registration error, folding and runtime | synthetic |
 
 All `x` / `y` columns are level-0 pixel coordinates of the matching image
 (column, row), so a viewer overlays them with `points_scale: 1`.
@@ -186,6 +188,18 @@ zarr-python 3 (the version is in `manifest.json`):
   wells differ visibly. `shape_yxc` puts the channel axis last on purpose: the
   ingest's NGFF check flags it and the viewer refuses it, naming its axes.
 
+- The registration is drawn too. Each sample's fixed image is cell nuclei with
+  the membranes between them; the moving image is that image under a known
+  transform (a 12 to 14 degree rotation, a shift, anisotropic scale and shear,
+  and a smooth displacement of up to about 12 px). A step store is the fixed
+  image sampled through what the step leaves uncorrected, so the metrics are
+  computed, not typed in: NCC of channel 0 against the fixed image, the target
+  registration error over 20 landmarks, and the share of pixels where the
+  Jacobian determinant of the B-spline displacement is not positive (folding).
+  `runtime_s` is the one invented column. `embryo_b` fails at the affine step
+  (its shear is fitted with the wrong sign), so its affine error is higher than
+  its rigid one and its B-spline step recovers only part of it and folds.
+
 ## Licences
 
 | Dataset | Licence | Credit |
@@ -228,6 +242,14 @@ numpy and zarr 2:
 ```bash
 uv run --no-project --python 3.12 --with numpy --with "zarr<3" \
     python dev/bioimage/make_plate_and_shapes.py \
+    --out depictio/projects/init/bioimage_examples/data
+```
+
+The registration example needs scipy as well:
+
+```bash
+uv run --no-project --python 3.12 --with numpy --with scipy --with "zarr<3" \
+    python dev/bioimage/make_registration_example.py \
     --out depictio/projects/init/bioimage_examples/data
 ```
 

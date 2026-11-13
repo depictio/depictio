@@ -29,6 +29,15 @@ describe('helpTopics', () => {
     ).toEqual(['move', 'pick', 'planes', 'channels', 'cells', 'select', 'labels', 'badges', 'open']);
   });
 
+  it('explains the steps, and the comparison only with a reference', () => {
+    const topic = (ctx: Partial<HelpContext>) =>
+      helpTopics({ ...BASE, ...ctx }).find((t) => t.key === 'steps');
+    expect(topic({})).toBeUndefined();
+    expect(topic({ steps: true })!.text).not.toMatch(/Compare/);
+    expect(topic({ steps: true, reference: true })!.text).toMatch(/green.*magenta/);
+    expect(keys({ samples: true, steps: true })).toEqual(['move', 'pick', 'steps', 'channels', 'badges', 'open']);
+  });
+
   it('names only the plane axes that exist', () => {
     const z = helpTopics({ ...BASE, hasZ: true }).find((t) => t.key === 'planes')!;
     expect(z.text).toMatch(/^Z moves/);

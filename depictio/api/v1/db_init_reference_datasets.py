@@ -449,6 +449,8 @@ STATIC_IDS = {
             "hcs_cells": "646b0f3c1e4a2d7f8e5b8f22",
             "shape_gallery_images": "646b0f3c1e4a2d7f8e5b8f23",
             "shape_gallery_sheet": "646b0f3c1e4a2d7f8e5b8f24",
+            "registration_images": "646b0f3c1e4a2d7f8e5b8f27",
+            "registration_steps": "646b0f3c1e4a2d7f8e5b8f28",
         },
         "dashboards": {
             # Main tab id equals project_id (same convention as the showcase).
@@ -462,6 +464,7 @@ STATIC_IDS = {
             "bioimage_remote": "646b0f3c1e4a2d7f8e5b8f18",
             "bioimage_plate": "646b0f3c1e4a2d7f8e5b8f25",
             "bioimage_shapes": "646b0f3c1e4a2d7f8e5b8f26",
+            "bioimage_registration": "646b0f3c1e4a2d7f8e5b8f29",
         },
     },
 }

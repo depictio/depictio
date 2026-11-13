@@ -1,0 +1,504 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8f29"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8f29"
+  },
+  "version": 1,
+  "stored_metadata": [
+    {
+      "index": "omz-reg-text",
+      "component_type": "text",
+      "title": "One registration, step by step",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_align": "left",
+      "section": "Steps",
+      "order": 6,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "Two synthetic samples, each registered in four steps as elastix or ANTs would do it: the raw moving image, then after a rigid, an affine and a B-spline transform. Pick a step in the viewer to see its output laid over the fixed image, with the step's metrics beside it. embryo_a improves at every step. embryo_b fails at the affine step: the shear is fitted the wrong way round, so it ends up further from the fixed image than after the rigid step, and the B-spline cannot fully recover and folds the image in one place. The plots draw both samples; the Sample filter narrows them and the viewer to one.\n",
+      "surface": "none",
+      "accent": null,
+      "logo": null,
+      "logo_dark": null,
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-reg-viewer",
+      "component_type": "advanced_viz",
+      "title": "Registration steps",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "registration_images",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f27"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic registration of two samples: the fixed image and the moving image resampled after each step (raw, rigid, affine, B-spline), 384 x 384, 2 channels",
+        "data_collection_tag": "registration_images",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f27"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "Each step of the selected sample: the moving image resampled into the fixed frame (384 x 384, nominal 0.5 um pixels), with the fixed image to compare it to.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Steps",
+      "viz_kind": "bioimage_viewer",
+      "config": {
+        "controls_placement": "popover",
+        "viz_kind": "bioimage_viewer",
+        "image_wf_id": "646b0f3c1e4a2d7f8e5b8f01",
+        "image_dc_id": "646b0f3c1e4a2d7f8e5b8f27",
+        "image_dc_tag": "registration_images",
+        "store": null,
+        "sample_wf_id": null,
+        "sample_dc_id": null,
+        "sample_dc_tag": null,
+        "sample_column": null,
+        "well_column": null,
+        "channels": [],
+        "show_scalebar": true,
+        "points_wf_id": null,
+        "points_dc_id": null,
+        "points_dc_tag": null,
+        "cell_id_col": null,
+        "x_col": null,
+        "y_col": null,
+        "z_col": null,
+        "t_col": null,
+        "points_all_planes": false,
+        "color_col": null,
+        "points_scale": 1.0,
+        "points_offset_x": 0.0,
+        "points_offset_y": 0.0,
+        "point_radius": 6.0,
+        "points_sample_col": null,
+        "points_well_col": null,
+        "labels_wf_id": null,
+        "labels_dc_id": null,
+        "labels_dc_tag": null,
+        "labels_opacity": 0.5,
+        "labels_outline": true,
+        "steps_wf_id": "646b0f3c1e4a2d7f8e5b8f01",
+        "steps_dc_id": "646b0f3c1e4a2d7f8e5b8f28",
+        "steps_dc_tag": "registration_steps",
+        "steps_store_col": "store",
+        "steps_label_col": "step",
+        "steps_order_col": "step_order",
+        "steps_sample_col": "sample",
+        "steps_reference_col": "fixed_store",
+        "steps_metric_cols": [
+          "ncc",
+          "tre_px",
+          "folding_pct"
+        ],
+        "selection_enabled": true,
+        "selection_column": null
+      },
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-reg-fig-tre",
+      "component_type": "figure",
+      "title": "Target registration error",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "registration_steps",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f28"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "One row per sample and registration step: the store it wrote, the fixed image, and its quality metrics",
+        "data_collection_tag": "registration_steps",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f28"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Quality",
+      "visu_type": "line",
+      "dict_kwargs": {
+        "x": "step_order",
+        "y": "tre_px",
+        "color": "sample",
+        "markers": true
+      },
+      "mode": "ui",
+      "code_content": null,
+      "displayed_data_count": 0,
+      "total_data_count": 0,
+      "was_sampled": false,
+      "filter_applied": false,
+      "max_points": null,
+      "selection_enabled": false,
+      "selection_column": null,
+      "font_scale": null,
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-reg-fig-ncc",
+      "component_type": "figure",
+      "title": "Normalised cross-correlation",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "registration_steps",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f28"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "One row per sample and registration step: the store it wrote, the fixed image, and its quality metrics",
+        "data_collection_tag": "registration_steps",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f28"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Quality",
+      "visu_type": "line",
+      "dict_kwargs": {
+        "x": "step_order",
+        "y": "ncc",
+        "color": "sample",
+        "markers": true
+      },
+      "mode": "ui",
+      "code_content": null,
+      "displayed_data_count": 0,
+      "total_data_count": 0,
+      "was_sampled": false,
+      "filter_applied": false,
+      "max_points": null,
+      "selection_enabled": false,
+      "selection_column": null,
+      "font_scale": null,
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-reg-steps",
+      "component_type": "table",
+      "title": "Steps",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "registration_steps",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f28"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "One row per sample and registration step: the store it wrote, the fixed image, and its quality metrics",
+        "data_collection_tag": "registration_steps",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f28"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "One row per sample and step: the store it wrote and its metrics.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Quality",
+      "columns": [],
+      "page_size": 10,
+      "sortable": true,
+      "filterable": true,
+      "compact": false,
+      "row_selection_enabled": false,
+      "row_selection_column": null,
+      "row_selection_mode": "multiple",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-reg-f-sample",
+      "component_type": "interactive",
+      "title": "Sample",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "registration_steps",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f28"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "One row per sample and registration step: the store it wrote, the fixed image, and its quality metrics",
+        "data_collection_tag": "registration_steps",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f28"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Sample",
+      "interactive_component_type": "Select",
+      "column_name": "sample",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": null,
+      "timescale": null,
+      "show_marks": null,
+      "show_mark_labels": null,
+      "show_histogram": null,
+      "slider_mode": null,
+      "icon_name": "mdi:layers-triple",
+      "wf_tag": "python/bioimage_demo"
+    }
+  ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-omz-reg-f-sample",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-omz-reg-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 2,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-omz-reg-viewer",
+      "x": 0,
+      "y": 2,
+      "w": 8,
+      "h": 9,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-omz-reg-fig-tre",
+      "x": 0,
+      "y": 11,
+      "w": 4,
+      "h": 4,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-omz-reg-fig-ncc",
+      "x": 4,
+      "y": 11,
+      "w": 4,
+      "h": 4,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-omz-reg-steps",
+      "x": 0,
+      "y": 15,
+      "w": 8,
+      "h": 4,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "Registration",
+  "subtitle": "The steps of an image registration, each against the fixed image",
+  "icon": "mdi:layers-triple",
+  "icon_color": "orange",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-12 00:00:00",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8f00"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8f00"
+  },
+  "tab_order": 6,
+  "main_tab_name": null,
+  "tab_icon": "mdi:layers-triple",
+  "tab_icon_color": "orange",
+  "tab_group": null,
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Sample",
+      "icon": "mdi:test-tube",
+      "color": "orange",
+      "description": "The registration shown in the viewer and the table",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Steps",
+      "icon": "mdi:microscope",
+      "color": "orange",
+      "description": "One registration per sample: the image after each step, laid over the fixed image",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    },
+    {
+      "name": "Quality",
+      "icon": "mdi:chart-line",
+      "color": "orange",
+      "description": "Registration error and similarity at each step",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null,
+  "category_colors": null,
+  "filter_panel_default": "open",
+  "content_width_default": "full",
+  "show_tab_header": true,
+  "open_with_defaults": false,
+  "show_guide": true,
+  "guide_intro": "",
+  "advanced_viz_controls": "popover",
+  "autofit": true
+}
