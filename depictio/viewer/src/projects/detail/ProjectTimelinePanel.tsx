@@ -2,31 +2,31 @@
  * The project's timeline (#1397), the History view of the Activity tab:
  * ingestions, dashboard versions and comments in one newest-first list, so
  * "what happened around that run" reads in one place. Items newer than the
- * reader's mark carry a "new" dot; an ingestion opens its steps and offers
- * "Compare" (what it changed in a dashboard), a version links to its
- * read-only preview.
+ * reader's mark carry a "new" dot; an ingestion opens its details (each
+ * collection's outcome) and offers "Compare" (what it changed in a
+ * dashboard), a version links to its read-only preview. Rows look like the
+ * What's new lists (`changes/feed`), grouped by day.
  *
  * It stands in for the ingestion history, so it keeps what that list did: a
  * run's steps and error, and a quiet refresh every few seconds while one is
  * still running.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Anchor, Button, Center, Chip, Group, Loader, Stack, Text, Timeline } from '@mantine/core';
+import { Alert, Button, Center, Chip, Group, Loader, Stack, Text } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import { fetchProjectIngestionRuns, fetchProjectTimeline } from 'depictio-react-core';
 import type { MonitoringIngestionRun, TimelineEvent } from 'depictio-react-core';
 
-import { NewDot } from '../../changes/feed';
-import { absTime, compactCount } from '../../monitoring/format';
-import { CHECK_STATUS } from '../checkStatus';
+import { FeedItem, FeedSection, NewDot, facts, nameList } from '../../changes/feed';
+import { parseServerTimestamp } from '../../lib/datetime';
+import { compactCount } from '../../monitoring/format';
 import { IngestionRunDetails } from './ProjectIngestionHistoryPanel';
 import { CompareMenu } from './RunDashboardActions';
-import { ingestionOutcome, isNewerThan, versionHref } from './projectChanges';
+import { isNewerThan, versionHref } from './projectChanges';
 
 const PAGE = 25;
 /** While an ingestion runs, the list refreshes this often. */
 const RUNNING_POLL_MS = 3000;
-const COLLECTIONS_SHOWN = 4;
 
 type EventType = TimelineEvent['type'];
 
@@ -36,151 +36,172 @@ const FILTERS: Array<{ value: EventType; label: string }> = [
   { value: 'comment', label: 'Comments' },
 ];
 
-const Bullet: React.FC<{ event: TimelineEvent }> = ({ event }) => {
-  if (event.type === 'ingestion') {
-    const mark = CHECK_STATUS[ingestionOutcome(event.status)];
-    return <Icon icon={mark.icon} width={16} color={`var(--mantine-color-${mark.color}-6)`} />;
-  }
-  return <Icon icon={event.type === 'version' ? 'mdi:history' : 'mdi:comment-text-outline'} width={14} />;
+/** An ingestion's outcome: a word for the title and the colour of its icon. */
+const OUTCOME: Record<string, { word: string; color: string }> = {
+  success: { word: 'Ingested', color: 'teal' },
+  partial: { word: 'Partly ingested', color: 'orange' },
+  failed: { word: 'Ingestion failed', color: 'red' },
+  interrupted: { word: 'Ingestion interrupted', color: 'orange' },
+  abandoned: { word: 'Ingestion abandoned', color: 'gray' },
+  running: { word: 'Ingesting', color: 'blue' },
 };
 
-/** A run's steps, below its ingestion event. */
-interface StepsToggle {
+const TRIGGER: Record<string, string> = { ui: 'from Add data', watch: 'by the watcher', cli: 'from the CLI' };
+
+/** "Today", "Yesterday", or the date: the heading a day's events sit under. */
+function dayOf(at: string): string {
+  const d = parseServerTimestamp(at);
+  if (!d) return 'Earlier';
+  const today = new Date();
+  const start = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const days = Math.round((start(today) - start(d)) / 86_400_000);
+  if (days === 0) return 'Today';
+  if (days === 1) return 'Yesterday';
+  return d.toLocaleDateString(undefined, {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    ...(d.getFullYear() !== today.getFullYear() ? { year: 'numeric' } : {}),
+  });
+}
+
+/** A run's details, below its ingestion. */
+interface DetailsToggle {
   open: boolean;
   /** undefined while loading; null when the run is past the loaded history. */
   run: MonitoringIngestionRun | null | undefined;
   onToggle: () => void;
 }
 
-const EventBody: React.FC<{
+const Title: React.FC<{ text: string; isNew: boolean }> = ({ text, isNew }) => (
+  <>
+    {text}
+    {isNew && (
+      <>
+        {' '}
+        <NewDot testId="timeline-new-badge" />
+      </>
+    )}
+  </>
+);
+
+const IngestionItem: React.FC<{
   projectId: string;
   event: TimelineEvent;
+  isNew: boolean;
   onShowRuns?: (run: string) => void;
-  steps?: StepsToggle;
-}> = ({ projectId, event, onShowRuns, steps }) => {
-  if (event.type === 'ingestion') {
-    const collections = event.collections ?? [];
-    return (
-      <Stack gap={6}>
-        {((event.run_tags ?? []).length > 0 || Boolean(event.rows_written)) && (
-          <Text size="xs" c="dimmed">
-            {(event.run_tags ?? []).map((t, i) => (
-              <React.Fragment key={t}>
-                {i > 0 && ', '}
-                <Anchor
-                  href={`/projects/${projectId}?tab=runs&run=${encodeURIComponent(t)}`}
-                  onClick={(e: React.MouseEvent) => {
-                    if (!onShowRuns) return;
-                    e.preventDefault();
-                    onShowRuns(t);
-                  }}
-                  size="xs"
-                  fw={500}
-                >
-                  {t}
-                </Anchor>
-              </React.Fragment>
-            ))}
-            {(event.run_tags ?? []).length > 0 && event.rows_written ? ' \u00b7 ' : null}
-            {event.rows_written ? `${compactCount(event.rows_written)} rows written` : null}
-          </Text>
+  details: DetailsToggle;
+}> = ({ projectId, event, isNew, onShowRuns, details }) => {
+  const outcome = OUTCOME[event.status ?? ''] ?? { word: `Ingestion ${event.status ?? ''}`.trim(), color: 'gray' };
+  const runs = event.run_tags ?? [];
+  const collections = event.collections ?? [];
+  return (
+    <FeedItem
+      kind="data"
+      color={outcome.color}
+      title={<Title text={runs.length ? `${outcome.word}: ${nameList(runs)}` : outcome.word} isNew={isNew} />}
+      summary={facts(
+        collections.length ? `${collections.length} collection${collections.length === 1 ? '' : 's'}` : null,
+        event.rows_written ? `${compactCount(event.rows_written)} rows written` : null,
+        event.trigger ? TRIGGER[event.trigger] ?? null : null,
+      )}
+      by={event.by ? [event.by] : undefined}
+      at={event.at}
+      data-testid="timeline-item"
+      data-type="ingestion"
+    >
+      <Group gap={4} mt={4}>
+        {runs.length === 1 && onShowRuns && (
+          <Button
+            size="compact-xs"
+            variant="subtle"
+            leftSection={<Icon icon="mdi:folder-play-outline" width={14} />}
+            onClick={() => onShowRuns(runs[0])}
+          >
+            Open the run
+          </Button>
         )}
-        {collections.length > 0 && (
-          <Text size="xs" c="dimmed">
-            {collections.slice(0, COLLECTIONS_SHOWN).join(', ')}
-            {collections.length > COLLECTIONS_SHOWN ? ` and ${collections.length - COLLECTIONS_SHOWN} more` : ''}
-          </Text>
-        )}
-        <Group gap="xs">
-          <CompareMenu
-            projectId={projectId}
-            ingestionRunId={event.id}
-            testId={`timeline-compare-${event.id}`}
-          />
-          {steps && (
-            <Button
-              size="compact-xs"
-              variant="subtle"
-              color="gray"
-              leftSection={<Icon icon={steps.open ? 'mdi:chevron-up' : 'mdi:chevron-down'} width={14} />}
-              onClick={steps.onToggle}
-              data-testid={`timeline-steps-${event.id}`}
-            >
-              {steps.open ? 'Hide steps' : 'Steps'}
-            </Button>
-          )}
-        </Group>
-        {steps?.open &&
-          (steps.run === undefined ? (
+        <CompareMenu projectId={projectId} ingestionRunId={event.id} testId={`timeline-compare-${event.id}`} />
+        <Button
+          size="compact-xs"
+          variant="subtle"
+          color="gray"
+          rightSection={<Icon icon={details.open ? 'mdi:chevron-up' : 'mdi:chevron-down'} width={14} />}
+          onClick={details.onToggle}
+          aria-expanded={details.open}
+          data-testid={`timeline-steps-${event.id}`}
+        >
+          Details
+        </Button>
+      </Group>
+      {details.open && (
+        <Stack mt="xs" p="sm" style={{ borderRadius: 'var(--mantine-radius-md)', background: 'var(--mantine-color-default-hover)' }}>
+          {details.run === undefined ? (
             <Loader size="xs" />
-          ) : steps.run === null ? (
+          ) : details.run === null ? (
             <Text size="xs" c="dimmed">
               This run is older than the loaded ingestion history.
             </Text>
           ) : (
-            <IngestionRunDetails run={steps.run} />
-          ))}
-      </Stack>
-    );
-  }
-  if (event.type === 'version') {
-    return (
-      <Group gap={8} wrap="wrap">
-        {event.kind && (
-          <Text size="xs" c="dimmed" tt="capitalize">
-            {event.kind}
-          </Text>
-        )}
-        {event.label && (
-          <Text size="xs" c="dimmed">
-            “{event.label}”
-          </Text>
-        )}
-        {event.component_count != null && (
-          <Text size="xs" c="dimmed">
-            {event.component_count} component{event.component_count === 1 ? '' : 's'}
-          </Text>
-        )}
-        {event.family_id && (
-          <Anchor
-            href={versionHref(event.family_id, event.id)}
-            size="xs"
-            data-testid={`timeline-version-link-${event.id}`}
-          >
-            Open this version
-          </Anchor>
-        )}
-      </Group>
-    );
-  }
-  return (
-    <Stack gap={2}>
-      {event.excerpt && (
-        <Text size="sm" style={{ overflowWrap: 'anywhere' }}>
-          {event.excerpt}
-        </Text>
+            <IngestionRunDetails run={details.run} />
+          )}
+        </Stack>
       )}
-      <Group gap={8}>
-        {event.component_title && (
-          <Text size="xs" c="dimmed">
-            on {event.component_title}
-          </Text>
-        )}
-        {event.family_id && (
-          <Anchor href={`/dashboard/${event.family_id}`} size="xs">
-            Open the dashboard
-          </Anchor>
-        )}
-      </Group>
-    </Stack>
+    </FeedItem>
   );
 };
 
-const titleOf = (e: TimelineEvent): string => {
-  if (e.type === 'ingestion') return `Ingestion ${e.status ?? ''}${e.trigger ? ` (${e.trigger})` : ''}`.trim();
-  if (e.type === 'version') return `${e.dashboard_title || 'Dashboard'} · v${e.seq ?? '?'}`;
-  return 'Comment';
-};
+const VersionItem: React.FC<{ event: TimelineEvent; isNew: boolean }> = ({ event, isNew }) => (
+  <FeedItem
+    kind="dashboard"
+    title={<Title text={`${event.dashboard_title || 'Dashboard'} · version ${event.seq ?? '?'}`} isNew={isNew} />}
+    summary={facts(
+      event.kind ? event.kind[0].toUpperCase() + event.kind.slice(1) : null,
+      event.label ? `\u201c${event.label}\u201d` : null,
+      event.component_count != null
+        ? `${event.component_count} component${event.component_count === 1 ? '' : 's'}`
+        : null,
+    )}
+    by={event.by ? [event.by] : undefined}
+    at={event.at}
+    action={
+      event.family_id
+        ? { label: 'Open this version', href: versionHref(event.family_id, event.id), testId: `timeline-version-link-${event.id}` }
+        : undefined
+    }
+    data-testid="timeline-item"
+    data-type="version"
+  />
+);
+
+const CommentItem: React.FC<{ event: TimelineEvent; isNew: boolean }> = ({ event, isNew }) => (
+  <FeedItem
+    kind="comment"
+    title={
+      <Title
+        text={`${event.by ?? 'Someone'} commented${event.component_title ? ` on ${event.component_title}` : ''}`}
+        isNew={isNew}
+      />
+    }
+    detail={event.excerpt || undefined}
+    at={event.at}
+    action={event.family_id ? { label: 'Open the dashboard', href: `/dashboard/${event.family_id}` } : undefined}
+    data-testid="timeline-item"
+    data-type="comment"
+  />
+);
+
+/** Events under their day, newest day first (the events come newest first). */
+function groupByDay(events: TimelineEvent[]): Array<[string, TimelineEvent[]]> {
+  const groups: Array<[string, TimelineEvent[]]> = [];
+  for (const e of events) {
+    const day = dayOf(e.at);
+    const last = groups[groups.length - 1];
+    if (last && last[0] === day) last[1].push(e);
+    else groups.push([day, [e]]);
+  }
+  return groups;
+}
 
 export const ProjectTimelinePanel: React.FC<{
   projectId: string;
@@ -316,43 +337,34 @@ export const ProjectTimelinePanel: React.FC<{
         </Text>
       ) : (
         events && (
-          <Timeline active={-1} bulletSize={26} lineWidth={2}>
-            {events.map((e) => (
-              <Timeline.Item
-                key={`${e.type}-${e.id}`}
-                bullet={<Bullet event={e} />}
-                title={
-                  <Group gap={8} wrap="wrap">
-                    <Text size="sm" fw={600}>
-                      {titleOf(e)}
-                    </Text>
-                    {isNewerThan(e.at, since) && <NewDot testId="timeline-new-badge" />}
-                  </Group>
-                }
-                data-testid="timeline-item"
-                data-type={e.type}
-              >
-                <Text size="xs" c="dimmed" mb={4}>
-                  {absTime(e.at)}
-                  {e.by ? ` · ${e.by}` : ''}
-                </Text>
-                <EventBody
-                  projectId={projectId}
-                  event={e}
-                  onShowRuns={onShowRuns}
-                  steps={
-                    e.type === 'ingestion'
-                      ? {
+          <Stack gap="md">
+            {groupByDay(events).map(([day, items]) => (
+              <FeedSection key={day} title={day}>
+                {items.map((e) => {
+                  const isNew = isNewerThan(e.at, since);
+                  const key = `${e.type}-${e.id}`;
+                  if (e.type === 'ingestion') {
+                    return (
+                      <IngestionItem
+                        key={key}
+                        projectId={projectId}
+                        event={e}
+                        isNew={isNew}
+                        onShowRuns={onShowRuns}
+                        details={{
                           open: openSteps.includes(e.id),
                           run: runs.get(e.id) ?? (runsLoading ? undefined : null),
                           onToggle: () => toggleSteps(e.id),
-                        }
-                      : undefined
+                        }}
+                      />
+                    );
                   }
-                />
-              </Timeline.Item>
+                  if (e.type === 'version') return <VersionItem key={key} event={e} isNew={isNew} />;
+                  return <CommentItem key={key} event={e} isNew={isNew} />;
+                })}
+              </FeedSection>
             ))}
-          </Timeline>
+          </Stack>
         )
       )}
       {next && (

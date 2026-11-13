@@ -62,6 +62,9 @@ export const FeedSection: React.FC<{
 
 export interface FeedItemProps {
   kind: FeedKind;
+  /** The icon's colour when the outcome, not the kind, should set it (a
+   *  failed ingestion). */
+  color?: string;
   title: React.ReactNode;
   /** How it changed, one line of facts. */
   summary?: React.ReactNode;
@@ -77,11 +80,14 @@ export interface FeedItemProps {
   action?: { label: string; href: string; newTab?: boolean; testId?: string };
   href?: string;
   onClick?: () => void;
+  /** Actions and an opened detail, below the meta line (non-link items only). */
+  children?: React.ReactNode;
   [dataAttr: `data-${string}`]: string | number | boolean | undefined;
 }
 
 export const FeedItem: React.FC<FeedItemProps> = ({
   kind,
+  color: colorOverride,
   title,
   summary,
   detail,
@@ -92,9 +98,11 @@ export const FeedItem: React.FC<FeedItemProps> = ({
   action,
   href,
   onClick,
+  children,
   ...data
 }) => {
-  const { icon, color } = FEED_KIND[kind];
+  const { icon } = FEED_KIND[kind];
+  const color = colorOverride ?? FEED_KIND[kind].color;
   const who = by && by.length ? `by ${by.join(', ')}` : null;
   const body = (
     <Group gap="sm" wrap="nowrap" align="flex-start">
@@ -102,7 +110,7 @@ export const FeedItem: React.FC<FeedItemProps> = ({
         <Icon icon={icon} width={17} aria-hidden />
       </ThemeIcon>
       <Stack gap={1} style={{ minWidth: 0, flex: 1 }}>
-        <Text size="sm" fw={500} lineClamp={1} className="dc-feed-item__title">
+        <Text component="div" size="sm" fw={500} lineClamp={1} className="dc-feed-item__title">
           {title}
         </Text>
         {summary && (
@@ -142,6 +150,7 @@ export const FeedItem: React.FC<FeedItemProps> = ({
             )}
           </Text>
         )}
+        {children}
       </Stack>
     </Group>
   );
