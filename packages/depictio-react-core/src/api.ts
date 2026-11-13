@@ -2560,6 +2560,9 @@ export interface BioimageNgffValidation {
   /** Label images the store's `labels/` group lists. */
   labels: string[];
   validator: string | null;
+  /** What was read when not the whole store ("plate metadata and 3 of 384
+   *  wells"): large containers are checked on a few members. */
+  checked?: string | null;
 }
 
 /** One image store registered under a `bioimage` DC. `sample` is the DC's

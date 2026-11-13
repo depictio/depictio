@@ -211,6 +211,9 @@ class NgffValidation(BaseModel):
     labels: list[str] = []
     #: The validating library and its version, e.g. ``ome-zarr-models 1.9.0``.
     validator: str | None = None
+    #: What was read when not the whole store, e.g. ``plate metadata and 3 of
+    #: 384 wells``: a large plate is checked on a few wells, not walked.
+    checked: str | None = None
 
 
 NGFF_MAX_ISSUES = 20

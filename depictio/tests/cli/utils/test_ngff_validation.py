@@ -154,3 +154,130 @@ def test_an_install_that_cannot_validate_reports_nothing(tmp_path, monkeypatch):
     """No report rather than every store marked invalid (Python 3.11 installs)."""
     monkeypatch.setattr(ngff_validation, "validator_available", lambda: False)
     assert validate_ngff_store(str(_image(tmp_path / "a.zarr"))) is None
+
+
+def _plate(path: Path, n_wells: int, broken: set[int] = frozenset()) -> Path:
+    """A one-row plate of ``n_wells`` wells, one field each; a ``broken``
+    well's field has a scale shorter than its axes."""
+    plate = zarr.open_group(str(path), mode="w", zarr_format=2)
+    plate.attrs["plate"] = {
+        "version": "0.4",
+        "columns": [{"name": str(i + 1)} for i in range(n_wells)],
+        "rows": [{"name": "A"}],
+        "wells": [{"path": f"A/{i + 1}", "rowIndex": 0, "columnIndex": i} for i in range(n_wells)],
+        "field_count": 1,
+    }
+    for i in range(n_wells):
+        well = plate.create_group(f"A/{i + 1}")
+        well.attrs["well"] = {"version": "0.4", "images": [{"path": "0"}]}
+        field = _image(path / "A" / str(i + 1) / "0")
+        if i in broken:
+            bad = _multiscales(CYX_AXES)
+            bad[0]["datasets"][0]["coordinateTransformations"][0]["scale"] = [1.0, 1.0]
+            zarr.open_group(str(field), mode="a").attrs["multiscales"] = bad
+    return path
+
+
+def test_a_large_plate_is_checked_on_a_few_wells(tmp_path, monkeypatch):
+    """A plate is not walked well by well: on a remote 384-well plate that is
+    thousands of reads. The plate metadata and the first, middle and last
+    wells are checked, and the report says so."""
+    from ome_zarr_models import v04
+
+    opened: list[str] = []
+    real = v04.Image.from_zarr.__func__
+
+    def spy(cls, group):
+        opened.append(group.path)
+        return real(cls, group)
+
+    monkeypatch.setattr(v04.Image, "from_zarr", classmethod(spy))
+    store = _plate(tmp_path / "plate.zarr", n_wells=9, broken={8})
+
+    report = validate_ngff_store(str(store))
+
+    assert sorted(opened) == ["A/1/0", "A/5/0", "A/9/0"]
+    assert report.layout == "plate"
+    assert report.checked == "plate metadata and 3 of 9 wells"
+    assert not report.ok
+    assert all(issue.startswith("A/9/") for issue in report.issues)
+
+
+def test_a_small_plate_is_checked_whole(tmp_path):
+    report = validate_ngff_store(str(_plate(tmp_path / "plate.zarr", n_wells=2)))
+
+    assert report.ok
+    assert report.checked == "plate metadata and 2 of 2 wells"
+
+
+def test_a_well_the_plate_lists_but_lacks_is_reported(tmp_path):
+    store = _plate(tmp_path / "plate.zarr", n_wells=3)
+    import shutil
+
+    shutil.rmtree(store / "A" / "3")
+
+    report = validate_ngff_store(str(store))
+
+    assert "A/3: listed in the plate but missing" in report.issues
+
+
+def test_bioformats2raw_is_checked_on_its_first_series(tmp_path):
+    root = zarr.open_group(str(tmp_path / "b2r.zarr"), mode="w", zarr_format=2)
+    root.attrs["bioformats2raw.layout"] = 3
+    for i in range(5):
+        _image(tmp_path / "b2r.zarr" / str(i))
+
+    report = validate_ngff_store(str(tmp_path / "b2r.zarr"))
+
+    assert report.layout == "bioformats2raw"
+    assert report.ok, report.issues
+    assert report.checked == "bioformats2raw metadata and the first 3 series"
+
+
+def test_an_array_zarr_python_cannot_read_is_not_an_ngff_error(tmp_path):
+    """``>u1`` is a valid Zarr v2 dtype (IDR writes it) that zarr-python 3
+    refuses. The metadata is checked alone, and the report says the arrays
+    were not read, rather than calling a valid store invalid."""
+    import json
+
+    store = _image(tmp_path / "be.zarr")
+    zarray = store / "0" / ".zarray"
+    meta = json.loads(zarray.read_text())
+    meta["dtype"] = ">u1"
+    zarray.write_text(json.dumps(meta))
+
+    report = validate_ngff_store(str(store))
+
+    assert report.ok, report.issues
+    assert report.checked.startswith("metadata only: zarr-python could not read the arrays")
+
+
+def test_a_well_with_many_fields_is_checked_on_a_few(tmp_path, monkeypatch):
+    from ome_zarr_models import v04
+
+    opened: list[str] = []
+    real = v04.Image.from_zarr.__func__
+
+    def spy(cls, group):
+        opened.append(group.path)
+        return real(cls, group)
+
+    monkeypatch.setattr(v04.Image, "from_zarr", classmethod(spy))
+    plate = zarr.open_group(str(tmp_path / "p.zarr"), mode="w", zarr_format=2)
+    plate.attrs["plate"] = {
+        "version": "0.4",
+        "columns": [{"name": "1"}],
+        "rows": [{"name": "A"}],
+        "wells": [{"path": "A/1", "rowIndex": 0, "columnIndex": 0}],
+        "field_count": 9,
+    }
+    well = plate.create_group("A/1")
+    well.attrs["well"] = {"version": "0.4", "images": [{"path": str(i)} for i in range(9)]}
+    for i in range(9):
+        _image(tmp_path / "p.zarr" / "A" / "1" / str(i))
+
+    report = validate_ngff_store(str(tmp_path / "p.zarr"))
+
+    assert report.ok, report.issues
+    assert sorted(opened) == ["A/1/0", "A/1/4", "A/1/8"]
+    assert report.checked == "plate metadata and 1 of 1 wells, 3 of up to 9 fields each"

@@ -157,6 +157,7 @@ const ValidationRows: React.FC<{ validation: BioimageNgffValidation }> = ({ vali
       {validation.validator ? (
         <Text size="xs" component="span" c="dimmed">
           {validation.validator}
+          {validation.checked ? `: ${validation.checked}` : ''}
         </Text>
       ) : null}
     </Stack>

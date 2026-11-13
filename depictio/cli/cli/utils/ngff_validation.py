@@ -122,33 +122,132 @@ def _format_errors(exc: Exception) -> list[str]:
     return [text[0] if text else type(exc).__name__]
 
 
-def _model_for(layout: NgffLayout, version: str | None):
-    """The ome-zarr-models class that validates ``layout`` at ``version``."""
+def _models(version: str | None):
+    """The ome-zarr-models modules for ``version``."""
     if version is not None and version.startswith("0.5"):
-        from ome_zarr_models import v05 as models
+        from ome_zarr_models.v05 import bioformats2raw, hcs, image, image_label, well
     else:
-        from ome_zarr_models import v04 as models
+        from ome_zarr_models.v04 import bioformats2raw, hcs, image, image_label, well
     return {
-        "image": models.Image,
-        "plate": models.HCS,
-        "well": models.Well,
-        "bioformats2raw": models.BioFormats2Raw,
-        "labels": models.ImageLabel,
-    }.get(layout)
+        "image": (image.Image, image.ImageAttrs),
+        "plate": (hcs.HCS, hcs.HCSAttrs),
+        "well": (well.Well, well.WellAttrs),
+        "bioformats2raw": (bioformats2raw.BioFormats2Raw, bioformats2raw.BioFormats2RawAttrs),
+        "labels": (image_label.ImageLabel, image_label.ImageLabelAttrs),
+    }
 
 
-def _validate_group(group, layout: NgffLayout, version: str | None, where: str) -> list[str]:
-    model = _model_for(layout, version)
-    if model is None:
-        return []
-    try:
-        with warnings.catch_warnings():
-            # The models warn on SHOULD-level findings too; those are not errors.
-            warnings.simplefilter("ignore")
-            model.from_zarr(group)
-    except Exception as exc:
-        return [f"{where}{line}" for line in _format_errors(exc)]
-    return []
+#: Wells, fields and bioformats2raw series read past a container's own
+#: metadata. ``ome-zarr-models`` walks them all, one after another: thousands
+#: of reads on a 384-well plate, minutes over HTTP. A few spread across the
+#: container catch a writer's systematic mistakes, which is what this is for.
+SAMPLED_MEMBERS = 3
+
+
+def _spread(items: list, n: int = SAMPLED_MEMBERS) -> list:
+    """First, middle and last of ``items`` (all of them when there are few)."""
+    if len(items) <= n:
+        return list(items)
+    picks = sorted({round(i * (len(items) - 1) / (n - 1)) for i in range(n)})
+    return [items[i] for i in picks]
+
+
+def _quiet(call) -> None:
+    with warnings.catch_warnings():
+        # The models warn on SHOULD-level findings too; those are not errors.
+        warnings.simplefilter("ignore")
+        call()
+
+
+class _Check:
+    """One store's validation: the issues found, and the groups whose arrays
+    zarr-python could not open (checked on their metadata alone)."""
+
+    def __init__(self, version: str | None):
+        self.version = version
+        self.models = _models(version)
+        self.issues: list[str] = []
+        self.unread: list[str] = []
+
+    def attrs(self, layout: NgffLayout, ome: dict[str, Any], where: str = "") -> None:
+        attrs_cls = self.models[layout][1]
+        try:
+            _quiet(lambda: attrs_cls.model_validate(ome))
+        except Exception as exc:
+            self.issues += [f"{where}{line}" for line in _format_errors(exc)]
+
+    def group(self, group, layout: NgffLayout, where: str = "") -> None:
+        """The group with its arrays; its metadata alone when zarr-python
+        cannot open them (``>u1`` is valid Zarr v2 that zarr-python 3 refuses),
+        since that is the reader's limit, not the store's."""
+        model = self.models[layout][0]
+        try:
+            _quiet(lambda: model.from_zarr(group))
+            return
+        except Exception as exc:
+            errors = _format_errors(exc)
+        before = len(self.issues)
+        ome, _ = _ome_attributes(dict(group.attrs))
+        self.attrs(layout, ome, where)
+        if len(self.issues) == before:
+            # The metadata is fine: what failed was reading the arrays.
+            self.unread.append(f"{where or 'root: '}{errors[0]}")
+
+    def plate(self, group, ome: dict[str, Any]) -> str:
+        self.attrs("plate", ome)
+        wells = (ome.get("plate") or {}).get("wells") or []
+        paths = [w["path"] for w in wells if isinstance(w, dict) and isinstance(w.get("path"), str)]
+        sample = _spread(paths)
+        most_fields = 0
+        for path in sample:
+            try:
+                well = group[path]
+            except Exception:
+                self.issues.append(f"{path}: listed in the plate but missing")
+                continue
+            most_fields = max(most_fields, self.well(well, f"{path}/"))
+        checked = f"plate metadata and {len(sample)} of {len(paths)} wells"
+        if most_fields > SAMPLED_MEMBERS:
+            checked += f", {SAMPLED_MEMBERS} of up to {most_fields} fields each"
+        return checked
+
+    def well(self, group, where: str) -> int:
+        """A well's metadata and a few of its fields; returns its field count."""
+        ome, _ = _ome_attributes(dict(group.attrs))
+        self.attrs("well", ome, where)
+        images = (ome.get("well") or {}).get("images") or []
+        paths = [
+            i["path"] for i in images if isinstance(i, dict) and isinstance(i.get("path"), str)
+        ]
+        for path in _spread(paths):
+            try:
+                field = group[path]
+            except Exception:
+                self.issues.append(f"{where}{path}: listed in the well but missing")
+                continue
+            self.group(field, "image", f"{where}{path}/")
+        return len(paths)
+
+    def bioformats2raw(self, group, ome: dict[str, Any]) -> str:
+        # bioformats2raw lists no series: they are 0, 1, 2... until one is
+        # missing. Counting them all is a read per series, so only the first few.
+        self.attrs("bioformats2raw", ome)
+        series = 0
+        while series < SAMPLED_MEMBERS and str(series) in group:
+            self.group(group[str(series)], "image", f"{series}/")
+            series += 1
+        if not series:
+            self.issues.append("0: a bioformats2raw container needs its first series at 0/")
+        return f"bioformats2raw metadata and the first {series} series"
+
+    def scope(self, checked: str | None) -> str | None:
+        if not self.unread:
+            return checked
+        note = (
+            "metadata only: zarr-python could not read the arrays "
+            f"({self.unread[0]}{f', +{len(self.unread) - 1} more' if len(self.unread) > 1 else ''})"
+        )
+        return f"{note}; {checked}" if checked else note
 
 
 def _label_names(group, ome: dict[str, Any]) -> list[str]:
@@ -192,6 +291,12 @@ def validate_ngff_store(store_path: str, image_path: str | None = None) -> NgffV
 
     ome, version = _ome_attributes(attrs)
     layout = _layout_of(ome)
+    if layout == "bioformats2raw" and version is None:
+        # 0.4 puts no version on a bioformats2raw root: its series carry it.
+        try:
+            version = _ome_attributes(dict(group["0"].attrs))[1]
+        except Exception:
+            pass
     if layout == "unknown":
         return NgffValidation(
             ok=False,
@@ -218,7 +323,14 @@ def validate_ngff_store(store_path: str, image_path: str | None = None) -> NgffV
             validator=validator,
         )
 
-    issues = _validate_group(group, layout, version, "")
+    check = _Check(version)
+    checked: str | None = None
+    if layout == "plate":
+        checked = check.plate(group, ome)
+    elif layout == "bioformats2raw":
+        checked = check.bioformats2raw(group, ome)
+    else:
+        check.group(group, layout)
     labels: list[str] = []
     if layout == "image":
         labels = _label_names(group, ome)
@@ -226,13 +338,16 @@ def validate_ngff_store(store_path: str, image_path: str | None = None) -> NgffV
             try:
                 label_group = group["labels"][name]
             except Exception:
-                issues.append(f"labels/{name}: listed in labels/ but missing")
+                check.issues.append(f"labels/{name}: listed in labels/ but missing")
                 continue
             _, label_version = _ome_attributes(dict(label_group.attrs))
-            issues += _validate_group(
-                label_group, "labels", label_version or version, f"labels/{name}/"
-            )
+            label_check = _Check(label_version or version)
+            label_check.group(label_group, "labels", f"labels/{name}/")
+            check.issues += label_check.issues
+            check.unread += label_check.unread
 
+    issues = check.issues
+    checked = check.scope(checked)
     if version is None:
         issues.insert(0, "no NGFF version in the metadata")
     return NgffValidation(
@@ -242,4 +357,5 @@ def validate_ngff_store(store_path: str, image_path: str | None = None) -> NgffV
         issues=issues[:NGFF_MAX_ISSUES],
         labels=labels,
         validator=validator,
+        checked=checked,
     )
