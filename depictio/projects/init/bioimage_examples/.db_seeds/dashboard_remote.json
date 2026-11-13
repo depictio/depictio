@@ -1,0 +1,421 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8f18"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8f18"
+  },
+  "version": 1,
+  "stored_metadata": [
+    {
+      "index": "omz-rm-text",
+      "component_type": "text",
+      "title": "Read in place from the IDR",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_align": "left",
+      "section": "Remote image",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "Study idr0062A of the Image Data Resource, a nuclear segmentation study, imaged in LaminB1 and Dapi. The viewer reads this OME-Zarr store (NGFF 0.4, three pyramid levels) through the Depictio API, chunk by chunk, as the image is panned. Nothing is copied to the server. The store also holds the authors' nucleus segmentation as a label image (labels/0, same geometry), drawn here as coloured outlines, one per nucleus, on the plane shown.\n",
+      "surface": "none",
+      "accent": null,
+      "logo": null,
+      "logo_dark": null,
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-rm-viewer",
+      "component_type": "advanced_viz",
+      "title": "IDR idr0062A, LaminB1 and Dapi",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "idr_laminb1_image",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f17"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "IDR study idr0062A (nuclear segmentation), LaminB1 and Dapi, read from the EMBL-EBI IDR (OME-Zarr NGFF 0.4, 2 x 236 x 275 x 271)",
+        "data_collection_tag": "idr_laminb1_image",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f17"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "LaminB1 and Dapi channels of IDR study idr0062A, read remotely; the first view waits on the network. The dots are the nuclei of the plane the viewer opens on, and they stay put when the z slider moves.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Image",
+      "viz_kind": "bioimage_viewer",
+      "config": {
+        "controls_placement": "popover",
+        "viz_kind": "bioimage_viewer",
+        "image_wf_id": "646b0f3c1e4a2d7f8e5b8f01",
+        "image_dc_id": "646b0f3c1e4a2d7f8e5b8f17",
+        "image_dc_tag": "idr_laminb1_image",
+        "store": null,
+        "sample_wf_id": null,
+        "sample_dc_id": null,
+        "sample_dc_tag": null,
+        "sample_column": null,
+        "channels": [],
+        "show_scalebar": true,
+        "points_wf_id": "646b0f3c1e4a2d7f8e5b8f01",
+        "points_dc_id": "646b0f3c1e4a2d7f8e5b8f19",
+        "points_dc_tag": "idr_laminb1_nuclei",
+        "cell_id_col": "nucleus_id",
+        "x_col": "x",
+        "y_col": "y",
+        "color_col": null,
+        "points_scale": 1.0,
+        "points_offset_x": 0.0,
+        "points_offset_y": 0.0,
+        "point_radius": 3.0,
+        "points_sample_col": null,
+        "selection_enabled": true
+      },
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-rm-card-count",
+      "component_type": "card",
+      "title": "Nuclei on this plane",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "idr_laminb1_nuclei",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f19"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Nuclei of IDR idr0062A on the plane the viewer opens on: centroid, area, mean LaminB1 and Dapi",
+        "data_collection_tag": "idr_laminb1_nuclei",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f19"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Nuclei",
+      "aggregation": "count",
+      "column_name": "nucleus_id",
+      "column_type": "int64",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "vertical",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "follow_region_filter": false,
+      "icon_name": "mdi:counter",
+      "title_font_size": "md",
+      "value_font_size": "xl",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-rm-card-area",
+      "component_type": "card",
+      "title": "Median area (px)",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "idr_laminb1_nuclei",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f19"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Nuclei of IDR idr0062A on the plane the viewer opens on: centroid, area, mean LaminB1 and Dapi",
+        "data_collection_tag": "idr_laminb1_nuclei",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f19"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Nuclei",
+      "aggregation": "median",
+      "column_name": "area_px",
+      "column_type": "int64",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "histogram",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "follow_region_filter": false,
+      "icon_name": "mdi:chart-histogram",
+      "title_font_size": "md",
+      "value_font_size": "xl",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-rm-table",
+      "component_type": "table",
+      "title": "Nuclei",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "idr_laminb1_nuclei",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f19"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Nuclei of IDR idr0062A on the plane the viewer opens on: centroid, area, mean LaminB1 and Dapi",
+        "data_collection_tag": "idr_laminb1_nuclei",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f19"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "One row per nucleus on the plane. A lasso on the image narrows it to the nuclei inside.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Nuclei",
+      "columns": [
+        "nucleus_id",
+        "x",
+        "y",
+        "area_px",
+        "lamin_b1_mean",
+        "dapi_mean"
+      ],
+      "page_size": 50,
+      "sortable": true,
+      "filterable": true,
+      "compact": false,
+      "row_selection_enabled": false,
+      "row_selection_column": null,
+      "wf_tag": "python/bioimage_demo"
+    }
+  ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [],
+  "right_panel_layout_data": [
+    {
+      "i": "box-omz-rm-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 2,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-omz-rm-viewer",
+      "x": 0,
+      "y": 2,
+      "w": 8,
+      "h": 6,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-omz-rm-card-count",
+      "x": 0,
+      "y": 0,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-omz-rm-card-area",
+      "x": 2,
+      "y": 0,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-omz-rm-table",
+      "x": 0,
+      "y": 2,
+      "w": 8,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "Remote (IDR)",
+  "subtitle": "An OME-Zarr store read in place from the EMBL-EBI Image Data Resource",
+  "icon": "mdi:cloud-download-outline",
+  "icon_color": "blue",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-12 00:00:00",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8f00"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8f00"
+  },
+  "tab_order": 7,
+  "main_tab_name": null,
+  "tab_icon": "mdi:cloud-download-outline",
+  "tab_icon_color": "blue",
+  "tab_group": null,
+  "parent_dashboard_title": null,
+  "filter_sections": [],
+  "grid_sections": [
+    {
+      "name": "Remote image",
+      "icon": "mdi:cloud-outline",
+      "color": "blue",
+      "description": "Where the image comes from, and what the viewer reads",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    },
+    {
+      "name": "Image",
+      "icon": "mdi:microscope",
+      "color": "blue",
+      "description": "LaminB1 and Dapi channels, read in place; lasso nuclei to filter the table",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    },
+    {
+      "name": "Nuclei",
+      "icon": "mdi:counter",
+      "color": "blue",
+      "description": "The nuclei the viewer draws, in numbers and as a table",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null,
+  "category_colors": null,
+  "filter_panel_default": "open",
+  "content_width_default": "full",
+  "show_tab_header": true,
+  "show_guide": true,
+  "guide_intro": "",
+  "advanced_viz_controls": "popover",
+  "autofit": true
+}

@@ -544,6 +544,7 @@ async def create_initial_dashboards(
                 "ome_tiff",
                 "spatialdata",
                 "ngff05",
+                "remote",
             )
         ),
     ]

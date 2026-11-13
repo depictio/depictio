@@ -11,10 +11,17 @@
 //
 // Coordinates are level-0 image pixels throughout (x right, y down), which is
 // the space viv's MultiscaleImageLayer draws in.
+//
+// A labels store (segmentation mask) draws over the image as a TileLayer on
+// its own pyramid: each tile's integer cell ids are coloured on the CPU
+// through a lookup table (see ./labels.ts) into an RGBA bitmap, cached per
+// tile and style version, and drawn with nearest sampling so ids never blend.
 
 import { Deck, OrthographicView } from '@deck.gl/core';
-import { PolygonLayer, ScatterplotLayer } from '@deck.gl/layers';
+import { TileLayer } from '@deck.gl/geo-layers';
+import { BitmapLayer, PolygonLayer, ScatterplotLayer } from '@deck.gl/layers';
 import {
+  ImageLayer,
   MultiscaleImageLayer,
   getChannelStats,
   loadOmeTiff,
@@ -36,6 +43,14 @@ import {
   type Rgb,
 } from './channels';
 import { fitViewState, rectToPolygon, type Polygon, type Vec2 } from './geometry';
+import {
+  colorizeLabels,
+  labelAt,
+  labelTileKey,
+  type LabelLut,
+  type LabelPaint,
+  type LabelTile,
+} from './labels';
 import { normaliseOmeTiffMetadata, type OmeXmlImage } from './omeTiff';
 
 export type SelectionMode = 'pan' | 'lasso' | 'rect';
@@ -48,6 +63,8 @@ export interface BioimageInfo {
   sizes: { c: number; z: number; t: number };
   dtype: string;
   levels: number;
+  /** Shape of every pyramid level, level 0 first, in `labels` order. */
+  levelShapes: number[][];
   /** Channel state in effect after the load: the starting state (config, then
    *  omero, then data statistics), or the kept one on a `keepView` reload. */
   channels: ChannelState[];
@@ -59,7 +76,10 @@ export interface BioimageInfo {
 }
 
 export interface OverlayPoint {
+  /** The id the selection filters on (`selection_column`, else the cell id). */
   id: string;
+  /** The cell id, the mask value, when it differs from `id`. */
+  label?: string;
   /** Level-0 image pixel coordinates. */
   x: number;
   y: number;
@@ -71,10 +91,28 @@ export interface OverlayPoint {
 export interface BioimageViewerOptions {
   /** Every time the tiles covering the viewport have all arrived. */
   onViewportLoad?: () => void;
+  /** Once per labels load, when the label tiles covering the viewport arrived. */
+  onLabelsLoad?: () => void;
+  /** A click (not a drag) in pan mode on the labels: the label under it, 0 for background. */
+  onLabelClick?: (label: number) => void;
   onZoomChange?: (zoom: number) => void;
   /** A finished lasso or rectangle, in image coordinates. */
   onRoi?: (polygon: Polygon) => void;
   onError?: (error: Error) => void;
+}
+
+/** What a labels store opened as. */
+export interface LabelsInfo {
+  width: number;
+  height: number;
+  levels: number;
+  dtype: string;
+}
+
+/** How the labels draw: colours per cell, fill opacity, outlines, visibility. */
+export interface LabelsStyle extends LabelPaint {
+  lut: LabelLut;
+  visible: boolean;
 }
 
 export interface BioimageLoadOptions {
@@ -96,6 +134,10 @@ export interface BioimageViewer {
   setChannels(channels: readonly ChannelState[]): void;
   setSelection(sel: { z: number; t: number }): void;
   setPoints(points: readonly OverlayPoint[], radius: number): void;
+  /** Open a labels store (replacing any previous one), or drop it with null.
+   *  Rejects with `LoadSupersededError` when a later call replaced it. */
+  setLabels(store: BioimageZarrStore | null): Promise<LabelsInfo | null>;
+  setLabelsStyle(style: LabelsStyle): void;
   setHighlighted(ids: ReadonlySet<string>): void;
   setSelectionMode(mode: SelectionMode): void;
   /** Theme sync. `accent` rings highlighted points and draws the ROI. */
@@ -117,8 +159,14 @@ export class LoadSupersededError extends Error {
 const STATS_MAX_PIXELS = 2048 * 2048;
 /** Channels whose statistics are computed up front. */
 const STATS_MAX_CHANNELS = 16;
+/** A single-level image up to this many pixels is read whole, not tiled: its
+ *  one chunk is often the whole image (SpatialData's Visium hires image), a
+ *  tile size viv's tiled layer draws nothing with below zoom 0. */
+const WHOLE_IMAGE_MAX_PIXELS = 4096 * 4096;
 /** Screen pixels a lasso has to travel before it records another vertex. */
 const LASSO_MIN_STEP_PX = 3;
+/** Screen pixels a pointer may move between down and up and still click. */
+const CLICK_MAX_MOVE_PX = 4;
 const DEFAULT_ACCENT: Rgb = [250, 176, 5];
 
 type PixelSource = {
@@ -126,6 +174,12 @@ type PixelSource = {
   dtype: string;
   labels: string[];
   getRaster(opts: { selection: Record<string, number> }): Promise<{ data: ArrayLike<number> }>;
+  getTile?(opts: {
+    x: number;
+    y: number;
+    selection: Record<string, number>;
+    signal?: AbortSignal;
+  }): Promise<LabelTile>;
 };
 
 /** An opened image, whatever its format: the pyramid (level 0 first) and the
@@ -204,6 +258,15 @@ export async function createBioimageViewer(
   let userMoved = false;
   let disposed = false;
   let viewState: ViewState = { target: [0, 0, 0], zoom: 0 };
+  // Labels overlay: its pyramid, the tiles fetched (for click picking), the
+  // style and a version bumped with it, so tiles recolour only on change.
+  let labels: { pyramid: PixelSource[]; info: LabelsInfo; tileSize: number } | null = null;
+  let labelsToken = 0;
+  let labelsReadyToken = -1;
+  let labelTiles = new Map<string, LabelTile>();
+  let labelsStyle: LabelsStyle | null = null;
+  let labelsStyleVersion = 0;
+  let bitmaps = new WeakMap<object, { version: number; image: ImageData }>();
 
   const hostSize = () => ({ w: host.clientWidth, h: host.clientHeight });
 
@@ -233,15 +296,16 @@ export async function createBioimageViewer(
     // viewport settles before the tileset reports: the layer's own isLoaded,
     // checked after each frame, covers those cases.
     onAfterRender: () => {
-      if (readyToken === loadToken || !data) return;
-      const id = `bioimage-image-${loadToken}`;
-      const layer = deck.props.layers.find((l) => (l as { id?: string } | null)?.id === id);
-      const managed = (
-        deck as unknown as { layerManager?: { getLayers(): Array<{ id: string; isLoaded: boolean }> } }
-      ).layerManager
-        ?.getLayers()
-        .find((l) => l.id === id);
-      if (layer && managed?.isLoaded) markReady();
+      if (readyToken !== loadToken && data && isLayerLoaded(`bioimage-image-${loadToken}`)) {
+        markReady();
+      }
+      if (
+        labels &&
+        labelsReadyToken !== labelsToken &&
+        isLayerLoaded(`bioimage-labels-${labelsToken}`)
+      ) {
+        markLabelsReady();
+      }
     },
     onViewStateChange: ({ viewState: next }) => {
       viewState = next as unknown as ViewState;
@@ -255,25 +319,128 @@ export async function createBioimageViewer(
     onError: (err) => opts.onError?.(err),
   });
 
+  function isLayerLoaded(id: string): boolean {
+    const layer = deck.props.layers.find((l) => (l as { id?: string } | null)?.id === id);
+    const managed = (
+      deck as unknown as { layerManager?: { getLayers(): Array<{ id: string; isLoaded: boolean }> } }
+    ).layerManager
+      ?.getLayers()
+      .find((l) => l.id === id);
+    return Boolean(layer && managed?.isLoaded);
+  }
+
   function markReady() {
     if (readyToken === loadToken) return;
     readyToken = loadToken;
     opts.onViewportLoad?.();
   }
 
+  function markLabelsReady() {
+    if (labelsReadyToken === labelsToken) return;
+    labelsReadyToken = labelsToken;
+    opts.onLabelsLoad?.();
+  }
+
+  /** The RGBA bitmap of one label tile under the current style, cached. */
+  const tileBitmap = (tile: LabelTile): ImageData | null => {
+    if (!labelsStyle) return null;
+    const key = tile.data as unknown as object;
+    const hit = bitmaps.get(key);
+    if (hit && hit.version === labelsStyleVersion) return hit.image;
+    const rgba = colorizeLabels(tile.data, tile.width, tile.height, labelsStyle.lut, labelsStyle);
+    const image = new ImageData(rgba as Uint8ClampedArray<ArrayBuffer>, tile.width, tile.height);
+    bitmaps.set(key, { version: labelsStyleVersion, image });
+    return image;
+  };
+
+  const labelsLayer = () => {
+    if (!labels || !labelsStyle?.visible) return null;
+    const { pyramid, info: li, tileSize } = labels;
+    const token = labelsToken;
+    const version = labelsStyleVersion;
+    // A ZYX or TCZYX mask follows the image's plane, like the image tiles.
+    const { z: planeZ, t: planeT } = plane;
+    return new TileLayer<LabelTile | null>({
+      id: `bioimage-labels-${token}`,
+      tileSize,
+      extent: [0, 0, li.width, li.height],
+      minZoom: -(li.levels - 1),
+      maxZoom: 0,
+      // Translucent tiles: never draw a coarse and a fine tile on top of each other.
+      refinementStrategy: 'no-overlap',
+      getTileData: async ({ index: { x, y, z }, signal }) => {
+        const level = Math.round(-z);
+        const source = pyramid[level];
+        if (!source?.getTile) return null;
+        try {
+          const selection = selectionFor(source.labels, { c: 0, z: planeZ, t: planeT });
+          const tile = await source.getTile({ x, y, selection, signal });
+          if (token === labelsToken) labelTiles.set(labelTileKey(level, x, y), tile);
+          return tile;
+        } catch (err) {
+          if (isBoundsError(err) || signal?.aborted) return null;
+          throw err;
+        }
+      },
+      // Keep the picking map to the tiles deck still caches, so panning a
+      // large mask does not hold every tile (and its bitmap) ever fetched.
+      onTileUnload: ({ index: { x, y, z } }) => {
+        if (token === labelsToken) labelTiles.delete(labelTileKey(Math.round(-z), x, y));
+      },
+      renderSubLayers: (props) => {
+        const tile = props.data as LabelTile | null;
+        const {
+          bbox,
+          index: { x, y, z },
+        } = props.tile as unknown as {
+          bbox: { left: number; top: number };
+          index: { x: number; y: number; z: number };
+        };
+        if (!tile || tile.width === 0 || tile.height === 0 || bbox.left < 0 || bbox.top < 0) {
+          return null;
+        }
+        const image = tileBitmap(tile);
+        if (!image) return null;
+        const scale = 2 ** Math.round(-z);
+        return new BitmapLayer({
+          id: `${props.id}-bitmap-${x}-${y}-${z}`,
+          image: image as never,
+          bounds: [
+            bbox.left,
+            bbox.top + tile.height * scale,
+            bbox.left + tile.width * scale,
+            bbox.top,
+          ],
+          // Cell ids never blend: each screen pixel shows one cell's colour.
+          textureParameters: { minFilter: 'nearest', magFilter: 'nearest' },
+          pickable: false,
+        });
+      },
+      updateTriggers: { getTileData: `${planeZ}:${planeT}`, renderSubLayers: version },
+      onViewportLoad: () => {
+        if (token === labelsToken) markLabelsReady();
+      },
+      onTileError: (err: unknown) => {
+        if (isBoundsError(err)) return;
+        opts.onError?.(err instanceof Error ? err : new Error(String(err)));
+      },
+    });
+  };
+
   const render = () => {
     if (disposed) return;
     const layers: unknown[] = [];
     if (data && info) {
       const shown = renderedChannels(channels);
-      const labels = info.labels;
+      // The image's axis labels (not the labels overlay).
+      const axes = info.labels;
       // `colors` belongs to viv's default ColorPaletteExtension, which the
       // layer's own prop type does not list, hence the loose object.
       const imageProps: Record<string, unknown> = {
         // Keyed by load, so a new store starts from an empty tile cache.
         id: `bioimage-image-${loadToken}`,
         loader: data,
-        selections: shown.map((c) => selectionFor(labels, { c: c.index, z: plane.z, t: plane.t })),
+        selections: shown.map((c) => selectionFor(axes, { c: c.index, z: plane.z, t: plane.t })),
         colors: shown.map((c) => hexToRgb(c.color) ?? [255, 255, 255]),
         contrastLimits: shown.map((c) => c.contrastLimits),
         channelsVisible: shown.map((c) => c.visible),
@@ -283,8 +450,16 @@ export async function createBioimageViewer(
           opts.onError?.(err instanceof Error ? err : new Error(String(err)));
         },
       };
-      layers.push(new MultiscaleImageLayer(imageProps as never));
+      const [base] = data;
+      const px = (axis: string) => base.shape[axes.indexOf(axis)] ?? 0;
+      if (data.length === 1 && px('x') * px('y') <= WHOLE_IMAGE_MAX_PIXELS) {
+        layers.push(new ImageLayer({ ...imageProps, loader: base } as never));
+      } else {
+        layers.push(new MultiscaleImageLayer(imageProps as never));
+      }
     }
+    const labelsOverlay = labelsLayer();
+    if (labelsOverlay) layers.push(labelsOverlay);
     if (points.length) {
       layers.push(
         new ScatterplotLayer<OverlayPoint>({
@@ -339,8 +514,15 @@ export async function createBioimageViewer(
     return { world: [x, y], screen };
   };
 
+  // A click in pan mode picks the label under it; deck still pans on a drag.
+  let press: Vec2 | null = null;
+
   const onPointerDown = (e: PointerEvent) => {
-    if (mode === 'pan' || e.button !== 0) return;
+    if (mode === 'pan') {
+      press = e.button === 0 ? [e.clientX, e.clientY] : null;
+      return;
+    }
+    if (e.button !== 0) return;
     const at = toImage(e);
     if (!at) return;
     e.preventDefault();
@@ -367,7 +549,28 @@ export async function createBioimageViewer(
     render();
   };
 
+  const onClickUp = (e: PointerEvent) => {
+    const start = press;
+    press = null;
+    if (!start || mode !== 'pan' || !labels || !opts.onLabelClick) return;
+    const dx = e.clientX - start[0];
+    const dy = e.clientY - start[1];
+    if (dx * dx + dy * dy > CLICK_MAX_MOVE_PX * CLICK_MAX_MOVE_PX) return;
+    const at = toImage(e);
+    if (!at) return;
+    const label = labelAt(
+      labelTiles,
+      at.world[0],
+      at.world[1],
+      labels.tileSize,
+      labels.info.levels,
+    );
+    if (label !== null) opts.onLabelClick(label);
+  };
+
   const onPointerUp = (e: PointerEvent) => {
+    if (e.type === 'pointerup') onClickUp(e);
+    else press = null;
     if (!drawing) return;
     host.releasePointerCapture?.(e.pointerId);
     const polygon = draft;
@@ -383,6 +586,45 @@ export async function createBioimageViewer(
   host.addEventListener('pointermove', onPointerMove, listen);
   host.addEventListener('pointerup', onPointerUp, listen);
   host.addEventListener('pointercancel', onPointerUp, listen);
+
+  // Wheel zoom needs Ctrl (Cmd on macOS): a plain wheel over the image scrolls
+  // the page, as it does over any other tile. Stopped in the capture phase, so
+  // deck's own wheel handler never sees it; a modified wheel passes through to
+  // deck's zoom untouched.
+  let hint: HTMLDivElement | null = null;
+  let hintTimer = 0;
+  const showWheelHint = () => {
+    if (!hint) {
+      hint = document.createElement('div');
+      Object.assign(hint.style, {
+        position: 'absolute',
+        left: '50%',
+        bottom: '12px',
+        transform: 'translateX(-50%)',
+        padding: '4px 10px',
+        borderRadius: '6px',
+        background: 'rgba(0, 0, 0, 0.7)',
+        color: '#fff',
+        fontSize: '12px',
+        pointerEvents: 'none',
+        transition: 'opacity 150ms',
+        zIndex: '1',
+      });
+      hint.textContent = 'Hold Ctrl (⌘ on Mac) and scroll to zoom';
+      host.appendChild(hint);
+    }
+    hint.style.opacity = '1';
+    window.clearTimeout(hintTimer);
+    hintTimer = window.setTimeout(() => {
+      if (hint) hint.style.opacity = '0';
+    }, 1200);
+  };
+  const onWheel = (e: WheelEvent) => {
+    if (e.ctrlKey || e.metaKey) return;
+    e.stopPropagation();
+    showWheelHint();
+  };
+  host.addEventListener('wheel', onWheel, { ...listen, capture: true, passive: true });
 
   return {
     async load(source, configChannels, loadOpts) {
@@ -404,22 +646,17 @@ export async function createBioimageViewer(
       const defaultZ = clampIndex(rdefs?.defaultZ, sizes.z, Math.floor(sizes.z / 2));
       const defaultT = clampIndex(rdefs?.defaultT, sizes.t, 0);
 
-      // Contrast statistics off the lowest level, only for channels that
-      // have no window from the config or omero.
+      // Contrast statistics off the lowest level, for every channel. The slider
+      // spans the data range they give; omero's window is the dtype's full range
+      // in most stores (0-65535 for a 12-bit image), which would leave the
+      // window a sliver of the track. The window itself still comes from the
+      // config or omero, in resolveChannels.
       const lowest = pyramid[pyramid.length - 1];
       const lowPixels =
         (lowest.shape[labels.indexOf('x')] ?? 0) * (lowest.shape[labels.indexOf('y')] ?? 0);
-      const pinned = new Set(
-        (configChannels ?? []).filter((c) => c.contrast_limits).map((c) => c.index),
-      );
-      const omeroChannels = (omero?.channels ?? []) as Array<{
-        window?: { start?: number; end?: number };
-      }>;
       const stats: Array<ChannelStats | null> = [];
       if (lowPixels > 0 && lowPixels <= STATS_MAX_PIXELS) {
-        const wanted = Array.from({ length: Math.min(sizes.c, STATS_MAX_CHANNELS) }, (_, c) => c)
-          .filter((c) => !pinned.has(c))
-          .filter((c) => typeof omeroChannels[c]?.window?.end !== 'number');
+        const wanted = Array.from({ length: Math.min(sizes.c, STATS_MAX_CHANNELS) }, (_, c) => c);
         await Promise.all(
           wanted.map(async (c) => {
             try {
@@ -463,6 +700,7 @@ export async function createBioimageViewer(
         sizes,
         dtype: base.dtype,
         levels: pyramid.length,
+        levelShapes: pyramid.map((level) => [...level.shape]),
         channels,
         defaultZ,
         defaultT,
@@ -481,12 +719,45 @@ export async function createBioimageViewer(
     setSelection(sel) {
       if (sel.z === plane.z && sel.t === plane.t) return;
       plane = { z: sel.z, t: sel.t };
+      // Label tiles are per plane: the picking map refills as they reload.
+      labelTiles = new Map();
       render();
     },
 
     setPoints(next, radius) {
       points = next;
       pointRadius = radius;
+      render();
+    },
+
+    async setLabels(store) {
+      labelsToken += 1;
+      const token = labelsToken;
+      labels = null;
+      labelTiles = new Map();
+      bitmaps = new WeakMap();
+      render();
+      if (!store) return null;
+      const loaded = await loadOmeZarrFromStore(store as never);
+      if (token !== labelsToken || disposed) throw new LoadSupersededError();
+      const pyramid = loaded.data as unknown as PixelSource[];
+      const base = pyramid[0];
+      const lab = base.labels;
+      const width = base.shape[lab.indexOf('x')] ?? base.shape[base.shape.length - 1];
+      const height = base.shape[lab.indexOf('y')] ?? base.shape[base.shape.length - 2];
+      if (/^Float/.test(base.dtype)) {
+        throw new Error(`Labels store has dtype ${base.dtype}: cell ids must be integers`);
+      }
+      const tileSize = (base as unknown as { tileSize?: number }).tileSize ?? 256;
+      const labelsInfo = { width, height, levels: pyramid.length, dtype: base.dtype };
+      labels = { pyramid, info: labelsInfo, tileSize };
+      render();
+      return labelsInfo;
+    },
+
+    setLabelsStyle(style) {
+      labelsStyle = style;
+      labelsStyleVersion += 1;
       render();
     },
 
@@ -526,7 +797,9 @@ export async function createBioimageViewer(
     dispose() {
       disposed = true;
       loadToken += 1;
+      labelsToken += 1;
       listeners.abort();
+      window.clearTimeout(hintTimer);
       try {
         deck.finalize();
       } catch {

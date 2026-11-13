@@ -26,6 +26,47 @@ import type { CatalogRender } from 'depictio-react-core';
 export const WF_PLACEHOLDER = '<your-workflow-tag>';
 export const DC_PLACEHOLDER = '<your-data-collection-tag>';
 
+/** A `bioimage_viewer` render names its partner outputs (image, labels, points)
+ *  in the catalog, but their data collections are per project, so the tile has
+ *  to name them. These are the keys `_expand_catalog_use` asks for. */
+const BIOIMAGE_DC_KEYS: Array<{ role: string; key: string; placeholder: string }> = [
+  { role: 'image', key: 'image_dc_tag', placeholder: '<your-image-dc-tag>' },
+  { role: 'labels', key: 'labels_dc_tag', placeholder: '<your-labels-dc-tag>' },
+  { role: 'points', key: 'points_dc_tag', placeholder: '<your-cells-table-dc-tag>' },
+];
+const BIOIMAGE_COLUMN_ROLES = ['cell_id', 'x', 'y', 'color', 'sample'];
+
+export function isBioimageViewerRender(render: CatalogRender): boolean {
+  return render.component === 'advanced_viz' && render.kind === 'bioimage_viewer';
+}
+
+/** The `config:` block of a bioimage_viewer tile: the data collections to fill.
+ *
+ *  `image_dc_tag` always; `labels_dc_tag` when the render overlays a mask;
+ *  `points_dc_tag` when it draws cells. When the render sits on the cells table
+ *  itself (no `points` role) and the snippet knows that table's tag, it is
+ *  filled in. The sample hub pair is optional and commented. */
+function bioimageConfigLines(
+  ctx: TileSnippetContext,
+  render: CatalogRender,
+  indent: string,
+): string[] {
+  const roles = render.roles || {};
+  const bindsPoints = 'points' in roles || BIOIMAGE_COLUMN_ROLES.some((r) => r in roles);
+  const out = [`${indent}config:`];
+  const inner = `${indent}  `;
+  for (const { role, key, placeholder } of BIOIMAGE_DC_KEYS) {
+    if (role === 'labels' && !('labels' in roles)) continue;
+    if (role === 'points' && !bindsPoints) continue;
+    const own = role === 'points' && !('points' in roles) ? ctx.dcTag : null;
+    out.push(line(key, own || placeholder, inner));
+  }
+  out.push(`${inner}# optional: a sample filter picks the image to show`);
+  out.push(`${inner}# sample_dc_tag: <your-samples-dc-tag>`);
+  out.push(`${inner}# sample_column: sample`);
+  return out;
+}
+
 export interface TileSnippetContext {
   toolId: string;
   outputId: string;
@@ -81,7 +122,8 @@ function configLines(render: CatalogRender, indent: string): string[] {
 
   switch (render.component) {
     case 'advanced_viz':
-      // `use:` expands into viz_kind + config. Nothing to add.
+      // `use:` expands into viz_kind + config. Nothing to add, except for the
+      // bioimage viewer's data collections (see `bioimageConfigLines`).
       break;
     case 'card':
       push('column_name', render.column ?? render.column_name);
@@ -147,17 +189,26 @@ export function buildTileSnippet(ctx: TileSnippetContext, render: CatalogRender)
   const lines = [
     `- component_type: ${render.component}`,
     line('workflow_tag', ctx.wfTag || WF_PLACEHOLDER, indent),
-    line('data_collection_tag', ctx.dcTag || DC_PLACEHOLDER, indent),
+    // A bioimage viewer's own collection is its image DC (the kind's DC type is
+    // `bioimage`), never the table the offer was matched on.
+    line(
+      'data_collection_tag',
+      isBioimageViewerRender(render) ? BIOIMAGE_DC_KEYS[0].placeholder : ctx.dcTag || DC_PLACEHOLDER,
+      indent,
+    ),
     line('use', catalogUseRef(ctx.toolId, ctx.outputId, render), indent),
   ];
   lines.push(...configLines(render, indent));
   if (ctx.title) lines.push(line('title', ctx.title, indent));
+  if (isBioimageViewerRender(render)) lines.push(...bioimageConfigLines(ctx, render, indent));
   return lines
     .join('\n')
     .replace('${tool}', ctx.toolId);
 }
 
-/** True when the snippet still carries placeholders the reader must replace. */
-export function snippetNeedsBinding(ctx: TileSnippetContext): boolean {
-  return !ctx.wfTag || !ctx.dcTag;
+/** True when the snippet still carries placeholders the reader must replace.
+ *  A bioimage viewer always does: its image (and mask) collections are never
+ *  the one the snippet was offered on. */
+export function snippetNeedsBinding(ctx: TileSnippetContext, render?: CatalogRender): boolean {
+  return !ctx.wfTag || !ctx.dcTag || Boolean(render && isBioimageViewerRender(render));
 }

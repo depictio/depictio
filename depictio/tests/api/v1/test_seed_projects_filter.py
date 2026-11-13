@@ -118,6 +118,7 @@ def test_bioimage_examples_is_an_optional_dataset():
         ("bioimage_ome_tiff", "bioimage_examples"),
         ("bioimage_spatialdata", "bioimage_examples"),
         ("bioimage_ngff05", "bioimage_examples"),
+        ("bioimage_remote", "bioimage_examples"),
     ],
 )
 def test_dataset_of_dashboard_mapping(dashboard_name, dataset):
@@ -165,6 +166,7 @@ def test_bioimage_dashboards_follow_the_static_id_table():
         "bioimage_ome_tiff",
         "bioimage_spatialdata",
         "bioimage_ngff05",
+        "bioimage_remote",
     }
     assert all(_dataset_of_dashboard(name) == "bioimage_examples" for name in dashboards)
     # The main tab carries the project id, as in the other multi-tab projects.
@@ -227,4 +229,4 @@ def test_bioimage_dashboards_follow_the_seed_request(monkeypatch, only, extra, k
     asyncio.run(db_init.create_initial_dashboards(admin_user=None, only=only, extra=extra))
 
     bio = [p for p in created if "bioimage_examples" in p]
-    assert len(bio) == (7 if kept else 0)
+    assert len(bio) == (8 if kept else 0)

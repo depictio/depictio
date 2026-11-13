@@ -40,6 +40,21 @@ export function defaultChannelColor(index: number, count: number): string {
   return count <= 1 ? GREYSCALE : FLUORESCENCE_COLORS[index % FLUORESCENCE_COLORS.length];
 }
 
+/** The colour a channel's name spells out: an RGB image's `r` / `g` / `b`
+ *  (SpatialData, brightfield) is drawn in its own colour, not its index's. */
+const NAMED_CHANNEL_COLORS: Record<string, string> = {
+  r: '#ff0000',
+  red: '#ff0000',
+  g: '#00ff00',
+  green: '#00ff00',
+  b: '#0000ff',
+  blue: '#0000ff',
+};
+
+export function namedChannelColor(name: string | null | undefined): string | null {
+  return NAMED_CHANNEL_COLORS[(name ?? '').trim().toLowerCase()] ?? null;
+}
+
 /** Full value range of an integer dtype (viv's spelling: `Uint16`, ...), or
  *  null for floats, whose range has to come from the data. */
 export function dtypeRange(dtype: string): [number, number] | null {
@@ -160,7 +175,10 @@ export function resolveChannels(opts: {
       index: i,
       name: cfg?.name || om?.label || `Channel ${i}`,
       color:
-        normaliseHex(cfg?.color) ?? normaliseHex(om?.color) ?? defaultChannelColor(i, sizeC),
+        normaliseHex(cfg?.color) ??
+        normaliseHex(om?.color) ??
+        namedChannelColor(om?.label) ??
+        defaultChannelColor(i, sizeC),
       visible: cfg?.visible ?? om?.active ?? i < MAX_RENDERED_CHANNELS,
       contrastLimits,
       // Widen the slider to whatever the limits already span, so a pinned

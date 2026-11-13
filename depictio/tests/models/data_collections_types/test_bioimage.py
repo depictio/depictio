@@ -10,7 +10,9 @@ from depictio.models.models.data_collections_types.bioimage import (
     bioimage_s3_object_key,
     bioimage_s3_prefix,
     bioimage_sample_name,
+    duplicate_samples,
     is_bioimage_store_name,
+    is_file_store_format,
     is_single_file_format,
     remote_store_name,
 )
@@ -87,6 +89,58 @@ class TestDCBioimageConfig:
             DCBioimageConfig(remote_stores=["s3://a/x/s.zarr", "https://example.org/s.zarr"])
 
 
+class TestLabels:
+    def test_defaults_to_image(self):
+        assert DCBioimageConfig().kind == "image"
+
+    @pytest.mark.parametrize("fmt", ["tiff", "ome-zarr"])
+    def test_labels_formats(self, fmt):
+        assert DCBioimageConfig(format=fmt, kind="labels").kind == "labels"
+
+    @pytest.mark.parametrize("fmt", ["ome-tiff", "spatialdata"])
+    def test_other_formats_are_not_labels(self, fmt):
+        extra = {"image_path": "images/x"} if fmt == "spatialdata" else {}
+        with pytest.raises(ValidationError, match="kind 'labels' takes format"):
+            DCBioimageConfig(format=fmt, kind="labels", **extra)
+
+    def test_tiff_is_labels_only(self):
+        with pytest.raises(ValidationError, match="set kind 'labels'"):
+            DCBioimageConfig(format="tiff")
+
+    def test_tiff_needs_upload(self):
+        with pytest.raises(ValidationError, match="cannot be reference-only"):
+            DCBioimageConfig(format="tiff", kind="labels", upload=False)
+
+    def test_tiff_has_no_remote_stores(self):
+        with pytest.raises(ValidationError, match="cannot use remote_stores"):
+            DCBioimageConfig(
+                format="tiff", kind="labels", remote_stores=["https://example.org/a.tif"]
+            )
+
+    def test_sample_pattern(self):
+        config = DCBioimageConfig(format="tiff", kind="labels", sample_pattern=r"^(.+?)_mask")
+        assert config.sample_pattern == r"^(.+?)_mask"
+
+    @pytest.mark.parametrize(
+        ("pattern", "match"),
+        [
+            (r"^(.+?)_(mask)\.tif$", "exactly one capture group"),
+            (r"^.+_mask\.tif$", "exactly one capture group"),
+            (r"^(.+?_mask", "not a valid regex"),
+        ],
+    )
+    def test_bad_sample_pattern(self, pattern, match):
+        with pytest.raises(ValidationError, match=match):
+            DCBioimageConfig(sample_pattern=pattern)
+
+    def test_remote_stores_share_a_sample(self):
+        with pytest.raises(ValidationError, match="share a sample"):
+            DCBioimageConfig(
+                format="ome-tiff",
+                remote_stores=["s3://b/a.ome.tif", "s3://b/a.ome.tiff"],
+            )
+
+
 class TestRemoteOnlyDataCollection:
     def _config(self, **props):
         return DataCollectionConfig(type="bioimage", dc_specific_properties=props)
@@ -108,7 +162,12 @@ class TestStoreNames:
             ("a.zarr", "spatialdata", True),
             ("a.ome.tif", "ome-tiff", True),
             ("a.ome.tiff", "ome-tiff", True),
-            ("a.tif", "ome-tiff", False),
+            ("a.tif", "ome-tiff", True),
+            ("a_mask.tif", "tiff", True),
+            ("a_mask.tiff", "tiff", True),
+            ("a.ome.tif", "tiff", True),
+            ("a.zarr", "tiff", False),
+            (".tif", "tiff", False),
             ("a.zarr", "ome-tiff", False),
             (".zarr", "ome-zarr", False),
             ("x/a.zarr", "ome-zarr", False),
@@ -122,6 +181,11 @@ class TestStoreNames:
         assert is_single_file_format("ome-tiff")
         assert not is_single_file_format("ome-zarr")
         assert not is_single_file_format("spatialdata")
+        # A mask TIFF is one file on disk but a key tree once converted.
+        assert not is_single_file_format("tiff")
+        assert is_file_store_format("tiff")
+        assert is_file_store_format("ome-tiff")
+        assert not is_file_store_format("ome-zarr")
 
     def test_tiff_object_key(self):
         assert bioimage_s3_object_key(DC_ID, "a.ome.tif") == f"bioimage/{DC_ID}/a.ome.tif"
@@ -146,10 +210,35 @@ class TestS3Layout:
             ("sample_A.ome.tif", "sample_A"),
             ("sample_A.ome.tiff", "sample_A"),
             ("plain", "plain"),
+            ("s1_mask.tif", "s1_mask"),
+            ("s1_mask.tiff", "s1_mask"),
         ],
     )
     def test_sample_name(self, store, sample):
         assert bioimage_sample_name(store) == sample
+
+    @pytest.mark.parametrize(
+        ("store", "pattern", "sample"),
+        [
+            ("s1_mask.tif", r"^(.+?)_mask\.tif$", "s1"),
+            ("cell_s1.ome.tif", r"^cell_(.+)\.ome\.tif$", "s1"),
+            # No match, or an empty capture: the default name.
+            ("other.tif", r"^(.+?)_mask\.tif$", "other"),
+            ("_mask.tif", r"^(.*)_mask\.tif$", "_mask"),
+        ],
+    )
+    def test_sample_name_with_pattern(self, store, pattern, sample):
+        assert bioimage_sample_name(store, pattern) == sample
+
+    def test_duplicate_samples(self):
+        assert duplicate_samples(["a.ome.tif", "a.ome.tiff", "b.ome.tif"]) == {
+            "a": ["a.ome.tif", "a.ome.tiff"]
+        }
+        pattern = r"^(.+?)_(?:mask|cells)\.tif$"
+        assert duplicate_samples(["s_mask.tif", "s_cells.tif"], pattern) == {
+            "s": ["s_mask.tif", "s_cells.tif"]
+        }
+        assert duplicate_samples(["s1_mask.tif", "s2_mask.tif"], pattern) == {}
 
 
 class TestStoreDirectoryAsFile:

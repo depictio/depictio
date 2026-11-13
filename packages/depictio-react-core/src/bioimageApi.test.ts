@@ -116,6 +116,26 @@ describe('createBioimageZarrStore.getRange', () => {
     expect(Array.from((await store.getRange('0/c/0', { suffixLength: 2 })) ?? [])).toEqual([4, 5]);
   });
 
+  it('fetches a key once however many readers ask for it', async () => {
+    respond(200, [1, 2, 3]);
+    const store = createBioimageZarrStore('dc1', 's.zarr');
+    const reads = await Promise.all([store.get('0/c/0'), store.get('0/c/0'), store.get('0/c/0')]);
+    expect(reads.map((r) => Array.from(r ?? []))).toEqual([[1, 2, 3], [1, 2, 3], [1, 2, 3]]);
+    expect(Array.from((await store.get('0/c/0')) ?? [])).toEqual([1, 2, 3]);
+    expect(calls).toHaveLength(1);
+  });
+
+  it('lets one reader give up without failing the others', async () => {
+    respond(200, [4]);
+    const store = createBioimageZarrStore('dc1', 's.zarr');
+    const abort = new AbortController();
+    const gaveUp = store.get('0/c/1', { signal: abort.signal });
+    const kept = store.get('0/c/1');
+    abort.abort();
+    await expect(gaveUp).rejects.toThrow('Aborted');
+    expect(Array.from((await kept) ?? [])).toEqual([4]);
+  });
+
   it('reads a missing shard as absent and throws on other failures', async () => {
     respond(404, []);
     const store = createBioimageZarrStore('dc1', 's.zarr');

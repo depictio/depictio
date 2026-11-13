@@ -65,7 +65,8 @@ from depictio.models.models.data_collections_types.bioimage import (
     OME_TIFF_SUFFIXES,
     OME_ZARR_STORE_SUFFIX,
     DCBioimageConfig,
-    is_single_file_format,
+    bioimage_store_suffixes,
+    is_file_store_format,
 )
 from depictio.models.models.data_collections_types.table import (
     DCTableConfig,
@@ -211,7 +212,7 @@ def _is_zarr_store_dc(data_collection: "DataCollection") -> bool:
     """DCs whose Files are whole ``*.zarr`` stores: OME-Zarr / SpatialData bioimages,
     and SpatialData tables."""
     if _is_bioimage_dc(data_collection):
-        return not is_single_file_format(_bioimage_format(data_collection))
+        return not is_file_store_format(_bioimage_format(data_collection))
     return _spatialdata_source(data_collection) is not None
 
 
@@ -221,31 +222,81 @@ def _remote_stores(data_collection: "DataCollection") -> list[str]:
     return list(props.remote_stores) if isinstance(props, DCBioimageConfig) else []
 
 
-def is_ome_tiff_file(path: str) -> bool:
-    """True when ``path`` is a regular file named ``*.ome.tif`` / ``*.ome.tiff``."""
+def _is_bioimage_file_name(path: str, fmt: str) -> bool:
+    """Name-only half of ``is_bioimage_file``: no file is opened."""
     name = os.path.basename(path)
-    return any(name.endswith(s) and name != s for s in OME_TIFF_SUFFIXES) and os.path.isfile(path)
+    if fmt == "tiff" and name.endswith(OME_TIFF_SUFFIXES):
+        return False  # an OME image beside the masks, not a mask
+    return os.path.isfile(path) and any(
+        name.endswith(s) and name != s for s in bioimage_store_suffixes(fmt)
+    )
 
 
-def iter_ome_tiff_files(path: str) -> list[str]:
-    """OME-TIFF files at or under ``path``, sorted.
+def is_bioimage_file(path: str, fmt: str = "ome-tiff") -> bool:
+    """True when ``path`` is a regular file named like a file store of ``fmt``:
+    a non-OME ``*.tif(f)`` for a labels TIFF; ``*.ome.tif(f)``, or a plain
+    ``*.tif(f)`` whose header carries OME-XML, for OME-TIFF (so masks beside
+    the images are not picked up)."""
+    if not _is_bioimage_file_name(path, fmt):
+        return False
+    if fmt != "ome-tiff" or path.endswith(OME_TIFF_SUFFIXES):
+        return True
+    from depictio.cli.cli.utils.deltatables import validate_ome_tiff
+
+    try:
+        validate_ome_tiff(path)
+    except (OSError, ValueError):
+        return False
+    return True
+
+
+def is_ome_tiff_file(path: str) -> bool:
+    """True when ``path`` is an OME-TIFF file (see ``is_bioimage_file``)."""
+    return is_bioimage_file(path, "ome-tiff")
+
+
+def iter_bioimage_files(path: str, fmt: str = "ome-tiff") -> list[str]:
+    """File stores of ``fmt`` (OME-TIFF, labels TIFF) at or under ``path``, sorted.
 
     ``*.zarr`` directories are not walked into: they hold chunk files only.
     """
     if os.path.isfile(path):
-        return [path] if is_ome_tiff_file(path) else []
+        return [path] if is_bioimage_file(path, fmt) else []
     found: list[str] = []
     for root, dirs, files in os.walk(path):
         dirs[:] = sorted(d for d in dirs if not d.endswith(OME_ZARR_STORE_SUFFIX))
         found.extend(
-            os.path.join(root, f) for f in files if is_ome_tiff_file(os.path.join(root, f))
+            os.path.join(root, f) for f in files if is_bioimage_file(os.path.join(root, f), fmt)
         )
     return sorted(found)
 
 
+def iter_ome_tiff_files(path: str) -> list[str]:
+    """OME-TIFF files at or under ``path``, sorted (see ``iter_bioimage_files``)."""
+    return iter_bioimage_files(path, "ome-tiff")
+
+
 def iter_bioimage_stores(path: str, fmt: str) -> list[str]:
     """Stores of format ``fmt`` at or under ``path``: TIFF files or ``*.zarr`` directories."""
-    return iter_ome_tiff_files(path) if is_single_file_format(fmt) else iter_zarr_stores(path)
+    return iter_bioimage_files(path, fmt) if is_file_store_format(fmt) else iter_zarr_stores(path)
+
+
+def warn_unmatched_sample_pattern(data_collection: "DataCollection", stores: list[str]) -> None:
+    """Log the stores a bioimage DC's ``sample_pattern`` does not match.
+
+    Such a store falls back to its name without suffix as its sample, which
+    rarely pairs with the image or the cells of that sample.
+    """
+    props = getattr(data_collection.config, "dc_specific_properties", None)
+    pattern = props.sample_pattern if isinstance(props, DCBioimageConfig) else None
+    if not pattern:
+        return
+    unmatched = [s for s in stores if not re.search(pattern, os.path.basename(s.rstrip("/")))]
+    if unmatched:
+        logger.warning(
+            f"{data_collection.data_collection_tag}: sample_pattern {pattern!r} does not match "
+            f"{len(unmatched)} store(s), which use their name as sample, e.g. {unmatched[0]}"
+        )
 
 
 def iter_zarr_stores(path: str) -> list[str]:
@@ -563,6 +614,8 @@ def process_files(
         stores = iter_bioimage_stores(path, fmt)
         if not stores:
             logger.warning(f"No {fmt} store found at {path}")
+        if _is_bioimage_dc(data_collection):
+            warn_unmatched_sample_pattern(data_collection, stores)
         for store_location in stores:
             file_instance = scan_single_file(
                 file_location=store_location,
@@ -620,10 +673,16 @@ def _run_candidates(
     dc: DataCollection, all_files_in_run: list[ScannedPath], all_zarr_stores_in_run: list[str]
 ) -> list[str]:
     """Paths a DC's regex is matched against in a run: its stores (zarr directories or
-    OME-TIFF files). Only called for bioimage and SpatialData table DCs."""
+    file stores). Only called for bioimage and SpatialData table DCs.
+
+    File-store bioimage DCs are narrowed by name only; the OME-TIFF header
+    check runs after the regex (``is_bioimage_file``), so a run's other
+    ``*.tif`` files are never opened.
+    """
     if _is_zarr_store_dc(dc):
         return all_zarr_stores_in_run
-    return [f.walk_path for f in all_files_in_run if is_ome_tiff_file(f.walk_path)]
+    fmt = _bioimage_format(dc)
+    return [f.walk_path for f in all_files_in_run if _is_bioimage_file_name(f.walk_path, fmt)]
 
 
 def scan_run_for_multiple_data_collections(
@@ -771,6 +830,13 @@ def scan_run_for_multiple_data_collections(
                 (None, store)
                 for store in _run_candidates(dc, all_files_in_run, all_zarr_stores_in_run)
                 if file_matches_data_collection(store, run_location, full_regex)
+                # A file-backed bioimage DC (OME-TIFF, a TIFF mask) keeps only
+                # the files of its own format.
+                and (
+                    _is_zarr_store_dc(dc)
+                    or not _is_bioimage_dc(dc)
+                    or is_bioimage_file(store, _bioimage_format(dc))
+                )
             ]
         else:
             candidates = [
@@ -796,6 +862,11 @@ def scan_run_for_multiple_data_collections(
 
             if file_scan_result:
                 dc_file_scan_results.append(file_scan_result)
+
+        if _is_bioimage_dc(dc):
+            warn_unmatched_sample_pattern(
+                dc, [sc.file.file_location for sc in dc_file_scan_results]
+            )
 
         # Process the scan results for this data collection. Bucket by reason
         # once rather than re-walking the result list per counter.

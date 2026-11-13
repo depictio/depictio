@@ -20,7 +20,8 @@ experimental result.
 | `kidney_3d_timelapse.zarr` | 2 channels x 8 z-planes x 5 timepoints, 192 x 192, uint8, `t,c,z,y,x` | `skimage.data.kidney`, cropped |
 | `kidney_3d_timelapse_nuclei.csv` | Nuclei of the first timepoint, segmented in 3D: centroid, depth band, volume | derived |
 | `multi_sample/sample_{A,B,C}.zarr` | One DNA channel, 256 x 256, uint8, `c,y,x` | `skimage.data.human_mitosis`, three crops |
-| `multi_sample/cells.csv` | One row per nucleus of the three samples, with a heuristic `phase` | derived |
+| `multi_sample/cells.csv` | One row per nucleus of the three samples, with a heuristic `phase` and its mask id (`label`) | derived |
+| `multi_sample/labels/sample_{A,B,C}_mask.tif` | Nucleus segmentation masks, 256 x 256, uint16, one integer id per nucleus (0 = background) | derived |
 | `multi_sample/samples.csv` | Sample sheet. `sample` equals the store name without `.zarr` | derived |
 | `lily_stem.ome.tif` | 2-channel fluorescence, 480 x 480, uint8, pyramidal OME-TIFF | `skimage.data.lily`, channels 1 and 2, cropped |
 | `lily_stem_cells.csv` | One row per plant cell: centroid, lumen area, mean intensity per channel, wall type | derived |
@@ -56,6 +57,17 @@ Physical pixel sizes:
 - `skin_spatialdata`: none. SpatialData keeps the image in its pixel frame
   (identity transform to the `global` coordinate system) and the source
   image carries no calibration.
+
+## Segmentation masks
+
+`multi_sample/labels/*_mask.tif` are plain TIFFs (one uint16 plane, zlib),
+the form segmentation tools write, for the `multi_sample_labels` DC
+(`format: tiff`, `kind: labels`). The CLI converts each to a multiscale
+OME-Zarr labels image at ingest; the viewer draws the one of the shown sample
+over its image. A mask value is the nucleus's `label` in `cells.csv`, unique
+across the three samples, so its colour, filter state and selection come from
+that row. `dev/bioimage/make_labels_example.py` derives them from the stores
+already here (same segmentation as the table, checked row by row).
 
 ## OME-TIFF
 

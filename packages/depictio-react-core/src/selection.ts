@@ -249,7 +249,9 @@ export function advancedVizSelectionColumn(metadata: StoredMetadata): string | u
       // bound, so without them there is nothing to select.
       const hasPoints = ['points_dc_id', 'x_col', 'y_col'].every((key) => configColumn(key));
       if (!hasPoints) return undefined;
-      return configColumn('cell_id_col');
+      const cellIdCol = configColumn('cell_id_col');
+      // A cell id unique only per sample names a sample:cell key column instead.
+      return cellIdCol ? (named ?? cellIdCol) : undefined;
     }
     default:
       // `ideogram` lands here on purpose: a karyotype emits a region, not a
