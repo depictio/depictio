@@ -87,6 +87,41 @@ def make_store(parent: Path, name: str, attrs: dict | None = None) -> Path:
     return store
 
 
+def make_plate(parent: Path, name: str, wells: list[str]) -> Path:
+    """An NGFF 0.4 plate: one field of view (``0``) per well, each a make_store image."""
+    plate = parent / name
+    plate.mkdir(parents=True)
+    rows = sorted({w.split("/")[0] for w in wells})
+    cols = sorted({w.split("/")[1] for w in wells})
+    (plate / ".zgroup").write_text(json.dumps({"zarr_format": 2}))
+    (plate / ".zattrs").write_text(
+        json.dumps(
+            {
+                "plate": {
+                    "version": "0.4",
+                    "rows": [{"name": r} for r in rows],
+                    "columns": [{"name": c} for c in cols],
+                    "wells": [
+                        {
+                            "path": w,
+                            "rowIndex": rows.index(w.split("/")[0]),
+                            "columnIndex": cols.index(w.split("/")[1]),
+                        }
+                        for w in wells
+                    ],
+                }
+            }
+        )
+    )
+    for w in wells:
+        well = plate / w
+        well.mkdir(parents=True)
+        (well / ".zgroup").write_text(json.dumps({"zarr_format": 2}))
+        (well / ".zattrs").write_text(json.dumps({"well": {"images": [{"path": "0"}]}}))
+        make_store(well, "0")
+    return plate
+
+
 OME_XML = (
     '<?xml version="1.0" encoding="UTF-8"?>'
     '<OME xmlns="http://www.openmicroscopy.org/Schemas/OME/2016-06">'
@@ -654,15 +689,62 @@ class TestIngest:
         self, tmp_path, monkeypatch, cli_config, s3_client
     ):
         good = make_store(tmp_path, "sample_A.zarr")
-        bad = make_store(tmp_path, "plate.zarr", attrs={"plate": {}})
+        bad = make_store(tmp_path, "other.zarr", attrs={"something": {}})
         _registered(monkeypatch, good, bad)
 
         result = process_bioimage_data_collection(_ingest_dc(), cli_config)  # type: ignore[arg-type]
 
         assert result["result"] == "error"
         assert "multiscales" in result["message"]
-        assert "plate.zarr" in result["message"]
+        assert "other.zarr" in result["message"]
         s3_client.upload_file.assert_not_called()
+
+    def test_a_plate_is_accepted_when_its_first_field_is_an_image(
+        self, tmp_path, monkeypatch, cli_config, s3_client
+    ):
+        plate = make_plate(tmp_path, "screen.zarr", wells=["A/1", "B/2"])
+        _registered(monkeypatch, plate)
+
+        result = process_bioimage_data_collection(_ingest_dc(), cli_config)  # type: ignore[arg-type]
+
+        assert result["result"] == "success", result["message"]
+        keys = {c.args[2] for c in s3_client.upload_file.call_args_list}
+        prefix = f"bioimage/{DC_ID}/screen.zarr/"
+        assert {prefix + ".zattrs", prefix + "A/1/.zattrs", prefix + "B/2/0/0/0.0.0"} <= keys
+
+    def test_a_plate_without_wells_is_an_error(self, tmp_path, monkeypatch, cli_config, s3_client):
+        _registered(monkeypatch, make_store(tmp_path, "empty.zarr", attrs={"plate": {}}))
+
+        result = process_bioimage_data_collection(_ingest_dc(), cli_config)  # type: ignore[arg-type]
+
+        assert result["result"] == "error"
+        assert "lists no wells" in result["message"]
+
+    def test_a_plate_whose_field_is_not_an_image_is_an_error(
+        self, tmp_path, monkeypatch, cli_config, s3_client
+    ):
+        plate = make_plate(tmp_path, "broken.zarr", wells=["A/1"])
+        (plate / "A" / "1" / "0" / ".zattrs").write_text(json.dumps({}))
+        _registered(monkeypatch, plate)
+
+        result = process_bioimage_data_collection(_ingest_dc(), cli_config)  # type: ignore[arg-type]
+
+        assert result["result"] == "error"
+        assert "multiscales" in result["message"]
+
+    def test_a_bioformats2raw_container_is_read_from_its_first_series(
+        self, tmp_path, monkeypatch, cli_config, s3_client
+    ):
+        store = tmp_path / "converted.zarr"
+        store.mkdir()
+        (store / ".zgroup").write_text(json.dumps({"zarr_format": 2}))
+        (store / ".zattrs").write_text(json.dumps({"bioformats2raw.layout": 3}))
+        make_store(store, "0")
+        _registered(monkeypatch, store)
+
+        result = process_bioimage_data_collection(_ingest_dc(), cli_config)  # type: ignore[arg-type]
+
+        assert result["result"] == "success", result["message"]
 
     def test_missing_zattrs_is_an_error(self, tmp_path, monkeypatch, cli_config, s3_client):
         store = make_store(tmp_path, "sample_A.zarr")
@@ -956,7 +1038,7 @@ class TestZarrV3:
                         }
                     )
                 ),
-                "no 'multiscales' entry",
+                "plate that lists no wells",
             ),
             (
                 lambda s: (s / "zarr.json").write_text(

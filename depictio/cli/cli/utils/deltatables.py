@@ -1987,14 +1987,62 @@ def _check_ngff_version(path: str, found: str, expected: str | None) -> None:
 def _require_multiscales(multiscales: object, where: str) -> list:
     if not isinstance(multiscales, list) or not multiscales:
         raise ValueError(
-            f"{where} has no 'multiscales' entry: not an OME-NGFF image "
-            "(plates and label-only stores are not supported)"
+            f"{where} has no 'multiscales' entry: not an OME-NGFF image, plate or "
+            "bioformats2raw container (label-only stores are not supported)"
         )
     return multiscales
 
 
+def _safe_subpath(path: object, where: str) -> str:
+    parts = path.split("/") if isinstance(path, str) else []
+    if not path or str(path).startswith("/") or ".." in parts:
+        raise ValueError(f"{where} has an invalid path {path!r}")
+    return str(path)
+
+
+def _first_image_path(store_path: str, ome: dict) -> str | None:
+    """Where the first image of a container root sits, or None for an image root.
+
+    A plate (NGFF ``plate``) holds wells, each holding fields of view; a
+    bioformats2raw container holds one image per series under ``0/``, ``1/``...
+    The viewer opens one image at a time, so a container is accepted when its
+    first image is one, and that is what the hard check looks at.
+    """
+    plate = ome.get("plate")
+    if isinstance(plate, dict):
+        wells = plate.get("wells")
+        if not isinstance(wells, list) or not wells or not isinstance(wells[0], dict):
+            raise ValueError(f"{store_path} is a plate that lists no wells")
+        well = _safe_subpath(wells[0].get("path"), f"{store_path} plate.wells[0]")
+        well_dir = os.path.join(store_path, *well.split("/"))
+        well_ome = _ngff_attributes(well_dir)
+        images = (well_ome.get("well") or {}).get("images") if well_ome else None
+        if not isinstance(images, list) or not images or not isinstance(images[0], dict):
+            raise ValueError(f"{store_path}: well {well} lists no images")
+        field = _safe_subpath(images[0].get("path"), f"{well_dir} well.images[0]")
+        return f"{well}/{field}"
+    if "bioformats2raw.layout" in ome:
+        return "0"
+    return None
+
+
+def _ngff_attributes(group_dir: str) -> dict | None:
+    """The NGFF attributes of a group directory (0.4 ``.zattrs`` or 0.5
+    ``zarr.json`` ``attributes.ome``), or None when it has neither."""
+    zattrs_path = os.path.join(group_dir, ".zattrs")
+    if os.path.isfile(zattrs_path):
+        return _read_json_object(zattrs_path)
+    zarr_json_path = os.path.join(group_dir, "zarr.json")
+    if os.path.isfile(zarr_json_path):
+        attributes = _read_json_object(zarr_json_path).get("attributes")
+        ome = attributes.get("ome") if isinstance(attributes, dict) else None
+        return ome if isinstance(ome, dict) else None
+    return None
+
+
 def validate_ome_zarr_store(store_path: str, ngff_version: str | None = None) -> str:
-    """Raise ValueError unless ``store_path`` is an NGFF 0.4 or 0.5 image store.
+    """Raise ValueError unless ``store_path`` is an NGFF 0.4 or 0.5 image store,
+    or a plate / bioformats2raw container whose first image is one.
 
     NGFF 0.4 (zarr v2): the root ``.zattrs`` must be a JSON object carrying a
     non-empty ``multiscales`` list, which is what the viewer reads first.
@@ -2008,6 +2056,15 @@ def validate_ome_zarr_store(store_path: str, ngff_version: str | None = None) ->
     """
     zattrs_path = os.path.join(store_path, ".zattrs")
     zarr_json_path = os.path.join(store_path, "zarr.json")
+    root = _ngff_attributes(store_path)
+    first = _first_image_path(store_path, root) if root is not None else None
+    if first is not None:
+        # A plate or bioformats2raw container: its first image decides.
+        _check_ngff_version(
+            store_path, "0.4" if os.path.isfile(zattrs_path) else "0.5", ngff_version
+        )
+        validate_ome_zarr_store(os.path.join(store_path, *first.split("/")), ngff_version)
+        return "0.4" if os.path.isfile(zattrs_path) else "0.5"
     if os.path.isfile(zattrs_path):
         _check_ngff_version(store_path, "0.4", ngff_version)
         _require_multiscales(_read_json_object(zattrs_path).get("multiscales"), zattrs_path)
