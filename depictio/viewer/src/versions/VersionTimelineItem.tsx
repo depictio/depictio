@@ -35,6 +35,8 @@ import {
   type MantineColor,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
+
+import { NewDot } from '../changes/feed';
 import {
   useBrandScopeAttributes,
   Z_LAYERS,
@@ -62,6 +64,10 @@ interface VersionTimelineItemProps {
   dataActive?: boolean;
   /** The row a link pointed at: highlighted so it can be found in the list. */
   focused?: boolean;
+  /** The version the reader saw on their last visit to the viewer (#1397). */
+  lastViewed?: boolean;
+  /** Saved by someone else since that visit. */
+  newSinceVisit?: boolean;
   /** Draw a rule above the row: every row of a day group but its first. */
   withDivider?: boolean;
   /** Owner-level rights: delete. Erasing history is the one action a restore
@@ -123,6 +129,8 @@ const VersionTimelineItem: React.FC<VersionTimelineItemProps> = ({
   isCurrent,
   dataActive = false,
   focused = false,
+  lastViewed = false,
+  newSinceVisit = false,
   withDivider = false,
   canDelete,
   busy,
@@ -197,10 +205,24 @@ const VersionTimelineItem: React.FC<VersionTimelineItemProps> = ({
             >
               {title}
             </Text>
+            {newSinceVisit && <NewDot label="Saved by someone else since your last visit" testId="version-new-dot" />}
             {isCurrent && (
               <Badge size="xs" variant="filled" color="teal">
                 Current
               </Badge>
+            )}
+            {lastViewed && (
+              <Tooltip
+                label="What you saw on your last visit: What's new compares the dashboard with this version"
+                withArrow
+                multiline
+                w={240}
+                zIndex={Z_LAYERS.tooltip}
+              >
+                <Badge size="xs" variant="outline" color="blue" data-testid="version-last-viewed">
+                  Last viewed
+                </Badge>
+              </Tooltip>
             )}
             {version.pinned && (
               <Badge size="xs" variant="light" color="yellow">

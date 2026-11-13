@@ -138,6 +138,7 @@ import {
   dataVersionBody,
   dataPinBody,
   fetchDashboardVersion,
+  fetchDashboardChanges,
   isCurrentDataOnlyType,
   isHttpStatus,
   DATA_VERSION_GONE_EVENT,
@@ -195,6 +196,7 @@ import ComponentVersionModal from './versions/ComponentVersionModal';
 import DataVersionPanel from './versions/DataVersionPanel';
 import VersionHistoryPanel, { type RestoreOutcome } from './versions/VersionHistoryPanel';
 import { useVersionHistory } from './versions/useVersionHistory';
+import { useChangesSinceEnabled } from './hooks/useChangesSinceEnabled';
 import DataVersionBanner from './versions/DataVersionBanner';
 import type { PinnedLabel } from './versions/dataVersionStatus';
 import { useDataVersionStatus } from './versions/useDataVersionStatus';
@@ -442,6 +444,24 @@ const EditorApp: React.FC = () => {
   // since your last visit" panel. Read once on load (the initializer is a pure
   // read), open History on that version, then drop the params so a reload or a
   // copied address does not reopen it.
+  // The version this user saw on their last visit to the viewer (#1397), for
+  // History's "Last viewed" mark. A read: the editor never moves a mark.
+  const changesSinceEnabled = useChangesSinceEnabled();
+  const [lastViewedVersionId, setLastViewedVersionId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!changesSinceEnabled || !dashboardId) return;
+    let live = true;
+    fetchDashboardChanges(dashboardId)
+      .then((cs) => {
+        if (live) setLastViewedVersionId(cs.first_visit ? null : cs.baseline_version_id);
+      })
+      .catch(() => {
+        /* History simply shows no mark */
+      });
+    return () => {
+      live = false;
+    };
+  }, [changesSinceEnabled, dashboardId]);
   const [focusVersionId] = useState<string | null>(() => {
     try {
       const params = new URLSearchParams(window.location.search);
@@ -3151,6 +3171,8 @@ const EditorApp: React.FC = () => {
               canDelete={isOwner}
               dataVersionId={asOfVersionId}
               focusVersionId={focusVersionId}
+              lastViewedVersionId={lastViewedVersionId}
+              selfId={currentUser?.id ?? null}
               onRestored={handleRestored}
             />
           ) : undefined
