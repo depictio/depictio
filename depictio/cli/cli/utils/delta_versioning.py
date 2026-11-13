@@ -453,6 +453,12 @@ def plan_scoped_write(
     return ScopedWritePlan(scoped=True, run_tags=sorted(set(changed_runs)))
 
 
+#: Written by the CLI on every row at each write (``aggregate_lazy_dataframes``).
+DIGEST_VOLATILE_COLUMNS = frozenset({"aggregation_time"})
+#: Enough for any figure, short of the float noise of a numerical method.
+DIGEST_SIG_FIGS = 10
+
+
 def content_digest(df: pl.DataFrame) -> str | None:
     """Digest of a frame's content, blind to row and column order.
 
@@ -463,10 +469,24 @@ def content_digest(df: pl.DataFrame) -> str | None:
     for equality between two writes, so a polars upgrade that changes row
     hashing shows one spurious change, never a missed one. None when a dtype
     cannot be hashed.
+
+    Two things vary between writes of the same data and are left out: the
+    ``aggregation_time`` column the CLI stamps on every row, and the last bits
+    of floats (an eigendecomposition, as in a PCoA recipe, differs around the
+    15th digit from one run to the next), which are rounded to
+    ``DIGEST_SIG_FIGS`` significant digits.
     """
     try:
-        cols = sorted(df.columns)
-        rows = df.select(cols).hash_rows().sort().to_numpy()
+        cols = sorted(c for c in df.columns if c not in DIGEST_VOLATILE_COLUMNS)
+        rows = (
+            df.select(
+                pl.col(c).round_sig_figs(DIGEST_SIG_FIGS) if df.schema[c].is_float() else pl.col(c)
+                for c in cols
+            )
+            .hash_rows()
+            .sort()
+            .to_numpy()
+        )
     except Exception as exc:  # unhashable dtype (Object, ...)
         logger.debug(f"content digest skipped: {exc}")
         return None

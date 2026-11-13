@@ -621,3 +621,10 @@ def test_content_digest_changes_with_a_value_or_the_schema():
     assert content_digest(df) != content_digest(df.with_columns(pl.col("a").replace(3, 4)))
     assert content_digest(df) != content_digest(df.with_columns(pl.col("a").cast(pl.Float64)))
     assert content_digest(df) != content_digest(df.head(2))
+
+
+def test_content_digest_ignores_the_write_time_and_float_noise():
+    df = pl.DataFrame({"a": [0.3256221559192277, 0.1986718677187851], "aggregation_time": ["t1", "t1"]})
+    again = pl.DataFrame({"a": [0.3256221559192276, 0.1986718677187849], "aggregation_time": ["t2", "t2"]})
+    assert content_digest(df) == content_digest(again)
+    assert content_digest(df) != content_digest(df.with_columns(pl.col("a") * 1.001))
