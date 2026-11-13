@@ -1374,6 +1374,7 @@ export type {
   AdvancedVizDataResponse,
   BioimageStoreInfo,
   BioimageZarrStore,
+  BioimageRangeQuery,
 } from './api';
 
 // Anonymous browser telemetry — shared with the Tools Studio, which aliases this

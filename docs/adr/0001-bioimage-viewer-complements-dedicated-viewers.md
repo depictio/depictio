@@ -18,6 +18,8 @@ Dedicated viewers already cover deep inspection of one dataset well:
 - **MoBIE** (EMBL): TB-scale multi-modal EM and light microscopy with
   segmentations and tables.
 - **napari**: desktop analysis, labels, plugins (Fractal, SpatialData).
+- **TissUUMaps**: browser-based exploration of large tissue images with
+  millions of spatial markers (in situ sequencing, spatial transcriptomics).
 
 What none of them provides is the view Depictio exists for: many runs or samples
 at once, driven by a samplesheet, with QC tables, cards and filters that stay
@@ -59,8 +61,11 @@ to become an image-analysis application:
   kept on disk. Next: reading stores in place on S3 or allow-listed HTTPS hosts,
   pyramidal OME-TIFF, and the image element of a SpatialData store, all as
   `format` values of the same `bioimage` type.
-- Segmentation labels, SpatialData shapes/tables as Depictio tables, coordinate
-  transforms and NGFF 0.5+ are tracked as follow-ups.
-- A hand-off to Vitessce, MoBIE or napari needs the store to be reachable by
+- NGFF 0.5 (zarr v3, a `zarr.json` per node) is now read as well, sharded
+  arrays included: the API serves shard files with HTTP Range, so the viewer
+  fetches a shard's index and then only the chunks it draws.
+- Segmentation labels, SpatialData shapes/tables as Depictio tables and
+  coordinate transforms are tracked as follow-ups.
+- A hand-off to Vitessce, MoBIE, napari or TissUUMaps needs the store to be reachable by
   that tool (public URL, presigned URL or CORS on the API); it is designed with
   the remote-location work, not in this PR.

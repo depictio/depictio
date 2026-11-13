@@ -4,6 +4,7 @@ import {
   axisSizes,
   formatLength,
   hexToRgb,
+  ngffRootAttrs,
   normaliseHex,
   physicalPixelSize,
   renderedChannels,
@@ -138,5 +139,45 @@ describe('physicalPixelSize', () => {
   it('formats lengths without float noise', () => {
     expect(formatLength(0.30000000000000004, 'µm')).toBe('0.3 µm');
     expect(formatLength(50, 'µm')).toBe('50 µm');
+  });
+});
+
+describe('NGFF 0.5 attributes', () => {
+  const ome = {
+    version: '0.5',
+    multiscales: [
+      {
+        axes: [
+          { name: 'c', type: 'channel' },
+          { name: 'y', type: 'space', unit: 'micrometer' },
+          { name: 'x', type: 'space', unit: 'micrometer' },
+        ],
+        datasets: [
+          { path: '0', coordinateTransformations: [{ type: 'scale', scale: [1, 0.5, 0.5] }] },
+        ],
+      },
+    ],
+    omero: {
+      channels: [{ label: 'DAPI', color: '0000FF', window: { start: 10, end: 200 } }],
+      rdefs: { defaultZ: 0 },
+    },
+  };
+
+  it('unwraps the ome block of a zarr.json and passes 0.4 attributes through', () => {
+    expect(ngffRootAttrs({ ome })).toBe(ome);
+    expect(ngffRootAttrs(ome)).toBe(ome);
+    expect(ngffRootAttrs(null)).toEqual({});
+    expect(ngffRootAttrs([1])).toEqual({});
+  });
+
+  it('reads the scale bar and omero channels from either spelling', () => {
+    expect(physicalPixelSize({ ome })).toEqual({ value: 0.5, unit: 'µm' });
+    expect(physicalPixelSize(ome)).toEqual({ value: 0.5, unit: 'µm' });
+    const [c] = resolveChannels({
+      sizeC: 1,
+      dtype: 'Uint8',
+      omero: ngffRootAttrs({ ome }).omero as never,
+    });
+    expect(c).toMatchObject({ name: 'DAPI', color: '#0000ff', contrastLimits: [10, 200] });
   });
 });

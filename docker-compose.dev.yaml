@@ -190,6 +190,13 @@ services:
         # Protein structure resolver for molecule_3d (AlphaFold DB, UniProt, ESMFold).
         # Off by default: accessions, gene names or sequences leave the server.
         DEPICTIO_STRUCTURE_RESOLVER_ENABLED: "${DEPICTIO_STRUCTURE_RESOLVER_ENABLED:-false}"
+        # Remote bioimage stores (s3:// or https:// in a bioimage DC's
+        # remote_stores) are read only from allow-listed buckets / hosts, both
+        # comma-separated. Empty (the default) keeps remote reading off.
+        DEPICTIO_BIOIMAGE_REMOTE_HTTPS_HOSTS: "${DEPICTIO_BIOIMAGE_REMOTE_HTTPS_HOSTS:-}"
+        DEPICTIO_BIOIMAGE_REMOTE_S3_BUCKETS: "${DEPICTIO_BIOIMAGE_REMOTE_S3_BUCKETS:-}"
+        DEPICTIO_BIOIMAGE_REMOTE_TIMEOUT_S: "${DEPICTIO_BIOIMAGE_REMOTE_TIMEOUT_S:-20}"
+        DEPICTIO_BIOIMAGE_REMOTE_MAX_OBJECT_MB: "${DEPICTIO_BIOIMAGE_REMOTE_MAX_OBJECT_MB:-64}"
         # Belt-and-suspenders: the editable plotly-upset / plotly-complexheatmap
         # packages are installed into the venv at image build (uv sync). If the
         # build re-used a cached layer (pre-dating the package addition), the
