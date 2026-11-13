@@ -168,6 +168,7 @@ export function resolveChannels(opts: {
   for (const c of config ?? []) if (typeof c?.index === 'number') byIndex.set(c.index, c);
   const range = dtypeRange(dtype);
   const out: ChannelState[] = [];
+  let shown = 0;
   for (let i = 0; i < sizeC; i += 1) {
     const cfg = byIndex.get(i);
     const om = omero?.channels?.[i];
@@ -188,12 +189,15 @@ export function resolveChannels(opts: {
         normaliseHex(om?.color) ??
         namedChannelColor(om?.label) ??
         defaultChannelColor(i, sizeC),
-      visible: cfg?.visible ?? om?.active ?? i < MAX_RENDERED_CHANNELS,
+      // Past what viv shades, a channel starts hidden even when the store marks
+      // it active: a switch shown on for a channel never drawn would lie.
+      visible: (cfg?.visible ?? om?.active ?? true) && shown < MAX_RENDERED_CHANNELS,
       contrastLimits,
       // Widen the slider to whatever the limits already span, so a pinned
       // window outside the observed data range is still reachable.
       domain: [Math.min(domain[0], contrastLimits[0]), Math.max(domain[1], contrastLimits[1])],
     });
+    if (out[out.length - 1].visible) shown += 1;
   }
   return out;
 }

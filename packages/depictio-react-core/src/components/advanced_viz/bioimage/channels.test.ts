@@ -109,6 +109,12 @@ describe('resolveChannels', () => {
     expect(renderedChannels(ch)).toHaveLength(6);
   });
 
+  it('caps the visible channels even when the store marks them all active', () => {
+    const omero = { channels: Array.from({ length: 8 }, () => ({ active: true })) };
+    const ch = resolveChannels({ sizeC: 8, dtype: 'Uint16', omero });
+    expect(ch.map((c) => c.visible)).toEqual([true, true, true, true, true, true, false, false]);
+  });
+
   it('keeps one invisible channel when all are hidden', () => {
     const ch = resolveChannels({ sizeC: 2, dtype: 'Uint16' }).map((c) => ({ ...c, visible: false }));
     const rendered = renderedChannels(ch);
