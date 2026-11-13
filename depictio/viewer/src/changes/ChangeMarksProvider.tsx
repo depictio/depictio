@@ -48,7 +48,7 @@ import { useChangesSinceEnabled } from '../hooks/useChangesSinceEnabled';
 import CompareModal from './CompareModal';
 import { ChangesSinceContext, type ChangesSinceValue } from './ChangesSinceContext';
 import { isReadOnlyQuery, markDetails, parseReadOnlyQuery } from './describe';
-import { newsSplitGroups, type NewsSplit, type NewsView } from './newsSplit';
+import { newSideOnly, newsSplitGroups, type NewsSplit, type NewsView } from './newsSplit';
 
 /** How long a reader stays on the page before it counts as a visit. */
 export const VISIT_DELAY_MS = 10_000;
@@ -273,19 +273,25 @@ const ChangeMarksProvider: React.FC<Props> = ({
     },
     [highlightKeys],
   );
-  const splitOn = view === 'split' && split !== null;
+  const splitOn = (view === 'split' || view === 'new') && split !== null;
+  // What the canvas applies: both sides, or the new side alone.
+  const applied = useMemo<NewsSplit | null>(
+    () => (!splitOn || !split ? null : view === 'new' ? newSideOnly(split) : { ...split, mode: 'split' }),
+    [splitOn, split, view],
+  );
   // The legend lists every side once, whichever collection it splits.
   const splitLegend = useMemo<GroupRenderDef[] | null>(() => {
     if (!splitOn) return null;
     const byName = new Map<string, GroupRenderDef>();
-    for (const g of [...split.groups, ...Object.values(split.samples).flat()]) {
+    if (!applied) return null;
+    for (const g of [...applied.groups, ...Object.values(applied.samples).flat()]) {
       if (!byName.has(g.name)) byName.set(g.name, g);
     }
     return [...byName.values()];
   }, [splitOn, split]);
   useEffect(() => {
-    onSplitChange?.(splitOn ? split : null);
-  }, [onSplitChange, splitOn, split]);
+    onSplitChange?.(applied);
+  }, [onSplitChange, applied]);
   // Gone (marked seen, flag off): the canvas goes back to normal.
   useEffect(() => () => onSplitChange?.(null), [onSplitChange]);
 
@@ -332,7 +338,7 @@ const ChangeMarksProvider: React.FC<Props> = ({
       diffQuery,
       baselineVersionId: changeSet.baseline_version_id,
       readOnly,
-      splitGroupsByDc: splitOn ? split.samples : NO_SPLIT_BY_DC,
+      splitGroupsByDc: applied ? applied.samples : NO_SPLIT_BY_DC,
     };
   }, [
     active,
@@ -345,8 +351,7 @@ const ChangeMarksProvider: React.FC<Props> = ({
     dismiss,
     readOnly,
     readOnlyQuery,
-    splitOn,
-    split,
+    applied,
   ]);
 
   const details = useMemo(() => markDetails(active ? changeSet : null), [active, changeSet]);

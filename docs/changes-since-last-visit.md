@@ -148,7 +148,11 @@ The "What's new" panel also shows the news on the whole tab at once, with
 - **Overlay** turns "Compare with last visit" on for every changed figure.
   Points already there fade and new ones keep their colour; with a colour
   column, the traces that hold no change fade, which reaches a binned
-  histogram too.
+  histogram too. In a MultiQC figure the samples seen before fade and the
+  new ones keep their colour; in the General Stats table their rows fade.
+  **Hide what you had seen**, a switch under Overlay, goes one step further:
+  the new side of the split is applied as a filter, so only the new runs or
+  new MultiQC samples are drawn. It needs the same sides as Split.
 - **Split** compares the new runs with the runs the reader had seen. Every
   Delta row carries its run in `depictio_run_id`, so the two sides are two
   selection groups on that column (`seen_run_tags` on a data change names the

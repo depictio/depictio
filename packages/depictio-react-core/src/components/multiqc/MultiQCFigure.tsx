@@ -6,7 +6,7 @@ import { renderMultiQC, InteractiveFilter, StoredMetadata } from '../../api';
 import { useInView } from '../../hooks/useInView';
 import { useDataVersionRequest } from '../../dataVersions';
 import { useChangeMark, useNewsSplitGroups } from '../../changeMarks';
-import { panelsFromGroups } from '../../splitPanels';
+import { panelFilters, panelsFromGroups } from '../../splitPanels';
 import SplitPanels from '../advanced_viz/SplitPanels';
 import { useFigureDiffOverlay } from '../../hooks/useComponentDiff';
 import { enqueueFetch, isStaleFetch } from '../../fetchQueue';
@@ -72,11 +72,13 @@ const MultiQCFigure: React.FC<MultiQCFigureProps> = (props) => {
       <MultiQCSplit {...props} panels={panels} isGeneralStats={isGeneralStats} />
     );
   }
+  // A single side ("New only"): that side's filter, no panels.
+  const filters = panels.length === 1 ? panelFilters(props.filters, panels[0]) : props.filters;
   if (isGeneralStats) {
     const { bare: _bare, ...rest } = props;
-    return <MultiQCGeneralStats {...rest} />;
+    return <MultiQCGeneralStats {...rest} filters={filters} />;
   }
-  return <MultiQCFigureBody {...props} />;
+  return <MultiQCFigureBody {...props} filters={filters} />;
 };
 
 const MultiQCSplit: React.FC<

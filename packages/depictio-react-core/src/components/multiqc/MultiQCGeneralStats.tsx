@@ -42,6 +42,9 @@ import type { RowAnnotationMark } from '../../annotations/tableRows';
 import type { RenderableAnnotation } from '../../annotations/types';
 import AnnotateToolbar from '../annotations/AnnotateToolbar';
 import InlineAnnotationEditor from '../annotations/InlineAnnotationEditor';
+import DiffSummaryChip from '../chrome/DiffSummaryChip';
+import { useChangeMark } from '../../changeMarks';
+import { useComponentDiff } from '../../hooks/useComponentDiff';
 
 interface MultiQCGeneralStatsProps {
   dashboardId: string;
@@ -172,6 +175,10 @@ const CELL_STYLE: React.CSSProperties = {
 };
 
 const NO_ANNOTATIONS: RenderableAnnotation[] = [];
+
+/** A row of a sample the reader had already seen, under "Compare with last visit":
+ *  faded but legible, the new rows stay as they are. */
+const SEEN_ROW_OPACITY = 0.35;
 
 /** Narrow first column carrying the ①② badges of annotated rows. */
 const BADGE_CELL_STYLE: React.CSSProperties = {
@@ -313,6 +320,28 @@ const MultiQCGeneralStats: React.FC<MultiQCGeneralStatsProps> = ({
   );
   const hasRowAnnotations = rowAnnotations.size > 0;
 
+  // "Compare with last visit" (#1397): the rows of samples new since the
+  // reader's last visit keep their look, the rows already seen fade.
+  const changeMark = useChangeMark(componentIndex);
+  const diffState = useComponentDiff({
+    dashboardId,
+    componentId: componentIndex,
+    comparing: changeMark.comparing,
+    filters: filters ?? [],
+  });
+  const newSamples = useMemo(() => {
+    const d = diffState.diff;
+    // A truncated list would fade new rows it left out: then fade nothing.
+    return d && d.supported && d.shape === 'samples' && !d.truncated ? new Set(d.added.map(String)) : null;
+  }, [diffState.diff]);
+  const matchedNew = useMemo(() => {
+    if (!newSamples) return 0;
+    return (mode?.table_data ?? []).filter((r) => {
+      const s = rowSample(r);
+      return s != null && newSamples.has(String(s));
+    }).length;
+  }, [newSamples, mode]);
+
   const annotatable = !!payload && !error && view === 'table';
   const reportAnnotatable = layer?.reportAnnotatable;
   useEffect(() => {
@@ -417,7 +446,17 @@ const MultiQCGeneralStats: React.FC<MultiQCGeneralStatsProps> = ({
     // "All" pill (instead of "Mean") so the active label matches the data.
     return (
       <Group justify="space-between" align="center" wrap="nowrap">
-        <Text fw={600} size="sm">{titleText}</Text>
+        <Group gap="xs" wrap="nowrap" style={{ minWidth: 0 }}>
+          <Text fw={600} size="sm">{titleText}</Text>
+          {changeMark.comparing && (
+            <DiffSummaryChip
+              diff={diffState.diff}
+              loading={diffState.loading}
+              error={diffState.error}
+              matched={matchedNew}
+            />
+          )}
+        </Group>
         <Group gap="xs" wrap="nowrap">
           <SegmentedControl
             size="xs"
@@ -496,11 +535,14 @@ const MultiQCGeneralStats: React.FC<MultiQCGeneralStatsProps> = ({
                 const picked = annotating && sample != null && annotateSelected.has(String(sample));
                 const tone = rowTone(mark, picked);
                 const stripe = mark ? annotationColorValue(mark.color, colorScheme) : undefined;
+                const seenBefore = newSamples !== null && !(sample != null && newSamples.has(String(sample)));
                 return (
                   <Table.Tr
                     key={rowIdx}
                     onClick={annotating ? () => toggleAnnotateRow(row) : undefined}
+                    data-diff-row={newSamples ? (seenBefore ? 'seen' : 'new') : undefined}
                     style={{
+                      ...(seenBefore ? { opacity: SEEN_ROW_OPACITY } : {}),
                       ...(annotating ? { cursor: 'pointer' } : {}),
                       ...(picked
                         ? { outline: '2px dashed var(--mantine-primary-color-filled)', outlineOffset: -2 }

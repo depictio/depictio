@@ -182,6 +182,7 @@ import ChangeMarksProvider from './changes/ChangeMarksProvider';
 import ChangesHeaderButton from './changes/ChangesHeaderButton';
 import type { NewsSplit } from './changes/newsSplit';
 import type { BulkComputeOptions } from 'depictio-react-core';
+import { panelsFromGroups } from 'depictio-react-core';
 
 /**
  * Top-level SPA. Layout:
@@ -257,7 +258,14 @@ const App: React.FC = () => {
   // Only a split on runs reaches the Delta figures and cards. MultiQC splits
   // on its own samples, read from the change marks by its renderer; a split
   // with nothing on runs leaves the rest of the canvas as it was.
-  const runSplit = newsSplit && newsSplit.groups.length > 0 ? newsSplit : null;
+  const runNews = newsSplit && newsSplit.groups.length > 0 ? newsSplit : null;
+  // "New only" is a filter on the new runs, not a split: the reader's own
+  // grouping stays as it was.
+  const runSplit = runNews?.mode === 'new' ? null : runNews;
+  const newOnlyFilters = useMemo(
+    () => (runNews?.mode === 'new' ? panelsFromGroups(runNews.groups)[0]?.constraints ?? [] : []),
+    [runNews],
+  );
   const bulkOptions = useMemo<BulkComputeOptions | undefined>(
     () =>
       runSplit
@@ -267,8 +275,10 @@ const App: React.FC = () => {
   );
   const combinedFilters = useMemo(
     () =>
-      groupsApi.groupFilters.length > 0 ? [...filters, ...groupsApi.groupFilters] : filters,
-    [filters, groupsApi.groupFilters],
+      groupsApi.groupFilters.length > 0 || newOnlyFilters.length > 0
+        ? [...filters, ...groupsApi.groupFilters, ...newOnlyFilters]
+        : filters,
+    [filters, groupsApi.groupFilters, newOnlyFilters],
   );
   // Data fetches follow a *settled* filter, not every intermediate value of one.
   // Interactive components keep reading `filters` directly so their own UI stays

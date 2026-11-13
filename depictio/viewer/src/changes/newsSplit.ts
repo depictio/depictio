@@ -8,7 +8,9 @@
  *                 (`depictio_run_id`): figures split into one panel per side
  *                 and keep their own colours, cards compare the two sides;
  *               * MultiQC collections, on their samples: each MultiQC figure
- *                 is drawn once for the new samples, once for those seen.
+ *                 is drawn once for the new samples, once for those seen;
+ *  - new      only the new side of the split: the same groups, the first one
+ *             applied as a filter, so everything else is hidden.
  *
  * The split groups are virtual: held by the change marks, never written to the
  * reader's saved groups and never applied as a filter.
@@ -17,7 +19,7 @@
  */
 import type { DashboardChangeSet, DataChange, GroupRenderDef } from 'depictio-react-core';
 
-export type NewsView = 'off' | 'overlay' | 'split';
+export type NewsView = 'off' | 'overlay' | 'split' | 'new';
 
 /** Written by the CLI on every Delta row: the run the row came from. */
 export const RUN_COLUMN = 'depictio_run_id';
@@ -32,6 +34,15 @@ export interface NewsSplit {
   showOther: boolean;
   /** MultiQC collections, by `dc_id`: new samples against the samples seen. */
   samples: Record<string, GroupRenderDef[]>;
+  /** Set by the change marks: both sides, or the new side alone. */
+  mode?: 'split' | 'new';
+}
+
+/** The new side alone of each split ("New only"): the first group is always it. */
+export function newSideOnly(split: NewsSplit): NewsSplit {
+  const samples: Record<string, GroupRenderDef[]> = {};
+  for (const [dcId, groups] of Object.entries(split.samples)) samples[dcId] = groups.slice(0, 1);
+  return { groups: split.groups.slice(0, 1), showOther: false, samples, mode: 'new' };
 }
 
 export interface SplitColors {

@@ -24,7 +24,7 @@ import {
   sampleSummary,
 } from '../src/changes/describe.ts';
 import { beforePane, diffTables } from '../src/changes/compare.ts';
-import { newsSplitGroups } from '../src/changes/newsSplit.ts';
+import { newSideOnly, newsSplitGroups } from '../src/changes/newsSplit.ts';
 
 let failures = 0;
 function check(label, actual, expected) {
@@ -290,6 +290,21 @@ check(
   'split: no samples seen, no MultiQC split',
   newsSplitGroups({ ...empty, data: [mqc({ seen_samples: null })] }, COLORS),
   null,
+);
+
+check(
+  'new only: the first side of each split, nothing left over',
+  newSideOnly({
+    groups: [{ name: 'New: run_c', column_name: 'depictio_run_id', values: ['run_c'] }, { name: 'Seen before', column_name: 'depictio_run_id', values: ['run_a'] }],
+    showOther: true,
+    samples: { mqc1: [{ name: 'New', column_name: 'sample', values: ['S3_1'] }, { name: 'Seen before', column_name: 'sample', values: ['S1_1'] }] },
+  }),
+  {
+    groups: [{ name: 'New: run_c', column_name: 'depictio_run_id', values: ['run_c'] }],
+    showOther: false,
+    samples: { mqc1: [{ name: 'New', column_name: 'sample', values: ['S3_1'] }] },
+    mode: 'new',
+  },
 );
 
 console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILURE(S)`);

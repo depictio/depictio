@@ -1791,6 +1791,8 @@ export {
   useNewsSplitGroups,
 } from './changeMarks';
 export type { ChangeReason, ChangeMarksValue } from './changeMarks';
+export { panelFilters, panelsFromGroups } from './splitPanels';
+export type { PanelSpec } from './splitPanels';
 export {
   DIFF_HOVER,
   DIFF_TRACE_PREFIX,

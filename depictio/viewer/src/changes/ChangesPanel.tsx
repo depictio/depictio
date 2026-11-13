@@ -8,7 +8,17 @@
  * (everyone else) as plain links: this module imports no version-history UI.
  */
 import React from 'react';
-import { Button, ColorSwatch, Divider, Group, ScrollArea, SegmentedControl, Stack, Text } from '@mantine/core';
+import {
+  Button,
+  ColorSwatch,
+  Divider,
+  Group,
+  ScrollArea,
+  SegmentedControl,
+  Stack,
+  Switch,
+  Text,
+} from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import { useCommentsControl } from 'depictio-react-core';
@@ -31,44 +41,78 @@ const VIEW_HINT: Record<NewsView, string> = {
   off: 'The figures as they are now.',
   overlay: 'Each changed figure marks what is new; what was already there fades.',
   split: 'Figures drawn twice, what is new beside what you had seen (new runs, or new MultiQC samples); cards compare the two.',
+  new: 'Only what is new is drawn (the new runs, or the new MultiQC samples); what you had seen is hidden.',
 };
 
-/** Off | Overlay | Split: how the news shows on the figures and cards. */
-const NewsViewControl: React.FC<{ ctx: ChangesSinceValue }> = ({ ctx }) => (
-  <Stack gap={6} px={4}>
-    <Text size="xs" c="dimmed">
-      Show on the dashboard
-    </Text>
-    <SegmentedControl
-      size="xs"
-      fullWidth
-      value={ctx.view}
-      onChange={(v) => ctx.setView(v as NewsView)}
-      data={[
-        { value: 'off', label: 'Off' },
-        { value: 'overlay', label: 'Overlay', disabled: ctx.highlightable === 0 },
-        { value: 'split', label: 'Split', disabled: !ctx.splitAvailable },
-      ]}
-      aria-label="Show what is new on the dashboard"
-      data-testid="changes-view"
-    />
-    <Text size="xs" c="dimmed">
-      {VIEW_HINT[ctx.view]}
-      {!ctx.splitAvailable &&
-        ' Split needs something new beside something seen: a new run, or new MultiQC samples. Data rewritten in place shows in Before | Now.'}
-    </Text>
-    {ctx.splitGroups && (
-      <Group gap="md" data-testid="changes-split-legend">
-        {ctx.splitGroups.map((g) => (
-          <Group key={g.name} gap={6} wrap="nowrap">
-            <ColorSwatch color={g.color} size={10} withShadow={false} />
-            <Text size="xs">{g.name}</Text>
-          </Group>
-        ))}
-      </Group>
-    )}
-  </Stack>
+const segment = (icon: string, label: string) => (
+  <Group gap={5} wrap="nowrap" justify="center">
+    <Icon icon={icon} width={14} height={14} />
+    <span>{label}</span>
+  </Group>
 );
+
+/**
+ * Off | Overlay | Split: how the news shows on the figures and cards. Hiding
+ * what was seen is a variant of the overlay (fade the rest, or drop it), so it
+ * is a switch under it rather than a fourth choice.
+ */
+const NewsViewControl: React.FC<{ ctx: ChangesSinceValue }> = ({ ctx }) => {
+  const overlayish = ctx.view === 'overlay' || ctx.view === 'new';
+  return (
+    <Stack gap={6} px={4}>
+      <Text size="xs" c="dimmed">
+        Show on the dashboard
+      </Text>
+      <SegmentedControl
+        size="xs"
+        fullWidth
+        value={overlayish ? 'overlay' : ctx.view}
+        onChange={(v) => ctx.setView(v as NewsView)}
+        data={[
+          { value: 'off', label: segment('tabler:eye-off', 'Off') },
+          {
+            value: 'overlay',
+            label: segment('tabler:highlight', 'Overlay'),
+            disabled: ctx.highlightable === 0 && !ctx.splitAvailable,
+          },
+          {
+            value: 'split',
+            label: segment('tabler:layout-columns', 'Split'),
+            disabled: !ctx.splitAvailable,
+          },
+        ]}
+        aria-label="Show what is new on the dashboard"
+        data-testid="changes-view"
+      />
+      {overlayish && (
+        <Switch
+          size="xs"
+          label="Hide what you had seen"
+          checked={ctx.view === 'new'}
+          disabled={!ctx.splitAvailable}
+          onChange={(e) => ctx.setView(e.currentTarget.checked ? 'new' : 'overlay')}
+          data-testid="changes-hide-seen"
+        />
+      )}
+      <Text size="xs" c="dimmed">
+        {VIEW_HINT[ctx.view]}
+        {!ctx.splitAvailable &&
+          ctx.view !== 'off' &&
+          ' Split and hiding need something new beside something seen: a new run, or new MultiQC samples. Data rewritten in place shows in Before | Now.'}
+      </Text>
+      {ctx.splitGroups && (
+        <Group gap="md" data-testid="changes-split-legend">
+          {ctx.splitGroups.map((g) => (
+            <Group key={g.name} gap={6} wrap="nowrap">
+              <ColorSwatch color={g.color} size={10} withShadow={false} />
+              <Text size="xs">{g.name}</Text>
+            </Group>
+          ))}
+        </Group>
+      )}
+    </Stack>
+  );
+};
 
 /** "1 new run" becomes "1 new run: run_c": the names are what a reader looks for. */
 function dataSummary(change: DataChange): string {
