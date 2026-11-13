@@ -11,6 +11,16 @@ import {
 const URL_ = 'https://depictio.example.org/depictio/api/v1/advanced_viz/bioimage/dc/t/tok/a.zarr';
 const ZARR = { name: 'a.zarr', format: 'ome-zarr' as const };
 const PLATE = { ...ZARR, layout: 'plate' as const, imagePath: 'B/2/0' };
+const VIEW = {
+  channels: [
+    { index: 0, color: '#0000ff', visible: true, window: [0, 1500] as const },
+    { index: 1, color: '#ffff00', visible: true, window: [10, 900] as const },
+    { index: 2, color: '#ff0000', visible: false, window: [0, 1] as const },
+  ],
+  z: 118,
+  width: 271,
+  height: 275,
+};
 
 describe('handoffUrl', () => {
   it('hands vizarr and the validator the store root, encoded', () => {
@@ -37,7 +47,13 @@ describe('handoffUrl', () => {
   it('hands Vitessce a config of its own, inline', () => {
     const url = handoffUrl('vitessce', URL_, ZARR);
     const config = JSON.parse(decodeURIComponent(url.split('url=data:,')[1]));
-    expect(config.datasets[0].files[0]).toEqual({ fileType: 'image.ome-zarr', url: URL_ });
+    expect(config.datasets[0].files[0]).toEqual({ fileType: 'raster.ome-zarr', url: URL_ });
+  });
+
+  it("hands Neuroglancer the tile's window for channel 0", () => {
+    const url = handoffUrl('neuroglancer', URL_, { ...ZARR, view: VIEW });
+    const state = JSON.parse(decodeURIComponent(url.split('#!')[1]));
+    expect(state.layers[0].shaderControls).toEqual({ normalized: { range: [0, 1500] } });
   });
 });
 
@@ -48,9 +64,44 @@ describe('unsupportedReason', () => {
     expect(unsupportedReason('neuroglancer', tiff)).toMatch(/OME-Zarr/);
     expect(unsupportedReason('validator', tiff)).toMatch(/OME-Zarr/);
     expect(unsupportedReason('vitessce', tiff)).toBeNull();
-    expect(vitessceConfig('u', tiff).datasets).toEqual([
-      { uid: 'image', name: 'a.ome.tif', files: [{ fileType: 'image.ome-tiff', url: 'u' }] },
+    const file = (vitessceConfig('u', tiff).datasets as Array<{ files: unknown[] }>)[0].files[0];
+    expect(file).toEqual({
+      fileType: 'raster.json',
+      options: {
+        schemaVersion: '0.0.2',
+        images: [{ name: 'a.ome.tif', type: 'ome-tiff', url: 'u' }],
+        renderLayers: ['a.ome.tif'],
+      },
+    });
+  });
+});
+
+describe('vitessceConfig', () => {
+  const layerOf = (config: Record<string, unknown>) =>
+    (config.coordinationSpace as { spatialImageLayer: { A: Array<{ channels: unknown[] }> } })
+      .spatialImageLayer.A[0];
+
+  it("draws the tile's visible channels, colours, windows and plane", () => {
+    expect(layerOf(vitessceConfig('u', { ...ZARR, view: VIEW })).channels).toEqual([
+      { selection: { c: 0, z: 118 }, color: [0, 0, 255], visible: true, slider: [0, 1500] },
+      { selection: { c: 1, z: 118 }, color: [255, 255, 0], visible: true, slider: [10, 900] },
     ]);
+  });
+
+  it('names one channel without a view, never letting Vitessce pick three', () => {
+    expect(layerOf(vitessceConfig('u', ZARR)).channels).toEqual([
+      { selection: { c: 0 }, color: [255, 255, 255], visible: true },
+    ]);
+  });
+
+  it('frames the whole image when its size is known', () => {
+    const space = vitessceConfig('u', { ...ZARR, view: VIEW }).coordinationSpace as Record<
+      string,
+      { A: unknown }
+    >;
+    expect(space.spatialTargetX.A).toBe(135.5);
+    expect(space.spatialTargetY.A).toBe(137.5);
+    expect(space.spatialZoom.A).toBeCloseTo(1.35, 2);
   });
 });
 

@@ -941,7 +941,10 @@ class TestRemoteHttps:
             listing = client.get(f"{PREFIX}/bioimage/{DC_ID}/stores", headers=AUTH).json()
 
         assert resp.status_code == 403
-        assert resp.json()["detail"] == "Remote bioimage host not allowed"
+        detail = resp.json()["detail"]
+        assert detail.startswith("Remote bioimage host not allowed")
+        # The reader learns what to ask for, not just that it failed.
+        assert "DEPICTIO_BIOIMAGE_REMOTE_HTTPS_HOSTS" in detail
         assert env.http_requests == []
         assert listing == [
             {

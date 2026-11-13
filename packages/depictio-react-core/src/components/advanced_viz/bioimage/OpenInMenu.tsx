@@ -17,6 +17,7 @@ import {
   unsupportedReason,
   type HandoffStore,
   type HandoffTargetId,
+  type HandoffView,
 } from './handoff';
 import type { NgffContainerLayout } from './layout';
 
@@ -58,6 +59,8 @@ interface Props {
   store: BioimageStoreInfo;
   layout?: NgffContainerLayout | null;
   imagePath?: string | null;
+  /** What the tile shows: the viewer opens on the same channels and plane. */
+  view?: HandoffView | null;
 }
 
 /**
@@ -65,12 +68,18 @@ interface Props {
  * validator, and commands to paste into napari. Targets that cannot take the
  * store are listed greyed out with the reason, never hidden.
  */
-const OpenInMenu: React.FC<Props> = ({ dcId, store, layout, imagePath }) => {
+const OpenInMenu: React.FC<Props> = ({ dcId, store, layout, imagePath, view }) => {
   const portalTarget = useFullscreenPortalTarget();
   const [status, setStatus] = useState<BioimageHandoffStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
-  const handoffStore: HandoffStore = { name: store.name, format: store.format, layout, imagePath };
+  const handoffStore: HandoffStore = {
+    name: store.name,
+    format: store.format,
+    layout,
+    imagePath,
+    view,
+  };
   const tier = status ? tierOf(status, dcId, store) : null;
 
   const load = () => {

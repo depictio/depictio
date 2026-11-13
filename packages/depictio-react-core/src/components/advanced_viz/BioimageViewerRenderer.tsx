@@ -1480,6 +1480,18 @@ const BioimageViewerRenderer: React.FC<Props> = ({
                     store={activeStore}
                     layout={containerValue?.layout ?? null}
                     imagePath={imagePath}
+                    view={{
+                      channels: channels.map((c) => ({
+                        index: c.index,
+                        color: c.color,
+                        visible: c.visible,
+                        window: c.contrastLimits,
+                      })),
+                      z: info && info.sizes.z > 1 ? plane.z : null,
+                      t: info && info.sizes.t > 1 ? plane.t : null,
+                      width: info?.width ?? null,
+                      height: info?.height ?? null,
+                    }}
                   />
                 ) : null}
                 <Tooltip label="Reset view" withArrow openDelay={300}>

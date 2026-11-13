@@ -2597,7 +2597,19 @@ def _bioimage_remote_target(url: str) -> _RemoteTarget:
     elif parsed.scheme == "https" and parsed.hostname and "@" not in parsed.netloc:
         if parsed.hostname.lower() in allowed.remote_https_hosts:
             return _RemoteTarget("https", "", "", url.rstrip("/"))
-    raise HTTPException(status_code=403, detail="Remote bioimage host not allowed")
+    where = parsed.netloc if parsed.scheme == "s3" else (parsed.hostname or "this host")
+    setting = (
+        "DEPICTIO_BIOIMAGE_REMOTE_S3_BUCKETS"
+        if parsed.scheme == "s3"
+        else "DEPICTIO_BIOIMAGE_REMOTE_HTTPS_HOSTS"
+    )
+    raise HTTPException(
+        status_code=403,
+        detail=(
+            f"Remote bioimage host not allowed: this server does not read images from "
+            f"{where}. An admin can add it to {setting}."
+        ),
+    )
 
 
 def _bioimage_remote_read(url: str, rel: str | None, byte_range: str | None = None) -> _Blob:

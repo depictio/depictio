@@ -2768,7 +2768,18 @@ export function createBioimageZarrStore(dcId: string, store: string): BioimageZa
     const path = key.startsWith('/') ? key : `/${key}`;
     const res = await authFetch(`${root}${path}`, init);
     if (res.status === 404) return undefined;
-    if (!res.ok) throw new BioimageHttpError(`OME-Zarr ${store}${path}: ${res.status}`, res.status);
+    if (!res.ok) {
+      // The server says why it refused (a remote host it does not read from,
+      // say): that sentence helps a reader, a bare status does not.
+      const detail = await res
+        .json()
+        .then((b: unknown) => (b as { detail?: unknown } | null)?.detail)
+        .catch(() => null);
+      throw new BioimageHttpError(
+        typeof detail === 'string' ? detail : `OME-Zarr ${store}${path}: ${res.status}`,
+        res.status,
+      );
+    }
     return { res, path };
   };
   // One fetch per key at a time, and the last few keys kept: viv asks for the
