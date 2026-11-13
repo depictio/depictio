@@ -11,7 +11,7 @@
  * (`?table=<dc>&new_runs=<run,...>`).
  */
 import React, { useEffect, useMemo, useState } from 'react';
-import { Group, LoadingOverlay, Stack, Switch, Text, useComputedColorScheme } from '@mantine/core';
+import { Button, Group, LoadingOverlay, Stack, Switch, Text, useComputedColorScheme } from '@mantine/core';
 import { AgGridReact } from 'ag-grid-react';
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-alpine.css';
@@ -46,11 +46,13 @@ function runFilter(dcId: string, runs: string[]): InteractiveFilter {
   } as InteractiveFilter;
 }
 
-const NewRowsPreview: React.FC<{ dcId: string; runs: string[]; height?: number }> = ({
-  dcId,
-  runs,
-  height = 400,
-}) => {
+const NewRowsPreview: React.FC<{
+  dcId: string;
+  runs: string[];
+  height?: number;
+  /** Back to the plain table (the project page); absent in the modal. */
+  onClear?: () => void;
+}> = ({ dcId, runs, height = 400, onClear }) => {
   const [onlyNew, setOnlyNew] = useState(false);
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [seenRows, setSeenRows] = useState<Record<string, unknown>[]>([]);
@@ -112,6 +114,12 @@ const NewRowsPreview: React.FC<{ dcId: string; runs: string[]; height?: number }
           {newRows.length < total ? `, first ${newRows.length} shown` : ''}
           {onlyNew || seenRows.length === 0 ? '' : `; below, faded, rows you had seen`}
         </Text>
+        <Group gap="sm" wrap="nowrap">
+        {onClear && (
+          <Button size="compact-xs" variant="subtle" color="gray" onClick={onClear} data-testid="new-rows-clear">
+            Clear
+          </Button>
+        )}
         <Switch
           size="xs"
           label="Hide what you had seen"
@@ -119,6 +127,7 @@ const NewRowsPreview: React.FC<{ dcId: string; runs: string[]; height?: number }
           onChange={(e) => setOnlyNew(e.currentTarget.checked)}
           data-testid="new-rows-hide-seen"
         />
+        </Group>
       </Group>
       {error && (
         <Text size="xs" c="red">

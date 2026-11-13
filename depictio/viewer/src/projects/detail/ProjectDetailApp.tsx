@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Accordion,
   ActionIcon,
@@ -387,7 +387,21 @@ const ProjectDetailApp: React.FC = () => {
   const requestedTableId = useMemo(readTableFromQuery, []);
   const requestedTableHandled = useRef(false);
   // `&new_runs=run_c`: the What's new panel's link, the rows those runs added.
-  const requestedNewRuns = useMemo(() => readNewRunsFromQuery(window.location.search), []);
+  const [requestedNewRuns, setRequestedNewRuns] = useState(() =>
+    readNewRunsFromQuery(window.location.search),
+  );
+  // "Clear": back to the plain table, and a reload does not bring the marking back.
+  const clearNewRuns = useCallback(() => {
+    setRequestedNewRuns([]);
+    const params = new URLSearchParams(window.location.search);
+    params.delete('new_runs');
+    const rest = params.toString();
+    window.history.replaceState(
+      window.history.state,
+      '',
+      `${window.location.pathname}${rest ? `?${rest}` : ''}${window.location.hash}`,
+    );
+  }, []);
   // Active project-detail tab, controlled so the ingestion report can switch
   // back to Overview when previewing a data collection. `?tab=` (overview |
   // runs | activity, plus the older ingestion | timeline) and `?run=<run_tag>`
@@ -778,6 +792,7 @@ const ProjectDetailApp: React.FC = () => {
                     }}
                     autoLoadPreview={requestedTableId === selectedDcId}
                     highlightRuns={requestedTableId === selectedDcId ? requestedNewRuns : undefined}
+                    onClearHighlight={clearNewRuns}
                   />
                 )}
               </Box>
@@ -2251,6 +2266,7 @@ const DataCollectionViewer: React.FC<{
   autoLoadPreview?: boolean;
   /** `&new_runs=`: the Data table puts these runs' rows first and marks them. */
   highlightRuns?: string[];
+  onClearHighlight?: () => void;
 }> = ({
   dc,
   fromPipeline,
@@ -2266,6 +2282,7 @@ const DataCollectionViewer: React.FC<{
   onOpenDc,
   autoLoadPreview = false,
   highlightRuns,
+  onClearHighlight,
 }) => {
   const dcId = (dc._id ?? dc.id) as string;
   const type = (dc.config?.type as string | undefined) || 'unknown';
@@ -2655,6 +2672,7 @@ const DataCollectionViewer: React.FC<{
                   checkEditable={isTable}
                   autoLoad
                   highlightRuns={highlightRuns}
+                  onClearHighlight={onClearHighlight}
                   onEdited={() => setEditTick((n) => n + 1)}
                 />
               ) : null,
@@ -3195,8 +3213,9 @@ const TableDataSection: React.FC<{
   autoLoad: boolean;
   /** Runs whose rows come first and stand out (the What's new and Runs links). */
   highlightRuns?: string[];
+  onClearHighlight?: () => void;
   onEdited: () => void;
-}> = ({ dcId, checkEditable, autoLoad, highlightRuns, onEdited }) => {
+}> = ({ dcId, checkEditable, autoLoad, highlightRuns, onClearHighlight, onEdited }) => {
   const accent = useBrandAccents();
   const glass = useGlassPages();
   const [status, setStatus] = useState<TableEditStatus | null>(null);
@@ -3297,7 +3316,7 @@ const TableDataSection: React.FC<{
           onShowReadOnly={() => setReadOnlyView(true)}
         />
       ) : highlightRuns && highlightRuns.length > 0 ? (
-        <NewRowsPreview dcId={dcId} runs={highlightRuns} />
+        <NewRowsPreview dcId={dcId} runs={highlightRuns} onClear={onClearHighlight} />
       ) : (
         <DataPreviewPanel
           key={`${dcId}-${previewKey}`}
