@@ -249,7 +249,27 @@ const NotificationsBell: React.FC<NotificationsBellProps> = ({
     async (done: InboxItem[]) => {
       const keys = new Set(done.map(itemKey));
       setItems((prev) => prev.filter((i) => !keys.has(itemKey(i))));
-      await Promise.allSettled(done.map(markItemSeen));
+      const results = await Promise.allSettled(done.map(markItemSeen));
+      const failed = done.filter((_, i) => {
+        const r = results[i];
+        return (
+          r.status === 'rejected' ||
+          (r.value as { persisted?: boolean } | undefined)?.persisted === false
+        );
+      });
+      if (failed.length > 0) {
+        // Back in the list, whatever the re-read below does: they are not marked.
+        setItems((prev) => {
+          const shown = new Set(prev.map(itemKey));
+          return [...prev, ...failed.filter((i) => !shown.has(itemKey(i)))];
+        });
+        notifications.show({
+          color: 'red',
+          title: 'Could not mark as seen',
+          message: failed.map((i) => i.title || i.scope_kind).join(', '),
+        });
+        console.error('Mark as seen failed', results);
+      }
       void refresh();
     },
     [refresh],

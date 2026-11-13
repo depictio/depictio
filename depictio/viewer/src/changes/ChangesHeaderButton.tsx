@@ -9,9 +9,9 @@ import React, { useState } from 'react';
 import { Modal, Popover } from '@mantine/core';
 
 import { ChromeButton, useBrandScopeAttributes, Z_LAYERS } from 'depictio-react-core';
+import type { DataChange } from 'depictio-react-core';
 
 import { formatDate, formatRelativeTime } from '../lib/datetime';
-import type { DataChange } from 'depictio-react-core';
 
 import ChangesPanel from './ChangesPanel';
 import NewRowsPreview from './NewRowsPreview';
@@ -39,52 +39,52 @@ const ChangesHeaderButton: React.FC = () => {
 
   return (
     <>
-    <Modal
-      opened={rowsOf !== null}
-      onClose={() => setRowsOf(null)}
-      title={rowsOf ? `${rowsOf.data_collection_tag}: new rows` : ''}
-      size="90%"
-    >
-      {rowsOf && <NewRowsPreview dcId={rowsOf.dc_id} runs={rowsOf.new_run_tags} height={480} />}
-    </Modal>
-    <Popover
-      opened={opened}
-      onChange={setOpened}
-      position="bottom-end"
-      width={400}
-      shadow="md"
-      radius="md"
-      zIndex={Z_LAYERS.tooltip}
-    >
-      <Popover.Target>
-        <ChromeButton
-          role="secondary"
-          collapse
-          icon="mdi:update"
-          label={label}
-          badge={total}
-          tooltip={opened ? null : since}
-          onClick={() => setOpened((o) => !o)}
-          aria-label={`${since}, ${total} change${total === 1 ? '' : 's'}`}
-          data-testid="changes-pill"
-          data-read-only={ctx.readOnly ? 'true' : undefined}
-        />
-      </Popover.Target>
-      <Popover.Dropdown
-        p="sm"
-        className={brandScope?.className}
-        data-mantine-color-scheme={brandScope?.['data-mantine-color-scheme']}
+      <Modal
+        opened={rowsOf !== null}
+        onClose={() => setRowsOf(null)}
+        title={rowsOf ? `${rowsOf.data_collection_tag}: new rows` : ''}
+        size="90%"
       >
-        <ChangesPanel
-          onClose={() => setOpened(false)}
-          subtitle={since}
-          onViewRows={(change) => {
-            setOpened(false);
-            setRowsOf(change);
-          }}
-        />
-      </Popover.Dropdown>
-    </Popover>
+        {rowsOf && <NewRowsPreview dcId={rowsOf.dc_id} runs={rowsOf.new_run_tags} height={480} />}
+      </Modal>
+      <Popover
+        opened={opened}
+        onChange={setOpened}
+        position="bottom-end"
+        width={400}
+        shadow="md"
+        radius="md"
+        zIndex={Z_LAYERS.tooltip}
+      >
+        <Popover.Target>
+          <ChromeButton
+            role="secondary"
+            collapse
+            icon="mdi:update"
+            label={label}
+            badge={total}
+            tooltip={opened ? null : since}
+            onClick={() => setOpened((o) => !o)}
+            aria-label={`${since}, ${total} change${total === 1 ? '' : 's'}`}
+            data-testid="changes-pill"
+            data-read-only={ctx.readOnly ? 'true' : undefined}
+          />
+        </Popover.Target>
+        <Popover.Dropdown
+          p="sm"
+          className={brandScope?.className}
+          data-mantine-color-scheme={brandScope?.['data-mantine-color-scheme']}
+        >
+          <ChangesPanel
+            onClose={() => setOpened(false)}
+            subtitle={since}
+            onViewRows={(change) => {
+              setOpened(false);
+              setRowsOf(change);
+            }}
+          />
+        </Popover.Dropdown>
+      </Popover>
     </>
   );
 };

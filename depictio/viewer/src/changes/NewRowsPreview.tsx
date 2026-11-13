@@ -82,7 +82,12 @@ const NewRowsPreview: React.FC<{
         );
       })
       .catch((err) => {
-        if (!cancelled) setError((err as Error).message || 'Failed to load the rows.');
+        if (cancelled) return;
+        // Nothing from a previous request stays on screen under the error.
+        setPreview(null);
+        setSeenRows([]);
+        console.error('New rows preview failed', err);
+        setError('Could not read the rows of this collection. Reload the page to try again.');
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -107,43 +112,47 @@ const NewRowsPreview: React.FC<{
   const hasRunColumn = columns.some((c) => c.field === RUN_COLUMN);
   const total = preview?.total_rows ?? newRows.length;
 
+  // Without the run column the server skips the run filter and answers with the
+  // whole table: no count, it would be the table's.
+  const summary =
+    preview && !hasRunColumn
+      ? 'This collection has no run column: its new rows cannot be told apart.'
+      : [
+          `${total} new row${total === 1 ? '' : 's'} from ${runs.join(', ')}`,
+          newRows.length < total ? `, first ${newRows.length} shown` : '',
+          onlyNew || seenRows.length === 0 ? '' : '; below, faded, rows you had seen',
+        ].join('');
+
   return (
     <Stack gap="xs" data-testid="new-rows-preview">
       <Group justify="space-between" wrap="nowrap">
         <Text size="xs" c="dimmed">
-          {`${total} new row${total === 1 ? '' : 's'} from ${runs.join(', ')}`}
-          {newRows.length < total ? `, first ${newRows.length} shown` : ''}
-          {onlyNew || seenRows.length === 0 ? '' : `; below, faded, rows you had seen`}
+          {summary}
         </Text>
         <Group gap="sm" wrap="nowrap">
-        {onClear && (
-          <Button
+          {onClear && (
+            <Button
+              size="xs"
+              variant="light"
+              leftSection={<Icon icon="tabler:filter-off" width={16} />}
+              onClick={onClear}
+              data-testid="new-rows-clear"
+            >
+              Back to full table
+            </Button>
+          )}
+          <Switch
             size="xs"
-            variant="light"
-            leftSection={<Icon icon="tabler:filter-off" width={16} />}
-            onClick={onClear}
-            data-testid="new-rows-clear"
-          >
-            Back to full table
-          </Button>
-        )}
-        <Switch
-          size="xs"
-          label="Hide what you had seen"
-          checked={onlyNew}
-          onChange={(e) => setOnlyNew(e.currentTarget.checked)}
-          data-testid="new-rows-hide-seen"
-        />
+            label="Hide what you had seen"
+            checked={onlyNew}
+            onChange={(e) => setOnlyNew(e.currentTarget.checked)}
+            data-testid="new-rows-hide-seen"
+          />
         </Group>
       </Group>
       {error && (
         <Text size="xs" c="red">
           {error}
-        </Text>
-      )}
-      {preview && !hasRunColumn && (
-        <Text size="xs" c="dimmed">
-          This collection has no run column, so its new rows cannot be told apart.
         </Text>
       )}
       <div

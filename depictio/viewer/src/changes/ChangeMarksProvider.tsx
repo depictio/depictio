@@ -302,7 +302,7 @@ const ChangeMarksProvider: React.FC<Props> = ({
       if (!byName.has(g.name)) byName.set(g.name, g);
     }
     return [...byName.values()];
-  }, [splitOn, split]);
+  }, [splitOn, applied]);
   useEffect(() => {
     onSplitChange?.(applied);
   }, [onSplitChange, applied]);

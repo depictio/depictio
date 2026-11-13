@@ -535,7 +535,13 @@ const MultiQCGeneralStats: React.FC<MultiQCGeneralStatsProps> = ({
                 const picked = annotating && sample != null && annotateSelected.has(String(sample));
                 const tone = rowTone(mark, picked);
                 const stripe = mark ? annotationColorValue(mark.color, colorScheme) : undefined;
-                const seenBefore = newSamples !== null && !(sample != null && newSamples.has(String(sample)));
+                // Faded only when some row is known new: a name mismatch must not
+                // dim the whole table, nor a row whose sample cannot be read.
+                const seenBefore =
+                  newSamples !== null &&
+                  matchedNew > 0 &&
+                  sample != null &&
+                  !newSamples.has(String(sample));
                 return (
                   <Table.Tr
                     key={rowIdx}
