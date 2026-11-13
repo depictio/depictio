@@ -48,7 +48,9 @@ components:
       The time course is synthetic: each frame is the same volume seen through a window
       that drifts a few pixels and loses 8 % of its signal, as a bleaching acquisition
       would. Use the z and t sliders of the viewer. The points are the nuclei of the first
-      timepoint, segmented in 3D; the depth filter keeps the upper, middle or lower third.
+      timepoint, segmented in 3D: each is drawn on the plane of its centroid, so moving the
+      z slider shows the nuclei of that plane (the viewer's "All planes when stacked" switch
+      draws them all). The depth filter keeps the upper, middle or lower third.
     layout: { x: 0, y: 0, w: 8, h: 2 }
 
   - tag: card-volume-nuclei
@@ -146,6 +148,8 @@ components:
       cell_id_col: cell_id
       x_col: x
       y_col: y
+      # Centroid plane: only the nuclei of the shown z are drawn.
+      z_col: z
       color_col: depth_band
       points_sample_col: sample
       point_radius: 3
