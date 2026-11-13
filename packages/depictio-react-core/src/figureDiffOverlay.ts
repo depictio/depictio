@@ -13,8 +13,9 @@
  *             new points can be placed there, the diff carries no z);
  *  - groups   a ghost outline bar at the previous value of each bar, a tick
  *             at the previous median of a box, an outline on a new bar;
- *  - samples  the traces (lines) or bars of new samples are emphasised, the
- *             rest dimmed (MultiQC draws one trace or one bar per sample);
+ *  - samples  the bars, lines and heatmap rows of the samples seen before
+ *             fade; the new ones keep their own colours, lines drawn on top
+ *             (MultiQC draws one trace, bar or row per sample);
  *  - rows     the points (or bars) whose `customdata`, `ids` or `text` hold a
  *             new or changed row key are ringed. Nothing otherwise: the
  *             side-by-side view lists the rows.
@@ -673,11 +674,14 @@ export function groupsOverlay(
 
 // ── samples (MultiQC) ──────────────────────────────────────────────────────
 
-/** Emphasise the traces or bars of new samples, dim the others. */
+/**
+ * Fade what the samples seen before drew; the new samples keep their own
+ * colours, so their values still read (MultiQC colours by status).
+ */
 export function samplesOverlay(
   figure: PlotlyFigureLike,
   diff: DiffSamples,
-  colors: DiffColors,
+  _colors?: DiffColors,
 ): FigureDiffOverlay {
   const added = new Set(diff.added.map(str));
   if (added.size === 0) return EMPTY;
@@ -688,55 +692,100 @@ export function samplesOverlay(
   traces.forEach((trace, index) => {
     perTrace.push({ index, trace, ids: sampleIdsForTrace(trace) });
   });
+  const out: PlotlyTraceLike[] = [];
+  for (const { index, trace } of perTrace) {
+    if (typeOf(trace) !== 'heatmap') continue;
+    const rows = heatmapRowsOverlay(trace, index, added);
+    if (rows) {
+      out.push(rows.trace);
+      patches.push(rows.patch);
+      matched += rows.matched;
+    }
+  }
   const hit = perTrace.some((p) => p.ids?.some((id) => id !== null && added.has(str(id))));
-  if (!hit) return EMPTY;
+  if (!hit) return out.length ? { traces: out, patches, matched } : EMPTY;
 
   for (const { index, trace, ids } of perTrace) {
     if (!ids) continue;
     const isAdded = ids.map((id) => id !== null && added.has(str(id)));
     if (typeOf(trace) === 'bar') {
+      // The bars keep their own colours (the values are what is read): only
+      // the bars of the samples seen before fade.
       const marker = (trace.marker as Record<string, unknown> | undefined) ?? {};
-      const line = (marker.line as Record<string, unknown> | undefined) ?? {};
-      const baseColor = (i: number) => {
-        const c = line.color;
-        return Array.isArray(c) ? c[i] : c ?? 'rgba(0,0,0,0)';
-      };
-      const baseWidth = (i: number) => {
-        const w = line.width;
-        return Array.isArray(w) ? w[i] ?? 0 : typeof w === 'number' ? w : 0;
-      };
       const baseOpacity = typeof marker.opacity === 'number' ? marker.opacity : 1;
       patches.push({
         traceIndex: index,
         patch: {
           marker: {
             ...marker,
-            opacity: isAdded.map((a) => (a ? 1 : baseOpacity * 0.35)),
-            line: {
-              ...line,
-              width: isAdded.map((a, i) => (a ? 2.5 : baseWidth(i))),
-              color: isAdded.map((a, i) => (a ? colors.primary : baseColor(i))),
-            },
+            opacity: isAdded.map((a) => (a ? baseOpacity : baseOpacity * DIFF_DIM_OPACITY)),
           },
         },
       });
       matched += isAdded.filter(Boolean).length;
     } else {
       const own = isAdded.some(Boolean);
+      if (!own) {
+        patches.push({ traceIndex: index, patch: { opacity: DIFF_DIM_OPACITY } });
+        continue;
+      }
+      // Drawn again after every trace, in its own colour and a little wider,
+      // so it sits on top of the faded lines; the original stays under it and
+      // keeps its hover.
       const lineStyle = (trace.line as Record<string, unknown> | undefined) ?? {};
-      patches.push({
-        traceIndex: index,
-        patch: own
-          ? {
-              opacity: 1,
-              line: { ...lineStyle, width: Math.max(3, Number(lineStyle.width) || 0) + 1 },
-            }
-          : { opacity: 0.25 },
+      out.push({
+        ...trace,
+        name: `${DIFF_TRACE_PREFIX}sample_${str(trace.name)}`,
+        line: { ...lineStyle, width: Math.max(1.5, Number(lineStyle.width) || 0) + 1 },
+        opacity: 1,
+        showlegend: false,
+        hoverinfo: 'skip',
+        hovertemplate: undefined,
       });
-      if (own) matched += 1;
+      matched += 1;
     }
   }
-  return { traces: [], patches, matched };
+  return { traces: out, patches, matched };
+}
+
+/**
+ * A heatmap with one row (or column) per sample, as MultiQC's status checks:
+ * the heatmap is dimmed and drawn again on top with only the new samples'
+ * cells (the others null, so transparent). Plotly cannot restyle one row of a
+ * heatmap, and a mark drawn over the row would hide the very cells to read.
+ */
+function heatmapRowsOverlay(
+  trace: PlotlyTraceLike,
+  index: number,
+  added: Set<string>,
+): { trace: PlotlyTraceLike; patch: TracePatch; matched: number } | null {
+  if (trace.visible === false) return null;
+  const z = arrayOf(trace.z)?.map((row) => arrayOf(row));
+  if (!z?.length || z.some((row) => row === null)) return null;
+  const rows = z as unknown[][];
+  const isNew = (cats: unknown[] | null) => (cats ?? []).map((c) => added.has(str(c)));
+  const newRows = isNew(arrayOf(trace.y));
+  const newCols = isNew(arrayOf(trace.x));
+  const nRows = newRows.filter(Boolean).length;
+  const nCols = newCols.filter(Boolean).length;
+  if (nRows === 0 && nCols === 0) return null;
+  const byRow = nRows >= nCols;
+  const kept = rows.map((row, i) =>
+    row.map((v, j) => ((byRow ? newRows[i] : newCols[j]) ? v : null)),
+  );
+  return {
+    trace: {
+      ...trace,
+      name: `${DIFF_TRACE_PREFIX}heatmap_${index}`,
+      z: kept,
+      opacity: 1,
+      showscale: false,
+      hoverinfo: 'skip',
+      hovertemplate: undefined,
+    },
+    patch: { traceIndex: index, patch: { opacity: DIFF_DIM_OPACITY } },
+    matched: byRow ? nRows : nCols,
+  };
 }
 
 // ── rows (advanced viz) ────────────────────────────────────────────────────

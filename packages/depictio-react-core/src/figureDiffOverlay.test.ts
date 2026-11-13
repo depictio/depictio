@@ -321,9 +321,16 @@ describe('samples', () => {
     };
     const overlay = buildFigureDiffOverlay(figure, diff, COLORS);
     const byIndex = Object.fromEntries(overlay.patches.map((p) => [p.traceIndex, p.patch]));
-    expect(byIndex[0]).toEqual({ opacity: 0.25 });
-    expect(byIndex[1].opacity).toBe(1);
-    expect((byIndex[1].line as Record<string, number>).width).toBeGreaterThan(3);
+    expect(byIndex[0]).toEqual({ opacity: DIFF_DIM_OPACITY });
+    // The new sample's line is left in place (it keeps its hover) and drawn
+    // again on top, in its own colour, a little wider.
+    expect(byIndex[1]).toBeUndefined();
+    const [copy] = overlay.traces as Array<Record<string, any>>;
+    expect(isDiffTraceName(copy.name)).toBe(true);
+    expect(copy.line.color).toBeUndefined();
+    expect(copy.line.width).toBeGreaterThan(2);
+    expect(copy.y).toEqual([2, 3]);
+    expect(overlay.matched).toBe(1);
     // The input stays as it was.
     expect(figure.data[0]).toEqual({
       type: 'scatter',
@@ -335,16 +342,58 @@ describe('samples', () => {
     });
   });
 
-  it('outlines the bars of new samples', () => {
+  it('fades the bars of the samples seen before, keeping every colour', () => {
     const figure = {
-      data: [{ type: 'bar', orientation: 'h', name: 'Pass', x: [1, 2], y: ['s1', 's2'] }],
+      data: [
+        { type: 'bar', orientation: 'h', name: 'Pass', x: [1, 2], y: ['s1', 's2'], marker: { color: 'green' } },
+      ],
       layout: {},
     };
     const overlay = buildFigureDiffOverlay(figure, diff, COLORS);
     const marker = overlay.patches[0].patch.marker as Record<string, any>;
-    expect(marker.opacity).toEqual([0.35, 1]);
-    expect(marker.line.width).toEqual([0, 2.5]);
-    expect(marker.line.color[1]).toBe('primary-test');
+    expect(marker.opacity).toEqual([DIFF_DIM_OPACITY, 1]);
+    expect(marker.color).toBe('green');
+    expect(marker.line).toBeUndefined();
+  });
+
+  it('dims a heatmap and redraws only the rows of new samples on top', () => {
+    const figure = {
+      data: [
+        {
+          type: 'heatmap',
+          x: ['Basic', 'Quality', 'Adapter'],
+          y: ['s1', 's2'],
+          z: [
+            [1, 0, 1],
+            [1, 1, 0],
+          ],
+        },
+      ],
+      layout: {},
+    };
+    const overlay = buildFigureDiffOverlay(figure, diff, COLORS);
+    expect(overlay.patches).toEqual([{ traceIndex: 0, patch: { opacity: DIFF_DIM_OPACITY } }]);
+    const [top] = overlay.traces as Array<Record<string, any>>;
+    expect(isDiffTraceName(top.name)).toBe(true);
+    expect(top.type).toBe('heatmap');
+    expect(top.z).toEqual([
+      [null, null, null],
+      [1, 1, 0],
+    ]);
+    expect(top.showscale).toBe(false);
+    expect(overlay.matched).toBe(1);
+  });
+
+  it('keeps the columns of new samples when the samples are on x', () => {
+    const figure = {
+      data: [{ type: 'heatmap', x: ['s1', 's2'], y: ['a', 'b'], z: [[1, 0], [0, 1]] }],
+      layout: {},
+    };
+    const [top] = buildFigureDiffOverlay(figure, diff, COLORS).traces as Array<Record<string, any>>;
+    expect(top.z).toEqual([
+      [null, 0],
+      [null, 1],
+    ]);
   });
 
   it('changes nothing when no new sample is in the figure', () => {
