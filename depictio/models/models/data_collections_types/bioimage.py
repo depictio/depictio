@@ -188,6 +188,34 @@ def normalize_image_path(path: str) -> str:
     return normalized
 
 
+#: What an OME-Zarr store's root holds (NGFF): one image, a plate of wells, one
+#: well, a bioformats2raw container of images, or a labels image.
+NgffLayout = Literal["image", "plate", "well", "bioformats2raw", "labels", "unknown"]
+
+
+class NgffValidation(BaseModel):
+    """How a store's OME-NGFF metadata validated at ingest (``ome-zarr-models``).
+
+    Reported on the store's File, never blocking: a store the viewer can open
+    is served even with findings, and the tile shows them. ``issues`` are short
+    ``<location>: <message>`` strings, at most ``NGFF_MAX_ISSUES`` of them.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    ok: bool
+    ngff_version: str | None = None
+    layout: NgffLayout = "unknown"
+    issues: list[str] = []
+    #: Names of the label images under the store's ``labels/`` group.
+    labels: list[str] = []
+    #: The validating library and its version, e.g. ``ome-zarr-models 1.9.0``.
+    validator: str | None = None
+
+
+NGFF_MAX_ISSUES = 20
+
+
 class DCBioimageConfig(BaseModel):
     """Config for a bioimage data collection."""
 

@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field, field_validator
 from depictio.models.config import DEPICTIO_CONTEXT
 from depictio.models.models.base import MongoModel, PyObjectId
 from depictio.models.models.data_collections import WildcardRegexBase
+from depictio.models.models.data_collections_types.bioimage import NgffValidation
 from depictio.models.models.manifest import is_remote_url
 from depictio.models.models.users import Permission
 
@@ -68,6 +69,14 @@ class File(MongoModel):
     index_filesize: int | None = Field(
         default=None,
         description="Size in bytes of the index sidecar, when the format has one",
+    )
+
+    # --- bioimage DCs ---------------------------------------------------------
+    # Set by the CLI after validating an OME-Zarr / SpatialData store's NGFF
+    # metadata. A finding never blocks the ingest: the tile reports it.
+    ngff_validation: NgffValidation | None = Field(
+        default=None,
+        description="OME-NGFF metadata validation of the store (bioimage DCs only)",
     )
 
     # id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")

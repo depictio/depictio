@@ -408,6 +408,7 @@ class TestProvenance:
                 "registration_time": "2026-10-01 09:05:00",
                 "filesize": 2048,
                 "remote": False,
+                "validation": None,
             }
         ]
 
@@ -425,6 +426,7 @@ class TestProvenance:
                 "registration_time": None,
                 "filesize": None,
                 "remote": True,
+                "validation": None,
             }
         ]
 
@@ -464,6 +466,20 @@ class TestStoresListing:
         assert [s["sample"] for s in body] == ["sample_A", "sample_B"]
         assert body[1]["file_id"] == str(FILE_ID)
 
+    def test_each_store_carries_its_ingest_validation_report(self, tmp_path):
+        report = {"ok": False, "ngff_version": "0.4", "layout": "image", "issues": ["axes: x"]}
+        env = Env(tmp_path)
+        env.file_docs.append(
+            {"_id": FILE_ID, "file_location": str(make_store(tmp_path)), "ngff_validation": report}
+        )
+        env.file_docs.append(
+            {"_id": ObjectId(), "file_location": str(make_store(tmp_path, "sample_B.zarr"))}
+        )
+        with env as client:
+            body = client.get(f"{PREFIX}/bioimage/{DC_ID}/stores", headers=AUTH).json()
+
+        assert [s["validation"] for s in body] == [report, None]
+
     def test_s3_only_stores_are_listed_from_prefixes(self, tmp_path):
         env = Env(tmp_path)
         paginator = MagicMock()
@@ -482,6 +498,7 @@ class TestStoresListing:
                 "format": "ome-zarr",
                 "kind": "image",
                 "remote": False,
+                "validation": None,
             }
         ]
 
@@ -527,6 +544,7 @@ class TestStoresListing:
                 "format": "ome-zarr",
                 "kind": "image",
                 "remote": False,
+                "validation": None,
             }
         ]
         assert chunk.content == b"\x01\x02\x03"
@@ -795,6 +813,7 @@ class TestTiffOnS3:
                 "format": "ome-tiff",
                 "kind": "image",
                 "remote": False,
+                "validation": None,
             }
         ]
 
@@ -873,6 +892,7 @@ class TestSpatialData:
                 "format": "spatialdata",
                 "kind": "image",
                 "remote": False,
+                "validation": None,
             }
         ]
 
@@ -924,6 +944,7 @@ class TestRemoteHttps:
                 "format": "ome-zarr",
                 "kind": "image",
                 "remote": True,
+                "validation": None,
             }
         ]
 
@@ -1445,6 +1466,7 @@ class TestLabelsStores:
                 "format": "tiff",
                 "kind": "labels",
                 "remote": False,
+                "validation": None,
             }
         ]
 

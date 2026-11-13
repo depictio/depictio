@@ -2150,7 +2150,8 @@ def _bioimage_store_info(dc_oid: ObjectId) -> dict[str, Any]:
 
     Returns ``{"format": str, "kind": "image" | "labels", "upload": bool,
     "image_path": str | None, "sample_pattern": str | None,
-    "stores": {name: {"file_id": str | None, "roots": [path, ...]}},
+    "stores": {name: {"file_id": str | None, "roots": [path, ...],
+    "validation": dict | None}},
     "remote": {name: url}}``. A ``tiff`` (labels) store is registered as its
     mask file but served as the OME-Zarr key tree the CLI converted it to. Local stores come from the CLI scan
     (``files_collection``, one File per store) and, for DCs never CLI-scanned,
@@ -2210,7 +2211,9 @@ def _bioimage_store_info(dc_oid: ObjectId) -> dict[str, Any]:
     # The path each store name is bound to; a second path with that name is a clash.
     store_paths: dict[str, str] = {}
 
-    def add_root(path: str, file_id: str | None = None) -> None:
+    def add_root(
+        path: str, file_id: str | None = None, validation: dict[str, Any] | None = None
+    ) -> None:
         path = path.rstrip("/")
         name = os.path.basename(path)
         if not is_bioimage_store_name(name, fmt):
@@ -2226,9 +2229,10 @@ def _bioimage_store_info(dc_oid: ObjectId) -> dict[str, Any]:
                 bound,
             )
             return
-        entry = stores.setdefault(name, {"file_id": None, "roots": []})
+        entry = stores.setdefault(name, {"file_id": None, "roots": [], "validation": None})
         if file_id and not entry["file_id"]:
             entry["file_id"] = file_id
+            entry["validation"] = validation
         for candidate in (path, _container_repo_path(path)):
             if candidate and candidate not in entry["roots"]:
                 entry["roots"].append(candidate)
@@ -2237,12 +2241,17 @@ def _bioimage_store_info(dc_oid: ObjectId) -> dict[str, Any]:
         doc
         for doc in files_collection.find(
             {"data_collection_id": {"$in": [dc_oid, str(dc_oid)]}},
-            {"_id": 1, "file_location": 1},
+            {"_id": 1, "file_location": 1, "ngff_validation": 1},
         )
         if doc.get("file_location") and not str(doc["file_location"]).startswith("s3://")
     ]
     for doc in sorted(file_docs, key=lambda d: str(d["file_location"]).rstrip("/")):
-        add_root(str(doc["file_location"]), str(doc["_id"]))
+        validation = doc.get("ngff_validation")
+        add_root(
+            str(doc["file_location"]),
+            str(doc["_id"]),
+            validation if isinstance(validation, dict) else None,
+        )
 
     if fname and not fname.startswith("s3://"):
         fname = fname.rstrip("/")
@@ -2765,6 +2774,7 @@ def get_bioimage_provenance(
                 else None,
                 "filesize": int(doc["filesize"]) if doc and doc.get("filesize") else None,
                 "remote": False,
+                "validation": entry.get("validation"),
             }
         )
     for name, url in sorted(info["remote"].items()):
@@ -2776,6 +2786,7 @@ def get_bioimage_provenance(
                 "registration_time": None,
                 "filesize": None,
                 "remote": True,
+                "validation": None,
             }
         )
 
@@ -2797,7 +2808,7 @@ def list_bioimage_stores(
 ) -> list[dict[str, Any]]:
     """List the image stores of a bioimage DC, sorted by name.
 
-    Each entry is ``{name, sample, file_id, format, kind, remote}``. ``sample``
+    Each entry is ``{name, sample, file_id, format, kind, remote, validation}``. ``sample``
     is the DC's ``sample_pattern`` capture on the store name, else the name
     without its suffix; the viewer matches it against upstream filter values,
     and pairs a labels store (``kind: labels``) with the image of its sample. ``file_id`` is None for a store only found on S3 or remote.
@@ -2827,6 +2838,8 @@ def list_bioimage_stores(
             "format": fmt,
             "kind": info["kind"],
             "remote": remote,
+            # The ingest's NGFF report (None: remote, S3-only, or ingested before it existed).
+            "validation": (info["stores"].get(name) or {}).get("validation"),
         }
         for name, file_id, remote in sorted(listed)
     ]

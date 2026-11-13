@@ -41,6 +41,11 @@ dependencies = [
   # tifffile 2026.4+ needs Python 3.12; 2026.3.3 is the last release for 3.11.
   "tifffile==2026.9.20; python_version >= '3.12'",
   "tifffile==2026.3.3; python_version < '3.12'",
+  # Validates OME-Zarr metadata (NGFF 0.4 / 0.5 images, plates, wells, labels)
+  # at ingest; a finding is reported on the store, never blocks the ingest.
+  # 1.7+ needs Python 3.12; 1.6 is the last release for 3.11 (same v04/v05 API).
+  "ome-zarr-models==1.9.0; python_version >= '3.12'",
+  "ome-zarr-models==1.6; python_version < '3.12'",
 ]
 authors = [{ name = "Thomas Weber", email = "thomas.weber@embl.de" }]
 urls = { Homepage = "https://github.com/depictio/depictio", Documentation = "https://depictio.github.io/depictio-docs/latest/" }

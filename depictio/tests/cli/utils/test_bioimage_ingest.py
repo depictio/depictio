@@ -536,12 +536,24 @@ class TestFormatScan:
         assert any("1 remote store(s), read in place" in c.args[0] for c in printed.call_args_list)
 
 
-def _registered(monkeypatch, *locations: Path) -> None:
+def _registered(monkeypatch, *locations: Path) -> list:
+    """Register stores as the DC's files; returns the files the ingest re-records
+    (its NGFF validation reports), one list per ``api_create_files`` call."""
+    recorded: list = []
     monkeypatch.setattr(
         deltatables,
         "fetch_file_data",
-        lambda dc_id, CLI_config: [SimpleNamespace(file_location=str(p)) for p in locations],
+        lambda dc_id, CLI_config: [
+            SimpleNamespace(file_location=str(p), ngff_validation=None) for p in locations
+        ],
     )
+
+    def record(files, CLI_config, update=False):
+        recorded.append(list(files))
+        return SimpleNamespace(status_code=200, text="")
+
+    monkeypatch.setattr(deltatables, "api_create_files", record)
+    return recorded
 
 
 def _ingest_dc(upload: bool = True, scan: object = True, **props) -> SimpleNamespace:
@@ -671,6 +683,34 @@ class TestIngest:
 
         assert result["result"] == "success"
         s3_client.upload_file.assert_not_called()
+
+    def test_every_store_gets_an_ngff_report_that_never_blocks(
+        self, tmp_path, monkeypatch, cli_config, s3_client
+    ):
+        # make_store's arrays carry no dtype or chunks: the viewer-level check
+        # passes, the spec models do not, and the ingest still succeeds.
+        recorded = _registered(
+            monkeypatch,
+            make_store(tmp_path, "sample_A.zarr"),
+            make_store(tmp_path, "sample_B.zarr"),
+        )
+
+        result = process_bioimage_data_collection(_ingest_dc(), cli_config)  # type: ignore[arg-type]
+
+        assert result["result"] == "success"
+        assert len(recorded) == 1
+        reports = [f.ngff_validation for f in recorded[0]]
+        assert len(reports) == 2
+        assert all(r.layout == "image" and r.ngff_version == "0.4" for r in reports)
+        assert all(not r.ok and r.issues for r in reports)
+        s3_client.upload_file.assert_called()
+
+    def test_ome_tiff_stores_get_no_ngff_report(self, tmp_path, monkeypatch, cli_config, s3_client):
+        recorded = _registered(monkeypatch, make_ome_tiff(tmp_path / "slide.ome.tif"))
+
+        process_bioimage_data_collection(_ingest_dc(format="ome-tiff"), cli_config)  # type: ignore[arg-type]
+
+        assert recorded == []
 
     def test_no_deltatable_is_upserted(self, tmp_path, monkeypatch, cli_config, s3_client):
         _registered(monkeypatch, make_store(tmp_path, "sample_A.zarr"))

@@ -2423,6 +2423,41 @@ def _validate_bioimage_store(store_path: str, props: DCBioimageConfig) -> None:
         validate_ome_zarr_store(store_path, props.ngff_version)
 
 
+def _record_ngff_validation(
+    files: list[File], props: DCBioimageConfig, CLI_config: CLIConfig
+) -> None:
+    """Validate each OME-Zarr / SpatialData store's NGFF metadata and store the
+    report on its File, where the stores listing and the tile read it.
+
+    Never fails the ingest: a finding is logged as a warning, and a failure to
+    record the reports only costs the badge.
+    """
+    if props.format not in ("ome-zarr", "spatialdata"):
+        return
+    from depictio.cli.cli.utils.ngff_validation import validate_ngff_store
+
+    changed: list[File] = []
+    for file_obj in files:
+        if "://" in file_obj.file_location:
+            continue
+        report = validate_ngff_store(file_obj.file_location, props.image_path)
+        if not report.ok:
+            first = report.issues[0] if report.issues else "invalid"
+            more = f" (+{len(report.issues) - 1} more)" if len(report.issues) > 1 else ""
+            logger.warning(f"NGFF validation of {file_obj.file_location}: {first}{more}")
+        if file_obj.ngff_validation != report:
+            file_obj.ngff_validation = report
+            changed.append(file_obj)
+    if not changed:
+        return
+    try:
+        response = api_create_files(changed, CLI_config, update=True)
+        if response.status_code != 200:
+            logger.warning(f"Could not record NGFF validation reports: {response.text}")
+    except Exception as e:
+        logger.warning(f"Could not record NGFF validation reports: {e}")
+
+
 def process_bioimage_data_collection(
     data_collection: DataCollection,
     CLI_config: CLIConfig,
@@ -2511,6 +2546,8 @@ def process_bioimage_data_collection(
             _validate_bioimage_store(store_path, props)
         except ValueError as e:
             return {"result": "error", "message": f"Invalid {label} store: {e}"}
+
+    _record_ngff_validation(files, props, CLI_config)
 
     if props.upload:
         bucket = CLI_config.s3_storage.bucket
