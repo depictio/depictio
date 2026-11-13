@@ -10,6 +10,7 @@ import { Button, Divider, Indicator, Popover, ScrollArea, Stack, Text } from '@m
 import { Icon } from '@iconify/react';
 import type { DataChange } from 'depictio-react-core';
 
+import { rowsFact } from '../../changes/describe';
 import { FeedHeader, FeedItem, FeedSection, facts, nameList } from '../../changes/feed';
 import { formatRelativeTime } from '../../lib/datetime';
 import { compactCount } from '../../monitoring/format';
@@ -19,10 +20,8 @@ import type { ProjectChanges } from './useProjectChanges';
 export function dataChangeFacts(d: DataChange): string[] {
   if (d.kind === 'emptied') return ['emptied'];
   const facts: string[] = [];
-  if (d.rows_added) facts.push(`+${compactCount(d.rows_added)} rows`);
-  else if (d.rows_before != null && d.rows_after != null && d.rows_before !== d.rows_after) {
-    facts.push(`${compactCount(d.rows_before)} → ${compactCount(d.rows_after)} rows`);
-  }
+  const rows = rowsFact(d, compactCount);
+  if (rows) facts.push(rows);
   if (d.new_sample_count) {
     facts.push(`${compactCount(d.new_sample_count)} new sample${d.new_sample_count === 1 ? '' : 's'}`);
   } else if (d.reports_added) {

@@ -123,6 +123,10 @@ check('count only (no names)', sampleSummary({ new_sample_count: 2 }), { shown: 
 check('an overwrite shows the totals', dataFacts({ ...data, new_run_tags: [], new_samples: [], new_sample_count: 0, rows_added: 0, rows_before: 150, rows_after: 154 }), [
   '150 \u2192 154 rows',
 ]);
+check('a run-scoped rewrite counts by totals, not rows written', dataFacts({ ...data, new_run_tags: [], new_samples: [], new_sample_count: 0, rows_added: 50, rows_before: 150, rows_after: 154 }), [
+  '150 \u2192 154 rows',
+]);
+check('same total says nothing about rows', dataFacts({ ...data, new_run_tags: [], new_samples: [], new_sample_count: 0, rows_added: 50, rows_before: 150, rows_after: 150 }), []);
 check('singular', dataFacts({ ...data, rows_added: 0, new_sample_count: 1, new_samples: ['s1'] }), [
   '1 new run',
   '1 new sample',

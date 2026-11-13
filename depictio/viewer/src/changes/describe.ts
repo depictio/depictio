@@ -91,14 +91,27 @@ export function sampleSummary(change: Pick<DataChange, 'new_samples' | 'new_samp
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
-/** The facts on one data row, as short phrases ("1 new run", "+5 rows"). */
+/**
+ * How the row count moved. The totals win when both are known: an overwrite
+ * reports no added rows, and a run-scoped write (`replace-runs`) counts the
+ * rewritten rows of an edited run as written, so "+N" would overstate what
+ * is new. The sum of written rows is shown only when no total is.
+ */
+export function rowsFact(
+  change: Pick<DataChange, 'rows_added' | 'rows_before' | 'rows_after'>,
+  fmt: (n: number) => string,
+): string | null {
+  const { rows_before: before, rows_after: after, rows_added: added } = change;
+  if (before != null && after != null) return before === after ? null : `${fmt(before)} \u2192 ${fmt(after)} rows`;
+  return added && added > 0 ? `+${fmt(added)} rows` : null;
+}
+
+/** The facts on one data row, as short phrases ("1 new run", "150 → 154 rows"). */
 export function dataFacts(change: DataChange): string[] {
   const facts: string[] = [];
   if (change.new_run_tags.length) facts.push(plural(change.new_run_tags.length, 'new run'));
-  const { rows_before: before, rows_after: after } = change;
-  if (change.rows_added && change.rows_added > 0) facts.push(`+${change.rows_added} rows`);
-  // An overwrite reports no appended rows; the totals still say what moved.
-  else if (before != null && after != null && before !== after) facts.push(`${before} \u2192 ${after} rows`);
+  const rows = rowsFact(change, String);
+  if (rows) facts.push(rows);
   const { total } = sampleSummary(change);
   if (total > 0) facts.push(plural(total, 'new sample'));
   if (change.reports_added) facts.push(plural(change.reports_added, 'new report'));
