@@ -8,11 +8,18 @@ import {
   ScrollArea,
   Stack,
   Text,
+  Tooltip,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { Icon } from '@iconify/react';
 
-import { fetchAllDashboards, fetchChangesInbox, type InboxItem } from 'depictio-react-core';
+import {
+  fetchAllDashboards,
+  fetchChangesInbox,
+  markDashboardSeen,
+  markProjectSeen,
+  type InboxItem,
+} from 'depictio-react-core';
 
 import { useChangesSinceEnabled } from '../hooks/useChangesSinceEnabled';
 import { useCurrentUser } from '../hooks/useCurrentUser';
@@ -40,23 +47,53 @@ export function itemHref(item: InboxItem): string {
 
 const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? '' : 's'}`;
 
-const NotificationRow: React.FC<{ item: InboxItem }> = ({ item }) => {
+const itemKey = (item: InboxItem) => `${item.scope_kind}:${item.scope_id}`;
+
+/** Moves the reader's mark on that dashboard or project, as its own
+ *  "Mark as seen" does: a mark, never a dashboard version. */
+function markItemSeen(item: InboxItem): Promise<unknown> {
+  return item.scope_kind === 'project'
+    ? markProjectSeen(item.scope_id)
+    : markDashboardSeen(item.scope_id);
+}
+
+const NotificationRow: React.FC<{ item: InboxItem; onDone: (item: InboxItem) => void }> = ({
+  item,
+  onDone,
+}) => {
   const runs = item.new_run_tags;
   return (
-    <FeedItem
-      kind={item.scope_kind === 'project' ? 'project' : 'dashboard'}
-      title={item.title || (item.scope_kind === 'project' ? 'Project' : 'Dashboard')}
-      summary={facts(
-        runs.length ? `${plural(runs.length, 'new run')}: ${nameList(runs, CHIPS_SHOWN)}` : null,
-        item.dashboard_versions > 0 ? plural(item.dashboard_versions, 'dashboard change') : null,
-        item.refreshed.length > 0 ? `${nameList(item.refreshed, CHIPS_SHOWN)} refreshed` : null,
-      )}
-      at={item.at}
-      href={itemHref(item)}
-      data-testid="notification-item"
-      data-scope-kind={item.scope_kind}
-      data-scope-id={item.scope_id}
-    />
+    <Group gap={4} wrap="nowrap" align="flex-start">
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <FeedItem
+          kind={item.scope_kind === 'project' ? 'project' : 'dashboard'}
+          title={item.title || (item.scope_kind === 'project' ? 'Project' : 'Dashboard')}
+          summary={facts(
+            runs.length ? `${plural(runs.length, 'new run')}: ${nameList(runs, CHIPS_SHOWN)}` : null,
+            item.dashboard_versions > 0 ? plural(item.dashboard_versions, 'dashboard change') : null,
+            item.refreshed.length > 0 ? `${nameList(item.refreshed, CHIPS_SHOWN)} refreshed` : null,
+          )}
+          at={item.at}
+          href={itemHref(item)}
+          data-testid="notification-item"
+          data-scope-kind={item.scope_kind}
+          data-scope-id={item.scope_id}
+        />
+      </div>
+      <Tooltip label="Mark as seen" withinPortal>
+        <ActionIcon
+          variant="subtle"
+          color="gray"
+          size="sm"
+          mt={6}
+          aria-label={`Mark ${item.title || item.scope_kind} as seen`}
+          data-testid="notification-done"
+          onClick={() => onDone(item)}
+        >
+          <Icon icon="tabler:check" width={16} />
+        </ActionIcon>
+      </Tooltip>
+    </Group>
   );
 };
 
@@ -206,6 +243,18 @@ const NotificationsBell: React.FC<NotificationsBellProps> = ({
 
   useProjectIngestionEvents(projectIds, onFinished, eligible && heldByServer);
 
+  // Done, one item or all: the row leaves at once, the inbox is then re-read
+  // (a failed write brings it back).
+  const markSeen = useCallback(
+    async (done: InboxItem[]) => {
+      const keys = new Set(done.map(itemKey));
+      setItems((prev) => prev.filter((i) => !keys.has(itemKey(i))));
+      await Promise.allSettled(done.map(markItemSeen));
+      void refresh();
+    },
+    [refresh],
+  );
+
   if (!eligible || !heldByServer) return null;
 
   return (
@@ -258,9 +307,22 @@ const NotificationsBell: React.FC<NotificationsBellProps> = ({
         })()}
       </Popover.Target>
       <Popover.Dropdown data-testid="notifications-panel" p="xs">
-        <Text size="sm" fw={600} px={8} pt={4} pb={6}>
-          Since your last visit
-        </Text>
+        <Group justify="space-between" wrap="nowrap" px={8} pt={4} pb={6}>
+          <Text size="sm" fw={600}>
+            Since your last visit
+          </Text>
+          {items.length > 0 && (
+            <Button
+              size="compact-xs"
+              variant="subtle"
+              leftSection={<Icon icon="tabler:checks" width={14} />}
+              data-testid="notifications-done-all"
+              onClick={() => void markSeen(items)}
+            >
+              Mark all as seen
+            </Button>
+          )}
+        </Group>
         {items.length === 0 ? (
           <Text size="sm" c="dimmed" px="xs" py="sm">
             Nothing new.
@@ -269,7 +331,11 @@ const NotificationsBell: React.FC<NotificationsBellProps> = ({
           <ScrollArea.Autosize mah={360} type="auto">
             <Stack gap={2}>
               {items.map((item) => (
-                <NotificationRow key={`${item.scope_kind}:${item.scope_id}`} item={item} />
+                <NotificationRow
+                  key={itemKey(item)}
+                  item={item}
+                  onDone={(i) => void markSeen([i])}
+                />
               ))}
             </Stack>
           </ScrollArea.Autosize>

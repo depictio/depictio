@@ -224,7 +224,9 @@ The sidebar bell does two things:
 - it raises a toast on the live event.
 
 Every item links to the dashboard, with its updates marked, or to the
-project's Runs tab on that run. The bell needs a server-held mark, so it is
+project's Runs tab on that run. Its check mark, or *Mark all as seen* for the
+whole list, moves the reader's mark on that dashboard or project, as the
+What's new panel's *Mark as seen* does. The bell needs a server-held mark, so it is
 hidden for anonymous readers.
 
 ## Routes
