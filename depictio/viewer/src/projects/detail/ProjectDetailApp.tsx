@@ -108,6 +108,7 @@ import ManageDataCollectionModal, {
   type ManageDcType,
 } from './ManageDataCollectionModal';
 import MultiQCViewerPreview from './MultiQCViewerPreview';
+import NewRowsPreview, { readNewRunsFromQuery } from '../../changes/NewRowsPreview';
 import CoordinatesMapPreview from './CoordinatesMapPreview';
 import MapCoordinatesModal from './coordinates/MapCoordinatesModal';
 import { detectCoordinatesColumns } from './extendedTableCategories';
@@ -385,6 +386,8 @@ const ProjectDetailApp: React.FC = () => {
   // collection is selected and its rows load. Applied once per visit.
   const requestedTableId = useMemo(readTableFromQuery, []);
   const requestedTableHandled = useRef(false);
+  // `&new_runs=run_c`: the What's new panel's link, the rows those runs added.
+  const requestedNewRuns = useMemo(() => readNewRunsFromQuery(window.location.search), []);
   // Active project-detail tab, controlled so the ingestion report can switch
   // back to Overview when previewing a data collection. `?tab=` (overview |
   // runs | activity, plus the older ingestion | timeline) and `?run=<run_tag>`
@@ -748,6 +751,14 @@ const ProjectDetailApp: React.FC = () => {
                 />
               )}
               <Box ref={dcViewerRef}>
+                {selectedDc && requestedNewRuns.length > 0 && requestedTableId === selectedDcId && (
+                  <Paper withBorder radius="md" p="sm" mb="sm" data-testid="project-new-rows">
+                    <Text fw={600} size="sm" mb={6}>
+                      New rows from {requestedNewRuns.join(', ')}
+                    </Text>
+                    <NewRowsPreview dcId={selectedDcId as string} runs={requestedNewRuns} />
+                  </Paper>
+                )}
                 {selectedDc && (
                   <DataCollectionViewer
                     dc={selectedDc}

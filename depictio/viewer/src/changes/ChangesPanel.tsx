@@ -36,6 +36,7 @@ import {
   sampleSummary,
 } from './describe';
 import { FeedHeader, FeedItem, FeedSection, facts, nameList } from './feed';
+import { newRowsHref } from './NewRowsPreview';
 
 const VIEW_HINT: Record<NewsView, string> = {
   off: 'The figures as they are now.',
@@ -123,8 +124,17 @@ function dataSummary(change: DataChange): string {
   );
 }
 
-const DataRow: React.FC<{ change: DataChange }> = ({ change }) => {
+/** A Delta collection that gained runs: its new rows can be shown. */
+const showsNewRows = (change: DataChange) =>
+  change.kind === 'refreshed' && change.dc_type !== 'multiqc' && change.new_run_tags.length > 0;
+
+const DataRow: React.FC<{
+  change: DataChange;
+  projectId: string | null;
+  onViewRows?: (change: DataChange) => void;
+}> = ({ change, projectId, onViewRows }) => {
   const samples = sampleSummary(change);
+  const withRows = showsNewRows(change);
   return (
     <FeedItem
       kind={change.kind === 'emptied' ? 'emptied' : 'data'}
@@ -141,7 +151,35 @@ const DataRow: React.FC<{ change: DataChange }> = ({ change }) => {
       at={change.at}
       data-testid="changes-data-row"
       data-dc-id={change.dc_id}
-    />
+    >
+      {withRows && (
+        <Group gap="xs" mt={4}>
+          {onViewRows && (
+            <Button
+              size="compact-xs"
+              variant="light"
+              leftSection={<Icon icon="tabler:table" width={13} />}
+              onClick={() => onViewRows(change)}
+              data-testid="changes-view-rows"
+            >
+              View new rows
+            </Button>
+          )}
+          {projectId && (
+            <Button
+              size="compact-xs"
+              variant="subtle"
+              component="a"
+              href={newRowsHref(projectId, change.dc_id, change.new_run_tags)}
+              leftSection={<Icon icon="tabler:external-link" width={13} />}
+              data-testid="changes-open-in-project"
+            >
+              Open in project
+            </Button>
+          )}
+        </Group>
+      )}
+    </FeedItem>
   );
 };
 
@@ -210,9 +248,15 @@ const CommentRow: React.FC<{ comment: CommentChange; ctx: ChangesSinceValue; onD
   );
 };
 
-const ChangesPanel: React.FC<{ onClose?: () => void; subtitle?: React.ReactNode }> = ({
+const ChangesPanel: React.FC<{
+  onClose?: () => void;
+  subtitle?: React.ReactNode;
+  /** Opens a collection's new rows; held by the caller, outside the popover. */
+  onViewRows?: (change: DataChange) => void;
+}> = ({
   onClose,
   subtitle,
+  onViewRows,
 }) => {
   const ctx = useChangesSince();
   if (!ctx) return null;
@@ -252,7 +296,7 @@ const ChangesPanel: React.FC<{ onClose?: () => void; subtitle?: React.ReactNode 
                 <FailedRow key={f.run_id} failure={f} />
               ))}
               {cs.data.map((d) => (
-                <DataRow key={d.dc_id} change={d} />
+                <DataRow key={d.dc_id} change={d} projectId={ctx.projectId} onViewRows={onViewRows} />
               ))}
             </FeedSection>
           )}

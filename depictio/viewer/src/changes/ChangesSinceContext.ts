@@ -12,6 +12,8 @@ export interface ChangesSinceValue {
   /** The tab on screen: dashboard rows link relative to it. */
   tabId: string;
   familyId: string;
+  /** The dashboard's project: data rows link to its collections. */
+  projectId: string | null;
   /** May open the editor's History. */
   canEdit: boolean;
   /** `?since=` / `?before_run=`: never moves a mark. */

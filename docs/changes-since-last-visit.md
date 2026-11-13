@@ -187,6 +187,12 @@ MultiQC time travel by report set is what makes the MultiQC *Before* possible:
 - `DataCollectionStamp.report_ids` records the set at save time;
 - `report_sets` in a render request restricts it.
 
+A Delta collection that gained runs shows **View new rows** in the panel's
+Data list, a table of the rows those runs added (or, switched off, the
+table's first rows with the runs already seen faded), and **Open in
+project**, the project page on that collection with the same table
+(`/projects/{id}?table=<dc_id>&new_runs=<run,...>`).
+
 ## Projects
 
 - `POST /changes/project/{id}` returns the same kind of change set for a

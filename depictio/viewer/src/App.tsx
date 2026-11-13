@@ -2312,6 +2312,7 @@ const App: React.FC = () => {
       <ChangeMarksProvider
         dashboardId={dashboardId}
         familyId={groupingScopeId}
+        projectId={dashboard?.project_id ? String(dashboard.project_id) : null}
         previewVersionId={previewVersionId}
         userLoading={userLoading}
         canEdit={canEditNow}

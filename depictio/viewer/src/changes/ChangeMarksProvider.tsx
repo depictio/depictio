@@ -58,6 +58,8 @@ interface Props {
   dashboardId: string | null;
   /** The family's main tab: the key of the stored mark. Unknown until the dashboard loads. */
   familyId: string | undefined;
+  /** The dashboard's project, for links to its collections. */
+  projectId?: string | null;
   /** `?version=` pinned preview: shows nothing, calls nothing. */
   previewVersionId: string | null;
   /** The signed-in user is still being resolved. */
@@ -123,6 +125,7 @@ function overlayRuns(cs: DashboardChangeSet): Record<string, string[]> {
 const ChangeMarksProvider: React.FC<Props> = ({
   dashboardId,
   familyId,
+  projectId,
   previewVersionId,
   userLoading,
   canEdit,
@@ -378,6 +381,7 @@ const ChangeMarksProvider: React.FC<Props> = ({
       changeSet,
       tabId: dashboardId,
       familyId,
+      projectId: projectId ?? null,
       canEdit,
       readOnly,
       readOnlyQuery,
@@ -408,6 +412,7 @@ const ChangeMarksProvider: React.FC<Props> = ({
     setView,
     split,
     splitLegend,
+    projectId,
   ]);
 
   // The component behind the open key. Opening needs marks to be live, so the
