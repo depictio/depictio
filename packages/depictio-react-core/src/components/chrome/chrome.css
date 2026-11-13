@@ -36,6 +36,38 @@
 .depictio-current-data-badge:empty {
   display: none;
 }
+/* The "updated since your last visit" dot: the tile's top-left corner, over
+ * its padding, so it never covers a table row or a filter's input. */
+.depictio-updated-dot-slot {
+  position: absolute;
+  left: 1px;
+  top: 1px;
+  z-index: 1100;
+  display: inline-flex;
+}
+.depictio-updated-dot-slot:empty {
+  display: none;
+}
+/* The "updated since your last visit" dot (#1397): the update dot's blue with
+ * the page surface for its ring, in a 18px hit area. */
+.depictio-updated-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.depictio-updated-dot__mark {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--mantine-color-blue-6);
+  box-shadow: 0 0 0 2px var(--mantine-color-body);
+}
 /* Hover-only action row, top-right, above the renderer's own Paper. Everything
  * a tile offers lives here, the catalog-origin flag included: a badge pinned
  * top-left would sit exactly where a figure draws its title. */

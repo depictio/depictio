@@ -160,11 +160,16 @@ export function validateLabel(label: string): string | null {
 /** Name of the "new items" highlight overlay FigureRenderer draws. */
 export const NEW_ITEMS_TRACE_NAME = '__depictio_new_items';
 
+/** Prefix of the before/after traces of "compare with your last visit" (figureDiffOverlay). */
+export const DIFF_TRACE_PREFIX = '__depictio_diff_';
+
 /** Whether a trace is a client-side overlay rather than part of the figure. */
 export function isOverlayTraceName(name: unknown): boolean {
   return (
     typeof name === 'string' &&
-    (name.startsWith(OVERLAY_TRACE_PREFIX) || name === NEW_ITEMS_TRACE_NAME)
+    (name.startsWith(OVERLAY_TRACE_PREFIX) ||
+      name.startsWith(DIFF_TRACE_PREFIX) ||
+      name === NEW_ITEMS_TRACE_NAME)
   );
 }
 

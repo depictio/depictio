@@ -385,12 +385,16 @@ def _process_table_uploads(
             ),
         )
 
-    _, dc_dict = _load_table_dc(data_collection_id, current_user)
+    project_doc, dc_dict = _load_table_dc(data_collection_id, current_user)
 
     # Best-effort ingestion-run ledger so UI uploads show in the admin
     # "Ingestion" pane next to CLI runs. Monitoring failures never block upload.
     run_id = _begin_ui_ingestion_run(
-        mode=mode, data_collection_id=data_collection_id, current_user=current_user
+        mode=mode,
+        data_collection_id=data_collection_id,
+        current_user=current_user,
+        project_id=str(project_doc["_id"]) if project_doc.get("_id") else None,
+        project_name=project_doc.get("name"),
     )
     try:
         result = _write_table_upload(
@@ -414,8 +418,18 @@ def _process_table_uploads(
     return result
 
 
-def _begin_ui_ingestion_run(*, mode: str, data_collection_id: str, current_user) -> str | None:
+def _begin_ui_ingestion_run(
+    *,
+    mode: str,
+    data_collection_id: str,
+    current_user,
+    project_id: str | None = None,
+    project_name: str | None = None,
+) -> str | None:
     """Best-effort: open an ingestion-run ledger record for a UI table upload.
+
+    ``project_id`` is the project owning the collection: without it the run
+    never shows in that project's ingestion history.
 
     Mirrors the CLI ``/monitoring/ingestion/start`` write so UI uploads appear in
     the admin "Ingestion" pane alongside CLI runs. Never raises — monitoring must
@@ -441,6 +455,9 @@ def _begin_ui_ingestion_run(*, mode: str, data_collection_id: str, current_user)
                 cli_hostname=socket.gethostname(),
                 user_id=str(getattr(current_user, "id", "") or "") or None,
                 email=getattr(current_user, "email", None),
+                project_id=project_id,
+                project_name=project_name,
+                trigger="ui",
                 status="running",
             )
         )

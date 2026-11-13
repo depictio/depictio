@@ -2950,6 +2950,9 @@ jobs:
           # opt-in because it is a test fixture, and the catalog coverage spec is
           # the only thing that needs it.
           echo "DEPICTIO_SEED_EXTRA_PROJECTS=catalog_conformance" >> docker-compose/.env
+          # "Changed since your last visit" (#1397) is off by default; its spec
+          # needs it on.
+          echo "DEPICTIO_DASHBOARD_VERSIONS_CHANGES_SINCE_ENABLED=true" >> docker-compose/.env
           # `multiqc_prerender` is bind-mounted into the backend and the worker,
           # both of which run as $UID:$GID. Left to Docker to create, it lands
           # root-owned and every MultiQC render 500s on the cache write.

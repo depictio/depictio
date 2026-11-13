@@ -177,6 +177,7 @@ def build_figure_preview(payload: dict) -> dict:
         apply_column_coloring_kwargs,
         apply_facet_kwargs,
         apply_group_coloring_kwargs,
+        apply_group_split_kwargs,
         code_group_globals,
         group_annotation_expr,
         group_source_columns,
@@ -251,7 +252,14 @@ def build_figure_preview(payload: dict) -> dict:
             return kwargs
         return apply_facet_kwargs(kwargs, facet_column)
 
+    # "Split, colours kept" (#1397's what's new): one panel per group with the
+    # figure's own colours, instead of recolouring by group.
+    group_keep_color = bool(payload.get("group_keep_color")) and grouping_display == "facet"
+
     def _grouped_kwargs(base: dict) -> dict:
+        n_panels = len(group_defs) + (1 if include_other else 0)
+        if group_keep_color and n_panels <= MAX_FACET_CATEGORIES:
+            return apply_group_split_kwargs(base, group_defs, include_other)
         # +1 when "Other" is shown: the synthetic column then carries the
         # fallback label as its own category (and facet panel in Split mode).
         return _apply_display(
@@ -3382,6 +3390,11 @@ def manifest_refresh_dc_task(self, payload: dict) -> dict:
                 None if sync_files else last_ingested_signature(payload["project_id"], tag, run_id)
             ),
             outcome=outcome,
+            # The run ledger entry this task belongs to, so what it writes can
+            # be joined back to the ingestion that produced it.
+            ingestion_run_id=run_id,
+            project_id=payload["project_id"],
+            trigger="ui",
             **scan_kwargs,
         )
     except ProjectStorageUnusable as exc:

@@ -69,7 +69,17 @@ REQUIRED = {
     # component definitions and labels the result as the past. That was a real
     # bug, and it is invisible in source review because both halves are correct
     # on their own.
-    "/src/App.tsx": ["DataVersionProvider", "definitionVersionId"],
+    #
+    # "Changed since your last visit" (#1397) reaches the viewer only through
+    # these two; both must stay in the viewer and out of the editor.
+    "/src/App.tsx": [
+        "DataVersionProvider",
+        "definitionVersionId",
+        "ChangesHeaderButton",
+        "ChangeMarksProvider",
+    ],
+    f"{PKG}/components/chrome/ComponentChrome.tsx": ["ChangeDot"],
+    f"{PKG}/changeMarks.tsx": ["useChangeMark", "ChangeMarksContext"],
     "/src/versions/preview.ts": ["definitionVersionFromPreview"],
 }
 
@@ -93,6 +103,14 @@ FORBIDDEN = {
         "VersionHistoryPanel",
         "DataVersionPanel",
         "DatasetVersionPicker",
+    ],
+    # "Changed since your last visit" records a visit and moves a mark: viewer
+    # only. An editor open must never count as a reader having looked.
+    "/src/EditorApp.tsx": [
+        "ChangeMarksProvider",
+        "ChangesHeaderButton",
+        "recordDashboardVisit",
+        "markDashboardSeen",
     ],
 }
 

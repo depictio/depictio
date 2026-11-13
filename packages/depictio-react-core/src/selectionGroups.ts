@@ -74,6 +74,9 @@ export interface GroupRenderState {
   /** Groups mode only: false drops ungrouped rows ("Other") from figures
    *  instead of drawing them gray. Omitted means true. */
   showOther?: boolean;
+  /** Groups in "facet" only: one panel per group, the figure keeping its own
+   *  colours. Set by the "what's new" split (#1397), never by saved groups. */
+  keepColor?: boolean;
 }
 
 /** The dashboard-global "Color by" control: nothing, the saved groups, or a

@@ -58,6 +58,15 @@ interface VersionHistoryPanelProps {
   canDelete: boolean;
   /** Stored version whose data the editor is drawing from, if any. */
   dataVersionId?: string | null;
+  /** A version to bring into view and highlight (a link from the viewer's
+   *  "Changed since your last visit"). Older pages are loaded until it is found. */
+  focusVersionId?: string | null;
+  /** The version the editing user saw on their last visit to the viewer, when
+   *  "changed since your last visit" is on (#1397): marked "Last viewed", and
+   *  the versions others saved after it carry a dot. */
+  lastViewedVersionId?: string | null;
+  /** The editing user, so their own saves are never "new" to them. */
+  selfId?: string | null;
   /** A restore landed. The host refetches the dashboard (a restore can add or
    *  remove whole tabs) and reloads `history`, which then shows the new
    *  `restore` row. Called after a restore only: every other action here
@@ -150,6 +159,9 @@ const VersionHistoryPanel: React.FC<VersionHistoryPanelProps> = ({
   history,
   canDelete,
   dataVersionId = null,
+  focusVersionId = null,
+  lastViewedVersionId = null,
+  selfId = null,
   onRestored,
 }) => {
   const {
@@ -180,6 +192,31 @@ const VersionHistoryPanel: React.FC<VersionHistoryPanelProps> = ({
   const shownTitle = shownVersion ? versionTitle(shownVersion) : '';
 
   const groups = useMemo(() => groupByDay(versions), [versions]);
+  // Only a mark found in the loaded pages dates the rest: a mark on an older
+  // page, or one pruned since, marks nothing rather than everything.
+  const lastViewedSeq = useMemo(
+    () => versions.find((v) => v.version_id === lastViewedVersionId)?.seq ?? null,
+    [versions, lastViewedVersionId],
+  );
+
+  // Bring the linked version into view. It may sit on an older page, so load
+  // pages until it shows up (or there are none left, or one fails).
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const focusFound = Boolean(focusVersionId) && versions.some((v) => v.version_id === focusVersionId);
+  useEffect(() => {
+    if (!focusVersionId) return;
+    if (!focusFound) {
+      if (hasMore && !loading && !loadingOlder && !olderError) void loadOlder();
+      return;
+    }
+    // After the accordion has finished opening.
+    const timer = window.setTimeout(() => {
+      listRef.current
+        ?.querySelector(`[data-version-id="${CSS.escape(focusVersionId)}"]`)
+        ?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [focusVersionId, focusFound, hasMore, loading, loadingOlder, olderError, loadOlder]);
 
   const restoring = pending?.type === 'restore' ? pending.version : null;
   const removesCurrentTab = useRemovesTab(
@@ -381,6 +418,13 @@ const VersionHistoryPanel: React.FC<VersionHistoryPanelProps> = ({
                   version={version}
                   isCurrent={version.version_id === currentVersionId}
                   dataActive={version.version_id === dataVersionId}
+                  focused={version.version_id === focusVersionId}
+                  lastViewed={version.version_id === lastViewedVersionId}
+                  newSinceVisit={
+                    lastViewedSeq != null &&
+                    version.seq > lastViewedSeq &&
+                    (!selfId || version.author_id !== selfId)
+                  }
                   withDivider={row > 0}
                   canDelete={canDelete}
                   busy={busy}
@@ -458,7 +502,7 @@ const VersionHistoryPanel: React.FC<VersionHistoryPanelProps> = ({
           </Text>
         )}
 
-        {list}
+        <div ref={listRef}>{list}</div>
       </Stack>
 
       {/* Naming: a bookmark on a row, or the current state. Both ask the same

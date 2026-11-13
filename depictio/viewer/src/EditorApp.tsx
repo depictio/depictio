@@ -138,6 +138,7 @@ import {
   dataVersionBody,
   dataPinBody,
   fetchDashboardVersion,
+  fetchDashboardChanges,
   isCurrentDataOnlyType,
   isHttpStatus,
   DATA_VERSION_GONE_EVENT,
@@ -195,6 +196,7 @@ import ComponentVersionModal from './versions/ComponentVersionModal';
 import DataVersionPanel from './versions/DataVersionPanel';
 import VersionHistoryPanel, { type RestoreOutcome } from './versions/VersionHistoryPanel';
 import { useVersionHistory } from './versions/useVersionHistory';
+import { useChangesSinceEnabled } from './hooks/useChangesSinceEnabled';
 import DataVersionBanner from './versions/DataVersionBanner';
 import type { PinnedLabel } from './versions/dataVersionStatus';
 import { useDataVersionStatus } from './versions/useDataVersionStatus';
@@ -438,6 +440,50 @@ const EditorApp: React.FC = () => {
   // or change a version.
   const [historyComponent, setHistoryComponent] = useState<StoredMetadata | null>(null);
   const versionHistory = useVersionHistory(dashboardId, Boolean(dashboardId));
+  // `?settings=history&at=<version_id>`: a link from the viewer's "Changed
+  // since your last visit" panel. Read once on load (the initializer is a pure
+  // read), open History on that version, then drop the params so a reload or a
+  // copied address does not reopen it.
+  // The version this user saw on their last visit to the viewer (#1397), for
+  // History's "Last viewed" mark. A read: the editor never moves a mark.
+  const changesSinceEnabled = useChangesSinceEnabled();
+  const [lastViewedVersionId, setLastViewedVersionId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!changesSinceEnabled || !dashboardId) return;
+    let live = true;
+    fetchDashboardChanges(dashboardId)
+      .then((cs) => {
+        if (live) setLastViewedVersionId(cs.first_visit ? null : cs.baseline_version_id);
+      })
+      .catch(() => {
+        /* History simply shows no mark */
+      });
+    return () => {
+      live = false;
+    };
+  }, [changesSinceEnabled, dashboardId]);
+  const [focusVersionId] = useState<string | null>(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('settings') === 'history' ? params.get('at')?.trim() || null : null;
+    } catch {
+      return null;
+    }
+  });
+  useEffect(() => {
+    if (!focusVersionId) return;
+    openSettingsAt('history');
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('settings');
+      url.searchParams.delete('at');
+      window.history.replaceState(window.history.state, '', url.toString());
+    } catch {
+      // The address stays as it was; harmless.
+    }
+    // Once, on load.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const {
     versions: familyVersions,
     loading: versionsLoading,
@@ -3124,6 +3170,9 @@ const EditorApp: React.FC = () => {
               history={versionHistory}
               canDelete={isOwner}
               dataVersionId={asOfVersionId}
+              focusVersionId={focusVersionId}
+              lastViewedVersionId={lastViewedVersionId}
+              selfId={currentUser?.id ?? null}
               onRestored={handleRestored}
             />
           ) : undefined

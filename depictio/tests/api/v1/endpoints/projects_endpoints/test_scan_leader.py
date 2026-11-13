@@ -272,11 +272,15 @@ def test_a_task_without_scan_keys_calls_ingest_as_before(worker_db):
     with patch.object(manifest_ingest, "_run_dc_ingest", return_value=(True, None)) as ingest:
         celery_tasks.manifest_refresh_dc_task(_payload(project, "a"))
 
+    # No scan keys; the run ledger keys are always passed (see the refresh tests).
     assert set(ingest.call_args.kwargs) == {
         "sync_files",
         "remote_storage_options",
         "previous_signature",
         "outcome",
+        "ingestion_run_id",
+        "project_id",
+        "trigger",
     }
 
 

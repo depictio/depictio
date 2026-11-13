@@ -13,6 +13,7 @@ import polars as pl
 import pytest
 
 from depictio.cli.cli.utils.delta_versioning import (
+    content_digest,
     MAX_RUN_TAGS_IN_METADATA,
     METADATA_PREFIX,
     RUN_ID_COLUMN,
@@ -607,3 +608,23 @@ class TestProbe:
     def test_an_unpartitioned_table_is_not_partitioned_by_run(self, destination, storage):
         write_delta_table_versioned(frame(["A", "B"]), destination, storage)
         assert probe_delta_table(destination, storage).partitioned_by_run is False
+
+
+def test_content_digest_ignores_row_and_column_order():
+    df = pl.DataFrame({"a": [1, 2, 3], "b": ["x", "y", "z"]})
+    shuffled = df.select("b", "a").reverse()
+    assert content_digest(df) == content_digest(shuffled)
+
+
+def test_content_digest_changes_with_a_value_or_the_schema():
+    df = pl.DataFrame({"a": [1, 2, 3], "b": ["x", "y", "z"]})
+    assert content_digest(df) != content_digest(df.with_columns(pl.col("a").replace(3, 4)))
+    assert content_digest(df) != content_digest(df.with_columns(pl.col("a").cast(pl.Float64)))
+    assert content_digest(df) != content_digest(df.head(2))
+
+
+def test_content_digest_ignores_the_write_time_and_float_noise():
+    df = pl.DataFrame({"a": [0.3256221559192277, 0.1986718677187851], "aggregation_time": ["t1", "t1"]})
+    again = pl.DataFrame({"a": [0.3256221559192276, 0.1986718677187849], "aggregation_time": ["t2", "t2"]})
+    assert content_digest(df) == content_digest(again)
+    assert content_digest(df) != content_digest(df.with_columns(pl.col("a") * 1.001))

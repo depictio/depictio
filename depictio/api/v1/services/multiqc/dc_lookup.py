@@ -5,9 +5,77 @@ data-collection id, used by the celery prerender tasks and FastAPI
 render endpoints.
 """
 
-from typing import Any, Dict, List, Optional
+import hashlib
+from typing import Any, Dict, Iterable, List, Optional
 
 from depictio.models.logging import logger
+
+
+def report_set_digest(report_ids: Iterable[str]) -> str:
+    """sha256 over the sorted report ids: the identity of "this set of reports".
+
+    The stamp records it (``manifest_digest``) and a pinned render salts its
+    cache key with it, so the two never disagree about what "the same set" is.
+    """
+    return hashlib.sha256(",".join(sorted(str(r) for r in report_ids)).encode()).hexdigest()
+
+
+def fetch_reports_for_dc(data_collection_id: str) -> List[Dict[str, Any]]:
+    """The reports of a MultiQC DC as ``{id, s3_location, samples}``, oldest first.
+
+    Feeds the manifest stamp a dashboard version records. Mongo only (no object
+    store round trip), so it is cheap enough for the save path. A failed lookup
+    returns an empty list: the stamp then says "no reports" instead of failing
+    the save.
+    """
+    try:
+        from depictio.api.v1.db import multiqc_collection
+
+        cursor = multiqc_collection.find(
+            {"data_collection_id": str(data_collection_id)},
+            {"s3_location": 1, "metadata.samples": 1},
+        ).sort([("_id", 1)])
+        return [
+            {
+                "id": str(doc["_id"]),
+                "s3_location": doc.get("s3_location") or "",
+                "samples": list((doc.get("metadata") or {}).get("samples") or []),
+            }
+            for doc in cursor
+        ]
+    except Exception as e:
+        logger.error(f"Failed to fetch reports of DC {data_collection_id}: {e}")
+        return []
+
+
+def fetch_s3_locations_for_reports(data_collection_id: str, report_ids: Iterable[str]) -> List[str]:
+    """S3 locations of the named reports of one DC, in insertion order.
+
+    Ids that are not valid, belong to another DC, or no longer exist are
+    dropped, so a baseline that names a deleted report renders the rest.
+    """
+    from bson import ObjectId
+    from bson.errors import InvalidId
+
+    object_ids = []
+    for report_id in report_ids:
+        try:
+            object_ids.append(ObjectId(str(report_id)))
+        except (InvalidId, TypeError):
+            continue
+    if not object_ids:
+        return []
+    try:
+        from depictio.api.v1.db import multiqc_collection
+
+        cursor = multiqc_collection.find(
+            {"data_collection_id": str(data_collection_id), "_id": {"$in": object_ids}},
+            {"s3_location": 1},
+        ).sort([("_id", 1)])
+        return [loc for doc in cursor if (loc := doc.get("s3_location"))]
+    except Exception as e:
+        logger.error(f"Failed to fetch pinned reports of DC {data_collection_id}: {e}")
+        return []
 
 
 def fetch_s3_locations_from_dc(

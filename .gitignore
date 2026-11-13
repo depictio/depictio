@@ -155,6 +155,8 @@ dump.rdb
 # generated from stub logs so the e2e suite can exercise the MultiQC catalog
 # outputs without vendoring a reference pipeline's 24 MB parquet)
 !depictio/projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet
+# e2e fixture of #1397: two runs, then a third attached (three small MultiQC reports)
+!depictio/tests/e2e-playwright/fixtures/data/changes_since/**/multiqc.parquet
 *.gz
 *.csv
 *.tsv

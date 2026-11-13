@@ -178,6 +178,11 @@ import { useLayoutOverride } from './layoutOverride';
 import type { SettingsSectionKey } from './chrome/SettingsDrawer';
 import VersionPreviewBanner from './versions/VersionPreviewBanner';
 import { dashboardHref } from './dashboards/lib/dashboardLinks';
+import ChangeMarksProvider from './changes/ChangeMarksProvider';
+import ChangesHeaderButton from './changes/ChangesHeaderButton';
+import type { NewsSplit } from './changes/newsSplit';
+import type { BulkComputeOptions } from 'depictio-react-core';
+import { panelsFromGroups } from 'depictio-react-core';
 
 /**
  * Top-level SPA. Layout:
@@ -247,10 +252,33 @@ const App: React.FC = () => {
     return id ? String(id) : undefined;
   }, [dashboard]);
   const groupsApi = useSelectionGroups(groupingScopeId);
+  // "What's new" in Split view (#1397): virtual New / Seen before groups that
+  // stand in for the reader's own groups while it is on, never stored.
+  const [newsSplit, setNewsSplit] = useState<NewsSplit | null>(null);
+  // Only a split on runs reaches the Delta figures and cards. MultiQC splits
+  // on its own samples, read from the change marks by its renderer; a split
+  // with nothing on runs leaves the rest of the canvas as it was.
+  const runNews = newsSplit && newsSplit.groups.length > 0 ? newsSplit : null;
+  // "New only" is a filter on the new runs, not a split: the reader's own
+  // grouping stays as it was.
+  const runSplit = runNews?.mode === 'new' ? null : runNews;
+  const newOnlyFilters = useMemo(
+    () => (runNews?.mode === 'new' ? panelsFromGroups(runNews.groups)[0]?.constraints ?? [] : []),
+    [runNews],
+  );
+  const bulkOptions = useMemo<BulkComputeOptions | undefined>(
+    () =>
+      runSplit
+        ? { groups: runSplit.groups, compareGroups: true, showOther: runSplit.showOther, showOverall: true }
+        : groupsApi.bulkOptions,
+    [runSplit, groupsApi.bulkOptions],
+  );
   const combinedFilters = useMemo(
     () =>
-      groupsApi.groupFilters.length > 0 ? [...filters, ...groupsApi.groupFilters] : filters,
-    [filters, groupsApi.groupFilters],
+      groupsApi.groupFilters.length > 0 || newOnlyFilters.length > 0
+        ? [...filters, ...groupsApi.groupFilters, ...newOnlyFilters]
+        : filters,
+    [filters, groupsApi.groupFilters, newOnlyFilters],
   );
   // Data fetches follow a *settled* filter, not every intermediate value of one.
   // Interactive components keep reading `filters` directly so their own UI stays
@@ -612,7 +640,7 @@ const App: React.FC = () => {
           dashboardId,
           req.filters,
           req.ids,
-          groupsApi.bulkOptions,
+          bulkOptions,
           // Wired to the abort above: without it a slow superseded response
           // (e.g. compare-on forces real Delta loads) could land after a fast
           // newer one and resurrect stale card strips.
@@ -647,7 +675,7 @@ const App: React.FC = () => {
     filterScopes,
     refreshTick,
     // Undefined while compare is off, so group edits don't refire the fetch.
-    JSON.stringify(groupsApi.bulkOptions ?? null),
+    JSON.stringify(bulkOptions ?? null),
     versionKey,
   ]);
 
@@ -1286,7 +1314,15 @@ const App: React.FC = () => {
   // identity, so a fresh one per render would rebuild every cell.
   const groupRender = useMemo(
     () =>
-      resolveGroupRender(
+      runSplit
+        ? {
+            groups: runSplit.groups,
+            colorByGroup: true,
+            display: 'facet' as const,
+            showOther: runSplit.showOther,
+            keepColor: true,
+          }
+        : resolveGroupRender(
         groupsApi.colorBy,
         groupsApi.renderGroups,
         colorByColumnRender,
@@ -1299,6 +1335,7 @@ const App: React.FC = () => {
       colorByColumnRender,
       groupsApi.displayMode,
       groupsApi.showOther,
+      runSplit,
     ],
   );
 
@@ -1320,7 +1357,7 @@ const App: React.FC = () => {
           onFilterChange={handleFilterChange}
           refreshTick={refreshTick}
           groupRender={groupRender}
-          bulkOptions={groupsApi.bulkOptions}
+          bulkOptions={bulkOptions}
           onResetFilters={handleResetAllFilters}
           onResetBarFilters={handleResetFilterIndices}
           autofit={dashboard?.autofit !== false}
@@ -1668,6 +1705,8 @@ const App: React.FC = () => {
   const ready = Boolean(dashboard) && !loading && !error;
   const headerActions: HeaderAction[] = [];
   if (dashboard) {
+    // Renders nothing on a first visit, when nothing changed and in a preview.
+    headerActions.push({ id: 'changes', group: 'read', node: <ChangesHeaderButton /> });
     headerActions.push({ id: 'comments', group: 'read', node: <CommentsHeaderButton /> });
     headerActions.push({
       id: 'analysis',
@@ -2058,7 +2097,7 @@ const App: React.FC = () => {
               onFilterChange={handleFilterChange}
               refreshTick={refreshTick}
               groupRender={groupRender}
-              bulkOptions={groupsApi.bulkOptions}
+              bulkOptions={bulkOptions}
               onResetFilters={handleResetAllFilters}
               autofit={dashboard?.autofit !== false}
             />
@@ -2266,6 +2305,21 @@ const App: React.FC = () => {
       >
       {/* Editors and owners only: for anyone else the provider renders its
           children alone, so no comment badge, button or drawer appears. */}
+      {/* "Changed since your last visit" (#1397): the change set, the marks on
+          the canvas and what the header pill reads. Always mounted so the tree
+          never remounts when the flag arrives; inert until it does. Never
+          active in a `?version=` preview. */}
+      <ChangeMarksProvider
+        dashboardId={dashboardId}
+        familyId={groupingScopeId}
+        projectId={dashboard?.project_id ? String(dashboard.project_id) : null}
+        previewVersionId={previewVersionId}
+        userLoading={userLoading}
+        canEdit={canEditNow}
+        components={summaryMetadata}
+        filters={deferredFilters}
+        onSplitChange={setNewsSplit}
+      >
       <CommentsProvider
         dashboardId={dashboardId}
         metadata={summaryMetadata}
@@ -2294,7 +2348,9 @@ const App: React.FC = () => {
           isOwner: canEditNow,
           titleExtras:
             dashboard && !loading && !error ? (
-              <DashboardLoadIndicator metadataList={rightComponents} cardsLoading={cardsLoading} />
+              <>
+                <DashboardLoadIndicator metadataList={rightComponents} cardsLoading={cardsLoading} />
+              </>
             ) : undefined,
           extraActions: headerActions,
         }}
@@ -2356,6 +2412,7 @@ const App: React.FC = () => {
         guideOpen={guide.open}
       />
       </CommentsProvider>
+      </ChangeMarksProvider>
       </ComponentExportProvider>
       </GenomeBrowserTargetProvider>
       </TabLinkProvider>

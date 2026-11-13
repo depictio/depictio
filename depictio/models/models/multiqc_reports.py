@@ -41,6 +41,38 @@ def general_stats_available(flags: Iterable[Optional[bool]]) -> bool:
     return not (values and all(f is False for f in values))
 
 
+def run_tag_from_path(
+    original_file_path: str, locations: list[str], structure: Optional[str] = None
+) -> Optional[str]:
+    """The run a report belongs to, read from where its file lives.
+
+    Fallback for reports stored before ``run_tag`` was recorded on them. The
+    run is the first path component under the deepest of ``locations`` that
+    contains the file: ``/data/two_runs/run_b/multiqc/multiqc_data/multiqc.parquet``
+    under ``/data/two_runs`` is ``run_b``. A ``structure: flat`` workflow
+    registers each location as one run named after its directory, so with
+    ``structure="flat"`` that directory's name is answered instead. Local paths
+    and ``s3://`` URLs are both split on ``/``. ``None`` when no location
+    contains the file.
+    """
+    path = original_file_path.rstrip("/")
+    best: Optional[str] = None
+    for location in locations:
+        root = location.rstrip("/")
+        if not root or not path.startswith(root + "/"):
+            continue
+        if best is None or len(root) > len(best):
+            best = root
+    if best is None:
+        return None
+    parts = [part for part in path[len(best) + 1 :].split("/") if part]
+    if len(parts) < 2:  # a file sitting directly in the location names no run
+        return None
+    if structure == "flat":
+        return best.rsplit("/", 1)[-1] or None
+    return parts[0]
+
+
 class MultiQCMetadata(BaseModel):
     """Metadata extracted from MultiQC parquet files."""
 
@@ -151,6 +183,15 @@ class MultiQCReport(MongoModel):
     )
     last_change: Optional[MultiQCReportChange] = Field(
         None, description="Samples and modules the last overwrite of this report added or removed"
+    )
+    # Provenance, optional so reports stored before it was recorded still load.
+    run_tag: Optional[str] = Field(
+        None,
+        description="Run (run folder) this report belongs to. None on reports ingested "
+        "before this was recorded; see run_tag_from_path for the path-based fallback.",
+    )
+    ingestion_run_id: Optional[str] = Field(
+        None, description="Ingestion run (ledger entry) that stored or last updated this report"
     )
 
     class Config:

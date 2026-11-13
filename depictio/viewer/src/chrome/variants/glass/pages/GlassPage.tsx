@@ -25,6 +25,7 @@ import type { MantineTheme } from '@mantine/core';
 import { BRAND_PALETTES, brandAccent, useBranding } from 'depictio-react-core';
 import {
   Activity,
+  Bell,
   ChevronRight,
   Compass,
   FolderKanban,
@@ -52,6 +53,7 @@ import { useGuestSignIn } from '../../../../hooks/useGuestSignIn';
 import { AvatarPicture, useAccountIdentity } from '../../../account';
 import { ServerInfoPopover, UpdateDot } from '../../../server';
 import { useServerStatus } from '../../../../hooks/useServerStatus';
+import NotificationsBell from '../../../NotificationsBell';
 import { usePageMark } from './useGlassPages';
 import './pages.css';
 
@@ -280,6 +282,12 @@ const TopBar: React.FC<{ section: SidebarSection; crumbs: Crumb[] }> = ({ sectio
       </span>
       <div className="gp-top-keys">
         <ThemeKey />
+        <NotificationsBell
+          position="bottom-end"
+          renderTrigger={({ label, onClick }) => (
+            <GlassKey label={label} icon={Bell} onClick={onClick} data-testid="notifications-bell" />
+          )}
+        />
         <ProfileKey />
       </div>
     </header>

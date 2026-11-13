@@ -6,6 +6,10 @@ import { wrapWithChrome } from '../chrome';
 import { clearedSelectionFilters, ownSelection } from '../../selection';
 import { defaultRegionKey, withoutDefaultRegion } from './genomespy/defaultRegionMemo';
 import { HideLegendContext } from './LegendAwarePlot';
+import { AdvancedVizDiffContext } from './diffOverlayContext';
+import { useChangeMark } from '../../changeMarks';
+import { useComponentDiff } from '../../hooks/useComponentDiff';
+import DiffSummaryChip from '../chrome/DiffSummaryChip';
 import VolcanoRenderer from './VolcanoRenderer';
 import EmbeddingRenderer from './EmbeddingRenderer';
 import ManhattanRenderer from './ManhattanRenderer';
@@ -322,6 +326,15 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
   dashboardId,
 }) => {
   const [published, setPublished] = React.useState<AdvancedVizExtrasPayload | null>(null);
+  // "Compare with last visit" (#1397): inert unless switched on from the tile's
+  // change dot. The diff reaches the plots through AdvancedVizDiffContext.
+  const { comparing } = useChangeMark(String(metadata.index));
+  const diffView = useComponentDiff({
+    dashboardId,
+    componentId: String(metadata.index),
+    comparing,
+    filters: filters as unknown[],
+  });
   // Where a `popover` tile docks its controls (`controls_placement` on the
   // component, see controlsDock.ts); null when the author left it unsaid.
   // A linked view cell has little room: unless the author placed them, its
@@ -719,7 +732,17 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
                     <AdvancedVizKindContext.Provider value={kindLabel}>
                       <AdvancedVizRegionEchoContext.Provider value={regionEcho}>
                         <HideLegendContext.Provider value={Boolean(metadata.hide_legend)}>
-                          {inner}
+                          <AdvancedVizDiffContext.Provider value={comparing ? diffView.diff : null}>
+                            {inner}
+                          </AdvancedVizDiffContext.Provider>
+                          {comparing && (
+                            <DiffSummaryChip
+                              floating
+                              diff={diffView.diff}
+                              loading={diffView.loading}
+                              error={diffView.error}
+                            />
+                          )}
                         </HideLegendContext.Provider>
                       </AdvancedVizRegionEchoContext.Provider>
                     </AdvancedVizKindContext.Provider>

@@ -289,6 +289,18 @@ def start_dashboard_version_storage(should_initialize: bool) -> None:
         logger.warning(f"Worker {WORKER_ID}: Dashboard version storage setup failed: {exc}")
 
 
+def start_reader_marks_storage(should_initialize: bool) -> None:
+    """Create the reader-marks indexes (#1397). Never fails boot."""
+    if not (settings.dashboard_versions.changes_since_enabled and should_initialize):
+        return
+    try:
+        from depictio.api.v1.services.changes.store import ensure_reader_marks_storage
+
+        ensure_reader_marks_storage()
+    except Exception as exc:
+        logger.warning(f"Worker {WORKER_ID}: Reader marks storage setup failed: {exc}")
+
+
 def start_monitoring_storage(should_initialize: bool) -> None:
     """Set up the monitoring ledger and the job store.
 
@@ -473,6 +485,7 @@ async def lifespan(_app: FastAPI):
     start_core_indexes(should_initialize)
     start_migration_recovery(should_initialize)
     start_dashboard_version_storage(should_initialize)
+    start_reader_marks_storage(should_initialize)
     start_monitoring_storage(should_initialize)
     start_comment_indexes(should_initialize)
     start_multiqc_prewarm(should_initialize)

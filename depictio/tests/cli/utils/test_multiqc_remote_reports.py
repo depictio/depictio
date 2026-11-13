@@ -110,6 +110,8 @@ def ingest(monkeypatch, _env):
         mode=None,
         keep_unchanged=False,
         update_status=200,
+        workflow=None,
+        ingestion_run_id=None,
     ):
         client = install_s3_client(monkeypatch, _Client(bodies, frozenset(denied)))
         instance = _InstanceBucket()
@@ -168,8 +170,14 @@ def ingest(monkeypatch, _env):
                 verify_tls=True,
             ),
         )
+        extra = {"ingestion_run_id": ingestion_run_id} if ingestion_run_id else {}
         result = mp.process_multiqc_data_collection(
-            data_collection, cli_config, overwrite=overwrite, keep_unchanged=keep_unchanged
+            data_collection,
+            cli_config,
+            overwrite=overwrite,
+            keep_unchanged=keep_unchanged,
+            workflow=workflow,
+            **extra,
         )
         return SimpleNamespace(
             result=result,
@@ -311,6 +319,60 @@ def test_parallel_parse_maps_each_copy_back_to_its_url(ingest, fake_parse, monke
     assert len(fake_parse) == 2
     by_url = {r["original_file_path"]: r["metadata"]["samples"] for r in out.created}
     assert by_url == {_url("run_01"): ["S1"], _url("run_03"): ["S3"]}
+
+
+# ── which run, which ingestion ───────────────────────────────────────────────
+
+
+def test_a_report_records_the_run_of_its_file_and_the_ingestion(ingest, fake_parse):
+    files = _files("run_01", "run_02")
+    for file, run in zip(files, ("run_01", "run_02")):
+        file.run_tag = run
+    out = ingest(
+        files,
+        {_key("run_01"): b"S1", _key("run_02"): b"S2"},
+        ingestion_run_id="ing-1",
+    )
+
+    assert out.result["result"] == "success"
+    assert {r["original_file_path"]: r["run_tag"] for r in out.created} == {
+        _url("run_01"): "run_01",
+        _url("run_02"): "run_02",
+    }
+    assert {r["ingestion_run_id"] for r in out.created} == {"ing-1"}
+
+
+def test_a_file_without_a_run_tag_falls_back_on_its_path(ingest, fake_parse):
+    workflow = SimpleNamespace(
+        data_location=SimpleNamespace(
+            locations=[f"s3://{BUCKET}/{PREFIX}"], structure="sequencing-runs"
+        )
+    )
+    out = ingest(_files("run_01"), {_key("run_01"): b"S1"}, workflow=workflow)
+
+    assert [r["run_tag"] for r in out.created] == ["run_01"]
+    assert [r["ingestion_run_id"] for r in out.created] == [None]
+
+
+def test_an_overwritten_report_is_restamped(ingest, fake_parse):
+    existing = {
+        _url("run_01"): {
+            "id": "existing-1",
+            "s3_location": f"s3://depictio-bucket/{DC_ID}/abc/multiqc.parquet",
+        }
+    }
+    files = _files("run_01")
+    files[0].run_tag = "run_01"
+    out = ingest(
+        files,
+        {_key("run_01"): b"S1-v2"},
+        existing=existing,
+        overwrite=True,
+        ingestion_run_id="ing-2",
+    )
+
+    [(_report_id, report)] = out.updated
+    assert (report["run_tag"], report["ingestion_run_id"]) == ("run_01", "ing-2")
 
 
 # ── re-ingest ────────────────────────────────────────────────────────────────

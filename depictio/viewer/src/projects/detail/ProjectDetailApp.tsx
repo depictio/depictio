@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Accordion,
   ActionIcon,
@@ -34,7 +34,6 @@ import { GlassPage, STROKE, useGlassPages } from '../../chrome/variants/glass/pa
 import '../../chrome/variants/glass/pages/project-detail.css';
 import {
   Check,
-  ClipboardCheck,
   Database,
   GitBranch,
   HardDrive,
@@ -42,6 +41,7 @@ import {
   Settings,
   ShieldCheck,
   FolderGit,
+  History as HistoryIcon,
   Workflow,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -108,6 +108,7 @@ import ManageDataCollectionModal, {
   type ManageDcType,
 } from './ManageDataCollectionModal';
 import MultiQCViewerPreview from './MultiQCViewerPreview';
+import NewRowsPreview, { readNewRunsFromQuery } from '../../changes/NewRowsPreview';
 import CoordinatesMapPreview from './CoordinatesMapPreview';
 import MapCoordinatesModal from './coordinates/MapCoordinatesModal';
 import { detectCoordinatesColumns } from './extendedTableCategories';
@@ -152,6 +153,10 @@ import { ProjectSummary } from './ProjectSummary';
 import AddDataButton from './addData/AddDataButton';
 import { isRealWorkflow } from '../layout';
 import RunsPanel from './RunsPanel';
+import { ProjectChangesPill } from './ProjectChangesPill';
+import { ProjectTimelinePanel } from './ProjectTimelinePanel';
+import { readTabRequest, resolveTab, type ActivityView } from './projectChanges';
+import { useProjectChanges } from './useProjectChanges';
 import DerivedLineage from './DerivedLineage';
 
 interface DataCollectionShape {
@@ -351,6 +356,16 @@ function readTableFromQuery(): string | null {
   return new URLSearchParams(window.location.search).get('table') || null;
 }
 
+/** `?tab=runs&run=run_c`: the project tab (and run) a link asks the page to open. */
+function readTabRequestFromQuery() {
+  if (typeof window === 'undefined') return { tab: null, view: null, run: null };
+  const fromQuery = readTabRequest(window.location.search);
+  if (fromQuery.tab) return fromQuery;
+  // `#ingestion`, `#ingestion-history`, `#runs`: the older hash links.
+  const fromHash = resolveTab(window.location.hash);
+  return fromHash ? { ...fromHash, run: null } : fromQuery;
+}
+
 /** Flatten DCs across all workflows. The workflows are the project's own
  *  (a pipeline's, plus one wrapped around each hand-added collection). */
 function flattenDataCollections(
@@ -371,27 +386,37 @@ const ProjectDetailApp: React.FC = () => {
   // collection is selected and its rows load. Applied once per visit.
   const requestedTableId = useMemo(readTableFromQuery, []);
   const requestedTableHandled = useRef(false);
-  // Active project-detail tab. Honors `#ingestion` deep links (e.g. from the
-  // dashboard banner / settings drawer) and is controlled so the ingestion
-  // report can switch back to Overview when previewing a data collection.
-  const [activeTab, setActiveTab] = useState<string | null>(
-    typeof window !== 'undefined' &&
-      ['#ingestion', '#ingestion-history'].includes(window.location.hash)
-      ? 'ingestion'
-      : typeof window !== 'undefined' && window.location.hash === '#runs'
-        ? 'runs'
-        : 'overview',
+  // `&new_runs=run_c`: the What's new panel's link, the rows those runs added.
+  const [requestedNewRuns, setRequestedNewRuns] = useState(() =>
+    readNewRunsFromQuery(window.location.search),
   );
+  // "Clear": back to the plain table, and a reload does not bring the marking back.
+  const clearNewRuns = useCallback(() => {
+    setRequestedNewRuns([]);
+    const params = new URLSearchParams(window.location.search);
+    params.delete('new_runs');
+    const rest = params.toString();
+    window.history.replaceState(
+      window.history.state,
+      '',
+      `${window.location.pathname}${rest ? `?${rest}` : ''}${window.location.hash}`,
+    );
+  }, []);
+  // Active project-detail tab, controlled so the ingestion report can switch
+  // back to Overview when previewing a data collection. `?tab=` (overview |
+  // runs | activity, plus the older ingestion | timeline) and `?run=<run_tag>`
+  // open a tab, and a run in it, from a link (the notifications, the
+  // timeline); `#ingestion` / `#ingestion-history` (the dashboard banner, the
+  // settings drawer, a failed ingestion) open Activity.
+  const tabRequest = useMemo(readTabRequestFromQuery, []);
+  const [activeTab, setActiveTab] = useState<string | null>(tabRequest.tab ?? 'overview');
   // The run the Runs tab opens on, when another part of the page asked for one.
-  const [focusRun, setFocusRun] = useState<string | null>(null);
-  // Which half of the Ingestion tab is showing. `#ingestion-history` deep-links
-  // straight to the run history, which is what a "your ingestion failed" link
-  // should open.
-  const [ingestionView, setIngestionView] = useState<'report' | 'history'>(
-    typeof window !== 'undefined' && window.location.hash === '#ingestion-history'
-      ? 'history'
-      : 'report',
-  );
+  const [focusRun, setFocusRun] = useState<string | null>(tabRequest.run);
+  // Which view of the Activity tab is showing: the latest ingestion's report,
+  // or the history (the timeline when changes-since is on, else the ingestion
+  // runs). `#ingestion-history` opens the history, which is what a "your
+  // ingestion failed" link should open.
+  const [ingestionView, setIngestionView] = useState<ActivityView>(tabRequest.view ?? 'report');
   const [refreshKey, setRefreshKey] = useState(0);
   // Nudges the history panel off its idle 30s cadence when a browser-triggered
   // ingestion finishes, so the completed run shows up straight away.
@@ -439,6 +464,9 @@ const ProjectDetailApp: React.FC = () => {
 
   const { user, isPublicMode, loading: userLoading } = useCurrentUser();
   const projectId = readProjectIdFromPath();
+  // "Changed since your last visit" and the Activity timeline (#1397): inert
+  // unless the server turns the feature on.
+  const changes = useProjectChanges(projectId);
 
   usePageTitle('Project Data Collections');
   const glass = useGlassPages();
@@ -476,7 +504,7 @@ const ProjectDetailApp: React.FC = () => {
   };
   // Open the ingestion report (latest run) and bring the Data part into view.
   const showIngestion = () => {
-    setActiveTab('ingestion');
+    setActiveTab('activity');
     setIngestionView('report');
     window.setTimeout(() => {
       const toggle = document.querySelector<HTMLElement>('[data-testid="project-part-data-toggle"]');
@@ -617,6 +645,21 @@ const ProjectDetailApp: React.FC = () => {
   }, [allDataCollections]);
   // A project made from a pipeline has runs: it gets the Runs tab.
   const hasRuns = realWorkflows.length > 0;
+  // A link may ask for a tab this project does not have (no runs): show the
+  // overview rather than an empty panel.
+  const tabValue = activeTab === 'runs' && !hasRuns ? 'overview' : activeTab;
+  const activityMeta = changes.enabled
+    ? 'What happened, and when'
+    : 'What each ingestion found';
+  const newRunTags = useMemo(
+    () => new Set((changes.changeSet?.new_runs ?? []).map((r) => r.run_tag)),
+    [changes.changeSet],
+  );
+  // Open the ingestion history (a failed ingestion's link).
+  const showIngestionHistory = () => {
+    setActiveTab('activity');
+    setIngestionView('history');
+  };
 
   // After an ingestion-report "preview" jumps to Overview with a DC selected,
   // scroll the DC viewer (which renders the table preview) into view.
@@ -748,6 +791,8 @@ const ProjectDetailApp: React.FC = () => {
                       setSelectedDcId(id);
                     }}
                     autoLoadPreview={requestedTableId === selectedDcId}
+                    highlightRuns={requestedTableId === selectedDcId ? requestedNewRuns : undefined}
+                    onClearHighlight={clearNewRuns}
                   />
                 )}
               </Box>
@@ -779,13 +824,13 @@ const ProjectDetailApp: React.FC = () => {
                 icon={Database}
                 title="Data"
                 summary={dataSummary}
-                forceOpen={requestedTableId != null}
+                forceOpen={requestedTableId != null || tabRequest.tab != null}
               >
                 <Stack gap="lg">
                   {workflowsPanel}
                   {projectId ? (
                     <Tabs
-                      value={activeTab}
+                      value={tabValue}
                       onChange={setActiveTab}
                       keepMounted={false}
                       variant="pills"
@@ -822,20 +867,21 @@ const ProjectDetailApp: React.FC = () => {
                               }
                             >
                               <span className="dc-project-tab-label">Runs</span>
-                              <span className="dc-project-tab-meta">Each run folder and what it holds</span>
+                              <span className="dc-project-tab-meta">Each run and what it holds</span>
                             </Tabs.Tab>
                           )}
                           <Tabs.Tab
-                            value="ingestion"
+                            value="activity"
                             className="dc-project-tab"
+                            data-testid="project-tab-activity"
                             leftSection={
                               <span className="dc-project-tab-icon">
-                                <ClipboardCheck size={20} strokeWidth={STROKE} aria-hidden />
+                                <HistoryIcon size={20} strokeWidth={STROKE} aria-hidden />
                               </span>
                             }
                           >
-                            <span className="dc-project-tab-label">Ingestion report</span>
-                            <span className="dc-project-tab-meta">What each run found, and when</span>
+                            <span className="dc-project-tab-label">Activity</span>
+                            <span className="dc-project-tab-meta">{activityMeta}</span>
                           </Tabs.Tab>
                         </Tabs.List>
                       ) : (
@@ -860,12 +906,13 @@ const ProjectDetailApp: React.FC = () => {
                             </Tabs.Tab>
                           )}
                           <Tabs.Tab
-                            value="ingestion"
+                            value="activity"
                             fz="md"
                             px="lg"
-                            leftSection={<Icon icon="mdi:clipboard-check-outline" width={18} />}
+                            data-testid="project-tab-activity"
+                            leftSection={<Icon icon="mdi:timeline-clock-outline" width={18} />}
                           >
-                            Ingestion report
+                            Activity
                           </Tabs.Tab>
                         </Tabs.List>
                       )}
@@ -876,6 +923,7 @@ const ProjectDetailApp: React.FC = () => {
                             projectId={projectId}
                             refreshKey={refreshKey}
                             focusRun={focusRun}
+                            newRunTags={newRunTags}
                             dcIdByTag={dcIdByTag}
                             dcTypeByTag={dcTypeByTag}
                             onOpenDc={(dcId) => {
@@ -887,18 +935,19 @@ const ProjectDetailApp: React.FC = () => {
                           />
                         </Tabs.Panel>
                       )}
-                      <Tabs.Panel value="ingestion">
+                      <Tabs.Panel value="activity">
                         <Stack gap="md">
                           <Group justify="space-between" wrap="wrap" gap="sm">
                             <SegmentedControl
                               size="xs"
                               w="fit-content"
                               value={ingestionView}
-                              onChange={(v: string) => setIngestionView(v as 'report' | 'history')}
+                              onChange={(v: string) => setIngestionView(v as ActivityView)}
                               data={[
-                                { value: 'report', label: 'Latest run' },
+                                { value: 'report', label: 'Latest ingestion' },
                                 { value: 'history', label: 'History' },
                               ]}
+                              data-testid="activity-view"
                             />
                             <ProjectIngestionTrigger
                               projectId={projectId}
@@ -923,6 +972,15 @@ const ProjectDetailApp: React.FC = () => {
                               }}
                               onShowRuns={hasRuns ? () => showRuns() : undefined}
                               shapeByTag={shapeByTag}
+                            />
+                          ) : changes.enabled ? (
+                            // The timeline holds the ingestions too, with the
+                            // dashboard versions and comments around them.
+                            <ProjectTimelinePanel
+                              projectId={projectId}
+                              since={changes.changeSet?.since ?? null}
+                              onShowRuns={hasRuns ? (run) => showRuns(run) : undefined}
+                              refreshSignal={ingestionHistorySignal}
                             />
                           ) : (
                             <ProjectIngestionHistoryPanel
@@ -1009,6 +1067,19 @@ const ProjectDetailApp: React.FC = () => {
     </>
   );
 
+  // What changed since the reader's last visit (#1397); renders nothing when
+  // there is nothing new.
+  const changesButton = (variant: 'default' | 'light') =>
+    projectId ? (
+      <ProjectChangesPill
+        projectId={projectId}
+        changes={changes}
+        onShowRuns={(run) => showRuns(run)}
+        onShowHistory={showIngestionHistory}
+        variant={variant}
+      />
+    ) : null;
+
   // After adding data the next thing to do: open the dialog on this project.
   const createDashboardButton = (
     <Button
@@ -1033,6 +1104,7 @@ const ProjectDetailApp: React.FC = () => {
           crumbs={[{ label: name }]}
           actions={
             <Group gap="xs">
+              {changesButton('default')}
               {createDashboardButton}
               {/* Open to every reader once the project has loaded: the sections
                   inside disable what the reader may not change and say why. */}
@@ -1108,6 +1180,7 @@ const ProjectDetailApp: React.FC = () => {
             </Title>
           </Group>
           <Group gap="xs">
+            {changesButton('light')}
             {createDashboardButton}
             {/* Open to every reader once the project has loaded: the sections
                 inside disable what the reader may not change and say why. */}
@@ -2191,6 +2264,9 @@ const DataCollectionViewer: React.FC<{
   onOpenDc?: (dcId: string) => void;
   /** Open on the rows (a table the URL asked for). */
   autoLoadPreview?: boolean;
+  /** `&new_runs=`: the Data table puts these runs' rows first and marks them. */
+  highlightRuns?: string[];
+  onClearHighlight?: () => void;
 }> = ({
   dc,
   fromPipeline,
@@ -2205,6 +2281,8 @@ const DataCollectionViewer: React.FC<{
   onShowRuns,
   onOpenDc,
   autoLoadPreview = false,
+  highlightRuns,
+  onClearHighlight,
 }) => {
   const dcId = (dc._id ?? dc.id) as string;
   const type = (dc.config?.type as string | undefined) || 'unknown';
@@ -2387,6 +2465,10 @@ const DataCollectionViewer: React.FC<{
   const [coordsOpen, setCoordsOpen] = useState(false);
   // A table not yet marked whose column names look like a lat/lon pair: offer
   // the marking, never apply it (a column called "lat" may mean something else).
+  // Map coordinates only where it means something: a table already marked,
+  // or one whose columns look like a lat/lon pair.
+  const showCoordsButton =
+    isTable && (isCoordTable || detectCoordinatesColumns(shownColumns.map((c) => c.name)) != null);
   const coordsGuess =
     isTable && !isCoordTable && canMutate
       ? detectCoordinatesColumns(shownColumns.map((c) => c.name))
@@ -2472,7 +2554,7 @@ const DataCollectionViewer: React.FC<{
             </Stack>
           </Group>
           <Group gap="xs" wrap="nowrap">
-            {isTable && (
+            {showCoordsButton && (
               <Tooltip
                 label={
                   !canMutate
@@ -2593,6 +2675,8 @@ const DataCollectionViewer: React.FC<{
                   dcId={dcId}
                   checkEditable={isTable}
                   autoLoad
+                  highlightRuns={highlightRuns}
+                  onClearHighlight={onClearHighlight}
                   onEdited={() => setEditTick((n) => n + 1)}
                 />
               ) : null,
@@ -3131,14 +3215,18 @@ const TableDataSection: React.FC<{
   /** Only tables can be edited; other Delta-backed types skip the lookup. */
   checkEditable: boolean;
   autoLoad: boolean;
+  /** Runs whose rows come first and stand out (the What's new and Runs links). */
+  highlightRuns?: string[];
+  onClearHighlight?: () => void;
   onEdited: () => void;
-}> = ({ dcId, checkEditable, autoLoad, onEdited }) => {
+}> = ({ dcId, checkEditable, autoLoad, highlightRuns, onClearHighlight, onEdited }) => {
   const accent = useBrandAccents();
   const glass = useGlassPages();
   const [status, setStatus] = useState<TableEditStatus | null>(null);
   // Until the answer is in, neither grid: one would flash and give way to the other.
   const [statusKnown, setStatusKnown] = useState(!checkEditable);
-  const [readOnlyView, setReadOnlyView] = useState(false);
+  // Opened on a run's rows (the What's new and Runs links): read, not edit.
+  const [readOnlyView, setReadOnlyView] = useState(Boolean(highlightRuns?.length));
   // Bumped after an edit: remounts the preview, which then reloads its rows.
   const [previewKey, setPreviewKey] = useState(0);
 
@@ -3231,6 +3319,8 @@ const TableDataSection: React.FC<{
           }}
           onShowReadOnly={() => setReadOnlyView(true)}
         />
+      ) : highlightRuns && highlightRuns.length > 0 ? (
+        <NewRowsPreview dcId={dcId} runs={highlightRuns} onClear={onClearHighlight} />
       ) : (
         <DataPreviewPanel
           key={`${dcId}-${previewKey}`}

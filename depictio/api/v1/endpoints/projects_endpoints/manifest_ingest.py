@@ -487,6 +487,9 @@ def _run_dc_ingest(
     on_scanned: Callable[[str, str | None], None] | None = None,
     previous_signature: str | None = None,
     outcome: dict | None = None,
+    ingestion_run_id: str | None = None,
+    project_id: str | None = None,
+    trigger: str | None = None,
 ) -> tuple[bool, str | None]:
     """Scan + process one DC through the CLI helpers. Returns (ok, error_message).
 
@@ -505,6 +508,12 @@ def _run_dc_ingest(
     ``(dc_id, error message or None)`` as soon as it is known: that is what a
     follower is ingested or failed on, never the leader's own processing. A
     follower's scan that raises is that follower's failure, not the leader's.
+
+    ``ingestion_run_id`` / ``project_id`` / ``trigger`` are the run ledger
+    keys the CLI and the upload task pass to the processing helper: without
+    them the Delta commits and aggregations a worker writes carry no
+    provenance, so they cannot be joined back to the run that produced them.
+    Left None (the synchronous flows, which have no run), nothing is added.
 
     Synchronous on purpose: the helpers use a sync httpx client back into
     this same FastAPI process (see ``_push_workflow_and_ingest``).
@@ -655,14 +664,21 @@ def _run_dc_ingest(
             outcome["unchanged"] = True
         return True, UNCHANGED_DETAIL
 
+    # Unchanged MultiQC reports are kept as they are, unless asked to read
+    # everything again.
+    process_parameters: dict[str, Any] = {"overwrite": True, "keep_unchanged": not sync_files}
+    if ingestion_run_id:
+        process_parameters["ingestion_run_id"] = ingestion_run_id
+        if project_id:
+            process_parameters["project_id"] = project_id
+        if trigger:
+            process_parameters["trigger"] = trigger
     process_result = process_data_collection_helper(
         CLI_config=cli_config,
         wf=workflow,
         dc_id=dc_id,
         mode="process",
-        # Unchanged MultiQC reports are kept as they are, unless asked to read
-        # everything again.
-        command_parameters={"overwrite": True, "keep_unchanged": not sync_files},
+        command_parameters=process_parameters,
     )
     if (process_result or {}).get("result") != "success":
         return False, f"Processing failed: {(process_result or {}).get('message', 'unknown error')}"
@@ -1416,6 +1432,7 @@ def _dispatch_refresh_tasks(
     scan_modes: dict[str, str] | None = None,
     data_root: str | None = None,
     sync_files: bool = False,
+    run_tags: list[str] | None = None,
 ) -> tuple[str, bool, list[ManifestIngestDCResult]]:
     """Fan the per-DC ingestions out to Celery, backed by an ingestion run.
 
@@ -1458,8 +1475,10 @@ def _dispatch_refresh_tasks(
     differ only in bookkeeping, which is what the keyword arguments carry:
     ``command`` labels the run (and is what ``_get_refresh_run_report`` accepts),
     ``scan_modes`` records each DC's real mode instead of assuming "manifest",
-    and ``data_root`` notes the run folder a from_run, or a refresh of its
-    project, read from. Their defaults are the manifest refresh's own values.
+    ``data_root`` notes the run folder a from_run, or a refresh of its
+    project, read from, and ``run_tags`` the run tags (run folders) the
+    ingestion brings in, which an attach_run only knows at request time and
+    would otherwise lose after its response. Their defaults are the manifest refresh's own values.
 
     Returns ``(run_id, all_dispatched, results)``; the caller owns its report
     shape and attaches these itself.
@@ -1502,7 +1521,9 @@ def _dispatch_refresh_tasks(
             project_id=str(project_dict["_id"]),
             project_name=project_dict.get("name"),
             command=command,
+            trigger="ui",
             data_root=data_root,
+            run_tags=list(run_tags or []),
             data_collections=data_collections,
             status="running",
             steps=steps,
