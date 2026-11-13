@@ -919,8 +919,7 @@ dependencies = [
     { name = "deltalake" },
     { name = "httpx" },
     { name = "numpy" },
-    { name = "ome-zarr-models", version = "1.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
-    { name = "ome-zarr-models", version = "1.9.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+    { name = "ome-zarr-models", marker = "python_full_version >= '3.12'" },
     { name = "pandas" },
     { name = "plotly" },
     { name = "polars", extra = ["deltalake", "excel", "numpy", "pandas", "pyarrow", "rtcompat"] },
@@ -1082,7 +1081,6 @@ requires-dist = [
     { name = "multiqc", marker = "extra == 'multiqc'", specifier = "==1.35" },
     { name = "mypy-boto3-s3", marker = "extra == 'server'", specifier = "==1.43.50" },
     { name = "numpy", specifier = "==2.4.6" },
-    { name = "ome-zarr-models", marker = "python_full_version < '3.12'", specifier = "==1.6" },
     { name = "ome-zarr-models", marker = "python_full_version >= '3.12'", specifier = "==1.9.0" },
     { name = "pandas", specifier = "==3.0.5" },
     { name = "playwright", marker = "extra == 'server'", specifier = "==1.62.0" },
@@ -2283,36 +2281,12 @@ wheels = [
 
 [[package]]
 name = "ome-zarr-models"
-version = "1.6"
-source = { registry = "https://pypi.org/simple" }
-resolution-markers = [
-    "python_full_version < '3.12' and sys_platform == 'emscripten'",
-    "python_full_version < '3.12' and sys_platform != 'emscripten'",
-]
-dependencies = [
-    { name = "pydantic", marker = "python_full_version < '3.12'" },
-    { name = "pydantic-zarr", version = "0.9.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
-    { name = "zarr", version = "3.1.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/3d/e7/c37b8896a24eabc76d6a5e7855f722792de5bdf3f5ccc562001738be4f7e/ome_zarr_models-1.6.tar.gz", hash = "sha256:00735ad939d2b5f6a4f583cc19af1e8a5247fa1e93f1f08191143cd913b9633a", size = 106913, upload-time = "2026-03-10T10:14:28.369Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/5b/fc/7650df09dce0edfbaa1f2898c5eb0e0523ae5964dadb83855beb52166505/ome_zarr_models-1.6-py3-none-any.whl", hash = "sha256:d855a6fe885aa2613f64cd124ff8453d75854531bb3282eeaa916e976c7bcf66", size = 64251, upload-time = "2026-03-10T10:14:27.177Z" },
-]
-
-[[package]]
-name = "ome-zarr-models"
 version = "1.9.0"
 source = { registry = "https://pypi.org/simple" }
-resolution-markers = [
-    "python_full_version >= '3.14' and sys_platform == 'emscripten'",
-    "python_full_version >= '3.12' and python_full_version < '3.14' and sys_platform == 'emscripten'",
-    "python_full_version >= '3.14' and sys_platform != 'emscripten'",
-    "python_full_version >= '3.12' and python_full_version < '3.14' and sys_platform != 'emscripten'",
-]
 dependencies = [
     { name = "numpy", marker = "python_full_version >= '3.12'" },
     { name = "pydantic", marker = "python_full_version >= '3.12'" },
-    { name = "pydantic-zarr", version = "0.10.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+    { name = "pydantic-zarr", marker = "python_full_version >= '3.12'" },
     { name = "zarr", version = "3.4.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/11/6b/5b9cbac762272be8b5bd40c111378ad5557adeb7a65de4d226f743ca2c7b/ome_zarr_models-1.9.0.tar.gz", hash = "sha256:846aa1968129bc6e96f20befcc325f2168dd032f84f8c77cb12d15be33114a5c", size = 61373, upload-time = "2026-11-09T13:47:47.378Z" }
@@ -3068,32 +3042,8 @@ wheels = [
 
 [[package]]
 name = "pydantic-zarr"
-version = "0.9.2"
-source = { registry = "https://pypi.org/simple" }
-resolution-markers = [
-    "python_full_version < '3.12' and sys_platform == 'emscripten'",
-    "python_full_version < '3.12' and sys_platform != 'emscripten'",
-]
-dependencies = [
-    { name = "numpy", marker = "python_full_version < '3.12'" },
-    { name = "packaging", marker = "python_full_version < '3.12'" },
-    { name = "pydantic", marker = "python_full_version < '3.12'" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/6a/19/ad4f22b7a395408c90cc0f213d70cf5b9ed5f3b0db2b319cacff93b66850/pydantic_zarr-0.9.2.tar.gz", hash = "sha256:59f536cbc456ff4dc64d887d651476e2a6a2ca9f3ea13228dce4e3aeb1cf00b9", size = 80379, upload-time = "2026-03-18T14:38:30.766Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/0e/f4/93a623ab5d2e1c20de0b43e60d6bd8df7704b39e88f5424b4191391a40d9/pydantic_zarr-0.9.2-py3-none-any.whl", hash = "sha256:8009b661cdce3e8283c26d281975432841a39fc8af8309f4ff66722e43850c6f", size = 52952, upload-time = "2026-03-18T14:38:29.684Z" },
-]
-
-[[package]]
-name = "pydantic-zarr"
 version = "0.10.0"
 source = { registry = "https://pypi.org/simple" }
-resolution-markers = [
-    "python_full_version >= '3.14' and sys_platform == 'emscripten'",
-    "python_full_version >= '3.12' and python_full_version < '3.14' and sys_platform == 'emscripten'",
-    "python_full_version >= '3.14' and sys_platform != 'emscripten'",
-    "python_full_version >= '3.12' and python_full_version < '3.14' and sys_platform != 'emscripten'",
-]
 dependencies = [
     { name = "numpy", marker = "python_full_version >= '3.12'" },
     { name = "packaging", marker = "python_full_version >= '3.12'" },

@@ -2491,13 +2491,18 @@ def _record_ngff_validation(
     """
     if props.format not in ("ome-zarr", "spatialdata"):
         return
-    from depictio.cli.cli.utils.ngff_validation import validate_ngff_store
+    from depictio.cli.cli.utils.ngff_validation import validate_ngff_store, validator_available
 
+    if not validator_available():
+        logger.info("NGFF validation skipped: ome-zarr-models is not usable on this install")
+        return
     changed: list[File] = []
     for file_obj in files:
         if "://" in file_obj.file_location:
             continue
         report = validate_ngff_store(file_obj.file_location, props.image_path)
+        if report is None:
+            continue
         if not report.ok:
             first = report.issues[0] if report.issues else "invalid"
             more = f" (+{len(report.issues) - 1} more)" if len(report.issues) > 1 else ""

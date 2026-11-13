@@ -7,9 +7,12 @@ from pathlib import Path
 import pytest
 
 zarr = pytest.importorskip("zarr")
-pytest.importorskip("ome_zarr_models")
-
+from depictio.cli.cli.utils import ngff_validation  # noqa: E402
 from depictio.cli.cli.utils.ngff_validation import validate_ngff_store  # noqa: E402
+
+pytestmark = pytest.mark.skipif(
+    not ngff_validation.validator_available(), reason="ome-zarr-models cannot validate here"
+)
 
 CYX_AXES = [
     {"name": "c", "type": "channel"},
@@ -145,3 +148,9 @@ def test_a_store_without_ngff_metadata_never_raises(tmp_path, make):
 
     assert not report.ok
     assert len(report.issues) == 1
+
+
+def test_an_install_that_cannot_validate_reports_nothing(tmp_path, monkeypatch):
+    """No report rather than every store marked invalid (Python 3.11 installs)."""
+    monkeypatch.setattr(ngff_validation, "validator_available", lambda: False)
+    assert validate_ngff_store(str(_image(tmp_path / "a.zarr"))) is None

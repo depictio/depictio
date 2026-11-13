@@ -24,7 +24,7 @@ import numpy as np
 import pytest
 import tifffile
 
-from depictio.cli.cli.utils import deltatables
+from depictio.cli.cli.utils import deltatables, ngff_validation
 from depictio.cli.cli.utils.deltatables import (
     _delete_s3_keys,
     bioimage_upload_marker_key,
@@ -44,6 +44,7 @@ from depictio.cli.cli.utils.labels_tiff import (
     labels_pyramid,
     read_labels_tiff,
 )
+from depictio.cli.cli.utils.ngff_validation import validator_available
 from depictio.cli.cli.utils.scan import (
     _is_current_single_location,
     is_bioimage_file,
@@ -766,6 +767,7 @@ class TestIngest:
         assert result["result"] == "success"
         s3_client.upload_file.assert_not_called()
 
+    @pytest.mark.skipif(not validator_available(), reason="ome-zarr-models cannot validate here")
     def test_every_store_gets_an_ngff_report_that_never_blocks(
         self, tmp_path, monkeypatch, cli_config, s3_client
     ):
@@ -786,6 +788,17 @@ class TestIngest:
         assert all(r.layout == "image" and r.ngff_version == "0.4" for r in reports)
         assert all(not r.ok and r.issues for r in reports)
         s3_client.upload_file.assert_called()
+
+    def test_an_install_that_cannot_validate_records_nothing(
+        self, tmp_path, monkeypatch, cli_config, s3_client
+    ):
+        monkeypatch.setattr(ngff_validation, "validator_available", lambda: False)
+        recorded = _registered(monkeypatch, make_store(tmp_path, "sample_A.zarr"))
+
+        result = process_bioimage_data_collection(_ingest_dc(), cli_config)  # type: ignore[arg-type]
+
+        assert result["result"] == "success"
+        assert recorded == []
 
     def test_ome_tiff_stores_get_no_ngff_report(self, tmp_path, monkeypatch, cli_config, s3_client):
         recorded = _registered(monkeypatch, make_ome_tiff(tmp_path / "slide.ome.tif"))

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import os
 import warnings
+from functools import lru_cache
 from importlib import metadata
 from typing import Any
 
@@ -41,6 +42,21 @@ def _validator_name() -> str | None:
         return f"ome-zarr-models {metadata.version('ome-zarr-models')}"
     except metadata.PackageNotFoundError:
         return None
+
+
+@lru_cache(maxsize=1)
+def validator_available() -> bool:
+    """Whether ``ome-zarr-models`` is installed and its models can validate.
+
+    It needs Python 3.12 at the pinned release. An older release imports but
+    leaves its models half-built under a newer pydantic, and every store would
+    then read as invalid; such an install validates nothing instead.
+    """
+    try:
+        from ome_zarr_models import v04, v05
+    except Exception:
+        return False
+    return all(getattr(m.Image, "__pydantic_complete__", True) for m in (v04, v05))
 
 
 def _ome_attributes(attrs: dict[str, Any]) -> tuple[dict[str, Any], str | None]:
@@ -149,14 +165,17 @@ def _label_names(group, ome: dict[str, Any]) -> list[str]:
     return []
 
 
-def validate_ngff_store(store_path: str, image_path: str | None = None) -> NgffValidation:
+def validate_ngff_store(store_path: str, image_path: str | None = None) -> NgffValidation | None:
     """Validate the NGFF metadata of the store at ``store_path``.
 
     With ``image_path`` (a SpatialData store), the image element under it is
     validated, since that is what the viewer reads. Never raises: a store that
     cannot even be opened as a zarr group comes back ``ok=False`` with the
-    reason as its only issue.
+    reason as its only issue. None when this install cannot validate
+    (``validator_available``): no report rather than a wrong one.
     """
+    if not validator_available():
+        return None
     import zarr
 
     root = os.path.join(store_path, *image_path.split("/")) if image_path else store_path
