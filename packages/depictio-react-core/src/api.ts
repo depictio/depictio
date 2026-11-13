@@ -2613,6 +2613,54 @@ export interface BioimageProvenance {
   stores: BioimageProvenanceStore[];
 }
 
+/** How a `bioimage` DC's stores can be opened in a viewer on another origin
+ *  (`GET .../bioimage/{dc}/handoff`). */
+export interface BioimageHandoffStatus {
+  /** The project is public: its stores are read anonymously, with CORS. */
+  public: boolean;
+  /** Private stores can get a short-lived signed link. */
+  links_enabled: boolean;
+  ttl_minutes: number;
+  /** The https URL each remote store is read from (its own host). */
+  remote_urls: Record<string, string>;
+}
+
+export async function fetchBioimageHandoffStatus(dcId: string): Promise<BioimageHandoffStatus> {
+  const res = await authFetch(
+    `${API_BASE}/advanced_viz/bioimage/${encodeURIComponent(dcId)}/handoff`,
+  );
+  if (!res.ok) throw new Error(`Failed to read hand-off options: ${res.status}`);
+  return res.json();
+}
+
+/** A signed, read-only link to one store (`POST .../{store}/handoff`). `path`
+ *  is the store root under `API_BASE`. */
+export interface BioimageHandoffLink {
+  token: string;
+  jti: string;
+  expires_at: number;
+  ttl_s: number;
+  path: string;
+}
+
+export async function createBioimageHandoffLink(
+  dcId: string,
+  store: string,
+): Promise<BioimageHandoffLink> {
+  const res = await authFetch(
+    `${API_BASE}/advanced_viz/bioimage/${encodeURIComponent(dcId)}/${encodeURIComponent(store)}/handoff`,
+    { method: 'POST' },
+  );
+  if (!res.ok) await throwHttpDetailError(res, 'Could not create a link');
+  return res.json();
+}
+
+/** An absolute URL for a path under `API_BASE`, as a viewer on another origin needs it. */
+export function absoluteApiUrl(path: string): string {
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost';
+  return new URL(`${API_BASE}${path}`, origin).href;
+}
+
 /** The provenance of a `bioimage` DC: its description, scan and store origins. */
 export async function fetchBioimageProvenance(dcId: string): Promise<BioimageProvenance> {
   const res = await authFetch(

@@ -66,9 +66,7 @@ to become an image-analysis application:
   fetches a shard's index and then only the chunks it draws.
 - Segmentation labels, SpatialData shapes/tables as Depictio tables and
   coordinate transforms are tracked as follow-ups.
-- A hand-off to Vitessce, MoBIE, napari or TissUUMaps needs the store to be reachable by
-  that tool (public URL, presigned URL or CORS on the API); it is designed with
-  the remote-location work, not in this PR.
+- The hand-off is designed below ("Open in").
 
 ## Labels (segmentation masks)
 
@@ -81,3 +79,34 @@ it, and a click or lasso selects cells through the same `scatter_selection`.
 There is no label editing, painting, merging or proofreading: Depictio is not
 an annotation tool, and curating a segmentation stays with napari, QuPath or
 the pipeline that produced it.
+
+## Open in (hand-off)
+
+The tile's "Open in" menu opens the store in vizarr, Neuroglancer, Vitessce
+or the OME-NGFF validator, and copies its URL or a napari command. Those
+viewers fetch the store's keys themselves, from another origin, and cannot
+send Depictio's `Authorization` header, so the store has to be reachable
+without it. Three tiers, picked by the server (`GET .../bioimage/{dc}/handoff`):
+
+1. **Remote store** (https): its own URL. Depictio is not in the path.
+2. **Public project**: the store's URL on this server. Its reads carry
+   `Access-Control-Allow-Origin: *`, never credentialed, so a cross-origin page
+   reads only what an anonymous visitor could. No other read gets CORS: in
+   single-user mode the anonymous user reads every project, and a blanket grant
+   would let any web page read a local instance's images.
+3. **Private store**: a signed link, minted on click. An RS256 token (the
+   instance's own key pair, with its own `typ`, so it is never an access token)
+   names one store of one DC, reads only, lives
+   `DEPICTIO_BIOIMAGE_HANDOFF_TTL_MINUTES` (60) and can be revoked through
+   Redis. It sits in the URL path, since viewers resolve keys relative to the
+   store root. Off unless `DEPICTIO_BIOIMAGE_HANDOFF_ENABLED`; the menu then
+   shows the targets greyed out with the reason.
+
+Trade-off: whoever holds a link reads that store until it expires, and access
+is checked when the link is made, not on every read. That is why links are
+short-lived, scoped to one store, and off by default.
+
+Targets that cannot take a store say why rather than disappear (OME-TIFF opens
+in Vitessce only). Vitessce gets a config of its own, inline as a data URI.
+MoBIE and QuPath take the copied URL; TissUUMaps is not offered, as it has no
+deep link to open a remote store.

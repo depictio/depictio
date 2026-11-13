@@ -97,7 +97,7 @@ class TestCors:
         env = _env(tmp_path, public=True, bioimage=ON)
         with env as client:
             body = client.get(f"{PREFIX}/bioimage/{DC_ID}/handoff", headers=AUTH).json()
-        assert body == {"public": True, "links_enabled": True, "ttl_minutes": 5}
+        assert body == {"public": True, "links_enabled": True, "ttl_minutes": 5, "remote_urls": {}}
 
 
 class TestLinks:
@@ -204,3 +204,12 @@ class TestPreflight:
     def test_anything_else_falls_through(self, headers, method):
         # Not answered here: the bare app has no route, so it is a 405/404.
         assert self._preflight(headers, method).status_code != 204
+
+
+def test_a_remote_store_is_handed_off_at_its_own_url(tmp_path):
+    from depictio.tests.api.v1.test_bioimage_endpoint import REMOTE_ZARR
+
+    env = Env(tmp_path, props={"remote_stores": [REMOTE_ZARR]})
+    with env as client:
+        body = client.get(f"{PREFIX}/bioimage/{DC_ID}/handoff", headers=AUTH).json()
+    assert list(body["remote_urls"].values()) == [REMOTE_ZARR.rstrip("/")]

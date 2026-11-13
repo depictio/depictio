@@ -2880,16 +2880,28 @@ def get_bioimage_handoff_status(
     ``public``: the project is public, so its stores are read anonymously with
     CORS and a viewer can take the plain store URL. ``links_enabled``: private
     stores can get a short-lived signed link (``POST .../{store}/handoff``),
-    valid ``ttl_minutes``.
+    valid ``ttl_minutes``. ``remote_urls``: the https URL a remote store is read
+    from (its image element for SpatialData), which a viewer can take as it is;
+    ``s3://`` stores are left out (no browser reads them).
     """
+    import posixpath
+
     from depictio.api.v1.configs.config import settings
 
     dc_oid = _bioimage_parse_dc_id(data_collection_id)
     _assert_dc_access_cached(dc_oid, current_user)
+    info = _bioimage_store_info(dc_oid)
+    image_path = info["image_path"]
+    remote_urls = {
+        name: (posixpath.join(url.rstrip("/"), image_path) if image_path else url.rstrip("/"))
+        for name, url in info["remote"].items()
+        if str(url).startswith("https://")
+    }
     return {
         "public": _bioimage_dc_is_public(dc_oid),
         "links_enabled": bool(settings.bioimage.handoff_enabled),
         "ttl_minutes": int(settings.bioimage.handoff_ttl_minutes),
+        "remote_urls": remote_urls,
     }
 
 

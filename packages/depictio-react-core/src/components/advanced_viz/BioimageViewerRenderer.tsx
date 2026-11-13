@@ -51,6 +51,7 @@ import {
 } from './controls/VizControls';
 import { usePersistedVizControl, useVizConfigWriter } from './usePersistedVizControl';
 import BioimageBadges from './bioimage/BioimageBadges';
+import OpenInMenu from './bioimage/OpenInMenu';
 import {
   formatLength,
   hexToRgb,
@@ -1408,7 +1409,15 @@ const BioimageViewerRenderer: React.FC<Props> = ({
                   touchAction: 'none',
                 }}
               />
-              <Box style={{ position: 'absolute', right: 6, top: 6, zIndex: 2 }}>
+              <Group gap={4} wrap="nowrap" style={{ position: 'absolute', right: 6, top: 6, zIndex: 2 }}>
+                {activeStore && imageDcId ? (
+                  <OpenInMenu
+                    dcId={imageDcId}
+                    store={activeStore}
+                    layout={containerValue?.layout ?? null}
+                    imagePath={imagePath}
+                  />
+                ) : null}
                 <Tooltip label="Reset view" withArrow openDelay={300}>
                   <ActionIcon
                     size="sm"
@@ -1420,7 +1429,7 @@ const BioimageViewerRenderer: React.FC<Props> = ({
                     <Icon icon="tabler:focus-centered" width={14} height={14} />
                   </ActionIcon>
                 </Tooltip>
-              </Box>
+              </Group>
               {bar && physical ? (
                 <Paper
                   px={6}
