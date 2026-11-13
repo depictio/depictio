@@ -2073,6 +2073,35 @@ def _assert_dc_access_cached(dc_oid: ObjectId, current_user) -> None:
     _bioimage_cache_put(_bioimage_access_cache, key, now + _BIOIMAGE_CACHE_TTL_S)
 
 
+_bioimage_public_cache: dict[str, tuple[float, bool]] = {}
+
+
+def _bioimage_dc_is_public(dc_oid: ObjectId) -> bool:
+    """Whether the DC's project is public (cached briefly, like the access check).
+
+    A public project's stores are readable by an anonymous visitor anyway, so
+    their reads carry CORS for viewers on other origins. Nothing else does: in
+    single-user mode the anonymous user can read every project, and a blanket
+    CORS grant would let any web page read them.
+    """
+    import time
+
+    from depictio.api.v1.db import projects_collection
+
+    now = time.monotonic()
+    hit = _bioimage_public_cache.get(str(dc_oid))
+    if hit is not None and hit[0] > now:
+        return hit[1]
+    public = (
+        projects_collection.find_one(
+            {"workflows.data_collections._id": dc_oid, "is_public": True}, {"_id": 1}
+        )
+        is not None
+    )
+    _bioimage_cache_put(_bioimage_public_cache, str(dc_oid), (now + _BIOIMAGE_CACHE_TTL_S, public))
+    return public
+
+
 def _bioimage_parse_dc_id(data_collection_id: str) -> ObjectId:
     try:
         return ObjectId(str(data_collection_id))
@@ -2647,10 +2676,6 @@ def _head_response(size: int, media_type: str, headers: dict[str, str]) -> Respo
     return Response(status_code=200, media_type=media_type, headers=headers)
 
 
-def _tiff_head_response(size: int) -> Response:
-    return _head_response(size, _TIFF_MEDIA_TYPE, _TIFF_HEADERS)
-
-
 def _blob_response(
     blob: _Blob, requested: _ByteRange | None, media_type: str, headers: dict[str, str]
 ) -> Response:
@@ -2845,6 +2870,102 @@ def list_bioimage_stores(
     ]
 
 
+@advanced_viz_endpoint_router.get("/bioimage/{data_collection_id}/handoff")
+def get_bioimage_handoff_status(
+    data_collection_id: str,
+    current_user=Depends(get_user_or_anonymous),
+) -> dict[str, Any]:
+    """How this DC's stores can be opened in another viewer (vizarr, Neuroglancer...).
+
+    ``public``: the project is public, so its stores are read anonymously with
+    CORS and a viewer can take the plain store URL. ``links_enabled``: private
+    stores can get a short-lived signed link (``POST .../{store}/handoff``),
+    valid ``ttl_minutes``.
+    """
+    from depictio.api.v1.configs.config import settings
+
+    dc_oid = _bioimage_parse_dc_id(data_collection_id)
+    _assert_dc_access_cached(dc_oid, current_user)
+    return {
+        "public": _bioimage_dc_is_public(dc_oid),
+        "links_enabled": bool(settings.bioimage.handoff_enabled),
+        "ttl_minutes": int(settings.bioimage.handoff_ttl_minutes),
+    }
+
+
+@advanced_viz_endpoint_router.post("/bioimage/{data_collection_id}/{store}/handoff")
+def create_bioimage_handoff(
+    data_collection_id: str,
+    store: str,
+    current_user=Depends(get_user_or_anonymous),
+) -> dict[str, Any]:
+    """A signed, read-only link to one store, for a viewer on another origin.
+
+    ``path`` is the store's root under the API prefix
+    (``/advanced_viz/bioimage/{dc}/t/{token}/{store}``): keys resolve under it
+    exactly as under the store's own URL. 404 when links are off
+    (``DEPICTIO_BIOIMAGE_HANDOFF_ENABLED``), for a store the DC does not have,
+    and for a caller who cannot read the DC. Writes nothing but the token.
+    """
+    from urllib.parse import quote
+
+    from depictio.api.v1.configs.config import settings
+    from depictio.models.models.data_collections_types.bioimage import is_bioimage_store_name
+
+    from . import bioimage_handoff
+
+    if not settings.bioimage.handoff_enabled:
+        raise HTTPException(status_code=404, detail="Hand-off links are off on this server")
+    dc_oid = _bioimage_parse_dc_id(data_collection_id)
+    _assert_dc_access(dc_oid, current_user)
+    info = _bioimage_store_info(dc_oid)
+    known = set(info["stores"]) | set(info["remote"])
+    if not is_bioimage_store_name(store, info["format"]) or (known and store not in known):
+        raise HTTPException(status_code=404, detail="Store not found")
+    user_id = getattr(current_user, "id", None)
+    minted = bioimage_handoff.mint(str(dc_oid), store, str(user_id) if user_id else None)
+    minted["path"] = f"/advanced_viz/bioimage/{dc_oid}/t/{minted['token']}/{quote(store, safe='')}"
+    return minted
+
+
+@advanced_viz_endpoint_router.delete("/bioimage/{data_collection_id}/t/{token}")
+def revoke_bioimage_handoff(
+    data_collection_id: str,
+    token: str,
+    current_user=Depends(get_user_or_anonymous),
+) -> dict[str, Any]:
+    """Revoke a hand-off link before it expires. Needs read access to the DC."""
+    from . import bioimage_handoff
+
+    dc_oid = _bioimage_parse_dc_id(data_collection_id)
+    _assert_dc_access(dc_oid, current_user)
+    return bioimage_handoff.revoke(token, str(dc_oid))
+
+
+@advanced_viz_endpoint_router.get("/bioimage/{data_collection_id}/t/{token}/{store}/{key:path}")
+def get_bioimage_key_by_link(
+    data_collection_id: str, token: str, store: str, key: str, request: Request
+):
+    """One zarr key of a store, read through a hand-off link (CORS, no login)."""
+    from . import bioimage_handoff
+
+    dc_oid = _bioimage_parse_dc_id(data_collection_id)
+    bioimage_handoff.verify(token, str(dc_oid), store)
+    return _serve_bioimage_key(dc_oid, store, key, request, bioimage_handoff.cors_headers(True))
+
+
+@advanced_viz_endpoint_router.api_route(
+    "/bioimage/{data_collection_id}/t/{token}/{store}", methods=["GET", "HEAD"]
+)
+def get_bioimage_file_by_link(data_collection_id: str, token: str, store: str, request: Request):
+    """A single-file store (OME-TIFF), read through a hand-off link (CORS, no login)."""
+    from . import bioimage_handoff
+
+    dc_oid = _bioimage_parse_dc_id(data_collection_id)
+    bioimage_handoff.verify(token, str(dc_oid), store)
+    return _serve_bioimage_file(dc_oid, store, request, bioimage_handoff.cors_headers(True))
+
+
 @advanced_viz_endpoint_router.get("/bioimage/{data_collection_id}/{store}/{key:path}")
 def get_bioimage_key(
     data_collection_id: str,
@@ -2871,6 +2992,22 @@ def get_bioimage_key(
     empty chunk, so only a genuine miss may produce one (ranged or not): a
     storage error with no disk copy is a 502.
     """
+    from . import bioimage_handoff
+
+    dc_oid = _bioimage_parse_dc_id(data_collection_id)
+    # Gate before any read, and before validating the key, so an unauthorised
+    # caller learns nothing about which stores or keys exist.
+    _assert_dc_access_cached(dc_oid, current_user)
+    cors = bioimage_handoff.cors_headers(_bioimage_dc_is_public(dc_oid))
+    return _serve_bioimage_key(dc_oid, store, key, request, cors)
+
+
+def _serve_bioimage_key(
+    dc_oid: ObjectId, store: str, key: str, request: Request, cors: dict[str, str]
+):
+    """The body of a key read, once the caller may read the DC. ``cors`` goes on
+    every answer, errors included: a cross-origin zarr reader must be able to
+    read a 404 to treat it as an empty chunk."""
     import posixpath
 
     from fastapi.responses import FileResponse
@@ -2881,11 +3018,6 @@ def get_bioimage_key(
         is_bioimage_store_name,
         is_single_file_format,
     )
-
-    dc_oid = _bioimage_parse_dc_id(data_collection_id)
-    # Gate before any read, and before validating the key, so an unauthorised
-    # caller learns nothing about which stores or keys exist.
-    _assert_dc_access_cached(dc_oid, current_user)
 
     info = _bioimage_store_info(dc_oid)
     fmt = info["format"]
@@ -2906,17 +3038,21 @@ def get_bioimage_key(
     requested = _parse_byte_range(range_header)
     byte_range = _byte_range_header(requested)
     media_type = _zarr_media_type(normalized)
-    headers = _zarr_headers(normalized)
+    headers = {**_zarr_headers(normalized), **cors}
 
     remote_url = info["remote"].get(store)
     if remote_url:
         try:
             blob = _bioimage_remote_read(remote_url, rel_key, byte_range)
         except _BioimageMiss as exc:
-            raise HTTPException(status_code=404, detail="Key not found") from exc
+            raise HTTPException(
+                status_code=404, detail="Key not found", headers=cors or None
+            ) from exc
         except _BioimageUpstreamError as exc:
             logger.warning("bioimage remote read failed: %s", exc)
-            raise HTTPException(status_code=502, detail="Remote image store unavailable") from exc
+            raise HTTPException(
+                status_code=502, detail="Remote image store unavailable", headers=cors or None
+            ) from exc
         return _blob_response(blob, requested, media_type, headers)
 
     s3_failed = False
@@ -2955,8 +3091,10 @@ def get_bioimage_key(
             continue
 
     if s3_failed:
-        raise HTTPException(status_code=502, detail="Image storage unavailable")
-    raise HTTPException(status_code=404, detail="Key not found")
+        raise HTTPException(
+            status_code=502, detail="Image storage unavailable", headers=cors or None
+        )
+    raise HTTPException(status_code=404, detail="Key not found", headers=cors or None)
 
 
 @advanced_viz_endpoint_router.api_route(
@@ -2977,15 +3115,22 @@ def get_bioimage_file(
     CLI upload at ``bioimage_s3_object_key`` (skipped for ``upload: false``),
     then the registered file on disk. As for keys, only a genuine miss is a 404.
     """
+    from . import bioimage_handoff
+
+    dc_oid = _bioimage_parse_dc_id(data_collection_id)
+    _assert_dc_access_cached(dc_oid, current_user)
+    cors = bioimage_handoff.cors_headers(_bioimage_dc_is_public(dc_oid))
+    return _serve_bioimage_file(dc_oid, store, request, cors)
+
+
+def _serve_bioimage_file(dc_oid: ObjectId, store: str, request: Request, cors: dict[str, str]):
+    """The body of a single-file read, once the caller may read the DC."""
     from depictio.api.v1.configs.config import settings
     from depictio.models.models.data_collections_types.bioimage import (
         bioimage_s3_object_key,
         is_bioimage_store_name,
         is_single_file_format,
     )
-
-    dc_oid = _bioimage_parse_dc_id(data_collection_id)
-    _assert_dc_access_cached(dc_oid, current_user)
 
     info = _bioimage_store_info(dc_oid)
     fmt = info["format"]
@@ -2995,6 +3140,7 @@ def get_bioimage_file(
         )
     if not is_bioimage_store_name(store, fmt):
         raise HTTPException(status_code=400, detail="Invalid store")
+    tiff_headers = {**_TIFF_HEADERS, **cors}
     head = request.method == "HEAD"
     # A Range on HEAD is ignored: HEAD describes the whole file.
     requested = None if head else _parse_byte_range(request.headers.get("range"))
@@ -3004,27 +3150,35 @@ def get_bioimage_file(
     if remote_url:
         try:
             if head:
-                return _tiff_head_response(_bioimage_remote_size(remote_url))
+                return _head_response(
+                    _bioimage_remote_size(remote_url), _TIFF_MEDIA_TYPE, tiff_headers
+                )
             return _blob_response(
                 _bioimage_remote_read(remote_url, None, byte_range),
                 requested,
                 _TIFF_MEDIA_TYPE,
-                _TIFF_HEADERS,
+                tiff_headers,
             )
         except _BioimageMiss as exc:
-            raise HTTPException(status_code=404, detail="Image not found") from exc
+            raise HTTPException(
+                status_code=404, detail="Image not found", headers=cors or None
+            ) from exc
         except _BioimageUpstreamError as exc:
             logger.warning("bioimage remote read failed: %s", exc)
-            raise HTTPException(status_code=502, detail="Remote image store unavailable") from exc
+            raise HTTPException(
+                status_code=502, detail="Remote image store unavailable", headers=cors or None
+            ) from exc
 
     s3_failed = False
     if info["upload"]:
         s3_key = bioimage_s3_object_key(str(dc_oid), store)
         try:
             if head:
-                return _tiff_head_response(_bioimage_s3_size(settings.s3.bucket, s3_key))
+                return _head_response(
+                    _bioimage_s3_size(settings.s3.bucket, s3_key), _TIFF_MEDIA_TYPE, tiff_headers
+                )
             blob = _bioimage_s3_read(settings.s3.bucket, s3_key, byte_range)
-            return _blob_response(blob, requested, _TIFF_MEDIA_TYPE, _TIFF_HEADERS)
+            return _blob_response(blob, requested, _TIFF_MEDIA_TYPE, tiff_headers)
         except _BioimageMiss:
             pass
         except _BioimageUpstreamError as exc:
@@ -3036,10 +3190,12 @@ def get_bioimage_file(
         try:
             path = os.path.realpath(root)
             if os.path.isfile(path):
-                return _disk_response(path, requested, _TIFF_MEDIA_TYPE, _TIFF_HEADERS, head)
+                return _disk_response(path, requested, _TIFF_MEDIA_TYPE, tiff_headers, head)
         except (OSError, ValueError):
             continue
 
     if s3_failed:
-        raise HTTPException(status_code=502, detail="Image storage unavailable")
-    raise HTTPException(status_code=404, detail="Image not found")
+        raise HTTPException(
+            status_code=502, detail="Image storage unavailable", headers=cors or None
+        )
+    raise HTTPException(status_code=404, detail="Image not found", headers=cors or None)

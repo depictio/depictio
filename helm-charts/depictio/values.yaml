@@ -427,6 +427,8 @@ backend:
     DEPICTIO_BIOIMAGE_REMOTE_S3_BUCKETS: ""
     DEPICTIO_BIOIMAGE_REMOTE_TIMEOUT_S: "20"
     DEPICTIO_BIOIMAGE_REMOTE_MAX_OBJECT_MB: "64"
+    DEPICTIO_BIOIMAGE_HANDOFF_ENABLED: "false"
+    DEPICTIO_BIOIMAGE_HANDOFF_TTL_MINUTES: "60"
 
     # Which view /dashboards opens in for someone who never picked one
     # ("thumbnails" or "table"), and the geometry of the thumbnails it shows:

@@ -152,6 +152,8 @@ services:
       DEPICTIO_BIOIMAGE_REMOTE_S3_BUCKETS: "${DEPICTIO_BIOIMAGE_REMOTE_S3_BUCKETS:-}"
       DEPICTIO_BIOIMAGE_REMOTE_TIMEOUT_S: "${DEPICTIO_BIOIMAGE_REMOTE_TIMEOUT_S:-20}"
       DEPICTIO_BIOIMAGE_REMOTE_MAX_OBJECT_MB: "${DEPICTIO_BIOIMAGE_REMOTE_MAX_OBJECT_MB:-64}"
+      DEPICTIO_BIOIMAGE_HANDOFF_ENABLED: "${DEPICTIO_BIOIMAGE_HANDOFF_ENABLED:-false}"
+      DEPICTIO_BIOIMAGE_HANDOFF_TTL_MINUTES: "${DEPICTIO_BIOIMAGE_HANDOFF_TTL_MINUTES:-60}"
       # Forwarded so the automatic CI suppression works through the container
       # boundary. These are set on the machine running Compose, not inside the
       # container, so without this a pipeline that brings Depictio up on every

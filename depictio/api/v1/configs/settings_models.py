@@ -1616,6 +1616,22 @@ class BioimageConfig(BaseSettings):
         ),
     )
 
+    handoff_enabled: bool = Field(
+        default=False,
+        description=(
+            "Offer 'Open in' links (vizarr, Neuroglancer, the NGFF validator, Vitessce) for "
+            "private bioimage stores: a signed, read-only link to one store, valid for "
+            "handoff_ttl_minutes and revocable. Whoever holds the link reads that store "
+            "until it expires. Stores of public projects are handed off without it."
+        ),
+    )
+    handoff_ttl_minutes: int = Field(
+        default=60,
+        gt=0,
+        le=24 * 60,
+        description="Lifetime, in minutes, of a hand-off link (at most a day).",
+    )
+
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_BIOIMAGE_")
 
     @field_validator("remote_https_hosts", "remote_s3_buckets", mode="before")

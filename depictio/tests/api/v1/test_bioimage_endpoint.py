@@ -101,6 +101,7 @@ class Env:
         scan_filename: str | None = None,
         bioimage: BioimageConfig | None = None,
         http_handler=None,
+        public: bool = False,
     ):
         self.tmp_path = tmp_path
         self.projects = MagicMock()
@@ -127,10 +128,14 @@ class Env:
 
         self.http = httpx.Client(transport=httpx.MockTransport(handle), follow_redirects=False)
         self.permitted = permitted
+        self.public = public
         self.tokens: list[str | None] = []
 
         def find_one(query, projection=None):
             if "$or" in query and not self.permitted:
+                return None
+            # The public-project check behind the CORS grant (no access clause).
+            if query.get("is_public") is True and "$or" not in query and not self.public:
                 return None
             return {"_id": ObjectId(), "workflows": [{"data_collections": [self.dc_doc]}]}
 
@@ -151,6 +156,7 @@ class Env:
 
         routes._bioimage_access_cache.clear()
         routes._bioimage_store_cache.clear()
+        routes._bioimage_public_cache.clear()
         self._patches = [
             patch("depictio.api.v1.db.projects_collection", self.projects),
             patch("depictio.api.v1.db.files_collection", self.files),
@@ -171,6 +177,7 @@ class Env:
             p.stop()
         routes._bioimage_access_cache.clear()
         routes._bioimage_store_cache.clear()
+        routes._bioimage_public_cache.clear()
 
 
 AUTH = {"Authorization": "Bearer good"}

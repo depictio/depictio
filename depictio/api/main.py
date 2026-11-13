@@ -250,6 +250,14 @@ class EmbedPreflightMiddleware(BaseHTTPMiddleware):
 app.add_middleware(cast(Any, EmbedPreflightMiddleware))
 
 
+# Viewers on other origins reading a handed-off bioimage store (see the class).
+from depictio.api.v1.endpoints.advanced_viz_endpoints.bioimage_handoff import (  # noqa: E402
+    BioimagePreflightMiddleware,
+)
+
+app.add_middleware(cast(Any, BioimagePreflightMiddleware))
+
+
 # Local folders are a single-user feature: on a shared server, reading the
 # server's own disk for whoever asks is never right, so the roots are ignored.
 if settings.local_data.root_list and not settings.auth.is_single_user_mode:
