@@ -48,6 +48,11 @@ function onThisComputer(): boolean {
   return ['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname);
 }
 
+/** A viewer's logo at menu-icon size. Decorative: the item names the viewer. */
+const Logo: React.FC<{ src: string }> = ({ src }) => (
+  <img src={src} alt="" width={16} height={16} style={{ objectFit: 'contain', display: 'block' }} />
+);
+
 interface Props {
   dcId: string;
   store: BioimageStoreInfo;
@@ -123,7 +128,7 @@ const OpenInMenu: React.FC<Props> = ({ dcId, store, layout, imagePath }) => {
       portalProps={{ target: portalTarget }}
       closeOnItemClick={false}
       onOpen={load}
-      width={300}
+      width={320}
     >
       <Menu.Target>
         <Tooltip label="Open in another viewer" withArrow openDelay={300}>
@@ -139,29 +144,28 @@ const OpenInMenu: React.FC<Props> = ({ dcId, store, layout, imagePath }) => {
       </Menu.Target>
       <Menu.Dropdown data-testid="bioimage-open-in-menu">
         <Menu.Label>Open {store.sample} in</Menu.Label>
+        <Text size="xs" c="dimmed" px="xs" pb={6}>
+          The tile shows one plane next to the dashboard&apos;s data. These viewers open the
+          whole store: 3D, every channel, a whole plate.
+        </Text>
         {HANDOFF_TARGETS.map((target) => {
           const reason = unsupportedReason(target.id, handoffStore) ?? blocked;
           return (
-            <Tooltip
-              key={target.id}
-              label={reason ?? target.description}
-              multiline
-              w={240}
-              position="left"
-              withArrow
-              openDelay={250}
-            >
-              <div>
+            <React.Fragment key={target.id}>
                 <Menu.Item
-                  leftSection={<Icon icon={target.icon} width={14} />}
+                  leftSection={<Logo src={target.logo} />}
                   disabled={Boolean(reason) || pending}
                   onClick={() => open(target.id)}
                   data-testid={`bioimage-open-in-${target.id}`}
                 >
-                  {target.label}
+                  <Text size="sm" lh={1.3}>
+                    {target.label}
+                  </Text>
+                  <Text size="xs" c="dimmed" lh={1.3}>
+                    {reason ?? target.description}
+                  </Text>
                 </Menu.Item>
-              </div>
-            </Tooltip>
+            </React.Fragment>
           );
         })}
         <Menu.Divider />
@@ -169,7 +173,15 @@ const OpenInMenu: React.FC<Props> = ({ dcId, store, layout, imagePath }) => {
         {commands.map((cmd) => (
           <Menu.Item
             key={cmd.label}
-            leftSection={<Icon icon={copied === cmd.label ? 'tabler:check' : 'tabler:copy'} width={14} />}
+            leftSection={
+              copied === cmd.label ? (
+                <Icon icon="tabler:check" width={16} />
+              ) : cmd.logo ? (
+                <Logo src={cmd.logo} />
+              ) : (
+                <Icon icon="tabler:copy" width={16} />
+              )
+            }
             disabled={Boolean(blocked) || pending}
             onClick={() =>
               copy(cmd.label, (url) => copyCommands(url, handoffStore).find((c) => c.label === cmd.label)?.text ?? url)

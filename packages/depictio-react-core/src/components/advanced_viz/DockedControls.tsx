@@ -148,7 +148,9 @@ const DockedControls: React.FC<{
   side: DockSide;
   lead?: React.ReactNode;
   headerAction?: React.ReactNode;
-}> = ({ controls, side, lead, headerAction }) => {
+  /** Controls shown beside the plot before "More options". */
+  essentials?: number;
+}> = ({ controls, side, lead, headerAction, essentials = DOCK_ESSENTIALS }) => {
   const top = side === 'top';
   const dockRef = useRef<HTMLDivElement | null>(null);
   const lineRef = useRef<HTMLDivElement | null>(null);
@@ -188,7 +190,7 @@ const DockedControls: React.FC<{
       if (!force && found.units.length === count) return;
       count = found.units.length;
       const live = found.units.map(isLive);
-      const next = top ? pickTop(found.units, live) : pickEssentials(live, DOCK_ESSENTIALS);
+      const next = top ? pickTop(found.units, live) : pickEssentials(live, essentials);
       const folded = next.map((k) => !k);
       markFolded(found, folded, 'data-dock-extra');
       setKeep((prev) => (sameFlags(prev, next) ? prev : next));
@@ -214,7 +216,7 @@ const DockedControls: React.FC<{
       mo.disconnect();
       ro?.disconnect();
     };
-  }, [controls, top]);
+  }, [controls, top, essentials]);
 
   const extra = keep.filter((k) => !k).length;
   const [overflowOpen, setOverflowOpen] = useState(false);

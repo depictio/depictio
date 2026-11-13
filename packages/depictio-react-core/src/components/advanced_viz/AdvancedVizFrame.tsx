@@ -164,6 +164,11 @@ interface AdvancedVizFrameProps {
   estimated?: boolean;
   /** Extra header badges, e.g. the annotation layer's "N/M points found". */
   badges?: React.ReactNode[];
+  /** How many controls the side dock shows before "More options"
+   *  (`DOCK_ESSENTIALS` when unset). A kind whose every view needs one more
+   *  control in reach (the image viewer: sample, Z, Time and its channels)
+   *  raises it. */
+  dockEssentials?: number;
 }
 
 /** Subtle Mantine theme colour for each canonical tier name (no hardcoded
@@ -260,6 +265,7 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
   reduction,
   estimated,
   badges,
+  dockEssentials,
 }) => {
   const publish = useContext(AdvancedVizExtrasContext);
   // A linked view or a docked column asks for a one-line header (`density.ts`).
@@ -789,6 +795,7 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
               controls={docking}
               lead={lead}
               side="right"
+              essentials={dockEssentials}
               headerAction={<ControlsPlacementPicker state={placementState} />}
             />
           ) : null}

@@ -8,6 +8,7 @@
 //  3. a private store: a signed link valid for a while, made on click.
 
 import type { BioimageFormat } from '../../../api';
+import { HANDOFF_LOGOS } from './handoffLogos';
 import type { NgffContainerLayout } from './layout';
 
 export type HandoffTargetId = 'vizarr' | 'validator' | 'neuroglancer' | 'vitessce';
@@ -15,34 +16,36 @@ export type HandoffTargetId = 'vizarr' | 'validator' | 'neuroglancer' | 'vitessc
 export interface HandoffTarget {
   id: HandoffTargetId;
   label: string;
+  /** One line under the name: what the viewer is good at. */
   description: string;
-  icon: string;
+  /** The viewer's own logo, a data URI. */
+  logo: string;
 }
 
 export const HANDOFF_TARGETS: readonly HandoffTarget[] = [
   {
     id: 'vizarr',
     label: 'vizarr',
-    description: 'Every channel and plane of the image, plates included',
-    icon: 'tabler:photo-search',
+    description: 'Every channel and plane at once, whole plates included',
+    logo: HANDOFF_LOGOS.vizarr,
   },
   {
     id: 'neuroglancer',
     label: 'Neuroglancer',
-    description: 'Volumes in 3D and orthogonal slices',
-    icon: 'tabler:box',
+    description: 'The volume in 3D, with slices along each axis',
+    logo: HANDOFF_LOGOS.neuroglancer,
   },
   {
     id: 'vitessce',
     label: 'Vitessce',
-    description: 'The image in a spatial view with layer controls',
-    icon: 'tabler:layout-dashboard',
+    description: 'A spatial view with per-channel layer controls',
+    logo: HANDOFF_LOGOS.vitessce,
   },
   {
     id: 'validator',
     label: 'OME-NGFF validator',
-    description: 'Check the store against the NGFF spec, key by key',
-    icon: 'tabler:checklist',
+    description: 'Checks the store against the OME-NGFF spec, key by key',
+    logo: HANDOFF_LOGOS.validator,
   },
 ];
 
@@ -136,11 +139,15 @@ export function handoffUrl(
 export function copyCommands(
   storeUrl: string,
   store: HandoffStore,
-): Array<{ label: string; text: string }> {
+): Array<{ label: string; text: string; logo?: string }> {
   const url = storeUrl.replace(/\/+$/, '');
-  const out = [{ label: 'Store URL', text: url }];
+  const out: Array<{ label: string; text: string; logo?: string }> = [{ label: 'Store URL', text: url }];
   if (store.format !== 'ome-tiff') {
-    out.push({ label: 'napari', text: `napari --plugin napari-ome-zarr ${url}` });
+    out.push({
+      label: 'napari',
+      text: `napari --plugin napari-ome-zarr ${url}`,
+      logo: HANDOFF_LOGOS.napari,
+    });
   }
   return out;
 }

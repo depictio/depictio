@@ -40,10 +40,8 @@ import { foldByColour, keyTitle, type LegendRamp } from '../jbrowse/trackLegend'
 import AdvancedVizFrame from './AdvancedVizFrame';
 import PointerModeSwitch, { type PointerMode } from './controls/PointerModeSwitch';
 import {
-  VizColourInput,
   VizControlGroup,
   VizInlineField,
-  VizRangeSlider,
   VizSelect,
   VizSlider,
   VizSwitch,
@@ -52,6 +50,9 @@ import {
 import { usePersistedVizControl, useVizConfigWriter } from './usePersistedVizControl';
 import BioimageBadges from './bioimage/BioimageBadges';
 import OpenInMenu from './bioimage/OpenInMenu';
+import ChannelRow from './bioimage/ChannelRow';
+import BioimageHelp from './bioimage/BioimageHelp';
+import type { HelpContext } from './bioimage/help';
 import {
   formatLength,
   hexToRgb,
@@ -1150,43 +1151,47 @@ const BioimageViewerRenderer: React.FC<Props> = ({
   const controls = useMemo(
     () => (
       <>
-        {channels.map((c) => {
-          const [lo, hi] = c.domain;
-          const step = integerDtype ? 1 : Math.max((hi - lo) / 500, Number.EPSILON);
-          // viv shades a fixed number of channels at once: past it, another
-          // one is offered greyed out with the reason.
-          const full = !c.visible && visibleChannels >= MAX_RENDERED_CHANNELS;
-          return (
-            <VizControlGroup key={c.index} title={c.name}>
-              <VizSwitch
-                label="Show"
-                checked={c.visible}
-                disabled={full}
-                title={full ? `At most ${MAX_RENDERED_CHANNELS} channels show at once` : undefined}
-                onChange={(e) =>
-                  persistChannels(updateChannel(c.index, { visible: e.currentTarget.checked }))
-                }
-              />
-              <VizColourInput
-                label="Colour"
-                value={c.color}
-                disabled={!c.visible}
-                onCommit={(hex) => persistChannels(updateChannel(c.index, { color: hex }))}
-              />
-              <VizRangeSlider
-                label="Contrast"
-                min={lo}
-                max={hi}
-                step={step}
-                minRange={0}
-                value={c.contrastLimits}
-                disabled={!c.visible}
-                onChange={(v) => updateChannel(c.index, { contrastLimits: v })}
-                onChangeEnd={(v) => persistChannels(updateChannel(c.index, { contrastLimits: v }))}
-              />
-            </VizControlGroup>
-          );
-        })}
+        {channels.length ? (
+          <VizControlGroup
+            title={
+              channels.length > MAX_RENDERED_CHANNELS
+                ? `Channels · ${visibleChannels} of ${channels.length} shown`
+                : 'Channels'
+            }
+          >
+            {/* One block: the dock keeps it whole rather than folding channels
+                past the first two under "More options". */}
+            <Stack gap={2} data-testid="bioimage-channels">
+            {channels.map((c) => {
+              const [lo, hi] = c.domain;
+              const step = integerDtype ? 1 : Math.max((hi - lo) / 500, Number.EPSILON);
+              // viv shades a fixed number of channels at once: past it, another
+              // one is offered greyed out with the reason.
+              const full = !c.visible && visibleChannels >= MAX_RENDERED_CHANNELS;
+              return (
+                <ChannelRow
+                  key={c.index}
+                  name={c.name}
+                  color={c.color}
+                  visible={c.visible}
+                  blockedReason={
+                    full
+                      ? `At most ${MAX_RENDERED_CHANNELS} channels show at once: hide one to show this one`
+                      : null
+                  }
+                  domain={c.domain}
+                  step={step}
+                  contrastLimits={c.contrastLimits}
+                  onVisibleChange={(v) => persistChannels(updateChannel(c.index, { visible: v }))}
+                  onColourCommit={(hex) => persistChannels(updateChannel(c.index, { color: hex }))}
+                  onContrastChange={(v) => updateChannel(c.index, { contrastLimits: v })}
+                  onContrastCommit={(v) => persistChannels(updateChannel(c.index, { contrastLimits: v }))}
+                />
+              );
+            })}
+            </Stack>
+          </VizControlGroup>
+        ) : null}
         {labelsDcId || embeddedLabelsFound ? (
           <VizControlGroup title="Labels">
             <VizSwitch
@@ -1288,6 +1293,19 @@ const BioimageViewerRenderer: React.FC<Props> = ({
   );
 
   const validation = activeStore?.validation ?? null;
+  const helpContext: HelpContext = {
+    samples: Boolean(stores && stores.length > 1),
+    sampleFollowsFilter: sampleValue != null || wellValue != null,
+    plate: wells.length > 1,
+    hasZ: (info?.sizes.z ?? 1) > 1,
+    hasT: (info?.sizes.t ?? 1) > 1,
+    channels: channels.length,
+    points: pointsEnabled,
+    colourBy: colorCol,
+    pointsFollowPlane: stacked,
+    selectable: roiEnabled && Boolean(onFilterChange),
+    labels: Boolean(labelsDcId || embeddedLabelsFound),
+  };
   const headerBadges: React.ReactNode[] = [
     ...(pointsEnabled
       ? [
@@ -1425,6 +1443,7 @@ const BioimageViewerRenderer: React.FC<Props> = ({
         controls={controls}
         echo={echo}
         badges={headerBadges}
+        dockEssentials={4}
         loading={storesLoading}
         error={frameError}
         emptyMessage={noStoreMessage}
@@ -1454,6 +1473,7 @@ const BioimageViewerRenderer: React.FC<Props> = ({
                 }}
               />
               <Group gap={4} wrap="nowrap" style={{ position: 'absolute', right: 6, top: 6, zIndex: 2 }}>
+                <BioimageHelp context={helpContext} />
                 {activeStore && imageDcId ? (
                   <OpenInMenu
                     dcId={imageDcId}

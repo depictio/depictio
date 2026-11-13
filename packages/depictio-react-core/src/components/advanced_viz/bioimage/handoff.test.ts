@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { copyCommands, handoffUrl, unsupportedReason, vitessceConfig } from './handoff';
+import {
+  copyCommands,
+  handoffUrl,
+  HANDOFF_TARGETS,
+  unsupportedReason,
+  vitessceConfig,
+} from './handoff';
 
 const URL_ = 'https://depictio.example.org/depictio/api/v1/advanced_viz/bioimage/dc/t/tok/a.zarr';
 const ZARR = { name: 'a.zarr', format: 'ome-zarr' as const };
@@ -50,9 +56,29 @@ describe('unsupportedReason', () => {
 
 describe('copyCommands', () => {
   it('offers the URL, and napari for OME-Zarr', () => {
-    expect(copyCommands(`${URL_}/`, ZARR)).toEqual([
+    expect(copyCommands(`${URL_}/`, ZARR).map(({ label, text }) => ({ label, text }))).toEqual([
       { label: 'Store URL', text: URL_ },
       { label: 'napari', text: `napari --plugin napari-ome-zarr ${URL_}` },
     ]);
+  });
+
+  it('shows the napari logo beside the napari command', () => {
+    const napari = copyCommands(URL_, ZARR).find((c) => c.label === 'napari');
+    expect(napari?.logo).toMatch(/^data:image\/svg\+xml,/);
+  });
+});
+
+describe('HANDOFF_TARGETS', () => {
+  it('gives every target its own logo, as an image data URI', () => {
+    const logos = HANDOFF_TARGETS.map((t) => t.logo);
+    expect(new Set(logos).size).toBe(HANDOFF_TARGETS.length);
+    for (const logo of logos) expect(logo).toMatch(/^data:image\/(svg\+xml|png)[,;]/);
+  });
+});
+
+describe('HANDOFF_LOGOS', () => {
+  it('escapes # in an SVG data URI, which would otherwise end the URI as a fragment', async () => {
+    const { HANDOFF_LOGOS } = await import('./handoffLogos');
+    for (const uri of Object.values(HANDOFF_LOGOS)) expect(uri).not.toContain('#');
   });
 });
