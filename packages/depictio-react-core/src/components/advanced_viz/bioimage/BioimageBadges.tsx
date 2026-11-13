@@ -71,7 +71,7 @@ const ValidationTooltip: React.FC<{ validation: BioimageNgffValidation }> = ({ v
     ) : null}
     {validation.validator ? (
       <Text size="xs" c="dimmed">
-        Checked at ingest by {validation.validator}
+        Checked by {validation.validator}
         {validation.checked ? `: ${validation.checked}` : ''}
       </Text>
     ) : null}

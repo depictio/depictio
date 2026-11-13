@@ -281,3 +281,33 @@ def test_a_well_with_many_fields_is_checked_on_a_few(tmp_path, monkeypatch):
     assert report.ok, report.issues
     assert sorted(opened) == ["A/1/0", "A/1/4", "A/1/8"]
     assert report.checked == "plate metadata and 1 of 1 wells, 3 of up to 9 fields each"
+
+
+def test_a_store_read_through_a_callback_validates_like_a_path(tmp_path):
+    """The API validates a remote store through its own allow-listed reader:
+    every key comes from ``read``, never from zarr's own HTTP client."""
+    from depictio.cli.cli.utils.ngff_validation import callback_store
+
+    store = _plate(tmp_path / "plate.zarr", n_wells=4, broken={3})
+    asked: list[str] = []
+
+    def read(key: str) -> bytes | None:
+        asked.append(key)
+        path = store / key
+        return path.read_bytes() if path.is_file() else None
+
+    by_path = validate_ngff_store(str(store))
+    by_callback = validate_ngff_store(callback_store(read))
+
+    assert by_callback == by_path
+    assert not by_callback.ok
+    assert asked and all(not k.endswith(("/0/0/0/0", "0.0.0")) for k in asked)  # metadata only
+
+
+def test_a_callback_store_that_misses_everything_is_not_a_zarr_group():
+    from depictio.cli.cli.utils.ngff_validation import callback_store
+
+    report = validate_ngff_store(callback_store(lambda key: None))
+
+    assert not report.ok
+    assert report.issues[0].startswith("not a zarr group")

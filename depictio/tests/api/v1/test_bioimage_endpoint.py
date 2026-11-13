@@ -157,6 +157,7 @@ class Env:
         routes._bioimage_access_cache.clear()
         routes._bioimage_store_cache.clear()
         routes._bioimage_public_cache.clear()
+        routes._bioimage_validation_cache.clear()
         self._patches = [
             patch("depictio.api.v1.db.projects_collection", self.projects),
             patch("depictio.api.v1.db.files_collection", self.files),
@@ -178,6 +179,7 @@ class Env:
         routes._bioimage_access_cache.clear()
         routes._bioimage_store_cache.clear()
         routes._bioimage_public_cache.clear()
+        routes._bioimage_validation_cache.clear()
 
 
 AUTH = {"Authorization": "Bearer good"}
@@ -957,6 +959,112 @@ class TestRemoteHttps:
                 "validation": None,
             }
         ]
+
+    @staticmethod
+    def _served(store: Path):
+        """An http handler serving ``store``'s files under REMOTE_ZARR."""
+
+        def handler(req: httpx.Request) -> httpx.Response:
+            rel = str(req.url).removeprefix(f"{REMOTE_ZARR}/")
+            path = store / rel
+            return (
+                httpx.Response(200, content=path.read_bytes())
+                if path.is_file()
+                else httpx.Response(404)
+            )
+
+        return handler
+
+    @staticmethod
+    def _ngff_image(path: Path, scale: list[float]) -> Path:
+        zarr = pytest.importorskip("zarr")
+        group = zarr.open_group(str(path), mode="w", zarr_format=2)
+        group.create_array("0", shape=(8, 8), chunks=(8, 8), dtype="uint8")
+        group.attrs["multiscales"] = [
+            {
+                "version": "0.4",
+                "axes": [{"name": "y", "type": "space"}, {"name": "x", "type": "space"}],
+                "datasets": [
+                    {"path": "0", "coordinateTransformations": [{"type": "scale", "scale": scale}]}
+                ],
+            }
+        ]
+        return path
+
+    def test_remote_store_is_validated_on_request_and_cached(self, tmp_path):
+        from depictio.cli.cli.utils.ngff_validation import validator_available
+
+        if not validator_available():
+            pytest.skip("ome-zarr-models cannot validate here")
+        store = self._ngff_image(tmp_path / "remote.zarr", scale=[1.0])  # 1 scale for 2 axes
+        env = Env(
+            tmp_path,
+            props={"remote_stores": [REMOTE_ZARR]},
+            bioimage=ALLOW_HTTPS,
+            http_handler=self._served(store),
+        )
+        url = f"{PREFIX}/bioimage/{DC_ID}/validation"
+        with env as client:
+            first = client.get(url, params={"store": "sample_R.zarr"}, headers=AUTH)
+            reads = len(env.http_requests)
+            again = client.get(url, params={"store": "sample_R.zarr"}, headers=AUTH)
+
+        assert first.status_code == 200
+        report = first.json()
+        assert report["layout"] == "image" and report["ok"] is False
+        assert any("scale" in issue for issue in report["issues"])
+        # Metadata only, every read through the allow-listed proxy client.
+        assert all(
+            str(r.url).startswith(REMOTE_ZARR) and not str(r.url).endswith("0.0")
+            for r in env.http_requests
+        )
+        assert again.json() == report and len(env.http_requests) == reads
+
+    def test_remote_validation_of_a_host_not_allowed_is_403(self, tmp_path):
+        env = Env(
+            tmp_path,
+            props={"remote_stores": [REMOTE_ZARR]},
+            bioimage=BioimageConfig(remote_https_hosts=["other.example.org"]),
+        )
+        with env as client:
+            resp = client.get(
+                f"{PREFIX}/bioimage/{DC_ID}/validation",
+                params={"store": "sample_R.zarr"},
+                headers=AUTH,
+            )
+
+        assert resp.status_code == 403
+        assert env.http_requests == []
+
+    def test_remote_validation_of_an_unknown_store_is_404(self, tmp_path):
+        env = Env(tmp_path, props={"remote_stores": [REMOTE_ZARR]}, bioimage=ALLOW_HTTPS)
+        with env as client:
+            resp = client.get(
+                f"{PREFIX}/bioimage/{DC_ID}/validation", params={"store": "nope.zarr"}, headers=AUTH
+            )
+
+        assert resp.status_code == 404
+
+    def test_remote_validation_upstream_failure_is_502_and_not_cached(self, tmp_path):
+        from depictio.cli.cli.utils.ngff_validation import validator_available
+
+        if not validator_available():
+            pytest.skip("ome-zarr-models cannot validate here")
+        env = Env(
+            tmp_path,
+            props={"remote_stores": [REMOTE_ZARR]},
+            bioimage=ALLOW_HTTPS,
+            http_handler=lambda req: httpx.Response(500),
+        )
+        with env as client:
+            resp = client.get(
+                f"{PREFIX}/bioimage/{DC_ID}/validation",
+                params={"store": "sample_R.zarr"},
+                headers=AUTH,
+            )
+
+        assert resp.status_code == 502
+        assert routes._bioimage_validation_cache == {}
 
     def test_redirect_is_not_followed(self, tmp_path):
         env = Env(

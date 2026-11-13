@@ -2592,6 +2592,19 @@ export async function fetchBioimageStores(dcId: string): Promise<BioimageStoreIn
   return res.json();
 }
 
+/** The NGFF report of a remote store, made by the API on request (remote
+ *  stores have no ingest check); null when the server cannot validate. */
+export async function fetchBioimageRemoteValidation(
+  dcId: string,
+  store: string,
+): Promise<BioimageNgffValidation | null> {
+  const res = await authFetch(
+    `${API_BASE}/advanced_viz/bioimage/${encodeURIComponent(dcId)}/validation?store=${encodeURIComponent(store)}`,
+  );
+  if (!res.ok) await throwHttpDetailError(res, 'Could not validate the store');
+  return res.json();
+}
+
 /** One store's origin: where it is registered, when, and how big it is.
  *  `location` is a path, or the URL of a remote store; the times and size are
  *  null for a store with no File document (found on S3 only). */

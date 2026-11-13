@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import os
 import warnings
+from collections.abc import Callable
 from functools import lru_cache
 from importlib import metadata
 from typing import Any
@@ -264,8 +265,82 @@ def _label_names(group, ome: dict[str, Any]) -> list[str]:
     return []
 
 
-def validate_ngff_store(store_path: str, image_path: str | None = None) -> NgffValidation | None:
-    """Validate the NGFF metadata of the store at ``store_path``.
+def callback_store(read: Callable[[str], bytes | None]):
+    """A read-only zarr store whose every key comes from ``read(key)`` (None:
+    no such key).
+
+    The API validates a remote store through this, with its own reader, which
+    holds the host allow-list and size caps: zarr's HTTP client would follow
+    any URL the metadata leads it to. Not listable, like any store over HTTP;
+    each key is read once.
+    """
+    from zarr.abc.store import (
+        OffsetByteRequest,
+        RangeByteRequest,
+        Store,
+        SuffixByteRequest,
+    )
+
+    class _CallbackStore(Store):
+        supports_writes = False
+        supports_deletes = False
+        supports_listing = False
+        supports_partial_writes = False
+
+        def __init__(self) -> None:
+            super().__init__(read_only=True)
+            self._seen: dict[str, bytes | None] = {}
+
+        def __eq__(self, other: object) -> bool:
+            return self is other
+
+        def _get(self, key: str) -> bytes | None:
+            if key not in self._seen:
+                self._seen[key] = read(key)
+            return self._seen[key]
+
+        async def get(self, key, prototype, byte_range=None):
+            data = self._get(key)
+            if data is None:
+                return None
+            if isinstance(byte_range, RangeByteRequest):
+                data = data[byte_range.start : byte_range.end]
+            elif isinstance(byte_range, OffsetByteRequest):
+                data = data[byte_range.offset :]
+            elif isinstance(byte_range, SuffixByteRequest):
+                data = data[-byte_range.suffix :]
+            return prototype.buffer.from_bytes(data)
+
+        async def get_partial_values(self, prototype, key_ranges):
+            return [await self.get(key, prototype, rng) for key, rng in key_ranges]
+
+        async def exists(self, key: str) -> bool:
+            return self._get(key) is not None
+
+        async def set(self, key, value) -> None:
+            raise PermissionError("read-only store")
+
+        async def delete(self, key) -> None:
+            raise PermissionError("read-only store")
+
+        async def list(self):
+            return
+            yield
+
+        async def list_prefix(self, prefix: str):
+            return
+            yield
+
+        async def list_dir(self, prefix: str):
+            return
+            yield
+
+    return _CallbackStore()
+
+
+def validate_ngff_store(store_path, image_path: str | None = None) -> NgffValidation | None:
+    """Validate the NGFF metadata of the store at ``store_path`` (a path, or a
+    zarr store such as ``callback_store``).
 
     With ``image_path`` (a SpatialData store), the image element under it is
     validated, since that is what the viewer reads. Never raises: a store that
@@ -277,10 +352,13 @@ def validate_ngff_store(store_path: str, image_path: str | None = None) -> NgffV
         return None
     import zarr
 
-    root = os.path.join(store_path, *image_path.split("/")) if image_path else store_path
     validator = _validator_name()
     try:
-        group = zarr.open_group(root, mode="r")
+        if isinstance(store_path, str):
+            root = os.path.join(store_path, *image_path.split("/")) if image_path else store_path
+            group = zarr.open_group(root, mode="r")
+        else:
+            group = zarr.open_group(store=store_path, path=image_path or "", mode="r")
         attrs = dict(group.attrs)
     except Exception as exc:
         return NgffValidation(

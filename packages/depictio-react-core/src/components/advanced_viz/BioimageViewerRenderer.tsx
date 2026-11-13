@@ -21,8 +21,10 @@ import {
   createBioimageSource,
   createBioimageZarrStore,
   fetchAdvancedVizData,
+  fetchBioimageRemoteValidation,
   fetchBioimageStores,
   InteractiveFilter,
+  BioimageNgffValidation,
   BioimageSource,
   BioimageStoreInfo,
   StoredMetadata,
@@ -1292,7 +1294,31 @@ const BioimageViewerRenderer: React.FC<Props> = ({
     [roiEnabled, onFilterChange],
   );
 
-  const validation = activeStore?.validation ?? null;
+  // A remote store has no ingest check: the API makes one when it is shown.
+  const [remoteValidation, setRemoteValidation] = useState<
+    Record<string, BioimageNgffValidation | null>
+  >({});
+  const askRemoteValidation =
+    imageDcId && activeStoreName && activeStoreRemote && isZarr && !activeStore?.validation
+      ? activeStoreName
+      : null;
+  useEffect(() => {
+    if (!imageDcId || !askRemoteValidation || askRemoteValidation in remoteValidation) return;
+    let cancelled = false;
+    fetchBioimageRemoteValidation(imageDcId, askRemoteValidation)
+      .then((report) => {
+        if (!cancelled) setRemoteValidation((m) => ({ ...m, [askRemoteValidation]: report }));
+      })
+      // A host not allowed or a storage failure: the image error says it; no badge.
+      .catch(() => {
+        if (!cancelled) setRemoteValidation((m) => ({ ...m, [askRemoteValidation]: null }));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [imageDcId, askRemoteValidation, remoteValidation]);
+  const validation =
+    activeStore?.validation ?? (activeStoreName ? remoteValidation[activeStoreName] : null) ?? null;
   const helpContext: HelpContext = {
     samples: Boolean(stores && stores.length > 1),
     sampleFollowsFilter: sampleValue != null || wellValue != null,

@@ -2917,6 +2917,64 @@ def get_bioimage_handoff_status(
     }
 
 
+# Remote stores have no File, so the ingest never validates them: the first
+# tile that shows one asks, and the report is kept per URL for an hour.
+_BIOIMAGE_VALIDATION_TTL_S = 3600.0
+_bioimage_validation_cache: dict[tuple[str, str | None], tuple[float, dict[str, Any] | None]] = {}
+
+
+@advanced_viz_endpoint_router.get("/bioimage/{data_collection_id}/validation")
+def get_bioimage_remote_validation(
+    data_collection_id: str,
+    store: str,
+    current_user=Depends(get_user_or_anonymous),
+) -> dict[str, Any] | None:
+    """The NGFF report of one remote OME-Zarr / SpatialData store, made now.
+
+    Read through the same allow-listed reader as the store's keys (a host not
+    allowed is a 403), metadata only, on a few wells of a plate. None when this
+    install cannot validate. A storage failure is a 502 and is not cached, so
+    a network hiccup never sticks to a store as a finding.
+    """
+    import time
+
+    from depictio.cli.cli.utils.ngff_validation import callback_store, validate_ngff_store
+
+    dc_oid = _bioimage_parse_dc_id(data_collection_id)
+    _assert_dc_access_cached(dc_oid, current_user)
+    info = _bioimage_store_info(dc_oid)
+    url = info["remote"].get(store)
+    if url is None:
+        raise HTTPException(status_code=404, detail=f"No remote store {store!r} in this collection")
+    if info["format"] not in ("ome-zarr", "spatialdata"):
+        return None
+    _bioimage_remote_target(url)  # 403 before any read
+
+    key = (str(url), info["image_path"])
+    now = time.monotonic()
+    cached = _bioimage_validation_cache.get(key)
+    if cached is not None and cached[0] > now:
+        return cached[1]
+
+    failures: list[str] = []
+
+    def read(rel: str) -> bytes | None:
+        try:
+            return _bioimage_remote_read(url, rel).content
+        except _BioimageMiss:
+            return None
+        except Exception as exc:  # upstream down, over the relay cap...
+            failures.append(str(exc))
+            raise
+
+    report = validate_ngff_store(callback_store(read), info["image_path"])
+    if failures:
+        raise HTTPException(status_code=502, detail=f"Could not read the store: {failures[0]}")
+    result = report.model_dump() if report is not None else None
+    _bioimage_cache_put(_bioimage_validation_cache, key, (now + _BIOIMAGE_VALIDATION_TTL_S, result))
+    return result
+
+
 @advanced_viz_endpoint_router.post("/bioimage/{data_collection_id}/{store}/handoff")
 def create_bioimage_handoff(
     data_collection_id: str,
