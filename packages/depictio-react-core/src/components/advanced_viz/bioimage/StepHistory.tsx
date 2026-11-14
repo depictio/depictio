@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   ActionIcon,
+  Collapse,
   Group,
   Stack,
   Text,
@@ -83,6 +84,9 @@ const StepHistory: React.FC<StepHistoryProps> = ({
   onTogglePlay,
 }) => {
   const lead = metrics[0];
+  // The parameters fold away: most reads of a history are about the images
+  // and the metrics; the parameters answer the follow-up question.
+  const [paramsOpen, setParamsOpen] = useState(false);
   return (
     // `data-dock-keep`: only buttons here, which the dock would otherwise fold.
     <Stack gap={6} data-testid="bioimage-step-history" data-dock-keep="">
@@ -137,7 +141,8 @@ const StepHistory: React.FC<StepHistoryProps> = ({
         styles={{
           item: { marginTop: 6 },
           itemTitle: { marginBottom: 0 },
-          itemBullet: { backgroundColor: 'transparent', border: 'none' },
+          // Opaque behind the light icon, or the line shows through it.
+          itemBullet: { backgroundColor: 'var(--mantine-color-body)', border: 'none' },
         }}
       >
         {steps.map((step, i) => {
@@ -191,23 +196,40 @@ const StepHistory: React.FC<StepHistoryProps> = ({
                   ) : null}
                   {step.params.length ? (
                     <Stack gap={2} data-testid="bioimage-step-params">
-                      <Text fz={11} fw={600}>
-                        Parameters{' '}
-                        <Text span fz={11} c="dimmed" fw={400}>
-                          (as run)
-                        </Text>
-                      </Text>
-                      {/* Name over value: the dock is too narrow for two columns. */}
-                      {step.params.map(([key, value]) => (
-                        <div key={key}>
-                          <Text fz={10} c="dimmed" lh={1.2}>
-                            {key}
+                      <UnstyledButton
+                        onClick={() => setParamsOpen((o) => !o)}
+                        aria-expanded={paramsOpen}
+                        data-testid="bioimage-step-params-toggle"
+                      >
+                        <Group gap={4} wrap="nowrap">
+                          <Icon
+                            icon={paramsOpen ? 'tabler:chevron-down' : 'tabler:chevron-right'}
+                            width={12}
+                          />
+                          <Icon icon="tabler:settings" width={12} />
+                          <Text fz={11} fw={600}>
+                            Parameters{' '}
+                            <Text span fz={11} c="dimmed" fw={400}>
+                              ({step.params.length}, as run)
+                            </Text>
                           </Text>
-                          <Text fz={11} ff="monospace" lh={1.3} style={{ overflowWrap: 'anywhere' }}>
-                            {value}
-                          </Text>
-                        </div>
-                      ))}
+                        </Group>
+                      </UnstyledButton>
+                      <Collapse in={paramsOpen}>
+                        <Stack gap={2} pl={16}>
+                          {/* Name over value: the dock is too narrow for two columns. */}
+                          {step.params.map(([key, value]) => (
+                            <div key={key}>
+                              <Text fz={10} c="dimmed" lh={1.2}>
+                                {key}
+                              </Text>
+                              <Text fz={11} ff="monospace" lh={1.3} style={{ overflowWrap: 'anywhere' }}>
+                                {value}
+                              </Text>
+                            </div>
+                          ))}
+                        </Stack>
+                      </Collapse>
                     </Stack>
                   ) : null}
                 </Stack>
