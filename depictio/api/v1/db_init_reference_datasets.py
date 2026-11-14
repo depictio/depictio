@@ -444,6 +444,8 @@ STATIC_IDS = {
             "idr_laminb1_image": "646b0f3c1e4a2d7f8e5b8f17",
             "idr_laminb1_nuclei": "646b0f3c1e4a2d7f8e5b8f19",
             "multi_sample_labels": "646b0f3c1e4a2d7f8e5b8f1a",
+            # The same fields after preprocessing, for the linked comparison tile.
+            "multi_sample_processed": "646b0f3c1e4a2d7f8e5b8f33",
             "hcs_plate_image": "646b0f3c1e4a2d7f8e5b8f20",
             "hcs_wells": "646b0f3c1e4a2d7f8e5b8f21",
             "hcs_cells": "646b0f3c1e4a2d7f8e5b8f22",

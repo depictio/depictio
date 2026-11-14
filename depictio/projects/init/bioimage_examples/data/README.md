@@ -23,6 +23,7 @@ experimental result.
 | `multi_sample/cells.csv` | One row per nucleus of the three samples, with a heuristic `phase` and its mask id (`label`) | derived |
 | `multi_sample/labels/sample_{A,B,C}_mask.tif` | Nucleus segmentation masks, 256 x 256, uint16, one integer id per nucleus (0 = background) | derived |
 | `multi_sample/samples.csv` | Sample sheet. `sample` equals the store name without `.zarr` | derived |
+| `multi_sample/processed/sample_{A,B,C}_processed.zarr` | The same three fields after rolling-ball background subtraction (radius 25 px) and non-local means denoising; one DNA channel, 256 x 256, uint8, `c,y,x`; parameters in `multiscales[0].metadata.processing` | derived (`dev/bioimage/make_multi_sample_processed.py`) |
 | `lily_stem.ome.tif` | 2-channel fluorescence, 480 x 480, uint8, pyramidal OME-TIFF | `skimage.data.lily`, channels 1 and 2, cropped |
 | `lily_stem_cells.csv` | One row per plant cell: centroid, lumen area, mean intensity per channel, wall type | derived |
 | `skin_spatialdata.zarr` | SpatialData store: H&E image (640 x 896, uint8 RGB), spot circles, nucleus points, an AnnData table | `skimage.data.skin`, cropped |

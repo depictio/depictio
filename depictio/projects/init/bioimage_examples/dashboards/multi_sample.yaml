@@ -36,8 +36,8 @@ grid_sections:
   - name: 'Image'
     icon: 'mdi:microscope'
     color: 'blue'
-    description: 'The selected sample with its nucleus masks, and another sample beside it at the same place; click or lasso nuclei to filter the table'
-    # One screen: the two samples side by side, moving together.
+    description: 'The selected sample as acquired and after preprocessing, side by side at the same place; click or lasso nuclei to filter the table'
+    # One screen: the same field in two states, moving together.
     display: linked
   - name: 'Tables'
     icon: 'mdi:table-account'
@@ -57,10 +57,11 @@ components:
       Three crops of a human cell screen image (DNA stain), each its own OME-Zarr store,
       named after the sample in the sheet below. Pick a sample on the left: the viewer
       opens that store, and the cards and the table narrow to its nuclei. The tile beside
-      it shows another sample, picked in its own Sample list, at the same zoom and
-      position: pan or zoom either one and both move. The condition
-      labels are for the demo, and "mitotic" marks bright, compact nuclei: a heuristic,
-      not a classifier.
+      it shows the same field after preprocessing (rolling-ball background subtraction,
+      then non-local means denoising), at the same zoom and position: pan or zoom either
+      one and both move, so what the processing changed is read nucleus by nucleus. The
+      condition labels are for the demo, and "mitotic" marks bright, compact nuclei: a
+      heuristic, not a classifier.
     layout: { x: 0, y: 0, w: 8, h: 2 }
 
   - tag: card-multi-sample-nuclei
@@ -134,7 +135,7 @@ components:
     component_type: advanced_viz
     workflow_tag: python/bioimage_demo
     data_collection_tag: multi_sample_images
-    title: 'Selected sample'
+    title: 'As acquired'
     description: 'One 256 x 256 store per sample (nominal 0.65 um pixels). Nuclei are drawn from their segmentation masks, coloured by phase and faded when filtered out.'
     section: 'Image'
     viz_kind: bioimage_viewer
@@ -175,17 +176,32 @@ components:
     index: omz-ms-compare
     component_type: advanced_viz
     workflow_tag: python/bioimage_demo
-    data_collection_tag: multi_sample_images
-    title: 'Compared with'
-    description: 'Another sample, picked here, at the same zoom and position as the selected one: pan or zoom either tile and both move.'
+    data_collection_tag: multi_sample_processed
+    title: 'After preprocessing'
+    description: 'The same field after rolling-ball background subtraction (radius 25 px) and non-local means denoising; follows the Sample filter and moves with the tile beside it. Parameters are in each store''s metadata.'
     section: 'Image'
     viz_kind: bioimage_viewer
     config:
       viz_kind: bioimage_viewer
-      image_dc_tag: multi_sample_images
+      image_dc_tag: multi_sample_processed
       image_wf_id: '646b0f3c1e4a2d7f8e5b8f01'
-      image_dc_id: '646b0f3c1e4a2d7f8e5b8f08'
-      store: sample_B.zarr
+      image_dc_id: '646b0f3c1e4a2d7f8e5b8f33'
+      store: sample_A_processed.zarr
+      sample_dc_tag: multi_sample_samples
+      sample_wf_id: '646b0f3c1e4a2d7f8e5b8f01'
+      sample_dc_id: '646b0f3c1e4a2d7f8e5b8f0a'
+      sample_column: sample
+      # The same nuclei as beside it, so a mask reads the same colour and
+      # fades with the same filters in both states.
+      points_dc_tag: multi_sample_cells
+      points_wf_id: '646b0f3c1e4a2d7f8e5b8f01'
+      points_dc_id: '646b0f3c1e4a2d7f8e5b8f09'
+      cell_id_col: label
+      x_col: x
+      y_col: y
+      color_col: phase
+      points_sample_col: sample
+      point_radius: 5
       labels_dc_tag: multi_sample_labels
       labels_wf_id: '646b0f3c1e4a2d7f8e5b8f01'
       labels_dc_id: '646b0f3c1e4a2d7f8e5b8f1a'

@@ -1,0 +1,109 @@
+{
+    "multiscales": [
+        {
+            "axes": [
+                {
+                    "name": "c",
+                    "type": "channel"
+                },
+                {
+                    "name": "y",
+                    "type": "space",
+                    "unit": "micrometer"
+                },
+                {
+                    "name": "x",
+                    "type": "space",
+                    "unit": "micrometer"
+                }
+            ],
+            "datasets": [
+                {
+                    "coordinateTransformations": [
+                        {
+                            "scale": [
+                                1.0,
+                                0.65,
+                                0.65
+                            ],
+                            "type": "scale"
+                        }
+                    ],
+                    "path": "0"
+                },
+                {
+                    "coordinateTransformations": [
+                        {
+                            "scale": [
+                                1.0,
+                                1.3,
+                                1.3
+                            ],
+                            "type": "scale"
+                        }
+                    ],
+                    "path": "1"
+                },
+                {
+                    "coordinateTransformations": [
+                        {
+                            "scale": [
+                                1.0,
+                                2.6,
+                                2.6
+                            ],
+                            "type": "scale"
+                        }
+                    ],
+                    "path": "2"
+                }
+            ],
+            "metadata": {
+                "description": "2x mean downsampling of y and x per level",
+                "method": "skimage.transform.downscale_local_mean",
+                "processing": {
+                    "nl_means": {
+                        "h": 0.00211,
+                        "patch_distance": 6,
+                        "patch_size": 5,
+                        "sigma_estimated": 0.00264
+                    },
+                    "rolling_ball_radius_px": 25,
+                    "steps": [
+                        "skimage.restoration.rolling_ball",
+                        "skimage.restoration.denoise_nl_means"
+                    ]
+                }
+            },
+            "name": "sample_C_processed",
+            "type": "local_mean",
+            "version": "0.4"
+        }
+    ],
+    "omero": {
+        "channels": [
+            {
+                "active": true,
+                "coefficient": 1,
+                "color": "FFFFFF",
+                "family": "linear",
+                "inverted": false,
+                "label": "DNA (processed)",
+                "window": {
+                    "end": 85.0,
+                    "max": 255.0,
+                    "min": 0.0,
+                    "start": 1.0
+                }
+            }
+        ],
+        "id": 1,
+        "name": "sample_C_processed",
+        "rdefs": {
+            "defaultT": 0,
+            "defaultZ": 0,
+            "model": "color"
+        },
+        "version": "0.4"
+    }
+}
