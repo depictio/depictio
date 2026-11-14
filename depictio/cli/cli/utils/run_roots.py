@@ -67,6 +67,38 @@ def iter_run_roots(data_location, CLI_config=None) -> list[RunRoot]:
     return runs
 
 
+def _attach_scope(workflow, CLI_config, attached: list[str]) -> tuple[list[str], set[str]] | None:
+    if not attached or workflow is None:
+        return None
+    runs = iter_run_roots(getattr(workflow, "data_location", None), CLI_config)
+    real = {os.path.realpath(str(loc)) for loc in attached}
+    tags = sorted({r.tag for r in runs if os.path.realpath(r.location) in real})
+    if not tags:
+        return None
+    return tags, {r.tag for r in runs}
+
+
+def attach_scope(
+    workflow, CLI_config, command_parameters: dict
+) -> tuple[list[str], set[str]] | None:
+    """The runs an ``--attach-run`` adds to ``workflow``, and every run it has.
+
+    None when this ingestion attaches nothing to the workflow: its tables are
+    then written as before.
+    """
+    return _attach_scope(workflow, CLI_config, command_parameters.get("attach_locations") or [])
+
+
+def attached_run_tags(workflows, CLI_config, attach_locations: list[str]) -> list[str]:
+    """Every run an ``--attach-run`` brings, across the project's workflows."""
+    tags: set[str] = set()
+    for workflow in workflows or []:
+        scope = _attach_scope(workflow, CLI_config, attach_locations)
+        if scope is not None:
+            tags.update(scope[0])
+    return sorted(tags)
+
+
 def single_file_run_tag(
     dc_tag: str,
     file_path: str,

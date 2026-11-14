@@ -95,3 +95,45 @@ def test_filter_single_run_and_missing_column_pass_whole():
     assert filter_frame_to_run(df, "run_1", {"run_1"}).equals(df)
     bare = pl.DataFrame({"sample": ["a"]})
     assert filter_frame_to_run(bare, "run_1", {"run_1", "run_2"}).equals(bare)
+
+
+def test_attach_scope_names_the_attached_runs_and_every_run(tmp_path):
+    from types import SimpleNamespace
+
+    from depictio.cli.cli.utils.run_roots import attach_scope
+
+    athens, naples = tmp_path / "run_athens", tmp_path / "run_naples"
+    athens.mkdir()
+    naples.mkdir()
+    wf = SimpleNamespace(
+        data_location=SimpleNamespace(
+            locations=[str(athens), str(naples)], structure="flat", runs_regex=None
+        )
+    )
+    assert attach_scope(wf, None, {"attach_locations": [str(naples) + "/"]}) == (
+        ["run_naples"],
+        {"run_athens", "run_naples"},
+    )
+    assert attach_scope(wf, None, {}) is None
+    assert attach_scope(None, None, {"attach_locations": [str(naples)]}) is None
+
+
+def test_attached_run_tags_gathers_the_new_runs_of_every_workflow(tmp_path):
+    """What the ingestion record names, so the Runs tab and the toast can tie
+    a CLI --attach-run to its runs as they do an attach from the UI."""
+    from depictio.cli.cli.utils.run_roots import attached_run_tags
+
+    athens, naples = tmp_path / "run_athens", tmp_path / "run_naples"
+    athens.mkdir()
+    naples.mkdir()
+
+    def wf(*locations):
+        return SimpleNamespace(
+            data_location=SimpleNamespace(
+                locations=[str(p) for p in locations], structure="flat", runs_regex=None
+            )
+        )
+
+    workflows = [wf(athens, naples), wf(athens, naples), wf(athens)]
+    assert attached_run_tags(workflows, None, [str(naples)]) == ["run_naples"]
+    assert attached_run_tags(workflows, None, []) == []

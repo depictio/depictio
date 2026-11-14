@@ -1265,6 +1265,7 @@ class IngestOptions:
     incremental_write: bool = False
     skip_unchanged: bool = False
     repartition: bool = False
+    per_run: bool = False
     async_upsert: bool = False
     # Where to write how the ingestion ended, as JSON, for scripts.
     result_json: str | None = None
@@ -1344,6 +1345,7 @@ def run_ingest(opts: IngestOptions, ingestion: _IngestionRecord) -> IngestOutcom
     write_mode = opts.write_mode
     incremental_write = opts.incremental_write
     skip_unchanged = opts.skip_unchanged
+    per_run = opts.per_run
     repartition = opts.repartition
     async_upsert = opts.async_upsert
     result_json = opts.result_json
@@ -2143,6 +2145,8 @@ def run_ingest(opts: IngestOptions, ingestion: _IngestionRecord) -> IngestOutcom
     # validation above already ran merge_existing_ids(), which copies the server's
     # workflow / data-collection ids onto this config by tag, so the runs and files
     # already ingested stay attached to the same collections.
+    # The run folders this --attach-run adds: processing writes their rows alone.
+    attached_locations: list[str] = []
     if attach_run and not dry_run:
         rich_print_section_separator("Step 3b: Attaching run to existing project")
         try:
@@ -2161,6 +2165,7 @@ def run_ingest(opts: IngestOptions, ingestion: _IngestionRecord) -> IngestOutcom
             report = attach_run_to_project(project_config, remote.json())
             _stop_on_run_tag_clash(project_config)
             added_locations = {tag: locs for tag, locs in report["added"].items() if locs}
+            attached_locations = sorted({loc for locs in added_locations.values() for loc in locs})
             for wf_tag, new_locations in added_locations.items():
                 rich_print_checked_statement(
                     f"Workflow '{escape(wf_tag)}': +{len(new_locations)} run location(s) -> "
@@ -2200,6 +2205,8 @@ def run_ingest(opts: IngestOptions, ingestion: _IngestionRecord) -> IngestOutcom
             _proj = locals().get("project_config")
             ingestion.CLI_config = CLI_config
             ingestion.project_config = _proj
+            from depictio.cli.cli.utils.run_roots import attached_run_tags
+
             ingestion.run_id = api_monitoring_ingestion_start(
                 CLI_config=CLI_config,
                 command=command,
@@ -2213,6 +2220,9 @@ def run_ingest(opts: IngestOptions, ingestion: _IngestionRecord) -> IngestOutcom
                 # says what started its cycle.
                 trigger=trigger,
                 trigger_reason=trigger_reason,
+                run_tags=attached_run_tags(
+                    getattr(_proj, "workflows", None), CLI_config, attached_locations
+                ),
             )
         except Exception:
             ingestion.run_id = None
@@ -2487,11 +2497,13 @@ def run_ingest(opts: IngestOptions, ingestion: _IngestionRecord) -> IngestOutcom
                             "repartition": repartition,
                             "scan_signal": scan_signal,
                             "incremental_write": incremental_write,
+                            "per_run": per_run,
                             # Off for `ingest`: running it again is how someone
                             # rebuilds a project that drifted, so it must not
                             # quietly decide to do nothing.
                             "skip_unchanged": skip_unchanged,
                             "dry_run": scan_dry_run,
+                            "attach_locations": attached_locations,
                         }
 
                         process_result = process_project_helper(
@@ -2967,9 +2979,9 @@ def register_run_command(app: typer.Typer):
                 help="Add DATA_DIR to an EXISTING project as one more run, instead of "
                 "creating a project. The run is recorded as attached, so a later "
                 "--update-config keeps it. The project is found by --project, else by the "
-                "template's own name. Implies --update-config, dashboards included. The "
-                "tables of file-based collections are rebuilt from all runs; collections a "
-                "recipe computes still read the project's first run only.",
+                "template's own name. Implies --update-config, dashboards included. Only "
+                "the new run's rows are written; a recipe that mixes samples (distances, "
+                "ordinations, top-N) is recomputed over every run, see --per-run.",
                 rich_help_panel=PROJECT_PANEL,
             ),
         ] = False,
@@ -3197,6 +3209,16 @@ def register_run_command(app: typer.Typer):
                 rich_help_panel=STEPS_PANEL,
             ),
         ] = False,
+        per_run: Annotated[
+            bool,
+            typer.Option(
+                "--per-run",
+                help="Compute every recipe once per run, including those that mix samples "
+                "(distances, ordinations, top-N cuts), which are otherwise recomputed over "
+                "all the project's runs at once. Their per-run outputs are then stacked.",
+                rich_help_panel=STEPS_PANEL,
+            ),
+        ] = False,
         skip_unchanged: Annotated[
             bool,
             typer.Option(
@@ -3420,6 +3442,7 @@ def register_run_command(app: typer.Typer):
             upload_chunk_size=upload_chunk_size,
             write_mode=write_mode,
             incremental_write=incremental_write,
+            per_run=per_run,
             skip_unchanged=skip_unchanged,
             repartition=repartition,
             async_upsert=async_upsert,

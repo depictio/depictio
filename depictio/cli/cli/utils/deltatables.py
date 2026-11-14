@@ -30,10 +30,14 @@ from depictio.cli.cli.utils.delta_versioning import (
     build_commit_metadata,
     commit_write_options,
     frame_run_tags,
+    plan_attach_write,
     plan_partitioning,
     plan_scoped_write,
     probe_delta_table,
     read_delta_commit_info,
+    scoped_frame_conflicts,
+    table_run_tags,
+    table_written_by_aggregate,
     write_delta_table_versioned,
 )
 from depictio.cli.cli.utils.ingest_timing import record, timed
@@ -92,6 +96,14 @@ def calculate_dataframe_size_bytes(df: pl.DataFrame) -> int:
 
 class NoFilesForRunsError(Exception):
     """A run-restricted fetch found nothing left to read."""
+
+
+def _registered_run_tags(dc_id: str, CLI_config: CLIConfig) -> set[str]:
+    """The run tags of the files registered for a collection, without reading them."""
+    response = api_get_files_by_dc_id(dc_id, CLI_config)
+    if response.status_code != 200:
+        return set()
+    return {str(fd["run_tag"]) for fd in response.json() or [] if fd.get("run_tag")}
 
 
 @validate_call
@@ -841,16 +853,21 @@ def write_delta_table(
         scoped=scoped,
     )
 
+    # A scoped write only ever saw part of the table: its frame's height is
+    # the rows it added, and the total is read back from the table's log
+    # (None when unreadable) rather than published as the subset's.
+    if scoped:
+        rows_total = delta_table_stats(destination_file, storage_options)[1] or None
+    else:
+        rows_total = outcome.rows_written
+
     return {
         "result": outcome.result,
         "message": outcome.message,
         "delta_version": outcome.delta_version,
         "delta_commit_timestamp": outcome.delta_timestamp,
         "write_mode": outcome.write_mode,
-        # A scoped write only ever saw part of the table, so it knows how many
-        # rows it wrote and nothing about the total. Reporting the subset as
-        # `rows_total` would publish a wrong row count to the history UI.
-        "rows_total": None if scoped else outcome.rows_written,
+        "rows_total": rows_total,
         "rows_added": outcome.rows_written if scoped else None,
         "partitioned": outcome.partitioned,
         "content_digest": outcome.content_digest,
@@ -1112,7 +1129,10 @@ def client_aggregate_data(
         storage_options,
         # The schema is only needed to align a partial frame against the table
         # that is already there, so it is only fetched when that is on the table.
-        with_schema=bool(command_parameters.get("incremental_write")),
+        with_schema=bool(
+            command_parameters.get("incremental_write")
+            or command_parameters.get("attach_locations")
+        ),
     )
     destination_exists = probe is not None
     if probe:
@@ -1161,15 +1181,30 @@ def client_aggregate_data(
     # restricted to the runs that changed must only ever be built once a
     # partitioned, predicate-scoped write is guaranteed — see plan_scoped_write.
     signal = command_parameters.get("scan_signal") or {}
-    plan = plan_scoped_write(
-        probe=probe,
-        changed_runs=(signal.get("changed_dcs") or {}).get(str(data_collection.id), []),
-        removed_runs=list(signal.get("removed_runs") or []),
-        write_mode=write_mode,
-        incremental_write=bool(command_parameters.get("incremental_write")),
-        signal_complete=bool(signal.get("complete")),
-        covered=str(data_collection.id) in set(signal.get("covered_dcs") or []),
-    )
+    from depictio.cli.cli.utils.run_roots import attach_scope
+
+    attach = attach_scope(workflow, CLI_config, command_parameters)
+    if attach is not None:
+        # An --attach-run writes the rows of the new runs alone (epic #1399).
+        attach_tags, project_runs = attach
+        plan = plan_attach_write(
+            probe=probe,
+            attach_run_tags=attach_tags,
+            table_runs=table_run_tags(destination_prefix, storage_options) if probe else None,
+            # A file no run claims (one shared by every run) is tagged as such
+            # on purpose, and is not a leftover to migrate.
+            project_runs=project_runs | _registered_run_tags(str(data_collection.id), CLI_config),
+        )
+    else:
+        plan = plan_scoped_write(
+            probe=probe,
+            changed_runs=(signal.get("changed_dcs") or {}).get(str(data_collection.id), []),
+            removed_runs=list(signal.get("removed_runs") or []),
+            write_mode=write_mode,
+            incremental_write=bool(command_parameters.get("incremental_write")),
+            signal_complete=bool(signal.get("complete")),
+            covered=str(data_collection.id) in set(signal.get("covered_dcs") or []),
+        )
     if plan.declined:
         logger.info(f"Rebuilding {data_collection.data_collection_tag} in full: {plan.declined}")
 
@@ -1204,12 +1239,31 @@ def client_aggregate_data(
         try:
             files, lazy_frames = _read(set(plan.run_tags))
             aggregated_df = _collect(lazy_frames, probe.schema if probe else None)
+        except NoFilesForRunsError:
+            if attach is None:
+                raise
+            # The attached run brings no file of this collection (a file
+            # shared by every run, or a step that did not run there): the
+            # table already holds everything, and writing it again would
+            # only record a commit that changes nothing.
+            message = "the attached run brings no file of its own to it"
+            rich_print_checked_statement(
+                f"Left {escape(data_collection.data_collection_tag)} unchanged: {message}", "info"
+            )
+            return {"result": "success", "skipped": True, "message": f"Left unchanged: {message}."}
         except (SchemaConflictError, NoFilesForRunsError) as exc:
             # Both are found before anything large is read: the type conflict
             # from the lazy frames' headers, the empty fetch from the file list.
             # So the retry costs one more listing, not a re-read.
             logger.warning(
                 f"{data_collection.data_collection_tag}: {exc}. Rebuilding every run instead."
+            )
+            # Said out loud: the commit then names every run, and without this
+            # line nothing explains why an attach rewrote the whole table.
+            rich_print_checked_statement(
+                f"Rebuilt {escape(data_collection.data_collection_tag)} from every run: "
+                f"{escape(str(exc))}",
+                "info",
             )
             plan = ScopedWritePlan(scoped=False, declined=str(exc))
             files, lazy_frames = _read(None)
@@ -1288,8 +1342,10 @@ def client_aggregate_data(
         if plan.scoped:
             # Already decided, and not up for renegotiation: plan_partitioning's
             # fall-back is a full overwrite, which with this frame would delete
-            # every run it does not contain.
-            partition = True
+            # every run it does not contain. The predicate scopes the write; a
+            # table that is not partitioned (an attach to a one-run ingest)
+            # stays so.
+            partition = bool(probe and probe.partitioned_by_run)
             replace_run_tags = plan.run_tags
         else:
             # Decide the write strategy. plan_partitioning declines — with a reason —
@@ -1358,11 +1414,14 @@ def client_aggregate_data(
                     "DataFrame size calculated as 0 bytes - this indicates an empty DataFrame"
                 )
 
+        effective_mode = (
+            "replace-runs" if plan.scoped else (write_mode if partition else "overwrite")
+        )
         commit_metadata = _ingest_commit_metadata(
             data_collection,
             CLI_config,
             command_parameters,
-            write_mode=write_mode if partition else "overwrite",
+            write_mode=effective_mode,
             run_tags=run_tags,
             file_count=len(files) if files else None,
             # A partial frame's height is not the table's row count.
@@ -1398,7 +1457,7 @@ def client_aggregate_data(
                 aggregated_df=aggregated_df,
                 destination_file=destination_prefix,
                 storage_options=storage_options,
-                write_mode=write_mode if partition else "overwrite",
+                write_mode=effective_mode,
                 commit_metadata=commit_metadata,
                 partition=partition,
                 replace_run_tags=replace_run_tags,
@@ -2096,9 +2155,17 @@ def process_recipe_data_collection(
         }
 
     from depictio.cli.cli.utils.data_root import DataRoot
-    from depictio.cli.cli.utils.recipe_runs import RefFrame, execute_per_run, ref_frames_for_run
+    from depictio.cli.cli.utils.recipe_runs import (
+        PerRunResult,
+        RefFrame,
+        execute_aggregate,
+        execute_per_run,
+        ref_frames_for_run,
+        unreachable_runs,
+    )
+    from depictio.cli.cli.utils.recipe_scopes import RecipeScope, recipe_scope
     from depictio.cli.cli.utils.run_bindings import run_params_for
-    from depictio.cli.cli.utils.run_roots import RunRoot, iter_run_roots
+    from depictio.cli.cli.utils.run_roots import RunRoot, attach_scope, iter_run_roots
 
     # Every run of the workflow: each flat location, and each run folder of a
     # sequencing-runs location. A run is a DataRoot rather than a path so the
@@ -2126,6 +2193,8 @@ def process_recipe_data_collection(
     # Resolve dc_ref sources: load referenced DCs from their Delta tables. Each
     # run's recipe then sees that run's rows of them (ref_frames_for_run).
     refs: dict[str, RefFrame] = {}
+    # The version of each dc_ref read: the recipe output's lineage.
+    inputs: list[dict] = []
     try:
         recipe_module = _load_recipe(recipe_name, pipeline_version)
         dc_ref_sources = [s for s in recipe_module.SOURCES if s.dc_ref is not None]
@@ -2167,6 +2236,14 @@ def process_recipe_data_collection(
                             f"{read_result.get('message')}"
                         ),
                     }
+                ref_commit = read_delta_commit_info(ref_s3_path, storage_options)
+                inputs.append(
+                    {
+                        "dc_id": str(ref_dc.id),
+                        "dc_tag": ref_dc.data_collection_tag,
+                        "delta_version": ref_commit.version if ref_commit else None,
+                    }
+                )
                 ref_transform = ref_dc.config.transform
                 refs[src.ref] = RefFrame(
                     read_result["data"],
@@ -2211,26 +2288,145 @@ def process_recipe_data_collection(
         except RecipeError as e:
             return {"result": "error", "message": f"Recipe failed: {e}"}
 
+    destination_prefix = f"s3://{CLI_config.s3_storage.bucket}/{data_collection.id!s}"
+    storage_options = turn_S3_config_into_polars_storage_options(CLI_config.s3_storage)
+
+    # How the output relates to the runs (recipe_scopes). A recipe that mixes
+    # samples is recomputed over every run at once, the others run per run.
+    # With one run both are the same computation.
+    scope = recipe_scope(recipe_name, getattr(transform_config, "scope", None))
+    if scope.scope == "aggregate" and command_parameters.get("per_run"):
+        scope = RecipeScope("run")
+    aggregate = scope.scope == "aggregate" and len(runs) > 1
+
+    # An --attach-run computes the new runs alone and writes their rows only;
+    # a recomputation over every run rewrites the table.
+    plan = ScopedWritePlan(scoped=False)
+    probe = None
+    attach = attach_scope(workflow, CLI_config, command_parameters) if runs else None
+    if attach is not None and not aggregate:
+        probe = probe_delta_table(destination_prefix, storage_options, with_schema=True)
+        plan = plan_attach_write(
+            probe=probe,
+            attach_run_tags=attach[0],
+            table_runs=table_run_tags(destination_prefix, storage_options) if probe else None,
+            project_runs=attach[1],
+            aggregate_table=bool(probe)
+            and table_written_by_aggregate(destination_prefix, storage_options),
+        )
+        if plan.declined:
+            logger.info(
+                f"Rebuilding {data_collection.data_collection_tag} in full: {plan.declined}"
+            )
+
+    def refuse_unreachable() -> dict | None:
+        """A write over every run, some of them not on this host: refused,
+        since the rewritten table would silently lose their rows."""
+        gone = unreachable_runs(runs) if len(runs) > 1 else []
+        if not gone:
+            return None
+        tags = ", ".join(r.tag for r in gone)
+        message = (
+            f"Recipe '{recipe_name}' would rewrite {data_collection.data_collection_tag} "
+            f"without run(s) {tags}: their folder is not on this host. The table was left "
+            "unchanged; ingest where every run is reachable, or remove those runs from "
+            "the project with a refresh and --drop-missing-runs."
+        )
+        rich_print_checked_statement(escape(message), "error")
+        return {"result": "error", "message": message}
+
+    if not plan.scoped and (refused := refuse_unreachable()):
+        return refused
+
+    computed_from: list[str] = []
     try:
-        if runs:
-            per_run = execute_per_run(
+        if aggregate:
+            module = _load_recipe(recipe_name, pipeline_version)
+            outcome = execute_aggregate(
                 execute_recipe,
+                lambda run: _resolve_sources(module, run.root, overrides),
                 recipe_name,
                 runs,
                 refs,
-                lambda run: run_params_for(transform_config, run.location),
+                run_params_for(transform_config, runs[0].location),
+                scope,
                 RecipeSourceMissing,
                 overrides=overrides,
                 pipeline_version=pipeline_version,
                 properties=_recipe_properties,
             )
+            for run_tag, reason in outcome.skipped.items():
+                rich_print_checked_statement(
+                    f"Recipe '{escape(recipe_name)}': run {escape(run_tag)} has none of its "
+                    f"inputs, it is left out ({escape(reason)})",
+                    "warning",
+                )
+            rich_print_checked_statement(
+                f"Recipe '{escape(recipe_name)}' mixes samples: recomputed over "
+                f"{len(outcome.ran)} runs",
+                "info",
+            )
+            result_df = outcome.frame
+            computed_from = outcome.ran
+        elif runs:
+
+            def per_run_on(selected: list[RunRoot]) -> PerRunResult:
+                return execute_per_run(
+                    execute_recipe,
+                    recipe_name,
+                    selected,
+                    refs,
+                    lambda run: run_params_for(transform_config, run.location),
+                    RecipeSourceMissing,
+                    run_tags=run_tags,
+                    overrides=overrides,
+                    pipeline_version=pipeline_version,
+                    properties=_recipe_properties,
+                )
+
+            targets = [r for r in runs if r.tag in plan.run_tags] if plan.scoped else runs
+            try:
+                per_run = per_run_on(targets)
+            except RecipeSourceMissing:
+                if not plan.scoped:
+                    raise
+                message = "the attached run has none of its inputs"
+                rich_print_checked_statement(
+                    f"Left {escape(data_collection.data_collection_tag)} unchanged: {message}",
+                    "info",
+                )
+                return {"result": "success", "message": f"Left unchanged: {message}."}
+            conflicts = (
+                scoped_frame_conflicts(dict(per_run.frame.schema), probe.schema)
+                if plan.scoped and probe is not None and probe.schema
+                else []
+            )
+            if conflicts:
+                # Merged into the table, the new run's values would be cast into
+                # the old types (2.7 stored as 2): every run is recomputed and
+                # written in one consistent schema instead.
+                logger.info(
+                    f"Rebuilding {data_collection.data_collection_tag} in full: "
+                    + "; ".join(conflicts)
+                )
+                plan = ScopedWritePlan(scoped=False, declined="; ".join(conflicts))
+                if refused := refuse_unreachable():
+                    return refused
+                per_run = per_run_on(runs)
             for run_tag, reason in per_run.skipped.items():
                 rich_print_checked_statement(
                     f"Recipe '{escape(recipe_name)}': run {escape(run_tag)} has none of its "
                     f"inputs, it adds no rows ({escape(reason)})",
                     "warning",
                 )
+            if scope.scope == "pipeline" and len(runs) > 1:
+                rich_print_checked_statement(
+                    f"Recipe '{escape(recipe_name)}' reads a statistic the pipeline computed "
+                    "over each run: it stays per run",
+                    "info",
+                )
             result_df = per_run.frame
+            computed_from = per_run.ran
         else:
             result_df = execute_recipe(
                 recipe_name,
@@ -2245,28 +2441,38 @@ def process_recipe_data_collection(
         return {"result": "error", "message": f"Recipe failed: {e}"}
 
     # Write to Delta Lake (same path as standard aggregation)
-    destination_prefix = f"s3://{CLI_config.s3_storage.bucket}/{data_collection.id!s}"
-    storage_options = turn_S3_config_into_polars_storage_options(CLI_config.s3_storage)
-
-    deltatable_size_bytes = calculate_dataframe_size_bytes(result_df)
+    deltatable_size_bytes = (
+        probe.size_bytes if plan.scoped and probe else calculate_dataframe_size_bytes(result_df)
+    )
 
     # Recipe collections are written like any other: a full overwrite, but with
     # the same provenance. Without it their commits carry no depictio metadata
     # and their aggregations land with delta_version=None, which drops them out
     # of the joined view in /history and leaves a recipe-derived table looking
     # like it was never ingested by anyone.
-    run_tags = frame_run_tags(result_df)
+    written_runs = plan.run_tags if plan.scoped else frame_run_tags(result_df)
+    write_mode = "replace-runs" if plan.scoped else "overwrite"
+    lineage = {
+        "run_scope": scope.scope,
+        "computed_from_runs": computed_from,
+        "inputs": inputs,
+    }
     write_result = write_delta_table(
         aggregated_df=result_df,
         destination_file=destination_prefix,
         storage_options=storage_options,
+        write_mode=write_mode,
+        partition=bool(plan.scoped and probe and probe.partitioned_by_run),
+        replace_run_tags=plan.run_tags if plan.scoped else None,
+        scoped=plan.scoped,
         commit_metadata=_ingest_commit_metadata(
             data_collection,
             CLI_config,
             command_parameters,
-            write_mode="overwrite",
-            run_tags=run_tags,
-            row_count=result_df.height,
+            write_mode=write_mode,
+            run_tags=written_runs,
+            row_count=None if plan.scoped else result_df.height,
+            **lineage,
         ),
     )
 
@@ -2311,9 +2517,10 @@ def process_recipe_data_collection(
         deltatable_size_bytes=deltatable_size_bytes,
         delta_provenance=commit_provenance(
             write_result,
-            run_tags=run_tags,
+            run_tags=written_runs,
             ingestion_run_id=command_parameters.get("ingestion_run_id"),
             trigger=command_parameters.get("trigger"),
+            **lineage,
         ),
     )
     if api_upsert_result.status_code != 200:

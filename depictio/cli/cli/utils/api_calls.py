@@ -644,6 +644,7 @@ def api_monitoring_ingestion_start(
     data_root: str | None = None,
     trigger: str | None = None,
     trigger_reason: str | None = None,
+    run_tags: list[str] | None = None,
 ) -> str | None:
     """Open a server-side ingestion-run record. Best-effort.
 
@@ -664,6 +665,9 @@ def api_monitoring_ingestion_start(
             "trigger": trigger,
             "trigger_reason": trigger_reason,
         }
+        # Sent only when set: an older server ignores it either way.
+        if run_tags:
+            payload["run_tags"] = run_tags
         response = get_http_client().post(
             url, json=payload, headers=generate_api_headers(CLI_config), timeout=30.0
         )

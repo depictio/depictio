@@ -11,9 +11,9 @@ from datetime import datetime
 
 import polars as pl
 import pytest
+from deltalake import DeltaTable
 
 from depictio.cli.cli.utils.delta_versioning import (
-    content_digest,
     MAX_RUN_TAGS_IN_METADATA,
     METADATA_PREFIX,
     RUN_ID_COLUMN,
@@ -21,12 +21,15 @@ from depictio.cli.cli.utils.delta_versioning import (
     _metric,
     _parse_commit,
     build_commit_metadata,
+    content_digest,
     frame_run_tags,
     list_delta_versions,
+    plan_attach_write,
     plan_partitioning,
     plan_scoped_write,
     probe_delta_table,
     read_delta_commit_info,
+    table_run_tags,
     write_delta_table_versioned,
 )
 from depictio.models.models.s3 import PolarsStorageOptions
@@ -389,7 +392,7 @@ class TestScopedWriteSafety:
     """The invariants that make a partial frame safe to write."""
 
     def test_a_subset_write_refuses_to_overwrite_the_whole_table(self, destination, storage):
-        # Without partitioning, mode="overwrite" replaces every row — with a
+        # Without a predicate, mode="overwrite" replaces every row — with a
         # subset in hand that deletes every run the subset does not contain.
         partitioned_table(destination, storage)
         with pytest.raises(ValueError, match="subset of its runs"):
@@ -398,22 +401,53 @@ class TestScopedWriteSafety:
                 destination,
                 storage,
                 write_mode="replace-runs",
-                partition=False,
+                partition=True,
                 scoped=True,
             )
         assert rows(destination) == [("A", 0), ("B", 1), ("C", 2)]
 
-    def test_replace_run_tags_without_partitioning_is_refused(self, destination, storage):
+    def test_replace_run_tags_needs_replace_runs(self, destination, storage):
         partitioned_table(destination, storage)
-        with pytest.raises(ValueError, match="meaningless without partitioning"):
+        with pytest.raises(ValueError, match="needs replace-runs"):
             write_delta_table_versioned(
                 frame(["A"], [99]),
                 destination,
                 storage,
-                write_mode="replace-runs",
-                partition=False,
+                write_mode="overwrite",
+                partition=True,
                 replace_run_tags=["A"],
             )
+
+    def test_a_new_run_joins_an_unpartitioned_table_in_one_commit(self, destination, storage):
+        # A one-run first ingest is never partitioned (epic #1399): attaching a
+        # run writes its rows alone, the predicate matching nothing yet.
+        write_delta_table_versioned(frame(["A", "B"]), destination, storage)
+        before = DeltaTable(destination).version()
+        result = write_delta_table_versioned(
+            frame(["C"], [2]),
+            destination,
+            storage,
+            write_mode="replace-runs",
+            replace_run_tags=["C"],
+            scoped=True,
+        )
+        assert rows(destination) == [("A", 0), ("B", 1), ("C", 2)]
+        assert result.delta_version == before + 1
+        assert DeltaTable(destination).metadata().partition_columns == []
+
+    def test_a_run_written_again_into_an_unpartitioned_table_replaces_its_rows(
+        self, destination, storage
+    ):
+        write_delta_table_versioned(frame(["A", "B"]), destination, storage)
+        write_delta_table_versioned(
+            frame(["A"], [99]),
+            destination,
+            storage,
+            write_mode="replace-runs",
+            replace_run_tags=["A"],
+            scoped=True,
+        )
+        assert rows(destination) == [("A", 99), ("B", 1)]
 
     def test_one_changed_run_leaves_the_others_alone(self, destination, storage):
         # The nominal case, and the one that would be catastrophic if the
@@ -624,7 +658,116 @@ def test_content_digest_changes_with_a_value_or_the_schema():
 
 
 def test_content_digest_ignores_the_write_time_and_float_noise():
-    df = pl.DataFrame({"a": [0.3256221559192277, 0.1986718677187851], "aggregation_time": ["t1", "t1"]})
-    again = pl.DataFrame({"a": [0.3256221559192276, 0.1986718677187849], "aggregation_time": ["t2", "t2"]})
+    df = pl.DataFrame(
+        {"a": [0.3256221559192277, 0.1986718677187851], "aggregation_time": ["t1", "t1"]}
+    )
+    again = pl.DataFrame(
+        {"a": [0.3256221559192276, 0.1986718677187849], "aggregation_time": ["t2", "t2"]}
+    )
     assert content_digest(df) == content_digest(again)
     assert content_digest(df) != content_digest(df.with_columns(pl.col("a") * 1.001))
+
+
+class TestPlanAttachWrite:
+    """An --attach-run writes the new runs' rows alone (epic #1399)."""
+
+    def plan(self, destination, storage, **overrides):
+        kwargs = {
+            "probe": probe_delta_table(destination, storage, with_schema=True),
+            "attach_run_tags": ["C"],
+            "table_runs": table_run_tags(destination, storage),
+            "project_runs": {"A", "B", "C"},
+        }
+        kwargs.update(overrides)
+        return plan_attach_write(**kwargs)
+
+    def test_an_unpartitioned_table_of_the_project_runs_is_scoped(self, destination, storage):
+        write_delta_table_versioned(frame(["A", "B"]), destination, storage)
+        plan = self.plan(destination, storage)
+        assert plan.scoped and plan.run_tags == ["C"]
+
+    def test_rows_of_no_run_of_the_project_are_rewritten_once(self, destination, storage):
+        write_delta_table_versioned(frame(["meta-single-file-scan"]), destination, storage)
+        plan = self.plan(destination, storage)
+        assert not plan.scoped and "meta-single-file-scan" in (plan.declined or "")
+
+    def test_a_table_without_a_run_column_is_rewritten_once(self, destination, storage):
+        pl.DataFrame({"v": [1]}).write_delta(destination)
+        assert table_run_tags(destination, storage) is None
+        assert not self.plan(destination, storage).scoped
+
+    def test_no_table_yet_is_a_full_write(self, destination, storage):
+        plan = plan_attach_write(
+            probe=None, attach_run_tags=["C"], table_runs=None, project_runs={"C"}
+        )
+        assert not plan.scoped
+
+    def test_nothing_attached_plans_nothing(self, destination, storage):
+        write_delta_table_versioned(frame(["A"]), destination, storage)
+        assert self.plan(destination, storage, attach_run_tags=[]) == plan_attach_write(
+            probe=None, attach_run_tags=[], table_runs=None, project_runs=set()
+        )
+
+
+class TestScopedFrameConflicts:
+    """A scoped write merges into the table's schema: delta-rs casts a new
+    run's Float64 into the table's Int64 without a word (2.7 reads back as 2).
+    A disagreement has to send the write back to a full rebuild."""
+
+    TABLE = {"sample": pl.String, "x": pl.Int64, RUN_ID_COLUMN: pl.String}
+
+    def test_a_narrower_table_type_is_a_conflict(self):
+        from depictio.cli.cli.utils.delta_versioning import scoped_frame_conflicts
+
+        frame_schema = {"sample": pl.String, "x": pl.Float64, RUN_ID_COLUMN: pl.String}
+        assert scoped_frame_conflicts(frame_schema, self.TABLE) == [
+            "x is Float64 here but Int64 in the table"
+        ]
+
+    def test_matching_new_and_all_null_columns_are_not(self):
+        from depictio.cli.cli.utils.delta_versioning import scoped_frame_conflicts
+
+        frame_schema = {"sample": pl.String, "x": pl.Null, "extra": pl.Float64}
+        assert scoped_frame_conflicts(frame_schema, self.TABLE) == []
+
+
+class TestAttachAfterAnAggregate:
+    """A table an aggregate recipe wrote holds values computed over every run
+    (rows of several samples carry no run). Attaching a run to it per run, after
+    `--per-run` or a scope change, must rebuild it once: a scoped write would
+    keep the cross-run rows forever next to per-run ones."""
+
+    def plan(self, destination, storage):
+        from depictio.cli.cli.utils.delta_versioning import table_written_by_aggregate
+
+        return plan_attach_write(
+            probe=probe_delta_table(destination, storage, with_schema=True),
+            attach_run_tags=["C"],
+            table_runs=table_run_tags(destination, storage),
+            project_runs={"A", "B", "C"},
+            aggregate_table=table_written_by_aggregate(destination, storage),
+        )
+
+    def write(self, destination, storage, df, run_scope):
+        metadata = build_commit_metadata(
+            data_collection_id="dc1",
+            data_collection_tag="tag",
+            write_mode="overwrite",
+            run_scope=run_scope,
+        )
+        write_delta_table_versioned(df, destination, storage, commit_metadata=metadata)
+
+    def test_rows_of_no_run_are_rebuilt(self, destination, storage):
+        df = pl.DataFrame({RUN_ID_COLUMN: ["A", "B", None], "v": [1, 2, 3]})
+        self.write(destination, storage, df, run_scope=None)
+        plan = self.plan(destination, storage)
+        assert not plan.scoped and "aggregate" in (plan.declined or "")
+
+    def test_an_aggregate_commit_with_every_row_owned_is_rebuilt(self, destination, storage):
+        self.write(destination, storage, frame(["A", "B"]), run_scope="aggregate")
+        assert not self.plan(destination, storage).scoped
+
+    def test_a_per_run_table_is_still_scoped(self, destination, storage):
+        self.write(destination, storage, frame(["A", "B"]), run_scope="run")
+        plan = self.plan(destination, storage)
+        assert plan.scoped and plan.run_tags == ["C"]

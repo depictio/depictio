@@ -2278,21 +2278,40 @@ def scan_files_for_data_collection(
     # the run whose location it is bound to, or none when several runs share it
     # (epic #1399). A single-run project has one file, its run's.
     from depictio.cli.cli.utils.run_bindings import single_files
-    from depictio.cli.cli.utils.run_roots import single_file_run_tag
+    from depictio.cli.cli.utils.run_roots import single_file_run_tag, single_scan_tag
 
     data_location = workflow.data_location
     locations = [str(loc) for loc in (getattr(data_location, "locations", None) or [])]
     bound_files: dict[str, str] = {}
+    bound_location: dict[str, str] = {}
     for path, bound_locations in single_files(
         data_collection.config.scan.scan_parameters, locations
     ):
+        location = bound_locations[0] if len(bound_locations) == 1 else None
         bound_files[path] = single_file_run_tag(
             data_collection.data_collection_tag,
             path,
-            bound_locations[0] if len(bound_locations) == 1 else None,
+            location,
             getattr(data_location, "structure", None),
             getattr(data_location, "runs_regex", None),
         )
+        if location:
+            bound_location[path] = location
+
+    # The runs already registered (the recursive scan runs first): a file bound
+    # to one of them points at it, so the run's view lists it. A run only this
+    # collection knows of is registered below; the synthetic tag of a file no
+    # run claims never is.
+    synthetic_tag = single_scan_tag(data_collection.data_collection_tag)
+    known_runs: dict[str, str] = {}
+    runs_response = api_get_runs_by_wf_id(wf_id=str(workflow_id), CLI_config=CLI_config)
+    if runs_response.status_code == 200:
+        for known in runs_response.json() or []:
+            known_id = known.get("_id") or known.get("id")
+            if known_id and known.get("run_tag"):
+                known_runs[str(known["run_tag"])] = str(known_id)
+    else:
+        logger.warning(f"Failed to retrieve the runs of workflow {workflow_id}.")
 
     # Check for the file's existence in the DB
     response = api_get_files_by_dc_id(dc_id=str(data_collection.id), CLI_config=CLI_config)
@@ -2311,7 +2330,12 @@ def scan_files_for_data_collection(
             stale_files = [
                 f
                 for loc, f in existing_files_reformated.items()
-                if loc not in bound_files or f.get("run_tag", bound_files[loc]) != bound_files[loc]
+                if loc not in bound_files
+                or f.get("run_tag", bound_files[loc]) != bound_files[loc]
+                or (
+                    bound_files[loc] in known_runs
+                    and str(f.get("run_id")) != known_runs[bound_files[loc]]
+                )
             ]
             for stale_file in stale_files:
                 stale_id = stale_file.get("_id") or stale_file.get("id")
@@ -2341,6 +2365,7 @@ def scan_files_for_data_collection(
     )
 
     files = []
+    new_runs: dict[str, WorkflowRun] = {}
     for file_path, run_tag in bound_files.items():
         if not os.path.isfile(file_path):
             rich_print_checked_statement(
@@ -2349,14 +2374,14 @@ def scan_files_for_data_collection(
                 "warning",
             )
             continue
-        # Never registered as a run: the files carry the tag, and the runs the
-        # recursive scan registers stay the project's runs.
+        known_id = known_runs.get(run_tag)
         workflow_run = WorkflowRun(
+            id=PyObjectId(known_id) if known_id else PyObjectId(),
             workflow_id=PyObjectId(workflow_id),
             run_tag=run_tag,
             files_id=[],
             workflow_config_id=workflow_config_id,
-            run_location=os.path.dirname(file_path),
+            run_location=bound_location.get(file_path) or os.path.dirname(file_path),
             creation_time=format_timestamp(os.path.getctime(file_path)),
             last_modification_time=format_timestamp(os.path.getmtime(file_path)),
             run_hash="",
@@ -2377,6 +2402,17 @@ def scan_files_for_data_collection(
         # ``result`` already encodes whether a file should be uploaded: added
         # always, changed under --sync-changed, updated under --sync-files.
         files.extend(sc.file for sc in scan_file_result if sc.scan_result["result"] == "success")
+        if known_id is None and run_tag != synthetic_tag:
+            new_runs[run_tag] = workflow_run
+
+    if new_runs and not dry_run:
+        # Inserted only: a run of that tag registered meanwhile is left as is.
+        response = api_upsert_runs_batch(list(new_runs.values()), CLI_config, False)
+        if response.status_code >= 400:
+            raise RuntimeError(
+                f"Registering the runs of {data_collection.data_collection_tag} failed "
+                f"(HTTP {response.status_code}): {response.text[:300]}"
+            )
 
     if files:
         if dry_run:

@@ -606,6 +606,7 @@ def execute_recipe(
     pipeline_version: str | None = None,
     params: dict[str, str] | None = None,
     properties: dict | None = None,
+    sources: dict[str, pl.DataFrame] | None = None,
 ) -> pl.DataFrame:
     """Full pipeline: load → resolve → transform → validate.
 
@@ -618,6 +619,9 @@ def execute_recipe(
         pipeline_version: Optional pipeline version for version-specific recipe lookup.
         params: Optional template parameters, passed to ``transform(sources, params=...)``
             when the recipe accepts them (see ``call_transform``).
+        sources: The file sources, already read (from several run folders,
+            put back together by the caller). ``data_dir`` is then only the
+            context the transform receives.
 
     Returns:
         Validated output DataFrame.
@@ -626,7 +630,7 @@ def execute_recipe(
     module = load_recipe(recipe_name, pipeline_version)
 
     # Checkpoint 2: resolve
-    sources = resolve_sources(module, data_dir, overrides)
+    sources = dict(sources) if sources is not None else resolve_sources(module, data_dir, overrides)
 
     # Inject dc_ref sources
     if extra_sources:
