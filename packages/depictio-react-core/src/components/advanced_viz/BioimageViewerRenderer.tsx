@@ -160,6 +160,7 @@ interface BioimageViewerConfig {
   box_w_col?: string | null;
   box_h_col?: string | null;
   frame_on_filter?: boolean;
+  ortho_views?: boolean;
 }
 
 interface Props {
@@ -812,6 +813,7 @@ const BioimageViewerRenderer: React.FC<Props> = ({
           onZoomChange: (z) => setZoom(Math.round(z * 100) / 100),
           onViewChange: (camera) => viewChangeRef.current(camera),
           onRoi: (polygon) => roiRef.current(polygon),
+          onPlaneChange: (z) => planeChangeRef.current(z),
           onError: (err) => console.warn('[bioimage_viewer]', err),
         }),
       )
@@ -839,6 +841,12 @@ const BioimageViewerRenderer: React.FC<Props> = ({
   const [info, setInfo] = useState<BioimageInfo | null>(null);
   const [channels, setChannels] = useState<ChannelState[]>([]);
   const [plane, setPlane] = useState<{ z: number; t: number }>({ z: 0, t: 0 });
+  // A click on an orthogonal slice moves the plane.
+  const planeChangeRef = useRef((z: number) => setPlane((p) => ({ ...p, z })));
+  // XY with its XZ and YZ slices, or the plane alone. Starts from the config;
+  // the toggle by the Z slider is the reader's own, not written back.
+  const [orthoOn, setOrthoOn] = useState(Boolean(config.ortho_views));
+  useEffect(() => setOrthoOn(Boolean(config.ortho_views)), [config.ortho_views]);
   // Read at load time only: the reader's own channel edits write back to the
   // config, and must not reload the image they were made on.
   const configChannelsRef = useRef<ConfigChannel[]>(config.channels ?? []);
@@ -928,6 +936,10 @@ const BioimageViewerRenderer: React.FC<Props> = ({
   useEffect(() => {
     if (viewer && info) viewer.setSelection(plane);
   }, [viewer, info, plane]);
+
+  useEffect(() => {
+    if (viewer && info) viewer.setOrtho(orthoOn && info.ortho);
+  }, [viewer, info, orthoOn]);
 
   useEffect(() => {
     if (!hostEl || !viewer) return;
@@ -1598,13 +1610,38 @@ const BioimageViewerRenderer: React.FC<Props> = ({
           />
         ) : null}
         {info && info.sizes.z > 1 ? (
-          <PlaneSlider
-            label="Z"
-            value={plane.z}
-            size={info.sizes.z}
-            step={info.zStep}
-            onChange={(v) => setPlane((p) => ({ ...p, z: v }))}
-          />
+          <Group gap={4} wrap="nowrap" data-dock-keep="">
+            <PlaneSlider
+              label="Z"
+              value={plane.z}
+              size={info.sizes.z}
+              step={info.zStep}
+              onChange={(v) => setPlane((p) => ({ ...p, z: v }))}
+            />
+            {info.ortho ? (
+              <Tooltip
+                label={
+                  orthoOn
+                    ? 'Back to the XY plane alone'
+                    : 'Orthogonal slices: XZ and YZ under the plane; click a slice to move through it'
+                }
+                withArrow
+                openDelay={300}
+              >
+                <ActionIcon
+                  size="sm"
+                  variant={orthoOn ? 'light' : 'subtle'}
+                  color={orthoOn ? undefined : 'gray'}
+                  aria-label="Orthogonal slices"
+                  aria-pressed={orthoOn}
+                  data-testid="bioimage-ortho-toggle"
+                  onClick={() => setOrthoOn((o) => !o)}
+                >
+                  <Icon icon="tabler:cube" width={14} />
+                </ActionIcon>
+              </Tooltip>
+            ) : null}
+          </Group>
         ) : null}
         {info && info.sizes.t > 1 ? (
           <PlaneSlider
@@ -1634,7 +1671,7 @@ const BioimageViewerRenderer: React.FC<Props> = ({
       </>
     ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [stores, sampleStores, activeStore, sampleValue, config.sample_column, wells, activeWell, wellValue, config.well_column, info, plane, playing, stepsEnabled, steps, stepSample, sampleSteps, activeStep, previousStep, activeStepIndex, stepCols, referenceKnown, referenceName, referenceLabel, compareWith, compareMode, compareOpacity, stepsPlaying, config.steps_metric_better, overlayChannels.length, overlayOpacity],
+    [stores, sampleStores, activeStore, sampleValue, config.sample_column, wells, activeWell, wellValue, config.well_column, info, plane, playing, orthoOn, stepsEnabled, steps, stepSample, sampleSteps, activeStep, previousStep, activeStepIndex, stepCols, referenceKnown, referenceName, referenceLabel, compareWith, compareMode, compareOpacity, stepsPlaying, config.steps_metric_better, overlayChannels.length, overlayOpacity],
   );
 
   // The cosmetic tier: how it is drawn. One group per channel, then the labels

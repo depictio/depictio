@@ -315,6 +315,7 @@
         "box_w_col": null,
         "box_h_col": null,
         "frame_on_filter": false,
+        "ortho_views": false,
         "points_sample_col": "sample",
         "points_well_col": null,
         "labels_wf_id": null,

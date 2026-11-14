@@ -106,8 +106,8 @@ components:
     component_type: advanced_viz
     workflow_tag: python/bioimage_demo
     data_collection_tag: cosem_hela_em
-    title: 'Picked crop at 4 nm'
-    description: 'The same volume, zoomed to the crops the overview selection and the filters keep, at their middle plane, streamed at full resolution.'
+    title: 'Picked crop at 4 nm, three ways'
+    description: 'The same volume, zoomed to the crops the overview selection and the filters keep, at their middle plane, streamed at full resolution: the XY plane above its XZ and YZ slices through the crop. Click a slice to move through it.'
     section: 'Cell'
     viz_kind: bioimage_viewer
     controls_placement: top
@@ -132,9 +132,12 @@ components:
       color_col: main_organelle
       channels: *em
       frame_on_filter: true
+      # The XY plane above its XZ and YZ slices: the crop is a box in the
+      # volume, and a thin XY strip of the cell reads best from the side.
+      ortho_views: true
       selection_enabled: false
       show_scalebar: true
-    layout: { x: 0, y: 8, w: 8, h: 9 }
+    layout: { x: 0, y: 8, w: 8, h: 12 }
 
   - tag: card-deep-zoom-crops
     index: omz-dz-card-crops
@@ -149,7 +152,7 @@ components:
     title_font_size: md
     value_font_size: xl
     title: 'Annotated crops'
-    layout: { x: 0, y: 17, w: 2, h: 2 }
+    layout: { x: 0, y: 20, w: 2, h: 2 }
 
   - tag: card-deep-zoom-mito
     index: omz-dz-card-mito
@@ -164,7 +167,7 @@ components:
     title_font_size: md
     value_font_size: xl
     title: 'Mitochondria (% of crop)'
-    layout: { x: 2, y: 17, w: 2, h: 2 }
+    layout: { x: 2, y: 20, w: 2, h: 2 }
 
   - tag: card-deep-zoom-er
     index: omz-dz-card-er
@@ -179,7 +182,7 @@ components:
     title_font_size: md
     value_font_size: xl
     title: 'ER (% of crop)'
-    layout: { x: 4, y: 17, w: 2, h: 2 }
+    layout: { x: 4, y: 20, w: 2, h: 2 }
 
   - tag: card-deep-zoom-depth
     index: omz-dz-card-depth
@@ -194,7 +197,7 @@ components:
     title_font_size: md
     value_font_size: xl
     title: 'Depth annotated (um)'
-    layout: { x: 6, y: 17, w: 2, h: 2 }
+    layout: { x: 6, y: 20, w: 2, h: 2 }
 
   - tag: figure-deep-zoom-main
     index: omz-dz-fig-main
@@ -207,7 +210,7 @@ components:
     dict_kwargs:
       x: main_organelle
       color: main_organelle
-    layout: { x: 0, y: 19, w: 4, h: 4 }
+    layout: { x: 0, y: 22, w: 4, h: 4 }
 
   - tag: figure-deep-zoom-mito-er
     index: omz-dz-fig-mito-er
@@ -223,7 +226,7 @@ components:
       color: main_organelle
       size: depth_um
       hover_name: crop
-    layout: { x: 4, y: 19, w: 4, h: 4 }
+    layout: { x: 4, y: 22, w: 4, h: 4 }
 
   - tag: table-deep-zoom-crops
     index: omz-dz-crops
@@ -235,7 +238,7 @@ components:
     description: 'One row per annotated crop: where it is in the cell, its size, and the share of it each organelle fills.'
     columns: [crop, main_organelle, width_um, depth_um, mito_pct, er_pct, nuc_pct, golgi_pct, ves_pct, lyso_pct, ecs_pct, z_first, z_last]
     page_size: 10
-    layout: { x: 0, y: 23, w: 8, h: 4 }
+    layout: { x: 0, y: 26, w: 8, h: 4 }
 
   - tag: filter-deep-zoom-main
     index: omz-dz-f-main

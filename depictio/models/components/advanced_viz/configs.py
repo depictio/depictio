@@ -1626,6 +1626,13 @@ class BioimageViewerConfig(_BaseVizConfig):
             "included): the detail view of an overview tile"
         ),
     )
+    ortho_views: bool = Field(
+        default=False,
+        description=(
+            "Open on the orthogonal slices of a volume: the XY plane above its XZ and "
+            "YZ slices, crossing where the reader clicks (OME-Zarr images with a Z axis)"
+        ),
+    )
     points_sample_col: str | None = Field(
         default=None,
         description="Points column holding the sample name, to keep only the shown store's points",

@@ -19,7 +19,7 @@
 
 import { Deck, OrthographicView } from '@deck.gl/core';
 import { TileLayer } from '@deck.gl/geo-layers';
-import { BitmapLayer, PolygonLayer, ScatterplotLayer } from '@deck.gl/layers';
+import { BitmapLayer, LineLayer, PolygonLayer, ScatterplotLayer } from '@deck.gl/layers';
 import {
   ImageLayer,
   MultiscaleImageLayer,
@@ -56,6 +56,8 @@ import {
   type Polygon,
   type Vec2,
 } from './geometry';
+import { ScaleMatrix } from './matrix';
+import { reslice, zAspect, type OrthoCursor, type ReslicedSource } from './ortho';
 import { overlayMatrix, overlayPlane } from './overlay';
 import {
   colorizeLabels,
@@ -90,6 +92,8 @@ export interface BioimageInfo {
   /** The step between two Z planes and two time points, when the store says. */
   zStep: AxisStep | null;
   tStep: AxisStep | null;
+  /** Whether the image can show orthogonal slices (an OME-Zarr volume). */
+  ortho: boolean;
 }
 
 export interface OverlayPoint {
@@ -123,6 +127,8 @@ export interface BioimageViewerOptions {
   onViewChange?: (camera: { zoom: number; target: [number, number] }) => void;
   /** A finished lasso or rectangle, in image coordinates. */
   onRoi?: (polygon: Polygon) => void;
+  /** A click on an orthogonal slice picked another Z plane. */
+  onPlaneChange?: (z: number) => void;
   onError?: (error: Error) => void;
 }
 
@@ -234,6 +240,10 @@ export interface BioimageViewer {
    *  whole image again with null. Applies to later loads too. */
   frame(bounds: Bounds | null): void;
   setSelectionMode(mode: SelectionMode): void;
+  /** Show the XZ and YZ slices under the XY plane, through a cursor the
+   *  reader moves by clicking; false goes back to the plane alone. Ignored
+   *  for an image without Z (see `BioimageInfo.ortho`). */
+  setOrtho(on: boolean): void;
   /** Theme sync. `accent` rings highlighted points and draws the ROI. */
   setDark(dark: boolean, accent?: Rgb): void;
   resetView(): void;
@@ -398,12 +408,34 @@ export async function createBioimageViewer(
   const SIDE_VIEW = 'side';
   const MAIN_VIEW = 'ortho';
   let split = false;
+  // Orthogonal slices: the XY plane on top, XZ and YZ under it, each with its
+  // own camera, crossing at `cursor` (level-0 voxels; its Z is the plane).
+  const XZ_VIEW = 'slice-xz';
+  const YZ_VIEW = 'slice-yz';
+  let ortho = false;
+  let slices: { xz: ReslicedSource[]; yz: ReslicedSource[] } | null = null;
+  let cursor: Omit<OrthoCursor, 'z'> = { x: 0, y: 0 };
+  let zScale = 1;
+  let sliceStates: Record<string, ViewState> = {
+    [XZ_VIEW]: { target: [0, 0, 0], zoom: 0 },
+    [YZ_VIEW]: { target: [0, 0, 0], zoom: 0 },
+  };
+  // The reader moved a slice's camera: framing and plane changes leave it be.
+  let slicesMoved = false;
+  const orthoOn = () => ortho && slices !== null;
   const hostSize = () => ({
     w: split ? host.clientWidth / 2 : host.clientWidth,
-    h: host.clientHeight,
+    h: orthoOn() ? host.clientHeight / 2 : host.clientHeight,
   });
   const viewStateProp = () =>
-    split ? { [SIDE_VIEW]: viewState, [MAIN_VIEW]: viewState } : viewState;
+    orthoOn()
+      ? { [MAIN_VIEW]: viewState, ...sliceStates }
+      : split
+        ? { [SIDE_VIEW]: viewState, [MAIN_VIEW]: viewState }
+        : viewState;
+  /** World extent of a slice: across (X or Y) by Z drawn to scale. */
+  const sliceExtent = (id: string): [number, number] =>
+    info ? [id === XZ_VIEW ? info.width : info.height, info.sizes.z * zScale] : [1, 1];
 
   // Points with a size are boxes, except those too small to see at this zoom,
   // which draw (and are picked) as dots at their centre.
@@ -439,14 +471,52 @@ export async function createBioimageViewer(
     const v = framed ? fitBoundsViewState(framed, w, h, 0.05) : whole;
     viewState = { ...v, minZoom: whole.zoom - 3, maxZoom: Math.max(8, v.zoom) };
     userMoved = false;
+    if (orthoOn()) fitSlices();
     deck.setProps({ viewState: viewStateProp() as never });
     opts.onZoomChange?.(viewState.zoom);
+  };
+
+  /** Each slice fitted whole in its pane or, when the plane is framed on some
+   *  bounds, at the plane's zoom on the cursor and the current depth. */
+  const fitSlices = () => {
+    if (!info) return;
+    const paneW = host.clientWidth / 2;
+    const paneH = host.clientHeight / 2;
+    for (const id of [XZ_VIEW, YZ_VIEW]) {
+      const [w, h] = sliceExtent(id);
+      const whole = fitViewState(w, h, paneW, paneH);
+      const across = id === XZ_VIEW ? cursor.x : cursor.y;
+      const v = framed
+        ? { zoom: viewState.zoom, target: [across, (plane.z + 0.5) * zScale, 0] as ViewState['target'] }
+        : whole;
+      sliceStates[id] = { ...v, minZoom: whole.zoom - 3, maxZoom: Math.max(8, v.zoom) };
+    }
+    slicesMoved = false;
   };
 
   const view = (dragPan: boolean) =>
     new OrthographicView({ id: MAIN_VIEW, controller: { dragPan, doubleClickZoom: dragPan } });
   const views = () => {
     const dragPan = mode === 'pan';
+    if (orthoOn()) {
+      const panes = { dragPan: true, doubleClickZoom: true };
+      return [
+        new OrthographicView({
+          id: MAIN_VIEW,
+          height: '50%',
+          controller: { dragPan, doubleClickZoom: dragPan },
+        }),
+        new OrthographicView({ id: XZ_VIEW, y: '50%', width: '50%', height: '50%', controller: panes }),
+        new OrthographicView({
+          id: YZ_VIEW,
+          x: '50%',
+          y: '50%',
+          width: '50%',
+          height: '50%',
+          controller: panes,
+        }),
+      ];
+    }
     if (!split) return view(dragPan);
     const controller = { dragPan, doubleClickZoom: dragPan };
     return [
@@ -457,14 +527,24 @@ export async function createBioimageViewer(
   // Split, the reference draws only on the left and everything else only on the right.
   const sideFilter = ({ layer, viewport }: { layer: { id: string }; viewport: { id: string } }) =>
     (viewport.id === SIDE_VIEW) === layer.id.startsWith('bioimage-reference');
+  // Ortho, a slice's layers draw only in its pane, everything else on the plane.
+  const orthoFilter = ({ layer, viewport }: { layer: { id: string }; viewport: { id: string } }) =>
+    layer.id.startsWith(XZ_VIEW)
+      ? viewport.id === XZ_VIEW
+      : layer.id.startsWith(YZ_VIEW)
+        ? viewport.id === YZ_VIEW
+        : viewport.id === MAIN_VIEW;
+  const applyViews = () => {
+    deck.setProps({
+      views: views() as never,
+      layerFilter: (orthoOn() ? orthoFilter : split ? sideFilter : null) as never,
+      viewState: viewStateProp() as never,
+    });
+  };
   const setSplit = (next: boolean) => {
     if (next === split) return;
     split = next;
-    deck.setProps({
-      views: views() as never,
-      layerFilter: (split ? sideFilter : null) as never,
-      viewState: viewStateProp() as never,
-    });
+    applyViews();
     if (!userMoved) fit();
   };
 
@@ -496,7 +576,13 @@ export async function createBioimageViewer(
         markLabelsReady();
       }
     },
-    onViewStateChange: ({ viewState: next }) => {
+    onViewStateChange: ({ viewId, viewState: next }) => {
+      if (orthoOn() && (viewId === XZ_VIEW || viewId === YZ_VIEW)) {
+        sliceStates = { ...sliceStates, [viewId]: next as unknown as ViewState };
+        slicesMoved = true;
+        deck.setProps({ viewState: viewStateProp() as never });
+        return next as never;
+      }
       viewState = next as unknown as ViewState;
       userMoved = true;
       deck.setProps({ viewState: viewStateProp() as never });
@@ -660,6 +746,69 @@ export async function createBioimageViewer(
     });
   };
 
+  /** The XZ and YZ slices through the cursor, and the cursor's lines on all
+   *  three panes. */
+  const sliceLayers = (image: BioimageInfo): unknown[] => {
+    if (!slices) return [];
+    const shown = renderedChannels(channels);
+    const matrix = zScale !== 1 ? ScaleMatrix.of2d(1, zScale) : null;
+    const layers: unknown[] = [];
+    for (const [id, pyramid, at] of [
+      [XZ_VIEW, slices.xz, cursor.y],
+      [YZ_VIEW, slices.yz, cursor.x],
+    ] as const) {
+      layers.push(
+        imageLayer(pyramid as unknown as PixelSource[], {
+          id: `${id}-${loadToken}`,
+          loader: pyramid,
+          selections: shown.map((c) => ({ c: c.index, t: plane.t, at: Math.floor(at) })),
+          colors: shown.map((c) => hexToRgb(c.color) ?? [255, 255, 255]),
+          contrastLimits: shown.map((c) => c.contrastLimits),
+          channelsVisible: shown.map((c) => c.visible),
+          ...(matrix ? { modelMatrix: matrix } : {}),
+          onTileError: (err: unknown) => {
+            if (isBoundsError(err)) return;
+            opts.onError?.(err instanceof Error ? err : new Error(String(err)));
+          },
+        }),
+      );
+    }
+    // Lines through the voxel centres, in each pane's own world coordinates.
+    const z = (plane.z + 0.5) * zScale;
+    const depth = image.sizes.z * zScale;
+    const cx = Math.floor(cursor.x) + 0.5;
+    const cy = Math.floor(cursor.y) + 0.5;
+    const lines: Record<string, Array<[Vec2, Vec2]>> = {
+      'cursor-xy': [
+        [[cx, 0], [cx, image.height]],
+        [[0, cy], [image.width, cy]],
+      ],
+      [`${XZ_VIEW}-cursor`]: [
+        [[cx, 0], [cx, depth]],
+        [[0, z], [image.width, z]],
+      ],
+      [`${YZ_VIEW}-cursor`]: [
+        [[cy, 0], [cy, depth]],
+        [[0, z], [image.height, z]],
+      ],
+    };
+    for (const [id, data] of Object.entries(lines)) {
+      layers.push(
+        new LineLayer<[Vec2, Vec2]>({
+          id,
+          data,
+          getSourcePosition: (d) => d[0],
+          getTargetPosition: (d) => d[1],
+          getColor: [...accent, 170],
+          getWidth: 1,
+          widthUnits: 'pixels',
+          updateTriggers: { getColor: accent },
+        }),
+      );
+    }
+    return layers;
+  };
+
   const render = () => {
     if (disposed) return;
     const layers: unknown[] = [];
@@ -684,7 +833,7 @@ export async function createBioimageViewer(
         },
       };
       const comparing = reference !== null && referenceStyle.mode !== 'off';
-      setSplit(comparing && referenceStyle.mode === 'side');
+      setSplit(!orthoOn() && comparing && referenceStyle.mode === 'side');
       const compared =
         channels.find((c) => c.index === referenceStyle.channel) ?? shown[0] ?? null;
       if (comparing && referenceStyle.mode === 'colours' && compared) {
@@ -731,6 +880,7 @@ export async function createBioimageViewer(
         }
       }
     }
+    if (orthoOn() && info) layers.push(...sliceLayers(info));
     const overlayed = data && info ? overlayLayer(info) : null;
     if (overlayed) layers.push(overlayed);
     const labelsOverlay = labelsLayer();
@@ -815,15 +965,43 @@ export async function createBioimageViewer(
   // with dragPan off in the ROI modes, deck does not claim the drag itself.
   let drawing: { start: Vec2; lastScreen: Vec2 } | null = null;
 
-  const toImage = (e: PointerEvent): { world: Vec2; screen: Vec2 } | null => {
-    const vp = deck.getViewports().find((v) => v.id === MAIN_VIEW) ?? deck.getViewports()[0];
-    if (!vp) return null;
+  /** The pane under the pointer and the world point there. */
+  const locate = (e: PointerEvent): { world: Vec2; screen: Vec2; view: string } | null => {
     const rect = host.getBoundingClientRect();
     const screen: Vec2 = [e.clientX - rect.left, e.clientY - rect.top];
-    // Split, the left half is the reference: nothing there to pick or select.
-    if (split && screen[0] < vp.x) return null;
+    const vp = deck
+      .getViewports()
+      .find(
+        (v) =>
+          screen[0] >= v.x &&
+          screen[0] < v.x + v.width &&
+          screen[1] >= v.y &&
+          screen[1] < v.y + v.height,
+      );
+    if (!vp) return null;
     const [x, y] = vp.unproject([screen[0] - vp.x, screen[1] - vp.y]);
-    return { world: [x, y], screen };
+    return { world: [x, y], screen, view: vp.id };
+  };
+
+  // Only the plane (not the reference beside it, nor a slice) picks and selects.
+  const toImage = (e: PointerEvent): { world: Vec2; screen: Vec2 } | null => {
+    const at = locate(e);
+    return at && at.view === MAIN_VIEW ? at : null;
+  };
+
+  /** Move the cursor; a click on a slice also moves the plane to its depth. */
+  const moveCursor = (next: Partial<OrthoCursor>) => {
+    if (!info) return;
+    const clamp = (v: number, size: number) => Math.min(size - 1, Math.max(0, Math.floor(v)));
+    cursor = {
+      x: next.x == null ? cursor.x : clamp(next.x, info.width),
+      y: next.y == null ? cursor.y : clamp(next.y, info.height),
+    };
+    render();
+    if (next.z != null) {
+      const z = clamp(next.z, info.sizes.z);
+      if (z !== plane.z) opts.onPlaneChange?.(z);
+    }
   };
 
   // A click in pan mode picks the label under it; deck still pans on a drag.
@@ -868,6 +1046,12 @@ export async function createBioimageViewer(
     const dx = e.clientX - start[0];
     const dy = e.clientY - start[1];
     if (dx * dx + dy * dy > CLICK_MAX_MOVE_PX * CLICK_MAX_MOVE_PX) return;
+    const where = orthoOn() ? locate(e) : null;
+    if (where && where.view !== MAIN_VIEW) {
+      const [u, v] = where.world;
+      moveCursor(where.view === XZ_VIEW ? { x: u, z: v / zScale } : { y: u, z: v / zScale });
+      return;
+    }
     const at = toImage(e);
     if (!at) return;
     if (opts.onPointClick && points.length) {
@@ -881,6 +1065,7 @@ export async function createBioimageViewer(
         return;
       }
     }
+    if (orthoOn()) moveCursor({ x: at.world[0], y: at.world[1] });
     if (!labels || !opts.onLabelClick) return;
     const label = labelAt(
       labelTiles,
@@ -1012,6 +1197,11 @@ export async function createBioimageViewer(
       // drawn until the new one has its tiles. A refresh (`keepView`) also
       // keeps what the reader set up on it.
       const sameFrame = info !== null && info.width === width && info.height === height;
+      const xz = reslice(pyramid as never, 'xz');
+      const yz = reslice(pyramid as never, 'yz');
+      slices = xz && yz ? { xz, yz } : null;
+      zScale = zAspect(opened.zStep ?? null, opened.physicalSize);
+      if (!sameFrame) cursor = { x: Math.floor(width / 2), y: Math.floor(height / 2) };
       const keep = Boolean(loadOpts?.keepView) && sameFrame;
       heldImage = sameFrame && data ? lastImage : null;
       data = pyramid;
@@ -1032,7 +1222,9 @@ export async function createBioimageViewer(
         physicalSize: opened.physicalSize,
         zStep: opened.zStep ?? null,
         tStep: opened.tStep ?? null,
+        ortho: slices !== null,
       };
+      if (ortho) applyViews();
       if (!sameFrame || !userMoved) fit();
       render();
       return info;
@@ -1048,6 +1240,11 @@ export async function createBioimageViewer(
       plane = { z: sel.z, t: sel.t };
       // Label tiles are per plane: the picking map refills as they reload.
       labelTiles = new Map();
+      // Framed slices follow the depth the framing moved to.
+      if (orthoOn() && framed && !slicesMoved) {
+        fitSlices();
+        deck.setProps({ viewState: viewStateProp() as never });
+      }
       render();
     },
 
@@ -1211,6 +1408,14 @@ export async function createBioimageViewer(
       render();
     },
 
+    setOrtho(on) {
+      if (on === ortho) return;
+      ortho = on;
+      applyViews();
+      fit();
+      render();
+    },
+
     setDark(_dark, nextAccent) {
       // The image is drawn additively on black whatever the scheme, and the
       // canvas is transparent around it, so only the accent follows the theme.
@@ -1240,7 +1445,15 @@ export async function createBioimageViewer(
 
     frame(bounds) {
       framed = bounds;
+      // The slices cut through what is framed.
+      if (bounds && info) {
+        cursor = {
+          x: Math.min(info.width - 1, Math.max(0, Math.floor((bounds.minX + bounds.maxX) / 2))),
+          y: Math.min(info.height - 1, Math.max(0, Math.floor((bounds.minY + bounds.maxY) / 2))),
+        };
+      }
       fit();
+      render();
     },
 
     resize() {
