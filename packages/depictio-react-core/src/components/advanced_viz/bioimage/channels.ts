@@ -215,6 +215,29 @@ export function renderedChannels(channels: readonly ChannelState[]): ChannelStat
   return channels.length ? [{ ...channels[0], visible: false }] : [];
 }
 
+/**
+ * The channels a comparison draws of its reference store.
+ *
+ * The image's own shown channels when the reference holds the same ones (a
+ * registration step against the step before or its fixed image, one modality):
+ * a contrast change then applies to both sides. Another modality (a
+ * bright-field image under a second-harmonic one) has channels of its own, and
+ * the image's contrast would mean nothing on it: its own starting state is
+ * drawn instead. Until that is known (`own` empty), the image's channels the
+ * reference has (`count`) are drawn.
+ */
+export function referenceChannelsFor(
+  shown: readonly ChannelState[],
+  image: readonly ChannelState[],
+  own: readonly ChannelState[],
+  count = own.length,
+): ChannelState[] {
+  if (!own.length) return shown.filter((c) => c.index < Math.max(count, 1));
+  const same = own.length === image.length && own.every((c, i) => c.name === image[i].name);
+  if (same) return shown.filter((c) => c.index < own.length);
+  return renderedChannels(own).filter((c) => c.visible);
+}
+
 const UNIT_ABBREVIATIONS: Record<string, string> = {
   angstrom: 'Å',
   nanometer: 'nm',

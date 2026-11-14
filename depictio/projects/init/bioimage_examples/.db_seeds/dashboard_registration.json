@@ -131,6 +131,8 @@
           "tre_px": "lower",
           "folding_pct": "lower"
         },
+        "steps_compare_with": "previous",
+        "steps_compare": "side",
         "overlay_store": null,
         "overlay_opacity": 0.6,
         "selection_enabled": true,

@@ -339,3 +339,13 @@ def test_a_steps_history_reads_parameters_run_info_and_metric_directions():
         )
     with pytest.raises(ValidationError, match="no steps DC"):
         BioimageViewerConfig(image_dc_tag="images", steps_param_col="parameters")
+
+
+def test_steps_compare_picks_how_a_step_first_shows():
+    assert VIZ_CONFIG.validate_python(STEPS).steps_compare == "side"
+    assert VIZ_CONFIG.validate_python({**STEPS, "steps_compare": "fade"}).steps_compare == "fade"
+    with pytest.raises(ValidationError):
+        VIZ_CONFIG.validate_python({**STEPS, "steps_compare": "blend"})
+    assert VIZ_CONFIG.validate_python(STEPS).steps_compare_with == "previous"
+    fixed = VIZ_CONFIG.validate_python({**STEPS, "steps_compare_with": "fixed"})
+    assert fixed.steps_compare_with == "fixed"

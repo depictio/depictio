@@ -1,0 +1,90 @@
+{
+    "multiscales": [
+        {
+            "axes": [
+                {
+                    "name": "c",
+                    "type": "channel"
+                },
+                {
+                    "name": "y",
+                    "type": "space"
+                },
+                {
+                    "name": "x",
+                    "type": "space"
+                }
+            ],
+            "datasets": [
+                {
+                    "coordinateTransformations": [
+                        {
+                            "scale": [
+                                1.0,
+                                1.0,
+                                1.0
+                            ],
+                            "type": "scale"
+                        }
+                    ],
+                    "path": "0"
+                },
+                {
+                    "coordinateTransformations": [
+                        {
+                            "scale": [
+                                1.0,
+                                2.0,
+                                2.0
+                            ],
+                            "type": "scale"
+                        }
+                    ],
+                    "path": "1"
+                }
+            ],
+            "name": "1B_B8_bf",
+            "version": "0.4"
+        }
+    ],
+    "omero": {
+        "channels": [
+            {
+                "active": true,
+                "color": "FF0000",
+                "label": "Red",
+                "window": {
+                    "end": 124.0,
+                    "max": 255,
+                    "min": 0,
+                    "start": 39.0
+                }
+            },
+            {
+                "active": true,
+                "color": "00FF00",
+                "label": "Green",
+                "window": {
+                    "end": 131.0,
+                    "max": 255,
+                    "min": 0,
+                    "start": 32.0
+                }
+            },
+            {
+                "active": true,
+                "color": "0000FF",
+                "label": "Blue",
+                "window": {
+                    "end": 142.0,
+                    "max": 255,
+                    "min": 0,
+                    "start": 72.0
+                }
+            }
+        ],
+        "rdefs": {
+            "model": "color"
+        }
+    }
+}

@@ -154,6 +154,8 @@ interface BioimageViewerConfig {
   steps_param_col?: string | null;
   steps_info_cols?: string[];
   steps_metric_better?: Record<string, MetricDirection>;
+  steps_compare?: CompareMode;
+  steps_compare_with?: 'previous' | 'fixed';
   overlay_store?: string | null;
   points_z_tolerance?: number;
   overlay_opacity?: number;
@@ -1253,7 +1255,9 @@ const BioimageViewerRenderer: React.FC<Props> = ({
   // Reading a history, the question is first "what did this step change?",
   // so the step before is the default; the fixed image answers "how far is
   // it from the target?". The first step has nothing before it.
-  const [compareWith, setCompareWith] = useState<'previous' | 'fixed'>('previous');
+  const [compareWith, setCompareWith] = useState<'previous' | 'fixed'>(
+    config.steps_compare_with ?? 'previous',
+  );
   const referenceName =
     compareWith === 'previous' && previousStep
       ? previousStep.store
@@ -1265,7 +1269,7 @@ const BioimageViewerRenderer: React.FC<Props> = ({
   const referenceKnown = Boolean(
     referenceName && stores?.some((st) => st.name === referenceName),
   );
-  const [compareMode, setCompareMode] = useState<CompareMode>('side');
+  const [compareMode, setCompareMode] = useState<CompareMode>(config.steps_compare ?? 'side');
   const [compareOpacity, setCompareOpacity] = useState(0.5);
   const [referenceError, setReferenceError] = useState<string | null>(null);
   const comparing = referenceKnown && compareMode !== 'off';

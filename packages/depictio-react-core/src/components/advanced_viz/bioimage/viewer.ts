@@ -37,6 +37,7 @@ import {
   ngffRootAttrs,
   physicalPixelSize,
   renderedChannels,
+  referenceChannelsFor,
   resolveChannels,
   selectionFor,
   type AxisStep,
@@ -386,6 +387,8 @@ export async function createBioimageViewer(
   // Reference image (a registration's fixed image), drawn over the image.
   let reference: PixelSource[] | null = null;
   let referenceChannels = 0;
+  // The reference's own starting channels (another modality draws these).
+  let referenceOwn: ChannelState[] = [];
   let referenceToken = 0;
   // Bumped when a new reference pyramid is in place: its layer id, so the old
   // one keeps its tiles while the next store opens.
@@ -851,9 +854,16 @@ export async function createBioimageViewer(
       layers.push(lastImage);
       if (comparing && reference) {
         const refAxes = reference[0].labels;
-        const usable = (c: ChannelState) => c.index < Math.max(referenceChannels, 1);
         const colours = referenceStyle.mode === 'colours';
-        const drawn = colours ? (compared && usable(compared) ? [compared] : []) : shown.filter(usable);
+        const own = referenceChannelsFor(shown, channels, referenceOwn, referenceChannels);
+        const sameModality = !referenceOwn.length || own.every((c) => shown.includes(c));
+        const drawn = colours
+          ? sameModality
+            ? compared && compared.index < Math.max(referenceChannels, 1)
+              ? [compared]
+              : []
+            : own.slice(0, 1)
+          : own;
         if (drawn.length) {
           if (heldReference) layers.push(heldReference);
           lastReference = imageLayer(reference, {
@@ -1291,6 +1301,7 @@ export async function createBioimageViewer(
       if (!store) {
         reference = null;
         referenceChannels = 0;
+        referenceOwn = [];
         heldReference = null;
         render();
         return null;
@@ -1305,6 +1316,11 @@ export async function createBioimageViewer(
       reference = opened.pyramid;
       referenceId += 1;
       referenceChannels = lab.includes('c') ? (base.shape[lab.indexOf('c')] ?? 1) : 1;
+      referenceOwn = resolveChannels({
+        sizeC: referenceChannels,
+        dtype: base.dtype,
+        omero: opened.omero as never,
+      });
       render();
       return {
         width: base.shape[lab.indexOf('x')] ?? 0,

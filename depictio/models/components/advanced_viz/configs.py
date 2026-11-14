@@ -1719,6 +1719,21 @@ class BioimageViewerConfig(_BaseVizConfig):
             "change since the step before reads as better or worse"
         ),
     )
+    steps_compare_with: Literal["previous", "fixed"] = Field(
+        default="previous",
+        description=(
+            "What a step is first compared with: the step before it, or the fixed image. "
+            "'fixed' suits two modalities, where the step before is the same technique"
+        ),
+    )
+    steps_compare: Literal["side", "colours", "fade", "off"] = Field(
+        default="side",
+        description=(
+            "How a step is first shown against the one it is compared with: side by side, "
+            "in two colours, faded over it, or alone. 'fade' suits two modalities (a "
+            "second-harmonic image over bright field), where colours would not add up"
+        ),
+    )
     # Another image registered onto this one (light microscopy over EM): a
     # store of the same image DC, drawn over the image in its own channels and
     # stretched to the image's extent, so it must cover the same field.

@@ -37,6 +37,9 @@ experimental result.
 | `shapes/shapes.csv` | Sample sheet of the gallery: axes, shape, pixel type and what each store exercises | synthetic |
 | `registration/{embryo_a,embryo_b}_{fixed,raw,rigid,affine,bspline}.zarr` | A registration in steps, NGFF 0.4, 2 channels (nuclei, membranes), 384 x 384, uint16, `c,y,x`: the fixed image and the moving image resampled into its frame after each step | synthetic |
 | `registration/registration_steps.csv` | One row per sample and step: the store it wrote, the fixed store, NCC, target registration error, folding and runtime | synthetic |
+| `multimodal/{1B_B8,2B_E4,1B_J2}_bf.zarr` | The bright-field H&E image of three tissue cores, 834 x 834, uint8, RGB as `c,y,x`, NGFF 0.4: the fixed image of the multimodal registration | Eliceiri dataset (Zenodo 3874362), CC BY 4.0 |
+| `multimodal/{core}_{raw,rigid_intensity,rigid_stroma,affine}.zarr` | The second-harmonic image of the same core resampled into the bright-field frame after each registration step (`raw`: as acquired), 834 x 834, uint8, `c,y,x` | same; resampled by itk-elastix |
+| `multimodal/multimodal_steps.csv` | One row per core and step: the store it wrote, the bright-field store, the corner error against the dataset's ground truth, normalised mutual information, recovered rotation, measured runtime, elastix parameters | derived from the same, measured |
 | `clem/lm_in_em.zarr` | The light microscopy of one HeLa cell (DAPI, mitochondria, Golgi, lysosomes) resampled into the frame of its FIB-SEM volume by a landmark affine, 4 x 19 x 437 x 371, uint8, `c,z,y,x`, NGFF 0.4 | BioImage Archive S-BIAD4355 and S-BSST707, CC0 |
 | `clem/clem_landmarks.csv` | The 150 landmark pairs placed between the LM and the EM, in um and EM pixels, fitted or held out, with their residual after the affine | BioImage Archive S-BSST707 (licence not stated, see below); residuals derived |
 | `wsi/wsi_patches.csv` | One row per 500 um tissue patch of a mouse H&E whole slide: position and box in slide level-0 pixels, section, hematoxylin and eosin optical density, share of nucleus-stained tissue | derived from JAX KOMP slide `42815.zarr`, CC BY 4.0 |
@@ -269,6 +272,32 @@ Crops annotating background only are named for it.
 Regenerate with `python3 -I dev/bioimage/make_cosem_crops.py` (stdlib only,
 a few hundred small JSON reads).
 
+## Multimodal registration
+
+Three tissue cores of the Eliceiri multimodal registration dataset (test set):
+bright field (H&E) and second-harmonic generation (SHG) of the same breast
+tissue microarray core, the SHG image rotated and shifted by the dataset
+authors, who give where its corners truly lie in the bright-field frame. The
+three cores span the test set's range of displacement (65, 248 and 283 px).
+`make_multimodal_registration.py` runs itk-elastix (mutual information) in
+four steps and records each step's output and how far it lands from the truth:
+the image as acquired, a rigid fit on bright-field brightness, a rigid fit on
+the stain's stroma channel (eosin minus haematoxylin, Gaussian-smoothed 3 px)
+from seven start rotations, and an affine fit from that. Nothing is simulated:
+the stores and metrics are the run's own, so a rerun on another machine can
+differ in the last digits and in runtimes.
+
+Regenerate from the test set extracted in a folder of its own (Zenodo record
+3874362, `TestSet.zip` and `metadata.csv`, about 460 MB):
+
+```bash
+uv run --no-project --python 3.12 --with itk-elastix --with tifffile \
+    --with scikit-image --with numpy --with "zarr<3" \
+    python -I dev/bioimage/make_multimodal_registration.py \
+    --testset <dir>/TestSet --metadata <dir>/metadata.csv \
+    --out depictio/projects/init/bioimage_examples/data
+```
+
 ## Licences
 
 | Dataset | Licence | Credit |
@@ -281,6 +310,7 @@ a few hundred small JSON reads).
 | CLEM landmarks (S-BSST707) | No licence stated in the BioStudies record (to confirm before release) | Same authors; the BigWarp landmarks between the LM and EMPIAR-10819 |
 | Whole slide `42815.zarr` (JAX KOMP) | CC BY 4.0 | The Jackson Laboratory, KOMP histopathology, [image 176894](https://images.jax.org/webclient/?show=image-176894), OME-Zarr conversion for the OME 2024 NGFF challenge |
 | HeLa overview and tomograms (MoBIE) | No licence stated in the repository or the paper record (to confirm with the authors before shipping the tomograms) | MoBIE clem-example-project; Kukulski et al., J Cell Biol 2011, doi:10.1083/jcb.201009037 |
+| Multimodal cores (bright field, SHG) | CC BY 4.0 | Eliceiri, Li and Keikhosravi, *Multimodal Biomedical Dataset for Evaluating Registration Methods (patches from TMA Cores)*, Zenodo, doi:10.5281/zenodo.3874362; images from Conklin et al., *Aligned collagen is a prognostic signature for survival in human breast carcinoma*, Am J Pathol 2011 |
 | FIB-SEM cell `jrc_hela-2` (OpenOrganelle) | CC BY 4.0 | Janelia COSEM Project Team / OpenOrganelle; Xu et al., Nature 599, 147-151 (2021); Heinrich et al., Nature 599, 141-146 (2021) |
 | `skin` | Public domain | Wikipedia user Kilbad, [Normal Epidermis and Dermis with Intradermal Nevus 10x](https://en.wikipedia.org/wiki/File:Normal_Epidermis_and_Dermis_with_Intradermal_Nevus_10x.JPG) |
 

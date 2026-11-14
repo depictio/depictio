@@ -9,6 +9,7 @@ import {
   axisStep,
   physicalPixelSize,
   planeLabel,
+  referenceChannelsFor,
   renderedChannels,
   resolveChannels,
   selectionFor,
@@ -243,5 +244,38 @@ describe('axisStep and planeLabel', () => {
     expect(planeLabel(2, 10, { value: 1.5, unit: 'min' })).toBe('3/10 · 3 min');
     expect(planeLabel(0, 18, { value: 2, unit: 'µm' })).toBe('1/18 · 0 µm');
     expect(planeLabel(4, 5, null)).toBe('5/5');
+  });
+});
+
+describe('referenceChannelsFor', () => {
+  const ch = (index: number, name: string, visible = true) => ({
+    index,
+    name,
+    color: '#FFFFFF',
+    visible,
+    contrastLimits: [0, 255] as [number, number],
+    domain: [0, 255] as [number, number],
+  });
+
+  it("draws the image's channels when the reference holds the same ones", () => {
+    const image = [ch(0, 'DAPI'), ch(1, 'GFP', false)];
+    const shown = [{ ...image[0], contrastLimits: [10, 90] as [number, number] }];
+    const own = [ch(0, 'DAPI'), ch(1, 'GFP')];
+    expect(referenceChannelsFor(shown, image, own)).toEqual(shown);
+  });
+
+  it('draws its own channels when it is another modality', () => {
+    const image = [ch(0, 'SHG')];
+    const own = [ch(0, 'Red'), ch(1, 'Green'), ch(2, 'Blue')];
+    expect(referenceChannelsFor(image, image, own).map((c) => c.name)).toEqual([
+      'Red',
+      'Green',
+      'Blue',
+    ]);
+  });
+
+  it("keeps the image's channels the reference has, before its own are read", () => {
+    const image = [ch(0, 'A'), ch(1, 'B')];
+    expect(referenceChannelsFor(image, image, [], 1).map((c) => c.name)).toEqual(['A']);
   });
 });

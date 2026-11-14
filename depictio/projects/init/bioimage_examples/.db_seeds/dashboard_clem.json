@@ -129,6 +129,8 @@
         "steps_param_col": null,
         "steps_info_cols": [],
         "steps_metric_better": {},
+        "steps_compare_with": "previous",
+        "steps_compare": "side",
         "overlay_store": "lm_in_em.zarr",
         "overlay_opacity": 0.6,
         "selection_enabled": true,

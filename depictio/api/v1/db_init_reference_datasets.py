@@ -469,6 +469,10 @@ STATIC_IDS = {
             # (122 GB), and its annotated crops computed from their metadata.
             "cosem_hela_em": "646b0f3c1e4a2d7f8e5b8f34",
             "cosem_hela_crops": "646b0f3c1e4a2d7f8e5b8f35",
+            # Bright field and second harmonic of three tissue cores, and the
+            # steps of a real elastix run between them.
+            "multimodal_images": "646b0f3c1e4a2d7f8e5b8f37",
+            "multimodal_steps": "646b0f3c1e4a2d7f8e5b8f38",
         },
         "dashboards": {
             # Main tab id equals project_id (same convention as the showcase).
@@ -487,6 +491,7 @@ STATIC_IDS = {
             "bioimage_wsi": "646b0f3c1e4a2d7f8e5b8f2f",
             "bioimage_hela_tomo": "646b0f3c1e4a2d7f8e5b8f32",
             "bioimage_deep_zoom": "646b0f3c1e4a2d7f8e5b8f36",
+            "bioimage_multimodal": "646b0f3c1e4a2d7f8e5b8f39",
         },
     },
 }

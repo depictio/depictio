@@ -608,6 +608,59 @@ workflows:
               parameters: "Parameters the step ran with, as JSON (elastix parameter-map keys); shown read-only"
 
       # ----------------------------------------------------------------
+      # 9b. Multimodal registration: second-harmonic generation onto bright field
+      # ----------------------------------------------------------------
+      # Three tissue cores of the Eliceiri dataset (Zenodo 3874362, CC BY 4.0):
+      # the bright-field reference of each, and its SHG image in that frame after
+      # each step of a real itk-elastix run (dev/bioimage/make_multimodal_registration.py).
+      # No sample_pattern, as for the registration above: the steps table's
+      # `store` column names each store.
+      - id: "646b0f3c1e4a2d7f8e5b8f37"
+        data_collection_tag: "multimodal_images"
+        description: "Three breast tissue cores in two techniques (Eliceiri dataset, CC BY 4.0): the bright-field H&E image of each (RGB, 834 x 834) and its second-harmonic image brought into that frame after each registration step"
+        config:
+          type: "bioimage"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "[12]B_[A-J][0-9]+_(?:bf|raw|rigid_intensity|rigid_stroma|affine)\\.zarr"
+          dc_specific_properties:
+            format: "ome-zarr"
+            ngff_version: "0.4"
+            upload: true
+
+      - id: "646b0f3c1e4a2d7f8e5b8f38"
+        data_collection_tag: "multimodal_steps"
+        description: "One row per core and registration step: the store it wrote, the bright-field image it aligns to, and how far it lands from the truth"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/bioimage_examples/data/multimodal/multimodal_steps.csv"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              separator: ","
+            columns_description:
+              core: "Tissue core of the tissue microarray"
+              step: "Registration step, in the order it ran"
+              step_order: "Position of the step, 0 for the image as acquired"
+              transform: "Kind of transform fitted at the step"
+              store: "Store holding the second-harmonic image after the step, in the bright-field frame"
+              fixed_store: "Store of the bright-field image the step aligns to"
+              corner_err_px: "Mean distance between where the step puts the corners of the second-harmonic image and where they truly are (dataset ground truth), in pixels"
+              nmi: "Normalised mutual information of the stroma channel of the bright field and the resampled second-harmonic image (higher agrees more)"
+              rotation_deg: "Rotation the step recovered, in degrees"
+              displacement_px: "Displacement the dataset applied to the core: the mean corner distance before any registration, in pixels"
+              runtime_s: "Measured runtime of the step, in seconds"
+              tool: "What produced the step: the input image, or the itk-elastix version that ran it"
+              duration: "Measured runtime of the step, as text for the history"
+              parameters: "What the step ran with, as JSON: the image it fitted on and its elastix parameter-map keys; shown read-only"
+
+      # ----------------------------------------------------------------
       # 10. CLEM: one HeLa cell, FIB-SEM read in place, LM registered into it
       # ----------------------------------------------------------------
       # Two stores in one DC: the EM volume read in place from the BioImage
