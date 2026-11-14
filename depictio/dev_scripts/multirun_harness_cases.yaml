@@ -1,0 +1,43 @@
+# Cases for depictio/dev_scripts/multirun_harness.py.
+#
+# Each case ingests `runs[0]` with `template` for `record`; `multirun` ingests
+# runs[0], then attaches every following run with --attach-run. Paths may start
+# with ~ and may be overridden on the command line with --data-root.
+cases:
+  ampliseq-trec:
+    # TREC AML 2024 split by locality: flat, single metadata + samplesheet,
+    # recursive tables, recipe families A/B/C, phylogeny, MultiQC.
+    template: nf-core/ampliseq/2.18.0
+    runs:
+      - ~/Data/depictio-ui-test/trec_runs/run_athens
+      - ~/Data/depictio-ui-test/trec_runs/run_barcelona
+      - ~/Data/depictio-ui-test/trec_runs/run_naples
+    # multirun: these collections must hold rows of every run.
+    expect_all_runs:
+      - samplesheet
+      - metadata
+      - read_tracking
+      - alpha_rarefaction
+      - alpha_diversity_multi_canonical
+      - taxonomy_rel_abundance
+  viralrecon-seqruns:
+    # sequencing-runs structure: the data root holds run_* folders.
+    template: nf-core/viralrecon/3.0.0
+    runs:
+      - depictio/projects/nf-core/viralrecon/3.0.0
+  rnaseq:
+    template: nf-core/rnaseq/3.26.0
+    runs:
+      - ~/Data/depictio-nfcore.local-partial-20261101/rnaseq/3.26.0/megatest
+  sarek:
+    template: nf-core/sarek/3.11.0
+    runs:
+      - ~/Data/depictio-nfcore.local-partial-20261101/sarek/3.11.0/megatest
+  atacseq:
+    template: nf-core/atacseq/1.2.2
+    runs:
+      - ~/Data/depictio-nfcore.local-partial-20261101/atacseq/1.2.2/megatest
+  cutandrun:
+    template: nf-core/cutandrun/3.1
+    runs:
+      - ~/Data/depictio-nfcore.local-partial-20261101/cutandrun/3.1/megatest

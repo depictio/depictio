@@ -300,3 +300,36 @@ class TestWiring:
 
         assert eager.to_dicts() == lazy.to_dicts()
         assert eager["id"].to_list() == [2, 4]
+
+
+class TestRunFilterKeepsRowsOfEveryRun:
+    """A row with no ``depictio_run_id`` belongs to every run (epic #1399).
+
+    A recipe recomputed over every run tags a row with its sample's run, and
+    leaves it null when the row aggregates several runs' samples (an UpSet
+    intersection, a tree node). Filtering on one run must keep those rows, or
+    "What's new" under Hide or Split empties the figure.
+    """
+
+    FRAME = pl.DataFrame(
+        {"depictio_run_id": ["run_a", "run_b", None], "v": [1, 2, 3]},
+        schema={"depictio_run_id": pl.String, "v": pl.Int64},
+    )
+
+    @pytest.mark.parametrize("component_type", CATEGORICAL_TYPES)
+    def test_rows_of_no_run_survive_a_run_filter(self, component_type):
+        filters: list = []
+        add_filter(
+            filters,
+            interactive_component_type=component_type,
+            column_name="depictio_run_id",
+            value=["run_a"],
+            dtype=pl.String,
+        )
+        assert self.FRAME.filter(filters[0])["v"].to_list() == [1, 3]
+
+    def test_other_columns_still_drop_nulls(self):
+        df = pl.DataFrame({"g": ["a", None]}, schema={"g": pl.String})
+        filters: list = []
+        add_filter(filters, interactive_component_type="MultiSelect", column_name="g", value=["a"])
+        assert df.filter(filters[0]).height == 1

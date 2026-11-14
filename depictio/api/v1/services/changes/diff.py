@@ -307,10 +307,39 @@ def _delta_change(dc_id: str, before: DcSeenState) -> dict[str, Any] | None:
     tags = sorted({t for a in newer for t in a.get("run_tags") or [] if t})
     known = set(before.run_tags)
     rows_after = newer[-1].get("rows_total")
+    # A recipe recomputed over every run (epic #1399) rewrote the rows of runs
+    # the reader had seen: they are in "seen before" with new values.
+    recomputed = sorted(
+        {
+            t
+            for a in newer
+            if a.get("run_scope") == "aggregate"
+            for t in a.get("computed_from_runs") or []
+            if t in known
+        }
+    )
+    # When and by whom each new run arrived: the collection's own time is its
+    # last commit, a later run's when several were attached since the mark. A
+    # recomputation over every run wrote no run in particular.
+    run_at: dict[str, str | None] = {}
+    run_by: dict[str, list[str]] = {}
+    for a in newer:
+        if a.get("run_scope") == "aggregate":
+            continue
+        for t in a.get("run_tags") or []:
+            if not t or t in known:
+                continue
+            run_at[t] = _iso(local_to_utc(a.get("aggregation_time")))
+            email = author(a)
+            run_by[t] = [email] if email else []
     return {
         "kind": "emptied" if rows_after == 0 else "refreshed",
         "new_run_tags": [t for t in tags if t not in known],
+        "run_at": run_at,
+        "run_by": run_by,
         "touched_run_tags": tags,
+        "run_scope": newer[-1].get("run_scope"),
+        "recomputed_run_tags": recomputed,
         # The runs the reader had seen: with the new ones, the two sides of
         # the "what's new" split (rows carry their run in `depictio_run_id`).
         "seen_run_tags": sorted(known),

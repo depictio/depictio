@@ -6,7 +6,7 @@
  * happen for a run nobody looks at.
  */
 import React, { useEffect, useState } from 'react';
-import { Anchor, Group, Loader, Stack, Text } from '@mantine/core';
+import { Anchor, Badge, Group, Loader, Stack, Text } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import { fetchDeltaHistory, fetchMultiQCByDataCollection } from 'depictio-react-core';
 import type {
@@ -18,6 +18,7 @@ import type {
 import { absTime, compactCount } from '../../monitoring/format';
 import { CHECK_STATUS } from '../checkStatus';
 import { BeforeRunMenu, CompareMenu } from './RunDashboardActions';
+import { commitLineage, scopeLabel, SCOPE_COLOR } from './deltaHistory';
 import { newRowsHref } from '../../changes/NewRowsPreview';
 import {
   commitsForRun,
@@ -47,6 +48,18 @@ interface Produced {
   skipped: number;
 }
 
+/** How the collection's latest commit relates to the runs (recipes only). */
+const CommitScopeBadge: React.FC<{ entry: DeltaVersionEntry }> = ({ entry }) => {
+  const lineage = commitLineage(entry);
+  const label = scopeLabel(lineage);
+  if (!label || !lineage.scope) return null;
+  return (
+    <Badge size="xs" variant="light" color={SCOPE_COLOR[lineage.scope]}>
+      {label}
+    </Badge>
+  );
+};
+
 export const RunProduced: React.FC<{
   projectId: string;
   run: ProjectRun;
@@ -66,10 +79,13 @@ export const RunProduced: React.FC<{
       const { runs } = await loadIngestions();
       const ingestions = ingestionsForRun(runs, run.run_tag);
       const ids = ingestions.map((i) => i.run_id);
-      const withFiles = Object.entries(run.dc_files)
+      // Collections with files from the run, then the ones computed from it
+      // (recipes have no files of their own).
+      const fromFiles = Object.entries(run.dc_files)
         .filter(([, n]) => n > 0)
-        .map(([tag]) => tag)
-        .filter((tag) => dcIdByTag[tag]);
+        .map(([tag]) => tag);
+      const computed = Object.keys(run.dc_outputs ?? {}).filter((tag) => !fromFiles.includes(tag));
+      const withFiles = [...fromFiles, ...computed].filter((tag) => dcIdByTag[tag]);
       const shown = withFiles.slice(0, MAX_COLLECTIONS);
       const written = await Promise.all(
         shown.map(async (tag): Promise<Written | null> => {
@@ -202,6 +218,7 @@ export const RunProduced: React.FC<{
                       no commit recorded for this run
                     </Text>
                   )}
+                  {w.kind === 'commits' && w.commits.length > 0 && <CommitScopeBadge entry={w.commits[0]} />}
                   {w.kind === 'commits' &&
                     w.commits.map((c, i) => (
                       <Text key={`${c.version ?? 'x'}-${i}`} size="sm" c="dimmed">

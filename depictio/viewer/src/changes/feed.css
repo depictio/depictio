@@ -55,3 +55,25 @@
   border-radius: 50%;
   background: var(--mantine-color-blue-6);
 }
+
+/* A collection under its run (#1399): indented under the run's line. */
+.dc-feed-sub {
+  padding: 4px 0 4px 10px;
+  border-left: 2px solid var(--mantine-color-default-border);
+}
+
+/* The view controls (#1399): one soft card above the list. */
+.dc-news-card {
+  background: var(--mantine-color-default-hover);
+  border-color: var(--mantine-color-default-border);
+}
+
+/* The run the dashboard follows: "new" is blue on every page. */
+.dc-feed-item[data-focused='true'] {
+  background: var(--mantine-color-blue-light);
+}
+
+/* See FeedScroll: the Autosize wrapper must shrink to the panel. */
+.dc-feed-scroll > div {
+  min-width: 0;
+}

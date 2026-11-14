@@ -12,6 +12,8 @@ import type {
   DataChange,
 } from 'depictio-react-core';
 
+import { compactCount } from '../monitoring/format';
+
 export interface ReadOnlyQuery {
   since: string | null;
   beforeRun: string | null;
@@ -39,8 +41,15 @@ export interface ChangeCounts {
   total: number;
 }
 
+/**
+ * What the panel lists, counted as it lists it: one per new run (however many
+ * collections it refreshed), one per collection no run explains, one per
+ * failed ingestion. A recomputation over every run follows from the new runs
+ * and adds nothing.
+ */
 export function changeCounts(cs: DashboardChangeSet | null): ChangeCounts {
-  const data = (cs?.data.length ?? 0) + (cs?.failed_ingestions.length ?? 0);
+  const news = newsByRun(cs?.data ?? []);
+  const data = news.runs.length + news.other.length + (cs?.failed_ingestions.length ?? 0);
   const dashboard = cs?.dashboard.length ?? 0;
   const comments = cs?.comments.length ?? 0;
   return { data, dashboard, comments, total: data + dashboard + comments };
@@ -89,7 +98,8 @@ export function sampleSummary(change: Pick<DataChange, 'new_samples' | 'new_samp
   return { shown, more: Math.max(0, total - shown.length), total };
 }
 
-const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+/** "1 run", "12 runs", "2.6k rows": counts read the same in every feed. */
+export const plural = (n: number, one: string, many = `${one}s`) => `${compactCount(n)} ${n === 1 ? one : many}`;
 
 /**
  * How the row count moved. The totals win when both are known: an overwrite
@@ -110,14 +120,102 @@ export function rowsFact(
 export function dataFacts(change: DataChange): string[] {
   const facts: string[] = [];
   if (change.new_run_tags.length) facts.push(plural(change.new_run_tags.length, 'new run'));
-  const rows = rowsFact(change, String);
+  const rows = rowsFact(change, compactCount);
   if (rows) facts.push(rows);
   const { total } = sampleSummary(change);
   if (total > 0) facts.push(plural(total, 'new sample'));
   if (change.reports_added) facts.push(plural(change.reports_added, 'new report'));
   if (change.reports_refreshed) facts.push(plural(change.reports_refreshed, 'report') + ' refreshed');
   if (change.reports_removed) facts.push(plural(change.reports_removed, 'report') + ' removed');
+  // A collection that mixes samples is recomputed over every run: the rows of
+  // runs already seen changed too, so "seen before" is not what it was.
+  const recomputed = change.recomputed_run_tags ?? [];
+  if (recomputed.length) facts.push(`recomputed: ${plural(recomputed.length, 'run')} seen before changed`);
   return facts;
+}
+
+/** What one new run brought: the collections that gained its rows, and the
+ *  collections that mix samples, recomputed because it came in. */
+export interface RunNews {
+  run: string;
+  collections: DataChange[];
+  /** New samples, from the tables that name this run alone (not MultiQC). */
+  samples: number;
+  /** When the run arrived and who brought it, read off the collections that
+   *  gained this run alone: a collection's last commit may be a later run's. */
+  at: string | null;
+  by: string[];
+}
+
+export interface NewsByRun {
+  /** Newest first. */
+  runs: RunNews[];
+  /** Recipes recomputed over every run: listed once, not under each run. */
+  recomputed: DataChange[];
+  /** What no new run explains, listed by collection. */
+  other: DataChange[];
+}
+
+/** Newest first; a run with no time of its own after the dated ones, by name. */
+function newestFirst(a: RunNews, b: RunNews): number {
+  if (a.at && b.at && a.at !== b.at) return a.at < b.at ? 1 : -1;
+  if (Boolean(a.at) !== Boolean(b.at)) return a.at ? -1 : 1;
+  return b.run.localeCompare(a.run, undefined, { numeric: true });
+}
+
+/**
+ * The data news read run by run, the way runs arrive (epic #1399), rather
+ * than collection by collection. A collection that gained several runs is
+ * listed under each. A recipe recomputed over every run belongs to no run in
+ * particular (its rows mix the runs' samples), so it is listed once, apart.
+ * What no new run explains (a rewrite in place, an emptied table, a MultiQC
+ * refresh) is `other`, listed by collection.
+ */
+export function newsByRun(data: DataChange[]): NewsByRun {
+  const newRuns = unique(
+    data.filter((d) => d.kind === 'refreshed').flatMap((d) => d.new_run_tags),
+  );
+  const byRun = new Map<string, RunNews>(
+    newRuns.map((run) => [run, { run, collections: [], samples: 0, at: null, by: [] }]),
+  );
+  const recomputed: DataChange[] = [];
+  const other: DataChange[] = [];
+  for (const d of data) {
+    const refreshed = d.kind === 'refreshed';
+    if (refreshed && d.run_scope === 'aggregate' && newRuns.length > 0) {
+      recomputed.push(d);
+      continue;
+    }
+    if (refreshed && d.new_run_tags.length > 0) {
+      const alone = d.new_run_tags.length === 1;
+      for (const run of d.new_run_tags) {
+        const news = byRun.get(run);
+        if (!news) continue;
+        news.collections.push(d);
+        // The server dates each run by the commit that wrote it; without that
+        // (an older server), only a collection that gained this run alone does.
+        const at = d.run_at?.[run] ?? (alone ? d.at : null);
+        if (at && (!news.at || at > news.at)) news.at = at;
+        const by = d.run_by?.[run] ?? (alone ? d.by : null);
+        if (by) news.by = unique([...news.by, ...by]);
+        if (!alone) continue;
+        // MultiQC lists an entry per read and per module, not per sample: only a
+        // table counts the run's samples.
+        if (d.dc_type !== 'multiqc') news.samples = Math.max(news.samples, sampleSummary(d).total);
+      }
+      continue;
+    }
+    other.push(d);
+  }
+  return { runs: [...byRun.values()].sort(newestFirst), recomputed, other };
+}
+
+/** "3 collections · 29 new samples". */
+export function runFacts(news: RunNews): string[] {
+  const out: string[] = [];
+  if (news.collections.length) out.push(plural(news.collections.length, 'collection'));
+  if (news.samples > 0) out.push(plural(news.samples, 'new sample'));
+  return out;
 }
 
 /** "Edited «Mean petal length» on tab Overview". */
@@ -180,4 +278,10 @@ export function commentTarget(
 ): { sameTab: boolean; tabHref: string | null } {
   const sameTab = !comment.tab_id || comment.tab_id === viewedTabId;
   return { sameTab, tabHref: sameTab ? null : `/dashboard/${comment.tab_id}` };
+}
+
+/** A project's Runs tab, with one run in focus. */
+export function projectRunsHref(projectId: string, runTag?: string): string {
+  const base = `/projects/${encodeURIComponent(projectId)}`;
+  return runTag ? `${base}?tab=runs&run=${encodeURIComponent(runTag)}` : base;
 }

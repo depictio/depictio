@@ -552,28 +552,39 @@ def put_prefs(
 
 @changes_router.get("/inbox")
 def inbox(current_user: User = Depends(get_user_or_anonymous)) -> dict[str, Any]:
-    """Per marked dashboard or project, a short summary of what is new. Signed-in readers only."""
+    """Per marked dashboard or project, a short summary of what is new. Signed-in readers only.
+
+    ``followed_project_ids`` are the projects of every mark, news or not: the
+    bell listens for their ingestions, so the first one after a visit that
+    left nothing new still raises a notification.
+    """
     _enabled()
     if not _server_held(current_user):
-        return {"items": [], "server_held": False}
+        return {"items": [], "server_held": False, "followed_project_ids": []}
     reader = _reader(current_user)
     items: list[dict[str, Any]] = []
+    followed: set[str] = set()
     for mark in store.list_marks(str(current_user.id), limit=INBOX_LIMIT):
         if mark.baseline is None:
             continue
         try:
-            item = _inbox_item(mark.scope_kind, mark.scope_id, mark.baseline, current_user, reader)
+            project_id, item = _inbox_item(
+                mark.scope_kind, mark.scope_id, mark.baseline, current_user, reader
+            )
         except HTTPException:
             continue  # access revoked or scope deleted since the mark was written
+        if project_id:
+            followed.add(project_id)
         if item:
             items.append(item)
     items.sort(key=lambda i: i.get("at") or "", reverse=True)
-    return {"items": items, "server_held": True}
+    return {"items": items, "server_held": True, "followed_project_ids": sorted(followed)}
 
 
 def _inbox_item(
     scope_kind: str, scope_id: str, base: ReaderBaseline, user: User, reader: df.Reader
-) -> dict[str, Any] | None:
+) -> tuple[str | None, dict[str, Any] | None]:
+    """The mark's project, and what is new under it (None when nothing is)."""
     if scope_kind == "project":
         _require_project(scope_id, user)
         now = bl.project_baseline(scope_id)
@@ -582,12 +593,14 @@ def _inbox_item(
         runs = df.new_workflow_runs(base, now)
         title = project.get("name") or ""
         dashboard_versions = 0
+        project_id: str | None = scope_id
     else:
         family_id, main, docs = _family(scope_id, user)
         now = bl.family_baseline(family_id, docs)
         data = df.data_changes(base, now, bl.project_collections(main.get("project_id")))
         runs = []
         title = main.get("title") or ""
+        project_id = str(main["project_id"]) if main.get("project_id") else None
         dashboard_versions = dashboard_versions_collection.count_documents(
             {
                 "family_id": family_id,
@@ -599,9 +612,9 @@ def _inbox_item(
         {t for d in data for t in d.get("new_run_tags") or []} | {r["run_tag"] for r in runs}
     )
     if not (data or runs or dashboard_versions):
-        return None
+        return project_id, None
     times = [d.get("at") for d in data if d.get("at")]
-    return {
+    return project_id, {
         "scope_kind": scope_kind,
         "scope_id": scope_id,
         "title": title,

@@ -19,12 +19,16 @@ import {
   historyHref,
   isReadOnlyQuery,
   markDetails,
+  newsByRun,
   parseReadOnlyQuery,
+  runFacts,
   pillLabel,
   sampleSummary,
 } from '../src/changes/describe.ts';
 import { beforePane, diffTables } from '../src/changes/compare.ts';
-import { newSideOnly, newsSplitGroups } from '../src/changes/newsSplit.ts';
+import { focusedRuns, newSideOnly, newsSplitGroups } from '../src/changes/newsSplit.ts';
+import { commitLineage, entriesForRun, historyRuns, scopeLabel } from '../src/projects/detail/deltaHistory.ts';
+import { commitsForRun } from '../src/projects/detail/projectChanges.ts';
 
 let failures = 0;
 function check(label, actual, expected) {
@@ -132,6 +136,85 @@ check('singular', dataFacts({ ...data, rows_added: 0, new_sample_count: 1, new_s
   '1 new run',
   '1 new sample',
 ]);
+check('a recomputation says the seen runs changed', dataFacts({ ...data, new_samples: [], new_sample_count: 0, rows_added: 0, recomputed_run_tags: ['athens', 'barcelona'] }), [
+  '1 new run',
+  'recomputed: 2 runs seen before changed',
+]);
+
+console.log('== news by run (#1399) ==');
+const ch = (tag, extra) => ({ ...data, dc_id: tag, data_collection_tag: tag, new_samples: [], new_sample_count: 0, ...extra });
+const byRun = newsByRun([
+  ch('samplesheet', { new_run_tags: ['naples'], new_samples: ['s1', 's2'], new_sample_count: 2 }),
+  ch('alpha', { new_run_tags: ['naples'] }),
+  ch('bray', { new_run_tags: ['naples'], run_scope: 'aggregate', recomputed_run_tags: ['athens'] }),
+  ch('upset', { new_run_tags: [], run_scope: 'aggregate', recomputed_run_tags: ['athens'] }),
+  ch('metadata', { new_run_tags: [] }),
+  // MultiQC names a sample per read and per module: 243 "samples" for 30.
+  ch('mqc', { new_run_tags: ['naples'], dc_type: 'multiqc', new_samples: ['s1', 's1 - Read 1'], new_sample_count: 243 }),
+]);
+check('one entry per new run', byRun.runs.map((r) => r.run), ['naples']);
+check('collections that gained the run', byRun.runs[0].collections.map((d) => d.dc_id), ['samplesheet', 'alpha', 'mqc']);
+check('recomputed listed once, whether or not its rows name the run', byRun.recomputed.map((d) => d.dc_id), ['bray', 'upset']);
+check('a rewrite in place stays by collection', byRun.other.map((d) => d.dc_id), ['metadata']);
+check('run facts', runFacts(byRun.runs[0]), ['3 collections', '2 new samples']);
+check('the pill counts runs, not the collections they refreshed', changeCounts({ ...empty, data: [
+  ch('a', { new_run_tags: ['barcelona', 'naples'] }),
+  ch('b', { new_run_tags: ['barcelona', 'naples'] }),
+  ch('c', { new_run_tags: ['naples'] }),
+  ch('upset', { new_run_tags: [], run_scope: 'aggregate' }),
+  ch('metadata', { new_run_tags: [] }),
+] }).data, 3);
+check('no new run: everything by collection', newsByRun([ch('a', { new_run_tags: [] })]).runs, []);
+const dated = newsByRun([
+  ch('a1', { new_run_tags: ['athens'], at: '2026-11-01T10:00:00Z', by: ['a@x'] }),
+  ch('n1', { new_run_tags: ['naples'], at: '2026-11-03T10:00:00Z', by: ['n@x'] }),
+  ch('b1', { new_run_tags: ['barcelona'], at: '2026-11-02T10:00:00Z', by: [] }),
+  // Its last commit is naples': it dates neither run.
+  ch('both', { new_run_tags: ['athens', 'naples'], at: '2026-11-04T10:00:00Z', by: ['late@x'] }),
+  ch('r2', { new_run_tags: ['run_2'], at: null, by: [] }),
+  ch('r10', { new_run_tags: ['run_10'], at: null, by: [] }),
+]);
+check('newest first, undated after, by name', dated.runs.map((r) => r.run), ['naples', 'barcelona', 'athens', 'run_10', 'run_2']);
+check('a run is dated by the collections it alone brought', dated.runs[2].at, '2026-11-01T10:00:00Z');
+check('nor authored by a later run', dated.runs[2].by, ['a@x']);
+const both = newsByRun([
+  ch('t', {
+    new_run_tags: ['athens', 'naples'],
+    at: '2026-11-04T10:00:00',
+    run_at: { athens: '2026-11-01T10:00:00', naples: '2026-11-03T10:00:00' },
+    run_by: { athens: ['a@x'], naples: ['n@x'] },
+  }),
+]);
+check('the server dates each run of a collection that gained several', both.runs.map((r) => [r.run, r.at, r.by]), [
+  ['naples', '2026-11-03T10:00:00', ['n@x']],
+  ['athens', '2026-11-01T10:00:00', ['a@x']],
+]);
+
+console.log('== runs and lineage of a commit (#1399) ==');
+const meta = (m) => ({ origin: 'delta', version: 1, metadata: m });
+const perRun = meta({ 'depictio.run_tags': 'naples', 'depictio.run_scope': 'run' });
+const aggregate = meta({
+  'depictio.run_tags': 'athens,naples',
+  'depictio.computed_from': 'athens,barcelona,naples',
+  'depictio.run_scope': 'aggregate',
+  'depictio.inputs': 'taxonomy_heatmap@3,metadata@2',
+});
+const fileBacked = meta({ 'depictio.run_tags': 'barcelona' });
+const anonymous = meta({});
+check('lineage of an aggregate', commitLineage(aggregate), {
+  scope: 'aggregate',
+  runTags: ['athens', 'naples'],
+  computedFrom: ['athens', 'barcelona', 'naples'],
+  inputs: [{ tag: 'taxonomy_heatmap', version: '3' }, { tag: 'metadata', version: '2' }],
+  capped: false,
+});
+check('aggregate label', scopeLabel(commitLineage(aggregate)), 'recomputed over 3 runs');
+check('per-run label', scopeLabel(commitLineage(perRun)), 'per run');
+check('a file-backed commit has no scope', scopeLabel(commitLineage(fileBacked)), null);
+check('runs of a history', historyRuns([perRun, aggregate, fileBacked]), ['athens', 'barcelona', 'naples']);
+check('filter: a run read by a recomputation counts', entriesForRun([perRun, aggregate, fileBacked, anonymous], 'barcelona'), [aggregate, fileBacked, anonymous]);
+check('no filter keeps everything', entriesForRun([perRun, aggregate], null).length, 2);
+check('a run sees the recomputation that read it', commitsForRun([perRun, aggregate, fileBacked], 'barcelona', []), [aggregate, fileBacked]);
 
 console.log('== dashboard rows ==');
 check('edit text', dashboardChangeText(edit), 'Edited «Mean length» on tab Overview');
@@ -242,6 +325,22 @@ check('split: new run against the runs seen', newsSplitGroups({ ...empty, data: 
   showOther: false,
   samples: {},
 });
+console.log('== one run in focus (#1399) ==');
+const twoNew = { ...empty, data: [delta({ new_run_tags: ['run_3', 'run_4'], seen_run_tags: ['run_1', 'run_2'] })] };
+check('focus: that run against every other', newsSplitGroups(twoNew, COLORS, 'run_4'), {
+  groups: [
+    { name: 'New: run_4', column_name: 'depictio_run_id', values: ['run_4'], color: '#159090' },
+    { name: 'Other runs', column_name: 'depictio_run_id', values: ['run_1', 'run_2', 'run_3'], color: '#adb5bd' },
+  ],
+  showOther: false,
+  samples: {},
+});
+check('focus: a run that is not new is ignored', newsSplitGroups(twoNew, COLORS, 'run_1'), newsSplitGroups(twoNew, COLORS));
+const mqcTwo = { ...empty, data: [delta({ new_run_tags: ['run_3', 'run_4'] }), { ...delta({}), dc_id: 'm', new_run_tags: ['run_3', 'run_4'], new_samples: ['a'], seen_samples: ['b'], new_sample_count: 1 }] };
+check('focus: MultiQC samples that mix runs are not split', Object.keys(newsSplitGroups(mqcTwo, COLORS, 'run_4').samples), []);
+check('focus: the new runs a collection shows', focusedRuns({ a: ['run_3', 'run_4'], b: ['run_3'] }, 'run_4'), { a: ['run_4'] });
+check('focus: none, every new run', focusedRuns({ a: ['run_3'] }, null), { a: ['run_3'] });
+
 check('split: no new run, no split', newsSplitGroups({ ...empty, data: [delta({ new_run_tags: [] })] }, COLORS), null);
 check(
   'split: no seen runs and no samples, no split',

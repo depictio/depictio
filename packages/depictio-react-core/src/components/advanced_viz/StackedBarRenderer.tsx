@@ -25,6 +25,9 @@ import { InSplitPanelContext } from './AdvancedVizExtras';
 import { usePlotAnnotationLayer } from '../annotations/usePlotAnnotationLayer';
 import { supportsAdvancedVizAnnotation } from '../../annotations/plotDecorate';
 import { usePersistedVizControl } from './usePersistedVizControl';
+import { OTHER_COLOR, OTHER_LABEL } from './groupSplit';
+import { GroupColouringReportContext } from '../../groupReach';
+import type { GroupRenderState } from '../../selectionGroups';
 import { withRanksInOrder } from './phylo/view';
 import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeColors, plotlyThemeFragment } from './plotlyTheme';
 import { syncAxisBreak, type AxisBreakSpec } from './axisBreakOverlay';
@@ -176,7 +179,13 @@ interface Props {
   refreshTick?: number;
   /** Selection-as-filter callback; absent on read-only hosts. */
   onFilterChange?: (filter: InteractiveFilter) => void;
+  /** The dashboard's groups in the Overlay display: a strip above the bars,
+   *  one cell per sample, so the bars keep their taxa's colours. */
+  groupRender?: GroupRenderState;
 }
+
+/** The strip the groups draw, apart from the configured ones. */
+const GROUP_STRIP_COLUMN = '\u0000groups';
 
 /** Fallback cycle for an unbranded deployment; a brand's colorway wins. */
 const PALETTE = [
@@ -208,7 +217,13 @@ function textOn(fill: string | undefined): string {
 /** Stand-in value of a spacer slot in a strip: breaks runs, never shown. */
 const SPACER_VALUE = '\u0000';
 
-const StackedBarRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFilterChange }) => {
+const StackedBarRenderer: React.FC<Props> = ({
+  metadata,
+  filters,
+  refreshTick,
+  onFilterChange,
+  groupRender,
+}) => {
   const { colorScheme } = useMantineColorScheme();
   const theme = useMantineTheme();
   const isDark = colorScheme === 'dark';
@@ -446,6 +461,31 @@ const StackedBarRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
     };
   }, [metadata.wf_id, metadata.dc_id, bound, JSON.stringify(requiredCols), filterSig, refreshTick, fullLoad, rankReady, wantedRank]);
 
+  // Each sample's group, first group winning, and the strip's colours.
+  const groupStrip = useMemo(() => {
+    const groups = groupRender?.colorByGroup ? groupRender.groups.filter((g) => g.values.length > 0) : [];
+    if (groups.length === 0) return null;
+    const bySample = new Map<string, string>();
+    for (const g of groups) {
+      for (const v of g.values) if (!bySample.has(String(v))) bySample.set(String(v), g.name);
+    }
+    const palette: Record<string, string> = { [OTHER_LABEL]: OTHER_COLOR };
+    for (const g of groups) palette[g.name] = g.color;
+    return { bySample, palette };
+  }, [groupRender]);
+  // Whether any bar is in a group, for the dispatch's "not grouped" badge.
+  const reportColouring = useContext(GroupColouringReportContext);
+  const groupMatched = useMemo(() => {
+    if (!groupStrip || !rows) return null;
+    const samples = (rows[config.sample_id_col] as unknown[] | undefined) ?? [];
+    return samples.some((v) => groupStrip.bySample.has(String(v ?? '')));
+  }, [groupStrip, rows, config.sample_id_col]);
+  useEffect(() => {
+    if (!reportColouring || groupMatched === null) return;
+    reportColouring(groupMatched);
+    return () => reportColouring(null);
+  }, [reportColouring, groupMatched]);
+
   const { figure, allRanks, categories, seriesCount, stripCount, slotCount, canZoom, axisBreak } = useMemo(() => {
     if (!rows)
       return {
@@ -459,8 +499,8 @@ const StackedBarRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
         axisBreak: null as { axis: 'x' | 'y'; normalise: boolean } | null,
       };
     // A panel of a split is too narrow for a column of taxa beside its bars:
-    // the key goes under them and the bars keep the width.
-    const legendPos = inSplit ? 'bottom' : (config.legend_pos ?? 'right');
+    // the key goes above them, in every panel alike, and the bars keep the width.
+    const legendPos = inSplit ? 'top' : (config.legend_pos ?? 'right');
     const melted = wide
       ? meltWideRows(rows, config.sample_id_col, valueCols, config.value_labels)
       : null;
@@ -671,7 +711,13 @@ const StackedBarRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
     // (a one-column heatmap on its own x-axis beside horizontal bars).
     // A heatmap rather than layout shapes: shapes take no hover and no legend,
     // so a strip told nothing about which category a colour stood for.
-    const strips = (config.annotation_strips ?? []).filter((s) => s && s.column);
+    const strips: AnnotationStrip[] = [
+      // The groups first, nearest the top: they are what the reader asked for.
+      ...(groupStrip && !inSplit
+        ? [{ column: GROUP_STRIP_COLUMN, label: 'Group', position: 'top' as const, palette: groupStrip.palette }]
+        : []),
+      ...(config.annotation_strips ?? []).filter((s) => s && s.column),
+    ];
     const stripTraces: Record<string, unknown>[] = [];
     // A strip's categories were legend entries after the taxa, one legend
     // holding two keys that read as one. A strip whose categories each hold a
@@ -690,8 +736,11 @@ const StackedBarRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
       let topCursor = 1;
       let bottomCursor = 0;
       strips.forEach((strip, k) => {
-        const sampleToValue = firstValueBySample(strip.column);
-        const values = slots.map((s, i) => (spacer[i] ? SPACER_VALUE : sampleToValue.get(s) ?? '—'));
+        const isGroupStrip = strip.column === GROUP_STRIP_COLUMN;
+        const sampleToValue =
+          isGroupStrip && groupStrip ? groupStrip.bySample : firstValueBySample(strip.column);
+        const missing = isGroupStrip ? OTHER_LABEL : '—';
+        const values = slots.map((s, i) => (spacer[i] ? SPACER_VALUE : sampleToValue.get(s) ?? missing));
         // Stable category→colour for THIS strip's categories: the dashboard's
         // colours for its column, the strip's own `palette` winning per value.
         const categories = Array.from(new Set(values.filter((v) => v !== SPACER_VALUE))).sort();
@@ -950,7 +999,7 @@ const StackedBarRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
       },
       allRanks,
     };
-  }, [narrow, inSplit, rows, rowsRank, rankUniverse, config, rankCol, wide, valueCols, horizontal, rank, topN, normalise, sampleSort, sortCategory, activeGroupCol, yZoom, showLegend, logY, isDark, theme, taxonUniverse, categorySource, stripBand, stripGap, groupLabelBand]);
+  }, [narrow, inSplit, rows, rowsRank, rankUniverse, config, rankCol, wide, valueCols, horizontal, rank, topN, normalise, sampleSort, sortCategory, activeGroupCol, yZoom, showLegend, logY, isDark, theme, taxonUniverse, categorySource, stripBand, stripGap, groupLabelBand, groupStrip]);
 
   // Memoised so AdvancedVizFrame's `extras` useMemo stays stable — an unmemoised
   // element re-fires the frame's publish effect and loops it against

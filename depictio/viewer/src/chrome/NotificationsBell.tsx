@@ -1,11 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActionIcon,
+  Anchor,
   Button,
   Group,
   Indicator,
   Popover,
-  ScrollArea,
   Stack,
   Text,
   Tooltip,
@@ -23,7 +23,8 @@ import {
 
 import { useChangesSinceEnabled } from '../hooks/useChangesSinceEnabled';
 import { useCurrentUser } from '../hooks/useCurrentUser';
-import { FeedItem, facts, nameList } from '../changes/feed';
+import { FeedHeader, FeedItem, FeedMarkSeen, FeedScroll, facts, nameList } from '../changes/feed';
+import { projectRunsHref } from '../changes/describe';
 import {
   useProjectIngestionEvents,
   type IngestionFinishedPayload,
@@ -34,16 +35,75 @@ const CHIPS_SHOWN = 3;
 
 /** Where a notification leads: a project's Runs tab with the first new run in
  *  focus, or the dashboard (which draws its own marks). */
-export function projectRunsHref(projectId: string, runTag?: string): string {
-  const base = `/projects/${encodeURIComponent(projectId)}`;
-  return runTag ? `${base}?tab=runs&run=${encodeURIComponent(runTag)}` : base;
-}
-
 export function itemHref(item: InboxItem): string {
   return item.scope_kind === 'project'
     ? projectRunsHref(item.scope_id, item.new_run_tags[0])
     : `/dashboard/${encodeURIComponent(item.scope_id)}`;
 }
+
+/** The browser's own notifications (the system's notification centre). */
+type DesktopPermission = NotificationPermission | 'unsupported';
+
+function desktopPermission(): DesktopPermission {
+  return typeof window !== 'undefined' && 'Notification' in window
+    ? Notification.permission
+    : 'unsupported';
+}
+
+/** A system notification when this tab is not in front: the toast already
+ *  says it to a reader looking at the page. One per `tag`, whatever the
+ *  number of open tabs. */
+function showDesktopNotification(title: string, body: string, tag: string, href: string): void {
+  if (desktopPermission() !== 'granted') return;
+  if (!document.hidden && document.hasFocus()) return;
+  try {
+    const note = new Notification(title, { body, tag, icon: '/favicon.ico' });
+    note.onclick = () => {
+      window.focus();
+      window.location.href = href;
+      note.close();
+    };
+  } catch {
+    // Some browsers only allow notifications from a service worker: the toast stays.
+  }
+}
+
+/** The inbox as last read in this tab, so the bell paints its count at once
+ *  on the next page instead of after the round trips (every tab is a page). */
+interface CachedInbox {
+  items: InboxItem[];
+  server_held: boolean;
+  followed: string[];
+}
+
+const inboxCacheKey = (userId: string) => `depictio-inbox:${userId}`;
+
+function readCachedInbox(userId: string | null): CachedInbox | null {
+  if (!userId) return null;
+  try {
+    const raw = window.sessionStorage.getItem(inboxCacheKey(userId));
+    return raw ? (JSON.parse(raw) as CachedInbox) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedInbox(userId: string | null, inbox: CachedInbox): void {
+  if (!userId) return;
+  try {
+    window.sessionStorage.setItem(inboxCacheKey(userId), JSON.stringify(inbox));
+  } catch {
+    // storage full or blocked: the next page waits for the inbox, as before
+  }
+}
+
+/** What an item says, to tell a poll that brought news from one that did not. */
+const itemSignature = (item: InboxItem) =>
+  [item.new_run_tags.join(','), item.refreshed.join(','), item.dashboard_versions, item.at ?? ''].join('|');
+
+/** A live ingestion toast stands for this long: a poll naming the same project
+ *  within it does not toast again. */
+const LIVE_COVERS_MS = 5 * 60_000;
 
 const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? '' : 's'}`;
 
@@ -126,8 +186,11 @@ const NotificationsBell: React.FC<NotificationsBellProps> = ({
   const { user } = useCurrentUser();
   const eligible = enabledByServer && Boolean(user) && !user?.is_temporary;
 
+  const userId = user && !user.is_temporary ? (user.id ?? user.email) : null;
   const [items, setItems] = useState<InboxItem[]>([]);
   const [heldByServer, setHeldByServer] = useState(false);
+  const [followed, setFollowed] = useState<string[]>([]);
+  const [desktop, setDesktop] = useState<DesktopPermission>(desktopPermission);
   const [opened, setOpened] = useState(false);
   // dashboard id -> project id, for the dashboards the reader follows.
   const [dashboardProject, setDashboardProject] = useState<Record<string, string>>({});
@@ -136,16 +199,79 @@ const NotificationsBell: React.FC<NotificationsBellProps> = ({
   const dashboardProjectRef = useRef(dashboardProject);
   dashboardProjectRef.current = dashboardProject;
   const announced = useRef(new Set<string>());
+  // project id -> when a live toast named it.
+  const liveAt = useRef(new Map<string, number>());
+  // What the last read said, per item; null until the first read of this page,
+  // which is only a baseline: what it holds was there before the page opened.
+  const signatures = useRef<Map<string, string> | null>(null);
+
+  const announcePolled = useCallback((item: InboxItem) => {
+    const project =
+      item.scope_kind === 'project' ? item.scope_id : dashboardProjectRef.current[item.scope_id];
+    const live = project ? liveAt.current.get(project) : undefined;
+    if (live != null && Date.now() - live < LIVE_COVERS_MS) return;
+    const title = `New in ${item.title || (item.scope_kind === 'project' ? 'a project' : 'a dashboard')}`;
+    const runs = item.new_run_tags;
+    const body = facts(
+      runs.length ? `${plural(runs.length, 'new run')}: ${nameList(runs, CHIPS_SHOWN)}` : null,
+      item.dashboard_versions > 0 ? plural(item.dashboard_versions, 'dashboard change') : null,
+      item.refreshed.length > 0 ? `${nameList(item.refreshed, CHIPS_SHOWN)} refreshed` : null,
+    );
+    const href = itemHref(item);
+    showDesktopNotification(title, body, `inbox-${itemKey(item)}`, href);
+    notifications.show({
+      id: `inbox-${itemKey(item)}-${itemSignature(item)}`,
+      title,
+      autoClose: 20_000,
+      message: (
+        <Stack gap={4} data-testid="inbox-toast">
+          {body && (
+            <Text size="xs" c="dimmed">
+              {body}
+            </Text>
+          )}
+          <Anchor href={href} size="xs" data-testid="inbox-toast-open">
+            {item.scope_kind === 'project' ? 'Open project' : 'Open dashboard'}
+          </Anchor>
+        </Stack>
+      ),
+    });
+  }, []);
 
   const refresh = useCallback(async () => {
     try {
       const inbox = await fetchChangesInbox();
+      const previous = signatures.current;
+      const next = new Map(inbox.items.map((i) => [itemKey(i), itemSignature(i)]));
+      if (previous) {
+        for (const item of inbox.items) {
+          if (previous.get(itemKey(item)) !== next.get(itemKey(item))) announcePolled(item);
+        }
+      }
+      signatures.current = next;
       setItems(inbox.items);
+      const followedIds = inbox.followed_project_ids ?? [];
       setHeldByServer(inbox.server_held);
+      setFollowed(followedIds);
+      writeCachedInbox(userId, {
+        items: inbox.items,
+        server_held: inbox.server_held,
+        followed: followedIds,
+      });
     } catch {
       // keep what we have; the next tick retries
     }
-  }, []);
+  }, [announcePolled, userId]);
+
+  // The last page's inbox, until this page's first read replaces it.
+  useEffect(() => {
+    if (!eligible || signatures.current) return;
+    const cached = readCachedInbox(userId);
+    if (!cached) return;
+    setItems(cached.items);
+    setHeldByServer(cached.server_held);
+    setFollowed(cached.followed);
+  }, [eligible, userId]);
 
   useEffect(() => {
     if (!eligible) return undefined;
@@ -181,13 +307,15 @@ const NotificationsBell: React.FC<NotificationsBellProps> = ({
   }, [eligible, unresolved]);
 
   const projectIds = useMemo(() => {
-    const ids = new Set<string>();
+    // Every project the reader follows, news or not: right after a visit the
+    // inbox is empty, and the next ingestion must still be heard.
+    const ids = new Set<string>(followed);
     for (const item of items) {
       if (item.scope_kind === 'project') ids.add(item.scope_id);
       else if (dashboardProject[item.scope_id]) ids.add(dashboardProject[item.scope_id]);
     }
     return [...ids];
-  }, [items, dashboardProject]);
+  }, [items, dashboardProject, followed]);
 
   const onFinished = useCallback(
     (event: IngestionFinishedPayload) => {
@@ -199,6 +327,14 @@ const NotificationsBell: React.FC<NotificationsBellProps> = ({
         (i) =>
           i.scope_kind === 'dashboard' &&
           dashboardProjectRef.current[i.scope_id] === event.project_id,
+      );
+      liveAt.current.set(event.project_id, Date.now());
+      const href = projectRunsHref(event.project_id, event.run_tags[0]);
+      showDesktopNotification(
+        `New data in ${name}`,
+        labels.length > 0 ? nameList(labels, CHIPS_SHOWN) : 'An ingestion finished.',
+        `ingestion-${event.run_id}`,
+        href,
       );
       notifications.show({
         id: `ingestion-${event.run_id}`,
@@ -212,25 +348,17 @@ const NotificationsBell: React.FC<NotificationsBellProps> = ({
               </Text>
             )}
             <Group gap="xs">
-              <Button
-                component="a"
-                size="compact-xs"
-                variant="light"
-                href={projectRunsHref(event.project_id, event.run_tags[0])}
-                data-testid="ingestion-toast-open-project"
-              >
+              <Anchor href={href} size="xs" data-testid="ingestion-toast-open-project">
                 Open project
-              </Button>
+              </Anchor>
               {marked && (
-                <Button
-                  component="a"
-                  size="compact-xs"
-                  variant="subtle"
+                <Anchor
                   href={`/dashboard/${encodeURIComponent(marked.scope_id)}`}
+                  size="xs"
                   data-testid="ingestion-toast-open-dashboard"
                 >
                   Open dashboard
-                </Button>
+                </Anchor>
               )}
             </Group>
           </Stack>
@@ -327,28 +455,46 @@ const NotificationsBell: React.FC<NotificationsBellProps> = ({
         })()}
       </Popover.Target>
       <Popover.Dropdown data-testid="notifications-panel" p="xs">
-        <Group justify="space-between" wrap="nowrap" px={8} pt={4} pb={6}>
-          <Text size="sm" fw={600}>
-            Since your last visit
+        <Stack pt={4} pb={6}>
+          <FeedHeader
+            title="Since your last visit"
+            action={
+              items.length > 0 && (
+                <FeedMarkSeen
+                  label="Mark all as seen"
+                  onClick={() => void markSeen(items)}
+                  testId="notifications-done-all"
+                />
+              )
+            }
+          />
+        </Stack>
+        {desktop === 'default' && (
+          <Button
+            size="compact-xs"
+            variant="light"
+            mx={8}
+            mb={6}
+            leftSection={<Icon icon="tabler:bell-ringing" width={14} />}
+            data-testid="notifications-enable-desktop"
+            onClick={() => {
+              void Notification.requestPermission().then(setDesktop);
+            }}
+          >
+            Enable desktop alerts
+          </Button>
+        )}
+        {desktop === 'denied' && (
+          <Text size="xs" c="dimmed" px={8} pb={6}>
+            Desktop alerts are blocked for this site in the browser settings.
           </Text>
-          {items.length > 0 && (
-            <Button
-              size="compact-xs"
-              variant="subtle"
-              leftSection={<Icon icon="tabler:checks" width={14} />}
-              data-testid="notifications-done-all"
-              onClick={() => void markSeen(items)}
-            >
-              Mark all as seen
-            </Button>
-          )}
-        </Group>
+        )}
         {items.length === 0 ? (
           <Text size="sm" c="dimmed" px="xs" py="sm">
             Nothing new.
           </Text>
         ) : (
-          <ScrollArea.Autosize mah={360} type="auto" offsetScrollbars>
+          <FeedScroll mah={360}>
             <Stack gap={2}>
               {items.map((item) => (
                 <NotificationRow
@@ -358,7 +504,7 @@ const NotificationsBell: React.FC<NotificationsBellProps> = ({
                 />
               ))}
             </Stack>
-          </ScrollArea.Autosize>
+          </FeedScroll>
         )}
       </Popover.Dropdown>
     </Popover>

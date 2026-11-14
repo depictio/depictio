@@ -8380,6 +8380,31 @@ def _family_main_id(doc: dict) -> Any:
     return doc["dashboard_id"]
 
 
+def _gained_category_colors(
+    colour_spec: Any, existing: dict, project_id: Any
+) -> dict[str, dict[str, str]] | None:
+    """A kept dashboard's colours, extended to the values its data gained.
+
+    An --attach-run keeps the dashboard as edited, but a new run brings new
+    values (a second locality) that its `auto` columns never coloured: the
+    legend and the figures then name only the first run's (epic #1399). The
+    template's spec is resolved again with the stored colours first, so every
+    value already coloured keeps its colour (edited in the viewer or not) and
+    only new ones take a palette slot. None when nothing was gained.
+    """
+    if not isinstance(colour_spec, dict) or not colour_spec:
+        return None
+    current = existing.get("category_colors") or {}
+    probe = {
+        "category_colors": json.loads(json.dumps(colour_spec)),
+        "stored_metadata": existing.get("stored_metadata") or [],
+    }
+    _resolve_auto_category_colors(probe, project_id, current)
+    # The stored map wins value by value: a resolve only ever adds.
+    merged = _layered_category_colors(probe.get("category_colors"), current)
+    return merged if merged != current else None
+
+
 def _keep_existing_dashboard(
     existing: dict,
     project_id: PyObjectId,
@@ -8389,6 +8414,7 @@ def _keep_existing_dashboard(
     *,
     current_user: Any,
     before_write: Callable[[], None] | None = None,
+    colour_spec: Any = None,
 ) -> dict[str, Any]:
     """The response of an import that leaves a dashboard the project has as it is.
 
@@ -8398,10 +8424,14 @@ def _keep_existing_dashboard(
     for a multi-tab main: the tabs it gained, which the response lists with the
     ones it had.
 
-    A version is recorded only when the family's content moved: a rename, or
-    tabs gained. A `source_key` alone names the dashboard and changes nothing on
-    screen. `before_write` is the caller's pre-import capture, already run if the
-    caller wrote tabs, so the state before them is the one recorded.
+    `colour_spec`, the YAML's `category_colors`, colours the values the data
+    gained since (see `_gained_category_colors`).
+
+    A version is recorded only when the family's content moved: a rename, new
+    colours, or tabs gained. A `source_key` alone names the dashboard and
+    changes nothing on screen. `before_write` is the caller's pre-import
+    capture, already run if the caller wrote tabs, so the state before them is
+    the one recorded.
     """
     family_id = _family_main_id(existing)
     before_write = before_write or _capture_before_import(family_id, current_user)
@@ -8410,14 +8440,20 @@ def _keep_existing_dashboard(
         changes["title"] = title
     if source_key and not existing.get("source_key"):
         changes["source_key"] = source_key
+    gained = _gained_category_colors(colour_spec, existing, project_id)
+    if gained is not None:
+        changes["category_colors"] = gained
+    content_moved = "title" in changes or "category_colors" in changes
     if changes:
-        if "title" in changes:
+        if content_moved:
             before_write()
         dashboards_collection.update_one({"_id": existing["_id"]}, {"$set": changes})
-    if "title" in changes or tabs_added:
+    if content_moved or tabs_added:
         _capture_import(family_id, current_user)
     kept = {**existing, **changes}
     message = "Dashboard kept as it is" + (", renamed" if "title" in changes else "")
+    if "category_colors" in changes:
+        message += ", colours added for new values"
     if tabs_added:
         message += f", {tabs_added} tab{'s' if tabs_added > 1 else ''} added"
     response: dict[str, Any] = {
@@ -8522,6 +8558,7 @@ def _import_multi_tab_dashboard(
             tabs_added=len(added),
             current_user=current_user,
             before_write=before_write,
+            colour_spec=main_dashboard_data.get("category_colors"),
         )
 
     main_dashboard_dict = main_lite.to_full()
@@ -9012,7 +9049,12 @@ def import_dashboard_yaml_content(
     )
     if keep_existing and existing_dashboard is not None:
         return _keep_existing_dashboard(
-            existing_dashboard, project_id, source_key, main_title, current_user=current_user
+            existing_dashboard,
+            project_id,
+            source_key,
+            main_title,
+            current_user=current_user,
+            colour_spec=yaml_data.get("category_colors") if isinstance(yaml_data, dict) else None,
         )
     if existing_dashboard:
         logger.info(
@@ -11049,13 +11091,21 @@ async def resolve_groups_endpoint(
     A group that cannot reach ``dc_id`` is absent from ``groups`` and says why
     in ``status``. Viewer permission on the dashboard; ``dc_id`` must belong to
     its project.
+
+    With ``"component_id"``, groups of runs (on ``depictio_run_id``, the
+    Overlay of "What's new") are rewritten to the ids the component matches
+    its marks by: its id role (``sample_id_col``, ``feature_id_col``, ...),
+    the ids whose rows came from those runs. A component whose ids each carry
+    rows of several runs gets none of them back (``runs_ambiguous``).
     """
+    from depictio.api.v1.deltatables_utils import RUN_ID_COLUMN
     from depictio.api.v1.services.figure.groups import sanitize_group_defs
 
     dc_id = request.get("dc_id")
     if not isinstance(dc_id, str) or not dc_id:
         raise HTTPException(status_code=400, detail="dc_id is required.")
     group_defs = sanitize_group_defs(request.get("groups"))
+    component_id = request.get("component_id")
 
     def _run() -> dict[str, Any]:
         dashboard_data = _viewable_dashboard(dashboard_id, current_user)
@@ -11065,12 +11115,88 @@ async def resolve_groups_endpoint(
                 status_code=404,
                 detail=f"Data collection {dc_id} is not part of this dashboard's project.",
             )
-        resolved, status = _resolve_group_defs(
-            group_defs, dc_id, project_id, access_token, "advanced_viz"
+
+        # Groups of runs, as the Overlay builds them: on the run column and
+        # captured on no collection (the client's `isRunGroup`). A group taken
+        # on another collection's run column goes through the links instead.
+        def is_run_group(g: dict) -> bool:
+            return g["column_name"] == RUN_ID_COLUMN and not g.get("dc_id")
+
+        run_defs = [g for g in group_defs if is_run_group(g)]
+        by_runs = (
+            _run_groups_for_component(dashboard_data, component_id, dc_id, run_defs)
+            if run_defs and isinstance(component_id, str) and component_id
+            else None
         )
-        return {"groups": resolved, "status": status}
+        if by_runs is None:
+            # No answer for the runs: they resolve as any other group.
+            resolved, status = _resolve_group_defs(
+                group_defs, dc_id, project_id, access_token, "advanced_viz"
+            )
+            return {"groups": resolved, "status": status}
+        run_groups, run_status = by_runs
+        others = [g for g in group_defs if not is_run_group(g)]
+        resolved, status = _resolve_group_defs(
+            others, dc_id, project_id, access_token, "advanced_viz"
+        )
+        # Back in the order the groups were asked in: the first wins a mark.
+        kept = {g["name"]: g for g in [*resolved, *run_groups]}
+        verdicts = {v["name"]: v for v in [*status, *run_status]}
+        return {
+            "groups": [kept[g["name"]] for g in group_defs if g["name"] in kept],
+            "status": [verdicts[g["name"]] for g in group_defs if g["name"] in verdicts],
+        }
 
     return await run_in_threadpool(_run)
+
+
+def _component_by_index(components: Any, component_id: str) -> dict | None:
+    return next((c for c in components or [] if str(c.get("index")) == component_id), None)
+
+
+def _family_component(dashboard_data: dict, component_id: str) -> dict | None:
+    """A component of this tab, else of another tab of its family (a highlight
+    draws a component of the tab it points at)."""
+    component = _component_by_index(dashboard_data.get("stored_metadata"), component_id)
+    if component:
+        return component
+    family_id = versioning.resolve_family_id(dashboard_data) or dashboard_data.get("dashboard_id")
+    for tab in dashboards_collection.find(
+        {"$or": [{"dashboard_id": family_id}, {"parent_dashboard_id": family_id}]},
+        {"stored_metadata": 1},
+    ):
+        component = _component_by_index(tab.get("stored_metadata"), component_id)
+        if component:
+            return component
+    return None
+
+
+def _run_groups_for_component(
+    dashboard_data: dict, component_id: str, dc_id: str, run_defs: list[dict]
+) -> tuple[list[dict], list[dict]] | None:
+    """Groups of runs as groups of the component's mark ids, or None when that
+    cannot be said (no id role, no run column): the caller then resolves them
+    as any other group."""
+    from depictio.api.v1.deltatables_utils import RUN_ID_COLUMN, load_deltatable_lite
+    from depictio.api.v1.services.changes.advanced_diff import key_role
+    from depictio.api.v1.services.figure.groups import run_groups_to_identities
+
+    component = _family_component(dashboard_data, component_id)
+    if component is None or str(component.get("dc_id")) != dc_id or not component.get("wf_id"):
+        return None
+    _role, identity = key_role(component.get("config") or {})
+    if not identity:
+        return None
+    try:
+        frame = load_deltatable_lite(
+            ObjectId(str(component["wf_id"])), dc_id, select_columns=[identity, RUN_ID_COLUMN]
+        )
+    except Exception as exc:
+        logger.warning(f"run groups on {dc_id}: could not read {identity!r} ({exc})")
+        return None
+    if identity not in frame.columns or RUN_ID_COLUMN not in frame.columns:
+        return None
+    return run_groups_to_identities(run_defs, frame, identity, RUN_ID_COLUMN)
 
 
 @dashboards_endpoint_router.post("/data_version_status/{dashboard_id}")

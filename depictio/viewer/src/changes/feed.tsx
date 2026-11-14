@@ -8,21 +8,38 @@
  * line, so a long list wraps like prose instead of like a tag cloud.
  */
 import React from 'react';
-import { Anchor, Group, Stack, Text, ThemeIcon, Tooltip, UnstyledButton } from '@mantine/core';
+import {
+  ActionIcon,
+  Anchor,
+  Button,
+  Group,
+  ScrollArea,
+  Stack,
+  Text,
+  ThemeIcon,
+  Tooltip,
+  UnstyledButton,
+} from '@mantine/core';
 import { Icon } from '@iconify/react';
+import { Z_LAYERS } from 'depictio-react-core';
 
 import { formatDateTimeVerbose, formatRelative } from '../lib/datetime';
+import { CHANGE_COLOR } from './palette';
 import './feed.css';
 
-/** Kinds of change, each with its icon and theme colour. */
+/** Kinds of change, each with its icon and its colour from the shared
+ *  palette. Thin tabler outline icons on a light tint, in every feed: the
+ *  list is read, the icons only sort it. Section headings use the same icon
+ *  as the rows under them. */
 export const FEED_KIND = {
-  data: { icon: 'mdi:database-refresh-outline', color: 'teal' },
-  run: { icon: 'mdi:folder-play-outline', color: 'blue' },
-  emptied: { icon: 'mdi:database-remove-outline', color: 'orange' },
-  failed: { icon: 'mdi:alert-circle-outline', color: 'red' },
-  dashboard: { icon: 'mdi:view-dashboard-edit-outline', color: 'violet' },
-  comment: { icon: 'mdi:comment-text-outline', color: 'grape' },
-  project: { icon: 'mdi:jira', color: 'blue' },
+  data: { icon: 'tabler:database', color: CHANGE_COLOR.data },
+  recomputed: { icon: 'tabler:refresh', color: CHANGE_COLOR.data },
+  run: { icon: 'tabler:folder-plus', color: CHANGE_COLOR.new },
+  emptied: { icon: 'tabler:database-off', color: CHANGE_COLOR.warning },
+  failed: { icon: 'tabler:alert-circle', color: CHANGE_COLOR.failed },
+  dashboard: { icon: 'tabler:layout-dashboard', color: CHANGE_COLOR.dashboard },
+  comment: { icon: 'tabler:message-circle', color: CHANGE_COLOR.comment },
+  project: { icon: 'tabler:folder', color: CHANGE_COLOR.new },
 } as const;
 export type FeedKind = keyof typeof FEED_KIND;
 
@@ -39,7 +56,7 @@ export function nameList(names: string[], max = 3): string {
 export const When: React.FC<{ at: string | null | undefined }> = ({ at }) => {
   if (!at) return null;
   return (
-    <Tooltip label={formatDateTimeVerbose(at)} withArrow openDelay={300}>
+    <Tooltip label={formatDateTimeVerbose(at)} withArrow openDelay={300} zIndex={Z_LAYERS.tooltip}>
       <span>{formatRelative(at)}</span>
     </Tooltip>
   );
@@ -48,17 +65,53 @@ export const When: React.FC<{ at: string | null | undefined }> = ({ at }) => {
 export const FeedSection: React.FC<{
   title: string;
   count?: number;
+  /** A thin icon before the title. */
+  icon?: string;
   testId?: string;
   children: React.ReactNode;
-}> = ({ title, count, testId, children }) => (
+}> = ({ title, count, icon, testId, children }) => (
   <Stack gap={2} data-testid={testId}>
-    <Text className="dc-feed-section" data-testid={testId ? `${testId}-head` : undefined}>
+    <Text component="div" className="dc-feed-section" data-testid={testId ? `${testId}-head` : undefined}>
+      {icon && <Icon icon={icon} width={13} aria-hidden />}
       {title}
       {count != null && <span className="dc-feed-section__count">{count}</span>}
     </Text>
     {children}
   </Stack>
 );
+
+/** A quiet link in the meta line; `onClick` alone makes it a button that
+ *  looks like one, so every action in a feed reads the same. */
+export interface FeedAction {
+  label: string;
+  href?: string;
+  onClick?: () => void;
+  newTab?: boolean;
+  testId?: string;
+}
+
+export const FeedLink: React.FC<{ action: FeedAction }> = ({ action }) => {
+  const common = {
+    size: 'xs' as const,
+    'data-testid': action.testId,
+    onClick: (e: React.MouseEvent) => {
+      e.stopPropagation();
+      action.onClick?.();
+    },
+  };
+  if (!action.href) {
+    return (
+      <Anchor component="button" type="button" {...common}>
+        {action.label}
+      </Anchor>
+    );
+  }
+  return (
+    <Anchor href={action.href} {...common} {...(action.newTab ? { target: '_blank', rel: 'noopener' } : {})}>
+      {action.label}
+    </Anchor>
+  );
+};
 
 export interface FeedItemProps {
   kind: FeedKind;
@@ -77,9 +130,13 @@ export interface FeedItemProps {
   by?: string[];
   at?: string | null;
   /** A link at the end of the meta line. */
-  action?: { label: string; href: string; newTab?: boolean; testId?: string };
+  action?: FeedAction;
+  /** Several, after `action`: each a link, or a button styled as one. */
+  actions?: FeedAction[];
   href?: string;
   onClick?: () => void;
+  /** Icon actions on the right of the title line (non-link items only). */
+  aside?: React.ReactNode;
   /** Actions and an opened detail, below the meta line (non-link items only). */
   children?: React.ReactNode;
   [dataAttr: `data-${string}`]: string | number | boolean | undefined;
@@ -96,23 +153,33 @@ export const FeedItem: React.FC<FeedItemProps> = ({
   by,
   at,
   action,
+  actions,
   href,
   onClick,
+  aside,
   children,
   ...data
 }) => {
+  const links = [...(action ? [action] : []), ...(actions ?? [])];
   const { icon } = FEED_KIND[kind];
   const color = colorOverride ?? FEED_KIND[kind].color;
   const who = by && by.length ? `by ${by.join(', ')}` : null;
   const body = (
     <Group gap="sm" wrap="nowrap" align="flex-start">
-      <ThemeIcon variant="light" color={color} radius="md" size={30} style={{ flexShrink: 0 }}>
-        <Icon icon={icon} width={17} aria-hidden />
+      <ThemeIcon variant="light" color={color} radius="xl" size={28} style={{ flexShrink: 0 }}>
+        <Icon icon={icon} width={15} aria-hidden />
       </ThemeIcon>
       <Stack gap={1} style={{ minWidth: 0, flex: 1 }}>
-        <Text component="div" size="sm" fw={500} lineClamp={1} className="dc-feed-item__title">
-          {title}
-        </Text>
+        <Group gap={6} wrap="nowrap" justify="space-between" align="flex-start">
+          <Text component="div" size="sm" fw={500} lineClamp={1} className="dc-feed-item__title">
+            {title}
+          </Text>
+          {aside && (
+            <Group gap={2} wrap="nowrap" style={{ flexShrink: 0 }}>
+              {aside}
+            </Group>
+          )}
+        </Group>
         {summary && (
           <Text size="xs" className="dc-feed-item__summary">
             {summary}
@@ -129,25 +196,17 @@ export const FeedItem: React.FC<FeedItemProps> = ({
             {detail}
           </Text>
         )}
-        {(who || at || action) && (
+        {(who || at || links.length > 0) && (
           <Text size="xs" c="dimmed" className="dc-feed-item__meta">
             {who}
             {who && at && ' · '}
             <When at={at} />
-            {action && (
-              <>
-                {(who || at) && ' · '}
-                <Anchor
-                  href={action.href}
-                  size="xs"
-                  onClick={(e) => e.stopPropagation()}
-                  data-testid={action.testId}
-                  {...(action.newTab ? { target: '_blank', rel: 'noopener' } : {})}
-                >
-                  {action.label}
-                </Anchor>
-              </>
-            )}
+            {links.map((link, i) => (
+              <React.Fragment key={link.label}>
+                {(i > 0 || who || at) && ' · '}
+                <FeedLink action={link} />
+              </React.Fragment>
+            ))}
           </Text>
         )}
         {children}
@@ -172,6 +231,34 @@ export const FeedItem: React.FC<FeedItemProps> = ({
     </div>
   );
 };
+
+/** The one "Mark as seen" of every feed. */
+export const FeedMarkSeen: React.FC<{
+  onClick: () => void;
+  loading?: boolean;
+  label?: string;
+  testId?: string;
+}> = ({ onClick, loading, label = 'Mark as seen', testId }) => (
+  <Button
+    size="compact-sm"
+    variant="subtle"
+    leftSection={<Icon icon="tabler:checks" width={15} />}
+    loading={loading}
+    onClick={onClick}
+    data-testid={testId}
+  >
+    {label}
+  </Button>
+);
+
+/** The scrolling list of a feed. Its inner wrapper is a flex item, which
+ *  without `min-width: 0` grows to its longest line: truncation then fails
+ *  and the row actions slide out of the panel. */
+export const FeedScroll: React.FC<{ mah: number | string; children: React.ReactNode }> = ({ mah, children }) => (
+  <ScrollArea.Autosize mah={mah} type="auto" offsetScrollbars className="dc-feed-scroll">
+    {children}
+  </ScrollArea.Autosize>
+);
 
 /** The panel's head: what the list covers, and its one action. */
 export const FeedHeader: React.FC<{
@@ -199,7 +286,36 @@ export const NewDot: React.FC<{ label?: string; testId?: string }> = ({
   label = 'New since your last visit',
   testId,
 }) => (
-  <Tooltip label={label} withArrow openDelay={300}>
+  <Tooltip label={label} withArrow openDelay={300} zIndex={Z_LAYERS.tooltip}>
     <span role="img" aria-label={label} className="dc-feed-new" data-testid={testId} />
+  </Tooltip>
+);
+
+/** A quiet icon button for a row's action, named by its tooltip. */
+export const FeedIconAction: React.FC<{
+  icon: string;
+  label: string;
+  href?: string;
+  onClick?: () => void;
+  active?: boolean;
+  testId?: string;
+}> = ({ icon, label, href, onClick, active = false, testId }) => (
+  <Tooltip label={label} withArrow openDelay={250} withinPortal zIndex={Z_LAYERS.tooltip}>
+    <ActionIcon
+      variant={active ? 'light' : 'subtle'}
+      color={active ? CHANGE_COLOR.new : 'gray'}
+      size="sm"
+      radius="md"
+      aria-label={label}
+      aria-pressed={onClick && !href ? active : undefined}
+      {...(href ? { component: 'a' as const, href } : {})}
+      onClick={(e: React.MouseEvent) => {
+        e.stopPropagation();
+        onClick?.();
+      }}
+      data-testid={testId}
+    >
+      <Icon icon={icon} width={15} />
+    </ActionIcon>
   </Tooltip>
 );

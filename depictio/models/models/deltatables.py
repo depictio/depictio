@@ -1,6 +1,7 @@
 from datetime import datetime
+from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from depictio.models.models.base import MongoModel, PyObjectId
 from depictio.models.models.users import UserBase
@@ -40,6 +41,28 @@ class DeltaTableColumn(BaseModel):
         return v
 
 
+class AggregationInput(BaseModel):
+    """A collection a derived table was computed from, at the version read."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    dc_id: str
+    dc_tag: str | None = None
+    delta_version: int | None = None
+
+    @field_validator("dc_id", mode="before")
+    @classmethod
+    def _id_as_string(cls, v):
+        # The API stores ids as ObjectIds; the next upsert reads them back.
+        return str(v) if v is not None else v
+
+
+#: How a recipe's output relates to the project's runs (epic #1399): ``run``
+#: computed once per run and stacked, ``aggregate`` recomputed over every run
+#: at once, ``pipeline`` a statistic the pipeline computed per run.
+RunScope = Literal["run", "aggregate", "pipeline"]
+
+
 class Aggregation(MongoModel):
     aggregation_time: datetime = Field(default_factory=datetime.now)
     aggregation_by: UserBase
@@ -68,6 +91,13 @@ class Aggregation(MongoModel):
     ingestion_run_id: str | None = None
     #: How the write was initiated: manual CLI run, watcher cycle, UI upload.
     trigger: str | None = None
+    #: A recipe output's relation to the runs; None for a file-backed table.
+    run_scope: RunScope | None = None
+    #: The runs a recomputation read. For ``aggregate`` every run, including
+    #: the ones whose rows it rewrote; ``run_tags`` are the runs it wrote.
+    computed_from_runs: list[str] = []
+    #: The collections it was computed from, each at the Delta version read.
+    inputs: list[AggregationInput] = []
     #: ``complete`` once ``aggregation_columns_specs`` describes the table.
     #: ``pending`` marks the window in which an offloaded job is still computing
     #: them, letting a reader tell "this table has no columns" apart from "the
@@ -153,6 +183,9 @@ class UpsertDeltaTableAggregated(BaseModel):
     run_tags: list[str] = []
     ingestion_run_id: str | None = None
     trigger: str | None = None
+    run_scope: RunScope | None = None
+    computed_from_runs: list[str] = []
+    inputs: list[AggregationInput] = []
 
     #: Ask the server to offload the expensive half of the upsert and return a
     #: ``job_id`` to poll. A *request*, not an instruction: the server also has

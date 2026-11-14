@@ -322,13 +322,16 @@ describe('the Analysis demo picks', () => {
   });
 
   it('leaves out what draws no group and takes no lasso', () => {
-    // A heatmap is drawn whole from its frame, a stacked bar overlaid is a sum.
+    // A heatmap is drawn whole from its frame.
     expect(
       analysisFigureRank(meta({ index: 'h', component_type: 'figure', visu_type: 'heatmap' })),
     ).toBeNull();
-    expect(analysisFigureRank(view('stacked_taxonomy', { sample_id_col: 'sample_id' }))).toBeNull();
     expect(analysisFigureRank(view('phylogenetic'))).toBeNull();
     expect(analysisFigureRank(meta({ index: 't', component_type: 'table' }))).toBeNull();
+  });
+
+  it('counts a stacked bar, which draws the groups as a strip over its bars', () => {
+    expect(analysisFigureRank(view('stacked_taxonomy', { sample_id_col: 'sample_id' }))).toBe(1);
   });
 
   it('puts a code figure that never draws the groups last', () => {

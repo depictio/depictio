@@ -115,7 +115,7 @@ const IngestionItem: React.FC<{
           <Button
             size="compact-xs"
             variant="subtle"
-            leftSection={<Icon icon="mdi:folder-play-outline" width={14} />}
+            leftSection={<Icon icon="tabler:folder-open" width={14} />}
             onClick={() => onShowRuns(runs[0])}
           >
             Open the run
@@ -126,7 +126,7 @@ const IngestionItem: React.FC<{
           size="compact-xs"
           variant="subtle"
           color="gray"
-          rightSection={<Icon icon={details.open ? 'mdi:chevron-up' : 'mdi:chevron-down'} width={14} />}
+          rightSection={<Icon icon={details.open ? 'tabler:chevron-up' : 'tabler:chevron-down'} width={14} />}
           onClick={details.onToggle}
           aria-expanded={details.open}
           data-testid={`timeline-steps-${event.id}`}

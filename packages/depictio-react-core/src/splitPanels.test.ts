@@ -195,12 +195,13 @@ describe('splitPanels', () => {
       for (const kind of NONE) {
         expect(groupDisplaysForKind(kind), kind).toEqual({ overlay: false, split: false });
       }
-      // Curves and tracks per sample are recoloured whole; a stacked bar, a
-      // sunburst or a flow is already a sum, drawn overlaid as it was.
-      for (const kind of ['qq', 'rarefaction', 'coverage_track']) {
+      // Curves and tracks per sample are recoloured whole, and a bar per
+      // sample takes the groups as a strip; a sunburst or a flow is already a
+      // sum, drawn overlaid as it was.
+      for (const kind of ['qq', 'rarefaction', 'coverage_track', 'stacked_bar', 'stacked_taxonomy']) {
         expect(groupDisplaysForKind(kind), kind).toEqual({ overlay: true, split: true });
       }
-      for (const kind of ['stacked_bar', 'stacked_taxonomy', 'sunburst', 'sankey', 'oncoplot', 'signal_matrix']) {
+      for (const kind of ['sunburst', 'sankey', 'oncoplot', 'signal_matrix']) {
         expect(groupDisplaysForKind(kind), kind).toEqual({ overlay: false, split: true });
       }
       expect(groupDisplaysForKind('some_future_kind')).toEqual({ overlay: false, split: true });

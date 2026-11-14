@@ -32,6 +32,7 @@ import { fetchProjectRunFiles, relativeToRunFolder } from 'depictio-react-core';
 import type { ProjectRun, RunFile, RunFiles, RunReportChange } from 'depictio-react-core';
 
 import { FactBadge, StatusBadge } from '../badges';
+import { SCOPE_COLOR } from './deltaHistory';
 import { DcTypeIcon } from '../dcTypeIcon';
 import { FilePreviewPanel, FilePreviewToggle, RunFileScope } from '../fromRun/FilePreview';
 import { fileSize } from '../fromRun/fileSize';
@@ -107,6 +108,64 @@ const SectionLabel: React.FC<{ icon: string; children: React.ReactNode; right?: 
     {right}
   </Group>
 );
+
+const OUTPUT_SCOPE: Record<string, { label: string; color: string; help: string }> = {
+  run: {
+    label: 'this run',
+    color: SCOPE_COLOR.run,
+    help: 'Computed from this run alone: later runs leave its rows as they are.',
+  },
+  aggregate: {
+    label: 'recomputed over every run',
+    color: SCOPE_COLOR.aggregate,
+    help: 'Mixes samples (a distance, an ordination, a top-N): recomputed over every run, so a new run can change the rows that came from this one.',
+  },
+  pipeline: {
+    label: "this run's pipeline statistic",
+    color: SCOPE_COLOR.pipeline,
+    help: 'A statistic the pipeline computed within this run: kept per run, never recomputed over several.',
+  },
+};
+
+/** The recipe collections this run fed, and how (epic #1399). */
+const ComputedFromRun: React.FC<{
+  run: ProjectRun;
+  dcIdByTag: Record<string, string>;
+  onOpenDc?: (dcId: string) => void;
+}> = ({ run, dcIdByTag, onOpenDc }) => {
+  const outputs = Object.entries(run.dc_outputs ?? {}).sort(([a], [b]) => a.localeCompare(b));
+  if (outputs.length === 0) return null;
+  return (
+    <Box data-testid={`run-computed-${run.run_tag}`}>
+      <SectionLabel icon="mdi:function-variant">Computed for this run</SectionLabel>
+      <Group gap="xs" wrap="wrap">
+        {outputs.map(([tag, scope]) => {
+          const s = OUTPUT_SCOPE[scope] ?? OUTPUT_SCOPE.run;
+          const dcId = dcIdByTag[tag];
+          const open = dcId && onOpenDc ? () => onOpenDc(dcId) : undefined;
+          return (
+            <Tooltip key={tag} label={s.help} multiline w={300} withArrow withinPortal>
+              <UnstyledButton
+                onClick={open}
+                style={{ cursor: open ? 'pointer' : 'default' }}
+                data-testid={`run-computed-${tag}`}
+              >
+                <Group gap={6} wrap="nowrap">
+                  <Text size="sm" fw={500}>
+                    {tag}
+                  </Text>
+                  <StatusBadge size="xs" color={s.color}>
+                    {s.label}
+                  </StatusBadge>
+                </Group>
+              </UnstyledButton>
+            </Tooltip>
+          );
+        })}
+      </Group>
+    </Box>
+  );
+};
 
 const FileRow: React.FC<{
   file: RunFile;
@@ -429,6 +488,7 @@ export const RunDetails: React.FC<{
           </Group>
         )}
         {folder ? <RunFileScope dataRoot={folder}>{body}</RunFileScope> : body}
+        <ComputedFromRun run={run} dcIdByTag={dcIdByTag} onOpenDc={onOpenDc} />
         {produced}
       </Stack>
     </Paper>

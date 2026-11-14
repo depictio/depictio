@@ -327,6 +327,10 @@ const SPLIT_KINDS_COLOURED_WHOLE: ReadonlySet<string> = new Set<AdvancedVizKind>
   'qq',
   'rarefaction',
   'coverage_track',
+  // A bar per sample keeps its taxa's colours: the groups are a strip above
+  // the bars, one cell per sample.
+  'stacked_bar',
+  'stacked_taxonomy',
 ]);
 
 /**

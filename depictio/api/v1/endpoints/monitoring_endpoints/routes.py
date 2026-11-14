@@ -252,6 +252,9 @@ class IngestionStartRequest(BaseModel):
     #: unable to open a monitoring record against an older server.
     trigger: Optional[IngestionTrigger] = None
     trigger_reason: Optional[str] = None
+    #: The runs a ``--attach-run`` brings, which tie this record to them in the
+    #: project's Runs tab and the ingestion event (epic #1399).
+    run_tags: list[str] = Field(default_factory=list, max_length=500)
 
     @field_validator("trigger", mode="before")
     @classmethod
@@ -363,6 +366,7 @@ def start_ingestion(
         data_root=body.data_root,
         trigger=body.trigger or "manual",
         trigger_reason=body.trigger_reason,
+        run_tags=body.run_tags,
         status="running",
     )
     store.create_ingestion_run(run)

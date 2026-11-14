@@ -158,12 +158,21 @@ async def _get_data_collection_polars_schema(
     # Auth + existence: reuse the existing specs path to enforce permissions.
     await _get_data_collection_specs(data_collection_id, current_user)
 
-    from depictio.api.v1.db import deltatables_collection
-
     try:
         dc_oid = ObjectId(data_collection_id)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+
+    # The Mongo lookup and the Delta log read block for ~170 ms against S3; on
+    # the event loop they stall every other request, and a dashboard asks for
+    # one schema per collection when a view on runs is on.
+    import asyncio
+
+    return await asyncio.to_thread(_read_polars_schema, dc_oid)
+
+
+def _read_polars_schema(dc_oid: ObjectId) -> dict[str, str]:
+    from depictio.api.v1.db import deltatables_collection
 
     dt_doc = deltatables_collection.find_one({"data_collection_id": dc_oid})
     if not dt_doc:

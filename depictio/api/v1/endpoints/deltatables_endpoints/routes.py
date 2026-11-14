@@ -342,6 +342,9 @@ async def upsert_deltatable(
             run_tags=payload.run_tags,
             ingestion_run_id=payload.ingestion_run_id,
             trigger=payload.trigger,
+            run_scope=payload.run_scope,
+            computed_from_runs=payload.computed_from_runs,
+            inputs=payload.inputs,
         )
     )
 

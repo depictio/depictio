@@ -132,6 +132,121 @@ def test_advanced_rows_are_matched_on_the_id_role():
     assert [r["key"] for r in out["changed"]] == ["b"]
 
 
+def test_advanced_rows_without_a_unique_key_are_a_multiset_difference():
+    # A long table repeats its id (one row per sample and taxon), so rows are
+    # compared as value tuples: a duplicate counts once per occurrence, added
+    # rows keep the new table's order and removed rows the old one's.
+    before = pl.DataFrame({"sample_id": ["s1", "s1", "s2", "s3"], "v": [1, 1, 2, 3]})
+    after = pl.DataFrame(
+        {"sample_id": ["s4", "s1", "s2", "s1", "s1", "s5"], "v": [4, 1, 2, 1, 1, 5]}
+    )
+    out = advanced_diff.rows_diff(before, after, "sample_id", ["sample_id", "v"])
+    assert out["key_column"] is None
+    assert [r["values"] for r in out["added"]] == [
+        {"sample_id": "s4", "v": "4"},
+        {"sample_id": "s1", "v": "1"},
+        {"sample_id": "s5", "v": "5"},
+    ]
+    assert [r["values"] for r in out["removed"]] == [{"sample_id": "s3", "v": "3"}]
+    assert out["counts"]["added"] == 3 and out["counts"]["removed"] == 1
+
+
+def _reference_rows_diff(before, after, values):
+    """The keyless diff as plain Python: value tuples as text, matched by count."""
+    from collections import Counter
+
+    def rows(df):
+        keep = [c for c in values if c in df.columns]
+        return [tuple(str(r.get(c)) for c in values) for r in df.select(keep).to_dicts()]
+
+    then, now = rows(before), rows(after)
+    unmatched, added = Counter(then), []
+    for t in now:
+        if unmatched[t] > 0:
+            unmatched[t] -= 1
+        else:
+            added.append(dict(zip(values, t)))
+    matched, removed = Counter(then) - unmatched, []
+    for t in then:
+        if matched[t] > 0:
+            matched[t] -= 1
+        else:
+            removed.append(dict(zip(values, t)))
+    return added, removed
+
+
+@pytest.mark.parametrize("seed", range(6))
+def test_the_keyless_diff_matches_a_plain_python_multiset_difference(seed):
+    import random
+
+    rng = random.Random(seed)
+    pool_f = [0.1, 1e-05, float("nan"), None, -0.0, 0.0, 2.5]
+    # No literal "None" text: plain Python matched it with a null (both print
+    # "None"); polars keeps them apart, which is the right answer.
+    pool_s = ["s1", "s2", None, "s3"]
+
+    def side(n):
+        return pl.DataFrame(
+            {
+                "sample_id": [rng.choice(pool_s) for _ in range(n)],
+                "v": [rng.choice(pool_f) for _ in range(n)],
+                "n": [rng.choice([1, 2, None]) for _ in range(n)],
+            },
+            schema={"sample_id": pl.String, "v": pl.Float64, "n": pl.Int64},
+        )
+
+    before, after = side(rng.randint(0, 60)), side(rng.randint(0, 60))
+    if seed == 5:
+        before = before.drop("n")  # a column the old version did not have
+    values = ["n", "sample_id", "v"]
+    out = advanced_diff.rows_diff(before, after, "sample_id", values)
+    added, removed = _reference_rows_diff(before, after, values)
+    assert [r["values"] for r in out["added"]] == added
+    assert [r["values"] for r in out["removed"]] == removed
+    assert out["counts"]["added"] == len(added) and out["counts"]["removed"] == len(removed)
+
+
+def test_an_advanced_diff_reads_only_its_bound_columns(monkeypatch):
+    # Each side is cached per Delta version: a full-width read kept every
+    # column of a wide table twice in the process for a few compared ones.
+    from depictio.api.v1 import deltatables_utils
+    from depictio.models.models.reader_marks import DcSeenState
+
+    asked: list[list[str] | None] = []
+
+    def fake_load(wf_id, dc_id, metadata=None, select_columns=None, delta_version=None):
+        asked.append(select_columns)
+        return pl.DataFrame({"sample_id": ["s1"], "abundance": [1.0], "unused": [0]})
+
+    monkeypatch.setattr(deltatables_utils, "load_deltatable_lite", fake_load)
+    component = {
+        "wf_id": str(ObjectId()),
+        "config": {"sample_id_col": "sample_id", "value_col": "abundance"},
+    }
+    advanced_diff.advanced_viz_diff(
+        component, str(ObjectId()), DcSeenState(delta_version=1), DcSeenState(delta_version=2), []
+    )
+    assert asked == [["abundance", "sample_id"], ["abundance", "sample_id"]]
+
+
+def test_advanced_rows_without_a_key_scale_linearly():
+    # The overlay view diffs every marked tile at once, on tables of hundreds
+    # of thousands of rows. Matching with list membership was quadratic: about
+    # an hour of CPU for one request on a 700k row taxonomy table, in a worker
+    # thread nothing cancels once the reader moves on.
+    import time
+
+    n = 60_000
+    before = pl.DataFrame({"sample_id": [f"s{i % 300}" for i in range(n)], "v": range(n)})
+    after = pl.concat([before, before.with_columns(pl.col("v") + n)]).sample(
+        fraction=1.0, shuffle=True, seed=1
+    )
+    started = time.perf_counter()
+    out = advanced_diff.rows_diff(before, after, "sample_id", ["sample_id", "v"])
+    assert out["counts"]["added"] == n and out["counts"]["removed"] == 0
+    assert time.perf_counter() - started < 5
+
+
 # ── the endpoint ────────────────────────────────────────────────────────────
 
 

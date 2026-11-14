@@ -28,7 +28,6 @@ filters by prefix.
 from __future__ import annotations
 
 import hashlib
-
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -174,6 +173,14 @@ def _parse_commit(entry: dict[str, Any]) -> DeltaCommitInfo:
     )
 
 
+def _capped_tag_list(tags: list[str]) -> str:
+    """The sorted tags, comma-joined, past the cap summarised as ``+N more``."""
+    joined = ",".join(sorted(tags)[:MAX_RUN_TAGS_IN_METADATA])
+    if len(tags) > MAX_RUN_TAGS_IN_METADATA:
+        joined += f",+{len(tags) - MAX_RUN_TAGS_IN_METADATA} more"
+    return joined
+
+
 def build_commit_metadata(
     *,
     data_collection_id: str,
@@ -187,8 +194,16 @@ def build_commit_metadata(
     trigger: str | None = None,
     cli_version: str | None = None,
     user_email: str | None = None,
+    run_scope: str | None = None,
+    computed_from_runs: list[str] | None = None,
+    inputs: list[dict] | None = None,
 ) -> dict[str, str]:
     """Assemble depictio's commit metadata, truncated to a sane size.
+
+    A recipe's commit also says how it relates to the runs (``run_scope``),
+    which runs it read (``computed_from``) and which collections, at which
+    version (``inputs``, ``tag@version``): its lineage, readable from the
+    table's own history (epic #1399).
 
     Every value is coerced to ``str`` because delta-rs requires
     ``dict[str, str]``, and the run-tag list is capped: this blob is inlined
@@ -208,6 +223,7 @@ def build_commit_metadata(
         "user_email": user_email,
         "file_count": file_count,
         "row_count": row_count,
+        "run_scope": run_scope,
     }
     for key, value in optional.items():
         if value is not None:
@@ -215,16 +231,21 @@ def build_commit_metadata(
 
     if run_tags:
         metadata[f"{METADATA_PREFIX}run_count"] = str(len(run_tags))
-        shown = sorted(run_tags)[:MAX_RUN_TAGS_IN_METADATA]
-        joined = ",".join(shown)
-        if len(run_tags) > MAX_RUN_TAGS_IN_METADATA:
-            joined += f",+{len(run_tags) - MAX_RUN_TAGS_IN_METADATA} more"
-        metadata[f"{METADATA_PREFIX}run_tags"] = joined
+        metadata[f"{METADATA_PREFIX}run_tags"] = _capped_tag_list(run_tags)
+
+    if computed_from_runs:
+        metadata[f"{METADATA_PREFIX}computed_from"] = _capped_tag_list(computed_from_runs)
+    if inputs:
+        metadata[f"{METADATA_PREFIX}inputs"] = ",".join(
+            f"{i.get('dc_tag') or i.get('dc_id')}@{i.get('delta_version')}"
+            for i in inputs[:MAX_RUN_TAGS_IN_METADATA]
+        )
 
     # Hard cap regardless of how the pieces added up.
     total = sum(len(k) + len(v) for k, v in metadata.items())
     if total > MAX_METADATA_BYTES:
         metadata.pop(f"{METADATA_PREFIX}run_tags", None)
+        metadata.pop(f"{METADATA_PREFIX}computed_from", None)
         logger.warning(
             f"Commit metadata exceeded {MAX_METADATA_BYTES} bytes; dropped the run-tag list."
         )
@@ -374,6 +395,22 @@ class ScopedWritePlan:
     declined: str | None = None
 
 
+def scoped_frame_conflicts(
+    frame_schema: dict[str, pl.DataType], table_schema: dict[str, pl.DataType]
+) -> list[str]:
+    """Columns whose type in a scoped frame differs from the table's.
+
+    A scoped write merges into the table's schema, and delta-rs casts into it
+    silently: a Float64 written into an Int64 column reads back truncated. A
+    column new to the table, or null in every row here, is no conflict.
+    """
+    return [
+        f"{col} is {dtype} here but {table_schema[col]} in the table"
+        for col, dtype in frame_schema.items()
+        if col in table_schema and dtype != pl.Null and dtype != table_schema[col]
+    ]
+
+
 def plan_scoped_write(
     *,
     probe: DeltaTableProbe | None,
@@ -453,6 +490,101 @@ def plan_scoped_write(
     return ScopedWritePlan(scoped=True, run_tags=sorted(set(changed_runs)))
 
 
+def table_run_tags(destination: str, storage_options: PolarsStorageOptions) -> set[str] | None:
+    """The runs a table holds rows of, or None when it has no run column.
+
+    Reads the one column. None when it cannot be read either: the caller then
+    rewrites the table in full, which is always correct.
+    """
+    try:
+        lf = pl.scan_delta(destination, storage_options=_delta_options(storage_options))
+        if RUN_ID_COLUMN not in lf.collect_schema().names():
+            return None
+        values = lf.select(pl.col(RUN_ID_COLUMN).cast(pl.String).unique()).collect()
+    except Exception as exc:  # noqa: BLE001 - a full rewrite is the safe answer
+        logger.debug(f"Could not read the runs of {destination}: {exc}")
+        return None
+    return {v for v in values[RUN_ID_COLUMN].to_list() if v is not None}
+
+
+def table_written_by_aggregate(destination: str, storage_options: PolarsStorageOptions) -> bool:
+    """Whether a recipe recomputed over every run wrote this table.
+
+    Its last commit says so (``run_scope``), or, for a commit that does not,
+    rows of several samples left with no run. Either way its values were
+    computed across runs, and adding one run's rows next to them would mix
+    two computations. False when nothing can be read: ``table_run_tags`` then
+    already sends the write back to a full rebuild.
+    """
+    info = read_delta_commit_info(destination, storage_options)
+    if info and info.custom_metadata.get(f"{METADATA_PREFIX}run_scope") == "aggregate":
+        return True
+    try:
+        lf = pl.scan_delta(destination, storage_options=_delta_options(storage_options))
+        if RUN_ID_COLUMN not in lf.collect_schema().names():
+            return False
+        return bool(lf.select(pl.col(RUN_ID_COLUMN).null_count()).collect().item())
+    except Exception as exc:  # noqa: BLE001 - see the docstring
+        logger.debug(f"Could not read the runs of {destination}: {exc}")
+        return False
+
+
+def plan_attach_write(
+    *,
+    probe: DeltaTableProbe | None,
+    attach_run_tags: list[str],
+    table_runs: set[str] | None,
+    project_runs: set[str],
+    aggregate_table: bool = False,
+) -> ScopedWritePlan:
+    """Whether attaching ``attach_run_tags`` may write their rows alone (epic #1399).
+
+    Everything already in the table stays as it is, so the attach is one
+    commit holding the new runs only, whether or not the table is
+    partitioned. A table that also holds rows no run of the project claims
+    (written before single files and recipes were tagged per run, under a
+    synthetic tag or no run column at all) is rewritten once in full instead:
+    a scoped write would keep those rows forever.
+    """
+    if not attach_run_tags:
+        return ScopedWritePlan(scoped=False)
+    if probe is None:
+        return ScopedWritePlan(scoped=False, declined="there is no table to write into yet")
+    if probe.schema is None:
+        return ScopedWritePlan(
+            scoped=False, declined="the table's schema could not be read to align against"
+        )
+    if probe.partition_columns and not probe.partitioned_by_run:
+        return ScopedWritePlan(
+            scoped=False, declined=f"the table is partitioned by {probe.partition_columns}"
+        )
+    if table_runs is None:
+        return ScopedWritePlan(
+            scoped=False, declined="the table has no run column yet, so it is rewritten once"
+        )
+    if aggregate_table:
+        return ScopedWritePlan(
+            scoped=False,
+            declined=(
+                "an aggregate recipe computed the table over every run, so it is rewritten "
+                "once per run"
+            ),
+        )
+    strangers = sorted(table_runs - project_runs)
+    if strangers:
+        return ScopedWritePlan(
+            scoped=False,
+            declined=(
+                f"the table holds rows of {', '.join(strangers[:3])}, which is no run of the "
+                "project, so it is rewritten once with every row tagged by its run"
+            ),
+        )
+    unsafe = [tag for tag in attach_run_tags if not SAFE_RUN_TAG.match(tag)]
+    if unsafe:
+        return ScopedWritePlan(scoped=False, declined=f"run tag {unsafe[0]!r} is not path-safe")
+    return ScopedWritePlan(scoped=True, run_tags=sorted(set(attach_run_tags)))
+
+
 #: Written by the CLI on every row at each write (``aggregate_lazy_dataframes``).
 DIGEST_VOLATILE_COLUMNS = frozenset({"aggregation_time"})
 #: Enough for any figure, short of the float noise of a numerical method.
@@ -523,24 +655,28 @@ def write_delta_table_versioned(
     ``scoped`` says ``aggregated_df`` holds only *some* of the table's runs. It
     changes two things, both required for correctness rather than performance:
 
-    * the write must be partitioned and predicated, so an unpartitioned
-      subset write is refused outright rather than silently overwriting the
-      table with a fraction of its rows;
+    * the write must be predicated on its runs, so a subset write without
+      ``replace_run_tags`` is refused outright rather than silently overwriting
+      the table with a fraction of its rows. The table need not be partitioned:
+      a one-run first ingest never is, and the predicate scopes the overwrite
+      to the rows of those runs either way (epic #1399, measured on deltalake
+      1.6.2), partitioning only making it cheaper;
     * ``schema_mode`` becomes ``"merge"``. Measured against deltalake 0.24 and
       1.6.1: a subset written with ``schema_mode="overwrite"`` and one column
       missing drops that column for *every* run on 1.6.1 and leaves the table
       unreadable on 0.24. ``merge`` keeps the column, and turns a genuine type
       conflict into a loud failure instead of a corrupt table.
     """
-    if scoped and not partition:
+    predicated = write_mode == "replace-runs" and bool(replace_run_tags)
+    if scoped and not predicated:
         # Invariant, deliberately an exception rather than a fall-back: with a
         # subset frame, "overwrite the whole table" is data loss.
         raise ValueError(
-            "a scoped write must be partitioned and predicate-scoped; "
+            "a scoped write must be predicate-scoped to its runs; "
             "refusing to overwrite the whole table with a subset of its runs"
         )
-    if replace_run_tags and not partition:
-        raise ValueError("replace_run_tags is meaningless without partitioning")
+    if replace_run_tags and write_mode != "replace-runs":
+        raise ValueError("replace_run_tags needs replace-runs")
 
     # Replacing the schema is only correct when the frame *is* the table; a
     # subset has to merge into the schema it finds. See the docstring.
@@ -551,11 +687,9 @@ def write_delta_table_versioned(
 
     if partition:
         delta_write_options["partition_by"] = [RUN_ID_COLUMN]
-        if write_mode == "replace-runs" and replace_run_tags:
-            quoted = ", ".join(
-                "'" + tag.replace("'", "''") + "'" for tag in sorted(replace_run_tags)
-            )
-            delta_write_options["predicate"] = f"{RUN_ID_COLUMN} IN ({quoted})"
+    if predicated:
+        quoted = ", ".join("'" + tag.replace("'", "''") + "'" for tag in sorted(replace_run_tags))
+        delta_write_options["predicate"] = f"{RUN_ID_COLUMN} IN ({quoted})"
 
     logger.debug(
         f"Writing Delta table to {destination_file} "

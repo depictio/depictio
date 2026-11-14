@@ -410,17 +410,62 @@ params.depictio_project = 'Ampliseq 16S survey'
 params.depictio_attach  = true
 ```
 
-One limitation is worth knowing before you build a project this way. In a
-template whose `data_location.structure` is `flat`, data collections declared
-with `scan.mode: single` name one file, and that path is resolved from the data
-root of the run that created the project. A samplesheet, a metadata table or a
-tree file is typically declared that way. Attaching a second run adds its
-`recursive` collections as expected, but the `single` ones keep pointing at the
-first run's files, so they describe the project rather than the new run. The
-CLI reports this in the attach summary rather than failing, and it is the
-correct behaviour for a samplesheet that genuinely covers the whole project.
-Templates whose structure is `sequencing-runs`, viralrecon among them, resolve
-those paths per run and are unaffected.
+### What an attached run changes
+
+An attach writes only what the new run brings. Each collection whose files the
+run holds gets one Delta commit, scoped to that run (`depictio_run_id IN
+(<new run>)`): the rows of the runs before it are left as they were, and the
+commit's history names the run. A run that brings nothing to a collection leaves
+it untouched, without an empty commit.
+
+`scan.mode: single` collections (a samplesheet, a metadata table) are read per
+run when each run has its own copy of the file, and are counted under that run
+in the project's Runs tab. A file that every run shares, a tree or a GeoJSON
+among them, describes the project and is kept from the first run.
+
+Collections a recipe computes fall into three kinds, and the CLI prints which
+one applies when a project has several runs:
+
+| Kind | Examples | On a new run |
+| --- | --- | --- |
+| per run | most recipes: they read one sample's rows at a time | computed from the new run alone, then written like a file-backed collection |
+| mixes samples | Bray-Curtis distances, PCoA and PCA, UpSet, top-N gene or taxon cuts | recomputed over every run, so the rows of earlier runs can change too |
+| pipeline statistic | PERMANOVA, ANCOM-BC, DESeq2 QC | kept per run: the pipeline computed it within its own run, and no union of runs can recompute it |
+
+A recipe that mixes samples is wrong once stacked run by run: a distance
+between two samples of different runs would simply be missing. It is therefore
+recomputed whenever a run is attached, and each of its rows still carries the
+run of its sample (none when a row aggregates several). Pass `--per-run` to
+compute such recipes one run at a time anyway, for instance when the runs are
+batches that should never be compared.
+
+For nf-core/quantms, the sample correlation and the sample embedding are
+recomputed over every run too, one mass-spectrometry run counting as one sample.
+Correlations across runs then also show how each run was normalised (a batch
+effect), so read the pairs from different runs with that in mind.
+
+Recomputing over every run needs every run's folder. When one is not on the
+host doing the ingest (an unmounted share, another machine), the CLI refuses to
+rewrite the collection, says which runs are missing and leaves it unchanged,
+rather than silently dropping their rows. Ingest where every run is reachable,
+or remove those runs from the project with a refresh and `--drop-missing-runs`.
+A run whose folder exists but
+lacks the recipe's input is a run the pipeline step skipped, and is left out
+with a warning, as before.
+
+Switching a collection between the two kinds (`--per-run`, or a `scope:` in the
+template) rewrites it once in full on the next attach, so it never keeps rows
+of both computations side by side.
+
+Every recipe commit records its lineage in the Delta log: the kind
+(`depictio.run_scope`), the runs it read (`depictio.computed_from`) and the
+collections it read, at the version it read them (`depictio.inputs`, as
+`tag@version`). The project's Version history shows them, and can be filtered
+to one run; the Runs tab lists, under each run, the collections computed from
+it.
+
+With a single run the three kinds are the same computation: a single-run
+project is written exactly as before, apart from the `depictio_run_id` column.
 
 ### Re-running the same pipeline
 

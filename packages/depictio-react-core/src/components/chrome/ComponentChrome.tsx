@@ -11,6 +11,7 @@ import InspectButton from './InspectButton';
 import { useInspectorControl } from './InspectorContext';
 import CommentsButton from './CommentsButton';
 import CurrentDataBadge from './CurrentDataBadge';
+import RunScopeBadge from './RunScopeBadge';
 import ChangeDot from './ChangeDot';
 import { useCommentsControl } from './CommentsContext';
 import ExportButton from './ExportButton';
@@ -529,9 +530,14 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
       {children}
       {/* Pinned at the bottom-left, out of the action row: a hover-only badge
        *  would let the tile pass for the past at rest, and the top-left is
-       *  where a figure draws its title. Renders nothing on live data. */}
+       *  where a figure draws its title. Renders nothing on live data, nor
+       *  while What's new on runs is off. */}
       <span className="depictio-current-data-badge dgl-no-drag">
         <CurrentDataBadge componentType={componentType} />
+        <RunScopeBadge
+          componentType={componentType}
+          dcId={(metadata as { dc_id?: string | null }).dc_id}
+        />
       </span>
       {/* The "updated since your last visit" dot (#1397), in the top-left
        *  corner over the tile's own padding: nothing unless a viewer mounted

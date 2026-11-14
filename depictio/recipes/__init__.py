@@ -34,6 +34,14 @@ class RecipeError(Exception):
     """Raised when a recipe fails validation."""
 
 
+class RecipeSourceMissing(RecipeError):
+    """A required input file of the recipe is not in the data root.
+
+    Raised apart so a project with several runs can tell a run where that
+    pipeline step did not run (skipped) from a recipe that is broken (fails).
+    """
+
+
 # Pre-#863 constant names. A recipe still using them fails loudly instead of
 # half-working: the optional schema is read with a ``None`` default, so a module
 # that only renamed the required schema would silently skip optional validation.
@@ -298,7 +306,7 @@ def _read_source_outside_root(
     if not Path(location).is_file():
         if source.optional:
             return None
-        raise RecipeError(f"Source '{source.ref}': file not found: {location}")
+        raise RecipeSourceMissing(f"Source '{source.ref}': file not found: {location}")
     return _read_source_file(location, source)
 
 
@@ -323,7 +331,7 @@ def _resolve_glob_source(
     if not matched_files:
         if source.optional:
             return None
-        raise RecipeError(
+        raise RecipeSourceMissing(
             f"Source '{source.ref}': no files matched glob '{pattern}' in {root.location}"
         )
 
@@ -417,7 +425,7 @@ def resolve_sources(
                 if source.optional:
                     sources[source.ref] = None  # type: ignore[assignment]
                     continue
-                raise RecipeError(f"Source '{source.ref}': file not found: {file_location}")
+                raise RecipeSourceMissing(f"Source '{source.ref}': file not found: {file_location}")
             df = _read_source_file(file_location, source, storage_options, rel_path=rel_path)
 
         if df.is_empty():
@@ -598,6 +606,7 @@ def execute_recipe(
     pipeline_version: str | None = None,
     params: dict[str, str] | None = None,
     properties: dict | None = None,
+    sources: dict[str, pl.DataFrame] | None = None,
 ) -> pl.DataFrame:
     """Full pipeline: load → resolve → transform → validate.
 
@@ -610,6 +619,9 @@ def execute_recipe(
         pipeline_version: Optional pipeline version for version-specific recipe lookup.
         params: Optional template parameters, passed to ``transform(sources, params=...)``
             when the recipe accepts them (see ``call_transform``).
+        sources: The file sources, already read (from several run folders,
+            put back together by the caller). ``data_dir`` is then only the
+            context the transform receives.
 
     Returns:
         Validated output DataFrame.
@@ -618,7 +630,7 @@ def execute_recipe(
     module = load_recipe(recipe_name, pipeline_version)
 
     # Checkpoint 2: resolve
-    sources = resolve_sources(module, data_dir, overrides)
+    sources = dict(sources) if sources is not None else resolve_sources(module, data_dir, overrides)
 
     # Inject dc_ref sources
     if extra_sources:

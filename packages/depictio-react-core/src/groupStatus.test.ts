@@ -162,6 +162,15 @@ describe('advancedVizGroupOutcome', () => {
     drawnHere: false,
   };
 
+  it('says why the run Overlay leaves a tile as it was', () => {
+    expect(advancedVizGroupOutcome({ ...whole, runOverlay: 'kind' })).toEqual({ badge: 'run_kind', reach: false });
+    // The groups of runs were refused, so none are active: the badge still says why.
+    expect(advancedVizGroupOutcome({ ...whole, groupsActive: false, runOverlay: 'ambiguous' })).toEqual({
+      badge: 'run_ambiguous',
+      reach: false,
+    });
+  });
+
   it('says nothing when no groups are active', () => {
     expect(advancedVizGroupOutcome({ ...whole, groupsActive: false, coloured: false })).toEqual({
       badge: null,
