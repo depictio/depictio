@@ -70,6 +70,12 @@ export interface HandoffView {
   /** Image size in pixels at full resolution, to frame it whole. */
   width?: number | null;
   height?: number | null;
+  /** Where the tile is looking (zoom, centre in level-0 pixels): the other
+   *  viewer opens on the same region rather than on the whole image. */
+  camera?: { zoom: number; target: readonly [number, number] } | null;
+  /** Size of one level-0 pixel in the store's own units (its x scale). vizarr
+   *  places the image in those units, the tile in pixels. */
+  pixelSize?: number | null;
 }
 
 /** What a target needs to know about the store it opens. */
@@ -80,6 +86,10 @@ export interface HandoffStore {
   /** The image group inside the store that the tile draws (a plate's well field). */
   imagePath?: string | null;
   view?: HandoffView | null;
+}
+
+function round2(v: number): number {
+  return Math.round(v * 100) / 100;
 }
 
 /** Most channels Vitessce's raster layer shades at once. */
@@ -107,11 +117,14 @@ export function unsupportedReason(target: HandoffTargetId, store: HandoffStore):
   }
 }
 
-/** The URL of the group a target opens: the store root for the targets that
- *  walk a plate themselves (vizarr, the validator), else the image drawn. */
+/** The URL of the group a target opens: the store root for the validator
+ *  (it checks the whole container) and for vizarr on a plate (it draws the
+ *  plate), else the image drawn. vizarr refuses a bioformats2raw container's
+ *  root and sends the reader to the validator, so it gets the series. */
 function sourceUrl(target: HandoffTargetId, storeUrl: string, store: HandoffStore): string {
   const root = storeUrl.replace(/\/+$/, '');
-  if (target === 'vizarr' || target === 'validator' || !store.imagePath) return root;
+  const plate = store.layout === 'plate' || store.layout === 'well';
+  if (target === 'validator' || (target === 'vizarr' && plate) || !store.imagePath) return root;
   return `${root}/${store.imagePath.replace(/^\/+/, '')}`;
 }
 
@@ -156,7 +169,13 @@ export function vitessceConfig(url: string, store: HandoffStore): Record<string,
     },
   };
   const scopes: Record<string, string> = { spatialImageLayer: 'A' };
-  if (view?.width && view?.height) {
+  if (view?.camera) {
+    // Same terms as the tile: pixel coordinates, zoom 0 = one pixel per screen pixel.
+    coordinationSpace.spatialZoom = { A: round2(view.camera.zoom) };
+    coordinationSpace.spatialTargetX = { A: Math.round(view.camera.target[0]) };
+    coordinationSpace.spatialTargetY = { A: Math.round(view.camera.target[1]) };
+    Object.assign(scopes, { spatialZoom: 'A', spatialTargetX: 'A', spatialTargetY: 'A' });
+  } else if (view?.width && view?.height) {
     // Pixel coordinates; zoom 0 is one image pixel per screen pixel.
     coordinationSpace.spatialZoom = {
       A: Math.round(Math.log2(700 / Math.max(view.width, view.height)) * 100) / 100,
@@ -198,8 +217,20 @@ export function handoffUrl(
 ): string {
   const url = sourceUrl(target, storeUrl, store);
   switch (target) {
-    case 'vizarr':
-      return `https://hms-dbmi.github.io/vizarr/?source=${encodeURIComponent(url)}`;
+    case 'vizarr': {
+      const base = `https://hms-dbmi.github.io/vizarr/?source=${encodeURIComponent(url)}`;
+      const camera = store.view?.camera;
+      // A plate opens framed on the plate: the tile's camera is a field's.
+      if (!camera || store.layout === 'plate' || store.layout === 'well') return base;
+      // vizarr draws in the store's physical units: scale the centre, and
+      // shift the zoom so as many screen pixels cover the same region.
+      const s = store.view?.pixelSize && store.view.pixelSize > 0 ? store.view.pixelSize : 1;
+      const viewState = {
+        zoom: round2(camera.zoom - Math.log2(s)),
+        target: camera.target.map((v) => Math.round(v * s)),
+      };
+      return `${base}&viewState=${encodeURIComponent(JSON.stringify(viewState))}`;
+    }
     case 'validator':
       return `https://ome.github.io/ome-ngff-validator/?source=${encodeURIComponent(url)}`;
     case 'neuroglancer': {

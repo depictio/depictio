@@ -19,10 +19,16 @@ tab_icon: 'mdi:microscope'
 tab_icon_color: 'grape'
 
 grid_sections:
+  - name: 'About'
+    icon: 'mdi:information-outline'
+    color: 'grape'
+    description: 'The samples, where the images come from, and how the tiles below work together'
   - name: 'Acquisitions'
     icon: 'mdi:microscope'
     color: 'grape'
     description: 'The overview with where each tomogram was acquired, and the tomogram picked on it'
+    # One screen: the overview and the tomogram it opens stay side by side.
+    display: linked
   - name: 'Tomograms'
     icon: 'mdi:table'
     color: 'grape'
@@ -36,7 +42,7 @@ components:
     order: 6
     alignment: left
     vertical_alignment: top
-    section: 'Acquisitions'
+    section: 'About'
     body: >
       HeLa cells on an electron microscopy grid, imaged twice: an overview of
       the whole section at 34 nm per pixel, then electron tomograms of single
@@ -59,12 +65,17 @@ components:
     description: 'The whole section; each mark is a tomogram, coloured by whether it opens on the right. Click one to open it.'
     section: 'Acquisitions'
     viz_kind: bioimage_viewer
+    # Linked cells keep controls behind the icon unless placed: the
+    # channels stay in view above the image.
+    controls_placement: top
     config:
       viz_kind: bioimage_viewer
       image_dc_tag: hela_images
       image_wf_id: '646b0f3c1e4a2d7f8e5b8f01'
       image_dc_id: '646b0f3c1e4a2d7f8e5b8f30'
       store: em-overview.ome.zarr
+      # The DC also holds the tomograms: they are the right tile's to show.
+      store_pattern: '^em-overview'
       points_dc_tag: hela_tomograms
       points_wf_id: '646b0f3c1e4a2d7f8e5b8f01'
       points_dc_id: '646b0f3c1e4a2d7f8e5b8f31'
@@ -77,6 +88,7 @@ components:
       channels:
         - index: 0
           name: 'EM'
+          description: 'Electron microscopy of the section at 34 nm per pixel: one grey-scale channel, dark where the sample scatters electrons (dense material), bright on the empty grid holes.'
           color: '#FFFFFF'
       selection_enabled: true
       show_scalebar: true
@@ -91,6 +103,9 @@ components:
     description: 'The tomogram picked on the overview, in its own orientation; Z moves through its depth.'
     section: 'Acquisitions'
     viz_kind: bioimage_viewer
+    # Linked cells keep controls behind the icon unless placed: the
+    # channels stay in view above the image.
+    controls_placement: top
     config:
       viz_kind: bioimage_viewer
       image_dc_tag: hela_images
@@ -100,9 +115,12 @@ components:
       sample_dc_tag: hela_tomograms
       sample_dc_id: '646b0f3c1e4a2d7f8e5b8f31'
       sample_column: tomogram
+      # Only the tomograms: the overview is the left tile's.
+      store_pattern: '^tomo_'
       channels:
         - index: 0
           name: 'EM'
+          description: 'Electron tomogram: one grey-scale channel of electron density, a slice through the cell volume at 6.2 nm per pixel. Membranes and dense organelles are dark.'
           color: '#FFFFFF'
       show_scalebar: true
     layout: { x: 4, y: 2, w: 4, h: 10 }

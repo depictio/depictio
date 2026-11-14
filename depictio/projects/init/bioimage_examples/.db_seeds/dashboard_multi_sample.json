@@ -271,6 +271,7 @@
         "image_dc_id": "646b0f3c1e4a2d7f8e5b8f08",
         "image_dc_tag": "multi_sample_images",
         "store": "sample_A.zarr",
+        "store_pattern": null,
         "sample_wf_id": "646b0f3c1e4a2d7f8e5b8f01",
         "sample_dc_id": "646b0f3c1e4a2d7f8e5b8f0a",
         "sample_dc_tag": "multi_sample_samples",

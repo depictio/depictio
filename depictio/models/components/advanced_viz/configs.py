@@ -1441,6 +1441,14 @@ class BioimageChannel(BaseModel):
 
     index: int = Field(..., ge=0, description="Channel index along the image's c axis")
     name: str | None = Field(default=None, description="Display name; null uses the store's")
+    description: str | None = Field(
+        default=None,
+        description=(
+            "What the channel shows, for a reader who does not know the name "
+            "(e.g. 'Electron microscopy: electron density, dark = dense'); shown "
+            "as the channel's tooltip"
+        ),
+    )
     visible: bool = Field(default=True, description="Draw this channel")
     color: str | None = Field(
         default=None, description="Hex colour (e.g. '#ff00ff'); null uses the store's"
@@ -1506,6 +1514,13 @@ class BioimageViewerConfig(_BaseVizConfig):
     store: str | None = Field(
         default=None,
         description="Store shown first (e.g. 'sample_A.zarr'); null uses the first store",
+    )
+    store_pattern: str | None = Field(
+        default=None,
+        description=(
+            "Regex searched in store names: the stores this tile offers. Others in "
+            "the DC belong to another tile (an overview beside its detail images)"
+        ),
     )
 
     # Sample source: a table DC whose filters choose the store.
@@ -1702,6 +1717,16 @@ class BioimageViewerConfig(_BaseVizConfig):
             "per sample (e.g. a sample:cell key); defaults to ``cell_id_col``"
         ),
     )
+
+    @field_validator("store_pattern")
+    @classmethod
+    def _valid_store_pattern(cls, value: str | None) -> str | None:
+        if value is not None:
+            try:
+                re.compile(value)
+            except re.error as e:
+                raise ValueError(f"store_pattern {value!r} is not a valid regex: {e}") from e
+        return value
 
     @model_validator(mode="after")
     def _check_bindings(self) -> BioimageViewerConfig:

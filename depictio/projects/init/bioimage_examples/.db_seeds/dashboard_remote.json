@@ -73,6 +73,7 @@
         "image_dc_id": "646b0f3c1e4a2d7f8e5b8f17",
         "image_dc_tag": "idr_laminb1_image",
         "store": null,
+        "store_pattern": null,
         "sample_wf_id": null,
         "sample_dc_id": null,
         "sample_dc_tag": null,

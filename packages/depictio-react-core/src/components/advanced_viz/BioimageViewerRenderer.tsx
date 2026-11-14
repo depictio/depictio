@@ -19,7 +19,7 @@ import { Icon } from '@iconify/react';
 
 import {
   createBioimageSource,
-  createBioimageZarrStore,
+  bioimageZarrStore,
   fetchAdvancedVizData,
   fetchBioimageRemoteValidation,
   fetchBioimageStores,
@@ -60,6 +60,8 @@ import {
   formatLength,
   hexToRgb,
   MAX_RENDERED_CHANNELS,
+  planeLabel,
+  type AxisStep,
   type ChannelState,
   type ConfigChannel,
   type Rgb,
@@ -107,6 +109,9 @@ interface BioimageViewerConfig {
   image_wf_id?: string | null;
   image_dc_id?: string | null;
   store?: string | null;
+  /** Regex on store names: the stores this tile offers (others in the DC are
+   *  another tile's, e.g. an overview beside its detail images). */
+  store_pattern?: string | null;
   sample_dc_id?: string | null;
   sample_column?: string | null;
   well_column?: string | null;
@@ -189,10 +194,22 @@ function sampleFromFilters(
   return null;
 }
 
+/** The tile's `store_pattern`, or null when unset or not a valid regex (the
+ *  model refuses one at save, so that only happens on hand-edited data). */
+function storePattern(source: string | null | undefined): RegExp | null {
+  if (!source) return null;
+  try {
+    return new RegExp(source);
+  } catch {
+    return null;
+  }
+}
+
 function toConfigChannels(channels: readonly ChannelState[]): ConfigChannel[] {
   return channels.map((c) => ({
     index: c.index,
     name: c.name,
+    ...(c.description ? { description: c.description } : {}),
     visible: c.visible,
     color: c.color,
     contrast_limits: c.contrastLimits,
@@ -272,6 +289,8 @@ interface PlaneSliderProps {
   label: string;
   value: number;
   size: number;
+  /** The axis step with its unit, so the label says where the plane sits. */
+  step?: AxisStep | null;
   onChange: (value: number) => void;
   /** Set for the T axis: a play button steps through the time points. */
   playing?: boolean;
@@ -284,14 +303,16 @@ function PlaneSlider({
   label,
   value,
   size,
+  step,
   onChange,
   playing,
   onTogglePlay,
 }: PlaneSliderProps): React.ReactElement {
+  const text = `${label} ${planeLabel(value, size, step ?? null)}`;
   if (!onTogglePlay) {
     return (
       <VizSlider
-        label={`${label} ${value + 1}/${size}`}
+        label={text}
         aria-label={label}
         min={0}
         max={size - 1}
@@ -303,7 +324,7 @@ function PlaneSlider({
     );
   }
   return (
-    <VizInlineField label={`${label} ${value + 1}/${size}`} controlWidth={VIZ_SLIDER_CONTROL_PX + 28}>
+    <VizInlineField label={text} controlWidth={VIZ_SLIDER_CONTROL_PX + 28}>
       <Group gap={6} wrap="nowrap">
         <Tooltip label={playing ? 'Pause' : 'Play through time'} withArrow openDelay={300}>
           <ActionIcon
@@ -557,11 +578,14 @@ const BioimageViewerRenderer: React.FC<Props> = ({
     [activeFetchFilters, config.sample_column, config.sample_dc_id],
   );
   const [pickedStore, setPickedStore] = useState<string | null>(config.store ?? null);
-  // The overlay store is drawn over the image, never picked as the image.
-  const sampleStores = useMemo(
-    () => (stores ?? []).filter((s) => s.name !== config.overlay_store),
-    [stores, config.overlay_store],
-  );
+  // The overlay store is drawn over the image, never picked as the image;
+  // `store_pattern` keeps the stores that are this tile's to show.
+  const sampleStores = useMemo(() => {
+    const pattern = storePattern(config.store_pattern);
+    return (stores ?? []).filter(
+      (s) => s.name !== config.overlay_store && (!pattern || pattern.test(s.name)),
+    );
+  }, [stores, config.overlay_store, config.store_pattern]);
   const activeStore = useMemo<BioimageStoreInfo | null>(() => {
     if (!stores || stores.length === 0) return null;
     if (stepsEnabled) {
@@ -592,7 +616,7 @@ const BioimageViewerRenderer: React.FC<Props> = ({
     }
     let cancelled = false;
     const unknown: NgffContainer = { layout: 'unknown', version: null, wells: [] };
-    openContainer(createBioimageZarrStore(imageDcId, activeStoreName))
+    openContainer(bioimageZarrStore(imageDcId, activeStoreName))
       .then((value) => {
         if (!cancelled) setContainer({ key: storeKey, value });
       })
@@ -635,7 +659,7 @@ const BioimageViewerRenderer: React.FC<Props> = ({
     if (!containerValue) return;
     let cancelled = false;
     const wellPath = activeWell?.path ?? null;
-    const root = createBioimageZarrStore(imageDcId, activeStoreName);
+    const root = bioimageZarrStore(imageDcId, activeStoreName);
     containerImagePath(root, containerValue, wellPath)
       .then(async (path) => {
         // Axes outside NGFF's t, c, z, y, x get a sentence, not a reader stack trace.
@@ -768,7 +792,7 @@ const BioimageViewerRenderer: React.FC<Props> = ({
       setInfo(null);
     }
     const source: BioimageSource = isZarr
-      ? { kind: 'zarr', store: subStore(createBioimageZarrStore(imageDcId, activeStoreName), target.path) }
+      ? { kind: 'zarr', store: subStore(bioimageZarrStore(imageDcId, activeStoreName), target.path) }
       : createBioimageSource(imageDcId, { name: activeStoreName, format: activeStoreFormat });
     viewer
       .load(source, configChannelsRef.current, { keepView: refresh })
@@ -1060,10 +1084,10 @@ const BioimageViewerRenderer: React.FC<Props> = ({
     setLabelsSize(null);
     setEmbeddedLabelsFound(false);
     const open = async () => {
-      if (labelsDcId && pairedLabelsName) return createBioimageZarrStore(labelsDcId, pairedLabelsName);
+      if (labelsDcId && pairedLabelsName) return bioimageZarrStore(labelsDcId, pairedLabelsName);
       if (!embeddedLabels || !imageDcId || !activeStoreName) return null;
       // The image's own `labels/` group: its first label image, by the name it lists.
-      const image = subStore(createBioimageZarrStore(imageDcId, activeStoreName), imagePath ?? '');
+      const image = subStore(bioimageZarrStore(imageDcId, activeStoreName), imagePath ?? '');
       const path = await firstLabelPath(image);
       return path ? subStore(image, path) : null;
     };
@@ -1141,7 +1165,7 @@ const BioimageViewerRenderer: React.FC<Props> = ({
     setReferenceError(null);
     const store =
       comparing && imageDcId && referenceName
-        ? createBioimageZarrStore(imageDcId, referenceName)
+        ? bioimageZarrStore(imageDcId, referenceName)
         : null;
     viewer.setReference(store).catch((err: unknown) => {
       if (cancelled || (err instanceof Error && err.name === 'LoadSupersededError')) return;
@@ -1173,7 +1197,7 @@ const BioimageViewerRenderer: React.FC<Props> = ({
     let cancelled = false;
     setOverlayError(null);
     setOverlayChannels([]);
-    const store = overlayKnown && imageDcId && overlayName ? createBioimageZarrStore(imageDcId, overlayName) : null;
+    const store = overlayKnown && imageDcId && overlayName ? bioimageZarrStore(imageDcId, overlayName) : null;
     viewer
       .setOverlay(store)
       .then((opened) => {
@@ -1445,6 +1469,7 @@ const BioimageViewerRenderer: React.FC<Props> = ({
             label="Z"
             value={plane.z}
             size={info.sizes.z}
+            step={info.zStep}
             onChange={(v) => setPlane((p) => ({ ...p, z: v }))}
           />
         ) : null}
@@ -1453,6 +1478,7 @@ const BioimageViewerRenderer: React.FC<Props> = ({
             label="Time"
             value={plane.t}
             size={info.sizes.t}
+            step={info.tStep}
             playing={playing}
             onTogglePlay={() => setPlaying((p) => !p)}
             onChange={(v) => {
@@ -1489,7 +1515,9 @@ const BioimageViewerRenderer: React.FC<Props> = ({
             title={
               channels.length > MAX_RENDERED_CHANNELS
                 ? `Channels · ${visibleChannels} of ${channels.length} shown`
-                : 'Channels'
+                : channels.length === 1
+                  ? 'Contrast'
+                  : 'Channels'
             }
           >
             {/* One block: the dock keeps it whole rather than folding channels
@@ -1505,8 +1533,12 @@ const BioimageViewerRenderer: React.FC<Props> = ({
                 <ChannelRow
                   key={c.index}
                   name={c.name}
+                  description={c.description}
+                  index={c.index}
+                  dtype={info?.dtype}
                   color={c.color}
                   visible={c.visible}
+                  only={channels.length === 1 && c.visible}
                   blockedReason={
                     full
                       ? `At most ${MAX_RENDERED_CHANNELS} channels show at once: hide one to show this one`
@@ -1654,6 +1686,11 @@ const BioimageViewerRenderer: React.FC<Props> = ({
   // ---- Overlay chrome -----------------------------------------------------
   const physical = config.show_scalebar === false ? null : (info?.physicalSize ?? null);
   const bar = physical ? scaleBarLength(physical.value, zoom, 120) : null;
+  // Which plane is on screen, on the image itself: a screenshot or a playing
+  // time series says where it is without the controls open.
+  const planeStamp: string[] = [];
+  if (info && info.sizes.z > 1) planeStamp.push(`Z ${planeLabel(plane.z, info.sizes.z, info.zStep)}`);
+  if (info && info.sizes.t > 1) planeStamp.push(`T ${planeLabel(plane.t, info.sizes.t, info.tStep)}`);
   const hasSelection = roiEnabled && ownSelection.length > 0;
 
   const pointerModes = useMemo<PointerMode<SelectionMode>[]>(
@@ -1895,6 +1932,7 @@ const BioimageViewerRenderer: React.FC<Props> = ({
                     store={activeStore}
                     layout={containerValue?.layout ?? null}
                     imagePath={imagePath}
+                    camera={() => viewer?.camera() ?? null}
                     view={{
                       channels: channels.map((c) => ({
                         index: c.index,
@@ -1905,6 +1943,7 @@ const BioimageViewerRenderer: React.FC<Props> = ({
                       z: info && info.sizes.z > 1 ? plane.z : null,
                       t: info && info.sizes.t > 1 ? plane.t : null,
                       width: info?.width ?? null,
+                      pixelSize: info?.physicalSize?.value ?? null,
                       height: info?.height ?? null,
                     }}
                   />
@@ -1921,6 +1960,24 @@ const BioimageViewerRenderer: React.FC<Props> = ({
                   </ActionIcon>
                 </Tooltip>
               </Group>
+              {planeStamp.length ? (
+                <Paper
+                  px={6}
+                  py={4}
+                  radius="sm"
+                  shadow="xs"
+                  data-testid="bioimage-plane-stamp"
+                  style={{ position: 'absolute', bottom: 8, left: 8, opacity: 0.92, pointerEvents: 'none' }}
+                >
+                  <Stack gap={2}>
+                    {planeStamp.map((line) => (
+                      <Text key={line} size="xs" lh={1.1} ff="monospace">
+                        {line}
+                      </Text>
+                    ))}
+                  </Stack>
+                </Paper>
+              ) : null}
               {bar && physical ? (
                 <Paper
                   px={6}

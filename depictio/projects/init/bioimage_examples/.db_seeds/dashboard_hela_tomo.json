@@ -25,7 +25,7 @@
       "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
       "title_align": "left",
-      "section": "Acquisitions",
+      "section": "About",
       "order": 6,
       "alignment": "left",
       "vertical_alignment": "top",
@@ -73,6 +73,7 @@
         "image_dc_id": "646b0f3c1e4a2d7f8e5b8f30",
         "image_dc_tag": "hela_images",
         "store": "em-overview.ome.zarr",
+        "store_pattern": "^em-overview",
         "sample_wf_id": null,
         "sample_dc_id": null,
         "sample_dc_tag": null,
@@ -82,6 +83,7 @@
           {
             "index": 0,
             "name": "EM",
+            "description": "Electron microscopy of the section at 34 nm per pixel: one grey-scale channel, dark where the sample scatters electrons (dense material), bright on the empty grid holes.",
             "visible": true,
             "color": "#FFFFFF",
             "contrast_limits": null
@@ -127,6 +129,7 @@
         "selection_enabled": true,
         "selection_column": null
       },
+      "controls_placement": "top",
       "wf_tag": "python/bioimage_demo"
     },
     {
@@ -166,6 +169,7 @@
         "image_dc_id": "646b0f3c1e4a2d7f8e5b8f30",
         "image_dc_tag": "hela_images",
         "store": "tomo_40.zarr",
+        "store_pattern": "^tomo_",
         "sample_wf_id": null,
         "sample_dc_id": "646b0f3c1e4a2d7f8e5b8f31",
         "sample_dc_tag": "hela_tomograms",
@@ -175,6 +179,7 @@
           {
             "index": 0,
             "name": "EM",
+            "description": "Electron tomogram: one grey-scale channel of electron density, a slice through the cell volume at 6.2 nm per pixel. Membranes and dense organelles are dark.",
             "visible": true,
             "color": "#FFFFFF",
             "contrast_limits": null
@@ -220,6 +225,7 @@
         "selection_enabled": true,
         "selection_column": null
       },
+      "controls_placement": "top",
       "wf_tag": "python/bioimage_demo"
     },
     {
@@ -610,6 +616,22 @@
   "filter_sections": [],
   "grid_sections": [
     {
+      "name": "About",
+      "icon": "mdi:information-outline",
+      "color": "grape",
+      "description": "The samples, where the images come from, and how the tiles below work together",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    },
+    {
       "name": "Acquisitions",
       "icon": "mdi:microscope",
       "color": "grape",
@@ -620,7 +642,7 @@
       "appearance": "box",
       "exclude_tabs": null,
       "card_variant": null,
-      "display": null,
+      "display": "linked",
       "filter_bar": null,
       "visible_filters": null,
       "figure_style": null

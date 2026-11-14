@@ -25,10 +25,16 @@ filter_sections:
     description: 'Which tissue patches the overview, the detail view and the plots show'
 
 grid_sections:
+  - name: 'About'
+    icon: 'mdi:information-outline'
+    color: 'pink'
+    description: 'The slide, where it comes from, and how the tiles below work together'
   - name: 'Slide'
     icon: 'mdi:microscope'
     color: 'pink'
     description: 'The overview at a coarse level, and the picked region at full resolution'
+    # One screen: the overview and the detail it drives stay side by side.
+    display: linked
   - name: 'Patches'
     icon: 'mdi:chart-scatter-plot'
     color: 'pink'
@@ -42,7 +48,7 @@ components:
     order: 6
     alignment: left
     vertical_alignment: top
-    section: 'Slide'
+    section: 'About'
     body: >
       Ten sections of a mouse head (brain, eye, nasal cavity), stained with
       hematoxylin and eosin and scanned at 0.45 um: 55296 x 96000 pixels, about
@@ -67,6 +73,9 @@ components:
     description: 'The whole slide, with the 500 um tissue patches coloured by the share of nucleus-stained tissue. Select patches to read them on the right.'
     section: 'Slide'
     viz_kind: bioimage_viewer
+    # Linked cells keep controls behind the icon unless placed: the
+    # channels stay in view above the image.
+    controls_placement: top
     config:
       viz_kind: bioimage_viewer
       image_dc_tag: wsi_slide
@@ -85,14 +94,17 @@ components:
       channels: &rgb
         - index: 0
           name: 'Red'
+          description: 'Red light of the brightfield RGB scan. Eosin-stained tissue (cytoplasm, matrix) passes it, so pink areas are bright here.'
           color: '#FF0000'
           contrast_limits: [0, 255]
         - index: 1
           name: 'Green'
+          description: 'Green light of the brightfield RGB scan: absorbed by both stains, it carries most of the tissue contrast.'
           color: '#00FF00'
           contrast_limits: [0, 255]
         - index: 2
           name: 'Blue'
+          description: 'Blue light of the brightfield RGB scan. Hematoxylin-stained nuclei pass it, so they read blue-purple.'
           color: '#0000FF'
           contrast_limits: [0, 255]
       selection_enabled: true
@@ -108,6 +120,9 @@ components:
     description: 'The same slide, zoomed to the patches the overview selection and the filters keep, streamed at full resolution.'
     section: 'Slide'
     viz_kind: bioimage_viewer
+    # Linked cells keep controls behind the icon unless placed: the
+    # channels stay in view above the image.
+    controls_placement: top
     config:
       viz_kind: bioimage_viewer
       image_dc_tag: wsi_slide

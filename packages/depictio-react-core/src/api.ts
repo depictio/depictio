@@ -2819,31 +2819,30 @@ export function createBioimageZarrStore(dcId: string, store: string): BioimageZa
       recentBytes -= entrySize(oldBytes);
     }
   };
-  const fetchKey = (key: string): Promise<Uint8Array | undefined> => {
-    let pending = inflight.get(key);
+  // One fetch per cache key at a time; the result kept with the others.
+  const shared = (
+    cacheKey: string,
+    load: () => Promise<Uint8Array | undefined>,
+  ): Promise<Uint8Array | undefined> => {
+    let pending = inflight.get(cacheKey);
     if (!pending) {
-      pending = read(key, {})
-        .then(async (hit) => hit && new Uint8Array(await hit.res.arrayBuffer()))
+      pending = load()
         .then((bytes) => {
-          remember(key, bytes);
+          remember(cacheKey, bytes);
           return bytes;
         })
-        .finally(() => inflight.delete(key));
-      inflight.set(key, pending);
+        .finally(() => inflight.delete(cacheKey));
+      inflight.set(cacheKey, pending);
     }
     return pending;
   };
-  return {
-    async get(key, opts) {
-      if (recent.has(key)) return recent.get(key);
-      return abortable(fetchKey(key), opts?.signal);
-    },
-    async getRange(key, range, opts) {
-      if ('length' in range && range.length <= 0) return new Uint8Array(0);
-      const hit = await read(key, {
-        signal: opts?.signal,
-        headers: { Range: bioimageRangeHeader(range) },
-      });
+  const fetchKey = (key: string) =>
+    shared(key, () =>
+      read(key, {}).then(async (hit) => hit && new Uint8Array(await hit.res.arrayBuffer())),
+    );
+  const fetchRange = (key: string, range: BioimageRangeQuery) =>
+    shared(`${key}\u0000${bioimageRangeHeader(range)}`, async () => {
+      const hit = await read(key, { headers: { Range: bioimageRangeHeader(range) } });
       if (!hit) return undefined;
       const body = new Uint8Array(await hit.res.arrayBuffer());
       if (hit.res.status === 206) return body;
@@ -2852,8 +2851,46 @@ export function createBioimageZarrStore(dcId: string, store: string): BioimageZa
         `OME-Zarr ${store}${hit.path} (range): ${hit.res.status}`,
         hit.res.status,
       );
+    });
+  return {
+    async get(key, opts) {
+      if (recent.has(key)) return recent.get(key);
+      return abortable(fetchKey(key), opts?.signal);
+    },
+    // A sharded array reads its shard index before every chunk, and a chunk
+    // holding several channels once per channel: the same ranges, many times.
+    async getRange(key, range, opts) {
+      if ('length' in range && range.length <= 0) return new Uint8Array(0);
+      const cacheKey = `${key}\u0000${bioimageRangeHeader(range)}`;
+      if (recent.has(cacheKey)) return recent.get(cacheKey);
+      return abortable(fetchRange(key, range), opts?.signal);
     },
   };
+}
+
+/** Stores handed out by `bioimageZarrStore`, most recently used last. */
+const SHARED_ZARR_STORES = new Map<string, BioimageZarrStore>();
+const SHARED_ZARR_STORE_LIMIT = 6;
+
+/**
+ * The zarr store of one DC store, shared by every reader on the page: two
+ * tiles on the same image (an overview and its detail view), and the probes a
+ * tile makes while opening it, then fetch each key and range once.
+ */
+export function bioimageZarrStore(dcId: string, store: string): BioimageZarrStore {
+  const id = `${dcId}\u0000${store}`;
+  let found = SHARED_ZARR_STORES.get(id);
+  if (found) {
+    SHARED_ZARR_STORES.delete(id);
+  } else {
+    found = createBioimageZarrStore(dcId, store);
+    if (SHARED_ZARR_STORES.size >= SHARED_ZARR_STORE_LIMIT) {
+      const oldest = SHARED_ZARR_STORES.keys().next().value;
+      if (oldest !== undefined) SHARED_ZARR_STORES.delete(oldest);
+    }
+  }
+  SHARED_ZARR_STORES.set(id, found);
+  return found;
 }
 
 function storedAccessToken(): string | null {
@@ -2919,7 +2956,7 @@ export function createBioimageSource(
 ): BioimageSource {
   return store.format === 'ome-tiff'
     ? { kind: 'tiff', tiff: createBioimageTiffSource(dcId, store.name) }
-    : { kind: 'zarr', store: createBioimageZarrStore(dcId, store.name) };
+    : { kind: 'zarr', store: bioimageZarrStore(dcId, store.name) };
 }
 
 

@@ -271,6 +271,7 @@
         "image_dc_id": "646b0f3c1e4a2d7f8e5b8f06",
         "image_dc_tag": "kidney_3d_timelapse_image",
         "store": null,
+        "store_pattern": null,
         "sample_wf_id": null,
         "sample_dc_id": null,
         "sample_dc_tag": null,
@@ -280,6 +281,7 @@
           {
             "index": 0,
             "name": "Nuclei (450 nm)",
+            "description": null,
             "visible": true,
             "color": "#00bfff",
             "contrast_limits": null
@@ -287,6 +289,7 @@
           {
             "index": 1,
             "name": "605 nm",
+            "description": null,
             "visible": true,
             "color": "#ffb000",
             "contrast_limits": null

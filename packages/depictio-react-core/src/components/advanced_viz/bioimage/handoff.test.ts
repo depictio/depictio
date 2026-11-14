@@ -32,6 +32,41 @@ describe('handoffUrl', () => {
     );
   });
 
+  it('hands vizarr the series of a bioformats2raw container, on the tile view', () => {
+    const slide = {
+      ...ZARR,
+      layout: 'bioformats2raw' as const,
+      imagePath: '0',
+      view: {
+        ...VIEW,
+        camera: { zoom: -1.14, target: [74520, 11592] as const },
+        pixelSize: 0.4500000000000001,
+      },
+    };
+    const url = new URL(handoffUrl('vizarr', URL_, slide));
+    // vizarr refuses the container root ("Please open in ome-ngff-validator").
+    expect(url.searchParams.get('source')).toBe(`${URL_}/0`);
+    // vizarr places the image in micrometres: same region, scaled.
+    expect(JSON.parse(url.searchParams.get('viewState') ?? 'null')).toEqual({
+      zoom: 0.01,
+      target: [33534, 5216],
+    });
+    // A plate opens on the plate, whatever field the tile shows.
+    const plate = new URL(handoffUrl('vizarr', URL_, { ...PLATE, view: slide.view }));
+    expect(plate.searchParams.get('source')).toBe(URL_);
+    expect(plate.searchParams.has('viewState')).toBe(false);
+  });
+
+  it('opens Vitessce on the tile view when it has one', () => {
+    const camera = { zoom: 1.5, target: [100, 200] as const };
+    const config = vitessceConfig(URL_, { ...ZARR, view: { ...VIEW, camera } }) as {
+      coordinationSpace: Record<string, Record<string, number>>;
+    };
+    expect(config.coordinationSpace.spatialZoom.A).toBe(1.5);
+    expect(config.coordinationSpace.spatialTargetX.A).toBe(100);
+    expect(config.coordinationSpace.spatialTargetY.A).toBe(200);
+  });
+
   it('hands Neuroglancer the image drawn, in the fragment', () => {
     const url = handoffUrl('neuroglancer', URL_, PLATE);
     const [base, fragment] = url.split('#!');

@@ -31,6 +31,7 @@ import {
 import type { BioimageSource, BioimageTiffSource, BioimageZarrStore } from '../../../api';
 import {
   axisSizes,
+  axisStep,
   hexToRgb,
   MAX_RENDERED_CHANNELS,
   ngffRootAttrs,
@@ -38,6 +39,7 @@ import {
   renderedChannels,
   resolveChannels,
   selectionFor,
+  type AxisStep,
   type ChannelState,
   type ChannelStats,
   type ConfigChannel,
@@ -84,6 +86,9 @@ export interface BioimageInfo {
   defaultT: number;
   /** Size of one level-0 pixel along x, or null when the store has no unit. */
   physicalSize: { value: number; unit: string } | null;
+  /** The step between two Z planes and two time points, when the store says. */
+  zStep: AxisStep | null;
+  tStep: AxisStep | null;
 }
 
 export interface OverlayPoint {
@@ -223,6 +228,9 @@ export interface BioimageViewer {
   /** Theme sync. `accent` rings highlighted points and draws the ROI. */
   setDark(dark: boolean, accent?: Rgb): void;
   resetView(): void;
+  /** Where the view is: zoom and centre in level-0 pixels, deck.gl's
+   *  orthographic terms (vizarr and Vitessce use the same). */
+  camera(): { zoom: number; target: [number, number] };
   resize(): void;
   dispose(): void;
 }
@@ -271,6 +279,8 @@ interface OpenedImage {
     rdefs?: { defaultZ?: number; defaultT?: number };
   } | null;
   physicalSize: { value: number; unit: string } | null;
+  zStep?: AxisStep | null;
+  tStep?: AxisStep | null;
 }
 
 async function openOmeZarr(store: BioimageZarrStore): Promise<OpenedImage> {
@@ -281,6 +291,8 @@ async function openOmeZarr(store: BioimageZarrStore): Promise<OpenedImage> {
     pyramid: loaded.data as unknown as PixelSource[],
     omero: rootAttrs.omero ?? null,
     physicalSize: physicalPixelSize(rootAttrs),
+    zStep: axisStep(rootAttrs, 'z'),
+    tStep: axisStep(rootAttrs, 't'),
   };
 }
 
@@ -948,6 +960,8 @@ export async function createBioimageViewer(
         defaultZ,
         defaultT,
         physicalSize: opened.physicalSize,
+        zStep: opened.zStep ?? null,
+        tStep: opened.tStep ?? null,
       };
       if (!keep || !userMoved) fit();
       render();
@@ -1089,6 +1103,10 @@ export async function createBioimageViewer(
 
     resetView() {
       fit();
+    },
+
+    camera() {
+      return { zoom: viewState.zoom, target: [viewState.target[0], viewState.target[1]] };
     },
 
     frame(bounds) {

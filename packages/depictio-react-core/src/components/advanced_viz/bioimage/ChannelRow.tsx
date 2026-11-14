@@ -29,10 +29,30 @@ const CHANNEL_SWATCHES = [
   '#ffffff',
 ];
 
+/** True for a colour too pale to read as a control on a light surface
+ *  (white, the usual colour of a grey-scale channel such as EM). */
+export function isPaleColour(hex: string): boolean {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return false;
+  const n = parseInt(m[1], 16);
+  const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 > 0.85;
+}
+
 export interface ChannelRowProps {
   name: string;
+  /** What the channel shows (the config's `description`), for the tooltip. */
+  description?: string;
+  /** Position along the image's channel axis, for a tooltip without one. */
+  index?: number;
+  /** The pixel type, so the tooltip can say what the slider's numbers are. */
+  dtype?: string;
   color: string;
   visible: boolean;
+  /** The image's only channel (a grey-scale EM, say): hiding it would leave
+   *  nothing and its colour is rarely the point, so the row is its contrast
+   *  window alone. A white swatch beside a checkbox read as two checkboxes. */
+  only?: boolean;
   /** Why the channel cannot be turned on (viv's channel limit), or null. */
   blockedReason?: string | null;
   domain: readonly [number, number];
@@ -60,8 +80,12 @@ function formatValue(v: number, step: number): string {
  */
 const ChannelRow: React.FC<ChannelRowProps> = ({
   name,
+  description,
+  index,
+  dtype,
   color,
   visible,
+  only,
   blockedReason,
   domain,
   step,
@@ -74,10 +98,31 @@ const ChannelRow: React.FC<ChannelRowProps> = ({
   const portalTarget = useFullscreenPortalTarget();
   const [draft, setDraft] = useState<string | null>(null);
   const shown = draft ?? color;
-  const checkbox = (
+  // A white channel would draw a white checkbox and slider: use the theme's grey.
+  const controlColour = isPaleColour(color) ? 'gray' : color;
+  const [lo, hi] = contrastLimits;
+  const what =
+    description ?? (index != null ? `Channel ${index + 1} of the image` : `Channel ${name}`);
+  const contrastHelp = (
+    <Stack gap={2}>
+      <Text size="xs" fw={600}>
+        Contrast window of {name}
+      </Text>
+      <Text size="xs">
+        Pixels at or below {formatValue(lo, step)} are drawn black, at or above{' '}
+        {formatValue(hi, step)} in full colour, and the values between as a ramp. Narrow it to
+        bring out faint detail; widen it if bright parts are flat.
+      </Text>
+      <Text size="xs" c="dimmed">
+        The numbers are the image&apos;s raw {dtype ? `${dtype} ` : ''}pixel values, from{' '}
+        {formatValue(domain[0], step)} to {formatValue(domain[1], step)} in this image.
+      </Text>
+    </Stack>
+  );
+  const checkbox = only ? null : (
     <Checkbox
       size="xs"
-      color={color}
+      color={controlColour}
       autoContrast
       checked={visible}
       disabled={Boolean(blockedReason)}
@@ -98,70 +143,96 @@ const ChannelRow: React.FC<ChannelRowProps> = ({
         minWidth: 0,
       }}
     >
-      {blockedReason ? (
-        <Tooltip label={blockedReason} withArrow openDelay={250}>
-          <span>{checkbox}</span>
+      {checkbox ? (
+        <Tooltip
+          label={blockedReason ?? (visible ? `Hide ${name}` : `Show ${name}`)}
+          withArrow
+          openDelay={250}
+        >
+          <span style={{ display: 'flex' }}>{checkbox}</span>
         </Tooltip>
-      ) : (
-        checkbox
+      ) : null}
+      {only ? null : (
+        <Popover
+          withinPortal
+          portalProps={{ target: portalTarget }}
+          position="bottom-start"
+          shadow="md"
+          onClose={() => setDraft(null)}
+        >
+          <Popover.Target>
+            <UnstyledButton
+              aria-label={`${name} colour`}
+              title={`${name} is drawn in this colour: click to change it`}
+              disabled={!visible}
+              style={{ display: 'flex', opacity: visible ? 1 : 0.4 }}
+            >
+              <ColorSwatch color={color} size={14} radius="xs" />
+            </UnstyledButton>
+          </Popover.Target>
+          <Popover.Dropdown p="xs">
+            <Stack gap={6}>
+              <ColorPicker
+                size="xs"
+                format="hex"
+                value={isColorValid(shown) ? shown : color}
+                swatches={CHANNEL_SWATCHES}
+                swatchesPerRow={8}
+                onChange={(v) => {
+                  setDraft(v);
+                  onColourCommit(v);
+                }}
+              />
+              <TextInput
+                size="xs"
+                aria-label={`${name} colour hex`}
+                value={shown}
+                onChange={(e) => {
+                  const v = e.currentTarget.value;
+                  setDraft(v);
+                  if (isColorValid(v)) onColourCommit(v);
+                }}
+              />
+            </Stack>
+          </Popover.Dropdown>
+        </Popover>
       )}
-      <Popover
-        withinPortal
-        portalProps={{ target: portalTarget }}
-        position="bottom-start"
-        shadow="md"
-        onClose={() => setDraft(null)}
-      >
-        <Popover.Target>
-          <UnstyledButton
-            aria-label={`${name} colour`}
-            title="Change colour"
-            disabled={!visible}
-            style={{ display: 'flex', opacity: visible ? 1 : 0.4 }}
-          >
-            <ColorSwatch color={color} size={14} radius="xs" />
-          </UnstyledButton>
-        </Popover.Target>
-        <Popover.Dropdown p="xs">
-          <Stack gap={6}>
-            <ColorPicker
-              size="xs"
-              format="hex"
-              value={isColorValid(shown) ? shown : color}
-              swatches={CHANNEL_SWATCHES}
-              swatchesPerRow={8}
-              onChange={(v) => {
-                setDraft(v);
-                onColourCommit(v);
-              }}
-            />
-            <TextInput
-              size="xs"
-              aria-label={`${name} colour hex`}
-              value={shown}
-              onChange={(e) => {
-                const v = e.currentTarget.value;
-                setDraft(v);
-                if (isColorValid(v)) onColourCommit(v);
-              }}
-            />
+      <Tooltip
+        label={
+          <Stack gap={2}>
+            <Text size="xs" fw={600}>
+              {name}
+            </Text>
+            <Text size="xs">{what}</Text>
           </Stack>
-        </Popover.Dropdown>
-      </Popover>
-      <Text
-        size="xs"
-        fw={500}
-        truncate
-        title={name}
-        c={visible ? undefined : 'dimmed'}
-        style={{ flex: '0 1 auto', minWidth: 0, maxWidth: '45%' }}
+        }
+        multiline
+        maw={300}
+        withArrow
+        openDelay={250}
       >
-        {name}
-      </Text>
+        <Text
+          size="xs"
+          fw={500}
+          truncate
+          c={visible ? undefined : 'dimmed'}
+          style={{
+            flex: '0 1 auto',
+            minWidth: 0,
+            maxWidth: '45%',
+            cursor: 'help',
+            textDecoration: 'underline dotted',
+            textUnderlineOffset: 3,
+          }}
+        >
+          {only ? `${name} contrast` : name}
+        </Text>
+      </Tooltip>
+      <Tooltip label={contrastHelp} multiline maw={320} withArrow openDelay={500}>
       <Box style={{ flex: '1 1 0', minWidth: 64, maxWidth: VIZ_SLIDER_CONTROL_PX, marginLeft: 'auto' }}>
         <RangeSlider
           size="xs"
-          color={color}
+          color={controlColour}
           min={domain[0]}
           max={domain[1]}
           step={step}
@@ -176,6 +247,17 @@ const ChannelRow: React.FC<ChannelRowProps> = ({
           onChangeEnd={onContrastCommit}
         />
       </Box>
+      </Tooltip>
+      {/* The window as numbers, always in view: the thumbs only label on drag. */}
+      <Text
+        size="xs"
+        c="dimmed"
+        ff="monospace"
+        style={{ flex: '0 0 auto', whiteSpace: 'nowrap', opacity: visible ? 1 : 0.5 }}
+        data-testid="bioimage-channel-window"
+      >
+        {formatValue(lo, step)}–{formatValue(hi, step)}
+      </Text>
     </Box>
   );
 };

@@ -25,7 +25,7 @@
       "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
       "title_align": "left",
-      "section": "Slide",
+      "section": "About",
       "order": 6,
       "alignment": "left",
       "vertical_alignment": "top",
@@ -73,6 +73,7 @@
         "image_dc_id": "646b0f3c1e4a2d7f8e5b8f2d",
         "image_dc_tag": "wsi_slide",
         "store": "42815.zarr",
+        "store_pattern": null,
         "sample_wf_id": null,
         "sample_dc_id": null,
         "sample_dc_tag": null,
@@ -82,6 +83,7 @@
           {
             "index": 0,
             "name": "Red",
+            "description": "Red light of the brightfield RGB scan. Eosin-stained tissue (cytoplasm, matrix) passes it, so pink areas are bright here.",
             "visible": true,
             "color": "#FF0000",
             "contrast_limits": [
@@ -92,6 +94,7 @@
           {
             "index": 1,
             "name": "Green",
+            "description": "Green light of the brightfield RGB scan: absorbed by both stains, it carries most of the tissue contrast.",
             "visible": true,
             "color": "#00FF00",
             "contrast_limits": [
@@ -102,6 +105,7 @@
           {
             "index": 2,
             "name": "Blue",
+            "description": "Blue light of the brightfield RGB scan. Hematoxylin-stained nuclei pass it, so they read blue-purple.",
             "visible": true,
             "color": "#0000FF",
             "contrast_limits": [
@@ -150,6 +154,7 @@
         "selection_enabled": true,
         "selection_column": null
       },
+      "controls_placement": "top",
       "wf_tag": "python/bioimage_demo"
     },
     {
@@ -189,6 +194,7 @@
         "image_dc_id": "646b0f3c1e4a2d7f8e5b8f2d",
         "image_dc_tag": "wsi_slide",
         "store": "42815.zarr",
+        "store_pattern": null,
         "sample_wf_id": null,
         "sample_dc_id": null,
         "sample_dc_tag": null,
@@ -198,6 +204,7 @@
           {
             "index": 0,
             "name": "Red",
+            "description": "Red light of the brightfield RGB scan. Eosin-stained tissue (cytoplasm, matrix) passes it, so pink areas are bright here.",
             "visible": true,
             "color": "#FF0000",
             "contrast_limits": [
@@ -208,6 +215,7 @@
           {
             "index": 1,
             "name": "Green",
+            "description": "Green light of the brightfield RGB scan: absorbed by both stains, it carries most of the tissue contrast.",
             "visible": true,
             "color": "#00FF00",
             "contrast_limits": [
@@ -218,6 +226,7 @@
           {
             "index": 2,
             "name": "Blue",
+            "description": "Blue light of the brightfield RGB scan. Hematoxylin-stained nuclei pass it, so they read blue-purple.",
             "visible": true,
             "color": "#0000FF",
             "contrast_limits": [
@@ -266,6 +275,7 @@
         "selection_enabled": false,
         "selection_column": null
       },
+      "controls_placement": "top",
       "wf_tag": "python/bioimage_demo"
     },
     {
@@ -899,6 +909,22 @@
   ],
   "grid_sections": [
     {
+      "name": "About",
+      "icon": "mdi:information-outline",
+      "color": "pink",
+      "description": "The slide, where it comes from, and how the tiles below work together",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    },
+    {
       "name": "Slide",
       "icon": "mdi:microscope",
       "color": "pink",
@@ -909,7 +935,7 @@
       "appearance": "box",
       "exclude_tabs": null,
       "card_variant": null,
-      "display": null,
+      "display": "linked",
       "filter_bar": null,
       "visible_filters": null,
       "figure_style": null

@@ -73,6 +73,7 @@
         "image_dc_id": "646b0f3c1e4a2d7f8e5b8f2a",
         "image_dc_tag": "clem_images",
         "store": "IM1.zarr",
+        "store_pattern": null,
         "sample_wf_id": null,
         "sample_dc_id": null,
         "sample_dc_tag": null,
@@ -82,6 +83,7 @@
           {
             "index": 0,
             "name": "FIB-SEM",
+            "description": null,
             "visible": true,
             "color": "#FFFFFF",
             "contrast_limits": null

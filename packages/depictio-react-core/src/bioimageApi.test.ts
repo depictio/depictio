@@ -5,6 +5,7 @@ import {
   bioimageAuthHeaders,
   bioimageRangeHeader,
   createBioimageSource,
+  bioimageZarrStore,
   createBioimageZarrStore,
 } from './api';
 
@@ -122,6 +123,30 @@ describe('createBioimageZarrStore.getRange', () => {
     const reads = await Promise.all([store.get('0/c/0'), store.get('0/c/0'), store.get('0/c/0')]);
     expect(reads.map((r) => Array.from(r ?? []))).toEqual([[1, 2, 3], [1, 2, 3], [1, 2, 3]]);
     expect(Array.from((await store.get('0/c/0')) ?? [])).toEqual([1, 2, 3]);
+    expect(calls).toHaveLength(1);
+  });
+
+  it('fetches a range once, and tells ranges of one key apart', async () => {
+    respond(206, [5, 6]);
+    const store = createBioimageZarrStore('dc1', 's.zarr');
+    const index = { suffixLength: 2 };
+    const reads = await Promise.all([
+      store.getRange('0/c/0', index),
+      store.getRange('0/c/0', index),
+      store.getRange('0/c/0', { offset: 0, length: 2 }),
+    ]);
+    expect(reads.map((r) => Array.from(r ?? []))).toEqual([[5, 6], [5, 6], [5, 6]]);
+    await store.getRange('0/c/0', index);
+    expect(calls.map((c) => c.range)).toEqual(['bytes=-2', 'bytes=0-1']);
+  });
+
+  it('hands every tile on one store the same instance, so they share fetches', async () => {
+    respond(206, [1]);
+    const a = bioimageZarrStore('dc-shared', 'one.zarr');
+    expect(bioimageZarrStore('dc-shared', 'one.zarr')).toBe(a);
+    expect(bioimageZarrStore('dc-shared', 'two.zarr')).not.toBe(a);
+    await a.getRange('0/c/0', { suffixLength: 1 });
+    await bioimageZarrStore('dc-shared', 'one.zarr').getRange('0/c/0', { suffixLength: 1 });
     expect(calls).toHaveLength(1);
   });
 

@@ -73,6 +73,7 @@
         "image_dc_id": "646b0f3c1e4a2d7f8e5b8f23",
         "image_dc_tag": "shape_gallery_images",
         "store": "shape_tczyx.zarr",
+        "store_pattern": null,
         "sample_wf_id": "646b0f3c1e4a2d7f8e5b8f01",
         "sample_dc_id": "646b0f3c1e4a2d7f8e5b8f24",
         "sample_dc_tag": "shape_gallery_sheet",

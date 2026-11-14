@@ -61,6 +61,9 @@ interface Props {
   imagePath?: string | null;
   /** What the tile shows: the viewer opens on the same channels and plane. */
   view?: HandoffView | null;
+  /** Where the tile is looking, read when a target opens (it changes on every
+   *  pan, which must not re-render the menu). */
+  camera?: () => HandoffView['camera'];
 }
 
 /**
@@ -68,7 +71,7 @@ interface Props {
  * validator, and commands to paste into napari. Targets that cannot take the
  * store are listed greyed out with the reason, never hidden.
  */
-const OpenInMenu: React.FC<Props> = ({ dcId, store, layout, imagePath, view }) => {
+const OpenInMenu: React.FC<Props> = ({ dcId, store, layout, imagePath, view, camera }) => {
   const portalTarget = useFullscreenPortalTarget();
   const [status, setStatus] = useState<BioimageHandoffStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -105,7 +108,11 @@ const OpenInMenu: React.FC<Props> = ({ dcId, store, layout, imagePath, view }) =
     const win = window.open('', '_blank');
     storeUrl()
       .then((url) => {
-        const address = handoffUrl(target, url, handoffStore);
+        const shown = camera?.() ?? null;
+        const address = handoffUrl(target, url, {
+          ...handoffStore,
+          view: shown ? { channels: [], ...view, camera: shown } : view,
+        });
         if (win) {
           win.opener = null;
           win.location.href = address;

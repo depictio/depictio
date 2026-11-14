@@ -6,7 +6,9 @@ import {
   hexToRgb,
   ngffRootAttrs,
   normaliseHex,
+  axisStep,
   physicalPixelSize,
+  planeLabel,
   renderedChannels,
   resolveChannels,
   selectionFor,
@@ -213,5 +215,33 @@ describe('resolveChannels contrast window', () => {
       stats: [{ domain: [7, 7], contrastLimits: [7, 7] }],
     });
     expect(ch.contrastLimits).toEqual([0, 255]);
+  });
+});
+
+describe('axisStep and planeLabel', () => {
+  const attrs = {
+    multiscales: [
+      {
+        axes: [
+          { name: 't', unit: 'minute' },
+          { name: 'z', unit: 'micrometer' },
+          { name: 'y', unit: 'micrometer' },
+          { name: 'x', unit: 'micrometer' },
+        ],
+        datasets: [{ coordinateTransformations: [{ type: 'scale', scale: [1.5, 2, 0.5, 0.5] }] }],
+      },
+    ],
+  };
+
+  it('reads the step and unit of a named axis', () => {
+    expect(axisStep(attrs, 't')).toEqual({ value: 1.5, unit: 'min' });
+    expect(axisStep(attrs, 'z')).toEqual({ value: 2, unit: 'µm' });
+    expect(axisStep(attrs, 'c')).toBeNull();
+  });
+
+  it('says where a plane sits, with its time or depth when the store gives a unit', () => {
+    expect(planeLabel(2, 10, { value: 1.5, unit: 'min' })).toBe('3/10 · 3 min');
+    expect(planeLabel(0, 18, { value: 2, unit: 'µm' })).toBe('1/18 · 0 µm');
+    expect(planeLabel(4, 5, null)).toBe('5/5');
   });
 });

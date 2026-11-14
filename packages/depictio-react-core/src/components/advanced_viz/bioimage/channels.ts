@@ -105,6 +105,8 @@ export function selectionFor(
 export interface ChannelState {
   index: number;
   name: string;
+  /** What the channel shows, from the config; the row's tooltip. */
+  description?: string;
   color: string;
   visible: boolean;
   contrastLimits: [number, number];
@@ -116,6 +118,7 @@ export interface ChannelState {
 export interface ConfigChannel {
   index: number;
   name?: string | null;
+  description?: string | null;
   visible?: boolean;
   color?: string | null;
   contrast_limits?: [number, number] | null;
@@ -184,6 +187,7 @@ export function resolveChannels(opts: {
     out.push({
       index: i,
       name: cfg?.name || om?.label || `Channel ${i}`,
+      ...(cfg?.description ? { description: cfg.description } : {}),
       color:
         normaliseHex(cfg?.color) ??
         normaliseHex(om?.color) ??
@@ -219,6 +223,11 @@ const UNIT_ABBREVIATIONS: Record<string, string> = {
   millimeter: 'mm',
   centimeter: 'cm',
   meter: 'm',
+  millisecond: 'ms',
+  second: 's',
+  minute: 'min',
+  hour: 'h',
+  day: 'd',
 };
 
 export function abbreviateUnit(unit: string): string {
@@ -270,21 +279,46 @@ export function ngffRootAttrs(attrs: unknown): NgffRootAttrs {
  * Null when x has no unit, because a bar labelled in pixels says nothing the
  * image does not.
  */
-export function physicalPixelSize(
+export interface AxisStep {
+  value: number;
+  unit: string;
+}
+
+/** The level-0 step of one NGFF axis (`x`, `z`, `t`) with its unit, or null
+ *  when the axis is missing or has no unit. */
+export function axisStep(
   attrs: NgffRootAttrs | { ome?: NgffRootAttrs } | null | undefined,
-): { value: number; unit: string } | null {
+  name: string,
+): AxisStep | null {
   const ms = ngffRootAttrs(attrs).multiscales?.[0];
   if (!ms?.axes) return null;
-  const xIndex = ms.axes.findIndex((a) => (typeof a === 'string' ? a : a?.name) === 'x');
-  if (xIndex < 0) return null;
-  const axis = ms.axes[xIndex];
+  const index = ms.axes.findIndex((a) => (typeof a === 'string' ? a : a?.name) === name);
+  if (index < 0) return null;
+  const axis = ms.axes[index];
   const unit = typeof axis === 'string' ? undefined : axis?.unit;
   if (!unit) return null;
   const datasetScale = scaleOf(ms.datasets?.[0]?.coordinateTransformations);
   const globalScale = scaleOf(ms.coordinateTransformations);
-  const value = (datasetScale?.[xIndex] ?? 1) * (globalScale?.[xIndex] ?? 1);
+  const value = (datasetScale?.[index] ?? 1) * (globalScale?.[index] ?? 1);
   if (!(value > 0) || !Number.isFinite(value)) return null;
   return { value, unit: abbreviateUnit(unit) };
+}
+
+/** Size of one level-0 pixel along x: what the scale bar reads. */
+export function physicalPixelSize(
+  attrs: NgffRootAttrs | { ome?: NgffRootAttrs } | null | undefined,
+): AxisStep | null {
+  return axisStep(attrs, 'x');
+}
+
+/**
+ * Where plane `index` of a Z or T axis sits, for the slider and the stamp on
+ * the image: `3/10 · 1.5 min`, or `3/10` when the store gives no unit.
+ */
+export function planeLabel(index: number, size: number, step: AxisStep | null): string {
+  const position = `${index + 1}/${size}`;
+  if (!step) return position;
+  return `${position} · ${formatLength(index * step.value, step.unit)}`;
 }
 
 /** `1500 µm` style label, trimming float noise. */

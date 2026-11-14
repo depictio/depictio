@@ -73,6 +73,7 @@
         "image_dc_id": "646b0f3c1e4a2d7f8e5b8f27",
         "image_dc_tag": "registration_images",
         "store": null,
+        "store_pattern": null,
         "sample_wf_id": null,
         "sample_dc_id": null,
         "sample_dc_tag": null,

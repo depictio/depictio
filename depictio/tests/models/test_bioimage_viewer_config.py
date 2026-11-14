@@ -300,3 +300,15 @@ def test_frame_on_filter_needs_points():
     assert VIZ_CONFIG.validate_python({**POINTS, "frame_on_filter": True}).frame_on_filter
     with pytest.raises(ValidationError, match="frame_on_filter"):
         VIZ_CONFIG.validate_python({"viz_kind": "bioimage_viewer", "frame_on_filter": True})
+
+
+def test_store_pattern_narrows_a_tile_and_must_compile():
+    config = BioimageViewerConfig(image_dc_tag="images", store_pattern=r"^tomo_\d+\.zarr$")
+    assert config.store_pattern == r"^tomo_\d+\.zarr$"
+    with pytest.raises(ValidationError, match="store_pattern"):
+        BioimageViewerConfig(image_dc_tag="images", store_pattern="tomo_(")
+
+
+def test_a_channel_carries_its_description():
+    channel = BioimageChannel(index=0, name="EM", description="Electron microscopy")
+    assert channel.description == "Electron microscopy"
