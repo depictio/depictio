@@ -90,6 +90,12 @@ deletes its marks.
     table on each write, and equal digests mean no news. A write without a
     digest (older CLI, a write of only some runs, a UI edit) counts as a
     change;
+  - for a collection a recipe computes, how it relates to the runs
+    (`run_scope`: `run`, `aggregate` or `pipeline`). A recipe that mixes
+    samples is recomputed over every run when one is attached, so the rows of
+    runs the reader had seen can change: `recomputed_run_tags` names them, and
+    the panel says "recomputed: N runs seen before changed". In Split, the
+    "seen before" side then holds new values, not what the reader saw;
   - MultiQC reports added, refreshed or removed, with new samples and new run
     tags;
   - failed ingestions.
@@ -203,6 +209,11 @@ wrote has **View rows**, the same link for that run.
   dashboards.
 - The Runs tab marks new runs and shows what each run produced:
   - ingestions, Delta commits and MultiQC reports;
+  - the collections computed from the run (`ProjectRun.dc_outputs`, a
+    `{dc_tag: run_scope}` map), each labelled "this run", "recomputed over
+    every run" or "this run's pipeline statistic". It comes from the recipe
+    commits' `run_tags` and `computed_from_runs`, so a recomputation over every
+    run lists itself under each run it read;
   - *Compare* (`?before_run=`): the dashboard with what that run changed
     marked, each component's *Before | Now* drawing the data just before it;
   - *Layout before <run>* (`?version=`): the definition only. An ingestion

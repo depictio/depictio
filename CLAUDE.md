@@ -286,6 +286,25 @@ Route dispatch is plain regex in `depictio/viewer/src/main.tsx` +
 ### Data Flow
 CLI ingests data → Delta/S3/MongoDB → API serves → React viewer renders
 
+### Multi-run templates (#1399)
+- `depictio ingest <dir> --attach-run` adds a run to an existing project. A single-run
+  project must come out identical apart from `depictio_run_id`; `multirun_harness.py
+  compare` checks that, `multirun` drives athens -> barcelona -> naples
+- An attach writes **only the new run**: `plan_attach_write` gives a predicate write
+  (`depictio_run_id IN (...)`, works unpartitioned). It falls back to a full rewrite when
+  the table holds tags that are not project runs (`*-single-file-scan`, old recipe
+  outputs). A scoped write without a predicate raises, never overwrites the table
+- `single` files bind to their real run (`File.run_id` = stored `WorkflowRun`), so the
+  Runs tab counts them; a file shared by every run keeps the synthetic tag
+- Recipe scopes live in `cli/cli/utils/recipe_scopes.py` (`TransformConfig.scope`
+  overrides): `run` (default, per run, stacked), `aggregate` (mixes samples: recomputed
+  over all runs, `combine` = rows/wide/unique per source, rows get the run of their
+  `sample_column`), `pipeline` (pipeline statistic, per run). `--per-run` forces `run`.
+  A new recipe that mixes samples must be registered, or it is silently wrong once stacked
+- Lineage: `Aggregation.run_scope / computed_from_runs / inputs` and commit metadata
+  `depictio.run_scope / computed_from / inputs` (`tag@version`). Read by
+  `ProjectRun.dc_outputs`, `_delta_change.recomputed_run_tags` and the viewer history
+
 ### Data Collection Storage Families
 Six types (`table`, `jbrowse2`, `multiqc`, `image`, `geojson`, `phylogeny`) with three storage shapes:
 - **Delta** — `table`, `image` (manifest only), joined/transformed: Delta table at `s3://{bucket}/{dc_id}`
