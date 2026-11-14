@@ -260,8 +260,10 @@ const App: React.FC = () => {
   // with nothing on runs leaves the rest of the canvas as it was.
   const runNews = newsSplit && newsSplit.groups.length > 0 ? newsSplit : null;
   // "New only" is a filter on the new runs, not a split: the reader's own
-  // grouping stays as it was.
-  const runSplit = runNews?.mode === 'new' ? null : runNews;
+  // grouping stays as it was. "Overlay" colours the runs in one panel and
+  // leaves the cards alone.
+  const runSplit = runNews?.mode === 'split' ? runNews : null;
+  const runOverlay = runNews?.mode === 'overlay' ? runNews : null;
   const newOnlyFilters = useMemo(
     () => (runNews?.mode === 'new' ? panelsFromGroups(runNews.groups)[0]?.constraints ?? [] : []),
     [runNews],
@@ -1322,7 +1324,17 @@ const App: React.FC = () => {
             showOther: runSplit.showOther,
             keepColor: true,
           }
-        : resolveGroupRender(
+        : runOverlay
+          ? {
+              // One panel: the new runs in the dashboard's colour, the runs
+              // seen before in grey.
+              groups: runOverlay.groups,
+              colorByGroup: true,
+              display: 'color' as const,
+              showOther: runOverlay.showOther,
+              keepColor: false,
+            }
+          : resolveGroupRender(
         groupsApi.colorBy,
         groupsApi.renderGroups,
         colorByColumnRender,
@@ -1336,6 +1348,7 @@ const App: React.FC = () => {
       groupsApi.displayMode,
       groupsApi.showOther,
       runSplit,
+      runOverlay,
     ],
   );
 
@@ -2315,6 +2328,7 @@ const App: React.FC = () => {
         projectId={dashboard?.project_id ? String(dashboard.project_id) : null}
         previewVersionId={previewVersionId}
         userLoading={userLoading}
+        readerId={currentUser?.id ?? currentUser?.email ?? null}
         canEdit={canEditNow}
         components={summaryMetadata}
         filters={deferredFilters}

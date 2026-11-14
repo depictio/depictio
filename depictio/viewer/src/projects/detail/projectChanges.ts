@@ -19,6 +19,7 @@ import type {
 
 import { parseTs } from '../../monitoring/format';
 import type { CheckOutcome } from '../checkStatus';
+import { commitLineage } from './deltaHistory';
 
 // ── the anonymous reader's mark ─────────────────────────────────────────────
 
@@ -142,7 +143,8 @@ export function commitRunTags(entry: DeltaVersionEntry): { tags: string[]; cappe
 }
 
 /** The Delta commits of a collection that carry a run: the run named in the
- *  commit metadata or, when the commit does not name its runs (or the list was
+ *  commit metadata (rows it wrote, or for a recomputation over every run, a
+ *  run it read) or, when the commit does not name its runs (or the list was
  *  capped), one of the ingestions that brought the run in. */
 export function commitsForRun(
   entries: DeltaVersionEntry[],
@@ -153,6 +155,7 @@ export function commitsForRun(
   return entries.filter((e) => {
     const { tags, capped } = commitRunTags(e);
     if (tags.includes(runTag)) return true;
+    if (commitLineage(e).computedFrom.includes(runTag)) return true;
     if (tags.length > 0 && !capped) return false;
     return Boolean(e.run_id && ids.has(e.run_id));
   });

@@ -37,10 +37,14 @@ export interface ChangeMarksValue {
   /** Under the tab-wide Overlay, by `dc_id`: the runs new since the
    *  reader's mark. A table fades the rows of every other run. */
   newRunsByDc: Record<string, string[]>;
+  /** While a view on runs is on: the collections of the tab whose rows carry
+   *  no run, so the view leaves them whole. Their tiles say so. */
+  runUnscopedDcs: ReadonlySet<string>;
 }
 
 const NO_COMPARING: ReadonlySet<string> = new Set<string>();
 const NO_SPLIT: Record<string, GroupRenderDef[]> = {};
+const NO_DCS: ReadonlySet<string> = new Set<string>();
 const noop = (): void => {};
 
 export const EMPTY_CHANGE_MARKS: ChangeMarksValue = {
@@ -56,6 +60,7 @@ export const EMPTY_CHANGE_MARKS: ChangeMarksValue = {
   splitGroupsByDc: NO_SPLIT,
   tabOverlay: false,
   newRunsByDc: {},
+  runUnscopedDcs: NO_DCS,
 };
 
 export const ChangeMarksContext = createContext<ChangeMarksValue>(EMPTY_CHANGE_MARKS);
@@ -79,6 +84,12 @@ const NO_RUNS: string[] = [];
 export function useOverlayNewRuns(dcId: string | null | undefined): string[] {
   const { newRunsByDc } = useContext(ChangeMarksContext);
   return (dcId && newRunsByDc[dcId]) || NO_RUNS;
+}
+
+/** Is a view on runs on, and does it leave this collection whole? */
+export function useRunUnscoped(dcId: string | null | undefined): boolean {
+  const { runUnscopedDcs } = useContext(ChangeMarksContext);
+  return Boolean(dcId && runUnscopedDcs.has(dcId));
 }
 
 export function useChangeMark(componentIndex: string | undefined): {

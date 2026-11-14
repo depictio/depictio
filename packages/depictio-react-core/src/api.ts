@@ -1403,10 +1403,13 @@ export async function fetchResolvedGroups(
   dcId: string,
   groups: Array<{ name: string; column_name: string; values: string[]; color: string; dc_id?: string }>,
   signal?: AbortSignal,
+  /** The component the groups are for: groups of runs are then rewritten to
+   *  the ids it matches its marks by (its samples, its features). */
+  componentId?: string,
 ): Promise<ResolvedGroupsResult> {
   const res = await authFetch(`${API_BASE}/dashboards/resolve_groups/${dashboardId}`, {
     method: 'POST',
-    body: JSON.stringify({ dc_id: dcId, groups }),
+    body: JSON.stringify({ dc_id: dcId, groups, ...(componentId ? { component_id: componentId } : {}) }),
     signal,
   });
   if (!res.ok) throw new Error(`Failed to resolve the groups: ${res.status}`);
@@ -5131,6 +5134,10 @@ export interface ProjectRun {
   files: number;
   dc_files: Record<string, number>;
   scans: RunScan[];
+  /** The recipe collections computed from the run, each with how it relates
+   *  to the runs: `run` (from this run alone), `aggregate` (recomputed over
+   *  every run) or `pipeline` (the pipeline's statistic for this run). */
+  dc_outputs?: Record<string, 'run' | 'aggregate' | 'pipeline' | string>;
 }
 
 /** The project's runs, their scans and the files each collection found in
@@ -10606,8 +10613,17 @@ export interface DataChange {
   kind: 'refreshed' | 'emptied';
   new_run_tags: string[];
   touched_run_tags: string[];
+  /** A recipe collection's relation to the runs (see ProjectRun.dc_outputs). */
+  run_scope?: string | null;
+  /** Runs the reader had seen whose rows a recomputation over every run
+   *  rewrote: "seen before" holds new values for them. */
+  recomputed_run_tags?: string[];
   /** Delta collections: the runs the reader had seen (absent on MultiQC). */
   seen_run_tags?: string[];
+  /** Delta collections: when, and by whom, each new run was written. `at` is
+   *  the last commit's, a later run's when several arrived since the mark. */
+  run_at?: Record<string, string | null>;
+  run_by?: Record<string, string[]>;
   rows_before?: number | null;
   rows_after?: number | null;
   rows_added?: number;
@@ -10861,7 +10877,12 @@ export interface InboxItem {
   at: string | null;
 }
 
-export async function fetchChangesInbox(): Promise<{ items: InboxItem[]; server_held: boolean }> {
+export async function fetchChangesInbox(): Promise<{
+  items: InboxItem[];
+  server_held: boolean;
+  /** The projects of every mark, news or not: whose ingestions the bell listens for. */
+  followed_project_ids?: string[];
+}> {
   const res = await authFetch(`${API_BASE}/changes/inbox`);
   if (!res.ok) await throwHttpDetailError(res, 'Failed to fetch notifications');
   return res.json();

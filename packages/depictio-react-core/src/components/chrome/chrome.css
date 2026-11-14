@@ -32,6 +32,7 @@
   bottom: 12px;
   z-index: 1100;
   display: inline-flex;
+  gap: 4px;
 }
 .depictio-current-data-badge:empty {
   display: none;

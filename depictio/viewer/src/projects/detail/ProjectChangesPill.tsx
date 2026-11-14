@@ -6,12 +6,21 @@
  * the same feed as the dashboard's (`changes/feed.tsx`).
  */
 import React, { useState } from 'react';
-import { Button, Divider, Indicator, Popover, ScrollArea, Stack, Text } from '@mantine/core';
+import { Button, Divider, Indicator, Popover, Stack, Text } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import type { DataChange } from 'depictio-react-core';
 
 import { rowsFact } from '../../changes/describe';
-import { FeedHeader, FeedItem, FeedSection, facts, nameList } from '../../changes/feed';
+import {
+  FEED_KIND,
+  FeedHeader,
+  FeedItem,
+  FeedMarkSeen,
+  FeedScroll,
+  FeedSection,
+  facts,
+  nameList,
+} from '../../changes/feed';
 import { formatRelativeTime } from '../../lib/datetime';
 import { compactCount } from '../../monitoring/format';
 import type { ProjectChanges } from './useProjectChanges';
@@ -82,26 +91,17 @@ export const ProjectChangesPill: React.FC<{
         <Stack gap="xs">
           <FeedHeader
             title="What's new"
-            subtitle={cs.since ? `Since your last visit, ${formatRelativeTime(cs.since)}` : undefined}
-            action={
-              <Button
-                size="compact-sm"
-                variant="subtle"
-                loading={saving}
-                onClick={mark}
-                leftSection={<Icon icon="mdi:check-all" width={15} />}
-                data-testid="project-changes-mark-seen"
-              >
-                Mark as seen
-              </Button>
-            }
+            subtitle={cs.since ? `Changed since ${formatRelativeTime(cs.since)}` : undefined}
+            action={<FeedMarkSeen loading={saving} onClick={mark} testId="project-changes-mark-seen" />}
           />
-          <Divider />
-          <ScrollArea.Autosize mah={440} type="auto" offsetScrollbars>
+          <FeedScroll mah={440}>
             <Stack gap="sm">
               {cs.new_runs.length > 0 && (
-                <FeedSection title="New runs" count={cs.new_runs.length} testId="project-changes-runs">
-                  {cs.new_runs.map((r) => (
+                <FeedSection title="New runs" icon={FEED_KIND.run.icon} count={cs.new_runs.length} testId="project-changes-runs">
+                  {/* Newest first, like the dashboard's What's new. */}
+                  {[...cs.new_runs]
+                    .sort((a, b) => String(b.registered ?? '').localeCompare(String(a.registered ?? '')))
+                    .map((r) => (
                     <FeedItem
                       key={`${r.workflow_id}-${r.run_tag}`}
                       kind="run"
@@ -115,7 +115,7 @@ export const ProjectChangesPill: React.FC<{
                 </FeedSection>
               )}
               {cs.data.length > 0 && (
-                <FeedSection title="Refreshed collections" count={cs.data.length} testId="project-changes-data">
+                <FeedSection title="Refreshed collections" icon={FEED_KIND.data.icon} count={cs.data.length} testId="project-changes-data">
                   {cs.data.map((d) => (
                     <FeedItem
                       key={d.dc_id}
@@ -133,7 +133,7 @@ export const ProjectChangesPill: React.FC<{
                 </FeedSection>
               )}
               {cs.failed_ingestions.length > 0 && (
-                <FeedSection title="Failed ingestions" count={cs.failed_ingestions.length} testId="project-changes-failed">
+                <FeedSection title="Failed ingestions" icon={FEED_KIND.failed.icon} count={cs.failed_ingestions.length} testId="project-changes-failed">
                   {cs.failed_ingestions.map((f) => (
                     <FeedItem
                       key={f.run_id}
@@ -150,7 +150,7 @@ export const ProjectChangesPill: React.FC<{
                 </FeedSection>
               )}
               {cs.dashboards.length > 0 && (
-                <FeedSection title="Dashboards changed" count={cs.dashboards.length} testId="project-changes-dashboards">
+                <FeedSection title="Dashboards changed" icon={FEED_KIND.dashboard.icon} count={cs.dashboards.length} testId="project-changes-dashboards">
                   {cs.dashboards.map((d) => (
                     <FeedItem
                       key={d.family_id}
@@ -164,7 +164,7 @@ export const ProjectChangesPill: React.FC<{
                 </FeedSection>
               )}
             </Stack>
-          </ScrollArea.Autosize>
+          </FeedScroll>
           <Divider />
           <Text size="xs" c="dimmed" px={4}>
             Marking as seen moves your mark to now; nothing is deleted.

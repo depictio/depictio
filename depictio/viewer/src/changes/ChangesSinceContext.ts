@@ -32,6 +32,14 @@ export interface ChangesSinceValue {
   splitAvailable: boolean;
   /** The split's groups while it is on (the legend of the panel). */
   splitGroups: GroupRenderDef[] | null;
+  /** The runs that are new since the mark, sorted. */
+  newRuns: string[];
+  /** The one new run the view follows, or null for all of them. */
+  focusRun: string | null;
+  setFocusRun: (run: string | null) => void;
+  /** That run alone on the dashboard (turning the view on if it was off), or
+   *  every new run again when it was already the one shown. */
+  showRun: (run: string) => void;
 }
 
 export const ChangesSinceContext = createContext<ChangesSinceValue | null>(null);

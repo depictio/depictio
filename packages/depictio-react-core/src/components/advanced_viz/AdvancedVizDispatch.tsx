@@ -90,16 +90,24 @@ import LoadAllButton from '../chrome/LoadAllButton';
 import { ComponentIndexContext } from '../DashboardLoadingProvider';
 import type { GroupRenderState } from '../../selectionGroups';
 import SplitPanels from './SplitPanels';
-import { groupingModeForKind, panelsForGrouping, shouldSplitIntoPanels } from '../../splitPanels';
+import {
+  groupDisplaysForKind,
+  groupingModeForKind,
+  panelsForGrouping,
+  shouldSplitIntoPanels,
+} from '../../splitPanels';
 import type { PanelSpec } from '../../splitPanels';
 import {
   advancedVizGroupOutcome,
   groupKindNotSplitReasons,
   groupUnmatchedReasons,
   groupUnreachableReasons,
+  runOverlayAmbiguousReasons,
+  runOverlayKindReasons,
 } from '../../groupStatus';
 import type { AdvancedVizGroupBadge } from '../../groupStatus';
-import { useGroupsForDc } from './groupsForDc';
+import { isRunGroup, useGroupsForDc } from './groupsForDc';
+import { useOverlayNewRuns } from '../../changeMarks';
 import {
   GroupColouringReportContext,
   groupColouringActive,
@@ -140,7 +148,22 @@ const NOT_GROUPED_REASONS: Record<AdvancedVizGroupBadge, () => string[]> = {
   kind: groupKindNotSplitReasons,
   unreachable: groupUnreachableReasons,
   unmatched: groupUnmatchedReasons,
+  run_kind: runOverlayKindReasons,
+  run_ambiguous: runOverlayAmbiguousReasons,
 };
+
+/** The label on that badge: the run Overlay is "by run", not a group. */
+const NOT_GROUPED_LABELS: Record<AdvancedVizGroupBadge, string> = {
+  kind: 'not grouped',
+  unreachable: 'not grouped',
+  unmatched: 'not grouped',
+  run_kind: 'not by run',
+  run_ambiguous: 'not by run',
+};
+
+/** Kinds with no mark to colour (one row read as text): the run Overlay
+ *  passes them by without a badge. */
+const KINDS_WITHOUT_MARKS: ReadonlySet<string> = new Set(['record_card']);
 
 interface AdvancedVizDispatchProps {
   metadata: StoredMetadata;
@@ -529,8 +552,27 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
   // that could still colour on its own would otherwise contradict it.
   // A group captured on another collection is translated through the project's
   // links first, or a tile of libraries would match nothing in a group of guides.
-  const linkedGroupRender = useGroupsForDc(groupRender, dashboardId, metadata.dc_id);
-  const wholeGroupRender = kindDeclinesSplit ? undefined : linkedGroupRender;
+  // The Overlay of "What's new" colours by run. A kind that draws each mark
+  // from several samples cannot, and is not handed the groups: it would
+  // otherwise read them as analysis groups on its own terms.
+  const overlayNewRuns = useOverlayNewRuns(metadata.dc_id);
+  const runOverlayOn =
+    groupRender?.display !== 'facet' && (groupRender?.groups ?? []).some(isRunGroup);
+  const runOverlayDeclined = runOverlayOn && !groupDisplaysForKind(vizKind).overlay;
+  const { groupRender: linkedGroupRender, runsAmbiguous } = useGroupsForDc(
+    groupRender,
+    dashboardId,
+    metadata.dc_id,
+    metadata.index != null ? String(metadata.index) : undefined,
+  );
+  const wholeGroupRender = kindDeclinesSplit || runOverlayDeclined ? undefined : linkedGroupRender;
+  // Said only on a tile whose collection gained a run: elsewhere there is
+  // nothing new for it to show.
+  let runOverlay: 'kind' | 'ambiguous' | null = null;
+  if (overlayNewRuns.length > 0 && !KINDS_WITHOUT_MARKS.has(vizKind)) {
+    if (runOverlayDeclined) runOverlay = 'kind';
+    else if (runsAmbiguous) runOverlay = 'ambiguous';
+  }
 
   // What the renderer drawn whole reported after recolouring its figure by the
   // groups (see `useReportGroupColouring`): whether any point belonged to one.
@@ -576,12 +618,13 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
     splitIneffective,
     coloured: colouringMatched,
     drawnHere,
+    runOverlay,
   });
   const groupBadge = React.useMemo(
     () =>
       groupOutcome.badge ? (
         <GroupStatusBadge
-          label="not grouped"
+          label={NOT_GROUPED_LABELS[groupOutcome.badge]}
           colored={false}
           reasons={NOT_GROUPED_REASONS[groupOutcome.badge]()}
         />

@@ -47,8 +47,21 @@ import type {
 import { useChangesSinceEnabled } from '../hooks/useChangesSinceEnabled';
 import CompareModal from './CompareModal';
 import { ChangesSinceContext, type ChangesSinceValue } from './ChangesSinceContext';
+import { dropCachedChangeSet, readCachedChangeSet, writeCachedChangeSet } from './changeSetCache';
+import { useRunUnscopedDcs } from './runColumns';
 import { isReadOnlyQuery, markDetails, parseReadOnlyQuery } from './describe';
-import { newSideOnly, newsSplitGroups, type NewsSplit, type NewsView } from './newsSplit';
+import {
+  focusedRuns,
+  newSideOnly,
+  newsSplitGroups,
+  overlaySides,
+  readSharedFocus,
+  readSharedView,
+  writeSharedFocus,
+  writeSharedView,
+  type NewsSplit,
+  type NewsView,
+} from './newsSplit';
 
 /** How long a reader stays on the page before it counts as a visit. */
 export const VISIT_DELAY_MS = 10_000;
@@ -64,6 +77,8 @@ interface Props {
   previewVersionId: string | null;
   /** The signed-in user is still being resolved. */
   userLoading: boolean;
+  /** Who reads, for the per-reader cache of the change set; null when anonymous. */
+  readerId?: string | null;
   /** The reader may open the editor's History. */
   canEdit: boolean;
   /** The components of the tab (and what it shows from others): the side-by-side view draws one of them. */
@@ -90,6 +105,7 @@ function brandHex(variable: string, fallback: string): string {
 const EMPTY_MARKED: Record<string, ChangeReason[]> = {};
 const NO_COMPARING: ReadonlySet<string> = new Set<string>();
 const NO_SPLIT_BY_DC: Record<string, GroupRenderDef[]> = {};
+const NO_DCS: ReadonlySet<string> = new Set<string>();
 const NO_DIFF_QUERY: ChangeMarksValue['diffQuery'] = {};
 const NO_COMPONENTS: StoredMetadata[] = [];
 const NO_FILTERS: InteractiveFilter[] = [];
@@ -97,6 +113,10 @@ const NO_FILTERS: InteractiveFilter[] = [];
 /** Component types that draw what is new in place when compared. Cards and
  *  tables have nothing to ring: their dot says it. */
 const HIGHLIGHTABLE_TYPES = new Set(['figure', 'multiqc', 'advanced_viz']);
+/** Drawn by run in the Overlay when their collection gained one, not ringed. */
+const RUN_COLOURED_TYPES = new Set(['figure', 'advanced_viz']);
+/** Advanced viz kinds with no marks to colour by run: they keep their ring. */
+const KINDS_WITHOUT_RUN_MARKS = new Set(['record_card']);
 
 /** The set after "Mark as seen": a previous visit exists, nothing differs. */
 function clearedSet(cs: DashboardChangeSet): DashboardChangeSet {
@@ -128,6 +148,7 @@ const ChangeMarksProvider: React.FC<Props> = ({
   projectId,
   previewVersionId,
   userLoading,
+  readerId,
   canEdit,
   components = NO_COMPONENTS,
   filters = NO_FILTERS,
@@ -140,6 +161,8 @@ const ChangeMarksProvider: React.FC<Props> = ({
   const active = flagOn && !previewVersionId && Boolean(dashboardId) && Boolean(familyId) && !userLoading;
 
   const [changeSet, setChangeSet] = useState<DashboardChangeSet | null>(null);
+  // The family whose set came from the server on this page, not the cache.
+  const [fetchedFamily, setFetchedFamily] = useState<string | null>(null);
   const [mode, setModeState] = useState<MarkMode>('sticky');
   const [comparing, setComparing] = useState<ReadonlySet<string>>(NO_COMPARING);
   const [seenBusy, setSeenBusy] = useState(false);
@@ -147,13 +170,25 @@ const ChangeMarksProvider: React.FC<Props> = ({
   const [compareKey, setCompareKey] = useState<string | null>(null);
   const modeRef = useRef(mode);
   modeRef.current = mode;
+  const reader = readerId || 'anonymous';
+  // The set painted from the cache: written back, it would renew its own age.
+  const paintedFromCache = useRef<DashboardChangeSet | null>(null);
 
   // One fetch per open. `changeSet` is kept for the whole session: nothing
-  // refetches it, so the marks do not shift under the reader.
+  // refetches it, so the marks do not shift under the reader. The previous
+  // tab's read paints first (each tab is a page load) and the fetch replaces it.
   useEffect(() => {
     if (!active || !familyId) return;
     let cancelled = false;
     const local = readOnly ? null : readLocalReader(familyId);
+    if (!readOnly) {
+      const cached = readCachedChangeSet(reader, familyId);
+      if (cached) {
+        setModeState(cached.server_held ? cached.mark_mode : (readLocalMode() ?? cached.mark_mode));
+        paintedFromCache.current = cached;
+        setChangeSet(cached);
+      }
+    }
     fetchDashboardChanges(
       familyId,
       readOnly
@@ -173,19 +208,32 @@ const ChangeMarksProvider: React.FC<Props> = ({
           setModeState(cs.mark_mode);
         }
         setChangeSet(cs);
+        setFetchedFamily(cs.family_id);
       })
       .catch(() => {
-        // Decoration: a failed fetch leaves the dashboard as it was.
+        // Decoration: a failed fetch leaves the dashboard as it was, minus a
+        // cached set the server no longer vouches for.
+        if (cancelled || readOnly) return;
+        dropCachedChangeSet(reader, familyId);
+        if (paintedFromCache.current) setChangeSet(null);
       });
     return () => {
       cancelled = true;
     };
-  }, [active, familyId, readOnly, readOnlyQuery]);
+  }, [active, familyId, readOnly, readOnlyQuery, reader]);
 
-  // After 10 s on the page: one visit. Never in a read-only view.
-  const loadedFamily = changeSet?.family_id ?? null;
+  // Every state of the set (fetched, dismissed, marked seen) is what the next
+  // tab paints first; the cached paint itself is not, or it never ages out.
   useEffect(() => {
-    if (!active || readOnly || !familyId || !loadedFamily) return;
+    if (!active || readOnly || !familyId || !changeSet) return;
+    if (changeSet === paintedFromCache.current) return;
+    writeCachedChangeSet(reader, familyId, changeSet);
+  }, [active, readOnly, familyId, changeSet, reader]);
+
+  // After 10 s on the page: one visit. Never in a read-only view, and never
+  // on a cached set: its baseline may predate the last tab's visit.
+  useEffect(() => {
+    if (!active || readOnly || !familyId || !fetchedFamily) return;
     const held = changeSet?.server_held ?? false;
     const baseline = changeSet?.current_baseline;
     const timer = window.setTimeout(() => {
@@ -199,7 +247,7 @@ const ChangeMarksProvider: React.FC<Props> = ({
     return () => window.clearTimeout(timer);
     // changeSet is read for two values fixed at load; the timer must not restart on dismissals.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, readOnly, familyId, loadedFamily]);
+  }, [active, readOnly, familyId, fetchedFamily]);
 
   const fail = useCallback((message: string, err: unknown) => {
     notifications.show({
@@ -218,6 +266,9 @@ const ChangeMarksProvider: React.FC<Props> = ({
       setChangeSet((prev) => (prev ? clearedSet(prev) : prev));
       setComparing(NO_COMPARING);
       setViewState('off');
+      setFocusRunState(null);
+      writeSharedView(familyId, 'off');
+      writeSharedFocus(familyId, null);
     } catch (err) {
       fail('Could not mark the changes as seen.', err);
     } finally {
@@ -267,32 +318,123 @@ const ChangeMarksProvider: React.FC<Props> = ({
       .map((m) => changeKey(dashboardId, String(m.index)))
       .filter((key) => key in marked);
   }, [dashboardId, changeSet, components]);
+  // Of those, the ones Overlay still rings: a figure or an advanced viz on a
+  // collection that gained a run is coloured by run instead (or badged when
+  // its marks cannot be), which says more than rings on a box or a curve ever
+  // did. Rings there would circle every point of a recomputed ordination.
+  const ringKeys = useMemo(() => {
+    if (!dashboardId || !changeSet) return [] as string[];
+    const byRun = overlayRuns(changeSet);
+    const coloured = new Set(
+      components
+        .filter(
+          (m) =>
+            RUN_COLOURED_TYPES.has(String(m.component_type)) &&
+            !KINDS_WITHOUT_RUN_MARKS.has(String(m.viz_kind)) &&
+            m.dc_id &&
+            String(m.dc_id) in byRun,
+        )
+        .map((m) => changeKey(dashboardId, String(m.index))),
+    );
+    return highlightKeys.filter((key) => !coloured.has(key));
+  }, [dashboardId, changeSet, components, highlightKeys]);
 
   // How the news shows on the canvas: off, marked in place, or split by run.
   const [view, setViewState] = useState<NewsView>('off');
+  // One new run followed instead of all of them (null: every new run).
+  const [focusRun, setFocusRunState] = useState<string | null>(null);
+  const newRuns = useMemo(
+    () =>
+      [
+        ...new Set(
+          (changeSet?.data ?? []).flatMap((d) => (d.kind === 'refreshed' ? d.new_run_tags : [])),
+        ),
+      ].sort(),
+    [changeSet],
+  );
+  const focus = focusRun && newRuns.includes(focusRun) ? focusRun : null;
   const split = useMemo<NewsSplit | null>(
     () =>
       active && changeSet && !changeSet.first_visit
-        ? newsSplitGroups(changeSet, {
-            fresh: brandHex('--mantine-primary-color-filled', '#228be6'),
-            seen: brandHex('--mantine-color-gray-5', '#adb5bd'),
-          })
+        ? newsSplitGroups(
+            changeSet,
+            {
+              // "New" is blue on every page, like the tile's updated dot and
+              // the run rows, whatever the page's primary colour.
+              fresh: brandHex('--mantine-color-blue-6', '#228be6'),
+              seen: brandHex('--mantine-color-gray-5', '#adb5bd'),
+            },
+            focus,
+          )
         : null,
-    [active, changeSet],
+    [active, changeSet, focus],
+  );
+  const setFocusRun = useCallback(
+    (run: string | null) => {
+      setFocusRunState(run);
+      if (familyId && !readOnly) writeSharedFocus(familyId, run);
+    },
+    [familyId, readOnly],
   );
   const setView = useCallback(
     (next: NewsView) => {
       setViewState(next);
-      setComparing(next === 'overlay' ? new Set(highlightKeys) : NO_COMPARING);
+      setComparing(next === 'overlay' ? new Set(ringKeys) : NO_COMPARING);
+      if (familyId && !readOnly) writeSharedView(familyId, next);
     },
-    [highlightKeys],
+    [ringKeys, familyId, readOnly],
   );
-  const splitOn = (view === 'split' || view === 'new') && split !== null;
-  // What the canvas applies: both sides, or the new side alone.
-  const applied = useMemo<NewsSplit | null>(
-    () => (!splitOn || !split ? null : view === 'new' ? newSideOnly(split) : { ...split, mode: 'split' }),
-    [splitOn, split, view],
+  // "This run on the dashboard": that run alone, or back to every new run when
+  // it was already the one shown.
+  const showRun = useCallback(
+    (run: string) => {
+      if (focus === run && view !== 'off') {
+        setFocusRun(null);
+        return;
+      }
+      setFocusRun(run);
+      if (view === 'off') setView(split ? 'new' : 'overlay');
+    },
+    [focus, view, split, setFocusRun, setView],
   );
+  // The view chosen on another tab of the family follows the reader here,
+  // once this tab's news and components are known.
+  const restoredFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!active || readOnly || !familyId || !changeSet || changeSet.first_visit) return;
+    if (restoredFor.current === familyId || components.length === 0) return;
+    // A cached set restores at once, and the fetched one again: a run that
+    // arrived since the cache was written is a valid focus only in the latter.
+    if (fetchedFamily === familyId) restoredFor.current = familyId;
+    const sharedFocus = readSharedFocus(familyId);
+    if (sharedFocus && newRuns.includes(sharedFocus)) setFocusRunState(sharedFocus);
+    const shared = readSharedView(familyId);
+    if (!shared || shared === 'off') return;
+    const needsSplit = shared === 'split' || shared === 'new';
+    if (needsSplit && !split) return;
+    if (shared === 'overlay' && highlightKeys.length === 0 && !split) return;
+    setViewState(shared);
+    setComparing(shared === 'overlay' ? new Set(ringKeys) : NO_COMPARING);
+  }, [
+    active,
+    readOnly,
+    familyId,
+    fetchedFamily,
+    changeSet,
+    components.length,
+    split,
+    highlightKeys.length,
+    ringKeys,
+    newRuns,
+  ]);
+  const splitOn = view !== 'off' && split !== null && (view !== 'overlay' || split.groups.length > 0);
+  // What the canvas applies: side by side, in one panel, or the new side alone.
+  const applied = useMemo<NewsSplit | null>(() => {
+    if (!splitOn || !split) return null;
+    if (view === 'new') return newSideOnly(split);
+    if (view === 'overlay') return overlaySides(split);
+    return { ...split, mode: 'split' };
+  }, [splitOn, split, view]);
   // The legend lists every side once, whichever collection it splits.
   const splitLegend = useMemo<GroupRenderDef[] | null>(() => {
     if (!splitOn) return null;
@@ -306,6 +448,7 @@ const ChangeMarksProvider: React.FC<Props> = ({
   useEffect(() => {
     onSplitChange?.(applied);
   }, [onSplitChange, applied]);
+  const runUnscopedDcs = useRunUnscopedDcs(components, Boolean(applied && applied.groups.length > 0));
   // Gone (marked seen, flag off): the canvas goes back to normal.
   useEffect(() => () => onSplitChange?.(null), [onSplitChange]);
 
@@ -339,6 +482,7 @@ const ChangeMarksProvider: React.FC<Props> = ({
         splitGroupsByDc: NO_SPLIT_BY_DC,
         tabOverlay: false,
         newRunsByDc: NO_RUNS_BY_DC,
+        runUnscopedDcs: NO_DCS,
       };
     }
     let diffQuery: ChangeMarksValue['diffQuery'] = NO_DIFF_QUERY;
@@ -356,7 +500,8 @@ const ChangeMarksProvider: React.FC<Props> = ({
       readOnly,
       splitGroupsByDc: applied ? applied.samples : NO_SPLIT_BY_DC,
       tabOverlay: view === 'overlay',
-      newRunsByDc: view === 'overlay' ? overlayRuns(changeSet) : NO_RUNS_BY_DC,
+      newRunsByDc: view === 'overlay' ? focusedRuns(overlayRuns(changeSet), focus) : NO_RUNS_BY_DC,
+      runUnscopedDcs,
     };
   }, [
     active,
@@ -371,6 +516,8 @@ const ChangeMarksProvider: React.FC<Props> = ({
     readOnlyQuery,
     applied,
     view,
+    focus,
+    runUnscopedDcs,
   ]);
 
   const details = useMemo(() => markDetails(active ? changeSet : null), [active, changeSet]);
@@ -394,6 +541,10 @@ const ChangeMarksProvider: React.FC<Props> = ({
       setView,
       splitAvailable: split !== null,
       splitGroups: splitLegend,
+      newRuns,
+      focusRun: focus,
+      setFocusRun,
+      showRun,
     };
   }, [
     active,
@@ -413,6 +564,10 @@ const ChangeMarksProvider: React.FC<Props> = ({
     split,
     splitLegend,
     projectId,
+    newRuns,
+    focus,
+    setFocusRun,
+    showRun,
   ]);
 
   // The component behind the open key. Opening needs marks to be live, so the
