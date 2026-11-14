@@ -305,6 +305,94 @@ def test_a_delta_refresh_reports_new_run_tags_and_rows(ctx):
     assert (table["delta_from"], table["delta_to"]) == (0, 1)
 
 
+def test_each_new_run_is_dated_by_the_commit_that_wrote_it(ctx):
+    """Two runs attached since the reader's mark (epic #1399): the collection's
+    time is the second's, so each run needs its own to be listed newest first."""
+    _visit(ctx)
+    ctx["db"]["deltatables"].update_one(
+        {"data_collection_id": ctx["dc_table"]},
+        {
+            "$push": {
+                "aggregation": {
+                    "$each": [
+                        {
+                            "aggregation_version": 2,
+                            "delta_version": 1,
+                            "aggregation_time": datetime(2026, 11, 1, 10, 0),
+                            "rows_total": 15,
+                            "rows_added": 5,
+                            "run_tags": ["run_c"],
+                            "aggregation_by": {"email": EDITOR.email},
+                        },
+                        {
+                            "aggregation_version": 3,
+                            "delta_version": 2,
+                            "aggregation_time": datetime(2026, 11, 3, 10, 0),
+                            "rows_total": 20,
+                            "rows_added": 5,
+                            "run_tags": ["run_d"],
+                            "aggregation_by": {"email": "other@example.org"},
+                        },
+                        # Recomputed over every run: it dates none of them.
+                        {
+                            "aggregation_version": 4,
+                            "delta_version": 3,
+                            "aggregation_time": datetime(2026, 11, 4, 10, 0),
+                            "rows_total": 20,
+                            "rows_added": 0,
+                            "run_tags": ["run_c", "run_d"],
+                            "run_scope": "aggregate",
+                            "aggregation_by": {"email": "late@example.org"},
+                        },
+                    ]
+                }
+            }
+        },
+    )
+    [table] = _changes(ctx)["data"]
+    from depictio.api.v1.services.changes.clock import local_to_utc
+
+    # Stored on the writer's local clock, sent as naive UTC like ``at``.
+    utc = {
+        t: local_to_utc(datetime(2026, 11, d, 10, 0)).isoformat()
+        for t, d in [("run_c", 1), ("run_d", 3)]
+    }
+    assert table["run_at"] == utc
+    assert table["run_by"] == {"run_c": [EDITOR.email], "run_d": ["other@example.org"]}
+
+
+@pytest.mark.parametrize(
+    ("scope", "recomputed"),
+    [("aggregate", ["run_a", "run_b"]), ("run", [])],
+)
+def test_a_recomputation_over_every_run_names_the_seen_runs_it_rewrote(ctx, scope, recomputed):
+    """A recipe that mixes samples is recomputed over every run (epic #1399):
+    the rows of runs already seen changed, so "seen before" is not as it was."""
+    _visit(ctx)
+    ctx["db"]["deltatables"].update_one(
+        {"data_collection_id": ctx["dc_table"]},
+        {
+            "$push": {
+                "aggregation": {
+                    "aggregation_version": 2,
+                    "delta_version": 1,
+                    "rows_total": 15,
+                    "rows_added": 15,
+                    "run_tags": ["run_a", "run_b", "run_c"],
+                    "run_scope": scope,
+                    "computed_from_runs": ["run_a", "run_b", "run_c"],
+                    "aggregation_by": {"email": EDITOR.email},
+                }
+            }
+        },
+    )
+    [table] = _changes(ctx)["data"]
+    assert table["run_scope"] == scope
+    assert table["new_run_tags"] == ["run_c"]
+    # Only runs the reader had seen: run_c is new, not recomputed.
+    assert table["recomputed_run_tags"] == recomputed
+
+
 @pytest.mark.parametrize(
     ("seen", "now", "reported"),
     [
@@ -411,6 +499,15 @@ def test_reading_the_changes_leaves_the_autosave_window_open(ctx):
     assert _visit(ctx)["moved"] is False  # sticky: a later visit moves nothing
 
     assert versions.find_one({"seq": 1})["coalesce_until"] > utc_now_naive()  # still open
+
+
+def test_the_inbox_names_the_followed_projects_even_with_nothing_new(ctx):
+    """The bell listens for ingestions on these projects: right after a visit
+    the inbox is empty, and the next ingestion must still be heard."""
+    _visit(ctx)
+    inbox = ctx["client"].get(f"{API}/inbox").json()
+    assert inbox["items"] == []
+    assert inbox["followed_project_ids"] == [ctx["project"]]
 
 
 def test_the_editor_does_not_see_their_own_edit(ctx):

@@ -110,6 +110,13 @@ class TestStart:
         assert response.status_code == 403
         assert api.runs.find_one({"run_id": run_id})["user_id"] == str(api.owner.id)
 
+    def test_a_cli_attach_names_the_runs_it_brings(self, api):
+        # The Runs tab and the ingestion toast find a run's ingestion by these
+        # tags; a UI attach always set them, a CLI --attach-run never did.
+        run_id = _start(api, api.owner, run_tags=["run_naples"]).json()["run_id"]
+
+        assert api.runs.find_one({"run_id": run_id})["run_tags"] == ["run_naples"]
+
     def test_reopening_your_own_run_is_allowed(self, api):
         run_id = _start(api, api.owner).json()["run_id"]
 

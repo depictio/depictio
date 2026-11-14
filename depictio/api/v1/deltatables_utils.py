@@ -154,6 +154,10 @@ GENOME_SELECTION_SOURCE = "genome_selection"
 # which an empty value list cannot express (see ``add_filter``).
 LINK_NO_MATCH = "__link_no_match__"
 
+#: The column every run-tagged row carries its run in (epic #1399). Mirrors
+#: ``depictio.cli.cli.utils.delta_versioning.RUN_ID_COLUMN``.
+RUN_ID_COLUMN = "depictio_run_id"
+
 
 def _categorical_predicate(column_name: str, values: list, dtype: pl.DataType | None) -> pl.Expr:
     """Build the ``is_in`` predicate for Select/MultiSelect/SegmentedControl.
@@ -431,7 +435,12 @@ def add_filter(
             if not isinstance(value, list):
                 value = [value]
 
-            filter_list.append(_categorical_predicate(column_name, value, dtype))
+            predicate = _categorical_predicate(column_name, value, dtype)
+            if column_name == RUN_ID_COLUMN:
+                # A row with no run aggregates several runs' samples (a recipe
+                # recomputed over every run): it belongs to each of them.
+                predicate = predicate | pl.col(column_name).is_null()
+            filter_list.append(predicate)
 
     elif interactive_component_type == "TextInput":
         # An empty value, or a pattern the regex engine rejects, adds nothing:
@@ -1329,10 +1338,6 @@ def _cache_dataframe_to_stores(
         df: DataFrame to cache.
         size_bytes: Estimated size in bytes.
     """
-    import time
-
-    global _total_memory_usage
-
     if size_bytes > MEMORY_THRESHOLD_BYTES:
         return
 
@@ -1345,11 +1350,31 @@ def _cache_dataframe_to_stores(
         pass
 
     # Also cache in memory
+    _remember_in_memory(cache_key, df, size_bytes)
+
+
+def _remember_in_memory(cache_key: str, df: pl.DataFrame, size_bytes: int) -> None:
+    """Keep a frame in the process, within the cache's budget.
+
+    Every frame read is cached, one per collection and Delta version, so
+    without eviction a process keeps every version a time-travel read or a
+    before/after diff ever touched. A key cached again replaces its entry
+    rather than counting twice.
+    """
+    import time
+
+    global _total_memory_usage
+
+    previous = _cache_metadata.pop(cache_key, None)
+    if previous is not None:
+        _dataframe_memory_cache.pop(cache_key, None)
+        _total_memory_usage -= previous["size_bytes"]
+    if size_bytes > MEMORY_PER_ITEM_MAX_BYTES:
+        return
+    while _total_memory_usage + size_bytes > MEMORY_THRESHOLD_BYTES and _cache_metadata:
+        evict_oldest_cached_dataframe()
     _dataframe_memory_cache[cache_key] = df
-    _cache_metadata[cache_key] = {
-        "size_bytes": size_bytes,
-        "timestamp": time.time(),
-    }
+    _cache_metadata[cache_key] = {"size_bytes": size_bytes, "timestamp": time.time()}
     _total_memory_usage += size_bytes
 
 
@@ -1385,7 +1410,6 @@ def _load_and_cache_fresh_data(
     Returns:
         Loaded DataFrame.
     """
-    import time
 
     global _total_memory_usage
 
@@ -1414,17 +1438,9 @@ def _load_and_cache_fresh_data(
 
                 if not cache_dataframe(filtered_cache_key, df):
                     # Fallback to memory cache if Redis fails
-                    _dataframe_memory_cache[filtered_cache_key] = df
-                    _cache_metadata[filtered_cache_key] = {
-                        "size_bytes": filtered_size,
-                        "timestamp": time.time(),
-                    }
+                    _remember_in_memory(filtered_cache_key, df, filtered_size)
             except Exception:
-                _dataframe_memory_cache[filtered_cache_key] = df
-                _cache_metadata[filtered_cache_key] = {
-                    "size_bytes": filtered_size,
-                    "timestamp": time.time(),
-                }
+                _remember_in_memory(filtered_cache_key, df, filtered_size)
 
     return df
 

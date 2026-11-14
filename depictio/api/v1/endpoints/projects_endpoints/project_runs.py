@@ -41,6 +41,11 @@ class ProjectRun(BaseModel):
     #: 0 for one that found nothing.
     dc_files: dict[str, int]
     scans: list[RunScan]
+    #: The collections computed from the run (recipes, epic #1399), each with
+    #: how it relates to the runs: ``run`` computed from this run alone,
+    #: ``aggregate`` recomputed over every run, ``pipeline`` a statistic of
+    #: the pipeline's for this run.
+    dc_outputs: dict[str, str] = {}
 
 
 class ProjectRuns(BaseModel):
@@ -68,7 +73,19 @@ def _latest_stats(run: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return (scans[-1].get("dc_stats") if scans else None) or {}
 
 
-def build_project_runs(project: dict[str, Any], run_docs: Iterable[dict[str, Any]]) -> ProjectRuns:
+def build_project_runs(
+    project: dict[str, Any],
+    run_docs: Iterable[dict[str, Any]],
+    single_files: dict[str, dict[str, int]] | None = None,
+    outputs: dict[str, dict[str, str]] | None = None,
+) -> ProjectRuns:
+    """``single_files`` maps a run tag to the one-file collections registered
+    under it (epic #1399): a ``single`` collection bound per run has its file
+    in each run, outside the recursive scan's stats. It counts in the run that
+    holds it and is never expected of another: a file shared by every run is
+    registered once, under the run that brought it."""
+    single_files = single_files or {}
+    outputs = outputs or {}
     workflows = {str(wf.get("_id") or wf.get("id")): wf for wf in project.get("workflows") or []}
     docs = [
         r
@@ -97,6 +114,9 @@ def build_project_runs(project: dict[str, Any], run_docs: Iterable[dict[str, Any
             n = int((stats or {}).get("total_files", 0) or 0)
             if n > 0 or dc_tag in dc_files:
                 dc_files[dc_tag] = n
+        singles = {t: n for t, n in single_files.get(str(run["run_tag"]), {}).items() if n > 0}
+        for dc_tag, n in singles.items():
+            dc_files.setdefault(dc_tag, n)
         if not scans:
             status = "no_scan"
         elif _sum(latest, "other_failure_files") > 0:
@@ -117,9 +137,11 @@ def build_project_runs(project: dict[str, Any], run_docs: Iterable[dict[str, Any
                 status=status,
                 # The latest scan's count: ``files_id`` is not kept up to date
                 # when a run is scanned again.
-                files=_sum(latest, "total_files") if scans else len(run.get("files_id") or []),
+                files=(_sum(latest, "total_files") if scans else len(run.get("files_id") or []))
+                + sum(n for t, n in singles.items() if t not in latest),
                 dc_files=dict(sorted(dc_files.items())),
                 scans=[_scan(s) for s in scans],
+                dc_outputs=dict(sorted(outputs.get(str(run["run_tag"]), {}).items())),
             )
         )
     runs.sort(key=lambda r: r.run_tag)
@@ -130,7 +152,105 @@ def project_runs(project: dict[str, Any]) -> ProjectRuns:
     ids = [ObjectId(wf["_id"]) for wf in project.get("workflows") or [] if wf.get("_id")]
     if not ids:
         return ProjectRuns(runs=[])
-    return build_project_runs(project, runs_collection.find({"workflow_id": {"$in": ids}}))
+    run_docs = list(runs_collection.find({"workflow_id": {"$in": ids}}))
+    return build_project_runs(
+        project, run_docs, _single_files_by_run(project, run_docs), _outputs_by_run(project)
+    )
+
+
+def _data_collections(project: dict[str, Any]) -> Iterable[dict[str, Any]]:
+    for wf in project.get("workflows") or []:
+        yield from wf.get("data_collections") or []
+
+
+def _dc_key(dc: dict[str, Any]) -> str:
+    return str(dc.get("_id") or dc.get("id"))
+
+
+def outputs_by_run(project: dict[str, Any], aggregations_by_dc: dict[str, list[dict]]) -> dict:
+    """``{run_tag: {dc_tag: run_scope}}``: the recipe collections each run fed.
+
+    A run fed a collection when one of its commits wrote rows of it
+    (``run_tags``) or read it (``computed_from_runs``, a recomputation over
+    every run). The scope is the newest commit's.
+    """
+    recipes = _recipe_tags_by_id(project)
+    out: dict[str, dict[str, str]] = {}
+    for dc_id, aggregations in aggregations_by_dc.items():
+        tag = recipes.get(dc_id)
+        if not tag or not aggregations:
+            continue
+        scope = next(
+            (a.get("run_scope") for a in reversed(aggregations) if a.get("run_scope")), None
+        )
+        for agg in aggregations:
+            for run_tag in {*(agg.get("run_tags") or []), *(agg.get("computed_from_runs") or [])}:
+                out.setdefault(str(run_tag), {})[tag] = scope or "run"
+    return out
+
+
+def _recipe_tags_by_id(project: dict[str, Any]) -> dict[str, str | None]:
+    """``{dc_id: tag}`` of the project's recipe (transformed) collections."""
+    return {
+        _dc_key(dc): dc.get("data_collection_tag")
+        for dc in _data_collections(project)
+        if (dc.get("config") or {}).get("source") == "transformed"
+    }
+
+
+def _outputs_by_run(project: dict[str, Any]) -> dict[str, dict[str, str]]:
+    from depictio.api.v1.db import deltatables_collection
+
+    dc_ids = [i for i in _recipe_tags_by_id(project) if ObjectId.is_valid(i)]
+    if not dc_ids:
+        return {}
+    docs = deltatables_collection.find(
+        {"data_collection_id": {"$in": [ObjectId(i) for i in dc_ids]}},
+        {
+            "data_collection_id": 1,
+            "aggregation.run_tags": 1,
+            "aggregation.computed_from_runs": 1,
+            "aggregation.run_scope": 1,
+        },
+    )
+    return outputs_by_run(
+        project, {str(d["data_collection_id"]): d.get("aggregation") or [] for d in docs}
+    )
+
+
+def _single_files_by_run(
+    project: dict[str, Any], run_docs: list[dict[str, Any]]
+) -> dict[str, dict[str, int]]:
+    """How many files each ``single`` collection registered under each run."""
+    from depictio.api.v1.db import files_collection
+
+    singles = {
+        _dc_key(dc): dc.get("data_collection_tag")
+        for dc in _data_collections(project)
+        if str(((dc.get("config") or {}).get("scan") or {}).get("mode") or "").lower() == "single"
+    }
+    if not singles or not run_docs:
+        return {}
+    tag_by_run_id = {str(r["_id"]): str(r.get("run_tag")) for r in run_docs if r.get("_id")}
+    out: dict[str, dict[str, int]] = {}
+    for row in files_collection.aggregate(
+        [
+            {
+                "$match": {
+                    "data_collection_id": {
+                        "$in": [ObjectId(i) for i in singles if ObjectId.is_valid(i)]
+                        + list(singles)
+                    }
+                }
+            },
+            {"$group": {"_id": {"run": "$run_id", "dc": "$data_collection_id"}, "n": {"$sum": 1}}},
+        ]
+    ):
+        run_tag = tag_by_run_id.get(str(row["_id"].get("run")))
+        dc_tag = singles.get(str(row["_id"].get("dc")))
+        if run_tag and dc_tag:
+            out.setdefault(run_tag, {})[dc_tag] = int(row["n"])
+    return out
 
 
 # ── the files of one run ─────────────────────────────────────────────────────
