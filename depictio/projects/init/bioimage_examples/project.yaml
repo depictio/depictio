@@ -634,6 +634,104 @@ workflows:
               em_z_px: "Position in the EM, z (plane, 5 nm)"
               residual_um: "Distance between the landmark's EM position and its LM position mapped by the affine (um)"
 
+      # ----------------------------------------------------------------
+      # Whole slide: a mouse H&E slide read in place from JAX, 16 GB at
+      # level 0, and a table of 500 um tissue patches computed from it
+      # (dev/bioimage/make_wsi_patches.py). Nothing of the slide is copied.
+      # ----------------------------------------------------------------
+      - id: "646b0f3c1e4a2d7f8e5b8f2d"
+        data_collection_tag: "wsi_slide"
+        description: "Mouse head sections, H&E whole slide from the JAX KOMP histopathology collection (CC BY 4.0), read in place: OME-Zarr 0.5, 55296 x 96000 RGB at 0.45 um, 7 levels"
+        config:
+          type: "bioimage"
+          dc_specific_properties:
+            format: "ome-zarr"
+            ngff_version: "0.5"
+            upload: false
+            remote_stores:
+              - "https://storage.googleapis.com/jax-public-ngff/public/42815.zarr"
+
+      - id: "646b0f3c1e4a2d7f8e5b8f2e"
+        data_collection_tag: "wsi_patches"
+        description: "One row per 500 um square of tissue on the whole slide: where it is, its section, and its stain densities from colour deconvolution"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/bioimage_examples/data/wsi/wsi_patches.csv"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              separator: ","
+            columns_description:
+              patch: "Patch id: its row and column in the 500 um grid"
+              section: "Tissue section the patch belongs to (connected tissue, numbered left slide first)"
+              x_px: "Patch centre, x (slide level-0 pixels, 0.45 um)"
+              y_px: "Patch centre, y (slide level-0 pixels)"
+              box_w_px: "Patch width (level-0 pixels)"
+              box_h_px: "Patch height (level-0 pixels)"
+              x_um: "Patch centre, x (um)"
+              y_um: "Patch centre, y (um)"
+              tissue_fraction: "Share of the patch covered by tissue"
+              hematoxylin_od: "Mean hematoxylin optical density over the tissue (nuclei)"
+              eosin_od: "Mean eosin optical density over the tissue (cytoplasm, matrix)"
+              h_dominant_fraction: "Share of tissue pixels where hematoxylin outweighs eosin: how densely nucleated"
+
+      # ----------------------------------------------------------------
+      # Two magnifications: an EM overview of HeLa cells on a grid, read in
+      # place from EMBL's S3 (MoBIE clem-example-project), and electron
+      # tomograms of cells acquired inside it. The tomograms are generated
+      # by dev/bioimage/make_hela_tomograms.py and not shipped (the source
+      # states no licence): without them the overview still opens.
+      # ----------------------------------------------------------------
+      - id: "646b0f3c1e4a2d7f8e5b8f30"
+        data_collection_tag: "hela_images"
+        description: "HeLa cells on an EM grid: the whole-section overview (34 nm, read in place) and electron tomograms of single cells inside it (6.2 nm after binning)"
+        config:
+          type: "bioimage"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "tomo_\\d+\\.zarr"
+          dc_specific_properties:
+            format: "ome-zarr"
+            ngff_version: "0.4"
+            upload: true
+            remote_stores:
+              - "https://s3.embl.de/yeast-clem/hela/images/ome-zarr/em-overview.ome.zarr"
+
+      - id: "646b0f3c1e4a2d7f8e5b8f31"
+        data_collection_tag: "hela_tomograms"
+        description: "One row per electron tomogram: where its footprint sits on the EM overview, and whether it was converted for the detail view"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/bioimage_examples/data/hela_tomo/tomograms.csv"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              separator: ","
+            columns_description:
+              tomogram: "Tomogram name, as in the MoBIE project (and its store, without .zarr)"
+              x_px: "Footprint centre on the overview, x (overview level-0 pixels, 34 nm)"
+              y_px: "Footprint centre on the overview, y (overview level-0 pixels)"
+              box_w_px: "Width of the footprint's bounding box on the overview (pixels)"
+              box_h_px: "Height of the footprint's bounding box on the overview (pixels)"
+              pixel_nm: "Pixel size of the converted tomogram (nm, after 4x binning)"
+              source_pixel_nm: "Pixel size of the acquired tomogram (nm)"
+              slices: "Slices kept in the converted tomogram"
+              rotation_deg: "In-plane rotation of the tomogram on the overview (degrees)"
+              footprint_um: "Side of the tomogram's field of view (um)"
+              mean_intensity: "Mean grey level of the binned tomogram, before the stretch"
+              contrast_std: "Standard deviation of the grey level of the binned tomogram"
+              converted: "Whether the tomogram was converted, so the detail view can open it"
+
 # A sample picked in the sample sheet narrows the cells table, so the cards and
 # table of the multi-sample tab follow the store the viewer is showing.
 links:

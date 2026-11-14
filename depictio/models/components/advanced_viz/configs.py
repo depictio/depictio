@@ -1587,6 +1587,22 @@ class BioimageViewerConfig(_BaseVizConfig):
     points_offset_x: float = Field(default=0.0, description="x offset in level-0 pixels")
     points_offset_y: float = Field(default=0.0, description="y offset in level-0 pixels")
     point_radius: float = Field(default=6.0, gt=0, description="Marker radius in screen pixels")
+    # A point with a size draws as a box (a tissue patch, a field acquired at
+    # higher magnification): both columns or neither, in table units.
+    box_w_col: str | None = Field(
+        default=None,
+        description="Box width column (table units, like x_col): the point draws as a box",
+    )
+    box_h_col: str | None = Field(
+        default=None, description="Box height column (table units, like y_col)"
+    )
+    frame_on_filter: bool = Field(
+        default=False,
+        description=(
+            "Zoom to the points the dashboard filters keep (another tile's selection "
+            "included): the detail view of an overview tile"
+        ),
+    )
     points_sample_col: str | None = Field(
         default=None,
         description="Points column holding the sample name, to keep only the shown store's points",
@@ -1702,6 +1718,8 @@ class BioimageViewerConfig(_BaseVizConfig):
             self.z_col,
             self.t_col,
             self.selection_column,
+            self.box_w_col,
+            self.box_h_col,
         )
         if any(points_cols) and not points_dc:
             raise ValueError(
@@ -1710,6 +1728,12 @@ class BioimageViewerConfig(_BaseVizConfig):
             )
         if points_dc and not (self.x_col and self.y_col):
             raise ValueError("a points DC needs both x_col and y_col")
+        if bool(self.box_w_col) != bool(self.box_h_col):
+            raise ValueError("a box needs both box_w_col and box_h_col")
+        if self.frame_on_filter and not points_dc:
+            raise ValueError(
+                "frame_on_filter zooms to the points the filters keep: bind a points DC"
+            )
         steps_cols = (
             self.steps_store_col,
             self.steps_label_col,

@@ -65,7 +65,15 @@ import {
   type Rgb,
 } from './bioimage/channels';
 import { clearImageInfo, publishImageInfo } from './bioimage/imageInfoRegistry';
-import { onPlane, pointsInPolygon, scaleBarLength, type Polygon } from './bioimage/geometry';
+import {
+  footprintBounds,
+  onPlane,
+  padBounds,
+  pointsInPolygon,
+  scaleBarLength,
+  type Bounds,
+  type Polygon,
+} from './bioimage/geometry';
 import {
   buildLabelLut,
   cellColouring,
@@ -136,6 +144,9 @@ interface BioimageViewerConfig {
   overlay_store?: string | null;
   points_z_tolerance?: number;
   overlay_opacity?: number;
+  box_w_col?: string | null;
+  box_h_col?: string | null;
+  frame_on_filter?: boolean;
 }
 
 interface Props {
@@ -146,6 +157,10 @@ interface Props {
    *  in read-only hosts, which hides the ROI tools. */
   onFilterChange?: (filter: InteractiveFilter) => void;
 }
+
+/** Smallest extent frame_on_filter zooms to, in level-0 pixels: a lone dot
+ *  would otherwise ask for an infinite zoom. */
+const MIN_FRAME_PX = 256;
 
 /** Categories listed in the overlay legend before it stops. */
 const LEGEND_MAX = 10;
@@ -388,6 +403,8 @@ const BioimageViewerRenderer: React.FC<Props> = ({
   const wellCol = config.points_well_col ?? null;
   const zCol = config.z_col ?? null;
   const tCol = config.t_col ?? null;
+  const boxWCol = config.box_w_col ?? null;
+  const boxHCol = config.box_h_col ?? null;
   const pointsEnabled = Boolean(pointsWfId && pointsDcId && xCol && yCol);
 
   // The viewer's own ROI selection is stripped before anything reads the
@@ -681,6 +698,7 @@ const BioimageViewerRenderer: React.FC<Props> = ({
   const [zoom, setZoom] = useState(0);
   const roiRef = useRef<(polygon: Polygon) => void>(() => {});
   const labelClickRef = useRef<(label: number) => void>(() => {});
+  const pointClickRef = useRef<(id: string) => void>(() => {});
   const [labelsDrawn, setLabelsDrawn] = useState(false);
   const [labelsError, setLabelsError] = useState<string | null>(null);
 
@@ -697,6 +715,7 @@ const BioimageViewerRenderer: React.FC<Props> = ({
           },
           onLabelsLoad: () => setLabelsDrawn(true),
           onLabelClick: (label) => labelClickRef.current(label),
+          onPointClick: (id) => pointClickRef.current(id),
           onZoomChange: (z) => setZoom(Math.round(z * 100) / 100),
           onRoi: (polygon) => roiRef.current(polygon),
           onError: (err) => console.warn('[bioimage_viewer]', err),
@@ -834,12 +853,22 @@ const BioimageViewerRenderer: React.FC<Props> = ({
     () =>
       Array.from(
         new Set(
-          [cellIdCol, keyCol, xCol, yCol, zCol, tCol, colorCol, sampleCol, wellCol].filter(
-            (c): c is string => !!c,
-          ),
+          [
+            cellIdCol,
+            keyCol,
+            xCol,
+            yCol,
+            zCol,
+            tCol,
+            colorCol,
+            sampleCol,
+            wellCol,
+            boxWCol,
+            boxHCol,
+          ].filter((c): c is string => !!c),
         ),
       ),
-    [cellIdCol, keyCol, xCol, yCol, zCol, tCol, colorCol, sampleCol, wellCol],
+    [cellIdCol, keyCol, xCol, yCol, zCol, tCol, colorCol, sampleCol, wellCol, boxWCol, boxHCol],
   );
   const pointColsKey = pointCols.join('|');
   const [pointRows, setPointRows] = useState<Record<string, unknown[]> | null>(null);
@@ -936,6 +965,8 @@ const BioimageViewerRenderer: React.FC<Props> = ({
     const keys = keyCol && keyCol !== cellIdCol ? (pointRows[keyCol] ?? []) : null;
     const cats = colorCol ? (pointRows[colorCol] ?? []) : null;
     const samples = sampleCol ? (pointRows[sampleCol] ?? []) : null;
+    const boxW = boxWCol && boxHCol ? (pointRows[boxWCol] ?? []) : null;
+    const boxH = boxWCol && boxHCol ? (pointRows[boxHCol] ?? []) : null;
     // On a plate, a cell belongs to the shown image when its well is the one open.
     const rowWells = wellCol && activeWell ? (pointRows[wellCol] ?? []) : null;
     // In a stack, a cell sits on its plane: only the shown z and t draw.
@@ -963,11 +994,15 @@ const BioimageViewerRenderer: React.FC<Props> = ({
       let color = base;
       if (continuous) color = rampColor(continuous, cats?.[i]) ?? base;
       else if (cat != null && colorScale) color = hexToRgb(colorScale.get(cat)) ?? base;
+      // A row with a size draws as its box; one without stays a dot.
+      const w = boxW ? Number(boxW[i]) * scale : NaN;
+      const h = boxH ? Number(boxH[i]) * scale : NaN;
       out.push({
         id,
         ...(keys ? { label: cellId } : {}),
         x,
         y,
+        ...(w > 0 && h > 0 ? { w, h } : {}),
         color,
         faded: keptIds ? !keptIds.has(id) : false,
       });
@@ -985,6 +1020,8 @@ const BioimageViewerRenderer: React.FC<Props> = ({
     wellCol,
     zCol,
     tCol,
+    boxWCol,
+    boxHCol,
     allPlanes,
     plane.z,
     plane.t,
@@ -1163,6 +1200,24 @@ const BioimageViewerRenderer: React.FC<Props> = ({
     if (viewer && info) viewer.setPoints(labelsShown ? [] : overlay, pointRadius);
   }, [viewer, info, overlay, pointRadius, labelsShown]);
 
+  // frame_on_filter: when the dashboard filters keep only some of the points,
+  // the camera shows what they cover; the whole image again once nothing
+  // filters. Another tile's selection is a filter, so an overview tile drives
+  // this one.
+  const framing = useMemo<Bounds | null>(() => {
+    if (!config.frame_on_filter || !keptIds) return null;
+    const kept = overlay.filter((p) => !p.faded);
+    if (kept.length === 0 || kept.length === overlay.length) return null;
+    return padBounds(footprintBounds(kept), MIN_FRAME_PX);
+  }, [config.frame_on_filter, keptIds, overlay]);
+  const framingKey = framing
+    ? `${framing.minX}|${framing.minY}|${framing.maxX}|${framing.maxY}`
+    : '';
+  useEffect(() => {
+    if (viewer && config.frame_on_filter) viewer.frame(framing);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewer, framingKey, config.frame_on_filter]);
+
   const ownSelectionKey = ownSelection.join('\u0000');
   useEffect(() => {
     if (viewer) viewer.setHighlighted(new Set(ownSelection));
@@ -1224,6 +1279,12 @@ const BioimageViewerRenderer: React.FC<Props> = ({
     if (!roiEnabled || !labelsShown || label === 0) return;
     const id = labelLut.ids.get(label);
     if (id === undefined || labelLut.styles.get(label)?.faded) return;
+    const only = ownSelection.length === 1 && ownSelection[0] === id;
+    emitSelection(only ? [] : [id]);
+  };
+  // A click on a point or box selects it, the same toggle as a cell click.
+  pointClickRef.current = (id: string) => {
+    if (!roiEnabled) return;
     const only = ownSelection.length === 1 && ownSelection[0] === id;
     emitSelection(only ? [] : [id]);
   };
@@ -1574,6 +1635,13 @@ const BioimageViewerRenderer: React.FC<Props> = ({
   }
   if (labelsDcId && labelStores && !labelsWanted && activeStore) {
     notices.push({ key: 'no-mask', tone: 'info', text: `No labels for sample "${activeStore.sample}"` });
+  }
+  if (config.frame_on_filter && pointsEnabled && !framing) {
+    notices.push({
+      key: 'frame',
+      tone: 'info',
+      text: 'Select some of the points on another tile to zoom in here.',
+    });
   }
   if (keptIdsFailed) {
     notices.push({

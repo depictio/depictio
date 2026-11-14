@@ -43,7 +43,16 @@ import {
   type ConfigChannel,
   type Rgb,
 } from './channels';
-import { fitViewState, rectToPolygon, type Polygon, type Vec2 } from './geometry';
+import {
+  fitBoundsViewState,
+  boxDisplay,
+  fitViewState,
+  pointAt,
+  rectToPolygon,
+  type Bounds,
+  type Polygon,
+  type Vec2,
+} from './geometry';
 import { overlayMatrix, overlayPlane } from './overlay';
 import {
   colorizeLabels,
@@ -82,9 +91,12 @@ export interface OverlayPoint {
   id: string;
   /** The cell id, the mask value, when it differs from `id`. */
   label?: string;
-  /** Level-0 image pixel coordinates. */
+  /** Level-0 image pixel coordinates (a box's centre). */
   x: number;
   y: number;
+  /** Width and height in level-0 pixels: the point draws as that box. */
+  w?: number;
+  h?: number;
   color: Rgb;
   /** Excluded by the dashboard filters: drawn faint, still there for context. */
   faded: boolean;
@@ -97,6 +109,8 @@ export interface BioimageViewerOptions {
   onLabelsLoad?: () => void;
   /** A click (not a drag) in pan mode on the labels: the label under it, 0 for background. */
   onLabelClick?: (label: number) => void;
+  /** A click (not a drag) in pan mode on a point or box the filters keep. */
+  onPointClick?: (id: string) => void;
   onZoomChange?: (zoom: number) => void;
   /** A finished lasso or rectangle, in image coordinates. */
   onRoi?: (polygon: Polygon) => void;
@@ -202,6 +216,9 @@ export interface BioimageViewer {
   setOverlay(store: BioimageZarrStore | null): Promise<OverlayInfo | null>;
   setOverlayStyle(style: OverlayStyle): void;
   setHighlighted(ids: ReadonlySet<string>): void;
+  /** Show these bounds (level-0 pixels) instead of the whole image, or the
+   *  whole image again with null. Applies to later loads too. */
+  frame(bounds: Bounds | null): void;
   setSelectionMode(mode: SelectionMode): void;
   /** Theme sync. `accent` rings highlighted points and draws the ROI. */
   setDark(dark: boolean, accent?: Rgb): void;
@@ -343,11 +360,39 @@ export async function createBioimageViewer(
 
   const hostSize = () => ({ w: host.clientWidth, h: host.clientHeight });
 
+  // Points with a size are boxes, except those too small to see at this zoom,
+  // which draw (and are picked) as dots at their centre.
+  let drawnBoxKey = '';
+  const splitPoints = (): { dots: OverlayPoint[]; boxes: OverlayPoint[] } => {
+    const scale = 2 ** viewState.zoom;
+    const dots: OverlayPoint[] = [];
+    const boxes: OverlayPoint[] = [];
+    for (const p of points) {
+      if (p.w == null || p.h == null) dots.push(p);
+      else if (boxDisplay(p, scale) === 'dot') dots.push({ ...p, w: undefined, h: undefined });
+      else boxes.push(p);
+    }
+    return { dots, boxes };
+  };
+  // What decides the boxes' look: how many show as dots, filled or outlined.
+  const boxDisplayKey = (): string => {
+    const scale = 2 ** viewState.zoom;
+    const counts = { dot: 0, filled: 0, outline: 0 };
+    for (const p of points) {
+      if (p.w != null && p.h != null) counts[boxDisplay(p, scale)] += 1;
+    }
+    return `${counts.dot}|${counts.filled}|${counts.outline}`;
+  };
+
+  // What the camera fits to: the whole image, or the bounds `frame` asked for.
+  let framed: Bounds | null = null;
+
   const fit = () => {
     if (!info) return;
     const { w, h } = hostSize();
-    const v = fitViewState(info.width, info.height, w, h);
-    viewState = { ...v, minZoom: v.zoom - 3, maxZoom: 8 };
+    const whole = fitViewState(info.width, info.height, w, h);
+    const v = framed ? fitBoundsViewState(framed, w, h, 0.05) : whole;
+    viewState = { ...v, minZoom: whole.zoom - 3, maxZoom: Math.max(8, v.zoom) };
     userMoved = false;
     deck.setProps({ viewState });
     opts.onZoomChange?.(viewState.zoom);
@@ -384,6 +429,8 @@ export async function createBioimageViewer(
       viewState = next as unknown as ViewState;
       userMoved = true;
       deck.setProps({ viewState });
+      // Boxes change look with the zoom (dot, filled, outlined).
+      if (boxDisplayKey() !== drawnBoxKey) render();
       opts.onZoomChange?.(viewState.zoom);
       return viewState as never;
     },
@@ -609,11 +656,46 @@ export async function createBioimageViewer(
     if (overlayed) layers.push(overlayed);
     const labelsOverlay = labelsLayer();
     if (labelsOverlay) layers.push(labelsOverlay);
-    if (points.length) {
+    const { dots, boxes } = splitPoints();
+    drawnBoxKey = boxDisplayKey();
+    if (boxes.length) {
+      layers.push(
+        new PolygonLayer<OverlayPoint>({
+          id: 'bioimage-boxes',
+          data: boxes,
+          getPolygon: (p) => {
+            const hw = (p.w ?? 0) / 2;
+            const hh = (p.h ?? 0) / 2;
+            return [
+              [p.x - hw, p.y - hh],
+              [p.x + hw, p.y - hh],
+              [p.x + hw, p.y + hh],
+              [p.x - hw, p.y + hh],
+            ];
+          },
+          filled: true,
+          stroked: true,
+          getFillColor: (p) =>
+            boxDisplay(p, 2 ** viewState.zoom) === 'filled'
+              ? [...p.color, p.faded ? 10 : 60]
+              : [0, 0, 0, 0],
+          getLineColor: (p) =>
+            highlighted.has(p.id) ? [...accent, 255] : [...p.color, p.faded ? 50 : 230],
+          getLineWidth: (p) => (highlighted.has(p.id) ? 3 : 1.25),
+          lineWidthUnits: 'pixels',
+          updateTriggers: {
+            getFillColor: drawnBoxKey,
+            getLineColor: [highlightVersion, accent],
+            getLineWidth: highlightVersion,
+          },
+        }),
+      );
+    }
+    if (dots.length) {
       layers.push(
         new ScatterplotLayer<OverlayPoint>({
           id: 'bioimage-points',
-          data: points as OverlayPoint[],
+          data: dots,
           getPosition: (p) => [p.x, p.y],
           getFillColor: (p) => [...p.color, p.faded ? 45 : 220],
           getLineColor: [...accent, 255],
@@ -701,12 +783,24 @@ export async function createBioimageViewer(
   const onClickUp = (e: PointerEvent) => {
     const start = press;
     press = null;
-    if (!start || mode !== 'pan' || !labels || !opts.onLabelClick) return;
+    if (!start || mode !== 'pan') return;
     const dx = e.clientX - start[0];
     const dy = e.clientY - start[1];
     if (dx * dx + dy * dy > CLICK_MAX_MOVE_PX * CLICK_MAX_MOVE_PX) return;
     const at = toImage(e);
     if (!at) return;
+    if (opts.onPointClick && points.length) {
+      // A dot is hit within its drawn radius, in world units at this zoom.
+      const slack = pointRadius * 2 ** -viewState.zoom;
+      const { dots, boxes } = splitPoints();
+      const kept = [...dots, ...boxes].filter((p) => !p.faded);
+      const hit = pointAt(kept, at.world[0], at.world[1], slack);
+      if (hit) {
+        opts.onPointClick(hit.id);
+        return;
+      }
+    }
+    if (!labels || !opts.onLabelClick) return;
     const label = labelAt(
       labelTiles,
       at.world[0],
@@ -994,6 +1088,11 @@ export async function createBioimageViewer(
     },
 
     resetView() {
+      fit();
+    },
+
+    frame(bounds) {
+      framed = bounds;
       fit();
     },
 

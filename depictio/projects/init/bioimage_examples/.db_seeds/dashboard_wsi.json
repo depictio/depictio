@@ -1,0 +1,945 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8f2f"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8f2f"
+  },
+  "version": 1,
+  "stored_metadata": [
+    {
+      "index": "omz-wsi-text",
+      "component_type": "text",
+      "title": "Overview and detail on one slide",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_align": "left",
+      "section": "Slide",
+      "order": 6,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "Ten sections of a mouse head (brain, eye, nasal cavity), stained with hematoxylin and eosin and scanned at 0.45 um: 55296 x 96000 pixels, about 16 GB at full resolution. The slide is read in place from JAX's public OME-Zarr copy; each tile only fetches the pieces of the pyramid it shows. The overview on the left draws the tissue cut into 500 um patches, coloured by how densely nucleated each one is. Draw a rectangle or a lasso over some patches (or click one) and the detail view on the right zooms to them at full resolution, where single nuclei are visible; the plots and the table follow the same patches. The section filter does the same for a whole section. Slide from the JAX KOMP histopathology collection (CC BY 4.0); the patch table is computed from the slide by colour deconvolution (dev/bioimage/make_wsi_patches.py).\n",
+      "surface": "none",
+      "accent": null,
+      "logo": null,
+      "logo_dark": null,
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-wsi-overview",
+      "component_type": "advanced_viz",
+      "title": "Overview",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "wsi_slide",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f2d"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Mouse head sections, H&E whole slide from the JAX KOMP histopathology collection (CC BY 4.0), read in place: OME-Zarr 0.5, 55296 x 96000 RGB at 0.45 um, 7 levels",
+        "data_collection_tag": "wsi_slide",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f2d"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "The whole slide, with the 500 um tissue patches coloured by the share of nucleus-stained tissue. Select patches to read them on the right.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Slide",
+      "viz_kind": "bioimage_viewer",
+      "config": {
+        "controls_placement": "popover",
+        "viz_kind": "bioimage_viewer",
+        "image_wf_id": "646b0f3c1e4a2d7f8e5b8f01",
+        "image_dc_id": "646b0f3c1e4a2d7f8e5b8f2d",
+        "image_dc_tag": "wsi_slide",
+        "store": "42815.zarr",
+        "sample_wf_id": null,
+        "sample_dc_id": null,
+        "sample_dc_tag": null,
+        "sample_column": null,
+        "well_column": null,
+        "channels": [
+          {
+            "index": 0,
+            "name": "Red",
+            "visible": true,
+            "color": "#FF0000",
+            "contrast_limits": [
+              0.0,
+              255.0
+            ]
+          },
+          {
+            "index": 1,
+            "name": "Green",
+            "visible": true,
+            "color": "#00FF00",
+            "contrast_limits": [
+              0.0,
+              255.0
+            ]
+          },
+          {
+            "index": 2,
+            "name": "Blue",
+            "visible": true,
+            "color": "#0000FF",
+            "contrast_limits": [
+              0.0,
+              255.0
+            ]
+          }
+        ],
+        "show_scalebar": true,
+        "points_wf_id": "646b0f3c1e4a2d7f8e5b8f01",
+        "points_dc_id": "646b0f3c1e4a2d7f8e5b8f2e",
+        "points_dc_tag": "wsi_patches",
+        "cell_id_col": "patch",
+        "x_col": "x_px",
+        "y_col": "y_px",
+        "z_col": null,
+        "t_col": null,
+        "points_z_tolerance": 0.0,
+        "points_all_planes": false,
+        "color_col": "h_dominant_fraction",
+        "points_scale": 1.0,
+        "points_offset_x": 0.0,
+        "points_offset_y": 0.0,
+        "point_radius": 6.0,
+        "box_w_col": "box_w_px",
+        "box_h_col": "box_h_px",
+        "frame_on_filter": false,
+        "points_sample_col": null,
+        "points_well_col": null,
+        "labels_wf_id": null,
+        "labels_dc_id": null,
+        "labels_dc_tag": null,
+        "labels_opacity": 0.5,
+        "labels_outline": true,
+        "steps_wf_id": null,
+        "steps_dc_id": null,
+        "steps_dc_tag": null,
+        "steps_store_col": null,
+        "steps_label_col": null,
+        "steps_order_col": null,
+        "steps_sample_col": null,
+        "steps_reference_col": null,
+        "steps_metric_cols": [],
+        "overlay_store": null,
+        "overlay_opacity": 0.6,
+        "selection_enabled": true,
+        "selection_column": null
+      },
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-wsi-detail",
+      "component_type": "advanced_viz",
+      "title": "Detail",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "wsi_slide",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f2d"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Mouse head sections, H&E whole slide from the JAX KOMP histopathology collection (CC BY 4.0), read in place: OME-Zarr 0.5, 55296 x 96000 RGB at 0.45 um, 7 levels",
+        "data_collection_tag": "wsi_slide",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f2d"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "The same slide, zoomed to the patches the overview selection and the filters keep, streamed at full resolution.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Slide",
+      "viz_kind": "bioimage_viewer",
+      "config": {
+        "controls_placement": "popover",
+        "viz_kind": "bioimage_viewer",
+        "image_wf_id": "646b0f3c1e4a2d7f8e5b8f01",
+        "image_dc_id": "646b0f3c1e4a2d7f8e5b8f2d",
+        "image_dc_tag": "wsi_slide",
+        "store": "42815.zarr",
+        "sample_wf_id": null,
+        "sample_dc_id": null,
+        "sample_dc_tag": null,
+        "sample_column": null,
+        "well_column": null,
+        "channels": [
+          {
+            "index": 0,
+            "name": "Red",
+            "visible": true,
+            "color": "#FF0000",
+            "contrast_limits": [
+              0.0,
+              255.0
+            ]
+          },
+          {
+            "index": 1,
+            "name": "Green",
+            "visible": true,
+            "color": "#00FF00",
+            "contrast_limits": [
+              0.0,
+              255.0
+            ]
+          },
+          {
+            "index": 2,
+            "name": "Blue",
+            "visible": true,
+            "color": "#0000FF",
+            "contrast_limits": [
+              0.0,
+              255.0
+            ]
+          }
+        ],
+        "show_scalebar": true,
+        "points_wf_id": "646b0f3c1e4a2d7f8e5b8f01",
+        "points_dc_id": "646b0f3c1e4a2d7f8e5b8f2e",
+        "points_dc_tag": "wsi_patches",
+        "cell_id_col": "patch",
+        "x_col": "x_px",
+        "y_col": "y_px",
+        "z_col": null,
+        "t_col": null,
+        "points_z_tolerance": 0.0,
+        "points_all_planes": false,
+        "color_col": "h_dominant_fraction",
+        "points_scale": 1.0,
+        "points_offset_x": 0.0,
+        "points_offset_y": 0.0,
+        "point_radius": 6.0,
+        "box_w_col": "box_w_px",
+        "box_h_col": "box_h_px",
+        "frame_on_filter": true,
+        "points_sample_col": null,
+        "points_well_col": null,
+        "labels_wf_id": null,
+        "labels_dc_id": null,
+        "labels_dc_tag": null,
+        "labels_opacity": 0.5,
+        "labels_outline": true,
+        "steps_wf_id": null,
+        "steps_dc_id": null,
+        "steps_dc_tag": null,
+        "steps_store_col": null,
+        "steps_label_col": null,
+        "steps_order_col": null,
+        "steps_sample_col": null,
+        "steps_reference_col": null,
+        "steps_metric_cols": [],
+        "overlay_store": null,
+        "overlay_opacity": 0.6,
+        "selection_enabled": false,
+        "selection_column": null
+      },
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-wsi-card-count",
+      "component_type": "card",
+      "title": "Patches",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "wsi_patches",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f2e"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "One row per 500 um square of tissue on the whole slide: where it is, its section, and its stain densities from colour deconvolution",
+        "data_collection_tag": "wsi_patches",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f2e"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Patches",
+      "aggregation": "count",
+      "column_name": "patch",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "vertical",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "follow_region_filter": false,
+      "icon_name": "mdi:grid",
+      "title_font_size": "md",
+      "value_font_size": "xl",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-wsi-card-nuclear",
+      "component_type": "card",
+      "title": "Nucleus-stained share",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "wsi_patches",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f2e"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "One row per 500 um square of tissue on the whole slide: where it is, its section, and its stain densities from colour deconvolution",
+        "data_collection_tag": "wsi_patches",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f2e"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Patches",
+      "aggregation": "average",
+      "column_name": "h_dominant_fraction",
+      "column_type": "float64",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "vertical",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "follow_region_filter": false,
+      "icon_name": "mdi:circle-multiple-outline",
+      "title_font_size": "md",
+      "value_font_size": "xl",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-wsi-card-hematoxylin",
+      "component_type": "card",
+      "title": "Hematoxylin density",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "wsi_patches",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f2e"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "One row per 500 um square of tissue on the whole slide: where it is, its section, and its stain densities from colour deconvolution",
+        "data_collection_tag": "wsi_patches",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f2e"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Patches",
+      "aggregation": "average",
+      "column_name": "hematoxylin_od",
+      "column_type": "float64",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "vertical",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "follow_region_filter": false,
+      "icon_name": "mdi:water-outline",
+      "title_font_size": "md",
+      "value_font_size": "xl",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-wsi-card-eosin",
+      "component_type": "card",
+      "title": "Eosin density",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "wsi_patches",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f2e"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "One row per 500 um square of tissue on the whole slide: where it is, its section, and its stain densities from colour deconvolution",
+        "data_collection_tag": "wsi_patches",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f2e"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Patches",
+      "aggregation": "average",
+      "column_name": "eosin_od",
+      "column_type": "float64",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "vertical",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "follow_region_filter": false,
+      "icon_name": "mdi:water",
+      "title_font_size": "md",
+      "value_font_size": "xl",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-wsi-fig-stains",
+      "component_type": "figure",
+      "title": "Hematoxylin against eosin, by section",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "wsi_patches",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f2e"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "One row per 500 um square of tissue on the whole slide: where it is, its section, and its stain densities from colour deconvolution",
+        "data_collection_tag": "wsi_patches",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f2e"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Patches",
+      "visu_type": "scatter",
+      "dict_kwargs": {
+        "x": "eosin_od",
+        "y": "hematoxylin_od",
+        "color": "section"
+      },
+      "mode": "ui",
+      "code_content": null,
+      "displayed_data_count": 0,
+      "total_data_count": 0,
+      "was_sampled": false,
+      "filter_applied": false,
+      "max_points": null,
+      "selection_enabled": false,
+      "selection_column": null,
+      "font_scale": null,
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-wsi-fig-nuclear",
+      "component_type": "figure",
+      "title": "Nucleus-stained share per section",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "wsi_patches",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f2e"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "One row per 500 um square of tissue on the whole slide: where it is, its section, and its stain densities from colour deconvolution",
+        "data_collection_tag": "wsi_patches",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f2e"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Patches",
+      "visu_type": "box",
+      "dict_kwargs": {
+        "x": "section",
+        "y": "h_dominant_fraction"
+      },
+      "mode": "ui",
+      "code_content": null,
+      "displayed_data_count": 0,
+      "total_data_count": 0,
+      "was_sampled": false,
+      "filter_applied": false,
+      "max_points": null,
+      "selection_enabled": false,
+      "selection_column": null,
+      "font_scale": null,
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-wsi-patches",
+      "component_type": "table",
+      "title": "Patches",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "wsi_patches",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f2e"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "One row per 500 um square of tissue on the whole slide: where it is, its section, and its stain densities from colour deconvolution",
+        "data_collection_tag": "wsi_patches",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f2e"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "One row per 500 um tissue patch: where it is and its stain densities.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Patches",
+      "columns": [],
+      "page_size": 10,
+      "sortable": true,
+      "filterable": true,
+      "compact": false,
+      "row_selection_enabled": false,
+      "row_selection_column": null,
+      "row_selection_mode": "multiple",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-wsi-f-section",
+      "component_type": "interactive",
+      "title": "Section",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "wsi_patches",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f2e"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "One row per 500 um square of tissue on the whole slide: where it is, its section, and its stain densities from colour deconvolution",
+        "data_collection_tag": "wsi_patches",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f2e"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Patches",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "section",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": null,
+      "timescale": null,
+      "show_marks": null,
+      "show_mark_labels": null,
+      "show_histogram": null,
+      "slider_mode": null,
+      "icon_name": "mdi:shape-outline",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-wsi-f-nuclear",
+      "component_type": "interactive",
+      "title": "Nucleus-stained share",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "wsi_patches",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f2e"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "One row per 500 um square of tissue on the whole slide: where it is, its section, and its stain densities from colour deconvolution",
+        "data_collection_tag": "wsi_patches",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f2e"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Patches",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "h_dominant_fraction",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": null,
+      "timescale": null,
+      "show_marks": null,
+      "show_mark_labels": null,
+      "show_histogram": null,
+      "slider_mode": null,
+      "icon_name": "mdi:circle-multiple-outline",
+      "wf_tag": "python/bioimage_demo"
+    }
+  ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-omz-wsi-f-section",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-omz-wsi-f-nuclear",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-omz-wsi-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 2,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-omz-wsi-overview",
+      "x": 0,
+      "y": 2,
+      "w": 4,
+      "h": 10,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-omz-wsi-detail",
+      "x": 4,
+      "y": 2,
+      "w": 4,
+      "h": 10,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-omz-wsi-card-count",
+      "x": 0,
+      "y": 12,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-omz-wsi-card-nuclear",
+      "x": 2,
+      "y": 12,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-omz-wsi-card-hematoxylin",
+      "x": 4,
+      "y": 12,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-omz-wsi-card-eosin",
+      "x": 6,
+      "y": 12,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-omz-wsi-fig-stains",
+      "x": 0,
+      "y": 14,
+      "w": 4,
+      "h": 4,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-omz-wsi-fig-nuclear",
+      "x": 4,
+      "y": 14,
+      "w": 4,
+      "h": 4,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-omz-wsi-patches",
+      "x": 0,
+      "y": 18,
+      "w": 8,
+      "h": 4,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "Whole slide (H&E)",
+  "subtitle": "A 16 GB slide streamed in place: pick a region on the overview, read it at full resolution",
+  "icon": "mdi:microscope",
+  "icon_color": "pink",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-12 00:00:00",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8f00"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8f00"
+  },
+  "tab_order": 12,
+  "main_tab_name": null,
+  "tab_icon": "mdi:microscope",
+  "tab_icon_color": "pink",
+  "tab_group": null,
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Patches",
+      "icon": "mdi:filter-variant",
+      "color": "pink",
+      "description": "Which tissue patches the overview, the detail view and the plots show",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Slide",
+      "icon": "mdi:microscope",
+      "color": "pink",
+      "description": "The overview at a coarse level, and the picked region at full resolution",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    },
+    {
+      "name": "Patches",
+      "icon": "mdi:chart-scatter-plot",
+      "color": "pink",
+      "description": "Stain densities of the 500 um tissue patches",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null,
+  "category_colors": null,
+  "filter_panel_default": "open",
+  "content_width_default": "full",
+  "show_tab_header": true,
+  "open_with_defaults": false,
+  "show_guide": true,
+  "guide_intro": "",
+  "advanced_viz_controls": "popover",
+  "autofit": true
+}

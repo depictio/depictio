@@ -77,13 +77,50 @@ export function rectToPolygon(a: Vec2, b: Vec2): Polygon {
   ];
 }
 
+/** Axis-aligned bounds in level-0 image pixels. */
+export interface Bounds {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+}
+
+/** A point, or a box when it has a width and height (centred on x, y). */
+export interface Footprint {
+  x: number;
+  y: number;
+  w?: number;
+  h?: number;
+}
+
 /**
- * Orthographic camera that shows the whole image centred in the viewport.
+ * Orthographic camera that shows `bounds` centred in the viewport.
  *
  * deck's orthographic zoom is log2 of screen pixels per world unit, so the
- * image fits when 2^zoom times its larger relative side equals the viewport.
+ * bounds fit when 2^zoom times their larger relative side equals the viewport.
  * `padding` is a fraction of the viewport kept clear on each axis.
  */
+export function fitBoundsViewState(
+  bounds: Bounds,
+  viewWidth: number,
+  viewHeight: number,
+  padding = 0.02,
+): { target: [number, number, number]; zoom: number } {
+  const width = bounds.maxX - bounds.minX;
+  const height = bounds.maxY - bounds.minY;
+  const target: [number, number, number] = [
+    (bounds.minX + bounds.maxX) / 2,
+    (bounds.minY + bounds.maxY) / 2,
+    0,
+  ];
+  if (width <= 0 || height <= 0 || viewWidth <= 0 || viewHeight <= 0) {
+    return { target, zoom: 0 };
+  }
+  const scale = Math.min(viewWidth / width, viewHeight / height) * (1 - 2 * padding);
+  return { target, zoom: Math.log2(scale) };
+}
+
+/** The camera that shows the whole image (see `fitBoundsViewState`). */
 export function fitViewState(
   imageWidth: number,
   imageHeight: number,
@@ -91,12 +128,86 @@ export function fitViewState(
   viewHeight: number,
   padding = 0.02,
 ): { target: [number, number, number]; zoom: number } {
-  const target: [number, number, number] = [imageWidth / 2, imageHeight / 2, 0];
-  if (imageWidth <= 0 || imageHeight <= 0 || viewWidth <= 0 || viewHeight <= 0) {
-    return { target, zoom: 0 };
+  const bounds = { minX: 0, minY: 0, maxX: imageWidth, maxY: imageHeight };
+  return fitBoundsViewState(bounds, viewWidth, viewHeight, padding);
+}
+
+/** What a set of points covers, a box counting its whole extent. Null for none. */
+export function footprintBounds(points: readonly Footprint[]): Bounds | null {
+  if (points.length === 0) return null;
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const p of points) {
+    const hw = (p.w ?? 0) / 2;
+    const hh = (p.h ?? 0) / 2;
+    minX = Math.min(minX, p.x - hw);
+    minY = Math.min(minY, p.y - hh);
+    maxX = Math.max(maxX, p.x + hw);
+    maxY = Math.max(maxY, p.y + hh);
   }
-  const scale = Math.min(viewWidth / imageWidth, viewHeight / imageHeight) * (1 - 2 * padding);
-  return { target, zoom: Math.log2(scale) };
+  return { minX, minY, maxX, maxY };
+}
+
+/** `bounds` grown about their centre to at least `minSize` on each axis. */
+export function padBounds(bounds: Bounds | null, minSize: number): Bounds | null {
+  if (!bounds) return null;
+  const grow = (lo: number, hi: number): [number, number] => {
+    const extra = Math.max(0, minSize - (hi - lo)) / 2;
+    return [lo - extra, hi + extra];
+  };
+  const [minX, maxX] = grow(bounds.minX, bounds.maxX);
+  const [minY, maxY] = grow(bounds.minY, bounds.maxY);
+  return { minX, minY, maxX, maxY };
+}
+
+/** How a box shows at a zoom: a dot when it is too small to see, filled
+ *  while small (a heat map over an overview), outlined once it is big
+ *  enough for the image inside it to matter. */
+export type BoxDisplay = 'dot' | 'filled' | 'outline';
+
+/** Screen sizes (px) below which a box is a dot, and above which it is
+ *  outlined rather than filled. */
+export const BOX_MIN_PX = 4;
+export const BOX_FILL_MAX_PX = 48;
+
+export function boxDisplay(box: Footprint, pixelsPerUnit: number): BoxDisplay {
+  const side = Math.max(box.w ?? 0, box.h ?? 0) * pixelsPerUnit;
+  if (side < BOX_MIN_PX) return 'dot';
+  return side < BOX_FILL_MAX_PX ? 'filled' : 'outline';
+}
+
+/**
+ * The point under (x, y): the smallest box holding it, else the nearest dot
+ * within `slack` (world units, the dot radius at the current zoom). Null when
+ * nothing is there.
+ */
+export function pointAt<T extends Footprint>(
+  points: readonly T[],
+  x: number,
+  y: number,
+  slack: number,
+): T | null {
+  let box: T | null = null;
+  let boxArea = Infinity;
+  let dot: T | null = null;
+  let dotDistance = slack * slack;
+  for (const p of points) {
+    if (p.w != null && p.h != null) {
+      if (Math.abs(x - p.x) <= p.w / 2 && Math.abs(y - p.y) <= p.h / 2 && p.w * p.h < boxArea) {
+        box = p;
+        boxArea = p.w * p.h;
+      }
+      continue;
+    }
+    const d = (x - p.x) ** 2 + (y - p.y) ** 2;
+    if (d <= dotDistance) {
+      dot = p;
+      dotDistance = d;
+    }
+  }
+  return box ?? dot;
 }
 
 /** Largest 1, 2 or 5 times a power of ten that is at most `value`. */

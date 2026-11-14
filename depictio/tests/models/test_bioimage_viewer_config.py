@@ -268,3 +268,35 @@ def test_points_z_tolerance_is_a_number_of_planes():
     assert VIZ_CONFIG.validate_python({**base, "points_z_tolerance": 60}).points_z_tolerance == 60
     with pytest.raises(ValidationError):
         VIZ_CONFIG.validate_python({**base, "points_z_tolerance": -1})
+
+
+POINTS = {
+    "viz_kind": "bioimage_viewer",
+    "image_dc_tag": "slide",
+    "points_dc_tag": "patches",
+    "x_col": "x_px",
+    "y_col": "y_px",
+}
+
+
+def test_points_with_a_size_draw_as_boxes():
+    parsed = VIZ_CONFIG.validate_python({**POINTS, "box_w_col": "w", "box_h_col": "h"})
+    assert (parsed.box_w_col, parsed.box_h_col) == ("w", "h")
+
+
+def test_a_box_needs_both_sides():
+    with pytest.raises(ValidationError, match="both box_w_col and box_h_col"):
+        VIZ_CONFIG.validate_python({**POINTS, "box_w_col": "w"})
+
+
+def test_box_columns_need_a_points_dc():
+    with pytest.raises(ValidationError, match="no points DC is bound"):
+        VIZ_CONFIG.validate_python(
+            {"viz_kind": "bioimage_viewer", "box_w_col": "w", "box_h_col": "h"}
+        )
+
+
+def test_frame_on_filter_needs_points():
+    assert VIZ_CONFIG.validate_python({**POINTS, "frame_on_filter": True}).frame_on_filter
+    with pytest.raises(ValidationError, match="frame_on_filter"):
+        VIZ_CONFIG.validate_python({"viz_kind": "bioimage_viewer", "frame_on_filter": True})

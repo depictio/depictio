@@ -1,0 +1,260 @@
+# Whole slide (H&E): one tab of the bioimage examples.
+#
+# Regenerate the seed after editing:
+#   uv run python -m depictio.dev_scripts.generate_dashboard_seeds bioimage_examples
+#
+# The component `index` values are pinned rather than auto-generated: they are
+# what keeps a regenerated seed byte-identical to the shipped one.
+title: 'Whole slide (H&E)'
+subtitle: 'A 16 GB slide streamed in place: pick a region on the overview, read it at full resolution'
+icon: 'mdi:microscope'
+icon_color: 'pink'
+icon_variant: filled
+workflow_system: python
+dashboard_id: '646b0f3c1e4a2d7f8e5b8f2f'
+is_main_tab: false
+tab_order: 12
+parent_dashboard_tag: fluorescence
+tab_icon: 'mdi:microscope'
+tab_icon_color: 'pink'
+
+filter_sections:
+  - name: 'Patches'
+    icon: 'mdi:filter-variant'
+    color: 'pink'
+    description: 'Which tissue patches the overview, the detail view and the plots show'
+
+grid_sections:
+  - name: 'Slide'
+    icon: 'mdi:microscope'
+    color: 'pink'
+    description: 'The overview at a coarse level, and the picked region at full resolution'
+  - name: 'Patches'
+    icon: 'mdi:chart-scatter-plot'
+    color: 'pink'
+    description: 'Stain densities of the 500 um tissue patches'
+
+components:
+  - tag: text-wsi
+    index: omz-wsi-text
+    component_type: text
+    title: 'Overview and detail on one slide'
+    order: 6
+    alignment: left
+    vertical_alignment: top
+    section: 'Slide'
+    body: >
+      Ten sections of a mouse head (brain, eye, nasal cavity), stained with
+      hematoxylin and eosin and scanned at 0.45 um: 55296 x 96000 pixels, about
+      16 GB at full resolution. The slide is read in place from JAX's public
+      OME-Zarr copy; each tile only fetches the pieces of the pyramid it shows.
+      The overview on the left draws the tissue cut into 500 um patches,
+      coloured by how densely nucleated each one is. Draw a rectangle or a
+      lasso over some patches (or click one) and the detail view on the right
+      zooms to them at full resolution, where single nuclei are visible; the
+      plots and the table follow the same patches. The section filter does the
+      same for a whole section. Slide from the JAX KOMP histopathology
+      collection (CC BY 4.0); the patch table is computed from the slide by
+      colour deconvolution (dev/bioimage/make_wsi_patches.py).
+    layout: { x: 0, y: 0, w: 8, h: 2 }
+
+  - tag: viz-wsi-overview
+    index: omz-wsi-overview
+    component_type: advanced_viz
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: wsi_slide
+    title: 'Overview'
+    description: 'The whole slide, with the 500 um tissue patches coloured by the share of nucleus-stained tissue. Select patches to read them on the right.'
+    section: 'Slide'
+    viz_kind: bioimage_viewer
+    config:
+      viz_kind: bioimage_viewer
+      image_dc_tag: wsi_slide
+      image_wf_id: '646b0f3c1e4a2d7f8e5b8f01'
+      image_dc_id: '646b0f3c1e4a2d7f8e5b8f2d'
+      store: 42815.zarr
+      points_dc_tag: wsi_patches
+      points_wf_id: '646b0f3c1e4a2d7f8e5b8f01'
+      points_dc_id: '646b0f3c1e4a2d7f8e5b8f2e'
+      cell_id_col: patch
+      x_col: x_px
+      y_col: y_px
+      box_w_col: box_w_px
+      box_h_col: box_h_px
+      color_col: h_dominant_fraction
+      channels: &rgb
+        - index: 0
+          name: 'Red'
+          color: '#FF0000'
+          contrast_limits: [0, 255]
+        - index: 1
+          name: 'Green'
+          color: '#00FF00'
+          contrast_limits: [0, 255]
+        - index: 2
+          name: 'Blue'
+          color: '#0000FF'
+          contrast_limits: [0, 255]
+      selection_enabled: true
+      show_scalebar: true
+    layout: { x: 0, y: 2, w: 4, h: 10 }
+
+  - tag: viz-wsi-detail
+    index: omz-wsi-detail
+    component_type: advanced_viz
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: wsi_slide
+    title: 'Detail'
+    description: 'The same slide, zoomed to the patches the overview selection and the filters keep, streamed at full resolution.'
+    section: 'Slide'
+    viz_kind: bioimage_viewer
+    config:
+      viz_kind: bioimage_viewer
+      image_dc_tag: wsi_slide
+      image_wf_id: '646b0f3c1e4a2d7f8e5b8f01'
+      image_dc_id: '646b0f3c1e4a2d7f8e5b8f2d'
+      store: 42815.zarr
+      points_dc_tag: wsi_patches
+      points_wf_id: '646b0f3c1e4a2d7f8e5b8f01'
+      points_dc_id: '646b0f3c1e4a2d7f8e5b8f2e'
+      cell_id_col: patch
+      x_col: x_px
+      y_col: y_px
+      box_w_col: box_w_px
+      box_h_col: box_h_px
+      color_col: h_dominant_fraction
+      channels: *rgb
+      frame_on_filter: true
+      selection_enabled: false
+      show_scalebar: true
+    layout: { x: 4, y: 2, w: 4, h: 10 }
+
+  - tag: card-wsi-count
+    index: omz-wsi-card-count
+    component_type: card
+    section: 'Patches'
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: wsi_patches
+    aggregation: count
+    column_name: patch
+    column_type: object
+    icon_name: mdi:grid
+    title_font_size: md
+    value_font_size: xl
+    title: 'Patches'
+    layout: { x: 0, y: 12, w: 2, h: 2 }
+
+  - tag: card-wsi-nuclear
+    index: omz-wsi-card-nuclear
+    component_type: card
+    section: 'Patches'
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: wsi_patches
+    aggregation: average
+    column_name: h_dominant_fraction
+    column_type: float64
+    icon_name: mdi:circle-multiple-outline
+    title_font_size: md
+    value_font_size: xl
+    title: 'Nucleus-stained share'
+    layout: { x: 2, y: 12, w: 2, h: 2 }
+
+  - tag: card-wsi-hematoxylin
+    index: omz-wsi-card-hematoxylin
+    component_type: card
+    section: 'Patches'
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: wsi_patches
+    aggregation: average
+    column_name: hematoxylin_od
+    column_type: float64
+    icon_name: mdi:water-outline
+    title_font_size: md
+    value_font_size: xl
+    title: 'Hematoxylin density'
+    layout: { x: 4, y: 12, w: 2, h: 2 }
+
+  - tag: card-wsi-eosin
+    index: omz-wsi-card-eosin
+    component_type: card
+    section: 'Patches'
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: wsi_patches
+    aggregation: average
+    column_name: eosin_od
+    column_type: float64
+    icon_name: mdi:water
+    title_font_size: md
+    value_font_size: xl
+    title: 'Eosin density'
+    layout: { x: 6, y: 12, w: 2, h: 2 }
+
+  - tag: figure-wsi-stains
+    index: omz-wsi-fig-stains
+    component_type: figure
+    section: 'Patches'
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: wsi_patches
+    title: 'Hematoxylin against eosin, by section'
+    visu_type: scatter
+    dict_kwargs:
+      x: eosin_od
+      y: hematoxylin_od
+      color: section
+    layout: { x: 0, y: 14, w: 4, h: 4 }
+
+  - tag: figure-wsi-nuclear
+    index: omz-wsi-fig-nuclear
+    component_type: figure
+    section: 'Patches'
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: wsi_patches
+    title: 'Nucleus-stained share per section'
+    visu_type: box
+    dict_kwargs:
+      x: section
+      y: h_dominant_fraction
+    layout: { x: 4, y: 14, w: 4, h: 4 }
+
+  - tag: table-wsi-patches
+    index: omz-wsi-patches
+    component_type: table
+    section: 'Patches'
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: wsi_patches
+    title: 'Patches'
+    description: 'One row per 500 um tissue patch: where it is and its stain densities.'
+    page_size: 10
+    layout: { x: 0, y: 18, w: 8, h: 4 }
+
+  - tag: filter-wsi-section
+    index: omz-wsi-f-section
+    component_type: interactive
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: wsi_patches
+    interactive_component_type: MultiSelect
+    column_name: section
+    column_type: object
+    title: 'Section'
+    placement: left
+    section: 'Patches'
+    display:
+      title_size: md
+      icon_name: 'mdi:shape-outline'
+    layout: { x: 0, y: 0, w: 1, h: 3 }
+
+  - tag: filter-wsi-nuclear
+    index: omz-wsi-f-nuclear
+    component_type: interactive
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: wsi_patches
+    interactive_component_type: RangeSlider
+    column_name: h_dominant_fraction
+    column_type: float64
+    title: 'Nucleus-stained share'
+    placement: left
+    section: 'Patches'
+    display:
+      title_size: md
+      icon_name: 'mdi:circle-multiple-outline'
+    layout: { x: 0, y: 3, w: 1, h: 3 }

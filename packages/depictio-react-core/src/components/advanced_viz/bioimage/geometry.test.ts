@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 import {
   onPlane,
+  fitBoundsViewState,
   fitViewState,
+  boxDisplay,
+  footprintBounds,
+  padBounds,
+  pointAt,
   niceFloor,
   pointInPolygon,
   pointsInPolygon,
@@ -145,5 +150,78 @@ describe('onPlane', () => {
     expect(onPlane(400, 460, 60)).toBe(true);
     expect(onPlane(400, 461, 60)).toBe(false);
     expect(onPlane(Number.NaN, 0, 60)).toBe(false);
+  });
+});
+
+describe('footprintBounds', () => {
+  it('counts a box by its whole extent and a dot by its centre', () => {
+    expect(footprintBounds([])).toBeNull();
+    expect(
+      footprintBounds([
+        { x: 10, y: 10, w: 4, h: 2 },
+        { x: 30, y: 5 },
+      ]),
+    ).toEqual({ minX: 8, minY: 5, maxX: 30, maxY: 11 });
+  });
+});
+
+describe('fitBoundsViewState', () => {
+  it('centres the bounds and fits their larger relative side', () => {
+    const v = fitBoundsViewState({ minX: 100, minY: 0, maxX: 300, maxY: 100 }, 400, 400, 0);
+    expect(v.target).toEqual([200, 50, 0]);
+    expect(v.zoom).toBeCloseTo(1);
+  });
+
+  it('matches fitViewState on the whole image', () => {
+    expect(fitBoundsViewState({ minX: 0, minY: 0, maxX: 800, maxY: 600 }, 400, 300)).toEqual(
+      fitViewState(800, 600, 400, 300),
+    );
+  });
+});
+
+describe('pointAt', () => {
+  const boxes = [
+    { id: 'big', x: 50, y: 50, w: 100, h: 100 },
+    { id: 'small', x: 20, y: 20, w: 10, h: 10 },
+  ];
+
+  it('picks the smallest box under the click', () => {
+    expect(pointAt(boxes, 21, 19, 0)?.id).toBe('small');
+    expect(pointAt(boxes, 80, 80, 0)?.id).toBe('big');
+    expect(pointAt(boxes, 200, 200, 5)).toBeNull();
+  });
+
+  it('picks the nearest dot within the slack', () => {
+    const dots = [
+      { id: 'a', x: 0, y: 0 },
+      { id: 'b', x: 6, y: 0 },
+    ];
+    expect(pointAt(dots, 4, 0, 3)?.id).toBe('b');
+    expect(pointAt(dots, 3, 9, 3)).toBeNull();
+  });
+
+  it('prefers a box to a dot', () => {
+    expect(pointAt([{ id: 'dot', x: 21, y: 20 }, ...boxes], 21, 20, 5)?.id).toBe('small');
+  });
+});
+
+describe('padBounds', () => {
+  it('grows a small extent about its centre and leaves a large one alone', () => {
+    expect(padBounds(null, 10)).toBeNull();
+    expect(padBounds({ minX: 5, minY: 0, maxX: 5, maxY: 100 }, 10)).toEqual({
+      minX: 0,
+      minY: 0,
+      maxX: 10,
+      maxY: 100,
+    });
+  });
+});
+
+describe('boxDisplay', () => {
+  const box = { x: 0, y: 0, w: 100, h: 50 };
+  it('is a dot when smaller than one, filled while small, outlined when large', () => {
+    expect(boxDisplay(box, 0.03)).toBe('dot');
+    expect(boxDisplay(box, 0.3)).toBe('filled');
+    expect(boxDisplay(box, 2)).toBe('outline');
   });
 });

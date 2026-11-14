@@ -455,6 +455,14 @@ STATIC_IDS = {
             # overlay registered into it is a local store of the same DC.
             "clem_images": "646b0f3c1e4a2d7f8e5b8f2a",
             "clem_landmarks": "646b0f3c1e4a2d7f8e5b8f2b",
+            # A whole slide read in place from JAX (16 GB at level 0), and a
+            # table of tissue patches computed from it.
+            "wsi_slide": "646b0f3c1e4a2d7f8e5b8f2d",
+            "wsi_patches": "646b0f3c1e4a2d7f8e5b8f2e",
+            # An EM overview read in place from EMBL's S3, and electron
+            # tomograms of cells acquired inside it (generated locally).
+            "hela_images": "646b0f3c1e4a2d7f8e5b8f30",
+            "hela_tomograms": "646b0f3c1e4a2d7f8e5b8f31",
         },
         "dashboards": {
             # Main tab id equals project_id (same convention as the showcase).
@@ -470,6 +478,8 @@ STATIC_IDS = {
             "bioimage_shapes": "646b0f3c1e4a2d7f8e5b8f26",
             "bioimage_registration": "646b0f3c1e4a2d7f8e5b8f29",
             "bioimage_clem": "646b0f3c1e4a2d7f8e5b8f2c",
+            "bioimage_wsi": "646b0f3c1e4a2d7f8e5b8f2f",
+            "bioimage_hela_tomo": "646b0f3c1e4a2d7f8e5b8f32",
         },
     },
 }
