@@ -221,6 +221,9 @@ export interface BioimageViewer {
    *  or drop it with null. Rejects with `LoadSupersededError` when replaced. */
   setReference(store: BioimageZarrStore | null): Promise<ReferenceInfo | null>;
   setReferenceStyle(style: ReferenceStyle): void;
+  /** Warm the cache with these stores at the current view (metadata and the
+   *  tiles of the current plane), so switching to one draws at once. */
+  prefetch(stores: readonly BioimageZarrStore[]): Promise<void>;
   /** Open an overlay image (replacing any previous one), or drop it with
    *  null. Rejects with `LoadSupersededError` when a later call replaced it. */
   setOverlay(store: BioimageZarrStore | null): Promise<OverlayInfo | null>;
@@ -258,6 +261,8 @@ const STATS_MAX_CHANNELS = 16;
  *  one chunk is often the whole image (SpatialData's Visium hires image), a
  *  tile size viv's tiled layer draws nothing with below zoom 0. */
 const WHOLE_IMAGE_MAX_PIXELS = 4096 * 4096;
+/** A store whose shown level has more tiles than this is not prefetched. */
+const PREFETCH_MAX_TILES = 16;
 /** Screen pixels a lasso has to travel before it records another vertex. */
 const LASSO_MIN_STEP_PX = 3;
 /** Screen pixels a pointer may move between down and up and still click. */
@@ -370,6 +375,15 @@ export async function createBioimageViewer(
   let reference: PixelSource[] | null = null;
   let referenceChannels = 0;
   let referenceToken = 0;
+  // Bumped when a new reference pyramid is in place: its layer id, so the old
+  // one keeps its tiles while the next store opens.
+  let referenceId = 0;
+  // A replaced image or reference stays drawn under its successor until the
+  // successor has drawn its tiles: switching steps never flashes black.
+  let lastImage: unknown = null;
+  let heldImage: unknown = null;
+  let lastReference: unknown = null;
+  let heldReference: unknown = null;
   let referenceStyle: ReferenceStyle = { mode: 'off', opacity: 0.5, channel: 0 };
   // Overlay image (another modality), drawn over the image and the reference.
   let overlay: { pyramid: PixelSource[]; width: number; height: number; depth: number } | null =
@@ -468,6 +482,10 @@ export async function createBioimageViewer(
       if (readyToken !== loadToken && data && isLayerLoaded(`bioimage-image-${loadToken}`)) {
         markReady();
       }
+      if (heldReference && isLayerLoaded(`bioimage-reference-${referenceId}`)) {
+        heldReference = null;
+        render();
+      }
       if (
         labels &&
         labelsReadyToken !== labelsToken &&
@@ -504,6 +522,10 @@ export async function createBioimageViewer(
   function markReady() {
     if (readyToken === loadToken) return;
     readyToken = loadToken;
+    if (heldImage) {
+      heldImage = null;
+      render();
+    }
     opts.onViewportLoad?.();
   }
 
@@ -673,16 +695,18 @@ export async function createBioimageViewer(
           channelsVisible: [true],
         });
       }
-      layers.push(imageLayer(data, imageProps));
+      if (heldImage) layers.push(heldImage);
+      lastImage = imageLayer(data, imageProps);
+      layers.push(lastImage);
       if (comparing && reference) {
         const refAxes = reference[0].labels;
         const usable = (c: ChannelState) => c.index < Math.max(referenceChannels, 1);
         const colours = referenceStyle.mode === 'colours';
         const drawn = colours ? (compared && usable(compared) ? [compared] : []) : shown.filter(usable);
         if (drawn.length) {
-          layers.push(
-            imageLayer(reference, {
-              id: `bioimage-reference-${referenceToken}`,
+          if (heldReference) layers.push(heldReference);
+          lastReference = imageLayer(reference, {
+              id: `bioimage-reference-${referenceId}`,
               loader: reference,
               selections: drawn.map((c) =>
                 selectionFor(refAxes, { c: c.index, z: plane.z, t: plane.t }),
@@ -700,8 +724,8 @@ export async function createBioimageViewer(
                 if (isBoundsError(err)) return;
                 opts.onError?.(err instanceof Error ? err : new Error(String(err)));
               },
-            }),
-          );
+            });
+          layers.push(lastReference);
         }
       }
     }
@@ -981,12 +1005,13 @@ export async function createBioimageViewer(
         config: configChannels,
         stats,
       });
-      // A refresh of the same image keeps what the reader set up on it.
-      const keep =
-        Boolean(loadOpts?.keepView) &&
-        info !== null &&
-        info.width === width &&
-        info.height === height;
+      // An image of the same size (a refresh, the next step of a registration,
+      // another sample of a series) keeps the camera, and the old image stays
+      // drawn until the new one has its tiles. A refresh (`keepView`) also
+      // keeps what the reader set up on it.
+      const sameFrame = info !== null && info.width === width && info.height === height;
+      const keep = Boolean(loadOpts?.keepView) && sameFrame;
+      heldImage = sameFrame && data ? lastImage : null;
       data = pyramid;
       if (!keep || channels.length !== resolved.length) channels = resolved;
       if (!keep || plane.z >= sizes.z || plane.t >= sizes.t) plane = { z: defaultZ, t: defaultT };
@@ -1006,7 +1031,7 @@ export async function createBioimageViewer(
         zStep: opened.zStep ?? null,
         tStep: opened.tStep ?? null,
       };
-      if (!keep || !userMoved) fit();
+      if (!sameFrame || !userMoved) fit();
       render();
       return info;
     },
@@ -1064,15 +1089,22 @@ export async function createBioimageViewer(
     async setReference(store) {
       referenceToken += 1;
       const token = referenceToken;
-      reference = null;
-      referenceChannels = 0;
-      render();
-      if (!store) return null;
+      if (!store) {
+        reference = null;
+        referenceChannels = 0;
+        heldReference = null;
+        render();
+        return null;
+      }
+      // The current reference stays on screen while the next one opens: the
+      // side-by-side split would otherwise close and reopen, moving the view.
       const opened = await openOmeZarr(store);
       if (token !== referenceToken || disposed) throw new LoadSupersededError();
       const base = opened.pyramid[0];
       const lab = base.labels;
+      heldReference = reference ? lastReference : null;
       reference = opened.pyramid;
+      referenceId += 1;
       referenceChannels = lab.includes('c') ? (base.shape[lab.indexOf('c')] ?? 1) : 1;
       render();
       return {
@@ -1085,6 +1117,46 @@ export async function createBioimageViewer(
     setReferenceStyle(style) {
       referenceStyle = style;
       render();
+    },
+
+    async prefetch(stores) {
+      const shown = renderedChannels(channels);
+      await Promise.all(
+        stores.map(async (store) => {
+          try {
+            const { pyramid } = await openOmeZarr(store);
+            if (disposed) return;
+            // The level the current zoom draws, its tiles for the shown plane.
+            const level =
+              pyramid[Math.min(pyramid.length - 1, Math.max(0, Math.round(-viewState.zoom)))];
+            const lab = level.labels;
+            const size = (axis: string) => level.shape[lab.indexOf(axis)] ?? 1;
+            const tile = (level as unknown as { tileSize?: number }).tileSize ?? 512;
+            const nx = Math.ceil(size('x') / tile);
+            const ny = Math.ceil(size('y') / tile);
+            if (!level.getTile || nx * ny > PREFETCH_MAX_TILES) return;
+            const getTile = level.getTile.bind(level);
+            const wanted = shown.length ? shown : [{ index: 0 } as ChannelState];
+            const reads: Promise<unknown>[] = [];
+            for (let y = 0; y < ny; y++) {
+              for (let x = 0; x < nx; x++) {
+                for (const c of wanted) {
+                  reads.push(
+                    getTile({
+                      x,
+                      y,
+                      selection: selectionFor(lab, { c: c.index, z: plane.z, t: plane.t }),
+                    }),
+                  );
+                }
+              }
+            }
+            await Promise.allSettled(reads);
+          } catch {
+            /* a warm-up only: the real read reports its own error */
+          }
+        }),
+      );
     },
 
     async setOverlay(store) {

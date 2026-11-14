@@ -6,6 +6,7 @@ import {
   metricChange,
   parseParams,
   readSteps,
+  stepIcon,
   type StepColumns,
 } from './steps';
 
@@ -104,5 +105,18 @@ describe('step parameters and run info', () => {
     expect(changeTone(0.2, 'higher')).toBe('better');
     expect(changeTone(0.2, undefined)).toBe('neutral');
     expect(changeTone(null, 'lower')).toBe('neutral');
+  });
+});
+
+describe('stepIcon', () => {
+  it('names the kind of a registration step', () => {
+    expect(stepIcon('raw')).toBe('tabler:photo');
+    expect(stepIcon('rigid')).toBe('tabler:rotate-2');
+    expect(stepIcon('affine')).toBe('tabler:transform');
+    expect(stepIcon('bspline')).toBe('tabler:grid-4x4');
+    expect(stepIcon('B-spline (elastix)')).toBe('tabler:grid-4x4');
+  });
+  it('falls back to a dot', () => {
+    expect(stepIcon('step 7')).toBe('tabler:point');
   });
 });

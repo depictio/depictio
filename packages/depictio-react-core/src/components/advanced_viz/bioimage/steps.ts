@@ -129,3 +129,23 @@ export function formatMetric(v: unknown): string {
 export function metricChange(current: unknown, previous: unknown): number | null {
   return typeof current === 'number' && typeof previous === 'number' ? current - previous : null;
 }
+
+// What kind of step a label names, by the words processing tools use for it.
+// A light icon per kind lets a reader scan a history without reading it.
+const STEP_ICONS: ReadonlyArray<readonly [RegExp, string]> = [
+  [/^(raw|input|original|unregistered|none|moving)\b/i, 'tabler:photo'],
+  [/rigid|euler|translat|rotat/i, 'tabler:rotate-2'],
+  [/affine|similarity|scal/i, 'tabler:transform'],
+  [/b-?spline|deform|elastic|syn\b|non-?linear|demons|warp/i, 'tabler:grid-4x4'],
+  [/denois|smooth|filter/i, 'tabler:sparkles'],
+  [/segment|mask|label/i, 'tabler:shape'],
+  [/crop|roi/i, 'tabler:crop'],
+  [/stitch|mosaic|tile/i, 'tabler:layout-grid'],
+  [/normali|correct|flat|background|illum/i, 'tabler:adjustments-horizontal'],
+];
+
+/** The icon of a step, from its label; a plain dot when no word matches. */
+export function stepIcon(label: string): string {
+  for (const [pattern, icon] of STEP_ICONS) if (pattern.test(label)) return icon;
+  return 'tabler:point';
+}

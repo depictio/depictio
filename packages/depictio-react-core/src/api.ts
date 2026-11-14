@@ -2872,7 +2872,8 @@ export function createBioimageZarrStore(dcId: string, store: string): BioimageZa
 
 /** Stores handed out by `bioimageZarrStore`, most recently used last. */
 const SHARED_ZARR_STORES = new Map<string, BioimageZarrStore>();
-const SHARED_ZARR_STORE_LIMIT = 6;
+// A registration history reads one store per step plus the fixed image.
+const SHARED_ZARR_STORE_LIMIT = 8;
 
 /**
  * The zarr store of one DC store, shared by every reader on the page: two

@@ -104,7 +104,7 @@ import type {
   OverlayPoint,
   SelectionMode,
 } from './bioimage/viewer';
-import { readSteps, type MetricDirection, type StepColumns } from './bioimage/steps';
+import { readSteps, stepIcon, type MetricDirection, type StepColumns } from './bioimage/steps';
 import StepHistory from './bioimage/StepHistory';
 import { joinViewLink, moveViewLink, type LinkedCamera } from './bioimage/viewLink';
 
@@ -268,6 +268,24 @@ function emptyStoreMessage(
 }
 
 /** Milliseconds per step while a processing history plays. */
+/** A segmented control's option: a light icon, with a word or, when the
+ *  dock has no room for one, a tooltip saying what it is. */
+const SegmentLabel: React.FC<{ icon: string; text?: string; tip?: string }> = ({ icon, text, tip }) => {
+  const body = (
+    <Group gap={4} wrap="nowrap" justify="center">
+      <Icon icon={icon} width={14} height={14} />
+      {text ? <span>{text}</span> : null}
+    </Group>
+  );
+  return tip ? (
+    <Tooltip label={tip} withArrow openDelay={300}>
+      {body}
+    </Tooltip>
+  ) : (
+    body
+  );
+};
+
 const STEP_PLAY_MS = 1500;
 
 /** Milliseconds per time point while the T axis plays. */
@@ -833,10 +851,13 @@ const BioimageViewerRenderer: React.FC<Props> = ({
     let cancelled = false;
     const key = target.key;
     const refresh = loadedRef.current?.viewer === viewer && loadedRef.current.key === key;
+    // Another step of the same history: the image swaps in place, keeping the
+    // reader's view and channels, with no spinner and no reset of the panel.
+    const swap = !refresh && stepsEnabled && loadedRef.current?.viewer === viewer;
     loadedRef.current = { viewer, key };
     setImageError(null);
     setDrawn(false);
-    if (!refresh) {
+    if (!refresh && !swap) {
       setImageLoading(true);
       setInfo(null);
     }
@@ -844,7 +865,7 @@ const BioimageViewerRenderer: React.FC<Props> = ({
       ? { kind: 'zarr', store: subStore(bioimageZarrStore(imageDcId, activeStoreName), target.path) }
       : createBioimageSource(imageDcId, { name: activeStoreName, format: activeStoreFormat });
     viewer
-      .load(source, configChannelsRef.current, { keepView: refresh })
+      .load(source, configChannelsRef.current, { keepView: refresh || swap })
       .then((loaded) => {
         if (cancelled) return;
         setInfo(loaded);
@@ -856,7 +877,7 @@ const BioimageViewerRenderer: React.FC<Props> = ({
             : {}),
           ...(target.path ? { imagePath: target.path } : {}),
         });
-        if (refresh) {
+        if (refresh || swap) {
           // Keep the reader's channel state, including an unsaved edit.
           setChannels((prev) => (prev.length === loaded.channels.length ? prev : loaded.channels));
           setPlane((p) =>
@@ -1210,8 +1231,8 @@ const BioimageViewerRenderer: React.FC<Props> = ({
       : (activeStep?.reference ?? null);
   const referenceLabel =
     compareWith === 'previous' && previousStep
-      ? `step ${activeStepIndex}. ${previousStep.label}`
-      : 'the fixed image';
+      ? `${activeStepIndex}. ${previousStep.label}`
+      : 'fixed image';
   const referenceKnown = Boolean(
     referenceName && stores?.some((st) => st.name === referenceName),
   );
@@ -1235,6 +1256,24 @@ const BioimageViewerRenderer: React.FC<Props> = ({
       cancelled = true;
     };
   }, [viewer, imageDcId, referenceName, comparing]);
+  // Every step of the sample, and its fixed image, warmed once the first one
+  // is drawn: picking or playing a step then draws it at once.
+  const prefetchedRef = useRef<string | null>(null);
+  const stepStoreNames = useMemo(
+    () => [
+      ...new Set(
+        sampleSteps.flatMap((st) => [st.store, st.reference]).filter((n): n is string => Boolean(n)),
+      ),
+    ],
+    [sampleSteps],
+  );
+  useEffect(() => {
+    if (!viewer || !drawn || !imageDcId || stepStoreNames.length < 2) return;
+    const key = `${imageDcId}|${stepStoreNames.join('|')}`;
+    if (prefetchedRef.current === key) return;
+    prefetchedRef.current = key;
+    void viewer.prefetch(stepStoreNames.map((n) => bioimageZarrStore(imageDcId, n)));
+  }, [viewer, drawn, imageDcId, stepStoreNames]);
   // Colours mode compares one channel: the first one shown.
   const compareChannel = channels.find((c) => c.visible)?.index ?? 0;
   useEffect(() => {
@@ -1425,6 +1464,7 @@ const BioimageViewerRenderer: React.FC<Props> = ({
               />
             ) : null}
             {sampleSteps.length > 1 ? (
+              <VizControlGroup title="History">
               <StepHistory
                 steps={sampleSteps}
                 active={activeStepIndex}
@@ -1437,14 +1477,23 @@ const BioimageViewerRenderer: React.FC<Props> = ({
                 playing={stepsPlaying}
                 onTogglePlay={() => setStepsPlaying((p) => !p)}
               />
+              </VizControlGroup>
             ) : null}
             {referenceKnown || previousStep ? (
-              <>
+              <VizControlGroup title="Compare">
                 <VizSegmented
-                  label="Compare with"
+                  aria-label="Compare with"
                   data={[
-                    { value: 'previous', label: 'Step before', disabled: !previousStep },
-                    { value: 'fixed', label: 'Fixed image', disabled: !activeStep?.reference },
+                    {
+                      value: 'previous',
+                      label: <SegmentLabel icon="tabler:history" text="Previous step" />,
+                      disabled: !previousStep,
+                    },
+                    {
+                      value: 'fixed',
+                      label: <SegmentLabel icon="tabler:target" text="Fixed image" />,
+                      disabled: !activeStep?.reference,
+                    },
                   ]}
                   value={previousStep ? compareWith : 'fixed'}
                   onChange={(v) => setCompareWith(v as 'previous' | 'fixed')}
@@ -1453,12 +1502,12 @@ const BioimageViewerRenderer: React.FC<Props> = ({
                 {/* One unit for the dock: the switch with what it shows. */}
                 <Stack gap={4}>
                   <VizSegmented
-                    label="Shown as"
+                    aria-label="Shown as"
                     data={[
-                      { value: 'side', label: 'Side by side' },
-                      { value: 'colours', label: 'Colours' },
-                      { value: 'fade', label: 'Fade' },
-                      { value: 'off', label: 'Off' },
+                      { value: 'side', label: <SegmentLabel icon="tabler:layout-columns" tip="Side by side" /> },
+                      { value: 'colours', label: <SegmentLabel icon="tabler:color-swatch" tip="Colours: this step green, the other magenta" /> },
+                      { value: 'fade', label: <SegmentLabel icon="tabler:blend-mode" tip="Fade the other over this step" /> },
+                      { value: 'off', label: <SegmentLabel icon="tabler:eye-off" tip="This step alone" /> },
                     ]}
                     value={compareMode}
                     onChange={(v) => setCompareMode(v as CompareMode)}
@@ -1484,7 +1533,7 @@ const BioimageViewerRenderer: React.FC<Props> = ({
                     onChange={setCompareOpacity}
                   />
                 ) : null}
-              </>
+              </VizControlGroup>
             ) : null}
           </>
         ) : null}
@@ -2019,22 +2068,43 @@ const BioimageViewerRenderer: React.FC<Props> = ({
               {comparing && compareMode === 'side' && activeStep ? (
                 <>
                   {[
-                    { left: 8, text: `Before · ${referenceLabel}` },
-                    { left: 'calc(50% + 8px)', text: `This step · ${activeStepIndex + 1}. ${activeStep.label}` },
+                    { centre: '25%', kind: 'Before', label: referenceLabel, icon: 'tabler:history' },
+                    {
+                      centre: '75%',
+                      kind: 'This step',
+                      label: `${activeStepIndex + 1}. ${activeStep.label}`,
+                      icon: stepIcon(activeStep.label),
+                    },
                   ].map((cap) => (
-                    <Paper
-                      key={cap.text}
-                      px={6}
-                      py={2}
-                      radius="sm"
-                      shadow="xs"
+                    // Centred over its half, dark on any image and any page theme.
+                    <Group
+                      key={cap.kind}
+                      gap={6}
+                      wrap="nowrap"
+                      px={10}
+                      py={4}
                       data-testid="bioimage-side-caption"
-                      style={{ position: 'absolute', top: 8, left: cap.left, opacity: 0.92, pointerEvents: 'none' }}
+                      style={{
+                        position: 'absolute',
+                        top: 10,
+                        left: cap.centre,
+                        transform: 'translateX(-50%)',
+                        borderRadius: 'var(--mantine-radius-xl)',
+                        background: 'color-mix(in srgb, var(--mantine-color-dark-9) 65%, transparent)',
+                        backdropFilter: 'blur(4px)',
+                        color: 'var(--mantine-color-white)',
+                        pointerEvents: 'none',
+                        maxWidth: '46%',
+                      }}
                     >
-                      <Text size="xs" fw={500}>
-                        {cap.text}
+                      <Icon icon={cap.icon} width={14} height={14} />
+                      <Text span size="xs" c="gray.4" style={{ whiteSpace: 'nowrap' }}>
+                        {cap.kind}
                       </Text>
-                    </Paper>
+                      <Text span size="sm" fw={700} truncate>
+                        {cap.label}
+                      </Text>
+                    </Group>
                   ))}
                   <div
                     style={{
