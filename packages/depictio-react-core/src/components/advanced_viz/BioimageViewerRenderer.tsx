@@ -251,6 +251,9 @@ function sameStores(a: BioimageStoreInfo[] | null, b: BioimageStoreInfo[]): bool
 type ReadyState = 'false' | 'true' | 'error' | 'skipped';
 
 /** Whether a points row's sample value names `store`, by sample or full name. */
+/** A point of the image with its plane, for frame_on_filter. */
+type FramedPoint = OverlayPoint & { z: number | null };
+
 function isRowOfStore(sample: unknown, store: BioimageStoreInfo): boolean {
   const value = String(sample ?? '');
   return value === store.sample || value === store.name;
@@ -1051,8 +1054,11 @@ const BioimageViewerRenderer: React.FC<Props> = ({
   const stacked = Boolean(
     (zCol && info && info.sizes.z > 1) || (tCol && info && info.sizes.t > 1),
   );
-  const overlay = useMemo<OverlayPoint[]>(() => {
-    if (!pointRows || !xCol || !yCol || !activeStore) return [];
+  // The points drawn on the shown plane, and (for frame_on_filter) every point
+  // of the image with its plane: a tile framing a filtered point must find it
+  // whatever plane it is on, then go to that plane.
+  const pointSets = useMemo<{ shown: OverlayPoint[]; all: FramedPoint[] }>(() => {
+    if (!pointRows || !xCol || !yCol || !activeStore) return { shown: [], all: [] };
     const xs = pointRows[xCol] ?? [];
     const ys = pointRows[yCol] ?? [];
     const ids = cellIdCol ? (pointRows[cellIdCol] ?? []) : null;
@@ -1067,6 +1073,8 @@ const BioimageViewerRenderer: React.FC<Props> = ({
     const rowZ = zCol && !allPlanes && info && info.sizes.z > 1 ? (pointRows[zCol] ?? []) : null;
     const rowT = tCol && !allPlanes && info && info.sizes.t > 1 ? (pointRows[tCol] ?? []) : null;
     const zTolerance = config.points_z_tolerance ?? 0;
+    const zAll = zCol ? (pointRows[zCol] ?? []) : null;
+    const all: FramedPoint[] = [];
     const scale = config.points_scale ?? 1;
     const ox = config.points_offset_x ?? 0;
     const oy = config.points_offset_y ?? 0;
@@ -1077,8 +1085,10 @@ const BioimageViewerRenderer: React.FC<Props> = ({
       if (rowWells && activeWell && normaliseWellName(String(rowWells[i] ?? '')) !== activeWell.name) {
         continue;
       }
-      if (rowZ && !onPlane(Number(rowZ[i]), plane.z, zTolerance)) continue;
-      if (rowT && Math.round(Number(rowT[i])) !== plane.t) continue;
+      const shownHere =
+        !(rowZ && !onPlane(Number(rowZ[i]), plane.z, zTolerance)) &&
+        !(rowT && Math.round(Number(rowT[i])) !== plane.t);
+      if (!shownHere && !config.frame_on_filter) continue;
       const x = Number(xs[i]) * scale + ox;
       const y = Number(ys[i]) * scale + oy;
       if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
@@ -1091,7 +1101,7 @@ const BioimageViewerRenderer: React.FC<Props> = ({
       // A row with a size draws as its box; one without stays a dot.
       const w = boxW ? Number(boxW[i]) * scale : NaN;
       const h = boxH ? Number(boxH[i]) * scale : NaN;
-      out.push({
+      const point: OverlayPoint = {
         id,
         ...(keys ? { label: cellId } : {}),
         x,
@@ -1099,9 +1109,14 @@ const BioimageViewerRenderer: React.FC<Props> = ({
         ...(w > 0 && h > 0 ? { w, h } : {}),
         color,
         faded: keptIds ? !keptIds.has(id) : false,
-      });
+      };
+      if (config.frame_on_filter) {
+        const z = zAll ? Number(zAll[i]) : NaN;
+        all.push({ ...point, z: Number.isFinite(z) ? z : null });
+      }
+      if (shownHere) out.push(point);
     }
-    return out;
+    return { shown: out, all };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     pointRows,
@@ -1122,6 +1137,7 @@ const BioimageViewerRenderer: React.FC<Props> = ({
     info,
     activeWell,
     activeStore,
+    config.frame_on_filter,
     config.points_scale,
     config.points_z_tolerance,
     config.points_offset_x,
@@ -1132,6 +1148,7 @@ const BioimageViewerRenderer: React.FC<Props> = ({
     accentKey,
     palette,
   ]);
+  const overlay = pointSets.shown;
 
   // ---- Labels overlay -----------------------------------------------------
   const [labelsVisible, setLabelsVisible] = useState(true);
@@ -1327,19 +1344,33 @@ const BioimageViewerRenderer: React.FC<Props> = ({
   // the camera shows what they cover; the whole image again once nothing
   // filters. Another tile's selection is a filter, so an overview tile drives
   // this one.
-  const framing = useMemo<Bounds | null>(() => {
+  // In a stack (z_col), it also goes to the kept points' middle plane.
+  const framing = useMemo<{ bounds: Bounds; z: number | null } | null>(() => {
     if (!config.frame_on_filter || !keptIds) return null;
-    const kept = overlay.filter((p) => !p.faded);
-    if (kept.length === 0 || kept.length === overlay.length) return null;
-    return padBounds(footprintBounds(kept), MIN_FRAME_PX);
-  }, [config.frame_on_filter, keptIds, overlay]);
+    const all = pointSets.all;
+    const kept = all.filter((p) => !p.faded);
+    if (kept.length === 0 || kept.length === all.length) return null;
+    const bounds = padBounds(footprintBounds(kept), MIN_FRAME_PX);
+    if (!bounds) return null;
+    const zs = kept
+      .map((p) => p.z)
+      .filter((z): z is number => z != null)
+      .sort((a, b) => a - b);
+    return { bounds, z: zs.length ? zs[Math.floor(zs.length / 2)] : null };
+  }, [config.frame_on_filter, keptIds, pointSets]);
   const framingKey = framing
-    ? `${framing.minX}|${framing.minY}|${framing.maxX}|${framing.maxY}`
+    ? `${framing.bounds.minX}|${framing.bounds.minY}|${framing.bounds.maxX}|${framing.bounds.maxY}|${framing.z ?? ''}`
     : '';
+  const sizeZ = info?.sizes.z ?? 1;
   useEffect(() => {
-    if (viewer && config.frame_on_filter) viewer.frame(framing);
+    if (!viewer || !config.frame_on_filter) return;
+    viewer.frame(framing?.bounds ?? null);
+    const z = framing?.z;
+    if (z != null && sizeZ > 1) {
+      setPlane((p) => ({ ...p, z: Math.min(sizeZ - 1, Math.max(0, Math.round(z))) }));
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [viewer, framingKey, config.frame_on_filter]);
+  }, [viewer, framingKey, config.frame_on_filter, sizeZ]);
 
   const ownSelectionKey = ownSelection.join('\u0000');
   useEffect(() => {

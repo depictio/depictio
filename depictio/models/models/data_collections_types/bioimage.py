@@ -58,6 +58,8 @@ BioimageKind = Literal["image", "labels"]
 OME_ZARR_STORE_SUFFIX = ".zarr"
 OME_TIFF_SUFFIXES = (".ome.tiff", ".ome.tif")
 TIFF_SUFFIXES = (".tiff", ".tif")
+# Formats whose store is a zarr tree the image can sit inside of.
+IMAGE_PATH_FORMATS = ("spatialdata", "ome-zarr")
 # Formats a labels DC accepts: an NGFF labels image, or a plain mask TIFF
 # converted to one at ingest.
 LABELS_FORMATS = ("tiff", "ome-zarr")
@@ -234,7 +236,10 @@ class DCBioimageConfig(BaseModel):
     # False = reference-only: the CLI validates the stores but skips the S3
     # upload, and the API serves them from the registered path on disk.
     upload: bool = True
-    # SpatialData only: the image element to show, relative to the store root.
+    # The image element to show, relative to the store root: required for
+    # SpatialData (``images/<name>``); optional for OME-Zarr, whose image may
+    # be a group inside a larger zarr container (OpenOrganelle puts each
+    # volume at ``recon-1/em/<name>`` in ``<dataset>.zarr``).
     image_path: str | None = None
     # Stores read in place (``s3://bucket/key`` or ``https://host/path``); the
     # last path segment is the store name, so it carries the format's suffix.
@@ -273,8 +278,8 @@ class DCBioimageConfig(BaseModel):
     def _check_format_fields(self) -> DCBioimageConfig:
         if self.format == "spatialdata" and not self.image_path:
             raise ValueError("format 'spatialdata' needs image_path (e.g. 'images/<name>')")
-        if self.format != "spatialdata" and self.image_path is not None:
-            raise ValueError("image_path only applies to format 'spatialdata'")
+        if self.format not in IMAGE_PATH_FORMATS and self.image_path is not None:
+            raise ValueError("image_path only applies to formats 'spatialdata' and 'ome-zarr'")
         if self.kind == "labels" and self.format not in LABELS_FORMATS:
             raise ValueError(
                 f"kind 'labels' takes format 'tiff' or 'ome-zarr', not {self.format!r}"

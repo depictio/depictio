@@ -1157,6 +1157,27 @@ class TestRemoteHttps:
         assert resp.status_code == 200
         assert str(env.http_requests[0].url) == f"https://{HOST}/sd/{SD_STORE}/images/he/.zattrs"
 
+    def test_ome_zarr_remote_joins_its_image_path(self, tmp_path):
+        """OpenOrganelle's layout: the image is a group inside the dataset's container."""
+        env = Env(
+            tmp_path,
+            props={
+                "format": "ome-zarr",
+                "image_path": "recon-1/em/fibsem-uint8",
+                "remote_stores": [f"https://{HOST}/cosem/cell.zarr"],
+            },
+            bioimage=ALLOW_HTTPS,
+            http_handler=lambda req: httpx.Response(200, content=b"{}"),
+        )
+        with env as client:
+            resp = client.get(key_url("cell.zarr", "s0/.zarray"), headers=AUTH)
+
+        assert resp.status_code == 200
+        assert (
+            str(env.http_requests[0].url)
+            == f"https://{HOST}/cosem/cell.zarr/recon-1/em/fibsem-uint8/s0/.zarray"
+        )
+
     def test_tiff_range_is_forwarded(self, tmp_path):
         def serve(req):
             assert req.headers["range"] == "bytes=2-5"

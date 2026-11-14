@@ -58,9 +58,19 @@ class TestDCBioimageConfig:
         with pytest.raises(ValidationError):
             DCBioimageConfig(format="spatialdata", image_path=path)
 
-    def test_image_path_is_spatialdata_only(self):
+    def test_ome_zarr_image_inside_a_container(self):
+        """OpenOrganelle's layout: the multiscales group sits inside ``<dataset>.zarr``."""
+        config = DCBioimageConfig(
+            image_path="recon-1/em/fibsem-uint8/",
+            remote_stores=["https://bucket.example.org/jrc_hela-2/jrc_hela-2.zarr"],
+        )
+        assert config.image_path == "recon-1/em/fibsem-uint8"
+
+    @pytest.mark.parametrize("fmt", ["ome-tiff", "tiff"])
+    def test_image_path_is_for_zarr_trees_only(self, fmt):
+        extra = {"kind": "labels"} if fmt == "tiff" else {}
         with pytest.raises(ValidationError, match="only applies"):
-            DCBioimageConfig(image_path="images/he")
+            DCBioimageConfig(format=fmt, image_path="images/he", **extra)
 
     def test_remote_stores(self):
         config = DCBioimageConfig(

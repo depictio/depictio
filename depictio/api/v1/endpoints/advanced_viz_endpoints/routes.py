@@ -2221,7 +2221,9 @@ def _bioimage_store_info(dc_oid: ObjectId) -> dict[str, Any]:
         )
         fmt = "ome-zarr"
     image_path: str | None = None
-    if fmt == "spatialdata":
+    # SpatialData always names its image element; an OME-Zarr image may sit
+    # inside a larger zarr container (OpenOrganelle's ``recon-1/em/<name>``).
+    if fmt == "spatialdata" or (fmt == "ome-zarr" and props.get("image_path")):
         try:
             image_path = normalize_image_path(str(props.get("image_path") or ""))
         except ValueError as exc:
@@ -3085,8 +3087,8 @@ def get_bioimage_key(
     past the end a 416, exactly as for an OME-TIFF file. Without a Range the
     key is served whole, as before.
 
-    OME-Zarr stores are read as they are; a SpatialData store at its
-    ``image_path``. A remote store is proxied from its URL. A local one is read
+    A store is read at its DC's ``image_path`` when it has one (always for
+    SpatialData, optional for OME-Zarr), else as it is. A remote store is proxied from its URL. A local one is read
     from the CLI upload at ``bioimage_s3_prefix(dc_id, store) + key`` first
     (skipped for ``upload: false`` DCs; a SpatialData upload holds the image
     subtree only, so no ``image_path`` join), then from the registered store

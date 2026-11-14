@@ -45,6 +45,7 @@ import {
   type ConfigChannel,
   type Rgb,
 } from './channels';
+import { matchSelectionsAcrossLevels } from './pyramid';
 import {
   fitBoundsViewState,
   boxDisplay,
@@ -300,7 +301,8 @@ async function openOmeZarr(store: BioimageZarrStore): Promise<OpenedImage> {
   // NGFF 0.4 (`.zattrs`) or 0.5 (`zarr.json`, attributes under `ome`).
   const rootAttrs = ngffRootAttrs(loaded.metadata);
   return {
-    pyramid: loaded.data as unknown as PixelSource[],
+    // Volume EM pyramids shrink Z too; viv reads every level at level 0's plane.
+    pyramid: matchSelectionsAcrossLevels(loaded.data as unknown as PixelSource[]),
     omero: rootAttrs.omero ?? null,
     physicalSize: physicalPixelSize(rootAttrs),
     zStep: axisStep(rootAttrs, 'z'),
@@ -1065,7 +1067,7 @@ export async function createBioimageViewer(
       if (!store) return null;
       const loaded = await loadOmeZarrFromStore(store as never);
       if (token !== labelsToken || disposed) throw new LoadSupersededError();
-      const pyramid = loaded.data as unknown as PixelSource[];
+      const pyramid = matchSelectionsAcrossLevels(loaded.data as unknown as PixelSource[]);
       const base = pyramid[0];
       const lab = base.labels;
       const width = base.shape[lab.indexOf('x')] ?? base.shape[base.shape.length - 1];

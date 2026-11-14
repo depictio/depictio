@@ -1,0 +1,270 @@
+# Deep zoom: one tab of the bioimage examples.
+#
+# Regenerate the seed after editing:
+#   uv run python -m depictio.dev_scripts.generate_dashboard_seeds bioimage_examples
+#
+# The component `index` values are pinned rather than auto-generated: they are
+# what keeps a regenerated seed byte-identical to the shipped one.
+title: 'Deep zoom (FIB-SEM cell)'
+subtitle: 'A 122 GB volume streamed in place: from the whole cell at 128 nm to organelles at 4 nm'
+icon: 'mdi:magnify-plus-outline'
+icon_color: 'grape'
+icon_variant: filled
+workflow_system: python
+dashboard_id: '646b0f3c1e4a2d7f8e5b8f36'
+is_main_tab: false
+tab_order: 14
+parent_dashboard_tag: fluorescence
+tab_icon: 'mdi:magnify-plus-outline'
+tab_icon_color: 'grape'
+
+filter_sections:
+  - name: 'Crops'
+    icon: 'mdi:filter-variant'
+    color: 'grape'
+    description: 'Which annotated crops the cell views, the plots and the table show'
+
+grid_sections:
+  - name: 'About'
+    icon: 'mdi:information-outline'
+    color: 'grape'
+    description: 'The cell, where it comes from, and how the tiles below work together'
+  - name: 'Cell'
+    icon: 'mdi:microscope'
+    color: 'grape'
+    description: 'The whole cell with its annotated crops, and the picked crop at full resolution'
+    # One screen: the overview strip above the detail it drives.
+    display: linked
+  - name: 'Annotated crops'
+    icon: 'mdi:chart-bar'
+    color: 'grape'
+    description: 'What the experts annotated in each crop'
+
+components:
+  - tag: text-deep-zoom
+    index: omz-dz-text
+    component_type: text
+    title: 'One cell, 4 nm voxels, 122 GB'
+    order: 6
+    alignment: left
+    vertical_alignment: top
+    section: 'About'
+    body: >
+      A whole HeLa cell imaged by focused ion beam scanning electron microscopy
+      (FIB-SEM): 12000 x 1600 x 6368 voxels at 4 x 4 x 5.24 nm, about 122 GB,
+      in six levels from 4 to 128 nm per pixel. It is read in place from
+      Janelia's public OpenOrganelle bucket (jrc_hela-2, CC BY 4.0): each tile
+      only fetches the chunks it shows, so zooming from the cell to a single
+      mitochondrion downloads megabytes, not the volume. Experts annotated
+      organelles voxel by voxel in 26 small crops of the cell; the boxes on the
+      overview are those crops, coloured by the organelle that fills most of each.
+      Click a crop (or draw a rectangle over several) and the view below
+      zooms to it at full resolution and moves to its depth; the plots and the
+      table follow. The crop table is built from the crops' metadata alone
+      (dev/bioimage/make_cosem_crops.py); no voxel is copied. Data: Xu et al.,
+      Nature 599, 147-151 (2021) and Heinrich et al., Nature 599, 141-146 (2021).
+    layout: { x: 0, y: 0, w: 8, h: 2 }
+
+  - tag: viz-deep-zoom-overview
+    index: omz-dz-overview
+    component_type: advanced_viz
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: cosem_hela_em
+    title: 'The whole cell'
+    description: 'The cell at a coarse level, with the 26 annotated crops drawn as boxes on every plane, coloured by their main organelle. Select crops to read them below.'
+    section: 'Cell'
+    viz_kind: bioimage_viewer
+    # Linked cells keep controls behind the icon unless placed: the Z slider
+    # and the contrast stay in view above the image.
+    controls_placement: top
+    config:
+      viz_kind: bioimage_viewer
+      image_dc_tag: cosem_hela_em
+      image_wf_id: '646b0f3c1e4a2d7f8e5b8f01'
+      image_dc_id: '646b0f3c1e4a2d7f8e5b8f34'
+      store: jrc_hela-2.zarr
+      points_dc_tag: cosem_hela_crops
+      points_wf_id: '646b0f3c1e4a2d7f8e5b8f01'
+      points_dc_id: '646b0f3c1e4a2d7f8e5b8f35'
+      cell_id_col: crop
+      x_col: x
+      y_col: y
+      box_w_col: box_w
+      box_h_col: box_h
+      color_col: main_organelle
+      channels: &em
+        - index: 0
+          name: 'EM'
+          description: 'Backscattered electron signal of the FIB-SEM: membranes and dense structures read dark, cytoplasm light.'
+          color: '#FFFFFF'
+      selection_enabled: true
+      show_scalebar: true
+    layout: { x: 0, y: 2, w: 8, h: 6 }
+
+  - tag: viz-deep-zoom-detail
+    index: omz-dz-detail
+    component_type: advanced_viz
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: cosem_hela_em
+    title: 'Picked crop at 4 nm'
+    description: 'The same volume, zoomed to the crops the overview selection and the filters keep, at their middle plane, streamed at full resolution.'
+    section: 'Cell'
+    viz_kind: bioimage_viewer
+    controls_placement: top
+    config:
+      viz_kind: bioimage_viewer
+      image_dc_tag: cosem_hela_em
+      image_wf_id: '646b0f3c1e4a2d7f8e5b8f01'
+      image_dc_id: '646b0f3c1e4a2d7f8e5b8f34'
+      store: jrc_hela-2.zarr
+      points_dc_tag: cosem_hela_crops
+      points_wf_id: '646b0f3c1e4a2d7f8e5b8f01'
+      points_dc_id: '646b0f3c1e4a2d7f8e5b8f35'
+      cell_id_col: crop
+      x_col: x
+      y_col: y
+      box_w_col: box_w
+      box_h_col: box_h
+      # A crop's box draws only on the planes it spans (about 100 either side
+      # of its middle plane for most crops).
+      z_col: z
+      points_z_tolerance: 100
+      color_col: main_organelle
+      channels: *em
+      frame_on_filter: true
+      selection_enabled: false
+      show_scalebar: true
+    layout: { x: 0, y: 8, w: 8, h: 9 }
+
+  - tag: card-deep-zoom-crops
+    index: omz-dz-card-crops
+    component_type: card
+    section: 'Annotated crops'
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: cosem_hela_crops
+    aggregation: count
+    column_name: crop
+    column_type: object
+    icon_name: mdi:cube-outline
+    title_font_size: md
+    value_font_size: xl
+    title: 'Annotated crops'
+    layout: { x: 0, y: 17, w: 2, h: 2 }
+
+  - tag: card-deep-zoom-mito
+    index: omz-dz-card-mito
+    component_type: card
+    section: 'Annotated crops'
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: cosem_hela_crops
+    aggregation: average
+    column_name: mito_pct
+    column_type: float64
+    icon_name: mdi:lightning-bolt-outline
+    title_font_size: md
+    value_font_size: xl
+    title: 'Mitochondria (% of crop)'
+    layout: { x: 2, y: 17, w: 2, h: 2 }
+
+  - tag: card-deep-zoom-er
+    index: omz-dz-card-er
+    component_type: card
+    section: 'Annotated crops'
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: cosem_hela_crops
+    aggregation: average
+    column_name: er_pct
+    column_type: float64
+    icon_name: mdi:waves
+    title_font_size: md
+    value_font_size: xl
+    title: 'ER (% of crop)'
+    layout: { x: 4, y: 17, w: 2, h: 2 }
+
+  - tag: card-deep-zoom-depth
+    index: omz-dz-card-depth
+    component_type: card
+    section: 'Annotated crops'
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: cosem_hela_crops
+    aggregation: sum
+    column_name: depth_um
+    column_type: float64
+    icon_name: mdi:arrow-collapse-vertical
+    title_font_size: md
+    value_font_size: xl
+    title: 'Depth annotated (um)'
+    layout: { x: 6, y: 17, w: 2, h: 2 }
+
+  - tag: figure-deep-zoom-main
+    index: omz-dz-fig-main
+    component_type: figure
+    section: 'Annotated crops'
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: cosem_hela_crops
+    title: 'Crops by main organelle'
+    visu_type: histogram
+    dict_kwargs:
+      x: main_organelle
+      color: main_organelle
+    layout: { x: 0, y: 19, w: 4, h: 4 }
+
+  - tag: figure-deep-zoom-mito-er
+    index: omz-dz-fig-mito-er
+    component_type: figure
+    section: 'Annotated crops'
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: cosem_hela_crops
+    title: 'Mitochondria against ER, per crop'
+    visu_type: scatter
+    dict_kwargs:
+      x: er_pct
+      y: mito_pct
+      color: main_organelle
+      size: depth_um
+      hover_name: crop
+    layout: { x: 4, y: 19, w: 4, h: 4 }
+
+  - tag: table-deep-zoom-crops
+    index: omz-dz-crops
+    component_type: table
+    section: 'Annotated crops'
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: cosem_hela_crops
+    title: 'Crops'
+    description: 'One row per annotated crop: where it is in the cell, its size, and the share of it each organelle fills.'
+    columns: [crop, main_organelle, width_um, depth_um, mito_pct, er_pct, nuc_pct, golgi_pct, ves_pct, lyso_pct, ecs_pct, z_first, z_last]
+    page_size: 10
+    layout: { x: 0, y: 23, w: 8, h: 4 }
+
+  - tag: filter-deep-zoom-main
+    index: omz-dz-f-main
+    component_type: interactive
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: cosem_hela_crops
+    interactive_component_type: MultiSelect
+    column_name: main_organelle
+    column_type: object
+    title: 'Main organelle'
+    placement: left
+    section: 'Crops'
+    display:
+      title_size: md
+      icon_name: 'mdi:shape-outline'
+    layout: { x: 0, y: 0, w: 1, h: 3 }
+
+  - tag: filter-deep-zoom-mito
+    index: omz-dz-f-mito
+    component_type: interactive
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: cosem_hela_crops
+    interactive_component_type: RangeSlider
+    column_name: mito_pct
+    column_type: float64
+    title: 'Mitochondria (% of crop)'
+    placement: left
+    section: 'Crops'
+    display:
+      title_size: md
+      icon_name: 'mdi:lightning-bolt-outline'
+    layout: { x: 0, y: 3, w: 1, h: 3 }

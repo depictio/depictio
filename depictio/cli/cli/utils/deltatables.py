@@ -2481,6 +2481,11 @@ def _validate_bioimage_store(store_path: str, props: DCBioimageConfig) -> None:
         validate_ome_tiff(store_path)
     elif props.format == "spatialdata":
         validate_spatialdata_store(store_path, props.image_path or "", props.ngff_version)
+    elif props.image_path:
+        # An OME-Zarr image inside a zarr container: the element is the store.
+        validate_ome_zarr_store(
+            os.path.join(store_path, *props.image_path.split("/")), props.ngff_version
+        )
     else:
         validate_ome_zarr_store(store_path, props.ngff_version)
 

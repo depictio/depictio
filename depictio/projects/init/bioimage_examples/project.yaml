@@ -757,6 +757,67 @@ workflows:
               contrast_std: "Standard deviation of the grey level of the binned tomogram"
               converted: "Whether the tomogram was converted, so the detail view can open it"
 
+      # ----------------------------------------------------------------
+      # Deep zoom: a whole HeLa cell imaged by FIB-SEM (OpenOrganelle
+      # jrc_hela-2, CC BY 4.0), read in place from Janelia's public bucket:
+      # 12000 x 1600 x 6368 voxels at 4 x 4 x 5.24 nm, about 122 GB, six
+      # levels (4 to 128 nm). The crops experts annotated organelles in, as a
+      # table built from their metadata alone (dev/bioimage/make_cosem_crops.py).
+      # ----------------------------------------------------------------
+      - id: "646b0f3c1e4a2d7f8e5b8f34"
+        data_collection_tag: "cosem_hela_em"
+        description: "A whole HeLa cell, FIB-SEM from OpenOrganelle (jrc_hela-2, CC BY 4.0), read in place: OME-Zarr 0.4, 12000 x 1600 x 6368 voxels at 4 nm (5.24 nm in z), 6 levels, about 122 GB"
+        config:
+          type: "bioimage"
+          dc_specific_properties:
+            format: "ome-zarr"
+            ngff_version: "0.4"
+            upload: false
+            # The EM is one multiscales group inside the dataset's container.
+            image_path: "recon-1/em/fibsem-uint8"
+            remote_stores:
+              - "https://janelia-cosem-datasets.s3.amazonaws.com/jrc_hela-2/jrc_hela-2.zarr"
+
+      - id: "646b0f3c1e4a2d7f8e5b8f35"
+        data_collection_tag: "cosem_hela_crops"
+        description: "One row per crop of the cell that experts annotated organelle by organelle: where it is, its size, and the share of it each organelle fills"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/bioimage_examples/data/cosem/hela2_crops.csv"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              separator: ","
+            columns_description:
+              crop: "Annotated crop (CellMap ground truth id)"
+              x: "Crop centre, x (EM level-0 pixels, 4 nm)"
+              y: "Crop centre, y (EM level-0 pixels, 4 nm)"
+              box_w: "Crop width (EM level-0 pixels)"
+              box_h: "Crop height (EM level-0 pixels)"
+              z_first: "First EM plane the crop spans (5.24 nm planes)"
+              z_last: "Last EM plane the crop spans"
+              z: "Middle EM plane of the crop"
+              width_um: "Crop width (um)"
+              height_um: "Crop height (um)"
+              depth_um: "Crop depth (um)"
+              classes_annotated: "Organelle classes annotated in the crop (CellMap's 63, parts included)"
+              mito_pct: "Share of the crop's annotated volume that is mitochondria (%)"
+              er_pct: "Share that is endoplasmic reticulum (%)"
+              nuc_pct: "Share that is nucleus (%)"
+              golgi_pct: "Share that is Golgi (%)"
+              ves_pct: "Share that is vesicles (%)"
+              endo_pct: "Share that is endosomes (%)"
+              lyso_pct: "Share that is lysosomes (%)"
+              ld_pct: "Share that is lipid droplets (%)"
+              perox_pct: "Share that is peroxisomes (%)"
+              mt_pct: "Share that is microtubules (%)"
+              ecs_pct: "Share that is extracellular space (%)"
+              main_organelle: "Organelle filling most of the crop (extracellular space for the background-only crops)"
+
 # A sample picked in the sample sheet narrows the cells table, so the cards and
 # table of the multi-sample tab follow the store the viewer is showing.
 links:

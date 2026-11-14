@@ -465,6 +465,10 @@ STATIC_IDS = {
             # tomograms of cells acquired inside it (generated locally).
             "hela_images": "646b0f3c1e4a2d7f8e5b8f30",
             "hela_tomograms": "646b0f3c1e4a2d7f8e5b8f31",
+            # A whole HeLa cell in FIB-SEM read in place from Janelia's bucket
+            # (122 GB), and its annotated crops computed from their metadata.
+            "cosem_hela_em": "646b0f3c1e4a2d7f8e5b8f34",
+            "cosem_hela_crops": "646b0f3c1e4a2d7f8e5b8f35",
         },
         "dashboards": {
             # Main tab id equals project_id (same convention as the showcase).
@@ -482,6 +486,7 @@ STATIC_IDS = {
             "bioimage_clem": "646b0f3c1e4a2d7f8e5b8f2c",
             "bioimage_wsi": "646b0f3c1e4a2d7f8e5b8f2f",
             "bioimage_hela_tomo": "646b0f3c1e4a2d7f8e5b8f32",
+            "bioimage_deep_zoom": "646b0f3c1e4a2d7f8e5b8f36",
         },
     },
 }
