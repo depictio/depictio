@@ -1,0 +1,328 @@
+/**
+ * NGFF metadata (0.4, or 0.5 with its attributes under `ome`) to viewer state:
+ * axis sizes, per-channel defaults and the physical pixel size. Pure (no viv /
+ * deck import) so it runs in vitest and stays off the renderer's eager path.
+ */
+
+/** viv shades at most this many channels at once (its `MAX_CHANNELS`). */
+export const MAX_RENDERED_CHANNELS = 6;
+
+/** Additive fluorescence LUTs for channels with no colour of their own
+ *  (blue, green, red, magenta, cyan, yellow). Channels are summed on a black
+ *  field, so these are the domain convention, not UI colours, and are
+ *  deliberately not themed. A single channel reads as greyscale. */
+const FLUORESCENCE_COLORS = ['#0000ff', '#00ff00', '#ff0000', '#ff00ff', '#00ffff', '#ffff00'];
+const GREYSCALE = '#ffffff';
+
+export type Rgb = [number, number, number];
+
+/** `#rrggbb`, `rrggbb` (OMERO's spelling) or `#rgb` to RGB, else null. */
+export function hexToRgb(hex: string | null | undefined): Rgb | null {
+  if (typeof hex !== 'string') return null;
+  let h = hex.trim().replace(/^#/, '');
+  if (/^[0-9a-f]{3}$/i.test(h)) {
+    h = h
+      .split('')
+      .map((c) => c + c)
+      .join('');
+  }
+  if (!/^[0-9a-f]{6}$/i.test(h)) return null;
+  return [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16)) as Rgb;
+}
+
+/** Normalise any accepted hex spelling to `#rrggbb`, else null. */
+export function normaliseHex(hex: string | null | undefined): string | null {
+  const rgb = hexToRgb(hex);
+  return rgb ? `#${rgb.map((v) => v.toString(16).padStart(2, '0')).join('')}` : null;
+}
+
+export function defaultChannelColor(index: number, count: number): string {
+  return count <= 1 ? GREYSCALE : FLUORESCENCE_COLORS[index % FLUORESCENCE_COLORS.length];
+}
+
+/** The colour a channel's name spells out: an RGB image's `r` / `g` / `b`
+ *  (SpatialData, brightfield) is drawn in its own colour, not its index's. */
+const NAMED_CHANNEL_COLORS: Record<string, string> = {
+  r: '#ff0000',
+  red: '#ff0000',
+  g: '#00ff00',
+  green: '#00ff00',
+  b: '#0000ff',
+  blue: '#0000ff',
+};
+
+export function namedChannelColor(name: string | null | undefined): string | null {
+  return NAMED_CHANNEL_COLORS[(name ?? '').trim().toLowerCase()] ?? null;
+}
+
+/** Full value range of an integer dtype (viv's spelling: `Uint16`, ...), or
+ *  null for floats, whose range has to come from the data. */
+export function dtypeRange(dtype: string): [number, number] | null {
+  switch (dtype) {
+    case 'Uint8':
+      return [0, 255];
+    case 'Uint16':
+      return [0, 65535];
+    case 'Uint32':
+      return [0, 4294967295];
+    case 'Int8':
+      return [-128, 127];
+    case 'Int16':
+      return [-32768, 32767];
+    case 'Int32':
+      return [-2147483648, 2147483647];
+    default:
+      return null;
+  }
+}
+
+/** Sizes of the non-spatial axes; an absent axis counts as size 1. */
+export function axisSizes(
+  labels: readonly string[],
+  shape: readonly number[],
+): { c: number; z: number; t: number } {
+  const size = (name: string) => {
+    const i = labels.indexOf(name);
+    return i >= 0 ? (shape[i] ?? 1) : 1;
+  };
+  return { c: size('c'), z: size('z'), t: size('t') };
+}
+
+/** A viv selection for one channel, naming only the axes the array has
+ *  (viv's indexer throws on a key it does not know). */
+export function selectionFor(
+  labels: readonly string[],
+  sel: { c: number; z: number; t: number },
+): Record<string, number> {
+  const out: Record<string, number> = {};
+  if (labels.includes('c')) out.c = sel.c;
+  if (labels.includes('z')) out.z = sel.z;
+  if (labels.includes('t')) out.t = sel.t;
+  return out;
+}
+
+/** What the viewer draws for one channel. `color` is `#rrggbb`. */
+export interface ChannelState {
+  index: number;
+  name: string;
+  /** What the channel shows, from the config; the row's tooltip. */
+  description?: string;
+  color: string;
+  visible: boolean;
+  contrastLimits: [number, number];
+  /** Slider bounds for the contrast limits. */
+  domain: [number, number];
+}
+
+/** A channel entry of the component config (`BioimageChannel`). */
+export interface ConfigChannel {
+  index: number;
+  name?: string | null;
+  description?: string | null;
+  visible?: boolean;
+  color?: string | null;
+  contrast_limits?: [number, number] | null;
+}
+
+interface OmeroChannel {
+  label?: string;
+  color?: string;
+  active?: boolean;
+  window?: { start?: number; end?: number; min?: number; max?: number };
+}
+
+/** Per-channel intensity statistics, as viv's `getChannelStats` reports them. */
+export interface ChannelStats {
+  domain: [number, number];
+  contrastLimits: [number, number];
+}
+
+function finitePair(a: unknown, b: unknown): [number, number] | null {
+  return typeof a === 'number' && typeof b === 'number' && Number.isFinite(a) && Number.isFinite(b)
+    ? [a, b]
+    : null;
+}
+
+/** A contrast window that shows something: `hi` above `lo`. viv's statistics
+ *  give `[v, v]` for a plane that is almost all one value (a small object on
+ *  an empty background), and such a window draws nothing at all. */
+function openWindow(pair: [number, number] | null | undefined): [number, number] | null {
+  return pair && pair[1] > pair[0] ? pair : null;
+}
+
+/**
+ * The starting state of every channel.
+ *
+ * Each field is taken from the first source that has it: the component config
+ * (what the dashboard author pinned), then the store's own `omero` rendering
+ * settings, then the data (`stats`, from the lowest pyramid level), then the
+ * dtype. Only the first `MAX_RENDERED_CHANNELS` channels start visible unless
+ * config or omero say otherwise, since viv cannot shade more at once.
+ */
+export function resolveChannels(opts: {
+  sizeC: number;
+  dtype: string;
+  omero?: { channels?: OmeroChannel[] } | null;
+  config?: readonly ConfigChannel[] | null;
+  stats?: ReadonlyArray<ChannelStats | null | undefined>;
+}): ChannelState[] {
+  const { sizeC, dtype, omero, config, stats } = opts;
+  const byIndex = new Map<number, ConfigChannel>();
+  for (const c of config ?? []) if (typeof c?.index === 'number') byIndex.set(c.index, c);
+  const range = dtypeRange(dtype);
+  const out: ChannelState[] = [];
+  let shown = 0;
+  for (let i = 0; i < sizeC; i += 1) {
+    const cfg = byIndex.get(i);
+    const om = omero?.channels?.[i];
+    const st = stats?.[i] ?? null;
+    const domain: [number, number] =
+      st?.domain ?? finitePair(om?.window?.min, om?.window?.max) ?? range ?? [0, 1];
+    const contrastLimits: [number, number] =
+      finitePair(cfg?.contrast_limits?.[0], cfg?.contrast_limits?.[1]) ??
+      openWindow(finitePair(om?.window?.start, om?.window?.end)) ??
+      openWindow(st?.contrastLimits) ??
+      openWindow(domain) ??
+      range ?? [0, 1];
+    out.push({
+      index: i,
+      name: cfg?.name || om?.label || `Channel ${i}`,
+      ...(cfg?.description ? { description: cfg.description } : {}),
+      color:
+        normaliseHex(cfg?.color) ??
+        normaliseHex(om?.color) ??
+        namedChannelColor(om?.label) ??
+        defaultChannelColor(i, sizeC),
+      // Past what viv shades, a channel starts hidden even when the store marks
+      // it active: a switch shown on for a channel never drawn would lie.
+      visible: (cfg?.visible ?? om?.active ?? true) && shown < MAX_RENDERED_CHANNELS,
+      contrastLimits,
+      // Widen the slider to whatever the limits already span, so a pinned
+      // window outside the observed data range is still reachable.
+      domain: [Math.min(domain[0], contrastLimits[0]), Math.max(domain[1], contrastLimits[1])],
+    });
+    if (out[out.length - 1].visible) shown += 1;
+  }
+  return out;
+}
+
+/** The channels handed to viv: the visible ones, capped at what it can shade.
+ *  An all-hidden image still needs one channel for the layer to exist, drawn
+ *  invisible. */
+export function renderedChannels(channels: readonly ChannelState[]): ChannelState[] {
+  const visible = channels.filter((c) => c.visible).slice(0, MAX_RENDERED_CHANNELS);
+  if (visible.length) return visible;
+  return channels.length ? [{ ...channels[0], visible: false }] : [];
+}
+
+const UNIT_ABBREVIATIONS: Record<string, string> = {
+  angstrom: 'Å',
+  nanometer: 'nm',
+  micrometer: 'µm',
+  micron: 'µm',
+  millimeter: 'mm',
+  centimeter: 'cm',
+  meter: 'm',
+  millisecond: 'ms',
+  second: 's',
+  minute: 'min',
+  hour: 'h',
+  day: 'd',
+};
+
+export function abbreviateUnit(unit: string): string {
+  return UNIT_ABBREVIATIONS[unit.toLowerCase()] ?? unit;
+}
+
+interface NgffMultiscale {
+  axes?: Array<{ name?: string; unit?: string } | string>;
+  datasets?: Array<{ coordinateTransformations?: Array<{ type?: string; scale?: number[] }> }>;
+  coordinateTransformations?: Array<{ type?: string; scale?: number[] }>;
+}
+
+function scaleOf(transforms: NgffMultiscale['coordinateTransformations']): number[] | null {
+  const t = (transforms ?? []).find((x) => x?.type === 'scale' && Array.isArray(x.scale));
+  return t?.scale ?? null;
+}
+
+/** The OME attributes of an image group: `multiscales` and the `omero`
+ *  rendering settings. NGFF 0.4 keeps them at the top of `.zattrs`; NGFF 0.5
+ *  nests them under `ome` in `zarr.json` (`attributes.ome`). */
+export interface NgffRootAttrs {
+  multiscales?: NgffMultiscale[];
+  omero?: {
+    channels?: object[];
+    rdefs?: { defaultZ?: number; defaultT?: number };
+  };
+  version?: string;
+}
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
+
+/**
+ * The OME attributes of an image group, whichever NGFF version wrote them:
+ * the `ome` block when there is one (0.5), else the attributes themselves
+ * (0.4). viv already unwraps `ome` in the metadata it returns, so this is a
+ * no-op on its output and only matters for raw group attributes.
+ */
+export function ngffRootAttrs(attrs: unknown): NgffRootAttrs {
+  if (!isRecord(attrs)) return {};
+  return (isRecord(attrs.ome) ? attrs.ome : attrs) as NgffRootAttrs;
+}
+
+/**
+ * Size of one level-0 pixel along x, with its unit, from the NGFF multiscale
+ * (0.4 or 0.5, which spell it the same way): the x axis' `unit` and the first
+ * dataset's `scale` (times the multiscale-level `scale`, when there is one).
+ * Null when x has no unit, because a bar labelled in pixels says nothing the
+ * image does not.
+ */
+export interface AxisStep {
+  value: number;
+  unit: string;
+}
+
+/** The level-0 step of one NGFF axis (`x`, `z`, `t`) with its unit, or null
+ *  when the axis is missing or has no unit. */
+export function axisStep(
+  attrs: NgffRootAttrs | { ome?: NgffRootAttrs } | null | undefined,
+  name: string,
+): AxisStep | null {
+  const ms = ngffRootAttrs(attrs).multiscales?.[0];
+  if (!ms?.axes) return null;
+  const index = ms.axes.findIndex((a) => (typeof a === 'string' ? a : a?.name) === name);
+  if (index < 0) return null;
+  const axis = ms.axes[index];
+  const unit = typeof axis === 'string' ? undefined : axis?.unit;
+  if (!unit) return null;
+  const datasetScale = scaleOf(ms.datasets?.[0]?.coordinateTransformations);
+  const globalScale = scaleOf(ms.coordinateTransformations);
+  const value = (datasetScale?.[index] ?? 1) * (globalScale?.[index] ?? 1);
+  if (!(value > 0) || !Number.isFinite(value)) return null;
+  return { value, unit: abbreviateUnit(unit) };
+}
+
+/** Size of one level-0 pixel along x: what the scale bar reads. */
+export function physicalPixelSize(
+  attrs: NgffRootAttrs | { ome?: NgffRootAttrs } | null | undefined,
+): AxisStep | null {
+  return axisStep(attrs, 'x');
+}
+
+/**
+ * Where plane `index` of a Z or T axis sits, for the slider and the stamp on
+ * the image: `3/10 · 1.5 min`, or `3/10` when the store gives no unit.
+ */
+export function planeLabel(index: number, size: number, step: AxisStep | null): string {
+  const position = `${index + 1}/${size}`;
+  if (!step) return position;
+  return `${position} · ${formatLength(index * step.value, step.unit)}`;
+}
+
+/** `1500 µm` style label, trimming float noise. */
+export function formatLength(value: number, unit: string): string {
+  const text = Number(value.toPrecision(3)).toString();
+  return `${text} ${unit}`;
+}

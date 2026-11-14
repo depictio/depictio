@@ -1,0 +1,689 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8f2c"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8f2c"
+  },
+  "version": 1,
+  "stored_metadata": [
+    {
+      "index": "omz-clem-text",
+      "component_type": "text",
+      "title": "Light microscopy over electron microscopy",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_align": "left",
+      "section": "Correlation",
+      "order": 6,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "One HeLa cell, imaged first by fluorescence (DAPI, mitochondria, Golgi, lysosomes) and then by FIB-SEM at 5 nm. The EM volume is read in place from the BioImage Archive (EMPIAR-10819), never copied. The fluorescence was registered into it with an affine fitted on the landmarks the authors placed between the two, and is laid over the EM: the Overlay slider fades it, Z moves through the EM and the overlay follows. DAPI and mitochondria show first; Golgi and lysosomes are under Overlay in the settings. Each dot is a landmark within 0.3 um of the shown plane, coloured by how far it lands from its EM partner after the affine; a lasso around some of them narrows the plots and the table. Five landmarks were left out of the fit: their error is the honest one. Data from Krentzel et al., CLEM-Reg, Nature Methods 2025 (S-BIAD4355, S-BSST707).\n",
+      "surface": "none",
+      "accent": null,
+      "logo": null,
+      "logo_dark": null,
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-clem-viewer",
+      "component_type": "advanced_viz",
+      "title": "FIB-SEM with the registered fluorescence",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "clem_images",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f2a"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "One HeLa cell: its FIB-SEM volume (EMPIAR-10819, 5 nm, read in place) and its light microscopy (DAPI, mitochondria, Golgi, lysosomes) registered into the EM frame",
+        "data_collection_tag": "clem_images",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f2a"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "EMPIAR-10819, 965 x 7000 x 5938 at 5 nm, read from the BioImage Archive; the four fluorescence channels resampled into its frame (0.08 um in plane, 0.25 um in depth).",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Correlation",
+      "viz_kind": "bioimage_viewer",
+      "config": {
+        "controls_placement": "popover",
+        "viz_kind": "bioimage_viewer",
+        "image_wf_id": "646b0f3c1e4a2d7f8e5b8f01",
+        "image_dc_id": "646b0f3c1e4a2d7f8e5b8f2a",
+        "image_dc_tag": "clem_images",
+        "store": "IM1.zarr",
+        "view_link": null,
+        "store_pattern": null,
+        "sample_wf_id": null,
+        "sample_dc_id": null,
+        "sample_dc_tag": null,
+        "sample_column": null,
+        "well_column": null,
+        "channels": [
+          {
+            "index": 0,
+            "name": "FIB-SEM",
+            "description": null,
+            "visible": true,
+            "color": "#FFFFFF",
+            "contrast_limits": null
+          }
+        ],
+        "show_scalebar": true,
+        "points_wf_id": "646b0f3c1e4a2d7f8e5b8f01",
+        "points_dc_id": "646b0f3c1e4a2d7f8e5b8f2b",
+        "points_dc_tag": "clem_landmarks",
+        "cell_id_col": "landmark",
+        "x_col": "em_x_px",
+        "y_col": "em_y_px",
+        "z_col": "em_z_px",
+        "t_col": null,
+        "points_z_tolerance": 60.0,
+        "points_all_planes": false,
+        "color_col": "residual_um",
+        "points_scale": 1.0,
+        "points_offset_x": 0.0,
+        "points_offset_y": 0.0,
+        "point_radius": 4.0,
+        "box_w_col": null,
+        "box_h_col": null,
+        "frame_on_filter": false,
+        "points_sample_col": null,
+        "points_well_col": null,
+        "labels_wf_id": null,
+        "labels_dc_id": null,
+        "labels_dc_tag": null,
+        "labels_opacity": 0.5,
+        "labels_outline": true,
+        "steps_wf_id": null,
+        "steps_dc_id": null,
+        "steps_dc_tag": null,
+        "steps_store_col": null,
+        "steps_label_col": null,
+        "steps_order_col": null,
+        "steps_sample_col": null,
+        "steps_reference_col": null,
+        "steps_metric_cols": [],
+        "steps_param_col": null,
+        "steps_info_cols": [],
+        "steps_metric_better": {},
+        "overlay_store": "lm_in_em.zarr",
+        "overlay_opacity": 0.6,
+        "selection_enabled": true,
+        "selection_column": null
+      },
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-clem-card-count",
+      "component_type": "card",
+      "title": "Landmarks",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "clem_landmarks",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f2b"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "The 150 landmark pairs placed between the light and electron microscopy of the HeLa cell, with their residual after the affine registration",
+        "data_collection_tag": "clem_landmarks",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f2b"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Registration quality",
+      "aggregation": "count",
+      "column_name": "landmark",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "vertical",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "follow_region_filter": false,
+      "icon_name": "mdi:map-marker-multiple",
+      "title_font_size": "md",
+      "value_font_size": "xl",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-clem-card-mean",
+      "component_type": "card",
+      "title": "Mean residual (um)",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "clem_landmarks",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f2b"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "The 150 landmark pairs placed between the light and electron microscopy of the HeLa cell, with their residual after the affine registration",
+        "data_collection_tag": "clem_landmarks",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f2b"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Registration quality",
+      "aggregation": "average",
+      "column_name": "residual_um",
+      "column_type": "float64",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "vertical",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "follow_region_filter": false,
+      "icon_name": "mdi:target",
+      "title_font_size": "md",
+      "value_font_size": "xl",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-clem-card-max",
+      "component_type": "card",
+      "title": "Largest residual (um)",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "clem_landmarks",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f2b"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "The 150 landmark pairs placed between the light and electron microscopy of the HeLa cell, with their residual after the affine registration",
+        "data_collection_tag": "clem_landmarks",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f2b"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Registration quality",
+      "aggregation": "max",
+      "column_name": "residual_um",
+      "column_type": "float64",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "vertical",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "follow_region_filter": false,
+      "icon_name": "mdi:arrow-expand-all",
+      "title_font_size": "md",
+      "value_font_size": "xl",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-clem-fig-residuals",
+      "component_type": "figure",
+      "title": "Residual after the affine",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "clem_landmarks",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f2b"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "The 150 landmark pairs placed between the light and electron microscopy of the HeLa cell, with their residual after the affine registration",
+        "data_collection_tag": "clem_landmarks",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f2b"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Registration quality",
+      "visu_type": "histogram",
+      "dict_kwargs": {
+        "x": "residual_um",
+        "color": "set",
+        "nbins": 30
+      },
+      "mode": "ui",
+      "code_content": null,
+      "displayed_data_count": 0,
+      "total_data_count": 0,
+      "was_sampled": false,
+      "filter_applied": false,
+      "max_points": null,
+      "selection_enabled": false,
+      "selection_column": null,
+      "font_scale": null,
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-clem-fig-depth",
+      "component_type": "figure",
+      "title": "Residual by depth in the EM",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "clem_landmarks",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f2b"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "The 150 landmark pairs placed between the light and electron microscopy of the HeLa cell, with their residual after the affine registration",
+        "data_collection_tag": "clem_landmarks",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f2b"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Registration quality",
+      "visu_type": "scatter",
+      "dict_kwargs": {
+        "x": "em_z_um",
+        "y": "residual_um",
+        "color": "set"
+      },
+      "mode": "ui",
+      "code_content": null,
+      "displayed_data_count": 0,
+      "total_data_count": 0,
+      "was_sampled": false,
+      "filter_applied": false,
+      "max_points": null,
+      "selection_enabled": false,
+      "selection_column": null,
+      "font_scale": null,
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-clem-landmarks",
+      "component_type": "table",
+      "title": "Landmarks",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "clem_landmarks",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f2b"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "The 150 landmark pairs placed between the light and electron microscopy of the HeLa cell, with their residual after the affine registration",
+        "data_collection_tag": "clem_landmarks",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f2b"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "One row per landmark pair: its position in both images and its residual.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Registration quality",
+      "columns": [],
+      "page_size": 10,
+      "sortable": true,
+      "filterable": true,
+      "compact": false,
+      "row_selection_enabled": false,
+      "row_selection_column": null,
+      "row_selection_mode": "multiple",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-clem-f-set",
+      "component_type": "interactive",
+      "title": "Landmark set",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "clem_landmarks",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f2b"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "The 150 landmark pairs placed between the light and electron microscopy of the HeLa cell, with their residual after the affine registration",
+        "data_collection_tag": "clem_landmarks",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f2b"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Landmarks",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "set",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": null,
+      "timescale": null,
+      "show_marks": null,
+      "show_mark_labels": null,
+      "show_histogram": null,
+      "slider_mode": null,
+      "icon_name": "mdi:map-marker-multiple",
+      "wf_tag": "python/bioimage_demo"
+    }
+  ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-omz-clem-f-set",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-omz-clem-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 2,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-omz-clem-viewer",
+      "x": 0,
+      "y": 2,
+      "w": 8,
+      "h": 10,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-omz-clem-card-count",
+      "x": 0,
+      "y": 12,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-omz-clem-card-mean",
+      "x": 2,
+      "y": 12,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-omz-clem-card-max",
+      "x": 4,
+      "y": 12,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-omz-clem-fig-residuals",
+      "x": 0,
+      "y": 14,
+      "w": 4,
+      "h": 4,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-omz-clem-fig-depth",
+      "x": 4,
+      "y": 14,
+      "w": 4,
+      "h": 4,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-omz-clem-landmarks",
+      "x": 0,
+      "y": 18,
+      "w": 8,
+      "h": 4,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "CLEM (HeLa)",
+  "subtitle": "One cell in light and electron microscopy, registered on landmarks",
+  "icon": "mdi:microscope",
+  "icon_color": "violet",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-12 00:00:00",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8f00"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8f00"
+  },
+  "tab_order": 11,
+  "main_tab_name": null,
+  "tab_icon": "mdi:microscope",
+  "tab_icon_color": "violet",
+  "tab_group": null,
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Landmarks",
+      "icon": "mdi:map-marker-outline",
+      "color": "violet",
+      "description": "Which landmarks the viewer, the plots and the table show",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Correlation",
+      "icon": "mdi:microscope",
+      "color": "violet",
+      "description": "The EM volume with the light microscopy laid over it, and the landmarks between them",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    },
+    {
+      "name": "Registration quality",
+      "icon": "mdi:ruler",
+      "color": "violet",
+      "description": "How far each landmark lands from its partner once the affine is applied",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null,
+  "category_colors": null,
+  "filter_panel_default": "open",
+  "content_width_default": "full",
+  "show_tab_header": true,
+  "open_with_defaults": false,
+  "show_guide": true,
+  "guide_intro": "",
+  "advanced_viz_controls": "popover",
+  "autofit": true
+}

@@ -414,12 +414,81 @@ STATIC_IDS = {
             "viralrecon_sample_qc": "746b0f3c1e4a2d7f8e5b9cc2",
         },
     },
+    # Bioimage viewer examples (optional, see OPTIONAL_DATASETS): seven image
+    # cases (four OME-Zarr NGFF 0.4, one OME-TIFF, one SpatialData, one sharded
+    # OME-Zarr NGFF 0.5), each with the table its points overlay reads. The
+    # image DCs have no
+    # delta table; their stores are uploaded under `bioimage/{dc_id}/`. See
+    # projects/init/bioimage_examples/.
+    "bioimage_examples": {
+        "project": "646b0f3c1e4a2d7f8e5b8f00",
+        "workflows": {"bioimage_demo": "646b0f3c1e4a2d7f8e5b8f01"},
+        "data_collections": {
+            "kidney_2d_image": "646b0f3c1e4a2d7f8e5b8f02",
+            "kidney_2d_cells": "646b0f3c1e4a2d7f8e5b8f03",
+            "ihc_spatial_image": "646b0f3c1e4a2d7f8e5b8f04",
+            "ihc_spatial_spots": "646b0f3c1e4a2d7f8e5b8f05",
+            "kidney_3d_timelapse_image": "646b0f3c1e4a2d7f8e5b8f06",
+            "kidney_3d_timelapse_nuclei": "646b0f3c1e4a2d7f8e5b8f07",
+            "multi_sample_images": "646b0f3c1e4a2d7f8e5b8f08",
+            "multi_sample_cells": "646b0f3c1e4a2d7f8e5b8f09",
+            "multi_sample_samples": "646b0f3c1e4a2d7f8e5b8f0a",
+            "lily_stem_image": "646b0f3c1e4a2d7f8e5b8f0b",
+            "lily_stem_cells": "646b0f3c1e4a2d7f8e5b8f0c",
+            "skin_spatialdata_image": "646b0f3c1e4a2d7f8e5b8f0d",
+            "skin_spatialdata_spots": "646b0f3c1e4a2d7f8e5b8f0e",
+            # Not contiguous: 8f10 to 8f15 are this project's dashboards.
+            "lily_sharded_image": "646b0f3c1e4a2d7f8e5b8f0f",
+            "lily_sharded_cells": "646b0f3c1e4a2d7f8e5b8f16",
+            # Read in place from the EMBL-EBI IDR (remote_stores), never uploaded.
+            "idr_laminb1_image": "646b0f3c1e4a2d7f8e5b8f17",
+            "idr_laminb1_nuclei": "646b0f3c1e4a2d7f8e5b8f19",
+            "multi_sample_labels": "646b0f3c1e4a2d7f8e5b8f1a",
+            "hcs_plate_image": "646b0f3c1e4a2d7f8e5b8f20",
+            "hcs_wells": "646b0f3c1e4a2d7f8e5b8f21",
+            "hcs_cells": "646b0f3c1e4a2d7f8e5b8f22",
+            "shape_gallery_images": "646b0f3c1e4a2d7f8e5b8f23",
+            "shape_gallery_sheet": "646b0f3c1e4a2d7f8e5b8f24",
+            "registration_images": "646b0f3c1e4a2d7f8e5b8f27",
+            "registration_steps": "646b0f3c1e4a2d7f8e5b8f28",
+            # The EM volume is read in place from the BioImage Archive; the LM
+            # overlay registered into it is a local store of the same DC.
+            "clem_images": "646b0f3c1e4a2d7f8e5b8f2a",
+            "clem_landmarks": "646b0f3c1e4a2d7f8e5b8f2b",
+            # A whole slide read in place from JAX (16 GB at level 0), and a
+            # table of tissue patches computed from it.
+            "wsi_slide": "646b0f3c1e4a2d7f8e5b8f2d",
+            "wsi_patches": "646b0f3c1e4a2d7f8e5b8f2e",
+            # An EM overview read in place from EMBL's S3, and electron
+            # tomograms of cells acquired inside it (generated locally).
+            "hela_images": "646b0f3c1e4a2d7f8e5b8f30",
+            "hela_tomograms": "646b0f3c1e4a2d7f8e5b8f31",
+        },
+        "dashboards": {
+            # Main tab id equals project_id (same convention as the showcase).
+            "bioimage_fluorescence": "646b0f3c1e4a2d7f8e5b8f00",
+            "bioimage_spatial": "646b0f3c1e4a2d7f8e5b8f10",
+            "bioimage_volume": "646b0f3c1e4a2d7f8e5b8f11",
+            "bioimage_multi_sample": "646b0f3c1e4a2d7f8e5b8f12",
+            "bioimage_ome_tiff": "646b0f3c1e4a2d7f8e5b8f13",
+            "bioimage_spatialdata": "646b0f3c1e4a2d7f8e5b8f14",
+            "bioimage_ngff05": "646b0f3c1e4a2d7f8e5b8f15",
+            "bioimage_remote": "646b0f3c1e4a2d7f8e5b8f18",
+            "bioimage_plate": "646b0f3c1e4a2d7f8e5b8f25",
+            "bioimage_shapes": "646b0f3c1e4a2d7f8e5b8f26",
+            "bioimage_registration": "646b0f3c1e4a2d7f8e5b8f29",
+            "bioimage_clem": "646b0f3c1e4a2d7f8e5b8f2c",
+            "bioimage_wsi": "646b0f3c1e4a2d7f8e5b8f2f",
+            "bioimage_hela_tomo": "646b0f3c1e4a2d7f8e5b8f32",
+        },
+    },
 }
 
-# Reference projects that are NOT seeded by default. They exist for the test
-# suite, so they stay out of ordinary deployments until DEPICTIO_SEED_EXTRA_PROJECTS
-# names one.
-OPTIONAL_DATASETS = ("catalog_conformance",)
+# Reference projects that are NOT seeded by default: the conformance fixture of
+# the test suite, and the bioimage examples (images, so bigger than a table demo).
+# They stay out of ordinary deployments until DEPICTIO_SEED_EXTRA_PROJECTS names
+# one, or DEPICTIO_SEED_PROJECTS lists one explicitly.
+OPTIONAL_DATASETS = ("catalog_conformance", "bioimage_examples")
 
 
 def _load_generated_static_ids(dataset_name: str) -> dict[str, Any]:
@@ -447,6 +516,8 @@ def _load_generated_static_ids(dataset_name: str) -> dict[str, Any]:
 
 
 for _optional in OPTIONAL_DATASETS:
+    if _optional in STATIC_IDS:
+        continue
     _ids = _load_generated_static_ids(_optional)
     if _ids:
         STATIC_IDS[_optional] = _ids
@@ -627,6 +698,7 @@ class ReferenceDatasetRegistry:
         "genome_tracks_examples": os.path.join("init", "genome_tracks_examples"),
         "viralrecon": os.path.join("nf-core", "viralrecon"),
         "catalog_conformance": os.path.join("init", "catalog_conformance"),
+        "bioimage_examples": os.path.join("init", "bioimage_examples"),
     }
 
     @classmethod
@@ -970,7 +1042,8 @@ async def create_reference_datasets(
             ``DEPICTIO_SEED_PROJECTS``). ``None`` seeds all of them.
         extra: Optional dataset names to seed *in addition* (from
             ``DEPICTIO_SEED_EXTRA_PROJECTS``). Only names in
-            ``OPTIONAL_DATASETS`` are honoured.
+            ``OPTIONAL_DATASETS`` are honoured. An optional name listed in
+            ``only`` is seeded too, so an allowlist can hold nothing but one.
 
     Note: ampliseq dataset uses 16S rRNA microbiome data from nf-core/ampliseq.
     Data files are included under depictio/projects/nf-core/ampliseq/<latest version>/.
@@ -993,14 +1066,19 @@ async def create_reference_datasets(
         "genome_tracks_examples",
     ]
 
+    # An optional dataset is asked for either way: added on top of the default
+    # set (`extra`), or named in the allowlist (`only`), which is how
+    # `depictio local up --examples bioimage_examples` seeds it and nothing else.
+    requested_optional = (extra or set()) | (only or set())
+
     if only is not None:
-        unknown = only - set(all_datasets)
+        unknown = only - set(all_datasets) - set(OPTIONAL_DATASETS)
         if unknown:
             logger.warning(
                 "DEPICTIO_SEED_PROJECTS lists unknown project(s) %s — ignoring them. "
                 "Valid names: %s",
                 sorted(unknown),
-                ", ".join(all_datasets),
+                ", ".join([*all_datasets, *OPTIONAL_DATASETS]),
             )
         datasets_to_create = [name for name in all_datasets if name in only]
         logger.info(
@@ -1014,9 +1092,9 @@ async def create_reference_datasets(
     # after the allowlist is applied is deliberate: asking for the conformance
     # project must not also mean giving up iris and the rest.
     for name in OPTIONAL_DATASETS:
-        if name in (extra or set()) and name in STATIC_IDS:
+        if name in requested_optional and name in STATIC_IDS:
             datasets_to_create.append(name)
-            logger.info("DEPICTIO_SEED_EXTRA_PROJECTS — also seeding: %s", name)
+            logger.info("Optional reference project requested, also seeding: %s", name)
 
     for dataset_name in datasets_to_create:
         logger.info(f"Creating reference dataset: {dataset_name}")

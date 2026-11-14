@@ -1,0 +1,194 @@
+# CLEM (HeLa): one tab of the bioimage examples.
+#
+# Regenerate the seed after editing:
+#   uv run python -m depictio.dev_scripts.generate_dashboard_seeds bioimage_examples
+#
+# The component `index` values are pinned rather than auto-generated: they are
+# what keeps a regenerated seed byte-identical to the shipped one.
+title: 'CLEM (HeLa)'
+subtitle: 'One cell in light and electron microscopy, registered on landmarks'
+icon: 'mdi:microscope'
+icon_color: 'violet'
+icon_variant: filled
+workflow_system: python
+dashboard_id: '646b0f3c1e4a2d7f8e5b8f2c'
+is_main_tab: false
+tab_order: 11
+parent_dashboard_tag: fluorescence
+tab_icon: 'mdi:microscope'
+tab_icon_color: 'violet'
+
+filter_sections:
+  - name: 'Landmarks'
+    icon: 'mdi:map-marker-outline'
+    color: 'violet'
+    description: 'Which landmarks the viewer, the plots and the table show'
+
+grid_sections:
+  - name: 'Correlation'
+    icon: 'mdi:microscope'
+    color: 'violet'
+    description: 'The EM volume with the light microscopy laid over it, and the landmarks between them'
+  - name: 'Registration quality'
+    icon: 'mdi:ruler'
+    color: 'violet'
+    description: 'How far each landmark lands from its partner once the affine is applied'
+
+components:
+  - tag: text-clem
+    index: omz-clem-text
+    component_type: text
+    title: 'Light microscopy over electron microscopy'
+    order: 6
+    alignment: left
+    vertical_alignment: top
+    section: 'Correlation'
+    body: >
+      One HeLa cell, imaged first by fluorescence (DAPI, mitochondria, Golgi,
+      lysosomes) and then by FIB-SEM at 5 nm. The EM volume is read in place from
+      the BioImage Archive (EMPIAR-10819), never copied. The fluorescence was
+      registered into it with an affine fitted on the landmarks the authors placed
+      between the two, and is laid over the EM: the Overlay slider fades it, Z moves
+      through the EM and the overlay follows. DAPI and mitochondria show first;
+      Golgi and lysosomes are under Overlay in the settings. Each dot is a
+      landmark within 0.3 um of the shown plane, coloured by how far it lands from
+      its EM partner after the affine; a lasso around some of them narrows the
+      plots and the table. Five landmarks were left out of the fit:
+      their error is the honest one. Data from Krentzel et al., CLEM-Reg, Nature
+      Methods 2025 (S-BIAD4355, S-BSST707).
+    layout: { x: 0, y: 0, w: 8, h: 2 }
+
+  - tag: viz-clem
+    index: omz-clem-viewer
+    component_type: advanced_viz
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: clem_images
+    title: 'FIB-SEM with the registered fluorescence'
+    description: 'EMPIAR-10819, 965 x 7000 x 5938 at 5 nm, read from the BioImage Archive; the four fluorescence channels resampled into its frame (0.08 um in plane, 0.25 um in depth).'
+    section: 'Correlation'
+    viz_kind: bioimage_viewer
+    config:
+      viz_kind: bioimage_viewer
+      image_dc_tag: clem_images
+      image_wf_id: '646b0f3c1e4a2d7f8e5b8f01'
+      image_dc_id: '646b0f3c1e4a2d7f8e5b8f2a'
+      store: IM1.zarr
+      overlay_store: lm_in_em.zarr
+      points_dc_tag: clem_landmarks
+      points_wf_id: '646b0f3c1e4a2d7f8e5b8f01'
+      points_dc_id: '646b0f3c1e4a2d7f8e5b8f2b'
+      cell_id_col: landmark
+      x_col: em_x_px
+      y_col: em_y_px
+      z_col: em_z_px
+      # 60 planes of 5 nm: the landmarks within 0.3 um of the shown plane.
+      points_z_tolerance: 60
+      channels:
+        - index: 0
+          name: 'FIB-SEM'
+          color: '#FFFFFF'
+      color_col: residual_um
+      point_radius: 4
+      selection_enabled: true
+      show_scalebar: true
+    layout: { x: 0, y: 2, w: 8, h: 10 }
+
+  - tag: card-clem-count
+    index: omz-clem-card-count
+    component_type: card
+    section: 'Registration quality'
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: clem_landmarks
+    aggregation: count
+    column_name: landmark
+    column_type: object
+    icon_name: mdi:map-marker-multiple
+    title_font_size: md
+    value_font_size: xl
+    title: 'Landmarks'
+    layout: { x: 0, y: 12, w: 2, h: 2 }
+
+  - tag: card-clem-mean
+    index: omz-clem-card-mean
+    component_type: card
+    section: 'Registration quality'
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: clem_landmarks
+    aggregation: average
+    column_name: residual_um
+    column_type: float64
+    icon_name: mdi:target
+    title_font_size: md
+    value_font_size: xl
+    title: 'Mean residual (um)'
+    layout: { x: 2, y: 12, w: 2, h: 2 }
+
+  - tag: card-clem-max
+    index: omz-clem-card-max
+    component_type: card
+    section: 'Registration quality'
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: clem_landmarks
+    aggregation: max
+    column_name: residual_um
+    column_type: float64
+    icon_name: mdi:arrow-expand-all
+    title_font_size: md
+    value_font_size: xl
+    title: 'Largest residual (um)'
+    layout: { x: 4, y: 12, w: 2, h: 2 }
+
+  - tag: figure-clem-residuals
+    index: omz-clem-fig-residuals
+    component_type: figure
+    section: 'Registration quality'
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: clem_landmarks
+    title: 'Residual after the affine'
+    visu_type: histogram
+    dict_kwargs:
+      x: residual_um
+      color: set
+      nbins: 30
+    layout: { x: 0, y: 14, w: 4, h: 4 }
+
+  - tag: figure-clem-depth
+    index: omz-clem-fig-depth
+    component_type: figure
+    section: 'Registration quality'
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: clem_landmarks
+    title: 'Residual by depth in the EM'
+    visu_type: scatter
+    dict_kwargs:
+      x: em_z_um
+      y: residual_um
+      color: set
+    layout: { x: 4, y: 14, w: 4, h: 4 }
+
+  - tag: table-clem-landmarks
+    index: omz-clem-landmarks
+    component_type: table
+    section: 'Registration quality'
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: clem_landmarks
+    title: 'Landmarks'
+    description: 'One row per landmark pair: its position in both images and its residual.'
+    page_size: 10
+    layout: { x: 0, y: 18, w: 8, h: 4 }
+
+  - tag: filter-clem-set
+    index: omz-clem-f-set
+    component_type: interactive
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: clem_landmarks
+    interactive_component_type: MultiSelect
+    column_name: set
+    column_type: object
+    title: 'Landmark set'
+    placement: left
+    section: 'Landmarks'
+    display:
+      title_size: md
+      icon_name: 'mdi:map-marker-multiple'
+    layout: { x: 0, y: 0, w: 1, h: 3 }

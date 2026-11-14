@@ -44,6 +44,7 @@ from depictio.cli.cli.utils.scan_utils import (
     data_collection_full_regex,
     describe_empty_scan_outcome,
     describe_unmatched_run_scan,
+    file_matches_data_collection,
     generate_file_hash,
     generate_run_hash,
     regex_match,
@@ -60,10 +61,22 @@ from depictio.cli.cli_logging import logger
 from depictio.models.models.base import PyObjectId
 from depictio.models.models.cli import CLIConfig
 from depictio.models.models.data_collections import DataCollection
+from depictio.models.models.data_collections_types.bioimage import (
+    OME_TIFF_SUFFIXES,
+    OME_ZARR_STORE_SUFFIX,
+    DCBioimageConfig,
+    bioimage_store_suffixes,
+    is_file_store_format,
+)
+from depictio.models.models.data_collections_types.table import (
+    DCTableConfig,
+    SpatialDataTableSource,
+)
 from depictio.models.models.files import (
     NOT_UPLOADED_SCAN_REASONS,
     File,
     FileScanResult,
+    is_zarr_store_dir,
 )
 from depictio.models.models.users import Permission, UserBase
 from depictio.models.models.workflows import (
@@ -169,6 +182,179 @@ def _warn_enforced_scan_bounds(data_collections: list[DataCollection]) -> None:
     )
 
 
+def _is_bioimage_dc(data_collection: "DataCollection") -> bool:
+    return data_collection.config.type.lower() == "bioimage"
+
+
+def _bioimage_format(data_collection: "DataCollection") -> str:
+    """The bioimage DC's store format (``ome-zarr`` when unset)."""
+    props = getattr(data_collection.config, "dc_specific_properties", None)
+    return props.format if isinstance(props, DCBioimageConfig) else "ome-zarr"
+
+
+def _spatialdata_source(data_collection: "DataCollection") -> SpatialDataTableSource | None:
+    """The spatialdata block of a ``table`` DC with ``format: spatialdata``, else None."""
+    if data_collection.config.type.lower() != "table":
+        return None
+    props = getattr(data_collection.config, "dc_specific_properties", None)
+    if isinstance(props, DCTableConfig) and props.format == "spatialdata":
+        return props.spatialdata
+    return None
+
+
+def _is_store_dc(data_collection: "DataCollection") -> bool:
+    """DCs whose Files are whole stores, never walked into: bioimages of any
+    format, and SpatialData tables."""
+    return _is_bioimage_dc(data_collection) or _spatialdata_source(data_collection) is not None
+
+
+def _is_zarr_store_dc(data_collection: "DataCollection") -> bool:
+    """DCs whose Files are whole ``*.zarr`` stores: OME-Zarr / SpatialData bioimages,
+    and SpatialData tables."""
+    if _is_bioimage_dc(data_collection):
+        return not is_file_store_format(_bioimage_format(data_collection))
+    return _spatialdata_source(data_collection) is not None
+
+
+def _remote_stores(data_collection: "DataCollection") -> list[str]:
+    """A bioimage DC's ``remote_stores`` (read in place, never scanned)."""
+    props = getattr(data_collection.config, "dc_specific_properties", None)
+    return list(props.remote_stores) if isinstance(props, DCBioimageConfig) else []
+
+
+def _is_bioimage_file_name(path: str, fmt: str) -> bool:
+    """Name-only half of ``is_bioimage_file``: no file is opened."""
+    name = os.path.basename(path)
+    if fmt == "tiff" and name.endswith(OME_TIFF_SUFFIXES):
+        return False  # an OME image beside the masks, not a mask
+    return os.path.isfile(path) and any(
+        name.endswith(s) and name != s for s in bioimage_store_suffixes(fmt)
+    )
+
+
+def is_bioimage_file(path: str, fmt: str = "ome-tiff") -> bool:
+    """True when ``path`` is a regular file named like a file store of ``fmt``:
+    a non-OME ``*.tif(f)`` for a labels TIFF; ``*.ome.tif(f)``, or a plain
+    ``*.tif(f)`` whose header carries OME-XML, for OME-TIFF (so masks beside
+    the images are not picked up)."""
+    if not _is_bioimage_file_name(path, fmt):
+        return False
+    if fmt != "ome-tiff" or path.endswith(OME_TIFF_SUFFIXES):
+        return True
+    from depictio.cli.cli.utils.deltatables import validate_ome_tiff
+
+    try:
+        validate_ome_tiff(path)
+    except (OSError, ValueError):
+        return False
+    return True
+
+
+def is_ome_tiff_file(path: str) -> bool:
+    """True when ``path`` is an OME-TIFF file (see ``is_bioimage_file``)."""
+    return is_bioimage_file(path, "ome-tiff")
+
+
+def iter_bioimage_files(path: str, fmt: str = "ome-tiff") -> list[str]:
+    """File stores of ``fmt`` (OME-TIFF, labels TIFF) at or under ``path``, sorted.
+
+    ``*.zarr`` directories are not walked into: they hold chunk files only.
+    """
+    if os.path.isfile(path):
+        return [path] if is_bioimage_file(path, fmt) else []
+    found: list[str] = []
+    for root, dirs, files in os.walk(path):
+        dirs[:] = sorted(d for d in dirs if not d.endswith(OME_ZARR_STORE_SUFFIX))
+        found.extend(
+            os.path.join(root, f) for f in files if is_bioimage_file(os.path.join(root, f), fmt)
+        )
+    return sorted(found)
+
+
+def iter_ome_tiff_files(path: str) -> list[str]:
+    """OME-TIFF files at or under ``path``, sorted (see ``iter_bioimage_files``)."""
+    return iter_bioimage_files(path, "ome-tiff")
+
+
+def iter_bioimage_stores(path: str, fmt: str) -> list[str]:
+    """Stores of format ``fmt`` at or under ``path``: TIFF files or ``*.zarr`` directories."""
+    return iter_bioimage_files(path, fmt) if is_file_store_format(fmt) else iter_zarr_stores(path)
+
+
+def warn_unmatched_sample_pattern(data_collection: "DataCollection", stores: list[str]) -> None:
+    """Log the stores a bioimage DC's ``sample_pattern`` does not match.
+
+    Such a store falls back to its name without suffix as its sample, which
+    rarely pairs with the image or the cells of that sample.
+    """
+    props = getattr(data_collection.config, "dc_specific_properties", None)
+    pattern = props.sample_pattern if isinstance(props, DCBioimageConfig) else None
+    if not pattern:
+        return
+    unmatched = [s for s in stores if not re.search(pattern, os.path.basename(s.rstrip("/")))]
+    if unmatched:
+        logger.warning(
+            f"{data_collection.data_collection_tag}: sample_pattern {pattern!r} does not match "
+            f"{len(unmatched)} store(s), which use their name as sample, e.g. {unmatched[0]}"
+        )
+
+
+def iter_zarr_stores(path: str) -> list[str]:
+    """OME-Zarr store directories at or under ``path``, sorted.
+
+    ``path`` itself is returned when it is a store. Otherwise the tree is walked
+    and every directory named ``*.zarr`` is collected without descending into
+    it: a store holds thousands of chunk files that are never scanned one by one.
+    """
+    if is_zarr_store_dir(path):
+        return [path]
+    stores: list[str] = []
+    for root, dirs, _ in os.walk(path):
+        kept = []
+        for d in sorted(dirs):
+            if d.endswith(OME_ZARR_STORE_SUFFIX):
+                stores.append(os.path.join(root, d))
+            else:
+                kept.append(d)
+        dirs[:] = kept
+    return sorted(stores)
+
+
+def zarr_store_stats(store_path: str) -> tuple[int, float, bytes]:
+    """Total byte size, newest mtime and root metadata of a store.
+
+    The root metadata is ``.zattrs`` (NGFF 0.4 / zarr v2) or ``zarr.json``
+    (NGFF 0.5 / zarr v3), empty when the store has neither.
+    """
+    total_size = 0
+    max_mtime = os.path.getmtime(store_path)
+    for root, _, files in os.walk(store_path):
+        for name in files:
+            st = os.stat(os.path.join(root, name))
+            total_size += st.st_size
+            max_mtime = max(max_mtime, st.st_mtime)
+    for meta_name in (".zattrs", "zarr.json"):
+        meta_path = os.path.join(store_path, meta_name)
+        if os.path.isfile(meta_path):
+            with open(meta_path, "rb") as fh:
+                return total_size, max_mtime, fh.read()
+    return total_size, max_mtime, b""
+
+
+def generate_zarr_store_hash(
+    store_name: str, total_size: int, max_mtime_iso: str, root_meta: bytes
+) -> str:
+    """Change-detection hash of a store: name, root metadata (``.zattrs`` or
+    ``zarr.json``), total size and newest mtime.
+
+    Walking the store once is enough to notice a rewritten chunk or shard (size
+    or mtime moves) or edited metadata, without hashing gigabytes of pixel data.
+    """
+    digest = hashlib.sha256(f"{store_name}{total_size}{max_mtime_iso}".encode())
+    digest.update(root_meta)
+    return digest.hexdigest()
+
+
 def scan_single_file(
     file_location: str,
     run: WorkflowRun,
@@ -209,6 +395,7 @@ def scan_single_file(
         Optional[File]: A File instance if the file is valid; otherwise, None.
     """
 
+    spatialdata = _spatialdata_source(data_collection)
     if scanned is not None:
         file_location = scanned.path
         file_name = scanned.name
@@ -219,7 +406,16 @@ def scan_single_file(
         # should be the original target, not the transient symlink. file_hash is
         # derived from basename + size + mtime (not the path), so this does not affect
         # change detection or hash-based dedup.
-        file_location = os.path.realpath(file_location)
+        resolved_location = os.path.realpath(file_location)
+        if _is_store_dc(data_collection):
+            # A bioimage store is named after its basename (store name, sample,
+            # upload key), so a symlink to a differently named target (git-annex /
+            # DataLad blobs, a *.zarr link to an unsuffixed folder) keeps the
+            # scanned path.
+            if os.path.basename(resolved_location) == os.path.basename(file_location):
+                file_location = resolved_location
+        else:
+            file_location = resolved_location
         file_name = os.path.basename(file_location)
 
     if not skip_regex:
@@ -241,10 +437,30 @@ def scan_single_file(
 
     # Get file details. Kept after the regex check so a non-matching file still
     # costs nothing on the legacy (non-``scanned``) path.
+    root_meta = b""
+    file_hash: str | None = None
+    is_store = scanned is None and is_zarr_store_dir(file_location)
     if scanned is not None:
         creation_time_iso = format_timestamp(scanned.ctime)
         modification_time_iso = format_timestamp(scanned.mtime)
         filesize = scanned.size
+    elif spatialdata is not None and is_store:
+        # A SpatialData table is one File per store, hashed on what the table
+        # DC reads (table, its regions, image metadata), not the whole store.
+        from depictio.cli.cli.utils.spatialdata_table import spatialdata_table_stats
+
+        creation_time_iso = format_timestamp(os.path.getctime(file_location))
+        try:
+            filesize, store_mtime, file_hash = spatialdata_table_stats(file_location, spatialdata)
+        except ValueError as e:
+            logger.warning(f"Skipping SpatialData store {file_location}: {e}")
+            return None
+        modification_time_iso = format_timestamp(store_mtime)
+    elif is_store:
+        # An OME-Zarr store is one File: size and mtime aggregate its whole tree.
+        creation_time_iso = format_timestamp(os.path.getctime(file_location))
+        filesize, store_mtime, root_meta = zarr_store_stats(file_location)
+        modification_time_iso = format_timestamp(store_mtime)
     else:
         creation_time_iso = format_timestamp(os.path.getctime(file_location))
         modification_time_iso = format_timestamp(os.path.getmtime(file_location))
@@ -258,7 +474,14 @@ def scan_single_file(
         )
         return None
 
-    file_hash = generate_file_hash(file_name, filesize, creation_time_iso, modification_time_iso)
+    if file_hash is not None:
+        pass
+    elif is_store:
+        file_hash = generate_zarr_store_hash(file_name, filesize, modification_time_iso, root_meta)
+    else:
+        file_hash = generate_file_hash(
+            file_name, filesize, creation_time_iso, modification_time_iso
+        )
     logger.debug(f"File Hash for {file_name}: {file_hash}")
 
     scan_result = None
@@ -381,7 +604,32 @@ def process_files(
         )
         logger.debug(f"Full Regex: {full_regex}")
 
-    if os.path.isdir(path):
+    if _is_store_dc(data_collection):
+        # Each store (a *.zarr directory or an *.ome.tif(f) file) is one File;
+        # never walk into a zarr store.
+        fmt = (
+            _bioimage_format(data_collection) if _is_bioimage_dc(data_collection) else "spatialdata"
+        )
+        logger.debug(f"Scanning {fmt} stores under: {path}")
+        stores = iter_bioimage_stores(path, fmt)
+        if not stores:
+            logger.warning(f"No {fmt} store found at {path}")
+        if _is_bioimage_dc(data_collection):
+            warn_unmatched_sample_pattern(data_collection, stores)
+        for store_location in stores:
+            file_instance = scan_single_file(
+                file_location=store_location,
+                run=run,
+                data_collection=data_collection,
+                permissions=permissions,
+                existing_files=existing_files,
+                update_files=update_files,
+                full_regex=full_regex,
+                skip_regex=skip_regex,
+            )
+            if file_instance:
+                file_list.append(file_instance)
+    elif os.path.isdir(path):
         logger.debug(f"Scanning directory: {path}")
         bounds = _dc_scan_bounds(data_collection) if honor_scan_bounds else ScanBounds(None, ())
         for scanned in iter_run_files(path, max_depth=bounds.max_depth, ignore=list(bounds.ignore)):
@@ -419,6 +667,22 @@ def process_files(
         raise ValueError(f"Path '{path}' is neither a file nor a directory.")
 
     return file_list
+
+
+def _run_candidates(
+    dc: DataCollection, all_files_in_run: list[ScannedPath], all_zarr_stores_in_run: list[str]
+) -> list[str]:
+    """Paths a DC's regex is matched against in a run: its stores (zarr directories or
+    file stores). Only called for bioimage and SpatialData table DCs.
+
+    File-store bioimage DCs are narrowed by name only; the OME-TIFF header
+    check runs after the regex (``is_bioimage_file``), so a run's other
+    ``*.tif`` files are never opened.
+    """
+    if _is_zarr_store_dc(dc):
+        return all_zarr_stores_in_run
+    fmt = _bioimage_format(dc)
+    return [f.walk_path for f in all_files_in_run if _is_bioimage_file_name(f.walk_path, fmt)]
 
 
 def scan_run_for_multiple_data_collections(
@@ -496,6 +760,16 @@ def scan_run_for_multiple_data_collections(
             )
         )
 
+    # Zarr-based bioimage DCs (OME-Zarr, SpatialData) and SpatialData table DCs
+    # match store directories instead of files (collected once, only when one
+    # of the DCs needs them). OME-TIFF DCs match the TIFF files among the run's
+    # regular files.
+    all_zarr_stores_in_run: list[str] = (
+        iter_zarr_stores(run_location)
+        if any(_is_zarr_store_dc(dc) for dc in data_collections)
+        else []
+    )
+
     # Process files for each data collection
     all_processed_files = []
     dc_stats = {}  # This will store per-data-collection stats
@@ -549,12 +823,34 @@ def scan_run_for_multiple_data_collections(
         dc_bounds = _dc_scan_bounds(dc) if honor_scan_bounds else None
 
         dc_file_scan_results = []
-        for scanned in select_run_files(all_files_in_run, run_location, full_regex, dc_bounds):
-            logger.debug(f"File {scanned.match_name} matches DC {dc.data_collection_tag}")
+        if _is_bioimage_dc(dc) or _is_zarr_store_dc(dc):
+            # A store (a *.zarr directory or an OME-TIFF file) is matched on its
+            # path and scanned on the non-``scanned`` path, which stats it whole.
+            candidates: list[tuple[ScannedPath | None, str]] = [
+                (None, store)
+                for store in _run_candidates(dc, all_files_in_run, all_zarr_stores_in_run)
+                if file_matches_data_collection(store, run_location, full_regex)
+                # A file-backed bioimage DC (OME-TIFF, a TIFF mask) keeps only
+                # the files of its own format.
+                and (
+                    _is_zarr_store_dc(dc)
+                    or not _is_bioimage_dc(dc)
+                    or is_bioimage_file(store, _bioimage_format(dc))
+                )
+            ]
+        else:
+            candidates = [
+                (scanned, scanned.path)
+                for scanned in select_run_files(
+                    all_files_in_run, run_location, full_regex, dc_bounds
+                )
+            ]
+        for scanned, scan_location in candidates:
+            logger.debug(f"File {scan_location} matches DC {dc.data_collection_tag}")
 
             # skip_regex=True because we already matched in the loop above
             file_scan_result = scan_single_file(
-                file_location=scanned.path,
+                file_location=scan_location,
                 run=temp_run,
                 data_collection=dc,
                 permissions=permissions,
@@ -568,6 +864,11 @@ def scan_run_for_multiple_data_collections(
 
             if file_scan_result:
                 dc_file_scan_results.append(file_scan_result)
+
+        if _is_bioimage_dc(dc):
+            warn_unmatched_sample_pattern(
+                dc, [sc.file.file_location for sc in dc_file_scan_results]
+            )
 
         # Process the scan results for this data collection. Bucket by reason
         # once rather than re-walking the result list per counter.
@@ -2200,6 +2501,22 @@ def scan_manifest_for_data_collection(
     return {"result": "success", "added": len(to_add), "updated": len(to_update)}
 
 
+def _is_current_single_location(
+    data_collection: DataCollection, location: str, current_path: str
+) -> bool:
+    """Whether a registered File still belongs to a single-mode DC's scan path.
+
+    An OME-Zarr (or SpatialData table) single-mode ``filename`` may point at one
+    store or at a folder of stores, so any store at or under that path is current.
+    """
+    if location == current_path:
+        return True
+    if not _is_store_dc(data_collection):
+        return False
+    root = os.path.realpath(current_path)
+    return location == root or location.startswith(root.rstrip("/") + "/")
+
+
 def scan_files_for_data_collection(
     workflow: Workflow,
     data_collection_id: str,
@@ -2289,7 +2606,9 @@ def scan_files_for_data_collection(
         current_file_path = data_collection.config.scan.scan_parameters.filename
         if existing_files_reformated:
             stale_files = [
-                f for loc, f in existing_files_reformated.items() if loc != current_file_path
+                f
+                for loc, f in existing_files_reformated.items()
+                if not _is_current_single_location(data_collection, loc, current_file_path)
             ]
             for stale_file in stale_files:
                 stale_id = stale_file.get("_id") or stale_file.get("id")
@@ -2483,6 +2802,10 @@ def scan_project_files(
             for dc in data_collections_to_scan
             if dc.config.type.lower() == "multiqc" and not dc.config.scan
         ]
+        # Bioimage DCs with only remote stores: read in place, nothing to scan.
+        remote_bioimage_data_collections = [
+            dc for dc in data_collections_to_scan if not dc.config.scan and _remote_stores(dc)
+        ]
         # Note: Image DCs are now processed as single/aggregate (like Table DCs)
         # They have delta tables and scan configs, so no special handling needed
 
@@ -2581,6 +2904,14 @@ def scan_project_files(
             )
             # MultiQC collections don't need file scanning - they work with existing parquet files
             # The actual processing happens in Step 6 (data processing)
+
+        for dc in remote_bioimage_data_collections:
+            rich_print_checked_statement(
+                f"  ↪ Data Collection: [italic]'{dc.data_collection_tag}'[/italic] - type "
+                f"{dc.config.type} - {len(_remote_stores(dc))} remote store(s), read in place "
+                "(no file scanning needed)",
+                "info",
+            )
 
         # Note: Image DCs are now processed in single/aggregate_data_collections
         # They have delta tables and are scanned like Table DCs

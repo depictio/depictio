@@ -1427,6 +1427,411 @@ class PhylogeneticConfig(_BaseVizConfig):
         return self
 
 
+_HEX_COLOUR_RE = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
+
+
+class BioimageChannel(BaseModel):
+    """Display settings for one channel of an OME-Zarr image.
+
+    Unlisted channels keep what the store's own ``omero`` metadata says (or the
+    viewer's defaults when it says nothing).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    index: int = Field(..., ge=0, description="Channel index along the image's c axis")
+    name: str | None = Field(default=None, description="Display name; null uses the store's")
+    description: str | None = Field(
+        default=None,
+        description=(
+            "What the channel shows, for a reader who does not know the name "
+            "(e.g. 'Electron microscopy: electron density, dark = dense'); shown "
+            "as the channel's tooltip"
+        ),
+    )
+    visible: bool = Field(default=True, description="Draw this channel")
+    color: str | None = Field(
+        default=None, description="Hex colour (e.g. '#ff00ff'); null uses the store's"
+    )
+    contrast_limits: tuple[float, float] | None = Field(
+        default=None, description="(min, max) intensity window; null uses the store's"
+    )
+
+    @field_validator("color")
+    @classmethod
+    def _hex_colour(cls, value: str | None) -> str | None:
+        if value is not None and not _HEX_COLOUR_RE.match(value):
+            raise ValueError(f"color must be a hex colour like '#ff00ff', got {value!r}")
+        return value
+
+    @field_validator("contrast_limits", mode="before")
+    @classmethod
+    def _limits_from_yaml_list(cls, value: Any) -> Any:
+        """Accept the YAML spelling ``[min, max]``, for the reason given on
+        ``ProfileConfig._bands_from_yaml_lists``."""
+        return tuple(value) if isinstance(value, list) else value
+
+    @field_validator("contrast_limits")
+    @classmethod
+    def _ordered_limits(cls, value: tuple[float, float] | None) -> tuple[float, float] | None:
+        if value is not None and value[0] >= value[1]:
+            raise ValueError(f"contrast_limits must be (min, max) with min < max, got {value}")
+        return value
+
+
+class BioimageViewerConfig(_BaseVizConfig):
+    """Multiscale image (OME-Zarr NGFF 0.4/0.5, OME-TIFF, SpatialData) with an
+    optional cell-points overlay.
+
+    The pixels come from a *separate* DC with ``type: "bioimage"`` holding one
+    or more stores: ``.zarr`` key trees served key by key through
+    ``/advanced_viz/bioimage/{dc_id}/{store}/{key}``, or ``.ome.tif`` files
+    read with Range through ``/advanced_viz/bioimage/{dc_id}/{store}``. The
+    image has no tabular payload, so the CANONICAL_SCHEMAS entry is empty.
+
+    Two optional table DCs plug into it. A *sample* DC lets an upstream filter
+    on ``sample_column`` pick the store to show (the store whose name without
+    ``.zarr`` equals the first selected value). A *points* DC draws one marker
+    per row at (``x_col``, ``y_col``) mapped to level-0 pixels, and a lasso on
+    those markers emits a ``scatter_selection`` filter on ``cell_id_col``.
+
+    Every ``*_dc_tag`` is what a template YAML ships; the dashboard import
+    rewrites the matching ``*_dc_id`` / ``*_wf_id`` from it, like the
+    phylogenetic viz's ``tree_dc_tag``.
+    """
+
+    viz_kind: Literal["bioimage_viewer"] = "bioimage_viewer"
+
+    # Image source: a bioimage DC.
+    image_wf_id: str | None = Field(default=None, description="Workflow id of the bioimage DC")
+    image_dc_id: str | None = Field(
+        default=None, description="Data-collection id of the bioimage DC"
+    )
+    image_dc_tag: str | None = Field(
+        default=None,
+        description="Data-collection tag of the bioimage DC (resolved to ids at import)",
+    )
+    store: str | None = Field(
+        default=None,
+        description="Store shown first (e.g. 'sample_A.zarr'); null uses the first store",
+    )
+    view_link: str | None = Field(
+        default=None,
+        description=(
+            "Tiles of a dashboard with the same view_link move together: a pan or zoom "
+            "in one is applied to the others (two samples, or two stains, compared at "
+            "the same place)"
+        ),
+    )
+    store_pattern: str | None = Field(
+        default=None,
+        description=(
+            "Regex searched in store names: the stores this tile offers. Others in "
+            "the DC belong to another tile (an overview beside its detail images)"
+        ),
+    )
+
+    # Sample source: a table DC whose filters choose the store.
+    sample_wf_id: str | None = Field(
+        default=None, description="Workflow id of the sample table DC (optional)"
+    )
+    sample_dc_id: str | None = Field(
+        default=None, description="Data-collection id of the sample table DC (optional)"
+    )
+    sample_dc_tag: str | None = Field(
+        default=None,
+        description="Data-collection tag of the sample table DC (resolved to ids at import)",
+    )
+    sample_column: str | None = Field(
+        default=None,
+        description=(
+            "Column of the sample DC whose filtered value names the store to show "
+            "(matched against the store name without '.zarr')"
+        ),
+    )
+    well_column: str | None = Field(
+        default=None,
+        description=(
+            "Column whose filtered value names the well to show when the store is an "
+            "HCS plate (A1, A01 and A/1 all match well A/1); else the reader picks one"
+        ),
+    )
+
+    channels: list[BioimageChannel] = Field(
+        default_factory=list, description="Per-channel overrides of the store's display metadata"
+    )
+    show_scalebar: bool = Field(
+        default=True, description="Draw a scale bar (needs physical units in the store)"
+    )
+
+    # Points overlay: a table DC with one row per cell / spot.
+    points_wf_id: str | None = Field(
+        default=None, description="Workflow id of the points table DC (optional)"
+    )
+    points_dc_id: str | None = Field(
+        default=None, description="Data-collection id of the points table DC (optional)"
+    )
+    points_dc_tag: str | None = Field(
+        default=None,
+        description="Data-collection tag of the points table DC (resolved to ids at import)",
+    )
+    cell_id_col: str | None = Field(
+        default=None, description="Point identifier column, the one a lasso selection filters on"
+    )
+    x_col: str | None = Field(default=None, description="Point x coordinate column")
+    y_col: str | None = Field(default=None, description="Point y coordinate column")
+    z_col: str | None = Field(
+        default=None,
+        description=(
+            "Point z plane column (0-based plane index): only the shown plane's points are "
+            "drawn, unless points_all_planes"
+        ),
+    )
+    t_col: str | None = Field(
+        default=None,
+        description="Point time point column (0-based index): only the shown time's points",
+    )
+    points_z_tolerance: float = Field(
+        default=0.0,
+        ge=0,
+        description=(
+            "Planes either side of the shown one whose points still draw (z_col): a "
+            "point between planes, or a stack too thin to hold one per plane"
+        ),
+    )
+    points_all_planes: bool = Field(
+        default=False,
+        description="Draw every point whatever its z / t, instead of the shown plane's only",
+    )
+    color_col: str | None = Field(default=None, description="Optional point colour column")
+    points_scale: float = Field(
+        default=1.0, gt=0, description="Multiplier from table coordinates to level-0 pixels"
+    )
+    points_offset_x: float = Field(default=0.0, description="x offset in level-0 pixels")
+    points_offset_y: float = Field(default=0.0, description="y offset in level-0 pixels")
+    point_radius: float = Field(default=6.0, gt=0, description="Marker radius in screen pixels")
+    # A point with a size draws as a box (a tissue patch, a field acquired at
+    # higher magnification): both columns or neither, in table units.
+    box_w_col: str | None = Field(
+        default=None,
+        description="Box width column (table units, like x_col): the point draws as a box",
+    )
+    box_h_col: str | None = Field(
+        default=None, description="Box height column (table units, like y_col)"
+    )
+    frame_on_filter: bool = Field(
+        default=False,
+        description=(
+            "Zoom to the points the dashboard filters keep (another tile's selection "
+            "included): the detail view of an overview tile"
+        ),
+    )
+    points_sample_col: str | None = Field(
+        default=None,
+        description="Points column holding the sample name, to keep only the shown store's points",
+    )
+    points_well_col: str | None = Field(
+        default=None,
+        description="Points column holding the well name, to keep only the shown well's points",
+    )
+
+    # Labels overlay: a bioimage DC with ``kind: labels`` (segmentation masks),
+    # one store per sample, matched to the shown image by sample name. A label
+    # value is a cell id, so ``color_col`` / filters / selection of the points
+    # DC apply to the cells through ``cell_id_col``.
+    labels_wf_id: str | None = Field(
+        default=None, description="Workflow id of the labels bioimage DC (optional)"
+    )
+    labels_dc_id: str | None = Field(
+        default=None, description="Data-collection id of the labels bioimage DC (optional)"
+    )
+    labels_dc_tag: str | None = Field(
+        default=None,
+        description="Data-collection tag of the labels bioimage DC (resolved to ids at import)",
+    )
+    labels_opacity: float = Field(
+        default=0.5, ge=0, le=1, description="Opacity of the filled labels"
+    )
+    labels_outline: bool = Field(
+        default=True, description="Draw each label's outline rather than only its fill"
+    )
+
+    # Processing steps: a table DC with one row per sample and step (raw,
+    # rigid, affine, B-spline...), each naming the store that step wrote in
+    # the image DC. The tile then shows a step picker instead of the store
+    # picker, the step's metrics, and can lay the step's reference image
+    # (the fixed image of a registration) over it to judge the alignment.
+    steps_wf_id: str | None = Field(
+        default=None, description="Workflow id of the processing-steps table DC (optional)"
+    )
+    steps_dc_id: str | None = Field(
+        default=None, description="Data-collection id of the processing-steps table DC"
+    )
+    steps_dc_tag: str | None = Field(
+        default=None,
+        description="Data-collection tag of the processing-steps table DC (resolved at import)",
+    )
+    steps_store_col: str | None = Field(
+        default=None, description="Steps column naming the store (in the image DC) a step wrote"
+    )
+    steps_label_col: str | None = Field(
+        default=None, description="Steps column with the step's name (e.g. rigid, affine)"
+    )
+    steps_order_col: str | None = Field(
+        default=None, description="Steps column ordering the steps (numeric); else table order"
+    )
+    steps_sample_col: str | None = Field(
+        default=None,
+        description="Steps column holding the sample, when the table covers several samples",
+    )
+    steps_reference_col: str | None = Field(
+        default=None,
+        description=(
+            "Steps column naming a reference store (the fixed image) to lay over the step"
+        ),
+    )
+    steps_metric_cols: list[str] = Field(
+        default_factory=list,
+        description="Steps columns shown as the step's metrics (e.g. ncc, tre_px)",
+    )
+    steps_param_col: str | None = Field(
+        default=None,
+        description=(
+            "Steps column holding the parameters a step ran with: a JSON object, or "
+            "'key=value; ...' pairs. Shown read-only; the tile never reruns a step"
+        ),
+    )
+    steps_info_cols: list[str] = Field(
+        default_factory=list,
+        description="Steps columns describing the run (tool, version, duration), as one line",
+    )
+    steps_metric_better: dict[str, Literal["higher", "lower"]] = Field(
+        default_factory=dict,
+        description=(
+            "Which way each metric improves (e.g. {ncc: higher, tre_px: lower}), so its "
+            "change since the step before reads as better or worse"
+        ),
+    )
+    # Another image registered onto this one (light microscopy over EM): a
+    # store of the same image DC, drawn over the image in its own channels and
+    # stretched to the image's extent, so it must cover the same field.
+    overlay_store: str | None = Field(
+        default=None,
+        description=(
+            "Store of the image DC drawn over the image in its own channels (e.g. LM "
+            "registered into an EM volume), covering the same field"
+        ),
+    )
+    overlay_opacity: float = Field(
+        default=0.6, ge=0, le=1, description="Opacity of the overlay image (0 hides it)"
+    )
+
+    # On by default, unlike EmbeddingConfig: the kind is new, so no shipped
+    # dashboard inherits a cross-filter it did not ask for, and it stays inert
+    # until a points DC with a `cell_id_col` is bound.
+    selection_enabled: bool = Field(
+        default=True,
+        description=(
+            "Let a lasso / box selection on the points emit a dashboard filter on "
+            "``cell_id_col`` of the points DC"
+        ),
+    )
+    selection_column: str | None = Field(
+        default=None,
+        description=(
+            "Points column the selection filters on, when ``cell_id_col`` is unique only "
+            "per sample (e.g. a sample:cell key); defaults to ``cell_id_col``"
+        ),
+    )
+
+    @field_validator("store_pattern")
+    @classmethod
+    def _valid_store_pattern(cls, value: str | None) -> str | None:
+        if value is not None:
+            try:
+                re.compile(value)
+            except re.error as e:
+                raise ValueError(f"store_pattern {value!r} is not a valid regex: {e}") from e
+        return value
+
+    @model_validator(mode="after")
+    def _check_bindings(self) -> BioimageViewerConfig:
+        # A tag alone counts as bound: the import clears the ids of a tag it
+        # cannot resolve, and that must not make the dashboard unloadable.
+        points_dc = self.points_dc_id or self.points_dc_tag
+        points_cols = (
+            self.cell_id_col,
+            self.x_col,
+            self.y_col,
+            self.color_col,
+            self.points_sample_col,
+            self.points_well_col,
+            self.z_col,
+            self.t_col,
+            self.selection_column,
+            self.box_w_col,
+            self.box_h_col,
+        )
+        if any(points_cols) and not points_dc:
+            raise ValueError(
+                "points columns are set but no points DC is bound: set points_dc_id or "
+                "points_dc_tag"
+            )
+        if points_dc and not (self.x_col and self.y_col):
+            raise ValueError("a points DC needs both x_col and y_col")
+        if bool(self.box_w_col) != bool(self.box_h_col):
+            raise ValueError("a box needs both box_w_col and box_h_col")
+        if self.frame_on_filter and not points_dc:
+            raise ValueError(
+                "frame_on_filter zooms to the points the filters keep: bind a points DC"
+            )
+        steps_cols = (
+            self.steps_store_col,
+            self.steps_label_col,
+            self.steps_order_col,
+            self.steps_sample_col,
+            self.steps_reference_col,
+            *self.steps_metric_cols,
+            self.steps_param_col,
+            *self.steps_info_cols,
+        )
+        steps_dc = self.steps_dc_id or self.steps_dc_tag
+        if any(steps_cols) and not steps_dc:
+            raise ValueError(
+                "steps columns are set but no steps DC is bound: set steps_dc_id or steps_dc_tag"
+            )
+        unknown = sorted(set(self.steps_metric_better) - set(self.steps_metric_cols))
+        if unknown:
+            raise ValueError(
+                f"steps_metric_better names metrics that are not in steps_metric_cols: {unknown}"
+            )
+        if steps_dc and not self.steps_store_col:
+            raise ValueError("a steps DC needs steps_store_col: the store each step wrote")
+        if steps_dc and (self.sample_column or self.store):
+            raise ValueError(
+                "a steps DC picks the store itself: drop sample_column / store, filter the "
+                "steps table instead"
+            )
+        if self.sample_column and not (self.sample_dc_id or self.sample_dc_tag):
+            raise ValueError("sample_column needs a sample DC: set sample_dc_id or sample_dc_tag")
+        if self.overlay_store and self.overlay_store == self.store:
+            raise ValueError("overlay_store names the image itself: pick another store")
+        if self.labels_dc_id or self.labels_dc_tag:
+            # Masks are drawn over the image of their sample, never on their own.
+            if not (self.image_dc_id or self.image_dc_tag):
+                raise ValueError(
+                    "a labels DC is drawn over an image: set image_dc_id or image_dc_tag"
+                )
+            same_id = self.labels_dc_id is not None and self.labels_dc_id == self.image_dc_id
+            same_tag = self.labels_dc_tag is not None and self.labels_dc_tag == self.image_dc_tag
+            if same_id or same_tag:
+                raise ValueError(
+                    "labels_dc and image_dc name the same DC: the labels are a separate "
+                    "bioimage DC with kind 'labels'"
+                )
+        return self
+
+
 class MAConfig(_BaseVizConfig):
     """MA (Bland-Altman) plot: mean log intensity (x) vs log fold change (y).
 
@@ -6069,6 +6474,7 @@ _VizConfigUnion = Annotated[
     | ManhattanConfig
     | StackedBarConfig
     | PhylogeneticConfig
+    | BioimageViewerConfig
     | RarefactionConfig
     | DaBarplotConfig
     | ComplexHeatmapConfig

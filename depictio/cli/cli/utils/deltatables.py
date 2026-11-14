@@ -1,4 +1,5 @@
 import contextlib
+import json
 import os
 import re
 import tempfile
@@ -45,6 +46,15 @@ from depictio.models.local_access import LocalPathRefused
 from depictio.models.models.base import convert_objectid_to_str
 from depictio.models.models.cli import CLIConfig
 from depictio.models.models.data_collections import DataCollection
+from depictio.models.models.data_collections_types.bioimage import (
+    DCBioimageConfig,
+    bioimage_s3_object_key,
+    bioimage_s3_prefix,
+    bioimage_sample_name,
+    duplicate_samples,
+    is_single_file_format,
+    remote_store_name,
+)
 from depictio.models.models.data_collections_types.geojson import geojson_s3_key
 from depictio.models.models.data_collections_types.indexed_file import (
     DCIndexedFileConfig,
@@ -53,6 +63,7 @@ from depictio.models.models.data_collections_types.indexed_file import (
     sample_from_path,
 )
 from depictio.models.models.data_collections_types.phylogeny import phylogeny_s3_key
+from depictio.models.models.data_collections_types.table import SpatialDataTableSource
 from depictio.models.models.files import File
 from depictio.models.models.manifest import is_remote_url
 from depictio.models.models.s3 import PolarsStorageOptions
@@ -394,6 +405,7 @@ def read_single_file_lazy(
     file_format: str,
     polars_kwargs: dict,
     CLI_config: CLIConfig | None = None,
+    spatialdata: SpatialDataTableSource | dict | None = None,
 ) -> pl.LazyFrame:
     """
     Lazily scan a single file into a Polars LazyFrame according to the specified format.
@@ -404,6 +416,7 @@ def read_single_file_lazy(
         polars_kwargs (dict): Additional keyword arguments for the Polars scanner.
         CLI_config (CLIConfig | None): Configuration s3:// remote locations
             resolve their read target from.
+        spatialdata: format "spatialdata" only: which table to read from the store.
 
     Returns:
         pl.LazyFrame: The lazy DataFrame representation of the file.
@@ -419,6 +432,13 @@ def read_single_file_lazy(
     try:
         if is_remote_url(file_path):
             lf = _read_remote_file_lazy(file_path, file_format, polars_kwargs, CLI_config)
+        elif file_format == "spatialdata":
+            # The File is a SpatialData store; its AnnData table is extracted eagerly.
+            from depictio.cli.cli.utils.spatialdata_table import read_spatialdata_table
+
+            if spatialdata is None:
+                raise ValueError("format 'spatialdata' needs a spatialdata block")
+            lf = read_spatialdata_table(file_path, spatialdata).lazy()
         else:
             lf = _lazy_scan_path(file_path, file_format, polars_kwargs)
 
@@ -448,6 +468,7 @@ def read_files_lazy(
     file_format: str,
     polars_kwargs: dict,
     CLI_config: CLIConfig | None = None,
+    spatialdata: SpatialDataTableSource | dict | None = None,
 ) -> list:
     """
     Lazily read all files into Polars LazyFrames.
@@ -458,13 +479,14 @@ def read_files_lazy(
         polars_kwargs (dict): Additional keyword arguments for the Polars scanners.
         CLI_config (CLIConfig | None): Configuration s3:// remote locations
             resolve their read target from.
+        spatialdata: format "spatialdata" only: which table to read from each store.
 
     Returns:
         list: List of Polars LazyFrames.
     """
     lazy_frames = []
     for file_info in files:
-        lf = read_single_file_lazy(file_info, file_format, polars_kwargs, CLI_config)
+        lf = read_single_file_lazy(file_info, file_format, polars_kwargs, CLI_config, spatialdata)
         lazy_frames.append(lf)
     if not lazy_frames:
         error_msg = "No LazyFrames were generated from the files."
@@ -991,7 +1013,7 @@ def skip_unchanged_reason(
 
 
 #: Collection types handed to a processor of their own, which writes as it runs.
-_WRITES_WHEN_DISPATCHED = frozenset({"multiqc", "geojson", "phylogeny", "indexed_file"})
+_WRITES_WHEN_DISPATCHED = frozenset({"multiqc", "geojson", "phylogeny", "indexed_file", "bioimage"})
 
 
 def client_aggregate_data(
@@ -1072,6 +1094,10 @@ def client_aggregate_data(
     # copied to S3 and read straight from the browser over HTTP range requests.
     if kind == "indexed_file":
         return process_indexed_file_data_collection(data_collection, CLI_config, overwrite)
+
+    # Bioimage DCs have no delta table; each store is copied to S3 for the chunk endpoint.
+    if kind == "bioimage":
+        return process_bioimage_data_collection(data_collection, CLI_config, overwrite)
 
     # Handle transformed (recipe-based) data collections. A `materialized`
     # transform keeps the recipe for lineage but ships a pre-computed seed file,
@@ -1185,7 +1211,13 @@ def client_aggregate_data(
             # only, the instance S3 config). The Delta write target below always
             # stays on the instance config: read and write are two different
             # credentials by design.
-            frames = read_files_lazy(collected, file_format, polars_kwargs, CLI_config=CLI_config)
+            frames = read_files_lazy(
+                collected,
+                file_format,
+                polars_kwargs,
+                CLI_config=CLI_config,
+                spatialdata=dc_props.get("spatialdata"),
+            )
             frames = add_wildcard_columns(frames, collected, data_collection_config.get("scan"))
         record("n_files", len(collected) if collected else 0)
         return collected, frames
@@ -1650,9 +1682,14 @@ def process_geojson_data_collection(
     }
 
 
-def _s3_client(CLI_config: CLIConfig):
-    """boto3 S3 client for the CLI's configured storage (GeoJSON and phylogeny uploads)."""
+def _s3_client(CLI_config: CLIConfig, max_pool_connections: int | None = None):
+    """boto3 S3 client for the CLI's configured storage (GeoJSON, phylogeny, OME-Zarr uploads).
+
+    ``max_pool_connections`` raises botocore's HTTP pool (10 by default) for a
+    client shared across upload threads, so workers do not queue on a socket.
+    """
     import boto3
+    from botocore.config import Config
 
     storage_options = turn_S3_config_into_polars_storage_options(CLI_config.s3_storage)
     return boto3.client(
@@ -1661,6 +1698,7 @@ def _s3_client(CLI_config: CLIConfig):
         aws_access_key_id=storage_options.aws_access_key_id,
         aws_secret_access_key=storage_options.aws_secret_access_key,
         region_name=storage_options.region,
+        config=Config(max_pool_connections=max_pool_connections) if max_pool_connections else None,
     )
 
 
@@ -1919,6 +1957,719 @@ def process_indexed_file_data_collection(
             f"s3://{bucket}/{indexed_file_s3_prefix(dc_id, '')}".rstrip("/")
         ),
     }
+
+
+# NGFF version of each zarr layout: 0.4 is zarr v2 (``.zattrs``), 0.5 is
+# zarr v3 (``zarr.json``, OME metadata under ``attributes.ome``).
+_NGFF_LAYOUTS = {"0.4": "zarr v2, .zattrs", "0.5": "zarr v3, zarr.json"}
+
+
+def _read_json_object(path: str) -> dict:
+    """The JSON object stored at ``path``, or a ValueError naming the file."""
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except (OSError, ValueError) as e:
+        raise ValueError(f"{path} is not valid JSON: {e}") from e
+    if not isinstance(data, dict):
+        raise ValueError(f"{path} is not a JSON object")
+    return data
+
+
+def _check_ngff_version(path: str, found: str, expected: str | None) -> None:
+    if expected is not None and found != expected:
+        raise ValueError(
+            f"{path} is NGFF {found} ({_NGFF_LAYOUTS[found]}) but the data collection "
+            f"requires ngff_version {expected} ({_NGFF_LAYOUTS[expected]})"
+        )
+
+
+def _require_multiscales(multiscales: object, where: str) -> list:
+    if not isinstance(multiscales, list) or not multiscales:
+        raise ValueError(
+            f"{where} has no 'multiscales' entry: not an OME-NGFF image, plate or "
+            "bioformats2raw container (label-only stores are not supported)"
+        )
+    return multiscales
+
+
+def _safe_subpath(path: object, where: str) -> str:
+    parts = path.split("/") if isinstance(path, str) else []
+    if not path or str(path).startswith("/") or ".." in parts:
+        raise ValueError(f"{where} has an invalid path {path!r}")
+    return str(path)
+
+
+def _first_image_path(store_path: str, ome: dict) -> str | None:
+    """Where the first image of a container root sits, or None for an image root.
+
+    A plate (NGFF ``plate``) holds wells, each holding fields of view; a
+    bioformats2raw container holds one image per series under ``0/``, ``1/``...
+    The viewer opens one image at a time, so a container is accepted when its
+    first image is one, and that is what the hard check looks at.
+    """
+    plate = ome.get("plate")
+    if isinstance(plate, dict):
+        wells = plate.get("wells")
+        if not isinstance(wells, list) or not wells or not isinstance(wells[0], dict):
+            raise ValueError(f"{store_path} is a plate that lists no wells")
+        well = _safe_subpath(wells[0].get("path"), f"{store_path} plate.wells[0]")
+        well_dir = os.path.join(store_path, *well.split("/"))
+        well_ome = _ngff_attributes(well_dir)
+        images = (well_ome.get("well") or {}).get("images") if well_ome else None
+        if not isinstance(images, list) or not images or not isinstance(images[0], dict):
+            raise ValueError(f"{store_path}: well {well} lists no images")
+        field = _safe_subpath(images[0].get("path"), f"{well_dir} well.images[0]")
+        return f"{well}/{field}"
+    if "bioformats2raw.layout" in ome:
+        # The OME group may name the series (``setup0/timepoint0``); without
+        # a list they are numbered from 0.
+        listed = (_ngff_attributes(os.path.join(store_path, "OME")) or {}).get("series")
+        if isinstance(listed, list) and listed and isinstance(listed[0], str):
+            return _safe_subpath(listed[0], f"{store_path} OME series[0]")
+        return "0"
+    return None
+
+
+def _ngff_attributes(group_dir: str) -> dict | None:
+    """The NGFF attributes of a group directory (0.4 ``.zattrs`` or 0.5
+    ``zarr.json`` ``attributes.ome``), or None when it has neither."""
+    zattrs_path = os.path.join(group_dir, ".zattrs")
+    if os.path.isfile(zattrs_path):
+        return _read_json_object(zattrs_path)
+    zarr_json_path = os.path.join(group_dir, "zarr.json")
+    if os.path.isfile(zarr_json_path):
+        attributes = _read_json_object(zarr_json_path).get("attributes")
+        ome = attributes.get("ome") if isinstance(attributes, dict) else None
+        return ome if isinstance(ome, dict) else None
+    return None
+
+
+def validate_ome_zarr_store(store_path: str, ngff_version: str | None = None) -> str:
+    """Raise ValueError unless ``store_path`` is an NGFF 0.4 or 0.5 image store,
+    or a plate / bioformats2raw container whose first image is one.
+
+    NGFF 0.4 (zarr v2): the root ``.zattrs`` must be a JSON object carrying a
+    non-empty ``multiscales`` list, which is what the viewer reads first.
+    NGFF 0.5 (zarr v3): the root ``zarr.json`` must be a group whose
+    ``attributes.ome.multiscales`` is non-empty, and every dataset path must
+    hold an array ``zarr.json`` (sharded or not: chunks are never read).
+    With ``ngff_version`` set, a store of the other version is rejected.
+
+    Returns:
+        The store's NGFF version, ``"0.4"`` or ``"0.5"``.
+    """
+    zattrs_path = os.path.join(store_path, ".zattrs")
+    zarr_json_path = os.path.join(store_path, "zarr.json")
+    root = _ngff_attributes(store_path)
+    first = _first_image_path(store_path, root) if root is not None else None
+    if first is not None:
+        # A plate or bioformats2raw container: its first image decides.
+        _check_ngff_version(
+            store_path, "0.4" if os.path.isfile(zattrs_path) else "0.5", ngff_version
+        )
+        validate_ome_zarr_store(os.path.join(store_path, *first.split("/")), ngff_version)
+        return "0.4" if os.path.isfile(zattrs_path) else "0.5"
+    if os.path.isfile(zattrs_path):
+        _check_ngff_version(store_path, "0.4", ngff_version)
+        _require_multiscales(_read_json_object(zattrs_path).get("multiscales"), zattrs_path)
+        return "0.4"
+    if not os.path.isfile(zarr_json_path):
+        raise ValueError(
+            f"{store_path} is not an OME-Zarr store: no root .zattrs (NGFF 0.4) "
+            "or zarr.json (NGFF 0.5)"
+        )
+
+    _check_ngff_version(store_path, "0.5", ngff_version)
+    meta = _read_json_object(zarr_json_path)
+    if meta.get("zarr_format") != 3 or meta.get("node_type") != "group":
+        raise ValueError(
+            f"{zarr_json_path} is not a zarr v3 group (zarr_format 3, node_type group)"
+        )
+    attributes = meta.get("attributes")
+    ome = attributes.get("ome") if isinstance(attributes, dict) else None
+    if not isinstance(ome, dict):
+        raise ValueError(f"{zarr_json_path} has no 'attributes.ome' entry: not an NGFF 0.5 image")
+    where = f"{zarr_json_path} attributes.ome"
+    for multiscale in _require_multiscales(ome.get("multiscales"), where):
+        datasets = multiscale.get("datasets") if isinstance(multiscale, dict) else None
+        if not isinstance(datasets, list) or not datasets:
+            raise ValueError(f"{where} has a multiscale without datasets")
+        for dataset in datasets:
+            path = dataset.get("path") if isinstance(dataset, dict) else None
+            parts = path.split("/") if isinstance(path, str) else []
+            if not path or path.startswith("/") or ".." in parts:
+                raise ValueError(f"{where} has an invalid dataset path {path!r}")
+            array_json = os.path.join(store_path, *parts, "zarr.json")
+            if not os.path.isfile(array_json):
+                raise ValueError(
+                    f"{store_path} has no array at dataset path {path!r} (no zarr.json)"
+                )
+            if _read_json_object(array_json).get("node_type") != "array":
+                raise ValueError(f"{array_json} is not a zarr v3 array")
+    return "0.5"
+
+
+def validate_spatialdata_store(
+    store_path: str, image_path: str, ngff_version: str | None = None
+) -> str:
+    """Raise ValueError unless ``store_path`` is a SpatialData store whose
+    ``image_path`` element is an NGFF multiscales image.
+
+    The root may be zarr v2 (``.zgroup`` / ``.zattrs``) or zarr v3
+    (``zarr.json``); ``ngff_version`` is enforced on the image element, which
+    is what the viewer reads. Returns the image's NGFF version.
+    """
+    markers = (".zattrs", ".zgroup", "zarr.json")
+    if not any(os.path.isfile(os.path.join(store_path, m)) for m in markers):
+        raise ValueError(
+            f"{store_path} is not a SpatialData store: no root .zgroup, .zattrs "
+            "(zarr v2) or zarr.json (zarr v3)"
+        )
+    image_dir = os.path.join(store_path, *image_path.split("/"))
+    if not os.path.isdir(image_dir):
+        raise ValueError(f"{store_path} has no image element at image_path {image_path!r}")
+    return validate_ome_zarr_store(image_dir, ngff_version)
+
+
+# TIFF ImageDescription tag, which holds the OME-XML in an OME-TIFF's first IFD.
+_TIFF_IMAGE_DESCRIPTION = 270
+# Only the head of the description is read: the <OME root element opens it.
+_OME_XML_PROBE_BYTES = 1 << 20
+
+
+def _read_exact(fh, offset: int, size: int, path: str) -> bytes:
+    fh.seek(offset)
+    data = fh.read(size)
+    if len(data) != size:
+        raise ValueError(f"{path} is a truncated TIFF file")
+    return data
+
+
+def validate_ome_tiff(path: str) -> None:
+    """Raise ValueError unless ``path`` is a TIFF / BigTIFF whose first IFD's
+    ImageDescription (tag 270) carries OME-XML.
+
+    Only the header and the first IFD are parsed; pixel data is never read.
+    """
+    import struct
+
+    with open(path, "rb") as fh:
+        head = fh.read(16)
+        order = {b"II": "<", b"MM": ">"}.get(head[:2])
+        if order is None or len(head) < 8:
+            raise ValueError(f"{path} is not a TIFF file (bad byte-order mark)")
+        (magic,) = struct.unpack(order + "H", head[2:4])
+        if magic == 42:
+            (ifd_offset,) = struct.unpack(order + "I", head[4:8])
+            count_fmt, entry_size, entry_fmt, inline_size = "H", 12, "HHI4s", 4
+        elif magic == 43 and len(head) == 16:
+            (ifd_offset,) = struct.unpack(order + "Q", head[8:16])
+            count_fmt, entry_size, entry_fmt, inline_size = "Q", 20, "HHQ8s", 8
+        else:
+            raise ValueError(f"{path} is not a TIFF or BigTIFF file (magic {magic})")
+
+        count_size = struct.calcsize(count_fmt)
+        (n_entries,) = struct.unpack(
+            order + count_fmt, _read_exact(fh, ifd_offset, count_size, path)
+        )
+        entries = _read_exact(fh, ifd_offset + count_size, n_entries * entry_size, path)
+        description = None
+        for i in range(n_entries):
+            tag, _type, count, value = struct.unpack(
+                order + entry_fmt, entries[i * entry_size : (i + 1) * entry_size]
+            )
+            if tag != _TIFF_IMAGE_DESCRIPTION:
+                continue
+            # ASCII / BYTE / UNDEFINED: one byte per value.
+            if count <= inline_size:
+                description = value[:count]
+            else:
+                (offset,) = struct.unpack(order + ("I" if inline_size == 4 else "Q"), value)
+                size = min(count, _OME_XML_PROBE_BYTES)
+                description = _read_exact(fh, offset, size, path)
+            break
+
+    if description is None:
+        raise ValueError(f"{path} has no ImageDescription in its first IFD: not an OME-TIFF")
+    if b"<OME" not in description:
+        raise ValueError(f"{path} ImageDescription carries no OME-XML: not an OME-TIFF")
+
+
+# Parallel uploads per store: a store is thousands of small chunk files, so a
+# serial loop is bound by per-request latency, not bandwidth.
+BIOIMAGE_UPLOAD_WORKERS_DEFAULT = 16
+# S3 DeleteObjects accepts at most 1000 keys per request.
+_S3_DELETE_BATCH = 1000
+
+
+def bioimage_upload_workers() -> int:
+    """Upload threads per store: ``DEPICTIO_INGEST_BIOIMAGE_UPLOAD_WORKERS`` or 16."""
+    raw = os.getenv("DEPICTIO_INGEST_BIOIMAGE_UPLOAD_WORKERS", "").strip()
+    try:
+        workers = int(raw) if raw else BIOIMAGE_UPLOAD_WORKERS_DEFAULT
+    except ValueError:
+        logger.warning(f"Ignoring non-integer DEPICTIO_INGEST_BIOIMAGE_UPLOAD_WORKERS={raw!r}")
+        workers = BIOIMAGE_UPLOAD_WORKERS_DEFAULT
+    return max(1, workers)
+
+
+def bioimage_upload_marker_key(dc_id: str, store_name: str) -> str:
+    """S3 key of the marker recording the last complete upload of a store.
+
+    It sits under ``bioimage/{dc_id}/.uploads/``, outside every store prefix,
+    so the chunk endpoint can never serve it as a zarr key and the backend's
+    store listing (which keeps only ``*.zarr`` prefixes) never reports it.
+    """
+    return f"{bioimage_s3_prefix(dc_id)}.uploads/{store_name}.json"
+
+
+def zarr_store_hash(store_path: str, image_path: str | None = None) -> str:
+    """Change-detection hash of a local store, computed like the scan's File hash.
+
+    With ``image_path`` (SpatialData) only that subtree is hashed, and the path
+    joins the name, so pointing the DC at another element re-uploads.
+    """
+    from depictio.cli.cli.utils.common import format_timestamp
+    from depictio.cli.cli.utils.scan import generate_zarr_store_hash, zarr_store_stats
+
+    store_name = os.path.basename(store_path.rstrip("/"))
+    source = os.path.join(store_path, *image_path.split("/")) if image_path else store_path
+    name = f"{store_name}/{image_path}" if image_path else store_name
+    total_size, max_mtime, root_meta = zarr_store_stats(source)
+    return generate_zarr_store_hash(name, total_size, format_timestamp(max_mtime), root_meta)
+
+
+def single_file_store_hash(path: str) -> str:
+    """Change-detection hash of a single-file store (OME-TIFF): name, size, mtime."""
+    import hashlib
+
+    from depictio.cli.cli.utils.common import format_timestamp
+
+    st = os.stat(path)
+    name = os.path.basename(path)
+    return hashlib.sha256(f"{name}{st.st_size}{format_timestamp(st.st_mtime)}".encode()).hexdigest()
+
+
+def _read_bioimage_upload_marker(s3_client, bucket: str, key: str) -> dict | None:
+    """The marker's JSON content, or None when absent or unreadable."""
+    try:
+        body = s3_client.get_object(Bucket=bucket, Key=key)["Body"]
+        try:
+            data = json.loads(body.read())
+        finally:
+            body.close()
+    except Exception:
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _list_s3_keys(s3_client, bucket: str, prefix: str) -> set[str]:
+    keys: set[str] = set()
+    paginator = s3_client.get_paginator("list_objects_v2")
+    for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+        for obj in page.get("Contents", []) or []:
+            keys.add(obj["Key"])
+    return keys
+
+
+def _delete_s3_keys(s3_client, bucket: str, keys: list[str]) -> None:
+    """Batch-delete ``keys``, raising if S3 reports any per-key error."""
+    for i in range(0, len(keys), _S3_DELETE_BATCH):
+        batch = keys[i : i + _S3_DELETE_BATCH]
+        resp = s3_client.delete_objects(
+            Bucket=bucket,
+            Delete={"Objects": [{"Key": k} for k in batch], "Quiet": True},
+        )
+        errors = (resp or {}).get("Errors") or []
+        if errors:
+            first = errors[0]
+            raise RuntimeError(
+                f"Failed to delete {len(errors)} stale object(s), e.g. "
+                f"{first.get('Key')}: {first.get('Code')} {first.get('Message')}"
+            )
+
+
+def upload_zarr_store(
+    s3_client,
+    bucket: str,
+    dc_id: str,
+    store_path: str,
+    *,
+    workers: int | None = None,
+    force: bool = False,
+    image_path: str | None = None,
+    store_hash: str | None = None,
+) -> int:
+    """Mirror a local store under ``bioimage_s3_prefix(dc_id, store_name)``.
+
+    Keys keep the store-relative path with ``/`` separators, so chunk keys like
+    ``0/0.0.0.0.0``, nested ``0/0/0/0/0/0`` or zarr v3 ``0/c/0/0/0`` resolve
+    unchanged; a large zarr v3 shard goes through boto3's managed (multipart)
+    transfer like any other file. With
+    ``image_path`` (SpatialData) only ``<store>/<image_path>`` is uploaded, with
+    keys relative to it, so the prefix reads like a plain OME-Zarr store. Files are
+    uploaded in parallel over the shared ``s3_client`` (boto3 clients are
+    thread-safe). Objects left under the prefix by an earlier upload that the
+    local store no longer holds are then deleted, so a re-chunked store never
+    serves stale chunks.
+
+    The store's change-detection hash is written last to
+    ``bioimage_upload_marker_key``. When that marker already matches the local
+    store (and ``force`` is False) nothing is uploaded. The marker is removed
+    before a re-upload starts, so an interrupted upload never looks complete.
+    ``store_hash`` replaces the hash of the local tree, for a store converted
+    into a temporary directory (a labels TIFF): keyed on its source instead.
+
+    Returns:
+        Number of objects uploaded (0 when the marker matched).
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
+    store_name = os.path.basename(store_path.rstrip("/"))
+    prefix = bioimage_s3_prefix(dc_id, store_name)
+    marker_key = bioimage_upload_marker_key(dc_id, store_name)
+    if store_hash is None:
+        store_hash = zarr_store_hash(store_path, image_path)
+    source = os.path.join(store_path, *image_path.split("/")) if image_path else store_path
+
+    marker = _read_bioimage_upload_marker(s3_client, bucket, marker_key)
+    if not force and marker is not None and marker.get("hash") == store_hash:
+        logger.info(f"Bioimage store unchanged since last upload, skipping: {store_path}")
+        return 0
+    if marker is not None:
+        s3_client.delete_object(Bucket=bucket, Key=marker_key)
+
+    uploads: list[tuple[str, str]] = []
+    for root, _, names in os.walk(source):
+        for name in sorted(names):
+            local = os.path.join(root, name)
+            rel = os.path.relpath(local, source).replace(os.sep, "/")
+            uploads.append((local, prefix + rel))
+
+    n_workers = workers or bioimage_upload_workers()
+    with ThreadPoolExecutor(max_workers=n_workers) as pool:
+        # list() drains the iterator so the first failed upload re-raises here.
+        list(pool.map(lambda item: s3_client.upload_file(item[0], bucket, item[1]), uploads))
+
+    local_keys = {key for _, key in uploads}
+    stale = sorted(_list_s3_keys(s3_client, bucket, prefix) - local_keys)
+    if stale:
+        logger.info(f"Deleting {len(stale)} stale object(s) under {prefix}")
+        _delete_s3_keys(s3_client, bucket, stale)
+
+    s3_client.put_object(
+        Bucket=bucket,
+        Key=marker_key,
+        Body=json.dumps({"hash": store_hash, "objects": len(uploads)}).encode(),
+        ContentType="application/json",
+    )
+    return len(uploads)
+
+
+def upload_ome_tiff(
+    s3_client,
+    bucket: str,
+    dc_id: str,
+    file_path: str,
+    *,
+    force: bool = False,
+) -> int:
+    """Copy one OME-TIFF to ``bioimage_s3_object_key(dc_id, name)``.
+
+    boto3's managed transfer splits a large file into a multipart upload. The
+    marker scheme matches ``upload_zarr_store``: skipped when the marker's
+    hash matches, marker removed before a re-upload and written last.
+
+    Returns:
+        Number of objects uploaded (0 when the marker matched, else 1).
+    """
+    name = os.path.basename(file_path)
+    key = bioimage_s3_object_key(dc_id, name)
+    marker_key = bioimage_upload_marker_key(dc_id, name)
+    file_hash = single_file_store_hash(file_path)
+
+    marker = _read_bioimage_upload_marker(s3_client, bucket, marker_key)
+    if not force and marker is not None and marker.get("hash") == file_hash:
+        logger.info(f"OME-TIFF unchanged since last upload, skipping: {file_path}")
+        return 0
+    if marker is not None:
+        s3_client.delete_object(Bucket=bucket, Key=marker_key)
+
+    s3_client.upload_file(file_path, bucket, key)
+    s3_client.put_object(
+        Bucket=bucket,
+        Key=marker_key,
+        Body=json.dumps({"hash": file_hash, "objects": [key]}).encode(),
+        ContentType="application/json",
+    )
+    return 1
+
+
+def upload_labels_tiff(
+    s3_client,
+    bucket: str,
+    dc_id: str,
+    tiff_path: str,
+    *,
+    sample_pattern: str | None = None,
+    workers: int | None = None,
+    force: bool = False,
+) -> int:
+    """Convert a mask TIFF to an OME-Zarr labels store and mirror it on S3.
+
+    The store keeps the TIFF's name (``<name>.tif`` is the prefix the API
+    serves keys under), is written to a temporary directory, validated as
+    NGFF 0.4 and uploaded with ``upload_zarr_store``. The marker hash is the
+    source file's (name, size, mtime) plus ``LABELS_CONVERSION_VERSION``, so
+    an unchanged mask is neither converted nor uploaded again.
+
+    Returns:
+        Number of objects uploaded (0 when the marker matched).
+    """
+    import tempfile
+
+    from depictio.cli.cli.utils.labels_tiff import (
+        LABELS_CONVERSION_VERSION,
+        convert_labels_tiff,
+    )
+
+    name = os.path.basename(tiff_path)
+    source_hash = f"labels-v{LABELS_CONVERSION_VERSION}:{single_file_store_hash(tiff_path)}"
+    marker = _read_bioimage_upload_marker(
+        s3_client, bucket, bioimage_upload_marker_key(dc_id, name)
+    )
+    if not force and marker is not None and marker.get("hash") == source_hash:
+        logger.info(f"Labels TIFF unchanged since last upload, skipping: {tiff_path}")
+        return 0
+    with tempfile.TemporaryDirectory(prefix="depictio-labels-") as tmp:
+        store = convert_labels_tiff(
+            tiff_path, os.path.join(tmp, name), bioimage_sample_name(name, sample_pattern)
+        )
+        validate_ome_zarr_store(store, "0.4")
+        return upload_zarr_store(
+            s3_client, bucket, dc_id, store, workers=workers, force=True, store_hash=source_hash
+        )
+
+
+def _store_name(path: str) -> str:
+    return remote_store_name(path) if "://" in path else os.path.basename(path.rstrip("/"))
+
+
+def _duplicate_store_names(store_paths: Iterable[str]) -> dict[str, list[str]]:
+    """Store names shared by more than one path or remote URL, with the clashes."""
+    by_name: dict[str, list[str]] = {}
+    for path in store_paths:
+        by_name.setdefault(_store_name(path), []).append(path)
+    return {name: paths for name, paths in by_name.items() if len(paths) > 1}
+
+
+_FORMAT_LABELS = {
+    "ome-zarr": "OME-Zarr",
+    "spatialdata": "SpatialData",
+    "ome-tiff": "OME-TIFF",
+    "tiff": "labels TIFF",
+}
+
+
+def _validate_bioimage_store(store_path: str, props: DCBioimageConfig) -> None:
+    if props.format == "tiff":
+        from depictio.cli.cli.utils.labels_tiff import inspect_labels_tiff
+
+        inspect_labels_tiff(store_path)
+    elif props.format == "ome-tiff":
+        validate_ome_tiff(store_path)
+    elif props.format == "spatialdata":
+        validate_spatialdata_store(store_path, props.image_path or "", props.ngff_version)
+    else:
+        validate_ome_zarr_store(store_path, props.ngff_version)
+
+
+def _record_ngff_validation(
+    files: list[File], props: DCBioimageConfig, CLI_config: CLIConfig
+) -> None:
+    """Validate each OME-Zarr / SpatialData store's NGFF metadata and store the
+    report on its File, where the stores listing and the tile read it.
+
+    Never fails the ingest: a finding is logged as a warning, and a failure to
+    record the reports only costs the badge.
+    """
+    if props.format not in ("ome-zarr", "spatialdata"):
+        return
+    from depictio.cli.cli.utils.ngff_validation import validate_ngff_store, validator_available
+
+    if not validator_available():
+        logger.info("NGFF validation skipped: ome-zarr-models is not usable on this install")
+        return
+    changed: list[File] = []
+    for file_obj in files:
+        if "://" in file_obj.file_location:
+            continue
+        report = validate_ngff_store(file_obj.file_location, props.image_path)
+        if report is None:
+            continue
+        if not report.ok:
+            first = report.issues[0] if report.issues else "invalid"
+            more = f" (+{len(report.issues) - 1} more)" if len(report.issues) > 1 else ""
+            logger.warning(f"NGFF validation of {file_obj.file_location}: {first}{more}")
+        if file_obj.ngff_validation != report:
+            file_obj.ngff_validation = report
+            changed.append(file_obj)
+    if not changed:
+        return
+    try:
+        response = api_create_files(changed, CLI_config, update=True)
+        if response.status_code != 200:
+            logger.warning(f"Could not record NGFF validation reports: {response.text}")
+    except Exception as e:
+        logger.warning(f"Could not record NGFF validation reports: {e}")
+
+
+def process_bioimage_data_collection(
+    data_collection: DataCollection,
+    CLI_config: CLIConfig,
+    overwrite: bool = False,
+) -> dict[str, str]:
+    """Validate a bioimage DC's local stores and upload them to S3.
+
+    Every registered File is one store of the DC's ``format``: a ``*.zarr``
+    directory (OME-Zarr, SpatialData), a ``*.tif(f)`` file (OME-TIFF) or
+    a ``*.tif(f)`` mask (labels TIFF, converted to OME-Zarr on upload, see
+    ``upload_labels_tiff``; such a DC is never reference-only).
+    Stores are keyed by their name (S3 prefix, stores listing, viewer), so two
+    stores sharing a name, local or remote, are rejected before anything is
+    uploaded, as are two stores giving one sample name (``sample_pattern``). Each store is validated for its format; unless the DC is
+    reference-only (``upload: false``), a key-tree store is then mirrored under
+    ``bioimage_s3_prefix(dc_id, store_name)`` (a SpatialData store: its
+    ``image_path`` subtree only) and an OME-TIFF copied to
+    ``bioimage_s3_object_key(dc_id, store_name)``. ``remote_stores`` are read in
+    place by the API and never touched here. No delta table is registered.
+
+    Args:
+        data_collection: Bioimage DataCollection object.
+        CLI_config: CLI configuration with API URL, credentials and S3 storage.
+        overwrite: Re-upload every store even when its upload marker matches
+            the local content.
+
+    Returns:
+        Result dict with success/error status.
+    """
+    logger.info(f"Processing bioimage data collection: {data_collection.data_collection_tag}")
+
+    dc_id = str(data_collection.id)
+    props = getattr(data_collection.config, "dc_specific_properties", None)
+    if not isinstance(props, DCBioimageConfig):
+        props = DCBioimageConfig()
+    label = _FORMAT_LABELS.get(props.format, props.format)
+    remote = list(props.remote_stores)
+    remote_note = f"{len(remote)} remote store(s), read in place"
+
+    if remote and not getattr(data_collection.config, "scan", None):
+        # Remote-only DC: nothing was scanned, so there is nothing to validate or upload.
+        return _bioimage_success(data_collection, len(remote), remote_note)
+
+    try:
+        files = fetch_file_data(dc_id, CLI_config)
+    except Exception as e:
+        if remote:
+            return _bioimage_success(data_collection, len(remote), remote_note)
+        return {"result": "error", "message": f"No stores found for bioimage DC: {e}"}
+
+    if not files:
+        if remote:
+            return _bioimage_success(data_collection, len(remote), remote_note)
+        return {"result": "error", "message": "No stores found for bioimage data collection"}
+
+    store_paths = sorted({f.file_location for f in files})
+    duplicates = _duplicate_store_names([*store_paths, *remote])
+    if duplicates:
+        clashes = "; ".join(
+            f"{name}: {', '.join(paths)}" for name, paths in sorted(duplicates.items())
+        )
+        return {
+            "result": "error",
+            "message": (
+                f"{label} store names must be unique within a data collection "
+                f"(stores are addressed by name): {clashes}"
+            ),
+        }
+    shared = duplicate_samples(
+        [_store_name(p) for p in [*store_paths, *remote]], props.sample_pattern
+    )
+    if shared:
+        clashes = "; ".join(
+            f"{sample}: {', '.join(names)}" for sample, names in sorted(shared.items())
+        )
+        return {
+            "result": "error",
+            "message": (
+                f"{label} stores must name distinct samples within a data collection "
+                f"(the viewer pairs images, labels and cells by sample): {clashes}"
+            ),
+        }
+
+    for store_path in store_paths:
+        try:
+            _validate_bioimage_store(store_path, props)
+        except ValueError as e:
+            return {"result": "error", "message": f"Invalid {label} store: {e}"}
+
+    _record_ngff_validation(files, props, CLI_config)
+
+    if props.upload:
+        bucket = CLI_config.s3_storage.bucket
+        workers = bioimage_upload_workers()
+        s3_client = _s3_client(CLI_config, max_pool_connections=workers)
+        for store_path in store_paths:
+            try:
+                logger.info(f"Uploading {label} store to S3: {store_path}")
+                if props.format == "tiff":
+                    count = upload_labels_tiff(
+                        s3_client,
+                        bucket,
+                        dc_id,
+                        store_path,
+                        sample_pattern=props.sample_pattern,
+                        workers=workers,
+                        force=overwrite,
+                    )
+                elif is_single_file_format(props.format):
+                    count = upload_ome_tiff(s3_client, bucket, dc_id, store_path, force=overwrite)
+                else:
+                    count = upload_zarr_store(
+                        s3_client,
+                        bucket,
+                        dc_id,
+                        store_path,
+                        workers=workers,
+                        force=overwrite,
+                        image_path=props.image_path,
+                    )
+            except Exception as e:
+                return {
+                    "result": "error",
+                    "message": f"Failed to upload {label} store {store_path} to S3: {e}",
+                }
+            logger.info(f"Uploaded {count} object(s) from {store_path}")
+        location = f"s3://{bucket}/{bioimage_s3_prefix(dc_id)}"
+    else:
+        location = "the registered paths on disk (upload disabled)"
+
+    message = f"{len(store_paths)} {label} store(s) available at {location}"
+    if remote:
+        message += f"; {remote_note}"
+    return _bioimage_success(data_collection, len(store_paths) + len(remote), message)
+
+
+def _bioimage_success(
+    data_collection: DataCollection, n_stores: int, message: str
+) -> dict[str, str]:
+    rich_print_checked_statement(
+        f"Bioimage data collection processed: {data_collection.data_collection_tag} "
+        f"({n_stores} store(s))",
+        "success",
+    )
+    return {"result": "success", "message": message}
 
 
 def _print_recipe_preview(

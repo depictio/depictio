@@ -807,8 +807,11 @@ class TestTemplateOptions:
         assert template["links"][0]["target_type"] == "table"
         assert template["data_management_platform_project_url"] == "https://lims.example.org/p/9"
 
-    def test_an_unavailable_kind_is_refused_with_its_reason(self, client):
-        # Bioimages are the kind this Depictio does not have yet.
+    def test_an_unavailable_kind_is_refused_with_its_reason(self, client, monkeypatch):
+        # A Depictio without the bioimage model (older, or trimmed) says why.
+        from depictio.project_builder import capabilities
+
+        monkeypatch.setattr(capabilities, "bioimage_model", lambda: None)
         images = {
             "tag": "imgs",
             "type": "bioimage",

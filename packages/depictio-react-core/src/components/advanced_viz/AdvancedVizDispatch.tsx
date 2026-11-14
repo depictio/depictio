@@ -36,6 +36,7 @@ import GseaRunningScoreRenderer from './GseaRunningScoreRenderer';
 import SashimiRenderer from './SashimiRenderer';
 import ScatterXyRenderer from './ScatterXyRenderer';
 import SpatialCellsRenderer from './SpatialCellsRenderer';
+import BioimageViewerRenderer from './BioimageViewerRenderer';
 import ContactMapRenderer from './ContactMapRenderer';
 import KneePlotRenderer from './KneePlotRenderer';
 import DamageProfileRenderer from './DamageProfileRenderer';
@@ -264,6 +265,7 @@ const RENDERERS: Record<string, React.ComponentType<any>> = {
   gsea_running_score: GseaRunningScoreRenderer,
   sashimi: SashimiRenderer,
   scatter_xy: ScatterXyRenderer,
+  bioimage_viewer: BioimageViewerRenderer,
   contact_map: ContactMapRenderer,
   knee_plot: KneePlotRenderer,
   damage_profile: DamageProfileRenderer,

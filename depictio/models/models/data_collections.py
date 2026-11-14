@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from depictio.models.config import DEPICTIO_CONTEXT
 from depictio.models.logging import logger
 from depictio.models.models.base import MongoModel
+from depictio.models.models.data_collections_types.bioimage import DCBioimageConfig
 from depictio.models.models.data_collections_types.genomic_tracks import DCGenomicTracksConfig
 from depictio.models.models.data_collections_types.geojson import DCGeoJSONConfig
 from depictio.models.models.data_collections_types.image import DCImageConfig
@@ -396,6 +397,7 @@ class DataCollectionConfig(MongoModel):
         | DCImageConfig
         | DCGeoJSONConfig
         | DCPhylogenyConfig
+        | DCBioimageConfig
         | DCIndexedFileConfig
         | DCGenomicTracksConfig
     )
@@ -450,6 +452,7 @@ class DataCollectionConfig(MongoModel):
             "image",
             "geojson",
             "phylogeny",
+            "bioimage",
             "indexed_file",
         ]
         lower_v = v.lower()
@@ -533,6 +536,12 @@ class DataCollectionConfig(MongoModel):
                     values["dc_specific_properties"] = DCPhylogenyConfig(**dc_specific_properties)
                 else:
                     values["dc_specific_properties"] = DCPhylogenyConfig()
+        elif type_value == "bioimage":
+            if not isinstance(dc_specific_properties, DCBioimageConfig):
+                if isinstance(dc_specific_properties, dict):
+                    values["dc_specific_properties"] = DCBioimageConfig(**dc_specific_properties)
+                else:
+                    values["dc_specific_properties"] = DCBioimageConfig()
         elif type_value == "indexed_file":
             # File-backed DC: no delta table, the browser reads the objects from
             # S3 over range requests. `format` is required, so an absent config
@@ -555,7 +564,16 @@ class DataCollectionConfig(MongoModel):
         # - MultiQC: has its own data handling
         # - Image: now requires scan config (works like Table DC with mandatory image_column)
         skip_scan_types = ["multiqc"]
-        if type_value not in skip_scan_types and is_native_source and not values.get("scan"):
+        # A bioimage DC whose stores are all remote has nothing to scan: the API
+        # reads them in place from `remote_stores`.
+        props = values.get("dc_specific_properties")
+        remote_only = type_value == "bioimage" and bool(getattr(props, "remote_stores", None))
+        if (
+            type_value not in skip_scan_types
+            and not remote_only
+            and is_native_source
+            and not values.get("scan")
+        ):
             raise ValueError(
                 "scan field is required for native data collections "
                 "(ingested from external sources). For joined/derived data collections, "

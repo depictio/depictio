@@ -16,12 +16,13 @@ Thin endpoints:
 
 from __future__ import annotations
 
+import functools
 import logging
 import os
-from typing import Any
+from typing import Any, NamedTuple
 
 from bson import ObjectId
-from fastapi import APIRouter, Body, Depends, HTTPException, Response
+from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response
 from fastapi.responses import PlainTextResponse
 
 from depictio.api.v1.endpoints.user_endpoints.routes import (
@@ -2011,3 +2012,1292 @@ from depictio.api.v1.endpoints.advanced_viz_endpoints.structure_resolver import 
 advanced_viz_endpoint_router.add_api_route(
     "/structure/resolve", resolve_structure, methods=["POST"]
 )
+
+
+# ---------------------------------------------------------------------------
+# Bioimage store serving (OME-Zarr, SpatialData images, OME-TIFF files)
+# ---------------------------------------------------------------------------
+#
+# A zarr reader in the browser fetches one small object per request (``.zattrs``,
+# ``.zarray`` or a v3 ``zarr.json``, then many chunks, or byte ranges of a v3
+# shard), and an OME-TIFF reader one byte range per tile, so both the access
+# check and the per-DC store lookup are cached briefly instead of hitting Mongo
+# on every read.
+#
+# Where a store is read from (see ``data_collections_types.bioimage``):
+# * key-tree formats (ome-zarr, spatialdata): the CLI upload under
+#   ``bioimage_s3_prefix``, then the registered store on disk, where a
+#   SpatialData store is read at ``<store>/<image_path>``;
+# * tiff (labels masks): the OME-Zarr labels image the CLI converted the mask
+#   to, under ``bioimage_s3_prefix`` like ome-zarr; never on disk (the
+#   registered path is the TIFF itself, and such a DC always uploads);
+# * ome-tiff: one file, at ``bioimage_s3_object_key`` or on disk, by byte range;
+# * remote stores (the DC's ``remote_stores``): proxied from their URL, only when
+#   the bucket or host is allow-listed in ``settings.bioimage``.
+
+_BIOIMAGE_CACHE_TTL_S = 60.0
+_BIOIMAGE_CACHE_MAX = 2048
+_BIOIMAGE_FORMATS = ("ome-zarr", "ome-tiff", "spatialdata", "tiff")
+# zarr v2 (NGFF 0.4) and v3 (NGFF 0.5) metadata documents.
+_ZARR_JSON_KEYS = frozenset({".zattrs", ".zgroup", ".zarray", ".zmetadata", "zarr.json"})
+# Metadata is revalidated on every read (a re-upload may change it); chunks are
+# addressed by the metadata that lists them, so they cache for an hour.
+_ZARR_JSON_HEADERS = {"Cache-Control": "no-cache"}
+_ZARR_CHUNK_HEADERS = {"Cache-Control": "private, max-age=3600"}
+_TIFF_MEDIA_TYPE = "image/tiff"
+_TIFF_HEADERS = {"Cache-Control": "private, max-age=3600", "Accept-Ranges": "bytes"}
+_S3_MISS_CODES = frozenset({"NoSuchKey", "404", "NotFound"})
+_DISK_READ_CHUNK = 1 << 20
+# Grants only (a deny re-checks, so a freshly shared project opens at once).
+_bioimage_access_cache: dict[tuple[str, str], float] = {}
+_bioimage_store_cache: dict[str, tuple[float, dict[str, Any]]] = {}
+
+
+def _bioimage_cache_put(cache: dict, key, value) -> None:
+    if len(cache) >= _BIOIMAGE_CACHE_MAX:
+        cache.clear()
+    cache[key] = value
+
+
+def _assert_dc_access_cached(dc_oid: ObjectId, current_user) -> None:
+    """``_assert_dc_access`` behind a short TTL cache keyed by (user, dc)."""
+    import time
+
+    user_id = getattr(current_user, "id", None)
+    key = (str(user_id) if user_id is not None else "anon", str(dc_oid))
+    now = time.monotonic()
+    expiry = _bioimage_access_cache.get(key)
+    if expiry is not None and expiry > now:
+        return
+    _assert_dc_access(dc_oid, current_user)
+    _bioimage_cache_put(_bioimage_access_cache, key, now + _BIOIMAGE_CACHE_TTL_S)
+
+
+_bioimage_public_cache: dict[str, tuple[float, bool]] = {}
+
+
+def _bioimage_dc_is_public(dc_oid: ObjectId) -> bool:
+    """Whether the DC's project is public (cached briefly, like the access check).
+
+    A public project's stores are readable by an anonymous visitor anyway, so
+    their reads carry CORS for viewers on other origins. Nothing else does: in
+    single-user mode the anonymous user can read every project, and a blanket
+    CORS grant would let any web page read them.
+    """
+    import time
+
+    from depictio.api.v1.db import projects_collection
+
+    now = time.monotonic()
+    hit = _bioimage_public_cache.get(str(dc_oid))
+    if hit is not None and hit[0] > now:
+        return hit[1]
+    public = (
+        projects_collection.find_one(
+            {"workflows.data_collections._id": dc_oid, "is_public": True}, {"_id": 1}
+        )
+        is not None
+    )
+    _bioimage_cache_put(_bioimage_public_cache, str(dc_oid), (now + _BIOIMAGE_CACHE_TTL_S, public))
+    return public
+
+
+def _bioimage_parse_dc_id(data_collection_id: str) -> ObjectId:
+    try:
+        return ObjectId(str(data_collection_id))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Invalid dc_id") from exc
+
+
+def _normalize_zarr_key(key: str) -> str | None:
+    """Traversal-safe, store-relative zarr key, or None when it must be rejected.
+
+    Same checks as ``files_endpoints._validate_image_path`` (raw ``..`` / leading
+    slash rejected, then re-asserted on the ``posixpath.normpath`` form) minus
+    the image-extension filter: zarr keys are ``.zattrs`` / ``zarr.json`` or
+    bare chunk and shard names.
+    """
+    import posixpath
+
+    if not key or ".." in key or key.startswith("/") or "\\" in key or "\x00" in key:
+        return None
+    normalized = posixpath.normpath(key)
+    if (
+        normalized in (".", "..")
+        or normalized.startswith("/")
+        or normalized.startswith("../")
+        or "/../" in normalized
+        or normalized != key.rstrip("/")
+    ):
+        return None
+    return normalized
+
+
+def _zarr_is_metadata(key: str) -> bool:
+    return key.rsplit("/", 1)[-1] in _ZARR_JSON_KEYS
+
+
+def _zarr_media_type(key: str) -> str:
+    return "application/json" if _zarr_is_metadata(key) else "application/octet-stream"
+
+
+def _zarr_headers(key: str) -> dict[str, str]:
+    return dict(_ZARR_JSON_HEADERS if _zarr_is_metadata(key) else _ZARR_CHUNK_HEADERS)
+
+
+def _same_bioimage_store(a: str, b: str) -> bool:
+    """Whether two registered paths name one store (symlink or container twin)."""
+    if a == b or _container_repo_path(a) == b or _container_repo_path(b) == a:
+        return True
+    try:
+        return os.path.realpath(a) == os.path.realpath(b)
+    except (OSError, ValueError):
+        return False
+
+
+def _bioimage_dc_properties(dc_oid: ObjectId) -> tuple[dict[str, Any], str | None]:
+    """The DC's ``dc_specific_properties`` and its ``scan_parameters.filename``."""
+    from depictio.api.v1.db import projects_collection
+
+    project_doc = projects_collection.find_one(
+        {"workflows.data_collections._id": dc_oid},
+        {"workflows.data_collections": 1},
+    )
+    for wf in (project_doc or {}).get("workflows", []) or []:
+        for dc in wf.get("data_collections", []) or []:
+            if (dc.get("_id") or dc.get("id")) != dc_oid:
+                continue
+            config = dc.get("config") or {}
+            props = config.get("dc_specific_properties") or {}
+            fname = ((config.get("scan") or {}).get("scan_parameters") or {}).get("filename")
+            return (props if isinstance(props, dict) else {}), (str(fname) if fname else None)
+    return {}, None
+
+
+def _bioimage_store_info(dc_oid: ObjectId) -> dict[str, Any]:
+    """Stores of a bioimage DC with its format and ``upload`` flag, cached briefly.
+
+    Returns ``{"format": str, "kind": "image" | "labels", "upload": bool,
+    "image_path": str | None, "sample_pattern": str | None,
+    "stores": {name: {"file_id": str | None, "roots": [path, ...],
+    "validation": dict | None}},
+    "remote": {name: url}}``. A ``tiff`` (labels) store is registered as its
+    mask file but served as the OME-Zarr key tree the CLI converted it to. Local stores come from the CLI scan
+    (``files_collection``, one File per store) and, for DCs never CLI-scanned,
+    from the project's ``scan_parameters.filename`` (a store, or a folder of
+    stores). A root is the store directory, or the file of an OME-TIFF store,
+    plus its ``/app`` container twin (see ``_container_repo_path``). Remote
+    stores come from the DC's ``remote_stores``, keyed by their last path segment.
+
+    Stores are keyed by name, so two registered paths sharing one name would
+    alias each other. The CLI refuses to ingest such a DC; here the first path
+    in sorted order wins (deterministic across calls) and the others are logged
+    and dropped rather than merged into one store's roots. A remote store whose
+    name a local store already uses is dropped the same way.
+    """
+    import time
+
+    from depictio.api.v1.db import files_collection
+    from depictio.models.models.data_collections_types.bioimage import (
+        OME_TIFF_SUFFIXES,
+        bioimage_store_suffixes,
+        check_sample_pattern,
+        is_bioimage_store_name,
+        is_file_store_format,
+        normalize_image_path,
+        remote_store_name,
+    )
+
+    now = time.monotonic()
+    cached = _bioimage_store_cache.get(str(dc_oid))
+    if cached is not None and cached[0] > now:
+        return cached[1]
+
+    props, fname = _bioimage_dc_properties(dc_oid)
+    fmt = str(props.get("format") or "ome-zarr")
+    if fmt not in _BIOIMAGE_FORMATS:
+        logger.warning(
+            "Bioimage DC %s has an unknown format %r; serving it as ome-zarr", dc_oid, fmt
+        )
+        fmt = "ome-zarr"
+    image_path: str | None = None
+    if fmt == "spatialdata":
+        try:
+            image_path = normalize_image_path(str(props.get("image_path") or ""))
+        except ValueError as exc:
+            logger.warning("Bioimage DC %s: %s", dc_oid, exc)
+    # On disk, a file store (OME-TIFF, labels TIFF) is a file, else a directory.
+    file_store = is_file_store_format(fmt)
+    kind = "labels" if props.get("kind") == "labels" else "image"
+    sample_pattern: str | None = None
+    if props.get("sample_pattern"):
+        try:
+            sample_pattern = check_sample_pattern(str(props["sample_pattern"]))
+        except ValueError as exc:
+            logger.warning("Bioimage DC %s: %s", dc_oid, exc)
+
+    stores: dict[str, dict[str, Any]] = {}
+    # The path each store name is bound to; a second path with that name is a clash.
+    store_paths: dict[str, str] = {}
+
+    def add_root(
+        path: str, file_id: str | None = None, validation: dict[str, Any] | None = None
+    ) -> None:
+        path = path.rstrip("/")
+        name = os.path.basename(path)
+        if not is_bioimage_store_name(name, fmt):
+            return
+        bound = store_paths.setdefault(name, path)
+        if not _same_bioimage_store(bound, path):
+            logger.warning(
+                "Bioimage DC %s: store name %s is registered twice (%s, %s); serving %s",
+                dc_oid,
+                name,
+                bound,
+                path,
+                bound,
+            )
+            return
+        entry = stores.setdefault(name, {"file_id": None, "roots": [], "validation": None})
+        if file_id and not entry["file_id"]:
+            entry["file_id"] = file_id
+            entry["validation"] = validation
+        for candidate in (path, _container_repo_path(path)):
+            if candidate and candidate not in entry["roots"]:
+                entry["roots"].append(candidate)
+
+    file_docs = [
+        doc
+        for doc in files_collection.find(
+            {"data_collection_id": {"$in": [dc_oid, str(dc_oid)]}},
+            {"_id": 1, "file_location": 1, "ngff_validation": 1},
+        )
+        if doc.get("file_location") and not str(doc["file_location"]).startswith("s3://")
+    ]
+    for doc in sorted(file_docs, key=lambda d: str(d["file_location"]).rstrip("/")):
+        validation = doc.get("ngff_validation")
+        add_root(
+            str(doc["file_location"]),
+            str(doc["_id"]),
+            validation if isinstance(validation, dict) else None,
+        )
+
+    if fname and not fname.startswith("s3://"):
+        fname = fname.rstrip("/")
+        if fname.endswith(bioimage_store_suffixes(fmt)):
+            add_root(fname)
+        else:
+            # A folder of stores: register its direct children named like one.
+            for folder in (fname, _container_repo_path(fname)):
+                if not folder or not os.path.isdir(folder):
+                    continue
+                try:
+                    for entry in sorted(os.scandir(folder), key=lambda e: e.name):
+                        is_store = entry.is_file() if file_store else entry.is_dir()
+                        # A plain `*.tif` passes as OME-TIFF only after the CLI scan's
+                        # header check (a file document); here, only OME names.
+                        if fmt == "ome-tiff" and not entry.name.endswith(OME_TIFF_SUFFIXES):
+                            continue
+                        # An OME image beside the masks is not a mask.
+                        if fmt == "tiff" and entry.name.endswith(OME_TIFF_SUFFIXES):
+                            continue
+                        if is_store and is_bioimage_store_name(entry.name, fmt):
+                            add_root(entry.path)
+                except OSError:
+                    continue
+
+    remote: dict[str, str] = {}
+    for url in props.get("remote_stores") or []:
+        name = remote_store_name(str(url))
+        if not is_bioimage_store_name(name, fmt):
+            logger.warning("Bioimage DC %s: remote store %s is not a %s store", dc_oid, url, fmt)
+        elif name in stores or name in remote:
+            logger.warning("Bioimage DC %s: remote store name %s is already taken", dc_oid, name)
+        else:
+            remote[name] = str(url)
+
+    info = {
+        "format": fmt,
+        "kind": kind,
+        "upload": props.get("upload") is not False,
+        "image_path": image_path,
+        "sample_pattern": sample_pattern,
+        "stores": stores,
+        "remote": remote,
+    }
+    _bioimage_cache_put(_bioimage_store_cache, str(dc_oid), (now + _BIOIMAGE_CACHE_TTL_S, info))
+    return info
+
+
+@functools.cache
+def _bioimage_s3_client():
+    """Fast-fail boto3 client, built once: a viewer fetches hundreds of chunks."""
+    return _phylogeny_s3_client()
+
+
+@functools.cache
+def _bioimage_http_client():
+    """httpx client for remote https stores, built once (keeps connections alive).
+
+    Redirects are never followed: the allow-list is checked on the URL the DC
+    names, so a redirect to another host must not be read.
+    """
+    import httpx
+
+    from depictio.api.v1.configs.config import settings
+
+    return httpx.Client(timeout=settings.bioimage.remote_timeout_s, follow_redirects=False)
+
+
+def _remote_host(url: str | None) -> str | None:
+    """The host of a remote store URL (``s3://bucket/...`` gives the bucket)."""
+    from urllib.parse import urlparse
+
+    return urlparse(url).hostname if url else None
+
+
+def _bioimage_s3_store_names(dc_oid: ObjectId, fmt: str) -> list[str]:
+    """Store names uploaded under the DC's S3 prefix (for DCs with no registered path).
+
+    Key-tree stores are prefixes, a single-file store is an object. Only names
+    of the DC's format count, which also skips the CLI's ``.uploads/`` marker.
+    """
+    from depictio.api.v1.configs.config import settings
+    from depictio.models.models.data_collections_types.bioimage import (
+        bioimage_s3_prefix,
+        is_bioimage_store_name,
+        is_single_file_format,
+    )
+
+    prefix = bioimage_s3_prefix(str(dc_oid))
+    single_file = is_single_file_format(fmt)
+    names: list[str] = []
+    try:
+        paginator = _bioimage_s3_client().get_paginator("list_objects_v2")
+        for page in paginator.paginate(Bucket=settings.s3.bucket, Prefix=prefix, Delimiter="/"):
+            if single_file:
+                keys = [obj.get("Key", "") for obj in page.get("Contents", []) or []]
+            else:
+                keys = [cp.get("Prefix", "") for cp in page.get("CommonPrefixes", []) or []]
+            for key in keys:
+                name = key[len(prefix) :].rstrip("/")
+                if is_bioimage_store_name(name, fmt):
+                    names.append(name)
+    except Exception as exc:
+        logger.debug("bioimage store listing on s3 failed for %s: %s", dc_oid, exc)
+    return names
+
+
+# ---- Reads that may miss, fail upstream, or be refused ---------------------
+
+
+class _BioimageMiss(Exception):
+    """The object does not exist upstream: a genuine 404."""
+
+
+class _BioimageUpstreamError(Exception):
+    """The storage behind a store failed: a 502, never a 404."""
+
+
+class _Blob(NamedTuple):
+    content: bytes
+    # The upstream ``bytes a-b/n`` when it served the requested range, else None.
+    content_range: str | None = None
+
+
+class _RemoteTarget(NamedTuple):
+    scheme: str  # "s3" or "https"
+    bucket: str  # s3 only
+    key: str  # s3 only
+    url: str
+
+
+def _bioimage_max_bytes() -> int:
+    from depictio.api.v1.configs.config import settings
+
+    return settings.bioimage.remote_max_object_mb * 1024 * 1024
+
+
+def _bioimage_too_large() -> HTTPException:
+    return HTTPException(
+        status_code=413,
+        detail=(
+            "Image object is larger than DEPICTIO_BIOIMAGE_REMOTE_MAX_OBJECT_MB; "
+            "request it by byte range"
+        ),
+    )
+
+
+def _range_not_satisfiable(size: int | None = None) -> HTTPException:
+    headers = {"Content-Range": f"bytes */{size}"} if size is not None else None
+    return HTTPException(status_code=416, detail="Requested range not satisfiable", headers=headers)
+
+
+def _bioimage_s3_get(bucket: str, key: str, byte_range: str | None = None) -> dict[str, Any]:
+    """``get_object`` with its errors mapped to a miss, a 416 or an upstream failure."""
+    from botocore.exceptions import ClientError
+
+    kwargs: dict[str, Any] = {"Bucket": bucket, "Key": key}
+    if byte_range:
+        kwargs["Range"] = byte_range
+    try:
+        return _bioimage_s3_client().get_object(**kwargs)
+    except ClientError as exc:
+        code = str(exc.response.get("Error", {}).get("Code", ""))
+        if code in _S3_MISS_CODES:
+            raise _BioimageMiss(key) from exc
+        if code == "InvalidRange":
+            raise _range_not_satisfiable() from exc
+        raise _BioimageUpstreamError(f"s3 {bucket}/{key}: {code}") from exc
+    except Exception as exc:
+        raise _BioimageUpstreamError(f"s3 {bucket}/{key}: {exc}") from exc
+
+
+def _read_s3_body(obj: dict[str, Any], bucket: str, key: str) -> bytes:
+    """The whole body: a mid-read failure is then a 502, not a truncated 200."""
+    body = obj["Body"]
+    try:
+        return body.read()
+    except Exception as exc:
+        raise _BioimageUpstreamError(f"s3 {bucket}/{key}: {exc}") from exc
+    finally:
+        body.close()
+
+
+def _bioimage_s3_read(bucket: str, key: str, byte_range: str | None = None) -> _Blob:
+    """One object (or byte range of it), whole-read and capped at the relay limit."""
+    obj = _bioimage_s3_get(bucket, key, byte_range)
+    length = obj.get("ContentLength")
+    if isinstance(length, int) and length > _bioimage_max_bytes():
+        obj["Body"].close()
+        raise _bioimage_too_large()
+    content = _read_s3_body(obj, bucket, key)
+    if len(content) > _bioimage_max_bytes():
+        raise _bioimage_too_large()
+    return _Blob(content, obj.get("ContentRange") if byte_range else None)
+
+
+def _bioimage_s3_whole_response(
+    bucket: str, key: str, media_type: str, headers: dict[str, str]
+) -> Response:
+    """A whole key of the DC's own upload, uncapped.
+
+    Metadata and zarr v2 chunks are small and read whole (502 on a mid-read
+    failure). A key past the relay limit, typically a zarr v3 shard fetched
+    without Range, is streamed instead of being held in API memory.
+    """
+    from fastapi.responses import StreamingResponse
+
+    obj = _bioimage_s3_get(bucket, key)
+    length = obj.get("ContentLength")
+    if not isinstance(length, int) or length <= _bioimage_max_bytes():
+        content = _read_s3_body(obj, bucket, key)
+        return Response(content=content, media_type=media_type, headers=headers)
+    body = obj["Body"]
+
+    def chunks():
+        try:
+            yield from body.iter_chunks(_DISK_READ_CHUNK)
+        finally:
+            body.close()
+
+    headers = {**headers, "Content-Length": str(length)}
+    return StreamingResponse(chunks(), media_type=media_type, headers=headers)
+
+
+def _bioimage_s3_size(bucket: str, key: str) -> int:
+    from botocore.exceptions import ClientError
+
+    try:
+        head = _bioimage_s3_client().head_object(Bucket=bucket, Key=key)
+    except ClientError as exc:
+        code = str(exc.response.get("Error", {}).get("Code", ""))
+        if code in _S3_MISS_CODES:
+            raise _BioimageMiss(key) from exc
+        raise _BioimageUpstreamError(f"s3 {bucket}/{key}: {code}") from exc
+    except Exception as exc:
+        raise _BioimageUpstreamError(f"s3 {bucket}/{key}: {exc}") from exc
+    return int(head["ContentLength"])
+
+
+def _check_https_status(response, url: str, forbidden_is_miss: bool = False) -> None:
+    status = response.status_code
+    if status in (404, 410) or (status == 403 and forbidden_is_miss):
+        raise _BioimageMiss(url)
+    if status == 416:
+        raise HTTPException(
+            status_code=416,
+            detail="Requested range not satisfiable",
+            headers=(
+                {"Content-Range": response.headers["content-range"]}
+                if "content-range" in response.headers
+                else None
+            ),
+        )
+    # Anything else, redirects included, is an upstream failure.
+    if status not in (200, 206):
+        raise _BioimageUpstreamError(f"GET {url}: HTTP {status}")
+
+
+def _bioimage_https_read(
+    url: str, byte_range: str | None = None, forbidden_is_miss: bool = False
+) -> _Blob:
+    """One remote object (or byte range of it), streamed in up to the relay limit.
+
+    ``forbidden_is_miss``: a 403 means the object is absent. A bucket its
+    readers may not list (radosgw, S3 without ``s3:ListBucket``) answers 403
+    for a missing key, and zarr readers probe for keys that may not exist.
+    """
+    import httpx
+
+    headers = {"Accept-Encoding": "identity"}
+    if byte_range:
+        headers["Range"] = byte_range
+    max_bytes = _bioimage_max_bytes()
+    try:
+        with _bioimage_http_client().stream(
+            "GET", url, headers=headers, follow_redirects=False
+        ) as response:
+            _check_https_status(response, url, forbidden_is_miss)
+            declared = response.headers.get("content-length", "")
+            if declared.isdigit() and int(declared) > max_bytes:
+                raise _bioimage_too_large()
+            content = bytearray()
+            for chunk in response.iter_bytes():
+                content += chunk
+                if len(content) > max_bytes:
+                    raise _bioimage_too_large()
+            content_range = (
+                response.headers.get("content-range") if response.status_code == 206 else None
+            )
+            return _Blob(bytes(content), content_range)
+    except httpx.HTTPError as exc:
+        raise _BioimageUpstreamError(f"GET {url}: {exc}") from exc
+
+
+def _bioimage_https_size(url: str) -> int:
+    import httpx
+
+    try:
+        response = _bioimage_http_client().head(
+            url, headers={"Accept-Encoding": "identity"}, follow_redirects=False
+        )
+    except httpx.HTTPError as exc:
+        raise _BioimageUpstreamError(f"HEAD {url}: {exc}") from exc
+    _check_https_status(response, url)
+    declared = response.headers.get("content-length", "")
+    if not declared.isdigit():
+        raise _BioimageUpstreamError(f"HEAD {url}: no Content-Length")
+    return int(declared)
+
+
+def _bioimage_remote_target(url: str) -> _RemoteTarget:
+    """The remote store at ``url`` when its bucket or host is allow-listed, else 403.
+
+    s3:// is read on the server's own S3 endpoint, and never from the Depictio
+    data bucket: that bucket holds every DC's data, so reading it by URL would
+    bypass data-collection access control.
+    """
+    from urllib.parse import urlparse
+
+    from depictio.api.v1.configs.config import settings
+
+    parsed = urlparse(url)
+    allowed = settings.bioimage
+    if parsed.scheme == "s3" and parsed.netloc and "@" not in parsed.netloc:
+        bucket = parsed.netloc
+        if bucket in allowed.remote_s3_buckets and bucket != settings.s3.bucket:
+            return _RemoteTarget("s3", bucket, parsed.path.strip("/"), url)
+    elif parsed.scheme == "https" and parsed.hostname and "@" not in parsed.netloc:
+        if parsed.hostname.lower() in allowed.remote_https_hosts:
+            return _RemoteTarget("https", "", "", url.rstrip("/"))
+    where = parsed.netloc if parsed.scheme == "s3" else (parsed.hostname or "this host")
+    setting = (
+        "DEPICTIO_BIOIMAGE_REMOTE_S3_BUCKETS"
+        if parsed.scheme == "s3"
+        else "DEPICTIO_BIOIMAGE_REMOTE_HTTPS_HOSTS"
+    )
+    raise HTTPException(
+        status_code=403,
+        detail=(
+            f"Remote bioimage host not allowed: this server does not read images from "
+            f"{where}. An admin can add it to {setting}."
+        ),
+    )
+
+
+def _bioimage_remote_read(url: str, rel: str | None, byte_range: str | None = None) -> _Blob:
+    """Read ``rel`` under the remote store at ``url`` (or the store file itself)."""
+    from urllib.parse import quote
+
+    target = _bioimage_remote_target(url)
+    if target.scheme == "s3":
+        key = f"{target.key}/{rel}" if rel else target.key
+        return _bioimage_s3_read(target.bucket, key, byte_range)
+    if not rel:
+        return _bioimage_https_read(target.url, byte_range)
+    # A key inside a store: a 403 there is a key that does not exist.
+    return _bioimage_https_read(
+        f"{target.url}/{quote(rel, safe='/')}", byte_range, forbidden_is_miss=True
+    )
+
+
+def _bioimage_remote_size(url: str) -> int:
+    target = _bioimage_remote_target(url)
+    if target.scheme == "s3":
+        return _bioimage_s3_size(target.bucket, target.key)
+    return _bioimage_https_size(target.url)
+
+
+# ---- Byte ranges (OME-TIFF files, zarr v3 shards) --------------------------
+
+_ByteRange = tuple[int | None, int | None]
+
+
+def _parse_byte_range(header: str | None) -> _ByteRange | None:
+    """The one byte range a Range header asks for, or None to serve the whole file.
+
+    ``(start, end)``, ``(start, None)`` for ``a-`` and ``(None, n)`` for the
+    suffix ``-n``. A header in another unit is ignored (RFC 9110 allows it).
+    Several ranges, or a malformed one, are a 416: viv (OME-TIFF) and zarrita
+    (zarr v3 shards) only ever ask for one.
+    """
+    import re
+
+    if not header:
+        return None
+    unit, sep, spec = header.strip().partition("=")
+    if not sep or unit.strip().lower() != "bytes":
+        return None
+    # 19 digits covers any real offset and keeps int() clear of its digit limit.
+    match = re.fullmatch(r"(\d{0,19})-(\d{0,19})", spec.strip())
+    if match is None or not (match[1] or match[2]):
+        raise _range_not_satisfiable()
+    start = int(match[1]) if match[1] else None
+    end = int(match[2]) if match[2] else None
+    if (start is None and end == 0) or (start is not None and end is not None and end < start):
+        raise _range_not_satisfiable()
+    return start, end
+
+
+def _byte_range_header(requested: _ByteRange | None) -> str | None:
+    """The canonical ``Range`` value to forward upstream."""
+    if requested is None:
+        return None
+    start, end = requested
+    return f"bytes={'' if start is None else start}-{'' if end is None else end}"
+
+
+def _resolve_byte_range(requested: _ByteRange, size: int) -> tuple[int, int]:
+    """Inclusive ``(start, end)`` offsets of ``requested`` in a ``size``-byte file."""
+    start, end = requested
+    if start is None:
+        # Suffix range: ``end`` is the number of trailing bytes.
+        start, end = max(0, size - (end or 0)), size - 1
+    else:
+        end = size - 1 if end is None else min(end, size - 1)
+    if size == 0 or start >= size:
+        raise _range_not_satisfiable(size)
+    return start, end
+
+
+def _head_response(size: int, media_type: str, headers: dict[str, str]) -> Response:
+    headers = {**headers, "Content-Length": str(size)}
+    return Response(status_code=200, media_type=media_type, headers=headers)
+
+
+def _blob_response(
+    blob: _Blob, requested: _ByteRange | None, media_type: str, headers: dict[str, str]
+) -> Response:
+    """The whole blob (200), or the ``requested`` range of it (206)."""
+    headers = dict(headers)
+    if requested is None:
+        return Response(content=blob.content, media_type=media_type, headers=headers)
+    headers["Accept-Ranges"] = "bytes"
+    if blob.content_range:
+        headers["Content-Range"] = blob.content_range
+        return Response(
+            content=blob.content, status_code=206, media_type=media_type, headers=headers
+        )
+    # The upstream ignored the Range and sent the whole object: slice it here.
+    size = len(blob.content)
+    start, end = _resolve_byte_range(requested, size)
+    headers["Content-Range"] = f"bytes {start}-{end}/{size}"
+    return Response(
+        content=blob.content[start : end + 1],
+        status_code=206,
+        media_type=media_type,
+        headers=headers,
+    )
+
+
+def _disk_response(
+    path: str,
+    requested: _ByteRange | None,
+    media_type: str,
+    headers: dict[str, str],
+    head: bool = False,
+) -> Response:
+    """Stream the file, or one range of it. Not a FileResponse: that would apply
+    the request's Range header itself (multi-range included) behind our back."""
+    from fastapi.responses import StreamingResponse
+
+    size = os.path.getsize(path)
+    if head:
+        return _head_response(size, media_type, headers)
+    headers = dict(headers)
+    if requested is None:
+        start, end, status = 0, size - 1, 200
+    else:
+        start, end = _resolve_byte_range(requested, size)
+        status = 206
+        headers["Accept-Ranges"] = "bytes"
+        headers["Content-Range"] = f"bytes {start}-{end}/{size}"
+    length = end - start + 1
+    headers["Content-Length"] = str(length)
+
+    def chunks():
+        with open(path, "rb") as fh:
+            fh.seek(start)
+            remaining = length
+            while remaining > 0:
+                data = fh.read(min(_DISK_READ_CHUNK, remaining))
+                if not data:
+                    break
+                remaining -= len(data)
+                yield data
+
+    return StreamingResponse(chunks(), status_code=status, media_type=media_type, headers=headers)
+
+
+# ---- Routes ------------------------------------------------------------------
+
+
+@advanced_viz_endpoint_router.get("/bioimage/{data_collection_id}/provenance")
+def get_bioimage_provenance(
+    data_collection_id: str,
+    current_user=Depends(get_user_or_anonymous),
+) -> dict[str, Any]:
+    """Where a bioimage DC's images come from, for the component's Info tab.
+
+    ``description`` is the collection's description in its project. ``scan_source``
+    is the path the project scanned (a store, or a folder of stores). ``stores``
+    lists each image store with the location it is registered at, when it was
+    created and registered, and its size; a remote store carries its URL as
+    ``location`` and ``remote: true``. A store with no File document (found on S3
+    only) has null times and size.
+    """
+    from depictio.api.v1.db import files_collection, projects_collection
+
+    dc_oid = _bioimage_parse_dc_id(data_collection_id)
+    _assert_dc_access_cached(dc_oid, current_user)
+
+    props, fname = _bioimage_dc_properties(dc_oid)
+    info = _bioimage_store_info(dc_oid)
+
+    description: str | None = None
+    project_doc = projects_collection.find_one(
+        {"workflows.data_collections._id": dc_oid},
+        {"workflows.data_collections": 1},
+    )
+    for wf in (project_doc or {}).get("workflows", []) or []:
+        for dc in wf.get("data_collections", []) or []:
+            if (dc.get("_id") or dc.get("id")) == dc_oid and dc.get("description"):
+                description = str(dc["description"])
+
+    by_location: dict[str, dict[str, Any]] = {}
+    for doc in files_collection.find(
+        {"data_collection_id": {"$in": [dc_oid, str(dc_oid)]}},
+        {"file_location": 1, "creation_time": 1, "registration_time": 1, "filesize": 1},
+    ):
+        if doc.get("file_location"):
+            by_location[str(doc["file_location"]).rstrip("/")] = doc
+
+    stores: list[dict[str, Any]] = []
+    for name, entry in sorted(info["stores"].items()):
+        doc = next((by_location[r] for r in entry["roots"] if r in by_location), None)
+        location = entry["roots"][0] if entry["roots"] else None
+        stores.append(
+            {
+                "name": name,
+                "location": location,
+                "creation_time": str(doc["creation_time"])
+                if doc and doc.get("creation_time")
+                else None,
+                "registration_time": str(doc["registration_time"])
+                if doc and doc.get("registration_time")
+                else None,
+                "filesize": int(doc["filesize"]) if doc and doc.get("filesize") else None,
+                "remote": False,
+                "validation": entry.get("validation"),
+            }
+        )
+    for name, url in sorted(info["remote"].items()):
+        stores.append(
+            {
+                "name": name,
+                "location": url,
+                "creation_time": None,
+                "registration_time": None,
+                "filesize": None,
+                "remote": True,
+                "validation": None,
+            }
+        )
+
+    return {
+        "description": description,
+        "format": info["format"],
+        "ngff_version": props.get("ngff_version"),
+        "upload": info["upload"],
+        "image_path": info["image_path"],
+        "scan_source": None if fname is None or fname.startswith("s3://") else fname,
+        "stores": stores,
+    }
+
+
+@advanced_viz_endpoint_router.get("/bioimage/{data_collection_id}/stores")
+def list_bioimage_stores(
+    data_collection_id: str,
+    current_user=Depends(get_user_or_anonymous),
+) -> list[dict[str, Any]]:
+    """List the image stores of a bioimage DC, sorted by name.
+
+    Each entry is ``{name, sample, file_id, format, kind, remote, validation}``. ``sample``
+    is the DC's ``sample_pattern`` capture on the store name, else the name
+    without its suffix; the viewer matches it against upstream filter values,
+    and pairs a labels store (``kind: labels``) with the image of its sample. ``file_id`` is None for a store only found on S3 or remote.
+    ``format`` is the DC's format. ``remote`` marks a store read in place from
+    its URL; it is listed even when its host is not allow-listed, so the tile
+    can say why it cannot open it.
+    """
+    from depictio.models.models.data_collections_types.bioimage import bioimage_sample_name
+
+    dc_oid = _bioimage_parse_dc_id(data_collection_id)
+    _assert_dc_access_cached(dc_oid, current_user)
+
+    info = _bioimage_store_info(dc_oid)
+    fmt = info["format"]
+    local: dict[str, str | None] = {
+        name: entry["file_id"] for name, entry in info["stores"].items()
+    }
+    if not local:
+        local = {name: None for name in _bioimage_s3_store_names(dc_oid, fmt)}
+    listed = [(name, file_id, False) for name, file_id in local.items()]
+    listed += [(name, None, True) for name in info["remote"] if name not in local]
+    return [
+        {
+            "name": name,
+            "sample": bioimage_sample_name(name, info["sample_pattern"]),
+            "file_id": file_id,
+            "format": fmt,
+            "kind": info["kind"],
+            "remote": remote,
+            # Where a remote store is read from, for the tile's badge: the host only.
+            "host": _remote_host(info["remote"].get(name)) if remote else None,
+            # The ingest's NGFF report (None: remote, S3-only, or ingested before it existed).
+            "validation": (info["stores"].get(name) or {}).get("validation"),
+        }
+        for name, file_id, remote in sorted(listed)
+    ]
+
+
+@advanced_viz_endpoint_router.get("/bioimage/{data_collection_id}/handoff")
+def get_bioimage_handoff_status(
+    data_collection_id: str,
+    current_user=Depends(get_user_or_anonymous),
+) -> dict[str, Any]:
+    """How this DC's stores can be opened in another viewer (vizarr, Neuroglancer...).
+
+    ``public``: the project is public, so its stores are read anonymously with
+    CORS and a viewer can take the plain store URL. ``links_enabled``: private
+    stores can get a short-lived signed link (``POST .../{store}/handoff``),
+    valid ``ttl_minutes``. ``remote_urls``: the https URL a remote store is read
+    from (its image element for SpatialData), which a viewer can take as it is;
+    ``s3://`` stores are left out (no browser reads them).
+    """
+    import posixpath
+
+    from depictio.api.v1.configs.config import settings
+
+    dc_oid = _bioimage_parse_dc_id(data_collection_id)
+    _assert_dc_access_cached(dc_oid, current_user)
+    info = _bioimage_store_info(dc_oid)
+    image_path = info["image_path"]
+    remote_urls = {
+        name: (posixpath.join(url.rstrip("/"), image_path) if image_path else url.rstrip("/"))
+        for name, url in info["remote"].items()
+        if str(url).startswith("https://")
+    }
+    return {
+        "public": _bioimage_dc_is_public(dc_oid),
+        "links_enabled": bool(settings.bioimage.handoff_enabled),
+        "ttl_minutes": int(settings.bioimage.handoff_ttl_minutes),
+        "remote_urls": remote_urls,
+    }
+
+
+# Remote stores have no File, so the ingest never validates them: the first
+# tile that shows one asks, and the report is kept per URL for an hour.
+_BIOIMAGE_VALIDATION_TTL_S = 3600.0
+_bioimage_validation_cache: dict[tuple[str, str | None], tuple[float, dict[str, Any] | None]] = {}
+
+
+@advanced_viz_endpoint_router.get("/bioimage/{data_collection_id}/validation")
+def get_bioimage_remote_validation(
+    data_collection_id: str,
+    store: str,
+    current_user=Depends(get_user_or_anonymous),
+) -> dict[str, Any] | None:
+    """The NGFF report of one remote OME-Zarr / SpatialData store, made now.
+
+    Read through the same allow-listed reader as the store's keys (a host not
+    allowed is a 403), metadata only, on a few wells of a plate. None when this
+    install cannot validate. A storage failure is a 502 and is not cached, so
+    a network hiccup never sticks to a store as a finding.
+    """
+    import time
+
+    from depictio.cli.cli.utils.ngff_validation import callback_store, validate_ngff_store
+
+    dc_oid = _bioimage_parse_dc_id(data_collection_id)
+    _assert_dc_access_cached(dc_oid, current_user)
+    info = _bioimage_store_info(dc_oid)
+    url = info["remote"].get(store)
+    if url is None:
+        raise HTTPException(status_code=404, detail=f"No remote store {store!r} in this collection")
+    if info["format"] not in ("ome-zarr", "spatialdata"):
+        return None
+    _bioimage_remote_target(url)  # 403 before any read
+
+    key = (str(url), info["image_path"])
+    now = time.monotonic()
+    cached = _bioimage_validation_cache.get(key)
+    if cached is not None and cached[0] > now:
+        return cached[1]
+
+    failures: list[str] = []
+
+    def read(rel: str) -> bytes | None:
+        try:
+            return _bioimage_remote_read(url, rel).content
+        except _BioimageMiss:
+            return None
+        except Exception as exc:  # upstream down, over the relay cap...
+            failures.append(str(exc))
+            raise
+
+    report = validate_ngff_store(callback_store(read), info["image_path"])
+    if failures:
+        raise HTTPException(status_code=502, detail=f"Could not read the store: {failures[0]}")
+    result = report.model_dump() if report is not None else None
+    _bioimage_cache_put(_bioimage_validation_cache, key, (now + _BIOIMAGE_VALIDATION_TTL_S, result))
+    return result
+
+
+@advanced_viz_endpoint_router.post("/bioimage/{data_collection_id}/{store}/handoff")
+def create_bioimage_handoff(
+    data_collection_id: str,
+    store: str,
+    current_user=Depends(get_user_or_anonymous),
+) -> dict[str, Any]:
+    """A signed, read-only link to one store, for a viewer on another origin.
+
+    ``path`` is the store's root under the API prefix
+    (``/advanced_viz/bioimage/{dc}/t/{token}/{store}``): keys resolve under it
+    exactly as under the store's own URL. 404 when links are off
+    (``DEPICTIO_BIOIMAGE_HANDOFF_ENABLED``), for a store the DC does not have,
+    and for a caller who cannot read the DC. Writes nothing but the token.
+    """
+    from urllib.parse import quote
+
+    from depictio.api.v1.configs.config import settings
+    from depictio.models.models.data_collections_types.bioimage import is_bioimage_store_name
+
+    from . import bioimage_handoff
+
+    if not settings.bioimage.handoff_enabled:
+        raise HTTPException(status_code=404, detail="Hand-off links are off on this server")
+    dc_oid = _bioimage_parse_dc_id(data_collection_id)
+    _assert_dc_access(dc_oid, current_user)
+    info = _bioimage_store_info(dc_oid)
+    known = set(info["stores"]) | set(info["remote"])
+    if not is_bioimage_store_name(store, info["format"]) or (known and store not in known):
+        raise HTTPException(status_code=404, detail="Store not found")
+    user_id = getattr(current_user, "id", None)
+    minted = bioimage_handoff.mint(str(dc_oid), store, str(user_id) if user_id else None)
+    minted["path"] = f"/advanced_viz/bioimage/{dc_oid}/t/{minted['token']}/{quote(store, safe='')}"
+    return minted
+
+
+@advanced_viz_endpoint_router.delete("/bioimage/{data_collection_id}/t/{token}")
+def revoke_bioimage_handoff(
+    data_collection_id: str,
+    token: str,
+    current_user=Depends(get_user_or_anonymous),
+) -> dict[str, Any]:
+    """Revoke a hand-off link before it expires. Needs read access to the DC."""
+    from . import bioimage_handoff
+
+    dc_oid = _bioimage_parse_dc_id(data_collection_id)
+    _assert_dc_access(dc_oid, current_user)
+    return bioimage_handoff.revoke(token, str(dc_oid))
+
+
+@advanced_viz_endpoint_router.get("/bioimage/{data_collection_id}/t/{token}/{store}/{key:path}")
+def get_bioimage_key_by_link(
+    data_collection_id: str, token: str, store: str, key: str, request: Request
+):
+    """One zarr key of a store, read through a hand-off link (CORS, no login)."""
+    from . import bioimage_handoff
+
+    dc_oid = _bioimage_parse_dc_id(data_collection_id)
+    bioimage_handoff.verify(token, str(dc_oid), store)
+    return _serve_bioimage_key(dc_oid, store, key, request, bioimage_handoff.cors_headers(True))
+
+
+@advanced_viz_endpoint_router.api_route(
+    "/bioimage/{data_collection_id}/t/{token}/{store}", methods=["GET", "HEAD"]
+)
+def get_bioimage_file_by_link(data_collection_id: str, token: str, store: str, request: Request):
+    """A single-file store (OME-TIFF), read through a hand-off link (CORS, no login)."""
+    from . import bioimage_handoff
+
+    dc_oid = _bioimage_parse_dc_id(data_collection_id)
+    bioimage_handoff.verify(token, str(dc_oid), store)
+    return _serve_bioimage_file(dc_oid, store, request, bioimage_handoff.cors_headers(True))
+
+
+@advanced_viz_endpoint_router.get("/bioimage/{data_collection_id}/{store}/{key:path}")
+def get_bioimage_key(
+    data_collection_id: str,
+    store: str,
+    key: str,
+    request: Request,
+    current_user=Depends(get_user_or_anonymous),
+):
+    """Serve one zarr key (metadata JSON or raw chunk / shard bytes) of a key-tree store.
+
+    Metadata is ``.zattrs`` / ``.zarray`` (zarr v2, NGFF 0.4) or ``zarr.json``
+    (zarr v3, NGFF 0.5). A zarr v3 reader fetches a sharded array by byte
+    range (the shard index, then each chunk), so one ``Range: bytes=a-b`` /
+    ``a-`` / ``-n`` gets a 206 with ``Content-Range``, several ranges or one
+    past the end a 416, exactly as for an OME-TIFF file. Without a Range the
+    key is served whole, as before.
+
+    OME-Zarr stores are read as they are; a SpatialData store at its
+    ``image_path``. A remote store is proxied from its URL. A local one is read
+    from the CLI upload at ``bioimage_s3_prefix(dc_id, store) + key`` first
+    (skipped for ``upload: false`` DCs; a SpatialData upload holds the image
+    subtree only, so no ``image_path`` join), then from the registered store
+    directory on disk. A missing key is a 404, which zarr readers treat as an
+    empty chunk, so only a genuine miss may produce one (ranged or not): a
+    storage error with no disk copy is a 502.
+    """
+    from . import bioimage_handoff
+
+    dc_oid = _bioimage_parse_dc_id(data_collection_id)
+    # Gate before any read, and before validating the key, so an unauthorised
+    # caller learns nothing about which stores or keys exist.
+    _assert_dc_access_cached(dc_oid, current_user)
+    cors = bioimage_handoff.cors_headers(_bioimage_dc_is_public(dc_oid))
+    return _serve_bioimage_key(dc_oid, store, key, request, cors)
+
+
+def _serve_bioimage_key(
+    dc_oid: ObjectId, store: str, key: str, request: Request, cors: dict[str, str]
+):
+    """The body of a key read, once the caller may read the DC. ``cors`` goes on
+    every answer, errors included: a cross-origin zarr reader must be able to
+    read a 404 to treat it as an empty chunk."""
+    import posixpath
+
+    from fastapi.responses import FileResponse
+
+    from depictio.api.v1.configs.config import settings
+    from depictio.models.models.data_collections_types.bioimage import (
+        bioimage_s3_prefix,
+        is_bioimage_store_name,
+        is_single_file_format,
+    )
+
+    info = _bioimage_store_info(dc_oid)
+    fmt = info["format"]
+    if is_single_file_format(fmt):
+        raise HTTPException(
+            status_code=400, detail=f"A {fmt} store is one file: fetch it without a key"
+        )
+    normalized = _normalize_zarr_key(key)
+    if not is_bioimage_store_name(store, fmt) or normalized is None:
+        raise HTTPException(status_code=400, detail="Invalid store or key")
+    image_path = info["image_path"]
+    if fmt == "spatialdata" and not image_path:
+        raise HTTPException(status_code=500, detail="SpatialData collection has no image_path")
+    # The key relative to the store root (a SpatialData store's image lives below it).
+    rel_key = posixpath.join(image_path, normalized) if image_path else normalized
+
+    range_header = request.headers.get("range")
+    requested = _parse_byte_range(range_header)
+    byte_range = _byte_range_header(requested)
+    media_type = _zarr_media_type(normalized)
+    headers = {**_zarr_headers(normalized), **cors}
+
+    remote_url = info["remote"].get(store)
+    if remote_url:
+        try:
+            blob = _bioimage_remote_read(remote_url, rel_key, byte_range)
+        except _BioimageMiss as exc:
+            raise HTTPException(
+                status_code=404, detail="Key not found", headers=cors or None
+            ) from exc
+        except _BioimageUpstreamError as exc:
+            logger.warning("bioimage remote read failed: %s", exc)
+            raise HTTPException(
+                status_code=502, detail="Remote image store unavailable", headers=cors or None
+            ) from exc
+        return _blob_response(blob, requested, media_type, headers)
+
+    s3_failed = False
+    if info["upload"]:
+        s3_key = bioimage_s3_prefix(str(dc_oid), store) + normalized
+        try:
+            if byte_range is None:
+                return _bioimage_s3_whole_response(settings.s3.bucket, s3_key, media_type, headers)
+            # One range of a shard, capped by its span.
+            blob = _bioimage_s3_read(settings.s3.bucket, s3_key, byte_range)
+            return _blob_response(blob, requested, media_type, headers)
+        except _BioimageMiss:
+            pass
+        except _BioimageUpstreamError as exc:
+            s3_failed = True
+            logger.warning("bioimage s3 read failed: %s", exc)
+
+    # Disk fallback: only under a registered root, and the resolved path must
+    # stay inside it (symlinks included).
+    entry = info["stores"].get(store)
+    for root in entry["roots"] if entry else []:
+        try:
+            real_root = os.path.realpath(root)
+            if not os.path.isdir(real_root):
+                continue
+            candidate = os.path.realpath(os.path.join(real_root, rel_key))
+            if os.path.commonpath([real_root, candidate]) != real_root:
+                continue
+            if os.path.isfile(candidate):
+                if range_header:
+                    # Any Range header (even one in another unit, ignored as
+                    # for OME-TIFF): never let FileResponse interpret it.
+                    return _disk_response(candidate, requested, media_type, headers)
+                return FileResponse(candidate, media_type=media_type, headers=headers)
+        except (OSError, ValueError):
+            continue
+
+    if s3_failed:
+        raise HTTPException(
+            status_code=502, detail="Image storage unavailable", headers=cors or None
+        )
+    raise HTTPException(status_code=404, detail="Key not found", headers=cors or None)
+
+
+@advanced_viz_endpoint_router.api_route(
+    "/bioimage/{data_collection_id}/{store}", methods=["GET", "HEAD"]
+)
+def get_bioimage_file(
+    data_collection_id: str,
+    store: str,
+    request: Request,
+    current_user=Depends(get_user_or_anonymous),
+):
+    """Serve a single-file store (OME-TIFF), whole or by one byte range.
+
+    ``Range: bytes=a-b`` / ``a-`` / ``-n`` gets a 206 with ``Content-Range``;
+    several ranges, or one past the end, a 416. No Range serves the whole file
+    (from S3 or a remote store only up to ``remote_max_object_mb``, else 413).
+    HEAD returns the size. Read from the remote URL for a remote store, else the
+    CLI upload at ``bioimage_s3_object_key`` (skipped for ``upload: false``),
+    then the registered file on disk. As for keys, only a genuine miss is a 404.
+    """
+    from . import bioimage_handoff
+
+    dc_oid = _bioimage_parse_dc_id(data_collection_id)
+    _assert_dc_access_cached(dc_oid, current_user)
+    cors = bioimage_handoff.cors_headers(_bioimage_dc_is_public(dc_oid))
+    return _serve_bioimage_file(dc_oid, store, request, cors)
+
+
+def _serve_bioimage_file(dc_oid: ObjectId, store: str, request: Request, cors: dict[str, str]):
+    """The body of a single-file read, once the caller may read the DC."""
+    from depictio.api.v1.configs.config import settings
+    from depictio.models.models.data_collections_types.bioimage import (
+        bioimage_s3_object_key,
+        is_bioimage_store_name,
+        is_single_file_format,
+    )
+
+    info = _bioimage_store_info(dc_oid)
+    fmt = info["format"]
+    if not is_single_file_format(fmt):
+        raise HTTPException(
+            status_code=400, detail=f"A {fmt} store is a key tree: fetch its keys under {store}/"
+        )
+    if not is_bioimage_store_name(store, fmt):
+        raise HTTPException(status_code=400, detail="Invalid store")
+    tiff_headers = {**_TIFF_HEADERS, **cors}
+    head = request.method == "HEAD"
+    # A Range on HEAD is ignored: HEAD describes the whole file.
+    requested = None if head else _parse_byte_range(request.headers.get("range"))
+    byte_range = _byte_range_header(requested)
+
+    remote_url = info["remote"].get(store)
+    if remote_url:
+        try:
+            if head:
+                return _head_response(
+                    _bioimage_remote_size(remote_url), _TIFF_MEDIA_TYPE, tiff_headers
+                )
+            return _blob_response(
+                _bioimage_remote_read(remote_url, None, byte_range),
+                requested,
+                _TIFF_MEDIA_TYPE,
+                tiff_headers,
+            )
+        except _BioimageMiss as exc:
+            raise HTTPException(
+                status_code=404, detail="Image not found", headers=cors or None
+            ) from exc
+        except _BioimageUpstreamError as exc:
+            logger.warning("bioimage remote read failed: %s", exc)
+            raise HTTPException(
+                status_code=502, detail="Remote image store unavailable", headers=cors or None
+            ) from exc
+
+    s3_failed = False
+    if info["upload"]:
+        s3_key = bioimage_s3_object_key(str(dc_oid), store)
+        try:
+            if head:
+                return _head_response(
+                    _bioimage_s3_size(settings.s3.bucket, s3_key), _TIFF_MEDIA_TYPE, tiff_headers
+                )
+            blob = _bioimage_s3_read(settings.s3.bucket, s3_key, byte_range)
+            return _blob_response(blob, requested, _TIFF_MEDIA_TYPE, tiff_headers)
+        except _BioimageMiss:
+            pass
+        except _BioimageUpstreamError as exc:
+            s3_failed = True
+            logger.warning("bioimage s3 read failed: %s", exc)
+
+    entry = info["stores"].get(store)
+    for root in entry["roots"] if entry else []:
+        try:
+            path = os.path.realpath(root)
+            if os.path.isfile(path):
+                return _disk_response(path, requested, _TIFF_MEDIA_TYPE, tiff_headers, head)
+        except (OSError, ValueError):
+            continue
+
+    if s3_failed:
+        raise HTTPException(
+            status_code=502, detail="Image storage unavailable", headers=cors or None
+        )
+    raise HTTPException(status_code=404, detail="Image not found", headers=cors or None)

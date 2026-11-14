@@ -1,0 +1,686 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8f32"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8f32"
+  },
+  "version": 1,
+  "stored_metadata": [
+    {
+      "index": "omz-hela-text",
+      "component_type": "text",
+      "title": "From the grid to the cell",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_align": "left",
+      "section": "About",
+      "order": 6,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "HeLa cells on an electron microscopy grid, imaged twice: an overview of the whole section at 34 nm per pixel, then electron tomograms of single cells at 1.6 nm. The overview is read in place from EMBL's S3 (MoBIE clem-example-project). On the left, each mark is where a tomogram was acquired; zoom in and it becomes the tomogram's footprint. Click one and the right tile opens that tomogram, with Z moving through its depth. Three of the six tomograms are converted for the detail view (binned to 6.2 nm, 18 central slices); the others only mark where they were taken. The tomograms are generated locally by dev/bioimage/make_hela_tomograms.py.\n",
+      "surface": "none",
+      "accent": null,
+      "logo": null,
+      "logo_dark": null,
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-hela-overview",
+      "component_type": "advanced_viz",
+      "title": "EM overview (34 nm)",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "hela_images",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f30"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "HeLa cells on an EM grid: the whole-section overview (34 nm, read in place) and electron tomograms of single cells inside it (6.2 nm after binning)",
+        "data_collection_tag": "hela_images",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f30"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "The whole section; each mark is a tomogram, coloured by whether it opens on the right. Click one to open it.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Acquisitions",
+      "viz_kind": "bioimage_viewer",
+      "config": {
+        "controls_placement": "popover",
+        "viz_kind": "bioimage_viewer",
+        "image_wf_id": "646b0f3c1e4a2d7f8e5b8f01",
+        "image_dc_id": "646b0f3c1e4a2d7f8e5b8f30",
+        "image_dc_tag": "hela_images",
+        "store": "em-overview.ome.zarr",
+        "view_link": null,
+        "store_pattern": "^em-overview",
+        "sample_wf_id": null,
+        "sample_dc_id": null,
+        "sample_dc_tag": null,
+        "sample_column": null,
+        "well_column": null,
+        "channels": [
+          {
+            "index": 0,
+            "name": "EM",
+            "description": "Electron microscopy of the section at 34 nm per pixel: one grey-scale channel, dark where the sample scatters electrons (dense material), bright on the empty grid holes.",
+            "visible": true,
+            "color": "#FFFFFF",
+            "contrast_limits": null
+          }
+        ],
+        "show_scalebar": true,
+        "points_wf_id": "646b0f3c1e4a2d7f8e5b8f01",
+        "points_dc_id": "646b0f3c1e4a2d7f8e5b8f31",
+        "points_dc_tag": "hela_tomograms",
+        "cell_id_col": "tomogram",
+        "x_col": "x_px",
+        "y_col": "y_px",
+        "z_col": null,
+        "t_col": null,
+        "points_z_tolerance": 0.0,
+        "points_all_planes": false,
+        "color_col": "converted",
+        "points_scale": 1.0,
+        "points_offset_x": 0.0,
+        "points_offset_y": 0.0,
+        "point_radius": 6.0,
+        "box_w_col": "box_w_px",
+        "box_h_col": "box_h_px",
+        "frame_on_filter": false,
+        "points_sample_col": null,
+        "points_well_col": null,
+        "labels_wf_id": null,
+        "labels_dc_id": null,
+        "labels_dc_tag": null,
+        "labels_opacity": 0.5,
+        "labels_outline": true,
+        "steps_wf_id": null,
+        "steps_dc_id": null,
+        "steps_dc_tag": null,
+        "steps_store_col": null,
+        "steps_label_col": null,
+        "steps_order_col": null,
+        "steps_sample_col": null,
+        "steps_reference_col": null,
+        "steps_metric_cols": [],
+        "steps_param_col": null,
+        "steps_info_cols": [],
+        "steps_metric_better": {},
+        "overlay_store": null,
+        "overlay_opacity": 0.6,
+        "selection_enabled": true,
+        "selection_column": null
+      },
+      "controls_placement": "top",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-hela-tomogram",
+      "component_type": "advanced_viz",
+      "title": "Electron tomogram (6.2 nm)",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "hela_images",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f30"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "HeLa cells on an EM grid: the whole-section overview (34 nm, read in place) and electron tomograms of single cells inside it (6.2 nm after binning)",
+        "data_collection_tag": "hela_images",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f30"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "The tomogram picked on the overview, in its own orientation; Z moves through its depth.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Acquisitions",
+      "viz_kind": "bioimage_viewer",
+      "config": {
+        "controls_placement": "popover",
+        "viz_kind": "bioimage_viewer",
+        "image_wf_id": "646b0f3c1e4a2d7f8e5b8f01",
+        "image_dc_id": "646b0f3c1e4a2d7f8e5b8f30",
+        "image_dc_tag": "hela_images",
+        "store": "tomo_40.zarr",
+        "view_link": null,
+        "store_pattern": "^tomo_",
+        "sample_wf_id": null,
+        "sample_dc_id": "646b0f3c1e4a2d7f8e5b8f31",
+        "sample_dc_tag": "hela_tomograms",
+        "sample_column": "tomogram",
+        "well_column": null,
+        "channels": [
+          {
+            "index": 0,
+            "name": "EM",
+            "description": "Electron tomogram: one grey-scale channel of electron density, a slice through the cell volume at 6.2 nm per pixel. Membranes and dense organelles are dark.",
+            "visible": true,
+            "color": "#FFFFFF",
+            "contrast_limits": null
+          }
+        ],
+        "show_scalebar": true,
+        "points_wf_id": null,
+        "points_dc_id": null,
+        "points_dc_tag": null,
+        "cell_id_col": null,
+        "x_col": null,
+        "y_col": null,
+        "z_col": null,
+        "t_col": null,
+        "points_z_tolerance": 0.0,
+        "points_all_planes": false,
+        "color_col": null,
+        "points_scale": 1.0,
+        "points_offset_x": 0.0,
+        "points_offset_y": 0.0,
+        "point_radius": 6.0,
+        "box_w_col": null,
+        "box_h_col": null,
+        "frame_on_filter": false,
+        "points_sample_col": null,
+        "points_well_col": null,
+        "labels_wf_id": null,
+        "labels_dc_id": null,
+        "labels_dc_tag": null,
+        "labels_opacity": 0.5,
+        "labels_outline": true,
+        "steps_wf_id": null,
+        "steps_dc_id": null,
+        "steps_dc_tag": null,
+        "steps_store_col": null,
+        "steps_label_col": null,
+        "steps_order_col": null,
+        "steps_sample_col": null,
+        "steps_reference_col": null,
+        "steps_metric_cols": [],
+        "steps_param_col": null,
+        "steps_info_cols": [],
+        "steps_metric_better": {},
+        "overlay_store": null,
+        "overlay_opacity": 0.6,
+        "selection_enabled": true,
+        "selection_column": null
+      },
+      "controls_placement": "top",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-hela-card-count",
+      "component_type": "card",
+      "title": "Tomograms",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "hela_tomograms",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f31"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "One row per electron tomogram: where its footprint sits on the EM overview, and whether it was converted for the detail view",
+        "data_collection_tag": "hela_tomograms",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f31"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Tomograms",
+      "aggregation": "count",
+      "column_name": "tomogram",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "vertical",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "follow_region_filter": false,
+      "icon_name": "mdi:cube-outline",
+      "title_font_size": "md",
+      "value_font_size": "xl",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-hela-card-field",
+      "component_type": "card",
+      "title": "Field of view (um)",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "hela_tomograms",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f31"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "One row per electron tomogram: where its footprint sits on the EM overview, and whether it was converted for the detail view",
+        "data_collection_tag": "hela_tomograms",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f31"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Tomograms",
+      "aggregation": "average",
+      "column_name": "footprint_um",
+      "column_type": "float64",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "vertical",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "follow_region_filter": false,
+      "icon_name": "mdi:crop-free",
+      "title_font_size": "md",
+      "value_font_size": "xl",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-hela-card-pixel",
+      "component_type": "card",
+      "title": "Acquired pixel (nm)",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "hela_tomograms",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f31"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "One row per electron tomogram: where its footprint sits on the EM overview, and whether it was converted for the detail view",
+        "data_collection_tag": "hela_tomograms",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f31"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Tomograms",
+      "aggregation": "average",
+      "column_name": "source_pixel_nm",
+      "column_type": "float64",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "vertical",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "follow_region_filter": false,
+      "icon_name": "mdi:grid",
+      "title_font_size": "md",
+      "value_font_size": "xl",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-hela-card-binned",
+      "component_type": "card",
+      "title": "Shown pixel (nm)",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "hela_tomograms",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f31"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "One row per electron tomogram: where its footprint sits on the EM overview, and whether it was converted for the detail view",
+        "data_collection_tag": "hela_tomograms",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f31"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Tomograms",
+      "aggregation": "average",
+      "column_name": "pixel_nm",
+      "column_type": "float64",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "vertical",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "follow_region_filter": false,
+      "icon_name": "mdi:grid-large",
+      "title_font_size": "md",
+      "value_font_size": "xl",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-hela-tomograms",
+      "component_type": "table",
+      "title": "Tomograms",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "hela_tomograms",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f31"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "One row per electron tomogram: where its footprint sits on the EM overview, and whether it was converted for the detail view",
+        "data_collection_tag": "hela_tomograms",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f31"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "One row per tomogram: where it sits on the overview and whether it opens on the right.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Tomograms",
+      "columns": [],
+      "page_size": 10,
+      "sortable": true,
+      "filterable": true,
+      "compact": false,
+      "row_selection_enabled": false,
+      "row_selection_column": null,
+      "row_selection_mode": "multiple",
+      "wf_tag": "python/bioimage_demo"
+    }
+  ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [],
+  "right_panel_layout_data": [
+    {
+      "i": "box-omz-hela-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 2,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-omz-hela-overview",
+      "x": 0,
+      "y": 2,
+      "w": 4,
+      "h": 10,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-omz-hela-tomogram",
+      "x": 4,
+      "y": 2,
+      "w": 4,
+      "h": 10,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-omz-hela-card-count",
+      "x": 0,
+      "y": 12,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-omz-hela-card-field",
+      "x": 2,
+      "y": 12,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-omz-hela-card-pixel",
+      "x": 4,
+      "y": 12,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-omz-hela-card-binned",
+      "x": 6,
+      "y": 12,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-omz-hela-tomograms",
+      "x": 0,
+      "y": 14,
+      "w": 8,
+      "h": 4,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "Two magnifications (HeLa)",
+  "subtitle": "An EM overview of a grid, and electron tomograms of cells acquired inside it",
+  "icon": "mdi:microscope",
+  "icon_color": "grape",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-12 00:00:00",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8f00"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8f00"
+  },
+  "tab_order": 13,
+  "main_tab_name": null,
+  "tab_icon": "mdi:microscope",
+  "tab_icon_color": "grape",
+  "tab_group": null,
+  "parent_dashboard_title": null,
+  "filter_sections": [],
+  "grid_sections": [
+    {
+      "name": "About",
+      "icon": "mdi:information-outline",
+      "color": "grape",
+      "description": "The samples, where the images come from, and how the tiles below work together",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    },
+    {
+      "name": "Acquisitions",
+      "icon": "mdi:microscope",
+      "color": "grape",
+      "description": "The overview with where each tomogram was acquired, and the tomogram picked on it",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": "linked",
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    },
+    {
+      "name": "Tomograms",
+      "icon": "mdi:table",
+      "color": "grape",
+      "description": "What was acquired, and where",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null,
+  "category_colors": null,
+  "filter_panel_default": "open",
+  "content_width_default": "full",
+  "show_tab_header": true,
+  "open_with_defaults": false,
+  "show_guide": true,
+  "guide_intro": "",
+  "advanced_viz_controls": "popover",
+  "autofit": true
+}

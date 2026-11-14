@@ -1,0 +1,247 @@
+import { describe, expect, it } from 'vitest';
+
+import {
+  axisSizes,
+  formatLength,
+  hexToRgb,
+  ngffRootAttrs,
+  normaliseHex,
+  axisStep,
+  physicalPixelSize,
+  planeLabel,
+  renderedChannels,
+  resolveChannels,
+  selectionFor,
+} from './channels';
+
+describe('hex colours', () => {
+  it('reads the OMERO spelling without a hash, and short forms', () => {
+    expect(hexToRgb('FF0080')).toEqual([255, 0, 128]);
+    expect(hexToRgb('#0f0')).toEqual([0, 255, 0]);
+    expect(hexToRgb('red')).toBeNull();
+    expect(normaliseHex('00FF00')).toBe('#00ff00');
+  });
+});
+
+describe('axes', () => {
+  it('counts absent axes as size 1', () => {
+    expect(axisSizes(['c', 'y', 'x'], [3, 512, 512])).toEqual({ c: 3, z: 1, t: 1 });
+    expect(axisSizes(['t', 'c', 'z', 'y', 'x'], [4, 2, 30, 64, 64])).toEqual({ c: 2, z: 30, t: 4 });
+  });
+
+  it('names only the axes the array has in a selection', () => {
+    expect(selectionFor(['c', 'y', 'x'], { c: 1, z: 5, t: 2 })).toEqual({ c: 1 });
+    expect(selectionFor(['t', 'c', 'z', 'y', 'x'], { c: 1, z: 5, t: 2 })).toEqual({
+      c: 1,
+      z: 5,
+      t: 2,
+    });
+  });
+});
+
+describe('resolveChannels', () => {
+  const omero = {
+    channels: [
+      { label: 'DAPI', color: '0000FF', active: true, window: { start: 10, end: 900, min: 0, max: 4095 } },
+      { label: 'GFP', color: '00FF00', active: false, window: { start: 0, end: 2000, min: 0, max: 4095 } },
+    ],
+  };
+
+  it('takes names, colours, visibility and windows from omero', () => {
+    const ch = resolveChannels({ sizeC: 2, dtype: 'Uint16', omero });
+    expect(ch.map((c) => c.name)).toEqual(['DAPI', 'GFP']);
+    expect(ch.map((c) => c.color)).toEqual(['#0000ff', '#00ff00']);
+    expect(ch.map((c) => c.visible)).toEqual([true, false]);
+    expect(ch[0].contrastLimits).toEqual([10, 900]);
+    expect(ch[0].domain).toEqual([0, 4095]);
+  });
+
+  it('draws an RGB image named r, g, b in its own colours', () => {
+    const rgb = { channels: [{ label: 'r' }, { label: 'g' }, { label: 'b' }] };
+    const ch = resolveChannels({ sizeC: 3, dtype: 'Uint8', omero: rgb });
+    expect(ch.map((c) => c.color)).toEqual(['#ff0000', '#00ff00', '#0000ff']);
+  });
+
+  it('lets the component config win over omero, field by field', () => {
+    const ch = resolveChannels({
+      sizeC: 2,
+      dtype: 'Uint16',
+      omero,
+      config: [{ index: 1, visible: true, color: '#ff00ff', contrast_limits: [5, 50] }],
+    });
+    expect(ch[1]).toMatchObject({
+      name: 'GFP',
+      color: '#ff00ff',
+      visible: true,
+      contrastLimits: [5, 50],
+    });
+    // Untouched channel keeps its omero settings.
+    expect(ch[0].contrastLimits).toEqual([10, 900]);
+  });
+
+  it('falls back to data statistics, then the dtype range', () => {
+    const fromStats = resolveChannels({
+      sizeC: 1,
+      dtype: 'Uint8',
+      stats: [{ domain: [3, 200], contrastLimits: [12, 180] }],
+    });
+    expect(fromStats[0]).toMatchObject({
+      name: 'Channel 0',
+      color: '#ffffff',
+      contrastLimits: [12, 180],
+      domain: [3, 200],
+    });
+    const fromDtype = resolveChannels({ sizeC: 1, dtype: 'Uint8' });
+    expect(fromDtype[0].contrastLimits).toEqual([0, 255]);
+  });
+
+  it('widens the slider domain to a pinned window outside the data', () => {
+    const ch = resolveChannels({
+      sizeC: 1,
+      dtype: 'Float32',
+      stats: [{ domain: [0, 1], contrastLimits: [0.1, 0.9] }],
+      config: [{ index: 0, contrast_limits: [-1, 2] }],
+    });
+    expect(ch[0].domain).toEqual([-1, 2]);
+  });
+
+  it('starts only as many channels visible as viv can shade', () => {
+    const ch = resolveChannels({ sizeC: 8, dtype: 'Uint16' });
+    expect(ch.filter((c) => c.visible)).toHaveLength(6);
+    expect(renderedChannels(ch)).toHaveLength(6);
+  });
+
+  it('caps the visible channels even when the store marks them all active', () => {
+    const omero = { channels: Array.from({ length: 8 }, () => ({ active: true })) };
+    const ch = resolveChannels({ sizeC: 8, dtype: 'Uint16', omero });
+    expect(ch.map((c) => c.visible)).toEqual([true, true, true, true, true, true, false, false]);
+  });
+
+  it('keeps one invisible channel when all are hidden', () => {
+    const ch = resolveChannels({ sizeC: 2, dtype: 'Uint16' }).map((c) => ({ ...c, visible: false }));
+    const rendered = renderedChannels(ch);
+    expect(rendered).toHaveLength(1);
+    expect(rendered[0].visible).toBe(false);
+  });
+});
+
+describe('physicalPixelSize', () => {
+  it('reads the x unit and the first dataset scale', () => {
+    const attrs = {
+      multiscales: [
+        {
+          axes: [
+            { name: 'c', type: 'channel' },
+            { name: 'y', type: 'space', unit: 'micrometer' },
+            { name: 'x', type: 'space', unit: 'micrometer' },
+          ],
+          datasets: [
+            { path: '0', coordinateTransformations: [{ type: 'scale', scale: [1, 0.325, 0.325] }] },
+            { path: '1', coordinateTransformations: [{ type: 'scale', scale: [1, 0.65, 0.65] }] },
+          ],
+        },
+      ],
+    };
+    expect(physicalPixelSize(attrs)).toEqual({ value: 0.325, unit: 'µm' });
+  });
+
+  it('is null without a unit on x', () => {
+    expect(physicalPixelSize({ multiscales: [{ axes: [{ name: 'y' }, { name: 'x' }] }] })).toBeNull();
+    expect(physicalPixelSize(null)).toBeNull();
+  });
+
+  it('formats lengths without float noise', () => {
+    expect(formatLength(0.30000000000000004, 'µm')).toBe('0.3 µm');
+    expect(formatLength(50, 'µm')).toBe('50 µm');
+  });
+});
+
+describe('NGFF 0.5 attributes', () => {
+  const ome = {
+    version: '0.5',
+    multiscales: [
+      {
+        axes: [
+          { name: 'c', type: 'channel' },
+          { name: 'y', type: 'space', unit: 'micrometer' },
+          { name: 'x', type: 'space', unit: 'micrometer' },
+        ],
+        datasets: [
+          { path: '0', coordinateTransformations: [{ type: 'scale', scale: [1, 0.5, 0.5] }] },
+        ],
+      },
+    ],
+    omero: {
+      channels: [{ label: 'DAPI', color: '0000FF', window: { start: 10, end: 200 } }],
+      rdefs: { defaultZ: 0 },
+    },
+  };
+
+  it('unwraps the ome block of a zarr.json and passes 0.4 attributes through', () => {
+    expect(ngffRootAttrs({ ome })).toBe(ome);
+    expect(ngffRootAttrs(ome)).toBe(ome);
+    expect(ngffRootAttrs(null)).toEqual({});
+    expect(ngffRootAttrs([1])).toEqual({});
+  });
+
+  it('reads the scale bar and omero channels from either spelling', () => {
+    expect(physicalPixelSize({ ome })).toEqual({ value: 0.5, unit: 'µm' });
+    expect(physicalPixelSize(ome)).toEqual({ value: 0.5, unit: 'µm' });
+    const [c] = resolveChannels({
+      sizeC: 1,
+      dtype: 'Uint8',
+      omero: ngffRootAttrs({ ome }).omero as never,
+    });
+    expect(c).toMatchObject({ name: 'DAPI', color: '#0000ff', contrastLimits: [10, 200] });
+  });
+});
+
+describe('resolveChannels contrast window', () => {
+  it('widens a window with no width to the data range', () => {
+    // viv's statistics of a small disc on an empty plane: every percentile is the disc.
+    const [ch] = resolveChannels({
+      sizeC: 1,
+      dtype: 'Uint8',
+      stats: [{ domain: [0, 200], contrastLimits: [200, 200] }],
+    });
+    expect(ch.contrastLimits).toEqual([0, 200]);
+  });
+
+  it('falls back to the dtype range when the data hold one value', () => {
+    const [ch] = resolveChannels({
+      sizeC: 1,
+      dtype: 'Uint8',
+      omero: { channels: [{ window: { start: 7, end: 7 } }] },
+      stats: [{ domain: [7, 7], contrastLimits: [7, 7] }],
+    });
+    expect(ch.contrastLimits).toEqual([0, 255]);
+  });
+});
+
+describe('axisStep and planeLabel', () => {
+  const attrs = {
+    multiscales: [
+      {
+        axes: [
+          { name: 't', unit: 'minute' },
+          { name: 'z', unit: 'micrometer' },
+          { name: 'y', unit: 'micrometer' },
+          { name: 'x', unit: 'micrometer' },
+        ],
+        datasets: [{ coordinateTransformations: [{ type: 'scale', scale: [1.5, 2, 0.5, 0.5] }] }],
+      },
+    ],
+  };
+
+  it('reads the step and unit of a named axis', () => {
+    expect(axisStep(attrs, 't')).toEqual({ value: 1.5, unit: 'min' });
+    expect(axisStep(attrs, 'z')).toEqual({ value: 2, unit: 'µm' });
+    expect(axisStep(attrs, 'c')).toBeNull();
+  });
+
+  it('says where a plane sits, with its time or depth when the store gives a unit', () => {
+    expect(planeLabel(2, 10, { value: 1.5, unit: 'min' })).toBe('3/10 · 3 min');
+    expect(planeLabel(0, 18, { value: 2, unit: 'µm' })).toBe('1/18 · 0 µm');
+    expect(planeLabel(4, 5, null)).toBe('5/5');
+  });
+});
