@@ -6,7 +6,7 @@ import type { StoredMetadata } from '../../api';
 export { default as ComponentChrome, actionsFor } from './ComponentChrome';
 export { canDuplicate } from './chromeActions';
 export type { ComponentChromeProps, ChromeAction } from './ComponentChrome';
-export { default as MetadataPopover } from './MetadataPopover';
+export { default as MetadataPopover, openComponentInfo } from './MetadataPopover';
 export { default as MetadataBody } from './MetadataBody';
 export { default as ComponentInfo, TileSubtitle, TileTitleRow } from './ComponentInfo';
 export { titleCarriesDescription } from './descriptionText';

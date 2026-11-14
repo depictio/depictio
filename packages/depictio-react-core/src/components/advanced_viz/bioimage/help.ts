@@ -60,14 +60,17 @@ export function helpTopics(ctx: HelpContext): HelpTopic[] {
   if (ctx.steps) {
     out.push({
       key: 'steps',
-      title: 'Processing steps',
+      title: 'Processing history',
       text:
-        'Step picks which stage of the processing is shown, the last one first; its metrics, ' +
-        'and how they moved since the step before, sit under it.' +
+        'The history lists what was done to this image, one step at a time, as the processing ' +
+        'tool recorded it: the tool, its run, the metrics and whether they got better or worse ' +
+        'since the step before. Pick a step (or use the arrows, or play) to see its output and ' +
+        'its parameters. Nothing here changes or reruns a step: that is the tool\'s job.' +
         (ctx.reference
-          ? ' Compare lays the reference image over it: Colours draws the step in green and the ' +
-            'reference in magenta, so what lines up turns grey-white and an offset shows as ' +
-            'coloured fringes; Fade blends the reference in with the slider.'
+          ? ' Compare with puts the step before, or the fixed image, next to it: side by side at ' +
+            'the same zoom, or laid over it (Colours draws the step in green and the other in ' +
+            'magenta, so what lines up turns grey-white and an offset shows as coloured fringes; ' +
+            'Fade blends it in with the slider).'
           : ''),
     });
   }

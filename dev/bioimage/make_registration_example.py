@@ -21,7 +21,9 @@ table with one row per sample and step holding the quality metrics.
   registration error over 20 landmarks, from the residual transform),
   ``folding_pct`` (share of pixels where the Jacobian determinant of the
   residual displacement is <= 0; 0 for the steps that are not B-spline) and a
-  synthetic ``runtime_s``.
+  synthetic ``runtime_s``; ``tool``, ``duration`` and ``parameters`` (the
+  elastix parameter-map keys such a step would use, as JSON) describe each
+  run for the read-only history the tile shows.
 
 ``embryo_b`` is a failed case: its affine step gets the shear the wrong way
 round, which leaves it further from the fixed image than the rigid step, and
@@ -59,6 +61,34 @@ BACKGROUND = 200.0
 CHANNELS = [("Nuclei", "00FFFF"), ("Membranes", "FFFF00")]
 STEPS = ["raw", "rigid", "affine", "bspline"]
 TRANSFORM = {"raw": "none", "rigid": "rigid", "affine": "affine", "bspline": "bspline"}
+#: The parameters an elastix run of each step would use (its parameter-map
+#: keys). The outputs here are simulated, so the table says so in ``tool``:
+#: a history must not claim a run that did not happen.
+PARAMETERS = {
+    "raw": {},
+    "rigid": {
+        "Transform": "EulerTransform",
+        "Metric": "AdvancedMattesMutualInformation",
+        "Optimizer": "AdaptiveStochasticGradientDescent",
+        "NumberOfResolutions": 3,
+        "MaximumNumberOfIterations": 250,
+    },
+    "affine": {
+        "Transform": "AffineTransform",
+        "Metric": "AdvancedMattesMutualInformation",
+        "Optimizer": "AdaptiveStochasticGradientDescent",
+        "NumberOfResolutions": 4,
+        "MaximumNumberOfIterations": 500,
+    },
+    "bspline": {
+        "Transform": "BSplineTransform",
+        "Metric": "AdvancedMattesMutualInformation",
+        "Optimizer": "AdaptiveStochasticGradientDescent",
+        "NumberOfResolutions": 4,
+        "MaximumNumberOfIterations": 1000,
+        "FinalGridSpacingInPhysicalUnits": 16,
+    },
+}
 AXES = [
     {"name": "c", "type": "channel"},
     {"name": "y", "type": "space", "unit": "micrometer"},
@@ -395,6 +425,9 @@ def make_sample(out: Path, sample: Sample, rng: np.random.Generator) -> list[dic
                 "tre_px": f"{np.mean(np.hypot(*(res_lm[step] - landmarks).T)):.2f}",
                 "folding_pct": f"{folding_pct(grid) if step == 'bspline' else 0.0:.2f}",
                 "runtime_s": f"{runtimes[step]:.1f}",
+                "tool": "input image" if step == "raw" else "elastix-style (simulated)",
+                "duration": "" if step == "raw" else f"{runtimes[step]:.1f} s",
+                "parameters": json.dumps(PARAMETERS[step]) if PARAMETERS[step] else "",
             }
         )
     return rows

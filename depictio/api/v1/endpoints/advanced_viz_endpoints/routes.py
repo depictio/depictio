@@ -2349,6 +2349,13 @@ def _bioimage_http_client():
     return httpx.Client(timeout=settings.bioimage.remote_timeout_s, follow_redirects=False)
 
 
+def _remote_host(url: str | None) -> str | None:
+    """The host of a remote store URL (``s3://bucket/...`` gives the bucket)."""
+    from urllib.parse import urlparse
+
+    return urlparse(url).hostname if url else None
+
+
 def _bioimage_s3_store_names(dc_oid: ObjectId, fmt: str) -> list[str]:
     """Store names uploaded under the DC's S3 prefix (for DCs with no registered path).
 
@@ -2886,6 +2893,8 @@ def list_bioimage_stores(
             "format": fmt,
             "kind": info["kind"],
             "remote": remote,
+            # Where a remote store is read from, for the tile's badge: the host only.
+            "host": _remote_host(info["remote"].get(name)) if remote else None,
             # The ingest's NGFF report (None: remote, S3-only, or ingested before it existed).
             "validation": (info["stores"].get(name) or {}).get("validation"),
         }

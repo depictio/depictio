@@ -36,11 +36,13 @@ grid_sections:
   - name: 'Image'
     icon: 'mdi:microscope'
     color: 'blue'
-    description: 'The selected sample with its nucleus masks; click or lasso nuclei to filter the table'
-  - name: 'Sample sheet'
+    description: 'The selected sample with its nucleus masks, and another sample beside it at the same place; click or lasso nuclei to filter the table'
+    # One screen: the two samples side by side, moving together.
+    display: linked
+  - name: 'Tables'
     icon: 'mdi:table-account'
     color: 'blue'
-    description: 'One row per store'
+    description: 'The nuclei of the selected samples, and one row per store'
 
 components:
   - tag: text-multi-sample
@@ -54,7 +56,9 @@ components:
     body: >
       Three crops of a human cell screen image (DNA stain), each its own OME-Zarr store,
       named after the sample in the sheet below. Pick a sample on the left: the viewer
-      opens that store, and the cards and the table narrow to its nuclei. The condition
+      opens that store, and the cards and the table narrow to its nuclei. The tile beside
+      it shows another sample, picked in its own Sample list, at the same zoom and
+      position: pan or zoom either one and both move. The condition
       labels are for the demo, and "mitotic" marks bright, compact nuclei: a heuristic,
       not a classifier.
     layout: { x: 0, y: 0, w: 8, h: 2 }
@@ -162,30 +166,58 @@ components:
       labels_outline: true
       show_scalebar: true
       selection_enabled: true
-    layout: { x: 0, y: 0, w: 8, h: 9 }
+      # Pan or zoom here and the comparison tile follows, and the other way round.
+      view_link: samples
+    controls_placement: top
+    layout: { x: 0, y: 0, w: 4, h: 9 }
+
+  - tag: viz-multi-sample-compare
+    index: omz-ms-compare
+    component_type: advanced_viz
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: multi_sample_images
+    title: 'Compared with'
+    description: 'Another sample, picked here, at the same zoom and position as the selected one: pan or zoom either tile and both move.'
+    section: 'Image'
+    viz_kind: bioimage_viewer
+    config:
+      viz_kind: bioimage_viewer
+      image_dc_tag: multi_sample_images
+      image_wf_id: '646b0f3c1e4a2d7f8e5b8f01'
+      image_dc_id: '646b0f3c1e4a2d7f8e5b8f08'
+      store: sample_B.zarr
+      labels_dc_tag: multi_sample_labels
+      labels_wf_id: '646b0f3c1e4a2d7f8e5b8f01'
+      labels_dc_id: '646b0f3c1e4a2d7f8e5b8f1a'
+      labels_opacity: 0.45
+      labels_outline: true
+      show_scalebar: true
+      view_link: samples
+    controls_placement: top
+    layout: { x: 4, y: 0, w: 4, h: 9 }
 
   - tag: table-multi-sample-cells
     index: omz-ms-table
     component_type: table
-    section: 'Image'
+    section: 'Tables'
     workflow_tag: python/bioimage_demo
     data_collection_tag: multi_sample_cells
     title: 'Nuclei'
     description: 'One row per nucleus of the selected samples. A lasso on the image narrows it.'
     columns: [cell_id, sample, area_px, mean_intensity, eccentricity, phase]
     page_size: 50
-    layout: { x: 0, y: 9, w: 8, h: 5 }
+    layout: { x: 0, y: 0, w: 8, h: 5 }
 
   - tag: table-multi-sample-sheet
     index: omz-ms-sheet
     component_type: table
-    section: 'Sample sheet'
+    section: 'Tables'
     workflow_tag: python/bioimage_demo
     data_collection_tag: multi_sample_samples
     title: 'Samples'
     description: 'The sample sheet. `sample` is the store name without .zarr.'
     page_size: 10
-    layout: { x: 0, y: 0, w: 8, h: 3 }
+    layout: { x: 0, y: 5, w: 8, h: 3 }
 
   - tag: filter-multi-sample-sample
     index: omz-ms-f-sample

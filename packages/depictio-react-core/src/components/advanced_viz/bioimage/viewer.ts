@@ -117,6 +117,9 @@ export interface BioimageViewerOptions {
   /** A click (not a drag) in pan mode on a point or box the filters keep. */
   onPointClick?: (id: string) => void;
   onZoomChange?: (zoom: number) => void;
+  /** The reader moved the view (pan or zoom), not the tile itself: for tiles
+   *  whose views are linked. */
+  onViewChange?: (camera: { zoom: number; target: [number, number] }) => void;
   /** A finished lasso or rectangle, in image coordinates. */
   onRoi?: (polygon: Polygon) => void;
   onError?: (error: Error) => void;
@@ -140,8 +143,10 @@ export interface LabelsStyle extends LabelPaint {
  *  image: `colours` draws one channel of each in complementary colours,
  *  added, so aligned structure reads grey-white and an offset shows as green
  *  and magenta fringes; `fade` draws the reference over the image at
- *  `opacity`, in the image's own channel colours. */
-export type CompareMode = 'off' | 'colours' | 'fade';
+ *  `opacity`, in the image's own channel colours; `side` draws it in a
+ *  second view on the left, same zoom and position, so the two read side by
+ *  side rather than through each other. */
+export type CompareMode = 'off' | 'colours' | 'fade' | 'side';
 
 export interface ReferenceStyle {
   mode: CompareMode;
@@ -231,6 +236,8 @@ export interface BioimageViewer {
   /** Where the view is: zoom and centre in level-0 pixels, deck.gl's
    *  orthographic terms (vizarr and Vitessce use the same). */
   camera(): { zoom: number; target: [number, number] };
+  /** Look where a linked tile looks; does not report back through onViewChange. */
+  setCamera(camera: { zoom: number; target: readonly [number, number] }): void;
   resize(): void;
   dispose(): void;
 }
@@ -370,7 +377,17 @@ export async function createBioimageViewer(
   let overlayToken = 0;
   let overlayStyle: OverlayStyle = { channels: [], opacity: 0 };
 
-  const hostSize = () => ({ w: host.clientWidth, h: host.clientHeight });
+  // Side by side (`side` compare mode): the reference in a second view on the
+  // left, the image on the right, one camera for both.
+  const SIDE_VIEW = 'side';
+  const MAIN_VIEW = 'ortho';
+  let split = false;
+  const hostSize = () => ({
+    w: split ? host.clientWidth / 2 : host.clientWidth,
+    h: host.clientHeight,
+  });
+  const viewStateProp = () =>
+    split ? { [SIDE_VIEW]: viewState, [MAIN_VIEW]: viewState } : viewState;
 
   // Points with a size are boxes, except those too small to see at this zoom,
   // which draw (and are picked) as dots at their centre.
@@ -406,12 +423,34 @@ export async function createBioimageViewer(
     const v = framed ? fitBoundsViewState(framed, w, h, 0.05) : whole;
     viewState = { ...v, minZoom: whole.zoom - 3, maxZoom: Math.max(8, v.zoom) };
     userMoved = false;
-    deck.setProps({ viewState });
+    deck.setProps({ viewState: viewStateProp() as never });
     opts.onZoomChange?.(viewState.zoom);
   };
 
   const view = (dragPan: boolean) =>
-    new OrthographicView({ id: 'ortho', controller: { dragPan, doubleClickZoom: dragPan } });
+    new OrthographicView({ id: MAIN_VIEW, controller: { dragPan, doubleClickZoom: dragPan } });
+  const views = () => {
+    const dragPan = mode === 'pan';
+    if (!split) return view(dragPan);
+    const controller = { dragPan, doubleClickZoom: dragPan };
+    return [
+      new OrthographicView({ id: SIDE_VIEW, x: 0, width: '50%', controller }),
+      new OrthographicView({ id: MAIN_VIEW, x: '50%', width: '50%', controller }),
+    ];
+  };
+  // Split, the reference draws only on the left and everything else only on the right.
+  const sideFilter = ({ layer, viewport }: { layer: { id: string }; viewport: { id: string } }) =>
+    (viewport.id === SIDE_VIEW) === layer.id.startsWith('bioimage-reference');
+  const setSplit = (next: boolean) => {
+    if (next === split) return;
+    split = next;
+    deck.setProps({
+      views: views() as never,
+      layerFilter: (split ? sideFilter : null) as never,
+      viewState: viewStateProp() as never,
+    });
+    if (!userMoved) fit();
+  };
 
   viewerCount += 1;
   const deck = new Deck<OrthographicView>({
@@ -440,10 +479,11 @@ export async function createBioimageViewer(
     onViewStateChange: ({ viewState: next }) => {
       viewState = next as unknown as ViewState;
       userMoved = true;
-      deck.setProps({ viewState });
+      deck.setProps({ viewState: viewStateProp() as never });
       // Boxes change look with the zoom (dot, filled, outlined).
       if (boxDisplayKey() !== drawnBoxKey) render();
       opts.onZoomChange?.(viewState.zoom);
+      opts.onViewChange?.({ zoom: viewState.zoom, target: [viewState.target[0], viewState.target[1]] });
       return viewState as never;
     },
     getCursor: ({ isDragging }) =>
@@ -620,6 +660,7 @@ export async function createBioimageViewer(
         },
       };
       const comparing = reference !== null && referenceStyle.mode !== 'off';
+      setSplit(comparing && referenceStyle.mode === 'side');
       const compared =
         channels.find((c) => c.index === referenceStyle.channel) ?? shown[0] ?? null;
       if (comparing && referenceStyle.mode === 'colours' && compared) {
@@ -653,7 +694,7 @@ export async function createBioimageViewer(
               channelsVisible: drawn.map(() => true),
               // The low-resolution backdrop under the tiles would count twice.
               excludeBackground: true,
-              opacity: colours ? 1 : referenceStyle.opacity,
+              opacity: colours || split ? 1 : referenceStyle.opacity,
               ...(colours ? { parameters: ADDITIVE_BLEND } : {}),
               onTileError: (err: unknown) => {
                 if (isBoundsError(err)) return;
@@ -749,11 +790,13 @@ export async function createBioimageViewer(
   let drawing: { start: Vec2; lastScreen: Vec2 } | null = null;
 
   const toImage = (e: PointerEvent): { world: Vec2; screen: Vec2 } | null => {
-    const vp = deck.getViewports()[0];
+    const vp = deck.getViewports().find((v) => v.id === MAIN_VIEW) ?? deck.getViewports()[0];
     if (!vp) return null;
     const rect = host.getBoundingClientRect();
     const screen: Vec2 = [e.clientX - rect.left, e.clientY - rect.top];
-    const [x, y] = vp.unproject(screen);
+    // Split, the left half is the reference: nothing there to pick or select.
+    if (split && screen[0] < vp.x) return null;
+    const [x, y] = vp.unproject([screen[0] - vp.x, screen[1] - vp.y]);
     return { world: [x, y], screen };
   };
 
@@ -1090,7 +1133,7 @@ export async function createBioimageViewer(
       mode = next;
       drawing = null;
       draft = null;
-      deck.setProps({ views: view(mode === 'pan') });
+      deck.setProps({ views: views() as never });
       render();
     },
 
@@ -1107,6 +1150,18 @@ export async function createBioimageViewer(
 
     camera() {
       return { zoom: viewState.zoom, target: [viewState.target[0], viewState.target[1]] };
+    },
+
+    setCamera(camera) {
+      viewState = {
+        ...viewState,
+        zoom: camera.zoom,
+        target: [camera.target[0], camera.target[1], 0] as ViewState['target'],
+      };
+      userMoved = true;
+      deck.setProps({ viewState: viewStateProp() as never });
+      if (boxDisplayKey() !== drawnBoxKey) render();
+      opts.onZoomChange?.(viewState.zoom);
     },
 
     frame(bounds) {

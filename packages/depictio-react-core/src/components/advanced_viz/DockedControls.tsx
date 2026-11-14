@@ -13,8 +13,11 @@ import {
 import { VIZ_ROW_GAP_PX, VizControlsGrid } from './controls/VizControls';
 
 /** Whether a control does something now: it has an input, not every input
- *  is disabled, and a panel of toggles has at least one on. */
+ *  is disabled, and a panel of toggles has at least one on; or it is marked
+ *  `data-dock-keep`. */
 function isLive(item: HTMLElement): boolean {
+  // A control made of buttons only (a step history) says so itself.
+  if (item.matches('[data-dock-keep]') || item.querySelector('[data-dock-keep]')) return true;
   const inputs = Array.from(item.querySelectorAll('input, textarea')) as HTMLInputElement[];
   const usable = inputs.filter((i) => i.type !== 'hidden' || i.closest('.mantine-Slider-root'));
   if (usable.length === 0) return false;

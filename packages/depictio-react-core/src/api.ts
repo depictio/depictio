@@ -2578,6 +2578,8 @@ export interface BioimageStoreInfo {
   /** Absent from an API older than the labels overlay: read it as 'image'. */
   kind?: BioimageKind;
   remote: boolean;
+  /** Where a remote store is read from (its host); null for a local one. */
+  host?: string | null;
   /** Ingest's NGFF check; null for a remote store, an OME-TIFF, or a store
    *  registered before the check existed. */
   validation?: BioimageNgffValidation | null;

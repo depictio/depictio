@@ -13,7 +13,7 @@
     {
       "index": "omz-reg-text",
       "component_type": "text",
-      "title": "One registration, step by step",
+      "title": "A registration, step by step",
       "workflow_tag": "",
       "data_collection_tag": "",
       "wf_id": {
@@ -29,7 +29,7 @@
       "order": 6,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "Two synthetic samples, each registered in four steps as elastix or ANTs would do it: the raw moving image, then after a rigid, an affine and a B-spline transform. Pick a step in the viewer to see its output laid over the fixed image, with the step's metrics beside it. embryo_a improves at every step. embryo_b fails at the affine step: the shear is fitted the wrong way round, so it ends up further from the fixed image than after the rigid step, and the B-spline cannot fully recover and folds the image in one place. The plots draw both samples; the Sample filter narrows them and the viewer to one.\n",
+      "body": "The history of an image registration, read-only: what was done to each sample, one step at a time, as the processing tool leaves it (the uncorrected image, then a rigid, an affine and a B-spline transform). Pick a step in the history beside the image, or play it: the tile shows that step's output next to the step before (or the fixed image), at the same zoom, with the parameters it ran with and whether each metric got better or worse. Nothing here reruns or tunes a step; that is elastix's or ANTs' job. Two synthetic samples, so the true transform is known: embryo_a improves at every step; embryo_b gets worse at the affine step (the shear is fitted the wrong way round), and its B-spline step cannot fully recover and folds the image in one place. The parameters are those an elastix run of each step would use; the outputs are simulated (dev/bioimage/make_registration_example.py).\n",
       "surface": "none",
       "accent": null,
       "logo": null,
@@ -39,7 +39,7 @@
     {
       "index": "omz-reg-viewer",
       "component_type": "advanced_viz",
-      "title": "Registration steps",
+      "title": "Registration history",
       "workflow_tag": "python/bioimage_demo",
       "data_collection_tag": "registration_images",
       "wf_id": {
@@ -61,7 +61,7 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
-      "description": "Each step of the selected sample: the moving image resampled into the fixed frame (384 x 384, nominal 0.5 um pixels), with the fixed image to compare it to.",
+      "description": "What was done to the selected sample, step by step: each step's output (the moving image resampled into the fixed frame, 384 x 384, nominal 0.5 um pixels) next to the step before or the fixed image.",
       "title_size": "sm",
       "title_align": "left",
       "section": "Steps",
@@ -73,6 +73,7 @@
         "image_dc_id": "646b0f3c1e4a2d7f8e5b8f27",
         "image_dc_tag": "registration_images",
         "store": null,
+        "view_link": null,
         "store_pattern": null,
         "sample_wf_id": null,
         "sample_dc_id": null,
@@ -119,6 +120,16 @@
           "tre_px",
           "folding_pct"
         ],
+        "steps_param_col": "parameters",
+        "steps_info_cols": [
+          "tool",
+          "duration"
+        ],
+        "steps_metric_better": {
+          "ncc": "higher",
+          "tre_px": "lower",
+          "folding_pct": "lower"
+        },
         "overlay_store": null,
         "overlay_opacity": 0.6,
         "selection_enabled": true,
@@ -405,7 +416,7 @@
     "count": 0
   },
   "title": "Registration",
-  "subtitle": "The steps of an image registration, each against the fixed image",
+  "subtitle": "The history of an image registration, read-only: what each step ran and changed",
   "icon": "mdi:layers-triple",
   "icon_color": "orange",
   "icon_variant": "filled",
@@ -468,7 +479,7 @@
       "name": "Steps",
       "icon": "mdi:microscope",
       "color": "orange",
-      "description": "One registration per sample: the image after each step, laid over the fixed image",
+      "description": "One registration per sample: each step, what it ran with, and its output beside the step before",
       "collapsed": false,
       "persistent": false,
       "pin": "top",

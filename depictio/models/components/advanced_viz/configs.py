@@ -1515,6 +1515,14 @@ class BioimageViewerConfig(_BaseVizConfig):
         default=None,
         description="Store shown first (e.g. 'sample_A.zarr'); null uses the first store",
     )
+    view_link: str | None = Field(
+        default=None,
+        description=(
+            "Tiles of a dashboard with the same view_link move together: a pan or zoom "
+            "in one is applied to the others (two samples, or two stains, compared at "
+            "the same place)"
+        ),
+    )
     store_pattern: str | None = Field(
         default=None,
         description=(
@@ -1686,6 +1694,24 @@ class BioimageViewerConfig(_BaseVizConfig):
         default_factory=list,
         description="Steps columns shown as the step's metrics (e.g. ncc, tre_px)",
     )
+    steps_param_col: str | None = Field(
+        default=None,
+        description=(
+            "Steps column holding the parameters a step ran with: a JSON object, or "
+            "'key=value; ...' pairs. Shown read-only; the tile never reruns a step"
+        ),
+    )
+    steps_info_cols: list[str] = Field(
+        default_factory=list,
+        description="Steps columns describing the run (tool, version, duration), as one line",
+    )
+    steps_metric_better: dict[str, Literal["higher", "lower"]] = Field(
+        default_factory=dict,
+        description=(
+            "Which way each metric improves (e.g. {ncc: higher, tre_px: lower}), so its "
+            "change since the step before reads as better or worse"
+        ),
+    )
     # Another image registered onto this one (light microscopy over EM): a
     # store of the same image DC, drawn over the image in its own channels and
     # stretched to the image's extent, so it must cover the same field.
@@ -1766,11 +1792,18 @@ class BioimageViewerConfig(_BaseVizConfig):
             self.steps_sample_col,
             self.steps_reference_col,
             *self.steps_metric_cols,
+            self.steps_param_col,
+            *self.steps_info_cols,
         )
         steps_dc = self.steps_dc_id or self.steps_dc_tag
         if any(steps_cols) and not steps_dc:
             raise ValueError(
                 "steps columns are set but no steps DC is bound: set steps_dc_id or steps_dc_tag"
+            )
+        unknown = sorted(set(self.steps_metric_better) - set(self.steps_metric_cols))
+        if unknown:
+            raise ValueError(
+                f"steps_metric_better names metrics that are not in steps_metric_cols: {unknown}"
             )
         if steps_dc and not self.steps_store_col:
             raise ValueError("a steps DC needs steps_store_col: the store each step wrote")

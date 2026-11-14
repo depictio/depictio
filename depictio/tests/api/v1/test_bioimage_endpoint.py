@@ -507,6 +507,7 @@ class TestStoresListing:
                 "format": "ome-zarr",
                 "kind": "image",
                 "remote": False,
+                "host": None,
                 "validation": None,
             }
         ]
@@ -553,6 +554,7 @@ class TestStoresListing:
                 "format": "ome-zarr",
                 "kind": "image",
                 "remote": False,
+                "host": None,
                 "validation": None,
             }
         ]
@@ -822,6 +824,7 @@ class TestTiffOnS3:
                 "format": "ome-tiff",
                 "kind": "image",
                 "remote": False,
+                "host": None,
                 "validation": None,
             }
         ]
@@ -901,6 +904,7 @@ class TestSpatialData:
                 "format": "spatialdata",
                 "kind": "image",
                 "remote": False,
+                "host": None,
                 "validation": None,
             }
         ]
@@ -943,6 +947,10 @@ class TestRemoteHttps:
             listing = client.get(f"{PREFIX}/bioimage/{DC_ID}/stores", headers=AUTH).json()
 
         assert resp.status_code == 403
+        # The tile's badge names where the store is read from: the host only.
+        assert [(s["name"], s["remote"], s["host"]) for s in listing] == [
+            ("sample_R.zarr", True, HOST)
+        ]
         detail = resp.json()["detail"]
         assert detail.startswith("Remote bioimage host not allowed")
         # The reader learns what to ask for, not just that it failed.
@@ -956,6 +964,7 @@ class TestRemoteHttps:
                 "format": "ome-zarr",
                 "kind": "image",
                 "remote": True,
+                "host": HOST,
                 "validation": None,
             }
         ]
@@ -1599,6 +1608,7 @@ class TestLabelsStores:
                 "format": "tiff",
                 "kind": "labels",
                 "remote": False,
+                "host": None,
                 "validation": None,
             }
         ]

@@ -6,7 +6,7 @@
 # The component `index` values are pinned rather than auto-generated: they are
 # what keeps a regenerated seed byte-identical to the shipped one.
 title: 'Registration'
-subtitle: 'The steps of an image registration, each against the fixed image'
+subtitle: 'The history of an image registration, read-only: what each step ran and changed'
 icon: 'mdi:layers-triple'
 icon_color: 'orange'
 icon_variant: filled
@@ -28,7 +28,7 @@ grid_sections:
   - name: 'Steps'
     icon: 'mdi:microscope'
     color: 'orange'
-    description: 'One registration per sample: the image after each step, laid over the fixed image'
+    description: 'One registration per sample: each step, what it ran with, and its output beside the step before'
   - name: 'Quality'
     icon: 'mdi:chart-line'
     color: 'orange'
@@ -38,20 +38,23 @@ components:
   - tag: text-registration
     index: omz-reg-text
     component_type: text
-    title: 'One registration, step by step'
+    title: 'A registration, step by step'
     order: 6
     alignment: left
     vertical_alignment: top
     section: 'Steps'
     body: >
-      Two synthetic samples, each registered in four steps as elastix or ANTs would do
-      it: the raw moving image, then after a rigid, an affine and a B-spline transform.
-      Pick a step in the viewer to see its output laid over the fixed image, with the
-      step's metrics beside it. embryo_a improves at every step. embryo_b fails at the
-      affine step: the shear is fitted the wrong way round, so it ends up further from
-      the fixed image than after the rigid step, and the B-spline cannot fully recover
-      and folds the image in one place. The plots draw both samples; the Sample filter
-      narrows them and the viewer to one.
+      The history of an image registration, read-only: what was done to each sample, one
+      step at a time, as the processing tool leaves it (the uncorrected image, then a rigid,
+      an affine and a B-spline transform). Pick a step in the history beside the image, or
+      play it: the tile shows that step's output next to the step before (or the fixed
+      image), at the same zoom, with the parameters it ran with and whether each metric got
+      better or worse. Nothing here reruns or tunes a step; that is elastix's or ANTs' job.
+      Two synthetic samples, so the true transform is known: embryo_a improves at every
+      step; embryo_b gets worse at the affine step (the shear is fitted the wrong way
+      round), and its B-spline step cannot fully recover and folds the image in one place.
+      The parameters are those an elastix run of each step would use; the outputs are
+      simulated (dev/bioimage/make_registration_example.py).
     layout: { x: 0, y: 0, w: 8, h: 2 }
 
   - tag: viz-registration
@@ -59,8 +62,8 @@ components:
     component_type: advanced_viz
     workflow_tag: python/bioimage_demo
     data_collection_tag: registration_images
-    title: 'Registration steps'
-    description: 'Each step of the selected sample: the moving image resampled into the fixed frame (384 x 384, nominal 0.5 um pixels), with the fixed image to compare it to.'
+    title: 'Registration history'
+    description: "What was done to the selected sample, step by step: each step's output (the moving image resampled into the fixed frame, 384 x 384, nominal 0.5 um pixels) next to the step before or the fixed image."
     section: 'Steps'
     viz_kind: bioimage_viewer
     config:
@@ -77,6 +80,10 @@ components:
       steps_sample_col: sample
       steps_reference_col: fixed_store
       steps_metric_cols: [ncc, tre_px, folding_pct]
+      # The history is read-only: what each step ran with, never a way to rerun it.
+      steps_param_col: parameters
+      steps_info_cols: [tool, duration]
+      steps_metric_better: { ncc: higher, tre_px: lower, folding_pct: lower }
       show_scalebar: true
     layout: { x: 0, y: 2, w: 8, h: 9 }
 

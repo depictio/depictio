@@ -581,6 +581,9 @@ workflows:
               tre_px: "Mean target registration error over 20 landmarks, in pixels"
               folding_pct: "Share of pixels where the Jacobian determinant of the step's displacement is <= 0 (folding)"
               runtime_s: "Synthetic runtime of the step, in seconds"
+              tool: "What produced the step: the input image, or a simulated elastix-style run (this example is synthetic)"
+              duration: "Synthetic runtime of the step, as text for the history"
+              parameters: "Parameters the step ran with, as JSON (elastix parameter-map keys); shown read-only"
 
       # ----------------------------------------------------------------
       # 10. CLEM: one HeLa cell, FIB-SEM read in place, LM registered into it

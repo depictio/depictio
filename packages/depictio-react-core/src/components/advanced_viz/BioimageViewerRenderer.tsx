@@ -52,6 +52,7 @@ import {
 } from './controls/VizControls';
 import { usePersistedVizControl, useVizConfigWriter } from './usePersistedVizControl';
 import BioimageBadges from './bioimage/BioimageBadges';
+import { openComponentInfo } from '../chrome/MetadataPopover';
 import OpenInMenu from './bioimage/OpenInMenu';
 import ChannelRow from './bioimage/ChannelRow';
 import BioimageHelp from './bioimage/BioimageHelp';
@@ -103,7 +104,9 @@ import type {
   OverlayPoint,
   SelectionMode,
 } from './bioimage/viewer';
-import { formatMetric, metricChange, readSteps, type StepColumns } from './bioimage/steps';
+import { readSteps, type MetricDirection, type StepColumns } from './bioimage/steps';
+import StepHistory from './bioimage/StepHistory';
+import { joinViewLink, moveViewLink, type LinkedCamera } from './bioimage/viewLink';
 
 interface BioimageViewerConfig {
   image_wf_id?: string | null;
@@ -112,6 +115,8 @@ interface BioimageViewerConfig {
   /** Regex on store names: the stores this tile offers (others in the DC are
    *  another tile's, e.g. an overview beside its detail images). */
   store_pattern?: string | null;
+  /** Tiles with the same name move together: pan and zoom in one, the others follow. */
+  view_link?: string | null;
   sample_dc_id?: string | null;
   sample_column?: string | null;
   well_column?: string | null;
@@ -146,6 +151,9 @@ interface BioimageViewerConfig {
   steps_sample_col?: string | null;
   steps_reference_col?: string | null;
   steps_metric_cols?: string[];
+  steps_param_col?: string | null;
+  steps_info_cols?: string[];
+  steps_metric_better?: Record<string, MetricDirection>;
   overlay_store?: string | null;
   points_z_tolerance?: number;
   overlay_opacity?: number;
@@ -258,6 +266,9 @@ function emptyStoreMessage(
   if (!activeStore && sampleValue != null) return `No image for sample "${sampleValue}"`;
   return undefined;
 }
+
+/** Milliseconds per step while a processing history plays. */
+const STEP_PLAY_MS = 1500;
 
 /** Milliseconds per time point while the T axis plays. */
 const PLAY_STEP_MS = 600;
@@ -503,6 +514,8 @@ const BioimageViewerRenderer: React.FC<Props> = ({
             sample: config.steps_sample_col,
             reference: config.steps_reference_col,
             metrics: config.steps_metric_cols ?? [],
+            params: config.steps_param_col,
+            info: config.steps_info_cols ?? [],
           }
         : null,
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -513,6 +526,8 @@ const BioimageViewerRenderer: React.FC<Props> = ({
       config.steps_sample_col,
       config.steps_reference_col,
       (config.steps_metric_cols ?? []).join('|'),
+      config.steps_param_col,
+      (config.steps_info_cols ?? []).join('|'),
     ],
   );
   const stepsEnabled = Boolean(stepsWfId && stepsDcId && stepCols);
@@ -527,7 +542,16 @@ const BioimageViewerRenderer: React.FC<Props> = ({
     let cancelled = false;
     const columns = [
       ...new Set(
-        [stepCols.store, stepCols.label, stepCols.order, stepCols.sample, stepCols.reference, ...stepCols.metrics].filter(
+        [
+          stepCols.store,
+          stepCols.label,
+          stepCols.order,
+          stepCols.sample,
+          stepCols.reference,
+          stepCols.params,
+          ...stepCols.metrics,
+          ...(stepCols.info ?? []),
+        ].filter(
           (c): c is string => Boolean(c),
         ),
       ),
@@ -567,11 +591,24 @@ const BioimageViewerRenderer: React.FC<Props> = ({
     [steps, stepSample],
   );
   const [pickedStep, setPickedStep] = useState<string | null>(null);
+  const [stepsPlaying, setStepsPlaying] = useState(false);
   // The last step by default: the end result is what a reader checks first.
   const pickedStepIndex = sampleSteps.findIndex((st) => st.label === pickedStep);
   const activeStepIndex = pickedStepIndex >= 0 ? pickedStepIndex : sampleSteps.length - 1;
   const activeStep = activeStepIndex >= 0 ? sampleSteps[activeStepIndex] : null;
   const previousStep = activeStepIndex > 0 ? sampleSteps[activeStepIndex - 1] : null;
+  // Play walks the history from the first step, looping, one step at a time.
+  useEffect(() => {
+    if (!stepsPlaying || sampleSteps.length < 2) return;
+    const id = window.setInterval(() => {
+      setPickedStep((current) => {
+        const i = sampleSteps.findIndex((st) => st.label === current);
+        const at = i >= 0 ? i : sampleSteps.length - 1;
+        return sampleSteps[(at + 1) % sampleSteps.length].label;
+      });
+    }, STEP_PLAY_MS);
+    return () => window.clearInterval(id);
+  }, [stepsPlaying, sampleSteps]);
 
   const sampleValue = useMemo(
     () => sampleFromFilters(activeFetchFilters, config.sample_column, config.sample_dc_id),
@@ -726,6 +763,17 @@ const BioimageViewerRenderer: React.FC<Props> = ({
   const [labelsDrawn, setLabelsDrawn] = useState(false);
   const [labelsError, setLabelsError] = useState<string | null>(null);
 
+  // Tiles sharing a `view_link` move together (see bioimage/viewLink.ts).
+  const viewLink = config.view_link || null;
+  const viewChangeRef = useRef<(camera: LinkedCamera) => void>(() => undefined);
+  viewChangeRef.current = (camera) => {
+    if (viewLink) moveViewLink(viewLink, componentKey, camera);
+  };
+  useEffect(() => {
+    if (!viewer || !viewLink) return;
+    return joinViewLink(viewLink, componentKey, (camera) => viewer.setCamera(camera));
+  }, [viewer, viewLink, componentKey]);
+
   useEffect(() => {
     if (!glGranted || !hostEl) return;
     let disposed = false;
@@ -741,6 +789,7 @@ const BioimageViewerRenderer: React.FC<Props> = ({
           onLabelClick: (label) => labelClickRef.current(label),
           onPointClick: (id) => pointClickRef.current(id),
           onZoomChange: (z) => setZoom(Math.round(z * 100) / 100),
+          onViewChange: (camera) => viewChangeRef.current(camera),
           onRoi: (polygon) => roiRef.current(polygon),
           onError: (err) => console.warn('[bioimage_viewer]', err),
         }),
@@ -1150,12 +1199,23 @@ const BioimageViewerRenderer: React.FC<Props> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewer, labelLut, labelsOpacity, labelsOutline, labelsVisible, accentKey]);
 
-  // ---- Reference image (a step's fixed image) ------------------------------
-  const referenceName = activeStep?.reference ?? null;
+  // ---- Reference image: the step before, or the fixed image ----------------
+  // Reading a history, the question is first "what did this step change?",
+  // so the step before is the default; the fixed image answers "how far is
+  // it from the target?". The first step has nothing before it.
+  const [compareWith, setCompareWith] = useState<'previous' | 'fixed'>('previous');
+  const referenceName =
+    compareWith === 'previous' && previousStep
+      ? previousStep.store
+      : (activeStep?.reference ?? null);
+  const referenceLabel =
+    compareWith === 'previous' && previousStep
+      ? `step ${activeStepIndex}. ${previousStep.label}`
+      : 'the fixed image';
   const referenceKnown = Boolean(
     referenceName && stores?.some((st) => st.name === referenceName),
   );
-  const [compareMode, setCompareMode] = useState<CompareMode>('colours');
+  const [compareMode, setCompareMode] = useState<CompareMode>('side');
   const [compareOpacity, setCompareOpacity] = useState(0.5);
   const [referenceError, setReferenceError] = useState<string | null>(null);
   const comparing = referenceKnown && compareMode !== 'off';
@@ -1364,58 +1424,56 @@ const BioimageViewerRenderer: React.FC<Props> = ({
                 allowDeselect={false}
               />
             ) : null}
-            {/* One unit for the docked panel: a lone line of text is folded under
-                "More options", and the metrics belong with the step they describe. */}
-            <Stack gap={4}>
-              {sampleSteps.length > 1 ? (
-                sampleSteps.length <= 5 ? (
-                  <VizSegmented
-                    label="Step"
-                    data={sampleSteps.map((st) => st.label)}
-                    value={activeStep?.label ?? ''}
-                    onChange={setPickedStep}
-                    data-testid="bioimage-steps"
-                  />
-                ) : (
-                  <VizSelect
-                    label="Step"
-                    data={sampleSteps.map((st) => st.label)}
-                    value={activeStep?.label ?? null}
-                    onChange={(v) => v != null && setPickedStep(v)}
-                    allowDeselect={false}
-                    data-testid="bioimage-steps"
-                  />
-                )
-              ) : null}
-              {activeStep && stepCols && stepCols.metrics.length ? (
-                <Text size="xs" c="dimmed" data-testid="bioimage-step-metrics">
-                  {stepCols.metrics
-                    .map((m) => {
-                      const value = activeStep.metrics[m];
-                      const change = previousStep ? metricChange(value, previousStep.metrics[m]) : null;
-                      const delta =
-                        change == null || change === 0
-                          ? ''
-                          : ` (${change > 0 ? '+' : '−'}${formatMetric(Math.abs(change))} vs ${previousStep?.label})`;
-                      return `${m} ${formatMetric(value)}${delta}`;
-                    })
-                    .join(' · ')}
-                </Text>
-              ) : null}
-            </Stack>
-            {referenceKnown ? (
+            {sampleSteps.length > 1 ? (
+              <StepHistory
+                steps={sampleSteps}
+                active={activeStepIndex}
+                onPick={(i) => {
+                  setStepsPlaying(false);
+                  setPickedStep(sampleSteps[i]?.label ?? null);
+                }}
+                metrics={stepCols?.metrics ?? []}
+                better={config.steps_metric_better}
+                playing={stepsPlaying}
+                onTogglePlay={() => setStepsPlaying((p) => !p)}
+              />
+            ) : null}
+            {referenceKnown || previousStep ? (
               <>
                 <VizSegmented
-                  label="Compare"
+                  label="Compare with"
                   data={[
-                    { value: 'off', label: 'Off' },
-                    { value: 'colours', label: 'Colours' },
-                    { value: 'fade', label: 'Fade' },
+                    { value: 'previous', label: 'Step before', disabled: !previousStep },
+                    { value: 'fixed', label: 'Fixed image', disabled: !activeStep?.reference },
                   ]}
-                  value={compareMode}
-                  onChange={(v) => setCompareMode(v as CompareMode)}
-                  data-testid="bioimage-compare"
+                  value={previousStep ? compareWith : 'fixed'}
+                  onChange={(v) => setCompareWith(v as 'previous' | 'fixed')}
+                  data-testid="bioimage-compare-with"
                 />
+                {/* One unit for the dock: the switch with what it shows. */}
+                <Stack gap={4}>
+                  <VizSegmented
+                    label="Shown as"
+                    data={[
+                      { value: 'side', label: 'Side by side' },
+                      { value: 'colours', label: 'Colours' },
+                      { value: 'fade', label: 'Fade' },
+                      { value: 'off', label: 'Off' },
+                    ]}
+                    value={compareMode}
+                    onChange={(v) => setCompareMode(v as CompareMode)}
+                    data-testid="bioimage-compare"
+                  />
+                  <Text size="xs" c="dimmed">
+                    {compareMode === 'side'
+                      ? `Left: ${referenceLabel}. Right: this step. Same zoom and position.`
+                      : compareMode === 'colours'
+                        ? `This step in green, ${referenceLabel} in magenta: where they agree the image is grey-white.`
+                        : compareMode === 'fade'
+                          ? `${referenceLabel} faded over this step.`
+                          : 'This step alone.'}
+                  </Text>
+                </Stack>
                 {compareMode === 'fade' ? (
                   <VizSlider
                     label="Reference"
@@ -1425,11 +1483,6 @@ const BioimageViewerRenderer: React.FC<Props> = ({
                     value={compareOpacity}
                     onChange={setCompareOpacity}
                   />
-                ) : null}
-                {compareMode === 'colours' ? (
-                  <Text size="xs" c="dimmed">
-                    {`This step in green, ${referenceName} in magenta: where they agree the image is grey-white.`}
-                  </Text>
                 ) : null}
               </>
             ) : null}
@@ -1501,7 +1554,7 @@ const BioimageViewerRenderer: React.FC<Props> = ({
       </>
     ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [stores, sampleStores, activeStore, sampleValue, config.sample_column, wells, activeWell, wellValue, config.well_column, info, plane, playing, stepsEnabled, steps, stepSample, sampleSteps, activeStep, previousStep, stepCols, referenceKnown, referenceName, compareMode, compareOpacity, overlayChannels.length, overlayOpacity],
+    [stores, sampleStores, activeStore, sampleValue, config.sample_column, wells, activeWell, wellValue, config.well_column, info, plane, playing, stepsEnabled, steps, stepSample, sampleSteps, activeStep, previousStep, activeStepIndex, stepCols, referenceKnown, referenceName, referenceLabel, compareWith, compareMode, compareOpacity, stepsPlaying, config.steps_metric_better, overlayChannels.length, overlayOpacity],
   );
 
   // The cosmetic tier: how it is drawn. One group per channel, then the labels
@@ -1794,10 +1847,12 @@ const BioimageViewerRenderer: React.FC<Props> = ({
             format={activeStore.format}
             validation={validation}
             ngffVersion={containerValue?.version ?? null}
-            axes={info?.labels ?? null}
+            image={info}
             layout={containerValue?.layout ?? null}
             labels={labelsShown}
             remote={activeStore.remote}
+            host={activeStore.host ?? null}
+            onOpenInfo={() => openComponentInfo(componentKey)}
           />,
         ]
       : []),
@@ -1895,7 +1950,8 @@ const BioimageViewerRenderer: React.FC<Props> = ({
         controls={controls}
         echo={echo}
         badges={headerBadges}
-        dockEssentials={4}
+        // The step history takes a slot of its own; the channels stay out of the fold.
+        dockEssentials={stepsEnabled ? 5 : 4}
         loading={storesLoading}
         error={frameError}
         emptyMessage={noStoreMessage}
@@ -1960,6 +2016,39 @@ const BioimageViewerRenderer: React.FC<Props> = ({
                   </ActionIcon>
                 </Tooltip>
               </Group>
+              {comparing && compareMode === 'side' && activeStep ? (
+                <>
+                  {[
+                    { left: 8, text: `Before · ${referenceLabel}` },
+                    { left: 'calc(50% + 8px)', text: `This step · ${activeStepIndex + 1}. ${activeStep.label}` },
+                  ].map((cap) => (
+                    <Paper
+                      key={cap.text}
+                      px={6}
+                      py={2}
+                      radius="sm"
+                      shadow="xs"
+                      data-testid="bioimage-side-caption"
+                      style={{ position: 'absolute', top: 8, left: cap.left, opacity: 0.92, pointerEvents: 'none' }}
+                    >
+                      <Text size="xs" fw={500}>
+                        {cap.text}
+                      </Text>
+                    </Paper>
+                  ))}
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      bottom: 0,
+                      left: '50%',
+                      width: 2,
+                      background: 'var(--mantine-color-body)',
+                      pointerEvents: 'none',
+                    }}
+                  />
+                </>
+              ) : null}
               {planeStamp.length ? (
                 <Paper
                   px={6}

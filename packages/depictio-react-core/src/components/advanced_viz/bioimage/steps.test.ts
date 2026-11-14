@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatMetric, metricChange, readSteps, type StepColumns } from './steps';
+import {
+  changeTone,
+  formatMetric,
+  metricChange,
+  parseParams,
+  readSteps,
+  type StepColumns,
+} from './steps';
 
 const COLS: StepColumns = {
   store: 'store',
@@ -63,5 +70,39 @@ describe('metrics', () => {
     expect(metricChange(0.95, 0.88)).toBeCloseTo(0.07);
     expect(metricChange(0.95, null)).toBeNull();
     expect(metricChange('x', 1)).toBeNull();
+  });
+});
+
+describe('step parameters and run info', () => {
+  it('reads JSON parameters and key=value pairs, in their own order', () => {
+    expect(parseParams('{"Transform": "AffineTransform", "Resolutions": 4}')).toEqual([
+      ['Transform', 'AffineTransform'],
+      ['Resolutions', '4'],
+    ]);
+    expect(parseParams('metric=MI; iterations: 500\ngrid=16 px')).toEqual([
+      ['metric', 'MI'],
+      ['iterations', '500'],
+      ['grid', '16 px'],
+    ]);
+    expect(parseParams(null)).toEqual([]);
+    expect(parseParams('{not json')).toEqual([['{not json', '']]);
+  });
+
+  it('carries each step its parameters and run info', () => {
+    const steps = readSteps(
+      { ...ROWS, tool: ['t', 't', 't', 't', 't'], params: ['', 'a=1', '', '', ''] },
+      { ...COLS, params: 'params', info: ['tool'] },
+    );
+    const affine = steps.bySample.get('a')![2];
+    expect(affine.params).toEqual([['a', '1']]);
+    expect(affine.info).toEqual({ tool: 't' });
+  });
+
+  it('says whether a change is for the better, given which way the metric improves', () => {
+    expect(changeTone(-3, 'lower')).toBe('better');
+    expect(changeTone(-3, 'higher')).toBe('worse');
+    expect(changeTone(0.2, 'higher')).toBe('better');
+    expect(changeTone(0.2, undefined)).toBe('neutral');
+    expect(changeTone(null, 'lower')).toBe('neutral');
   });
 });

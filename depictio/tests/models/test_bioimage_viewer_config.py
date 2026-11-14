@@ -302,6 +302,10 @@ def test_frame_on_filter_needs_points():
         VIZ_CONFIG.validate_python({"viz_kind": "bioimage_viewer", "frame_on_filter": True})
 
 
+def test_tiles_link_their_views_by_name():
+    assert BioimageViewerConfig(image_dc_tag="images", view_link="samples").view_link == "samples"
+
+
 def test_store_pattern_narrows_a_tile_and_must_compile():
     config = BioimageViewerConfig(image_dc_tag="images", store_pattern=r"^tomo_\d+\.zarr$")
     assert config.store_pattern == r"^tomo_\d+\.zarr$"
@@ -312,3 +316,26 @@ def test_store_pattern_narrows_a_tile_and_must_compile():
 def test_a_channel_carries_its_description():
     channel = BioimageChannel(index=0, name="EM", description="Electron microscopy")
     assert channel.description == "Electron microscopy"
+
+
+def test_a_steps_history_reads_parameters_run_info_and_metric_directions():
+    config = BioimageViewerConfig(
+        image_dc_tag="images",
+        steps_dc_tag="steps",
+        steps_store_col="store",
+        steps_metric_cols=["ncc", "tre_px"],
+        steps_param_col="parameters",
+        steps_info_cols=["tool", "runtime_s"],
+        steps_metric_better={"ncc": "higher", "tre_px": "lower"},
+    )
+    assert config.steps_metric_better == {"ncc": "higher", "tre_px": "lower"}
+    with pytest.raises(ValidationError, match="not in steps_metric_cols"):
+        BioimageViewerConfig(
+            image_dc_tag="images",
+            steps_dc_tag="steps",
+            steps_store_col="store",
+            steps_metric_cols=["ncc"],
+            steps_metric_better={"dice": "higher"},
+        )
+    with pytest.raises(ValidationError, match="no steps DC"):
+        BioimageViewerConfig(image_dc_tag="images", steps_param_col="parameters")
