@@ -128,6 +128,12 @@ COPY --from=catalog-preview-builder --chown=depictio:depictio \
 COPY --from=catalog-preview-builder --chown=depictio:depictio \
     /build/depictio/viewer/dist-static/static.html \
     /app/depictio/viewer/dist-static/static.html
+# The viewer's icon subset as JSON (scripts/generate-icon-subset.mjs, run by the
+# builds above): the notebook export's icons, with no Iconify call at export
+# time. Path must match SUBSET_PATH in services/icons.py.
+COPY --from=catalog-preview-builder --chown=depictio:depictio \
+    /build/depictio/viewer/dist-icons/icon-subset.json \
+    /app/depictio/viewer/dist-icons/icon-subset.json
 
 COPY --chown=depictio:depictio docker-images/run_fastapi.sh /app/run_fastapi.sh
 RUN chmod +x /app/run_fastapi.sh

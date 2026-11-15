@@ -1091,10 +1091,20 @@ def _start_services(
             WORKER_APP,
             "worker",
             "--loglevel=info",
+            # The default queue plus the notebook export's own two (browser
+            # passes, rendered reports; see celery_app.task_routes): a worker
+            # started without --queues consumes the default queue alone.
+            f"--queues={','.join(LOCAL_WORKER_QUEUES)}",
             *worker_pool_args(),
         ],
         env,
     )
+
+
+#: The queues the local worker consumes: Celery's default queue and the
+#: defaults of ``CeleryConfig.export_queue`` / ``report_queue`` (the CLI install
+#: cannot import the API settings). One worker serves all of them locally.
+LOCAL_WORKER_QUEUES: tuple[str, ...] = ("celery", "export", "report")
 
 
 def worker_pool_args() -> list[str]:

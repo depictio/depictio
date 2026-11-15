@@ -250,6 +250,8 @@ data:
   DEPICTIO_LOGGING_VERBOSITY_LEVEL: {{ .Values.backend.env.DEPICTIO_LOGGING_VERBOSITY_LEVEL | quote }}
   DEPICTIO_CELERY_WORKERS: {{ .Values.celery.env.DEPICTIO_CELERY_WORKERS | quote }}
   DEPICTIO_CELERY_ENABLED: {{ .Values.celery.env.DEPICTIO_CELERY_ENABLED | quote }}
+  # The worker must consume the notebook export's queues too (celery_app.task_routes).
+  DEPICTIO_CELERY_QUEUES: {{ .Values.celery.env.DEPICTIO_CELERY_QUEUES | default "celery,export,report" | quote }}
 
   # Authentication mode — MUST mirror the backend (sourced from the same
   # backend.env keys). The screenshot task validates dashboard ownership

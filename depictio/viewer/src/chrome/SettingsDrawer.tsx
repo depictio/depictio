@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Accordion,
   Anchor,
@@ -24,6 +24,7 @@ import {
   useIsStaticBundle,
   useResolvedBrandTheme,
   Z_LAYERS,
+  type AnalysisState,
   type BrandTheme,
   isControlsPlacement,
   type ControlsPlacement,
@@ -33,6 +34,7 @@ import {
 } from 'depictio-react-core';
 import DashboardInfoBody from './DashboardInfoBody';
 import ShareFiltersField from './ShareFiltersField';
+import NotebookExportModal from './NotebookExportModal';
 import {
   SECTION_ICON_STYLE,
   SettingsNavModal,
@@ -643,6 +645,41 @@ const FeedbackBlock: React.FC<{ href: string; label: string }> = ({ href, label 
   </Stack>
 );
 
+/** "Export" section: the dashboard as a Quarto document. */
+const ExportBlock: React.FC<{
+  dashboard: DashboardData | null;
+  getAnalysisState: () => AnalysisState;
+}> = ({ dashboard, getAnalysisState }) => {
+  const [opened, setOpened] = useState(false);
+  const dashboardId = String(dashboard?.dashboard_id ?? dashboard?._id ?? '');
+  return (
+    <Stack gap="sm" data-testid="export-section">
+      <Text size="sm" c="dimmed">
+        Take this dashboard with you as code: the same table, the same filters in funnel order,
+        every tile — as a Quarto document to render yourself, or a report rendered for you.
+      </Text>
+      <Group>
+        <Button
+          variant="light"
+          leftSection={<Icon icon="mdi:notebook-outline" width={16} />}
+          onClick={() => setOpened(true)}
+          disabled={!dashboardId}
+          data-testid="export-notebook"
+        >
+          Export as notebook
+        </Button>
+      </Group>
+      <NotebookExportModal
+        opened={opened}
+        onClose={() => setOpened(false)}
+        dashboardId={dashboardId}
+        dashboardTitle={dashboard?.title}
+        getAnalysisState={getAnalysisState}
+      />
+    </Stack>
+  );
+};
+
 // ---------------------------------------------------------------------------
 // Export static
 // ---------------------------------------------------------------------------
@@ -890,6 +927,10 @@ interface SettingsDrawerProps {
   /** False renders the export action disabled (never hidden) with the
    *  owner-gate explanation. Defaults to `true`. */
   isOwner?: boolean;
+  /** Viewer: a snapshot of the current analysis state (filters, funnel order,
+   *  groups) for the notebook export. The Export section renders only when
+   *  this is provided. */
+  getAnalysisState?: () => AnalysisState;
 }
 
 /** What the "Your filters" section needs from the viewer. */
@@ -951,6 +992,7 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
   dashboardId,
   onExportStatic,
   isOwner = true,
+  getAnalysisState,
 }) => {
   // Static bundles are offline snapshots: there is no API to preflight or build
   // against, so the export is absent rather than disabled. Inert (false) in
@@ -1091,19 +1133,31 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
       body: dataVersionPanel,
     });
   }
-  if (onExportStatic && !isStaticBundle) {
+  // One "Export" section, two outputs: the static HTML bundle (owner-gated)
+  // and the Quarto document (any reader). Both need the API, so a static
+  // bundle shows neither.
+  const showStaticExport = Boolean(onExportStatic) && !isStaticBundle;
+  const showNotebookExport = Boolean(getAnalysisState) && !isStaticBundle;
+  if (showStaticExport || showNotebookExport) {
     sections.push({
       key: 'export',
       icon: 'mdi:export-variant',
-      title: 'Export static',
+      title: 'Export',
       navLabel: 'Export',
-      subtitle: 'The whole dashboard as one HTML file that opens without Depictio',
+      subtitle: 'This dashboard as one offline HTML file, or as a Quarto document',
       body: (
-        <ExportStaticBlock
-          dashboardId={dashboardId}
-          isOwner={isOwner}
-          onExportStatic={onExportStatic}
-        />
+        <Stack gap="lg">
+          {showStaticExport && onExportStatic && (
+            <ExportStaticBlock
+              dashboardId={dashboardId}
+              isOwner={isOwner}
+              onExportStatic={onExportStatic}
+            />
+          )}
+          {showNotebookExport && getAnalysisState && (
+            <ExportBlock dashboard={dashboard} getAnalysisState={getAnalysisState} />
+          )}
+        </Stack>
       ),
     });
   }

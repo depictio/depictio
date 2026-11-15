@@ -1078,6 +1078,19 @@ class CeleryConfig(BaseSettings):
         description="Queue for offloaded ingestion tasks, consumed by the dedicated "
         "ingestion worker so a 20-minute table read cannot starve dashboard callbacks.",
     )
+    export_queue: str = Field(
+        default="export",
+        description="Queue for the notebook export's headless browser passes "
+        "(`depictio.embed.extract_figure`). Its own queue because each pass can "
+        "dispatch a compute task (an embedding, a heatmap) on the default queue and "
+        "wait for it: on one shared pool the two wait for each other's slots.",
+    )
+    report_queue: str = Field(
+        default="report",
+        description="Queue for rendered notebook reports (`render_notebook_report`). "
+        "A report holds its slot for minutes while its tiles' browser passes run on "
+        "the export queue, so the two must not share a pool of one.",
+    )
 
     # Monitoring settings
     worker_send_task_events: bool = Field(default=True, description="Enable task event monitoring")
@@ -2908,6 +2921,57 @@ class ProfilingConfig(BaseSettings):
         return Path(self.profile_dir).resolve()
 
 
+class NotebookExportConfig(BaseSettings):
+    """Dashboard → notebook export and the per-component Python import.
+
+    Gates the export endpoints, the component embed/figure-extraction endpoints
+    and the Parquet data endpoint the generated notebooks read from.
+    """
+
+    enabled: bool = Field(
+        default=True,
+        description=(
+            "Expose notebook export (a Quarto document), component embeds and the "
+            "Parquet data endpoint used by `depictio.notebook`."
+        ),
+    )
+    max_rows: int = Field(
+        default=5_000_000,
+        description=(
+            "Largest table the Parquet data endpoint will serve in one response; "
+            "bigger collections are refused with 413 so a notebook cannot pull an "
+            "arbitrarily large table through the API."
+        ),
+    )
+    extract_timeout_s: int = Field(
+        default=90,
+        description=(
+            "Seconds allowed for the headless render that extracts a Plotly figure from a "
+            "React-rendered component."
+        ),
+    )
+    render_enabled: bool = Field(
+        default=False,
+        description=(
+            "Offer the rendered HTML report as well as the Quarto document. Off by default: "
+            "the render executes the exported document on a worker, which needs Quarto and a "
+            "Jupyter kernel in the worker image and costs a browser pass per rendered tile. "
+            "A dashboard carrying code-mode figures is only rendered for its owners, since "
+            "their Python runs on the worker."
+        ),
+    )
+    render_timeout_s: int = Field(
+        default=900,
+        description="Seconds allowed for one `quarto render` of an exported document.",
+    )
+    render_prefix: str = Field(
+        default="notebook_reports",
+        description="S3 key prefix the rendered reports and their staged notebooks are written to.",
+    )
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_NOTEBOOK_EXPORT_")
+
+
 # ── Root ──────────────────────────────────────────────────────────────────────
 
 
@@ -2957,6 +3021,7 @@ class Settings(BaseSettings):
     branding: BrandingConfig = Field(default_factory=BrandingConfig)
     feedback: FeedbackConfig = Field(default_factory=FeedbackConfig)
     profiling: ProfilingConfig = Field(default_factory=ProfilingConfig)
+    notebook_export: NotebookExportConfig = Field(default_factory=NotebookExportConfig)
 
     disable_example_dashboards: bool = Field(
         default=False,

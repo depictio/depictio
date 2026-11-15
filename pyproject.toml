@@ -97,6 +97,22 @@ server = [
 # `depictio project-builder <dir>`: the builder's small local server, without the stack.
 builder = ["fastapi==0.141.1", "uvicorn==0.52.1"]
 local = ["depictio[server]", "py-rattler==0.26.0"]
+# The Jupyter kernel Quarto executes an exported notebook through, for the
+# worker that renders HTML reports. An extra and not a dependency: only the
+# worker image installs it, and only for an opt-in feature.
+render = [
+  "nbclient==0.11.0",
+  "ipykernel==7.3.0",
+  # Tables in the report: sortable, searchable, paginated, offline (DataTables
+  # inlined once per document). Optional for a reader; the document falls back
+  # to plain HTML tables without it.
+  "itables==2.9.1",
+  # Structures (molecule_3d) drawn in the report, rotatable. Its 3Dmol.js is
+  # the copy shipped in depictio/notebook/assets (the same 2.5.5), inlined once
+  # per document instead of fetched from a CDN. Optional: without it a
+  # structure is drawn as its backbone in Plotly.
+  "py3Dmol==2.5.5",
+]
 dev = [
   # The test suite covers the server too.
   "depictio[server]",
@@ -199,6 +215,9 @@ exclude = [
   "projects/nf-core/**/.db_seeds/*",
   "catalog/**/*",
   "cli/configs/**/*",
+  # What an exported report embeds so it needs no network: Inter (OFL) for
+  # the Paper look, 3Dmol.js (BSD-3) for structures.
+  "notebook/assets/**/*",
 ]
 
 # Exclude patterns are fnmatch-based: `*` also crosses `/`, so each pattern matches
