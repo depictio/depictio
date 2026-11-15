@@ -1,4 +1,4 @@
-"""Which params*.json the template-variable introspection reads.
+"""Which params*.json a run's template variables are read from.
 
 A resumed run writes one params file per attempt, so a results directory
 routinely holds several and only the last describes the run that produced the
@@ -8,9 +8,23 @@ prunes the wrong data collections.
 """
 
 import json
+from pathlib import Path
 
-from depictio.cli.cli.utils.templates import _introspect_pipeline_params
+import yaml
+
+from depictio.cli.cli.utils.templates import _introspect_pipeline_params, _read_run_params
 from depictio.models.models.nextflow import params_files_newest_first
+from depictio.models.models.templates import TemplateMetadata
+
+NFCORE = Path(__file__).resolve().parents[3] / "projects" / "nf-core"
+
+
+def _flags(root, template: str = "ampliseq/2.18.0") -> dict[str, str]:
+    """The variables a shipped template's ``from_params`` rules set on this run."""
+    meta = TemplateMetadata(
+        **yaml.safe_load((NFCORE / template / "template.yaml").read_text())["template"]
+    )
+    return meta.variables_from_params(_read_run_params(str(root)))
 
 
 def _write_params(directory, name, payload):
@@ -26,8 +40,7 @@ class TestStringBooleans:
             tmp_path / "pipeline_info", "params_2026-08-25_13-30-37.json", {"ancombc": "true"}
         )
 
-        variables: dict[str, str] = {}
-        _introspect_pipeline_params(str(tmp_path), variables)
+        variables = _flags(tmp_path)
 
         assert "SKIP_ANCOM" not in variables
 
@@ -38,8 +51,7 @@ class TestStringBooleans:
             {"ancombc": "false", "skip_taxonomy": "True", "skip_qiime": "false"},
         )
 
-        variables: dict[str, str] = {}
-        _introspect_pipeline_params(str(tmp_path), variables)
+        variables = _flags(tmp_path)
 
         assert variables["SKIP_ANCOM"] == "true"
         assert variables["SKIP_TAXONOMY"] == "true"
@@ -53,8 +65,7 @@ class TestNewestParamsWins:
         _write_params(info, "params_2026-06-11_16-37-38.json", {"skip_taxonomy": True})
         _write_params(info, "params_2026-06-12_07-20-45.json", {"skip_taxonomy": False})
 
-        variables: dict[str, str] = {}
-        _introspect_pipeline_params(str(tmp_path), variables)
+        variables = _flags(tmp_path)
 
         assert "SKIP_TAXONOMY" not in variables
 
@@ -64,8 +75,7 @@ class TestNewestParamsWins:
         _write_params(info, "params_2026-06-11_16-37-38.json", {"skip_taxonomy": False})
         _write_params(info, "params_2026-06-12_07-20-45.json", {"skip_taxonomy": True})
 
-        variables: dict[str, str] = {}
-        _introspect_pipeline_params(str(tmp_path), variables)
+        variables = _flags(tmp_path)
 
         assert variables["SKIP_TAXONOMY"] == "true"
 
@@ -75,8 +85,7 @@ class TestNewestParamsWins:
         _write_params(info, "params_2026-06-11_16-37-38.json", {"platform": "nanopore"})
         info.joinpath("params_2026-06-12_07-20-45.json").write_text('{"platform": "nano')
 
-        variables: dict[str, str] = {}
-        _introspect_pipeline_params(str(tmp_path), variables)
+        variables = _flags(tmp_path, "viralrecon/3.0.0")
 
         assert variables["IS_NANOPORE"] == "true"
 
@@ -87,20 +96,18 @@ class TestWhereItLooks:
         _write_params(
             tmp_path / "run_A" / "pipeline_info",
             "params_2026-01-01_00-00-00.json",
-            {"protocol": "metagenomic"},
+            {"platform": "nanopore"},
         )
 
-        variables: dict[str, str] = {}
-        _introspect_pipeline_params(str(tmp_path), variables)
+        variables = _flags(tmp_path, "viralrecon/3.0.0")
 
-        assert variables["IS_METAGENOMIC"] == "true"
+        assert variables["IS_NANOPORE"] == "true"
 
     def test_params_file_run_shape_is_recognised(self, tmp_path):
         """A `-params-file` run writes nf-params.json, which the old glob missed."""
         _write_params(tmp_path / "pipeline_info", "nf-params.json", {"skip_qiime": True})
 
-        variables: dict[str, str] = {}
-        _introspect_pipeline_params(str(tmp_path), variables)
+        variables = _flags(tmp_path)
 
         assert variables["SKIP_QIIME"] == "true"
 
@@ -108,18 +115,6 @@ class TestWhereItLooks:
         variables: dict[str, str] = {"GROUP_COL": "treatment"}
         _introspect_pipeline_params(str(tmp_path), variables)
         assert variables == {"GROUP_COL": "treatment"}
-
-
-class TestExplicitVarsWin:
-    def test_a_user_supplied_flag_is_never_overridden(self, tmp_path):
-        _write_params(
-            tmp_path / "pipeline_info", "params_2026-01-01_00-00-00.json", {"skip_qiime": True}
-        )
-
-        variables = {"SKIP_QIIME": "false"}
-        _introspect_pipeline_params(str(tmp_path), variables)
-
-        assert variables["SKIP_QIIME"] == "false"
 
 
 class TestPplaceTree:

@@ -59,7 +59,7 @@
 template:
   template_id: "nf-core/stableexpression/1.1.0"
   description: "nf-core/stableexpression template: the most stable candidate genes of each expression section, ranked by stability score with the spread of their normalised expression across every public sample, the four measures behind the score, how stability varies with expression level, and what each downloaded dataset went through (platform, gene ID mapping, sample filters)."
-  version: "1.2.0"
+  version: "1.3.0"
   variables:
     - name: "DATA_ROOT"
       description: "stableexpression output directory (reporting/, merged_data/, datasets/, statistics/, errors/, warnings/, id_mapping/, pipeline_info/)."
@@ -91,6 +91,7 @@ template:
     - name: "NO_ID_MAPPING"
       description: "Set (--var NO_ID_MAPPING=true) for a run with --skip_id_mapping: no ID mapping statistics are written, so the ID mapping collection and tab are removed."
       required: false
+      from_params: {param: skip_id_mapping}
   # Variables used when materialising the bundled reference dataset.
   reference:
     vars:

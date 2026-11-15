@@ -1,0 +1,37 @@
+name: template-params
+
+# Every `from_params` rule in a template.yaml names a parameter of the nf-core
+# release the template targets: checked against that release's own
+# nextflow_schema.json, fetched from GitHub. A misspelt or renamed param would
+# otherwise make the rule silently never hold, and the run keep a route it did
+# not take.
+on:
+  pull_request:
+    paths:
+      - "depictio/projects/**/template.yaml"
+      - "depictio/models/models/templates.py"
+      - "scripts/check_template_params.py"
+      - ".github/workflows/template-params.yaml"
+  push:
+    branches: [main]
+    paths:
+      - "depictio/projects/**/template.yaml"
+      - "scripts/check_template_params.py"
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Check from_params against the pipelines' schemas
+        run: |
+          pip install --quiet pyyaml
+          python scripts/check_template_params.py

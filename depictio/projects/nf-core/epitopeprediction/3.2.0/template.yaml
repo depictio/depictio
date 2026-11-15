@@ -36,7 +36,7 @@
 template:
   template_id: "nf-core/epitopeprediction/3.2.0"
   description: "nf-core/epitopeprediction template: MHC binding predictions of peptides from variants, proteins or peptide lists, by allele, by sample and by tool, the peptides that bind with their source variant or protein, mutant against wild-type affinity, and how far the tools agree."
-  version: "2.1.0"
+  version: "2.2.0"
   variables:
     - name: "DATA_ROOT"
       description: "epitopeprediction output directory (predictions/, variant_peptides/, variant_fasta/, the per-tool directories, multiqc/, pipeline_info/)."
@@ -63,6 +63,7 @@ template:
     - name: "NO_WILD_TYPE"
       description: "Set (--var NO_WILD_TYPE=true) for a run without --wild_type, or with no missense variant: no wild-type peptide was predicted, so the mutant / wild-type collection is removed."
       required: false
+      from_params: {param: wild_type, is: false}
     - name: "SINGLE_PREDICTOR"
       description: "Set (--var SINGLE_PREDICTOR=true) for a run with one prediction tool per MHC class: no peptide is scored by two tools, so the agreement collection and the Predictors tab are removed."
       required: false
