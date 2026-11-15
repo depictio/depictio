@@ -531,3 +531,108 @@ cites. Verified corrections — implementation must encode these, not the origin
     splitter that returns raw Python source — reuse it for *classification*, but the prologue
     transpiler needs its own `ast`-based parser to emit a browser-executable IR; it cannot get
     referenced columns or ops from the existing analyzer.
+
+## 13. Component compatibility (status on PR #963)
+
+Tiers: **live** (filters recompute in the browser from the bundled Parquet), **frozen**
+(a snapshot at the export's default filter state, badged), **omitted** (left out, with the
+reason in the tier table and the export modal). The per-kind source of truth is
+`SERVERLESS_KINDS` in `depictio/api/v1/services/export/capabilities.py` — every
+`AdvancedVizKind` must have an entry (import-time self-check +
+`depictio/tests/unit/serverless/test_serverless_capabilities.py`); nothing is live by
+elimination any more. Bundles draw the **Paper** chrome (the app default), gated read-only;
+`?chrome=base` opts into Classic.
+
+### 13.1 Component types and sub-features
+
+| component / feature | tier | interactive? | notes / reason |
+|---|---|---|---|
+| card (hero value, multi-metric, all variants) | live | yes | q1/q3/percentile/skewness/kurtosis ported (`_agg_value` parity fixture) |
+| card `filter_expr` (row-level) | live | yes | `__fe__<sha8>` boolean companion evaluated with `build_filter_expr`; `.over()` windows → frozen (A) / omitted (B) |
+| card breakdown layouts (top_n / composition / donut / concentration) | live | yes | `cardLayouts.computeBreakdown` = `card_breakdown.compute_breakdown` (fixture parity) |
+| card numeric layouts (histogram / threshold / completeness / uniqueness / trend / attrition) | live | yes | `cardLayouts.numericLayoutPayload` = `card_metrics.numeric_layout_payload` |
+| card group-compare strip (`__group_compare__`) | — | no | not ported: the strip is absent under selection groups |
+| card region / residue scoping | live | yes | `scopeRegionFilters` = `region_scope.scope_region_filters` |
+| text, markdown, tab links, logos | live | yes | |
+| text live values `{{name}}` (incl. `top` / `top_share`) | live | yes | computed as cards (`_text_value_cards`) on the card path |
+| text `{{param:KEY}}` | live | n/a | run constants baked by producer A (`run_params`); B prints a dash |
+| table | live | yes | `renderTableLive` |
+| MultiSelect / Select / SegmentedControl | live | yes | options honour `filter_expr` and `order_by` (`value_order` port) |
+| Slider | live | yes | `>=` default + `slider_mode` (server's `clean_filter_payload` used to drop it — fixed) |
+| TextInput (+ match count) | live | yes | case-insensitive regex default, `match_mode`, `case_sensitive` (`text_filter_pattern`) |
+| RangeSlider, DateRangePicker, Timeline | live | yes | |
+| funnel (available values + stage overview) | live | yes | `funnelValuesLive` = `funnel_values_endpoint` |
+| `always_selected` default / `banner_facts` | live | yes | `rank_values` / `row_values` ports |
+| selection groups (same DC / foreign via links) | live | yes | `resolvedGroupsLive` (shortest route) |
+| persistent sections, floating maps (cross-tab) | live | yes | `fetchCrossTabComponents` over the bundled family |
+| highlight | source's tier | as source | resolved inside the exported family (`highlightTile.ts` rules) |
+| figure ui-mode (bindable) | live | yes | bind-and-refill; region scoping per `_figure_encodes` |
+| figure ui-mode whole-frame visus / LOWESS | frozen | no | trace set is not a per-group partition |
+| figure code-mode (transpilable, context folded) | live | yes | seeds: 8 → 14 of 26 live data-free (more with the schema guard) |
+| figure code-mode (arbitrary Python) | frozen | no | see 13.3 |
+| MultiQC plots / General Statistics | live (A) / omitted (B) | yes | intersection of constraints, empty match → empty figure; GS data bars keep the export scale |
+| map (scatter/density) | frozen | no | basemap forced to `white-bg` |
+| image gallery | omitted | — | objects in S3; needs static-dir mode |
+| JBrowse | omitted | — | genome data backend / UCSC; needs static-dir/remote |
+| server-state (comments, annotations, versions, saved filters, avatar, editing) | hidden | — | shimmed to "not available in a read-only bundle" |
+
+### 13.2 Advanced-viz kinds (54 on this branch)
+
+| tier | count | kinds |
+|---|---|---|
+| live (data path) | 44 | every kind not listed below (volcano, ma, qq, embedding *table-driven*, manhattan, stacked_bar / stacked_taxonomy, rarefaction, da_barplot, enrichment, dot_plot, lollipop, sunburst (+`aggregate`), oncoplot, the 4 benchmark kinds, profile, signal_matrix, fusion_structure, gene_arrow_track, gsea_running_score, sashimi, scatter_xy, knee_plot (`log_rank`), damage_profile, genome_view (`top` tail), transcript_structure, cnv_profile, genome_chord, ideogram, record_card, parallel_coordinates (`head`), msa, sequence_track, hmm_logo, secondary_structure, domain_architecture, ranked_distribution, spatial_cells, allele_grid, pedigree, ranked_table) |
+| live (replayed compute) | 1 | coverage_track |
+| frozen (export-time Celery) | 3 | complex_heatmap, upset_plot, sankey (+ `embedding` with `compute_method`) |
+| frozen (tree) | 1 | phylogenetic |
+| omitted (per-interaction compute) | 2 | contact_map, group_compare |
+| omitted (render-time objects + 3Dmol) | 3 | molecule_3d, pae_matrix, ramachandran |
+
+Live kinds use the sampling table generated from `sampling.py` (drift test), and bundle their
+companion tables (`*_dc_id` / `*_dc_tag`, the volcano's MA table). Known residual gaps inside
+"live": GenomeSpy gene lanes (`genome_view`, the `locus` / `genomespy` views) fetch a gene asset
+by URL and draw without it offline; `spatial_cells` draws without its image underlay.
+
+Before → after (kinds): live 47 (of which 13 wrong or broken: 10 mis-sampled, 3 stubbed) →
+45 correct; frozen 5 → 4; omitted 2 → 5 (the 3 stubbed kinds now say why).
+
+### 13.3 What cannot migrate to a zero-network single file (hard reasons)
+
+| what | hard reason | fallback |
+|---|---|---|
+| live UMAP / t-SNE (`embedding` + `compute_method: umap\|tsne`) | the filter state space is unbounded, and umap-learn (numba) / sklearn TSNE cannot be reproduced in JS — a JS port draws a *different* embedding under the same label | frozen at the default state, badged. PCA / PCoA *could* go live (deterministic linear algebra) — not done |
+| arbitrary code-mode figures | executing user Python needs RestrictedPython + Polars/pandas semantics (Pyodide ruled out, §3.4); recategorising prologues (top-N + "Other", `.head()` scalars) create traces under filters, breaking bind-and-refill | frozen |
+| network basemap tiles | tiles are remote by definition | `white-bg` |
+| JBrowse with real references / UCSC hubs | hg38 2bit ~800 MB; the hub catalogue is a remote service | static-dir / remote mode |
+| `genome_view` `source: file` lanes | they exist to range-read files too large to load | static-dir / remote mode |
+| large bioimage stores, bioimage "Open in" | pyramids reach GB–TB; hand-off passes a credentialed server URL to another app | static-dir / remote; hide Open-in |
+| group_compare / complex_heatmap / contact_map at production scale | browser heap and bundle ceiling; per-interaction statistics too expensive in JS | size-gated live (not implemented), frozen above |
+| structure resolution beyond an export cap (ESMFold folding) | remote GPU compute | ship structures up to a cap (not implemented) |
+| server state: time travel, saved filter states, comments, annotations, realtime, editing, migrations | write paths / server history; a bundle is a point in time | hidden |
+
+### 13.4 Measured costs
+
+- Runtime (`dist-static/static.html`): 3.76 MB gzip (12.0 MB raw) before and after this
+  work, 89.6 % of the 4.2 MB budget. Paper adds nothing (it was already compiled in).
+- 3Dmol.js un-stubbed: 4.32 MB gzip (+0.56 MB) — over budget, so molecule_3d /
+  ramachandran stay omitted until a structure runtime variant (or an export option that picks
+  it, stating the size) exists.
+- Wheel: +3.9 MB deflated for the template; cap 20 → 24 MB.
+
+### 13.5 Bioimage (`bioimage_viewer`, #1118 — not on this branch)
+
+Decision: **live-precomputed** (LP), never live-by-elimination. When #1118 merges, its kind
+must enter `SERVERLESS_KINDS` as `omitted` with path `objects` first (the self-check forces an
+entry), then move up in this order:
+
+1. **Points overlay** (`sample_dc_id`, `x_col` / `y_col` / `cell_id_col`) is a plain data path:
+   bundle it as a companion table with policy `none` (as on the branch), so lasso-to-filter works
+   live even before images ship.
+2. **Store shim**: a `path → bytes` map in the manifest (`objects/` in static-dir mode), answering
+   `bioimageZarrStore` range reads and `fetchBioimageStores` from the manifest — no API proxy.
+3. **Single-file**: only stores under a cap (the #1118 examples are 0.5–9.5 MB each), pruned to
+   the coarse pyramid levels at export; above the cap the tile is omitted with the size in the
+   reason.
+4. **Runtime variant**: deck.gl + viv (est. +1–1.5 MB gzip) would break the 4.2 MB budget for
+   every bundle, so it ships as an "imaging" variant the producer picks from the tier table.
+5. **Open in** (napari / vizarr / BigDataViewer): hidden — it hands another application a
+   server URL with credentials.

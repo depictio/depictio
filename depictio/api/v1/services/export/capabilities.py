@@ -260,8 +260,9 @@ _CELERY_REASON = (
     "so filters do not reach it"
 )
 _OBJECTS_REASON = (
-    "{kind} fetches {what} at render time, outside the bundle; not exportable to a "
-    "zero-network single-file bundle yet"
+    "{kind} fetches {what} at render time, outside the bundle, and draws with 3Dmol.js, "
+    "which the single-file runtime leaves out (measured: +0.56 MB gzip, 3.76 -> 4.32 MB, "
+    "over the 4.2 MB runtime budget); not in a zero-network single-file bundle yet"
 )
 
 SERVERLESS_KINDS: dict[str, ServerlessCapability] = {
@@ -347,7 +348,8 @@ SERVERLESS_KINDS: dict[str, ServerlessCapability] = {
     "pae_matrix": ServerlessCapability(
         "omitted",
         "objects",
-        _OBJECTS_REASON.format(kind="a PAE matrix", what="its matrix file"),
+        "a PAE matrix reads its matrix file from object storage at render time, outside "
+        "the bundle; not in a zero-network single-file bundle yet",
     ),
     "ramachandran": ServerlessCapability(
         "omitted",
