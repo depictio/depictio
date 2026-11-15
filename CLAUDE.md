@@ -281,6 +281,21 @@ Six types (`table`, `jbrowse2`, `multiqc`, `image`, `geojson`, `phylogeny`) with
   `DEPICTIO_NOTEBOOK_EXPORT_RENDER_ENABLED` (off), owner-only when the dashboard carries code-mode figures
 - Design: `docs/design/rfc-notebook-export.md`
 
+### Offline outputs: one manifest, one runtime, two hosts
+- The serverless bundle (`/serverless/export-static`, `static.html`) and the rendered notebook report
+  embed the same `BundleManifest` from producer A (`depictio/serverless/producer_a.py`) and the same
+  static runtime. Module swaps live once in `viewer/vite-plugins/static-runtime.ts` (both configs);
+  `check:static-shim` walks both entries (`static-runtime/main.tsx`, `static-runtime/report/main.tsx`)
+- Report host: `vite.report.config.ts` → `dist-static/report-runtime.{js,css}` (built by `build:static`,
+  CSS scoped to `.depictio-report-root` by `vite-plugins/scope-css.ts`). The generator's
+  `embed_runtime` wraps each tile in `data-depictio-tile="<tab>:<index>"` with its own output as
+  `.depictio-fallback`; `depictio/serverless/report.py` builds the block (owner-only, like a static
+  export; pinned/grouped states refused); `depictio/notebook/report_runtime.py` is the shared markup
+- Which tile mounts: `static-core/src/reportMount.ts` (live always, frozen only at the default state)
+- `BundleManifest.initial_filters` is the report's exported state; a contract change means
+  regenerating `serverless.schema.json` and `manifest-basic.json`
+- Design: `docs/design/rfc-serverless-deployment.md` §14, `rfc-notebook-export.md` §3.9
+
 ### Auth & Storage
 - JWT tokens, role-based access (users, groups, projects); single-user mode via
   `DEPICTIO_AUTH_SINGLE_USER_MODE`

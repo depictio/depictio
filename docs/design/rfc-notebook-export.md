@@ -350,7 +350,7 @@ equals the funnel endpoint's count for that stage, for three stage orders; reord
 intermediate counts and never the final one. Against a live instance,
 `depictio/dev_scripts/verify_notebook_export.py` does the same for seeded dashboards.
 
-### 3.8 Design note — embedded-offline tiles for what is not Plotly (not built; superseded)
+### 3.8 Design note — embedded-offline tiles for what is not Plotly (superseded by §3.9)
 
 **Superseded by the native renderers (§3.4).** The non-Plotly kinds are drawn in the document
 from their data, in Python, which costs a report each tile's data plus 3Dmol.js once, against
@@ -383,6 +383,54 @@ which runs the real `ComponentRenderer` against a mock API fed by
 
 Stopped at this note: the multi-mount build, the payload endpoint and the per-tile mounting are a
 change of their own (L), and the snapshot already makes every one of these tiles render.
+The multi-mount entry was then built — not over the embed bundle and a payload per tile, but
+over the serverless runtime and one manifest for the whole document: §3.9.
+
+### 3.9 The common trunk — the report hosts the serverless runtime
+
+The rendered report embeds, once at its end, the serverless static runtime in mount mode and
+the dashboard's `BundleManifest` — built by producer A, the same call `/export-static` makes,
+with the exported state's filters as `initial_filters` (RFC `rfc-serverless-deployment.md`
+§14). Every tile the generator lays out is wrapped in a placeholder that keeps the tile's own
+output inside as its fallback:
+
+```
+::: {.depictio-tile data-depictio-tile="<tab_id>:<index>"}
+::: {.depictio-fallback}
+<the tile's cell, unchanged>
+:::
+:::
+```
+
+and the "Filters" part gets `<div data-depictio-filters="<entry tab>">`, where the runtime
+draws the dashboard's own filter panel. The runtime replaces a fallback only when it can draw
+the tile at the report's state (live tiles, frozen ones at the default state); the fallback
+is hidden only once the tile is drawn, so there is never one tile twice, and it comes back if
+the renderer throws. Quarto keeps what it is good at: the narrative, the reproducible Polars
+funnel, the code (code-tools); the tiles are the dashboard's renderers, in Paper, and follow
+the panel in the page, with no server.
+
+**Generator option** `ExportPlan.embed_runtime` (`NotebookExportRequest.embed_runtime`):
+
+* **Server-rendered report: on by default.** The endpoint clears it (owner on the project — a
+  manifest is the data, as a static export is; a state the page can reproduce; the runtime
+  built), the worker builds the manifest in-process with producer A and composes the block
+  (`serverless/report.py`), and hands it to the document's last cell through
+  `DEPICTIO_REPORT_RUNTIME_FILE`. Any failure leaves the block empty: the report renders
+  exactly as before.
+* **Downloaded `.qmd`: off by default.** Asked for, the last cell is
+  `print(client.report_runtime(<entry tab>, depictio_state, config=…))`: the reader's client
+  fetches `POST /serverless/report-manifest/{id}` (owner-gated, 404 on denial, 409 for a
+  state it cannot reproduce, 413 over the size ceiling) and `GET /serverless/report-runtime`,
+  and composes the same block (`depictio/notebook/report_runtime.py`, pure stdlib, shared by
+  both paths). Without API access it prints nothing and the fallbacks stand.
+
+The block is one raw-HTML block, inlined once: the runtime's scoped stylesheet, the report's
+look (`NotebookBuilder.runtime_config`: the document's primary and Inter-first type), the
+manifest, any add-on the manifest names (3Dmol.js), the runtime's script. Measured on the
+seeded families (penguins, iris; Quarto 1.9.37): 9.0 MB → 19.4 MB raw, 2.5 MB → 5.6 MB gzip,
+the difference being the runtime's 9.76 MB raw / 3.01 MB gzip floor plus a 0.13–0.15 MB
+manifest. What stays fallback-only, and why: RFC serverless §14.
 
 ## 4. Alternatives considered
 

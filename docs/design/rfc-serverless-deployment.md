@@ -686,3 +686,68 @@ runtime exactly when a candidate survives the build; the export modal shows it a
 the measured size. Not ported in this round: complex_heatmap (its task reads a second, metadata
 collection per request and builds through plotly-complexheatmap + pandas — the next candidate,
 via the same extraction).
+
+## 14. The common trunk — one manifest, one runtime, two hosts
+
+The serverless bundle and the notebook export's rendered report (RFC
+`rfc-notebook-export.md` §3.9) are two offline outputs of one engine. Both embed
+the same thing — one `BundleManifest` built by producer A, one static runtime — and
+differ only in the page that hosts it:
+
+| | bundle (`/export-static`) | report (`/notebook_export/{id}/render`) |
+|---|---|---|
+| manifest | `producer_a.export_manifest` | the same call (`serverless/report.py::build_report_manifest`), plus `initial_filters` |
+| runtime | `dist-static/static.html` (viewer App, whole page) | `dist-static/report-runtime.{js,css}` (`vite.report.config.ts`, mount mode) |
+| module swaps | `vite-plugins/static-runtime.ts` | the same list — one module, imported by both configs |
+| page | the bundle's own | Quarto's: tiles mounted into `<div data-depictio-tile="<tab>:<index>">`, controls into `<div data-depictio-filters>` |
+| permission | owner (RFC §8) | owner, the same check — anyone else gets the report without the runtime |
+| add-ons | appended before `</body>` | inlined beside the runtime (`addons.addons_html`, shared) |
+
+**Contract.** One addition, `BundleManifest.initial_filters` (the viewer's
+`InteractiveFilter` wire shape; empty = the dashboard's defaults): the report sets it to
+the exported analysis state, so the runtime opens on the view the document narrates.
+The bundle host ignores it today (`/export-static` always writes it empty).
+
+**Mount mode** (`viewer/src/static-runtime/report/`). One React root, one manifest, one
+filter store: every tile is a portal into its placeholder, so a filter picked in the
+report's panel (the real `FilterPanel`, with the funnel and its overview) or a selection
+on a figure recomputes every tile in the page through the same shimmed data path. Cards
+are bulk-computed once per filter change, as App does. Paper is the chrome
+(`setChromeStyle(glass)`, glassPlotly); the report's primary colour and type ride in a
+config block. The runtime's CSS is scoped to its own roots at build time
+(`vite-plugins/scope-css.ts`: `:root`/`html`/`body` → `.depictio-report-root`, element
+selectors prefixed, class selectors untouched; Virgil dropped) and Mantine writes its
+variables for those roots only (`cssVariablesSelector`), its portals into a root of their
+own — the Quarto page keeps its fonts, colours and resets (asserted by the e2e). Inter is
+not bundled: the report already embeds it once.
+
+**Which tile is drawn** (`static-core/src/reportMount.ts`, unit-tested): `live`/`partial`
+always; `frozen` only when the report opens on the default state (the payload is computed
+there; at any other state the export's own output, computed at that state, is the honest
+one); `omitted` or unknown never. A card row is one placeholder and mounts whole or not at
+all. A tile that throws restores its fallback (per-tile error boundary).
+
+**Sizes** (Quarto 1.9.37, Paper, the seeded families at their unfiltered state; rendered
+against a stand-in API over the seeded projects' own files; manifests from producer A over
+a fake Mongo with the same files — frozen payloads stubbed, data, bindings and tiers real):
+
+| family | tiles drawn / placeholders | manifest | report before | report after |
+|---|---|---|---|---|
+| penguins (2 tabs, 44 components: 40 live, 4 frozen) | 16 / 16 | 0.15 MB | 9.01 MB raw · 2.47 MB gzip | 19.40 MB raw · 5.64 MB gzip |
+| iris (2 tabs, 47 components: 43 live, 4 frozen) | 15 / 15 | 0.13 MB | 9.03 MB raw · 2.47 MB gzip | 19.40 MB raw · 5.64 MB gzip |
+
+The difference is the runtime floor, paid once per report: **9.76 MB raw, 3.01 MB gzip**
+(`report-runtime-floor.html`, its own budget line in serverless-ci at 3.5 MB). It carries
+its own plotly.js (2.35, the viewer's) beside the one the report's fallbacks use (3.7,
+plotly.py's): ~3.5 MB raw of the floor. Sharing one is a follow-up that needs one plotly.js
+major on both sides.
+
+**Fallback-only, and why.** Text and highlight tiles (the narrative is Quarto's; a text
+tile's live values are the export's, not the panel's); frozen tiles under a filtered
+exported state; whatever producer A omits; a whole report whose state pins data or
+definitions (the manifest carries current data), or engages selection groups, colour-by or
+split panels (the report runtime has no group store); a report rendered for a non-owner;
+the Python runtime (the report path builds with `python_runtime="off"`, so its candidates
+stay frozen); and every report read with scripts blocked, rendered where the runtime is not
+built, or rendered by a reader whose client cannot fetch the manifest
+(`DepictioClient.report_runtime()` prints nothing and the fallbacks stand).
