@@ -527,7 +527,19 @@ def _run_code_figure(comp: dict[str, Any], df: pl.DataFrame) -> Any:
     code = comp.get("code_content") or ""
     if not code.strip():
         raise ProducerBError("code-mode figure has no code_content")
-    ns: dict[str, Any] = {"df": df, "px": px, "go": go, "pd": pd, "pl": pl, "np": np}
+    ns: dict[str, Any] = {
+        "df": df,
+        "px": px,
+        "go": go,
+        "pd": pd,
+        "pl": pl,
+        "np": np,
+        # The names every server code figure runs with (groups.code_group_globals),
+        # at the ungrouped default state the bundle is built at.
+        "depictio_group_kwargs": {},
+        "depictio_group_by": [],
+        "depictio_category_colors": dict(comp.get("__category_colors__") or {}),
+    }
     try:
         exec(code, ns)  # noqa: S102 — trusted, author-supplied spec code on the author's machine
     except Exception as exc:
@@ -796,7 +808,11 @@ def build_manifest(
             # to rebuild the derived frame, and bind against it. A figure that
             # binds ships IR + binding and NO frozen payload — the runtime
             # re-derives it at every filter state from the bundled base table.
-            code = comp.get("code_content") or ""
+            from depictio.serverless.context_fold import fold_context
+
+            colors = getattr(spec, "category_colors", None) or {}
+            comp["__category_colors__"] = colors
+            code = fold_context(comp.get("code_content") or "", colors, df.columns)
             ops, refusal = transpile_with_reason(code)
             call = terminal_px_call(code) if ops is not None else None
             if ops is not None and call is None:

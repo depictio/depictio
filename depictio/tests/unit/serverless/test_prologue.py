@@ -500,21 +500,24 @@ def test_seed_corpus_classification_is_stable():
     """
     from collections import Counter
 
-    from depictio.serverless.scripts.measure_prologue import code_mode_figures
+    from depictio.serverless.scripts.measure_prologue import (
+        code_mode_figures_with_docs,
+        folded_code,
+    )
 
     counts = Counter(
-        classify(component.get("code_content") or "") for _, component in code_mode_figures()
+        classify(folded_code(doc, component)) for _, doc, component in code_mode_figures_with_docs()
     )
     assert sum(counts.values()) == 26
-    # Re-baselined on the rebase onto main (v1.21): the reference seeds were
-    # rewritten there (ampliseq 2.18.0, viralrecon 3.0.0 code-mode figures that
-    # build helper frames such as a colour map or `depictio_group_kwargs`
-    # beside the plotted one). The prologue IR covers one frame per figure, so
-    # 15 of the 18 frozen figures are "fig line mixes several prologue frames";
-    # the rest are `.with_columns()` and non-dataframe statements. Before the
-    # rebase the corpus measured 18 figures: {"free": 4, "prologue": 11,
-    # "frozen": 3}.
-    assert counts == {"free": 5, "prologue": 3, "frozen": 18}
+    # Re-baselined when the producers started folding the injected context
+    # (`context_fold`: `depictio_group_by` / `depictio_group_kwargs` /
+    # `depictio_category_colors` are constants at the export's ungrouped
+    # default state) and the transpiler learned `group_by(...).len()`. Before:
+    # {"free": 5, "prologue": 3, "frozen": 18} — 11 of the 18 refusals were
+    # "fig line mixes several prologue frames", i.e. those injected names read
+    # as frames. Data-free here (no schema), so a `'x' in df.columns` guard
+    # stays unfolded; the producers fold it against the real columns.
+    assert counts == {"free": 9, "prologue": 5, "frozen": 12}
 
 
 # ---------------------------------------------------------------------------

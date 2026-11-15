@@ -25,6 +25,12 @@ PROJECTS = REPO_ROOT / "depictio" / "projects"
 
 def code_mode_figures() -> Iterator[tuple[Path, dict[str, Any]]]:
     """Every code-mode figure component in the committed seeds, in path order."""
+    for seed, _doc, component in code_mode_figures_with_docs():
+        yield seed, component
+
+
+def code_mode_figures_with_docs() -> Iterator[tuple[Path, dict[str, Any], dict[str, Any]]]:
+    """Like :func:`code_mode_figures`, with the dashboard document each sits on."""
     for seed in sorted(PROJECTS.glob("**/.db_seeds/*.json")):
         try:
             doc = json.loads(seed.read_text())
@@ -35,7 +41,15 @@ def code_mode_figures() -> Iterator[tuple[Path, dict[str, Any]]]:
                 continue
             if component.get("mode") != "code":
                 continue
-            yield seed, component
+            yield seed, doc, component
+
+
+def folded_code(doc: dict[str, Any], component: dict[str, Any]) -> str:
+    """The code the producers transpile: injected context folded at the
+    export's default state with the dashboard's category colours."""
+    from depictio.serverless.context_fold import fold_context
+
+    return fold_context(component.get("code_content") or "", doc.get("category_colors") or {})
 
 
 def main() -> None:
@@ -44,9 +58,9 @@ def main() -> None:
     frozen: list[tuple[str, str, str]] = []
     rows: list[tuple[str, str, str, str]] = []
 
-    for seed, component in code_mode_figures():
+    for seed, doc, component in code_mode_figures_with_docs():
         label = f"{seed.relative_to(REPO_ROOT).as_posix()}::{component.get('index')}"
-        code = component.get("code_content") or ""
+        code = folded_code(doc, component)
         ops, reason = transpile_with_reason(code)
         if ops is None:
             verdict = "frozen"

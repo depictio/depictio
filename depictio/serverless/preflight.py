@@ -188,7 +188,9 @@ def classify_component(comp: dict[str, Any]) -> PlannedTier:
             # code, so preflight can already tell a replayable prologue from one
             # that will freeze. The build refines the first case to live once
             # the binding matches (and omits either if the code fails to run).
-            code = comp.get("code_content") or ""
+            from depictio.serverless.context_fold import fold_context
+
+            code = fold_context(comp.get("code_content") or "")
             ops, refusal = transpile_with_reason(code)
             # BOTH halves have to succeed for the build to offer this figure to
             # the binder, and the build folds them into one refusal — a

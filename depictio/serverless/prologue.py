@@ -516,6 +516,27 @@ def _chain(node: ast.expr, env: dict[str, list[PrologueOp]]) -> list[PrologueOp]
             return base + [_agg_op(receiver, node)]
         raise _reject(node, ".agg() outside of a group_by() is not supported")
 
+    # ``group_by(keys).len()`` is ``group_by(keys).agg(pl.len())``: the group
+    # size, in a column Polars names ``len``. ``name=`` renames it.
+    if (
+        method == "len"
+        and isinstance(receiver, ast.Call)
+        and isinstance(receiver.func, ast.Attribute)
+        and receiver.func.attr in ("group_by", "groupby")
+    ):
+        if receiver.func.attr == "groupby":
+            raise _reject(receiver, "pandas .groupby() differs on null keys and ordering")
+        if node.args:
+            raise _reject(node, "group_by().len() takes no positional arguments")
+        kw = _kwargs(node, {"name"})
+        alias = _string(kw["name"]) if "name" in kw else "len"
+        base = _chain(receiver.func.value, env)
+        return base + [
+            GroupByOp(
+                by=_group_by_keys(receiver), agg=[AggSpec(col=None, fn=AggFn.LEN, alias=alias)]
+            )
+        ]
+
     base = _chain(receiver, env)
 
     if method in _IDENTITY_METHODS:

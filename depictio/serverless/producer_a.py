@@ -174,6 +174,63 @@ LIVE_DATA_TYPES = frozenset({"card", "interactive", "table"})
 logger = logging.getLogger(__name__)
 
 
+#: Export-time context a code figure's injected names fold against
+#: (``context_fold``), set on the component by :func:`annotate_code_context` and
+#: stripped from the shipped document (``sanitize_dashboard_doc``).
+_FOLD_COLORS_KEY = "__fold_category_colors__"
+_FOLD_COLUMNS_KEY = "__fold_columns__"
+
+
+def figure_code(comp: dict[str, Any]) -> str:
+    """The code the transpiler and the binder read: the stored code with the
+    injected context (``depictio_group_by`` / ``depictio_group_kwargs`` /
+    ``depictio_category_colors``) folded at the export's default state."""
+    from depictio.serverless.context_fold import fold_context
+
+    return fold_context(
+        comp.get("code_content") or "",
+        comp.get(_FOLD_COLORS_KEY) or {},
+        comp.get(_FOLD_COLUMNS_KEY),
+    )
+
+
+def annotate_code_context(tabs: list["FamilyTab"]) -> None:
+    """Give each code figure the dashboard's category colours and its
+    collection's columns, which the fold needs (a ``'x' in df.columns`` guard
+    folds only against the real schema)."""
+    routes = _routes()
+    dtu = _dtu()
+    schema_cache: dict[str, list[str] | None] = {}
+    for tab in tabs:
+        try:
+            colors = routes.effective_category_colors(tab.doc) or {}
+        except Exception:
+            colors = {}
+        for comp in tab.components:
+            if comp.get("component_type") != "figure" or comp.get("mode") != "code":
+                continue
+            comp[_FOLD_COLORS_KEY] = colors
+            dc_id = str(comp.get("dc_id") or "")
+            if dc_id and dc_id not in schema_cache:
+                try:
+                    init = _dc_init_entry(comp)
+                    schema_cache[dc_id] = (
+                        list(
+                            dtu.schema_deltatable_lite(
+                                workflow_id=ObjectId(str(comp.get("wf_id"))),
+                                data_collection_id=dc_id,
+                                init_data={dc_id: init} if init else None,
+                            ).keys()
+                        )
+                        if comp.get("wf_id")
+                        else None
+                    )
+                except Exception:
+                    schema_cache[dc_id] = None
+            if schema_cache.get(dc_id) is not None:
+                comp[_FOLD_COLUMNS_KEY] = schema_cache[dc_id]
+
+
 def _code_figure_plan(
     comp: dict[str, Any],
 ) -> tuple[list[PrologueOp] | None, tuple[str, dict[str, Any]] | None, str | None]:
@@ -184,7 +241,7 @@ def _code_figure_plan(
     the binder forms its hypothesis from. Either refusal returns
     ``(None, None, reason)`` and the figure freezes with ``code_mode``.
     """
-    code = comp.get("code_content") or ""
+    code = figure_code(comp)
     ops, refusal = transpile_with_reason(code)
     if ops is None:
         return None, None, refusal
@@ -764,6 +821,13 @@ def sanitize_dashboard_doc(dashboard_data: dict[str, Any]) -> dict[str, Any]:
     (``inject.json_safe``).
     """
     doc = {k: v for k, v in dashboard_data.items() if k not in _DOC_STRIP_KEYS}
+    if isinstance(doc.get("stored_metadata"), list):
+        doc["stored_metadata"] = [
+            {k: v for k, v in m.items() if k not in (_FOLD_COLORS_KEY, _FOLD_COLUMNS_KEY)}
+            if isinstance(m, dict)
+            else m
+            for m in doc["stored_metadata"]
+        ]
     return convert_objectid_to_str(doc)
 
 
@@ -2837,6 +2901,7 @@ def export_manifest(
     budget = budget or ComputeBudget.from_env()
 
     items = family_components(tabs)
+    annotate_code_context(tabs)
     tier_rows: list[TierRow] = []
     for tab in tabs:
         tier_rows.extend(classify_stored_metadata(tab.components, tab_id=tab.id))
