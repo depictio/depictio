@@ -839,6 +839,7 @@ class NotebookBuilder:
         cells.append(self._metric_card_cell())
         cells.append(md_cell(self._header()))
         cells.append(self._state_cell())
+        cells.append(self._grouping_cell())
         cells.extend(self._data_cells())
         cells.extend(self._funnel_cells())
         cells.extend(self._group_cells())
@@ -875,6 +876,8 @@ class NotebookBuilder:
             "from depictio.notebook import (\n"
             "    DepictioClient,\n"
             "    fill_text,\n"
+            "    funnel_rest,\n"
+            "    funnel_stage,\n"
             "    init_tables,\n"
             "    show_table,\n"
             "    use_document_renderer,\n"
@@ -1029,14 +1032,23 @@ def card_row(cards):
     def _state_cell(self) -> Cell:
         state = self.plan.state.model_dump(mode="json", exclude_none=True)
         literal = pprint.pformat(state, width=88, sort_dicts=False)
+        # Tagged `parameters`: `quarto render -P depictio_state:'{...}'` (Papermill's
+        # convention, which Quarto's Jupyter engine follows) injects a cell after
+        # this one, and everything below reads the state from there.
         return Cell(
-            _comment(
-                "The analysis state as exported: filters, funnel order, groups. Components "
-                "rendered by Depictio below re-use it; edit it to change what they show"
+            "#| tags: [parameters]\n"
+            + _comment(
+                "The analysis state as exported: filters, funnel order, groups, pins. Every "
+                "tile below reads it when the document runs, the funnel stages computed in "
+                "code and the tiles Depictio renders alike: edit it, or render with "
+                "`quarto render -P depictio_state:...`, to change what they show"
             )
             + f"\ndepictio_state = {literal}"
-            + "\n\n"
-            + _comment(
+        )
+
+    def _grouping_cell(self) -> Cell:
+        return Cell(
+            _comment(
                 "What a code-mode figure is executed with on the dashboard: keyword arguments "
                 "it spreads into px (`**depictio_group_kwargs`), keys it adds to a group_by, "
                 "and the dashboard's colour per category value. "
@@ -1295,21 +1307,23 @@ def card_row(cards):
             name = self._stage_title(position, stage)
             labels.append(f"{position}. {name} = {short}" if short else f"{position}. {name}")
 
-        series: list[tuple[str, list[int | None]]] = []
+        frames = []
         for dc in self.plan.dcs:
-            if dc.initial_rows is None:
-                continue
-            series.append(
-                (dc.tag, [dc.initial_rows, *(s.rows_by_dc.get(dc.dc_id) for s in stages)])
-            )
+            names = [self.df_names[dc.dc_id]] + [
+                self._stage_name(k, dc.dc_id) for k in range(1, len(stages) + 1)
+            ]
+            frames.append(f"    ({dc.tag!r}, [{', '.join(f'{n}.height' for n in names)}]),")
 
         body = (
             _comment(
-                "Depictio's filter funnel: rows left after each stage, per data collection. "
-                "Reorder `_stages`/`_series` together to see the intermediate counts move"
+                "Depictio's filter funnel: rows left after each stage, per data collection, "
+                "counted from the stage frames above. Reorder the stages to see the "
+                "intermediate counts move"
             )
             + f"\n_stages = {pprint.pformat(labels, width=88)}"
-            + f"\n_series = {pprint.pformat(series, width=88)}"
+            + "\n_series = [\n"
+            + "\n".join(frames)
+            + "\n]"
             + f"\n_palette = {pprint.pformat(list(_FUNNEL_PALETTE), width=88)}"
             + """
 fig_funnel = go.Figure(
@@ -1416,7 +1430,9 @@ fig_funnel"""
                     part("Filters", FILTERS_ICON, RESULTS_LEVEL, "filters")
                     + "\n\n*Each stage applies one filter on top of the previous one, in the "
                     "order the funnel view showed. Reordering stages changes the intermediate "
-                    "counts, never the final one.*"
+                    "counts, never the final one. The stages read their filters from "
+                    "`depictio_state` when the document runs, so editing it, or rendering with "
+                    "`quarto render -P depictio_state:...`, re-filters every tile.*"
                 )
             )
             cells.append(
@@ -1426,14 +1442,6 @@ fig_funnel"""
                     + self._filters_summary_html(stages)
                 )
             )
-            cells.append(
-                md_cell(
-                    part("Funnel", FUNNEL_ICON, TAB_LEVEL, "section")
-                    + "\n\nRows left after each stage, and what share of the unfiltered "
-                    "table that is. Pick the data collection from the dropdown."
-                )
-            )
-            cells.append(self._funnel_figure_cell(stages))
         prev = dict(self.df_names)
         for k, stage in enumerate(stages, start=1):
             lines: list[str] = []
@@ -1450,39 +1458,77 @@ fig_funnel"""
             if counts:
                 head += ". After this stage: " + "; ".join(counts)
             lines.append(_comment(head))
+            lines.append(
+                f"# Read from depictio_state (stage {k} of its funnel order). As exported, it is:"
+            )
+            run: list[str] = []
             for dc in self.plan.dcs:
                 name = self._stage_name(k, dc.dc_id)
                 self.names.reserve(name)
                 entries = stage.per_dc.get(dc.dc_id) or []
                 applied = False
-                lines.append(f"{name} = {prev[dc.dc_id]}")
+                literal = [f"{name} = {prev[dc.dc_id]}"]
                 for entry in entries:
                     src = self._entry_source(dc, entry)
                     if src is None:
                         column = entry.get("column_name")
-                        lines.append(
-                            f"# '{column}' is not a column of {dc.tag}: the server skips this "
+                        literal.append(
+                            f"'{column}' is not a column of {dc.tag}: the server skips this "
                             "filter here, and so does the notebook"
                         )
                         continue
                     if entry.get("link"):
-                        lines.append(
-                            f"# values resolved at export time through the cross-collection "
+                        literal.append(
+                            f"values resolved at export time through the cross-collection "
                             f"link {entry.get('index')!r}"
                         )
-                    lines.extend(src.as_lines(name))
+                    literal.extend(src.as_lines(name))
                     applied = True
                     fexpr = entry.get("filter_expr")
                     if fexpr:
-                        lines.append(f"{name} = {name}.filter({emit_filter_expr(str(fexpr))})")
+                        literal.append(f"{name} = {name}.filter({emit_filter_expr(str(fexpr))})")
                 if not applied and not entries:
-                    lines[-1] += f"  # this filter does not touch {dc.tag}"
+                    literal[-1] += f"  (this filter does not touch {dc.tag})"
+                lines.extend(f"#   {line}" for line in literal)
+                links = [
+                    {k2: v for k2, v in e.items() if k2 not in ("link",)}
+                    for e in entries
+                    if e.get("link")
+                ]
+                call = (
+                    f"{name} = funnel_stage({prev[dc.dc_id]}, depictio_state, {k}, "
+                    f"dc_id={dc.dc_id!r}"
+                )
+                if links:
+                    call += (
+                        f",\n    links={pprint.pformat(links, width=80)},"
+                        f"\n    resolved_for={ {'index': stage.index, 'value': stage.value}!r},\n"
+                    )
+                run.append(call + ")")
                 prev[dc.dc_id] = name
-            cells.append(Cell("\n".join(lines)))
-        final_lines = [_comment("Every tile below reads this frame: the last funnel stage")]
+            cells.append(Cell("\n".join(lines + run)))
+        final_lines = [
+            _comment(
+                "Every tile below reads this frame: the last funnel stage, plus any filter "
+                "depictio_state holds beyond the exported stages"
+            )
+        ]
         for dc in self.plan.dcs:
-            final_lines.append(f"{self.final_names[dc.dc_id]} = {prev[dc.dc_id]}")
+            final_lines.append(
+                f"{self.final_names[dc.dc_id]} = funnel_rest({prev[dc.dc_id]}, depictio_state, "
+                f"{len(stages)}, dc_id={dc.dc_id!r})"
+            )
         cells.append(Cell("\n".join(final_lines)))
+        if stages:
+            cells.append(
+                md_cell(
+                    part("Funnel", FUNNEL_ICON, TAB_LEVEL, "section")
+                    + "\n\nRows left after each stage, and what share of the unfiltered "
+                    "table that is, counted when the document runs. Pick the data collection "
+                    "from the dropdown."
+                )
+            )
+            cells.append(self._funnel_figure_cell(stages))
         return cells
 
     def _entry_source(self, dc: DCPlan, entry: dict[str, Any]) -> PredicateSource | None:

@@ -259,7 +259,7 @@ def _funnel(filters):
     )
 
 
-def _run_notebook(source: str, tmp_path, monkeypatch):
+def _run_notebook(source: str, tmp_path, monkeypatch, parameters: dict | None = None):
     BASE_DF.write_parquet(tmp_path / f"{DC1}.parquet")
     monkeypatch.setenv("DEPICTIO_DATA_DIR", str(tmp_path))
     monkeypatch.delenv("DEPICTIO_API_URL", raising=False)
@@ -280,6 +280,9 @@ def _run_notebook(source: str, tmp_path, monkeypatch):
     ):
         for i, chunk in enumerate(_CHUNK_RE.findall(source)):
             exec(compile(chunk[1], f"<chunk {i}>", "exec"), defs)
+            if parameters is not None and chunk[1].startswith("#| tags: [parameters]"):
+                # What `quarto render -P` does: a cell right after the tagged one.
+                defs.update(parameters)
     return defs
 
 
@@ -344,6 +347,39 @@ def test_stage_row_counts_match_funnel_values(patched_env, tmp_path, monkeypatch
     # the offline stub stands in for the real API.
     assert defs["viz_temperature_by_habitat"] == "rendered by Depictio"
     assert defs["fig_custom"].data[0].type == "scatter"
+
+
+@pytest.mark.parametrize(
+    "new_filters,new_order",
+    [
+        # Same filters, another order: every stage follows the new order.
+        (FILTERS, ("comp-depth", "comp-habitat", "comp-temp")),
+        # Other values, and one filter fewer.
+        (
+            [
+                _filter("comp-habitat", "habitat", ["Riverwater"]),
+                _filter("comp-temp", "temp", [10.0, 30.0], itype="RangeSlider"),
+            ],
+            (),
+        ),
+        # A filter the export never saw: it lands in the final frame.
+        ([*FILTERS, _filter("comp-extra", "depth", ["1", "3", "4"])], ()),
+    ],
+)
+def test_a_parameterised_render_refilters_the_code_tiles(
+    patched_env, tmp_path, monkeypatch, new_filters, new_order
+):
+    """`quarto render -P depictio_state:...` re-filters every stage, so the code
+    tiles agree with the funnel endpoint for the *new* state, not the exported one."""
+    source = _export(_state(FILTERS)).body.decode()
+    new_state = _state(new_filters, new_order).model_dump(mode="json", exclude_none=True)
+    defs = _run_notebook(source, tmp_path, monkeypatch, parameters={"depictio_state": new_state})
+    ordered = nbx._order_active_filters(list(new_filters), list(new_order))
+    oracle = _funnel(ordered)
+    assert defs["final_samples"].height == oracle["stages"][-1]["rows_by_dc"][DC1]
+    for k, stage in enumerate(oracle["stages"][: len(FILTERS)], start=1):
+        assert defs[f"stage_{k}_samples"].height == stage["rows_by_dc"][DC1], k
+    assert defs["card_samples"] == defs["final_samples"].height
 
 
 def test_reordering_changes_intermediate_counts_but_not_the_final_one(patched_env):

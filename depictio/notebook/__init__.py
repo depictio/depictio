@@ -26,6 +26,7 @@ In a ``.qmd``::
 
 from .client import DepictioClient, DepictioClientError
 from .components import DepictioComponent, init_tables, show_table, use_document_renderer
+from .funnel import funnel_rest, funnel_stage
 from .text import fill_text
 
 __all__ = [
@@ -33,6 +34,8 @@ __all__ = [
     "DepictioClientError",
     "DepictioComponent",
     "fill_text",
+    "funnel_rest",
+    "funnel_stage",
     "init_tables",
     "show_table",
     "use_document_renderer",
