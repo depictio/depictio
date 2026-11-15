@@ -36,8 +36,10 @@ MARKDOWN_MIME = "text/markdown"
 PLAIN_MIME = "text/plain"
 PLOTLY_MIME = "application/vnd.plotly.v1+json"
 
-# Advanced-viz kinds the server renders as Plotly itself; everything else is
-# extracted from the React renderer by the ``component_figure`` endpoint.
+# Advanced-viz kinds whose figure a Celery compute builds. Informational only:
+# the ``component_figure`` endpoint decides per tile, building on the server
+# every kind it has a builder for (these, plus the registered Python builders)
+# and reading the rest off the React renderer, or snapshotting it.
 SERVER_PLOTLY_KINDS = frozenset({"complex_heatmap", "upset_plot", "sankey"})
 
 _HEX8_RE = re.compile(r"^#([0-9a-fA-F]{2}){4}$")

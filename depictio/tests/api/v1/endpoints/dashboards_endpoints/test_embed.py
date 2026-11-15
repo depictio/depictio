@@ -372,3 +372,56 @@ def test_a_drawn_tile_without_a_plotly_div_still_gets_its_snapshot():
 def test_a_tile_that_never_draws_is_an_error_with_the_timeout():
     out = _run_extract(_FakePage("loading", None, settles=False), "plotly")
     assert out["status"] == "error" and "did not render" in out["reason"]
+
+
+def test_a_kind_with_a_server_builder_skips_the_browser(patched_env):
+    """volcano has a Python builder: the figure comes from it, no extraction job."""
+    spec = {"data": [{"type": "scattergl", "x": [1], "y": [2]}], "layout": {"title": "v"}}
+
+    async def build(**kwargs):
+        assert kwargs["component"]["viz_kind"] == "volcano"
+        assert kwargs["filters"][0]["value"] == ["a"]
+        return {**spec, "config": {}, "meta": {}}
+
+    with (
+        patch("depictio.api.v1.services.export.plotly_export.build_plotly_export", build),
+        patch("depictio.api.v1.celery_tasks.extract_component_figure_task") as task,
+    ):
+        resp = _figure("viz-1")
+    assert resp.status == "ready" and resp.source == "server"
+    assert resp.figure == spec
+    task.delay.assert_not_called()
+
+
+def test_a_tile_coloured_by_groups_goes_to_the_renderer(patched_env):
+    """The builders take no colour-by; the embed page applies it."""
+    state = AnalysisState.model_validate(
+        {**_state().model_dump(mode="json"), "color_by": {"kind": "groups"}}
+    )
+
+    async def build(**kwargs):  # pragma: no cover - must not be reached
+        raise AssertionError("server builder used for a grouped tile")
+
+    with (
+        patch("depictio.api.v1.services.export.plotly_export.build_plotly_export", build),
+        patch("depictio.api.v1.celery_tasks.extract_component_figure_task") as task,
+    ):
+        task.delay.return_value = SimpleNamespace(id="job-g")
+        resp = emb.component_figure(
+            dashboard_id=DASHBOARD_ID,  # type: ignore[arg-type]
+            component_id="viz-1",
+            request=ComponentEmbedRequest(state=state, theme="light"),
+            current_user=object(),
+            access_token=None,
+        )
+    assert resp.status == "pending"
+
+
+def test_export_tasks_have_their_own_queues():
+    from depictio.api.celery_app import celery_app
+    from depictio.api.v1.configs.config import settings
+
+    routes = celery_app.conf.task_routes
+    assert routes["depictio.embed.extract_figure"]["queue"] == settings.celery.export_queue
+    assert routes["render_notebook_report"]["queue"] == settings.celery.report_queue
+    assert settings.celery.export_queue != "celery" != settings.celery.report_queue

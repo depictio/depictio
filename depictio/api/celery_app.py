@@ -45,6 +45,13 @@ celery_app.conf.update(
     task_routes={
         "depictio.deltatable.finalize_upsert": {"queue": settings.celery.ingestion_queue},
         "depictio.ingestion.run_project": {"queue": settings.celery.ingestion_queue},
+        # The notebook export's browser passes and reports: a pass dispatches the
+        # renderer's own compute task (default queue) and waits on it, and a
+        # report waits on its passes, so sharing one pool lets them starve each
+        # other. run_celery_worker.sh consumes all three by default; a
+        # deployment can give these two a worker of their own.
+        "depictio.embed.extract_figure": {"queue": settings.celery.export_queue},
+        "render_notebook_report": {"queue": settings.celery.report_queue},
     },
 )
 

@@ -53,7 +53,7 @@ echo -n "S3/SeaweedFS (9000): " && (curl -sf http://localhost:9000/healthz >/dev
 # =============================================================================
 install-browsers = "playwright install chromium"
 api = { cmd = "python depictio/api/run.py", depends-on = ["install-browsers"] }
-celery = "celery -A depictio.api.celery_app worker --loglevel=info"
+celery = "celery -A depictio.api.celery_app worker --loglevel=info --queues=celery,export,report"
 
 # Start everything (infrastructure + app)
 start-all = { cmd = "echo 'Starting API...' && python depictio/api/run.py", depends-on = ["start-infra", "install-browsers"] }

@@ -24,6 +24,7 @@ from fastapi import Depends, HTTPException, Response
 
 from depictio.api.celery_app import celery_app
 from depictio.api.v1.configs.config import settings
+from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.endpoints.dashboards_endpoints import routes
 from depictio.api.v1.endpoints.dashboards_endpoints.routes import (
     dashboards_endpoint_router,
@@ -114,6 +115,60 @@ def _remember(key: str, value: dict[str, Any]) -> None:
             _results.pop(stale, None)
 
 
+def _server_figure(
+    dashboard_id: Any,
+    component_id: str,
+    meta: dict,
+    state: dict[str, Any],
+    theme: str,
+    current_user: User,
+    access_token: str | None,
+) -> ComponentFigureResponse | None:
+    """The figure from the server's own builder, when it has one for this tile.
+
+    Sixteen kinds (the three Celery computes and the registered Python
+    builders, ``export.capabilities.component_json_source``) draw the same
+    numbers on the server that the renderer draws in the browser. Building them
+    here skips the browser pass and the compute task it would dispatch on the
+    worker, which is what starved a report's slots. ``None`` sends the tile to
+    the browser instead: a kind without a builder, a tile coloured by groups or
+    a column (the builders take no colour-by; the embed page applies it), or a
+    build that failed.
+    """
+    if str(meta.get("component_type") or "") != "advanced_viz":
+        return None
+    from depictio.api.v1.services.notebook_export.classify import advanced_viz_delivery
+
+    if advanced_viz_delivery(meta) != "server":
+        return None
+    if ((state.get("color_by") or {}).get("kind") or "none") != "none":
+        return None
+    import asyncio
+
+    from depictio.api.v1.services.export.plotly_export import build_plotly_export
+
+    try:
+        spec = asyncio.run(
+            build_plotly_export(
+                dashboard_id=dashboard_id,
+                component_id=str(component_id),
+                component=meta,
+                filters=list(state.get("filters") or []),
+                theme=theme,
+                access_token=access_token,
+                current_user=current_user,
+            )
+        )
+    except Exception as exc:  # noqa: BLE001 - the browser pass is the fallback
+        logger.info(f"component_figure: server build failed for {component_id}, extracting: {exc}")
+        return None
+    return ComponentFigureResponse(
+        status="ready",
+        figure={"data": spec.get("data") or [], "layout": spec.get("layout") or {}},
+        source="server",
+    )
+
+
 @dashboards_endpoint_router.post(
     "/component_figure/{dashboard_id}/{component_id}", response_model=ComponentFigureResponse
 )
@@ -142,6 +197,12 @@ def component_figure(
     hit = _cached(key)
     if hit is not None:
         return ComponentFigureResponse(**hit)
+    served = _server_figure(
+        dashboard_id, component_id, meta, state, request.theme, current_user, access_token
+    )
+    if served is not None:
+        _remember(key, served.model_dump(mode="json"))
+        return served
     from depictio.api.v1.celery_tasks import extract_component_figure_task
 
     job = extract_component_figure_task.delay(

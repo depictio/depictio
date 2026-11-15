@@ -554,6 +554,13 @@ celery:
   env:
     DEPICTIO_CELERY_WORKERS: "2"
     DEPICTIO_CELERY_ENABLED: "false"  # Controls dashboard view mode callbacks
+    # The default queue, plus the notebook export's own two: headless browser
+    # passes ("export") and rendered reports ("report"), routed apart in
+    # celery_app.task_routes because a pass waits on the tile's compute task
+    # and a report on its passes. With rendered reports on
+    # (DEPICTIO_NOTEBOOK_EXPORT_RENDER_ENABLED), run a second release of this
+    # worker with "export,report" and >= 3 workers, and set this one to "celery".
+    DEPICTIO_CELERY_QUEUES: "celery,export,report"
   podSecurityContext:
     runAsUser: 1000
     runAsGroup: 2000

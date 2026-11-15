@@ -1077,6 +1077,19 @@ class CeleryConfig(BaseSettings):
         description="Queue for offloaded ingestion tasks, consumed by the dedicated "
         "ingestion worker so a 20-minute table read cannot starve dashboard callbacks.",
     )
+    export_queue: str = Field(
+        default="export",
+        description="Queue for the notebook export's headless browser passes "
+        "(`depictio.embed.extract_figure`). Its own queue because each pass can "
+        "dispatch a compute task (an embedding, a heatmap) on the default queue and "
+        "wait for it: on one shared pool the two wait for each other's slots.",
+    )
+    report_queue: str = Field(
+        default="report",
+        description="Queue for rendered notebook reports (`render_notebook_report`). "
+        "A report holds its slot for minutes while its tiles' browser passes run on "
+        "the export queue, so the two must not share a pool of one.",
+    )
 
     # Monitoring settings
     worker_send_task_events: bool = Field(default=True, description="Enable task event monitoring")
