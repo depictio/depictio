@@ -1,19 +1,16 @@
 name: serverless-demo-pages
 
 # Publishes the per-phase serverless demos (depictio/viewer/dist-static/site/)
-# to GitHub Pages so each milestone stays browsable side by side. One-time repo
-# prerequisite: Settings → Pages → Source = "GitHub Actions"; until that is
-# enabled the deploy job fails cleanly and the CI artifact (serverless-ci.yaml)
-# remains the way to grab the demos.
+# to GitHub Pages so each milestone stays browsable side by side.
+#
+# Manual only (Actions → serverless-demo-pages → Run workflow). It used to run
+# on every push to feat/serverless-deployment and failed each time, because
+# GitHub Pages is not enabled on the repository. One-time repo prerequisite
+# before the first run: Settings → Pages → Source = "GitHub Actions". Until
+# then the deploy job fails cleanly; the `serverless-demos` artifact uploaded
+# by serverless-ci.yaml on every push is the way to get the demos.
 on:
   workflow_dispatch:
-  push:
-    branches: [feat/serverless-deployment]
-    paths:
-      - "packages/depictio-static-core/**"
-      - "depictio/viewer/**"
-      - "depictio/serverless/**"
-      - ".github/workflows/serverless-demo-pages.yaml"
 
 permissions:
   contents: read
