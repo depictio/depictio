@@ -48,7 +48,7 @@ module() {
     sheet=$(find . -maxdepth 1 -name 'nfcore-samplesheet.*' | head -1)
     nextflow run "$FIXTURES/module_nfcore.nf" -profile "$engine" \
         --results "$PWD/nfcore-results" --samplesheet "$PWD/$sheet" \
-        --outdir "$PWD/module-results" --image "$image" -work-dir "$PWD/module-work" \
+        --outdir "$PWD/module-results" --image "$image" -work-dir "$PWD/module-work" --depictio_id run \
         || { tail -80 module-work/*/*/.command.log 2>/dev/null; fail "the module failed"; }
     jq . "$RESULT"
     [ "$(jq -r .status "$RESULT")" = success ] || fail "ingestion status $(jq -r .status "$RESULT")"

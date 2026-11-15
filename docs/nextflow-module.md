@@ -8,10 +8,12 @@ and it can be shipped with the pipeline like any other nf-core module.
 
 It follows the nf-core module layout (`main.nf`, `meta.yml`, `environment.yml`,
 `tests/main.nf.test`) and lives in the depictio package, next to the trigger
-snippet:
+snippet, with the `depictio/publish` subworkflow that wires it into a pipeline
+(see [In an nf-core pipeline](#in-an-nf-core-pipeline)):
 
 ```
 depictio/cli/configs/nextflow/modules/depictio/ingest/
+depictio/cli/configs/nextflow/subworkflows/depictio/publish/
 ```
 
 ## Adding it to a pipeline
@@ -114,81 +116,72 @@ rescan of that location finds nothing once the work directory is cleaned.
 
 ## In an nf-core pipeline
 
-An nf-core template reads files from all over the results directory (the
-rnaseq one reads about thirty globs), so wiring each of them through `relpaths`
-is not worth it. Hand over the results directory once the run's last process,
-MultiQC, is done, plus the samplesheet, which nf-core does not publish but the
-templates read from `input/`. The CLI finds it there only when its name
-contains `samplesheet`, hence the fixed name below. This was run end to end on nf-core/rnaseq 3.26.0
-(`-profile test,conda`): the pipeline finished, the module ingested 10 data
-collections and created the template's dashboard.
+The `depictio/publish` subworkflow, shipped next to the module, is the whole
+integration, and it is the same for every pipeline Depictio has a template for:
+
+```bash
+cp -r "$(dirname "$(depictio config nextflow)")/subworkflows/depictio" subworkflows/local/
+```
+
+It hands the module the results directory once the run's last process is done,
+plus the samplesheet, which nf-core does not publish but the templates read
+from `input/`. Nothing in it names a pipeline:
+
+- the **template** is detected from the run's `pipeline_info/`, at the closest
+  bundled release when the run's own is not shipped;
+- its **route variables** (`--skip_alignment`, `--skip_multiqc`, `--tools`…)
+  are read from the run's own `params.json`: each template declares, per
+  variable, the parameter it follows (`from_params` in its `template.yaml`,
+  checked in CI against that release's `nextflow_schema.json`).
 
 In the pipeline's `main.nf`, after the main workflow:
 
 ```groovy
-include { DEPICTIO_INGEST } from './modules/local/depictio/ingest/main'
+include { DEPICTIO_PUBLISH } from './subworkflows/local/depictio/publish/main'
 
 if (params.depictio) {
-    DEPICTIO_INGEST(
-        NFCORE_RNASEQ.out.multiqc_report
-            .collect()
-            .map { _reports -> [
-                [ id: workflow.runName ],
-                [ file(params.outdir, type: 'dir'), file(params.input) ],
-                [ '.', 'input/samplesheet.csv' ],
-            ] },
-        '',     // template: detected from pipeline_info/
-        [], [],
-        [],     // no cli_config: build an artifact
+    DEPICTIO_PUBLISH(
+        NFCORE_RNASEQ.out.multiqc_report,   // published outputs: wait for them
+        params.outdir,
+        params.input,                       // the samplesheet, path or URL
     )
 }
 ```
 
-In its `nextflow.config`:
+In its `nextflow.config`, after its `params` block:
 
 ```groovy
-params {
-    depictio = true
-}
-
-process {
-    withName: 'DEPICTIO_INGEST' {
-        errorStrategy = 'ignore'
-        publishDir    = [
-            path: { "${params.outdir}/depictio" },
-            mode: params.publish_dir_mode,
-            saveAs: { filename -> filename.equals('versions.yml') ? null : filename },
-        ]
-        ext.args      = { [
-            // One project per run. A '/' in a project name breaks the CLI's
-            // lookup by name, hence the last part of the manifest name only.
-            "--project '${workflow.manifest.name.tokenize('/').last()} ${workflow.runName}'",
-            // The template's route flags, from the run's own parameters.
-            params.skip_alignment                   ? '--var PSEUDOALIGNER_ONLY=true'        : '',
-            (params.skip_multiqc || params.skip_qc) ? '--var SKIP_MULTIQC=true'              : '',
-            params.skip_quantification_merge        ? '--var SKIP_QUANTIFICATION_MERGE=true' : '',
-        ].findAll { a -> a }.join(' ') }
-    }
-}
+params { depictio = true }
+includeConfig 'subworkflows/local/depictio/publish/nextflow.config'
 ```
 
-Declare `depictio` in `nextflow_schema.json` too, or nf-schema rejects it.
+Declare `depictio` and the `depictio_*` params in `nextflow_schema.json`, or
+nf-schema rejects them. The included config publishes into
+`<outdir>/depictio/`, ignores a failed ingestion (Depictio reports on the run,
+it is not part of it), and takes every setting from a param, so a run adjusts
+it with `--depictio_*` or a params file, and a site with a `-c` config:
 
-The route flags are the per-template part: each template documents its
-variables in its `template.yaml`, and the pipeline is the one place that knows
-its own parameters. The CLI reads the run's `params.json`, but derives route
-flags from it for a few pipelines only (ampliseq, viralrecon, demultiplex), not
-rnaseq: without them a `--skip_alignment` rnaseq run looks for `star_salmon/`
-and fails.
+| Param | Default | |
+| --- | --- | --- |
+| `depictio_template` | detected | a template id, to skip detection (`nf-core/rnaseq/3.26.0`) |
+| `depictio_project_config` | none | a project YAML, for a pipeline with no template |
+| `depictio_dashboards` | none | dashboard YAML(s) to import as well |
+| `depictio_cli_config` | none: an artifact | a `CLI.yaml`, to send the run to that instance |
+| `depictio_project` | the template's | the project name |
+| `depictio_vars` | `[:]` | template variables the run's params cannot tell, e.g. `[GROUP_COL: 'condition']` |
+| `depictio_ingest_args` | `''` | further `depictio ingest` options |
+| `depictio_local_args` | `''` | `depictio local up` options, e.g. `--port 8123` |
+| `depictio_id` | `workflow.runName` | names the outputs |
 
-The results directory is read as published, so it relies on MultiQC's own
-outputs having been copied by the time the module starts. Publishing is
-asynchronous; in the tested run it had finished, but a slow file system can
-lag. When that matters, add MultiQC's `data` output as a further `files`
-entry at its published path, which depends on the pipeline and the MultiQC
-version (the tested `--skip_alignment` run wrote `multiqc/multiqc_report_data`):
-it comes from the task, not from the copy, and wins over whatever the copy
-holds.
+An explicit `depictio_vars` entry wins over what the run's params say. This
+was run end to end on nf-core/rnaseq 3.26.0 (`-profile test,docker`) and, in CI,
+on further nf-core pipelines at their templates' releases.
+
+The results directory is read as published, so it relies on the outputs having
+been copied by the time the subworkflow starts. Publishing is asynchronous; a
+slow file system can lag. When that matters, use the module directly and add the
+lagging outputs (e.g. MultiQC's `data` output) as further `files` entries at
+their published paths: they come from the task, not from the copy.
 
 ## The artifact
 

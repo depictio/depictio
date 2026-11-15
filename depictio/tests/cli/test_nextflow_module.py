@@ -20,7 +20,9 @@ import yaml
 from depictio.cli.depictio_cli import app
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-INGEST = REPO_ROOT / "depictio" / "cli" / "configs" / "nextflow" / "modules" / "depictio" / "ingest"
+NEXTFLOW = REPO_ROOT / "depictio" / "cli" / "configs" / "nextflow"
+INGEST = NEXTFLOW / "modules" / "depictio" / "ingest"
+PUBLISH = NEXTFLOW / "subworkflows" / "depictio" / "publish"
 
 
 def _package_version() -> str:
@@ -159,3 +161,42 @@ class TestPinsFollowThePackageVersion:
             "containerOptions \"${workflow.containerEngine in ['docker', 'podman'] "
             "? '--entrypoint \"\"' : ''}\""
         ) in _main()
+
+
+class TestPublishSubworkflow:
+    """depictio/publish: the module for any pipeline, settings from params.depictio_*."""
+
+    def test_it_ships_the_nf_core_subworkflow_files(self):
+        for name in ("main.nf", "meta.yml", "nextflow.config", "tests/main.nf.test"):
+            assert (PUBLISH / name).is_file(), name
+
+    def test_it_includes_the_module_it_ships_with(self):
+        main = (PUBLISH / "main.nf").read_text()
+        include = re.search(r"include \{ DEPICTIO_INGEST \} from '([^']+)'", main).group(1)
+        assert (PUBLISH / include).with_suffix(".nf").resolve() == (INGEST / "main.nf").resolve()
+
+    def test_every_setting_it_reads_has_a_default(self):
+        """A pipeline that includes nextflow.config sets none of them."""
+        read = set(re.findall(r"params\.(depictio_\w+)", (PUBLISH / "main.nf").read_text()))
+        config = (PUBLISH / "nextflow.config").read_text()
+        defaults = set(re.findall(r"^\s+(depictio_\w+)\s+=", config, re.MULTILINE))
+        used = set(re.findall(r"params\.(depictio_\w+)", config))
+        assert read | used <= defaults
+
+    def test_its_selector_matches_with_or_without_an_enclosing_workflow(self):
+        selector = re.search(
+            r"withName: '([^']+)'", (PUBLISH / "nextflow.config").read_text()
+        ).group(1)
+        for name in (
+            "DEPICTIO_PUBLISH:DEPICTIO_INGEST",
+            "NFCORE_RNASEQ:DEPICTIO_PUBLISH:DEPICTIO_INGEST",
+        ):
+            assert re.fullmatch(selector, name), name
+
+    def test_meta_yml_documents_its_takes_and_emits(self):
+        meta = yaml.safe_load((PUBLISH / "meta.yml").read_text())
+        main = (PUBLISH / "main.nf").read_text()
+        take = main.split("take:", 1)[1].split("main:", 1)[0]
+        emit = main.split("emit:", 1)[1]
+        assert [next(iter(i)) for i in meta["input"]] == re.findall(r"^\s+(\w+)\s+//", take, re.M)
+        assert [next(iter(o)) for o in meta["output"]] == re.findall(r"^\s+(\w+)\s+=", emit, re.M)

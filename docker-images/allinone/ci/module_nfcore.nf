@@ -1,22 +1,11 @@
-// Runs the depictio/ingest module, artifact mode, on the results of a finished
-// nf-core run, as docs/nextflow-module.md shows for an nf-core pipeline: the
-// results directory, plus the samplesheet at input/samplesheet.csv, template
-// detected from pipeline_info/. For the allinone-nfcore-rnaseq job in
-// .github/workflows/build-images.yaml:
-//   nextflow run module_nfcore.nf -profile docker --results <outdir> --samplesheet <file>
-// The samplesheet is staged at input/samplesheet.<its extension> (csv or tsv).
-include { DEPICTIO_INGEST } from '../../../depictio/cli/configs/nextflow/modules/depictio/ingest/main'
+// A finished nf-core run published through the depictio/publish subworkflow
+// (the depictio/ingest module in artifact mode), as docs/nextflow-module.md
+// shows for a pipeline: the results directory and the run's samplesheet, the
+// template detected from pipeline_info/ and its routes from params.json. For
+// the nf-core jobs of .github/workflows/build-images.yaml:
+//   nextflow run module_nfcore.nf -profile docker --results <outdir> --samplesheet <file> --depictio_id run
+include { DEPICTIO_PUBLISH } from '../../../depictio/cli/configs/nextflow/subworkflows/depictio/publish/main'
 
 workflow {
-    DEPICTIO_INGEST(
-        channel.of([
-            [id: 'run'],
-            [file(params.results, type: 'dir', checkIfExists: true), file(params.samplesheet, checkIfExists: true)],
-            ['.', "input/samplesheet.${file(params.samplesheet).extension ?: 'csv'}"],
-        ]),
-        '',
-        [],
-        [],
-        [],
-    )
+    DEPICTIO_PUBLISH(channel.of('done'), params.results, params.samplesheet)
 }
