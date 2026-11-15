@@ -167,6 +167,12 @@ Ruled out on evidence. The data layer cannot go there: `polars` and `deltalake` 
 support at all), `multiqc` is a large tree. Only `plotly` + `narwhals` would port — and plotly.js is
 already in the bundle. Pyodide buys a ~30 MB runtime and leaves the data problem unsolved.
 
+> **Update (§13.6).** Still not the data layer — the in-browser engine stays hyparquet + typed-array
+> kernels. But as an *optional add-on* for the computes TypeScript cannot reproduce (arbitrary
+> code-mode figures, group comparisons, PCA / PCoA / t-SNE), Pyodide 314.0.7 now packages polars,
+> boots from `file://` with zero network, and runs the server's own Python. Measured: +37 MB
+> (core + numpy + polars) to +69 MB per bundle, ~8 s boot; embedded only when a tile needs it.
+
 ### 3.5 Why not DuckDB-WASM as the primary engine
 
 It was the obvious choice and it is the wrong one **for the inlined single-file mode**: its `eh`
@@ -534,105 +540,149 @@ cites. Verified corrections — implementation must encode these, not the origin
 
 ## 13. Component compatibility (status on PR #963)
 
-Tiers: **live** (filters recompute in the browser from the bundled Parquet), **frozen**
-(a snapshot at the export's default filter state, badged), **omitted** (left out, with the
-reason in the tier table and the export modal). The per-kind source of truth is
-`SERVERLESS_KINDS` in `depictio/api/v1/services/export/capabilities.py` — every
-`AdvancedVizKind` must have an entry (import-time self-check +
-`depictio/tests/unit/serverless/test_serverless_capabilities.py`); nothing is live by
-elimination any more. Bundles draw the **Paper** chrome (the app default), gated read-only;
-`?chrome=base` opts into Classic.
+Tiers: **live** (filters recompute in the browser from the bundled Parquet), **live (Python)**
+(recomputed in the browser by the server's own Python, in the optional Pyodide add-on, §13.6),
+**frozen** (a snapshot at the export's default filter state, badged), **omitted** (left out, with
+the reason in the tier table and the export modal). The per-kind source of truth is
+`SERVERLESS_KINDS` in `depictio/api/v1/services/export/capabilities.py` — every `AdvancedVizKind`
+must have an entry (import-time self-check +
+`depictio/tests/unit/serverless/test_serverless_capabilities.py`); nothing is live by elimination.
+Which tiles the Python runtime takes is `depictio/serverless/pyodide/plan.py`. Bundles draw the
+**Paper** chrome (the app default), gated read-only; `?chrome=base` opts into Classic.
+
+Rule of this pass: **every component the live server can render renders in a bundle.** Where the
+browser cannot recompute it, the producer renders it at export with the server's own code and
+ships the result, badged; where even the view needs a remote service (a genome browser, an image
+store), the bundle shows an export-time snapshot or summary of it.
 
 ### 13.1 Component types and sub-features
 
 | component / feature | tier | interactive? | notes / reason |
 |---|---|---|---|
 | card (hero value, multi-metric, all variants) | live | yes | q1/q3/percentile/skewness/kurtosis ported (`_agg_value` parity fixture) |
-| card `filter_expr` (row-level) | live | yes | `__fe__<sha8>` boolean companion evaluated with `build_filter_expr`; `.over()` windows → frozen (A) / omitted (B) |
-| card breakdown layouts (top_n / composition / donut / concentration) | live | yes | `cardLayouts.computeBreakdown` = `card_breakdown.compute_breakdown` (fixture parity) |
-| card numeric layouts (histogram / threshold / completeness / uniqueness / trend / attrition) | live | yes | `cardLayouts.numericLayoutPayload` = `card_metrics.numeric_layout_payload` |
+| card `filter_expr` (row-level) | live | yes | `__fe__<sha8>` companion evaluated with `build_filter_expr`; `.over()` windows → frozen (A) / omitted (B) |
+| card breakdown / numeric layouts | live | yes | `cardLayouts` = `card_breakdown` / `card_metrics` (fixture parity) |
 | card group-compare strip (`__group_compare__`) | — | no | not ported: the strip is absent under selection groups |
 | card region / residue scoping | live | yes | `scopeRegionFilters` = `region_scope.scope_region_filters` |
-| text, markdown, tab links, logos | live | yes | |
-| text live values `{{name}}` (incl. `top` / `top_share`) | live | yes | computed as cards (`_text_value_cards`) on the card path |
-| text `{{param:KEY}}` | live | n/a | run constants baked by producer A (`run_params`); B prints a dash |
+| text, markdown, tab links, logos, live values, `{{param:KEY}}` | live | yes | `{{param}}` baked by producer A; B prints a dash |
 | table | live | yes | `renderTableLive` |
-| MultiSelect / Select / SegmentedControl | live | yes | options honour `filter_expr` and `order_by` (`value_order` port) |
-| Slider | live | yes | `>=` default + `slider_mode` (server's `clean_filter_payload` used to drop it — fixed) |
-| TextInput (+ match count) | live | yes | case-insensitive regex default, `match_mode`, `case_sensitive` (`text_filter_pattern`) |
-| RangeSlider, DateRangePicker, Timeline | live | yes | |
-| funnel (available values + stage overview) | live | yes | `funnelValuesLive` = `funnel_values_endpoint` |
-| `always_selected` default / `banner_facts` | live | yes | `rank_values` / `row_values` ports |
-| selection groups (same DC / foreign via links) | live | yes | `resolvedGroupsLive` (shortest route) |
-| persistent sections, floating maps (cross-tab) | live | yes | `fetchCrossTabComponents` over the bundled family |
-| highlight | source's tier | as source | resolved inside the exported family (`highlightTile.ts` rules) |
-| figure ui-mode (bindable) | live | yes | bind-and-refill; region scoping per `_figure_encodes` |
+| all interactive filters, funnel, `always_selected`, selection groups | live | yes | unchanged |
+| persistent sections, floating maps, highlight | live / source's tier | as source | unchanged |
+| figure ui-mode (bindable) | live | yes | bind-and-refill |
 | figure ui-mode whole-frame visus / LOWESS | frozen | no | trace set is not a per-group partition |
-| figure code-mode (transpilable, context folded) | live | yes | seeds: 8 → 14 of 26 live data-free (more with the schema guard) |
-| figure code-mode (arbitrary Python) | frozen | no | see 13.3 |
-| MultiQC plots / General Statistics | live (A) / omitted (B) | yes | intersection of constraints, empty match → empty figure; GS data bars keep the export scale |
+| figure code-mode (transpilable, context folded) | live | yes | prologue IR + bind-and-refill |
+| figure code-mode (arbitrary Python) | **live (Python)** / frozen | yes (Python) | re-run in the server's RestrictedPython sandbox (`code_executor.py`, verbatim) on every filter change, ≤ 200k filtered rows; frozen without the add-on |
+| MultiQC plots / General Statistics | live (A) / omitted (B) | yes | GS data bars keep the export scale |
 | map (scatter/density) | frozen | no | basemap forced to `white-bg` |
-| image gallery | omitted | — | objects in S3; needs static-dir mode |
-| JBrowse | omitted | — | genome data backend / UCSC; needs static-dir/remote |
+| image gallery | **frozen (snapshot)** — was omitted | no | default rows' images read from the bucket at export, ≤ 384 px thumbnails, ≤ 48, under the object budget; `blob:` URLs |
+| JBrowse | **frozen (summary)** — was omitted | no | export-time session: assembly, locus, track table (`render_jbrowse` at the default state) |
 | server-state (comments, annotations, versions, saved filters, avatar, editing) | hidden | — | shimmed to "not available in a read-only bundle" |
 
 ### 13.2 Advanced-viz kinds (54 on this branch)
 
-| tier | count | kinds |
+| tier | before → after | kinds |
 |---|---|---|
-| live (data path) | 44 | every kind not listed below (volcano, ma, qq, embedding *table-driven*, manhattan, stacked_bar / stacked_taxonomy, rarefaction, da_barplot, enrichment, dot_plot, lollipop, sunburst (+`aggregate`), oncoplot, the 4 benchmark kinds, profile, signal_matrix, fusion_structure, gene_arrow_track, gsea_running_score, sashimi, scatter_xy, knee_plot (`log_rank`), damage_profile, genome_view (`top` tail), transcript_structure, cnv_profile, genome_chord, ideogram, record_card, parallel_coordinates (`head`), msa, sequence_track, hmm_logo, secondary_structure, domain_architecture, ranked_distribution, spatial_cells, allele_grid, pedigree, ranked_table) |
-| live (replayed compute) | 1 | coverage_track |
-| frozen (export-time Celery) | 3 | complex_heatmap, upset_plot, sankey (+ `embedding` with `compute_method`) |
-| frozen (tree) | 1 | phylogenetic |
-| omitted (per-interaction compute) | 2 | contact_map, group_compare |
-| omitted (render-time objects + 3Dmol) | 3 | molecule_3d, pae_matrix, ramachandran |
+| live (data path) | 44 → 44 | unchanged (volcano, ma, qq, table-driven embedding, manhattan, stacked_bar, …, msa, sequence_track, hmm_logo, secondary_structure, domain_architecture, ranked_distribution, spatial_cells, allele_grid, pedigree, ranked_table) |
+| live (replayed compute, TS port) | 1 → 2 | coverage_track, **contact_map** (`contactMapWindow` = `contact_map_window`, fixture parity; any window, any filter state) |
+| live (objects shipped) | 0 → 3 | **molecule_3d** (+ 3Dmol.js add-on), **pae_matrix**, **ramachandran** — structure / PAE files read at export from the indexed_file DC (or the structure resolver, ≤ 12 entities), ≤ 24 MB / bundle, ≤ 8 MB / file |
+| live (Python, optional) | 0 → 2 | **group_compare** (any pair, `group_compare_from_frame`, ≤ 50k rows), **embedding** with `compute_method` pca / pcoa / tsne (`_embedding_result_from_frame`, ≤ 5k / ≤ 1k rows) |
+| frozen (export-time compute) | 3 → 4 | complex_heatmap, upset_plot, sankey, **group_compare** without the add-on (the tile's opening pair; another pair is refused with the reason, never relabelled); `embedding` + umap keeps its coordinates and drops filtered-out points |
+| frozen (tree) | 1 → 1 | phylogenetic |
+| omitted | 5 → **0** | — |
 
-Live kinds use the sampling table generated from `sampling.py` (drift test), and bundle their
-companion tables (`*_dc_id` / `*_dc_tag`, the volcano's MA table). Known residual gaps inside
-"live": GenomeSpy gene lanes (`genome_view`, the `locus` / `genomespy` views) fetch a gene asset
-by URL and draw without it offline; `spatial_cells` draws without its image underlay.
+Counts, producer A, kinds: live 45 → 49 without the Python runtime (51 counting the Python-live
+kinds), frozen 4 → 5 (→ 4 with Python, group_compare going live), omitted 5 → 0. Component
+types: image and JBrowse omitted → frozen, arbitrary code-mode figures frozen → live (Python).
 
-Before → after (kinds): live 47 (of which 13 wrong or broken: 10 mis-sampled, 3 stubbed) →
-45 correct; frozen 5 → 4; omitted 2 → 5 (the 3 stubbed kinds now say why).
+Producer B (no server, by design): Celery kinds without the Python runtime (complex_heatmap,
+upset_plot, sankey, umap embeddings), MultiQC and phylogenetic stay omitted; group_compare is
+now frozen there too (the service function runs on the local Parquet), and with the Python
+runtime computed embeddings and code figures go live.
 
-### 13.3 What cannot migrate to a zero-network single file (hard reasons)
+### 13.3 Cannot render at all vs renders but is not interactive
 
-| what | hard reason | fallback |
-|---|---|---|
-| live UMAP / t-SNE (`embedding` + `compute_method: umap\|tsne`) | the filter state space is unbounded, and umap-learn (numba) / sklearn TSNE cannot be reproduced in JS — a JS port draws a *different* embedding under the same label | frozen at the default state, badged. PCA / PCoA *could* go live (deterministic linear algebra) — not done |
-| arbitrary code-mode figures | executing user Python needs RestrictedPython + Polars/pandas semantics (Pyodide ruled out, §3.4); recategorising prologues (top-N + "Other", `.head()` scalars) create traces under filters, breaking bind-and-refill | frozen |
-| network basemap tiles | tiles are remote by definition | `white-bg` |
-| JBrowse with real references / UCSC hubs | hg38 2bit ~800 MB; the hub catalogue is a remote service | static-dir / remote mode |
-| `genome_view` `source: file` lanes | they exist to range-read files too large to load | static-dir / remote mode |
-| large bioimage stores, bioimage "Open in" | pyramids reach GB–TB; hand-off passes a credentialed server URL to another app | static-dir / remote; hide Open-in |
-| group_compare / complex_heatmap / contact_map at production scale | browser heap and bundle ceiling; per-interaction statistics too expensive in JS | size-gated live (not implemented), frozen above |
-| structure resolution beyond an export cap (ESMFold folding) | remote GPU compute | ship structures up to a cap (not implemented) |
-| server state: time travel, saved filter states, comments, annotations, realtime, editing, migrations | write paths / server history; a bundle is a point in time | hidden |
+**Cannot render at all** (producer A), after this pass:
+
+| what | why |
+|---|---|
+| a kind with no `SERVERLESS_KINDS` entry (a future kind) | refused by design until classified — never live by elimination |
+| a tile whose export-time compute fails or exceeds the export's compute budget | omitted with the error in its detail; the build never aborts for one tile |
+| a gallery / structure whose files exceed the object budget | the files that fit ship; the rest are named in the tier detail |
+| (not on this branch) `bioimage_viewer` | see §13.5 |
+
+**Renders, not interactive** (a snapshot or a frozen compute, badged): map (white-bg),
+whole-frame visus / LOWESS, complex_heatmap, upset_plot, sankey, phylogenetic, UMAP layout
+(points follow filters), group_compare and arbitrary code-mode figures *without* the Python
+runtime, image gallery, JBrowse session, MultiQC GS data-bar scale, resolver models beyond the
+12 frozen entities.
+
+**Hard limits, unchanged in kind** (they now degrade to the snapshots above): live UMAP (numba,
+no WASM build); network basemap tiles; JBrowse / GenomeSpy remote tracks and references;
+large bioimage pyramids; server state (time travel, comments, annotations, realtime, editing).
 
 ### 13.4 Measured costs
 
-- Runtime (`dist-static/static.html`): 3.76 MB gzip (12.0 MB raw) before and after this
-  work, 89.6 % of the 4.2 MB budget. Paper adds nothing (it was already compiled in).
-- 3Dmol.js un-stubbed: 4.32 MB gzip (+0.56 MB) — over budget, so molecule_3d /
-  ramachandran stay omitted until a structure runtime variant (or an export option that picks
-  it, stating the size) exists.
-- Wheel: +3.9 MB deflated for the template; cap 20 → 24 MB.
+| what | raw | gzip | notes |
+|---|---|---|---|
+| static runtime (`static.html`) | 12.00 MB | 3.77 MB | unchanged; budget 4.2 MB |
+| + structure viewer (`static-structure.html`) | 12.51 MB | 3.92 MB | 3Dmol.js 2.5.5's own minified UMD as a conditional add-on (+0.15 MB, vs +0.56 MB when Vite compiled the unminified ES entry in); second budget line, 4.4 MB |
+| + Python runtime, demo job set (code figure + group_compare + PCA) | 81.5 MB | 52.4 MiB | the add-on is ~69 MB of base64 (already-compressed wheels barely gzip); size budget line 60 MiB |
+
+Python add-on, base64 bytes each (`pin.json`): core (pyodide.asm.wasm gzip'd, asm.mjs gzip'd,
+stdlib) 8.47 MB · numpy 3.95 · polars 24.43 · pandas + dateutil + pytz + six 6.57 · scipy 18.71 ·
+scikit-learn + joblib + threadpoolctl 6.20 · plotly 6.9.0 stripped (9.9 → 3.9 MB wheel) 5.17 ·
+narwhals 0.59 · packaging 0.13 · RestrictedPython 0.04. Floor (core + numpy + polars) 37 MB; a
+code figure adds pandas + plotly + RestrictedPython (+12 MB); group_compare adds scipy (+19 MB);
+t-SNE adds scikit-learn (+6 MB). Wheel: + 0.54 MB raw (3Dmol add-on) + pin.json; the Pyodide
+files never enter the wheel (cap 24 MB, accepted).
 
 ### 13.5 Bioimage (`bioimage_viewer`, #1118 — not on this branch)
 
 Decision: **live-precomputed** (LP), never live-by-elimination. When #1118 merges, its kind
-must enter `SERVERLESS_KINDS` as `omitted` with path `objects` first (the self-check forces an
-entry), then move up in this order:
+must enter `SERVERLESS_KINDS` with path `objects` (the self-check forces an entry) — at worst
+frozen as a downsampled snapshot of its opening view (the gallery-thumbnail path, §13.1), never
+omitted — then move up in this order:
 
 1. **Points overlay** (`sample_dc_id`, `x_col` / `y_col` / `cell_id_col`) is a plain data path:
    bundle it as a companion table with policy `none` (as on the branch), so lasso-to-filter works
    live even before images ship.
-2. **Store shim**: a `path → bytes` map in the manifest (`objects/` in static-dir mode), answering
+2. **Store shim**: a `path → bytes` map in the manifest — `BundleManifest.objects` now exists
+   (the protein kinds use it, served as `blob:` URLs through the `authFetch` shim), answering
    `bioimageZarrStore` range reads and `fetchBioimageStores` from the manifest — no API proxy.
 3. **Single-file**: only stores under a cap (the #1118 examples are 0.5–9.5 MB each), pruned to
-   the coarse pyramid levels at export; above the cap the tile is omitted with the size in the
-   reason.
-4. **Runtime variant**: deck.gl + viv (est. +1–1.5 MB gzip) would break the 4.2 MB budget for
-   every bundle, so it ships as an "imaging" variant the producer picks from the tier table.
+   the coarse pyramid levels at export; above the cap a downsampled snapshot of the opening
+   view ships instead, with the size in the reason.
+4. **Runtime add-on**: deck.gl + viv (est. +1–1.5 MB gzip) would break the 4.2 MB budget for
+   every bundle, so it ships as a conditional add-on, like 3Dmol.js (`serverless/addons.py`).
 5. **Open in** (napari / vizarr / BigDataViewer): hidden — it hands another application a
    server URL with credentials.
+
+### 13.6 The optional Python runtime (Pyodide) — spike and design
+
+Spike (`chromium-1243` headless, `file://`, every non-file request aborted):
+
+| question | answer |
+|---|---|
+| version | Pyodide **314.0.7** (CPython 3.14.2, emscripten 5.0.3), npm/CDN, two months old |
+| boots from `file://`, everything inlined, zero network? | **yes** — files decoded from inert `<script type="application/octet-stream">` blocks (gzip'd wasm via `DecompressionStream`), served to Pyodide from memory under a fake origin through a scoped `fetch`; `pyodide.mjs` / `pyodide.asm.mjs` imported from `blob:` URLs; `loadPackage(…, {checkIntegrity: true})` against the lock's sha256. 0 network attempts in every run |
+| polars? | **yes, 1.33.1** — but built without its Parquet reader (`PyLazyFrame.new_from_parquet` missing) and without JSON; IPC (incl. zstd / lz4) and CSV work → Python jobs get an Arrow IPC (zstd) copy of their table |
+| plotly? | not in the distribution; the PyPI wheel (6.9.0, the server's version) is pure Python — unpacked into site-packages after stripping plotly.js, the widget bundle and datasets |
+| RestrictedPython on 3.14? | yes (8.4, pure wheel); the server's executor runs **unmodified** (it needs pandas at import for its write guard, so code figures embed pandas) |
+| boot time | decode 0.36 s · Pyodide 2.3 s · packages 3.8–4.4 s · server modules import 1.1 s → **~8 s** (code-figure + group_compare + PCA set); core + numpy + polars + plotly ≈ 7.7 s; numpy only ≈ 4.8 s |
+| job timings (warm) | code figure (with_columns + px.scatter) 10k / 50k / 200k rows × 9 cols: 0.12 / 0.07 / 0.16 s · Wilcoxon 5k / 20k / 50k × 60: 0.08 / 0.28 / 0.75 s · PCA 1k / 5k / 20k × 200: 0.18 / 0.54 / 2.4 s · t-SNE 300 / 1k × 50: 3.8 / 13 s → limits 200k / 50k / 5k / 1k rows (`plan.MAX_ROWS`) |
+| UMAP? | **no** — umap-learn needs numba / llvmlite, which have no WebAssembly build: export-time coordinates, filtered points |
+
+Design: `depictio/serverless/pyodide/` — `pin.json` (version, files, sha256), `assets.py` (fetch
+once, verify, cache: `DEPICTIO_PYODIDE_CACHE`; air-gapped: `DEPICTIO_PYODIDE_DIR`),
+`modules.py` (the server code shipped: verbatim modules + functions extracted with every
+module-level name they reach; an unshippable dependency fails the build, not the bundle),
+`depictio_bundle.py` (entry points), `plan.py` (candidates, limits, sizes). Manifest:
+`python_components` (job, table, spec, `max_rows`) + an `addons` entry. Runtime:
+`static-runtime/pyodide/` boots lazily on the first tile that asks; the filter mask comes from
+the same TypeScript engine every live tile uses (links resolved), so a Python tile filters
+exactly like the others; above `max_rows`, without the add-on, or on a failed boot the
+frozen payload is served. Mode `auto` (CLI and API default; library default `off`) embeds the
+runtime exactly when a candidate survives the build; the export modal shows it as a switch with
+the measured size. Not ported in this round: complex_heatmap (its task reads a second, metadata
+collection per request and builds through plotly-complexheatmap + pandas — the next candidate,
+via the same extraction).
