@@ -1,8 +1,9 @@
-name: Build images (api / worker / viewer / cli)
+name: Build images (api / worker / viewer / cli / allinone)
 
 # Canonical image build pipeline. Builds the four per-service images
-# (see docker-images/Dockerfile.api / .worker / .viewer / .cli) on tag pushes
-# and validates them on PRs.
+# (see docker-images/Dockerfile.api / .worker / .viewer / .cli) and the
+# all-in-one image (docker-images/allinone/Dockerfile) on tag pushes and
+# validates them on PRs.
 #
 # Architectures (resolved by the `setup` job):
 #   - PRs: linux/amd64 only — fast validation, no arm64 on every commit/PR.
@@ -12,8 +13,10 @@ name: Build images (api / worker / viewer / cli)
 #     the `merge` job. So every released version runs natively on Apple Silicon.
 #
 # Image namespaces: `depictio-api`, `depictio-worker`, `depictio-viewer`,
-# `depictio-cli`. The CLI image is what lets a pipeline ingest its own
-# results without a local install (see the Nextflow completion trigger).
+# `depictio-cli`, `depictio-allinone`. The CLI image is what lets a pipeline
+# ingest its own results without a local install (see the Nextflow completion
+# trigger); the all-in-one image reopens the artifact the Nextflow module
+# publishes with one `docker run` / `apptainer run`.
 
 on:
   pull_request:
@@ -96,6 +99,9 @@ jobs:
           - { name: depictio-worker, dockerfile: docker-images/Dockerfile.worker }
           - { name: depictio-viewer, dockerfile: docker-images/Dockerfile.viewer }
           - { name: depictio-cli, dockerfile: docker-images/Dockerfile.cli }
+          # arm64 runs natively on ubuntu-24.04-arm (Neoverse, ARMv8.2-A+, which
+          # mongod needs); the Dockerfile runs `mongod --version` per platform.
+          - { name: depictio-allinone, dockerfile: docker-images/allinone/Dockerfile }
         # amd64 always; arm64 added only for stable releases (see `setup`).
         platform: ${{ fromJSON(needs.setup.outputs.platforms) }}
 
@@ -232,9 +238,10 @@ jobs:
   allinone-image-check:
     # The all-in-one image (docker-images/allinone/) runs the whole single-user
     # stack on one /data folder, to reopen the depictio/ folder the Nextflow
-    # module publishes. Not published yet: this only builds it and proves the
-    # life cycle a user goes through, on the runner's kernel (Linux 6.19+ needs
-    # GLIBC_TUNABLES for mongod, which the image sets).
+    # module publishes. The `build`/`merge` jobs publish it on releases; this
+    # job is the PR gate: it builds it locally and proves the life cycle a user
+    # goes through, on the runner's kernel (Linux 6.19+ needs GLIBC_TUNABLES
+    # for mongod, which the image sets).
     name: All-in-one image
     runs-on: ubuntu-24.04
     timeout-minutes: 60
@@ -310,7 +317,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image: [depictio-api, depictio-worker, depictio-viewer, depictio-cli]
+        image: [depictio-api, depictio-worker, depictio-viewer, depictio-cli, depictio-allinone]
 
     steps:
       - name: Determine version

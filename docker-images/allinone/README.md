@@ -1,13 +1,14 @@
-# depictio all-in-one image (draft)
+# depictio all-in-one image
 
 One image holding the whole single-user stack that `depictio local up` runs:
 MongoDB, Redis and SeaweedFS (the same conda-forge builds), the FastAPI API serving
 the built viewer, and the Celery worker. Its only state is one mounted folder, a
-**depictio local home**: the `depictio/` folder the Nextflow module writes
-(`mongo/`, `s3/`, `keys/`, `cli/`, `secrets.json`, `.depictio-local-home`, ...).
+**depictio local home**: the `<run>_depictio/` artifact the Nextflow module
+publishes under `results/depictio/` (`mongo/`, `s3/`, `keys/`, `cli/`,
+`secrets.json`, `.depictio-local-home`, ...).
 
-Use case: reopen a pipeline's `results/depictio/` and browse its dashboards with a
-single `docker run` or `apptainer run`. No compose file, no install.
+Use case: reopen a pipeline's artifact and browse its dashboards with a single
+`docker run` or `apptainer run`. No compose file, no install.
 
 | File | Role |
 | --- | --- |
@@ -15,42 +16,61 @@ single `docker run` or `apptainer run`. No compose file, no install.
 | `entrypoint.py` | PID 1's child: starts the stack on `/data`, supervises it, stops it in order |
 | `install_services.py` | build step: installs `CONDA_SPECS` from `local_stack.py` into `/opt/depictio-services`, prunes it |
 
-## Build
+## Get the image
 
-The build context is the root of a depictio checkout:
+Every depictio release publishes it, for linux/amd64 and linux/arm64, as
+`ghcr.io/depictio/depictio-allinone:<version>` (built by
+`.github/workflows/build-images.yaml`, like the api/worker/viewer/cli images).
+Use the depictio version the pipeline ran, the one in the module's `versions.yml`:
+the image must run the MongoDB series that wrote the data (see *MongoDB versions*).
+`next` points at the latest build, beta or not.
+
+```bash
+# Docker / Podman
+docker pull ghcr.io/depictio/depictio-allinone:<version>
+
+# Apptainer / Singularity (HPC): a SIF file, built once from the registry
+apptainer build depictio-allinone.sif docker://ghcr.io/depictio/depictio-allinone:<version>
+```
+
+arm64 needs ARMv8.2-A for mongod (Graviton, Apple silicon, Ampere; not a Pi 4).
+
+### Or build it from source
+
+The build context is the root of a depictio checkout, at the tag of that version:
 
 ```bash
 cd depictio                                    # the repository root
-docker build -f docker-images/allinone/Dockerfile -t depictio-allinone:1.19.3 .
+docker build -f docker-images/allinone/Dockerfile -t depictio-allinone:<version> .
 
-# both platforms (arm64 needs ARMv8.2-A for mongod: Graviton, Apple silicon; not a Pi 4)
+# both platforms
 docker buildx build --platform linux/amd64,linux/arm64 \
-  -f docker-images/allinone/Dockerfile -t ghcr.io/depictio/depictio-allinone:1.19.3 --push .
+  -f docker-images/allinone/Dockerfile -t <registry>/depictio-allinone:<version> --push .
 
-# Apptainer / Singularity image, from the local Docker daemon or a registry
-apptainer build depictio-allinone.sif docker-daemon://depictio-allinone:1.19.3
-apptainer build depictio-allinone.sif docker://ghcr.io/depictio/depictio-allinone:1.19.3
+# Apptainer, from the local Docker daemon
+apptainer build depictio-allinone.sif docker-daemon://depictio-allinone:<version>
 ```
 
-Tag the image with the depictio version the pipeline used: the image must run the
-MongoDB series that wrote the data (see *MongoDB versions*).
-
 ## Run on a pipeline result
+
+Mount the artifact, `results/depictio/<run>_depictio/`, at `/data`: not
+`results/` nor `results/depictio/` (that one holds the artifact next to
+`<run>.depictio.json`). The entrypoint names the folder to mount if you mount
+one of its parents.
 
 ```bash
 # Docker. 127.0.0.1: single-user mode has no login, whoever reaches the port is admin.
 docker run --rm --name depictio -p 127.0.0.1:8058:8058 \
-  -v "$PWD/results/depictio:/data" depictio-allinone:1.19.3
+  -v "$PWD/results/depictio/<run>_depictio:/data" \
+  ghcr.io/depictio/depictio-allinone:<version>
 # -> open http://localhost:8058/dashboards
 
 # Apptainer (HPC). --containall gives the run a private /tmp and PID namespace.
-apptainer run --containall --bind "$PWD/results/depictio:/data" depictio-allinone.sif
+apptainer run --containall --bind "$PWD/results/depictio/<run>_depictio:/data" \
+  depictio-allinone.sif
 # -> on the node: http://127.0.0.1:8058/dashboards
 #    from a laptop: ssh -L 8058:127.0.0.1:8058 <node>, then http://localhost:8058/dashboards
 ```
-
-Mount the `depictio/` folder itself, not `results/`: the entrypoint says so if you
-mount its parent.
 
 What the user sees (`docker logs`, or the terminal):
 
@@ -62,6 +82,10 @@ What the user sees (`docker logs`, or the terminal):
 [depictio-allinone] Ready: http://localhost:8058/dashboards  (API on 0.0.0.0:8058)
 [depictio-allinone] Stop with Ctrl-C or `docker stop -t 60 <container>`
 ```
+
+The MongoDB line is the conda-forge `mongod` the image and `depictio local up`
+run, 8.0.23 (the only 8.0 build on conda-forge), not the `mongo:8.0.34` image of
+the compose stack.
 
 Startup takes ~10-60 s (the API's own startup dominates). The service logs go to
 `/data/logs/{mongo,redis,s3,api,worker}.log`, as with `depictio local up`; on a
@@ -82,7 +106,7 @@ docker exec -it -u "$(id -u):$(id -g)" depictio \
 ```
 
 Any command other than `serve`/`health` is exec'ed, e.g.
-`docker run --rm depictio-allinone depictio --help`.
+`docker run --rm ghcr.io/depictio/depictio-allinone:<version> depictio --help`.
 
 ### Settings (environment variables)
 
@@ -234,7 +258,14 @@ only in shipped dashboards. This Dockerfile copies both.
 
 ## What was validated, and what was not
 
-No Docker or Podman command was run. The entrypoint was run natively with the
+CI (`allinone-image-check` in `build-images.yaml`, on every PR touching this
+folder) builds the image for linux/amd64 and runs it on an empty folder, then
+reopens it: `HEALTHCHECK` healthy, `/dashboards` served through `-p`, a
+`docker stop -t 60` that exits 0 and leaves an empty `mongod.lock`, and every
+file under `/data` owned by the runner's user. Releases build linux/arm64
+natively and check that `mongod`, `redis-server` and `weed` start on it.
+
+Before that image check existed, the entrypoint was run natively with the
 repository's venv, in a private mount namespace laid out as the image lays itself
 out (a helper script, not committed): home bind-mounted at a fixed path, services prefix and
 the whole depictio checkout **read-only**, network and PIDs shared with the host.
@@ -265,9 +296,7 @@ Validated:
   shellcheck 0.10 clean, ruff check + format clean.
 
 Not validated:
-- any `docker build`: the viewer stage, `uv sync` in the image, the COPY paths,
-  the final size; `tini`; `HEALTHCHECK`; real `-p` port publishing; `docker stop`;
 - Apptainer itself (`--containall`, read-only SIF, env passing, Ctrl-C under `srun`);
-- arm64; a Linux >= 6.19 kernel; homes on NFS/Lustre (`flock`, mongod on network FS);
+- running the stack on arm64 (the build only starts each binary); a Linux >= 6.19 kernel; homes on NFS/Lustre (`flock`, mongod on network FS);
 - a home produced by the actual Nextflow module (an equivalent `local up` home was used);
 - a MongoDB series mismatch (only the matching case and the warning's code path).

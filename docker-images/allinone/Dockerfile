@@ -1,15 +1,17 @@
 # syntax=docker/dockerfile:1.7
 # -----------------------------
-# Depictio all-in-one image (DRAFT)
+# Depictio all-in-one image
 # -----------------------------
 # The whole single-user stack of `depictio local up` in one image: MongoDB, Redis
 # and SeaweedFS (conda-forge builds, the same ones `local up` downloads), the
 # FastAPI API serving the built viewer, and the Celery worker. Its only state is
 # the local home mounted at /data, e.g. the depictio/ folder the Nextflow module
-# writes:
+# writes (results/depictio/<run>_depictio/). Published as
+# ghcr.io/depictio/depictio-allinone:<version> by .github/workflows/build-images.yaml:
 #
-#   docker run --rm -p 8058:8058 -v "$PWD/results/depictio:/data" depictio-allinone
-#   apptainer run --containall --bind "$PWD/results/depictio:/data" depictio-allinone.sif
+#   docker run --rm -p 127.0.0.1:8058:8058 -v "$PWD/results/depictio/<run>_depictio:/data" \
+#     ghcr.io/depictio/depictio-allinone:<version>
+#   apptainer run --containall --bind "$PWD/results/depictio/<run>_depictio:/data" depictio-allinone.sif
 #
 # Build from the root of a depictio checkout (see README.md):
 #
