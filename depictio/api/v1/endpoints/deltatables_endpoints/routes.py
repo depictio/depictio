@@ -1740,6 +1740,7 @@ async def get_shape(
 async def get_data_parquet(
     data_collection_id: PyObjectId,
     columns: str | None = None,
+    version: int | None = None,
     current_user: User = Depends(get_user_or_anonymous),
 ):
     """The whole table as Parquet — what a notebook reads.
@@ -1749,20 +1750,31 @@ async def get_data_parquet(
     notebook applies the filters itself, in code, so the reader can see them.
     Refused with 413 above ``settings.notebook_export.max_rows``: a notebook
     must not become a way to pull an arbitrarily large table through the API.
+
+    ``version`` reads that Delta commit (an export taken under a dashboard
+    version's data pins). The table is scanned directly at that commit: never
+    from a cache or the ``USE_LOCAL_FILES`` mirror, which only hold the newest
+    one, so a pinned read can never be answered with current data. A commit
+    the table does not have is a 404, never a silent fall back to the latest.
     """
     if not settings.notebook_export.enabled:
         raise HTTPException(status_code=404, detail="Notebook export is disabled.")
+    if version is not None and (isinstance(version, bool) or version < 0):
+        raise HTTPException(status_code=400, detail="version must be a Delta commit number >= 0.")
     delta_table_location = _resolve_delta_location(data_collection_id, current_user)
     wanted = [c.strip() for c in (columns or "").split(",") if c.strip()]
 
     def _build() -> tuple[bytes, int, int]:
         try:
-            lf = pl.scan_delta(delta_table_location, storage_options=polars_s3_config)
+            lf = pl.scan_delta(
+                delta_table_location, version=version, storage_options=polars_s3_config
+            )
             schema_names = list(lf.collect_schema().names())
         except Exception as e:
+            at = f" at version {version}" if version is not None else ""
             raise HTTPException(
                 status_code=404,
-                detail=f"Data collection {data_collection_id} has no readable Delta table: {e}",
+                detail=f"Data collection {data_collection_id} has no readable Delta table{at}: {e}",
             ) from e
         if wanted:
             unknown = [c for c in wanted if c not in schema_names]
@@ -1796,6 +1808,7 @@ async def get_data_parquet(
             "Content-Disposition": f'attachment; filename="{data_collection_id}.parquet"',
             "X-Depictio-Rows": str(n_rows),
             "X-Depictio-Columns": str(n_cols),
+            **({"X-Depictio-Delta-Version": str(version)} if version is not None else {}),
         },
     )
 

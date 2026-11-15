@@ -20,9 +20,9 @@ test fails when the model drifts from the snapshot.
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StrictInt
 
 ANALYSIS_STATE_VERSION = 1
 
@@ -107,6 +107,39 @@ class SplitPanel(BaseModel):
     constraints: list[AnalysisFilter] = Field(default_factory=list)
 
 
+class AnalysisPins(BaseModel):
+    """Which data, and which definitions, the state was looking at.
+
+    The viewer's time travel, in the wire shape every render endpoint takes
+    (``dataVersionBody`` in ``dataVersions.tsx``): ``as_of_version`` reads each
+    collection at the commit a stored dashboard version stamped,
+    ``data_versions`` overrides one collection (a commit, or ``None`` to stay
+    live), and ``definition_version`` draws each component as that version
+    defined it. Both halves travel together: pinning only the data would draw
+    a past version's numbers through today's chart definitions. Empty for a
+    live view, which keeps every request byte-identical to an unpinned one.
+    """
+
+    as_of_version: str | None = None
+    data_versions: dict[str, Annotated[StrictInt, Field(ge=0)] | None] = Field(default_factory=dict)
+    definition_version: str | None = None
+
+    def body(self) -> dict[str, Any]:
+        """The fields to merge into a render request body (empty when live)."""
+        out: dict[str, Any] = {}
+        if self.as_of_version:
+            out["as_of_version"] = self.as_of_version
+        if self.data_versions:
+            out["data_versions"] = dict(self.data_versions)
+        if self.definition_version:
+            out["definition_version"] = self.definition_version
+        return out
+
+    @property
+    def active(self) -> bool:
+        return bool(self.body())
+
+
 class AnalysisContext(BaseModel):
     """Where the state was captured."""
 
@@ -128,6 +161,7 @@ class AnalysisState(BaseModel):
     compare_in_cards: bool = False
     funnel: FunnelState = Field(default_factory=FunnelState)
     split_panels: list[SplitPanel] = Field(default_factory=list)
+    pins: AnalysisPins = Field(default_factory=AnalysisPins)
     context: AnalysisContext
 
     def filters_as_payload(self) -> list[dict[str, Any]]:

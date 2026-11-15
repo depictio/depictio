@@ -581,6 +581,9 @@ class DCPlan:
     dtypes: dict[str, pl.DataType] | None = None  # None = schema unknown at export
     initial_rows: int | None = None
     n_cols: int | None = None
+    # The Delta commit the exported state pins this collection to; None reads
+    # current data.
+    version: int | None = None
 
     @property
     def columns(self) -> set[str] | None:
@@ -1008,6 +1011,11 @@ def card_row(cards):
         )
         state = f"v{plan.state.version} · {len(plan.stages)} filter"
         state += "" if len(plan.stages) == 1 else "s"
+        pins = plan.state.pins
+        if pins.as_of_version or pins.definition_version:
+            state += f"\nas of dashboard version {pins.as_of_version or pins.definition_version}"
+        elif pins.data_versions:
+            state += f"\n{len(pins.data_versions)} collection(s) pinned to a past commit"
         return [
             ("Server", server),
             ("Project", "\n".join(x for x in (project.get("name"), project.get("_id")) if x)),
@@ -1181,10 +1189,13 @@ def card_row(cards):
                 if dc.n_cols is not None:
                     shape += f", {dc.n_cols} columns"
                 shape += " at export time"
+            if dc.version is not None:
+                shape += f", read at Delta commit {dc.version} as the exported version pins it"
+            pin = f", version={dc.version}" if dc.version is not None else ""
             cells.append(
                 Cell(
                     _comment(f'Data collection "{dc.tag}"{shape}')
-                    + f"\n{self.df_names[dc.dc_id]} = client.data({dc.dc_id!r})"
+                    + f"\n{self.df_names[dc.dc_id]} = client.data({dc.dc_id!r}{pin})"
                 )
             )
         return cells

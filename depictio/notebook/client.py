@@ -16,7 +16,7 @@ from typing import Any
 import httpx
 import polars as pl
 
-from .components import DepictioComponent, component_for
+from .components import DepictioComponent, component_for, pin_body
 
 API_PREFIX = "/depictio/api/v1"
 DEFAULT_CLI_CONFIG = "~/.depictio/CLI.yaml"
@@ -180,16 +180,27 @@ class DepictioClient:
         return DepictioClientError(504, f"job {job_id} did not finish within {max_wait:.0f}s")
 
     # ------------------------------------------------------------------ data
-    def data(self, dc_id: str, columns: list[str] | None = None) -> pl.DataFrame:
+    def data(
+        self, dc_id: str, columns: list[str] | None = None, *, version: int | None = None
+    ) -> pl.DataFrame:
         """A data collection's table, unfiltered.
 
-        Reads ``DEPICTIO_DATA_DIR/<dc_id>.parquet`` when that variable is set
-        (offline mode), otherwise the API's Parquet endpoint.
+        ``version`` reads that Delta commit instead of the current table (what
+        an export taken under a dashboard version pins). Reads
+        ``DEPICTIO_DATA_DIR/<dc_id>.parquet`` when that variable is set
+        (offline mode; ``<dc_id>@v<version>.parquet`` first for a pinned read),
+        otherwise the API's Parquet endpoint.
         """
         if self.data_dir:
-            df = pl.read_parquet(Path(self.data_dir) / f"{dc_id}.parquet")
+            folder = Path(self.data_dir)
+            path = folder / f"{dc_id}.parquet"
+            if version is not None and (folder / f"{dc_id}@v{version}.parquet").exists():
+                path = folder / f"{dc_id}@v{version}.parquet"
+            df = pl.read_parquet(path)
             return df.select(columns) if columns else df
-        params = {"columns": ",".join(columns)} if columns else {}
+        params: dict[str, Any] = {"columns": ",".join(columns)} if columns else {}
+        if version is not None:
+            params["version"] = int(version)
         return pl.read_parquet(io.BytesIO(self.get_bytes(f"/deltatables/data/{dc_id}", **params)))
 
     def specs(self, dc_id: str) -> list[dict[str, Any]]:
@@ -271,8 +282,19 @@ class DepictioClient:
         groups: list[dict[str, Any]] | None = None,
         stage_order: list[str] | None = None,
         theme: str = "light",
+        as_of_version: str | None = None,
+        data_versions: dict[str, int | None] | None = None,
     ) -> dict[str, Any]:
-        """An ``AnalysisState`` payload, the wire shape the server expects."""
+        """An ``AnalysisState`` payload, the wire shape the server expects.
+
+        ``as_of_version`` reads the data and the definitions a stored dashboard
+        version held (both halves, as the viewer's preview does);
+        ``data_versions`` pins single collections.
+        """
+        pins: dict[str, Any] = {"data_versions": dict(data_versions or {})}
+        if as_of_version:
+            pins["as_of_version"] = as_of_version
+            pins["definition_version"] = as_of_version
         return {
             "version": 1,
             "filters": list(filters or []),
@@ -284,6 +306,7 @@ class DepictioClient:
             "compare_in_cards": False,
             "funnel": {"enabled": True, "stage_order": list(stage_order or [])},
             "split_panels": [],
+            "pins": pins,
             "context": {"dashboard_id": dashboard_id, "theme": theme},
         }
 
@@ -306,7 +329,11 @@ class DepictioClient:
         try:
             payload = self.post(
                 f"/dashboards/bulk_compute_cards/{dashboard_id}",
-                {"filters": list(state.get("filters") or []), "component_ids": [index]},
+                {
+                    "filters": list(state.get("filters") or []),
+                    "component_ids": [index],
+                    **pin_body(state),
+                },
             )
             got = (payload.get("values") or {}).get(index)
             if isinstance(got, dict):

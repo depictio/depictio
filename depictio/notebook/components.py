@@ -315,6 +315,19 @@ def filters_to_metadata(filters: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
+def pin_body(state: dict[str, Any]) -> dict[str, Any]:
+    """``AnalysisState.pins`` as the keys a render body takes (``dataVersionBody``)."""
+    pins = state.get("pins") or {}
+    out: dict[str, Any] = {}
+    if pins.get("as_of_version"):
+        out["as_of_version"] = pins["as_of_version"]
+    if pins.get("data_versions"):
+        out["data_versions"] = dict(pins["data_versions"])
+    if pins.get("definition_version"):
+        out["definition_version"] = pins["definition_version"]
+    return out
+
+
 def _render_groups(state: dict[str, Any]) -> list[dict[str, Any]]:
     """The saved groups as the render endpoints take them (``groupsRenderPayload``)."""
     out = []
@@ -421,6 +434,15 @@ class DepictioComponent:
     @property
     def filters(self) -> list[dict[str, Any]]:
         return list(self.state.get("filters") or [])
+
+    @property
+    def pins(self) -> dict[str, Any]:
+        """The state's time travel as render-body keys; empty for a live view.
+
+        Both halves together, as every render needs them: the data pins
+        (``as_of_version`` / ``data_versions``) and ``definition_version``.
+        """
+        return pin_body(self.state)
 
     def __repr__(self) -> str:
         return f"<DepictioComponent {self.component_type} {self.title!r} ({self.index})>"
@@ -590,6 +612,7 @@ class FigureComponent(DepictioComponent):
                 "theme": self.theme,
                 "full_load": False,
                 **figure_group_body(self.state, self._category_colors()),
+                **self.pins,
             },
         )
         return _figure_from_dict(payload["figure"])
@@ -599,14 +622,14 @@ class MapComponent(FigureComponent):
     def _fetch_figure(self):
         payload = self.client.post(
             f"/dashboards/render_map/{self.dashboard_id}/{self.index}",
-            {"filters": self.filters, "theme": self.theme},
+            {"filters": self.filters, "theme": self.theme, **self.pins},
         )
         return _figure_from_dict(payload["figure"])
 
     def _fetch_data(self) -> pl.DataFrame:
         payload = self.client.post(
             f"/dashboards/map_data/{self.dashboard_id}/{self.index}",
-            {"filters": self.filters},
+            {"filters": self.filters, **self.pins},
         )
         return pl.DataFrame(payload.get("rows") or {})
 
@@ -619,7 +642,7 @@ class MultiQCComponent(FigureComponent):
         while True:
             resp = self.client.post(
                 f"/dashboards/render_multiqc/{self.dashboard_id}/{self.index}",
-                {"filters": self.filters, "theme": self.theme},
+                {"filters": self.filters, "theme": self.theme, **self.pins},
                 raw=True,
             )
             if resp.status_code == 202:
@@ -636,7 +659,7 @@ class MultiQCGeneralStatsComponent(DepictioComponent):
     def _payload(self) -> dict[str, Any]:
         return self.client.post(
             f"/dashboards/render_multiqc_general_stats/{self.dashboard_id}/{self.index}",
-            {"filters": self.filters, "theme": self.theme},
+            {"filters": self.filters, "theme": self.theme, **self.pins},
         )
 
     def _fetch_data(self) -> pl.DataFrame:
@@ -782,6 +805,7 @@ class TableComponent(DepictioComponent):
                     "limit": min(limit, 500),
                     "sort_by": sort_by,
                     "sort_dir": sort_dir,
+                    **self.pins,
                 },
             )
             rows = payload.get("rows") or []
@@ -808,6 +832,7 @@ class CardComponent(DepictioComponent):
                 "component_ids": [self.index],
                 "include_icons": True,
                 **card_group_body(self.state),
+                **self.pins,
             },
         )
         return {
@@ -1160,7 +1185,7 @@ class ImageComponent(DepictioComponent):
     def _fetch_data(self) -> pl.DataFrame:
         payload = self.client.post(
             f"/dashboards/render_image_paths/{self.dashboard_id}/{self.index}",
-            {"filters": self.filters, "max": self.max_images},
+            {"filters": self.filters, "max": self.max_images, **self.pins},
         )
         self._paths = list(payload.get("paths") or [])
         self._base = str((self.meta.get("dc_config") or {}).get("s3_base_folder") or "")
@@ -1210,7 +1235,7 @@ class JBrowseComponent(DepictioComponent):
     def _fetch_data(self) -> dict[str, Any]:
         return self.client.post(
             f"/dashboards/render_jbrowse/{self.dashboard_id}/{self.index}",
-            {"filters": self.filters},
+            {"filters": self.filters, **self.pins},
         )
 
     @property

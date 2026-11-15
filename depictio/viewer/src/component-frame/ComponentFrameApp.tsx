@@ -25,6 +25,7 @@ import { Alert, Box, Center, Loader, useMantineColorScheme } from '@mantine/core
 import {
   ComponentRenderer,
   DashboardLoadingProvider,
+  DataVersionProvider,
   TRACKED_LOAD_TYPES,
   bulkComputeCards,
   fetchDashboard,
@@ -46,6 +47,30 @@ interface EmbedState {
   show_other?: boolean;
   compare_in_cards?: boolean;
   show_overall?: boolean;
+  /** Time travel, as the render bodies spell it (`AnalysisState.pins`). */
+  pins?: {
+    as_of_version?: string | null;
+    data_versions?: Record<string, number | null>;
+    definition_version?: string | null;
+  };
+}
+
+/** The pins as the renderers' context reads them, and as a request body. */
+function pinsFromState(state: EmbedState) {
+  const p = state.pins ?? {};
+  const pins = p.data_versions && Object.keys(p.data_versions).length ? p.data_versions : undefined;
+  const body: Record<string, unknown> = {};
+  if (p.as_of_version) body.as_of_version = p.as_of_version;
+  if (pins) body.data_versions = pins;
+  if (p.definition_version) body.definition_version = p.definition_version;
+  return {
+    context: {
+      asOfVersionId: p.as_of_version ?? null,
+      pins,
+      definitionVersionId: p.definition_version ?? null,
+    },
+    body,
+  };
 }
 
 export function parseEmbedRoute(pathname: string): { dashboardId: string; componentId: string } | null {
@@ -139,6 +164,7 @@ const ComponentFrameApp: React.FC = () => {
 
   const filters = useMemo(() => state.filters ?? [], [state]);
   const groupRender = useMemo(() => groupRenderFromState(state), [state]);
+  const versions = useMemo(() => pinsFromState(state), [state]);
 
   useEffect(() => {
     if (!route) {
@@ -158,12 +184,19 @@ const ComponentFrameApp: React.FC = () => {
         }
         setDashboard(d);
         if (meta.component_type === 'card') {
-          const res = await bulkComputeCards(route.dashboardId, filters, [String(meta.index)], {
-            groups: groupRender?.groups,
-            compareGroups: Boolean(state.compare_in_cards),
-            showOther: state.show_other,
-            showOverall: state.show_overall,
-          });
+          const res = await bulkComputeCards(
+            route.dashboardId,
+            filters,
+            [String(meta.index)],
+            {
+              groups: groupRender?.groups,
+              compareGroups: Boolean(state.compare_in_cards),
+              showOther: state.show_other,
+              showOverall: state.show_overall,
+            },
+            undefined,
+            versions.body,
+          );
           if (cancelled) return;
           setCardValue(res.values?.[String(meta.index)]);
           setCardSecondary(res.secondary_values?.[String(meta.index)]);
@@ -219,6 +252,7 @@ const ComponentFrameApp: React.FC = () => {
         </Center>
       )}
       {mounted && meta && route && (
+        <DataVersionProvider {...versions.context} dashboardId={route.dashboardId}>
         <DashboardLoadingProvider>
           <RenderStatusProbe meta={meta} onStatus={onRenderStatus} />
           <Box className="react-grid-item" style={{ height: '100%', width: '100%' }}>
@@ -235,6 +269,7 @@ const ComponentFrameApp: React.FC = () => {
             </FrameErrorBoundary>
           </Box>
         </DashboardLoadingProvider>
+        </DataVersionProvider>
       )}
     </Box>
   );

@@ -121,3 +121,23 @@ def test_export_request_carries_only_the_state():
     )
     assert req.state.context.dashboard_id == "abc"
     assert "format" not in NotebookExportRequest.model_fields
+
+
+def test_pins_are_empty_for_a_live_view_and_strict_about_commits():
+    import pytest
+    from pydantic import ValidationError
+
+    state = AnalysisState.model_validate({"context": {"dashboard_id": "abc"}})
+    assert state.pins.body() == {} and not state.pins.active
+    pinned = AnalysisState.model_validate(
+        {
+            "context": {"dashboard_id": "abc"},
+            "pins": {"as_of_version": "v1", "data_versions": {"dc": 3, "other": None}},
+        }
+    )
+    assert pinned.pins.body() == {"as_of_version": "v1", "data_versions": {"dc": 3, "other": None}}
+    for bad in (True, -1, "3"):
+        with pytest.raises(ValidationError):
+            AnalysisState.model_validate(
+                {"context": {"dashboard_id": "abc"}, "pins": {"data_versions": {"dc": bad}}}
+            )

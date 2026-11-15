@@ -437,6 +437,37 @@ def test_old_format_field_still_gets_the_quarto_document(patched_env):
 # ── The rendered report ───────────────────────────────────────────────────────
 
 
+def _pinned_state(pins):
+    return AnalysisState.model_validate(
+        {
+            **_state(FILTERS).model_dump(mode="json"),
+            "pins": pins,
+        }
+    )
+
+
+def test_a_pinned_export_reads_the_pinned_commit_and_says_what_stays_live(patched_env):
+    source = _export(_pinned_state({"data_versions": {DC1: 2}})).body.decode()
+    assert f"client.data({DC1!r}, version=2)" in source
+    assert "read at Delta commit 2" in source
+    pre = _preflight(_pinned_state({"data_versions": {DC1: 2}}))
+    assert any("not versioned on the server" in w for w in pre.warnings)
+    # The live export is unchanged.
+    assert "version=" not in _export(_state(FILTERS)).body.decode().split("client.data(")[1][:60]
+
+
+def test_a_version_that_no_longer_exists_is_a_400(patched_env):
+    store = "depictio.api.v1.endpoints.dashboards_endpoints.data_versions.version_store"
+    with (
+        patch(f"{store}.get_version", lambda vid: None),
+        patch(f"{store}.get_version_tab", lambda vid, tab: None),
+    ):
+        with pytest.raises(HTTPException) as exc:
+            _export(_pinned_state({"as_of_version": "gone", "definition_version": "gone"}))
+    assert exc.value.status_code == 400
+    assert "no longer exists" in str(exc.value.detail)
+
+
 class _RenderUser:
     email = "t.weber@example.org"
     id = ObjectId()
@@ -533,3 +564,38 @@ def test_a_non_owner_cannot_render_author_written_code(patched_env):
             _render(_state(FILTERS))
     assert exc.value.status_code == 403
     assert "code-mode" in exc.value.detail
+
+
+def test_a_definition_version_exports_the_components_as_that_version_defined_them():
+    live = {
+        "dashboard_id": DASHBOARD_ID,
+        "stored_metadata": [
+            {
+                "index": "c1",
+                "component_type": "card",
+                "aggregation": "mean",
+                "dc_id": DC1,
+                "dc_config": {"live": True},
+            },
+            {"index": "c2", "component_type": "card", "aggregation": "sum", "dc_id": DC1},
+        ],
+    }
+    stored = {
+        "stored_metadata": [
+            {
+                "index": "c1",
+                "component_type": "card",
+                "aggregation": "median",
+                "dc_id": DC1,
+                "dc_config": {"live": False},
+            },
+            {"index": "c2", "component_type": "card", "aggregation": "sum", "dc_id": "other"},
+        ]
+    }
+    warnings: list[str] = []
+    with patch.object(nbx.routes, "_definition_tab", lambda tab, vid: stored):
+        (tab,) = nbx._overlay_definitions([live], "v1", {DC1}, warnings)
+    (card,) = tab["stored_metadata"]
+    assert card["aggregation"] == "median"  # the version's definition
+    assert card["dc_config"] == {"live": True}  # the live identity fields
+    assert warnings and "another collection" in warnings[0]

@@ -162,5 +162,31 @@ describe('buildAnalysisState', () => {
     validate(state, schema, schema, 'state', errors);
     expect(errors).toEqual([]);
     expect(state.context.family_id).toBeNull();
+    expect(state.pins).toEqual({ data_versions: {} });
+  });
+
+  it('carries a version preview as both halves of the pin', () => {
+    const state = buildAnalysisState({
+      filters: [],
+      groups: [],
+      colorBy: { kind: 'none' },
+      displayMode: 'color',
+      showOther: true,
+      showOverall: true,
+      compareInCards: false,
+      funnel: { enabled: true, order: [] },
+      splitPanels: [],
+      dataVersions: { asOfVersionId: 'v2', pins: { dc1: 3, dc2: null }, definitionVersionId: 'v2' },
+      dashboardId: 'dash',
+      theme: 'light',
+    });
+    const errors: string[] = [];
+    validate(state, schema, schema, 'state', errors);
+    expect(errors).toEqual([]);
+    expect(state.pins).toEqual({
+      as_of_version: 'v2',
+      data_versions: { dc1: 3, dc2: null },
+      definition_version: 'v2',
+    });
   });
 });

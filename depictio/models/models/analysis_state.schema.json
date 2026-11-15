@@ -239,6 +239,52 @@
       "title": "AnalysisGroup",
       "type": "object"
     },
+    "AnalysisPins": {
+      "description": "Which data, and which definitions, the state was looking at.\n\nThe viewer's time travel, in the wire shape every render endpoint takes\n(``dataVersionBody`` in ``dataVersions.tsx``): ``as_of_version`` reads each\ncollection at the commit a stored dashboard version stamped,\n``data_versions`` overrides one collection (a commit, or ``None`` to stay\nlive), and ``definition_version`` draws each component as that version\ndefined it. Both halves travel together: pinning only the data would draw\na past version's numbers through today's chart definitions. Empty for a\nlive view, which keeps every request byte-identical to an unpinned one.",
+      "properties": {
+        "as_of_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "As Of Version"
+        },
+        "data_versions": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Data Versions",
+          "type": "object"
+        },
+        "definition_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Definition Version"
+        }
+      },
+      "title": "AnalysisPins",
+      "type": "object"
+    },
     "ColorBy": {
       "description": "The dashboard-global \"Colour by\" override.",
       "properties": {
@@ -359,6 +405,9 @@
       },
       "title": "Groups",
       "type": "array"
+    },
+    "pins": {
+      "$ref": "#/$defs/AnalysisPins"
     },
     "show_other": {
       "default": true,

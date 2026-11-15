@@ -10,6 +10,7 @@
  * validates what this builder produces against it.
  */
 import type { InteractiveFilter } from './api';
+import type { DataVersionState } from './dataVersions';
 import type { ColorByState, GroupingDisplay, SelectionGroup } from './selectionGroups';
 import type { PanelSpec } from './splitPanels';
 
@@ -60,6 +61,13 @@ export interface AnalysisSplitPanel {
   constraints: AnalysisFilter[];
 }
 
+/** Time travel, in the render bodies' own keys (`dataVersionBody`). */
+export interface AnalysisPins {
+  as_of_version?: string | null;
+  data_versions: Record<string, number | null>;
+  definition_version?: string | null;
+}
+
 export interface AnalysisContext {
   dashboard_id: string;
   family_id?: string | null;
@@ -77,6 +85,7 @@ export interface AnalysisState {
   compare_in_cards: boolean;
   funnel: AnalysisFunnel;
   split_panels: AnalysisSplitPanel[];
+  pins: AnalysisPins;
   context: AnalysisContext;
 }
 
@@ -129,9 +138,19 @@ export interface BuildAnalysisStateInput {
   compareInCards: boolean;
   funnel: { enabled: boolean; order: string[] };
   splitPanels: PanelSpec[];
+  /** What the view reads from: a `?version=` preview's data pins and definition
+   *  version. Omitted (or empty) for the live dashboard. */
+  dataVersions?: DataVersionState | null;
   dashboardId: string;
   familyId?: string | null;
   theme: 'light' | 'dark';
+}
+
+export function toAnalysisPins(v: DataVersionState | null | undefined): AnalysisPins {
+  const out: AnalysisPins = { data_versions: { ...(v?.pins ?? {}) } };
+  if (v?.asOfVersionId) out.as_of_version = v.asOfVersionId;
+  if (v?.definitionVersionId) out.definition_version = v.definitionVersionId;
+  return out;
 }
 
 export function buildAnalysisState(input: BuildAnalysisStateInput): AnalysisState {
@@ -150,6 +169,7 @@ export function buildAnalysisState(input: BuildAnalysisStateInput): AnalysisStat
       color: p.color ?? null,
       constraints: p.constraints.map(toAnalysisFilter),
     })),
+    pins: toAnalysisPins(input.dataVersions),
     context: {
       dashboard_id: input.dashboardId,
       family_id: input.familyId ?? null,

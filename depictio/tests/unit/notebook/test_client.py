@@ -424,6 +424,22 @@ def test_render_calls_carry_the_grouping_the_viewer_sends(client, api):
     assert set(plain) == {"filters", "theme", "full_load"}
 
 
+def test_every_render_call_carries_both_halves_of_a_pin(client, api):
+    state = client.state(DASH, as_of_version="v7", data_versions={DC: 2})
+    client.component(DASH, "fig-1", state=state).figure
+    client.component(DASH, "Raw data", state=state).data
+    client.component(DASH, "card-1", state=state).data
+    for marker in ("/render_figure/", "/render_table/", "/bulk_compute_cards/"):
+        body = next(b for m, p, b in api.calls if marker in p)
+        assert body["as_of_version"] == "v7" and body["definition_version"] == "v7", marker
+        assert body["data_versions"] == {DC: 2}, marker
+
+
+def test_data_reads_a_pinned_commit(client, api):
+    client.data(DC, version=3)
+    assert any("/deltatables/data/" in p for m, p, b in api.calls)
+
+
 def test_notebook_and_preflight(client, tmp_path):
     assert client.notebook(DASH).startswith("---\ntitle: Penguins")
     out = tmp_path / "penguins.qmd"

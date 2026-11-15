@@ -336,6 +336,7 @@ def _export_text_values(
     filters: list[dict[str, Any]],
     current_user: User,
     access_token: str | None,
+    pins: dict[str, Any] | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Every live-value text tile's values under the exported filters, by its index.
 
@@ -344,6 +345,7 @@ def _export_text_values(
     leaves its tiles printing the values the document computes when it runs.
     """
     out: dict[str, dict[str, Any]] = {}
+    pins = pins or {}
     for tab in tabs:
         texts = [
             str(m.get("index"))
@@ -357,7 +359,7 @@ def _export_text_values(
         try:
             payload = routes.bulk_compute_cards(
                 dashboard_id=PyObjectId(str(tab.get("dashboard_id"))),
-                request={"filters": filters, "component_ids": texts},
+                request={"filters": filters, "component_ids": texts, **pins},
                 current_user=current_user,
                 access_token=access_token,
             )
@@ -371,6 +373,83 @@ def _export_text_values(
             if isinstance(got, dict):
                 out[idx] = got
     return out
+
+
+def _overlay_definitions(
+    tabs: list[dict[str, Any]], version_id: str, project_dc_ids: set[str], warnings: list[str]
+) -> list[dict[str, Any]]:
+    """The family as ``version_id`` defined its components.
+
+    The other half of a pinned export: each component is taken from the
+    version (``_definition_tab``, which 400s for a version of another family
+    or one that no longer exists), with the live identity fields kept
+    (``_LIVE_IDENTITY_FIELDS``) when it still reads the same collection, as
+    ``_component_from_version`` does for a render. A component whose
+    collection changed since cannot be drawn from the version (a render
+    answers 409), so it is left out with a warning; one deleted since is kept
+    when its collection still belongs to the project.
+    """
+    out = []
+    for tab in tabs:
+        stored_tab = routes._definition_tab(tab, version_id)
+        if stored_tab is None:
+            out.append(tab)
+            continue
+        live = {str(m.get("index")): m for m in tab.get("stored_metadata") or []}
+        merged: list[dict[str, Any]] = []
+        for m in convert_objectid_to_str(stored_tab.get("stored_metadata") or []):
+            idx = str(m.get("index"))
+            current = live.get(idx)
+            if current is not None:
+                if str(current.get("dc_id") or "") != str(m.get("dc_id") or ""):
+                    warnings.append(
+                        f"{m.get('title') or idx} reads another collection than in version "
+                        f"{version_id}, so it is left out of this export."
+                    )
+                    continue
+                m = {
+                    **m,
+                    **{k: current[k] for k in routes._LIVE_IDENTITY_FIELDS if k in current},
+                }
+            elif m.get("dc_id") and str(m.get("dc_id")) not in project_dc_ids:
+                continue
+            merged.append(m)
+        out.append({**tab, "stored_metadata": merged})
+    return out
+
+
+def _resolve_export_pins(
+    state: AnalysisState, main_tab: dict[str, Any], dc_ids: list[str], warnings: list[str]
+) -> dict[str, int]:
+    """The Delta commit each exported collection is read at, from the state's pins."""
+    if not state.pins.active:
+        return {}
+    from depictio.api.v1.endpoints.dashboards_endpoints.data_versions import (
+        resolve_data_versions,
+    )
+
+    try:
+        resolved = resolve_data_versions(state.pins.body(), dashboard=main_tab, referenced=dc_ids)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    live = [d for d in dc_ids if resolved.for_dc(d) is None]
+    if resolved.pins:
+        what = (
+            f"dashboard version {state.pins.as_of_version}"
+            if state.pins.as_of_version
+            else "the pinned commits"
+        )
+        warnings.append(
+            f"This export reads its data as {what} held it ({len(resolved.pins)} collection(s) "
+            "pinned). MultiQC reports and advanced visualisations are not versioned on the "
+            "server: those tiles show live data."
+            + (
+                f" {len(live)} collection(s) have no stamp in that version and read live data."
+                if live
+                else ""
+            )
+        )
+    return dict(resolved.pins)
 
 
 def build_export_plan(
@@ -391,13 +470,15 @@ def build_export_plan(
         project_doc = None
     project = convert_objectid_to_str(project_doc) if project_doc else None
     dc_tags = _dc_tags(project)
+    warnings: list[str] = []
+    if state.pins.definition_version:
+        tabs = _overlay_definitions(tabs, state.pins.definition_version, set(dc_tags), warnings)
 
     family_meta: list[dict[str, Any]] = []
     for tab in tabs:
         family_meta.extend(m for m in (tab.get("stored_metadata") or []) if isinstance(m, dict))
     family_doc = {"stored_metadata": family_meta}
 
-    warnings: list[str] = []
     active = [f for f in state.filters_as_payload() if routes._funnel_filter_is_active(f)]
     active = _order_active_filters(active, state.funnel.stage_order)
     if len(active) > routes.FUNNEL_MAX_STAGES:
@@ -420,12 +501,18 @@ def build_export_plan(
         wf_by_dc[dc_id] = str(m.get("wf_id")) if m.get("wf_id") else None
         stage_dc_ids.append(dc_id)
 
-    counted = routes._funnel_stage_counts(
-        family_doc, project_id, access_token, active, stage_dc_ids
-    )
-    # ``None`` only answers column mode (a stage column the frame lacks), which
-    # the export never asks for.
-    initial, stage_rows, _ = counted if counted is not None else ({}, [], None)
+    pinned = _resolve_export_pins(state, tabs[0], stage_dc_ids, warnings)
+    if pinned:
+        # The funnel endpoint counts live rows; under pins the document counts
+        # its own stages when it runs instead of printing numbers of other data.
+        initial, stage_rows = {}, []
+    else:
+        counted = routes._funnel_stage_counts(
+            family_doc, project_id, access_token, active, stage_dc_ids
+        )
+        # ``None`` only answers column mode (a stage column the frame lacks),
+        # which the export never asks for.
+        initial, stage_rows, _ = counted if counted is not None else ({}, [], None)
 
     dcs: list[DCPlan] = []
     for dc_id in stage_dc_ids:
@@ -438,6 +525,7 @@ def build_export_plan(
                 dtypes=dtypes,
                 initial_rows=initial.get(dc_id),
                 n_cols=len(dtypes) if dtypes else None,
+                version=pinned.get(dc_id),
             )
         )
 
@@ -516,7 +604,7 @@ def build_export_plan(
         tab_brands=_resolve_tab_brands(tabs, main_brand=brand),
         icons=_resolve_tab_icons(tabs),
         text_values=_export_text_values(
-            tabs, state.filters_as_payload(), current_user, access_token
+            tabs, state.filters_as_payload(), current_user, access_token, state.pins.body()
         ),
     )
 

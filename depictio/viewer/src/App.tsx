@@ -1324,6 +1324,9 @@ const App: React.FC = () => {
         compareInCards: groupsApi.compareInCards,
         funnel: { enabled: funnelEnabled, order: funnelOrder },
         splitPanels: groupRender ? panelsForGrouping(groupRender, combinedFilters) : [],
+        // A `?version=` preview exports what it shows: that version's data
+        // and definitions, not today's under its label.
+        dataVersions: previewRequest,
         dashboardId: dashboardId ?? '',
         familyId: groupingScopeId ?? null,
         theme: computedColorScheme,
@@ -1339,6 +1342,7 @@ const App: React.FC = () => {
       funnelEnabled,
       funnelOrder,
       groupRender,
+      previewRequest,
       dashboardId,
       groupingScopeId,
       computedColorScheme,
