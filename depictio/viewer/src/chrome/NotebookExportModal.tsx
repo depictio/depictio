@@ -26,6 +26,7 @@ import {
   type NotebookInclusion,
   type NotebookPreflight,
   type NotebookRenderStatus,
+  Z_LAYERS,
 } from 'depictio-react-core';
 
 /**
@@ -187,6 +188,9 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
     <Modal
       opened={opened}
       onClose={onClose}
+      // Opened from the settings modal, so it must stack above it: at Mantine's
+      // default it rendered underneath and the settings caught every click.
+      zIndex={Z_LAYERS.nestedOverlay}
       size="lg"
       title={
         <Group gap="xs">
@@ -265,7 +269,13 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
                           </Text>
                         </Table.Td>
                         <Table.Td>
-                          <Tooltip label={c.reason ?? ''} disabled={!c.reason} multiline w={320}>
+                          <Tooltip
+                            label={c.reason ?? ''}
+                            disabled={!c.reason}
+                            multiline
+                            w={320}
+                            zIndex={Z_LAYERS.tooltip}
+                          >
                             <Group gap={6} wrap="nowrap">
                               <Badge size="xs" color={meta.color} variant="light">
                                 {meta.label}
