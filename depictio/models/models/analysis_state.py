@@ -219,10 +219,15 @@ class ComponentEmbedRequest(BaseModel):
 
 
 class ComponentFigureResponse(BaseModel):
-    """A component as a Plotly figure, or the job that will produce it."""
+    """A component as a Plotly figure, or the job that will produce it.
+
+    A renderer that is not Plotly comes back ``ready`` with ``image`` (a PNG
+    data URI of the tile, ``source="snapshot"``) and no figure.
+    """
 
     status: Literal["ready", "pending", "unsupported", "error"]
     figure: dict[str, Any] | None = None
+    image: str | None = None
     job_id: str | None = None
     reason: str | None = None
-    source: Literal["server", "extracted"] | None = None
+    source: Literal["server", "extracted", "snapshot"] | None = None

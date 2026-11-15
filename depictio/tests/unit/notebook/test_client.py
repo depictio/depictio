@@ -433,6 +433,26 @@ def test_a_tile_that_cannot_be_fetched_shows_a_placeholder_not_an_error(monkeypa
         client.component(DASH, "Bill shape").figure
 
 
+def test_a_renderer_without_plotly_is_shown_as_a_captioned_snapshot():
+    png = "data:image/png;base64,iVBORw0KGgo="
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith(f"/dashboards/get/{DASH}"):
+            return httpx.Response(200, json=DASHBOARD)
+        return httpx.Response(200, json={"status": "ready", "image": png, "source": "snapshot"})
+
+    client = DepictioClient("https://depictio.test", "tok", transport=httpx.MockTransport(handler))
+    comp = client.component(DASH, "Embedding")
+    bundle = comp._repr_mimebundle_()
+    assert png in bundle["text/html"]
+    assert "Static snapshot; interactive in the" in bundle["text/html"]
+    assert f"https://depictio.test/dashboard/{DASH}" in bundle["text/html"]
+    assert bundle["image/png"] == "iVBORw0KGgo="
+    assert comp.image == b"\x89PNG\r\n\x1a\n"
+    with pytest.raises(AttributeError, match="not drawn with Plotly"):
+        comp.figure
+
+
 def test_poll_retries_a_failed_job_once():
     handler, state = _job_api(["error", "ready"])
     client = DepictioClient("https://depictio.test", "tok", transport=httpx.MockTransport(handler))

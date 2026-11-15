@@ -178,6 +178,43 @@ def figure_bundle(fig) -> dict[str, Any]:
     }
 
 
+def _decode_data_uri(uri: str) -> bytes:
+    return base64.b64decode(uri.split(",", 1)[1] if "," in uri else uri)
+
+
+def snapshot_html(image_uri: str, title: str, live_url: str | None, note: str = "") -> str:
+    """A PNG snapshot of a tile, captioned as one.
+
+    Used for renderers that are not Plotly (SVG, canvas, WebGL, the genome
+    browser): the picture is the real renderer's, but nothing in it can be
+    hovered or zoomed, and the caption says so rather than letting it pass for
+    the live tile.
+    """
+    link = (
+        f'<a href="{_html.escape(live_url, quote=True)}">live dashboard</a>'
+        if live_url
+        else "live dashboard"
+    )
+    extra = f" {_html.escape(note)}" if note else ""
+    return (
+        '<figure class="dpx-snapshot" style="margin:0.25rem 0 0.75rem">'
+        f'<img src="{_html.escape(image_uri, quote=True)}" alt="{_html.escape(title, quote=True)}" '
+        'style="max-width:100%;height:auto;border:1px solid #e9ecef;border-radius:8px">'
+        '<figcaption style="font-size:12px;color:#868e96;margin-top:4px">'
+        f"Static snapshot; interactive in the {link}.{extra}</figcaption></figure>"
+    )
+
+
+def snapshot_bundle(image_uri: str, title: str, live_url: str | None) -> dict[str, Any]:
+    bundle: dict[str, Any] = {
+        HTML_MIME: snapshot_html(image_uri, title, live_url),
+        PLAIN_MIME: f"{title} (static snapshot)",
+    }
+    if image_uri.startswith("data:image/png;base64,"):
+        bundle["image/png"] = image_uri.split(",", 1)[1]
+    return bundle
+
+
 def filters_to_metadata(filters: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """The ``filter_metadata`` shape (``clean_filter_payload``) from state filters."""
     out = []
@@ -463,7 +500,21 @@ class MultiQCGeneralStatsComponent(DepictioComponent):
 
 
 class AdvancedVizComponent(DepictioComponent):
+    """An advanced visualisation: its Plotly figure, or a snapshot of its renderer.
+
+    The server answers with the Plotly figure when the renderer draws one
+    (built on the server where it can, otherwise read off the real React
+    renderer headlessly), and with a PNG of the tile when it does not — SVG,
+    canvas and WebGL renderers have no figure to hand back. ``.figure`` raises
+    for those; ``.image`` holds the PNG, and the cell shows it captioned as
+    the static snapshot it is.
+    """
+
     default_display = "figure"
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._result: dict[str, Any] | None = None
 
     @property
     def kind(self) -> str:
@@ -474,17 +525,46 @@ class AdvancedVizComponent(DepictioComponent):
             or ""
         )
 
-    def _fetch_figure(self):
-        result = self.client.poll(
+    def refresh(self) -> DepictioComponent:
+        self._result = None
+        return super().refresh()
+
+    def _render_result(self) -> dict[str, Any]:
+        if self._result is None:
+            self._result = self._fetch_render()
+        return self._result
+
+    def _fetch_render(self) -> dict[str, Any]:
+        return self.client.poll(
             f"/dashboards/component_figure/{self.dashboard_id}/{self.index}",
             {"state": self.state, "theme": self.theme},
             "/dashboards/component_figure/jobs/{job_id}",
         )
-        if result.get("status") == "unsupported" or not result.get("figure"):
-            raise RuntimeError(
-                f"no figure for {self.title!r}: {result.get('reason') or 'unsupported'}"
+
+    def _fetch_figure(self):
+        result = self._render_result()
+        if result.get("figure"):
+            return _figure_from_dict(result["figure"])
+        if result.get("image"):
+            raise AttributeError(
+                f"{self.title!r} is not drawn with Plotly, so it has no figure; "
+                "`.image` holds a PNG snapshot of it"
             )
-        return _figure_from_dict(result["figure"])
+        raise RuntimeError(f"no figure for {self.title!r}: {result.get('reason') or 'unsupported'}")
+
+    @property
+    def image(self) -> bytes | None:
+        """The PNG snapshot, for a renderer that is not Plotly (else ``None``)."""
+        uri = self._render_result().get("image")
+        return _decode_data_uri(uri) if uri else None
+
+    def _bundle(self) -> dict[str, Any]:
+        result = self._render_result()
+        if result.get("figure"):
+            return figure_bundle(self.figure)
+        if result.get("image"):
+            return snapshot_bundle(str(result["image"]), self.title, self.live_url)
+        raise RuntimeError(str(result.get("reason") or "the server returned nothing to show"))
 
     def _fetch_data(self) -> pl.DataFrame:
         payload = self.client.post(

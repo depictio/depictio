@@ -3,7 +3,9 @@
 * ``POST /dashboards/component_figure/{dashboard}/{component}`` — the
   component as a Plotly figure. Figures the server draws itself and the
   React-rendered kinds alike go through headless extraction on the worker
-  (one code path, the real renderer), with a small result cache.
+  (one code path, the real renderer), with a small result cache. A renderer
+  that is not Plotly (SVG, canvas, WebGL, the JBrowse view) comes back as a
+  PNG snapshot of the tile instead.
 * ``GET /dashboards/component_figure/jobs/{job_id}`` — poll.
 * ``POST /dashboards/embed/{dashboard}/{component}`` — an HTML document
   that frames the viewer's ``/embed`` route with the given state, for a
@@ -33,8 +35,27 @@ from depictio.models.models.analysis_state import ComponentEmbedRequest, Compone
 from depictio.models.models.base import PyObjectId
 from depictio.models.models.users import User
 
-# Component types that draw a Plotly figure the embed page can hand back.
-EXTRACTABLE_TYPES: frozenset[str] = frozenset({"figure", "map", "multiqc", "advanced_viz"})
+# Component types the embed page can hand back: as the Plotly figure they draw,
+# or, for what is not Plotly, as a PNG snapshot of the tile.
+EXTRACTABLE_TYPES: frozenset[str] = frozenset(
+    {"figure", "map", "multiqc", "advanced_viz", "jbrowse"}
+)
+# Of those, the types that never draw Plotly.
+SNAPSHOT_TYPES: frozenset[str] = frozenset({"jbrowse"})
+
+
+def expected_output(meta: dict[str, Any]) -> str:
+    """``"image"`` when the tile's renderer is not Plotly, else ``"plotly"``."""
+    ctype = str(meta.get("component_type") or "")
+    if ctype in SNAPSHOT_TYPES:
+        return "image"
+    if ctype == "advanced_viz":
+        from depictio.api.v1.services.notebook_export.classify import advanced_viz_delivery
+
+        if advanced_viz_delivery(meta) == "snapshot":
+            return "image"
+    return "plotly"
+
 
 _RESULT_TTL_S = 600.0
 _results: dict[str, tuple[float, dict[str, Any]]] = {}
@@ -60,9 +81,14 @@ def _load_component(dashboard_id: PyObjectId, component_id: str, current_user: U
     raise HTTPException(status_code=404, detail=f"Component '{component_id}' not found.")
 
 
-def _cache_key(dashboard_id: Any, component_id: str, state: dict[str, Any], theme: str) -> str:
+def _cache_key(
+    dashboard_id: Any, component_id: str, state: dict[str, Any], theme: str, expect: str = "plotly"
+) -> str:
+    # Everything the page renders from: filters and groups, but also colour-by,
+    # facet and the "other" bucket, which change the figure as much.
+    relevant = {k: v for k, v in state.items() if k != "context"}
     blob = json.dumps(
-        [str(dashboard_id), str(component_id), state.get("filters"), state.get("groups"), theme],
+        [str(dashboard_id), str(component_id), relevant, theme, expect],
         sort_keys=True,
         default=str,
     )
@@ -107,21 +133,12 @@ def component_figure(
             status="unsupported",
             reason=f"a {ctype} component has no Plotly figure; use .data or .html instead",
         )
-    if ctype == "advanced_viz":
-        from depictio.api.v1.services.notebook_export.classify import advanced_viz_delivery
-
-        if advanced_viz_delivery(meta) == "snapshot":
-            # Answer now rather than after a browser pass that waits for a
-            # Plotly div this renderer never draws.
-            return ComponentFigureResponse(
-                status="unsupported",
-                reason=(
-                    "this visualisation is drawn without Plotly (SVG, canvas or WebGL); "
-                    "open the live dashboard to see it"
-                ),
-            )
+    # A renderer that is not Plotly is snapshotted as soon as it reports itself
+    # drawn, rather than after a browser pass waiting for a Plotly div it never
+    # draws.
+    expect = expected_output(meta)
     state = request.state.model_dump(mode="json", exclude_none=True) if request.state else {}
-    key = _cache_key(dashboard_id, component_id, state, request.theme)
+    key = _cache_key(dashboard_id, component_id, state, request.theme, expect)
     hit = _cached(key)
     if hit is not None:
         return ComponentFigureResponse(**hit)
@@ -133,6 +150,7 @@ def component_figure(
             "component_id": str(component_id),
             "state": state,
             "theme": request.theme,
+            "expect": expect,
         }
     )
     _jobs[job.id] = key
@@ -163,6 +181,7 @@ def component_figure_job(
     response = ComponentFigureResponse(
         status=payload.get("status") or "error",
         figure=payload.get("figure"),
+        image=payload.get("image"),
         job_id=job_id,
         reason=payload.get("reason"),
         source=payload.get("source"),

@@ -3429,7 +3429,9 @@ __all__: list[str] = [
 def extract_component_figure_task(payload: dict) -> dict:
     """Read a component's Plotly figure off the viewer's embed page (headless).
 
-    ``payload``: ``{dashboard_id, component_id, state, theme}``. Returns a
+    ``payload``: ``{dashboard_id, component_id, state, theme, expect}``, where
+    ``expect`` is ``"image"`` for a renderer that is not Plotly (a PNG of the
+    tile comes back instead of a figure). Returns a
     ``ComponentFigureResponse``-shaped dict; failures are reported in it rather
     than raised so the poll endpoint can hand the reason to the notebook.
     """
@@ -3458,6 +3460,7 @@ def extract_component_figure_task(payload: dict) -> dict:
                 component_id=str(payload.get("component_id")),
                 state=dict(payload.get("state") or {}),
                 theme=str(payload.get("theme") or "light"),
+                expect="image" if payload.get("expect") == "image" else "plotly",
             )
         finally:
             client.close()

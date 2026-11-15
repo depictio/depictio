@@ -12,12 +12,20 @@
  *   are logged into the instance.
  *
  * `data-embed-status` on the root reports `loading | ready | error | unsupported`
- * so a headless caller knows when to read the figure and when to give up.
+ * so a headless caller knows when to read the figure and when to give up. It
+ * is the *renderer's* status, not the page's: `ready` only once the component
+ * reported itself drawn (the same load registry the dashboard's progress bar
+ * reads), `error` as soon as it reported a failure or threw, with the reason
+ * in `data-embed-reason`. A headless caller can therefore screenshot an SVG,
+ * canvas or WebGL renderer the moment it is done, instead of waiting for a
+ * Plotly div that never comes.
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Box, Center, Loader, useMantineColorScheme } from '@mantine/core';
 import {
   ComponentRenderer,
+  DashboardLoadingProvider,
+  TRACKED_LOAD_TYPES,
   bulkComputeCards,
   fetchDashboard,
   groupsRenderPayload,
@@ -27,6 +35,7 @@ import {
   type InteractiveFilter,
   type SelectionGroup,
   type StoredMetadata,
+  useDashboardLoadSummary,
 } from 'depictio-react-core';
 
 interface EmbedState {
@@ -77,6 +86,40 @@ function groupRenderFromState(state: EmbedState): GroupRenderState | undefined {
 
 type Status = 'loading' | 'ready' | 'error' | 'unsupported';
 
+/** The renderer's own verdict, read off the load registry it reports to. */
+const RenderStatusProbe: React.FC<{
+  meta: StoredMetadata;
+  onStatus: (status: 'ready' | 'error') => void;
+}> = ({ meta, onStatus }) => {
+  const list = useMemo(() => [meta], [meta]);
+  const summary = useDashboardLoadSummary(list, false);
+  useEffect(() => {
+    if (summary.error > 0) onStatus('error');
+    else if (summary.ready > 0 && summary.loading === 0) onStatus('ready');
+  }, [summary.error, summary.ready, summary.loading, onStatus]);
+  return null;
+};
+
+/** A renderer that throws reports `error` rather than leaving the page loading. */
+class FrameErrorBoundary extends React.Component<
+  { children: React.ReactNode; onError: (message: string) => void },
+  { failed: boolean }
+> {
+  state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  componentDidCatch(error: Error) {
+    this.props.onError(error?.message || String(error));
+  }
+
+  render() {
+    return this.state.failed ? null : this.props.children;
+  }
+}
+
 const ComponentFrameApp: React.FC = () => {
   const route = useMemo(() => parseEmbedRoute(window.location.pathname), []);
   const { state, theme } = useMemo(() => decodeEmbedState(window.location.hash), []);
@@ -86,6 +129,9 @@ const ComponentFrameApp: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [cardValue, setCardValue] = useState<unknown>(undefined);
   const [cardSecondary, setCardSecondary] = useState<Record<string, unknown> | undefined>();
+  // The page is ready to draw (dashboard read, card values in hand); the
+  // renderer then decides `status` itself through the load registry.
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     if (theme) setColorScheme(theme);
@@ -122,7 +168,10 @@ const ComponentFrameApp: React.FC = () => {
           setCardValue(res.values?.[String(meta.index)]);
           setCardSecondary(res.secondary_values?.[String(meta.index)]);
         }
-        setStatus('ready');
+        setMounted(true);
+        // A type that reports no load lifecycle (a card already computed, a
+        // text tile, a filter control) is drawn as soon as it mounts.
+        if (!TRACKED_LOAD_TYPES.has(String(meta.component_type))) setStatus('ready');
       })
       .catch((err) => {
         if (cancelled) return;
@@ -141,34 +190,51 @@ const ComponentFrameApp: React.FC = () => {
     return (dashboard.stored_metadata ?? []).find((m) => String(m.index) === route.componentId);
   }, [dashboard, route]);
 
+  const onRenderStatus = React.useCallback((next: 'ready' | 'error') => {
+    // Terminal once decided: a renderer that re-reports `loading` for a
+    // background refetch must not flip a page a headless caller already read.
+    setStatus((prev) => (prev === 'loading' ? next : prev));
+    if (next === 'error') setError((prev) => prev ?? 'The component reported an error.');
+  }, []);
+  const onRenderError = React.useCallback((message: string) => {
+    setError(message);
+    setStatus('error');
+  }, []);
+
   return (
     <Box
       data-embed-status={status}
+      data-embed-reason={status === 'error' ? (error ?? '') : undefined}
       data-component-type={meta?.component_type ?? ''}
       style={{ height: '100vh', width: '100%', padding: 8, boxSizing: 'border-box' }}
     >
-      {status === 'error' && (
+      {status === 'error' && !mounted && (
         <Alert color="red" title="Cannot embed this component">
           {error}
         </Alert>
       )}
-      {status === 'loading' && (
+      {!mounted && status === 'loading' && (
         <Center h="100%">
           <Loader />
         </Center>
       )}
-      {status === 'ready' && meta && route && (
-        <Box className="react-grid-item" style={{ height: '100%', width: '100%' }}>
-          <ComponentRenderer
-            metadata={meta}
-            filters={filters}
-            dashboardId={route.dashboardId}
-            cardValue={cardValue}
-            cardSecondaryValues={cardSecondary}
-            cardLoading={false}
-            groupRender={groupRender}
-          />
-        </Box>
+      {mounted && meta && route && (
+        <DashboardLoadingProvider>
+          <RenderStatusProbe meta={meta} onStatus={onRenderStatus} />
+          <Box className="react-grid-item" style={{ height: '100%', width: '100%' }}>
+            <FrameErrorBoundary onError={onRenderError}>
+              <ComponentRenderer
+                metadata={meta}
+                filters={filters}
+                dashboardId={route.dashboardId}
+                cardValue={cardValue}
+                cardSecondaryValues={cardSecondary}
+                cardLoading={false}
+                groupRender={groupRender}
+              />
+            </FrameErrorBoundary>
+          </Box>
+        </DashboardLoadingProvider>
       )}
     </Box>
   );

@@ -4,6 +4,13 @@ Same machinery as the dashboard screenshots (``screenshot_service``): the
 worker's Playwright drives the viewer with the admin token, but instead of
 capturing pixels it reads ``gd.data`` / ``gd.layout`` off the Plotly graph
 div. Same renderer, same numbers, no reimplementation.
+
+A renderer that is not Plotly (SVG, canvas, WebGL, plain HTML) has no figure
+to read, so for those the same pass takes a PNG of the tile once the
+renderer reports itself drawn (``data-embed-status`` on the embed page): a
+static snapshot, which the notebook labels as one. ``expect`` says which of
+the two the caller knows it wants; a tile expected to be Plotly that turns
+out not to be still gets its snapshot rather than an error.
 """
 
 from __future__ import annotations
@@ -11,7 +18,7 @@ from __future__ import annotations
 import base64
 import json
 import re
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import quote
 
 from depictio.api.v1.configs.config import settings
@@ -48,29 +55,56 @@ _READ_FIGURE_JS = """
 () => {
   const root = document.querySelector('[data-embed-status]');
   const status = root ? root.getAttribute('data-embed-status') : 'missing';
+  const reason = root ? root.getAttribute('data-embed-reason') : null;
   const gd = document.querySelector('.js-plotly-plot');
   if (!gd || !gd.data) {
-    return JSON.stringify({ status: status === 'ready' ? 'unsupported' : status, figure: null });
+    return JSON.stringify({
+      status: status === 'ready' ? 'unsupported' : status,
+      figure: null,
+      reason,
+    });
   }
   const replacer = (_k, v) => (ArrayBuffer.isView(v) ? Array.from(v) : v);
   return JSON.stringify({ status: 'ready', figure: { data: gd.data, layout: gd.layout } }, replacer);
 }
 """
 
-# Wait until the embed has decided (ready with a drawn Plotly div, or a
-# terminal status) — polling the DOM is cheap and exits early on errors.
+# Wait until the embed has decided (the renderer reported itself drawn, and for
+# a Plotly tile its graph div exists, or a terminal status) — polling the DOM is
+# cheap and exits early on errors.
 _SETTLED_JS = """
-() => {
+(expect) => {
   const root = document.querySelector('[data-embed-status]');
   if (!root) return false;
   const status = root.getAttribute('data-embed-status');
   if (status === 'error' || status === 'unsupported') return true;
   if (status !== 'ready') return false;
+  if (expect === 'image') return true;
   const gd = document.querySelector('.js-plotly-plot');
   if (!gd) return false;
   return Boolean(gd.querySelector('.plot-container')) && Boolean(gd.data);
 }
 """
+
+_STATUS_JS = """
+() => {
+  const root = document.querySelector('[data-embed-status]');
+  return root ? root.getAttribute('data-embed-status') : 'missing';
+}
+"""
+
+Expect = Literal["plotly", "image"]
+
+# WebGL renderers (3Dmol, GenomeSpy, deck.gl) need a software GL in a headless
+# browser with no GPU; recent Chromium no longer falls back to SwiftShader on
+# its own.
+_LAUNCH_ARGS = ["--enable-unsafe-swiftshader", "--use-angle=swiftshader", "--ignore-gpu-blocklist"]
+
+# The tile's own frame on the embed page (ComponentFrameApp); the screenshot
+# system targets the same class on the dashboard.
+_TILE_SELECTOR = ".react-grid-item"
+_SNAPSHOT_VIEWPORT = {"width": 1200, "height": 720}
+_FIGURE_VIEWPORT = {"width": 1400, "height": 900}
 
 
 def encode_state(state: dict[str, Any]) -> str:
@@ -113,7 +147,37 @@ def parse_extracted(raw: str) -> dict[str, Any]:
             "figure": None,
             "reason": "this component does not draw a Plotly figure",
         }
-    return {"status": "error", "figure": None, "reason": f"embed page reported {status!r}"}
+    reason = payload.get("reason")
+    return {
+        "status": "error",
+        "figure": None,
+        "reason": f"the component reported an error: {reason}"
+        if reason
+        else f"embed page reported {status!r}",
+    }
+
+
+def snapshot_result(png: bytes) -> dict[str, Any]:
+    """A ``ComponentFigureResponse`` dict carrying a PNG of the tile."""
+    return {
+        "status": "ready",
+        "figure": None,
+        "image": "data:image/png;base64," + base64.b64encode(png).decode("ascii"),
+        "source": "snapshot",
+    }
+
+
+async def _snapshot(page: Any) -> bytes:
+    """A PNG of the tile, once what it fetched has landed and it has painted."""
+    try:
+        await page.wait_for_load_state("networkidle", timeout=5000)
+    except Exception:  # a renderer that keeps a connection open is still drawn
+        pass
+    # One more frame budget for canvas/WebGL renderers, which paint after their
+    # data arrives rather than with it.
+    await page.wait_for_timeout(800)
+    tile = page.locator(_TILE_SELECTOR).first
+    return await tile.screenshot(type="png", timeout=15000, animations="disabled")
 
 
 async def extract_component_figure(
@@ -122,8 +186,9 @@ async def extract_component_figure(
     state: dict[str, Any],
     theme: str = "light",
     timeout_s: int | None = None,
+    expect: Expect = "plotly",
 ) -> dict[str, Any]:
-    """Load the embed page headlessly and read its Plotly figure."""
+    """Load the embed page headlessly and read its Plotly figure, or snapshot it."""
     from playwright.async_api import async_playwright
 
     from depictio.api.v1.services.screenshot_helpers import (
@@ -138,9 +203,10 @@ async def extract_component_figure(
     logger.info(f"embed extract: {dashboard_id}/{component_id} via {url.split('#')[0]}")
 
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
+        browser = await p.chromium.launch(headless=True, args=_LAUNCH_ARGS)
         try:
-            context = await browser.new_context(viewport={"width": 1400, "height": 900})
+            viewport = _SNAPSHOT_VIEWPORT if expect == "image" else _FIGURE_VIEWPORT
+            context = await browser.new_context(viewport=viewport)
             await apply_init_script(context, json.dumps(token_data), theme)
             page = await context.new_page()
             try:
@@ -154,14 +220,23 @@ async def extract_component_figure(
                     }
                 raise
             try:
-                await page.wait_for_function(_SETTLED_JS, timeout=timeout_s * 1000)
+                await page.wait_for_function(_SETTLED_JS, arg=expect, timeout=timeout_s * 1000)
             except Exception:
+                # Drawn, but no Plotly div after all: the renderer is not Plotly
+                # (or not on this view), and its picture is still worth having.
+                if await page.evaluate(_STATUS_JS) == "ready":
+                    return snapshot_result(await _snapshot(page))
                 return {
                     "status": "error",
                     "figure": None,
                     "reason": f"the component did not render within {timeout_s}s",
                 }
             raw = await page.evaluate(_READ_FIGURE_JS)
-            return parse_extracted(raw)
+            result = parse_extracted(raw)
+            if result["status"] == "unsupported" or (
+                expect == "image" and result["status"] == "ready"
+            ):
+                return snapshot_result(await _snapshot(page))
+            return result
         finally:
             await browser.close()

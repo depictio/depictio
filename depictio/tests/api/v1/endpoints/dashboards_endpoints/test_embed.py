@@ -87,13 +87,48 @@ def test_non_plotly_component_is_unsupported(patched_env):
     assert resp.status == "unsupported" and "table" in (resp.reason or "")
 
 
-def test_a_kind_drawn_without_plotly_answers_at_once(patched_env):
-    """No browser pass that would wait 90 s for a Plotly div the renderer never draws."""
+def test_a_kind_drawn_without_plotly_is_snapshotted(patched_env):
+    """The browser pass is told to take a PNG once the renderer is drawn, rather
+    than wait 90 s for a Plotly div the renderer never draws."""
     with patch("depictio.api.v1.celery_tasks.extract_component_figure_task") as task:
+        task.delay.return_value = SimpleNamespace(id="job-rec")
         resp = _figure("rec-1")
-    assert resp.status == "unsupported"
-    assert "without Plotly" in (resp.reason or "")
-    task.delay.assert_not_called()
+        assert resp.status == "pending"
+        assert task.delay.call_args.args[0]["expect"] == "image"
+        _figure("viz-1")
+        assert task.delay.call_args.args[0]["expect"] == "plotly"
+
+
+def test_a_snapshot_job_hands_back_its_image(patched_env):
+    with patch("depictio.api.v1.celery_tasks.extract_component_figure_task") as task:
+        task.delay.return_value = SimpleNamespace(id="job-rec")
+        _figure("rec-1")
+    done = SimpleNamespace(
+        state="SUCCESS",
+        result={"status": "ready", "image": "data:image/png;base64,AAAA", "source": "snapshot"},
+    )
+    with patch("celery.result.AsyncResult", return_value=done):
+        resp = emb.component_figure_job(job_id="job-rec", current_user=object())
+    assert resp.status == "ready" and resp.figure is None
+    assert resp.image == "data:image/png;base64,AAAA" and resp.source == "snapshot"
+
+
+def test_the_cache_tells_colour_by_apart(patched_env):
+    base = AnalysisState.model_validate({"context": {"dashboard_id": DASHBOARD_ID}})
+    grouped = AnalysisState.model_validate(
+        {
+            "context": {"dashboard_id": DASHBOARD_ID},
+            "color_by": {"kind": "column", "column_name": "x"},
+        }
+    )
+    plain = emb._cache_key(DASHBOARD_ID, "viz-1", base.model_dump(mode="json"), "light")
+    other = emb._cache_key(DASHBOARD_ID, "viz-1", grouped.model_dump(mode="json"), "light")
+    assert plain != other
+
+
+def test_parse_extracted_carries_the_renderer_reason():
+    out = parse_extracted(json.dumps({"status": "error", "figure": None, "reason": "no rows"}))
+    assert out["status"] == "error" and "no rows" in out["reason"]
 
 
 def test_dispatch_then_poll_then_cache(patched_env):
@@ -237,3 +272,103 @@ def test_parse_extracted_survives_8digit_hex_alpha_without_losing_the_trace_type
     assert trace["type"] == "sankey"
     assert trace["link"]["color"] == ["rgba(51, 154, 240, 0.200)"]
     assert trace["node"]["color"] == ["#339af0", "#51cf66"]  # a plain 6-digit hex is untouched
+
+
+class _FakeTile:
+    async def screenshot(self, **kwargs):
+        return b"\x89PNG-tile"
+
+
+class _FakePage:
+    """The embed page as the extraction sees it: a status, maybe a Plotly div."""
+
+    def __init__(self, status: str, figure: dict | None, settles: bool = True):
+        self.status, self.figure, self.settles = status, figure, settles
+        self.locator = lambda selector: SimpleNamespace(first=_FakeTile())
+
+    async def goto(self, *a, **k):
+        return None
+
+    async def wait_for_function(self, js, arg=None, timeout=None):
+        if not self.settles:
+            raise TimeoutError("not settled")
+
+    async def wait_for_load_state(self, *a, **k):
+        return None
+
+    async def wait_for_timeout(self, ms):
+        return None
+
+    async def evaluate(self, js):
+        from depictio.api.v1.services.embed import extract
+
+        if js == extract._STATUS_JS:
+            return self.status
+        return json.dumps(
+            {"status": "ready" if self.figure else "unsupported", "figure": self.figure}
+        )
+
+
+def _run_extract(page: _FakePage, expect: str):
+    import asyncio
+
+    from depictio.api.v1.services.embed import extract
+
+    class _Ctx:
+        async def new_page(self):
+            return page
+
+    class _Browser:
+        async def new_context(self, **k):
+            return _Ctx()
+
+        async def close(self):
+            return None
+
+    class _PW:
+        chromium = SimpleNamespace(launch=None)
+
+        async def __aenter__(self):
+            async def launch(**k):
+                return _Browser()
+
+            self.chromium = SimpleNamespace(launch=launch)
+            return self
+
+        async def __aexit__(self, *a):
+            return None
+
+    async def _noop(*a, **k):
+        return {}
+
+    with (
+        patch("playwright.async_api.async_playwright", lambda: _PW()),
+        patch("depictio.api.v1.services.screenshot_service.get_admin_auth_token", _noop),
+        patch("depictio.api.v1.services.screenshot_helpers.apply_init_script", _noop),
+    ):
+        return asyncio.run(
+            extract.extract_component_figure(DASHBOARD_ID, "c", {}, timeout_s=1, expect=expect)
+        )
+
+
+def test_extraction_snapshots_a_renderer_that_is_not_plotly():
+    out = _run_extract(_FakePage("ready", None), "image")
+    assert out["status"] == "ready" and out["source"] == "snapshot"
+    assert out["image"].startswith("data:image/png;base64,")
+
+
+def test_extraction_reads_the_plotly_figure_when_there_is_one():
+    fig = {"data": [{"type": "scatter", "x": [1], "y": [2]}], "layout": {}}
+    out = _run_extract(_FakePage("ready", fig), "plotly")
+    assert out["status"] == "ready" and out["figure"]["data"][0]["type"] == "scatter"
+
+
+def test_a_drawn_tile_without_a_plotly_div_still_gets_its_snapshot():
+    """Expected Plotly, but the renderer drew something else: a picture, not an error."""
+    out = _run_extract(_FakePage("ready", None, settles=False), "plotly")
+    assert out["source"] == "snapshot"
+
+
+def test_a_tile_that_never_draws_is_an_error_with_the_timeout():
+    out = _run_extract(_FakePage("loading", None, settles=False), "plotly")
+    assert out["status"] == "error" and "did not render" in out["reason"]
