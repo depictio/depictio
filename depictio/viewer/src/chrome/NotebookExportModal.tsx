@@ -235,6 +235,11 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
               <Badge color="blue" variant="light">
                 {counts.api ?? 0} via Depictio
               </Badge>
+              {(counts.native ?? 0) > 0 && (
+                <Badge color="cyan" variant="light">
+                  {counts.native} drawn in the document
+                </Badge>
+              )}
               {(counts.snapshot ?? 0) > 0 && (
                 <Badge color="grape" variant="light">
                   {counts.snapshot} as snapshot

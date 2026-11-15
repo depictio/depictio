@@ -8,9 +8,11 @@
 >>> client.data("646b0f3c1e4a2d7f8e5b8ca1")         # a whole data collection
 
 Every dashboard component is importable: figures, maps and MultiQC plots come
-back as Plotly figures; advanced visualisations too (extracted from the real
-renderer on the server); tables and filters as DataFrames; cards, text, image
-galleries and JBrowse sessions as HTML. A component displays itself through
+back as Plotly figures; advanced visualisations too (built or extracted from
+the real renderer on the server), and the ones the app draws without Plotly
+are drawn here from their data (``depictio.notebook.native``: Plotly, py3Dmol,
+SVG, HTML), with the server's snapshot as the fallback; tables and filters as
+DataFrames; cards, text, image galleries and JBrowse sessions as HTML. A component displays itself through
 the kernel's ``_repr_mimebundle_`` hook — which is what ``quarto render``
 captures — and exposes ``.figure``, ``.data`` and ``.html`` when you want the
 object rather than the picture.
@@ -27,6 +29,7 @@ In a ``.qmd``::
 from .client import DepictioClient, DepictioClientError
 from .components import DepictioComponent, init_tables, show_table, use_document_renderer
 from .funnel import funnel_rest, funnel_stage
+from .native import use_native
 from .text import fill_text
 from .theme import use_theme
 
@@ -40,5 +43,6 @@ __all__ = [
     "init_tables",
     "show_table",
     "use_document_renderer",
+    "use_native",
     "use_theme",
 ]

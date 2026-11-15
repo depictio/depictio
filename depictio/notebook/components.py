@@ -6,8 +6,10 @@ It fetches lazily, caches, and displays itself wherever a Jupyter kernel does
 (a Quarto render, Quarto's editor integrations, JupyterLab):
 
 * ``.figure`` — a ``plotly.graph_objects.Figure`` for figures, maps, MultiQC
-  plots and every advanced visualisation (the server extracts the Plotly
-  figure from its own React renderer for the kinds it does not draw in Python);
+  plots and the advanced visualisations (the server extracts the Plotly
+  figure from its own React renderer for the kinds it does not draw in Python,
+  and the kinds the app draws without Plotly are drawn here from their data,
+  ``depictio.notebook.native``);
 * ``.data`` — a ``polars.DataFrame`` (tables, filters, image rows, advanced-viz
   payloads) or a dict (cards);
 * ``.html`` — the real React tile, self-contained, as an HTML document.
@@ -166,6 +168,18 @@ def use_document_renderer() -> bool:
         pio.renderers.default = "notebook"
     except (ImportError, ValueError):
         return False
+    # Plotly emits the library lazily, with the first figure displayed through
+    # its renderer. Figures a component displays never go through it (their
+    # bundle is built here), so a document whose figures all come from
+    # Depictio carried no plotly.js at all and drew every one of them blank.
+    # Emit it now, in this cell, ahead of every figure; plotly then drops the
+    # renderer from its pending list, so a bare figure later adds no copy.
+    try:
+        from plotly.io._base_renderers import MimetypeRenderer
+
+        pio.renderers._activate_pending_renderers(cls=MimetypeRenderer)
+    except Exception:  # noqa: BLE001 - the lazy path still covers bare figures
+        pass
     return True
 
 
@@ -291,9 +305,11 @@ def snapshot_html(image_uri: str, title: str, live_url: str | None, note: str = 
     )
 
 
-def snapshot_bundle(image_uri: str, title: str, live_url: str | None) -> dict[str, Any]:
+def snapshot_bundle(
+    image_uri: str, title: str, live_url: str | None, note: str = ""
+) -> dict[str, Any]:
     bundle: dict[str, Any] = {
-        HTML_MIME: snapshot_html(image_uri, title, live_url),
+        HTML_MIME: snapshot_html(image_uri, title, live_url, note),
         PLAIN_MIME: f"{title} (static snapshot)",
     }
     if image_uri.startswith("data:image/png;base64,"):
@@ -703,14 +719,19 @@ class MultiQCGeneralStatsComponent(DepictioComponent):
 
 
 class AdvancedVizComponent(DepictioComponent):
-    """An advanced visualisation: its Plotly figure, or a snapshot of its renderer.
+    """An advanced visualisation: its Plotly figure, drawn here, or a snapshot.
 
-    The server answers with the Plotly figure when the renderer draws one
-    (built on the server where it can, otherwise read off the real React
-    renderer headlessly), and with a PNG of the tile when it does not — SVG,
-    canvas and WebGL renderers have no figure to hand back. ``.figure`` raises
-    for those; ``.image`` holds the PNG, and the cell shows it captioned as
-    the static snapshot it is.
+    Three ways to the picture, the first that works:
+
+    * the kinds the live app draws with Plotly come back as that figure (built
+      on the server where it can, otherwise read off the real React renderer
+      headlessly);
+    * the kinds it draws with SVG, a canvas or WebGL are drawn here, from the
+      data the renderer reads (``depictio.notebook.native``): a Plotly figure,
+      a py3Dmol structure, SVG or HTML;
+    * failing that (a renderer whose library is missing, a file the client
+      cannot reach), a PNG of the server's renderer, captioned as the static
+      snapshot it is. ``.image`` holds it.
     """
 
     default_display = "figure"
@@ -718,6 +739,9 @@ class AdvancedVizComponent(DepictioComponent):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self._result: dict[str, Any] | None = None
+        self._native: Any = None
+        # Why the native renderer did not draw this tile, when it did not.
+        self.native_error: str | None = None
 
     @property
     def kind(self) -> str:
@@ -730,7 +754,30 @@ class AdvancedVizComponent(DepictioComponent):
 
     def refresh(self) -> DepictioComponent:
         self._result = None
+        self._native = None
+        self.native_error = None
         return super().refresh()
+
+    def _native_result(self) -> Any:
+        """The tile drawn here, or ``None`` (no renderer, its library missing, or it failed)."""
+        from . import native
+
+        if self._native is not None:
+            return self._native
+        if self.native_error is not None or not native.native_enabled():
+            return None
+        renderer = native.renderer_for(self.meta)
+        if renderer is None:
+            return None
+        if not renderer.available():
+            self.native_error = f"{renderer.requires or 'its renderer'} is not installed"
+            return None
+        try:
+            self._native = renderer.render(native.Tile(self))
+        except Exception as exc:  # noqa: BLE001 - the server's snapshot is the fallback
+            self.native_error = self._reason(exc)
+            return None
+        return self._native
 
     def _render_result(self) -> dict[str, Any]:
         if self._result is None:
@@ -745,6 +792,13 @@ class AdvancedVizComponent(DepictioComponent):
         )
 
     def _fetch_figure(self):
+        drawn = self._native_result()
+        if drawn is not None and drawn.figure is not None:
+            return drawn.figure
+        if drawn is not None:
+            raise AttributeError(
+                f"{self.title!r} is drawn here as HTML, not with Plotly, so it has no figure"
+            )
         result = self._render_result()
         if result.get("figure"):
             return _figure_from_dict(result["figure"])
@@ -757,29 +811,41 @@ class AdvancedVizComponent(DepictioComponent):
 
     @property
     def image(self) -> bytes | None:
-        """The PNG snapshot, for a renderer that is not Plotly (else ``None``)."""
+        """The server's PNG snapshot, for a renderer that is not Plotly (else ``None``)."""
         uri = self._render_result().get("image")
         return _decode_data_uri(uri) if uri else None
 
     def _bundle(self) -> dict[str, Any]:
+        drawn = self._native_result()
+        if drawn is not None:
+            return drawn.bundle
         result = self._render_result()
         if result.get("figure"):
             return figure_bundle(self.figure)
         if result.get("image"):
-            return snapshot_bundle(str(result["image"]), self.title, self.live_url)
+            note = f" Not drawn here: {self.native_error}." if self.native_error else ""
+            return snapshot_bundle(str(result["image"]), self.title, self.live_url, note=note)
         raise RuntimeError(str(result.get("reason") or "the server returned nothing to show"))
 
     def _fetch_data(self) -> pl.DataFrame:
-        payload = self.client.post(
-            "/advanced_viz/data",
-            {
-                "dc_id": self.dc_id,
-                "filter_metadata": filters_to_metadata(self.filters),
-                "viz_kind": self.kind or None,
-            },
-        )
-        rows = payload.get("rows") or {}
-        return pl.DataFrame(rows)
+        """The rows the tile's renderer reads: every column its config binds."""
+        from .native import Tile
+
+        config = self.meta.get("config") if isinstance(self.meta.get("config"), dict) else {}
+        columns: list[str] = []
+        for key, value in config.items():
+            if key.endswith("_col") and isinstance(value, str) and value:
+                columns.append(value)
+            elif key.endswith("_cols") and isinstance(value, list):
+                columns.extend(v for v in value if isinstance(v, str) and v)
+        if not columns and self.dc_id:
+            # Nothing bound by name (a kind whose config names no column): the
+            # collection's own columns, as its specs list them.
+            try:
+                columns = [str(s["name"]) for s in self.client.specs(self.dc_id) if s.get("name")]
+            except Exception:  # noqa: BLE001 - the server then says what it needs
+                columns = []
+        return Tile(self).rows(columns)
 
 
 # ---------------------------------------------------------------------------

@@ -27,6 +27,7 @@ from depictio.api.v1.services.export.capabilities import (
     resolve_viz_kind,
 )
 from depictio.models.components.types import AdvancedVizKind, ComponentType
+from depictio.notebook.native import renderer_for
 
 from .aggregations import agg_expr_source
 
@@ -47,6 +48,8 @@ class Classification:
     reason: str
     kind: str | None = None
     output: Output | None = None
+    # Drawn in the document from its data rather than by the server.
+    native: bool = False
 
 
 # Component types that the literal does not list but the viewer draws.
@@ -65,8 +68,11 @@ ALL_ADVANCED_VIZ_KINDS: tuple[str, ...] = tuple(get_args(AdvancedVizKind))
 #   ``export.capabilities.component_json_source``) is served from there, with
 #   no browser; the rest are extracted from the renderer, headless.
 # * ``snapshot`` — the renderer draws SVG, a canvas, WebGL or plain HTML: no
-#   Plotly figure exists to hand back, so the report shows a PNG of the real
-#   renderer, taken by the same headless pass, and says it is one.
+#   Plotly figure exists to hand back. The document draws the tile itself from
+#   its data where ``depictio.notebook.native`` has a renderer for it (Plotly,
+#   py3Dmol, SVG or HTML); otherwise, and as that renderer's fallback, the
+#   report shows a PNG of the real renderer, taken by the same headless pass,
+#   and says it is one.
 AdvancedVizRendering = Literal["plotly", "snapshot"]
 
 ADVANCED_VIZ_RENDERING: dict[str, AdvancedVizRendering] = {
@@ -148,7 +154,7 @@ SERVER_PLOTLY_KINDS: frozenset[str] = frozenset({"complex_heatmap", "upset_plot"
 
 API_REASON = "re-rendered through the Depictio API with the exported filters"
 
-AdvancedVizDelivery = Literal["server", "extracted", "snapshot"]
+AdvancedVizDelivery = Literal["server", "extracted", "native", "snapshot"]
 
 
 def advanced_viz_kind(meta: dict[str, Any]) -> str:
@@ -160,6 +166,8 @@ def advanced_viz_delivery(meta: dict[str, Any]) -> AdvancedVizDelivery | None:
 
     ``server`` — the server builds the Plotly figure (no browser);
     ``extracted`` — the React renderer's Plotly figure, read headlessly;
+    ``native`` — not Plotly in the app, drawn in the document from its data
+    (``depictio.notebook.native``), with the snapshot as its fallback;
     ``snapshot`` — a PNG of the renderer, for what is not Plotly.
     ``None`` for an unknown kind.
     """
@@ -170,10 +178,13 @@ def advanced_viz_delivery(meta: dict[str, Any]) -> AdvancedVizDelivery | None:
         return None
     config = meta.get("config") if isinstance(meta.get("config"), dict) else {}
     view = config.get("view")
-    if verdict == "snapshot" or view in SNAPSHOT_VIEWS.get(kind, frozenset()):
-        return "snapshot"
-    if kind == "phylogenetic" and config.get("collapse_rank"):
-        return "snapshot"
+    snapshot = (
+        verdict == "snapshot"
+        or view in SNAPSHOT_VIEWS.get(kind, frozenset())
+        or (kind == "phylogenetic" and bool(config.get("collapse_rank")))
+    )
+    if snapshot:
+        return "native" if renderer_for(meta) is not None else "snapshot"
     try:
         source = component_json_source(meta)
     except Exception:  # a malformed config is the renderer's problem, not the export's
@@ -243,6 +254,18 @@ def _advanced_viz(meta: dict[str, Any]) -> Classification:
             "a Plotly figure built on the server; " + API_REASON,
             kind=kind,
             output="interactive",
+        )
+    if delivery == "native":
+        renderer = renderer_for(meta)
+        assert renderer is not None
+        return Classification(
+            "api",
+            f"drawn by Depictio's renderer without Plotly, so the document draws it from "
+            f"its data: {renderer.how}; a static snapshot of Depictio's renderer when that "
+            "cannot run",
+            kind=kind,
+            output=renderer.output,
+            native=True,
         )
     if delivery == "extracted":
         return Classification(

@@ -53,7 +53,9 @@ def expected_output(meta: dict[str, Any]) -> str:
     if ctype == "advanced_viz":
         from depictio.api.v1.services.notebook_export.classify import advanced_viz_delivery
 
-        if advanced_viz_delivery(meta) == "snapshot":
+        # A tile the document draws natively asks here only as its fallback,
+        # which is the renderer's picture.
+        if advanced_viz_delivery(meta) in ("snapshot", "native"):
             return "image"
     return "plotly"
 

@@ -1070,6 +1070,7 @@ render = [
     { name = "ipykernel" },
     { name = "itables" },
     { name = "nbclient" },
+    { name = "py3dmol" },
 ]
 server = [
     { name = "authlib" },
@@ -1150,6 +1151,7 @@ requires-dist = [
     { name = "pre-commit", marker = "extra == 'dev'", specifier = "==4.6.1" },
     { name = "psutil", marker = "extra == 'server'", specifier = "==7.2.2" },
     { name = "py-rattler", marker = "extra == 'local'", specifier = "==0.26.0" },
+    { name = "py3dmol", marker = "extra == 'render'", specifier = "==2.5.5" },
     { name = "pydantic", extras = ["email"], specifier = "==2.13.4" },
     { name = "pydantic-settings", specifier = "==2.14.2" },
     { name = "pyjwt", marker = "extra == 'server'", specifier = "==2.13.0" },
@@ -2907,6 +2909,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/ea/f7/f0618c5b6f7041d93433b36ddbc9bcb39510780ac4becce7b126ca173025/py_rattler-0.26.0-cp310-abi3-win32.whl", hash = "sha256:82f7ca25e4e4a3633abf575216c0e548497e49261438dd92705ade941758c61b", size = 15899995, upload-time = "2026-09-10T14:49:30.163Z" },
     { url = "https://files.pythonhosted.org/packages/27/0e/36cab35d4fb908024cee5bd356930f93bed2e644ad0d8e93fcdc08d030b7/py_rattler-0.26.0-cp310-abi3-win_amd64.whl", hash = "sha256:6b790e928429b5c5eef5808a410797bcc2486cf407cdcc83e6708297358e7709", size = 18085826, upload-time = "2026-09-10T14:49:33.633Z" },
     { url = "https://files.pythonhosted.org/packages/05/45/666521b2366c064b679ac1fed926c8b6914c48ab1dffd9f3c1bf21601986/py_rattler-0.26.0-cp310-abi3-win_arm64.whl", hash = "sha256:4ddfdd3671b9fe00186b1d004f84ecb2e8dd40fe7c0b8124204d8279f30eda8a", size = 17076917, upload-time = "2026-09-10T14:49:37.179Z" },
+]
+
+[[package]]
+name = "py3dmol"
+version = "2.5.5"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/8f/ce/8fa27aa0fcf37a99df16f72d59300040dec61f3a5126c28d6b625bcb7f9e/py3dmol-2.5.5.tar.gz", hash = "sha256:cb102cc3370800a9ca7679774759f008e34a0f3a283778d85b0410849d370298", size = 7832, upload-time = "2026-05-23T14:08:08.553Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/8e/5a/7fd1b784a87e96e0078f49a0a13a98b4c5f644ba5597a4a3b70a2ba3e613/py3dmol-2.5.5-py2.py3-none-any.whl", hash = "sha256:9717ea9a899ec641b458f53de538e5bae758281f5053be78bc2db0706ae60bcb", size = 7153, upload-time = "2026-05-23T14:08:07.733Z" },
 ]
 
 [[package]]

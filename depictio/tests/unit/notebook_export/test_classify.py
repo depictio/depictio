@@ -14,6 +14,7 @@ from depictio.api.v1.services.notebook_export.classify import (
     classify,
 )
 from depictio.models.components.types import AdvancedVizKind, ComponentType
+from depictio.notebook.native import renderer_for
 
 
 def test_coverage_table_names_every_component_type():
@@ -32,8 +33,12 @@ def test_every_advanced_viz_kind_has_an_explicit_rendering_verdict():
         verdict = classify({"component_type": "advanced_viz", "viz_kind": kind})
         assert verdict.status == "api"
         assert verdict.kind == kind
-        expected = "snapshot" if ADVANCED_VIZ_RENDERING[kind] == "snapshot" else "interactive"
-        assert verdict.output == expected, kind
+        if ADVANCED_VIZ_RENDERING[kind] == "plotly":
+            assert verdict.output == "interactive" and not verdict.native, kind
+        else:
+            # Not Plotly in the app: drawn in the document, the snapshot its fallback.
+            assert verdict.native, kind
+            assert verdict.output == NATIVE_OUTPUT[kind], kind
 
 
 # The verdicts the audit established by reading each renderer. Pinned by name
@@ -56,8 +61,46 @@ NOT_PLOTLY = {
 }
 
 
+# How the document draws each of them: an interactive figure (Plotly, py3Dmol)
+# or static markup (HTML, SVG).
+NATIVE_OUTPUT = {
+    "genome_view": "interactive",
+    "genome_chord": "interactive",
+    "ideogram": "interactive",
+    "record_card": "static",
+    "ranked_table": "static",
+    "molecule_3d": "interactive",
+    "msa": "interactive",
+    "sequence_track": "interactive",
+    "hmm_logo": "static",
+    "secondary_structure": "interactive",
+    "domain_architecture": "interactive",
+    "pae_matrix": "interactive",
+    "allele_grid": "static",
+    "pedigree": "static",
+}
+
+
 def test_non_plotly_kinds_are_snapshots():
     assert {k for k, v in ADVANCED_VIZ_RENDERING.items() if v == "snapshot"} == NOT_PLOTLY
+    assert set(NATIVE_OUTPUT) == NOT_PLOTLY
+
+
+def test_every_non_plotly_kind_and_view_has_a_native_renderer():
+    """Nothing the app draws without Plotly is left to a snapshot when it has data."""
+    for kind in NOT_PLOTLY:
+        assert renderer_for({"viz_kind": kind}) is not None, kind
+    for meta in (
+        {"viz_kind": "cnv_profile", "config": {"view": "locus"}},
+        {"viz_kind": "sashimi", "config": {"view": "genomespy"}},
+        {"viz_kind": "phylogenetic", "config": {"collapse_rank": "Phylum"}},
+    ):
+        assert renderer_for(meta) is not None, meta
+    # A Plotly view stays the app's own figure; files read by range stay snapshots.
+    assert renderer_for({"viz_kind": "cnv_profile", "config": {"view": "plotly"}}) is None
+    assert renderer_for({"viz_kind": "phylogenetic"}) is None
+    assert renderer_for({"viz_kind": "genome_view", "config": {"source": "file"}}) is None
+    assert renderer_for({"viz_kind": "volcano"}) is None
 
 
 @pytest.mark.parametrize(
@@ -66,12 +109,13 @@ def test_non_plotly_kinds_are_snapshots():
         ({"viz_kind": "complex_heatmap"}, "server"),
         ({"viz_kind": "volcano"}, "server"),
         ({"viz_kind": "rarefaction"}, "extracted"),
-        ({"viz_kind": "record_card"}, "snapshot"),
+        ({"viz_kind": "record_card"}, "native"),
+        ({"viz_kind": "genome_view", "config": {"source": "file"}}, "snapshot"),
         ({"viz_kind": "coverage_track", "config": {"view": "locus"}}, "snapshot"),
-        ({"viz_kind": "cnv_profile", "config": {"view": "locus"}}, "snapshot"),
-        ({"viz_kind": "sashimi", "config": {"view": "genomespy"}}, "snapshot"),
+        ({"viz_kind": "cnv_profile", "config": {"view": "locus"}}, "native"),
+        ({"viz_kind": "sashimi", "config": {"view": "genomespy"}}, "native"),
         ({"viz_kind": "phylogenetic"}, "extracted"),
-        ({"viz_kind": "phylogenetic", "config": {"collapse_rank": "Phylum"}}, "snapshot"),
+        ({"viz_kind": "phylogenetic", "config": {"collapse_rank": "Phylum"}}, "native"),
         ({"viz_kind": "hologram"}, None),
     ],
 )

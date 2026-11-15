@@ -948,7 +948,7 @@ class NotebookBuilder:
     # -------------------------------------------------------------- preflight
     def preflight(self, *, render_available: bool = False) -> NotebookPreflight:
         components: list[NotebookPreflightComponent] = []
-        counts = {"code": 0, "api": 0, "omitted": 0, "snapshot": 0}
+        counts = {"code": 0, "api": 0, "omitted": 0, "snapshot": 0, "native": 0}
         for entry, tab in self.entries():
             if isinstance(entry, MarkdownUnit):
                 continue
@@ -956,6 +956,8 @@ class NotebookBuilder:
             counts[entry.verdict.status] = counts.get(entry.verdict.status, 0) + 1
             if entry.verdict.output == "snapshot":
                 counts["snapshot"] += 1
+            if entry.verdict.native:
+                counts["native"] += 1
             components.append(
                 NotebookPreflightComponent(
                     index=str(meta.get("index") or ""),
@@ -2144,13 +2146,17 @@ fig_funnel"""
                 "It is not drawn with Plotly, so the cell shows a static snapshot of the "
                 "real renderer; `.image` is that PNG, `.data` the data"
             )
+        elif entry.verdict.native and entry.verdict.output == "interactive":
+            handles = "`.figure` is the figure drawn here, `.data` the data"
+        elif entry.verdict.native:
+            handles = "`.data` is the data it is drawn from"
         elif entry.verdict.output == "interactive":
             handles = "`.figure` is the Plotly figure, `.data` the data"
         else:
             handles = "`.data` is the data behind it"
+        verb = "drawn here from its data" if entry.verdict.native else "rendered by Depictio"
         head = _comment(
-            f'"{title}" ({kind}) is rendered by Depictio with the state above: '
-            f"{entry.verdict.reason}. {handles}"
+            f'"{title}" ({kind}) is {verb} with the state above: {entry.verdict.reason}. {handles}'
         )
         body = (
             head + f"\n{name} = client.component({tab_id!r}, {str(meta.get('index'))!r}, "

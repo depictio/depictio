@@ -107,6 +107,11 @@ render = [
   # inlined once per document). Optional for a reader; the document falls back
   # to plain HTML tables without it.
   "itables==2.9.1",
+  # Structures (molecule_3d) drawn in the report, rotatable. Its 3Dmol.js is
+  # the copy shipped in depictio/notebook/assets (the same 2.5.5), inlined once
+  # per document instead of fetched from a CDN. Optional: without it a
+  # structure is drawn as its backbone in Plotly.
+  "py3Dmol==2.5.5",
 ]
 dev = [
   # The test suite covers the server too.
@@ -201,7 +206,7 @@ exclude = [
   "catalog/**/*",
   "cli/configs/**/*",
   # What an exported report embeds so it needs no network: Inter (OFL) for
-  # the Paper look.
+  # the Paper look, 3Dmol.js (BSD-3) for structures.
   "notebook/assets/**/*",
 ]
 
