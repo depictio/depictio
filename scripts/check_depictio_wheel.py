@@ -20,7 +20,9 @@ import zipfile
 # bundled hg19/hg38/mm10 gene annotations put the wheel near 17 MB (17.9 MB at
 # 1.21.0b6). The serverless bundle template (viewer/dist-static/static.html,
 # 12.5 MB raw, 3.9 MB deflated) adds ~4 MB: 24 MB keeps the same ~2 MB headroom.
-MAX_MB = 24
+# The report runtime beside it (report-runtime.js + .css, 10.2 MB raw, ~3.2 MB
+# deflated), what `depictio local up` needs to embed a report's tiles: 28 MB.
+MAX_MB = 28
 REQUIRED = [
     r"depictio/viewer/dist/index\.html",
     # The serverless bundle template `depictio build-static` injects into.
@@ -28,6 +30,9 @@ REQUIRED = [
     # Its conditional add-ons (3Dmol.js for bundles with a molecule_3d tile).
     r"depictio/viewer/dist-static/addons/addons\.json",
     r"depictio/viewer/dist-static/addons/3dmol\.js",
+    # The report runtime a rendered notebook report inlines (serverless/report.py).
+    r"depictio/viewer/dist-static/report-runtime\.js",
+    r"depictio/viewer/dist-static/report-runtime\.css",
     r"depictio/projects/init/iris/\.db_seeds/dashboard\.json",
     r"depictio/projects/init/penguins/\.db_seeds/dashboard\.json",
     r"depictio/projects/nf-core/rnaseq/[^/]+/template\.yaml",

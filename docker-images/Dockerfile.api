@@ -128,6 +128,13 @@ COPY --from=catalog-preview-builder --chown=depictio:depictio \
 COPY --from=catalog-preview-builder --chown=depictio:depictio \
     /build/depictio/viewer/dist-static/static.html \
     /app/depictio/viewer/dist-static/static.html
+# The report runtime (same `build:static`): what a rendered notebook report
+# inlines to draw its tiles with the dashboard's renderers. The API serves it to
+# a reader rendering their own .qmd (GET /serverless/report-runtime).
+COPY --from=catalog-preview-builder --chown=depictio:depictio \
+    /build/depictio/viewer/dist-static/report-runtime.js \
+    /build/depictio/viewer/dist-static/report-runtime.css \
+    /app/depictio/viewer/dist-static/
 # The viewer's icon subset as JSON (scripts/generate-icon-subset.mjs, run by the
 # builds above): the notebook export's icons, with no Iconify call at export
 # time. Path must match SUBSET_PATH in services/icons.py.

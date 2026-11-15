@@ -127,6 +127,15 @@ jobs:
         working-directory: depictio/viewer
         run: node scripts/check-bundle-budget.mjs dist-static/static-structure.html 4613734 static-runtime+3dmol
 
+      # The report runtime (vite.report.config.ts): what a rendered notebook
+      # report inlines ONCE to draw its tiles with the dashboard's renderers —
+      # its script + scoped stylesheet, composed with no manifest
+      # (dist-static/report-runtime-floor.html, written by build-demo.mjs).
+      # Measured 3.01 MB gzip (9.72 MB raw); budget = that + ~0.5 MB.
+      - name: Byte budget — report runtime (notebook report host)
+        working-directory: depictio/viewer
+        run: node scripts/check-bundle-budget.mjs dist-static/report-runtime-floor.html 3670016 report-runtime
+
       - name: Byte budget — catalog preview
         working-directory: depictio/viewer
         run: node scripts/check-bundle-budget.mjs dist-catalog-preview/catalog-preview.html 4718592 catalog-preview
@@ -186,5 +195,7 @@ jobs:
           path: |
             depictio/viewer/dist-static/site/
             depictio/viewer/dist-static/static.html
+            depictio/viewer/dist-static/report-runtime.js
+            depictio/viewer/dist-static/report-runtime.css
             depictio/viewer/dist-static/addons/
           retention-days: 7

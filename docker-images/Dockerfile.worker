@@ -176,6 +176,14 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 COPY --from=static-template-builder --chown=depictio:depictio \
     /build/depictio/viewer/dist-static/static.html \
     /app/depictio/viewer/dist-static/static.html
+# The report runtime, built by the same `build:static`: `render_notebook_report`
+# inlines it beside producer A's manifest so the report's tiles are the
+# dashboard's own renderers (depictio/serverless/report.py). Without it the
+# report keeps every tile's own output.
+COPY --from=static-template-builder --chown=depictio:depictio \
+    /build/depictio/viewer/dist-static/report-runtime.js \
+    /build/depictio/viewer/dist-static/report-runtime.css \
+    /app/depictio/viewer/dist-static/
 
 COPY --chown=depictio:depictio docker-images/run_celery_worker.sh /app/run_celery_worker.sh
 RUN chmod +x /app/run_celery_worker.sh
