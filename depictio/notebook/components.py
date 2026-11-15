@@ -238,6 +238,70 @@ def filters_to_metadata(filters: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
+def _render_groups(state: dict[str, Any]) -> list[dict[str, Any]]:
+    """The saved groups as the render endpoints take them (``groupsRenderPayload``)."""
+    out = []
+    for g in state.get("groups") or []:
+        if not g.get("values"):
+            continue
+        out.append(
+            {
+                "name": g.get("name"),
+                "column_name": g.get("column_name"),
+                "values": list(g.get("values") or []),
+                "color": g.get("color"),
+                "dc_id": g.get("dc_id"),
+            }
+        )
+    return out
+
+
+def figure_group_body(
+    state: dict[str, Any], category_colors: dict[str, dict[str, str]] | None = None
+) -> dict[str, Any]:
+    """The grouping keys of a ``render_figure`` body, as the viewer sends them.
+
+    Mirrors ``renderFigure`` in ``depictio-react-core/src/api.ts``: groups win
+    over a column override, ``grouping_display`` rides along only with one of
+    them, and nothing is sent when the state is ungrouped, so an ungrouped
+    request stays byte-identical. A column override's colour map is the
+    dashboard's own category colours for that column when it has some (the
+    viewer builds it from the column's palette); without one the server
+    declines to facet, as it does for the viewer.
+    """
+    color_by = state.get("color_by") or {}
+    kind = color_by.get("kind") or "none"
+    body: dict[str, Any] = {}
+    groups = _render_groups(state)
+    if kind == "groups" and groups:
+        body = {"groups": groups, "color_by_group": True}
+        if state.get("show_other") is False:
+            body["include_other"] = False
+    elif kind == "column" and color_by.get("column_name"):
+        column = str(color_by["column_name"])
+        spec: dict[str, Any] = {"column_name": column}
+        color_map = (category_colors or {}).get(column)
+        if color_map:
+            spec["color_map"] = dict(color_map)
+        body = {"color_by_column": spec}
+    if body and state.get("display_mode") == "facet":
+        body["grouping_display"] = "facet"
+    return body
+
+
+def card_group_body(state: dict[str, Any]) -> dict[str, Any]:
+    """The comparison keys of a ``bulk_compute_cards`` body (``bulkComputeCards``)."""
+    groups = _render_groups(state)
+    if not (state.get("compare_in_cards") and groups):
+        return {}
+    body: dict[str, Any] = {"groups": groups, "compare_groups": True}
+    if state.get("show_other") is False:
+        body["include_other"] = False
+    if state.get("show_overall") is False:
+        body["include_overall"] = False
+    return body
+
+
 class DepictioComponent:
     """One dashboard component, bound to a client and an analysis state."""
 
@@ -283,6 +347,16 @@ class DepictioComponent:
 
     def __repr__(self) -> str:
         return f"<DepictioComponent {self.component_type} {self.title!r} ({self.index})>"
+
+    def _category_colors(self) -> dict[str, dict[str, str]]:
+        """The dashboard's colour per category value, when the colour-by needs it."""
+        if ((self.state.get("color_by") or {}).get("kind") or "none") != "column":
+            return {}
+        try:
+            colors = self.client.dashboard(self.dashboard_id).get("category_colors")
+        except Exception:  # noqa: BLE001 - a missing palette only costs the facet
+            return {}
+        return colors if isinstance(colors, dict) else {}
 
     # ------------------------------------------------------------- fetching
     def _fetch_figure(self):
@@ -434,7 +508,12 @@ class FigureComponent(DepictioComponent):
     def _fetch_figure(self):
         payload = self.client.post(
             f"/dashboards/render_figure/{self.dashboard_id}/{self.index}",
-            {"filters": self.filters, "theme": self.theme, "full_load": False},
+            {
+                "filters": self.filters,
+                "theme": self.theme,
+                "full_load": False,
+                **figure_group_body(self.state, self._category_colors()),
+            },
         )
         return _figure_from_dict(payload["figure"])
 
@@ -637,6 +716,7 @@ class CardComponent(DepictioComponent):
                 "filters": self.filters,
                 "component_ids": [self.index],
                 "include_icons": True,
+                **card_group_body(self.state),
             },
         )
         return {

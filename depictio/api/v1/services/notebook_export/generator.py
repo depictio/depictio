@@ -962,15 +962,132 @@ def card_row(cards):
             + f"\ndepictio_state = {literal}"
             + "\n\n"
             + _comment(
-                "What a code-mode figure is executed with on the dashboard, ungrouped: "
-                "keyword arguments it spreads into px (`**depictio_group_kwargs`), keys it "
-                "adds to a group_by, and the dashboard's colour per category value"
+                "What a code-mode figure is executed with on the dashboard: keyword arguments "
+                "it spreads into px (`**depictio_group_kwargs`), keys it adds to a group_by, "
+                "and the dashboard's colour per category value. "
+                + (
+                    "The exported state colours by "
+                    + (
+                        "the selection groups"
+                        if self._grouping()[0] == "groups"
+                        else f"the column {self._grouping()[1]!r}"
+                    )
+                    + ", so a figure that spreads them is coloured the same way; each figure "
+                    "cell passes the values for its own data collection"
+                    if self._grouping()[0] != "none"
+                    else "The exported state is ungrouped"
+                )
             )
-            + "\ndepictio_group_kwargs = {}"
-            + "\ndepictio_group_by = []"
+            + "\ndepictio_group_kwargs = "
+            + pprint.pformat(self._group_kwargs(None)[0], width=88, sort_dicts=False)
+            + "\ndepictio_group_by = "
+            + repr(self._group_kwargs(None)[1])
             + "\ndepictio_category_colors = "
             + pprint.pformat(self._category_colors(), width=88, sort_dicts=True)
         )
+
+    # -------------------------------------------------------------- grouping
+    def _grouping(self) -> tuple[str, str | None]:
+        """``("groups" | "column" | "none", column)``: what the exported state colours by."""
+        state = self.plan.state
+        if state.color_by.kind == "groups" and any(g.values for g in state.groups):
+            return "groups", None
+        if state.color_by.kind == "column" and state.color_by.column_name:
+            return "column", state.color_by.column_name
+        return "none", None
+
+    def _group_defs(self) -> list[dict[str, Any]]:
+        from depictio.api.v1.services.figure.groups import sanitize_group_defs
+
+        return sanitize_group_defs(
+            [
+                {
+                    "name": g.name,
+                    "column_name": g.column_name,
+                    "values": list(g.values),
+                    "color": g.color,
+                    "dc_id": g.dc_id,
+                }
+                for g in self.plan.state.groups
+                if g.values
+            ]
+        )
+
+    def _group_kwargs(self, dc: DCPlan | None) -> tuple[dict[str, Any], list[str]]:
+        """``(depictio_group_kwargs, depictio_group_by)`` as the server hands them over.
+
+        Mirrors the code-mode handover in ``build_figure_preview``
+        (``_grouped_kwargs({})`` / ``_column_kwargs({})`` over
+        ``services/figure/groups.py``): empty when ungrouped, or when ``dc``
+        does not carry the column the colouring needs, which is what the
+        server hands a figure whose frame lacks it.
+        """
+        from depictio.api.v1.services.figure.groups import (
+            GROUP_COLUMN,
+            MAX_FACET_CATEGORIES,
+            apply_column_coloring_kwargs,
+            apply_facet_kwargs,
+            apply_group_coloring_kwargs,
+        )
+
+        kind, column = self._grouping()
+        state = self.plan.state
+        facet = state.display_mode == "facet"
+        if kind == "groups":
+            defs = self._group_defs()
+            if dc is not None and dc.columns is not None:
+                defs = [g for g in defs if g["column_name"] in dc.columns]
+            if not defs:
+                return {}, []
+            kwargs = apply_group_coloring_kwargs({}, defs, include_other=state.show_other)
+            n = len(defs) + (1 if state.show_other else 0)
+            if facet and n <= MAX_FACET_CATEGORIES:
+                kwargs = apply_facet_kwargs(kwargs, GROUP_COLUMN)
+            return kwargs, [GROUP_COLUMN]
+        if kind == "column" and column:
+            if dc is not None and dc.columns is not None and column not in dc.columns:
+                return {}, []
+            color_map = self._category_colors().get(column) or {}
+            kwargs = apply_column_coloring_kwargs({}, column, color_map)
+            if facet and color_map and len(color_map) <= MAX_FACET_CATEGORIES:
+                kwargs = apply_facet_kwargs(kwargs, column)
+            return kwargs, [column]
+        return {}, []
+
+    def _group_annotation_lines(self, dc: DCPlan, target: str) -> list[str]:
+        """Source for the server's ``group_annotation_expr`` on ``target``.
+
+        First matching group wins, rows in none are ``Other`` (dropped when the
+        state hides it); membership uses the same categorical predicate as the
+        filters. A group captured on another collection is only reproduced
+        where this one carries its column: the server's cross-collection
+        translation of group values is not.
+        """
+        from depictio.api.v1.services.figure.groups import GROUP_COLUMN, OTHER_LABEL
+
+        branches = []
+        for g in self._group_defs():
+            if dc.columns is not None and g["column_name"] not in dc.columns:
+                continue
+            src = emit_predicate(
+                "MultiSelect", g["column_name"], g["values"], dc.dtype(g["column_name"])
+            )
+            if src is None or src.prelude:
+                continue
+            branches.append((src.expr, g["name"]))
+        if not branches:
+            return []
+        chain = "pl"
+        for expr, name in branches:
+            chain += f".when({expr}).then(pl.lit({name!r}))"
+        lines = [
+            f"{target} = {target}.with_columns(",
+            f"    {chain}.otherwise(pl.lit({OTHER_LABEL!r})).alias({GROUP_COLUMN!r})",
+            ")",
+        ]
+        if not self.plan.state.show_other:
+            lines.append(f"{target} = {target}.filter(pl.col({GROUP_COLUMN!r}) != {OTHER_LABEL!r})")
+        return lines
 
     def _category_colors(self) -> dict[str, dict[str, str]]:
         """``{column: {value: colour}}`` across the family, the main tab first and
@@ -1666,19 +1783,53 @@ fig_funnel"""
         # their own code, not a guess. A UI-built figure is classified "api"
         # instead and goes through _api_cell, so it renders through
         # client.component(...) rather than a reconstructed px.* call.
+        from depictio.api.v1.services.figure.groups import (
+            CODE_GROUP_BY,
+            CODE_GROUP_KWARGS,
+            GROUP_COLUMN,
+        )
+
         code = str(meta.get("code_content") or "").rstrip()
         code_lines = ["    " + line if line.strip() else "" for line in code.split("\n")]
-        body = [
+        # The server hands the grouping over only to code that names it, and
+        # annotates the frame only then (`code_group_optin`).
+        opts_in = any(n in code for n in (CODE_GROUP_KWARGS, CODE_GROUP_BY, GROUP_COLUMN))
+        dc = self.dc_by_id.get(str(meta.get("dc_id") or ""))
+        kind, _column = self._grouping()
+        lines = [
             _comment(f'Figure "{title}", code mode: the author\'s code, verbatim'),
             *prelude,
-            f"def _make_{name}(df):",
+        ]
+        call = f"{name} = _make_{name}({source})"
+        if opts_in and kind != "none" and dc is not None:
+            kwargs, by = self._group_kwargs(dc)
+            frame = source
+            if kind == "groups" and kwargs:
+                annotate = self._group_annotation_lines(dc, "_grouped")
+                if annotate:
+                    lines += [
+                        _comment("Each row labelled with its selection group, as the server does"),
+                        f"_grouped = {source}",
+                        *annotate,
+                    ]
+                    frame = "_grouped"
+                else:
+                    kwargs, by = {}, []
+            call = (
+                f"{name} = _make_{name}(\n    {frame},\n"
+                f"    depictio_group_kwargs={pprint.pformat(kwargs, width=80, sort_dicts=False)},\n"
+                f"    depictio_group_by={by!r},\n)"
+            )
+        lines += [
+            f"def _make_{name}(df, depictio_group_kwargs=depictio_group_kwargs, "
+            "depictio_group_by=depictio_group_by):",
             *code_lines,
             "    return fig",
             "",
-            f"{name} = _make_{name}({source})",
+            call,
             name,
         ]
-        return Cell("\n".join(body))
+        return Cell("\n".join(lines))
 
 
 def generate_qmd(plan: ExportPlan) -> str:

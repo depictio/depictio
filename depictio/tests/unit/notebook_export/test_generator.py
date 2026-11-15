@@ -418,3 +418,77 @@ def test_a_highlight_points_at_the_figure_it_repeats(ampliseq_tabs):
         if m.get("component_type") == "highlight" and m.get("source_tab")
     )
     assert f"from the **{html.escape(source['source_tab'])}** tab" in src
+
+
+def _code_figure_tab(code: str) -> dict:
+    return {
+        "dashboard_id": PENGUINS_DASHBOARD,
+        "title": "Grouped",
+        "stored_metadata": [
+            {
+                "index": "code-fig",
+                "component_type": "figure",
+                "mode": "code",
+                "title": "By group",
+                "dc_id": PENGUINS_DC,
+                "code_content": code,
+            }
+        ],
+    }
+
+
+def _grouped_plan(tab: dict, color_by: dict, display: str = "color") -> ExportPlan:
+    plan = penguins_plan([tab])
+    plan.state = AnalysisState.model_validate(
+        {
+            **penguins_state().model_dump(mode="json"),
+            "color_by": color_by,
+            "display_mode": display,
+        }
+    )
+    return plan
+
+
+def test_a_grouped_export_hands_code_figures_what_the_server_does():
+    """`depictio_group_kwargs` / `depictio_group_by` follow the exported colour-by,
+    and the frame carries the group label, exactly as `build_figure_preview` hands
+    them to code that opts in by naming them."""
+    code = "fig = px.scatter(df, x='bill_length_mm', y='bill_depth_mm', **depictio_group_kwargs)"
+    src = generate_qmd(_grouped_plan(_code_figure_tab(code), {"kind": "groups"}, "facet"))
+    assert_defined_before_use(src)
+    assert "'color': '__depictio_group__'" in src
+    assert "'facet_col': '__depictio_group__'" in src
+    assert "depictio_group_by=['__depictio_group__']" in src
+    assert ".alias('__depictio_group__')" in src
+
+    frame = pl.DataFrame(
+        {
+            "individual_id": ["N1A1", "N9"],
+            "bill_length_mm": [1.0, 2.0],
+            "bill_depth_mm": [3.0, 4.0],
+        }
+    )
+    import plotly.express as px
+
+    cell = next(c for c in python_chunks(src) if "def _make_fig_by_group" in c)
+    scope = {"pl": pl, "px": px, "final_penguins_complete": frame}
+    scope["depictio_group_kwargs"], scope["depictio_group_by"] = {}, []
+    exec(cell, scope)  # noqa: S102 - the generated cell
+    fig = scope["fig_by_group"]
+    assert {t.name for t in fig.data} == {"Heavy Adelie", "Other"}
+
+
+def test_column_colour_by_reaches_code_figures_and_ungrouped_code_is_untouched():
+    code = "fig = px.scatter(df, x='year', y='body_mass_g', **depictio_group_kwargs)"
+    src = generate_qmd(
+        _grouped_plan(_code_figure_tab(code), {"kind": "column", "column_name": "island"})
+    )
+    assert "'color': 'island'" in src and "depictio_group_by=['island']" in src
+    # Code that does not name the grouping is run exactly as before.
+    plain = generate_qmd(
+        _grouped_plan(
+            _code_figure_tab("fig = px.scatter(df, x='year', y='body_mass_g')"), {"kind": "groups"}
+        )
+    )
+    assert "_make_fig_by_group(final_penguins_complete)" in plain
+    assert ".alias('__depictio_group__')" not in plain

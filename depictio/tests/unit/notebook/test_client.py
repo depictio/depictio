@@ -392,6 +392,38 @@ def test_state_can_be_passed_explicitly(client, api):
     assert sent["filters"][0]["value"] == ["Gentoo"]
 
 
+def test_render_calls_carry_the_grouping_the_viewer_sends(client, api):
+    group = {
+        "id": "g1",
+        "name": "Heavy",
+        "color": "#e64980",
+        "dc_id": DC,
+        "column_name": "species",
+        "values": ["Gentoo"],
+        "created_at": 0,
+        "filter_active": False,
+    }
+    state = {
+        **client.state(DASH, groups=[group]),
+        "color_by": {"kind": "groups"},
+        "display_mode": "facet",
+        "show_other": False,
+        "compare_in_cards": True,
+    }
+    client.component(DASH, "fig-1", state=state).figure
+    sent = next(b for m, p, b in api.calls if "/render_figure/" in p)
+    assert sent["color_by_group"] is True and sent["groups"][0]["name"] == "Heavy"
+    assert sent["grouping_display"] == "facet" and sent["include_other"] is False
+    client.component(DASH, "card-1", state=state).data
+    cards = next(b for m, p, b in api.calls if "/bulk_compute_cards/" in p)
+    assert cards["compare_groups"] is True and cards["groups"][0]["values"] == ["Gentoo"]
+    # Ungrouped: the bodies are what they always were.
+    api.calls.clear()
+    client.component(DASH, "fig-1").figure
+    plain = next(b for m, p, b in api.calls if "/render_figure/" in p)
+    assert set(plain) == {"filters", "theme", "full_load"}
+
+
 def test_notebook_and_preflight(client, tmp_path):
     assert client.notebook(DASH).startswith("---\ntitle: Penguins")
     out = tmp_path / "penguins.qmd"
