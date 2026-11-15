@@ -2965,12 +2965,12 @@ def bulk_compute_cards(
             },
             "aggregations": {"<component_index>": ["<aggregation>", ...], ...},
             "group_status": {"<component_index>": [<group status>, ...], ...},
-            "icons": {"<icon_id>": "<svg markup>", ...},
+            "icons": {"<icon_id>": "<svg markup>", ...},  # only with include_icons
             "filter_applied": bool,
             "filter_count": int
         }
 
-        ``icons`` is only populated when ``include_icons`` is set — the React
+        ``icons`` is only present when ``include_icons`` is set — the React
         viewer draws icons itself and never needs this; ``depictio.notebook``
         sets it to get an inline SVG (resolved from Iconify, cached) it can
         bake into a self-contained notebook cell.
@@ -3049,7 +3049,6 @@ def bulk_compute_cards(
     if not cards and not texts:
         empty: dict[str, Any] = {
             "values": {idx: None for idx in definition_errors},
-            "icons": {},
             "filter_applied": bool(filters),
             "filter_count": len(filters),
         }
@@ -3662,21 +3661,18 @@ def bulk_compute_cards(
             folded[f"param:{key}"] = run_params.get(key)
         values[text_idx] = folded
 
-    icons: dict[str, str] = {}
-    if include_icons:
-        from depictio.api.v1.services.icons import resolve_icons
-
-        icons = resolve_icons(m.get("icon_name") for m in cards)
-
     result: dict[str, Any] = {
         "values": values,
         "secondary_values": secondary_values,
         "aggregations": aggregations_per_card,
         "group_status": group_status,
-        "icons": icons,
         "filter_applied": len(base_filter_metadata) > 0,
         "filter_count": len(base_filter_metadata),
     }
+    if include_icons:
+        from depictio.api.v1.services.icons import resolve_icons
+
+        result["icons"] = resolve_icons(m.get("icon_name") for m in cards)
     if definition_errors:
         for idx in definition_errors:
             values.setdefault(idx, None)
