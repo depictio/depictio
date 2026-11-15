@@ -22,16 +22,19 @@
  * unreachable by construction, not by luck). Two traps that walk found:
  *   - reachability is not "fires on page load". `fetchMapData` and
  *     `fetchProject` are one user click deep (a map's data popover; the
- *     header's Settings gear, which unlike Edit/Export carries no
- *     `isStaticBundle` guard) — a clean load trace proves nothing about them.
+ *     header's Settings gear, which unlike Edit carries no `isStaticBundle`
+ *     guard) — a clean load trace proves nothing about them.
  *   - a shimmed function does not make its module safe: `availableValues`
  *     dispatches to `fetchUniqueValues` (shimmed) OR
  *     `fetchMultiQCSampleMappings` (was not).
  * Still unshimmed and deliberately so: `preflightStaticExport` /
  * `dispatchStaticExport` / `pollStaticExport` / `downloadStaticExport`.
  * `ExportStaticModal` IS in the graph (App renders it unconditionally) and
- * only the `!isStaticBundle` guard on its opener keeps it shut, so any future
- * second opener turns those four into live calls.
+ * only the `!isStaticBundle` guard on its opener keeps it shut — that opener
+ * now lives in `SettingsDrawer`'s Actions section (it used to be a header
+ * button), i.e. inside a surface that IS reachable in a bundle, so the guard
+ * has to stay there. Any future second opener turns those four into live
+ * calls.
  *
  * NOT an api.ts concern, but the last thing standing between a bundle and a
  * zero-network load: Iconify. `../icons` registers only the source-SCANNED
@@ -190,7 +193,7 @@ export async function fetchProjectFromDashboard(_dashboardId: string) {
 }
 
 /** Reached one click deep: the header's Settings gear is NOT `isStaticBundle`-
- *  gated (unlike Edit and Export beside it), and `DashboardInfoBody` enriches
+ *  gated (unlike Edit beside it), and `DashboardInfoBody` enriches
  *  `doc.project_id` — which producer A keeps — into a project name. Rejecting
  *  matches the sibling `fetchProjectFromDashboard` above, and that effect
  *  already catches and falls back to "no name"; the drawer's other fields all
@@ -496,13 +499,57 @@ export async function fetchMultiQCSampleMappings(
 
 // ---- advanced viz (requests carry dc_id) -----------------------------------
 
-function advancedVizIndexFor(dcId: string): string {
-  const doc = bundle().dashboard.doc as {
-    stored_metadata?: { index?: string; component_type?: string; dc_id?: string | null }[];
-  };
-  const meta = (doc.stored_metadata ?? []).find(
-    (c) => c.component_type === 'advanced_viz' && String(c.dc_id ?? '') === dcId,
+interface AdvancedVizMeta {
+  index?: string;
+  component_type?: string;
+  viz_kind?: string;
+  dc_id?: string | null;
+  config?: {
+    viz_kind?: string;
+    tree_dc_id?: string | null;
+    metadata_dc_id?: string | null;
+  } | null;
+}
+
+/**
+ * Component index whose frozen payload answers a request for `dcId`.
+ *
+ * TWO id namespaces reach this lookup. Most advanced_viz tiles are found by
+ * their own `dc_id`, but a phylogenetic tile reads two collections —
+ * `PhylogeneticRenderer` pulls the tree from `config.tree_dc_id` and the tip
+ * metadata from `config.metadata_dc_id` — and both of those lookups must land
+ * on the one component whose frozen payload carries the merged answer.
+ *
+ * The two namespaces can collide: nothing stops another advanced_viz from
+ * owning the very DC a phylogenetic tile names as its metadata source, and a
+ * single first-match over the array then hands whichever component happens to
+ * come first the other's payload — silently, because no caller checks. So the
+ * search is ordered instead. `vizKind` is the caller's own kind (every caller
+ * knows it: the request carries it, and the newick fetch is phylogenetic by
+ * construction) and settles the collision; within one kind, owning the DC
+ * outranks merely referencing it in config. The last two passes ignore the kind
+ * so a manifest whose components predate `viz_kind` still resolves.
+ */
+function advancedVizIndexFor(dcId: string, vizKind?: string): string {
+  const doc = bundle().dashboard.doc as { stored_metadata?: AdvancedVizMeta[] };
+  const components = (doc.stored_metadata ?? []).filter(
+    (c) => c.component_type === 'advanced_viz',
   );
+  const owns = (c: AdvancedVizMeta) => String(c.dc_id ?? '') === dcId;
+  const refers = (c: AdvancedVizMeta) => {
+    const cfg = c.config ?? {};
+    return String(cfg.tree_dc_id ?? '') === dcId || String(cfg.metadata_dc_id ?? '') === dcId;
+  };
+  // Kind lives top-level or inside the config blob, depending on how the
+  // component was authored (mirrors `advanced_viz_kind` in serverless/pruning.py).
+  const sameKind = (c: AdvancedVizMeta) =>
+    Boolean(vizKind) && (c.viz_kind ?? c.config?.viz_kind) === vizKind;
+
+  const meta =
+    components.find((c) => sameKind(c) && owns(c)) ??
+    components.find((c) => sameKind(c) && refers(c)) ??
+    components.find(owns) ??
+    components.find(refers);
   if (!meta?.index) {
     throw new Error(`static bundle: no advanced_viz component for dc "${dcId}"`);
   }
@@ -533,7 +580,7 @@ export async function fetchAdvancedVizData(
     return fetchAdvancedVizDataLive(req);
   }
   return frozenPayload<AdvancedVizDataResponse>(
-    advancedVizIndexFor(req.dcId),
+    advancedVizIndexFor(req.dcId, req.vizKind),
     'advanced-viz-data',
   );
 }
@@ -551,7 +598,10 @@ export async function fetchPolarsSchema(dcId: string): Promise<Record<string, st
 }
 
 export async function fetchPhylogenyNewick(dcId: string): Promise<string> {
-  const p = frozenPayload<{ newick?: string }>(advancedVizIndexFor(dcId), 'newick');
+  const p = frozenPayload<{ newick?: string }>(
+    advancedVizIndexFor(dcId, 'phylogenetic'),
+    'newick',
+  );
   return p.newick ?? '';
 }
 

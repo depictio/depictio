@@ -1238,6 +1238,7 @@ export type {
   // Serverless static export types
   StaticExportTierRow,
   StaticExportLinkRow,
+  StaticExportSizeEstimate,
   StaticExportPreflight,
   StaticExportResult,
   StaticExportJob,

@@ -22,7 +22,11 @@ import {
   STATIC_TIER_BADGE_LABEL,
   STATIC_TIER_BADGE_COLOR,
 } from 'depictio-react-core';
-import type { StaticExportPreflight, StaticExportTierRow } from 'depictio-react-core';
+import type {
+  StaticExportPreflight,
+  StaticExportSizeEstimate,
+  StaticExportTierRow,
+} from 'depictio-react-core';
 
 /** 'live' is deliberately absent from the shared maps — the in-bundle badge
  *  only renders non-live tiers. The preflight table shows every component, so
@@ -42,16 +46,16 @@ const UNDECIDED_NOTE =
 /**
  * Whether the build can still overturn this row's verdict.
  *
- * The preflight classifier reads no data, so it never runs the bind-and-refill
- * builder: it calls EVERY figure frozen/binding_miss and the build then
- * upgrades the ones it can redraw in the browser. Presenting that guess as a
- * verdict promises far more frozen tiles than a bundle actually ships (on the
- * reference dashboards, 18 predicted binding misses against 5 real ones), so
- * those rows are shown as undecided instead of frozen.
+ * Expected to be false on every row now: the endpoint runs the bind-and-refill
+ * builder for real before it answers, so a figure's tier is a verdict rather
+ * than a guess. This path survives for a viewer talking to an older API, which
+ * classified data-free — it called EVERY figure frozen/binding_miss and let the
+ * build upgrade the ones it could redraw, promising far more frozen tiles than
+ * a bundle actually ships (on the reference dashboards, 18 predicted binding
+ * misses against 5 real ones). Those rows read as undecided rather than frozen.
  *
- * The endpoint says so itself with `provisional`; the inferred fallback keeps a
- * viewer built against an older API honest, since the shape of that guess
- * identifies exactly the rows it could not settle.
+ * The endpoint states it with `provisional`; the inferred fallback identifies
+ * exactly the rows an older one could not settle.
  */
 function isProvisional(row: StaticExportTierRow): boolean {
   if (typeof row.provisional === 'boolean') return row.provisional;
@@ -63,6 +67,94 @@ function isProvisional(row: StaticExportTierRow): boolean {
 /** Link tiers (A = fully resolved, B = partially resolved, inert = shipped
  *  disabled). Distinct axis from component tiers, hence a separate map. */
 const LINK_TIER_COLOR: Record<string, string> = { A: 'green', B: 'yellow', inert: 'gray' };
+
+const BYTES_PER_MB = 1024 * 1024;
+
+/**
+ * Whole megabytes, never a decimal.
+ *
+ * The preflight sizes the data from row/column counts before anything is
+ * compressed, so the figure runs about twice the file a reader actually gets.
+ * A tenth of a megabyte on top of an error bar that wide would be invented
+ * precision; and since the number is a ceiling, rounding a fraction up to 1 MB
+ * still overstates rather than understates.
+ */
+function approxMB(bytes: number): string {
+  return `${Math.max(1, Math.round(bytes / BYTES_PER_MB))} MB`;
+}
+
+/** Why every size in this modal is prefixed "up to". Said once, next to the
+ *  number, because a reader who takes the estimate for a measurement will
+ *  think the export lied to them when a 40 MB prediction downloads as 18 MB. */
+const SIZE_UPPER_BOUND_NOTE =
+  'That is an upper bound: the data is sized before it is compressed, so the file you get is usually smaller.';
+
+/**
+ * What the size estimate means for the reader, before they commit to a build.
+ *
+ * Three verdicts, same voice as the tier notes: what you will end up with, and
+ * what is awkward about it. `would_be_refused` is a warning rather than a
+ * block — the ceiling is enforced against the REAL bytes mid-build, and this
+ * prediction overshoots, so a bundle the preflight calls too large can still
+ * squeeze under. Disabling Export here would refuse builds the server would
+ * have accepted; the reader is told what is likely and left to decide.
+ */
+const SizeEstimate: React.FC<{ size: StaticExportSizeEstimate }> = ({ size }) => {
+  const total = size.estimated_total_bytes;
+  if (typeof total !== 'number') return null;
+  const upTo = `up to about ${approxMB(total)}`;
+
+  if (size.verdict === 'would_be_refused') {
+    return (
+      <Alert
+        color="red"
+        variant="light"
+        icon={<Icon icon="mdi:alert-circle" />}
+        title="Probably too large to export"
+        data-testid="export-size-estimate"
+        data-size-verdict={size.verdict}
+      >
+        <Text size="sm">
+          This dashboard would build a file of {upTo}, past the{' '}
+          {size.hard_limit_mb ? `${size.hard_limit_mb} MB ` : ''}
+          limit this server allows, so the build is likely to be refused. Fewer or narrower
+          components would bundle less data, or an administrator can raise the limit.{' '}
+          {SIZE_UPPER_BOUND_NOTE}
+        </Text>
+      </Alert>
+    );
+  }
+
+  if (size.verdict === 'over_soft_limit') {
+    return (
+      <Alert
+        color="yellow"
+        variant="light"
+        icon={<Icon icon="mdi:alert-outline" />}
+        title="Large file"
+        data-testid="export-size-estimate"
+        data-size-verdict={size.verdict}
+      >
+        <Text size="sm">
+          This dashboard builds a file of {upTo}. It works, but a file that size is awkward to
+          send by mail, and nothing appears on screen until the whole of it has loaded.{' '}
+          {SIZE_UPPER_BOUND_NOTE}
+        </Text>
+      </Alert>
+    );
+  }
+
+  return (
+    <Text
+      size="xs"
+      c="dimmed"
+      data-testid="export-size-estimate"
+      data-size-verdict={size.verdict ?? 'unknown'}
+    >
+      Expect a file of {upTo}. {SIZE_UPPER_BOUND_NOTE}
+    </Text>
+  );
+};
 
 const POLL_FIRST_MS = 800;
 const POLL_INTERVAL_MS = 1500;
@@ -209,7 +301,11 @@ const ExportStaticModal: React.FC<ExportStaticModalProps> = ({
       opened={opened}
       onClose={onClose}
       title="Export static dashboard"
-      size="lg"
+      // The tier table is the body of this modal: component title, tier chip
+      // and a per-row note, times one row per component (74 of them on the
+      // ampliseq family). At `lg` the note column wrapped to three lines and
+      // the table dominated the viewport; `xl` gives the note room to breathe.
+      size="xl"
       centered
       closeOnClickOutside={false}
     >
@@ -222,8 +318,12 @@ const ExportStaticModal: React.FC<ExportStaticModalProps> = ({
         {preflightLoading && (
           <Group justify="center" gap="xs" py="md">
             <Loader size="sm" />
+            {/* Seconds, not milliseconds: the preflight loads each data
+                collection and tries to redraw every figure in order to answer
+                with a verdict rather than a guess. Say so, or the wait reads
+                as the modal being stuck. */}
             <Text size="sm" c="dimmed">
-              Analyzing components…
+              Redrawing every chart to see which ones stay interactive…
             </Text>
           </Group>
         )}
@@ -385,6 +485,12 @@ const ExportStaticModal: React.FC<ExportStaticModalProps> = ({
             </Text>
           </Group>
         )}
+
+        {/* Last thing above the Export button rather than up with the counts:
+            the tier table is long enough that a reader reaches the button by
+            scrolling past everything else, and a size warning they scrolled
+            over is a size warning they did not read. */}
+        {preflight?.size_estimate && <SizeEstimate size={preflight.size_estimate} />}
 
         <Group justify="flex-end" gap="xs" mt="sm">
           {/* Cancel stays enabled during the build: closing only stops the
