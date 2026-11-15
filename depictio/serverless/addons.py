@@ -13,9 +13,18 @@ say what was embedded and why.
   (``static-runtime/threeDmolAddon.ts``) reads the global the script defines and
   falls back to the stub's message when it is absent.
 
-The add-on is a classic ``<script>`` inserted before ``</body>``: it runs while
-the document parses, before the deferred module script of the runtime, so the
-global is in place when the runtime first imports ``3dmol``.
+* ``pyodide`` — the optional Python runtime (Pyodide, pinned in
+  ``serverless/pyodide/pin.json``): the core, the packages the bundle's Python
+  jobs need, and the server modules they run, all inlined as data blocks
+  (``<script type="application/octet-stream" data-pya=…>``) plus one JSON meta
+  block. Never in the wheel: the producer fetches and verifies the files at
+  export (``pyodide/assets.py``). The runtime boots it lazily, on the first
+  tile that asks (``static-runtime/pyodide/runtime.ts``).
+
+The add-ons are inserted before ``</body>``: 3Dmol's classic ``<script>`` runs
+while the document parses, before the deferred module script of the runtime,
+so its global is in place when the runtime first imports ``3dmol``; the
+Pyodide blocks are inert data until a tile boots the runtime.
 """
 
 from __future__ import annotations
@@ -81,11 +90,42 @@ def addon_script(name: str) -> str:
     return f'<script data-depictio-addon="{name}">{body}</script>'
 
 
-def apply_addons(template: str, names: list[str]) -> str:
-    """Insert the add-ons' scripts before the template's closing ``</body>``."""
+PYODIDE_META_ID = "depictio-pyodide-meta"
+
+
+def pyodide_html(packages: list[str]) -> str:
+    """The Pyodide add-on's data blocks for ``packages`` (+ extras), verified."""
+    from depictio.serverless.pyodide.assets import load_assets_named
+    from depictio.serverless.pyodide.modules import bundle_python_sources
+
+    assets = load_assets_named(packages)
+    meta = {
+        "version": assets.version,
+        "packages": assets.packages,
+        "extras": [f"{n}.zip" for n in assets.extras],
+        "lock": assets.lock,
+        "modules": bundle_python_sources(),
+    }
+    blob = json.dumps(meta, separators=(",", ":")).replace("</", "<\\/")
+    blocks = [f'<script type="application/json" id="{PYODIDE_META_ID}">{blob}</script>']
+    for f in assets.files:
+        blocks.append(
+            f'<script type="application/octet-stream" data-pya="{f.name}" '
+            f'data-gz="{int(f.gzip)}">{f.embedded()}</script>'
+        )
+    return "".join(blocks)
+
+
+def apply_addons(template: str, names: list[str], packages: list[str] | None = None) -> str:
+    """Insert the add-ons' scripts before the template's closing ``</body>``.
+
+    ``packages`` is the Pyodide add-on's package list (``RuntimeAddon.packages``).
+    """
     if not names:
         return template
-    scripts = "".join(addon_script(n) for n in names)
+    scripts = "".join(
+        pyodide_html(list(packages or [])) if n == "pyodide" else addon_script(n) for n in names
+    )
     at = template.rfind("</body>")
     if at < 0:
         return template + scripts

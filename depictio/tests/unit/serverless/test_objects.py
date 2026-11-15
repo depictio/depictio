@@ -12,10 +12,11 @@ import gzip
 import json
 from pathlib import Path
 
+import numpy as np
 import polars as pl
 import pytest
 
-from depictio.models.models.serverless import ComponentTier
+from depictio.models.models.serverless import ComponentTier, TierReason
 from depictio.serverless import addons as addons_mod
 from depictio.serverless.objects import (
     ObjectBudget,
@@ -228,3 +229,95 @@ def test_producer_a_ships_from_the_collection_and_marks_unshippable_tiles_partia
     assert rows["mol"].tier is ComponentTier.LIVE
     assert rows["pae"].tier is ComponentTier.PARTIAL
     assert "holds no readable object" in (rows["pae"].detail or "")
+
+
+def test_image_snapshot_ships_thumbnails_under_the_budget(monkeypatch: pytest.MonkeyPatch) -> None:
+    pytest.importorskip("fastapi")
+    import io as _io
+
+    from PIL import Image
+
+    from depictio.api.v1 import s3 as s3_mod
+    from depictio.api.v1.configs.config import settings
+    from depictio.serverless import producer_a
+    from depictio.serverless.objects import image_s3_path
+
+    big = _io.BytesIO()
+    noise = np.random.default_rng(0).integers(0, 255, (900, 1200, 3), dtype=np.uint8)
+    Image.fromarray(noise, "RGB").save(big, format="PNG")  # incompressible: ~3 MB
+    stored = {"cells/a.png": big.getvalue(), "cells/b.png": b"\x89PNG tiny"}
+
+    class FakeS3:
+        def get_object(self, Bucket, Key):
+            assert Bucket == settings.s3.bucket
+            return {"Body": _io.BytesIO(stored[Key])}
+
+    class FakeRoutes:
+        @staticmethod
+        def render_image_paths_endpoint(
+            dashboard_id, component_id, request, current_user, access_token
+        ):
+            assert request == {"filters": [], "max": 2}
+            rows = [
+                {"img": "cells/a.png", "id": 1},
+                {"img": "b.png", "id": 2},
+                {"img": None, "id": 3},
+            ]
+            return {"rows": rows, "image_column": "img", "paths": [r["img"] for r in rows]}
+
+    monkeypatch.setattr(s3_mod, "s3_client", FakeS3())
+    monkeypatch.setattr(producer_a, "_routes", lambda: FakeRoutes)
+    comp = {
+        "component_type": "image",
+        "image_column": "img",
+        "max_images": 2,
+        "s3_base_folder": f"s3://{settings.s3.bucket}/cells/",
+    }
+    assert image_s3_path(comp["s3_base_folder"], "cells/a.png").endswith("/cells/a.png")
+    blobs: dict[str, str] = {}
+    payload, note = producer_a._freeze_image(
+        None, comp, "img-1", producer_a.ExportUser(id=None), ObjectBudget(), blobs
+    )
+    assert [r["id"] for r in payload["rows"]] == [1, 2]
+    assert all(r["img"].startswith("inline:obj_") for r in payload["rows"])
+    # The 1200 px PNG was downsampled; the tiny one shipped as is.
+    shipped = sorted(len(base64.b64decode(v)) for v in blobs.values())
+    assert shipped[0] == len(b"\x89PNG tiny") and shipped[1] < len(big.getvalue())
+    assert note is None
+
+
+def test_python_jobs_settle_only_when_embedded(monkeypatch: pytest.MonkeyPatch) -> None:
+    pytest.importorskip("fastapi")
+    from depictio.models.models.serverless import DataRef
+    from depictio.serverless import producer_a
+    from depictio.serverless.preflight import TierRow
+    from depictio.serverless.pyodide import plan
+
+    monkeypatch.setattr(plan, "unavailable_reason", lambda features: None)
+    code = {"component_type": "figure", "mode": "code", "dc_id": "d" * 24, "code_content": "fig=1"}
+    bound = {**code, "code_content": "fig=2"}
+    items = [(None, code, "f1"), (None, bound, "f2")]
+    ref = DataRef(uri="inline:dc_x", rows=3, size_bytes=1, columns=[])
+
+    def rows():
+        return {
+            cid: TierRow(cid, cid, "figure", ComponentTier.FROZEN, TierReason.CODE_MODE, "x")
+            for cid in ("f1", "f2")
+        }
+
+    cands = producer_a.mark_python_candidates(items, "auto")
+    assert set(cands) == {"f1", "f2"} and code[producer_a.PYTHON_JOB_KEY] == "code_figure"
+    tiers = rows()
+    jobs, info = producer_a.settle_python_jobs(
+        items, tiers, {"f2": object()}, {"d" * 24: ref}, cands, "auto"
+    )
+    assert list(jobs) == ["f1"] and info["embedded"]
+    assert jobs["f1"].table_uri == f"inline:ipc_{'d' * 24}"
+    assert tiers["f1"].tier is ComponentTier.LIVE and "Pyodide" in (tiers["f1"].detail or "")
+    assert tiers["f2"].tier is ComponentTier.FROZEN  # bound: TypeScript serves it
+    assert producer_a.PYTHON_JOB_KEY not in code  # marker stripped
+    # off: nothing marked, nothing embedded.
+    assert producer_a.mark_python_candidates(items, "off") == {}
+    tiers = rows()
+    jobs, info = producer_a.settle_python_jobs(items, tiers, {}, {"d" * 24: ref}, {}, "off")
+    assert jobs == {} and not info["embedded"] and tiers["f1"].tier is ComponentTier.FROZEN

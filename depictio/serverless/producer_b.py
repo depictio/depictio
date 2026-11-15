@@ -556,9 +556,14 @@ def _run_code_figure(comp: dict[str, Any], df: pl.DataFrame) -> Any:
 
 
 def _code_figure_payload(fig: Any) -> dict[str, Any]:
-    """The frozen payload shape for a code-mode figure."""
+    """The frozen payload shape for a code-mode figure.
+
+    Through ``to_json`` like the server (``build_figure_preview``):
+    ``to_plotly_json`` keeps numpy arrays in the traces (any px call over a
+    frame), which the manifest cannot serialise.
+    """
     return {
-        "figure": fig.to_plotly_json(),
+        "figure": json.loads(fig.to_json()),
         "metadata": {"visu_type": "code", "filter_applied": False},
     }
 
@@ -694,6 +699,73 @@ def _freeze_group_compare_b(
     )
 
 
+def _settle_python_b(
+    components: list[dict[str, Any]],
+    tier_by_id: dict[str, TierRow],
+    bindings: dict[str, Any],
+    data_refs: dict[str, DataRef],
+    candidates: dict[str, tuple[str, set[str]]],
+    mode: str,
+    spec: DashboardDataLite,
+) -> tuple[dict[str, Any], Any]:
+    """Producer B's half of ``producer_a.settle_python_jobs`` (same rules)."""
+    from depictio.models.models.serverless import PythonComponent, RuntimeAddon
+    from depictio.serverless.pyodide import plan
+    from depictio.serverless.pyodide.assets import estimate_bytes, version
+
+    jobs: dict[str, PythonComponent] = {}
+    feats_by: dict[str, set[str]] = {}
+    features: set[str] = set()
+    colors = getattr(spec, "category_colors", None) or {}
+    for comp in components:
+        cid = comp["tag"]
+        if cid not in candidates or cid in bindings:
+            continue
+        row = tier_by_id[cid]
+        dc_id = synthetic_dc_id(
+            comp.get("workflow_tag") or "", comp.get("data_collection_tag") or ""
+        )
+        if dc_id not in data_refs:
+            continue
+        if row.tier is ComponentTier.OMITTED and row.reason is not TierReason.CELERY_COMPUTE:
+            continue
+        job, feats = candidates[cid]
+        spec_in: dict[str, Any] = {}
+        if job == "code_figure":
+            spec_in = {"code": comp.get("code_content") or "", "category_colors": colors}
+        jobs[cid] = PythonComponent(
+            job=job,  # type: ignore[arg-type]
+            dc_id=dc_id,
+            spec=spec_in,
+            max_rows=plan.max_rows(job, feats),
+            table_uri=f"inline:ipc_{dc_id}",
+        )
+        feats_by[cid] = feats
+        features |= feats
+    embedded = bool(jobs) if mode == "auto" else mode == "on"
+    if not embedded:
+        return {}, None
+    if not features:
+        features = {"code_figure"}
+    missing = plan.unavailable_reason(features)
+    if missing:
+        if mode == "on":
+            raise ProducerBError(f"the Python runtime could not be embedded: {missing}")
+        return {}, None
+    for cid, job in jobs.items():
+        tier_by_id[cid].tier = ComponentTier.LIVE
+        tier_by_id[cid].reason = None
+        tier_by_id[cid].detail = plan.live_detail(job.job, feats_by[cid])
+    addon = RuntimeAddon(
+        name="pyodide",
+        version=version(),
+        packages=plan.addon_packages(features),
+        bytes=estimate_bytes(features),
+        reason="Python-live tiles: " + ", ".join(sorted(jobs)),
+    )
+    return dict(jobs), addon
+
+
 def _collect_objects_b(
     components: list[dict[str, Any]],
     tier_by_id: dict[str, TierRow],
@@ -772,8 +844,13 @@ def build_manifest(
     spec: DashboardDataLite,
     data_dir: str | Path,
     mode: BundleMode = BundleMode.SINGLE_FILE,
+    python_runtime: str = "off",
 ) -> BuildResult:
-    """Assemble and validate the full ``BundleManifest`` (no HTML involved)."""
+    """Assemble and validate the full ``BundleManifest`` (no HTML involved).
+
+    ``python_runtime`` (auto / on / off) embeds the optional Pyodide runtime
+    for the tiles it can make live (``serverless/pyodide/plan.py``).
+    """
     if mode is not BundleMode.SINGLE_FILE:
         raise ProducerBError(f"phase 1 supports only single-file mode, got {mode.value!r}")
     data_path = Path(data_dir)
@@ -834,6 +911,31 @@ def build_manifest(
             needed.setdefault(key, (wf_tag, tag))
             consumers.setdefault(key, [])
             companion_cols[key] = companion_cols.get(key, set()) | cols
+
+    # Python-runtime candidates ship their whole table (the server code they
+    # run reads any column); which of them the runtime serves is settled below.
+    python_candidates: dict[str, tuple[str, set[str]]] = {}
+    if python_runtime != "off":
+        from depictio.serverless.pyodide.plan import candidate
+
+        for comp in components:
+            row = tier_by_id[comp["tag"]]
+            wf_tag = comp.get("workflow_tag") or ""
+            dc_tag = comp.get("data_collection_tag") or ""
+            if not wf_tag or not dc_tag:
+                continue
+            # An omitted Celery kind (a computed embedding) is a candidate too:
+            # producer B cannot freeze it, but the runtime can compute it.
+            if row.tier is ComponentTier.OMITTED and row.reason is not TierReason.CELERY_COMPUTE:
+                continue
+            key = dc_key(wf_tag, dc_tag)
+            plan = candidate({**comp, "dc_id": key})
+            if plan is None:
+                continue
+            python_candidates[comp["tag"]] = plan
+            needed.setdefault(key, (wf_tag, dc_tag))
+            consumers.setdefault(key, [])
+            column_sets[key] = None
 
     data_refs: dict[str, DataRef] = {}
     inline_blobs: dict[str, str] = {}
@@ -1033,6 +1135,21 @@ def build_manifest(
             frozen[row.component_id] = FrozenPayload(kind="figure", payload=payload)
 
     objects, addons = _collect_objects_b(components, tier_by_id, data_path, inline_blobs)
+    python_components, python_addon = _settle_python_b(
+        components, tier_by_id, bindings, data_refs, python_candidates, python_runtime, spec
+    )
+    if python_addon is not None:
+        from depictio.serverless.pyodide.plan import ipc_blob
+
+        addons.append(python_addon)
+        frames_by_id = {
+            synthetic_dc_id(wf, dc): pruned_frames[key]
+            for key, (wf, dc) in needed.items()
+            if key in pruned_frames
+        }
+        for job in python_components.values():
+            if f"ipc_{job.dc_id}" not in inline_blobs:
+                inline_blobs[f"ipc_{job.dc_id}"] = ipc_blob(frames_by_id[job.dc_id])
 
     dashboard_doc = build_dashboard_doc(spec)
     if opened:
@@ -1066,6 +1183,7 @@ def build_manifest(
         inline_blobs=inline_blobs,
         objects=objects,
         addons=addons,
+        python_components=python_components,
     )
     # A link whose source DC did not end up bundled (its only components were
     # omitted) has no data to translate through and no precomputed table — the
@@ -1093,7 +1211,12 @@ def render_bundle_html(manifest: BundleManifest) -> str:
         )
     from depictio.serverless.addons import apply_addons
 
-    html = apply_addons(template.read_text(), [a.name for a in manifest.addons])
+    pyodide = next((a for a in manifest.addons if a.name == "pyodide"), None)
+    html = apply_addons(
+        template.read_text(),
+        [a.name for a in manifest.addons],
+        list(pyodide.packages) if pyodide else None,
+    )
     return inject(html, BUNDLE_TOKEN, manifest.model_dump(mode="json"))
 
 
@@ -1102,10 +1225,11 @@ def build_static(
     data_dir: str | Path,
     out_path: str | Path,
     mode: BundleMode = BundleMode.SINGLE_FILE,
+    python_runtime: str = "off",
 ) -> BuildResult:
     """End-to-end: spec file + data dir → self-contained HTML at ``out_path``."""
     spec = load_spec(spec_path)
-    result = build_manifest(spec, data_dir, mode=mode)
+    result = build_manifest(spec, data_dir, mode=mode, python_runtime=python_runtime)
     html = render_bundle_html(result.manifest)
     out = Path(out_path)
     out.parent.mkdir(parents=True, exist_ok=True)

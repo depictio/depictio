@@ -271,7 +271,9 @@ def _fake_export_result() -> ExportResult:
 def test_preflight_happy_path(client, owner, monkeypatch: pytest.MonkeyPatch):
     captured: dict[str, Any] = {}
 
-    def fake_export_static(dashboard_id, out_path=None, mode=None, check=False, user=None):
+    def fake_export_static(
+        dashboard_id, out_path=None, mode=None, check=False, user=None, python_runtime="off"
+    ):
         captured.update(dashboard_id=dashboard_id, check=check, user=user)
         return _fake_export_result()
 
@@ -347,6 +349,7 @@ def test_preflight_happy_path(client, owner, monkeypatch: pytest.MonkeyPatch):
             "hard_limit_mb": 100,
             "verdict": "over_soft_limit",
         },
+        "python_runtime": None,
     }
 
 
@@ -428,6 +431,7 @@ def test_dispatch_creates_job_and_enqueues(
                     "is_admin": False,
                     "is_anonymous": False,
                 },
+                "python_runtime": "auto",
             }
         ]
     ]
@@ -686,9 +690,20 @@ def test_export_task_uploads_bundle(monkeypatch: pytest.MonkeyPatch):
     captured: dict[str, Any] = {}
 
     def fake_export_static(
-        dashboard_id, out_path=None, mode=None, check=False, user=None, single_tab=False
+        dashboard_id,
+        out_path=None,
+        mode=None,
+        check=False,
+        user=None,
+        single_tab=False,
+        python_runtime="off",
     ):
-        captured.update(dashboard_id=dashboard_id, user=user, single_tab=single_tab)
+        captured.update(
+            dashboard_id=dashboard_id,
+            user=user,
+            single_tab=single_tab,
+            python_runtime=python_runtime,
+        )
         Path(out_path).write_text("<html>hi</html>", encoding="utf-8")
         return _fake_export_result()
 

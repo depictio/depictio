@@ -89,6 +89,7 @@ import {
   renderTableLive,
   specsLive,
   userColumns,
+  keptValues,
   type ContactMapLiveRequest,
   type CoverageTrackLiveRequest,
 } from './liveData';
@@ -101,6 +102,7 @@ import {
   uniqueValuesLive,
 } from './interactiveLive';
 import { themedFrozenFigure } from './mantinePlotlyTemplate';
+import { pythonJob, pythonJobFor, runPythonJob, TooManyRowsError } from './pyodide/jobs';
 import { renderMultiQCGeneralStatsStatic, renderMultiQCStatic } from './multiqcShim';
 
 // ---- authFetch: object files and the structure resolver ---------------------
@@ -428,11 +430,61 @@ export async function renderFigure(
       }
     }
   }
+  // Python-live (RFC §13.6): a code figure the transpiler could not bind
+  // re-runs its code in the server's sandbox inside Pyodide, over the rows
+  // the current filters select. Its frozen payload stays the fallback: no
+  // runtime, a failed boot, or a frame above the tile's row limit.
+  const pyJob = pythonJob(componentId);
+  if (pyJob && pyJob.job === 'code_figure') {
+    const dcId = figureDcIdFor(componentId) ?? pyJob.dc_id;
+    try {
+      const { result } = await runPythonJob<FigureResponse>(
+        { ...pyJob, dc_id: dcId },
+        {},
+        scopeRegionFilters(filters, 'figure', figureMetaFor(componentId)),
+      );
+      return themedFrozenFigure(result, theme);
+    } catch (e) {
+      if (!(e instanceof TooManyRowsError)) {
+        const message = e instanceof Error ? e.message : String(e);
+        // The server shows a code error as the figure; do the same rather
+        // than passing the export-time snapshot off as this filter state.
+        if (!/Python runtime|bundle/i.test(message)) {
+          return themedFrozenFigure(codeErrorFigure(message), theme);
+        }
+      }
+      console.error(`static bundle: Python figure failed for "${componentId}"`, e);
+    }
+  }
   // FigureRenderer re-requests on every color-scheme flip (the live path
   // sends `theme` to the server, which re-templates the figure). Offline
   // equivalent: swap the frozen figure's layout.template with the matching
   // client-side mantine template so frozen figures follow the theme too.
   return themedFrozenFigure(frozenPayload<FigureResponse>(componentId, 'figure'), theme);
+}
+
+/** The server's code-error figure, in its words (create_error_figure). */
+function codeErrorFigure(message: string): FigureResponse {
+  return {
+    figure: {
+      data: [],
+      layout: {
+        xaxis: { visible: false },
+        yaxis: { visible: false },
+        annotations: [
+          {
+            text: `Code execution error: ${message}`,
+            showarrow: false,
+            xref: 'paper',
+            yref: 'paper',
+            x: 0.5,
+            y: 0.5,
+          },
+        ],
+      },
+    },
+    metadata: {},
+  } as unknown as FigureResponse;
 }
 
 export async function renderMap(_dashboardId: string, componentId: string) {
@@ -506,8 +558,22 @@ export async function renderTable(
   };
 }
 
+/** A gallery's export-time snapshot: its rows, each image a thumbnail the
+ *  producer shipped (`inline:obj_…`), served here as a `blob:` URL — the
+ *  renderer uses an absolute URL as is. */
 export async function fetchImagePaths(_dashboardId: string, componentId: string) {
-  return frozenPayload(componentId, 'image') as never;
+  const p = frozenPayload<{ rows?: Record<string, unknown>[]; image_column?: string; paths?: unknown[] }>(
+    componentId,
+    'image',
+  );
+  const col = p.image_column ?? '';
+  const asUrl = (v: unknown) =>
+    typeof v === 'string' && v.startsWith('inline:') ? (objectUrl(v) ?? v) : v;
+  return {
+    ...p,
+    rows: (p.rows ?? []).map((r) => ({ ...r, [col]: asUrl(r[col]) })),
+    paths: (p.paths ?? []).map(asUrl),
+  } as never;
 }
 
 export async function fetchJBrowseSession(_dashboardId: string, componentId: string) {
@@ -779,27 +845,91 @@ export async function fetchPhylogenyNewick(dcId: string): Promise<string> {
 // result is frozen at export time — dispatch returns a finished job
 // immediately and poll echoes it (catalog-preview precedent). `coverage_track`
 // left this family in phase 8; see its override below.
-function finishedJob(dcId: string) {
-  const p = frozenPayload<{ result?: unknown }>(advancedVizIndexFor(dcId), 'compute');
+function finishedJob(dcId: string, vizKind?: string) {
+  // The kind disambiguates a DC several advanced_viz tiles read (a frozen
+  // UMAP over the same table as a live sunburst).
+  const p = frozenPayload<{ result?: unknown }>(advancedVizIndexFor(dcId, vizKind), 'compute');
   return { job_id: dcId, status: 'done' as const, result: p.result, from_cache: true };
 }
-export async function dispatchComputeEmbedding(p: { dc_id: string }) {
-  return finishedJob(p.dc_id) as never;
+/** A Celery-shaped job answered by the Python runtime, or `null` to fall back
+ *  to the frozen echo (no runtime, too many rows). A refusal the server would
+ *  also give is a failed job with its message. */
+async function pythonComputeJob(
+  dcId: string,
+  kind: 'group_compare' | 'embedding',
+  payload: { filter_metadata?: InteractiveFilter[] },
+): Promise<unknown | null> {
+  const hit = pythonJobFor(dcId, kind);
+  if (!hit) return null;
+  try {
+    const { result } = await runPythonJob(hit[1], payload, payload.filter_metadata ?? []);
+    return { job_id: dcId, status: 'done' as const, result, from_cache: false };
+  } catch (e) {
+    if (e instanceof TooManyRowsError) return null;
+    const message = e instanceof Error ? e.message : String(e);
+    if (/Python runtime|bundle/i.test(message)) {
+      console.error(`static bundle: Python ${kind} failed`, e);
+      return null;
+    }
+    return { job_id: dcId, status: 'failed' as const, error: message };
+  }
+}
+
+/** A computed embedding without the Python runtime (UMAP always: umap-learn
+ *  needs numba, which has no WebAssembly build). The export-time coordinates
+ *  stay; the points whose sample the current filters exclude are dropped, so
+ *  the tile follows the filters without pretending to recompute the layout. */
+async function filteredFrozenEmbedding(p: {
+  dc_id: string;
+  feature_id_col?: string;
+  filter_metadata?: InteractiveFilter[];
+}) {
+  const job = finishedJob(p.dc_id, 'embedding');
+  const result = job.result as Record<string, unknown> | undefined;
+  const ids = result?.sample_ids;
+  const idCol = p.feature_id_col || 'sample_id';
+  const ref = dataRefFor(p.dc_id);
+  if (!Array.isArray(ids) || !ref || !(p.filter_metadata ?? []).length) return job;
+  if (!userColumns(ref).some((c) => c.name === idCol)) return job;
+  const keep = await keptValues(p.dc_id, idCol, p.filter_metadata ?? []);
+  if (keep === null) return job;
+  const n = ids.length;
+  const rows = ids.map((v, i) => (keep.has(String(v)) ? i : -1)).filter((i) => i >= 0);
+  const pick = (obj: Record<string, unknown>): Record<string, unknown> => {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(obj)) {
+      if (Array.isArray(v) && v.length === n) out[k] = rows.map((i) => v[i]);
+      else if (k === 'extras' && v && typeof v === 'object') out[k] = pick(v as Record<string, unknown>);
+      else out[k] = v;
+    }
+    return out;
+  };
+  return { ...job, result: pick(result ?? {}) };
+}
+
+export async function dispatchComputeEmbedding(p: {
+  dc_id: string;
+  feature_id_col?: string;
+  filter_metadata?: InteractiveFilter[];
+}) {
+  const live = await pythonComputeJob(p.dc_id, 'embedding', p);
+  if (live) return live as never;
+  return (await filteredFrozenEmbedding(p)) as never;
 }
 export async function pollComputeEmbedding(jobId: string) {
-  return finishedJob(jobId) as never;
+  return finishedJob(jobId, 'embedding') as never;
 }
 export async function dispatchComplexHeatmap(p: { dc_id: string }) {
-  return finishedJob(p.dc_id) as never;
+  return finishedJob(p.dc_id, 'complex_heatmap') as never;
 }
 export async function pollComplexHeatmap(jobId: string) {
-  return finishedJob(jobId) as never;
+  return finishedJob(jobId, 'complex_heatmap') as never;
 }
 export async function dispatchUpset(p: { dc_id: string }) {
-  return finishedJob(p.dc_id) as never;
+  return finishedJob(p.dc_id, 'upset_plot') as never;
 }
 export async function pollUpset(jobId: string) {
-  return finishedJob(jobId) as never;
+  return finishedJob(jobId, 'upset_plot') as never;
 }
 /** Live path (phase 8): `coverage_track` dispatches to Celery on a server, but
  *  its task is a projection + two whitelist masks + a sort + a
@@ -823,16 +953,16 @@ export async function dispatchCoverageTrack(p: CoverageTrackLiveRequest) {
       from_cache: false,
     } as never;
   }
-  return finishedJob(p.dc_id) as never;
+  return finishedJob(p.dc_id, 'coverage_track') as never;
 }
 export async function pollCoverageTrack(jobId: string) {
-  return finishedJob(jobId) as never;
+  return finishedJob(jobId, 'coverage_track') as never;
 }
 export async function dispatchSankey(p: { dc_id: string }) {
-  return finishedJob(p.dc_id) as never;
+  return finishedJob(p.dc_id, 'sankey') as never;
 }
 export async function pollSankey(jobId: string) {
-  return finishedJob(jobId) as never;
+  return finishedJob(jobId, 'sankey') as never;
 }
 /** contact_map windows are `compute_live`: every step of the task commutes
  *  with the filters, so the browser replays it over the bundled Parquet
@@ -847,10 +977,10 @@ export async function dispatchContactMap(p: ContactMapLiveRequest) {
       from_cache: false,
     } as never;
   }
-  return finishedJob(p.dc_id) as never;
+  return finishedJob(p.dc_id, 'contact_map') as never;
 }
 export async function pollContactMap(jobId: string) {
-  return finishedJob(jobId) as never;
+  return finishedJob(jobId, 'contact_map') as never;
 }
 
 interface GroupSelector {
@@ -874,7 +1004,11 @@ export async function dispatchGroupCompare(p: {
   group_b?: GroupSelector;
   test?: string;
   log_transform?: boolean;
+  filter_metadata?: InteractiveFilter[];
 }) {
+  // Python-live: any pair, any filter state, the server's own function.
+  const live = await pythonComputeJob(p.dc_id, 'group_compare', p);
+  if (live) return live as never;
   const index = advancedVizIndexFor(p.dc_id, 'group_compare');
   const frozen = bundle().frozen[index]?.payload as
     | { result?: unknown; request?: { group_a?: GroupSelector; group_b?: GroupSelector; test?: string; log_transform?: boolean } }
@@ -898,10 +1032,10 @@ export async function dispatchGroupCompare(p: {
         'exported. Another pair or test needs the live dashboard.',
     } as never;
   }
-  return finishedJob(p.dc_id) as never;
+  return finishedJob(p.dc_id, 'group_compare') as never;
 }
 export async function pollGroupCompare(jobId: string) {
-  return finishedJob(jobId) as never;
+  return finishedJob(jobId, 'group_compare') as never;
 }
 
 // ---- interactive endpoints beyond the option list (audit §3 item 6) --------

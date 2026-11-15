@@ -84,8 +84,10 @@ from depictio.serverless.producer_a import (
         # applied a pure patch — the runtime re-applies that patch offline.
         ({"component_type": "multiqc"}, ComponentTier.LIVE, None),
         ({"component_type": "map"}, ComponentTier.FROZEN, TierReason.MAP_TILES),
-        ({"component_type": "image"}, ComponentTier.OMITTED, TierReason.IMAGE),
-        ({"component_type": "jbrowse"}, ComponentTier.OMITTED, TierReason.JBROWSE),
+        # Snapshots since the zero-omitted pass: a gallery ships thumbnails of
+        # its default rows, a genome browser its export-time track table.
+        ({"component_type": "image"}, ComponentTier.FROZEN, TierReason.IMAGE),
+        ({"component_type": "jbrowse"}, ComponentTier.FROZEN, TierReason.JBROWSE),
         # A computed embedding (``compute_method``) is a Celery kind; with no
         # derivable request it is omitted. A table-driven one is a data path.
         (
@@ -898,8 +900,22 @@ def offline_stack(monkeypatch: pytest.MonkeyPatch) -> dict[str, list]:
         assert str(data_collection_id) == str(TREE_DC_OID)
         return "(t1:0.1,t2:0.2,t3:0.3);"
 
+    def fake_image_paths(dashboard_id, component_id, request, current_user, access_token):
+        # A gallery whose rows name no image: its snapshot ships no thumbnail.
+        return {
+            "rows": [],
+            "image_column": "img",
+            "sort_by": None,
+            "sort_dir": "desc",
+            "sortable_columns": [],
+            "paths": [],
+            "filter_applied": False,
+            "filter_count": 0,
+        }
+
     monkeypatch.setattr(routes_mod, "bulk_compute_cards", fake_bulk_cards)
     monkeypatch.setattr(routes_mod, "render_table_endpoint", fake_render_table)
+    monkeypatch.setattr(routes_mod, "render_image_paths_endpoint", fake_image_paths)
     monkeypatch.setattr(celery_mod, "build_figure_preview", fake_figure_preview)
     monkeypatch.setattr(av_mod, "fetch_advanced_viz_data", fake_av_data)
     monkeypatch.setattr(av_mod, "get_phylogeny_newick", fake_newick)
@@ -986,7 +1002,7 @@ def test_offline_export_tiers(offline_export: BundleManifest):
     assert tiers["phy-1"].detail and "Newick" in tiers["phy-1"].detail
     assert tiers["emb-1"].tier is ComponentTier.OMITTED
     assert tiers["emb-1"].reason is TierReason.CELERY_COMPUTE
-    assert tiers["img-1"].tier is ComponentTier.OMITTED
+    assert tiers["img-1"].tier is ComponentTier.FROZEN
     assert tiers["img-1"].reason is TierReason.IMAGE
 
 
@@ -1057,7 +1073,10 @@ def test_offline_export_frozen_payloads(offline_export: BundleManifest):
     # The live advanced_viz ships NO frozen payload (the runtime recomputes it).
     assert "av-1" not in frozen
     # Omitted components ship no payload.
-    assert "emb-1" not in frozen and "img-1" not in frozen
+    assert "emb-1" not in frozen
+    # A gallery snapshot is a frozen payload now (rows + shipped thumbnails).
+    assert frozen["img-1"].kind == "image"
+    assert frozen["img-1"].payload["rows"] == []
 
 
 def test_offline_export_bindings(offline_export: BundleManifest):

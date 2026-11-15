@@ -129,6 +129,7 @@ from depictio.serverless.binding import (
     planned_figure_miss,
 )
 from depictio.serverless.companions import filter_expr_companionable
+from depictio.serverless.objects import IMAGE_SNAPSHOT_MAX, IMAGE_THUMB_PX, ObjectBudget
 from depictio.serverless.preflight import (
     LINK_TIER_A,
     LINK_TIER_B,
@@ -152,6 +153,7 @@ from depictio.serverless.prologue import transpile_with_reason
 from depictio.serverless.prologue_exec import execute_ops, terminal_px_call
 from depictio.serverless.pruning import (
     CELERY_VIZ_KINDS,
+    PYTHON_JOB_KEY,
     advanced_viz_capability,
     advanced_viz_columns,
     advanced_viz_companions,
@@ -285,6 +287,7 @@ def _ships_data(comp: dict[str, Any]) -> bool:
         or _refillable_figure(comp)
         or serves_advanced_viz_live(comp)
         or ships_frozen_inputs(comp)
+        or bool(comp.get(PYTHON_JOB_KEY))
     )
 
 
@@ -696,15 +699,19 @@ def classify_stored_component(comp: dict[str, Any]) -> PlannedTier:
         )
     if ctype == "image":
         return PlannedTier(
-            ComponentTier.OMITTED,
+            ComponentTier.FROZEN,
             TierReason.IMAGE,
-            "image galleries read from S3; no object store in a static bundle",
+            "export-time snapshot: the gallery's images at the default filter state, read "
+            "from S3 at export and shipped as thumbnails (up to "
+            f"{IMAGE_SNAPSHOT_MAX}, longest side {IMAGE_THUMB_PX} px, within the bundle's "
+            "object cap); filters do not reach it",
         )
     if ctype == "jbrowse":
         return PlannedTier(
-            ComponentTier.OMITTED,
+            ComponentTier.FROZEN,
             TierReason.JBROWSE,
-            "JBrowse sessions need a genome-data backend",
+            "the genome browser streams its tracks from the server at view time; the bundle "
+            "shows the export-time session instead: assembly, locus and the track table",
         )
     if ctype == "advanced_viz":
         kind = advanced_viz_kind(comp)
@@ -826,7 +833,11 @@ def sanitize_dashboard_doc(dashboard_data: dict[str, Any]) -> dict[str, Any]:
     doc = {k: v for k, v in dashboard_data.items() if k not in _DOC_STRIP_KEYS}
     if isinstance(doc.get("stored_metadata"), list):
         doc["stored_metadata"] = [
-            {k: v for k, v in m.items() if k not in (_FOLD_COLORS_KEY, _FOLD_COLUMNS_KEY)}
+            {
+                k: v
+                for k, v in m.items()
+                if k not in (_FOLD_COLORS_KEY, _FOLD_COLUMNS_KEY, PYTHON_JOB_KEY)
+            }
             if isinstance(m, dict)
             else m
             for m in doc["stored_metadata"]
@@ -2207,6 +2218,7 @@ def used_dc_ids(
     items: list[tuple[FamilyTab, dict[str, Any], str]],
     tier_by_id: dict[str, TierRow],
     bindings: dict[str, BindingTable],
+    python_ids: frozenset[str] | set[str] = frozenset(),
 ) -> set[str]:
     """The DCs whose bytes the bundle actually needs.
 
@@ -2227,6 +2239,7 @@ def used_dc_ids(
             or cid in bindings
             or (serves_advanced_viz_live(c) and tier_by_id[cid].tier is ComponentTier.LIVE)
             or (ships_frozen_inputs(c) and tier_by_id[cid].tier is ComponentTier.FROZEN)
+            or (cid in python_ids)
         )
     }
     # ...the collections a live text tile's values read...
@@ -2760,6 +2773,9 @@ class ExportResult:
     link_rows: list[LinkRow] = field(default_factory=list)
     tabs: list[TabRow] = field(default_factory=list)
     size: BundleSize | None = None
+    #: The Python runtime plan: ``{"mode", "embedded", "components", "bytes",
+    #: "version"}`` — what the export modal states before the build.
+    python: dict[str, Any] | None = None
 
 
 def _fetch_dashboard(dashboard_id: str) -> dict[str, Any]:
@@ -2906,6 +2922,7 @@ def export_manifest(
     single_tab: bool = False,
     budget: ComputeBudget | None = None,
     decide_only: bool = False,
+    python_runtime: str = "off",
 ) -> ExportResult:
     """Assemble and validate the full ``BundleManifest`` for a dashboard family.
 
@@ -2980,6 +2997,10 @@ def export_manifest(
     dc_ids = dashboard_dc_ids(stored_metadata)
     emitted_links = emit_link_configs(project_links(project_doc), dc_ids)
 
+    # Python-runtime candidates (RFC §13.6) ship their whole table: the build
+    # below decides which of them the runtime really serves.
+    python_candidates = mark_python_candidates(items, python_runtime)
+
     # Live tier: bundle the DCs cards/interactive (and ui-mode figures, and the
     # live advanced_viz kinds) read — keyed by dc_id, so a DC read on three tabs
     # is loaded, pruned and inlined exactly once.
@@ -2995,6 +3016,9 @@ def export_manifest(
     frozen: dict[str, FrozenPayload] = {}
     bindings: dict[str, BindingTable] = {}
     prologues: dict[str, list[PrologueOp]] = {}
+    # One object budget for every file the bundle ships: structures, PAE
+    # matrices and gallery thumbnails alike.
+    object_budget = ObjectBudget()
     computes_frozen = 0
     computes_skipped = 0
 
@@ -3088,15 +3112,39 @@ def export_manifest(
                 frozen[component_id] = FrozenPayload(kind=kind, payload=payload)
             elif ctype == "map":
                 frozen[component_id] = FrozenPayload(kind="map", payload=_freeze_map(comp, user))
+            elif ctype == "image":
+                payload, note = _freeze_image(
+                    dashboard_oid, comp, component_id, user, object_budget, inline_blobs
+                )
+                frozen[component_id] = FrozenPayload(kind="image", payload=payload)
+                if note:
+                    row.detail = f"{row.detail}; {note}"
+            elif ctype == "jbrowse":
+                frozen[component_id] = FrozenPayload(
+                    kind="jbrowse", payload=_freeze_jbrowse(dashboard_oid, component_id, user)
+                )
         except Exception as exc:
             row.tier = ComponentTier.OMITTED
             row.reason = row.reason or TierReason.UNSUPPORTED
             row.detail = f"frozen payload could not be computed: {exc}"
 
+    python_components, python_info = settle_python_jobs(
+        items, tier_by_id, bindings, data_refs, python_candidates, python_runtime, decide_only
+    )
+    if python_components and not decide_only:
+        from depictio.serverless.pyodide.plan import ipc_blob, user_frame
+
+        for job in python_components.values():
+            key = f"ipc_{job.dc_id}"
+            if key not in inline_blobs and job.dc_id in pruned_frames:
+                inline_blobs[key] = ipc_blob(
+                    user_frame(pruned_frames[job.dc_id], data_refs[job.dc_id].companions)
+                )
+
     resolve_highlight_tiers(items, tabs, tier_by_id)
 
     dcs_loaded = len(data_refs)
-    used_dcs = used_dc_ids(items, tier_by_id, bindings)
+    used_dcs = used_dc_ids(items, tier_by_id, bindings, set(python_components))
     for dc_id in [d for d in data_refs if d not in used_dcs]:
         del data_refs[dc_id]
         inline_blobs.pop(f"dc_{dc_id}", None)
@@ -3132,6 +3180,7 @@ def export_manifest(
             link_rows=link_rows,
             tabs=[tab.tab_row() for tab in tabs],
             size=bundle_size,
+            python=python_info,
         )
 
     # Links last: a link's tier depends on whether its SOURCE DC survived the
@@ -3144,8 +3193,10 @@ def export_manifest(
     )
 
     objects, resolved_structures, addons = collect_objects_a(
-        items, tier_by_id, pruned_frames, inline_blobs, user
+        items, tier_by_id, pruned_frames, inline_blobs, user, object_budget
     )
+    if python_info.get("embedded"):
+        addons.append(python_info["addon"])
 
     built_at = datetime.now(timezone.utc).isoformat()
     manifest = BundleManifest(
@@ -3176,6 +3227,7 @@ def export_manifest(
         objects=objects,
         resolved_structures=resolved_structures,
         addons=addons,
+        python_components=python_components,
     )
     logger.info(
         "producer A: exported %s (%d tab(s), %d component(s), %d data collection(s), "
@@ -3197,6 +3249,86 @@ def export_manifest(
         link_rows=link_rows,
         tabs=[tab.tab_row() for tab in tabs],
         size=bundle_size,
+        python={k: v for k, v in python_info.items() if k != "addon"},
+    )
+
+
+def _freeze_image(
+    dashboard_oid: ObjectId,
+    comp: dict[str, Any],
+    component_id: str,
+    user: ExportUser,
+    budget: ObjectBudget,
+    inline_blobs: dict[str, str],
+) -> tuple[dict[str, Any], str | None]:
+    """A gallery's export-time snapshot: its default rows, images as thumbnails.
+
+    The rows come from ``render_image_paths_endpoint`` (the gallery's own
+    order and cap); each image is read from the instance's bucket, downsampled
+    (:func:`objects.thumbnail`) and shipped under the bundle's object budget.
+    The row's image value becomes the ``inline:`` key; the runtime turns it
+    into a ``blob:`` URL. Rows whose image did not fit are left out, and the
+    tier detail says how many.
+    """
+    from depictio.api.v1.s3 import s3_client
+    from depictio.serverless.objects import image_s3_path, pack_object, thumbnail
+
+    routes = _routes()
+    cap = min(int(comp.get("max_images") or IMAGE_SNAPSHOT_MAX), IMAGE_SNAPSHOT_MAX)
+    payload = routes.render_image_paths_endpoint(
+        dashboard_oid,
+        component_id,
+        {"filters": [], "max": cap},
+        current_user=user,
+        access_token=None,
+    )
+    image_column = payload.get("image_column") or comp.get("image_column")
+    base = str(comp.get("s3_base_folder") or "")
+    from depictio.api.v1.configs.config import settings
+
+    kept: list[dict[str, Any]] = []
+    rows = [r for r in payload.get("rows") or [] if r.get(image_column)]
+    for row in rows:
+        rel = row.get(image_column)
+        path = image_s3_path(base, str(rel))
+        bucket, _, key = path.removeprefix("s3://").partition("/")
+        if bucket != settings.s3.bucket or not key:
+            continue
+        try:
+            data = thumbnail(s3_client.get_object(Bucket=bucket, Key=key)["Body"].read())
+        except Exception as exc:
+            logger.warning("producer A: gallery image %s unreadable: %s", path, exc)
+            continue
+        if not budget.admits(len(data)):
+            continue
+        blob_key, b64, _ = pack_object(data, compress=False)
+        if blob_key not in budget.seen:
+            budget.seen.add(blob_key)
+            budget.used += len(data)
+            inline_blobs[blob_key] = b64
+        kept.append({**row, image_column: f"inline:{blob_key}"})
+    payload = {
+        **payload,
+        "rows": kept,
+        "paths": [r[image_column] for r in kept],
+        "filter_applied": False,
+    }
+    note = None
+    if len(kept) < len(rows):
+        note = (
+            f"{len(kept)} of {len(rows)} images shipped (the rest did not fit or were unreadable)"
+        )
+    return payload, note
+
+
+def _freeze_jbrowse(dashboard_oid: ObjectId, component_id: str, user: ExportUser) -> dict[str, Any]:
+    """The genome browser's session at the default filter state (its track table)."""
+    return _routes().render_jbrowse_endpoint(
+        dashboard_oid,
+        component_id,
+        {"filters": []},
+        current_user=user,
+        access_token=None,
     )
 
 
@@ -3332,6 +3464,7 @@ def collect_objects_a(
     pruned_frames: dict[str, Any],
     inline_blobs: dict[str, str],
     user: ExportUser,
+    budget: Any = None,
 ) -> tuple[dict[str, Any], list[Any], list[Any]]:
     """Ship the object files the live protein tiles read (``objects`` path).
 
@@ -3343,7 +3476,6 @@ def collect_objects_a(
     from depictio.serverless.addons import addon_entry
     from depictio.serverless.objects import (
         THREE_DMOL_KINDS,
-        ObjectBudget,
         build_collection,
         collection_detail,
         object_dc_refs,
@@ -3351,7 +3483,7 @@ def collect_objects_a(
         resolve_mode,
     )
 
-    budget = ObjectBudget()
+    budget = budget or ObjectBudget()
     objects: dict[str, Any] = {}
     resolved: list[Any] = []
     three_dmol: list[str] = []
@@ -3409,6 +3541,113 @@ def collect_objects_a(
     return objects, resolved, addons
 
 
+def mark_python_candidates(
+    items: list[tuple[FamilyTab, dict[str, Any], str]], mode: str
+) -> dict[str, tuple[str, set[str]]]:
+    """Mark the Python-runtime candidates (``pyodide/plan.py``) before bundling.
+
+    Marked components ship their whole table. ``off`` marks nothing.
+    """
+    from depictio.serverless.pyodide.plan import candidate
+
+    if mode == "off":
+        return {}
+    out: dict[str, tuple[str, set[str]]] = {}
+    for _tab, comp, cid in items:
+        plan = candidate(comp)
+        if plan is None:
+            continue
+        comp[PYTHON_JOB_KEY] = plan[0]
+        out[cid] = plan
+    return out
+
+
+def settle_python_jobs(
+    items: list[tuple[FamilyTab, dict[str, Any], str]],
+    tier_by_id: dict[str, TierRow],
+    bindings: dict[str, BindingTable],
+    data_refs: dict[str, DataRef],
+    candidates: dict[str, tuple[str, set[str]]],
+    mode: str,
+    decide_only: bool = False,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Which candidates the embedded Python runtime serves, after the build.
+
+    A code figure that bound is live in TypeScript and needs no Python; a
+    candidate whose table did not make it into the bundle cannot run. The rest
+    become ``live`` with the job named in their detail — their frozen payload,
+    computed by the loop above, stays as the fallback. ``auto`` embeds the
+    runtime only when one job survives; ``on`` embeds it regardless.
+    """
+    from depictio.models.models.serverless import PythonComponent, RuntimeAddon
+    from depictio.serverless.pyodide import plan
+    from depictio.serverless.pyodide.assets import estimate_bytes, version
+
+    jobs: dict[str, Any] = {}
+    job_features: dict[str, set[str]] = {}
+    features: set[str] = set()
+    for _tab, comp, cid in items:
+        comp.pop(PYTHON_JOB_KEY, None)
+        if cid not in candidates:
+            continue
+        job, feats = candidates[cid]
+        row = tier_by_id[cid]
+        dc_id = str(comp.get("dc_id") or "")
+        if cid in bindings or row.tier is ComponentTier.OMITTED or dc_id not in data_refs:
+            continue
+        spec: dict[str, Any] = {}
+        if job == "code_figure":
+            spec = {
+                "code": comp.get("code_content") or "",
+                "category_colors": comp.get(_FOLD_COLORS_KEY) or {},
+            }
+        jobs[cid] = PythonComponent(
+            job=job,  # type: ignore[arg-type]
+            dc_id=dc_id,
+            spec=spec,
+            max_rows=plan.max_rows(job, feats),
+            table_uri=f"inline:ipc_{dc_id}",
+        )
+        job_features[cid] = feats
+        features |= feats
+    embedded = bool(jobs) if mode == "auto" else mode == "on"
+    if mode == "on" and not features:
+        features = {"code_figure"}
+    info: dict[str, Any] = {
+        "mode": mode,
+        "embedded": embedded,
+        "version": version(),
+        "components": sorted(jobs) if embedded else [],
+        "candidates": sorted(jobs),
+        "bytes": estimate_bytes(features) if embedded else 0,
+        "bytes_if_embedded": estimate_bytes(features or {"code_figure"}),
+    }
+    if embedded and not decide_only:
+        missing = plan.unavailable_reason(features)
+        if missing and mode == "on":
+            raise ProducerAError(f"the Python runtime could not be embedded: {missing}")
+        if missing:
+            logger.warning(
+                "producer A: Python runtime left out (%s); its tiles stay frozen", missing
+            )
+            info.update(embedded=False, components=[], bytes=0, unavailable=missing)
+            embedded = False
+    if not embedded:
+        return {}, info
+    for cid, job in jobs.items():
+        row = tier_by_id[cid]
+        row.tier = ComponentTier.LIVE
+        row.detail = plan.live_detail(job.job, job_features[cid])
+    info["addon"] = RuntimeAddon(
+        name="pyodide",
+        version=version(),
+        packages=plan.addon_packages(features),
+        bytes=info["bytes"],
+        reason="Python-live tiles: " + ", ".join(sorted(jobs)),
+    )
+    return {cid: job for cid, job in jobs.items()}, info
+
+
 def _refuse_oversized_render(html: str, size: BundleSize | None) -> None:
     """Refuse a rendered bundle past the hard ceiling, before it is written.
 
@@ -3448,6 +3687,7 @@ def export_static(
     user: Any = None,
     single_tab: bool = False,
     bind: bool = True,
+    python_runtime: str = "off",
 ) -> ExportResult:
     """End-to-end: dashboard in Mongo → self-contained HTML at ``out_path``.
 
@@ -3479,7 +3719,15 @@ def export_static(
             for the tests, and for anyone debugging a dashboard whose data
             cannot be read (an unreachable S3, a Delta table mid-rewrite) who
             still wants the component inventory. Not public CLI surface.
+        python_runtime: ``auto`` (the CLI's and the API's default) embeds the optional Python runtime
+            (Pyodide) when a tile it can make live survives the build — a code
+            figure that did not bind, a group comparison, a PCA / PCoA / t-SNE
+            embedding — ``on`` forces it, ``off`` leaves it out (those tiles
+            stay frozen). See ``serverless/pyodide/plan.py``. The library
+            default is ``off``, so nothing downloads unless a caller asks.
     """
+    if python_runtime not in ("auto", "on", "off"):
+        raise ProducerAError(f"python_runtime must be auto, on or off, got {python_runtime!r}")
     bundle_mode = BundleMode(mode) if not isinstance(mode, BundleMode) else mode
     if bundle_mode is not BundleMode.SINGLE_FILE:
         raise ProducerAError(f"phase 2 supports only single-file mode, got {bundle_mode.value!r}")
@@ -3487,7 +3735,13 @@ def export_static(
     export_user = resolve_user(user)
 
     if check and bind:
-        return export_manifest(dashboard_id, export_user, single_tab=single_tab, decide_only=True)
+        return export_manifest(
+            dashboard_id,
+            export_user,
+            single_tab=single_tab,
+            decide_only=True,
+            python_runtime=python_runtime,
+        )
 
     if check:
         entry_doc = _fetch_dashboard(dashboard_id)
@@ -3518,7 +3772,9 @@ def export_static(
     if out_path is None:
         raise ProducerAError("out_path is required unless check=True")
 
-    result = export_manifest(dashboard_id, export_user, single_tab=single_tab)
+    result = export_manifest(
+        dashboard_id, export_user, single_tab=single_tab, python_runtime=python_runtime
+    )
     assert result.manifest is not None
     html = render_bundle_html(result.manifest)
     # Last ceiling check, and the only one taken on the whole file (RFC §8.1).

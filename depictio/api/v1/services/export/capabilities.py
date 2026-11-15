@@ -383,8 +383,10 @@ _SERVERLESS_ALIASES = {"upset": "upset_plot"}
 
 #: ``compute_method`` values an ``embedding`` dispatches to Celery with.
 EMBEDDING_COMPUTE_REASON = (
-    "embedding computed on the server ({method}); frozen at the export's default "
-    "filter state, so filters do not reach it"
+    "embedding computed on the server ({method}); the coordinates are frozen at the "
+    "export's default filter state, and the points the current filters exclude are "
+    "dropped in the browser (matched on the sample column), so the layout is not "
+    "recomputed"
 )
 
 

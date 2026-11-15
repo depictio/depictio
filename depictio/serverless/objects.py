@@ -125,7 +125,7 @@ def needs_three_dmol(components: Iterable[dict[str, Any]]) -> bool:
     )
 
 
-def pack_object(data: bytes) -> tuple[str, str, bool]:
+def pack_object(data: bytes, compress: bool = True) -> tuple[str, str, bool]:
     """``(blob_key, base64, gzipped)`` for one object's bytes.
 
     Text formats (PDB, mmCIF, PAE JSON/TSV) compress 3-6x, and the renderer's
@@ -133,7 +133,7 @@ def pack_object(data: bytes) -> tuple[str, str, bool]:
     not already gzipped is stored compressed. The key is content-addressed, so
     two tiles on the same model ship it once.
     """
-    gzipped = data[:2] == _GZIP_MAGIC
+    gzipped = data[:2] == _GZIP_MAGIC or not compress
     stored = data if gzipped else gzip.compress(data, compresslevel=9, mtime=0)
     key = "obj_" + hashlib.sha256(stored).hexdigest()[:24]
     return key, base64.b64encode(stored).decode("ascii"), not gzipped
@@ -269,3 +269,49 @@ def collection_detail(collection: ObjectCollection) -> str | None:
         f"{len(collection.files)} of {collection.total} files shipped; left out: {shown}{more} "
         f"({cap_sentence()})"
     )
+
+
+# --- image galleries: an export-time snapshot ----------------------------------
+
+#: Images a gallery snapshot ships (the gallery's own ``max_images`` caps it too).
+IMAGE_SNAPSHOT_MAX = 48
+#: Longest side of a shipped thumbnail; a smaller original ships as is.
+IMAGE_THUMB_PX = 384
+
+
+def thumbnail(data: bytes) -> bytes:
+    """``data`` downsampled to ``IMAGE_THUMB_PX`` on its longest side (PNG / JPEG).
+
+    The original when Pillow cannot read it, or when it is already small: a
+    gallery tile draws thumbnails, and a microscopy PNG of a few KB costs less
+    than any re-encode.
+    """
+    if len(data) <= 48 * 1024:
+        return data
+    try:
+        import io
+
+        from PIL import Image
+
+        with Image.open(io.BytesIO(data)) as img:
+            img.thumbnail((IMAGE_THUMB_PX, IMAGE_THUMB_PX))
+            out = io.BytesIO()
+            if img.mode in ("RGBA", "LA", "P"):
+                img.save(out, format="PNG", optimize=True)
+            else:
+                img.convert("RGB").save(out, format="JPEG", quality=82, optimize=True)
+            small = out.getvalue()
+    except Exception:
+        return data
+    return small if len(small) < len(data) else data
+
+
+def image_s3_path(base_folder: str, relative: str) -> str:
+    """``ImageRenderer.buildImageUrl``'s path: base + relative, the base's last
+    segment not repeated."""
+    base = base_folder.rstrip("/")
+    last = base.split("/")[-1] if base else ""
+    rel = relative.lstrip("/")
+    if last and rel.startswith(f"{last}/"):
+        rel = rel[len(last) + 1 :]
+    return f"{base}/{rel}"

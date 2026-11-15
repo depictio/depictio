@@ -753,6 +753,18 @@ def build_static(
     open_browser: Annotated[
         bool, typer.Option("--open", help="Open the built bundle in a browser tab")
     ] = False,
+    python_runtime: Annotated[
+        str,
+        typer.Option(
+            "--python-runtime",
+            help=(
+                "Embed the optional Python runtime (Pyodide): 'auto' (default) when a tile "
+                "it can make live exists (a code figure the transpiler refused, a group "
+                "comparison, a PCA/PCoA/t-SNE embedding), 'on' or 'off'. Adds tens of MB; "
+                "the files are fetched once and verified against a pin."
+            ),
+        ),
+    ] = "auto",
 ) -> None:
     """Build a backend-less static dashboard bundle (serverless producer B).
 
@@ -796,7 +808,7 @@ def build_static(
         raise typer.Exit(0)
 
     try:
-        result = build_manifest(lite, data, mode=bundle_mode)
+        result = build_manifest(lite, data, mode=bundle_mode, python_runtime=python_runtime)
         html = render_bundle_html(result.manifest)
     except ProducerBError as e:
         console.print(f"[red]Error: {e}[/red]")
@@ -867,6 +879,18 @@ def export_static_cmd(
             ),
         ),
     ] = None,
+    python_runtime: Annotated[
+        str,
+        typer.Option(
+            "--python-runtime",
+            help=(
+                "Embed the optional Python runtime (Pyodide): 'auto' (default) when a tile "
+                "it can make live exists — a code figure the transpiler refused, a group "
+                "comparison, a PCA/PCoA/t-SNE embedding — 'on' or 'off'. Adds tens of MB; "
+                "--check prints the exact figure."
+            ),
+        ),
+    ] = "auto",
 ) -> None:
     """Export a static bundle from a RUNNING instance (serverless producer A).
 
@@ -914,6 +938,7 @@ def export_static_cmd(
             check=check,
             user=user_email,
             single_tab=single_tab,
+            python_runtime=python_runtime,
         )
     except (ProducerAError, ProducerBError) as e:
         console.print(f"[red]Error: {e}[/red]")
@@ -930,6 +955,15 @@ def export_static_cmd(
     # flat table it always had.
     print_tier_table(result.tier_rows, console, tabs=result.tabs if len(result.tabs) > 1 else None)
     print_links_summary(result.link_rows, console)
+    py = result.python or {}
+    if py.get("candidates"):
+        state = "embedded" if py.get("embedded") else "not embedded"
+        console.print(
+            f"Python runtime (Pyodide {py.get('version')}): {state} — "
+            f"{len(py['candidates'])} tile(s) it makes live, "
+            f"+{(py.get('bytes') or py.get('bytes_if_embedded') or 0) / 1e6:.1f} MB "
+            f"(--python-runtime {python_runtime})"
+        )
 
     if check:
         console.print("[dim]Preflight only (--check): nothing written.[/dim]")

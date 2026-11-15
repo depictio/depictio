@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import functools
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Literal
 from uuid import uuid4
 
 import anyio.to_thread
@@ -253,6 +253,7 @@ def _compact_timestamp(built_at: Any) -> str:
 @serverless_endpoint_router.get("/export-static/{dashboard_id}/preflight")
 async def preflight_export_static(
     dashboard_id: str,
+    python_runtime: Literal["auto", "on", "off"] = "auto",
     current_user=Depends(get_user_or_anonymous),
 ) -> dict[str, Any]:
     """Per-component (and per-tab, per-link) tier table for a would-be static export.
@@ -293,7 +294,13 @@ async def preflight_export_static(
     """
     try:
         result = await anyio.to_thread.run_sync(
-            functools.partial(export_static, dashboard_id, check=True, user=current_user)
+            functools.partial(
+                export_static,
+                dashboard_id,
+                check=True,
+                user=current_user,
+                python_runtime=python_runtime,
+            )
         )
     except BundleTooLargeError as exc:
         # Not a 404: the dashboard exists and this caller may read it. Answering
@@ -361,12 +368,16 @@ async def preflight_export_static(
         "links": links,
         "counts": counts,
         "size_estimate": _size_estimate_payload(result.size),
+        # The optional Python runtime (Pyodide): which tiles it would make live
+        # and what it adds to the file, so the modal can offer it with its size.
+        "python_runtime": result.python,
     }
 
 
 @serverless_endpoint_router.post("/export-static/{dashboard_id}")
 def dispatch_export_static(
     dashboard_id: str,
+    python_runtime: Literal["auto", "on", "off"] = "auto",
     current_user=Depends(get_user_or_anonymous),
 ) -> dict[str, Any]:
     """Enqueue a static-bundle build; poll ``/export-static/status/{job_id}``.
@@ -408,6 +419,7 @@ def dispatch_export_static(
             "is_admin": bool(getattr(current_user, "is_admin", False)),
             "is_anonymous": bool(getattr(current_user, "is_anonymous", False)),
         },
+        "python_runtime": python_runtime,
     }
     async_result = export_static_bundle_task.apply_async(args=[payload])
     static_exports_collection.update_one(

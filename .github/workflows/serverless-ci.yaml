@@ -12,6 +12,9 @@ on:
       - "depictio/models/models/serverless.py"
       - "depictio/models/models/serverless.schema.json"
       - "depictio/serverless/**"
+      - "depictio/api/v1/services/figure/code_executor.py"
+      - "depictio/api/v1/services/group_compare.py"
+      - "depictio/api/v1/services/contact_map.py"
       - "depictio/tests/unit/serverless/**"
       - "depictio/tests/e2e-playwright/tests/static-runtime/**"
       - "pnpm-lock.yaml"
@@ -127,6 +130,40 @@ jobs:
       - name: Byte budget — catalog preview
         working-directory: depictio/viewer
         run: node scripts/check-bundle-budget.mjs dist-catalog-preview/catalog-preview.html 4718592 catalog-preview
+
+      # The Python-runtime demo (Pyodide, RFC §13.6) is built by producer B,
+      # not injected from a committed manifest: it inlines ~70 MB of Pyodide
+      # assets the build fetches from the pinned CDN / PyPI URLs and verifies
+      # against depictio/serverless/pyodide/pin.json (cached between runs).
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version-file: "pyproject.toml"
+      - name: Cache Pyodide assets
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/depictio/pyodide
+          key: pyodide-${{ hashFiles('depictio/serverless/pyodide/pin.json') }}
+      - name: Build the Python-runtime demo
+        run: |
+          uv venv --python 3.12.9 venv
+          source venv/bin/activate
+          uv pip install -e ".[dev]"
+          DEPICTIO_CONTEXT=cli python -m depictio.serverless.pyodide.demo \
+            depictio/viewer/dist-static/site/demo-python-runtime.html
+
+      # Not a budget for the base runtime: the size of the opt-in Python add-on
+      # for this demo's job set (code figure + group comparison + PCA: core,
+      # numpy, polars, pandas, scipy, plotly, RestrictedPython). Measured
+      # 81.5 MB raw, 52.6 MiB gzip (the base64 of already-compressed wheels
+      # barely gzips); a jump here means the pin or the package closure grew.
+      - name: Byte budget — static runtime + Python runtime (demo job set)
+        working-directory: depictio/viewer
+        run: node scripts/check-bundle-budget.mjs dist-static/site/demo-python-runtime.html 62914560 static-runtime+pyodide
 
       - name: Install Playwright
         working-directory: depictio/tests/e2e-playwright

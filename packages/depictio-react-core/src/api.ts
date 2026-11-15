@@ -8449,12 +8449,29 @@ export interface StaticExportSizeEstimate {
   verdict?: 'ok' | 'over_soft_limit' | 'would_be_refused';
 }
 
+/** The optional Python runtime (Pyodide) a bundle can embed: which tiles it
+ *  makes live and what it adds to the file. */
+export interface StaticExportPythonRuntime {
+  mode: 'auto' | 'on' | 'off';
+  embedded: boolean;
+  version: string;
+  /** Tiles the runtime would make live (empty: nothing to gain). */
+  candidates: string[];
+  components: string[];
+  bytes: number;
+  bytes_if_embedded: number;
+  unavailable?: string;
+}
+
+export type PythonRuntimeMode = 'auto' | 'on' | 'off';
+
 export interface StaticExportPreflight {
   dashboard_id: string;
   tiers: StaticExportTierRow[];
   links: StaticExportLinkRow[];
   counts: { live: number; partial: number; frozen: number; omitted: number };
   size_estimate?: StaticExportSizeEstimate | null;
+  python_runtime?: StaticExportPythonRuntime | null;
 }
 
 export interface StaticExportResult {
@@ -8478,8 +8495,11 @@ export interface StaticExportJob {
  *  404 (`detail`) when the dashboard is unknown or not viewable. */
 export async function preflightStaticExport(
   dashboardId: string,
+  pythonRuntime: PythonRuntimeMode = 'auto',
 ): Promise<StaticExportPreflight> {
-  const res = await authFetch(`${API_BASE}/serverless/export-static/${dashboardId}/preflight`);
+  const res = await authFetch(
+    `${API_BASE}/serverless/export-static/${dashboardId}/preflight?python_runtime=${pythonRuntime}`,
+  );
   if (!res.ok) await throwHttpDetailError(res, 'Static export preflight failed');
   return res.json();
 }
@@ -8488,10 +8508,12 @@ export async function preflightStaticExport(
  *  Returns a job the caller polls via pollStaticExport(). */
 export async function dispatchStaticExport(
   dashboardId: string,
+  pythonRuntime: PythonRuntimeMode = 'auto',
 ): Promise<StaticExportJob> {
-  const res = await authFetch(`${API_BASE}/serverless/export-static/${dashboardId}`, {
-    method: 'POST',
-  });
+  const res = await authFetch(
+    `${API_BASE}/serverless/export-static/${dashboardId}?python_runtime=${pythonRuntime}`,
+    { method: 'POST' },
+  );
   if (!res.ok) await throwHttpDetailError(res, 'Failed to dispatch static export');
   return res.json();
 }

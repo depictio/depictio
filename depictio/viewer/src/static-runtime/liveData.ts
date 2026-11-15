@@ -1228,6 +1228,27 @@ export async function contactMapLive(req: ContactMapLiveRequest): Promise<Record
   return { ...out, compute_ms: Math.round(performance.now() - startedAt) };
 }
 
+/** The distinct values of `column` among the rows `filters` keep (links
+ *  resolved), as strings; `null` when no filter applies. */
+export async function keptValues(
+  dcId: string,
+  column: string,
+  filters: InteractiveFilter[],
+): Promise<Set<string> | null> {
+  const { ref, handle } = await tableFor(dcId);
+  const bound = toBoundFilters(await resolveLinkFilters(dcId, filters));
+  if (!bound.length) return null;
+  const mask = (await engine.mask(handle, bound)).mask;
+  const values = (await engine.columns(handle, [column]))[column];
+  const keep = new Set<string>();
+  for (let i = 0; i < ref.rows; i++) {
+    if (mask[i] === 1 && values[i] !== null && values[i] !== undefined) {
+      keep.add(String(jsonNumber(values[i])));
+    }
+  }
+  return keep;
+}
+
 /** Numeric Polars dtypes → AG Grid's numericColumn, matching the dtype set
  *  Polars' `DataType.is_numeric()` covers (ints, uints, floats, decimals). */
 const NUMERIC_DTYPE_RE = /^(u?int|float|decimal)/i;

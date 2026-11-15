@@ -1,0 +1,86 @@
+# Worked producer-B example — the optional Python runtime (Pyodide, RFC §13.6).
+#
+# Three tiles TypeScript cannot reproduce, made live by running the server's
+# own Python in the browser:
+#
+# - a code-mode figure the transpiler refuses (a derived column): its code runs
+#   in the server's sandbox (RestrictedPython) over the filtered rows;
+# - a group comparison: any pair, the server's group_compare_from_frame;
+# - a PCA embedding: the server's _embedding_result_from_frame.
+#
+# Data (laid out by depictio/serverless/pyodide/demo.py):
+#   <data_dir>/penguin_species_analysis/joined_penguins_complete.parquet
+#   <data_dir>/python_demo/group_compare_demo.parquet
+#   <data_dir>/python_demo/embedding_features.parquet
+
+title: "Python runtime — static bundle example"
+subtitle: "Producer B worked example (Pyodide: code figure, group comparison, PCA)"
+
+components:
+  - tag: text-python
+    component_type: text
+    title: "Server Python, in the browser"
+    order: 2
+    alignment: left
+    body: >
+      These tiles run the server's own Python inside this page (Pyodide, WebAssembly): the code
+      figure re-runs on every species pick, the comparison takes any two clusters, the PCA is
+      recomputed. Nothing leaves the page.
+    layout: {x: 0, y: 0, w: 8, h: 1}
+
+  - tag: figure-python-code
+    component_type: figure
+    workflow_tag: penguin_species_analysis
+    data_collection_tag: joined_penguins_complete
+    mode: code
+    title: "Body mass per flipper millimetre (code, Python runtime)"
+    code_content: |
+      df_modified = df.with_columns(
+          (pl.col("body_mass_g") / pl.col("flipper_length_mm")).alias("mass_per_mm")
+      ).drop_nulls("mass_per_mm")
+      fig = px.box(df_modified, x="species", y="mass_per_mm", color="species", points="all")
+    layout: {x: 0, y: 1, w: 4, h: 6}
+
+  - tag: filter-species
+    component_type: interactive
+    workflow_tag: penguin_species_analysis
+    data_collection_tag: joined_penguins_complete
+    interactive_component_type: MultiSelect
+    column_name: species
+    column_type: object
+    title: "Species"
+    layout: {x: 0, y: 0, w: 1, h: 3}
+
+  - tag: viz-group-compare-py
+    component_type: advanced_viz
+    workflow_tag: python_demo
+    data_collection_tag: group_compare_demo
+    title: "Any two clusters"
+    viz_kind: group_compare
+    config:
+      viz_kind: group_compare
+      index_col: cell_id
+      group_col: cluster
+      test: wilcoxon
+      log_transform: true
+      default_group_a: cluster_1
+      default_group_b: cluster_2
+      top_n_labels: 10
+      controls_placement: header
+    layout: {x: 4, y: 1, w: 4, h: 10}
+
+  - tag: viz-pca-py
+    component_type: advanced_viz
+    workflow_tag: python_demo
+    data_collection_tag: embedding_features
+    title: "PCA, recomputed in the browser"
+    viz_kind: embedding
+    config:
+      viz_kind: embedding
+      sample_id_col: sample_id
+      dim_1_col: dim_1
+      dim_2_col: dim_2
+      cluster_col: cluster
+      color_col: color
+      compute_method: pca
+    layout: {x: 0, y: 7, w: 4, h: 6}

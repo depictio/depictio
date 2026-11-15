@@ -284,6 +284,16 @@ export interface RuntimeAddon {
   reason: string;
 }
 
+/** A tile the optional Python runtime (Pyodide) recomputes in the browser. */
+export interface PythonComponent {
+  job: 'code_figure' | 'group_compare' | 'embedding';
+  dc_id: string;
+  spec: Record<string, unknown>;
+  max_rows?: number | null;
+  /** 'inline:ipc_<dc_id>': Arrow IPC copy for Python (Pyodide polars has no Parquet reader). */
+  table_uri: string;
+}
+
 export interface BundleManifest {
   manifest_version: number;
   mode: BundleMode;
@@ -317,6 +327,8 @@ export interface BundleManifest {
   resolved_structures?: ResolvedStructureEntry[];
   /** Add-ons embedded into this bundle's HTML. Absent in older manifests. */
   addons?: RuntimeAddon[];
+  /** component_id -> Python job (only with the Pyodide add-on). */
+  python_components?: Record<string, PythonComponent>;
 }
 
 /** The manifest's sampling ceilings, with server defaults for older bundles. */

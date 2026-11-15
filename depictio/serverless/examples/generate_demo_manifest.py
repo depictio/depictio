@@ -101,9 +101,11 @@ def main() -> None:
         dc_dir.mkdir(parents=True)
         penguins_frame().write_parquet(dc_dir / f"{DC_TAG}.parquet")
         island_regions_frame().write_parquet(dc_dir / f"{LINKED_DC_TAG}.parquet")
-        _write(build_manifest(load_spec(SPEC), Path(tmp)), OUT)
+        _write(build_manifest(load_spec(SPEC), Path(tmp), python_runtime="off"), OUT)
     with tempfile.TemporaryDirectory() as tmp:
-        result = build_manifest(load_spec(PROTEIN_SPEC), protein_data_dir(Path(tmp)))
+        result = build_manifest(
+            load_spec(PROTEIN_SPEC), protein_data_dir(Path(tmp)), python_runtime="off"
+        )
         if not result.manifest.addons:
             raise SystemExit(
                 "the 3dmol add-on is not built: run `pnpm run build:static` in depictio/viewer "
@@ -111,7 +113,12 @@ def main() -> None:
             )
         _write(result, PROTEIN_OUT)
     with tempfile.TemporaryDirectory() as tmp:
-        _write(build_manifest(load_spec(COMPUTE_SPEC), compute_data_dir(Path(tmp))), COMPUTE_OUT)
+        _write(
+            build_manifest(
+                load_spec(COMPUTE_SPEC), compute_data_dir(Path(tmp)), python_runtime="off"
+            ),
+            COMPUTE_OUT,
+        )
 
 
 if __name__ == "__main__":

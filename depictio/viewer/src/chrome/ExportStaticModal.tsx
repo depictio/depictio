@@ -7,6 +7,7 @@ import {
   Loader,
   Modal,
   Stack,
+  Switch,
   Table,
   Text,
 } from '@mantine/core';
@@ -24,6 +25,7 @@ import {
 } from 'depictio-react-core';
 import type {
   StaticExportPreflight,
+  StaticExportPythonRuntime,
   StaticExportSizeEstimate,
   StaticExportTierRow,
 } from 'depictio-react-core';
@@ -186,6 +188,9 @@ const ExportStaticModal: React.FC<ExportStaticModalProps> = ({
   const [preflightLoading, setPreflightLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // The optional Python runtime: null = follow the preflight's `auto` verdict
+  // (on exactly when a tile would gain from it), else the reader's choice.
+  const [pythonChoice, setPythonChoice] = useState<boolean | null>(null);
   // Set on close/unmount so in-flight promises and the poll loop go quiet
   // instead of setting state on a closed modal. The server-side build keeps
   // running — reopening and re-exporting is cheap (idempotent job dispatch).
@@ -199,6 +204,7 @@ const ExportStaticModal: React.FC<ExportStaticModalProps> = ({
     setPreflight(null);
     setErrorMessage(null);
     setExporting(false);
+    setPythonChoice(null);
     setPreflightLoading(true);
     preflightStaticExport(dashboardId)
       .then((pf) => {
@@ -248,7 +254,10 @@ const ExportStaticModal: React.FC<ExportStaticModalProps> = ({
     };
 
     try {
-      const job = await dispatchStaticExport(dashboardId);
+      const job = await dispatchStaticExport(
+        dashboardId,
+        pythonChoice === null ? 'auto' : pythonChoice ? 'on' : 'off',
+      );
       if (cancelledRef.current) return;
       if (job.status === 'failed') {
         fail(job.error || 'Static export failed');
@@ -492,6 +501,15 @@ const ExportStaticModal: React.FC<ExportStaticModalProps> = ({
             over is a size warning they did not read. */}
         {preflight?.size_estimate && <SizeEstimate size={preflight.size_estimate} />}
 
+        {preflight?.python_runtime && preflight.python_runtime.candidates.length > 0 && (
+          <PythonRuntimeOption
+            info={preflight.python_runtime}
+            checked={pythonChoice ?? preflight.python_runtime.embedded}
+            onChange={setPythonChoice}
+            disabled={exporting}
+          />
+        )}
+
         <Group justify="flex-end" gap="xs" mt="sm">
           {/* Cancel stays enabled during the build: closing only stops the
               client-side polling, the server keeps building. */}
@@ -513,5 +531,36 @@ const ExportStaticModal: React.FC<ExportStaticModalProps> = ({
     </Modal>
   );
 };
+
+/** The optional Python runtime (Pyodide): what it makes live, what it costs.
+ *  On by default exactly when a tile would otherwise stay frozen. */
+function PythonRuntimeOption({
+  info,
+  checked,
+  onChange,
+  disabled,
+}: {
+  info: StaticExportPythonRuntime;
+  checked: boolean;
+  onChange: (value: boolean) => void;
+  disabled: boolean;
+}) {
+  const mb = ((info.bytes || info.bytes_if_embedded) / 1e6).toFixed(1);
+  const n = info.candidates.length;
+  return (
+    <Switch
+      checked={checked}
+      onChange={(e) => onChange(e.currentTarget.checked)}
+      disabled={disabled}
+      data-testid="export-static-python-runtime"
+      label={`Embed the Python runtime (Pyodide ${info.version}, +${mb} MB)`}
+      description={
+        `${n} tile${n === 1 ? '' : 's'} run the server's Python in the browser and stay live ` +
+        '(code figures the transpiler cannot follow, group comparisons, PCA / PCoA / t-SNE); ' +
+        'without it they keep their export-time snapshot. Booted on first use, ~8 s, no network.'
+      }
+    />
+  );
+}
 
 export default ExportStaticModal;

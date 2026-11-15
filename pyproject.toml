@@ -182,6 +182,9 @@ exclude = [
   # Its conditional add-ons (3Dmol.js, 0.54 MB raw / 0.16 MB deflated), appended
   # only to bundles that need one (depictio/serverless/addons.py).
   "viewer/dist-static/addons/*",
+  # The optional Python runtime's pin (Pyodide version, files, sha256): the
+  # assets themselves are fetched and verified at export, never shipped here.
+  "serverless/pyodide/pin.json",
   # Reference thumbnails of the iris and penguins dashboards only.
   "api/static/screenshots/6824cb3b89d2b72169309737_*.png",
   "api/static/screenshots/6824cb3b89d2b72169309738_*.png",

@@ -654,6 +654,36 @@ class RuntimeAddon(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class PythonComponent(BaseModel):
+    """A tile the optional Python runtime (Pyodide) recomputes in the browser.
+
+    The runtime runs the server's own function for ``job`` over the bundled
+    table under the current filter mask and answers the tile's request with
+    it; the frozen payload, when there is one, stays as the fallback (Python
+    runtime not embedded, failed to boot, or the frame above ``max_rows``).
+    """
+
+    job: Literal["code_figure", "group_compare", "embedding"]
+    dc_id: str = Field(description="The bundled table the job reads (all user columns)")
+    spec: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Job inputs fixed at export (code_figure: code + category colours)",
+    )
+    max_rows: int | None = Field(
+        default=None,
+        description="Filtered rows above which the runtime serves the frozen payload instead",
+    )
+    table_uri: str = Field(
+        description=(
+            "'inline:ipc_<dc_id>': the table as Arrow IPC (zstd), for Python — Pyodide's "
+            "polars is built without its Parquet reader. Same rows and order as the Parquet "
+            "data_ref, user columns only, so the browser's row mask applies as is"
+        )
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class BundleManifest(BaseModel):
     """The serverless bundle contract (RFC §3.1). manifest_version 1."""
 
@@ -726,6 +756,13 @@ class BundleManifest(BaseModel):
     addons: list[RuntimeAddon] = Field(
         default_factory=list,
         description="Optional runtime add-ons embedded into this bundle's HTML (3Dmol.js, Pyodide)",
+    )
+    python_components: dict[str, PythonComponent] = Field(
+        default_factory=dict,
+        description=(
+            "component_id -> the Python job the Pyodide add-on runs for it (present only "
+            "when the add-on is embedded)"
+        ),
     )
 
     model_config = ConfigDict(extra="forbid")

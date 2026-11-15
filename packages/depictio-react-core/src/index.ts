@@ -1240,6 +1240,8 @@ export type {
   StaticExportLinkRow,
   StaticExportSizeEstimate,
   StaticExportPreflight,
+  StaticExportPythonRuntime,
+  PythonRuntimeMode,
   StaticExportResult,
   StaticExportJob,
   // Project management types

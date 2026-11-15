@@ -131,6 +131,10 @@ def advanced_viz_columns(comp: dict[str, Any]) -> list[str]:
 _KIND_SCHEMA_COLUMNS: dict[str, tuple[str, ...]] = {"contact_map": ("resolution",)}
 
 
+#: Marker of a Python-runtime candidate (``serverless/pyodide/plan.py``).
+PYTHON_JOB_KEY = "__python_job__"
+
+
 #: Frozen kinds whose tile still reads its own table offline before it can
 #: show the frozen result: a group comparison offers its two pickers from the
 #: distinct values of ``group_col`` (``fetchUniqueValues``), and only then
@@ -139,10 +143,19 @@ FROZEN_INPUT_KINDS = frozenset({"group_compare"})
 
 
 def ships_frozen_inputs(comp: dict[str, Any]) -> bool:
-    """True for a frozen tile whose pickers read the bundled table (group_compare)."""
-    return comp.get("component_type") == "advanced_viz" and (
-        advanced_viz_kind(comp) in FROZEN_INPUT_KINDS
-    )
+    """True for a frozen tile that still reads its own bundled table.
+
+    A group comparison offers its pickers from it; a computed embedding
+    (UMAP above all, which no browser can rerun) keeps its export-time
+    coordinates and drops the points the current filters exclude, matched on
+    its sample column.
+    """
+    if comp.get("component_type") != "advanced_viz":
+        return False
+    kind = advanced_viz_kind(comp)
+    if kind == "embedding":
+        return bool((comp.get("config") or {}).get("compute_method"))
+    return kind in FROZEN_INPUT_KINDS
 
 
 #: Columns the volcano's MA view reads off its ``ma_dc_id`` table under fixed
@@ -304,6 +317,11 @@ def component_columns(comp: dict[str, Any]) -> set[str] | None:
                 cols.add(column)
         return cols | filter_expr_columns(comp.get("filter_expr"))
     if ctype == "table":
+        return None
+    if comp.get(PYTHON_JOB_KEY):
+        # A tile the Python runtime recomputes runs the server's code over the
+        # whole table (a code figure reads any column, the computes infer their
+        # features from the schema): keep every column.
         return None
     if ctype == "advanced_viz":
         if ships_frozen_inputs(comp):

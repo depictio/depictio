@@ -851,6 +851,57 @@
       "title": "Producer",
       "type": "string"
     },
+    "PythonComponent": {
+      "additionalProperties": false,
+      "description": "A tile the optional Python runtime (Pyodide) recomputes in the browser.\n\nThe runtime runs the server's own function for ``job`` over the bundled\ntable under the current filter mask and answers the tile's request with\nit; the frozen payload, when there is one, stays as the fallback (Python\nruntime not embedded, failed to boot, or the frame above ``max_rows``).",
+      "properties": {
+        "dc_id": {
+          "description": "The bundled table the job reads (all user columns)",
+          "title": "Dc Id",
+          "type": "string"
+        },
+        "job": {
+          "enum": [
+            "code_figure",
+            "group_compare",
+            "embedding"
+          ],
+          "title": "Job",
+          "type": "string"
+        },
+        "max_rows": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Filtered rows above which the runtime serves the frozen payload instead",
+          "title": "Max Rows"
+        },
+        "spec": {
+          "additionalProperties": true,
+          "description": "Job inputs fixed at export (code_figure: code + category colours)",
+          "title": "Spec",
+          "type": "object"
+        },
+        "table_uri": {
+          "description": "'inline:ipc_<dc_id>': the table as Arrow IPC (zstd), for Python \u2014 Pyodide's polars is built without its Parquet reader. Same rows and order as the Parquet data_ref, user columns only, so the browser's row mask applies as is",
+          "title": "Table Uri",
+          "type": "string"
+        }
+      },
+      "required": [
+        "job",
+        "dc_id",
+        "table_uri"
+      ],
+      "title": "PythonComponent",
+      "type": "object"
+    },
     "RenameOp": {
       "additionalProperties": false,
       "description": "``df.rename({\"old\": \"new\"})``.",
@@ -1441,6 +1492,14 @@
     },
     "provenance": {
       "$ref": "#/$defs/ExportProvenance"
+    },
+    "python_components": {
+      "additionalProperties": {
+        "$ref": "#/$defs/PythonComponent"
+      },
+      "description": "component_id -> the Python job the Pyodide add-on runs for it (present only when the add-on is embedded)",
+      "title": "Python Components",
+      "type": "object"
     },
     "resolved_structures": {
       "description": "Structure-resolver answers frozen at export (molecule_3d resolve mode)",
