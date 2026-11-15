@@ -10,6 +10,11 @@ import { blockNetwork, injectedBundleUrl, skipUnlessBundleBuilt } from "./helper
 
 test.beforeEach(() => skipUnlessBundleBuilt());
 
+/** These specs pin the Classic shell (`?chrome=base`, the opt-in a bundle
+ *  keeps); bundles draw Paper by default — see paper.spec.ts. */
+const classicUrl = (manifest?: string) =>
+  `${manifest ? injectedBundleUrl(manifest) : injectedBundleUrl()}?chrome=base`;
+
 /** Paper background of the first Plotly figure (`.main-svg` carries it). */
 async function plotBackground(page: Page): Promise<string> {
   return page
@@ -20,7 +25,7 @@ async function plotBackground(page: Page): Promise<string> {
 
 test("frozen figures re-theme when the color scheme toggles", async ({ page }) => {
   await blockNetwork(page);
-  await page.goto(injectedBundleUrl());
+  await page.goto(classicUrl());
   await expect(page.getByText("Fixture scatter")).toBeVisible();
 
   const lightBg = await plotBackground(page);
@@ -45,7 +50,7 @@ test("frozen figures re-theme when the color scheme toggles", async ({ page }) =
 
 test("logo is inlined (renders from file:// with zero network)", async ({ page }) => {
   await blockNetwork(page);
-  await page.goto(injectedBundleUrl());
+  await page.goto(classicUrl());
 
   const logo = page.locator('img[alt="Depictio"]');
   await expect(logo).toBeVisible();
@@ -60,7 +65,7 @@ test("edit and management affordances are hidden in the read-only bundle", async
   page,
 }) => {
   await blockNetwork(page);
-  await page.goto(injectedBundleUrl());
+  await page.goto(classicUrl());
   await expect(page.getByText("Fixture scatter")).toBeVisible();
 
   // Header: no Edit button (the editor route does not exist in a bundle).

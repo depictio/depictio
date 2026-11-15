@@ -20,6 +20,11 @@ import {
 
 test.beforeEach(() => skipUnlessBundleBuilt());
 
+/** These specs pin the Classic shell (`?chrome=base`, the opt-in a bundle
+ *  keeps); bundles draw Paper by default — see paper.spec.ts. */
+const classicUrl = (manifest?: string) =>
+  `${manifest ? injectedBundleUrl(manifest) : injectedBundleUrl()}?chrome=base`;
+
 const tabPill = (page: Page, name: string) =>
   page.locator('[role="tab"]').filter({ hasText: name });
 
@@ -27,7 +32,7 @@ test("clicking a rail pill switches tab in place, offline", async ({ page }) => 
   const attempts = await blockNetwork(page);
   const pageErrors: string[] = [];
   page.on("pageerror", (err) => pageErrors.push(String(err)));
-  const url = injectedBundleUrl(TABS_MANIFEST);
+  const url = classicUrl(TABS_MANIFEST);
   await page.goto(url);
 
   // Entry tab: the basic fixture's dashboard, plus a pill per family member.
@@ -60,7 +65,7 @@ test("clicking a rail pill switches tab in place, offline", async ({ page }) => 
 
 test("the rail carries the export provenance", async ({ page }) => {
   await blockNetwork(page);
-  await page.goto(injectedBundleUrl(TABS_MANIFEST));
+  await page.goto(classicUrl(TABS_MANIFEST));
 
   const rail = page.locator(".mantine-AppShell-navbar");
   await expect(rail.getByText("Static export")).toBeVisible();
@@ -85,7 +90,7 @@ test("the rail carries the export provenance", async ({ page }) => {
 
 test("a Celery-computed view says filters do not reach it", async ({ page }) => {
   await blockNetwork(page);
-  await page.goto(injectedBundleUrl(TABS_MANIFEST));
+  await page.goto(classicUrl(TABS_MANIFEST));
   await tabPill(page, "Distributions").click();
 
   const badge = page.locator('[data-static-reason="celery_compute"]');
@@ -113,7 +118,7 @@ test("a single-tab bundle renders exactly as before", async ({ page }) => {
   const attempts = await blockNetwork(page);
   const pageErrors: string[] = [];
   page.on("pageerror", (err) => pageErrors.push(String(err)));
-  await page.goto(injectedBundleUrl(FIXTURE_MANIFEST));
+  await page.goto(classicUrl(FIXTURE_MANIFEST));
 
   // No family -> the rail keeps the viewer's collapsed-by-default behaviour,
   // so it has to be opened by hand (a multi-tab bundle opens it on first run).
@@ -145,7 +150,7 @@ test("a persistent filter section follows the reader onto every tab", async ({ p
   // fetchCrossTabComponents — which a bundle used to leave unshimmed, so the
   // section silently vanished on every child tab.
   const attempts = await blockNetwork(page);
-  await page.goto(injectedBundleUrl(TABS_MANIFEST));
+  await page.goto(classicUrl(TABS_MANIFEST));
   await expect(page.getByText("Species picker").first()).toBeVisible();
 
   await tabPill(page, "Distributions").click();

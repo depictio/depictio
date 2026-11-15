@@ -1,6 +1,6 @@
 import React from 'react';
 import { Modal, Tooltip } from '@mantine/core';
-import { useBrandScopeAttributes, Z_LAYERS } from 'depictio-react-core';
+import { useBrandScopeAttributes, useIsStaticBundle, Z_LAYERS } from 'depictio-react-core';
 import {
   ArrowLeft,
   BookOpenText,
@@ -165,12 +165,7 @@ export const TabList: React.FC<{
           <span className="hy-tablist-label">Guide</span>
         </a>
       )}
-      <a href={nav.backHref} className="hy-tablist-item hy-tablist-quiet">
-        <span className="hy-tablist-icon">
-          <ArrowLeft size={20} strokeWidth={1.9} aria-hidden />
-        </span>
-        <span className="hy-tablist-label">All dashboards</span>
-      </a>
+      <BackToDashboards href={nav.backHref} />
     </div>}
   </nav>
 );
@@ -291,7 +286,7 @@ export const ThemeTile: React.FC<{ place?: 'rail' | 'top' | 'sheet' }> = ({ plac
 };
 
 /** The reader: initials (or a figure) linking straight to Account settings. */
-export const ProfileTile: React.FC = () => {
+const ProfileTileLive: React.FC = () => {
   const who = useAccountIdentity();
   if (who.signIn) {
     return (
@@ -317,7 +312,7 @@ export const ProfileTile: React.FC = () => {
 
 /** The same, as the phone's More sheet row: avatar and name, linking to
  *  Account settings. */
-export const ProfileRows: React.FC = () => {
+const ProfileRowsLive: React.FC = () => {
   const who = useAccountIdentity();
   if (who.signIn) {
     return (
@@ -355,7 +350,7 @@ function statusLabel(status: string, version: string | null): string {
  *  footer: one soft card holding the live dot with "Online" and the dimmed
  *  version, then the instance mode (single user, public, demo). Folded, the
  *  dot alone. It opens the server info popover. */
-export const SideStatus: React.FC<{ open: boolean }> = ({ open }) => {
+const SideStatusLive: React.FC<{ open: boolean }> = ({ open }) => {
   const { status, version } = useServerStatus();
   const { isPublicMode, isDemoMode, isSingleUserMode } = useCurrentUser();
   const label = statusLabel(status, version);
@@ -402,7 +397,7 @@ export const SideStatus: React.FC<{ open: boolean }> = ({ open }) => {
 
 /** The same as a row of the phone's More sheet: a popover has no room on a
  *  phone, so the panel opens in a modal above the sheet. */
-export const ServerSheetRow: React.FC = () => {
+const ServerSheetRowLive: React.FC = () => {
   const { status, version } = useServerStatus();
   const { show } = useUpdateNotice();
   const [opened, setOpened] = React.useState(false);
@@ -453,8 +448,24 @@ const HomeMark: React.FC<{ home: string; height: number; markSize: number }> = (
 }) => {
   const mode = useBrandLogoMode();
   const [hovered, setHovered] = React.useState(false);
+  const isStaticBundle = useIsStaticBundle();
   if (mode === 'none') return null;
   const markOnly = mode === 'inherit';
+  if (isStaticBundle) {
+    // No "all dashboards" to go home to from a file: the mark is identity only.
+    return (
+      <span
+        className={cn('hy-top-brand', markOnly && 'hy-top-brand--mark')}
+        data-testid={markOnly ? 'glass-logo' : undefined}
+      >
+        {markOnly ? (
+          <DepictioRose mode="logo" size={markSize} label="depictio" />
+        ) : (
+          <BrandLogo height={height} width="auto" testId="glass-logo" />
+        )}
+      </span>
+    );
+  }
   return (
     <Tooltip label="All dashboards" withArrow openDelay={400}>
       <a
@@ -547,3 +558,27 @@ export const DrawerHead: React.FC<{
     </Tooltip>
   </div>
 );
+
+/** A static bundle has no account and no server: ProfileTile draws nothing there. */
+export const ProfileTile: React.FC = () => (useIsStaticBundle() ? null : <ProfileTileLive />);
+
+/** A static bundle has no account and no server: ProfileRows draws nothing there. */
+export const ProfileRows: React.FC = () => (useIsStaticBundle() ? null : <ProfileRowsLive />);
+
+/** A static bundle has no account and no server: ServerSheetRow draws nothing there. */
+export const ServerSheetRow: React.FC = () => (useIsStaticBundle() ? null : <ServerSheetRowLive />);
+
+/** The server card at the sidebar's foot; nothing in a static bundle. */
+export const SideStatus: React.FC<{ open: boolean }> = ({ open }) =>
+  useIsStaticBundle() ? null : <SideStatusLive open={open} />;
+
+/** "All dashboards" in the phone sheet; a static bundle has no such page. */
+const BackToDashboards: React.FC<{ href: string }> = ({ href }) =>
+  useIsStaticBundle() ? null : (
+    <a href={href} className="hy-tablist-item hy-tablist-quiet">
+      <span className="hy-tablist-icon">
+        <ArrowLeft size={20} strokeWidth={1.9} aria-hidden />
+      </span>
+      <span className="hy-tablist-label">All dashboards</span>
+    </a>
+  );

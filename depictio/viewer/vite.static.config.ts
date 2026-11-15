@@ -49,8 +49,8 @@ export default defineConfig({
           RUNTIME,
           'serverStatusShim.ts',
         ),
-        // Bundles draw the Classic chrome, the one their read-only gating
-        // is wired into (see the shim).
+        // Bundles draw Paper (the app's default), gated for a read-only
+        // file; `?chrome=base` opts into Classic (see the shim).
         [path.resolve(__dirname, 'src/chrome/variants/index.ts')]: path.join(
           RUNTIME,
           'chromeVariantShim.ts',

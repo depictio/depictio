@@ -42,6 +42,7 @@ import {
   ChromeButton,
   ChromeButtonGroup,
   useChromeStyle,
+  useIsStaticBundle,
   Z_LAYERS,
 } from 'depictio-react-core';
 
@@ -64,6 +65,7 @@ import {
   TopBar,
 } from './parts';
 import { usePanelRoom } from '../../shell/usePanelRoom';
+import StaticProvenance from '../../StaticProvenance';
 import { useDockAnchor } from './useDockPlacement';
 import './layout.css';
 
@@ -440,6 +442,7 @@ const DeskLayout: React.FC<DashboardShellProps> = ({
 
   const ICON = 20;
   const stroke = STROKE;
+  const isStaticBundle = useIsStaticBundle();
 
   return (
     <div
@@ -579,12 +582,18 @@ const DeskLayout: React.FC<DashboardShellProps> = ({
           <div className="hy-side-spacer" />
           <div className="hy-side-foot">
             <SideStatus open={sideOpen} />
-            <SideRow
-              open={sideOpen}
-              icon={<ArrowLeft size={ICON - 1} strokeWidth={stroke} aria-hidden />}
-              label="All dashboards"
-              href={nav.model.backHref}
-            />
+            {isStaticBundle ? (
+              // Who exported this file, from where, and when — the bundle's
+              // own "about"; there is no dashboards list to go back to.
+              sideOpen && <StaticProvenance />
+            ) : (
+              <SideRow
+                open={sideOpen}
+                icon={<ArrowLeft size={ICON - 1} strokeWidth={stroke} aria-hidden />}
+                label="All dashboards"
+                href={nav.model.backHref}
+              />
+            )}
           </div>
         </nav>
       </MantineThemeContext.Provider>
