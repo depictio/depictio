@@ -271,12 +271,7 @@ def _run_notebook(source: str, tmp_path, monkeypatch):
     try:
         import IPython.display  # noqa: F401
     except ImportError:
-        display = types.ModuleType("IPython.display")
-        display.HTML = type(
-            "HTML", (), {"__init__": lambda self, data: setattr(self, "data", data)}
-        )
-        monkeypatch.setitem(sys.modules, "IPython", types.ModuleType("IPython"))
-        monkeypatch.setitem(sys.modules, "IPython.display", display)
+        _stub_ipython_without_a_kernel(monkeypatch)
     defs: dict = {"__name__": f"export_{tmp_path.name}"}
     # The child tab's advanced viz re-renders through the API, which this
     # offline run has no access to: stub the client call so the rest runs.
@@ -286,6 +281,29 @@ def _run_notebook(source: str, tmp_path, monkeypatch):
         for i, chunk in enumerate(_CHUNK_RE.findall(source)):
             exec(compile(chunk[1], f"<chunk {i}>", "exec"), defs)
     return defs
+
+
+def _stub_ipython_without_a_kernel(monkeypatch) -> None:
+    """IPython as a plain Python process sees it: importable, no kernel running.
+
+    The document imports ``HTML`` from ``IPython.display``, and plotly asks
+    ``IPython.get_ipython()`` whether it is inside a notebook; ``None`` is the
+    real answer outside a kernel.
+    """
+    ipython = types.ModuleType("IPython")
+    ipython.get_ipython = lambda: None  # type: ignore[attr-defined]
+    display = types.ModuleType("IPython.display")
+    display.HTML = type(  # type: ignore[attr-defined]
+        "HTML",
+        (),
+        {
+            "__init__": lambda self, data: setattr(self, "data", data),
+            "_repr_html_": lambda self: self.data,
+        },
+    )
+    ipython.display = display  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "IPython", ipython)
+    monkeypatch.setitem(sys.modules, "IPython.display", display)
 
 
 _CHUNK_RE = re.compile(r"^(`{3,})\{python\}\n(.*?)\n\1$", re.S | re.M)
