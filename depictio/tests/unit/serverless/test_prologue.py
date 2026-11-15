@@ -651,6 +651,25 @@ def _exec_prologue(code: str, df: pl.DataFrame) -> pl.DataFrame:
     return result
 
 
+def _assert_payload_matches(got: dict[str, list[Any]], want: dict[str, list[Any]], name: str):
+    """Equal columns, floats to within rounding.
+
+    Polars sums a group's partitions in parallel, so a ``mean`` / ``sum`` can
+    differ from the committed value in its last bit from one run to the next
+    (``0.295`` vs ``0.29500000000000004`` on CI). Everything else — names,
+    order, nulls, strings, integers — must match exactly.
+    """
+    assert list(got) == list(want), name
+    for column, values in want.items():
+        actual = got[column]
+        assert len(actual) == len(values), (name, column)
+        for i, (a, w) in enumerate(zip(actual, values, strict=True)):
+            if isinstance(w, float) and isinstance(a, float):
+                assert a == pytest.approx(w, rel=1e-9, abs=1e-12), (name, column, i)
+            else:
+                assert a == w, (name, column, i)
+
+
 def test_case_code_covers_every_fixture_case():
     assert set(CASE_CODE) == set(FIXTURE_CASES) == set(EXPECTED_CASES)
 
@@ -663,7 +682,7 @@ def test_generator_output_matches_committed_fixture():
         out = GEN.apply_ops(df, case["ops"])
         expected = EXPECTED_CASES[name]["output"]
         assert out.height == expected["length"], name
-        assert GEN.columns_payload(out) == expected["columns"], name
+        _assert_payload_matches(GEN.columns_payload(out), expected["columns"], name)
 
 
 @pytest.mark.parametrize("name", sorted(CASE_CODE))
@@ -682,7 +701,7 @@ def test_code_transpiles_to_the_case_ir_and_runs_identically(name):
     # code == IR execution == committed expectation.
     assert from_code.equals(from_ir), name
     payload = GEN.columns_payload(from_code)
-    assert payload == EXPECTED_CASES[name]["output"]["columns"], name
+    _assert_payload_matches(payload, EXPECTED_CASES[name]["output"]["columns"], name)
     assert from_code.height == EXPECTED_CASES[name]["output"]["length"], name
 
 
