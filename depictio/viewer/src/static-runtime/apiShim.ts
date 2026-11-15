@@ -69,7 +69,14 @@ import type {
 
 import { scopeRegionFilters } from 'depictio-static-core';
 
-import { bundle, bundledTabs, frozenPayload, interactiveIndexFor, rawBundle } from './bundle';
+import {
+  bundle,
+  bundledTabs,
+  familyMetadata,
+  frozenPayload,
+  interactiveIndexFor,
+  rawBundle,
+} from './bundle';
 import {
   columnRangeLive,
   computeCardsLive,
@@ -232,11 +239,10 @@ export async function saveDashboardNotes(_dashboardId: string, _notes: unknown) 
 // ---- frozen render-path lookups (keyed by component index) -----------------
 
 /** dc_id of a figure component, from the dashboard document. */
+/** Family-wide (active tab first): a highlight draws another tab's figure,
+ *  and a persistent section its owner tab's, under that component's id. */
 function figureMetaFor(componentId: string): Record<string, unknown> | undefined {
-  const doc = bundle().dashboard.doc as {
-    stored_metadata?: { index?: string; component_type?: string; dc_id?: string | null }[];
-  };
-  return (doc.stored_metadata ?? []).find(
+  return familyMetadata().find(
     (c) => c.component_type === 'figure' && String(c.index ?? '') === componentId,
   ) as Record<string, unknown> | undefined;
 }
@@ -339,10 +345,7 @@ export async function fetchMapData(
 
 /** dc_id of a table component, from the dashboard document. */
 function tableDcIdFor(componentId: string): string {
-  const doc = bundle().dashboard.doc as {
-    stored_metadata?: { index?: string; component_type?: string; dc_id?: string | null }[];
-  };
-  const meta = (doc.stored_metadata ?? []).find(
+  const meta = familyMetadata().find(
     (c) => c.component_type === 'table' && String(c.index ?? '') === componentId,
   );
   return String(meta?.dc_id ?? '');
@@ -585,8 +588,7 @@ interface AdvancedVizMeta {
  * so a manifest whose components predate `viz_kind` still resolves.
  */
 function advancedVizIndexFor(dcId: string, vizKind?: string): string {
-  const doc = bundle().dashboard.doc as { stored_metadata?: AdvancedVizMeta[] };
-  const components = (doc.stored_metadata ?? []).filter(
+  const components = (familyMetadata() as AdvancedVizMeta[]).filter(
     (c) => c.component_type === 'advanced_viz',
   );
   const owns = (c: AdvancedVizMeta) => String(c.dc_id ?? '') === dcId;

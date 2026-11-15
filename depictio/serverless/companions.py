@@ -70,6 +70,13 @@ def filter_expr_targets(components: Iterable[dict]) -> list[str]:
         expr = comp.get("filter_expr") or (comp.get("metadata") or {}).get("filter_expr")
         if isinstance(expr, str) and expr.strip():
             out[expr] = None
+        # A text tile's live values each carry their own (computed like a card).
+        for value in (
+            (comp.get("values") or {}).values() if isinstance(comp.get("values"), dict) else ()
+        ):
+            expr = value.get("filter_expr") if isinstance(value, dict) else None
+            if isinstance(expr, str) and expr.strip():
+                out[expr] = None
     return list(out)
 
 

@@ -574,6 +574,56 @@ def test_a_companion_table_ships_and_the_config_names_its_synthetic_id(tmp_path:
     assert manifest.tiers["volcano-1"].tier is ComponentTier.LIVE
 
 
+def test_text_live_values_ship_their_collection(tmp_path: Path) -> None:
+    """``{{name}}`` values are computed like cards in the browser: their
+    collection ships (column + weight + filter_expr columns) and the doc names
+    the synthetic id an import would have resolved ``dc`` to."""
+    from depictio.models.models.dashboards import DashboardDataLite
+    from depictio.serverless.companions import filter_expr_companion
+    from depictio.serverless.producer_b import synthetic_dc_id
+
+    (tmp_path / "wf").mkdir()
+    pl.DataFrame(
+        {"phylum": ["A", "B", "A"], "abund": [0.2, 0.5, 0.4], "ok": [1, 1, 0], "x": [0, 0, 0]}
+    ).write_parquet(tmp_path / "wf" / "tax.parquet")
+    spec = DashboardDataLite.model_validate(
+        _mini_spec(
+            [
+                {
+                    "tag": "card-1",
+                    "component_type": "card",
+                    "workflow_tag": "wf",
+                    "data_collection_tag": "tax",
+                    "column_name": "abund",
+                    "aggregation": "sum",
+                },
+                {
+                    "tag": "text-1",
+                    "component_type": "text",
+                    "title": "Top {{top}}",
+                    "values": {
+                        "top": {
+                            "dc": "tax",
+                            "column": "phylum",
+                            "aggregation": "top",
+                            "weight": "abund",
+                            "filter_expr": "col('ok') == 1",
+                        }
+                    },
+                },
+            ]
+        )
+    )
+    manifest = build_manifest(spec, tmp_path).manifest
+    dc_id = synthetic_dc_id("wf", "tax")
+    ref = manifest.data_refs[dc_id]
+    names = {c.name for c in ref.columns}
+    assert {"phylum", "abund", "ok"} <= names and "x" not in names
+    assert filter_expr_companion("col('ok') == 1") in names
+    text = next(m for m in manifest.dashboard.doc["stored_metadata"] if m["index"] == "text-1")
+    assert text["values"]["top"]["dc_id"] == dc_id
+
+
 def test_table_without_dc_is_omitted() -> None:
     from depictio.models.models.dashboards import DashboardDataLite
 

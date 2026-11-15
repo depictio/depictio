@@ -90,6 +90,7 @@ import hashlib
 import io
 import logging
 import os
+import re
 import threading
 import time
 from dataclasses import dataclass, field
@@ -703,6 +704,16 @@ def classify_stored_component(comp: dict[str, Any]) -> PlannedTier:
             "from the bundled Parquet",
         )
 
+    if ctype == "highlight":
+        # Another tab's figure / advanced viz shown again here: it takes its
+        # source's tier once the family is classified (resolve_highlight_tiers).
+        return PlannedTier(
+            ComponentTier.OMITTED,
+            TierReason.UNSUPPORTED,
+            "the highlighted component is not in this export",
+            provisional=True,
+        )
+
     return PlannedTier(
         ComponentTier.OMITTED,
         TierReason.UNSUPPORTED,
@@ -776,6 +787,40 @@ def _dc_init_entry(comp: dict[str, Any]) -> dict[str, Any] | None:
         "dc_type": dc_config.get("type") or "table",
         "size_bytes": dc_config.get("size_bytes", 0),
     }
+
+
+def text_value_cards(stored_metadata: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """A text tile's live values (``{{name}}``) as the cards the server computes
+    them with (``routes._text_value_cards``): indexed ``<text index>::<name>``,
+    so their data collections ship like a card's and the browser computes them
+    on the card path (filters, links, filter_expr)."""
+    out: list[dict[str, Any]] = []
+    for comp in stored_metadata:
+        if comp.get("component_type") != "text" or not comp.get("values"):
+            continue
+        out.extend(_routes()._text_value_cards(comp))
+    return out
+
+
+def text_run_params(
+    project_doc: dict[str, Any] | None, text: dict[str, Any]
+) -> dict[str, str | None]:
+    """The ``{{param:KEY}}`` values a text tile prints, read the way
+    ``_project_run_params`` reads them (pipeline params first, unset → None).
+    Run constants: the same under every filter, so the bundle carries them."""
+    routes = _routes()
+    keys = routes._text_params(text)
+    if not keys:
+        return {}
+    entries = ((project_doc or {}).get("template_origin") or {}).get("run_provenance") or []
+    params: dict[str, str | None] = {}
+    for entry in sorted(entries, key=lambda e: e.get("source") != "params"):
+        key = entry.get("key")
+        if not key or key in params:
+            continue
+        value = entry.get("value")
+        params[str(key)] = None if value in (None, "", "null") else str(value)
+    return {k: params.get(k) for k in keys}
 
 
 def live_column_sets(stored_metadata: list[dict[str, Any]]) -> dict[str, set[str] | None]:
@@ -1795,6 +1840,8 @@ def _bundle_data_refs(
     binding's column references always exist in the bundled data.
     """
     dtu = _dtu()
+    # Text live values compute like cards, so their collections ship like cards'.
+    stored_metadata = [*stored_metadata, *text_value_cards(stored_metadata)]
     column_sets = live_column_sets(stored_metadata)
     filter_cols = interactive_filter_columns(stored_metadata)
     join_cols = link_join_column_sets(links or [])
@@ -2008,6 +2055,10 @@ def used_dc_ids(
             or (serves_advanced_viz_live(c) and tier_by_id[cid].tier is ComponentTier.LIVE)
         )
     }
+    # ...the collections a live text tile's values read...
+    for _tab, c, cid in items:
+        if c.get("component_type") == "text" and tier_by_id[cid].tier is ComponentTier.LIVE:
+            used |= {str(v["dc_id"]) for v in text_value_cards([c]) if v.get("dc_id")}
     # ...and the companion tables of every live advanced_viz.
     for _tab, c, cid in items:
         if serves_advanced_viz_live(c) and tier_by_id[cid].tier is ComponentTier.LIVE:
@@ -2232,8 +2283,10 @@ def workflow_ids_by_dc(project_doc: dict[str, Any] | None) -> dict[str, str]:
 
 
 def dashboard_dc_ids(stored_metadata: list[dict[str, Any]]) -> set[str]:
-    """Every data collection any component of this dashboard reads."""
-    return {str(comp["dc_id"]) for comp in stored_metadata if comp.get("dc_id")}
+    """Every data collection any component of this dashboard reads (a text
+    tile's live values included)."""
+    comps = [*stored_metadata, *text_value_cards(stored_metadata)]
+    return {str(comp["dc_id"]) for comp in comps if comp.get("dc_id")}
 
 
 def _link_config_json(link: dict[str, Any]) -> dict[str, Any]:
@@ -2593,6 +2646,86 @@ def build_provenance(
     )
 
 
+_OBJECT_ID_RE = re.compile(r"^[0-9a-f]{24}$", re.I)
+_HIGHLIGHTABLE_TYPES = frozenset({"figure", "advanced_viz"})
+
+
+def _tab_key(name: str) -> str:
+    """``tabLinkKey``: trimmed, lower-cased, inner whitespace collapsed."""
+    return re.sub(r"\s+", " ", name.strip().lower())
+
+
+def highlight_source(
+    comp: dict[str, Any], tabs: list[FamilyTab]
+) -> tuple[FamilyTab, dict[str, Any]] | None:
+    """The (tab, component) a highlight shows, resolved inside the exported family.
+
+    Mirrors ``resolveHighlightTab`` + ``findHighlightSource``
+    (``highlightTile.ts``): the tab by id first, then by name (an id written in
+    ``source_tab`` counts); the component by index, else by title (case and
+    spacing ignored), preferring a highlightable one. ``None`` when the source
+    is not in the family or is not a figure / advanced viz.
+    """
+    tab_id = str(comp.get("source_dashboard_id") or "").strip()
+    tab_name = str(comp.get("source_tab") or "").strip()
+    by_id = {t.id: t for t in tabs}
+    tab = by_id.get(tab_id) if tab_id else None
+    if tab is None and tab_name:
+        tab = next((t for t in tabs if _tab_key(t.title) == _tab_key(tab_name)), None)
+        if tab is None and _OBJECT_ID_RE.match(tab_name):
+            tab = by_id.get(tab_name)
+    if tab is None:
+        return None
+    wanted = str(comp.get("source_component") or "").strip()
+    if not wanted:
+        return None
+    metas = tab.components
+    key = _tab_key(wanted)
+    found = next((m for m in metas if str(m.get("index")) == wanted), None)
+    found = found or next(
+        (
+            m
+            for m in metas
+            if m.get("component_type") in _HIGHLIGHTABLE_TYPES
+            and _tab_key(str(m.get("title") or "")) == key
+        ),
+        None,
+    )
+    if found is None or found.get("component_type") not in _HIGHLIGHTABLE_TYPES:
+        return None
+    return tab, found
+
+
+def resolve_highlight_tiers(
+    items: list[tuple[FamilyTab, dict[str, Any], str]],
+    tabs: list[FamilyTab],
+    tier_by_id: dict[str, TierRow],
+) -> None:
+    """A highlight takes its source's settled tier (the runtime draws the
+    source's own payload / binding / data under the highlight's index)."""
+    for _tab, comp, cid in items:
+        if comp.get("component_type") != "highlight":
+            continue
+        row = tier_by_id[cid]
+        found = highlight_source(comp, tabs)
+        if found is None:
+            row.tier = ComponentTier.OMITTED
+            row.reason = TierReason.UNSUPPORTED
+            row.detail = (
+                "the highlighted component is not a figure or advanced viz of a tab in this export"
+            )
+            row.provisional = False
+            continue
+        source = tier_by_id.get(str(found[1].get("index")))
+        if source is None:
+            continue
+        row.tier = source.tier
+        row.reason = source.reason
+        row.detail = f"shows {found[1].get('title') or found[1].get('index')!r} from "
+        row.detail += f"{found[0].title!r}" + (f": {source.detail}" if source.detail else "")
+        row.provisional = False
+
+
 def export_manifest(
     dashboard_id: str,
     user: ExportUser,
@@ -2661,6 +2794,14 @@ def export_manifest(
     # can land a filter on this dashboard, and folded into the column sets
     # before anything is bundled — a join column pruned away is a dead filter.
     project_doc = _fetch_project(entry_tab.doc.get("project_id"))
+    # `{{param:KEY}}` in a text tile reads the run's recorded parameters —
+    # constants, so the bundle carries them on the tile itself (the runtime
+    # folds them in beside the computed values, as bulk_compute_cards does).
+    for _tab, comp, _cid in items:
+        if comp.get("component_type") == "text":
+            params = text_run_params(project_doc, comp)
+            if params:
+                comp["run_params"] = params
     dc_ids = dashboard_dc_ids(stored_metadata)
     emitted_links = emit_link_configs(project_links(project_doc), dc_ids)
 
@@ -2776,6 +2917,8 @@ def export_manifest(
             row.tier = ComponentTier.OMITTED
             row.reason = row.reason or TierReason.UNSUPPORTED
             row.detail = f"frozen payload could not be computed: {exc}"
+
+    resolve_highlight_tiers(items, tabs, tier_by_id)
 
     dcs_loaded = len(data_refs)
     used_dcs = used_dc_ids(items, tier_by_id, bindings)

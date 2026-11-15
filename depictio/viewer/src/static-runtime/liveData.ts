@@ -312,12 +312,54 @@ interface CardMeta {
   aggregations?: string[];
   secondary_layout?: string | null;
   breakdown_col?: string | null;
+  weight?: string | null;
+  values?: unknown;
+  run_params?: unknown;
   trend_col?: string | null;
   top_n_count?: number | null;
   filter_expr?: string | null;
   follow_region_filter?: boolean;
   config?: Record<string, unknown>;
   [k: string]: unknown;
+}
+
+/** `_top_category_expr`: the category of `values` holding the most weight
+ *  (summed `weight`, a missing weight counting 0; else the row count). Null
+ *  categories never win; ties go to the alphabetically first category (its
+ *  text form). `share` returns that weight over the total of every selected
+ *  row (null categories included), null when no row has a category or the
+ *  total is 0. `top` comes back as text (`_coerce_agg_result`). */
+export function topCategory(
+  values: ArrayLike<unknown>,
+  weight: ArrayLike<unknown> | null,
+  mask: Uint8Array | null,
+  share: boolean,
+): string | number | null {
+  const totals = new Map<string, { text: string; w: number }>();
+  let total = 0;
+  for (let i = 0; i < values.length; i++) {
+    if (mask && mask[i] !== 1) continue;
+    let w = 1;
+    if (weight) {
+      const raw = weight[i];
+      const n = typeof raw === 'bigint' ? Number(raw) : typeof raw === 'number' ? raw : Number(raw);
+      w = raw === null || raw === undefined || Number.isNaN(n) ? 0 : n;
+    }
+    total += w;
+    const v = values[i];
+    if (v === null || v === undefined) continue;
+    const text = typeof v === 'boolean' ? (v ? 'true' : 'false') : String(v);
+    const e = totals.get(text);
+    if (e) e.w += w;
+    else totals.set(text, { text, w });
+  }
+  let best: { text: string; w: number } | null = null;
+  for (const e of totals.values()) {
+    if (!best || e.w > best.w || (e.w === best.w && e.text < best.text)) best = e;
+  }
+  if (!share) return best ? best.text : null;
+  if (!best || !(total > 0)) return null;
+  return best.w / total;
 }
 
 /** Live equivalent of the server's bulk_compute_cards body. */
@@ -334,13 +376,40 @@ export async function computeCardsLive(
   const manifest = bundle();
   const requested = componentIds ? new Set(componentIds) : null;
   // Family-wide: a persistent section draws its owner tab's cards on every tab.
-  const cards = (familyMetadata() as CardMeta[]).filter(
+  const cards: CardMeta[] = (familyMetadata() as CardMeta[]).filter(
     (m) =>
       m.component_type === 'card' &&
       m.index &&
       manifest.tiers[m.index]?.tier === 'live' &&
       (!requested || requested.has(String(m.index))),
   );
+
+  // A text tile's live values ride along as cards of their own
+  // (`_text_value_cards`: `<text index>::<name>`), on the card path — same
+  // filters, links, filter_expr — and are folded back under the tile's index
+  // with its `{{param:KEY}}` run constants at the end.
+  const texts = (familyMetadata() as CardMeta[]).filter(
+    (m) =>
+      m.component_type === 'text' &&
+      m.index &&
+      manifest.tiers[m.index]?.tier !== 'omitted' &&
+      (m.values || m.run_params) &&
+      (!requested || requested.has(String(m.index))),
+  );
+  for (const t of texts) {
+    for (const [name, spec] of Object.entries((t.values ?? {}) as Record<string, Record<string, unknown>>)) {
+      if (!spec || typeof spec !== 'object') continue;
+      cards.push({
+        index: `${t.index}::${name}`,
+        component_type: 'card',
+        dc_id: (spec.dc_id as string) ?? null,
+        column_name: spec.column as string,
+        aggregation: spec.aggregation as string,
+        weight: (spec.weight as string) ?? null,
+        filter_expr: (spec.filter_expr as string) ?? null,
+      });
+    }
+  }
 
   const bound = toBoundFilters(filters);
   const values: Record<string, unknown> = {};
@@ -382,6 +451,12 @@ export async function computeCardsLive(
   const aggOne = async (card: CardMeta, dcId: string, column: string, aggregation: string) => {
     const { handle } = await tableFor(dcId);
     const mask = await maskFor(card, dcId);
+    const agg = (aggregation || '').toLowerCase();
+    if (agg === 'top' || agg === 'top_share') {
+      const names = [column, card.weight].filter((c): c is string => Boolean(c));
+      const cols = await engine.columns(handle, names);
+      return topCategory(cols[column], card.weight ? cols[card.weight] : null, mask, agg === 'top_share');
+    }
     const fn = toAggFn(aggregation);
     if (fn === undefined) {
       console.warn(`static bundle: aggregation "${aggregation}" not supported offline`);
@@ -465,6 +540,21 @@ export async function computeCardsLive(
       }
     }),
   );
+
+  for (const t of texts) {
+    const idx = String(t.index);
+    const folded: Record<string, unknown> = {};
+    for (const name of Object.keys((t.values ?? {}) as Record<string, unknown>)) {
+      const key = `${idx}::${name}`;
+      folded[name] = key in values ? values[key] : null;
+      delete values[key];
+      delete secondary_values[key];
+    }
+    for (const [key, value] of Object.entries((t.run_params ?? {}) as Record<string, unknown>)) {
+      folded[`param:${key}`] = value ?? null;
+    }
+    values[idx] = folded;
+  }
 
   // Reported from the USER's filters, not any dc's link-extended set: the
   // server's own count is of the filter entries the client sent

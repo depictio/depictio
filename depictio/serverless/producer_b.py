@@ -221,10 +221,41 @@ def resolve_parquet_path(data_dir: Path, workflow_tag: str, dc_tag: str) -> Path
 # ---------------------------------------------------------------------------
 
 
-def _component_meta(comp: dict[str, Any], index: str, dc_id: str | None) -> dict[str, Any]:
+def text_value_workflows(spec: DashboardDataLite) -> dict[str, str]:
+    """``dc_tag -> workflow_tag`` for the collections text live values name: the
+    first spec component reading that collection (a value names its ``dc`` by
+    tag alone, as an import resolves it within the project)."""
+    out: dict[str, str] = {}
+    for raw in spec.components:
+        comp = component_as_dict(raw)
+        wf, dc = comp.get("workflow_tag"), comp.get("data_collection_tag")
+        if wf and dc:
+            out.setdefault(str(dc), str(wf))
+    return out
+
+
+def _component_meta(
+    comp: dict[str, Any],
+    index: str,
+    dc_id: str | None,
+    value_workflows: dict[str, str] | None = None,
+) -> dict[str, Any]:
     """One ``stored_metadata`` entry: the spec component + runtime identifiers."""
     wf_tag = comp.get("workflow_tag") or ""
     meta = {k: v for k, v in comp.items() if k not in ("layout", "tag")}
+    if meta.get("component_type") == "text" and isinstance(meta.get("values"), dict):
+        # Each live value names its collection by tag; the runtime reads the
+        # (synthetic) dc_id / wf_id an import would have resolved it to.
+        values: dict[str, Any] = {}
+        for name, value in meta["values"].items():
+            value = dict(value) if isinstance(value, dict) else value
+            if isinstance(value, dict) and value.get("dc"):
+                wf = (value_workflows or {}).get(str(value["dc"]))
+                if wf:
+                    value.setdefault("dc_id", synthetic_dc_id(wf, str(value["dc"])))
+                    value.setdefault("wf_id", synthetic_wf_id(wf))
+            values[name] = value
+        meta["values"] = values
     meta["index"] = index
     meta["component_type"] = comp.get("component_type", "figure")
     meta["wf_id"] = synthetic_wf_id(wf_tag) if wf_tag else None
@@ -256,6 +287,7 @@ def build_dashboard_doc(spec: DashboardDataLite) -> dict[str, Any]:
     defaults.
     """
     stored_metadata: list[dict[str, Any]] = []
+    value_workflows = text_value_workflows(spec)
     left_layout: list[dict[str, Any]] = []
     right_layout: list[dict[str, Any]] = []
     left_y = 0
@@ -268,7 +300,7 @@ def build_dashboard_doc(spec: DashboardDataLite) -> dict[str, Any]:
         wf_tag = comp.get("workflow_tag") or ""
         dc_tag = comp.get("data_collection_tag") or ""
         dc_id = synthetic_dc_id(wf_tag, dc_tag) if wf_tag and dc_tag else None
-        stored_metadata.append(_component_meta(comp, index, dc_id))
+        stored_metadata.append(_component_meta(comp, index, dc_id, value_workflows))
 
         layout = comp.get("layout") if isinstance(comp.get("layout"), dict) else {}
         if ctype == "interactive":
@@ -636,6 +668,18 @@ def build_manifest(
         key = dc_key(wf_tag, dc_tag)
         needed.setdefault(key, (wf_tag, dc_tag))
         consumers.setdefault(key, []).append(comp)
+
+    # The collections text live values read (``values: {name: {dc: ...}}``).
+    value_workflows = text_value_workflows(spec)
+    for comp in components:
+        if comp.get("component_type") != "text":
+            continue
+        for value in (comp.get("values") or {}).values():
+            tag = value.get("dc") if isinstance(value, dict) else None
+            wf = value_workflows.get(str(tag)) if tag else None
+            if wf:
+                needed.setdefault(dc_key(wf, str(tag)), (wf, str(tag)))
+                consumers.setdefault(dc_key(wf, str(tag)), []).append(comp)
 
     # Companion tables of the live advanced_viz components (``*_dc_tag``):
     # bundled when their Parquet exists — a missing one costs that lane, not

@@ -30,12 +30,16 @@ export async function fetchDashboard(dashboardId: string): Promise<DashboardData
   // Single-tab bundle (and every manifest written before `tabs` existed): the
   // base shim owns the answer, including its legacy `wf_id` back-fill.
   if (bundledTabs().length === 0) return baseFetchDashboard(dashboardId);
-  // Tab family: `bundle()` already resolves `dashboard` to the active tab, and
-  // the document is the manifest's own object, so its identity is stable
-  // across App's re-fetches without a cache of our own. No `wf_id` back-fill
-  // here — that compensates for bundles built before the producers wrote a
-  // workflow id, all of which predate the `tabs` field and so take the branch
-  // above.
+  // Tab family: the tab the caller ASKED for — a highlight looks its figure up
+  // on another tab with this call, and used to be handed the active tab back.
+  // Unknown ids (App's own route-less fetch) resolve to the active tab, which
+  // `bundle()` already points at. The documents are the manifest's own
+  // objects, so identities stay stable across App's re-fetches. No `wf_id`
+  // back-fill here — that compensates for bundles built before the producers
+  // wrote a workflow id, all of which predate the `tabs` field and so take the
+  // branch above.
+  const tab = bundledTabs().find((t) => t.id === dashboardId);
+  if (tab) return tab.doc as unknown as DashboardData;
   return bundle().dashboard.doc as unknown as DashboardData;
 }
 

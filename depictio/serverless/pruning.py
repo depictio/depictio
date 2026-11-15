@@ -258,7 +258,9 @@ def component_columns(comp: dict[str, Any]) -> set[str] | None:
         # The columns its secondary layout reads besides its own — the
         # server's ``_card_payload_columns``: the breakdown column, the trend
         # axis and the attrition stages. The browser recomputes those strips.
-        for key in ("breakdown_col", "trend_col"):
+        # ``weight``: a text tile's ``top`` / ``top_share`` value (computed as a
+        # card) sums it per category.
+        for key in ("breakdown_col", "trend_col", "weight"):
             if comp.get(key):
                 cols.add(comp[key])
         for stage in comp.get("attrition_cols") or []:
@@ -411,6 +413,22 @@ def compute_column_sets(
         else:
             existing = sets.get(key) or set()
             sets[key] = existing | cols
+
+    # A text tile's live values (``{{name}}``) compute like cards on the
+    # collection their ``dc`` tag names.
+    by_tag = dc_keys_by_tag(spec)
+    for raw in spec.components:
+        comp = component_as_dict(raw)
+        if comp.get("component_type") != "text":
+            continue
+        for value in (comp.get("values") or {}).values():
+            if not isinstance(value, dict) or not value.get("dc"):
+                continue
+            cols = {c for c in (value.get("column"), value.get("weight")) if c}
+            cols |= filter_expr_columns(value.get("filter_expr"))
+            for key in by_tag.get(str(value["dc"]), [])[:1]:
+                if sets.get(key, set()) is not None:
+                    sets[key] = (sets.get(key) or set()) | cols
 
     for key, join_cols in link_join_columns(spec, links).items():
         if key in sets and sets[key] is not None:
