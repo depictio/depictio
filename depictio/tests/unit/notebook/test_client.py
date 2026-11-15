@@ -540,3 +540,48 @@ def test_poll_does_not_retry_an_unsupported_job():
     with pytest.raises(DepictioClientError):
         client.poll("/dispatch", {}, "/jobs/{job_id}", interval=0)
     assert state["dispatches"] == 1
+
+
+def test_tables_show_every_requested_row_not_a_ten_row_preview():
+    from depictio.notebook import show_table
+    from depictio.notebook.components import data_html
+
+    df = pl.DataFrame({"i": list(range(100))})
+    html = data_html(df)
+    assert html.count("<tr>") >= 100
+    assert "…" not in html
+    assert show_table(df)._repr_mimebundle_()["text/html"] == html
+
+
+def test_tables_go_interactive_once_itables_is_on(monkeypatch):
+    import sys
+    import types
+
+    from depictio.notebook import components
+
+    seen = {}
+    itables = types.ModuleType("itables")
+    itables.init_notebook_mode = lambda **kw: seen.update(init=kw)  # type: ignore[attr-defined]
+    itables.to_html_datatable = lambda df, **kw: seen.update(table=kw) or "<table data-dt>"  # type: ignore[attr-defined]
+    ipython = types.ModuleType("IPython")
+    ipython.get_ipython = lambda: object()  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "itables", itables)
+    monkeypatch.setitem(sys.modules, "IPython", ipython)
+    monkeypatch.setitem(components._TABLES, "interactive", False)
+    assert components.init_tables() is True
+    assert seen["init"]["connected"] is False
+    assert components.data_html(pl.DataFrame({"a": [1]})) == "<table data-dt>"
+    assert seen["table"]["maxBytes"] == 0 and seen["table"]["connected"] is False
+
+
+def test_init_tables_is_off_outside_a_kernel(monkeypatch):
+    from depictio.notebook import components
+
+    monkeypatch.setitem(components._TABLES, "interactive", False)
+    import sys
+    import types
+
+    ipython = types.ModuleType("IPython")
+    ipython.get_ipython = lambda: None  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "IPython", ipython)
+    assert components.init_tables() is False

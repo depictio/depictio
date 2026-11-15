@@ -869,7 +869,13 @@ class NotebookBuilder:
             "import plotly.graph_objects as go\n"
             "import polars as pl\n"
             "from IPython.display import HTML\n"
-            "from depictio.notebook import DepictioClient, fill_text, use_document_renderer\n"
+            "from depictio.notebook import (\n"
+            "    DepictioClient,\n"
+            "    fill_text,\n"
+            "    init_tables,\n"
+            "    show_table,\n"
+            "    use_document_renderer,\n"
+            ")\n"
             "from polars import col, lit\n"
             "\n"
             + _comment(
@@ -881,7 +887,13 @@ class NotebookBuilder:
             # Assigned to a throwaway: the call returns a bool, and a bare
             # expression at the end of a cell is that cell's output — the report
             # would open on the word "True".
-            + "\n_ = use_document_renderer()"
+            + "\n_ = use_document_renderer()\n"
+            + _comment(
+                "Tables as sortable, searchable, paginated tables (itables, with DataTables "
+                "inlined once so the report stays self-contained); plain HTML tables with "
+                "every row when itables is not installed"
+            )
+            + "\n_ = init_tables()"
         )
 
     def _connection_cell(self) -> Cell:
@@ -1761,10 +1773,10 @@ fig_funnel"""
             page = int(meta.get("page_size") or 100)
             select = f".select({columns!r})" if columns else ""
             body = [
-                _comment(f'Table "{title}": the first {page} filtered rows'),
+                _comment(f'Table "{title}": the first {page} filtered rows, all of them shown'),
                 *prelude,
                 f"{name} = {source}{select}.head({page})",
-                name,
+                f"show_table({name})",
             ]
             return Cell("\n".join(body))
         if ctype == "figure":

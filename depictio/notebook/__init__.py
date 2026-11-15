@@ -25,7 +25,7 @@ In a ``.qmd``::
 """
 
 from .client import DepictioClient, DepictioClientError
-from .components import DepictioComponent, use_document_renderer
+from .components import DepictioComponent, init_tables, show_table, use_document_renderer
 from .text import fill_text
 
 __all__ = [
@@ -33,5 +33,7 @@ __all__ = [
     "DepictioClientError",
     "DepictioComponent",
     "fill_text",
+    "init_tables",
+    "show_table",
     "use_document_renderer",
 ]

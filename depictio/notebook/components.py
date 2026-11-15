@@ -165,6 +165,83 @@ def use_document_renderer() -> bool:
     return True
 
 
+# Whether tables draw through itables (DataTables: sort, search, pages), set by
+# ``init_tables`` once the document has loaded the library.
+_TABLES = {"interactive": False}
+
+# Rows per page of an interactive table; every requested row is in it.
+TABLE_PAGE_LENGTH = 25
+
+
+def init_tables() -> bool:
+    """Draw tables as sortable, searchable, paginated tables for the whole document.
+
+    Uses ``itables`` in offline mode: DataTables is inlined once into the
+    document (``connected=False``), so a self-contained report keeps working
+    with no network. Needs a running kernel and ``itables`` installed; returns
+    whether it is on. Without it, tables are plain HTML with every row.
+    """
+    try:
+        from IPython import get_ipython
+
+        if get_ipython() is None:
+            return False
+        import itables
+
+        itables.init_notebook_mode(all_interactive=False, connected=False)
+    except Exception:  # noqa: BLE001 - plain HTML tables are the fallback
+        return False
+    _TABLES["interactive"] = True
+    return True
+
+
+def data_html(df: pl.DataFrame) -> str:
+    """A DataFrame as HTML with every row it holds (not Polars' 10-row head/tail).
+
+    An interactive table when ``init_tables`` turned itables on; the frame
+    is never downsampled (``maxBytes=0``): the cell already holds the rows the
+    tile asked for.
+    """
+    if _TABLES["interactive"]:
+        try:
+            from itables import to_html_datatable
+
+            return to_html_datatable(
+                df,
+                connected=False,
+                pageLength=TABLE_PAGE_LENGTH,
+                lengthMenu=[10, 25, 50, 100],
+                maxBytes=0,
+                classes="display compact",
+            )
+        except Exception:  # noqa: BLE001 - fall through to plain HTML
+            pass
+    with pl.Config(tbl_rows=max(df.height, 1), tbl_cols=-1, fmt_str_lengths=200):
+        return df._repr_html_()
+
+
+class TableView:
+    """A DataFrame displayed whole: what a table tile shows (``show_table``)."""
+
+    def __init__(self, df: pl.DataFrame, title: str | None = None) -> None:
+        self.df = df
+        self.title = title
+
+    def _repr_html_(self) -> str:
+        return data_html(self.df)
+
+    def _repr_mimebundle_(self, include=None, exclude=None, **kwargs):
+        return {HTML_MIME: self._repr_html_(), PLAIN_MIME: repr(self.df)}
+
+    def __repr__(self) -> str:
+        return repr(self.df)
+
+
+def show_table(df: pl.DataFrame, title: str | None = None) -> TableView:
+    """Display ``df`` with every row, as an interactive table when available."""
+    return TableView(df, title)
+
+
 def figure_bundle(fig) -> dict[str, Any]:
     """A mimebundle Jupyter and Quarto both render.
 
@@ -454,7 +531,7 @@ class DepictioComponent:
         if mode == "data":
             df = self.data
             if isinstance(df, pl.DataFrame):
-                return {HTML_MIME: df._repr_html_(), PLAIN_MIME: repr(df)}
+                return {HTML_MIME: data_html(df), PLAIN_MIME: repr(df)}
             return {PLAIN_MIME: repr(df)}
         if mode == "markdown":
             return {MARKDOWN_MIME: self._display_markdown() or "", PLAIN_MIME: self.title}
@@ -573,6 +650,20 @@ class MultiQCGeneralStatsComponent(DepictioComponent):
         modes = payload.get("modes") or {}
         mode = modes.get("all") or modes.get("mean") or next(iter(modes.values()), {})
         return _figure_from_dict(mode["violin_figure"])
+
+    def _bundle(self) -> dict[str, Any]:
+        """The table the tile shows, then the violin summary drawn beside it."""
+        df = self.data
+        html = data_html(df) if isinstance(df, pl.DataFrame) else ""
+        bundle: dict[str, Any] = {PLAIN_MIME: repr(df)}
+        try:
+            fig = self.figure
+        except Exception:  # noqa: BLE001 - a table with no numeric column has no violin
+            fig = None
+        if fig is not None and fig.data:
+            html += fig.to_html(full_html=False, include_plotlyjs=PLOTLY_JS)
+        bundle[HTML_MIME] = html
+        return bundle
 
 
 # ---------------------------------------------------------------------------

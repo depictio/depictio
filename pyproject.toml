@@ -103,6 +103,10 @@ local = ["depictio[server]", "py-rattler==0.26.0"]
 render = [
   "nbclient==0.11.0",
   "ipykernel==7.3.0",
+  # Tables in the report: sortable, searchable, paginated, offline (DataTables
+  # inlined once per document). Optional for a reader; the document falls back
+  # to plain HTML tables without it.
+  "itables==2.9.1",
 ]
 dev = [
   # The test suite covers the server too.

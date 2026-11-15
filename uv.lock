@@ -1068,6 +1068,7 @@ multiqc = [
 ]
 render = [
     { name = "ipykernel" },
+    { name = "itables" },
     { name = "nbclient" },
 ]
 server = [
@@ -1130,6 +1131,7 @@ requires-dist = [
     { name = "gunicorn", marker = "extra == 'server'", specifier = "==26.0.0" },
     { name = "httpx", specifier = "==0.28.1" },
     { name = "ipykernel", marker = "extra == 'render'", specifier = "==7.3.0" },
+    { name = "itables", marker = "extra == 'render'", specifier = "==2.9.1" },
     { name = "joserfc", marker = "extra == 'server'", specifier = "==1.7.6" },
     { name = "kombu", marker = "extra == 'server'", specifier = ">=5.6.2,<5.7" },
     { name = "mongomock", marker = "extra == 'dev'", specifier = "==4.3.0" },
@@ -1639,6 +1641,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/ef/4c/5dd1d8af08107f88c7f741ead7a40854b8ac24ddf9ae850afbcf698aa552/ipython_pygments_lexers-1.1.1.tar.gz", hash = "sha256:09c0138009e56b6854f9535736f4171d855c8c08a563a0dcd8022f78355c7e81", size = 8393, upload-time = "2025-01-17T11:24:34.505Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/d9/33/1f075bf72b0b747cb3288d011319aaf64083cf2efef8354174e3ed4540e2/ipython_pygments_lexers-1.1.1-py3-none-any.whl", hash = "sha256:a9462224a505ade19a605f71f8fa63c2048833ce50abc86768a0d81d876dc81c", size = 8074, upload-time = "2025-01-17T11:24:33.271Z" },
+]
+
+[[package]]
+name = "itables"
+version = "2.9.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/ae/2d/aa4700aeda35684c3a75f56e63e5499c4a86e5e9be2c0e350c2934198208/itables-2.9.1.tar.gz", hash = "sha256:b547f0882b56e5e37ed6a88450b3e34492aa03f5aaa4cf0fe00b54933b9eb7e9", size = 1543197, upload-time = "2026-07-22T21:08:31.523Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f5/3b/3a8bce7568cf568ab108fdfa41017169efc5650a4091bb6de2ae2441e5ec/itables-2.9.1-py3-none-any.whl", hash = "sha256:8342ceaa10a074d4623916875fd7390dccd703bf2cb29386ab20034e188e50cb", size = 1568923, upload-time = "2026-07-22T21:08:29.642Z" },
 ]
 
 [[package]]

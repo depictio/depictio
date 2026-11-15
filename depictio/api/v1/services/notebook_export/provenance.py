@@ -10,7 +10,7 @@ HOW_TO_RUN = """\
 **How to run**
 
 ```bash
-pip install depictio-cli jupyter           # the client, and the kernel Quarto runs it on
+pip install depictio-cli jupyter itables   # the client, the kernel Quarto runs it on, tables
 export DEPICTIO_API_URL={api_url}
 export DEPICTIO_API_TOKEN=...              # a long-lived token from the "CLI agents" page
 quarto render {stem}.qmd                   # or `quarto preview {stem}.qmd` while you edit
@@ -20,8 +20,10 @@ Quarto picks the first `python3` on your PATH; if that one has no Jupyter it ren
 with every result missing and still exits 0, so point `QUARTO_PYTHON` at the interpreter you
 installed into. Any editor with Quarto support (VS Code, Positron, RStudio) runs the cells one
 by one as well.
+`itables` is optional: without it tables print as plain HTML, every row still there.
 Offline: set `DEPICTIO_DATA_DIR` to a folder holding `<dc_id>.parquet` files instead of the
-API variables; the cells marked *rendered by Depictio* need the API and are skipped offline.
+API variables; the cells marked *rendered by Depictio* need the API and show a placeholder
+saying so offline.
 """
 
 
