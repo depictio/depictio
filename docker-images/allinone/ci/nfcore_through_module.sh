@@ -25,9 +25,11 @@ pipeline() {
     # Cloned with git rather than pulled by Nextflow, which asks GitHub's API
     # for the manifest: unauthenticated, the shared runners exhaust its rate
     # limit ("API rate limit exceeded") when several jobs start at once.
-    git clone --quiet --depth 1 --branch "$version" "https://github.com/nf-core/$name.git" nfcore-pipeline
-    # Older pipelines predate Nextflow's strict syntax.
-    NXF_SYNTAX_PARSER=v1 nextflow run "$PWD/nfcore-pipeline" -profile test,docker \
+    git -c advice.detachedHead=false clone --quiet --depth 1 --branch "$version" \
+        "https://github.com/nf-core/$name.git" nfcore-pipeline
+    # Nextflow's default parser: these releases all need >= 25.04, and forcing
+    # the old one fails on configs written for the new (airrflow 5.1.2).
+    nextflow run "$PWD/nfcore-pipeline" -profile test,docker \
         --outdir "$PWD/nfcore-results" -work-dir "$PWD/nfcore-work"
     # The pipeline's work directory is GBs the rest of the job does not need.
     rm -rf nfcore-work
