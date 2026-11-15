@@ -179,6 +179,8 @@ def test_bioimage_dashboards_follow_the_static_id_table():
         "bioimage_clem",
         "bioimage_wsi",
         "bioimage_hela_tomo",
+        "bioimage_deep_zoom",
+        "bioimage_multimodal",
     }
     assert all(_dataset_of_dashboard(name) == "bioimage_examples" for name in dashboards)
     # The main tab carries the project id, as in the other multi-tab projects.

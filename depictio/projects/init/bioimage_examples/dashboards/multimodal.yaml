@@ -20,17 +20,17 @@ tab_icon_color: 'pink'
 
 filter_sections:
   - name: 'Core'
-    icon: 'mdi:circle-slice-8'
+    icon: 'mdi:test-tube'
     color: 'pink'
     description: 'The tissue core shown in the viewer, the plot and the table'
 
 grid_sections:
   - name: 'Registration'
-    icon: 'mdi:vector-combine'
+    icon: 'mdi:microscope'
     color: 'pink'
     description: 'The second-harmonic image of the core after each step, over its bright-field image'
   - name: 'Against the truth'
-    icon: 'mdi:target'
+    icon: 'mdi:ruler'
     color: 'pink'
     description: 'How far each step leaves the image from where it truly belongs'
 
