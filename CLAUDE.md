@@ -270,12 +270,15 @@ Six types (`table`, `jbrowse2`, `multiqc`, `image`, `geojson`, `phylogeny`) with
 - **Opaque blobs** — `geojson` (fixed S3 key), `phylogeny` (bare filesystem path, never uploaded)
 
 `metatype` is a free-form unvalidated string — never key behaviour on it.
+
 ### Notebook export & Python import
-- Dashboard → marimo/Jupyter/Quarto: `depictio/api/v1/services/notebook_export/` (generator),
+- Dashboard → one Quarto document (`.qmd`), nothing else: `depictio/api/v1/services/notebook_export/` (generator),
   `dashboards_endpoints/notebook_export.py` (endpoints), `AnalysisState` contract in
   `depictio/models/models/analysis_state.py` (+ committed `analysis_state.schema.json`)
 - Any component in a notebook: `depictio/notebook/` (`DepictioClient`), headless figure
   extraction via the viewer's `/embed/{dashboard}/{component}` route (`services/embed/`)
+- The rendered HTML report is that same `.qmd` run by `quarto render` on a worker, behind
+  `DEPICTIO_NOTEBOOK_EXPORT_RENDER_ENABLED` (off), owner-only when the dashboard carries code-mode figures
 - Design: `docs/design/rfc-notebook-export.md`
 
 ### Auth & Storage

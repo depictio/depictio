@@ -139,8 +139,6 @@ class AnalysisState(BaseModel):
 # Notebook export
 # ---------------------------------------------------------------------------
 
-NotebookFormat = Literal["marimo", "ipynb", "quarto"]
-
 # How a component reaches the notebook: as explicit Polars/Plotly code, as a
 # cell that re-renders it through the Depictio API with the exported state, or
 # not at all (with a reason written for the reader).
@@ -148,8 +146,9 @@ NotebookInclusion = Literal["code", "api", "omitted"]
 
 
 class NotebookExportRequest(BaseModel):
+    """The analysis state to export. The export is one Quarto document (``.qmd``)."""
+
     state: AnalysisState
-    format: NotebookFormat = "marimo"
 
 
 class NotebookPreflightComponent(BaseModel):
@@ -183,7 +182,6 @@ class NotebookPreflight(BaseModel):
     dcs: list[NotebookPreflightDC] = Field(default_factory=list)
     stages: list[NotebookPreflightStage] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
-    ipynb_available: bool = False
     render_available: bool = False
     counts: dict[str, int] = Field(default_factory=dict)
 

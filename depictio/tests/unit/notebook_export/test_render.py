@@ -28,7 +28,7 @@ def _quarto(monkeypatch, *, log: str, returncode: int = 0, write_output: bool = 
         seen["cmd"] = cmd
         seen["env"] = kwargs.get("env") or {}
         if write_output:
-            out = Path(kwargs["cwd"]) / f"{cmd[2].removesuffix('.quarto.ipynb')}.quarto.html"
+            out = Path(kwargs["cwd"]) / f"{cmd[2].removesuffix('.qmd')}.html"
             out.write_bytes(b"<html>report</html>")
         return FakeProc(returncode=returncode, stdout=log)
 
@@ -39,13 +39,18 @@ def _quarto(monkeypatch, *, log: str, returncode: int = 0, write_output: bool = 
 def test_render_needs_quarto(monkeypatch):
     monkeypatch.setattr(render, "quarto_binary", lambda: None)
     with pytest.raises(render.RenderUnavailable, match="Quarto is not installed"):
-        render.render_quarto_html(b"{}", stem="x", api_url="http://api", api_token="t")
+        render.render_quarto_html(
+            b"---\ntitle: x\n---\n", stem="x", api_url="http://api", api_token="t"
+        )
 
 
 def test_render_returns_the_report_and_passes_the_caller_through(monkeypatch):
-    seen = _quarto(monkeypatch, log="Executing 'x.quarto.ipynb'\n  Cell 1/2: ''...Done\n")
-    html = render.render_quarto_html(b"{}", stem="x", api_url="http://api:8058", api_token="tok")
+    seen = _quarto(monkeypatch, log="Executing 'x.quarto_ipynb'\n  Cell 1/2: ''...Done\n")
+    html = render.render_quarto_html(
+        b"---\ntitle: x\n---\n", stem="x", api_url="http://api:8058", api_token="tok"
+    )
     assert html == b"<html>report</html>"
+    assert seen["cmd"][2] == "x.qmd"
     assert "--execute" in seen["cmd"]
     env = seen["env"]
     # The notebook is a client of this deployment, running as whoever asked.
@@ -58,15 +63,19 @@ def test_render_returns_the_report_and_passes_the_caller_through(monkeypatch):
 
 def test_a_report_quarto_never_executed_is_a_failure(monkeypatch):
     """Quarto skips execution silently and exits 0 — the log is the only tell."""
-    _quarto(monkeypatch, log="pandoc\n  to: html\nOutput created: x.quarto.html\n")
+    _quarto(monkeypatch, log="pandoc\n  to: html\nOutput created: x.html\n")
     with pytest.raises(render.RenderUnavailable, match="without executing"):
-        render.render_quarto_html(b"{}", stem="x", api_url="http://api", api_token="t")
+        render.render_quarto_html(
+            b"---\ntitle: x\n---\n", stem="x", api_url="http://api", api_token="t"
+        )
 
 
 def test_a_failed_render_carries_quarto_s_own_message(monkeypatch):
     _quarto(monkeypatch, log="An error occurred: cell 4 raised", returncode=1, write_output=False)
     with pytest.raises(render.RenderUnavailable, match="cell 4 raised"):
-        render.render_quarto_html(b"{}", stem="x", api_url="http://api", api_token="t")
+        render.render_quarto_html(
+            b"---\ntitle: x\n---\n", stem="x", api_url="http://api", api_token="t"
+        )
 
 
 def test_job_keys_are_namespaced_by_user():

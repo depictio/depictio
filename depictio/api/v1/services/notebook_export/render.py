@@ -5,17 +5,17 @@ same file the download hands out, run against the same API the reader's own
 copy would call: the report is the export's output, not a second rendering of
 the dashboard written for the server.
 
-Quarto is a binary, not a library, so this is a subprocess like
-``marimo export ipynb`` next door — with two footguns of its own, both of which
-cost a full render to find:
+Quarto is a binary, not a library, so this is a subprocess, with two footguns
+of its own, both of which cost a full render to find:
 
-* Quarto renders an ``.ipynb`` *without executing it* unless told to. It then
-  produces a report with every result missing and exits 0.
+* Execution can be switched off — by a project ``_quarto.yml``, a freeze
+  directory, or for an ``.ipynb`` simply by not asking. It then produces a
+  report with every result missing and exits 0.
 * It picks the first ``python3`` on ``PATH``, and if that interpreter has no
   Jupyter it skips execution — again silently, again exit 0.
 
 So: ``--execute``, ``QUARTO_PYTHON`` pinned to the interpreter running this,
-and a cell count checked against the output before the bytes are handed back.
+and the log checked for an execution phase before the bytes are handed back.
 """
 
 from __future__ import annotations
@@ -65,14 +65,14 @@ def render_available() -> bool:
 
 
 def render_quarto_html(
-    quarto_ipynb: bytes,
+    qmd: bytes,
     *,
     stem: str,
     api_url: str,
     api_token: str | None,
     timeout_s: int = 900,
 ) -> bytes:
-    """The HTML report for a Quarto-ready ``.ipynb``, executed end to end.
+    """The HTML report for an exported ``.qmd``, executed end to end.
 
     ``api_url`` and ``api_token`` are what the notebook's own cells read: the
     report is computed with the rights of whoever asked for it, exactly as if
@@ -101,9 +101,9 @@ def render_quarto_html(
     env["DEPICTIO_CONTEXT"] = "client"
 
     with tempfile.TemporaryDirectory(prefix="depictio-report-") as tmp:
-        src = Path(tmp) / f"{stem}.quarto.ipynb"
-        out = Path(tmp) / f"{stem}.quarto.html"
-        src.write_bytes(quarto_ipynb)
+        src = Path(tmp) / f"{stem}.qmd"
+        out = Path(tmp) / f"{stem}.html"
+        src.write_bytes(qmd)
         cmd = [str(quarto_binary()), "render", src.name, "--execute", "--to", "html"]
         try:
             proc = subprocess.run(

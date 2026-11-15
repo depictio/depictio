@@ -1,7 +1,8 @@
 """Python identifiers for the generated notebook.
 
-marimo requires every global to be defined by exactly one cell, so each
-funnel stage, group, figure, card and table needs its own name. Names are
+The document runs top to bottom in one namespace, so each funnel stage,
+group, figure, card and table needs its own name, or a later cell would
+silently overwrite what an earlier one showed. Names are
 derived from what the reader sees in the dashboard (a DC tag, a component
 title, a column) and de-duplicated by the allocator; nothing in the notebook
 is ever called ``df`` or ``fig``, which the code-mode snippets use locally.
@@ -18,9 +19,7 @@ import unicodedata
 # snippet expects to find in scope. A generated global must never shadow them.
 RESERVED_NAMES: frozenset[str] = frozenset(
     {
-        "marimo",
-        "app",
-        "mo",
+        "HTML",
         "pl",
         "px",
         "go",
@@ -35,7 +34,11 @@ RESERVED_NAMES: frozenset[str] = frozenset(
         "DASHBOARD_ID",
         "DepictioClient",
         "depictio_state",
+        "depictio_group_kwargs",
+        "depictio_group_by",
+        "depictio_category_colors",
         "metric_card",
+        "card_row",
     }
     | set(keyword.kwlist)
     | set(dir(builtins))

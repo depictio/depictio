@@ -1,21 +1,20 @@
-"""The generator on the seeded dashboards: valid marimo, one definition per global."""
+"""The generator on the seeded dashboards: a valid Quarto document, run top to bottom."""
 
 from __future__ import annotations
 
 import ast
+import builtins
+import html
 import re
-import subprocess
-import sys
 
 import polars as pl
-import pytest
 
 from depictio.api.v1.services.notebook_export.generator import (
     DCPlan,
     ExportPlan,
     NotebookBuilder,
     StagePlan,
-    generate_marimo,
+    generate_qmd,
 )
 from depictio.models.models.analysis_state import AnalysisState
 
@@ -151,84 +150,86 @@ def penguins_plan(tabs, *, dtypes=PENGUINS_DTYPES) -> ExportPlan:
 # ---------------------------------------------------------------------------
 
 
-def _cell_functions(tree: ast.Module) -> list[ast.FunctionDef]:
-    out = []
-    for node in tree.body:
-        if isinstance(node, ast.FunctionDef) and any(
-            isinstance(d, ast.Attribute) and d.attr == "cell" for d in node.decorator_list
-        ):
-            out.append(node)
-    return out
+_CHUNK_RE = re.compile(r"^(`{3,})\{python\}\n(.*?)\n\1$", re.S | re.M)
 
 
-def _bound_names(fn: ast.FunctionDef) -> set[str]:
+def python_chunks(source: str) -> list[str]:
+    """The ``{python}`` chunks of a ``.qmd``, in document order."""
+    return [m.group(2) for m in _CHUNK_RE.finditer(source)]
+
+
+def _targets(node: ast.AST):
+    if isinstance(node, ast.Name):
+        yield node.id
+    elif isinstance(node, (ast.Tuple, ast.List)):
+        for elt in node.elts:
+            yield from _targets(elt)
+    elif isinstance(node, ast.Starred):
+        yield from _targets(node.value)
+
+
+def _top_level_bound(tree: ast.Module) -> set[str]:
     bound: set[str] = set()
-
-    def targets(node):
-        if isinstance(node, ast.Name):
-            bound.add(node.id)
-        elif isinstance(node, (ast.Tuple, ast.List)):
-            for e in node.elts:
-                targets(e)
-        elif isinstance(node, ast.Starred):
-            targets(node.value)
-
-    for stmt in fn.body:
+    for stmt in tree.body:
         if isinstance(stmt, ast.Assign):
             for t in stmt.targets:
-                targets(t)
-        elif isinstance(stmt, (ast.AnnAssign, ast.AugAssign)):
-            targets(stmt.target)
-        elif isinstance(stmt, (ast.For, ast.AsyncFor)):
-            targets(stmt.target)
-        elif isinstance(stmt, (ast.With, ast.AsyncWith)):
-            for item in stmt.items:
-                if item.optional_vars is not None:
-                    targets(item.optional_vars)
+                bound.update(_targets(t))
+        elif isinstance(stmt, (ast.AnnAssign, ast.AugAssign, ast.For, ast.AsyncFor)):
+            bound.update(_targets(stmt.target))
         elif isinstance(stmt, (ast.Import, ast.ImportFrom)):
             for alias in stmt.names:
                 bound.add(alias.asname or alias.name.split(".")[0])
         elif isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
             bound.add(stmt.name)
-    return {n for n in bound if not n.startswith("_")}
+    return bound
 
 
-def _returned_names(fn: ast.FunctionDef) -> set[str]:
-    for stmt in fn.body:
-        if isinstance(stmt, ast.Return):
-            if stmt.value is None:
-                return set()
-            if isinstance(stmt.value, ast.Tuple):
-                return {e.id for e in stmt.value.elts if isinstance(e, ast.Name)}
-            if isinstance(stmt.value, ast.Name):
-                return {stmt.value.id}
-    return set()
+def _free_loads(tree: ast.Module) -> set[str]:
+    """Names the chunk reads without binding them anywhere inside it."""
+    bound: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name) and isinstance(node.ctx, (ast.Store, ast.Del)):
+            bound.add(node.id)
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            bound.add(node.name)
+        elif isinstance(node, ast.arg):
+            bound.add(node.arg)
+        elif isinstance(node, (ast.Import, ast.ImportFrom)):
+            for alias in node.names:
+                bound.add(alias.asname or alias.name.split(".")[0])
+        elif isinstance(node, ast.ExceptHandler) and node.name:
+            bound.add(node.name)
+    loads = {
+        n.id for n in ast.walk(tree) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load)
+    }
+    return loads - bound
 
 
-def assert_no_global_redefinition(source: str) -> dict[str, int]:
-    tree = ast.parse(source)
-    cells = _cell_functions(tree)
-    assert cells, "no @app.cell functions found"
+def assert_defined_before_use(source: str) -> dict[str, int]:
+    """Run top to bottom, every chunk only reads what an earlier chunk defined,
+    and every public global is defined by exactly one chunk (a second one would
+    silently replace what the first showed). Returns ``{name: chunk index}``."""
+    chunks = python_chunks(source)
+    assert chunks, "no {python} chunks found"
     owners: dict[str, int] = {}
-    for i, fn in enumerate(cells):
-        bound = _bound_names(fn)
-        assert _returned_names(fn) == bound, (
-            f"cell {i}: returns {_returned_names(fn)} but defines {bound}"
-        )
-        for name in bound:
-            assert name not in owners, f"{name!r} defined by cells {owners[name]} and {i}"
+    private: set[str] = set()
+    known = set(dir(builtins))
+    for i, body in enumerate(chunks):
+        tree = ast.parse(body)
+        unknown = _free_loads(tree) - known - set(owners) - private
+        assert not unknown, f"chunk {i} reads {unknown} that no earlier chunk defines"
+        for name in _top_level_bound(tree):
+            if name.startswith("_"):
+                private.add(name)
+                continue
+            assert name not in owners, f"{name!r} defined by chunks {owners[name]} and {i}"
             owners[name] = i
-    for i, fn in enumerate(cells):
-        params = {a.arg for a in fn.args.args}
-        unknown = {p for p in params if p not in owners}
-        assert not unknown, f"cell {i} reads {unknown} that no cell defines"
-        assert all(owners[p] != i for p in params)
     return owners
 
 
 def test_penguins_export_defines_every_global_once(penguins_tabs):
-    src = generate_marimo(penguins_plan(penguins_tabs))
-    owners = assert_no_global_redefinition(src)
+    src = generate_qmd(penguins_plan(penguins_tabs))
+    owners = assert_defined_before_use(src)
     for name in (
         "client",
         "DASHBOARD_ID",
@@ -247,7 +248,7 @@ def test_penguins_export_defines_every_global_once(penguins_tabs):
 
 
 def test_penguins_export_content(penguins_tabs):
-    src = generate_marimo(penguins_plan(penguins_tabs))
+    src = generate_qmd(penguins_plan(penguins_tabs))
     # Stage order follows the funnel order in the plan, not the filter list.
     assert src.index("body_mass_g') >= 3500") < src.index("is_in(['Adelie', 'Gentoo'])")
     assert "stage_1_penguins_complete = df_penguins_complete" in src
@@ -300,18 +301,23 @@ def test_penguins_export_content(penguins_tabs):
 
 
 def test_card_row_reads_the_real_display_not_the_iframe_tile():
-    # card_row's members are a mix of mo.Html (code-mode cards) and Depictio
+    # card_row's members are a mix of HTML objects (code-mode cards) and Depictio
     # components (api-mode, multi-metric cards). A Depictio component's
     # `.html` is a different thing — an embeddable iframe tile pointing back
     # at a live session — while `_repr_html_()` is the same self-contained
     # look the object would show if displayed bare. Grouping cards into a
     # row must read the latter: exec the generator's own injected cell so
     # this exercises the exact code that ships, not a reimplementation.
-    import marimo as mo
+    class HTML:  # IPython.display.HTML, as far as card_row and metric_card use it
+        def __init__(self, data: str) -> None:
+            self.data = data
+
+        def _repr_html_(self) -> str:
+            return self.data
 
     body = NotebookBuilder._metric_card_cell(None).body
     ns: dict = {}
-    exec(compile(body, "<metric_card_cell>", "exec"), {"mo": mo}, ns)
+    exec(compile(body, "<metric_card_cell>", "exec"), {"HTML": HTML}, ns)
     card_row, metric_card = ns["card_row"], ns["metric_card"]
 
     class FakeApiCard:
@@ -323,18 +329,18 @@ def test_card_row_reads_the_real_display_not_the_iframe_tile():
             raise AssertionError("card_row must not read .html, the iframe tile")
 
     row = card_row([metric_card("Samples", 3), FakeApiCard()])
-    assert "iframe" not in row.text
-    assert "Samples" in row.text and "Species mix" in row.text
+    assert "iframe" not in row.data
+    assert "Samples" in row.data and "Species mix" in row.data
 
 
 def test_unknown_schema_falls_back_to_string_cast(penguins_tabs):
-    src = generate_marimo(penguins_plan(penguins_tabs, dtypes=None))
+    src = generate_qmd(penguins_plan(penguins_tabs, dtypes=None))
     assert "pl.col('species').cast(pl.Utf8, strict=False).is_in(['Adelie', 'Gentoo'])" in src
 
 
 def test_preflight_lists_every_tile_with_a_verdict(penguins_tabs):
     builder = NotebookBuilder(penguins_plan(penguins_tabs))
-    pre = builder.preflight(ipynb_available=True)
+    pre = builder.preflight()
     tiles = {
         m["index"]
         for t in penguins_tabs
@@ -366,9 +372,9 @@ def test_ampliseq_export_defines_every_global_once(ampliseq_tabs):
     plan = ExportPlan(
         tabs=tabs, project=None, state=state, dcs=dcs, stages=[], title="nf-core/ampliseq"
     )
-    src = generate_marimo(plan)
-    owners = assert_no_global_redefinition(src)
-    pre = NotebookBuilder(plan).preflight(ipynb_available=False)
+    src = generate_qmd(plan)
+    owners = assert_defined_before_use(src)
+    pre = NotebookBuilder(plan).preflight()
     kinds = {c.component_type for c in pre.components}
     assert "advanced_viz" in kinds
     assert any(c.status == "api" for c in pre.components)
@@ -377,15 +383,38 @@ def test_ampliseq_export_defines_every_global_once(ampliseq_tabs):
     assert len(owners) > 20
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="subprocess path quoting")
-def test_marimo_check_accepts_the_penguins_export(penguins_tabs, tmp_path):
-    pytest.importorskip("marimo")
-    path = tmp_path / "penguins.py"
-    path.write_text(generate_marimo(penguins_plan(penguins_tabs)))
-    proc = subprocess.run(
-        [sys.executable, "-m", "marimo", "check", "--strict", str(path)],
-        capture_output=True,
-        text=True,
-        timeout=180,
+def test_penguins_export_is_one_quarto_document(penguins_tabs):
+    import yaml
+
+    src = generate_qmd(penguins_plan(penguins_tabs))
+    assert src.startswith("---\n")
+    front = yaml.safe_load(src.split("\n---\n", 1)[0].removeprefix("---\n"))
+    assert front["title"] == "Penguins Species Analysis"
+    assert front["jupyter"] == "python3"
+    assert front["format"]["html"]["embed-resources"] is True
+    assert "marimo" not in src and "mo.Html" not in src
+    assert "from IPython.display import HTML" in python_chunks(src)[0]
+    assert "| **Notebook** | Quarto document (.qmd) |" in src or "Quarto document (.qmd)" in src
+
+
+def test_a_highlight_points_at_the_figure_it_repeats(ampliseq_tabs):
+    """A highlight re-shows a figure from another tab. The document already
+    draws that figure in its own tab's part, so the highlight is a pointer,
+    with no name and no code of its own."""
+    tabs = ampliseq_tabs
+    state = AnalysisState.model_validate(
+        {"context": {"dashboard_id": str(tabs[0]["dashboard_id"])}}
     )
-    assert proc.returncode == 0, proc.stdout + proc.stderr
+    plan = ExportPlan(tabs=tabs, project=None, state=state, dcs=[], stages=[], title="x")
+    pre = NotebookBuilder(plan).preflight()
+    highlights = [c for c in pre.components if c.component_type == "highlight"]
+    assert highlights
+    assert all(c.status == "code" and c.name is None for c in highlights)
+    src = generate_qmd(plan)
+    source = next(
+        m
+        for t in tabs
+        for m in t["stored_metadata"]
+        if m.get("component_type") == "highlight" and m.get("source_tab")
+    )
+    assert f"from the **{html.escape(source['source_tab'])}** tab" in src

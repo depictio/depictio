@@ -23,20 +23,19 @@ import {
   fetchNotebookRenderStatus,
   startNotebookRender,
   type AnalysisState,
-  type NotebookFormat,
   type NotebookInclusion,
   type NotebookPreflight,
   type NotebookRenderStatus,
 } from 'depictio-react-core';
 
 /**
- * Export the dashboard as a notebook: preflight first (what each tile becomes,
- * with a reason written for the reader), then the format, then the download.
+ * Export the dashboard as a Quarto document: preflight first (what each tile
+ * becomes, with a reason written for the reader), then the download.
  *
- * Three of the four choices are generated text: the marimo file, and the
- * Jupyter / Quarto variants derived from it with outputs excluded. The fourth
- * is the rendered report, and it is the one thing that executes — on a worker,
- * over minutes, so it is started, polled, then downloaded.
+ * Two outputs, one document. The `.qmd` is generated text the reader renders
+ * themselves. The report is that same document rendered here, and it is the
+ * one thing that executes — on a worker, over minutes, so it is started,
+ * polled, then downloaded.
  */
 interface NotebookExportModalProps {
   opened: boolean;
@@ -52,14 +51,12 @@ const STATUS_META: Record<NotebookInclusion, { label: string; color: string }> =
   omitted: { label: 'omitted', color: 'gray' },
 };
 
-/** The report is not a notebook format; it is what rendering one produces. */
-type ExportChoice = NotebookFormat | 'report';
+/** The document, or what rendering it produces. */
+type ExportChoice = 'qmd' | 'report';
 
 const FORMAT_HINT: Record<ExportChoice, string> = {
-  marimo: 'A reactive Python notebook: marimo edit <file>.py',
-  ipynb: 'Open in JupyterLab: jupyter lab <file>.ipynb',
-  quarto: 'The notebook to render yourself: quarto render <file>.quarto.ipynb',
-  report: 'That same notebook, rendered here: one HTML file, nothing to install.',
+  qmd: 'The document to render yourself: quarto render <file>.qmd',
+  report: 'That same document, rendered here: one HTML file, nothing to install.',
 };
 
 function elapsedLabel(seconds: number): string {
@@ -78,7 +75,7 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
   const [state, setState] = useState<AnalysisState | null>(null);
   const [preflight, setPreflight] = useState<NotebookPreflight | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [format, setFormat] = useState<ExportChoice>('marimo');
+  const [format, setFormat] = useState<ExportChoice>('qmd');
   const [downloading, setDownloading] = useState(false);
   const [downloaded, setDownloaded] = useState<string | null>(null);
   const [job, setJob] = useState<NotebookRenderStatus | null>(null);
@@ -142,7 +139,7 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
     setDownloading(true);
     setError(null);
     try {
-      const filename = await exportNotebook(dashboardId, state, format as NotebookFormat);
+      const filename = await exportNotebook(dashboardId, state);
       setDownloaded(filename);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -181,7 +178,6 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
     }
   };
 
-  const ipynbAvailable = preflight?.ipynb_available ?? true;
   const renderAvailable = preflight?.render_available ?? false;
   const counts = preflight?.counts ?? {};
   const isReport = format === 'report';
@@ -202,8 +198,8 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
       <Stack gap="md" data-testid="notebook-export-modal">
         <Text size="sm" c="dimmed">
           {dashboardTitle ? `"${dashboardTitle}"` : 'This dashboard'}, every tab, with the
-          filters, funnel order and groups you have right now — as a notebook you can keep
-          working in. Each tile is reproduced as code where it can be, and rendered through
+          filters, funnel order and groups you have right now — as a Quarto document you can
+          keep working in. Each tile is reproduced as code where it can be, and rendered through
           Depictio otherwise.
         </Text>
 
@@ -304,29 +300,26 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
 
         <Stack gap={4}>
           <Text fw={500} size="sm">
-            Format
+            Quarto
           </Text>
           <SegmentedControl
             value={format}
             onChange={(v) => setFormat(v as ExportChoice)}
             data={[
-              { label: 'marimo', value: 'marimo' },
-              { label: 'Jupyter', value: 'ipynb', disabled: !ipynbAvailable },
-              { label: 'Quarto', value: 'quarto', disabled: !ipynbAvailable },
-              { label: 'Quarto report', value: 'report', disabled: !renderAvailable },
+              { label: 'Document (.qmd)', value: 'qmd' },
+              { label: 'Rendered report', value: 'report', disabled: !renderAvailable },
             ]}
             data-testid="notebook-export-format"
           />
           <Text size="xs" c="dimmed">
             {FORMAT_HINT[format]}
-            {!ipynbAvailable && ' — Jupyter and Quarto variants need marimo on the server.'}
-            {ipynbAvailable && !renderAvailable && ' — rendered reports are off on this server.'}
+            {!renderAvailable && ' Rendered reports are off on this server.'}
           </Text>
         </Stack>
 
         {isReport && !job && renderAvailable && (
           <Alert color="blue" variant="light" data-testid="notebook-export-render-hint">
-            The Quarto notebook above, executed on the server: every tile is recomputed and every
+            The Quarto document, executed on the server: every tile is recomputed and every
             rendered figure costs a browser pass, so a dashboard this size takes a few minutes.
             You can leave this open while it builds.
           </Alert>
@@ -345,7 +338,7 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
 
         {job?.status === 'error' && (
           <Alert color="red" title="Render failed" data-testid="notebook-export-render-error">
-            {job.reason || 'The worker could not render this notebook.'}
+            {job.reason || 'The worker could not render this document.'}
           </Alert>
         )}
 

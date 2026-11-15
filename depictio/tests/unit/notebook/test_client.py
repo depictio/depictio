@@ -167,9 +167,8 @@ class FakeApi:
         if path.endswith("/notebook_export/" + DASH + "/preflight"):
             return httpx.Response(200, json={"components": [], "counts": {}})
         if path.endswith("/notebook_export/" + DASH):
-            if body["format"] == "marimo":
-                return httpx.Response(200, text="import marimo\n")
-            return httpx.Response(200, content=b'{"cells": []}')
+            assert "format" not in body
+            return httpx.Response(200, text="---\ntitle: Penguins\n---\n")
         if path.endswith("/dashboards/get/missing"):
             return httpx.Response(404, json={"detail": "Dashboard 'missing' not found."})
         return httpx.Response(500, json={"detail": f"unexpected {path}"})
@@ -268,8 +267,7 @@ def test_figure_component_renders_through_the_api(client, api):
     assert sent["filters"] == [species] and sent["theme"] == "light"
     bundle = comp._repr_mimebundle_()
     assert "application/vnd.plotly.v1+json" in bundle
-    mime, payload = comp._mime_()
-    assert mime == "text/html" and payload
+    assert comp._repr_html_()
     assert client.figure(DASH, "fig-1") is not None
 
 
@@ -379,10 +377,10 @@ def test_state_can_be_passed_explicitly(client, api):
 
 
 def test_notebook_and_preflight(client, tmp_path):
-    assert client.notebook(DASH).startswith("import marimo")
-    out = tmp_path / "nb.ipynb"
-    assert client.notebook(DASH, fmt="ipynb", save_to=out) == b'{"cells": []}'
-    assert out.read_bytes() == b'{"cells": []}'
+    assert client.notebook(DASH).startswith("---\ntitle: Penguins")
+    out = tmp_path / "penguins.qmd"
+    client.notebook(DASH, save_to=out)
+    assert out.read_text().startswith("---\ntitle: Penguins")
     assert client.preflight(DASH) == {"components": [], "counts": {}}
 
 
@@ -392,10 +390,10 @@ def test_api_errors_carry_status_and_detail(client):
     assert exc.value.status == 404 and "not found" in exc.value.detail
 
 
-def test_every_component_class_displays_in_all_three_environments():
+def test_every_component_class_displays_through_the_kernel():
     for cls in COMPONENT_CLASSES.values():
         assert callable(getattr(cls, "_repr_mimebundle_"))
-        assert callable(getattr(cls, "_mime_"))
+        assert callable(getattr(cls, "_repr_html_"))
         assert cls.default_display in ("figure", "data", "html", "markdown")
 
 

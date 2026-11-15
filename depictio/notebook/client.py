@@ -11,7 +11,7 @@ import io
 import os
 import time
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 import httpx
 import polars as pl
@@ -20,8 +20,6 @@ from .components import DepictioComponent, component_for
 
 API_PREFIX = "/depictio/api/v1"
 DEFAULT_CLI_CONFIG = "~/.depictio/CLI.yaml"
-
-NotebookFormat = Literal["marimo", "ipynb", "quarto"]
 
 
 class DepictioClientError(RuntimeError):
@@ -326,19 +324,15 @@ class DepictioClient:
         self,
         dashboard_id: str,
         state: dict[str, Any] | None = None,
-        fmt: NotebookFormat = "marimo",
         *,
         save_to: str | os.PathLike[str] | None = None,
-    ) -> str | bytes:
-        """The dashboard as a notebook: marimo source (``str``) or ``.ipynb`` bytes."""
+    ) -> str:
+        """The dashboard as a Quarto document: the ``.qmd`` source."""
         state = state or self.state(dashboard_id)
-        resp = self.post(
-            f"/dashboards/notebook_export/{dashboard_id}", {"state": state, "format": fmt}, raw=True
-        )
-        content: str | bytes = resp.text if fmt == "marimo" else resp.content
+        resp = self.post(f"/dashboards/notebook_export/{dashboard_id}", {"state": state}, raw=True)
+        content = resp.text
         if save_to is not None:
-            mode = "w" if isinstance(content, str) else "wb"
-            with open(save_to, mode) as fh:
+            with open(save_to, "w", encoding="utf-8") as fh:
                 fh.write(content)
         return content
 

@@ -1,17 +1,21 @@
 # RFC — Depictio → code (a dashboard as a runnable notebook, every component importable)
 
 **Status:** Implemented in this branch; design recorded for review.
+**Revision (2026-11):** the export is **Quarto only**. The marimo `.py` and the Jupyter `.ipynb`
+are gone, and with them marimo, nbformat and the `format` field: the generator writes one `.qmd`
+directly, and the rendered report is that same file through `quarto render`. Sections below are
+updated; §4 records why.
 **Audience:** maintainers.
 **Related:** `depictio/models/models/analysis_state.py` (the contract),
 `depictio/api/v1/services/notebook_export/` (the generator),
-`depictio/api/v1/services/embed/` + `depictio/viewer/src/embed/` (figure extraction),
+`depictio/api/v1/services/embed/` + `depictio/viewer/src/component-frame/` (figure extraction),
 `depictio/notebook/` (the Python client), PR #975 (funnel filtering, the seam this reuses),
 PR #962 / #1013 (groups, split panels), PR #963 (serverless bundle — the coverage-table shape
 and the "frozen badge" tone this borrows; none of its code).
 
 > Every dashboard tool is a dead end: what you build by clicking cannot be handed back to you as
 > code. This is Depictio returning the code — and, the other way round, letting any component of
-> a dashboard be pulled into a Jupyter, marimo or Quarto cell.
+> a dashboard be pulled into a Quarto (or any Jupyter-kernel) cell.
 
 ## 1. Context
 
@@ -20,8 +24,8 @@ server runs real Polars queries against Delta tables for every tile. Nothing of 
 browser tab. Two capabilities close the loop:
 
 1. **Export** — the whole dashboard family (all tabs) plus the *current analysis state* becomes a
-   **marimo `.py` notebook** that reproduces the same queries, with a derived Jupyter `.ipynb` and a
-   Quarto-ready `.ipynb`.
+   **Quarto document (`.qmd`)** that reproduces the same queries, and — opt-in — an HTML report
+   rendered from it on the server.
 2. **Import** — `depictio.notebook.DepictioClient` brings **any** component of a dashboard —
    figures, cards, tables, filters, text, maps, MultiQC, images, JBrowse, all 18 advanced-viz kinds
    — into a cell, bound to the same filters the dashboard applies.
@@ -76,10 +80,11 @@ as a third mode and rejected for now because no per-user credentials exist to ha
 
 ### 3.3 The generator: funnel stages are cells
 
-One generator, three artefacts. The marimo `.py` is canonical; the `.ipynb` is derived with
-`marimo export ipynb --no-include-outputs --sort top-down` (never a second nbformat template); the
-Quarto variant is that `.ipynb` plus a YAML front-matter *raw* cell added with `nbformat`
-(metadata only — the cell code path stays marimo's).
+One generator, one artefact: a `.qmd` — YAML front matter (title, author, date, the HTML
+report's layout, `jupyter: python3`), then markdown and ```` ```{python} ```` chunks in reading
+order. Quarto runs the chunks top to bottom in one kernel, so the document is the cells in
+sequence: no dependency graph, no converter, no second format. Every code chunk is parsed when it
+is generated, so a generator bug fails the export rather than the reader's render.
 
 Cell sequence: imports → `client = DepictioClient()` → header (title, provenance from
 `template_origin.run_provenance`, how to run) → `depictio_state = {…}` (the exported state as a
@@ -107,10 +112,12 @@ tiles; they are the stages.
 
 **Naming:** `df_<dc_tag>`, `stage_<k>_<tag>`, `final_<tag>`, `group_<slug>`, `panel_<slug>`,
 `fig_/card_/table_/viz_<slug>`; a `NameAllocator` dedupes and reserves the scaffolding names.
-Cell-locals use `_`. Code-mode figures are inlined **verbatim** inside `def _make_<name>(df): …;
-return fig`, so the author's `df`/`fig` survive and never become globals. The AST guard test
-proves no global is defined by two cells and that every cell's `return` matches its definitions;
-`marimo check --strict` passes on the seeded exports.
+Scratch names use `_`. Code-mode figures are inlined **verbatim** inside `def _make_<name>(df): …;
+return fig`, so the author's `df`/`fig` survive and never become globals; they run with the
+globals the dashboard executes them with (`depictio_group_kwargs`, `depictio_group_by` — empty,
+the export is ungrouped — and the family's `depictio_category_colors`). The AST guard test runs
+the chunks in order and proves each one only reads what an earlier chunk defined, and that no
+public global is defined by two chunks (a second one would replace what the first showed).
 
 ### 3.4 Coverage — how each component reaches the notebook
 
@@ -137,8 +144,8 @@ verdict.
 
 `client.component(dashboard, "Bill shape", filters=[...])` returns a `DepictioComponent` with
 `.figure` (a `plotly.graph_objects.Figure`), `.data` (a `polars.DataFrame`, or a dict for cards)
-and `.html` (the live tile). It displays itself in Jupyter and Quarto through
-`_repr_mimebundle_` and in marimo through `_mime_`; the default is the closest thing to what the
+and `.html` (the live tile). It displays itself through the kernel's
+`_repr_mimebundle_` (what `quarto render` captures); the default is the closest thing to what the
 dashboard shows (figure, DataFrame, a small HTML card, markdown, an image grid, an iframe).
 
 **Headless figure extraction.** For the 15 React-rendered advanced-viz kinds there is no Plotly on
@@ -151,24 +158,23 @@ cached per (component, filters, theme). Same renderer, same numbers, no second i
 `POST /dashboards/embed/{d}/{c}` returns an HTML page framing the same route for a reader who is
 logged into the instance.
 
-### 3.6 Three ways to open the export
+### 3.6 Opening the export
 
 | target | file | open with | notes |
 | --- | --- | --- | --- |
-| marimo | `<name>.py` | `marimo edit <name>.py` | reactive: change a stage, downstream cells re-run |
-| Jupyter | `<name>.ipynb` | `jupyter lab <name>.ipynb`, Run All | derived by marimo, outputs empty (nbstripout-safe) |
-| Quarto | `<name>.quarto.ipynb` | `quarto render <name>.quarto.ipynb` / `quarto preview` | front matter: title, author, date, `format: html` (toc, code-fold, embed-resources), `jupyter: python3`; PDF needs `kaleido` |
+| Quarto document | `<name>.qmd` | `quarto render <name>.qmd` / `quarto preview`, or any editor with Quarto support (VS Code, Positron, RStudio) | front matter: title, author, date, `format: html` (toc, code-tools, embed-resources), `jupyter: python3`; PDF needs `kaleido` |
+| Rendered report | `<name>.html` | a browser | the same document, rendered on the server (§3.6b) |
 
-The client also works inside a `.qmd` `{python}` block.
+The client works in any `{python}` chunk a reader adds.
 
 ### 3.6b The rendered report (server-side, opt-in)
 
-A fourth choice in the export modal: **Quarto report**, the Quarto notebook run here. The reader gets
-one self-contained file with every result in it and nothing to install; the notebook is unchanged,
+The second choice in the export modal: **Rendered report**, the `.qmd` run here. The reader gets
+one self-contained file with every result in it and nothing to install; the document is unchanged,
 so the report is the export's own output rather than a second renderer.
 
-It is a job, not a request. `POST /dashboards/notebook_export/{id}/render` builds the same Quarto
-`.ipynb` the download hands out, stages it in S3 under `notebook_reports/{user}/{job}/` (~10 MB is
+It is a job, not a request. `POST /dashboards/notebook_export/{id}/render` builds the same `.qmd`
+the download hands out, stages it in S3 under `notebook_reports/{user}/{job}/` (~10 MB is
 not a broker message), mints a **short-lived token for the caller** and queues
 `render_notebook_report` with the token's *id*. The worker runs `quarto render --execute` with
 `QUARTO_PYTHON` pinned to its own interpreter, stores the HTML next to the notebook, deletes both
@@ -177,7 +183,7 @@ the staged notebook and the token, and the client polls `GET …/render/{job}` t
 caller's own reports.
 
 Two Quarto behaviours cost a full render each to find, and both are guarded in `render.py`:
-rendering an `.ipynb` **does not execute it** unless asked (`--execute`), and an interpreter without
+execution can be switched off (project config, freeze, or simply not asked for: `--execute`), and an interpreter without
 Jupyter makes Quarto skip execution — in both cases it writes a report with every result missing and
 exits 0. The service checks the log for the execution it asked for before believing the output.
 
@@ -210,15 +216,20 @@ intermediate counts and never the final one. Against a live instance,
   (compute job bodies included), ~7 MB per embedded component, and the catalog shim only covers a
   subset of types. The live `/embed` route reuses the renderer and the API as they are.
 - **Porting the advanced-viz renderers to Python.** Fifteen renderers, permanent drift.
-- **`.qmd` as a third generator.** Quarto renders `.ipynb` natively; front matter is enough.
+- **marimo as the canonical file, with `.ipynb` and a Quarto `.ipynb` derived from it** (the first
+  version of this branch). Three artefacts to keep equivalent, two Python dependencies on the API
+  image (`marimo`, `nbformat`), a subprocess per download, a 501 when either was missing — for a
+  reader who in practice wanted one document they can render, read and edit. Quarto alone covers
+  that: the `.qmd` opens in the same editors, renders to the same report, and is plain text a
+  diff can read. Rejected in favour of one `.qmd`.
 - **Bundling Parquet with the export.** Bulk data exfiltration at viewer level; kept as an
   addable mode (`DEPICTIO_DATA_DIR`) rather than a default.
 - **Direct Delta-on-S3 from the notebook.** No per-user credentials exist; would hand out root.
 
 ## 5. Costs / open questions
 
-- `marimo` and `nbformat` become base dependencies of the API image (pure Python; imported lazily
-  by the ipynb path). The `.py` export works without them; the ipynb variants answer 501 otherwise.
+- No new dependency on the API image: the `.qmd` is generated text. The worker's `render` extra
+  (`nbclient`, `ipykernel`) and Quarto are only needed for the rendered report.
 - Extraction is a headless render per (component, filters): seconds, not milliseconds; cached.
 - **JBrowse** sessions are built with hard-coded `localhost` hosts (`routes.py`,
   `render_jbrowse`); outside the instance's network the iframe cannot load. Pre-existing; flagged.
@@ -250,14 +261,14 @@ the export modal — the client covers the "one component" case.
 | every component has a server figure | only figure/map/multiqc + 3 advanced-viz kinds; the rest are React-rendered |
 | seeds carry grid layout | no `.db_seeds` component has one; reading order falls back to stored order |
 | `Switch` filters rows | `add_filter` has no branch for it |
-| marimo alone derives `.ipynb` | it also needs `nbformat` |
 
 ## 9. For depictio-docs (user-facing, to move)
 
 **Export a dashboard as a notebook.** Open the dashboard settings (cog icon) → *Export* →
 *Export as notebook*. The preview lists every tile and how it will appear: *as code* (Polars /
 Plotly you can edit), *via Depictio* (rendered by the instance with your filters), or *omitted*
-(with the reason). Pick marimo, Jupyter or Quarto and download. Before running, create a token on
+(with the reason). Download the Quarto document (`.qmd`), or — where the instance offers it — a
+report rendered for you. Before rendering the document yourself, create a token on
 the *CLI agents* page and set `DEPICTIO_API_URL` and `DEPICTIO_API_TOKEN`.
 
 **Use any component in your own notebook.**

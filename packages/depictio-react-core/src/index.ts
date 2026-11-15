@@ -1346,7 +1346,6 @@ export type {
   FunnelTargetResult,
   FunnelStage,
   FunnelValuesResponse,
-  NotebookFormat,
   NotebookInclusion,
   NotebookPreflight,
   NotebookPreflightComponent,

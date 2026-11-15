@@ -643,7 +643,7 @@ const FeedbackBlock: React.FC<{ href: string; label: string }> = ({ href, label 
   </Stack>
 );
 
-/** "Export" section: the dashboard as a notebook. */
+/** "Export" section: the dashboard as a Quarto document. */
 const ExportBlock: React.FC<{
   dashboard: DashboardData | null;
   getAnalysisState: () => AnalysisState;
@@ -654,7 +654,7 @@ const ExportBlock: React.FC<{
     <Stack gap="sm" data-testid="export-section">
       <Text size="sm" c="dimmed">
         Take this dashboard with you as code: the same table, the same filters in funnel order,
-        every tile — as a marimo notebook, a Jupyter notebook or a Quarto report.
+        every tile — as a Quarto document to render yourself, or a report rendered for you.
       </Text>
       <Group>
         <Button
@@ -1072,7 +1072,7 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
       key: 'export',
       icon: 'mdi:export-variant',
       title: 'Export',
-      subtitle: 'This dashboard as a notebook, with the view you are looking at',
+      subtitle: 'This dashboard as a Quarto document, with the view you are looking at',
       body: <ExportBlock dashboard={dashboard} getAnalysisState={getAnalysisState} />,
     });
   }

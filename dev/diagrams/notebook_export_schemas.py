@@ -181,9 +181,7 @@ def build_export() -> Sketch:
     _document(s)
 
     files = (
-        (GREEN, "marimo .py", "canonical"),
-        (GREEN, ".ipynb", "outputs stripped"),
-        (GREEN, ".quarto.ipynb", "plus front matter"),
+        (GREEN, "dashboard.qmd", "the Quarto document"),
         (ORANGE, "report.html", "rendered here, opt-in"),
     )
     for i, (fill, name, sub) in enumerate(files):
@@ -196,10 +194,10 @@ def build_export() -> Sketch:
     # other. Both arrows land on the artefact they actually concern.
     s.arrow(DX + DW + 8, DY + 150, FX - 8, 200)
     s.text(DX + DW + 12, DY + 182, "export", size=14, colour=DIM, anchor="start")
-    s.arrow(FX + FW + 8, 530, PX - 8, 400)
-    s.text(FX + FW + 14, 556, "render", size=14, colour=DIM, anchor="start")
+    s.arrow(FX + FW + 8, 318, PX - 8, 400)
+    s.text(FX + FW + 34, 312, "render", size=14, colour=DIM, anchor="start")
 
-    s.text(FX + FW / 2 - 8, 148, "one generator, four artefacts", size=14, colour=DIM)
+    s.text(FX + FW / 2 - 8, 148, "one generator, one document", size=14, colour=DIM)
 
     # The legend is the diagram's only real claim, so it sits under the grid
     # whose colours it explains rather than in a corner.

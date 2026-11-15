@@ -1245,10 +1245,8 @@ export async function fetchFunnelValues(
 }
 
 // =============================================================================
-// Notebook export (dashboard → marimo / Jupyter / Quarto)
+// Notebook export (dashboard → a Quarto document, and its rendered report)
 // =============================================================================
-
-export type NotebookFormat = 'marimo' | 'ipynb' | 'quarto';
 
 /** How a component reaches the notebook: as explicit code, re-rendered
  *  through the API with the exported state, or not at all (with a reason). */
@@ -1271,7 +1269,6 @@ export interface NotebookPreflight {
   dcs: { dc_id: string; tag?: string | null; rows?: number | null }[];
   stages: { index?: string | null; label?: string | null; rows_by_dc: Record<string, number | null> }[];
   warnings: string[];
-  ipynb_available: boolean;
   /** Whether this deployment offers the rendered HTML report as well. */
   render_available?: boolean;
   counts: Record<string, number>;
@@ -1296,7 +1293,7 @@ export async function fetchNotebookPreflight(
 ): Promise<NotebookPreflight> {
   const res = await authFetch(`${API_BASE}/dashboards/notebook_export/${dashboardId}/preflight`, {
     method: 'POST',
-    body: JSON.stringify({ state, format: 'marimo' }),
+    body: JSON.stringify({ state }),
     signal,
   });
   if (!res.ok) await throwHttpDetailError(res, 'Failed to prepare the notebook export');
@@ -1308,24 +1305,18 @@ function filenameFromDisposition(header: string | null, fallback: string): strin
   return m ? m[1] : fallback;
 }
 
-/** Download the dashboard as a notebook. The server never executes it:
- *  `marimo` is generated text, `ipynb`/`quarto` are derived by marimo's
- *  converter with outputs excluded. */
-export async function exportNotebook(
-  dashboardId: string,
-  state: unknown,
-  format: NotebookFormat = 'marimo',
-): Promise<string> {
+/** Download the dashboard as a Quarto document (`.qmd`). The server never
+ *  executes it: the document is generated text, run by whoever renders it. */
+export async function exportNotebook(dashboardId: string, state: unknown): Promise<string> {
   const res = await authFetch(`${API_BASE}/dashboards/notebook_export/${dashboardId}`, {
     method: 'POST',
-    body: JSON.stringify({ state, format }),
+    body: JSON.stringify({ state }),
   });
   if (!res.ok) await throwHttpDetailError(res, 'Failed to export the notebook');
   const blob = await res.blob();
-  const ext = format === 'marimo' ? 'py' : format === 'quarto' ? 'quarto.ipynb' : 'ipynb';
   const filename = filenameFromDisposition(
     res.headers.get('Content-Disposition'),
-    `dashboard_${dashboardId}.${ext}`,
+    `dashboard_${dashboardId}.qmd`,
   );
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -1350,7 +1341,7 @@ export async function startNotebookRender(
 ): Promise<NotebookRenderStatus> {
   const res = await authFetch(`${API_BASE}/dashboards/notebook_export/${dashboardId}/render`, {
     method: 'POST',
-    body: JSON.stringify({ state, format: 'quarto' }),
+    body: JSON.stringify({ state }),
   });
   if (!res.ok) await throwHttpDetailError(res, 'Failed to start the report render');
   return res.json();

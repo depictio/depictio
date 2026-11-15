@@ -21,5 +21,5 @@ def test_allocator_dedupes_and_avoids_reserved():
 
 
 def test_reserved_covers_notebook_scaffolding_and_code_mode_globals():
-    for name in ("mo", "pl", "px", "go", "pd", "np", "df", "fig", "client", "depictio_state"):
+    for name in ("HTML", "pl", "px", "go", "pd", "np", "df", "fig", "client", "depictio_state"):
         assert name in RESERVED_NAMES

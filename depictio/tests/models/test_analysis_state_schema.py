@@ -113,6 +113,11 @@ def test_minimal_state_defaults():
     assert state.display_mode == "color"
 
 
-def test_export_request_defaults_to_marimo():
-    req = NotebookExportRequest.model_validate({"state": {"context": {"dashboard_id": "abc"}}})
-    assert req.format == "marimo"
+def test_export_request_carries_only_the_state():
+    """One output, so no format to pick: a client still sending the old
+    ``format`` field is not refused, the field is simply not read."""
+    req = NotebookExportRequest.model_validate(
+        {"state": {"context": {"dashboard_id": "abc"}}, "format": "marimo"}
+    )
+    assert req.state.context.dashboard_id == "abc"
+    assert "format" not in NotebookExportRequest.model_fields

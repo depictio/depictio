@@ -1,9 +1,8 @@
-"""Quarto-ready notebooks: the derived ``.ipynb`` plus a front-matter cell.
+"""The Quarto document's front matter: the options its YAML header carries.
 
-Quarto renders ``.ipynb`` natively and reads its document options from a
-leading *raw* cell holding YAML front matter. Adding that cell is metadata
-work on the file marimo produced — the cell code path stays marimo's, so
-there is still exactly one generator.
+The export is one ``.qmd`` file (``cells.render_qmd``); this is what goes
+between its leading ``---`` lines — title, the HTML report's layout, and the
+Jupyter kernel the chunks execute through.
 """
 
 from __future__ import annotations
@@ -12,8 +11,6 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import yaml
-
-FRONT_MATTER_TAG = "depictio-quarto-front-matter"
 
 
 @dataclass
@@ -82,16 +79,3 @@ class QuartoFrontMatter:
         doc["execute"] = {"warning": False, "echo": self.echo}
         doc.update(self.extra)
         return yaml.safe_dump(doc, sort_keys=False, allow_unicode=True).strip()
-
-
-def to_quarto_ipynb(ipynb_bytes: bytes, front_matter: QuartoFrontMatter) -> bytes:
-    """Prepend the front-matter raw cell to an ``.ipynb``."""
-    import nbformat
-
-    nb = nbformat.reads(ipynb_bytes.decode("utf-8"), as_version=4)
-    raw = nbformat.v4.new_raw_cell(f"---\n{front_matter.to_yaml()}\n---")
-    raw.metadata["tags"] = [FRONT_MATTER_TAG]
-    raw.metadata["format"] = "text/markdown"
-    nb.cells.insert(0, raw)
-    nbformat.validate(nb)
-    return nbformat.writes(nb).encode("utf-8")

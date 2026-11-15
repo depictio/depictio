@@ -1,9 +1,9 @@
 /**
- * Dashboard → notebook export (settings drawer → Export → modal → download).
+ * Dashboard → Quarto export (settings → Export → modal → download).
  *
  * Runs against the seeded Palmer Penguins dashboard. Checks the preflight
- * (every tile gets a verdict), the marimo download (a Python file starting
- * with `import marimo`), and the preflight API contract directly.
+ * (every tile gets a verdict), the download (a `.qmd` that opens on its YAML
+ * front matter), and the preflight API contract directly.
  */
 
 import { test, expect } from "@fixtures/auth";
@@ -11,7 +11,7 @@ import { test, expect } from "@fixtures/auth";
 const PENGUINS_DASHBOARD_ID = "6824cb3b89d2b72169309738";
 
 test.describe("Notebook export", () => {
-  test("exports the penguins dashboard as a marimo notebook from the drawer", async ({
+  test("exports the penguins dashboard as a Quarto document from the settings", async ({
     loginAsAdmin,
     page,
   }) => {
@@ -22,13 +22,14 @@ test.describe("Notebook export", () => {
     });
 
     await page.getByRole("button", { name: "Settings" }).click();
+    await page.locator("[data-testid='settings-nav-export']").click();
     const exportButton = page.locator("[data-testid='export-notebook']");
     await expect(exportButton).toBeVisible({ timeout: 15_000 });
     await exportButton.click();
 
     const modal = page.locator("[data-testid='notebook-export-modal']");
     await expect(modal).toBeVisible();
-    // Preflight: every tile has a verdict; penguins is fully expressible as code.
+    // Preflight: every tile has a verdict, and none of penguins' is left out.
     await expect(modal.locator("[data-testid='notebook-export-counts']")).toBeVisible({
       timeout: 30_000,
     });
@@ -39,12 +40,14 @@ test.describe("Notebook export", () => {
     const downloadPromise = page.waitForEvent("download");
     await modal.locator("[data-testid='notebook-export-download']").click();
     const download = await downloadPromise;
-    expect(download.suggestedFilename()).toMatch(/\.py$/);
+    expect(download.suggestedFilename()).toMatch(/\.qmd$/);
     const path = await download.path();
     expect(path).not.toBeNull();
     const fs = await import("node:fs");
     const content = fs.readFileSync(path!, "utf8");
-    expect(content.startsWith("import marimo")).toBe(true);
+    expect(content.startsWith("---\ntitle: ")).toBe(true);
+    expect(content).toContain("jupyter: python3");
+    expect(content).toContain("```{python}");
     expect(content).toContain("client = DepictioClient()");
     expect(content).toContain("# Penguins Species Analysis");
     await expect(modal.locator("[data-testid='notebook-export-done']")).toBeVisible();
@@ -63,7 +66,6 @@ test.describe("Notebook export", () => {
         headers: { Authorization: `Bearer ${token}` },
         data: {
           state: { version: 1, context: { dashboard_id: PENGUINS_DASHBOARD_ID } },
-          format: "marimo",
         },
       },
     );

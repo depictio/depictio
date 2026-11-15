@@ -3,12 +3,12 @@
 For each dashboard given (by id, or ``penguins`` / ``ampliseq`` for the seeded
 ones), this script:
 
-1. exports the marimo notebook through the API with a state made of the
+1. exports the Quarto document through the API with a state made of the
    dashboard's first two interactive filters (each set to its first two values);
-2. runs ``marimo check --strict`` on it and derives the ``.ipynb`` and the
-   Quarto variant;
-3. executes the notebook (``App.run()``) against the API with the given token and
-   compares every stage's ``df.height`` with ``POST /dashboards/funnel_values``;
+2. checks that every ``{python}`` chunk parses;
+3. with ``--run``, executes the chunks top to bottom (as Quarto would) against the
+   API with the given token and compares every stage's ``df.height`` with
+   ``POST /dashboards/funnel_values``;
 4. prints the ``quarto render`` command to run by hand.
 
 Usage::
@@ -20,13 +20,14 @@ Usage::
 from __future__ import annotations
 
 import argparse
-import importlib.util
+import ast
 import os
-import subprocess
-import sys
+import re
 from pathlib import Path
 
 import httpx
+
+_CHUNK_RE = re.compile(r"^(`{3,})\{python\}\n(.*?)\n\1$", re.S | re.M)
 
 SEEDED = {
     "penguins": "6824cb3b89d2b72169309738",
@@ -75,21 +76,21 @@ def main() -> int:
         print(f"   preflight: {pre.get('counts')}")
 
         stem = "".join(c if c.isalnum() else "_" for c in str(title).lower()).strip("_")
-        py_path = out_dir / f"{stem}.py"
-        client.notebook(dashboard_id, state, "marimo", save_to=py_path)
-        client.notebook(dashboard_id, state, "ipynb", save_to=out_dir / f"{stem}.ipynb")
-        client.notebook(dashboard_id, state, "quarto", save_to=out_dir / f"{stem}.quarto.ipynb")
-        print(f"   wrote {py_path}, .ipynb and .quarto.ipynb")
+        qmd_path = out_dir / f"{stem}.qmd"
+        source = client.notebook(dashboard_id, state, save_to=qmd_path)
+        print(f"   wrote {qmd_path}")
 
-        check = subprocess.run(
-            [sys.executable, "-m", "marimo", "check", "--strict", str(py_path)],
-            capture_output=True,
-            text=True,
-        )
-        print(f"   marimo check: {'ok' if check.returncode == 0 else 'FAILED'}")
-        if check.returncode != 0:
-            print(check.stdout, check.stderr)
-            failures += 1
+        chunks = [m.group(2) for m in _CHUNK_RE.finditer(source)]
+        broken = []
+        for i, chunk in enumerate(chunks):
+            try:
+                ast.parse(chunk)
+            except SyntaxError as exc:
+                broken.append(f"chunk {i}: {exc}")
+        print(f"   {len(chunks)} python chunks: {'ok' if not broken else 'FAILED'}")
+        for line in broken:
+            print(f"     {line}")
+        failures += len(broken)
 
         if args.run:
             oracle = httpx.post(
@@ -98,10 +99,9 @@ def main() -> int:
                 headers={"Authorization": f"Bearer {client.token}"},
                 timeout=300,
             ).json()
-            spec = importlib.util.spec_from_file_location(f"nb_{stem}", py_path)
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
-            _outputs, defs = module.app.run()
+            defs: dict = {"__name__": f"nb_{stem}"}
+            for i, chunk in enumerate(chunks):
+                exec(compile(chunk, f"<{stem} chunk {i}>", "exec"), defs)  # noqa: S102
             for k, stage in enumerate(oracle.get("stages") or [], start=1):
                 for dc_id, rows in (stage.get("rows_by_dc") or {}).items():
                     name = next((n for n in defs if n.startswith(f"stage_{k}_")), None)
@@ -111,7 +111,7 @@ def main() -> int:
                         failures += 1
                     print(f"   stage {k} {dc_id[-6:]}: notebook={got} funnel={rows} {status}")
 
-        print(f"   next: quarto render {out_dir / (stem + '.quarto.ipynb')}")
+        print(f"   next: quarto render {qmd_path}")
 
     print("\nall good" if failures == 0 else f"\n{failures} failure(s)")
     return 1 if failures else 0

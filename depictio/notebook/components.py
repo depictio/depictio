@@ -2,7 +2,8 @@
 
 A :class:`DepictioComponent` wraps one component of a dashboard, bound to an
 analysis state (the filters, groups and funnel order the dashboard applied).
-It fetches lazily, caches, and displays itself in Jupyter, Quarto and marimo:
+It fetches lazily, caches, and displays itself wherever a Jupyter kernel does
+(a Quarto render, Quarto's editor integrations, JupyterLab):
 
 * ``.figure`` — a ``plotly.graph_objects.Figure`` for figures, maps, MultiQC
   plots and every advanced visualisation (the server extracts the Plotly
@@ -112,8 +113,8 @@ def _figure_from_dict(fig_dict: dict[str, Any]):
 # report with 35 figures carried 35 copies of the library and came to 170 MB
 # for 2.5 MB of data. The library belongs to the document, not to the figure:
 # the export's setup cell activates plotly's ``notebook`` renderer, which emits
-# one copy for the whole notebook, and marimo and JupyterLab both load their
-# own — so a figure here only ever needs its own div.
+# one copy for the whole document, and JupyterLab loads its own — so a figure
+# here only ever needs its own div.
 PLOTLY_JS = False
 
 # Plotly's notebook renderer hard-codes a MathJax CDN tag onto every figure it
@@ -132,9 +133,8 @@ def use_document_renderer() -> bool:
     MathJax request it would otherwise put on each of them: a dashboard
     figure's labels are data, never TeX.
 
-    Returns whether the renderer was activated. It needs IPython, which marimo
-    does not use — there marimo draws the figures itself, so a ``False`` here
-    is the normal marimo path and not a failure.
+    Returns whether the renderer was activated: it needs IPython, so a plain
+    Python process (a script, a test) gets ``False`` and keeps plotly's default.
     """
     import plotly.io as pio
 
@@ -298,7 +298,7 @@ class DepictioComponent:
         return None
 
     def _repr_mimebundle_(self, include=None, exclude=None, **kwargs):
-        """Jupyter and Quarto."""
+        """The Jupyter kernel's display hook (what Quarto renders from)."""
         mode = self.default_display
         if mode == "figure":
             return figure_bundle(self.figure)
@@ -310,30 +310,6 @@ class DepictioComponent:
         if mode == "markdown":
             return {MARKDOWN_MIME: self._display_markdown() or "", PLAIN_MIME: self.title}
         return {HTML_MIME: self._display_html(), PLAIN_MIME: repr(self)}
-
-    def _mime_(self) -> tuple[str, str]:
-        """marimo."""
-        mode = self.default_display
-        if mode == "figure":
-            try:
-                import marimo as mo
-
-                return mo.as_html(self.figure)._mime_()
-            except Exception:
-                return HTML_MIME, self.figure.to_html(full_html=False, include_plotlyjs=PLOTLY_JS)
-        if mode == "data":
-            df = self.data
-            if isinstance(df, pl.DataFrame):
-                return HTML_MIME, df._repr_html_()
-            return PLAIN_MIME, repr(df)
-        if mode == "markdown":
-            try:
-                import marimo as mo
-
-                return mo.md(self._display_markdown() or "")._mime_()
-            except Exception:
-                return PLAIN_MIME, self._display_markdown() or ""
-        return HTML_MIME, self._display_html()
 
     def _repr_html_(self) -> str | None:
         mode = self.default_display
@@ -610,8 +586,8 @@ class CardComponent(DepictioComponent):
         """A static Tukey box-and-whisker plot, replicating the live card's
         ``BoxPlot.tsx`` geometry (whisker line + caps, an IQR box tinted with
         the card's own accent colour, a median line, a mean marker, outlier
-        dots) as absolutely-positioned divs. Raw HTML in a markdown cell
-        renders the same in marimo, Jupyter and Quarto. The full five-number
+        dots) as absolutely-positioned divs, which a static report keeps
+        intact. The full five-number
         summary the live card keeps in a hover tooltip has no static
         equivalent; the caption row below carries min/median/max instead.
         """
@@ -849,19 +825,6 @@ class InteractiveComponent(DepictioComponent):
             f"<code>{_html.escape(self.column)}</code><br>"
             f'<span style="color:#868e96">{_html.escape(preview)}</span></div>'
         )
-
-    def to_marimo(self):
-        """A marimo UI element mirroring this control (``mo.ui.multiselect`` / ``range_slider``)."""
-        import marimo as mo
-
-        if self.control in ("Select", "MultiSelect", "SegmentedControl"):
-            options = self.data[self.column].to_list()
-            if self.control == "Select":
-                return mo.ui.dropdown(options=options, label=self.title)
-            return mo.ui.multiselect(options=options, label=self.title)
-        stats = dict(zip(self.data["stat"].to_list(), self.data["value"].to_list()))
-        lo, hi = float(stats.get("min", 0)), float(stats.get("max", 1))
-        return mo.ui.range_slider(start=lo, stop=hi, label=self.title)
 
 
 class TextComponent(DepictioComponent):

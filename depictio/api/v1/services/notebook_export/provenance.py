@@ -10,20 +10,16 @@ HOW_TO_RUN = """\
 **How to run**
 
 ```bash
-pip install depictio-cli marimo            # the client, and marimo itself
+pip install depictio-cli jupyter           # the client, and the kernel Quarto runs it on
 export DEPICTIO_API_URL={api_url}
 export DEPICTIO_API_TOKEN=...              # a long-lived token from the "CLI agents" page
-marimo edit {stem}.py
+quarto render {stem}.qmd                   # or `quarto preview {stem}.qmd` while you edit
 ```
 
-The Jupyter and Quarto variants run on a Jupyter kernel, which neither of those two
-packages brings: `pip install jupyter` as well for either of them.
-Jupyter: download the Jupyter variant and open it, or convert this one with
-`marimo export ipynb {stem}.py -o {stem}.ipynb --no-include-outputs`.
-Quarto: download the Quarto variant and run `quarto render {stem}.quarto.ipynb`. Quarto
-picks the first `python3` on your PATH; if that one has no Jupyter it renders a report with
-every result missing and still exits 0, so point `QUARTO_PYTHON` at the interpreter you
-installed into.
+Quarto picks the first `python3` on your PATH; if that one has no Jupyter it renders a report
+with every result missing and still exits 0, so point `QUARTO_PYTHON` at the interpreter you
+installed into. Any editor with Quarto support (VS Code, Positron, RStudio) runs the cells one
+by one as well.
 Offline: set `DEPICTIO_DATA_DIR` to a folder holding `<dc_id>.parquet` files instead of the
 API variables; the cells marked *rendered by Depictio* need the API and are skipped offline.
 """
@@ -52,9 +48,8 @@ def _brand_header_html(brand: dict[str, Any] | None) -> str:
     ``brand`` carries the *resolved* instance theme (env defaults, admin
     overrides, whichever preset an operator picked) — the same identity the
     live app's chrome shows, so an exported report doesn't read as a
-    generic file once it has left the dashboard around it. Raw HTML in a
-    markdown cell renders identically in marimo, Jupyter and Quarto, so one
-    block covers all three formats.
+    generic file once it has left the dashboard around it. Raw HTML passes
+    through Quarto's markdown untouched.
     """
     if not brand:
         return ""
@@ -80,8 +75,7 @@ def provenance_table(entries: list[dict[str, Any]], *, limit: int = 40) -> str:
 
     HTML rather than markdown: this sits inside the header's collapsible
     ``<details>`` block, and markdown syntax inside a raw HTML block is not
-    reliably re-parsed the same way across marimo, Jupyter and Quarto's three
-    different renderers — an HTML table renders identically in all three.
+    reliably re-parsed by pandoc — an HTML table renders as written.
     Highlighted entries first, then the rest in their stored order; capped so
     a pipeline with hundreds of parameters does not turn the header into a
     wall.
@@ -199,8 +193,7 @@ def header_markdown(
             engine_txt += ")"
         wf_bits.append(f"`{wf.get('workflow_tag') or wf.get('name')}`{engine_txt}")
 
-    # A table scans faster than a run-on sentence, and it's the same markdown
-    # in marimo, Jupyter and Quarto — no format-specific callout syntax.
+    # A table scans faster than a run-on sentence.
     meta_rows = [("Live dashboard", f"[{dashboard_url}]({dashboard_url})")]
     exported_line = f"{exported_at.strftime('%Y-%m-%d %H:%M UTC')}"
     if exported_by:

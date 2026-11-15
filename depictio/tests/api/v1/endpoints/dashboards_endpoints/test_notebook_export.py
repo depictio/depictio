@@ -10,9 +10,9 @@ stage. Reordering stages changes the intermediate counts, never the last.
 from __future__ import annotations
 
 import asyncio
-import importlib.util
-import json
 import re
+import sys
+import types
 from unittest.mock import patch
 
 import mongomock
@@ -23,7 +23,6 @@ from fastapi import HTTPException
 
 from depictio.api.v1.endpoints.dashboards_endpoints import notebook_export as nbx
 from depictio.api.v1.endpoints.dashboards_endpoints.routes import funnel_values_endpoint
-from depictio.api.v1.services.notebook_export.ipynb import ipynb_available
 from depictio.models.models.analysis_state import AnalysisState, NotebookExportRequest
 
 DC1 = str(ObjectId())
@@ -233,10 +232,10 @@ def _state(filters, stage_order=()):
     )
 
 
-def _export(state, fmt="marimo"):
+def _export(state):
     return nbx.notebook_export(
         dashboard_id=DASHBOARD_ID,  # type: ignore[arg-type]
-        request=NotebookExportRequest(state=state, format=fmt),
+        request=NotebookExportRequest(state=state),
         current_user=_User(),
         access_token=None,
     )
@@ -265,18 +264,31 @@ def _run_notebook(source: str, tmp_path, monkeypatch):
     monkeypatch.setenv("DEPICTIO_DATA_DIR", str(tmp_path))
     monkeypatch.delenv("DEPICTIO_API_URL", raising=False)
     monkeypatch.delenv("DEPICTIO_API_TOKEN", raising=False)
-    path = tmp_path / "export.py"
-    path.write_text(source)
-    spec = importlib.util.spec_from_file_location(f"export_{tmp_path.name}", path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    (tmp_path / "export.qmd").write_text(source)
+    # Run the document the way Quarto does: every {python} chunk, top to
+    # bottom, in one namespace. The kernel Quarto drives always has IPython;
+    # the test env may not, and only its HTML display wrapper is used.
+    try:
+        import IPython.display  # noqa: F401
+    except ImportError:
+        display = types.ModuleType("IPython.display")
+        display.HTML = type(
+            "HTML", (), {"__init__": lambda self, data: setattr(self, "data", data)}
+        )
+        monkeypatch.setitem(sys.modules, "IPython", types.ModuleType("IPython"))
+        monkeypatch.setitem(sys.modules, "IPython.display", display)
+    defs: dict = {"__name__": f"export_{tmp_path.name}"}
     # The child tab's advanced viz re-renders through the API, which this
     # offline run has no access to: stub the client call so the rest runs.
     with patch(
         "depictio.notebook.client.DepictioClient.component", lambda *a, **k: "rendered by Depictio"
     ):
-        _outputs, defs = module.app.run()
+        for i, chunk in enumerate(_CHUNK_RE.findall(source)):
+            exec(compile(chunk[1], f"<chunk {i}>", "exec"), defs)
     return defs
+
+
+_CHUNK_RE = re.compile(r"^(`{3,})\{python\}\n(.*?)\n\1$", re.S | re.M)
 
 
 FILTERS = [
@@ -327,9 +339,11 @@ def test_reordering_changes_intermediate_counts_but_not_the_final_one(patched_en
 
 def test_export_headers_and_content(patched_env):
     resp = _export(_state(FILTERS))
-    assert resp.media_type.startswith("text/x-python")
-    assert resp.headers["Content-Disposition"] == 'attachment; filename="wells_rivers.py"'
+    assert resp.media_type.startswith("text/markdown")
+    assert resp.headers["Content-Disposition"] == 'attachment; filename="wells_rivers.qmd"'
     src = resp.body.decode()
+    assert src.startswith("---\ntitle: Wells & Rivers\n")
+    assert "\njupyter: python3\n" in src.split("\n---\n", 1)[0]
     assert "# Wells & Rivers" in src and "Where the samples came from" in src
     assert "min_depth" in src  # run provenance in the header
     assert "t.weber@example.org" in src
@@ -352,7 +366,7 @@ def test_preflight_verdicts(patched_env):
     assert [s.index for s in pre.stages] == ["comp-habitat", "comp-temp", "comp-depth"]
     assert pre.dcs[0].tag == "samples" and pre.dcs[0].rows == BASE_DF.height
     assert pre.counts["code"] == 5 and pre.counts["api"] == 2
-    assert pre.ipynb_available == ipynb_available()
+    assert pre.render_available is False  # the report is opt-in per deployment
 
 
 def test_inactive_filters_are_not_stages(patched_env):
@@ -388,29 +402,18 @@ def test_feature_flag_off_is_404(patched_env):
     assert exc.value.status_code == 404
 
 
-@pytest.mark.skipif(not ipynb_available(), reason="marimo/nbformat not installed")
-def test_ipynb_and_quarto_variants(patched_env):
-    marimo_src = _export(_state(FILTERS)).body.decode()
-    ipynb = _export(_state(FILTERS), fmt="ipynb")
-    assert ipynb.media_type == "application/x-ipynb+json"
-    assert ipynb.headers["Content-Disposition"].endswith('.ipynb"')
-    nb = json.loads(ipynb.body)
-    code_cells = [c for c in nb["cells"] if c["cell_type"] == "code"]
-    assert len(code_cells) == marimo_src.count("@app.cell") - marimo_src.count("mo.md(")
-    assert all(c["outputs"] == [] for c in code_cells)
-    quarto = _export(_state(FILTERS), fmt="quarto")
-    assert quarto.headers["Content-Disposition"].endswith('.quarto.ipynb"')
-    qnb = json.loads(quarto.body)
-    assert qnb["cells"][0]["cell_type"] == "raw"
-    assert "title: Wells & Rivers" in "".join(qnb["cells"][0]["source"])
-    assert qnb["cells"][1:] == nb["cells"]
-
-
-def test_ipynb_unavailable_is_501(patched_env):
-    with patch.object(nbx, "to_ipynb", side_effect=nbx.IpynbExportUnavailable("no marimo")):
-        with pytest.raises(HTTPException) as exc:
-            _export(_state([]), fmt="ipynb")
-    assert exc.value.status_code == 501
+def test_old_format_field_still_gets_the_quarto_document(patched_env):
+    """A client from before the single format sent ``format``; it is ignored."""
+    request = NotebookExportRequest.model_validate(
+        {"state": _state([]).model_dump(mode="json"), "format": "ipynb"}
+    )
+    resp = nbx.notebook_export(
+        dashboard_id=DASHBOARD_ID,  # type: ignore[arg-type]
+        request=request,
+        current_user=_User(),
+        access_token=None,
+    )
+    assert resp.headers["Content-Disposition"].endswith('.qmd"')
 
 
 # ── The rendered report ───────────────────────────────────────────────────────
@@ -438,7 +441,6 @@ def test_render_off_by_default_is_501(patched_env):
     assert exc.value.status_code == 501
 
 
-@pytest.mark.skipif(not ipynb_available(), reason="marimo/nbformat not installed")
 def test_render_stages_the_notebook_and_queues_the_job(patched_env):
     """The notebook goes to S3 under the caller's prefix; the broker gets its key."""
     staged: dict[str, bytes] = {}
@@ -474,9 +476,9 @@ def test_render_stages_the_notebook_and_queues_the_job(patched_env):
     assert status.status == "queued" and status.filename.endswith(".html")
     key = next(iter(staged))
     assert key.startswith(f"notebook_reports/{_RenderUser.id}/{status.job_id}/")
-    assert key.endswith(".quarto.ipynb")
-    # What was staged is the Quarto notebook, front matter and all.
-    assert json.loads(staged[key])["cells"][0]["cell_type"] == "raw"
+    assert key.endswith(".qmd")
+    # What was staged is the Quarto document the download hands out, front matter and all.
+    assert staged[key].startswith(b"---\ntitle: Wells & Rivers\n")
     # The job is addressed by the id the caller was handed, and carries the
     # token by id rather than the token itself.
     assert queued["task_id"] == status.job_id

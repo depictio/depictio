@@ -1,4 +1,4 @@
-"""From an :class:`ExportPlan` to a marimo notebook.
+"""From an :class:`ExportPlan` to a Quarto document (``.qmd``).
 
 The endpoint gathers everything that needs Mongo, Delta or link resolution
 into an ``ExportPlan``; this module only turns the plan into cells, so it
@@ -26,14 +26,13 @@ from depictio.models.models.analysis_state import (
 )
 
 from .aggregations import agg_expr_source
-from .cells import Cell, md_cell, render_notebook
+from .cells import Cell, md_cell, render_qmd
 from .classify import Classification, classify
 from .names import NameAllocator, slug
 from .predicates import PredicateSource, emit_filter_expr, emit_predicate
 from .provenance import EXPORT_DETAILS_ICON, PROVENANCE_ICON, header_markdown
+from .quarto import QuartoFrontMatter
 from .reading_order import ComponentUnit, MarkdownUnit, ordered_units
-
-DEFAULT_MARIMO_VERSION = "0.24.0"
 
 # Shade 6 of ``@mantine/core``'s own ``DEFAULT_COLORS`` — the shade every
 # icon/accent use in the live app resolves a bare palette name to. The server
@@ -259,9 +258,9 @@ nav[role="doc-toc"] a.active {
   function levelOf(el) { return parseInt(el.tagName.charAt(1), 10); }
   function headingIn(el) { return el.matches(SEL) ? el : el.querySelector(SEL); }
   // What a heading introduces. Quarto wraps each heading and its content in a
-  // <section>, so there the body is simply the rest of that wrapper; Jupyter
-  // and marimo lay cells out flat, so there we walk forward to the next
-  // heading of the same or higher rank.
+  // <section>, so there the body is simply the rest of that wrapper; a heading
+  // that is not the first child of one (raw HTML, a heading inside a tile)
+  // walks forward to the next heading of the same or higher rank.
   function bodyOf(h) {
     var out = [], p = h.parentElement, n;
     if (p && p.tagName === 'SECTION' && p.firstElementChild === h) {
@@ -411,7 +410,7 @@ nav[role="doc-toc"] a.active {
   // nothing about, and a 12-column table or a dense heatmap is the case the
   // page column cannot win. Only computed results get it — the header's own
   // tables are chrome, not results.
-  var OUTPUT = '.cell-output-display, .jp-OutputArea-output, .marimo-output';
+  var OUTPUT = '.cell-output-display';
   function zoomable() {
     var found = document.querySelectorAll(OUTPUT + ', .js-plotly-plot');
     for (var i = 0; i < found.length; i++) {
@@ -549,8 +548,8 @@ nav[role="doc-toc"] a.active {
   } else {
     enhance();
   }
-  // marimo mounts cells after this one runs, and Quarto's own scripts can move
-  // content around after load; re-running is cheap and skips what it has done.
+  // Quarto's own scripts can move content around after load (and Plotly
+  // mounts its figures late); re-running is cheap and skips what it has done.
   window.addEventListener('load', enhance);
   setTimeout(enhance, 500);
   setTimeout(enhance, 2500);
@@ -623,7 +622,9 @@ class ExportPlan:
     instance: str | None = None
     api_url: str = "https://depictio.example.org"
     warnings: list[str] = field(default_factory=list)
-    marimo_version: str = DEFAULT_MARIMO_VERSION
+    # The browser-tab icon of the rendered report, as a data URI (the
+    # endpoint resolves it; ``QuartoFrontMatter.favicon_data_uri``).
+    favicon_data_uri: str | None = None
     # The Depictio that produced this file. A report outlives the deployment
     # it came from, and "which version wrote this" is the first question when
     # one of them disagrees with the live dashboard.
@@ -708,7 +709,7 @@ class NotebookBuilder:
             meta = unit.meta
             verdict = classify(meta)
             dc_id = str(meta.get("dc_id") or "")
-            if verdict.status == "code" and meta.get("component_type") != "text":
+            if verdict.status == "code" and meta.get("component_type") not in ("text", "highlight"):
                 if dc_id not in self.dc_by_id:
                     verdict = Classification(
                         "api",
@@ -724,7 +725,7 @@ class NotebookBuilder:
     def _name_for(self, meta: dict[str, Any], verdict: Classification) -> str | None:
         ctype = str(meta.get("component_type") or "")
         hint = meta.get("title") or meta.get("column_name") or meta.get("index")
-        if verdict.status == "omitted" or ctype == "text":
+        if verdict.status == "omitted" or ctype in ("text", "highlight"):
             return None
         if verdict.status == "api":
             return self.names.claim("viz", hint)
@@ -732,9 +733,7 @@ class NotebookBuilder:
         return self.names.claim(prefix, hint)
 
     # -------------------------------------------------------------- preflight
-    def preflight(
-        self, *, ipynb_available: bool, render_available: bool = False
-    ) -> NotebookPreflight:
+    def preflight(self, *, render_available: bool = False) -> NotebookPreflight:
         components: list[NotebookPreflightComponent] = []
         counts = {"code": 0, "api": 0, "omitted": 0}
         for entry, tab in self.entries():
@@ -766,7 +765,6 @@ class NotebookBuilder:
                 for s in self.plan.stages
             ],
             warnings=list(self.plan.warnings),
-            ipynb_available=ipynb_available,
             render_available=render_available,
             counts={**counts, "stages": len(self.plan.stages), "dcs": len(self.plan.dcs)},
         )
@@ -790,18 +788,28 @@ class NotebookBuilder:
                 "brand colours are not reproduced; every number is.*"
             )
         )
-        return render_notebook(cells, generated_with=self.plan.marimo_version)
+        return render_qmd(cells, front_matter=self.front_matter().to_yaml())
+
+    def front_matter(self) -> QuartoFrontMatter:
+        plan = self.plan
+        return QuartoFrontMatter(
+            title=plan.title,
+            subtitle=plan.subtitle or f"Exported from Depictio on {plan.exported_at:%Y-%m-%d}",
+            author=plan.exported_by,
+            date=plan.exported_at.strftime("%Y-%m-%d"),
+            favicon_data_uri=plan.favicon_data_uri,
+        )
 
     def _imports_cell(self) -> Cell:
         return Cell(
             "import datetime\n"
             "\n"
-            "import marimo as mo\n"
             "import numpy as np\n"
             "import pandas as pd\n"
             "import plotly.express as px\n"
             "import plotly.graph_objects as go\n"
             "import polars as pl\n"
+            "from IPython.display import HTML\n"
             "from depictio.notebook import DepictioClient, use_document_renderer\n"
             "from polars import col, lit\n"
             "\n"
@@ -830,11 +838,8 @@ class NotebookBuilder:
     def _metric_card_cell(self) -> Cell:
         # A dashboard card is a number with a label; the honest notebook
         # equivalent of that is a bare print, but a report reads better as a
-        # tile. mo.Html carries both marimo's own display protocol and
-        # _repr_html_, so this renders the same in marimo, Jupyter and
-        # Quarto without needing marimo's runtime at read time. No leading
-        # underscore: that would make marimo treat it as cell-local (like
-        # `_scoped` below), invisible to every other cell that calls it.
+        # tile. IPython's HTML object is what the Jupyter kernel Quarto runs
+        # displays as markup, and it carries `_repr_html_` for card_row().
         body = '''def metric_card(title, value):
     """The card look, as inline HTML: a label over a big number."""
     if value is None:
@@ -847,7 +852,7 @@ class NotebookBuilder:
         text = f"{value:,}"
     else:
         text = str(value)
-    return mo.Html(
+    return HTML(
         f'<div style="display:inline-block;min-width:11rem;margin:0 0.5rem 0.5rem 0;'
         f'padding:0.85rem 1.1rem;border:1px solid #e3e3e8;border-radius:12px;'
         f'font-family:inherit;background:#fafafa">'
@@ -865,7 +870,7 @@ def card_row(cards):
     `auto-fit`, which fits as many as the page happens to be wide enough for
     and strands the remainder: three cards share one line, four fall into a
     2x2 block instead of 3+1, and anything larger runs three to a line.
-    `_repr_html_()` is the standard rich-display hook (mo.Html and Depictio's
+    `_repr_html_()` is the standard rich-display hook (IPython's HTML and Depictio's
     own components both implement it): calling it directly gets the actual
     card look, the same HTML each object would show if displayed bare —
     `.html` on a Depictio component is a different thing, an embeddable tile.
@@ -873,7 +878,7 @@ def card_row(cards):
     n = len(cards)
     cols = n if n <= 3 else (2 if n == 4 else 3)
     items = "".join(c._repr_html_() for c in cards)
-    return mo.Html(
+    return HTML(
         f'<div class="dpx-cards" style="display:grid;grid-template-columns:'
         f'repeat({cols},minmax(0,1fr));gap:0.75rem;margin:0 0 0.5rem">{items}</div>'
     )'''
@@ -938,7 +943,7 @@ def card_row(cards):
             ("Dashboard", dashboard),
             ("Data collections", collections),
             ("Analysis state", state),
-            ("Notebook", f"marimo {plan.marimo_version}"),
+            ("Notebook", "Quarto document (.qmd)"),
             ("Exported", f"{plan.exported_at:%Y-%m-%d %H:%M UTC}"),
         ]
 
@@ -951,7 +956,33 @@ def card_row(cards):
                 "rendered by Depictio below re-use it; edit it to change what they show"
             )
             + f"\ndepictio_state = {literal}"
+            + "\n\n"
+            + _comment(
+                "What a code-mode figure is executed with on the dashboard, ungrouped: "
+                "keyword arguments it spreads into px (`**depictio_group_kwargs`), keys it "
+                "adds to a group_by, and the dashboard's colour per category value"
+            )
+            + "\ndepictio_group_kwargs = {}"
+            + "\ndepictio_group_by = []"
+            + "\ndepictio_category_colors = "
+            + pprint.pformat(self._category_colors(), width=88, sort_dicts=True)
         )
+
+    def _category_colors(self) -> dict[str, dict[str, str]]:
+        """``{column: {value: colour}}`` across the family, the main tab first and
+        each tab laid over it — what ``effective_category_colors`` hands a code
+        figure on the server, family-wide since the document has one namespace."""
+        merged: dict[str, dict[str, str]] = {}
+        for tab in self.plan.tabs:
+            layer = tab.get("category_colors")
+            if not isinstance(layer, dict):
+                continue
+            for column, values in layer.items():
+                if isinstance(values, dict) and values:
+                    merged.setdefault(str(column), {}).update(
+                        {str(k): str(v) for k, v in values.items()}
+                    )
+        return merged
 
     def _data_cells(self) -> list[Cell]:
         cells = []
@@ -1260,7 +1291,15 @@ fig_funnel"""
         itype = entry.get("interactive_component_type")
         if dc.columns is not None and column not in dc.columns and itype != "__link_no_match__":
             return None
-        return emit_predicate(itype, column, entry.get("value"), dc.dtype(column))
+        return emit_predicate(
+            itype,
+            column,
+            entry.get("value"),
+            dc.dtype(column),
+            slider_mode=entry.get("slider_mode"),
+            case_sensitive=entry.get("case_sensitive"),
+            match_mode=entry.get("match_mode"),
+        )
 
     # ---------------------------------------------------------------- groups
     def _pick_dc(self, dc_id: str | None) -> DCPlan | None:
@@ -1488,8 +1527,8 @@ fig_funnel"""
         return "\n\n".join(parts)
 
     def _row_cell(self, render_names: list[str]) -> Cell:
-        # card_row() reads `.text` (an mo.Html from metric_card) or `.html`
-        # (a DepictioComponent) off each element, so it lays them out without
+        # card_row() calls `_repr_html_()` on each element (an HTML object from
+        # metric_card, or a DepictioComponent), so it lays them out without
         # needing to know what kind of card each one is.
         items = ", ".join(render_names)
         return Cell(f"card_row([{items}])")
@@ -1500,6 +1539,8 @@ fig_funnel"""
         title = str(meta.get("title") or meta.get("index") or ctype)
         if ctype == "text":
             return self._text_cell(meta, entry.unit.section)
+        if ctype == "highlight":
+            return self._highlight_cell(meta, title)
         if entry.verdict.status == "omitted":
             return md_cell(f"> **{title}** is not in this notebook: {entry.verdict.reason}.")
         if entry.verdict.status == "api":
@@ -1550,6 +1591,14 @@ fig_funnel"""
             return self._figure_cell(meta, name, source, prelude, title)
         return md_cell(f"> **{title}** ({ctype}) has no code path yet.")
 
+    def _highlight_cell(self, meta: dict[str, Any], title: str) -> Cell:
+        source = str(meta.get("source_component") or "a figure")
+        tab = str(meta.get("source_tab") or "").strip()
+        where = f"the **{_esc(tab)}** tab" if tab else "another tab"
+        line = f"> **{_esc(title)}** shows *{_esc(source)}* from {where}, drawn in that tab's part."
+        caption = str(meta.get("caption") or "").strip()
+        return md_cell(line + (f"\n>\n> {caption}" if caption else ""))
+
     def _text_cell(self, meta: dict[str, Any], section: str | None = None) -> Cell:
         title = str(meta.get("title") or "").strip()
         body = str(meta.get("body") or "").strip()
@@ -1591,10 +1640,8 @@ fig_funnel"""
             "state=depictio_state)"
         )
         # `show=False` is a card folded into a row: the assignment above still
-        # defines `name` (marimo's return tuple comes from AST-scanned
-        # assignments, not from what a cell displays), it just isn't shown as
-        # this cell's own output — the row cell after it displays all of them
-        # together via card_row().
+        # defines `name`, it just isn't shown as this cell's own output — the
+        # row cell after it displays all of them together via card_row().
         if show:
             body += f"\n{name}"
         return Cell(body)
@@ -1622,5 +1669,5 @@ fig_funnel"""
         return Cell("\n".join(body))
 
 
-def generate_marimo(plan: ExportPlan) -> str:
+def generate_qmd(plan: ExportPlan) -> str:
     return NotebookBuilder(plan).build()

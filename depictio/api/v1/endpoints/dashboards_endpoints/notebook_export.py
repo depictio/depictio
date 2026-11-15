@@ -36,13 +36,6 @@ from depictio.api.v1.services.notebook_export.generator import (
     NotebookBuilder,
     StagePlan,
 )
-from depictio.api.v1.services.notebook_export.ipynb import (
-    IpynbExportUnavailable,
-    ipynb_available,
-    marimo_version,
-    to_ipynb,
-)
-from depictio.api.v1.services.notebook_export.quarto import QuartoFrontMatter, to_quarto_ipynb
 from depictio.api.v1.services.notebook_export.reading_order import filter_icon_id
 from depictio.models.models.analysis_state import (
     AnalysisState,
@@ -78,6 +71,9 @@ TAB_PROJECTION = {
         "tab_icon_color",
         "icon",
         "icon_color",
+        # The colour per category value code-mode figures read
+        # (`depictio_category_colors`).
+        "category_colors",
     )
 }
 
@@ -382,9 +378,12 @@ def build_export_plan(
         wf_by_dc[dc_id] = str(m.get("wf_id")) if m.get("wf_id") else None
         stage_dc_ids.append(dc_id)
 
-    initial, stage_rows = routes._funnel_stage_counts(
+    counted = routes._funnel_stage_counts(
         family_doc, project_id, access_token, active, stage_dc_ids
     )
+    # ``None`` only answers column mode (a stage column the frame lacks), which
+    # the export never asks for.
+    initial, stage_rows, _ = counted if counted is not None else ({}, [], None)
 
     dcs: list[DCPlan] = []
     for dc_id in stage_dc_ids:
@@ -469,7 +468,7 @@ def build_export_plan(
         instance=instance,
         api_url=api_url,
         warnings=warnings,
-        marimo_version=marimo_version() or "0.24.0",
+        favicon_data_uri=_favicon_data_uri(),
         depictio_version=_depictio_version(),
         brand=brand,
         tab_brands=_resolve_tab_brands(tabs, main_brand=brand),
@@ -491,25 +490,7 @@ def notebook_export_preflight(
     plan = build_export_plan(dashboard_id, request.state, current_user, access_token)
     # Whether the *worker* can render is not something the API can see (Quarto
     # lives in the worker image), so this is the operator's switch, not a probe.
-    return NotebookBuilder(plan).preflight(
-        ipynb_available=ipynb_available(),
-        render_available=settings.notebook_export.render_enabled and ipynb_available(),
-    )
-
-
-def _quarto_ipynb(plan: ExportPlan, source: str) -> bytes:
-    """The Quarto-ready notebook for a plan: the ``.ipynb`` plus its front matter."""
-    ipynb = to_ipynb(source, timeout_s=settings.notebook_export.ipynb_timeout_s, stem=plan.stem)
-    return to_quarto_ipynb(
-        ipynb,
-        QuartoFrontMatter(
-            title=plan.title,
-            subtitle=plan.subtitle or f"Exported from Depictio on {plan.exported_at:%Y-%m-%d}",
-            author=plan.exported_by,
-            date=plan.exported_at.strftime("%Y-%m-%d"),
-            favicon_data_uri=_favicon_data_uri(),
-        ),
-    )
+    return NotebookBuilder(plan).preflight(render_available=settings.notebook_export.render_enabled)
 
 
 @dashboards_endpoint_router.post("/notebook_export/{dashboard_id}")
@@ -519,36 +500,21 @@ def notebook_export(
     current_user: User = Depends(get_user_or_anonymous),
     access_token: Annotated[str | None, Depends(oauth2_scheme_optional)] = None,
 ) -> Response:
-    """The dashboard as a notebook: marimo ``.py``, Jupyter ``.ipynb`` or a Quarto-ready ``.ipynb``.
+    """The dashboard as a Quarto document (``.qmd``).
 
-    Nothing runs on the server: the marimo file is generated text, the
-    ``.ipynb`` variants come from marimo's converter with outputs excluded.
-    The rendered report is the one thing that does execute, and it is a
-    separate, opt-in endpoint below.
+    Nothing runs on the server: the document is generated text. The rendered
+    report is the one thing that does execute, and it is a separate, opt-in
+    endpoint below.
     """
+    from depictio.api.v1.services.notebook_export import store
+
     _require_enabled()
     plan = build_export_plan(dashboard_id, request.state, current_user, access_token)
     source = NotebookBuilder(plan).build()
-    stem = plan.stem
-    if request.format == "marimo":
-        return Response(
-            content=source.encode("utf-8"),
-            media_type="text/x-python; charset=utf-8",
-            headers={"Content-Disposition": f'attachment; filename="{stem}.py"'},
-        )
-    try:
-        if request.format == "quarto":
-            ipynb = _quarto_ipynb(plan, source)
-            filename = f"{stem}.quarto.ipynb"
-        else:
-            ipynb = to_ipynb(source, timeout_s=settings.notebook_export.ipynb_timeout_s, stem=stem)
-            filename = f"{stem}.ipynb"
-    except IpynbExportUnavailable as exc:
-        raise HTTPException(status_code=501, detail=str(exc)) from exc
     return Response(
-        content=ipynb,
-        media_type="application/x-ipynb+json",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        content=source.encode("utf-8"),
+        media_type=store.QMD_MEDIA_TYPE,
+        headers={"Content-Disposition": f'attachment; filename="{plan.stem}.qmd"'},
     )
 
 
@@ -587,9 +553,7 @@ def _require_owner_for_authored_code(
     missing its figures is not the report they asked for.
     """
     authored = [
-        c
-        for c in builder.preflight(ipynb_available=True).components
-        if c.status == "code" and c.kind == "code"
+        c for c in builder.preflight().components if c.status == "code" and c.kind == "code"
     ]
     if not authored or settings.auth.is_single_user_mode:
         return
@@ -651,15 +615,12 @@ async def notebook_export_render(
     plan = build_export_plan(dashboard_id, request.state, current_user, access_token)
     builder = NotebookBuilder(plan)
     _require_owner_for_authored_code(dashboard_id, current_user, builder)
-    try:
-        ipynb = _quarto_ipynb(plan, builder.build())
-    except IpynbExportUnavailable as exc:
-        raise HTTPException(status_code=501, detail=str(exc)) from exc
+    qmd = builder.build().encode("utf-8")
 
     job_id = uuid4().hex
     user_id = str(current_user.id)
-    notebook_key = store.job_key(user_id, job_id, f"{plan.stem}.quarto.ipynb")
-    store.put(notebook_key, ipynb, store.IPYNB_MEDIA_TYPE)
+    notebook_key = store.job_key(user_id, job_id, f"{plan.stem}.qmd")
+    store.put(notebook_key, qmd, store.QMD_MEDIA_TYPE)
 
     # The notebook runs as the user who asked for it, so the report holds what
     # they can see and nothing more. A token of its own, so the render can be
