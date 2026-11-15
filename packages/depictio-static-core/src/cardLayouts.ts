@@ -41,7 +41,6 @@ const HISTOGRAM_BINS = 20;
 const TREND_MAX_POINTS = 24;
 
 const FLOAT_RE = /^Float/i;
-
 const NUMERIC_RE = /^(U?Int|Float|Decimal)/i;
 const TEMPORAL_RE = /^(Date|Datetime)/i;
 
@@ -571,5 +570,3 @@ export function needsLayoutPayload(card: Record<string, unknown>): boolean {
   if ((BREAKDOWN_LAYOUTS as readonly string[]).includes(layout)) return Boolean(card.breakdown_col);
   return (NUMERIC_LAYOUTS as readonly string[]).includes(layout);
 }
-
-
