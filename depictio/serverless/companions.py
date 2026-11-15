@@ -22,17 +22,55 @@ never re-implements them (RFC ``docs/design/rfc-serverless-deployment.md``
   JS selects the same rows the server's datetime predicate does. Null
   preserving.
 
-Both companion kinds are recorded in ``CompanionResult.companions``
-(``companion column -> source column``) for the manifest.
+- **Component-static row-level ``filter_expr``** (a card's own row scoping, an
+  interactive component's scope) gets a Boolean ``__fe__<sha8>`` companion,
+  evaluated with the server's own ``build_filter_expr`` (RFC §5): the browser
+  ANDs it into the mask instead of re-implementing the expression grammar. It
+  does not depend on the filter state, so evaluating it over the whole frame
+  and ANDing is the same as the server's filter-then-``filter(expr)``. A window
+  expression (``.over(...)``) does depend on which rows the window spans, so it
+  gets no companion (:func:`filter_expr_companionable`); a component carrying
+  one is not served live.
+
+Every companion kind is recorded in ``CompanionResult.companions``
+(``companion column -> source``; the expression text for ``__fe__``) for the
+manifest.
 """
 
 from __future__ import annotations
 
+import hashlib
+import re
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 
 import polars as pl
 
 from depictio.models.components.predicates import datetime_column_expr
+
+FILTER_EXPR_PREFIX = "__fe__"
+_FILTER_EXPR_COL_RE = re.compile(r"col\(\s*['\"]([^'\"]+)['\"]\s*\)")
+_WINDOW_RE = re.compile(r"\.over\s*\(")
+
+
+def filter_expr_companion(expr: str) -> str:
+    """``__fe__<sha8>``: the companion column name of a filter_expr (RFC §5)."""
+    return f"{FILTER_EXPR_PREFIX}{hashlib.sha1(expr.encode('utf-8')).hexdigest()[:8]}"
+
+
+def filter_expr_companionable(expr: str | None) -> bool:
+    """True for a row-level filter_expr (no ``.over()`` window)."""
+    return bool(expr and expr.strip()) and not _WINDOW_RE.search(expr or "")
+
+
+def filter_expr_targets(components: Iterable[dict]) -> list[str]:
+    """Every distinct filter_expr the components carry, in first-seen order."""
+    out: dict[str, None] = {}
+    for comp in components:
+        expr = comp.get("filter_expr") or (comp.get("metadata") or {}).get("filter_expr")
+        if isinstance(expr, str) and expr.strip():
+            out[expr] = None
+    return list(out)
 
 
 @dataclass
@@ -95,6 +133,7 @@ def build_companions(
     df: pl.DataFrame,
     categorical_cols: list[str],
     datetime_cols: list[str],
+    filter_exprs: Iterable[str] = (),
 ) -> CompanionResult:
     """Append companion columns for the given categorical/datetime columns.
 
@@ -107,6 +146,12 @@ def build_companions(
             Only Date/Datetime columns get a ``__ts__`` companion (Time and
             Duration have no epoch-µs meaning through the server's datetime
             branch; string-dated columns are the runtime's raw-parse concern).
+        filter_exprs: Component-static filter_expr strings. Each row-level one
+            whose ``col(...)`` references all exist on ``df`` and that compiles
+            and evaluates to one Boolean per row gets a ``__fe__<sha8>``
+            companion (null → False, as ``filter`` drops a null predicate).
+            The others are skipped: the runtime then has no companion to AND,
+            which the producers' tier check reports instead.
 
     Idempotent: a companion column that already exists on ``df`` is left as-is
     (never duplicated, never recomputed); its codebook/manifest entries are
@@ -175,6 +220,27 @@ def build_companions(
         exprs.append(
             datetime_column_expr(col).cast(pl.Datetime("us")).cast(pl.Int64).alias(companion)
         )
+
+    for expr in dict.fromkeys(filter_exprs):
+        if not filter_expr_companionable(expr):
+            continue
+        refs = set(_FILTER_EXPR_COL_RE.findall(expr))
+        if not refs or not refs <= set(schema):
+            continue
+        companion = filter_expr_companion(expr)
+        if companion in schema:
+            companions[companion] = expr
+            continue
+        from depictio.models.components.filter_expr import build_filter_expr
+
+        try:
+            series = df.select(build_filter_expr(expr).alias(companion)).to_series()
+        except Exception:
+            continue
+        if series.len() != df.height or series.dtype != pl.Boolean:
+            continue
+        companions[companion] = expr
+        exprs.append(series.fill_null(False))
 
     out = df.with_columns(exprs) if exprs else df
     return CompanionResult(df=out, codebooks=codebooks, companions=companions)

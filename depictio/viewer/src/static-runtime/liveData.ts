@@ -19,6 +19,10 @@
 import {
   HyparquetEngine,
   applyResolver,
+  bindFilters,
+  followsRegion,
+  parseWallClockMicros,
+  scopeRegionFilters,
   comparePolars,
   extendFiltersViaLinks,
   limitsOf,
@@ -37,6 +41,7 @@ import {
   type ColumnTable,
   type DCLinkLike,
   type DataRef,
+  type FilterLike,
   type PrologueOp,
   type QueryEngine,
   type ResolveHop,
@@ -45,8 +50,6 @@ import {
 } from 'depictio-static-core';
 import type { InteractiveFilter } from '../../../../packages/depictio-react-core/src/api';
 import { bundle } from './bundle';
-
-const LINK_NO_MATCH = '__link_no_match__';
 
 const engine: QueryEngine = new HyparquetEngine();
 const tableCache = new Map<string, Promise<{ ref: DataRef; handle: TableHandle }>>();
@@ -87,77 +90,42 @@ function jsonNumber(value: unknown): unknown {
   return typeof value === 'bigint' ? Number(value) : value;
 }
 
-/** Parse the ISO-ish strings the date pickers emit into epoch-microseconds,
- *  as WALL-CLOCK time — the server parses them into naive datetimes
- *  (add_filter:290-306) and the `__ts__` companions epoch wall-clock too, so
- *  local-timezone parsing (what `Date.parse` does for datetime strings) would
- *  shift the boundary. */
-export function parseWallClockMicros(raw: unknown): bigint | undefined {
-  if (typeof raw !== 'string') {
-    if (raw instanceof Date) return BigInt(raw.getTime()) * 1000n;
-    return undefined;
+/** Re-exported for the callers that parse picker bounds themselves. */
+export { parseWallClockMicros };
+
+/** filter_expr source text → its `__fe__<sha8>` companion, across every
+ *  bundled DataRef (the name is a hash of the text, so one map serves all). */
+let feCompanionCache: Map<string, string> | null = null;
+export function filterExprCompanions(): Map<string, string> {
+  if (feCompanionCache) return feCompanionCache;
+  const out = new Map<string, string>();
+  for (const ref of Object.values(bundle().data_refs ?? {})) {
+    for (const [name, source] of Object.entries(ref.companions ?? {})) {
+      if (name.startsWith('__fe__')) out.set(source, name);
+    }
   }
-  const m = raw.match(
-    /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?)?/,
-  );
-  if (!m) return undefined;
-  const [, y, mo, d, h = '0', mi = '0', s = '0', frac = ''] = m;
-  const ms = Date.UTC(+y, +mo - 1, +d, +h, +mi, +s);
-  const fracUs = Math.round(Number(`0.${frac || '0'}`) * 1e6);
-  return BigInt(ms) * 1000n + BigInt(fracUs);
+  feCompanionCache = out;
+  return out;
 }
 
-/** React filter payloads → engine BoundFilters, mirroring `add_filter`'s
- *  branches and its empty-value guards (`_build_filter_metadata`,
- *  dashboards routes.py:1606: entries without a column or with value in
- *  (None, [], "") never reach the predicate builder). */
+/** React filter payloads → engine BoundFilters — `clean_filter_payload` +
+ *  `process_metadata_and_filter` + `add_filter`, ported in
+ *  depictio-static-core's `bindFilters` (pinned there against the server's
+ *  own functions). The bundle supplies the `__fe__` companions a component's
+ *  filter_expr is ANDed through. */
 export function toBoundFilters(filters: InteractiveFilter[]): BoundFilter[] {
-  const out: BoundFilter[] = [];
-  for (const f of filters ?? []) {
-    const meta = f.metadata ?? {};
-    const type = f.interactive_component_type ?? meta.interactive_component_type;
-    if (type === LINK_NO_MATCH) {
-      out.push({ kind: 'link_no_match' });
-      continue;
-    }
-    const column = f.column_name ?? meta.column_name;
-    const v = f.value;
-    if (!column || v === null || v === undefined || v === '' || (Array.isArray(v) && v.length === 0)) {
-      continue;
-    }
-    switch (type) {
-      case 'Select':
-      case 'MultiSelect':
-      case 'SegmentedControl':
-        out.push({ kind: 'in', column, values: Array.isArray(v) ? v : [v] });
-        break;
-      case 'TextInput':
-        out.push({ kind: 'contains', column, pattern: String(v) });
-        break;
-      case 'Slider':
-        out.push({ kind: 'eq', column, value: v });
-        break;
-      case 'RangeSlider':
-        if (Array.isArray(v) && v.length === 2) {
-          out.push({ kind: 'range', column, min: Number(v[0]), max: Number(v[1]) });
-        }
-        break;
-      case 'DateRangePicker':
-      case 'Timeline':
-        if (Array.isArray(v) && v.length === 2) {
-          const min = parseWallClockMicros(v[0]);
-          const max = parseWallClockMicros(v[1]);
-          if (min !== undefined && max !== undefined) {
-            out.push({ kind: 'ts_range', column, min, max });
-          }
-        }
-        break;
-      default:
-        // Selection-sourced filters with filter_expr scoping are phase 6.
-        console.warn(`static bundle: unsupported filter type "${type}" skipped`);
-    }
-  }
-  return out;
+  return bindFilters(filters as unknown as FilterLike[], {
+    filterExprCompanions: filterExprCompanions(),
+    onUnsupported: (type) => console.warn(`static bundle: unsupported filter type "${type}" skipped`),
+  });
+}
+
+/** The `flag` filter for a component's own filter_expr (a card's row
+ *  scoping), or null when the bundle carries no companion for it. */
+export function filterExprFlag(expr: string | null | undefined): BoundFilter | null {
+  if (!expr) return null;
+  const column = filterExprCompanions().get(expr);
+  return column ? { kind: 'flag', column } : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -291,11 +259,10 @@ export async function resolveLinkFilters(
   return [...filters, ...(synthetic as unknown as InteractiveFilter[])];
 }
 
-/** Server aggregation-name aliases (`_agg_expr`, dashboards routes.py:1242)
- *  → engine AggFn. Returns undefined for aggregations the engine doesn't cover
- *  (q1/q3); `range` is derived from minMax. `box_plot_stats` maps straight
- *  through — the kernel resolves it to the same compound object the server
- *  returns, which the card's BoxPlot renderer type-guards on. */
+/** Server aggregation-name aliases (`_agg_expr`, dashboards routes.py) →
+ *  engine AggFn. `range` is derived from minMax; `box_plot_stats` maps
+ *  straight through — the kernel resolves it to the same compound object the
+ *  server returns, which the card's BoxPlot renderer type-guards on. */
 function toAggFn(aggregation: string): AggFn | 'range' | undefined {
   const agg = (aggregation || '').toLowerCase();
   const direct: Record<string, AggFn> = {
@@ -315,6 +282,11 @@ function toAggFn(aggregation: string): AggFn | 'range' | undefined {
     mode: 'mode',
     first: 'first',
     last: 'last',
+    q1: 'q1',
+    q3: 'q3',
+    percentile: 'percentile',
+    skewness: 'skewness',
+    kurtosis: 'kurtosis',
     box_plot_stats: 'box_plot_stats',
   };
   if (agg in direct) return direct[agg];
@@ -329,6 +301,10 @@ interface CardMeta {
   column_name?: string;
   aggregation?: string;
   aggregations?: string[];
+  filter_expr?: string | null;
+  follow_region_filter?: boolean;
+  config?: Record<string, unknown>;
+  [k: string]: unknown;
 }
 
 /** Live equivalent of the server's bulk_compute_cards body. */
@@ -358,35 +334,41 @@ export async function computeCardsLive(
   const secondary_values: Record<string, Record<string, unknown>> = {};
   const aggregations: Record<string, string[]> = {};
 
-  // One bound filter set per dc: the user's filters are global (per-filter
-  // column skip is the engine's job, matching apply_runtime_filters), but the
-  // link-resolved synthetics are per TARGET dc, so each dc resolves its own.
-  const boundCache = new Map<string, Promise<BoundFilter[]>>();
-  const boundFor = (dcId: string) => {
-    let b = boundCache.get(dcId);
-    if (!b) {
-      b = resolveLinkFilters(dcId, filters).then(toBoundFilters);
-      boundCache.set(dcId, b);
-    }
-    return b;
-  };
-
-  // One mask per dc, over that dc's own bound filters.
-  const maskCache = new Map<string, Promise<Uint8Array>>();
-  const maskFor = (dcId: string) => {
-    let m = maskCache.get(dcId);
+  // One bound filter set + mask per (dc, region scope, card filter_expr):
+  //   - a genome region / residue pick is a place to look, not a subset to
+  //     summarise, so a card drops it unless it opts in with
+  //     `follow_region_filter` (`scope_region_filters(…, "card")`), BEFORE
+  //     link resolution so a region link cannot bring it back;
+  //   - the link-resolved synthetics are per TARGET dc;
+  //   - a card's own `filter_expr` narrows its rows through the `__fe__`
+  //     companion (the server compiles it into the card's frame).
+  const maskCache = new Map<string, Promise<Uint8Array | null>>();
+  const maskFor = (card: CardMeta, dcId: string) => {
+    const follows = followsRegion(card);
+    const expr = card.filter_expr ?? null;
+    const key = `${dcId} ${follows ? 1 : 0} ${expr ?? ''}`;
+    let m = maskCache.get(key);
     if (!m) {
-      m = Promise.all([tableFor(dcId), boundFor(dcId)]).then(([{ handle }, dcBound]) =>
-        engine.mask(handle, dcBound).then((r) => r.mask),
-      );
-      maskCache.set(dcId, m);
+      m = (async () => {
+        const scoped = scopeRegionFilters(filters, 'card', card);
+        const dcBound = toBoundFilters(await resolveLinkFilters(dcId, scoped));
+        const flag = filterExprFlag(expr);
+        if (expr && !flag) {
+          console.warn(`static bundle: card filter_expr ${JSON.stringify(expr)} has no companion`);
+        }
+        if (flag) dcBound.push(flag);
+        if (dcBound.length === 0) return null;
+        const { handle } = await tableFor(dcId);
+        return (await engine.mask(handle, dcBound)).mask;
+      })();
+      maskCache.set(key, m);
     }
     return m;
   };
 
-  const aggOne = async (dcId: string, column: string, aggregation: string) => {
+  const aggOne = async (card: CardMeta, dcId: string, column: string, aggregation: string) => {
     const { handle } = await tableFor(dcId);
-    const mask = (await boundFor(dcId)).length ? await maskFor(dcId) : null;
+    const mask = await maskFor(card, dcId);
     const fn = toAggFn(aggregation);
     if (fn === undefined) {
       console.warn(`static bundle: aggregation "${aggregation}" not supported offline`);
@@ -407,12 +389,12 @@ export async function computeCardsLive(
       const column = card.column_name;
       if (!dcId || !column || !card.aggregation) return;
       try {
-        values[idx] = await aggOne(dcId, column, card.aggregation);
+        values[idx] = await aggOne(card, dcId, column, card.aggregation);
         const secondary = card.aggregations ?? [];
         if (secondary.length) {
           aggregations[idx] = [...secondary];
           const entries = await Promise.all(
-            secondary.map(async (agg) => [agg, await aggOne(dcId, column, agg)] as const),
+            secondary.map(async (agg) => [agg, await aggOne(card, dcId, column, agg)] as const),
           );
           secondary_values[idx] = Object.fromEntries(entries);
         }

@@ -56,6 +56,15 @@ export type AggFn =
   | 'mode'
   | 'first'
   | 'last'
+  /** `quantile(0.25 / 0.75, interpolation="linear")`. */
+  | 'q1'
+  | 'q3'
+  /** The precompute table's `quantile` entry: quantile(0.5, linear). */
+  | 'percentile'
+  /** Bias-corrected sample skewness, null below 3 values. */
+  | 'skewness'
+  /** Bias-corrected excess kurtosis, null below 4 values. */
+  | 'kurtosis'
   /** Compound Tukey box-and-whisker payload, not a scalar: resolves to a
    *  `BoxPlotStats` object (or null on an empty selection). The card renderer
    *  reads all nine fields; see aggregateValues. */

@@ -61,12 +61,30 @@ export type BoundFilter =
    * logical datetime column; the engine reads its `__ts__` companion.
    */
   | { kind: 'ts_range'; column: string; min?: bigint; max?: bigint }
-  /** Slider — exact equality. */
+  /** Exact equality (kept for callers that bind `eq` directly). */
   | { kind: 'eq'; column: string; value: unknown }
-  /** TextInput — case-sensitive, unanchored REGEX (Polars str.contains). */
-  | { kind: 'contains'; column: string; pattern: string }
+  /**
+   * Slider — `_slider_predicate`: `col <op> value`, `gte` by default
+   * (`slider_mode`). Null never matches.
+   */
+  | { kind: 'cmp'; column: string; op: SliderOp; value: unknown }
+  /**
+   * TextInput — Polars `str.contains`: an unanchored REGEX unless `literal`.
+   * `flags: 'i'` is the server's `(?i)` prefix (case-insensitive, the
+   * default — see filterBinding.textFilterPattern). A non-string cell is
+   * matched on its text form, as the server's `cast(Utf8)` does.
+   */
+  | { kind: 'contains'; column: string; pattern: string; literal?: boolean; flags?: string }
+  /**
+   * A build-time boolean companion that must be true — the `__fe__<sha8>`
+   * column the producer evaluated a component-static filter_expr into.
+   */
+  | { kind: 'flag'; column: string }
   /** Cross-DC link resolved to zero targets → all-false mask. */
   | { kind: 'link_no_match' };
+
+/** `SLIDER_MODES` keys (deltatables_utils.py). */
+export type SliderOp = 'gte' | 'gt' | 'lte' | 'lt' | 'eq' | 'ne';
 
 /**
  * Serialize a UI option value to the codebook key convention.

@@ -442,6 +442,42 @@ def test_datetime_companion_and_live_table(tmp_path: Path) -> None:
     assert "NaN" not in json.dumps(manifest.model_dump(mode="json"))
 
 
+def test_card_filter_expr_ships_as_a_boolean_companion(tmp_path: Path) -> None:
+    """A card's row scoping is evaluated once at build (``__fe__<sha8>``, RFC §5)
+    and ANDed in the browser, instead of the card silently aggregating every row."""
+    from depictio.models.models.dashboards import DashboardDataLite
+    from depictio.serverless.companions import filter_expr_companion
+
+    (tmp_path / "wf").mkdir()
+    pl.DataFrame({"coverage": [2, 8, 30, None], "sample": ["a", "b", "c", "d"]}).write_parquet(
+        tmp_path / "wf" / "dc.parquet"
+    )
+    expr = "col('coverage') < 10"
+    spec = DashboardDataLite.model_validate(
+        _mini_spec(
+            [
+                {
+                    "tag": "card-low",
+                    "component_type": "card",
+                    "workflow_tag": "wf",
+                    "data_collection_tag": "dc",
+                    "column_name": "sample",
+                    "aggregation": "count",
+                    "filter_expr": expr,
+                }
+            ]
+        )
+    )
+    built = build_manifest(spec, tmp_path)
+    ref = next(iter(built.manifest.data_refs.values()))
+    name = filter_expr_companion(expr)
+    assert ref.companions[name] == expr
+    blob = built.manifest.inline_blobs[ref.uri.removeprefix("inline:")]
+    df = pl.read_parquet(io.BytesIO(base64.b64decode(blob)))
+    # null -> False: the server's ``filter`` drops a null predicate row.
+    assert df[name].to_list() == [True, True, False, False]
+
+
 def test_table_without_dc_is_omitted() -> None:
     from depictio.models.models.dashboards import DashboardDataLite
 

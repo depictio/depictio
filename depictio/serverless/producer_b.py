@@ -73,7 +73,7 @@ from depictio.serverless.binding import (
     frozen_miss_detail,
     miss_tier_reason,
 )
-from depictio.serverless.companions import build_companions
+from depictio.serverless.companions import build_companions, filter_expr_targets
 from depictio.serverless.preflight import (
     LINK_TIER_A,
     LINK_TIER_INERT,
@@ -655,7 +655,19 @@ def build_manifest(
         pruned_frames[key] = df
 
         categorical_cols, datetime_cols = _companion_targets(consumers[key], df)
-        result = build_companions(df, categorical_cols, datetime_cols)
+        # This DC's component filter_exprs (a card's row scoping) plus every
+        # interactive scope, which travels with its filter (``__fe__``, RFC §5).
+        result = build_companions(
+            df,
+            categorical_cols,
+            datetime_cols,
+            filter_expr_targets(
+                [
+                    *consumers[key],
+                    *(c for c in components if c.get("component_type") == "interactive"),
+                ]
+            ),
+        )
 
         buf = io.BytesIO()
         result.df.write_parquet(

@@ -383,3 +383,42 @@ describe('aggregate: box_plot_stats vs the server dict', () => {
     expect(s.outliers[99]).toBe(1099);
   });
 });
+
+describe('aggregate: server-parity aggregations (q1/q3/percentile/skewness/kurtosis)', () => {
+  const PARITY: AggFn[] = ['q1', 'q3', 'percentile', 'skewness', 'kurtosis'];
+  const parity = (expected as unknown as {
+    aggregates_parity: Record<string, Record<string, Record<string, number | null>>>;
+  }).aggregates_parity;
+
+  for (const block of ['full', 'masked_in_str', 'empty', 'tiny'] as const) {
+    it(`matches _agg_value on the ${block} frame`, async () => {
+      const { engine, handle } = await openFixture();
+      let mask: Uint8Array | null = null;
+      if (block === 'masked_in_str') {
+        mask = (await engine.mask(handle, [{ kind: 'in', column: 'category_str', values: ['alpha', 'beta'] }])).mask;
+      } else if (block === 'empty' || block === 'tiny') {
+        mask = new Uint8Array(expected.rows);
+        if (block === 'tiny') mask.fill(1, 0, 3);
+      }
+      for (const col of ['value_f64', 'value_i64', 'metric_f64_nn']) {
+        const results = await engine.aggregate(handle, mask, PARITY.map((fn) => ({ col, fn })));
+        PARITY.forEach((fn, i) => {
+          const exp = parity[block][col][fn];
+          try {
+            if (exp !== null && (fn === 'skewness' || fn === 'kurtosis')) {
+              // Moment estimators: the summation order differs from Polars'
+              // streaming one, so allow ~1e-7 relative (still far below any
+              // card's displayed precision).
+              const tol = 1e-7 * Math.max(1, Math.abs(exp));
+              expect(Math.abs((results[i] as number) - exp)).toBeLessThanOrEqual(tol);
+            } else {
+              expectClose(results[i], exp);
+            }
+          } catch (e) {
+            throw new Error(`${block}.${col}.${fn}: ${(e as Error).message}`);
+          }
+        });
+      }
+    });
+  }
+});

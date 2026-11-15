@@ -190,6 +190,51 @@ export function aggregateValues(
           ? Number(result)
           : stringifyValue(result);
     }
+    case 'q1':
+    case 'q3':
+    case 'percentile': {
+      // `_agg_value`: q1/q3 are quantile(0.25/0.75, linear); `percentile`
+      // comes from the precompute table's `quantile` factory, which is
+      // quantile(0.5, linear). Non-numeric columns raise server-side → None.
+      if (!numericColumn) return null;
+      const nums = collectNumbers(values, mask);
+      if (nums.length === 0) return null;
+      nums.sort((a, b) => a - b);
+      return quantileLinear(nums, fn === 'q1' ? 0.25 : fn === 'q3' ? 0.75 : 0.5);
+    }
+    case 'skewness':
+    case 'kurtosis': {
+      // The precompute table's parity estimators
+      // (deltatables_endpoints/utils.py `_POLARS_AGG_EXPRS`):
+      //   skew: when(count >= 3).then(skew(bias=False))
+      //   kurt: when(count >= 4).then(kurtosis(bias=False))  — Fisher (excess)
+      if (!numericColumn) return null;
+      const nums = collectNumbers(values, mask);
+      const n = nums.length;
+      if (n < (fn === 'skewness' ? 3 : 4)) return null;
+      let sum = 0;
+      for (const v of nums) sum += v;
+      const mean = sum / n;
+      let m2 = 0;
+      let m3 = 0;
+      let m4 = 0;
+      for (const v of nums) {
+        const d = v - mean;
+        const d2 = d * d;
+        m2 += d2;
+        m3 += d2 * d;
+        m4 += d2 * d2;
+      }
+      m2 /= n;
+      m3 /= n;
+      m4 /= n;
+      if (fn === 'skewness') {
+        const g1 = m3 / Math.pow(m2, 1.5);
+        return (g1 * Math.sqrt(n * (n - 1))) / (n - 2);
+      }
+      const g2 = m4 / (m2 * m2) - 3;
+      return (((n + 1) * g2 + 6) * (n - 1)) / ((n - 2) * (n - 3));
+    }
     case 'box_plot_stats':
       return boxPlotStats(values, mask);
   }

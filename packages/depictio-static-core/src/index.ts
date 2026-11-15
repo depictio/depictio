@@ -8,3 +8,4 @@ export * from './refill';
 export * from './prologue';
 export * from './advancedViz';
 export * from './links';
+export * from './filterBinding';

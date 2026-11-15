@@ -60,6 +60,8 @@ import type {
   StoredMetadata,
 } from '../../../../packages/depictio-react-core/src/api';
 
+import { scopeRegionFilters } from 'depictio-static-core';
+
 import { bundle, bundledTabs, frozenPayload, interactiveIndexFor, rawBundle } from './bundle';
 import {
   columnRangeLive,
@@ -216,14 +218,17 @@ export async function saveDashboardNotes(_dashboardId: string, _notes: unknown) 
 // ---- frozen render-path lookups (keyed by component index) -----------------
 
 /** dc_id of a figure component, from the dashboard document. */
-function figureDcIdFor(componentId: string): string {
+function figureMetaFor(componentId: string): Record<string, unknown> | undefined {
   const doc = bundle().dashboard.doc as {
     stored_metadata?: { index?: string; component_type?: string; dc_id?: string | null }[];
   };
-  const meta = (doc.stored_metadata ?? []).find(
+  return (doc.stored_metadata ?? []).find(
     (c) => c.component_type === 'figure' && String(c.index ?? '') === componentId,
-  );
-  return String(meta?.dc_id ?? '');
+  ) as Record<string, unknown> | undefined;
+}
+
+function figureDcIdFor(componentId: string): string {
+  return String(figureMetaFor(componentId)?.dc_id ?? '');
 }
 
 export async function renderFigure(
@@ -248,6 +253,10 @@ export async function renderFigure(
   if (binding) {
     const dcId = figureDcIdFor(componentId);
     if (dcId && dataRefFor(dcId)) {
+      // A genome region / residue pick reaches a figure only when its
+      // encodings name a region column, or when it opts in
+      // (`scope_region_filters(…, "figure", component)`, before links).
+      filters = scopeRegionFilters(filters, 'figure', figureMetaFor(componentId));
       const prologue = bundle().prologues?.[componentId];
       try {
         const live =

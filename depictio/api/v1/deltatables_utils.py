@@ -1367,6 +1367,13 @@ def clean_filter_payload(filters: list[dict] | None) -> list[dict]:
             entry["filter_expr"] = filter_expr
         if (f.get("source") or meta.get("source")) == GENOME_SELECTION_SOURCE:
             entry["source"] = GENOME_SELECTION_SOURCE
+        if entry["interactive_component_type"] == "Slider":
+            # The comparison the component asked for (``gte`` when absent):
+            # dropping it here made every dashboard render apply ``>=`` whatever
+            # the component's ``slider_mode`` said.
+            slider_mode = f.get("slider_mode") or meta.get("slider_mode")
+            if slider_mode:
+                entry["slider_mode"] = slider_mode
         if entry["interactive_component_type"] == "TextInput":
             # The options change which rows a pattern keeps, so they travel with it.
             for key in ("case_sensitive", "match_mode"):

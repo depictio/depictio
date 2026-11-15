@@ -13,7 +13,10 @@
     "sample_id": "String",
     "__code__batch": "Int32",
     "__code__flag_bool": "Int32",
-    "__ts__event_date": "Int64"
+    "__ts__event_date": "Int64",
+    "__fe__61545a9b": "Boolean",
+    "__fe__37151f77": "Boolean",
+    "__fe__ce424936": "Boolean"
   },
   "null_counts": {
     "idx_i32": 0,
@@ -27,12 +30,18 @@
     "sample_id": 76,
     "__code__batch": 111,
     "__code__flag_bool": 117,
-    "__ts__event_date": 130
+    "__ts__event_date": 130,
+    "__fe__61545a9b": 0,
+    "__fe__37151f77": 0,
+    "__fe__ce424936": 0
   },
   "companions": {
     "__code__batch": "batch",
     "__code__flag_bool": "flag_bool",
-    "__ts__event_date": "event_date"
+    "__ts__event_date": "event_date",
+    "__fe__61545a9b": "col('value_f64') > 0.5",
+    "__fe__37151f77": "(col('category_str') != 'alpha') & col('value_i64').is_not_null()",
+    "__fe__ce424936": "col('batch').is_in([1, 3])"
   },
   "codebooks": {
     "batch": {
@@ -647,5 +656,312 @@
       ]
     }
   },
-  "polars_version": "1.42.1"
+  "binding": {
+    "text_ci_default": {
+      "matched": 634,
+      "value_f64_sum": 73.925341,
+      "filters": [
+        {
+          "value": "ALP",
+          "column_name": "category_str",
+          "interactive_component_type": "TextInput"
+        }
+      ]
+    },
+    "text_case_sensitive": {
+      "matched": 0,
+      "value_f64_sum": 0.0,
+      "filters": [
+        {
+          "value": "ALP",
+          "column_name": "category_str",
+          "interactive_component_type": "TextInput",
+          "metadata": {
+            "case_sensitive": true
+          }
+        }
+      ]
+    },
+    "text_regex_ci_anchored": {
+      "matched": 1054,
+      "value_f64_sum": 90.30175700000001,
+      "filters": [
+        {
+          "value": "^(ALPHA|beta)$",
+          "column_name": "category_str",
+          "interactive_component_type": "TextInput"
+        }
+      ]
+    },
+    "text_contains_literal_meta": {
+      "matched": 0,
+      "value_f64_sum": 0.0,
+      "filters": [
+        {
+          "value": "^al",
+          "column_name": "category_str",
+          "interactive_component_type": "TextInput",
+          "metadata": {
+            "match_mode": "contains"
+          }
+        }
+      ]
+    },
+    "text_contains_ci": {
+      "matched": 339,
+      "value_f64_sum": -25.273150999999984,
+      "filters": [
+        {
+          "value": "AMM",
+          "column_name": "category_str",
+          "interactive_component_type": "TextInput",
+          "match_mode": "contains"
+        }
+      ]
+    },
+    "text_trimmed": {
+      "matched": 339,
+      "value_f64_sum": -25.273150999999984,
+      "filters": [
+        {
+          "value": "  gam  ",
+          "column_name": "category_str",
+          "interactive_component_type": "TextInput"
+        }
+      ]
+    },
+    "text_invalid_regex_is_no_filter": {
+      "matched": 2000,
+      "value_f64_sum": 19.096772,
+      "filters": [
+        {
+          "value": "(",
+          "column_name": "category_str",
+          "interactive_component_type": "TextInput"
+        }
+      ]
+    },
+    "text_numeric_column": {
+      "matched": 140,
+      "value_f64_sum": 11.557054999999998,
+      "filters": [
+        {
+          "value": "^4",
+          "column_name": "value_i64",
+          "interactive_component_type": "TextInput"
+        }
+      ]
+    },
+    "slider_default_gte": {
+      "matched": 1508,
+      "value_f64_sum": 50.767076,
+      "filters": [
+        {
+          "value": 42,
+          "column_name": "value_i64",
+          "interactive_component_type": "Slider"
+        }
+      ]
+    },
+    "slider_lt_meta": {
+      "matched": 1119,
+      "value_f64_sum": -1437.8610949999998,
+      "filters": [
+        {
+          "value": 0.5,
+          "column_name": "value_f64",
+          "interactive_component_type": "Slider",
+          "metadata": {
+            "slider_mode": "lt"
+          }
+        }
+      ]
+    },
+    "slider_eq": {
+      "matched": 8,
+      "value_f64_sum": -1.2064389999999996,
+      "filters": [
+        {
+          "value": 42,
+          "column_name": "value_i64",
+          "interactive_component_type": "Slider",
+          "slider_mode": "eq"
+        }
+      ]
+    },
+    "slider_ne": {
+      "matched": 1885,
+      "value_f64_sum": 34.96159099999999,
+      "filters": [
+        {
+          "value": 42,
+          "column_name": "value_i64",
+          "interactive_component_type": "Slider",
+          "slider_mode": "ne"
+        }
+      ]
+    },
+    "slider_zero_is_a_value": {
+      "matched": 949,
+      "value_f64_sum": 1507.4846490000002,
+      "filters": [
+        {
+          "value": 0,
+          "column_name": "value_f64",
+          "interactive_component_type": "Slider"
+        }
+      ]
+    },
+    "multiselect_with_filter_expr": {
+      "matched": 327,
+      "value_f64_sum": 597.547666,
+      "filters": [
+        {
+          "value": [
+            "2",
+            "4"
+          ],
+          "column_name": "batch",
+          "interactive_component_type": "MultiSelect",
+          "filter_expr": "col('value_f64') > 0.5"
+        }
+      ]
+    },
+    "text_with_filter_expr_in_metadata": {
+      "matched": 1001,
+      "value_f64_sum": -3.504269000000015,
+      "filters": [
+        {
+          "value": "a",
+          "column_name": "category_str",
+          "interactive_component_type": "TextInput",
+          "metadata": {
+            "filter_expr": "(col('category_str') != 'alpha') & col('value_i64').is_not_null()"
+          }
+        }
+      ]
+    },
+    "range_with_isin_filter_expr": {
+      "matched": 356,
+      "value_f64_sum": 149.21667200000002,
+      "filters": [
+        {
+          "value": [
+            -1.0,
+            2.0
+          ],
+          "column_name": "value_f64",
+          "interactive_component_type": "RangeSlider",
+          "filter_expr": "col('batch').is_in([1, 3])"
+        }
+      ]
+    },
+    "empty_value_drops_its_filter_expr": {
+      "matched": 2000,
+      "value_f64_sum": 19.096772,
+      "filters": [
+        {
+          "value": [],
+          "column_name": "batch",
+          "interactive_component_type": "MultiSelect",
+          "filter_expr": "col('value_f64') > 0.5"
+        }
+      ]
+    }
+  },
+  "aggregates_parity": {
+    "full": {
+      "value_f64": {
+        "q1": -1.36753925,
+        "q3": 1.34355925,
+        "percentile": 0.033745,
+        "skewness": -0.03205637065863623,
+        "kurtosis": -0.04819114919482237
+      },
+      "value_i64": {
+        "q1": 51.0,
+        "q3": 154.0,
+        "percentile": 105.0,
+        "skewness": 6.183661294891656,
+        "kurtosis": 36.275992372378
+      },
+      "metric_f64_nn": {
+        "q1": 24.9375,
+        "q3": 274.8125,
+        "percentile": 149.875,
+        "skewness": 0.0,
+        "kurtosis": -1.2000000000000006
+      }
+    },
+    "masked_in_str": {
+      "value_f64": {
+        "q1": -1.3070374999999999,
+        "q3": 1.44239325,
+        "percentile": 0.1164425,
+        "skewness": -0.02743728733707118,
+        "kurtosis": -0.13131487801572872
+      },
+      "value_i64": {
+        "q1": 49.0,
+        "q3": 153.0,
+        "percentile": 101.0,
+        "skewness": 7.053203361000852,
+        "kurtosis": 47.84345652749015
+      },
+      "metric_f64_nn": {
+        "q1": 19.8125,
+        "q3": 277.6875,
+        "percentile": 150.5,
+        "skewness": 0.008350886391960053,
+        "kurtosis": -1.2410130118393505
+      }
+    },
+    "empty": {
+      "value_f64": {
+        "q1": null,
+        "q3": null,
+        "percentile": null,
+        "skewness": null,
+        "kurtosis": null
+      },
+      "value_i64": {
+        "q1": null,
+        "q3": null,
+        "percentile": null,
+        "skewness": null,
+        "kurtosis": null
+      },
+      "metric_f64_nn": {
+        "q1": null,
+        "q3": null,
+        "percentile": null,
+        "skewness": null,
+        "kurtosis": null
+      }
+    },
+    "tiny": {
+      "value_f64": {
+        "q1": -0.316994,
+        "q3": 0.6382365,
+        "percentile": -0.288181,
+        "skewness": 1.726573565198633,
+        "kurtosis": null
+      },
+      "value_i64": {
+        "q1": 96.5,
+        "q3": 162.5,
+        "percentile": 137.0,
+        "skewness": -0.660766584823976,
+        "kurtosis": null
+      },
+      "metric_f64_nn": {
+        "q1": -99.875,
+        "q3": -99.625,
+        "percentile": -99.75,
+        "skewness": 0.0,
+        "kurtosis": null
+      }
+    }
+  },
+  "polars_version": "1.43.2"
 }

@@ -46,6 +46,138 @@ CATEGORY_WEIGHTS = [0.34, 0.22, 0.18, 0.16, 0.10]
 BATCHES = [1, 2, 3, 4, 5]
 
 EPOCH = datetime(1970, 1, 1)
+
+#: Component-static filter_exprs the binding cases AND in (card / interactive
+#: ``filter_expr`` — the seeds' own shapes: comparisons, null checks, is_in).
+FILTER_EXPRS = [
+    "col('value_f64') > 0.5",
+    "(col('category_str') != 'alpha') & col('value_i64').is_not_null()",
+    "col('batch').is_in([1, 3])",
+]
+
+#: Viewer filter payloads (InteractiveFilter shape) whose rows the TS binder
+#: (filterBinding.bindFilters) + mask kernel must reproduce. Expected rows are
+#: what the SERVER keeps: clean_filter_payload → process_metadata_and_filter.
+BINDING_CASES: dict[str, list[dict]] = {
+    # TextInput: case-insensitive regex by default (text_filter_pattern).
+    "text_ci_default": [
+        {"value": "ALP", "column_name": "category_str", "interactive_component_type": "TextInput"}
+    ],
+    "text_case_sensitive": [
+        {
+            "value": "ALP",
+            "column_name": "category_str",
+            "interactive_component_type": "TextInput",
+            "metadata": {"case_sensitive": True},
+        }
+    ],
+    "text_regex_ci_anchored": [
+        {
+            "value": "^(ALPHA|beta)$",
+            "column_name": "category_str",
+            "interactive_component_type": "TextInput",
+        }
+    ],
+    "text_contains_literal_meta": [
+        {
+            "value": "^al",
+            "column_name": "category_str",
+            "interactive_component_type": "TextInput",
+            "metadata": {"match_mode": "contains"},
+        }
+    ],
+    "text_contains_ci": [
+        {
+            "value": "AMM",
+            "column_name": "category_str",
+            "interactive_component_type": "TextInput",
+            "match_mode": "contains",
+        }
+    ],
+    "text_trimmed": [
+        {
+            "value": "  gam  ",
+            "column_name": "category_str",
+            "interactive_component_type": "TextInput",
+        }
+    ],
+    "text_invalid_regex_is_no_filter": [
+        {"value": "(", "column_name": "category_str", "interactive_component_type": "TextInput"}
+    ],
+    "text_numeric_column": [
+        {"value": "^4", "column_name": "value_i64", "interactive_component_type": "TextInput"}
+    ],
+    # Slider: >= unless slider_mode says otherwise (_slider_predicate).
+    "slider_default_gte": [
+        {"value": 42, "column_name": "value_i64", "interactive_component_type": "Slider"}
+    ],
+    "slider_lt_meta": [
+        {
+            "value": 0.5,
+            "column_name": "value_f64",
+            "interactive_component_type": "Slider",
+            "metadata": {"slider_mode": "lt"},
+        }
+    ],
+    "slider_eq": [
+        {
+            "value": 42,
+            "column_name": "value_i64",
+            "interactive_component_type": "Slider",
+            "slider_mode": "eq",
+        }
+    ],
+    "slider_ne": [
+        {
+            "value": 42,
+            "column_name": "value_i64",
+            "interactive_component_type": "Slider",
+            "slider_mode": "ne",
+        }
+    ],
+    "slider_zero_is_a_value": [
+        {"value": 0, "column_name": "value_f64", "interactive_component_type": "Slider"}
+    ],
+    # filter_expr ANDed after the entry's own predicate.
+    "multiselect_with_filter_expr": [
+        {
+            "value": ["2", "4"],
+            "column_name": "batch",
+            "interactive_component_type": "MultiSelect",
+            "filter_expr": FILTER_EXPRS[0],
+        }
+    ],
+    "text_with_filter_expr_in_metadata": [
+        {
+            "value": "a",
+            "column_name": "category_str",
+            "interactive_component_type": "TextInput",
+            "metadata": {"filter_expr": FILTER_EXPRS[1]},
+        }
+    ],
+    "range_with_isin_filter_expr": [
+        {
+            "value": [-1.0, 2.0],
+            "column_name": "value_f64",
+            "interactive_component_type": "RangeSlider",
+            "filter_expr": FILTER_EXPRS[2],
+        }
+    ],
+    # An empty value drops the whole entry — its filter_expr with it.
+    "empty_value_drops_its_filter_expr": [
+        {
+            "value": [],
+            "column_name": "batch",
+            "interactive_component_type": "MultiSelect",
+            "filter_expr": FILTER_EXPRS[0],
+        }
+    ],
+}
+
+#: Card aggregations defined by the server's _agg_value / precompute parity
+#: table rather than spelled out in the kernel (q1/q3 quantiles, the bias-
+#: corrected skew/kurtosis, `percentile`).
+PARITY_AGGS = ["q1", "q3", "percentile", "skewness", "kurtosis"]
 DATE_LO = datetime(2023, 1, 1)
 
 
@@ -106,10 +238,14 @@ def main() -> None:
     # codebooks) and ``__ts__event_date`` (epoch-µs Int64) come from
     # depictio.serverless.companions.build_companions, so the fixture's
     # codebook keys are exactly what production bundles will carry.
+    base_df = df  # the server's view: no companions
     companion_result = build_companions(
         df,
         categorical_cols=["batch", "flag_bool", "category_str"],  # String col → no codebook
         datetime_cols=["event_date"],
+        # Component-static filter_exprs → ``__fe__<sha8>`` Boolean companions,
+        # evaluated with the server's build_filter_expr (RFC §5).
+        filter_exprs=FILTER_EXPRS,
     )
     df = companion_result.df
     assert "category_str" not in companion_result.codebooks  # String stays direct
@@ -357,9 +493,7 @@ def main() -> None:
         "str_asc_tail": sort_slice_case(
             ["category_str"], [False], tail, 10, value_col="category_str"
         ),
-        "str_desc_head": sort_slice_case(
-            ["category_str"], [True], 0, 10, value_col="category_str"
-        ),
+        "str_desc_head": sort_slice_case(["category_str"], [True], 0, 10, value_col="category_str"),
         "bool_asc_head": sort_slice_case(["flag_bool"], [False], 0, 10, value_col="flag_bool"),
         "date_asc_head": sort_slice_case(["event_date"], [False], 0, 10),
         "date_desc_head": sort_slice_case(["event_date"], [True], 0, 10),
@@ -378,6 +512,36 @@ def main() -> None:
         "masked_in_str_natural": sort_slice_case([], [], 5, 10, filter_expr=in_str_expr),
     }
 
+    # ---- binding cases (server: clean_filter_payload → process_metadata_and_filter)
+    from depictio.api.v1.deltatables_utils import (
+        clean_filter_payload,
+        process_metadata_and_filter,
+    )
+
+    binding: dict[str, dict] = {}
+    for name, payload in BINDING_CASES.items():
+        exprs = process_metadata_and_filter(
+            clean_filter_payload(payload), schema=dict(base_df.schema)
+        )
+        mask_expr = pl.all_horizontal(exprs) if exprs else pl.lit(True)
+        binding[name] = {**mask_summary(mask_expr), "filters": payload}
+
+    # ---- parity aggregations (server _agg_value) ---------------------------
+    from depictio.api.v1.endpoints.dashboards_endpoints.routes import _agg_value
+
+    aggregates_parity = {
+        block: {
+            col: {agg: _agg_value(frame[col], agg) for agg in PARITY_AGGS}
+            for col in ("value_f64", "value_i64", "metric_f64_nn")
+        }
+        for block, frame in (
+            ("full", df),
+            ("masked_in_str", masked_df),
+            ("empty", df.head(0)),
+            ("tiny", df.head(3)),
+        )
+    }
+
     expected = {
         "rows": N,
         "row_group_size": ROW_GROUP_SIZE,
@@ -390,6 +554,8 @@ def main() -> None:
         "unique": unique,
         "minmax": minmax_block,
         "sort_slice": sort_slice,
+        "binding": binding,
+        "aggregates_parity": aggregates_parity,
         "polars_version": pl.__version__,
     }
 

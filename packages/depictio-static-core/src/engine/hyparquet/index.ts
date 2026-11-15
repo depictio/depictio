@@ -264,16 +264,65 @@ export class HyparquetEngine implements QueryEngine {
         };
       }
 
-      case 'contains': {
+      case 'cmp': {
         if (!t.columnNames.includes(filter.column)) return 'skip';
-        // Polars str.contains(pattern): REGEX, case-sensitive, unanchored
-        // (add_filter:260-262). An invalid pattern throws — the server load
-        // errors too. JS RegExp and Rust regex agree on the common syntax;
-        // exotic constructs (look-around works here but not in Rust) diverge.
-        const regex = new RegExp(filter.pattern);
+        const target = filter.value;
+        const op = filter.op;
         return {
           values: this.cachedColumn(t, filter.column),
-          predicate: (v) => typeof v === 'string' && regex.test(v),
+          predicate: (v) => {
+            if (v == null || target == null) return false;
+            const c = compareScalar(v, target);
+            if (c === null) return false;
+            switch (op) {
+              case 'gte':
+                return c >= 0;
+              case 'gt':
+                return c > 0;
+              case 'lte':
+                return c <= 0;
+              case 'lt':
+                return c < 0;
+              case 'eq':
+                return c === 0;
+              case 'ne':
+                return c !== 0;
+            }
+          },
+        };
+      }
+
+      case 'flag': {
+        if (!t.columnNames.includes(filter.column)) return 'skip';
+        return {
+          values: this.cachedColumn(t, filter.column),
+          predicate: (v) => v === true || v === 1,
+        };
+      }
+
+      case 'contains': {
+        if (!t.columnNames.includes(filter.column)) return 'skip';
+        // Polars str.contains(pattern, literal): an unanchored REGEX unless
+        // literal. `flags: 'i'` stands for the server's `(?i)` prefix. A
+        // non-string column is matched on its text form (`cast(Utf8)`); JS
+        // renders an integral float without the `.0` Polars writes, the one
+        // known divergence there. JS RegExp and Rust regex agree on the common
+        // syntax; exotic constructs (look-around) diverge.
+        const literal = filter.literal === true;
+        const regex = literal ? null : new RegExp(filter.pattern, filter.flags ?? '');
+        const text = (v: unknown): string | null => {
+          if (typeof v === 'string') return v;
+          if (typeof v === 'number' || typeof v === 'bigint') return String(v);
+          if (typeof v === 'boolean') return v ? 'true' : 'false';
+          return null;
+        };
+        return {
+          values: this.cachedColumn(t, filter.column),
+          predicate: (v) => {
+            const s = text(v);
+            if (s === null) return false;
+            return regex ? regex.test(s) : s.includes(filter.pattern);
+          },
         };
       }
     }
@@ -432,6 +481,37 @@ function numericKey(v: unknown): string | null {
   }
   if (typeof v === 'boolean') return v ? '1' : '0';
   return null;
+}
+
+/** Order of two non-null scalars for a Slider compare, or null when they do
+ *  not compare (Polars raises there, and the filter keeps nothing). Integers
+ *  compare exactly in BigInt space; a numeric string value compares as its
+ *  number (the slider's value arrives as a JSON number either way). */
+function compareScalar(a: unknown, b: unknown): number | null {
+  const num = (x: unknown): number | bigint | null => {
+    if (typeof x === 'number') return Number.isNaN(x) ? null : x;
+    if (typeof x === 'bigint') return x;
+    if (typeof x === 'boolean') return x ? 1 : 0;
+    if (typeof x === 'string' && x.trim() !== '' && !Number.isNaN(Number(x))) return Number(x);
+    return null;
+  };
+  if (typeof a === 'string' && typeof b === 'string') return a < b ? -1 : a > b ? 1 : 0;
+  const x = num(a);
+  const y = num(b);
+  if (x === null || y === null) return null;
+  if (typeof x === 'bigint' || typeof y === 'bigint') {
+    const bothInt =
+      (typeof x === 'bigint' || Number.isInteger(x)) && (typeof y === 'bigint' || Number.isInteger(y));
+    if (bothInt) {
+      const bx = BigInt(x);
+      const by = BigInt(y);
+      return bx < by ? -1 : bx > by ? 1 : 0;
+    }
+    const fx = Number(x);
+    const fy = Number(y);
+    return fx < fy ? -1 : fx > fy ? 1 : 0;
+  }
+  return x < y ? -1 : x > y ? 1 : 0;
 }
 
 function asHyTable(h: TableHandle): HyTable {

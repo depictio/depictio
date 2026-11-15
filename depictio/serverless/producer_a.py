@@ -808,12 +808,22 @@ def live_column_sets(stored_metadata: list[dict[str, Any]]) -> dict[str, set[str
 
 
 def interactive_filter_columns(stored_metadata: list[dict[str, Any]]) -> set[str]:
-    """Column names any interactive component filters on (cross-DC candidates)."""
-    return {
-        comp["column_name"]
-        for comp in stored_metadata
-        if comp.get("component_type") == "interactive" and comp.get("column_name")
-    }
+    """Column names any interactive component filters on (cross-DC candidates).
+
+    Includes the columns of each interactive ``filter_expr``: the scope travels
+    with the filter to every DC carrying its column, and its ``__fe__``
+    companion can only be evaluated where the expression's columns survived.
+    """
+    from depictio.serverless.pruning import filter_expr_columns
+
+    out: set[str] = set()
+    for comp in stored_metadata:
+        if comp.get("component_type") != "interactive":
+            continue
+        if comp.get("column_name"):
+            out.add(comp["column_name"])
+        out |= filter_expr_columns(comp.get("filter_expr"))
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -1807,9 +1817,17 @@ def _bundle_data_refs(
         # frame — including cross-DC ones, which is why *all* interactive
         # components are passed (``_companion_targets`` schema-guards).
         categorical_cols, datetime_cols = _companion_targets(interactive_comps, df)
-        from depictio.serverless.companions import build_companions
+        from depictio.serverless.companions import build_companions, filter_expr_targets
 
-        result = build_companions(df, categorical_cols, datetime_cols)
+        # Component-static filter_exprs: this DC's own components (a card's row
+        # scoping) plus every interactive scope, which travels with its filter
+        # to any DC carrying the column (``__fe__`` companions, RFC §5).
+        result = build_companions(
+            df,
+            categorical_cols,
+            datetime_cols,
+            filter_expr_targets([*comps, *interactive_comps]),
+        )
         pruned_frames[dc_id] = result.df
 
         blob_key = f"dc_{dc_id}"
