@@ -21,10 +21,13 @@ Three things move together and are pinned here:
 from __future__ import annotations
 
 from pathlib import Path
+from typing import get_args
 
 import polars as pl
 import pytest
 
+from depictio.api.v1.services.export.capabilities import SERVERLESS_KINDS
+from depictio.models.components.types import AdvancedVizKind
 from depictio.models.models.dashboards import DashboardDataLite
 from depictio.models.models.serverless import ComponentTier, RuntimeLimits, TierReason
 from depictio.serverless.preflight import classify_component
@@ -45,34 +48,14 @@ from depictio.serverless.pruning import (
 )
 
 # Every kind of depictio/models/components/types.py::AdvancedVizKind.
-ALL_VIZ_KINDS = (
-    "volcano",
-    "embedding",
-    "manhattan",
-    "stacked_taxonomy",
-    "phylogenetic",
-    "rarefaction",
-    "da_barplot",
-    "enrichment",
-    "complex_heatmap",
-    "upset_plot",
-    "ma",
-    "dot_plot",
-    "lollipop",
-    "qq",
-    "sunburst",
-    "oncoplot",
-    "coverage_track",
-    "sankey",
-)
+ALL_VIZ_KINDS = tuple(get_args(AdvancedVizKind))
 
-# The 14 kinds the browser can serve itself (everything but the Celery
-# computes), of which the 13 purely tabular ones go live. ``coverage_track``
-# counts here even though it dispatches server-side: its task is row-wise plus
-# a partitioned rolling mean, so the runtime replays it from the same bundled
-# Parquet the /advanced_viz/data kinds read.
+# The per-kind serverless table (export/capabilities.SERVERLESS_KINDS) decides,
+# never elimination. ``coverage_track`` is live through its replayed compute
+# (``compute_live``): its task is row-wise plus a partitioned rolling mean, so
+# the runtime replays it from the same bundled Parquet the data kinds read.
+LIVE_KINDS = tuple(k for k in ALL_VIZ_KINDS if SERVERLESS_KINDS[k].tier == "live")
 DATA_PATH_KINDS = tuple(k for k in ALL_VIZ_KINDS if k not in CELERY_VIZ_KINDS)
-LIVE_KINDS = tuple(k for k in DATA_PATH_KINDS if k not in NON_TABULAR_VIZ_KINDS)
 
 
 def _spec_comp(kind: str, **config) -> dict:
@@ -104,15 +87,27 @@ def _stored_comp(kind: str, **config) -> dict:
 # ---------------------------------------------------------------------------
 
 
-def test_the_three_kind_families_partition_every_kind():
-    """No kind falls between the stools: 13 live, 4 Celery, 1 tree = 18."""
+def test_every_kind_has_exactly_one_explicit_serverless_tier():
+    """No kind falls between the stools, and none is live by elimination."""
+    assert set(SERVERLESS_KINDS) == set(ALL_VIZ_KINDS)
     celery = [k for k in ALL_VIZ_KINDS if k in CELERY_VIZ_KINDS]
-    assert len(celery) == 4  # 'upset' is a legacy alias of 'upset_plot'
     assert "coverage_track" not in CELERY_VIZ_KINDS  # live since phase 8
     assert NON_TABULAR_VIZ_KINDS == {"phylogenetic"}
-    assert len(DATA_PATH_KINDS) == 14
-    assert len(LIVE_KINDS) == 13
-    assert set(LIVE_KINDS) | set(celery) | NON_TABULAR_VIZ_KINDS == set(ALL_VIZ_KINDS)
+    omitted = {k for k in ALL_VIZ_KINDS if SERVERLESS_KINDS[k].tier == "omitted"}
+    assert set(LIVE_KINDS) | set(celery) | NON_TABULAR_VIZ_KINDS | omitted == set(ALL_VIZ_KINDS)
+    # The renderer-fetching kinds the deny-list used to call live.
+    for kind in ("molecule_3d", "pae_matrix", "ramachandran"):
+        assert SERVERLESS_KINDS[kind].tier != "live", kind
+    # Table-driven embeddings are a plain data path; compute_method ones are not.
+    assert serves_advanced_viz_live(_spec_comp("embedding", dim_x_col="x", dim_y_col="y"))
+    assert not serves_advanced_viz_live(_spec_comp("embedding", compute_method="umap", x_col="x"))
+
+
+def test_an_unknown_kind_is_omitted_not_live():
+    comp = _spec_comp("some_future_kind")
+    assert serves_advanced_viz_live(comp) is False
+    assert classify_component(comp).tier is ComponentTier.OMITTED
+    assert classify_stored_component(_stored_comp("some_future_kind")).tier is ComponentTier.OMITTED
 
 
 @pytest.mark.parametrize("kind", LIVE_KINDS)
@@ -153,14 +148,23 @@ def test_producer_a_freezes_a_derivable_celery_compute():
     assert request["filter_metadata"] == []  # the default filter state
 
 
-def test_producer_a_freezes_a_table_driven_embedding_via_the_data_path():
+def test_a_table_driven_embedding_is_live_in_both_producers():
     """No ``compute_method`` ⇒ the renderer never dispatches: it reads
-    dim_*_col off the table, so that is the path producer A freezes."""
+    dim_*_col off the table, a plain data path the browser serves under every
+    filter (it used to be frozen as a Celery kind)."""
     comp = _stored_comp("embedding", sample_id_col="sample_id", dim_1_col="d1", dim_2_col="d2")
     assert celery_compute_request(comp) is None
     plan = classify_stored_component(comp)
-    assert (plan.tier, plan.reason) == (ComponentTier.FROZEN, TierReason.UNSUPPORTED)
-    assert plan.detail and "compute_method" in plan.detail
+    assert (plan.tier, plan.reason) == (ComponentTier.LIVE, None)
+    b = classify_component(_spec_comp("embedding", dim_1_col="d1", dim_2_col="d2"))
+    assert b.tier is ComponentTier.LIVE
+
+
+def test_a_computed_embedding_is_frozen_by_producer_a():
+    comp = _stored_comp("embedding", sample_id_col="s", compute_method="pca", color_col="g")
+    assert celery_compute_request(comp) is not None
+    plan = classify_stored_component(comp)
+    assert (plan.tier, plan.reason) == (ComponentTier.FROZEN, TierReason.CELERY_COMPUTE)
 
 
 def test_producer_a_omits_a_celery_kind_it_cannot_call():
@@ -375,7 +379,7 @@ def test_pruning_ignores_celery_and_phylogenetic_advanced_viz():
     """They are omitted, so they must not conjure a DC entry of their own."""
     spec = _spec(
         [
-            _spec_comp("embedding", embedding_col="umap"),
+            _spec_comp("embedding", compute_method="umap", embedding_col="umap"),
             _spec_comp("phylogenetic", leaf_col="tip", tree_dc_id="8" * 24),
         ]
     )
@@ -437,7 +441,7 @@ def test_live_advanced_viz_bundles_its_columns_and_freezes_nothing(av_data_dir: 
 
 def test_omitted_advanced_viz_bundles_no_data(av_data_dir: Path):
     """A Celery kind is omitted, so its DC is never read at all."""
-    spec = _spec([_spec_comp("embedding", embedding_col="species")])
+    spec = _spec([_spec_comp("embedding", compute_method="umap", embedding_col="species")])
     manifest = build_manifest(spec, av_data_dir).manifest
     assert manifest.tiers["av-embedding"].tier is ComponentTier.OMITTED
     assert manifest.data_refs == {} and manifest.inline_blobs == {}

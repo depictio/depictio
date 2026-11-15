@@ -17,10 +17,10 @@ from typing import Any
 
 from depictio.models.models.dashboards import DashboardDataLite
 from depictio.models.models.serverless import ComponentTier, TierReason
+from depictio.serverless.companions import filter_expr_companionable
 from depictio.serverless.prologue import transpile_with_reason
 from depictio.serverless.pruning import (
-    CELERY_VIZ_KINDS,
-    NON_TABULAR_VIZ_KINDS,
+    advanced_viz_capability,
     advanced_viz_columns,
     advanced_viz_kind,
     component_as_dict,
@@ -157,6 +157,16 @@ def classify_component(comp: dict[str, Any]) -> PlannedTier:
     ctype = comp.get("component_type") or ""
 
     if ctype in _LIVE_TYPES:
+        expr = comp.get("filter_expr")
+        if ctype == "card" and expr and not filter_expr_companionable(expr):
+            # A window filter_expr (``.over()``) has no build-time ``__fe__``
+            # companion, and producer B has no server to freeze the card with.
+            return PlannedTier(
+                ComponentTier.OMITTED,
+                TierReason.UNSUPPORTED,
+                "the card's filter_expr is a window expression (.over()), which the "
+                "browser cannot re-evaluate under filters",
+            )
         return PlannedTier(ComponentTier.LIVE)
 
     if ctype == "table":
@@ -262,13 +272,16 @@ def classify_component(comp: dict[str, Any]) -> PlannedTier:
         )
     if ctype == "advanced_viz":
         kind = advanced_viz_kind(comp)
-        if kind in CELERY_VIZ_KINDS:
+        # One explicit per-kind verdict (export/capabilities.SERVERLESS_KINDS),
+        # never "live by elimination".
+        cap = advanced_viz_capability(comp)
+        if cap.path in ("celery", "per_interaction"):
             return PlannedTier(
                 ComponentTier.OMITTED,
                 TierReason.CELERY_COMPUTE,
-                f"advanced_viz '{kind}' is a server-side Celery compute (producer A)",
+                f"advanced_viz '{kind}' is a server-side Celery compute (producer A): {cap.reason}",
             )
-        if kind in NON_TABULAR_VIZ_KINDS:
+        if cap.path == "tree":
             # The tree lives in a second, non-tabular data collection (Newick),
             # which producer B has no way to read or bundle — and, unlike
             # producer A, no frozen payload to fall back on.
@@ -277,6 +290,12 @@ def classify_component(comp: dict[str, Any]) -> PlannedTier:
                 TierReason.UNSUPPORTED,
                 f"advanced_viz '{kind}' also reads a non-tabular tree data collection "
                 "(Newick); producer B bundles tabular Parquet only",
+            )
+        if cap.tier != "live":
+            return PlannedTier(
+                ComponentTier.OMITTED,
+                TierReason.UNSUPPORTED,
+                f"advanced_viz '{kind or '?'}': {cap.reason}",
             )
         if not (comp.get("workflow_tag") and comp.get("data_collection_tag")):
             return PlannedTier(

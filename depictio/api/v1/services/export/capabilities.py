@@ -31,6 +31,7 @@ depends on the view it opens on, which :func:`component_formats` resolves throug
 ``services/advanced_viz/views.py``.
 """
 
+from dataclasses import dataclass
 from enum import Enum
 from typing import Literal, get_args
 
@@ -216,6 +217,178 @@ AV_JSON_SOURCE: dict[str, AvJsonSource] = {
 }
 
 
+# --- Serverless bundle tier (PR #963) -------------------------------------------
+#
+# How the single-file serverless bundle (``depictio/serverless``) serves each
+# advanced-viz kind. Explicit per kind, never by elimination: the bundle used to
+# call every kind outside two deny-lists "live", which is how three
+# renderer-fetching kinds shipped as stubs that could not draw. A kind added to
+# ``AdvancedVizKind`` without an entry here fails the self-check below and
+# ``depictio/tests/unit/serverless/test_serverless_capabilities.py``.
+#
+# ``path`` says where the tile's data comes from in the bundle:
+#
+# ``data``            — ``fetchAdvancedVizData`` over the bundled Parquet: mask,
+#                       project, reduce by the kind's sampling policy, the real
+#                       renderer draws it. Filters recompute in the browser.
+# ``compute_live``    — a server compute whose every step commutes with the
+#                       filters, replayed in the browser (``coverage_track``).
+# ``celery``          — a server compute with no browser twin: run at export at
+#                       the default filter state and shipped frozen.
+# ``tree``            — a second, non-tabular source (a Newick tree): frozen.
+# ``per_interaction`` — computed per zoom window / per pair of selections, so
+#                       no snapshot stands for it.
+# ``objects``         — the renderer fetches object-store files or a structure
+#                       resolver at render time, outside ``api.ts``.
+ServerlessTier = Literal["live", "frozen", "omitted"]
+ServerlessPath = Literal["data", "compute_live", "celery", "tree", "per_interaction", "objects"]
+
+
+@dataclass(frozen=True)
+class ServerlessCapability:
+    """One kind's serverless verdict: tier, data path, and the reason when not live."""
+
+    tier: ServerlessTier
+    path: ServerlessPath
+    reason: str | None = None
+
+
+_LIVE = ServerlessCapability("live", "data")
+
+_CELERY_REASON = (
+    "computed on the server ({kind}); frozen at the export's default filter state, "
+    "so filters do not reach it"
+)
+_OBJECTS_REASON = (
+    "{kind} fetches {what} at render time, outside the bundle; not exportable to a "
+    "zero-network single-file bundle yet"
+)
+
+SERVERLESS_KINDS: dict[str, ServerlessCapability] = {
+    **{
+        kind: _LIVE
+        for kind in (
+            "volcano",
+            # Table-driven (``dim_*_col``): a plain data path. ``compute_method``
+            # embeddings dispatch to Celery instead; see ``serverless_capability``.
+            "embedding",
+            "manhattan",
+            "stacked_bar",
+            "stacked_taxonomy",
+            "rarefaction",
+            "da_barplot",
+            "enrichment",
+            "ma",
+            "dot_plot",
+            "lollipop",
+            "qq",
+            "sunburst",
+            "oncoplot",
+            "pr_benchmark",
+            "roc_pr_curve",
+            "confusion_matrix",
+            "metric_ci_bars",
+            "profile",
+            "signal_matrix",
+            "fusion_structure",
+            "gene_arrow_track",
+            "gsea_running_score",
+            "sashimi",
+            "scatter_xy",
+            "knee_plot",
+            "damage_profile",
+            "genome_view",
+            "transcript_structure",
+            "cnv_profile",
+            "genome_chord",
+            "ideogram",
+            "record_card",
+            "parallel_coordinates",
+            "msa",
+            "sequence_track",
+            "hmm_logo",
+            "secondary_structure",
+            "domain_architecture",
+            "ranked_distribution",
+            "spatial_cells",
+            "allele_grid",
+            "pedigree",
+            "ranked_table",
+        )
+    },
+    "coverage_track": ServerlessCapability("live", "compute_live"),
+    **{
+        kind: ServerlessCapability("frozen", "celery", _CELERY_REASON.format(kind=kind))
+        for kind in ("complex_heatmap", "upset_plot", "sankey")
+    },
+    "phylogenetic": ServerlessCapability(
+        "frozen",
+        "tree",
+        "also reads a Newick tree data collection; frozen at the export's default filter "
+        "state with the tree merged in",
+    ),
+    "contact_map": ServerlessCapability(
+        "omitted",
+        "per_interaction",
+        "a contact map computes each zoom window on the server as it is explored; no "
+        "snapshot stands for it",
+    ),
+    "group_compare": ServerlessCapability(
+        "omitted",
+        "per_interaction",
+        "a group comparison computes on the server for the two groups picked in the "
+        "tile; no snapshot stands for it",
+    ),
+    "molecule_3d": ServerlessCapability(
+        "omitted",
+        "objects",
+        _OBJECTS_REASON.format(kind="a 3D structure tile", what="its structure file"),
+    ),
+    "pae_matrix": ServerlessCapability(
+        "omitted",
+        "objects",
+        _OBJECTS_REASON.format(kind="a PAE matrix", what="its matrix file"),
+    ),
+    "ramachandran": ServerlessCapability(
+        "omitted",
+        "objects",
+        _OBJECTS_REASON.format(kind="a Ramachandran plot", what="its structure file"),
+    ),
+}
+
+#: Retired / dispatcher spellings that reach the bundle in stored metadata.
+_SERVERLESS_ALIASES = {"upset": "upset_plot"}
+
+#: ``compute_method`` values an ``embedding`` dispatches to Celery with.
+EMBEDDING_COMPUTE_REASON = (
+    "embedding computed on the server ({method}); frozen at the export's default "
+    "filter state, so filters do not reach it"
+)
+
+
+def serverless_capability(component: dict) -> ServerlessCapability:
+    """The serverless verdict for one ``advanced_viz`` component, sub-modes included.
+
+    An unknown kind is omitted, never assumed live. An ``embedding`` that names a
+    ``compute_method`` dispatches a Celery job (UMAP/t-SNE/PCA/PCoA) instead of
+    reading its coordinates from the table, so it is a ``celery`` kind there.
+    """
+    config = component.get("config") or {}
+    raw = component.get("viz_kind") or config.get("viz_kind") or ""
+    kind = _SERVERLESS_ALIASES.get(str(raw), str(raw))
+    cap = SERVERLESS_KINDS.get(kind)
+    if cap is None:
+        return ServerlessCapability(
+            "omitted", "objects", f"advanced_viz kind {raw!r} has no serverless tier"
+        )
+    if kind == "embedding" and config.get("compute_method"):
+        method = str(config["compute_method"])
+        return ServerlessCapability(
+            "frozen", "celery", EMBEDDING_COMPUTE_REASON.format(method=method)
+        )
+    return cap
+
+
 def _python_builder_kinds() -> frozenset[str]:
     """Kinds with a registered Python figure builder.
 
@@ -391,8 +564,10 @@ def component_json_source(component: dict, controls: dict | None = None) -> AvJs
 # type into an immediate, obvious failure rather than a 422 in production.
 _MISSING_TYPES = set(get_args(ComponentType)) - set(COMPONENT_FORMATS)
 _MISSING_KINDS = set(get_args(AdvancedVizKind)) - set(AV_JSON_SOURCE)
-if _MISSING_TYPES or _MISSING_KINDS:  # pragma: no cover - guards a coding error
+_MISSING_SERVERLESS = set(get_args(AdvancedVizKind)) - set(SERVERLESS_KINDS)
+if _MISSING_TYPES or _MISSING_KINDS or _MISSING_SERVERLESS:  # pragma: no cover
     raise RuntimeError(
         "export capability matrix is incomplete: "
-        f"component types {sorted(_MISSING_TYPES)}, viz kinds {sorted(_MISSING_KINDS)}"
+        f"component types {sorted(_MISSING_TYPES)}, viz kinds {sorted(_MISSING_KINDS)}, "
+        f"serverless tiers {sorted(_MISSING_SERVERLESS)}"
     )

@@ -126,6 +126,7 @@ from depictio.serverless.binding import (
     miss_tier_reason,
     planned_figure_miss,
 )
+from depictio.serverless.companions import filter_expr_companionable
 from depictio.serverless.preflight import (
     LINK_TIER_A,
     LINK_TIER_B,
@@ -149,7 +150,7 @@ from depictio.serverless.prologue import transpile_with_reason
 from depictio.serverless.prologue_exec import execute_ops, terminal_px_call
 from depictio.serverless.pruning import (
     CELERY_VIZ_KINDS,
-    NON_TABULAR_VIZ_KINDS,
+    advanced_viz_capability,
     advanced_viz_columns,
     advanced_viz_kind,
     advanced_viz_roles,
@@ -534,6 +535,17 @@ def classify_stored_component(comp: dict[str, Any]) -> PlannedTier:
     ctype = comp.get("component_type") or ""
 
     if ctype in ("card", "interactive", "text"):
+        expr = comp.get("filter_expr")
+        if ctype == "card" and expr and not filter_expr_companionable(expr):
+            # A window filter_expr (``.over()``) depends on which rows the
+            # window spans, so no build-time ``__fe__`` companion stands for it:
+            # the card keeps its server value at the default filter state.
+            return PlannedTier(
+                ComponentTier.FROZEN,
+                TierReason.UNSUPPORTED,
+                "the card's filter_expr is a window expression (.over()), which the "
+                "browser cannot re-evaluate under filters; frozen at the default state",
+            )
         return PlannedTier(ComponentTier.LIVE)
 
     if ctype == "table":
@@ -634,7 +646,10 @@ def classify_stored_component(comp: dict[str, Any]) -> PlannedTier:
         )
     if ctype == "advanced_viz":
         kind = advanced_viz_kind(comp)
-        if kind in CELERY_VIZ_KINDS:
+        # One explicit per-kind verdict (export/capabilities.SERVERLESS_KINDS),
+        # never "live by elimination".
+        cap = advanced_viz_capability(comp)
+        if cap.path == "celery":
             # The compute is run at export time by calling the task function
             # directly (the way figures call build_figure_preview) and shipped
             # as a frozen 'compute' payload, which the static runtime's
@@ -645,18 +660,6 @@ def classify_stored_component(comp: dict[str, Any]) -> PlannedTier:
                     TierReason.CELERY_COMPUTE,
                     CELERY_FROZEN_DETAIL.format(kind=kind),
                 )
-            if kind == "embedding" and advanced_viz_request(comp) is not None:
-                # An 'embedding' with no ``compute_method`` never dispatches:
-                # its renderer reads dim_*_col straight off the table
-                # (fetchAdvancedVizData), so the data path is what to freeze.
-                # The other four kinds always dispatch — a frozen /data payload
-                # would feed their popovers and leave the plot itself empty.
-                return PlannedTier(
-                    ComponentTier.FROZEN,
-                    TierReason.UNSUPPORTED,
-                    "advanced_viz 'embedding' has no compute_method: its renderer reads "
-                    "the coordinates from the table, frozen here at the default filter state",
-                )
             return PlannedTier(
                 ComponentTier.OMITTED,
                 TierReason.CELERY_COMPUTE,
@@ -664,7 +667,7 @@ def classify_stored_component(comp: dict[str, Any]) -> PlannedTier:
                 "can be derived from its config (missing workflow/data-collection id "
                 "or required column bindings)",
             )
-        if kind in NON_TABULAR_VIZ_KINDS:
+        if cap.path == "tree":
             return PlannedTier(
                 ComponentTier.FROZEN,
                 TierReason.UNSUPPORTED,
@@ -672,6 +675,14 @@ def classify_stored_component(comp: dict[str, Any]) -> PlannedTier:
                 "(Newick), which one bundled table cannot carry — it stays frozen at "
                 "the default filter state (tree merged in) while the other data-path "
                 "kinds went live in phase 4",
+            )
+        if cap.tier == "omitted":
+            return PlannedTier(
+                ComponentTier.OMITTED,
+                TierReason.CELERY_COMPUTE
+                if cap.path == "per_interaction"
+                else TierReason.UNSUPPORTED,
+                f"advanced_viz '{kind or '?'}': {cap.reason}",
             )
         if not serves_advanced_viz_live(comp) or advanced_viz_request(comp) is None:
             return PlannedTier(
@@ -1184,7 +1195,7 @@ def celery_compute_request(comp: dict[str, Any]) -> tuple[str, dict[str, Any]] |
     or a config missing what its task requires.
     """
     kind = advanced_viz_kind(comp)
-    if kind not in CELERY_VIZ_KINDS:
+    if kind not in CELERY_VIZ_KINDS and kind != "embedding":
         return None
     wf_id, dc_id = comp.get("wf_id"), comp.get("dc_id")
     if not wf_id or not dc_id:

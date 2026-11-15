@@ -22,6 +22,11 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from depictio.api.v1.services.export.capabilities import (
+    SERVERLESS_KINDS,
+    ServerlessCapability,
+    serverless_capability,
+)
 from depictio.models.models.dashboards import DashboardDataLite
 
 # Component types that read tabular data from a DC. Omitted types (multiqc,
@@ -31,43 +36,24 @@ from depictio.models.models.dashboards import DashboardDataLite
 # their config binds must survive pruning (see :func:`advanced_viz_columns`).
 DATA_COMPONENT_TYPES = frozenset({"figure", "card", "interactive", "table", "advanced_viz"})
 
-# advanced_viz kinds whose payload is computed by a Celery dispatch server-side
-# (mirrors ``_ADVANCED_VIZ_DISPATCH_KINDS`` in depictio/catalog/payload.py plus
-# the RFC §2.4 list). They read no columns from a bundled table — there is no
-# in-browser equivalent of the compute — so neither producer bundles data for
-# them.
+# Which advanced_viz kinds the bundle serves, and how, is ONE explicit per-kind
+# table: ``SERVERLESS_KINDS`` in ``api/v1/services/export/capabilities.py``,
+# beside the component export's own capability matrix (its self-check and
+# ``test_serverless_capabilities.py`` fail on a kind without a tier). It used to
+# be a deny-list here — every kind outside two sets was "live" — which is how
+# molecule_3d / pae_matrix / ramachandran shipped as stubs that could not draw.
 #
-# ``coverage_track`` dispatches on the server but is NOT here: its task
-# (``compute_coverage_track``, celery_tasks.py:1340) is a projection, two
-# whitelist row masks, a sort, a per-(chromosome, sample) rolling mean and an
-# every-Nth decimation — all of it row-wise or partitioned by the very columns
-# a dashboard filter masks on, so the mask commutes with the computation and
-# the browser can redo the whole thing (``coverageTrackLive``). Freezing it
-# also cost more than shipping the data: the frozen payload is the aggregated
-# rows as JSON, several times the size of the same rows as bundled Parquet.
-#
-# ``contact_map`` and ``group_compare`` joined the family on main (v1.21): each
-# dispatches its own Celery task (``compute_contact_map`` /
-# ``compute_group_compare``). Neither has an in-browser equivalent nor an
-# export-time request builder (``celery_compute_request``) yet, so both
-# producers omit them with the Celery reason instead of calling them live.
+# The two sets below are views of that table for the producers' compute
+# builders: kinds frozen through an export-time Celery call (``celery``) or not
+# snapshot-able at all (``per_interaction``), and kinds with a second,
+# non-tabular source (``tree``). ``upset`` is the dispatcher's spelling of
+# ``upset_plot``. An ``embedding`` is a data-path kind unless it names a
+# ``compute_method`` — that sub-mode is decided per component
+# (:func:`advanced_viz_capability`), not here.
 CELERY_VIZ_KINDS = frozenset(
-    {
-        "embedding",
-        "complex_heatmap",
-        "upset",
-        "upset_plot",
-        "sankey",
-        "contact_map",
-        "group_compare",
-    }
+    {k for k, c in SERVERLESS_KINDS.items() if c.path in ("celery", "per_interaction")} | {"upset"}
 )
-
-# Data-path kinds that additionally read a SECOND, non-tabular source: the
-# phylogenetic kind pairs its tabular DC with a Newick tree DC (``tree_dc_id``).
-# One DataRef per component is a table, so these cannot go live — producer A
-# freezes them (tree merged into the frozen payload), producer B omits them.
-NON_TABULAR_VIZ_KINDS = frozenset({"phylogenetic"})
+NON_TABULAR_VIZ_KINDS = frozenset(k for k, c in SERVERLESS_KINDS.items() if c.path == "tree")
 
 # `col('name')` / `col("name")` references inside a component-static filter_expr.
 _FILTER_EXPR_COL_RE = re.compile(r"col\(\s*['\"]([^'\"]+)['\"]\s*\)")
@@ -154,19 +140,28 @@ def advanced_viz_roles(comp: dict[str, Any]) -> dict[str, str]:
     }
 
 
+def advanced_viz_capability(comp: dict[str, Any]) -> ServerlessCapability:
+    """The explicit serverless verdict for one advanced_viz component.
+
+    ``SERVERLESS_KINDS`` per kind, plus the per-component sub-modes
+    (``serverless_capability``: an ``embedding`` with a ``compute_method`` is a
+    Celery compute). An unknown kind is omitted, never assumed live.
+    """
+    return serverless_capability(comp)
+
+
 def serves_advanced_viz_live(comp: dict[str, Any]) -> bool:
-    """True when an advanced_viz component's data path is served live (phase 4).
+    """True when an advanced_viz component's data is served live in the browser.
 
     Live means the browser engine reads the bundled Parquet itself, so the
-    component's columns must be bundled. Celery-computed kinds (no in-browser
-    compute) and the phylogenetic kind (second, non-tabular source) are out;
-    a config that binds no column at all is out too — there would be nothing
-    to project, and both producers degrade such a component instead.
+    component's columns must be bundled: the capability table says ``live``
+    (a ``data`` or ``compute_live`` path) AND the config binds at least one
+    column — with none there is nothing to project, and both producers degrade
+    such a component instead.
     """
     if comp.get("component_type") != "advanced_viz":
         return False
-    kind = advanced_viz_kind(comp)
-    if kind in CELERY_VIZ_KINDS or kind in NON_TABULAR_VIZ_KINDS:
+    if advanced_viz_capability(comp).tier != "live":
         return False
     return bool(advanced_viz_columns(comp))
 
