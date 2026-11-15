@@ -425,3 +425,12 @@ def test_export_tasks_have_their_own_queues():
     assert routes["depictio.embed.extract_figure"]["queue"] == settings.celery.export_queue
     assert routes["render_notebook_report"]["queue"] == settings.celery.report_queue
     assert settings.celery.export_queue != "celery" != settings.celery.report_queue
+
+
+def test_the_local_worker_consumes_the_export_queues():
+    from depictio.api.v1.configs.config import settings
+    from depictio.cli.cli.local_stack import LOCAL_WORKER_QUEUES
+
+    assert {"celery", settings.celery.export_queue, settings.celery.report_queue} <= set(
+        LOCAL_WORKER_QUEUES
+    )
