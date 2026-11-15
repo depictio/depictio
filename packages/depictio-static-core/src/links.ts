@@ -126,15 +126,114 @@ export interface SyntheticLinkFilter {
 
 /**
  * Read-pair / lane / replicate / tech suffixes stripped for the base-bucket
- * fallback (resolvers.py:114). Restricted to suffixes with an explicit prefix
- * letter (R/L/REP/TECH) so legit IDs ending in digits ('Sample_2024',
- * 'Patient_42') are never over-stripped onto the same base bucket.
+ * fallback (services/multiqc/sample_matching.py `SAMPLE_SUFFIX_RE`). Restricted
+ * to suffixes with an explicit prefix letter (R/L/REP/TECH) so legit IDs ending
+ * in digits ('Sample_2024', 'Patient_42') are never over-stripped onto the same
+ * base bucket.
  */
 const SAMPLE_SUFFIX_RE = /_(?:R\d+|L\d+|REP\d+|TECH\d+)$/i;
 
-/** Strip `_R1` / `_L001` / `_REP1` / `_TECH1` style suffixes (resolvers.py:120). */
+/** Strip `_R1` / `_L001` / `_REP1` / `_TECH1` style suffixes (`strip_sample_suffix`). */
 function stripSampleSuffix(name: string): string {
   return name.replace(SAMPLE_SUFFIX_RE, '');
+}
+
+/** Python `str(x).strip()`: whitespace trimmed on both ends. */
+function strip(v: unknown): string {
+  return String(v).trim();
+}
+
+/** Push each of `items` onto `into` unless already there (encounter order kept). */
+function mergeUnique(into: string[], items: string[]): void {
+  for (const it of items) if (!into.includes(it)) into.push(it);
+}
+
+/**
+ * Port of `SampleLookup` (services/multiqc/sample_matching.py), the one
+ * implementation the server's `SampleMappingResolver` and MultiQC patching
+ * delegate to. Matching tries, first hit wins:
+ *
+ * 1. exact — the value is a mapping key; targets are the key itself plus its
+ *    variants (a key with no variants resolves to itself and counts as mapped).
+ * 2. variant — the value is one of the variant names; resolves to itself.
+ * 3. base — the value equals a key once suffixes are stripped from the KEYS;
+ *    targets are every such key plus their merged variants.
+ * 4. source-suffix — the same stripping applied to the VALUE, then 1 and 3.
+ * 5. passthrough — unmatched, the stripped value is returned and recorded.
+ *
+ * Whitespace is trimmed on both sides; case folding on both sides unless
+ * `caseSensitive`. Indexes are built in key order, so the answer is
+ * deterministic and matches the server's.
+ */
+class SampleLookup {
+  private readonly exact = new Map<string, [string, string[]]>();
+  private readonly variants = new Map<string, string>();
+  private readonly base = new Map<string, [string[], string[]]>();
+
+  constructor(
+    mappings: Record<string, string[]>,
+    private readonly caseSensitive: boolean,
+  ) {
+    for (const [rawKey, rawVariants] of Object.entries(mappings)) {
+      const key = strip(rawKey);
+      if (!key) continue;
+      const variants = (rawVariants ?? []).map(strip).filter((v) => v.length > 0);
+
+      const nk = this.norm(key);
+      const known = this.exact.get(nk);
+      if (known) mergeUnique(known[1], variants);
+      else this.exact.set(nk, [key, [...variants]]);
+
+      for (const v of variants) {
+        const nv = this.norm(v);
+        if (!this.variants.has(nv)) this.variants.set(nv, v);
+      }
+
+      const b = this.norm(stripSampleSuffix(key));
+      let bucket = this.base.get(b);
+      if (!bucket) {
+        bucket = [[], []];
+        this.base.set(b, bucket);
+      }
+      bucket[0].push(key);
+      mergeUnique(bucket[1], variants);
+    }
+  }
+
+  private norm(value: string): string {
+    return this.caseSensitive ? value : value.toLowerCase();
+  }
+
+  private static forKey([key, variants]: [string, string[]]): string[] {
+    return [...new Set([key, ...variants])];
+  }
+
+  private static forBase([keys, variants]: [string[], string[]]): string[] {
+    return [...new Set([...keys, ...variants])];
+  }
+
+  match(value: unknown): { source: string; matched: boolean; targets: string[] } {
+    const source = strip(value);
+    const nv = this.norm(source);
+
+    const exact = this.exact.get(nv);
+    if (exact) return { source, matched: true, targets: SampleLookup.forKey(exact) };
+
+    const variant = this.variants.get(nv);
+    if (variant !== undefined) return { source, matched: true, targets: [variant] };
+
+    const baseHit = this.base.get(nv);
+    if (baseHit) return { source, matched: true, targets: SampleLookup.forBase(baseHit) };
+
+    const stripped = this.norm(stripSampleSuffix(source));
+    if (stripped !== nv) {
+      const ex = this.exact.get(stripped);
+      if (ex) return { source, matched: true, targets: SampleLookup.forKey(ex) };
+      const bh = this.base.get(stripped);
+      if (bh) return { source, matched: true, targets: SampleLookup.forBase(bh) };
+    }
+    return { source, matched: false, targets: [source] };
+  }
 }
 
 /** `str(v)` for the resolvers: JS String() matches Python str() on the JSON scalars links carry. */
@@ -149,10 +248,10 @@ function toStr(v: unknown): string {
  * `BaseLinkResolver.resolve`.
  *
  * - direct (resolvers.py:61): pass-through, stringified.
- * - sample_mapping (resolvers.py:88): exact key lookup first (a linear
- *   case-folded scan when `case_sensitive` is false), then the suffix-stripped
- *   base-bucket fallback aggregating variants from every key sharing the base;
- *   a value with no mapping is emitted AS-IS and recorded unmapped.
+ * - sample_mapping (resolvers.py → services/multiqc/sample_matching.py):
+ *   exact key, variant identity, suffix-stripped key base, suffix-stripped
+ *   source value (see `SampleLookup`); a value with no mapping is emitted
+ *   as-is and recorded unmapped.
  * - pattern (resolvers.py:192): substitute each value into the '{sample}'
  *   template; a missing pattern falls back to direct.
  * - regex / wildcard (resolvers.py:232/:293): the server always calls these
@@ -176,54 +275,21 @@ export function applyResolver(
       return { resolved: values.map(toStr), unmapped: [] };
 
     case 'sample_mapping': {
-      const mappings = config?.mappings ?? {};
-      const caseSensitive = config?.case_sensitive ?? true;
-
-      // Pre-bucket mapping keys by their stripped base (resolvers.py:147).
-      const baseToVariants = new Map<string, string[]>();
-      for (const [key, variants] of Object.entries(mappings)) {
-        const base = stripSampleSuffix(key);
-        const bucketKey = caseSensitive ? base : base.toLowerCase();
-        const bucket = baseToVariants.get(bucketKey);
-        if (bucket) bucket.push(...variants);
-        else baseToVariants.set(bucketKey, [...variants]);
-      }
-
+      // `expand_samples` (sample_matching.py): order-preserving, deduplicated
+      // across every source value; an unmatched value passes through AND is
+      // recorded unmapped.
+      const lookup = new SampleLookup(config?.mappings ?? {}, config?.case_sensitive ?? true);
       const resolved: string[] = [];
       const unmapped: string[] = [];
+      const seen = new Set<string>();
       for (const val of values) {
-        const strVal = toStr(val);
-        const lookupVal = caseSensitive ? strVal : strVal.toLowerCase();
-
-        // 1. exact key match (resolvers.py:157–164). Python's `if not
-        //    found_mapping` treats an empty variant list like a miss.
-        let found: string[] | null = null;
-        if (caseSensitive) {
-          found = mappings[strVal] ?? null;
-        } else {
-          for (const [key, variants] of Object.entries(mappings)) {
-            if (key.toLowerCase() === lookupVal) {
-              found = variants;
-              break;
-            }
+        const m = lookup.match(val);
+        if (!m.matched) unmapped.push(m.source);
+        for (const t of m.targets) {
+          if (!seen.has(t)) {
+            seen.add(t);
+            resolved.push(t);
           }
-        }
-
-        // 2. base-bucket fallback (resolvers.py:168–173), deduped with
-        //    first-occurrence order (Python dict.fromkeys).
-        if (!found || found.length === 0) {
-          const fallback = baseToVariants.get(lookupVal);
-          if (fallback && fallback.length > 0) {
-            found = [...new Set(fallback)];
-          }
-        }
-
-        if (found && found.length > 0) {
-          resolved.push(...found);
-        } else {
-          // No mapping: pass the value through AND record it (resolvers.py:180).
-          resolved.push(strVal);
-          unmapped.push(strVal);
         }
       }
       return { resolved, unmapped };

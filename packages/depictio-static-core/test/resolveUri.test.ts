@@ -11,6 +11,8 @@ function manifestWithBlobs(blobs: Record<string, string>): BundleManifest {
     built_at: '2026-08-03T00:00:00Z',
     depictio_version: 'test',
     dashboard: { id: 'a'.repeat(24), title: '', doc: {} },
+    tabs: [],
+    provenance: {},
     data_refs: {},
     tiers: {},
     frozen: {},

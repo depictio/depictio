@@ -504,10 +504,16 @@ def test_seed_corpus_classification_is_stable():
     counts = Counter(
         classify(component.get("code_content") or "") for _, component in code_mode_figures()
     )
-    assert sum(counts.values()) == 18
-    # `len` (group size) landed in the phase-6 IR: the four viralrecon
-    # `pl.count().alias('count')` figures moved frozen -> prologue.
-    assert counts == {"free": 4, "prologue": 11, "frozen": 3}
+    assert sum(counts.values()) == 26
+    # Re-baselined on the rebase onto main (v1.21): the reference seeds were
+    # rewritten there (ampliseq 2.18.0, viralrecon 3.0.0 code-mode figures that
+    # build helper frames such as a colour map or `depictio_group_kwargs`
+    # beside the plotted one). The prologue IR covers one frame per figure, so
+    # 15 of the 18 frozen figures are "fig line mixes several prologue frames";
+    # the rest are `.with_columns()` and non-dataframe statements. Before the
+    # rebase the corpus measured 18 figures: {"free": 4, "prologue": 11,
+    # "frozen": 3}.
+    assert counts == {"free": 5, "prologue": 3, "frozen": 18}
 
 
 # ---------------------------------------------------------------------------

@@ -635,14 +635,16 @@ def test_producer_a_precomputes_a_table_for_an_unbundled_source(producer_a_env):
 def test_producer_a_table_goes_through_the_real_server_resolver(producer_a_env):
     """Resolver fidelity: the table is whatever ``resolvers.py`` returns.
 
-    'R1' matches no mapping key exactly; SampleMappingResolver's suffix-stripped
-    base bucket (``_R1``/``_R2``) aggregates the variants of BOTH ``R1_R1`` and
-    ``R1_R2`` — a behaviour no reimplementation would produce by accident.
+    'R1' matches no mapping key exactly; the shared sample matcher's
+    suffix-stripped base bucket (``_R1``/``_R2``) aggregates BOTH ``R1_R1`` and
+    ``R1_R2`` — keys first, then their variants (sample_matching.py keeps the
+    canonical key as a target too) — a behaviour no reimplementation would
+    produce by accident.
     """
     table = producer_a_env(_links()).manifest.links.tables[str(LINK_SRC_B_OID)]
-    assert table.values["R1"] == ["R1_R1_x", "R1_R2_x"]
+    assert table.values["R1"] == ["R1_R1", "R1_R2", "R1_R1_x", "R1_R2_x"]
     # 'R2' matches a key exactly, so the fallback never runs.
-    assert table.values["R2"] == ["R2_y"]
+    assert table.values["R2"] == ["R2", "R2_y"]
 
 
 def test_producer_a_reads_only_the_join_column_of_an_unbundled_source(producer_a_env):

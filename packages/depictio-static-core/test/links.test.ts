@@ -373,7 +373,7 @@ describe('linkTargetColumn', () => {
 });
 
 // ---------------------------------------------------------------------------
-// applyResolver — sample_mapping (test_sample_mapping_resolver.py, 12 cases)
+// applyResolver — sample_mapping (test_sample_mapping_resolver.py, 17 cases)
 // ---------------------------------------------------------------------------
 
 describe('applyResolver / sample_mapping', () => {
@@ -482,6 +482,45 @@ describe('applyResolver / sample_mapping', () => {
     expect(resolved).toContain('DONOR_A_R1');
     expect(resolved).toContain('MISSING');
     expect(unmapped).toEqual(['MISSING']);
+  });
+
+  // Issue #938 regressions (sample_matching.py, shared with MultiQC patching).
+  it('a canonical-only mapping is matched, not unmapped', () => {
+    const { resolved, unmapped } = applyResolver(config({ HG001: [] }), ['HG001']);
+    expect(resolved).toEqual(['HG001']);
+    expect(unmapped).toEqual([]);
+  });
+
+  it('a variant name as the source value matches itself', () => {
+    const { resolved, unmapped } = applyResolver(
+      config({ SRR001: ['SRR001_1', 'SRR001_2'] }),
+      ['SRR001_1'],
+    );
+    expect(resolved).toEqual(['SRR001_1']);
+    expect(unmapped).toEqual([]);
+  });
+
+  it('a suffixed source value matches its base key', () => {
+    const { resolved, unmapped } = applyResolver(config({ HG001: ['HG001 - adapter'] }), [
+      'HG001_R1',
+    ]);
+    expect(unmapped).toEqual([]);
+    expect(resolved).toContain('HG001 - adapter');
+  });
+
+  it('surrounding whitespace does not break matching', () => {
+    const { resolved, unmapped } = applyResolver(config({ HG001: ['HG001_R1'] }), [' HG001 ']);
+    expect(unmapped).toEqual([]);
+    expect(resolved).toContain('HG001_R1');
+  });
+
+  it('dedupes across source values', () => {
+    const mappings = {
+      HG001_R1: ['HG001_R1', 'shared_variant'],
+      HG001_R2: ['HG001_R2', 'shared_variant'],
+    };
+    const { resolved } = applyResolver(config(mappings), ['HG001_R1', 'HG001_R2']);
+    expect(resolved.filter((v) => v === 'shared_variant')).toHaveLength(1);
   });
 });
 
