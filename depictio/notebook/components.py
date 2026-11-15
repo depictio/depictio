@@ -28,6 +28,8 @@ from typing import TYPE_CHECKING, Any
 
 import polars as pl
 
+from . import theme as _theme
+
 if TYPE_CHECKING:  # pragma: no cover
     from .client import DepictioClient
 
@@ -149,7 +151,9 @@ def use_document_renderer() -> bool:
         inner = renderer.to_mimebundle
 
         def to_mimebundle(fig_dict, _inner=inner):
-            bundle = _inner(fig_dict)
+            # The document's look (Paper by default), applied where every
+            # figure displayed bare passes: code-mode figures, the funnel.
+            bundle = _inner(_theme.apply_theme(fig_dict))
             html = bundle.get(HTML_MIME)
             if isinstance(html, str):
                 bundle[HTML_MIME] = _MATHJAX_TAG_RE.sub("", html)
@@ -248,8 +252,11 @@ def figure_bundle(fig) -> dict[str, Any]:
     Plotly's own ``_repr_mimebundle_`` is empty unless a mimetype renderer is
     active, which is not the case in every kernel; building the bundle here
     keeps the figure interactive wherever ``application/vnd.plotly.v1+json``
-    is understood and falls back to inline HTML elsewhere.
+    is understood and falls back to inline HTML elsewhere. The figure wears
+    the document's look (``theme.use_theme``), as the app's chrome restyles
+    every figure it draws.
     """
+    fig = _theme.apply_to_figure(fig)
     return {
         PLOTLY_MIME: json.loads(fig.to_json()),
         HTML_MIME: fig.to_html(full_html=False, include_plotlyjs=PLOTLY_JS),
@@ -684,6 +691,7 @@ class MultiQCGeneralStatsComponent(DepictioComponent):
         except Exception:  # noqa: BLE001 - a table with no numeric column has no violin
             fig = None
         if fig is not None and fig.data:
+            fig = _theme.apply_to_figure(fig)
             html += fig.to_html(full_html=False, include_plotlyjs=PLOTLY_JS)
         bundle[HTML_MIME] = html
         return bundle
@@ -869,12 +877,15 @@ class CardComponent(DepictioComponent):
         return (
             # The card's own frame, as `DepictioCard.css` draws it: a 1.5px
             # gray-2 border at radius 12, not the generic 1px box.
-            f'<div style="position:relative;display:inline-block;min-width:180px;padding:12px 16px;'
-            f"border:1.5px solid #e9ecef;border-radius:12px;font-family:inherit;"
+            # `dpx-card*` are the hooks the report's theme restyles them by.
+            '<div class="dpx-card" style="position:relative;display:inline-block;min-width:180px;'
+            "padding:12px 16px;border:1.5px solid #e9ecef;border-radius:12px;font-family:inherit;"
             f'background:{_html.escape(background)}">'
             f"{icon}"
-            f'<div style="font-size:12px;color:{_html.escape(title_color)}">{_html.escape(self.title)}</div>'
-            f'<div style="font-size:28px;font-weight:600;line-height:1.2">{self._fmt(self.value)}</div>'
+            f'<div class="dpx-card-title" style="font-size:12px;color:{_html.escape(title_color)}">'
+            f"{_html.escape(self.title)}</div>"
+            '<div class="dpx-card-value" style="font-size:28px;font-weight:600;line-height:1.2">'
+            f"{self._fmt(self.value)}</div>"
             f'<div style="font-size:11px;color:#adb5bd">{agg} · {column}</div>'
             f"{self._secondary_html()}</div>"
         )

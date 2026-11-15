@@ -259,6 +259,21 @@ def _funnel(filters):
     )
 
 
+@pytest.fixture(autouse=True)
+def _restore_document_theme():
+    """A document run here turns its theme on for the whole process, as a kernel's
+    would: put Plotly's default template back for the tests after it."""
+    import plotly.io as pio
+
+    from depictio.notebook import theme
+
+    default, state = pio.templates.default, dict(theme._STATE)
+    yield
+    pio.templates.default = default
+    theme._STATE.clear()
+    theme._STATE.update(state)
+
+
 def _run_notebook(source: str, tmp_path, monkeypatch, parameters: dict | None = None):
     BASE_DF.write_parquet(tmp_path / f"{DC1}.parquet")
     monkeypatch.setenv("DEPICTIO_DATA_DIR", str(tmp_path))

@@ -38,6 +38,10 @@ class QuartoFrontMatter:
     # section title onto two lines.
     body_width: str = "1100px"
     margin_width: str = "300px"
+    # The report's theme, as Quarto's brand (``paper_brand``), inline in the
+    # front matter so the export stays one file; ``None`` keeps Quarto's
+    # stock Bootstrap (the classic look).
+    brand: dict[str, Any] | None = None
     extra: dict[str, Any] = field(default_factory=dict)
 
     def to_yaml(self) -> str:
@@ -75,7 +79,59 @@ class QuartoFrontMatter:
             doc["format"]["html"]["include-in-header"] = {
                 "text": f'<link rel="icon" href="{self.favicon_data_uri}">'
             }
+        if self.brand:
+            doc["brand"] = self.brand
         doc["jupyter"] = "python3"
         doc["execute"] = {"warning": False, "echo": self.echo}
         doc.update(self.extra)
         return yaml.safe_dump(doc, sort_keys=False, allow_unicode=True).strip()
+
+
+# Mantine's gray 9 and 6 (the ink and the dimmed text of Paper), and Paper's
+# hairline: gray 9 at 11%.
+_INK = "#212529"
+_MUTED = "#868e96"
+_HAIR = "rgba(33, 37, 41, 0.11)"
+_SYSTEM_SANS = (
+    '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif'
+)
+_MONO = 'Menlo, Monaco, Consolas, "Courier New", monospace'
+
+
+def paper_brand(
+    *,
+    primary: str,
+    font_family: str | None = None,
+    headings_font_family: str | None = None,
+) -> dict[str, Any]:
+    """Depictio's Paper look as a Quarto brand, for one export.
+
+    Quarto 1.9 takes ``brand`` inline in a document's front matter and
+    compiles it into the page's Bootstrap theme: the colours (a white page,
+    gray 9 ink, the instance's primary), Inter in front of the app's UI stack
+    (or the brand's own family), Mantine's line height and Paper's radii and
+    hairlines. The rest of the chrome (sections as paper panels, tiles as
+    cards) is CSS the document's header carries, since it styles markup
+    Bootstrap has no variable for.
+    """
+    sans = font_family or f"'Inter Variable', Inter, {_SYSTEM_SANS}"
+    defaults: dict[str, Any] = {
+        "font-family-sans-serif": sans,
+        "font-family-monospace": _MONO,
+        "line-height-base": 1.55,
+        "headings-font-weight": 700,
+        "body-color": _INK,
+        "body-bg": "#ffffff",
+        "text-muted": _MUTED,
+        "border-color": _HAIR,
+        "border-radius": "0.75rem",
+        "border-radius-sm": "0.5rem",
+        "border-radius-lg": "1.125rem",
+        "code-color": _INK,
+    }
+    if headings_font_family:
+        defaults["headings-font-family"] = headings_font_family
+    return {
+        "color": {"primary": primary, "background": "#ffffff", "foreground": _INK},
+        "defaults": {"bootstrap": {"defaults": defaults}},
+    }

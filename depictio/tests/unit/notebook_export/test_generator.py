@@ -567,3 +567,57 @@ def test_inline_text_icons_become_svg():
     plan.icons = {"mdi:flask": '<svg id="flask"></svg>'}
     src = generate_qmd(plan)
     assert '<svg id="flask"></svg>' in src and "](icon:" not in src
+
+
+def _front(src: str) -> dict:
+    import yaml
+
+    return yaml.safe_load(src.split("\n---\n", 1)[0].removeprefix("---\n"))
+
+
+def test_the_report_is_in_paper_by_default(penguins_tabs):
+    from depictio.api.v1.services.notebook_export.generator import PAPER_CHROME
+
+    plan = penguins_plan(penguins_tabs)
+    plan.brand = {"app_name": "Depictio", "primary": "violet", "font_family": "Lato, sans-serif"}
+    src = generate_qmd(plan)
+    brand = _front(src)["brand"]
+    # The page's Bootstrap theme, from the instance brand, inline (one file).
+    assert brand["color"] == {
+        "primary": "#7950f2",
+        "background": "#ffffff",
+        "foreground": "#212529",
+    }
+    boot = brand["defaults"]["bootstrap"]["defaults"]
+    assert boot["font-family-sans-serif"] == "Lato, sans-serif"
+    assert boot["border-color"] == "rgba(33, 37, 41, 0.11)"
+    # The chrome restyled, with the primary and its ink set beside it.
+    assert PAPER_CHROME in src
+    assert "--dpx-primary: #7950f2; --dpx-accent-fg: #7048e8;" in src
+    assert "--dpx-font: Lato, sans-serif;" in src
+    # The figures and the font: the setup cell turns them on.
+    chunks = python_chunks(src)
+    assert chunks[1].startswith("#| output: asis")
+    assert (
+        "print(use_theme(\"paper\", primary='#7950f2', font_family='Lato, sans-serif'))"
+        in chunks[1]
+    )
+    assert "Paper look" in src.rsplit("---", 1)[1]
+
+
+def test_classic_keeps_quartos_stock_look(penguins_tabs):
+    from depictio.api.v1.services.notebook_export.generator import PAPER_CHROME
+
+    plan = penguins_plan(penguins_tabs)
+    plan.theme = "classic"
+    src = generate_qmd(plan)
+    assert "brand" not in _front(src)
+    assert PAPER_CHROME not in src
+    assert 'print(use_theme("classic"))' in python_chunks(src)[1]
+
+
+def test_unbranded_paper_falls_back_to_mantine_blue_and_inter(penguins_tabs):
+    src = generate_qmd(penguins_plan(penguins_tabs))
+    boot = _front(src)["brand"]["defaults"]["bootstrap"]["defaults"]
+    assert boot["font-family-sans-serif"].startswith("'Inter Variable', Inter,")
+    assert "print(use_theme(\"paper\", primary='#228be6'))" in src

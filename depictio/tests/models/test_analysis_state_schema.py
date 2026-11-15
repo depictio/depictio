@@ -16,6 +16,9 @@ json.dumps(AnalysisState.model_json_schema(), indent=2, sort_keys=True) + '\\n')
 import json
 from pathlib import Path
 
+import pytest
+from pydantic import ValidationError
+
 from depictio.models.models.analysis_state import (
     ANALYSIS_STATE_VERSION,
     AnalysisState,
@@ -113,14 +116,24 @@ def test_minimal_state_defaults():
     assert state.display_mode == "color"
 
 
-def test_export_request_carries_only_the_state():
+def test_export_request_carries_the_state_and_the_reports_look():
     """One output, so no format to pick: a client still sending the old
-    ``format`` field is not refused, the field is simply not read."""
+    ``format`` field is not refused, the field is simply not read. The look
+    is Paper unless the request asks for the classic one."""
     req = NotebookExportRequest.model_validate(
         {"state": {"context": {"dashboard_id": "abc"}}, "format": "marimo"}
     )
     assert req.state.context.dashboard_id == "abc"
     assert "format" not in NotebookExportRequest.model_fields
+    assert req.theme == "paper"
+    classic = NotebookExportRequest.model_validate(
+        {"state": {"context": {"dashboard_id": "abc"}}, "theme": "classic"}
+    )
+    assert classic.theme == "classic"
+    with pytest.raises(ValidationError):
+        NotebookExportRequest.model_validate(
+            {"state": {"context": {"dashboard_id": "abc"}}, "theme": "neon"}
+        )
 
 
 def test_pins_are_empty_for_a_live_view_and_strict_about_commits():

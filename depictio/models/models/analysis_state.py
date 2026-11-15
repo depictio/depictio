@@ -185,10 +185,16 @@ NotebookInclusion = Literal["code", "api", "omitted"]
 NotebookOutput = Literal["interactive", "static", "snapshot"]
 
 
+# The report's look: Depictio's Paper chrome (the live app's default, from the
+# instance brand), or the classic one (Mantine's defaults, Plotly's figures).
+NotebookTheme = Literal["paper", "classic"]
+
+
 class NotebookExportRequest(BaseModel):
     """The analysis state to export. The export is one Quarto document (``.qmd``)."""
 
     state: AnalysisState
+    theme: NotebookTheme = "paper"
 
 
 class NotebookPreflightComponent(BaseModel):

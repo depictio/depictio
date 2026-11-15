@@ -28,6 +28,7 @@ from .client import DepictioClient, DepictioClientError
 from .components import DepictioComponent, init_tables, show_table, use_document_renderer
 from .funnel import funnel_rest, funnel_stage
 from .text import fill_text
+from .theme import use_theme
 
 __all__ = [
     "DepictioClient",
@@ -39,4 +40,5 @@ __all__ = [
     "init_tables",
     "show_table",
     "use_document_renderer",
+    "use_theme",
 ]

@@ -238,6 +238,12 @@ def _resolve_export_brand(
     brand: dict[str, Any] = {"app_name": (theme.app_name if theme else None) or "Depictio"}
     if theme:
         brand["primary"] = theme.primary
+        # The report's Paper theme sets its type from these (the app's own
+        # `buildDepictioTheme` does), Inter when the brand names none.
+        if theme.font_family:
+            brand["font_family"] = theme.font_family
+        if theme.headings_font_family:
+            brand["headings_font_family"] = theme.headings_font_family
 
     logo_data_uri: str | None = None
     try:
@@ -461,6 +467,7 @@ def build_export_plan(
     state: AnalysisState,
     current_user: User,
     access_token: str | None,
+    theme: str = "paper",
 ) -> ExportPlan:
     family_id, raw_tabs = routes._resolve_tab_family(dashboard_id, current_user, TAB_PROJECTION)
     tabs = [convert_objectid_to_str(t) for t in raw_tabs]
@@ -610,6 +617,7 @@ def build_export_plan(
         text_values=_export_text_values(
             tabs, state.filters_as_payload(), current_user, access_token, state.pins.body()
         ),
+        theme=theme,
     )
 
 
@@ -624,7 +632,9 @@ def notebook_export_preflight(
 ) -> NotebookPreflight:
     """What the export will contain: one verdict per tile, stage counts, warnings."""
     _require_enabled()
-    plan = build_export_plan(dashboard_id, request.state, current_user, access_token)
+    plan = build_export_plan(
+        dashboard_id, request.state, current_user, access_token, theme=request.theme
+    )
     # Whether the *worker* can render is not something the API can see (Quarto
     # lives in the worker image), so this is the operator's switch, not a probe.
     return NotebookBuilder(plan).preflight(render_available=settings.notebook_export.render_enabled)
@@ -646,7 +656,9 @@ def notebook_export(
     from depictio.api.v1.services.notebook_export import store
 
     _require_enabled()
-    plan = build_export_plan(dashboard_id, request.state, current_user, access_token)
+    plan = build_export_plan(
+        dashboard_id, request.state, current_user, access_token, theme=request.theme
+    )
     source = NotebookBuilder(plan).build()
     return Response(
         content=source.encode("utf-8"),
@@ -749,7 +761,9 @@ async def notebook_export_render(
     from depictio.api.v1.services.notebook_export import store
     from depictio.models.models.users import TokenData
 
-    plan = build_export_plan(dashboard_id, request.state, current_user, access_token)
+    plan = build_export_plan(
+        dashboard_id, request.state, current_user, access_token, theme=request.theme
+    )
     builder = NotebookBuilder(plan)
     _require_owner_for_authored_code(dashboard_id, current_user, builder)
     qmd = builder.build().encode("utf-8")

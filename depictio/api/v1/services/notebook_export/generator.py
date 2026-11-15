@@ -24,6 +24,7 @@ from depictio.models.models.analysis_state import (
     NotebookPreflightDC,
     NotebookPreflightStage,
 )
+from depictio.notebook.theme import resolve_primary
 
 from .aggregations import agg_expr_source
 from .cells import Cell, md_cell, render_qmd
@@ -31,7 +32,7 @@ from .classify import Classification, classify
 from .names import NameAllocator, slug
 from .predicates import PredicateSource, emit_filter_expr, emit_predicate
 from .provenance import EXPORT_DETAILS_ICON, PROVENANCE_ICON, header_markdown
-from .quarto import QuartoFrontMatter
+from .quarto import QuartoFrontMatter, paper_brand
 from .reading_order import ComponentUnit, MarkdownUnit, ordered_units
 
 # Shade 6 of ``@mantine/core``'s own ``DEFAULT_COLORS`` — the shade every
@@ -325,7 +326,16 @@ nav[role="doc-toc"] a.active {
       var body = document.createElement('div');
       body.className = 'dpx-body';
       var accent = mark.getAttribute('data-dpx-accent');
+      var kind = mark.getAttribute('data-dpx-kind') || '';
       if (accent) body.style.setProperty('--dpx-accent', accent);
+      body.setAttribute('data-dpx-kind', kind);
+      // The heading's own wrapper (Quarto's <section>) carries the kind and
+      // the accent too: a theme that frames a whole section, heading
+      // included, styles that element.
+      if (h.parentElement && h.parentElement.tagName === 'SECTION') {
+        h.parentElement.setAttribute('data-dpx-kind', kind);
+        if (accent) h.parentElement.style.setProperty('--dpx-accent', accent);
+      }
       nodes[0].parentNode.insertBefore(body, nodes[0]);
       for (var j = 0; j < nodes.length; j++) body.appendChild(nodes[j]);
       fold(h, body);
@@ -562,6 +572,131 @@ nav[role="doc-toc"] a.active {
 </script>"""
 
 
+# Paper, the live app's default chrome (`chrome/variants/glass/glass.css`),
+# laid over the chrome above: the report as the dashboard reads in the app.
+# Every value is a `--gl-*` token of that stylesheet resolved for the light
+# scheme against Mantine's palette (CSS can mix colours itself, so the
+# hairlines keep the stylesheet's own `color-mix`). The body font and the
+# primary come from the brand (`--dpx-font`, `--dpx-primary`,
+# `--dpx-accent-fg`, set beside it). Strictly a restyle: no structure, no
+# script, so a report without it is the classic look with every result intact.
+PAPER_CHROME = """<style>
+:root {
+  --gl-fg: #212529;
+  --gl-muted: #868e96;
+  --gl-faint: #adb5bd;
+  --gl-paper: #ffffff;
+  --gl-accent: var(--dpx-primary, #228be6);
+  --gl-accent-fg: var(--dpx-accent-fg, #1c7ed6);
+  --gl-accent-soft: color-mix(in srgb, var(--gl-accent) 12%, transparent);
+  --gl-hair: color-mix(in srgb, #212529 11%, transparent);
+  --gl-well: color-mix(in srgb, #212529 6%, transparent);
+  --gl-shade-a: color-mix(in srgb, #212529 5%, transparent);
+  --gl-shade-b: color-mix(in srgb, #212529 10%, transparent);
+  --gl-tile-radius: 18px;
+  --gl-tile-shadow: 0 0 0 1px var(--gl-hair), 0 1px 2px var(--gl-shade-a),
+    0 14px 32px -20px var(--gl-shade-b);
+}
+/* The page: plain white, one family, the text colour Paper's ink. */
+html, body { background: var(--gl-paper); }
+body {
+  font-family: var(--dpx-font, 'Inter Variable', Inter, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif);
+  color: var(--gl-fg);
+}
+body h1, body h2, body h3, body h4, body h5, body h6 {
+  font-family: var(--dpx-headings-font, inherit);
+  color: var(--gl-fg); letter-spacing: -0.012em;
+}
+body h1.title { font-weight: 750; letter-spacing: -0.02em; }
+body .subtitle, body .quarto-title-meta-heading { color: var(--gl-muted); }
+body a { color: var(--gl-accent-fg); }
+body :not(pre) > code { background: var(--gl-well); color: var(--gl-fg); border-radius: 6px; }
+body pre, body div.sourceCode { background: var(--gl-well); border: 0; border-radius: 12px; }
+body hr { border-color: var(--gl-hair); opacity: 1; }
+body table:not(.dpx-plain) th {
+  border-bottom: 1px solid var(--gl-hair); color: var(--gl-muted); font-weight: 600;
+}
+body table:not(.dpx-plain) td { border-bottom: 1px solid var(--gl-hair); }
+body blockquote { border-inline-start: 3px solid var(--gl-hair); color: var(--gl-muted); }
+/* Tabs and the results heading lead the page; they are not framed. */
+.dpx-body[data-dpx-kind="tab"], .dpx-body[data-dpx-kind="results"] {
+  border-inline-start: 0; padding-inline-start: 0; margin-inline-start: 0;
+}
+/* Sections on the canvas: paper groups with a soft accent edge. */
+section[data-dpx-kind="section"] {
+  border: 1px solid var(--gl-hair); border-radius: 24px;
+  background: var(--gl-paper);
+  box-shadow: 0 0 0 1px var(--gl-hair),
+    inset 3px 0 0 color-mix(in srgb, var(--dpx-accent, #ced4da) 75%, transparent);
+  padding: 14px 18px 12px 16px; margin: 20px 0;
+}
+section[data-dpx-kind="section"] > .dpx-body {
+  border-inline-start: 0; padding-inline-start: 0; margin: 6px 0 0;
+}
+/* Tile frames: every computed result is a soft floating card, with the same
+   16px inner edge the app's tiles keep. Card rows are a row of cards, not a
+   card of cards; the text a cell prints is prose, not a tile. */
+.cell-output-display:has(.js-plotly-plot, table, img, .dpx-tile, .dpx-unavailable):not(:has(.dpx-cards, .dpx-card)) {
+  background: var(--gl-paper); border: 1px solid var(--gl-hair);
+  border-radius: var(--gl-tile-radius); box-shadow: var(--gl-tile-shadow);
+  padding: 14px 16px 12px; margin: 0 0 16px; overflow: hidden;
+}
+.dpx-tile-head { margin: 0 0 10px; min-height: 22px; }
+.dpx-tile-title { font-size: 14px; font-weight: 650; line-height: 22px; color: var(--gl-fg); }
+.dpx-tile-sub { font-size: 12px; line-height: 16px; color: var(--gl-faint); }
+/* KPI cards: floating cards, a quiet label over a firm number. */
+.dpx-card {
+  background: var(--gl-paper) !important; border: 1px solid var(--gl-hair) !important;
+  border-radius: var(--gl-tile-radius) !important; box-shadow: var(--gl-tile-shadow) !important;
+  padding: 14px 16px !important;
+}
+.dpx-card-title {
+  font-size: 12.5px !important; font-weight: 600 !important; letter-spacing: 0 !important;
+  text-transform: none !important; opacity: .9;
+}
+.dpx-card-value {
+  font-weight: 700 !important; letter-spacing: -0.03em; font-variant-numeric: tabular-nums;
+  font-size: 30px !important; line-height: 1.05 !important; color: var(--gl-fg) !important;
+}
+.dpx-cards { gap: 12px !important; }
+/* What could not be drawn reads as an empty tile, not as an error box. */
+.dpx-unavailable { border: 0 !important; padding: 0 !important; color: var(--gl-muted) !important; }
+.dpx-snapshot img { border: 0 !important; border-radius: 12px !important; }
+/* The chrome around the report. */
+nav[role="doc-toc"] > h2, #toc-title { color: var(--gl-faint); }
+nav[role="doc-toc"] a { color: var(--gl-muted); }
+nav[role="doc-toc"] a:hover { color: var(--gl-fg); }
+nav[role="doc-toc"] a.active { color: var(--gl-accent-fg); border-inline-start-color: var(--gl-accent); }
+#quarto-code-tools-source .btn, .code-tools-button {
+  border: 1px solid var(--gl-hair); border-radius: 999px; color: var(--gl-fg);
+  background: var(--gl-paper); font-weight: 600;
+}
+#quarto-code-tools-source .btn:hover, .code-tools-button:hover { background: var(--gl-well); }
+.dpx-all { border-radius: 999px; border-color: var(--gl-hair); color: var(--gl-muted); opacity: 1; }
+.dpx-all:hover { background: var(--gl-well); color: var(--gl-fg); }
+.dpx-select { border-radius: 12px; border-color: transparent; background-color: var(--gl-well); }
+.dpx-select:focus { border-color: var(--gl-accent); background-color: var(--gl-paper); }
+.dpx-zoom { border-radius: 10px; border-color: var(--gl-hair); color: var(--gl-muted); }
+.updatemenu-item-rect { rx: 12px; ry: 12px; stroke: var(--gl-hair); }
+/* DataTables (itables): Paper's quiet wells and pills. */
+.dataTables_wrapper, .dt-container { font-size: .8125rem; }
+.dataTables_wrapper input, .dataTables_wrapper select, .dt-container input, .dt-container select {
+  border: 1px solid transparent; border-radius: 12px; background: var(--gl-well);
+  padding: .2em .6em;
+}
+.dt-paging .dt-paging-button.current, .dataTables_paginate .paginate_button.current {
+  border-radius: 999px !important; border: 0 !important;
+  background: var(--gl-accent-soft) !important; color: var(--gl-accent-fg) !important;
+}
+</style>"""
+
+
+def _css_value(value: str) -> str:
+    """A brand font stack as a CSS value: nothing that could close the rule."""
+    return re.sub(r"[;{}<>]", "", value).strip()
+
+
 def _resolve_accent_hex(color: str | None, fallback: str) -> str:
     """A Mantine palette name or a literal CSS colour, to a hex the export's
     static HTML can use directly. Mirrors the live chrome's own fallback:
@@ -654,6 +789,9 @@ class ExportPlan:
     # (``{name: value, "param:KEY": value}``). The document recomputes them
     # through the API when it runs, and falls back on these offline.
     text_values: dict[str, dict[str, Any]] = field(default_factory=dict)
+    # The report's look: ``paper`` (the live app's default chrome, from the
+    # instance brand) or ``classic`` (Mantine's defaults, Plotly's own figures).
+    theme: str = "paper"
 
     @property
     def dashboard_id(self) -> str:
@@ -851,6 +989,7 @@ class NotebookBuilder:
     def build(self) -> str:
         cells: list[Cell] = []
         cells.append(self._imports_cell())
+        cells.append(self._theme_cell())
         cells.append(self._connection_cell())
         cells.append(self._metric_card_cell())
         cells.append(md_cell(self._header()))
@@ -861,22 +1000,45 @@ class NotebookBuilder:
         cells.extend(self._group_cells())
         cells.extend(self._panel_cells())
         cells.extend(self._tile_cells())
-        cells.append(
-            md_cell(
-                "---\n\n*Generated by Depictio's notebook export. The dashboard's theme and "
+        if self.paper:
+            footer = (
+                "*Generated by Depictio's notebook export, in the dashboard's Paper look and "
+                "the instance's brand colour; every number is the dashboard's.*"
+            )
+        else:
+            footer = (
+                "*Generated by Depictio's notebook export. The dashboard's theme and "
                 "brand colours are not reproduced; every number is.*"
             )
-        )
+        cells.append(md_cell("---\n\n" + footer))
         return render_qmd(cells, front_matter=self.front_matter().to_yaml())
+
+    @property
+    def paper(self) -> bool:
+        return self.plan.theme != "classic"
+
+    def _primary(self) -> tuple[str, str]:
+        """The instance primary as (shade 6, shade 7): the accent and its ink."""
+        return resolve_primary((self.plan.brand or {}).get("primary"))
 
     def front_matter(self) -> QuartoFrontMatter:
         plan = self.plan
+        brand = plan.brand or {}
         return QuartoFrontMatter(
             title=plan.title,
             subtitle=plan.subtitle or f"Exported from Depictio on {plan.exported_at:%Y-%m-%d}",
             author=plan.exported_by,
             date=plan.exported_at.strftime("%Y-%m-%d"),
             favicon_data_uri=plan.favicon_data_uri,
+            brand=(
+                paper_brand(
+                    primary=self._primary()[0],
+                    font_family=brand.get("font_family"),
+                    headings_font_family=brand.get("headings_font_family"),
+                )
+                if self.paper
+                else None
+            ),
         )
 
     def _imports_cell(self) -> Cell:
@@ -897,6 +1059,7 @@ class NotebookBuilder:
             "    init_tables,\n"
             "    show_table,\n"
             "    use_document_renderer,\n"
+            "    use_theme,\n"
             ")\n"
             "from polars import col, lit\n"
             "\n"
@@ -916,6 +1079,35 @@ class NotebookBuilder:
                 "every row when itables is not installed"
             )
             + "\n_ = init_tables()"
+        )
+
+    def _theme_cell(self) -> Cell:
+        """The report's look, for what the front matter's theme cannot reach.
+
+        Quarto styles the page; the figures are Plotly's and the font is a
+        file. ``use_theme`` registers Paper as the Plotly template every
+        figure here is drawn in (and lays it over the ones Depictio renders,
+        as the app does), and prints the ``<style>`` that embeds Inter, so
+        the report needs no font request.
+        """
+        if not self.paper:
+            return Cell(
+                "#| output: asis\n"
+                + _comment("The classic look: Plotly's own figures, the system font")
+                + '\nprint(use_theme("classic"))'
+            )
+        brand = self.plan.brand or {}
+        kwargs = f"primary={self._primary()[0]!r}"
+        if brand.get("font_family"):
+            kwargs += f", font_family={brand['font_family']!r}"
+        return Cell(
+            "#| output: asis\n"
+            + _comment(
+                "Depictio's Paper look, with this instance's primary colour: every figure "
+                'below is drawn in it, and Inter is embedded. use_theme("classic") for '
+                "Plotly's own"
+            )
+            + f'\nprint(use_theme("paper", {kwargs}))'
         )
 
     def _connection_cell(self) -> Cell:
@@ -946,12 +1138,12 @@ class NotebookBuilder:
     else:
         text = str(value)
     return HTML(
-        f'<div style="display:inline-block;min-width:11rem;margin:0 0.5rem 0.5rem 0;'
+        f'<div class="dpx-card" style="display:inline-block;min-width:11rem;margin:0 0.5rem 0.5rem 0;'
         f'padding:0.85rem 1.1rem;border:1px solid #e3e3e8;border-radius:12px;'
         f'font-family:inherit;background:#fafafa">'
-        f'<div style="font-size:0.78rem;color:#6b7280;text-transform:uppercase;'
+        f'<div class="dpx-card-title" style="font-size:0.78rem;color:#6b7280;text-transform:uppercase;'
         f'letter-spacing:0.02em;margin-bottom:0.3rem">{title}</div>'
-        f'<div style="font-size:1.65rem;font-weight:650;color:#111827">{text}</div>'
+        f'<div class="dpx-card-value" style="font-size:1.65rem;font-weight:650;color:#111827">{text}</div>'
         f'</div>'
     )
 
@@ -983,9 +1175,19 @@ def card_row(cards):
         # NOTEBOOK_CHROME: that constant is full of CSS and JS braces, and
         # nothing there is worth making it a format string over.
         accent = _resolve_accent_hex((self.plan.brand or {}).get("primary"), "#228be6")
+        root = f"--dpx-primary: {accent};"
+        chrome = NOTEBOOK_CHROME
+        if self.paper:
+            brand = self.plan.brand or {}
+            root += f" --dpx-accent-fg: {self._primary()[1]};"
+            if brand.get("font_family"):
+                root += f" --dpx-font: {_css_value(brand['font_family'])};"
+            if brand.get("headings_font_family"):
+                root += f" --dpx-headings-font: {_css_value(brand['headings_font_family'])};"
+            chrome += "\n" + PAPER_CHROME
         return (
-            f"<style>:root {{ --dpx-primary: {accent}; }}</style>\n"
-            + NOTEBOOK_CHROME
+            f"<style>:root {{ {root} }}</style>\n"
+            + chrome
             + "\n\n"
             + header_markdown(
                 title=self.plan.title,

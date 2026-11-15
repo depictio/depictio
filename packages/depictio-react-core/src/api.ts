@@ -1308,12 +1308,20 @@ function filenameFromDisposition(header: string | null, fallback: string): strin
   return m ? m[1] : fallback;
 }
 
+/** The report's look: Depictio's Paper chrome (the app's default, from the
+ *  instance brand), or the classic one (Quarto's stock page, Plotly's figures). */
+export type NotebookTheme = 'paper' | 'classic';
+
 /** Download the dashboard as a Quarto document (`.qmd`). The server never
  *  executes it: the document is generated text, run by whoever renders it. */
-export async function exportNotebook(dashboardId: string, state: unknown): Promise<string> {
+export async function exportNotebook(
+  dashboardId: string,
+  state: unknown,
+  theme: NotebookTheme = 'paper',
+): Promise<string> {
   const res = await authFetch(`${API_BASE}/dashboards/notebook_export/${dashboardId}`, {
     method: 'POST',
-    body: JSON.stringify({ state }),
+    body: JSON.stringify({ state, theme }),
   });
   if (!res.ok) await throwHttpDetailError(res, 'Failed to export the notebook');
   const blob = await res.blob();
@@ -1341,10 +1349,11 @@ export async function exportNotebook(dashboardId: string, state: unknown): Promi
 export async function startNotebookRender(
   dashboardId: string,
   state: unknown,
+  theme: NotebookTheme = 'paper',
 ): Promise<NotebookRenderStatus> {
   const res = await authFetch(`${API_BASE}/dashboards/notebook_export/${dashboardId}/render`, {
     method: 'POST',
-    body: JSON.stringify({ state }),
+    body: JSON.stringify({ state, theme }),
   });
   if (!res.ok) await throwHttpDetailError(res, 'Failed to start the report render');
   return res.json();

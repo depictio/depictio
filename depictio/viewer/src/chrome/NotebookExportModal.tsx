@@ -26,6 +26,7 @@ import {
   type NotebookInclusion,
   type NotebookPreflight,
   type NotebookRenderStatus,
+  type NotebookTheme,
   Z_LAYERS,
 } from 'depictio-react-core';
 
@@ -60,6 +61,11 @@ const FORMAT_HINT: Record<ExportChoice, string> = {
   report: 'That same document, rendered here: one HTML file, nothing to install.',
 };
 
+const THEME_HINT: Record<NotebookTheme, string> = {
+  paper: "Depictio's Paper look, in this instance's brand colour, with Inter embedded.",
+  classic: "Quarto's stock page and Plotly's own figures.",
+};
+
 function elapsedLabel(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
@@ -77,6 +83,7 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
   const [preflight, setPreflight] = useState<NotebookPreflight | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [format, setFormat] = useState<ExportChoice>('qmd');
+  const [theme, setTheme] = useState<NotebookTheme>('paper');
   const [downloading, setDownloading] = useState(false);
   const [downloaded, setDownloaded] = useState<string | null>(null);
   const [job, setJob] = useState<NotebookRenderStatus | null>(null);
@@ -140,7 +147,7 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
     setDownloading(true);
     setError(null);
     try {
-      const filename = await exportNotebook(dashboardId, state);
+      const filename = await exportNotebook(dashboardId, state, theme);
       setDownloaded(filename);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -155,7 +162,7 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
     setError(null);
     setDownloaded(null);
     try {
-      const started = await startNotebookRender(dashboardId, state);
+      const started = await startNotebookRender(dashboardId, state, theme);
       setStartedAt(Date.now());
       setElapsed(0);
       setJob(started);
@@ -334,6 +341,24 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
           <Text size="xs" c="dimmed">
             {FORMAT_HINT[format]}
             {!renderAvailable && ' Rendered reports are off on this server.'}
+          </Text>
+        </Stack>
+
+        <Stack gap={4}>
+          <Text fw={500} size="sm">
+            Look
+          </Text>
+          <SegmentedControl
+            value={theme}
+            onChange={(v) => setTheme(v as NotebookTheme)}
+            data={[
+              { label: 'Paper', value: 'paper' },
+              { label: 'Classic', value: 'classic' },
+            ]}
+            data-testid="notebook-export-theme"
+          />
+          <Text size="xs" c="dimmed">
+            {THEME_HINT[theme]}
           </Text>
         </Stack>
 

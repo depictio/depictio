@@ -200,6 +200,9 @@ exclude = [
   "projects/nf-core/**/.db_seeds/*",
   "catalog/**/*",
   "cli/configs/**/*",
+  # What an exported report embeds so it needs no network: Inter (OFL) for
+  # the Paper look.
+  "notebook/assets/**/*",
 ]
 
 # Exclude patterns are fnmatch-based: `*` also crosses `/`, so each pattern matches
