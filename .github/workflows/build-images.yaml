@@ -571,6 +571,9 @@ jobs:
     # through the same path as allinone-nfcore-rnaseq: -profile test,docker, the
     # module with template detection, the reopen. They cover the template shapes
     # rnaseq does not (params-derived routes, MultiQC recipes, databases, runs).
+    # Not scrnaseq: its template reads a megatest layout, one aligner_<route>/
+    # per --aligner run with aligner_cellranger/ required, which a single
+    # pipeline run (the test profile aligns with star) never produces.
     name: All-in-one image, nf-core/${{ matrix.pipeline }} through the module
     runs-on: ubuntu-24.04
     timeout-minutes: 180
@@ -586,7 +589,6 @@ jobs:
           - { pipeline: airrflow, version: 5.1.2 }
           - { pipeline: smrnaseq, version: 2.4.1 }
           - { pipeline: sarek, version: 3.11.0 }
-          - { pipeline: scrnaseq, version: 4.2.0 }
           - { pipeline: funcscan, version: 4.0.0 }
     env:
       NXF_VER: 26.10.6
