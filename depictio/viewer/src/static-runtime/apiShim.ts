@@ -664,3 +664,18 @@ export async function dispatchSankey(p: { dc_id: string }) {
 export async function pollSankey(jobId: string) {
   return finishedJob(jobId) as never;
 }
+// Celery kinds main added (contact_map, group_compare). Producers omit them
+// (no export-time request builder yet), so these normally surface the omitted
+// reason; shimming them keeps a bundle from dispatching to a server either way.
+export async function dispatchContactMap(p: { dc_id: string }) {
+  return finishedJob(p.dc_id) as never;
+}
+export async function pollContactMap(jobId: string) {
+  return finishedJob(jobId) as never;
+}
+export async function dispatchGroupCompare(p: { dc_id: string }) {
+  return finishedJob(p.dc_id) as never;
+}
+export async function pollGroupCompare(jobId: string) {
+  return finishedJob(jobId) as never;
+}

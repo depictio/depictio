@@ -45,7 +45,23 @@ DATA_COMPONENT_TYPES = frozenset({"figure", "card", "interactive", "table", "adv
 # the browser can redo the whole thing (``coverageTrackLive``). Freezing it
 # also cost more than shipping the data: the frozen payload is the aggregated
 # rows as JSON, several times the size of the same rows as bundled Parquet.
-CELERY_VIZ_KINDS = frozenset({"embedding", "complex_heatmap", "upset", "upset_plot", "sankey"})
+#
+# ``contact_map`` and ``group_compare`` joined the family on main (v1.21): each
+# dispatches its own Celery task (``compute_contact_map`` /
+# ``compute_group_compare``). Neither has an in-browser equivalent nor an
+# export-time request builder (``celery_compute_request``) yet, so both
+# producers omit them with the Celery reason instead of calling them live.
+CELERY_VIZ_KINDS = frozenset(
+    {
+        "embedding",
+        "complex_heatmap",
+        "upset",
+        "upset_plot",
+        "sankey",
+        "contact_map",
+        "group_compare",
+    }
+)
 
 # Data-path kinds that additionally read a SECOND, non-tabular source: the
 # phylogenetic kind pairs its tabular DC with a Newick tree DC (``tree_dc_id``).
