@@ -11,7 +11,9 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  ADVANCED_VIZ_KINDS,
   KIND_SAMPLING_POLICY,
+  logSpacedRankThin,
   TAIL_ROLE,
   policyForKind,
   reduceFrame,
@@ -21,6 +23,7 @@ import {
   type ReduceResult,
 } from '../src/advancedViz';
 import { DEFAULT_LIMITS, type RuntimeLimits } from '../src/manifest';
+import samplingExpected from '../fixtures/sampling-expected.json';
 
 // ---------------------------------------------------------------------------
 // helpers
@@ -180,35 +183,32 @@ describe('uniform hash sampling', () => {
 
 describe('per-kind policy tables', () => {
   it('cover every AdvancedVizKind, and every tail kind has a role', () => {
-    // Pinned from depictio/models/components/types.py:28–47.
-    const kinds = [
-      'volcano',
-      'embedding',
-      'manhattan',
-      'stacked_taxonomy',
-      'phylogenetic',
-      'rarefaction',
-      'da_barplot',
-      'enrichment',
-      'complex_heatmap',
-      'upset_plot',
-      'ma',
-      'dot_plot',
-      'lollipop',
-      'qq',
-      'sunburst',
-      'oncoplot',
-      'coverage_track',
-      'sankey',
-    ];
-    expect(new Set(Object.keys(KIND_SAMPLING_POLICY))).toEqual(new Set(kinds));
-    expect(Object.keys(KIND_SAMPLING_POLICY)).toHaveLength(18);
+    // The table is generated from sampling.py (scripts/generate_sampling_table.py;
+    // the pytest drift check pins it). Here: it is total over the kind list.
+    expect(new Set(Object.keys(KIND_SAMPLING_POLICY))).toEqual(new Set(ADVANCED_VIZ_KINDS));
+    expect(ADVANCED_VIZ_KINDS.length).toBeGreaterThanOrEqual(54);
 
     const tailKinds = Object.keys(KIND_SAMPLING_POLICY).filter(
       (k) => KIND_SAMPLING_POLICY[k] === 'tail',
     );
     expect(new Set(Object.keys(TAIL_ROLE))).toEqual(new Set(tailKinds));
-    expect(new Set(Object.keys(TAIL_ROLE))).toEqual(new Set(['volcano', 'ma', 'manhattan']));
+  });
+
+  it('serves the kinds the hand copy used to miss whole (stacked_bar, benchmarks)', () => {
+    for (const k of ['stacked_bar', 'pr_benchmark', 'profile', 'msa', 'ranked_table', 'record_card']) {
+      expect(policyForKind(k)).toBe('none');
+    }
+    expect(policyForKind('knee_plot')).toBe('log_rank');
+    expect(policyForKind('parallel_coordinates')).toBe('head');
+    expect(TAIL_ROLE['genome_view']).toEqual(['score', 'top']);
+
+    const n = 30_000;
+    const out = reduce(
+      { sample: seq(n, (i) => `s${i % 40}`), taxon: seq(n, (i) => `t${i % 997}`), v: seq(n, (i) => i) },
+      { vizKind: 'stacked_bar', limits: limits({ figure_max_points: 10_000 }) },
+    );
+    expect(out.row_count).toBe(n);
+    expect(out.sampling).toEqual({ policy: 'none', exact: true, degraded: false });
   });
 
   it('policyForKind defaults absent/unknown kinds to hash', () => {
@@ -483,5 +483,94 @@ describe('roundSigFigs', () => {
     expect(roundSigFigs(Number.NEGATIVE_INFINITY)).toBe(Number.NEGATIVE_INFINITY);
     expect(roundSigFigs('abc')).toBe('abc');
     expect(roundSigFigs(undefined)).toBe(undefined);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// log_rank / head / top — the policies the hand copy lacked
+// ---------------------------------------------------------------------------
+
+describe('logSpacedRankThin', () => {
+  it.each(samplingExpected.log_spaced_rank_thin)(
+    'matches sampling.py::log_spaced_rank_thin for n=$n cap=$cap',
+    ({ n, cap, positions }) => {
+      expect(logSpacedRankThin(n, cap)).toEqual(positions);
+    },
+  );
+});
+
+describe('log_rank reduction (knee_plot)', () => {
+  it('keeps the same log-spaced ranks for every sample', () => {
+    const perSample = 50_000;
+    const samples = ['a', 'b'];
+    const rank: number[] = [];
+    const sample: string[] = [];
+    for (const s of samples) {
+      for (let r = 1; r <= perSample; r++) {
+        rank.push(r);
+        sample.push(s);
+      }
+    }
+    const cap = 1_000;
+    const out = reduce(
+      { sample, rank, umis: rank.map((r) => 1e6 / r) },
+      {
+        vizKind: 'knee_plot',
+        roles: { rank: 'rank', sample: 'sample' },
+        limits: limits({ figure_max_points: cap }),
+      },
+    );
+    expect(out.sampling).toEqual({ policy: 'log_rank', exact: false, degraded: false });
+    const expected = new Set(logSpacedRankThin(perSample, cap / 2).map((p) => p + 1));
+    const kept = out.rows['rank'] as number[];
+    expect(kept.length).toBe(expected.size * 2);
+    for (const r of kept) expect(expected.has(r)).toBe(true);
+    // Dense near rank 1, sparse in the tail.
+    expect(kept.filter((r) => r <= 100).length).toBeGreaterThan(kept.filter((r) => r > 40_000).length);
+  });
+
+  it('falls back to a uniform sample when no rank column is bound', () => {
+    const n = 40_000;
+    const out = reduce(
+      { rank: seq(n, (i) => i + 1) },
+      { vizKind: 'knee_plot', limits: limits({ figure_max_points: 1_000 }) },
+    );
+    expect(out.sampling.policy).toBe('hash');
+  });
+});
+
+describe('head reduction (parallel_coordinates)', () => {
+  it('keeps the first cap rows, not degraded', () => {
+    const n = 5_000;
+    const out = reduce(
+      { id: seq(n, (i) => i) },
+      { vizKind: 'parallel_coordinates', limits: limits({ figure_max_points: 300 }) },
+    );
+    expect(out.sampling).toEqual({ policy: 'head', exact: false, degraded: false });
+    expect(out.rows['id']).toEqual(seq(300, (i) => i));
+  });
+});
+
+describe("'top' tail reduction (genome_view)", () => {
+  it('keeps the k largest |score| whole, k = cap // 2, plus a strided middle', () => {
+    const n = 100_000;
+    const cap = 2_000;
+    // A [0, 1] magnitude: 'auto' would have read it as p-values and kept the
+    // weakest rows; 'top' keeps the strongest.
+    const score = seq(n, (i) => ((i * 7919) % n) / n);
+    const out = reduce(
+      { pos: seq(n, (i) => i), score },
+      {
+        vizKind: 'genome_view',
+        roles: { score: 'score' },
+        limits: limits({ figure_max_points: cap }),
+      },
+    );
+    expect(out.sampling.policy).toBe('tail');
+    const kept = out.rows['score'] as number[];
+    const cutoff = [...(score as number[])].sort((a, b) => b - a)[cap / 2 - 1];
+    const strongKept = kept.filter((v) => v >= cutoff).length;
+    expect(strongKept).toBe(cap / 2);
+    expect(kept.length).toBeLessThanOrEqual(cap * 4);
   });
 });

@@ -584,6 +584,44 @@ export interface AdvancedVizLiveRequest {
   vizKind?: string | null;
   roles?: Record<string, string>;
   tail?: AdvancedVizTailSpec | null;
+  /** `{group_by, sum}`: sum per distinct key tuple AFTER the reduction
+   *  (routes.py `_aggregate_frame`), for renderers that only add rows up. */
+  aggregate?: { group_by: string[]; sum: string } | null;
+}
+
+/** `_aggregate_frame`: `df.group_by(group_by, maintain_order=True)
+ *  .agg(pl.col(sum).sum())` — first-seen key order, a null key is a group of
+ *  its own, nulls are skipped by the sum and an all-null group sums to 0. */
+export function aggregateRows(
+  rows: Record<string, unknown[]>,
+  groupBy: string[],
+  sumCol: string,
+): Record<string, unknown[]> {
+  for (const c of [...groupBy, sumCol]) {
+    if (!(c in rows)) throw new Error(`aggregate names columns not in the frame: ${c}`);
+  }
+  const n = (rows[sumCol] ?? []).length;
+  const order: string[] = [];
+  const groups = new Map<string, { keys: unknown[]; sum: number }>();
+  for (let i = 0; i < n; i++) {
+    const keys = groupBy.map((c) => rows[c][i] ?? null);
+    const key = JSON.stringify(keys.map((k) => (typeof k === 'bigint' ? `${k}n` : k)));
+    let g = groups.get(key);
+    if (!g) {
+      g = { keys, sum: 0 };
+      groups.set(key, g);
+      order.push(key);
+    }
+    const raw = rows[sumCol][i];
+    const v = typeof raw === 'bigint' ? Number(raw) : raw;
+    if (typeof v === 'number') g.sum += v;
+  }
+  const out: Record<string, unknown[]> = {};
+  groupBy.forEach((c, j) => {
+    out[c] = order.map((k) => groups.get(k)!.keys[j]);
+  });
+  out[sumCol] = order.map((k) => groups.get(k)!.sum);
+  return out;
 }
 
 /** `AdvancedVizDataResponse` (api.ts:593–609) with the optional fields the
@@ -719,9 +757,16 @@ export async function fetchAdvancedVizDataLive(
     sampling = reduced.sampling;
   }
 
+  // `aggregate` runs after the counts and before the column build, so
+  // `total_rows` still says how many rows the table held (routes.py).
+  if (req.aggregate && Array.isArray(req.aggregate.group_by) && req.aggregate.sum) {
+    rows = aggregateRows(rows, req.aggregate.group_by, req.aggregate.sum);
+    rowCount = (rows[req.aggregate.sum] ?? []).length;
+  }
+
   // Serialise only the requested columns that survived projection, in request
   // order, rounding the floats — the server's response-assembly step.
-  const present = req.columns.filter((c) => schema.has(c));
+  const present = req.columns.filter((c) => schema.has(c) && c in rows);
   const payload: Record<string, unknown[]> = {};
   for (const name of present) {
     const values = rows[name] ?? [];

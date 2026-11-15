@@ -14,8 +14,13 @@
  *
  * Server ↔ browser mapping (routes.py line refs):
  *
- *   policy table   — KIND_SAMPLING_POLICY / TAIL_ROLE / policyForKind /
- *     resolveTailDirection mirror sampling.py:40–133 verbatim.
+ *   policy table   — KIND_SAMPLING_POLICY / TAIL_ROLE are GENERATED from
+ *     sampling.py (src/generated/sampling.ts); policyForKind /
+ *     resolveTailDirection / logSpacedRankThin mirror its functions.
+ *   'log_rank'     — `_log_rank_sample`: keep rows whose rank value is in the
+ *     log-spaced positions of 1..max(rank), budget split across samples.
+ *   'head'         — the first `cap` rows of the filtered frame, not degraded.
+ *   'top' tail     — threshold is the k-th largest |score|, k = cap // 2.
  *   'none'         — the whole frame up to `advanced_viz_no_sample_max_rows`
  *     (:507–522); past that ceiling the kind is sampled anyway and the result
  *     is flagged `degraded` (its renderer's aggregates are now estimates).
@@ -58,8 +63,18 @@
  */
 
 import type { RuntimeLimits } from './manifest';
+import {
+  ADVANCED_VIZ_KINDS,
+  KIND_SAMPLING_POLICY,
+  TAIL_ROLE,
+  type DeclaredTailDirection,
+  type SamplingPolicy,
+} from './generated/sampling';
 
-export type SamplingPolicy = 'none' | 'hash' | 'tail';
+export { ADVANCED_VIZ_KINDS, KIND_SAMPLING_POLICY, TAIL_ROLE };
+export type { DeclaredTailDirection, SamplingPolicy };
+
+/** Direction of a client-supplied tail spec (the renderer's own threshold). */
 export type TailDirection = 'low' | 'high' | 'both';
 
 export interface AdvancedVizTailSpec {
@@ -68,53 +83,21 @@ export interface AdvancedVizTailSpec {
   threshold: number;
 }
 
-/**
- * Which reduction each kind's renderer can survive — sampling.py:40–62
- * verbatim.
+/*
+ * The per-kind tables (`KIND_SAMPLING_POLICY`, `TAIL_ROLE`) are GENERATED from
+ * sampling.py into ./generated/sampling.ts — see
+ * scripts/generate_sampling_table.py. A hand copy drifted once (18 of 54
+ * kinds), which hash-sampled every `none` kind added since.
  *
- *   'hash' — uniform sample; the renderer draws one mark per row.
- *   'none' — never sample; the renderer aggregates client-side, so a subset
- *            changes the reported values, not their resolution.
- *   'tail' — keep the distribution's tail whole, stride the dense middle.
+ *   'hash'     — uniform sample; the renderer draws one mark per row.
+ *   'none'     — never sample; the renderer aggregates client-side.
+ *   'tail'     — keep the distribution's tail whole, stride the middle.
+ *   'log_rank' — log-spaced ranks of a rank-ordered curve (knee plot).
+ *   'head'     — the first N rows in scan order (parallel coordinates).
  */
-export const KIND_SAMPLING_POLICY: Record<string, SamplingPolicy> = {
-  // Point clouds — uniform is faithful.
-  embedding: 'hash',
-  qq: 'hash',
-  lollipop: 'hash',
-  coverage_track: 'hash',
-  // Tail-carrying point clouds.
-  volcano: 'tail',
-  ma: 'tail',
-  manhattan: 'tail',
-  // Client-side aggregation — a sample is a wrong answer.
-  stacked_taxonomy: 'none',
-  rarefaction: 'none',
-  da_barplot: 'none',
-  enrichment: 'none',
-  sunburst: 'none',
-  dot_plot: 'none',
-  oncoplot: 'none',
-  upset_plot: 'none',
-  complex_heatmap: 'none',
-  sankey: 'none',
-  phylogenetic: 'none',
-};
 
 /**
- * The role whose tail a 'tail' kind must keep, and which end is interesting —
- * sampling.py:76–80. 'auto' is pinned at reduce time from the bound column's
- * observed range (a significance column arrives as a raw p-value or as its
- * -log10, depending on the pipeline).
- */
-export const TAIL_ROLE: Record<string, [role: string, direction: TailDirection | 'auto']> = {
-  volcano: ['significance', 'auto'],
-  ma: ['log2_fold_change', 'both'],
-  manhattan: ['score', 'auto'],
-};
-
-/**
- * Reduction policy for a viz kind — sampling.py::policy_for_kind (:91–102).
+ * Reduction policy for a viz kind — sampling.py::policy_for_kind.
  * An absent or unrecognised kind gets 'hash', the behaviour every caller had
  * before the policy table existed.
  */
@@ -124,13 +107,47 @@ export function policyForKind(vizKind: string | null | undefined): SamplingPolic
 }
 
 /**
+ * sampling.py::log_spaced_rank_thin — 0-based positions to keep from an
+ * `n`-long rank-ordered sequence, evenly spaced in log-index space. Python's
+ * `round` is half-to-even; {@link roundHalfEven} reproduces it, so the kept
+ * positions match the server's exactly (pinned by
+ * fixtures/sampling-expected.json).
+ */
+export function logSpacedRankThin(n: number, cap: number): number[] {
+  if (n <= 0) return [];
+  const all = () => Array.from({ length: n }, (_, i) => i);
+  if (cap <= 0 || n <= cap) return all();
+  if (cap === 1) return [0];
+  const logN = Math.log(n);
+  const positions = new Set<number>();
+  for (let t = 0; t < cap; t++) {
+    positions.add(Math.min(n - 1, roundHalfEven(Math.exp((t / (cap - 1)) * logN)) - 1));
+  }
+  positions.add(0);
+  positions.add(n - 1);
+  return [...positions].sort((a, b) => a - b);
+}
+
+/** Python 3 `round(x)`: nearest integer, ties to even. */
+function roundHalfEven(x: number): number {
+  const f = Math.floor(x);
+  const diff = x - f;
+  if (diff > 0.5) return f + 1;
+  if (diff < 0.5) return f;
+  return f % 2 === 0 ? f : f + 1;
+}
+
+/**
  * Pin an 'auto' tail direction from the column's observed range —
  * sampling.py::resolve_tail_direction (:112–133). p-values live in [0, 1];
  * -log10 scores do not stay there for any dataset with a single hit below
  * p = 0.1. An unreadable range (all-null / empty) lands on 'low': there is
  * nothing to preserve either way.
  */
-export function resolveTailDirection(min: number | null, max: number | null): TailDirection {
+export function resolveTailDirection(
+  min: number | null,
+  max: number | null,
+): 'low' | 'high' {
   if (min === null || max === null) return 'low';
   return 0.0 <= min && max <= 1.0 ? 'low' : 'high';
 }
@@ -232,6 +249,20 @@ export function reduceFrame(req: ReduceRequest): ReduceResult {
     }
   }
 
+  if (policy === 'log_rank') {
+    const idx = logRankSample(columns, cols, req.roles ?? {}, cap);
+    if (idx !== null) return reduced(columns, cols, idx, total, 'log_rank', false);
+  }
+
+  if (policy === 'head') {
+    // The kind asked for a prefix rather than a sample (routes.py
+    // `_load_reduced`, `policy == "head"`). Not degraded: nothing the renderer
+    // reports is an estimate, there are simply fewer lines.
+    const head: number[] = [];
+    for (let i = 0; i < Math.min(cap, total); i++) head.push(i);
+    return reduced(columns, cols, head, total, 'head', false);
+  }
+
   const idx = hashSample(cols, total, cap);
   if (idx === null) {
     if (!degraded) {
@@ -301,7 +332,7 @@ function reduced(
 
 interface ResolvedTail {
   column: string;
-  direction: TailDirection;
+  direction: TailDirection | 'top';
   threshold: number;
 }
 
@@ -340,12 +371,41 @@ function resolveTail(
   const column = (req.roles ?? {})[role];
   if (!column || !available.has(column)) return null;
 
+  const values = cols[columns.indexOf(column)];
+  if (declared === 'top') {
+    // The cut-off is the k-th largest |score|, k being half the row budget
+    // (`_resolve_tail`, declared == "top"): `abs().top_k(k).min()`. Polars'
+    // top_k ranks NaN above every number and nulls below; `min` then skips
+    // NaN and null, so an all-NaN top-k is NaN and an all-null one is None.
+    const k = Math.max(1, Math.floor(limits.figure_max_points / 2));
+    const abs: number[] = [];
+    for (const raw of values) {
+      const v = typeof raw === 'bigint' ? Number(raw) : raw;
+      if (typeof v === 'number') abs.push(Math.abs(v));
+    }
+    abs.sort((a, b) => {
+      if (Number.isNaN(a)) return Number.isNaN(b) ? 0 : -1;
+      if (Number.isNaN(b)) return 1;
+      return b - a;
+    });
+    const top = abs.slice(0, k);
+    let cut: number | null = null;
+    for (const v of top) {
+      if (Number.isNaN(v)) continue;
+      if (cut === null || v < cut) cut = v;
+    }
+    if (cut === null) {
+      if (top.length === 0) return null;
+      cut = NaN;
+    }
+    return { column, direction: 'top', threshold: cut };
+  }
+
   let direction: TailDirection;
   if (declared === 'auto') {
     // The observed range tells a p-value from its -log10 — see
     // resolveTailDirection. Nulls and NaN are skipped, like polars' min/max
     // over nulls; an unreadable range lands on 'low' harmlessly.
-    const values = cols[columns.indexOf(column)];
     let lo: number | null = null;
     let hi: number | null = null;
     for (const raw of values) {
@@ -381,11 +441,13 @@ function resolveTail(
  * (routes.py:413) — nulls are not tail members and must not be dropped by the
  * negation either.
  */
-function tailKeep(raw: unknown, direction: TailDirection, threshold: number): boolean {
+function tailKeep(raw: unknown, direction: TailDirection | 'top', threshold: number): boolean {
   const v = typeof raw === 'bigint' ? Number(raw) : raw;
   if (typeof v !== 'number' || Number.isNaN(v)) return false;
   if (direction === 'low') return v <= threshold;
   if (direction === 'high') return v >= threshold;
+  // 'both' and 'top' both keep the large |x| end; they differ only in where
+  // the threshold came from (a convention, or the k-th largest value).
   return Math.abs(v) >= threshold;
 }
 
@@ -429,6 +491,54 @@ function tailSample(
     }
   }
   if (idx.length > cap * 4) return null;
+  return idx;
+}
+
+// ---------------------------------------------------------------------------
+// log-rank thinning (_log_rank_sample, routes.py)
+// ---------------------------------------------------------------------------
+
+/**
+ * Keep the log-spaced ranks of a rank-ordered curve. Rows are kept by rank
+ * VALUE, not position, so every sample's curve keeps the same ranks and the
+ * budget is split across samples (`n_unique` counts null as a value, as
+ * Polars does). Null when the rank column is unbound/absent or all-null —
+ * the caller falls back to a uniform sample.
+ */
+function logRankSample(
+  columns: string[],
+  cols: unknown[][],
+  roles: Record<string, string>,
+  cap: number,
+): number[] | null {
+  const rankCol = roles['rank'];
+  if (!rankCol || !columns.includes(rankCol)) return null;
+  const ranks = cols[columns.indexOf(rankCol)];
+  const sampleCol = roles['sample'];
+  let nCurves = 1;
+  if (sampleCol && columns.includes(sampleCol)) {
+    const seen = new Set<string>();
+    for (const v of cols[columns.indexOf(sampleCol)]) seen.add(cellKey(v));
+    nCurves = Math.max(1, seen.size);
+  }
+  let maxRank: number | null = null;
+  for (const raw of ranks) {
+    const v = typeof raw === 'bigint' ? Number(raw) : raw;
+    if (typeof v !== 'number' || Number.isNaN(v)) continue;
+    if (maxRank === null || v > maxRank) maxRank = v;
+  }
+  if (maxRank === null) return null;
+  const keep = new Set(
+    logSpacedRankThin(Math.trunc(maxRank), Math.max(2, Math.floor(cap / nCurves))).map(
+      (p) => p + 1,
+    ),
+  );
+  const idx: number[] = [];
+  for (let i = 0; i < ranks.length; i++) {
+    const raw = ranks[i];
+    const v = typeof raw === 'bigint' ? Number(raw) : raw;
+    if (typeof v === 'number' && keep.has(v)) idx.push(i);
+  }
   return idx;
 }
 
