@@ -228,6 +228,11 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
               <Badge color="blue" variant="light">
                 {counts.api ?? 0} via Depictio
               </Badge>
+              {(counts.snapshot ?? 0) > 0 && (
+                <Badge color="grape" variant="light">
+                  {counts.snapshot} as snapshot
+                </Badge>
+              )}
               {(counts.omitted ?? 0) > 0 && (
                 <Badge color="gray" variant="light">
                   {counts.omitted} omitted
@@ -280,6 +285,11 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
                               <Badge size="xs" color={meta.color} variant="light">
                                 {meta.label}
                               </Badge>
+                              {c.output === 'snapshot' && (
+                                <Badge size="xs" color="grape" variant="outline">
+                                  snapshot
+                                </Badge>
+                              )}
                               {c.name && (
                                 <Text size="xs" c="dimmed" ff="monospace">
                                   {c.name}

@@ -413,6 +413,26 @@ def _job_api(statuses):
     return handler, state
 
 
+def test_a_tile_that_cannot_be_fetched_shows_a_placeholder_not_an_error(monkeypatch):
+    """One failing tile costs that tile: display never raises, `.figure` still does."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith(f"/dashboards/get/{DASH}"):
+            return httpx.Response(200, json=DASHBOARD)
+        return httpx.Response(404, json={"detail": "JBrowse is disabled on this instance."})
+
+    client = DepictioClient("https://depictio.test", "tok", transport=httpx.MockTransport(handler))
+    for title in ("Bill shape", "Raw data", "Species mix", "Embedding"):
+        comp = client.component(DASH, title)
+        bundle = comp._repr_mimebundle_()
+        assert "could not be shown here" in bundle["text/html"], title
+        assert "JBrowse is disabled" in bundle["text/html"], title
+        assert f"https://depictio.test/dashboard/{DASH}" in bundle["text/html"]
+        assert "could not be shown here" in comp._repr_html_()
+    with pytest.raises(DepictioClientError):
+        client.component(DASH, "Bill shape").figure
+
+
 def test_poll_retries_a_failed_job_once():
     handler, state = _job_api(["error", "ready"])
     client = DepictioClient("https://depictio.test", "tok", transport=httpx.MockTransport(handler))

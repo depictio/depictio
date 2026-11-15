@@ -290,6 +290,43 @@ class DepictioComponent:
             'sandbox="allow-scripts allow-same-origin" title="Depictio component"></iframe>'
         )
 
+    @property
+    def live_url(self) -> str | None:
+        """The live dashboard this tile belongs to, on the instance it came from."""
+        base = getattr(self.client, "base_url", "") or ""
+        return f"{base}/dashboard/{self.dashboard_id}" if base else None
+
+    def _live_link(self, text: str = "Open the live dashboard") -> str:
+        url = self.live_url
+        if not url:
+            return ""
+        return f'<a href="{_html.escape(url, quote=True)}">{_html.escape(text)}</a>'
+
+    def _placeholder_html(self, reason: str) -> str:
+        """What a tile shows when it cannot be drawn: its title, why, and where it lives.
+
+        A report is a document a reader trusts end to end; one tile that cannot
+        be fetched (an instance without JBrowse, a renderer that timed out, a
+        table over the export cap) must cost that tile, never the document.
+        """
+        link = self._live_link()
+        return (
+            '<div class="dpx-unavailable" data-dpx-unavailable="1" style="border:1px dashed '
+            "#adb5bd;border-radius:8px;padding:10px 14px;margin:4px 0;font-size:13px;"
+            'color:#495057">'
+            f"<b>{_html.escape(self.title)}</b> could not be shown here."
+            f'<div style="margin-top:4px;color:#868e96">{_html.escape(reason)}</div>'
+            '<div style="margin-top:6px;font-size:12px">'
+            + (f"{link} · " if link else "")
+            + "re-run this cell, or call <code>.refresh()</code> on the component, to try again"
+            "</div></div>"
+        )
+
+    @staticmethod
+    def _reason(exc: BaseException) -> str:
+        text = str(exc).strip() or type(exc).__name__
+        return text if len(text) <= 400 else text[:399] + "…"
+
     def _display_html(self) -> str:
         """HTML for the default display; subclasses override for lighter renderings."""
         return self._iframe(self.html)
@@ -297,8 +334,7 @@ class DepictioComponent:
     def _display_markdown(self) -> str | None:
         return None
 
-    def _repr_mimebundle_(self, include=None, exclude=None, **kwargs):
-        """The Jupyter kernel's display hook (what Quarto renders from)."""
+    def _bundle(self) -> dict[str, Any]:
         mode = self.default_display
         if mode == "figure":
             return figure_bundle(self.figure)
@@ -311,15 +347,31 @@ class DepictioComponent:
             return {MARKDOWN_MIME: self._display_markdown() or "", PLAIN_MIME: self.title}
         return {HTML_MIME: self._display_html(), PLAIN_MIME: repr(self)}
 
+    def _repr_mimebundle_(self, include=None, exclude=None, **kwargs):
+        """The Jupyter kernel's display hook (what Quarto renders from).
+
+        Never raises: a failure becomes a visible placeholder carrying the
+        reason. Asking for ``.figure`` / ``.data`` explicitly still raises.
+        """
+        try:
+            return self._bundle()
+        except Exception as exc:  # noqa: BLE001 - a tile must never break the document
+            reason = self._reason(exc)
+            return {
+                HTML_MIME: self._placeholder_html(reason),
+                PLAIN_MIME: f"{self.title}: not available ({reason})",
+            }
+
     def _repr_html_(self) -> str | None:
-        mode = self.default_display
-        if mode == "figure":
-            return self.figure.to_html(full_html=False, include_plotlyjs=PLOTLY_JS)
-        if mode == "data" and isinstance(self.data, pl.DataFrame):
-            return self.data._repr_html_()
-        if mode == "markdown":
+        try:
+            bundle = self._bundle()
+        except Exception as exc:  # noqa: BLE001 - same contract as _repr_mimebundle_
+            return self._placeholder_html(self._reason(exc))
+        if HTML_MIME in bundle:
+            return str(bundle[HTML_MIME])
+        if MARKDOWN_MIME in bundle:
             return None
-        return self._display_html()
+        return f"<pre>{_html.escape(str(bundle.get(PLAIN_MIME, '')))}</pre>"
 
     def show(self) -> Any:
         """Display now (``IPython.display.display`` when available)."""

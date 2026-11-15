@@ -1258,6 +1258,9 @@ export interface NotebookPreflightComponent {
   component_type: string;
   kind?: string | null;
   status: NotebookInclusion;
+  /** What an `api` tile looks like in the report: a Plotly figure, static HTML,
+   *  or a PNG snapshot of a renderer that is not Plotly. */
+  output?: 'interactive' | 'static' | 'snapshot' | null;
   reason?: string | null;
   name?: string | null;
   tab?: string | null;

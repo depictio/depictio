@@ -36,6 +36,12 @@ def patched_env():
                     "title": "Volcano",
                 },
                 {"index": "tbl-1", "component_type": "table", "title": "Rows"},
+                {
+                    "index": "rec-1",
+                    "component_type": "advanced_viz",
+                    "viz_kind": "record_card",
+                    "title": "Sample record",
+                },
             ],
         }
     )
@@ -79,6 +85,15 @@ def _figure(component):
 def test_non_plotly_component_is_unsupported(patched_env):
     resp = _figure("tbl-1")
     assert resp.status == "unsupported" and "table" in (resp.reason or "")
+
+
+def test_a_kind_drawn_without_plotly_answers_at_once(patched_env):
+    """No browser pass that would wait 90 s for a Plotly div the renderer never draws."""
+    with patch("depictio.api.v1.celery_tasks.extract_component_figure_task") as task:
+        resp = _figure("rec-1")
+    assert resp.status == "unsupported"
+    assert "without Plotly" in (resp.reason or "")
+    task.delay.assert_not_called()
 
 
 def test_dispatch_then_poll_then_cache(patched_env):

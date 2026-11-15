@@ -107,6 +107,19 @@ def component_figure(
             status="unsupported",
             reason=f"a {ctype} component has no Plotly figure; use .data or .html instead",
         )
+    if ctype == "advanced_viz":
+        from depictio.api.v1.services.notebook_export.classify import advanced_viz_delivery
+
+        if advanced_viz_delivery(meta) == "snapshot":
+            # Answer now rather than after a browser pass that waits for a
+            # Plotly div this renderer never draws.
+            return ComponentFigureResponse(
+                status="unsupported",
+                reason=(
+                    "this visualisation is drawn without Plotly (SVG, canvas or WebGL); "
+                    "open the live dashboard to see it"
+                ),
+            )
     state = request.state.model_dump(mode="json", exclude_none=True) if request.state else {}
     key = _cache_key(dashboard_id, component_id, state, request.theme)
     hit = _cached(key)

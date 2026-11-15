@@ -144,6 +144,12 @@ class AnalysisState(BaseModel):
 # not at all (with a reason written for the reader).
 NotebookInclusion = Literal["code", "api", "omitted"]
 
+# What an ``api`` tile looks like in the rendered report: a Plotly figure the
+# reader can hover and zoom, static HTML (a card, a table), or a PNG snapshot
+# of a renderer that is not Plotly (SVG, canvas, WebGL), interactive only in
+# the live dashboard.
+NotebookOutput = Literal["interactive", "static", "snapshot"]
+
 
 class NotebookExportRequest(BaseModel):
     """The analysis state to export. The export is one Quarto document (``.qmd``)."""
@@ -157,6 +163,7 @@ class NotebookPreflightComponent(BaseModel):
     component_type: str
     kind: str | None = None
     status: NotebookInclusion
+    output: NotebookOutput | None = None
     reason: str | None = None
     name: str | None = None
     tab: str | None = None

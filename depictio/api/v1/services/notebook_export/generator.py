@@ -716,6 +716,7 @@ class NotebookBuilder:
                         "its data collection has no Delta table in this export "
                         "(e.g. a MultiQC report); re-rendered through the Depictio API",
                         kind=verdict.kind,
+                        output="static" if meta.get("component_type") != "figure" else None,
                     )
             name = self._name_for(meta, verdict)
             out.append((ComponentEntry(unit=unit, verdict=verdict, name=name), current_tab))
@@ -735,12 +736,14 @@ class NotebookBuilder:
     # -------------------------------------------------------------- preflight
     def preflight(self, *, render_available: bool = False) -> NotebookPreflight:
         components: list[NotebookPreflightComponent] = []
-        counts = {"code": 0, "api": 0, "omitted": 0}
+        counts = {"code": 0, "api": 0, "omitted": 0, "snapshot": 0}
         for entry, tab in self.entries():
             if isinstance(entry, MarkdownUnit):
                 continue
             meta = entry.unit.meta
             counts[entry.verdict.status] = counts.get(entry.verdict.status, 0) + 1
+            if entry.verdict.output == "snapshot":
+                counts["snapshot"] += 1
             components.append(
                 NotebookPreflightComponent(
                     index=str(meta.get("index") or ""),
@@ -748,6 +751,7 @@ class NotebookBuilder:
                     component_type=str(meta.get("component_type") or ""),
                     kind=entry.verdict.kind,
                     status=entry.verdict.status,  # type: ignore[arg-type]
+                    output=entry.verdict.output,
                     reason=entry.verdict.reason,
                     name=entry.name,
                     tab=tab,
