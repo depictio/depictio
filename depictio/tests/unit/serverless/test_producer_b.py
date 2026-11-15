@@ -478,6 +478,53 @@ def test_card_filter_expr_ships_as_a_boolean_companion(tmp_path: Path) -> None:
     assert df[name].to_list() == [True, True, False, False]
 
 
+def test_card_secondary_layout_columns_ship(tmp_path: Path) -> None:
+    """The trend axis / attrition stages / breakdown column of a card's strip
+    are bundled: the browser recomputes the strip from them (it used to be
+    dropped by producer B)."""
+    from depictio.models.models.dashboards import DashboardDataLite
+
+    (tmp_path / "wf").mkdir()
+    pl.DataFrame(
+        {"reads": [10, 8], "mapped": [9, 7], "run": [1, 2], "lane": ["a", "b"], "x": [0, 0]}
+    ).write_parquet(tmp_path / "wf" / "dc.parquet")
+    base = {"component_type": "card", "workflow_tag": "wf", "data_collection_tag": "dc"}
+    spec = DashboardDataLite.model_validate(
+        _mini_spec(
+            [
+                {
+                    **base,
+                    "tag": "c1",
+                    "column_name": "reads",
+                    "aggregation": "sum",
+                    "secondary_layout": "trend",
+                    "trend_col": "run",
+                },
+                {
+                    **base,
+                    "tag": "c2",
+                    "column_name": "reads",
+                    "aggregation": "sum",
+                    "secondary_layout": "attrition",
+                    "attrition_cols": ["mapped"],
+                },
+                {
+                    **base,
+                    "tag": "c3",
+                    "column_name": "reads",
+                    "aggregation": "sum",
+                    "secondary_layout": "top_n",
+                    "breakdown_col": "lane",
+                },
+            ]
+        )
+    )
+    manifest = build_manifest(spec, tmp_path).manifest
+    ref = next(iter(manifest.data_refs.values()))
+    assert {c.name for c in ref.columns} == {"reads", "mapped", "run", "lane"}
+    assert all(manifest.tiers[t].tier is ComponentTier.LIVE for t in ("c1", "c2", "c3"))
+
+
 def test_table_without_dc_is_omitted() -> None:
     from depictio.models.models.dashboards import DashboardDataLite
 

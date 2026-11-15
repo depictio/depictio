@@ -19,8 +19,12 @@
 import {
   HyparquetEngine,
   applyResolver,
+  BREAKDOWN_LAYOUTS,
   bindFilters,
+  computeBreakdown,
   followsRegion,
+  needsLayoutPayload,
+  numericLayoutPayload,
   parseWallClockMicros,
   scopeRegionFilters,
   comparePolars,
@@ -49,7 +53,7 @@ import {
   type TableHandle,
 } from 'depictio-static-core';
 import type { InteractiveFilter } from '../../../../packages/depictio-react-core/src/api';
-import { bundle } from './bundle';
+import { bundle, familyMetadata } from './bundle';
 
 const engine: QueryEngine = new HyparquetEngine();
 
@@ -306,6 +310,10 @@ interface CardMeta {
   column_name?: string;
   aggregation?: string;
   aggregations?: string[];
+  secondary_layout?: string | null;
+  breakdown_col?: string | null;
+  trend_col?: string | null;
+  top_n_count?: number | null;
   filter_expr?: string | null;
   follow_region_filter?: boolean;
   config?: Record<string, unknown>;
@@ -324,9 +332,9 @@ export async function computeCardsLive(
   filter_count: number;
 }> {
   const manifest = bundle();
-  const doc = manifest.dashboard.doc as { stored_metadata?: CardMeta[] };
   const requested = componentIds ? new Set(componentIds) : null;
-  const cards = (doc.stored_metadata ?? []).filter(
+  // Family-wide: a persistent section draws its owner tab's cards on every tab.
+  const cards = (familyMetadata() as CardMeta[]).filter(
     (m) =>
       m.component_type === 'card' &&
       m.index &&
@@ -387,6 +395,44 @@ export async function computeCardsLive(
     return jsonNumber(value);
   };
 
+  // A card's secondary layout (breakdown strip, histogram, threshold, trend,
+  // …) is a reduction of the same masked rows as its hero value
+  // (`compute_breakdown` / `numeric_layout_payload`, depictio-static-core's
+  // cardLayouts) — recomputed here, never the export-time snapshot.
+  const layoutPayload = async (card: CardMeta, dcId: string, column: string) => {
+    if (!needsLayoutPayload(card)) return null;
+    const { ref, handle } = await tableFor(dcId);
+    const layout = String(card.secondary_layout || 'vertical');
+    const names = [
+      column,
+      card.breakdown_col,
+      card.trend_col,
+      ...((card.attrition_cols as unknown[] | undefined) ?? []),
+    ].filter((c): c is string => typeof c === 'string' && c.length > 0);
+    const schema = new Map(userColumns(ref).map((c) => [c.name, c.dtype]));
+    const present = [...new Set(names)].filter((c) => schema.has(c));
+    const cols = await engine.columns(handle, present);
+    const get = (name: string) =>
+      cols[name] ? { values: cols[name], dtype: schema.get(name) ?? '' } : undefined;
+    const mask = await maskFor(card, dcId);
+    if ((BREAKDOWN_LAYOUTS as readonly string[]).includes(layout)) {
+      const by = card.breakdown_col ? String(card.breakdown_col) : '';
+      if (!by || !get(by)) return null;
+      const payload = computeBreakdown(
+        get,
+        mask,
+        ref.rows,
+        column,
+        by,
+        String(card.aggregation || 'count'),
+        Number(card.top_n_count ?? 3),
+      );
+      return payload ? (['__breakdown__', payload] as const) : null;
+    }
+    const payload = numericLayoutPayload(get, mask, ref.rows, card, column, layout);
+    return payload ? ([`__${layout}__`, payload] as const) : null;
+  };
+
   await Promise.all(
     cards.map(async (card) => {
       const idx = String(card.index);
@@ -396,13 +442,23 @@ export async function computeCardsLive(
       try {
         values[idx] = await aggOne(card, dcId, column, card.aggregation);
         const secondary = card.aggregations ?? [];
+        const sec: Record<string, unknown> = {};
         if (secondary.length) {
           aggregations[idx] = [...secondary];
           const entries = await Promise.all(
             secondary.map(async (agg) => [agg, await aggOne(card, dcId, column, agg)] as const),
           );
-          secondary_values[idx] = Object.fromEntries(entries);
+          Object.assign(sec, Object.fromEntries(entries));
         }
+        try {
+          const extra = await layoutPayload(card, dcId, column);
+          if (extra) sec[extra[0]] = extra[1];
+        } catch (e) {
+          console.warn(`static bundle: card ${idx} secondary layout failed`, e);
+        }
+        // Always written for a live card, so the shim never lets a frozen
+        // strip from the export survive under live hero numbers.
+        secondary_values[idx] = sec;
       } catch (e) {
         console.error(`static bundle: card ${idx} computation failed`, e);
         values[idx] = null;

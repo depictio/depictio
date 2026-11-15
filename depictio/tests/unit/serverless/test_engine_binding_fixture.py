@@ -76,3 +76,45 @@ def test_filter_expr_companions_are_build_filter_expr():
     for name, expr in fe.items():
         want = base.select(build_filter_expr(expr).fill_null(False)).to_series().to_list()
         assert full[name].to_list() == want, expr
+
+
+def _close_payload(got, want, path=""):
+    if isinstance(want, float) and isinstance(got, float):
+        assert got == pytest.approx(want, rel=1e-9, abs=1e-12), path
+    elif isinstance(want, dict):
+        assert isinstance(got, dict) and set(got) == set(want), path
+        for k in want:
+            _close_payload(got[k], want[k], f"{path}.{k}")
+    elif isinstance(want, list):
+        assert isinstance(got, list) and len(got) == len(want), path
+        for i, (g, w) in enumerate(zip(got, want, strict=True)):
+            _close_payload(g, w, f"{path}[{i}]")
+    else:
+        assert got == want, path
+
+
+@pytest.mark.parametrize("name", sorted(EXPECTED["card_layouts"]))
+def test_card_layout_case_matches_the_server(name):
+    """The secondary-layout payloads the TS port is held to are the server's."""
+    from depictio.api.v1.services.card_breakdown import BREAKDOWN_LAYOUTS, compute_breakdown
+    from depictio.api.v1.services.card_metrics import numeric_layout_payload
+
+    _, base = _frames()
+    case = EXPECTED["card_layouts"][name]
+    frame = (
+        base.filter(pl.col("category_str").is_in(["alpha", "beta"]))
+        if name.endswith(":masked_in_str")
+        else base
+    )
+    card, layout = case["card"], case["layout"]
+    if layout in BREAKDOWN_LAYOUTS:
+        got = compute_breakdown(
+            frame,
+            column=card["column_name"],
+            breakdown_col=card["breakdown_col"],
+            aggregation=card["aggregation"],
+            top_n_count=int(card.get("top_n_count") or 3),
+        )
+    else:
+        got = numeric_layout_payload(frame, card, card["column_name"], layout)
+    _close_payload(got, case["payload"], name)

@@ -963,5 +963,1787 @@
       }
     }
   },
+  "card_layouts": {
+    "bd_count:full": {
+      "card": {
+        "column_name": "category_str",
+        "aggregation": "count",
+        "breakdown_col": "batch"
+      },
+      "layout": "top_n",
+      "payload": {
+        "column": "batch",
+        "total": 2000,
+        "top": [
+          {
+            "name": "2",
+            "count": 402,
+            "percent": 0.201
+          },
+          {
+            "name": "4",
+            "count": 397,
+            "percent": 0.1985
+          },
+          {
+            "name": "3",
+            "count": 382,
+            "percent": 0.191
+          }
+        ],
+        "top_share": 0.5905,
+        "unique_values": 6,
+        "breakdown_kind": "count",
+        "evenness": 0.967268904316891
+      }
+    },
+    "bd_count:masked_in_str": {
+      "card": {
+        "column_name": "category_str",
+        "aggregation": "count",
+        "breakdown_col": "batch"
+      },
+      "layout": "top_n",
+      "payload": {
+        "column": "batch",
+        "total": 1054,
+        "top": [
+          {
+            "name": "3",
+            "count": 213,
+            "percent": 0.20208728652751423
+          },
+          {
+            "name": "4",
+            "count": 206,
+            "percent": 0.1954459203036053
+          },
+          {
+            "name": "2",
+            "count": 203,
+            "percent": 0.19259962049335863
+          }
+        ],
+        "top_share": 0.5901328273244781,
+        "unique_values": 6,
+        "breakdown_kind": "count",
+        "evenness": 0.9602315916711059
+      }
+    },
+    "bd_sum_f64:full": {
+      "card": {
+        "column_name": "value_f64",
+        "aggregation": "sum",
+        "breakdown_col": "category_str"
+      },
+      "layout": "donut",
+      "payload": {
+        "column": "category_str",
+        "total": 19,
+        "top": [
+          {
+            "name": "alpha",
+            "count": 73,
+            "percent": 3.8421052631578947
+          },
+          {
+            "name": "beta",
+            "count": 16,
+            "percent": 0.8421052631578947
+          },
+          {
+            "name": "(null)",
+            "count": -4,
+            "percent": -0.21052631578947367
+          }
+        ],
+        "top_share": 4.473684210526316,
+        "unique_values": 6,
+        "breakdown_kind": "sum",
+        "evenness": 0.0
+      }
+    },
+    "bd_sum_f64:masked_in_str": {
+      "card": {
+        "column_name": "value_f64",
+        "aggregation": "sum",
+        "breakdown_col": "category_str"
+      },
+      "layout": "donut",
+      "payload": {
+        "column": "category_str",
+        "total": 90,
+        "top": [
+          {
+            "name": "alpha",
+            "count": 73,
+            "percent": 0.8111111111111111
+          },
+          {
+            "name": "beta",
+            "count": 16,
+            "percent": 0.17777777777777778
+          }
+        ],
+        "top_share": 0.9888888888888889,
+        "unique_values": 2,
+        "breakdown_kind": "sum",
+        "evenness": 0.68797480861222
+      }
+    },
+    "bd_sum_i64:full": {
+      "card": {
+        "column_name": "value_i64",
+        "aggregation": "sum",
+        "breakdown_col": "batch",
+        "top_n_count": 5
+      },
+      "layout": "composition",
+      "payload": {
+        "column": "batch",
+        "total": 184000000186194,
+        "top": [
+          {
+            "name": "1",
+            "count": 60000000034196,
+            "percent": 0.32608695637761176
+          },
+          {
+            "name": "3",
+            "count": 48000000034723,
+            "percent": 0.2608695651421231
+          },
+          {
+            "name": "2",
+            "count": 36000000037715,
+            "percent": 0.1956521739200312
+          },
+          {
+            "name": "4",
+            "count": 20000000036210,
+            "percent": 0.10869565226071479
+          },
+          {
+            "name": "5",
+            "count": 16000000032948,
+            "percent": 0.08695652183020226
+          }
+        ],
+        "top_share": 0.9782608695306831,
+        "unique_values": 6,
+        "breakdown_kind": "sum",
+        "evenness": 0.8773315022774085
+      }
+    },
+    "bd_sum_i64:masked_in_str": {
+      "card": {
+        "column_name": "value_i64",
+        "aggregation": "sum",
+        "breakdown_col": "batch",
+        "top_n_count": 5
+      },
+      "layout": "composition",
+      "payload": {
+        "column": "batch",
+        "total": 76000000096857,
+        "top": [
+          {
+            "name": "1",
+            "count": 32000000018724,
+            "percent": 0.4210526312887119
+          },
+          {
+            "name": "3",
+            "count": 20000000018844,
+            "percent": 0.263157894649412
+          },
+          {
+            "name": "2",
+            "count": 12000000018452,
+            "percent": 0.15789473688366829
+          },
+          {
+            "name": "5",
+            "count": 8000000017658,
+            "percent": 0.10526315799292797
+          },
+          {
+            "name": "(null)",
+            "count": 4000000004609,
+            "percent": 0.05263157894093767
+          }
+        ],
+        "top_share": 0.9999999997556579,
+        "unique_values": 6,
+        "breakdown_kind": "sum",
+        "evenness": 0.7807523405613236
+      }
+    },
+    "bd_nunique:full": {
+      "card": {
+        "column_name": "value_i64",
+        "aggregation": "nunique",
+        "breakdown_col": "category_str"
+      },
+      "layout": "concentration",
+      "payload": {
+        "column": "category_str",
+        "total": 910,
+        "top": [
+          {
+            "name": "alpha",
+            "count": 193,
+            "percent": 0.21208791208791208
+          },
+          {
+            "name": "beta",
+            "count": 176,
+            "percent": 0.1934065934065934
+          },
+          {
+            "name": "gamma",
+            "count": 171,
+            "percent": 0.1879120879120879
+          }
+        ],
+        "top_share": 0.5934065934065934,
+        "unique_values": 6,
+        "breakdown_kind": "nunique",
+        "evenness": 0.9843553010634317
+      }
+    },
+    "bd_nunique:masked_in_str": {
+      "card": {
+        "column_name": "value_i64",
+        "aggregation": "nunique",
+        "breakdown_col": "category_str"
+      },
+      "layout": "concentration",
+      "payload": {
+        "column": "category_str",
+        "total": 369,
+        "top": [
+          {
+            "name": "alpha",
+            "count": 193,
+            "percent": 0.5230352303523035
+          },
+          {
+            "name": "beta",
+            "count": 176,
+            "percent": 0.47696476964769646
+          }
+        ],
+        "top_share": 1.0,
+        "unique_values": 2,
+        "breakdown_kind": "nunique",
+        "evenness": 0.9984684069468356
+      }
+    },
+    "bd_self:full": {
+      "card": {
+        "column_name": "category_str",
+        "aggregation": "nunique",
+        "breakdown_col": "category_str"
+      },
+      "layout": "top_n",
+      "payload": {
+        "column": "category_str",
+        "total": 2000,
+        "top": [
+          {
+            "name": "alpha",
+            "count": 634,
+            "percent": 0.317
+          },
+          {
+            "name": "beta",
+            "count": 420,
+            "percent": 0.21
+          },
+          {
+            "name": "gamma",
+            "count": 339,
+            "percent": 0.1695
+          }
+        ],
+        "top_share": 0.6965,
+        "unique_values": 6,
+        "breakdown_kind": "nunique",
+        "evenness": 0.9324787850270468
+      }
+    },
+    "bd_self:masked_in_str": {
+      "card": {
+        "column_name": "category_str",
+        "aggregation": "nunique",
+        "breakdown_col": "category_str"
+      },
+      "layout": "top_n",
+      "payload": {
+        "column": "category_str",
+        "total": 1054,
+        "top": [
+          {
+            "name": "alpha",
+            "count": 634,
+            "percent": 0.6015180265654649
+          },
+          {
+            "name": "beta",
+            "count": 420,
+            "percent": 0.3984819734345351
+          }
+        ],
+        "top_share": 1.0,
+        "unique_values": 2,
+        "breakdown_kind": "nunique",
+        "evenness": 0.9700556767528163
+      }
+    },
+    "bd_mean:full": {
+      "card": {
+        "column_name": "value_f64",
+        "aggregation": "average",
+        "breakdown_col": "batch"
+      },
+      "layout": "top_n",
+      "payload": {
+        "column": "batch",
+        "total": 2000,
+        "top": [
+          {
+            "name": "2",
+            "count": 0.2824116737967915,
+            "percent": null
+          },
+          {
+            "name": "5",
+            "count": 0.10213156534954407,
+            "percent": null
+          },
+          {
+            "name": "3",
+            "count": 0.10136131767955801,
+            "percent": null
+          }
+        ],
+        "top_share": null,
+        "unique_values": 6,
+        "breakdown_kind": "average",
+        "evenness": null
+      }
+    },
+    "bd_mean:masked_in_str": {
+      "card": {
+        "column_name": "value_f64",
+        "aggregation": "average",
+        "breakdown_col": "batch"
+      },
+      "layout": "top_n",
+      "payload": {
+        "column": "batch",
+        "total": 1054,
+        "top": [
+          {
+            "name": "2",
+            "count": 0.4644293262032084,
+            "percent": null
+          },
+          {
+            "name": "5",
+            "count": 0.07979254857142855,
+            "percent": null
+          },
+          {
+            "name": "(null)",
+            "count": 0.07260595454545465,
+            "percent": null
+          }
+        ],
+        "top_share": null,
+        "unique_values": 6,
+        "breakdown_kind": "average",
+        "evenness": null
+      }
+    },
+    "bd_min:full": {
+      "card": {
+        "column_name": "value_f64",
+        "aggregation": "min",
+        "breakdown_col": "category_str"
+      },
+      "layout": "top_n",
+      "payload": {
+        "column": "category_str",
+        "total": 2000,
+        "top": [
+          {
+            "name": "beta",
+            "count": -6.583291,
+            "percent": null
+          },
+          {
+            "name": "gamma",
+            "count": -6.342375,
+            "percent": null
+          },
+          {
+            "name": "delta",
+            "count": -5.584713,
+            "percent": null
+          }
+        ],
+        "top_share": null,
+        "unique_values": 6,
+        "breakdown_kind": "min",
+        "evenness": null
+      }
+    },
+    "bd_min:masked_in_str": {
+      "card": {
+        "column_name": "value_f64",
+        "aggregation": "min",
+        "breakdown_col": "category_str"
+      },
+      "layout": "top_n",
+      "payload": {
+        "column": "category_str",
+        "total": 1054,
+        "top": [
+          {
+            "name": "beta",
+            "count": -6.583291,
+            "percent": null
+          },
+          {
+            "name": "alpha",
+            "count": -5.23401,
+            "percent": null
+          }
+        ],
+        "top_share": null,
+        "unique_values": 2,
+        "breakdown_kind": "min",
+        "evenness": null
+      }
+    },
+    "bd_bool:full": {
+      "card": {
+        "column_name": "value_f64",
+        "aggregation": "count",
+        "breakdown_col": "flag_bool"
+      },
+      "layout": "donut",
+      "payload": {
+        "column": "flag_bool",
+        "total": 2000,
+        "top": [
+          {
+            "name": "false",
+            "count": 1136,
+            "percent": 0.568
+          },
+          {
+            "name": "true",
+            "count": 747,
+            "percent": 0.3735
+          },
+          {
+            "name": "(null)",
+            "count": 117,
+            "percent": 0.0585
+          }
+        ],
+        "top_share": 1.0,
+        "unique_values": 3,
+        "breakdown_kind": "count",
+        "evenness": 0.7784205421135552
+      }
+    },
+    "bd_bool:masked_in_str": {
+      "card": {
+        "column_name": "value_f64",
+        "aggregation": "count",
+        "breakdown_col": "flag_bool"
+      },
+      "layout": "donut",
+      "payload": {
+        "column": "flag_bool",
+        "total": 1054,
+        "top": [
+          {
+            "name": "false",
+            "count": 595,
+            "percent": 0.5645161290322581
+          },
+          {
+            "name": "true",
+            "count": 395,
+            "percent": 0.3747628083491461
+          },
+          {
+            "name": "(null)",
+            "count": 64,
+            "percent": 0.06072106261859583
+          }
+        ],
+        "top_share": 1.0,
+        "unique_values": 3,
+        "breakdown_kind": "count",
+        "evenness": 0.7834483220828483
+      }
+    },
+    "hist_f64:full": {
+      "card": {
+        "column_name": "value_f64",
+        "aggregation": "average"
+      },
+      "layout": "histogram",
+      "payload": {
+        "bins": [
+          3,
+          6,
+          10,
+          31,
+          49,
+          76,
+          145,
+          194,
+          204,
+          241,
+          251,
+          225,
+          165,
+          112,
+          81,
+          48,
+          20,
+          9,
+          2,
+          2
+        ],
+        "breakpoints": [
+          -5.91444535,
+          -5.2455997,
+          -4.57675405,
+          -3.9079084,
+          -3.2390627500000004,
+          -2.5702171,
+          -1.90137145,
+          -1.2325258000000003,
+          -0.5636801500000006,
+          0.10516549999999913,
+          0.7740111499999998,
+          1.4428568000000004,
+          2.11170245,
+          2.7805481,
+          3.4493937499999996,
+          4.118239399999999,
+          4.787085049999999,
+          5.455930699999999,
+          6.1247763499999985,
+          6.793622
+        ],
+        "min": -6.583291,
+        "max": 6.793622,
+        "median": 0.033745,
+        "total": 2000,
+        "nulls": 126
+      }
+    },
+    "hist_f64:masked_in_str": {
+      "card": {
+        "column_name": "value_f64",
+        "aggregation": "average"
+      },
+      "layout": "histogram",
+      "payload": {
+        "bins": [
+          1,
+          1,
+          8,
+          16,
+          28,
+          31,
+          74,
+          99,
+          111,
+          123,
+          126,
+          121,
+          90,
+          56,
+          53,
+          29,
+          11,
+          6,
+          1,
+          1
+        ],
+        "breakpoints": [
+          -5.91444535,
+          -5.2455997,
+          -4.57675405,
+          -3.9079084,
+          -3.2390627500000004,
+          -2.5702171,
+          -1.90137145,
+          -1.2325258000000003,
+          -0.5636801500000006,
+          0.10516549999999913,
+          0.7740111499999998,
+          1.4428568000000004,
+          2.11170245,
+          2.7805481,
+          3.4493937499999996,
+          4.118239399999999,
+          4.787085049999999,
+          5.455930699999999,
+          6.1247763499999985,
+          6.793622
+        ],
+        "min": -6.583291,
+        "max": 6.793622,
+        "median": 0.1164425,
+        "total": 1054,
+        "nulls": 68
+      }
+    },
+    "hist_nn:full": {
+      "card": {
+        "column_name": "metric_f64_nn",
+        "aggregation": "average"
+      },
+      "layout": "histogram",
+      "payload": {
+        "bins": [
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100
+        ],
+        "breakpoints": [
+          -75.0125,
+          -50.025,
+          -25.037499999999994,
+          -0.04999999999999716,
+          24.9375,
+          49.92500000000001,
+          74.9125,
+          99.9,
+          124.88750000000002,
+          149.875,
+          174.8625,
+          199.85000000000002,
+          224.83750000000003,
+          249.825,
+          274.8125,
+          299.8,
+          324.7875,
+          349.77500000000003,
+          374.7625,
+          399.75
+        ],
+        "min": -100.0,
+        "max": 399.75,
+        "median": 149.875,
+        "total": 2000,
+        "nulls": 0
+      }
+    },
+    "hist_nn:masked_in_str": {
+      "card": {
+        "column_name": "metric_f64_nn",
+        "aggregation": "average"
+      },
+      "layout": "histogram",
+      "payload": {
+        "bins": [
+          49,
+          53,
+          59,
+          54,
+          62,
+          55,
+          47,
+          45,
+          53,
+          49,
+          45,
+          63,
+          42,
+          55,
+          53,
+          58,
+          60,
+          45,
+          53,
+          54
+        ],
+        "breakpoints": [
+          -74.775,
+          -49.8,
+          -24.82499999999999,
+          0.15000000000000568,
+          25.125,
+          50.10000000000002,
+          75.07500000000002,
+          100.05000000000001,
+          125.025,
+          150.0,
+          174.97500000000002,
+          199.95000000000005,
+          224.925,
+          249.90000000000003,
+          274.875,
+          299.85,
+          324.82500000000005,
+          349.8,
+          374.77500000000003,
+          399.75
+        ],
+        "min": -99.75,
+        "max": 399.75,
+        "median": 150.5,
+        "total": 1054,
+        "nulls": 0
+      }
+    },
+    "hist_batch:full": {
+      "card": {
+        "column_name": "batch",
+        "aggregation": "average"
+      },
+      "layout": "histogram",
+      "payload": {
+        "bins": [
+          356,
+          0,
+          0,
+          0,
+          402,
+          0,
+          0,
+          0,
+          0,
+          382,
+          0,
+          0,
+          0,
+          0,
+          397,
+          0,
+          0,
+          0,
+          0,
+          352
+        ],
+        "breakpoints": [
+          1.2,
+          1.4,
+          1.6,
+          1.8,
+          2.0,
+          2.2,
+          2.4000000000000004,
+          2.6,
+          2.8,
+          3.0,
+          3.2,
+          3.4000000000000004,
+          3.6,
+          3.8000000000000003,
+          4.0,
+          4.2,
+          4.4,
+          4.6,
+          4.800000000000001,
+          5.0
+        ],
+        "min": 1.0,
+        "max": 5.0,
+        "median": 3.0,
+        "total": 2000,
+        "nulls": 111
+      }
+    },
+    "hist_batch:masked_in_str": {
+      "card": {
+        "column_name": "batch",
+        "aggregation": "average"
+      },
+      "layout": "histogram",
+      "payload": {
+        "bins": [
+          194,
+          0,
+          0,
+          0,
+          203,
+          0,
+          0,
+          0,
+          0,
+          213,
+          0,
+          0,
+          0,
+          0,
+          206,
+          0,
+          0,
+          0,
+          0,
+          190
+        ],
+        "breakpoints": [
+          1.2,
+          1.4,
+          1.6,
+          1.8,
+          2.0,
+          2.2,
+          2.4000000000000004,
+          2.6,
+          2.8,
+          3.0,
+          3.2,
+          3.4000000000000004,
+          3.6,
+          3.8000000000000003,
+          4.0,
+          4.2,
+          4.4,
+          4.6,
+          4.800000000000001,
+          5.0
+        ],
+        "min": 1.0,
+        "max": 5.0,
+        "median": 3.0,
+        "total": 1054,
+        "nulls": 48
+      }
+    },
+    "thr_min_warn:full": {
+      "card": {
+        "column_name": "value_f64",
+        "aggregation": "average",
+        "threshold_value": 0.5,
+        "threshold_warn": -1.0
+      },
+      "layout": "threshold",
+      "payload": {
+        "column": "value_f64",
+        "threshold": 0.5,
+        "warn_threshold": -1.0,
+        "direction": "min",
+        "total": 2000,
+        "measured": 1874,
+        "nulls": 126,
+        "passing": 755,
+        "warning": 528,
+        "failing": 591,
+        "pass_rate": 0.4028815368196371,
+        "min": -6.583291,
+        "max": 6.793622,
+        "median": 0.033745
+      }
+    },
+    "thr_min_warn:masked_in_str": {
+      "card": {
+        "column_name": "value_f64",
+        "aggregation": "average",
+        "threshold_value": 0.5,
+        "threshold_warn": -1.0
+      },
+      "layout": "threshold",
+      "payload": {
+        "column": "value_f64",
+        "threshold": 0.5,
+        "warn_threshold": -1.0,
+        "direction": "min",
+        "total": 1054,
+        "measured": 986,
+        "nulls": 68,
+        "passing": 420,
+        "warning": 267,
+        "failing": 299,
+        "pass_rate": 0.4259634888438134,
+        "min": -6.583291,
+        "max": 6.793622,
+        "median": 0.1164425
+      }
+    },
+    "thr_max:full": {
+      "card": {
+        "column_name": "value_i64",
+        "aggregation": "average",
+        "threshold_value": 100,
+        "threshold_direction": "max"
+      },
+      "layout": "threshold",
+      "payload": {
+        "column": "value_i64",
+        "threshold": 100.0,
+        "warn_threshold": null,
+        "direction": "max",
+        "total": 2000,
+        "measured": 1893,
+        "nulls": 107,
+        "passing": 912,
+        "warning": 0,
+        "failing": 981,
+        "pass_rate": 0.48177496038034867,
+        "min": 0.0,
+        "max": 4000000000010.0,
+        "median": 105.0
+      }
+    },
+    "thr_max:masked_in_str": {
+      "card": {
+        "column_name": "value_i64",
+        "aggregation": "average",
+        "threshold_value": 100,
+        "threshold_direction": "max"
+      },
+      "layout": "threshold",
+      "payload": {
+        "column": "value_i64",
+        "threshold": 100.0,
+        "warn_threshold": null,
+        "direction": "max",
+        "total": 1054,
+        "measured": 999,
+        "nulls": 55,
+        "passing": 498,
+        "warning": 0,
+        "failing": 501,
+        "pass_rate": 0.4984984984984985,
+        "min": 0.0,
+        "max": 4000000000010.0,
+        "median": 101.0
+      }
+    },
+    "completeness:full": {
+      "card": {
+        "column_name": "value_f64",
+        "aggregation": "count"
+      },
+      "layout": "completeness",
+      "payload": {
+        "column": "value_f64",
+        "total": 2000,
+        "filled": 1874,
+        "nulls": 126,
+        "fill_rate": 0.937
+      }
+    },
+    "completeness:masked_in_str": {
+      "card": {
+        "column_name": "value_f64",
+        "aggregation": "count"
+      },
+      "layout": "completeness",
+      "payload": {
+        "column": "value_f64",
+        "total": 1054,
+        "filled": 986,
+        "nulls": 68,
+        "fill_rate": 0.9354838709677419
+      }
+    },
+    "uniq_sample:full": {
+      "card": {
+        "column_name": "sample_id",
+        "aggregation": "nunique"
+      },
+      "layout": "uniqueness",
+      "payload": {
+        "column": "sample_id",
+        "total": 2000,
+        "measured": 1924,
+        "distinct": 1924,
+        "duplicated": 0,
+        "unique_rate": 1.0,
+        "nulls": 76,
+        "top_repeat": null
+      }
+    },
+    "uniq_sample:masked_in_str": {
+      "card": {
+        "column_name": "sample_id",
+        "aggregation": "nunique"
+      },
+      "layout": "uniqueness",
+      "payload": {
+        "column": "sample_id",
+        "total": 1054,
+        "measured": 1011,
+        "distinct": 1011,
+        "duplicated": 0,
+        "unique_rate": 1.0,
+        "nulls": 43,
+        "top_repeat": null
+      }
+    },
+    "uniq_batch:full": {
+      "card": {
+        "column_name": "batch",
+        "aggregation": "nunique"
+      },
+      "layout": "uniqueness",
+      "payload": {
+        "column": "batch",
+        "total": 2000,
+        "measured": 1889,
+        "distinct": 5,
+        "duplicated": 1884,
+        "unique_rate": 0.0026469031233456856,
+        "nulls": 111,
+        "top_repeat": {
+          "name": "2",
+          "count": 402
+        }
+      }
+    },
+    "uniq_batch:masked_in_str": {
+      "card": {
+        "column_name": "batch",
+        "aggregation": "nunique"
+      },
+      "layout": "uniqueness",
+      "payload": {
+        "column": "batch",
+        "total": 1054,
+        "measured": 1006,
+        "distinct": 5,
+        "duplicated": 1001,
+        "unique_rate": 0.004970178926441352,
+        "nulls": 48,
+        "top_repeat": {
+          "name": "3",
+          "count": 213
+        }
+      }
+    },
+    "trend_date_mean:full": {
+      "card": {
+        "column_name": "value_f64",
+        "aggregation": "average",
+        "trend_col": "event_date"
+      },
+      "layout": "trend",
+      "payload": {
+        "column": "value_f64",
+        "axis": "event_date",
+        "axis_kind": "temporal",
+        "aggregation": "average",
+        "points": [
+          {
+            "label": "2023-01-01 00:09:19",
+            "value": 0.01413956164383562
+          },
+          {
+            "label": "2023-01-18 05:03:32",
+            "value": -0.16437438333333335
+          },
+          {
+            "label": "2023-02-03 08:26:15",
+            "value": 0.054599521126760545
+          },
+          {
+            "label": "2023-02-19 23:38:22",
+            "value": -0.40680405333333336
+          },
+          {
+            "label": "2023-03-08 19:36:11",
+            "value": -0.2245798705882353
+          },
+          {
+            "label": "2023-03-25 09:03:12",
+            "value": 0.07056831707317075
+          },
+          {
+            "label": "2023-04-10 22:55:30",
+            "value": 0.0794635172413793
+          },
+          {
+            "label": "2023-04-27 15:07:38",
+            "value": 0.08193069014084507
+          },
+          {
+            "label": "2023-05-14 07:31:56",
+            "value": -0.374279375
+          },
+          {
+            "label": "2023-05-31 03:47:25",
+            "value": -0.2332251973684211
+          },
+          {
+            "label": "2023-06-16 19:26:46",
+            "value": 0.25973112903225803
+          },
+          {
+            "label": "2023-07-03 13:57:00",
+            "value": 0.22295447560975612
+          },
+          {
+            "label": "2023-07-20 01:26:34",
+            "value": -5.4405063291155e-05
+          },
+          {
+            "label": "2023-08-06 00:34:22",
+            "value": -0.14461120253164553
+          },
+          {
+            "label": "2023-08-22 11:10:48",
+            "value": 0.03673002857142857
+          },
+          {
+            "label": "2023-09-07 21:19:24",
+            "value": -0.24544374025974025
+          },
+          {
+            "label": "2023-09-24 13:01:00",
+            "value": 0.020660835820895538
+          },
+          {
+            "label": "2023-10-11 05:01:21",
+            "value": 0.29334219753086416
+          },
+          {
+            "label": "2023-10-28 16:47:49",
+            "value": 0.4314687236842105
+          },
+          {
+            "label": "2023-11-13 14:18:41",
+            "value": 0.0019965070422534865
+          },
+          {
+            "label": "2023-11-30 13:39:42",
+            "value": 0.04178084374999997
+          },
+          {
+            "label": "2023-12-17 03:21:04",
+            "value": 0.413350431372549
+          },
+          {
+            "label": "2024-01-02 22:10:34",
+            "value": 0.10806461643835616
+          },
+          {
+            "label": "2024-01-19 03:52:27",
+            "value": 0.03135825287356322
+          }
+        ],
+        "first": 0.01413956164383562,
+        "last": 0.03135825287356322,
+        "change": 1.2177669763358172,
+        "min": -0.40680405333333336,
+        "max": 0.4314687236842105
+      }
+    },
+    "trend_date_mean:masked_in_str": {
+      "card": {
+        "column_name": "value_f64",
+        "aggregation": "average",
+        "trend_col": "event_date"
+      },
+      "layout": "trend",
+      "payload": {
+        "column": "value_f64",
+        "axis": "event_date",
+        "axis_kind": "temporal",
+        "aggregation": "average",
+        "points": [
+          {
+            "label": "2023-01-01 02:19:04",
+            "value": 0.27466866666666667
+          },
+          {
+            "label": "2023-01-18 05:03:32",
+            "value": -0.41438830303030305
+          },
+          {
+            "label": "2023-02-03 20:50:36",
+            "value": 0.06346684848484846
+          },
+          {
+            "label": "2023-02-21 14:19:32",
+            "value": -0.51249171875
+          },
+          {
+            "label": "2023-03-08 19:36:11",
+            "value": -0.346269465116279
+          },
+          {
+            "label": "2023-03-25 09:03:12",
+            "value": -0.18818733333333332
+          },
+          {
+            "label": "2023-04-11 07:35:37",
+            "value": 0.11436640476190478
+          },
+          {
+            "label": "2023-04-27 19:30:20",
+            "value": 0.3804452888888889
+          },
+          {
+            "label": "2023-05-14 09:16:51",
+            "value": -0.2909195882352941
+          },
+          {
+            "label": "2023-05-31 11:24:55",
+            "value": -0.03045020930232559
+          },
+          {
+            "label": "2023-06-16 19:26:46",
+            "value": 0.4428435
+          },
+          {
+            "label": "2023-07-03 13:57:00",
+            "value": 0.32237885
+          },
+          {
+            "label": "2023-07-20 09:46:34",
+            "value": 0.10365368888888887
+          },
+          {
+            "label": "2023-08-06 21:51:08",
+            "value": 0.13603822580645164
+          },
+          {
+            "label": "2023-08-22 11:10:48",
+            "value": 0.11326803030303031
+          },
+          {
+            "label": "2023-09-07 22:18:24",
+            "value": -0.10554477272727271
+          },
+          {
+            "label": "2023-09-24 22:38:45",
+            "value": 0.20125906249999997
+          },
+          {
+            "label": "2023-10-11 03:46:21",
+            "value": 0.36601388888888886
+          },
+          {
+            "label": "2023-10-28 16:47:49",
+            "value": 0.6895841142857143
+          },
+          {
+            "label": "2023-11-13 14:18:41",
+            "value": 0.2676712558139535
+          },
+          {
+            "label": "2023-11-30 13:39:42",
+            "value": 0.5253045789473684
+          },
+          {
+            "label": "2023-12-16 18:20:12",
+            "value": 0.26844437499999996
+          },
+          {
+            "label": "2024-01-02 08:17:10",
+            "value": 0.128992
+          },
+          {
+            "label": "2024-01-19 01:25:24",
+            "value": -0.10490670454545455
+          }
+        ],
+        "first": 0.27466866666666667,
+        "last": -0.10490670454545455,
+        "change": -1.3819391043710405,
+        "min": -0.51249171875,
+        "max": 0.6895841142857143
+      }
+    },
+    "trend_batch_count:full": {
+      "card": {
+        "column_name": "value_f64",
+        "aggregation": "count",
+        "trend_col": "batch"
+      },
+      "layout": "trend",
+      "payload": {
+        "column": "value_f64",
+        "axis": "batch",
+        "axis_kind": "numeric",
+        "aggregation": "count",
+        "points": [
+          {
+            "label": "1",
+            "value": 334.0
+          },
+          {
+            "label": "2",
+            "value": 374.0
+          },
+          {
+            "label": "3",
+            "value": 362.0
+          },
+          {
+            "label": "4",
+            "value": 369.0
+          },
+          {
+            "label": "5",
+            "value": 329.0
+          }
+        ],
+        "first": 334.0,
+        "last": 329.0,
+        "change": -0.014970059880239472,
+        "min": 329.0,
+        "max": 374.0
+      }
+    },
+    "trend_batch_count:masked_in_str": {
+      "card": {
+        "column_name": "value_f64",
+        "aggregation": "count",
+        "trend_col": "batch"
+      },
+      "layout": "trend",
+      "payload": {
+        "column": "value_f64",
+        "axis": "batch",
+        "axis_kind": "numeric",
+        "aggregation": "count",
+        "points": [
+          {
+            "label": "1",
+            "value": 183.0
+          },
+          {
+            "label": "2",
+            "value": 187.0
+          },
+          {
+            "label": "3",
+            "value": 209.0
+          },
+          {
+            "label": "4",
+            "value": 188.0
+          },
+          {
+            "label": "5",
+            "value": 175.0
+          }
+        ],
+        "first": 183.0,
+        "last": 175.0,
+        "change": -0.04371584699453557,
+        "min": 175.0,
+        "max": 209.0
+      }
+    },
+    "trend_idx_sum:full": {
+      "card": {
+        "column_name": "value_i64",
+        "aggregation": "sum",
+        "trend_col": "idx_i32"
+      },
+      "layout": "trend",
+      "payload": {
+        "column": "value_i64",
+        "axis": "idx_i32",
+        "axis_kind": "numeric",
+        "aggregation": "sum",
+        "points": [
+          {
+            "label": "0",
+            "value": 8000000008332.0
+          },
+          {
+            "label": "84",
+            "value": 4000000008194.0
+          },
+          {
+            "label": "167",
+            "value": 4000000007546.0
+          },
+          {
+            "label": "250",
+            "value": 8000000008226.0
+          },
+          {
+            "label": "334",
+            "value": 4000000008328.0
+          },
+          {
+            "label": "417",
+            "value": 8000000007980.0
+          },
+          {
+            "label": "500",
+            "value": 8000000008294.0
+          },
+          {
+            "label": "584",
+            "value": 12000000008570.0
+          },
+          {
+            "label": "667",
+            "value": 12000000005803.0
+          },
+          {
+            "label": "750",
+            "value": 8000000007319.0
+          },
+          {
+            "label": "833",
+            "value": 4000000008269.0
+          },
+          {
+            "label": "917",
+            "value": 8000000008030.0
+          },
+          {
+            "label": "1000",
+            "value": 12000000006948.0
+          },
+          {
+            "label": "1083",
+            "value": 8000000008932.0
+          },
+          {
+            "label": "1167",
+            "value": 4000000007340.0
+          },
+          {
+            "label": "1250",
+            "value": 4000000008161.0
+          },
+          {
+            "label": "1333",
+            "value": 8000000007327.0
+          },
+          {
+            "label": "1416",
+            "value": 12000000007329.0
+          },
+          {
+            "label": "1500",
+            "value": 4000000007128.0
+          },
+          {
+            "label": "1583",
+            "value": 4000000007055.0
+          },
+          {
+            "label": "1666",
+            "value": 12000000007771.0
+          },
+          {
+            "label": "1750",
+            "value": 16000000007437.0
+          },
+          {
+            "label": "1833",
+            "value": 9014.0
+          },
+          {
+            "label": "1916",
+            "value": 12000000006861.0
+          }
+        ],
+        "first": 8000000008332.0,
+        "last": 12000000006861.0,
+        "change": 0.499999999295375,
+        "min": 9014.0,
+        "max": 16000000007437.0
+      }
+    },
+    "trend_idx_sum:masked_in_str": {
+      "card": {
+        "column_name": "value_i64",
+        "aggregation": "sum",
+        "trend_col": "idx_i32"
+      },
+      "layout": "trend",
+      "payload": {
+        "column": "value_i64",
+        "axis": "idx_i32",
+        "axis_kind": "numeric",
+        "aggregation": "sum",
+        "points": [
+          {
+            "label": "1",
+            "value": 4685.0
+          },
+          {
+            "label": "89",
+            "value": 3506.0
+          },
+          {
+            "label": "168",
+            "value": 4000000004084.0
+          },
+          {
+            "label": "251",
+            "value": 4000000005083.0
+          },
+          {
+            "label": "334",
+            "value": 4000000005294.0
+          },
+          {
+            "label": "419",
+            "value": 4409.0
+          },
+          {
+            "label": "501",
+            "value": 4000000004495.0
+          },
+          {
+            "label": "584",
+            "value": 12000000004185.0
+          },
+          {
+            "label": "667",
+            "value": 4000000002059.0
+          },
+          {
+            "label": "751",
+            "value": 4000000003987.0
+          },
+          {
+            "label": "834",
+            "value": 3264.0
+          },
+          {
+            "label": "919",
+            "value": 4000000004193.0
+          },
+          {
+            "label": "1000",
+            "value": 4000000003357.0
+          },
+          {
+            "label": "1087",
+            "value": 8000000005383.0
+          },
+          {
+            "label": "1168",
+            "value": 4000000003094.0
+          },
+          {
+            "label": "1254",
+            "value": 3911.0
+          },
+          {
+            "label": "1333",
+            "value": 4127.0
+          },
+          {
+            "label": "1417",
+            "value": 4000000004190.0
+          },
+          {
+            "label": "1502",
+            "value": 4000000003961.0
+          },
+          {
+            "label": "1583",
+            "value": 4000000003376.0
+          },
+          {
+            "label": "1668",
+            "value": 3874.0
+          },
+          {
+            "label": "1750",
+            "value": 4000000003992.0
+          },
+          {
+            "label": "1833",
+            "value": 4811.0
+          },
+          {
+            "label": "1916",
+            "value": 4000000003537.0
+          }
+        ],
+        "first": 4685.0,
+        "last": 4000000003537.0,
+        "change": 853788687.054856,
+        "min": 3264.0,
+        "max": 12000000004185.0
+      }
+    },
+    "trend_cat_max:full": {
+      "card": {
+        "column_name": "value_f64",
+        "aggregation": "max",
+        "trend_col": "category_str"
+      },
+      "layout": "trend",
+      "payload": {
+        "column": "value_f64",
+        "axis": "category_str",
+        "axis_kind": "categorical",
+        "aggregation": "max",
+        "points": [
+          {
+            "label": "alpha",
+            "value": 6.793622
+          },
+          {
+            "label": "beta",
+            "value": 5.3731
+          },
+          {
+            "label": "delta",
+            "value": 6.508922
+          },
+          {
+            "label": "epsilon",
+            "value": 4.899481
+          },
+          {
+            "label": "gamma",
+            "value": 5.28714
+          }
+        ],
+        "first": 6.793622,
+        "last": 5.28714,
+        "change": -0.2217494585362565,
+        "min": 4.899481,
+        "max": 6.793622
+      }
+    },
+    "trend_cat_max:masked_in_str": {
+      "card": {
+        "column_name": "value_f64",
+        "aggregation": "max",
+        "trend_col": "category_str"
+      },
+      "layout": "trend",
+      "payload": {
+        "column": "value_f64",
+        "axis": "category_str",
+        "axis_kind": "categorical",
+        "aggregation": "max",
+        "points": [
+          {
+            "label": "alpha",
+            "value": 6.793622
+          },
+          {
+            "label": "beta",
+            "value": 5.3731
+          }
+        ],
+        "first": 6.793622,
+        "last": 5.3731,
+        "change": -0.2090964142544286,
+        "min": 5.3731,
+        "max": 6.793622
+      }
+    },
+    "attrition:full": {
+      "card": {
+        "column_name": "metric_f64_nn",
+        "aggregation": "sum",
+        "attrition_cols": [
+          "idx_i32",
+          "value_i64"
+        ]
+      },
+      "layout": "attrition",
+      "payload": {
+        "columns": [
+          "metric_f64_nn",
+          "idx_i32",
+          "value_i64"
+        ],
+        "aggregation": "sum",
+        "stages": [
+          {
+            "name": "metric_f64_nn",
+            "value": 299750.0,
+            "share": 1.0,
+            "step_share": null
+          },
+          {
+            "name": "idx_i32",
+            "value": 1999000.0,
+            "share": 6.668890742285238,
+            "step_share": 6.668890742285238
+          },
+          {
+            "name": "value_i64",
+            "value": 184000000186194.0,
+            "share": 613844871.346769,
+            "step_share": 92046023.10464932
+          }
+        ],
+        "retained": 613844871.346769
+      }
+    },
+    "attrition:masked_in_str": {
+      "card": {
+        "column_name": "metric_f64_nn",
+        "aggregation": "sum",
+        "attrition_cols": [
+          "idx_i32",
+          "value_i64"
+        ]
+      },
+      "layout": "attrition",
+      "payload": {
+        "columns": [
+          "metric_f64_nn",
+          "idx_i32",
+          "value_i64"
+        ],
+        "aggregation": "sum",
+        "stages": [
+          {
+            "name": "metric_f64_nn",
+            "value": 157654.75,
+            "share": 1.0,
+            "step_share": null
+          },
+          {
+            "name": "idx_i32",
+            "value": 1052219.0,
+            "share": 6.674197891278252,
+            "step_share": 6.674197891278252
+          },
+          {
+            "name": "value_i64",
+            "value": 76000000096857.0,
+            "share": 482066034.14649415,
+            "step_share": 72228309.97811007
+          }
+        ],
+        "retained": 482066034.14649415
+      }
+    }
+  },
   "polars_version": "1.43.2"
 }

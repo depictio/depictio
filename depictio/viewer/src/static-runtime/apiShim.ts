@@ -460,9 +460,11 @@ export async function bulkComputeCards(
       if (!componentIds.includes(key)) delete values[key];
     }
   }
-  // Live results win over any frozen snapshot of the same component.
+  // Live results win over any frozen snapshot of the same component — the
+  // secondary map WHOLE: a live card's frozen breakdown/histogram strip is the
+  // export-time snapshot, which must not survive under live hero numbers.
   Object.assign(values, live.values);
-  Object.assign(secondary_values, live.secondary_values);
+  for (const [idx, sec] of Object.entries(live.secondary_values)) secondary_values[idx] = sec;
   Object.assign(aggregations, live.aggregations);
   return {
     values,

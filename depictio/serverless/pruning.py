@@ -172,7 +172,8 @@ def component_columns(comp: dict[str, Any]) -> set[str] | None:
     - figures (ui mode): ``referenced_columns`` from the real figure service;
       its ``None`` (whole-frame visu / unparseable kwargs) means keep all.
       Code-mode figures are never projected — arbitrary code reads anything.
-    - cards: aggregation column + optional breakdown + filter_expr columns.
+    - cards: aggregation column + breakdown / trend / attrition columns +
+      filter_expr columns.
     - interactive: filtered column + filter_expr columns + ``order_by`` /
       ``default_by`` / ``banner_facts`` columns.
     - tables: all columns (RFC §6) — sorting/filtering may touch any of them.
@@ -190,8 +191,15 @@ def component_columns(comp: dict[str, Any]) -> set[str] | None:
         return referenced_columns(comp.get("visu_type") or "scatter", dict_kwargs)
     if ctype == "card":
         cols = {comp["column_name"]} if comp.get("column_name") else set()
-        if comp.get("breakdown_col"):
-            cols.add(comp["breakdown_col"])
+        # The columns its secondary layout reads besides its own — the
+        # server's ``_card_payload_columns``: the breakdown column, the trend
+        # axis and the attrition stages. The browser recomputes those strips.
+        for key in ("breakdown_col", "trend_col"):
+            if comp.get(key):
+                cols.add(comp[key])
+        for stage in comp.get("attrition_cols") or []:
+            if isinstance(stage, str) and stage:
+                cols.add(stage)
         return cols | filter_expr_columns(comp.get("filter_expr"))
     if ctype == "interactive":
         cols = {comp["column_name"]} if comp.get("column_name") else set()

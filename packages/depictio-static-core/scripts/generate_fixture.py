@@ -178,6 +178,33 @@ BINDING_CASES: dict[str, list[dict]] = {
 #: table rather than spelled out in the kernel (q1/q3 quantiles, the bias-
 #: corrected skew/kurtosis, `percentile`).
 PARITY_AGGS = ["q1", "q3", "percentile", "skewness", "kurtosis"]
+
+#: Card secondary layouts (card_breakdown.compute_breakdown /
+#: card_metrics.numeric_layout_payload), each over the full frame and under the
+#: ``in_str`` mask: (name, card, layout).
+CARD_LAYOUT_CASES: list[tuple[str, dict, str]] = [
+    ("bd_count", {"column_name": "category_str", "aggregation": "count", "breakdown_col": "batch"}, "top_n"),
+    ("bd_sum_f64", {"column_name": "value_f64", "aggregation": "sum", "breakdown_col": "category_str"}, "donut"),
+    ("bd_sum_i64", {"column_name": "value_i64", "aggregation": "sum", "breakdown_col": "batch", "top_n_count": 5}, "composition"),
+    ("bd_nunique", {"column_name": "value_i64", "aggregation": "nunique", "breakdown_col": "category_str"}, "concentration"),
+    ("bd_self", {"column_name": "category_str", "aggregation": "nunique", "breakdown_col": "category_str"}, "top_n"),
+    ("bd_mean", {"column_name": "value_f64", "aggregation": "average", "breakdown_col": "batch"}, "top_n"),
+    ("bd_min", {"column_name": "value_f64", "aggregation": "min", "breakdown_col": "category_str"}, "top_n"),
+    ("bd_bool", {"column_name": "value_f64", "aggregation": "count", "breakdown_col": "flag_bool"}, "donut"),
+    ("hist_f64", {"column_name": "value_f64", "aggregation": "average"}, "histogram"),
+    ("hist_nn", {"column_name": "metric_f64_nn", "aggregation": "average"}, "histogram"),
+    ("hist_batch", {"column_name": "batch", "aggregation": "average"}, "histogram"),
+    ("thr_min_warn", {"column_name": "value_f64", "aggregation": "average", "threshold_value": 0.5, "threshold_warn": -1.0}, "threshold"),
+    ("thr_max", {"column_name": "value_i64", "aggregation": "average", "threshold_value": 100, "threshold_direction": "max"}, "threshold"),
+    ("completeness", {"column_name": "value_f64", "aggregation": "count"}, "completeness"),
+    ("uniq_sample", {"column_name": "sample_id", "aggregation": "nunique"}, "uniqueness"),
+    ("uniq_batch", {"column_name": "batch", "aggregation": "nunique"}, "uniqueness"),
+    ("trend_date_mean", {"column_name": "value_f64", "aggregation": "average", "trend_col": "event_date"}, "trend"),
+    ("trend_batch_count", {"column_name": "value_f64", "aggregation": "count", "trend_col": "batch"}, "trend"),
+    ("trend_idx_sum", {"column_name": "value_i64", "aggregation": "sum", "trend_col": "idx_i32"}, "trend"),
+    ("trend_cat_max", {"column_name": "value_f64", "aggregation": "max", "trend_col": "category_str"}, "trend"),
+    ("attrition", {"column_name": "metric_f64_nn", "aggregation": "sum", "attrition_cols": ["idx_i32", "value_i64"]}, "attrition"),
+]
 DATE_LO = datetime(2023, 1, 1)
 
 
@@ -542,6 +569,25 @@ def main() -> None:
         )
     }
 
+    # ---- card secondary layouts (card_breakdown / card_metrics) ------------
+    from depictio.api.v1.services.card_breakdown import compute_breakdown
+    from depictio.api.v1.services.card_metrics import numeric_layout_payload
+
+    card_layouts: dict[str, dict] = {}
+    for name, card, layout in CARD_LAYOUT_CASES:
+        for scope, frame in (("full", base_df), ("masked_in_str", base_df.filter(in_str_expr))):
+            if layout in ("top_n", "concentration", "composition", "donut"):
+                payload = compute_breakdown(
+                    frame,
+                    column=card["column_name"],
+                    breakdown_col=card["breakdown_col"],
+                    aggregation=card["aggregation"],
+                    top_n_count=int(card.get("top_n_count") or 3),
+                )
+            else:
+                payload = numeric_layout_payload(frame, card, card["column_name"], layout)
+            card_layouts[f"{name}:{scope}"] = {"card": card, "layout": layout, "payload": payload}
+
     expected = {
         "rows": N,
         "row_group_size": ROW_GROUP_SIZE,
@@ -556,6 +602,7 @@ def main() -> None:
         "sort_slice": sort_slice,
         "binding": binding,
         "aggregates_parity": aggregates_parity,
+        "card_layouts": card_layouts,
         "polars_version": pl.__version__,
     }
 
