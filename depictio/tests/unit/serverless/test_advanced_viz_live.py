@@ -498,3 +498,35 @@ def test_interactive_keeps_the_columns_its_options_and_banner_read() -> None:
         }
     )
     assert cols == {"group", "group_order", "member_count", "pi", "site", "active"}
+
+
+def test_companion_tables_of_a_live_kind_ship_under_their_real_ids() -> None:
+    """hits / domains / variants / the MA table are read by real id from the
+    bundle (they fell through to a frozen lookup that threw)."""
+    from depictio.serverless.producer_a import live_column_sets
+    from depictio.serverless.pruning import MA_VIEW_COLUMNS, advanced_viz_companions
+
+    seq = _stored_comp(
+        "sequence_track",
+        position_col="pos",
+        residue_col="aa",
+        domains_dc_id="d" * 24,
+        domains_wf_id="w" * 24,
+        variants_dc_id="v" * 24,
+    )
+    companions = advanced_viz_companions(seq)
+    assert set(companions) == {"d" * 24, "v" * 24}
+    assert companions["d" * 24][0] == "w" * 24
+    assert {"source", "pos", "aa"} <= companions["d" * 24][1]
+    assert {"ref_aa", "alt_aa"} <= companions["v" * 24][1]
+
+    volcano = _stored_comp(
+        "volcano", effect_size_col="lfc", significance_col="p", ma_dc_id="m" * 24
+    )
+    assert set(MA_VIEW_COLUMNS) <= advanced_viz_companions(volcano)["m" * 24][1]
+
+    sets = live_column_sets([seq, volcano])
+    assert {"d" * 24, "v" * 24, "m" * 24} <= set(sets)
+
+    # A frozen / omitted tile reads no bundled table, companions included.
+    assert advanced_viz_companions(_stored_comp("molecule_3d", msa_dc_id="x" * 24)) == {}

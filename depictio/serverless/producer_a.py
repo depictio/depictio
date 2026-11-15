@@ -152,6 +152,7 @@ from depictio.serverless.pruning import (
     CELERY_VIZ_KINDS,
     advanced_viz_capability,
     advanced_viz_columns,
+    advanced_viz_companions,
     advanced_viz_kind,
     advanced_viz_roles,
     component_columns,
@@ -809,6 +810,12 @@ def live_column_sets(stored_metadata: list[dict[str, Any]]) -> dict[str, set[str
             continue
         key = str(dc_id)
         cols = component_columns(comp)
+        # A live advanced_viz's companion tables (hits, domains, variants,
+        # family rows, the MA table…) ship too, under their real ids
+        # (``pruning.advanced_viz_companions``).
+        for companion, (_wf, ccols) in advanced_viz_companions(comp).items():
+            if sets.get(companion, set()) is not None:
+                sets[companion] = (sets.get(companion) or set()) | ccols
         if key in sets and sets[key] is None:
             continue
         if cols is None:
@@ -816,6 +823,32 @@ def live_column_sets(stored_metadata: list[dict[str, Any]]) -> dict[str, set[str
         else:
             sets[key] = (sets.get(key) or set()) | cols
     return sets
+
+
+def companion_components(stored_metadata: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """``{companion dc_id: pseudo component}`` for every live advanced_viz's
+    companion table that is a ``table`` collection (an ``indexed_file`` holds
+    objects, not rows). The pseudo component carries what the DC loader reads
+    (``dc_id`` + ``wf_id``)."""
+    from depictio.api.v1.services.export.embed import _is_table_dc
+
+    out: dict[str, dict[str, Any]] = {}
+    for comp in stored_metadata:
+        for dc_id, (wf_id, _cols) in advanced_viz_companions(comp).items():
+            if dc_id in out:
+                continue
+            try:
+                if not _is_table_dc(dc_id):
+                    continue
+            except Exception:
+                continue
+            out[dc_id] = {
+                "component_type": "advanced_viz_companion",
+                "dc_id": dc_id,
+                "wf_id": wf_id or comp.get("wf_id"),
+                "companion_of": comp.get("index"),
+            }
+    return out
 
 
 def interactive_filter_columns(stored_metadata: list[dict[str, Any]]) -> set[str]:
@@ -1772,6 +1805,15 @@ def _bundle_data_refs(
             continue
         if _ships_data(comp):
             live_comps_by_dc.setdefault(str(comp["dc_id"]), []).append(comp)
+    companions = companion_components(stored_metadata)
+    for dc_id, pseudo in companions.items():
+        live_comps_by_dc.setdefault(dc_id, []).append(pseudo)
+    # A table bundled only as a companion: keep it whole when none of the
+    # over-collected columns are in its schema (its own ``*_col`` names live
+    # on the component that reads it).
+    companion_only = {
+        d for d, comps in live_comps_by_dc.items() if all(c.get("companion_of") for c in comps)
+    }
 
     data_refs: dict[str, DataRef] = {}
     inline_blobs: dict[str, str] = {}
@@ -1810,6 +1852,8 @@ def _bundle_data_refs(
                 # from this DC out of ``select`` (mirroring ``_project_scan``).
                 wanted = cols | filter_cols | join_cols.get(dc_id, set())
                 select = [c for c in available if c in wanted]
+                if dc_id in companion_only and not (cols & set(available)):
+                    select = None
             df = dtu.load_deltatable_lite(
                 workflow_id=ObjectId(str(wf_id)),
                 data_collection_id=dc_id,
@@ -1954,7 +1998,7 @@ def used_dc_ids(
     in-browser engine reads it at every filter state — unless the build
     downgraded it (unloadable DC).
     """
-    return {
+    used = {
         str(c["dc_id"])
         for _tab, c, cid in items
         if c.get("dc_id")
@@ -1964,6 +2008,11 @@ def used_dc_ids(
             or (serves_advanced_viz_live(c) and tier_by_id[cid].tier is ComponentTier.LIVE)
         )
     }
+    # ...and the companion tables of every live advanced_viz.
+    for _tab, c, cid in items:
+        if serves_advanced_viz_live(c) and tier_by_id[cid].tier is ComponentTier.LIVE:
+            used |= set(advanced_viz_companions(c))
+    return used
 
 
 # ---------------------------------------------------------------------------

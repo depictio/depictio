@@ -123,6 +123,70 @@ def advanced_viz_columns(comp: dict[str, Any]) -> list[str]:
     return list(dict.fromkeys(columns))
 
 
+#: Columns the volcano's MA view reads off its ``ma_dc_id`` table under fixed
+#: names (``diffViews.ts`` ``viewMetadata``) — no ``*_col`` key carries them.
+MA_VIEW_COLUMNS = ("feature_id", "avg_log_intensity", "log2_fold_change", "significance", "label")
+
+
+def advanced_viz_companions(comp: dict[str, Any]) -> dict[str, tuple[str | None, set[str]]]:
+    """Companion tables a live advanced_viz reads beside its own, by real id.
+
+    ``{dc_id: (wf_id or None, columns)}`` — the export's
+    ``companions._companion_dc_ids`` (hits of an HMM logo, domains / variants of
+    a sequence track, a ranked table's family rows, a sashimi's coverage, …) plus
+    the volcano's MA table, which the bundle serves through the same data path
+    (the export loads it from its view plan instead). ``columns`` over-collects
+    the component's own bindings plus the fixed companion columns; the caller
+    intersects with the companion's schema and keeps it whole when nothing
+    matches. Only for components served live — a frozen or omitted tile reads
+    no bundled table.
+    """
+    from depictio.api.v1.services.export.companions import _companion_dc_ids
+
+    if not serves_advanced_viz_live(comp):
+        return {}
+    config = comp.get("config") or {}
+    own = set(advanced_viz_columns(comp))
+    out: dict[str, tuple[str | None, set[str]]] = {}
+    for dc_id, (wf_id, fixed) in _companion_dc_ids(config).items():
+        if dc_id == str(comp.get("dc_id") or ""):
+            continue
+        out[dc_id] = (wf_id, own | set(fixed))
+    ma = config.get("ma_dc_id")
+    if ma and str(ma) != str(comp.get("dc_id") or ""):
+        wf = config.get("ma_wf_id")
+        prev = out.get(str(ma), (None, set()))
+        out[str(ma)] = (prev[0] or (str(wf) if wf else None), prev[1] | set(MA_VIEW_COLUMNS) | own)
+    return out
+
+
+def advanced_viz_companion_tags(comp: dict[str, Any]) -> dict[str, set[str]]:
+    """Producer B's spelling of :func:`advanced_viz_companions`: ``<base>_dc_tag``
+    keys name companion tables of the component's own workflow,
+    ``{dc_tag: columns}``. The build rewrites them into the
+    ``<base>_dc_id`` / ``<base>_wf_id`` pair the renderer reads."""
+    if not serves_advanced_viz_live(comp):
+        return {}
+    config = comp.get("config") or {}
+    own = set(advanced_viz_columns(comp))
+    out: dict[str, set[str]] = {}
+    for key, value in config.items():
+        if not key.endswith("_dc_tag") or not isinstance(value, str) or not value:
+            continue
+        base = key[: -len("_dc_tag")]
+        if f"{base}_dc_id" in ("tree_dc_id", "matrix_dc_id"):
+            continue
+        from depictio.api.v1.services.export.companions import _FIXED_COMPANION_COLUMNS
+
+        extra = set(_FIXED_COMPANION_COLUMNS.get(f"{base}_dc_id", ()))
+        if base == "ma":
+            extra |= set(MA_VIEW_COLUMNS)
+        if value == comp.get("data_collection_tag"):
+            continue
+        out[value] = out.get(value, set()) | own | extra
+    return out
+
+
 def advanced_viz_roles(comp: dict[str, Any]) -> dict[str, str]:
     """``<role> -> column`` map for an advanced_viz component's ``*_col`` keys.
 

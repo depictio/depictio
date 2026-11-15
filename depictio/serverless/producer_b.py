@@ -84,6 +84,7 @@ from depictio.serverless.preflight import (
 from depictio.serverless.prologue import transpile_with_reason
 from depictio.serverless.prologue_exec import execute_ops, terminal_px_call
 from depictio.serverless.pruning import (
+    advanced_viz_companion_tags,
     component_as_dict,
     compute_column_sets,
     dc_key,
@@ -228,6 +229,17 @@ def _component_meta(comp: dict[str, Any], index: str, dc_id: str | None) -> dict
     meta["component_type"] = comp.get("component_type", "figure")
     meta["wf_id"] = synthetic_wf_id(wf_tag) if wf_tag else None
     meta["dc_id"] = dc_id
+    if meta["component_type"] == "advanced_viz" and isinstance(meta.get("config"), dict):
+        # ``<base>_dc_tag`` names a companion table of the same workflow; the
+        # renderer reads ``<base>_dc_id`` / ``<base>_wf_id`` (the real-id pair
+        # an import resolves the tag into), so write the synthetic pair.
+        config = dict(meta["config"])
+        for key, value in list(config.items()):
+            if key.endswith("_dc_tag") and isinstance(value, str) and value and wf_tag:
+                base = key[: -len("_dc_tag")]
+                config.setdefault(f"{base}_dc_id", synthetic_dc_id(wf_tag, value))
+                config.setdefault(f"{base}_wf_id", synthetic_wf_id(wf_tag))
+        meta["config"] = config
     if meta["component_type"] == "figure":
         meta["dict_kwargs"] = comp.get("figure_params") or comp.get("dict_kwargs") or {}
         meta.pop("figure_params", None)
@@ -625,6 +637,22 @@ def build_manifest(
         needed.setdefault(key, (wf_tag, dc_tag))
         consumers.setdefault(key, []).append(comp)
 
+    # Companion tables of the live advanced_viz components (``*_dc_tag``):
+    # bundled when their Parquet exists — a missing one costs that lane, not
+    # the build — with the over-collected columns, or whole when none match.
+    companion_cols: dict[str, set[str]] = {}
+    for comp in components:
+        if tier_by_id[comp["tag"]].tier is ComponentTier.OMITTED:
+            continue
+        wf_tag = comp.get("workflow_tag") or ""
+        for tag, cols in advanced_viz_companion_tags(comp).items():
+            key = dc_key(wf_tag, tag)
+            if not resolve_parquet_path(data_path, wf_tag, tag).exists():
+                continue
+            needed.setdefault(key, (wf_tag, tag))
+            consumers.setdefault(key, [])
+            companion_cols[key] = companion_cols.get(key, set()) | cols
+
     data_refs: dict[str, DataRef] = {}
     inline_blobs: dict[str, str] = {}
     pruned_frames: dict[str, pl.DataFrame] = {}
@@ -640,6 +668,11 @@ def build_manifest(
             )
         df = pl.read_parquet(parquet_path)
 
+        if key in companion_cols and key not in column_sets:
+            wanted = companion_cols[key] & set(df.columns)
+            column_sets[key] = wanted or None
+        elif key in companion_cols and column_sets.get(key) is not None:
+            column_sets[key] = (column_sets[key] or set()) | (companion_cols[key] & set(df.columns))
         kept, missing = intersect_with_schema(column_sets.get(key), df.columns)
         # A link's join column absent from this DC's real schema is dropped, not
         # fatal — the same schema-guard the server applies in ``_project_scan``

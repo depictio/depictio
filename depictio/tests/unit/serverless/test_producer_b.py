@@ -525,6 +525,55 @@ def test_card_secondary_layout_columns_ship(tmp_path: Path) -> None:
     assert all(manifest.tiers[t].tier is ComponentTier.LIVE for t in ("c1", "c2", "c3"))
 
 
+def test_a_companion_table_ships_and_the_config_names_its_synthetic_id(tmp_path: Path) -> None:
+    """``ma_dc_tag`` on a volcano: the MA table is bundled under the synthetic id
+    the build writes into ``ma_dc_id`` / ``ma_wf_id``, which the MA view reads."""
+    from depictio.models.models.dashboards import DashboardDataLite
+    from depictio.serverless.producer_b import synthetic_dc_id
+
+    (tmp_path / "wf").mkdir()
+    pl.DataFrame({"gene": ["a", "b"], "lfc": [1.0, -2.0], "p": [0.01, 0.2]}).write_parquet(
+        tmp_path / "wf" / "de.parquet"
+    )
+    pl.DataFrame(
+        {
+            "feature_id": ["a", "b"],
+            "avg_log_intensity": [3.0, 4.0],
+            "log2_fold_change": [1.0, -2.0],
+            "significance": [0.01, 0.2],
+            "label": ["A", "B"],
+            "unused": [0, 0],
+        }
+    ).write_parquet(tmp_path / "wf" / "ma.parquet")
+    spec = DashboardDataLite.model_validate(
+        _mini_spec(
+            [
+                {
+                    "tag": "volcano-1",
+                    "component_type": "advanced_viz",
+                    "workflow_tag": "wf",
+                    "data_collection_tag": "de",
+                    "viz_kind": "volcano",
+                    "config": {
+                        "viz_kind": "volcano",
+                        "feature_id_col": "gene",
+                        "effect_size_col": "lfc",
+                        "significance_col": "p",
+                        "ma_dc_tag": "ma",
+                    },
+                }
+            ]
+        )
+    )
+    manifest = build_manifest(spec, tmp_path).manifest
+    ma_id = synthetic_dc_id("wf", "ma")
+    assert ma_id in manifest.data_refs
+    assert "unused" not in {c.name for c in manifest.data_refs[ma_id].columns}
+    meta = manifest.dashboard.doc["stored_metadata"][0]
+    assert meta["config"]["ma_dc_id"] == ma_id
+    assert manifest.tiers["volcano-1"].tier is ComponentTier.LIVE
+
+
 def test_table_without_dc_is_omitted() -> None:
     from depictio.models.models.dashboards import DashboardDataLite
 
