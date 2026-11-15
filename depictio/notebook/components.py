@@ -1013,7 +1013,26 @@ class ImageComponent(DepictioComponent):
 
 
 class JBrowseComponent(DepictioComponent):
+    """A genome browser tile: its session as data, a snapshot, and a link.
+
+    The live tile is the embedded JBrowse 2 linear view, which reads its
+    tracks by HTTP range through the instance's signed track proxy. Neither the
+    view nor the reads survive being written into a file, so the document
+    shows what can: the assembly, the locus it opens on and the tracks it
+    shows (``.tracks``, a DataFrame), a PNG snapshot of that opening view
+    taken by the instance's worker, and a link to browse it live. ``.data`` is
+    the server's whole session payload.
+    """
+
     default_display = "html"
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._snap: dict[str, Any] | None = None
+
+    def refresh(self) -> DepictioComponent:
+        self._snap = None
+        return super().refresh()
 
     def _fetch_data(self) -> dict[str, Any]:
         return self.client.post(
@@ -1022,13 +1041,116 @@ class JBrowseComponent(DepictioComponent):
         )
 
     @property
+    def location(self) -> str:
+        loc = self.data.get("location")
+        return loc if isinstance(loc, str) else (json.dumps(loc) if loc else "")
+
+    @property
+    def assembly(self) -> str:
+        conf = self.data.get("assembly") or {}
+        return (
+            str(conf.get("displayName") or conf.get("name") or "") if isinstance(conf, dict) else ""
+        )
+
+    @property
+    def tracks(self) -> pl.DataFrame:
+        """One row per track the session carries; ``shown`` marks the open ones."""
+        shown = {str(t) for t in self.data.get("shown_track_ids") or []}
+        rows = []
+        for t in self.data.get("tracks") or []:
+            if not isinstance(t, dict):
+                continue
+            category = t.get("category")
+            rows.append(
+                {
+                    "name": str(t.get("name") or t.get("trackId") or ""),
+                    "type": str(t.get("type") or ""),
+                    "category": " / ".join(category) if isinstance(category, list) else category,
+                    "shown": str(t.get("trackId")) in shown,
+                    "track_id": str(t.get("trackId") or ""),
+                }
+            )
+        if not rows:
+            return pl.DataFrame(
+                schema={"name": pl.Utf8, "type": pl.Utf8, "category": pl.Utf8, "shown": pl.Boolean}
+            )
+        return pl.DataFrame(rows).sort("shown", descending=True, maintain_order=True)
+
+    @property
     def iframe_url(self) -> str:
-        return str(self.data.get("iframe_url") or "")
+        """Kept for old notebooks: the live dashboard (there is no JBrowse host to frame)."""
+        return self.live_url or ""
+
+    def _snapshot(self) -> dict[str, Any]:
+        """The worker's PNG of the opening view, or ``{"reason": ...}`` when it has none."""
+        if self._snap is None:
+            try:
+                self._snap = self.client.poll(
+                    f"/dashboards/component_figure/{self.dashboard_id}/{self.index}",
+                    {"state": self.state, "theme": self.theme},
+                    "/dashboards/component_figure/jobs/{job_id}",
+                )
+            except Exception as exc:  # noqa: BLE001 - the table and the link still stand
+                self._snap = {"reason": self._reason(exc)}
+        return self._snap
+
+    @property
+    def image(self) -> bytes | None:
+        uri = self._snapshot().get("image")
+        return _decode_data_uri(uri) if uri else None
 
     def _display_html(self) -> str:
+        data = self.data  # raises (e.g. JBrowse disabled): the placeholder says why
+        tracks = self.tracks
+        shown = tracks.filter(pl.col("shown")) if tracks.height else tracks
+        facts = [
+            ("Assembly", self.assembly or "–"),
+            ("Opens on", self.location or "the assembly's default region"),
+            (
+                "Tracks",
+                f"{shown.height} shown of {int(data.get('matched_tracks') or tracks.height)} "
+                f"matching ({int(data.get('total_tracks') or tracks.height)} in the manifest)",
+            ),
+        ]
+        head = "".join(
+            f'<tr><th style="text-align:left;padding:2px 12px 2px 0;color:#868e96;'
+            f'font-weight:500">{_html.escape(k)}</th><td>{_html.escape(v)}</td></tr>'
+            for k, v in facts
+        )
+        snap = self._snapshot()
+        if snap.get("image"):
+            picture = snapshot_html(
+                str(snap["image"]),
+                self.title,
+                self.live_url,
+                "The genome browser reads its "
+                "tracks live from the instance, so the view itself cannot travel in a file.",
+            )
+        else:
+            picture = (
+                '<div style="font-size:12px;color:#868e96;margin:6px 0">No snapshot of the view '
+                f"({_html.escape(str(snap.get('reason') or 'unavailable'))}). "
+                f"{self._live_link('Browse it in the live dashboard')}</div>"
+            )
+        listing = shown.select([c for c in ("name", "type", "category") if c in shown.columns])
+        rows = "".join(
+            "<tr>" + "".join(f"<td>{_html.escape(str(v or ''))}</td>" for v in r) + "</tr>"
+            for r in listing.iter_rows()
+        )
+        table = (
+            '<table class="dpx-tracks" style="font-size:12px;border-collapse:collapse;margin-top:6px">'
+            "<thead><tr>"
+            + "".join(
+                f'<th style="text-align:left;padding-right:12px">{c}</th>' for c in listing.columns
+            )
+            + f"</tr></thead><tbody>{rows}</tbody></table>"
+            if listing.height
+            else ""
+        )
         return (
-            f'<iframe src="{_html.escape(self.iframe_url, quote=True)}" '
-            'style="width:100%;height:520px;border:0" title="JBrowse"></iframe>'
+            '<div class="dpx-jbrowse">'
+            f'<table style="font-size:13px;margin-bottom:6px">{head}</table>'
+            f"{picture}{table}</div>"
         )
 
 

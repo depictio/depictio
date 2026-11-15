@@ -69,6 +69,7 @@ DASHBOARD = {
             "viz_kind": "embedding",
             "dc_id": DC,
         },
+        {"index": "jb-1", "component_type": "jbrowse", "title": "Genome", "dc_id": DC},
         {"index": "dup", "component_type": "figure", "title": "Twin", "dc_id": DC},
         {"index": "dup2", "component_type": "figure", "title": "Twin", "dc_id": DC},
     ],
@@ -149,6 +150,21 @@ class FakeApi:
             )
         if "/deltatables/unique_values/" in path:
             return httpx.Response(200, json={"column": "species", "values": ["Adelie", "Gentoo"]})
+        if "/render_jbrowse/" in path:
+            return httpx.Response(
+                200,
+                json={
+                    "assembly": {"name": "hg38", "displayName": "GRCh38"},
+                    "tracks": [
+                        {"trackId": "t1", "name": "Coverage", "type": "QuantitativeTrack"},
+                        {"trackId": "t2", "name": "Variants", "type": "VariantTrack"},
+                    ],
+                    "shown_track_ids": ["t2"],
+                    "location": "chr1:100-200",
+                    "matched_tracks": 2,
+                    "total_tracks": 5,
+                },
+            )
         if "/component_figure/jobs/" in path:
             self.figure_polls += 1
             if self.figure_polls < 2:
@@ -422,7 +438,7 @@ def test_a_tile_that_cannot_be_fetched_shows_a_placeholder_not_an_error(monkeypa
         return httpx.Response(404, json={"detail": "JBrowse is disabled on this instance."})
 
     client = DepictioClient("https://depictio.test", "tok", transport=httpx.MockTransport(handler))
-    for title in ("Bill shape", "Raw data", "Species mix", "Embedding"):
+    for title in ("Bill shape", "Raw data", "Species mix", "Embedding", "Genome"):
         comp = client.component(DASH, title)
         bundle = comp._repr_mimebundle_()
         assert "could not be shown here" in bundle["text/html"], title
@@ -451,6 +467,21 @@ def test_a_renderer_without_plotly_is_shown_as_a_captioned_snapshot():
     assert comp.image == b"\x89PNG\r\n\x1a\n"
     with pytest.raises(AttributeError, match="not drawn with Plotly"):
         comp.figure
+
+
+def test_jbrowse_shows_its_session_snapshot_and_link(client, monkeypatch):
+    monkeypatch.setattr("depictio.notebook.client.time.sleep", lambda s: None)
+    comp = client.component(DASH, "Genome")
+    assert comp.tracks["name"].to_list() == ["Variants", "Coverage"]
+    assert comp.tracks["shown"].to_list() == [True, False]
+    html = comp._repr_mimebundle_()["text/html"]
+    assert "GRCh38" in html and "chr1:100-200" in html
+    assert "1 shown of 2 matching (5 in the manifest)" in html
+    assert "Variants" in html and "Coverage" not in html.split("dpx-tracks")[1]
+    # The fake job hands back a figure, not an image: the table and link still stand.
+    assert "No snapshot of the view" in html
+    assert f"https://depictio.test/dashboard/{DASH}" in html
+    assert "<iframe" not in html
 
 
 def test_poll_retries_a_failed_job_once():

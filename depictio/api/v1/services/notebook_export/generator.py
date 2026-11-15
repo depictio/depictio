@@ -1634,10 +1634,18 @@ fig_funnel"""
         tab_id = str(entry.unit.tab.get("dashboard_id") or self.plan.dashboard_id)
         kind = entry.verdict.kind or str(meta.get("component_type") or "component")
         name = entry.name or self.names.claim("viz", title)
+        if entry.verdict.output == "snapshot":
+            handles = (
+                "It is not drawn with Plotly, so the cell shows a static snapshot of the "
+                "real renderer; `.image` is that PNG, `.data` the data"
+            )
+        elif entry.verdict.output == "interactive":
+            handles = "`.figure` is the Plotly figure, `.data` the data"
+        else:
+            handles = "`.data` is the data behind it"
         head = _comment(
             f'"{title}" ({kind}) is rendered by Depictio with the state above: '
-            f"{entry.verdict.reason}. `.figure` is the Plotly figure, `.data` the data, "
-            "`.html` the interactive tile"
+            f"{entry.verdict.reason}. {handles}"
         )
         body = (
             head + f"\n{name} = client.component({tab_id!r}, {str(meta.get('index'))!r}, "
