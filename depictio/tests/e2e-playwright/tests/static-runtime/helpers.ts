@@ -128,3 +128,51 @@ export async function blockNetwork(page: Page): Promise<string[]> {
   });
   return attempts;
 }
+
+// ---------------------------------------------------------------------------
+// The report host: the same runtime mounted into a report's tiles
+// ---------------------------------------------------------------------------
+
+const DIST_STATIC = join(REPO_ROOT, "depictio/viewer/dist-static");
+export const REPORT_RUNTIME_JS = join(DIST_STATIC, "report-runtime.js");
+/** The report skeleton: the DOM Quarto renders from the notebook generator's
+ *  placeholders, for the penguins demo manifest. Regenerate with
+ *  `depictio/serverless/examples/generate_report_fixture.py`. */
+export const PENGUINS_REPORT = join(REPO_ROOT, "depictio/viewer/demo/reports/penguins.html");
+
+export function skipUnlessReportRuntimeBuilt(): void {
+  test.skip(
+    !existsSync(REPORT_RUNTIME_JS),
+    "report runtime not built — run `pnpm run build:static` in depictio/viewer first",
+  );
+}
+
+const jsonScript = (id: string, payload: unknown) =>
+  `<script type="application/json" id="${id}">${JSON.stringify(payload)
+    .replace(/<\//g, "<\\/")
+    .replace(/<!--/g, "<\\u0021--")}</script>`;
+
+/** The penguins report with the runtime and the manifest inlined once at its
+ *  end — the producer's block (depictio/notebook/report_runtime.py) — opened
+ *  on `initialFilters`. Returns a file:// URL. */
+export function reportUrl(initialFilters: unknown[] = []): string {
+  const manifest = JSON.parse(readFileSync(PENGUINS_MANIFEST, "utf-8"));
+  manifest.initial_filters = initialFilters;
+  const js = readFileSync(REPORT_RUNTIME_JS, "utf-8")
+    .replace(/<\/script/g, "<\\/script")
+    .replace(/<!--/g, "<\\!--");
+  const css = readFileSync(join(DIST_STATIC, "report-runtime.css"), "utf-8");
+  const block =
+    `<style data-depictio-report-runtime="css">${css}</style>` +
+    jsonScript("depictio-report-config", { brand: { primary: "#228be6" } }) +
+    jsonScript("depictio-report-manifest", manifest) +
+    `<script data-depictio-report-runtime="js">${js}</script>`;
+  const html = readFileSync(PENGUINS_REPORT, "utf-8").replace(
+    "<!--DEPICTIO_REPORT_RUNTIME-->",
+    () => block,
+  );
+  const dir = mkdtempSync(join(tmpdir(), "depictio-report-"));
+  const out = join(dir, "report-fixture.html");
+  writeFileSync(out, html);
+  return `file://${out}`;
+}

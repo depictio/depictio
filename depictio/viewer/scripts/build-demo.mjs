@@ -18,6 +18,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { applyAddons } from './addons.mjs';
+import { REPORT_TOKEN, composeReportRuntime, readReportRuntime } from './report-runtime.mjs';
 
 const VIEWER_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const TEMPLATE = join(VIEWER_DIR, 'dist-static', 'static.html');
@@ -61,6 +62,47 @@ writeFileSync(
   join(VIEWER_DIR, 'dist-static', 'static-structure.html'),
   applyAddons(template, ['3dmol']),
 );
+
+// The report host (the Quarto export's tiles drawn by this runtime): the
+// penguins report skeleton (demo/reports/penguins.html, written by
+// depictio/serverless/examples/generate_report_fixture.py) opened on an
+// exported state — species = Adelie — with the runtime and the manifest
+// inlined once at its end. Plus the floor every report pays for the runtime,
+// which CI checks against its own byte budget.
+const report = readReportRuntime(join(VIEWER_DIR, 'dist-static'));
+if (report) {
+  writeFileSync(
+    join(VIEWER_DIR, 'dist-static', 'report-runtime-floor.html'),
+    composeReportRuntime({ ...report, manifest: null }),
+  );
+  const penguins = JSON.parse(
+    readFileSync(join(VIEWER_DIR, 'demo', 'manifests', 'penguins.json'), 'utf-8'),
+  );
+  const species = penguins.dashboard.doc.stored_metadata.find((c) => c.index === 'filter-species');
+  penguins.initial_filters = [
+    {
+      index: 'filter-species',
+      value: ['Adelie'],
+      column_name: 'species',
+      interactive_component_type: 'MultiSelect',
+      metadata: { dc_id: species.dc_id, column_name: 'species', interactive_component_type: 'MultiSelect' },
+    },
+  ];
+  const skeleton = readFileSync(join(VIEWER_DIR, 'demo', 'reports', 'penguins.html'), 'utf-8');
+  const html = skeleton.replace(REPORT_TOKEN, () => composeReportRuntime({ ...report, manifest: penguins }));
+  writeFileSync(join(SITE_DIR, 'report-penguins.html'), html);
+  entries.push({
+    id: 'report-penguins',
+    file: 'report-penguins.html',
+    bytes: html.length,
+    title: 'Report host — the Quarto export\'s tiles drawn by this runtime',
+    description:
+      'A report page (the DOM Quarto renders from the notebook export) with the same manifest inlined once and the report runtime mounting each tile in place: the cards, the scatter, the tables and the advanced views are the dashboard\'s own renderers, the filter panel sits in the Filters part and recomputes every tile in the page. It opens on the exported state (species = Adelie); each tile\'s own export output stays as its fallback, and a tile the manifest does not hold keeps it.',
+  });
+  console.log(`report-penguins.html: ${(html.length / 1e6).toFixed(2)} MB — report host`);
+} else {
+  console.warn('report runtime not built (vite.report.config.ts): the report demo is skipped');
+}
 
 const sha = process.env.GITHUB_SHA?.slice(0, 8) ?? 'local';
 const built = new Date().toISOString();
