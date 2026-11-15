@@ -1009,6 +1009,40 @@ def prewarm_multiqc_dc_all_plots(self, dc_id: str) -> dict:
             logger.warning(f"prewarm_multiqc_dc_all_plots: failed to clear lock {lock_key}: {exc}")
 
 
+def _report_runtime_file(job_id: str, runtime: dict) -> str:
+    """Compose a report's runtime block on this worker; the file's path.
+
+    Producer A builds the manifest here with the requesting user's rights, so a
+    worker refuses what the static export would (owner, size ceilings). The
+    file is written even on failure — empty — so the document's last cell
+    prints nothing instead of asking the API for a block this worker could not
+    build.
+    """
+    import os
+    import tempfile
+
+    from depictio.api.v1.configs.logging_init import logger
+    from depictio.models.models.analysis_state import AnalysisState
+    from depictio.serverless import report
+    from depictio.serverless.producer_a import ExportUser
+
+    fd, path = tempfile.mkstemp(prefix=f"depictio-report-{job_id}-", suffix=".html")
+    block = ""
+    try:
+        block = report.build_report_runtime(
+            str(runtime["dashboard_id"]),
+            ExportUser(**runtime["user"]),
+            AnalysisState.model_validate(runtime["state"]),
+            config=runtime.get("config"),
+        )
+        logger.info(f"📄 Report {job_id}: runtime + manifest embedded ({len(block) / 1e6:.1f} MB)")
+    except Exception as exc:  # noqa: BLE001 - the fallbacks stand in
+        logger.warning(f"📄 Report {job_id}: tiles keep the export's own output ({exc})")
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        fh.write(block)
+    return path
+
+
 @celery_app.task(
     bind=True,
     name="render_notebook_report",
@@ -1023,6 +1057,7 @@ def render_notebook_report(
     stem: str,
     api_url: str,
     token_id: str,
+    runtime: dict | None = None,
 ) -> dict:
     """Execute an exported notebook and keep the report Quarto renders from it.
 
@@ -1035,8 +1070,16 @@ def render_notebook_report(
     The render executes the notebook against this deployment's own API, with
     the caller's rights: every tile that is rendered rather than computed costs
     a browser pass, which is why this is a worker task and not a request.
+
+    ``runtime`` (``{dashboard_id, state, user, config}``, set when the endpoint
+    cleared the report to embed the static runtime) has this worker build the
+    dashboard's manifest in-process — producer A, as the static export task
+    does — and hand the document the composed block through
+    ``DEPICTIO_REPORT_RUNTIME_FILE``. Any failure there leaves the block empty:
+    the report then keeps every tile's own output, and the render goes on.
     """
     import asyncio
+    from pathlib import Path
 
     from beanie import init_beanie
     from motor.motor_asyncio import AsyncIOMotorClient
@@ -1046,6 +1089,9 @@ def render_notebook_report(
     from depictio.api.v1.services.notebook_export import store
     from depictio.api.v1.services.notebook_export.render import render_quarto_html
     from depictio.models.models.users import TokenBeanie, UserBeanie
+    from depictio.notebook.report_runtime import RUNTIME_FILE_ENV
+
+    extra_env: dict[str, str] = {}
 
     async def _with_token(action):
         client = AsyncIOMotorClient(MONGODB_URL)
@@ -1072,6 +1118,9 @@ def render_notebook_report(
         access_token = asyncio.run(_with_token(_read))
         if not access_token:
             raise RuntimeError("the render token expired before the job started")
+        if runtime:
+            self.update_state(state="PROGRESS", meta={"phase": "embedding", "job_id": job_id})
+            extra_env[RUNTIME_FILE_ENV] = _report_runtime_file(job_id, runtime)
         self.update_state(state="PROGRESS", meta={"phase": "rendering", "job_id": job_id})
         notebook = store.get(notebook_key)
         html = render_quarto_html(
@@ -1080,6 +1129,7 @@ def render_notebook_report(
             api_url=api_url,
             api_token=access_token,
             timeout_s=settings.notebook_export.render_timeout_s,
+            extra_env=extra_env,
         )
         self.update_state(state="PROGRESS", meta={"phase": "storing", "job_id": job_id})
         store.put(html_key, html, store.HTML_MEDIA_TYPE)
@@ -1096,6 +1146,8 @@ def render_notebook_report(
         # The staged notebook has served its purpose either way, and a token
         # minted for one render outlives its usefulness the moment it ends.
         store.delete(notebook_key)
+        if extra_env.get(RUNTIME_FILE_ENV):
+            Path(extra_env[RUNTIME_FILE_ENV]).unlink(missing_ok=True)
         try:
             asyncio.run(_with_token(_revoke))
         except Exception as exc:  # noqa: BLE001 — never mask the render's own error

@@ -391,6 +391,66 @@ class DepictioClient:
                 fh.write(content)
         return content
 
+    # --------------------------------------------------------- report runtime
+    def manifest(self, dashboard_id: str, state: dict[str, Any] | None = None) -> dict[str, Any]:
+        """The dashboard's ``BundleManifest``, opening on ``state``.
+
+        The same manifest a static export bundles (producer A, the dashboard's
+        whole tab family), with ``initial_filters`` set to the state's filters,
+        so the runtime opens on the view the document narrates. Owner-gated,
+        like the static export: it carries the data.
+        """
+        state = state or self.state(dashboard_id)
+        if hasattr(state, "model_dump"):
+            state = state.model_dump(mode="json", exclude_none=True)
+        return self.post(f"/serverless/report-manifest/{dashboard_id}", {"state": state})
+
+    def runtime(self, addons: list[str] | None = None) -> dict[str, Any]:
+        """The report runtime: ``{"js", "css", "addons": {name: markup}}``."""
+        params = {"addons": ",".join(addons)} if addons else {}
+        return self.get("/serverless/report-runtime", **params)
+
+    def report_runtime(
+        self,
+        dashboard_id: str,
+        state: dict[str, Any] | None = None,
+        *,
+        config: dict[str, Any] | None = None,
+    ) -> str:
+        """The block a report inlines once at its end, as a raw-HTML block.
+
+        With it, the report's tiles are drawn by the dashboard's own renderers
+        and follow an in-page filter panel; without it (this returns ``""``
+        when the API is out of reach, the caller is not an owner, or the
+        state cannot be reproduced in the page) every tile keeps the output
+        this document computed for it. A worker rendering the report composes
+        the block itself and names it in ``DEPICTIO_REPORT_RUNTIME_FILE``.
+        """
+        from .report_runtime import RUNTIME_FILE_ENV, compose_report_runtime, raw_html_block
+
+        prebuilt = os.environ.get(RUNTIME_FILE_ENV)
+        if prebuilt:
+            try:
+                return raw_html_block(Path(prebuilt).read_text(encoding="utf-8"))
+            except OSError:
+                return ""
+        try:
+            manifest = self.manifest(dashboard_id, state)
+            names = [str(a.get("name")) for a in manifest.get("addons") or [] if a.get("name")]
+            runtime = self.runtime(names)
+        except Exception:  # noqa: BLE001 - the fallbacks stand in
+            return ""
+        addons = "".join((runtime.get("addons") or {}).get(n, "") for n in names)
+        return raw_html_block(
+            compose_report_runtime(
+                js=str(runtime.get("js") or ""),
+                css=str(runtime.get("css") or ""),
+                manifest=manifest,
+                config=config,
+                addons=addons,
+            )
+        )
+
     def close(self) -> None:
         self._http.close()
 

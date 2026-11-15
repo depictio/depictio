@@ -17,6 +17,11 @@ Four thin endpoints around ``depictio.serverless.producer_a.export_static``:
 * ``GET  /export-static/download/{job_id}`` — proxies the finished bundle out of
   S3 so the browser never needs to reach MinIO directly.
 
+And the two routes a Quarto report uses to host the same runtime when its
+reader renders it (``depictio/serverless/report.py``): ``GET /report-runtime``
+(the runtime's script and stylesheet) and ``POST /report-manifest/{id}``
+(producer A's manifest, owner-gated like the build, opening on a state).
+
 Job docs live in the ``static_exports`` collection (plain dicts + pymongo, no
 Beanie) and are readable only by their owner or an admin — a leaked job_id must
 not expose someone else's dashboard.
@@ -44,6 +49,7 @@ from depictio.api.v1.db import dashboards_collection, static_exports_collection
 from depictio.api.v1.endpoints.dashboards_endpoints.routes import check_project_permission
 from depictio.api.v1.endpoints.user_endpoints.routes import get_user_or_anonymous
 from depictio.api.v1.s3 import s3_client
+from depictio.models.models.analysis_state import NotebookExportRequest
 from depictio.serverless.preflight import rows_for_tab, tier_counts
 from depictio.serverless.producer_a import (
     BYTES_PER_MB,
@@ -477,3 +483,76 @@ def download_export_static(
         media_type="text/html",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+# ---------------------------------------------------------------------------
+# The report host of the static runtime (depictio/serverless/report.py)
+# ---------------------------------------------------------------------------
+
+
+@serverless_endpoint_router.get("/report-runtime")
+def get_report_runtime(
+    addons: str = "",
+    current_user=Depends(get_user_or_anonymous),
+) -> dict[str, Any]:
+    """The report runtime, for a reader rendering an exported ``.qmd`` themselves.
+
+    ``{"js", "css", "addons": {name: markup}}``: the runtime's script and
+    stylesheet (``dist-static/report-runtime.{js,css}``) and the add-ons a
+    manifest names (``addons=3dmol``). Code, not data — but served to signed-in
+    callers only, like every other route here. 503 when this deployment has not
+    built it.
+    """
+    from depictio.serverless import report
+    from depictio.serverless.addons import AddonError, addons_html
+
+    if not current_user or not getattr(current_user, "id", None):
+        raise HTTPException(status_code=401, detail="Sign in to fetch the report runtime.")
+    try:
+        assets = report.runtime_assets()
+    except report.ReportRuntimeUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    markup: dict[str, str] = {}
+    for name in [n.strip() for n in addons.split(",") if n.strip()]:
+        # Pyodide is assembled from the manifest's package list at export
+        # time; a reader's render does not get it from here.
+        if name == "pyodide":
+            continue
+        try:
+            markup[name] = addons_html([name])
+        except AddonError as exc:
+            logger.warning(f"report runtime: add-on {name!r} unavailable: {exc}")
+    return {"js": assets.js, "css": assets.css, "addons": markup}
+
+
+@serverless_endpoint_router.post("/report-manifest/{dashboard_id}")
+async def post_report_manifest(
+    dashboard_id: str,
+    request: NotebookExportRequest,
+    current_user=Depends(get_user_or_anonymous),
+) -> dict[str, Any]:
+    """Producer A's manifest of the dashboard's family, opening on ``request.state``.
+
+    The manifest a static export would bundle — same producer, same owner gate
+    (404 on a denial, as ``/export-static``), same size ceilings (413) — with
+    ``initial_filters`` set to the state's filters. 409 for a state the
+    in-page runtime cannot reproduce (pinned data, selection groups): the
+    report then keeps every tile's own output. Synchronous and as long as a
+    static export's build (it runs the same computes), so it runs in a thread.
+    """
+    from depictio.serverless import report
+
+    try:
+        manifest = await anyio.to_thread.run_sync(
+            functools.partial(
+                report.build_report_manifest, dashboard_id, current_user, request.state
+            )
+        )
+    except report.ReportRuntimeRefused as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    except BundleTooLargeError as exc:
+        raise HTTPException(status_code=413, detail=str(exc))
+    except ProducerAError as exc:
+        logger.info(f"Report manifest refused for {dashboard_id}: {exc}")
+        raise HTTPException(status_code=404, detail="Dashboard not found or access denied")
+    return manifest.model_dump(mode="json")

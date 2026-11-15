@@ -116,6 +116,14 @@ def pyodide_html(packages: list[str]) -> str:
     return "".join(blocks)
 
 
+def addons_html(names: list[str], packages: list[str] | None = None) -> str:
+    """The add-ons' elements, in order: what both hosts of the runtime embed
+    (the bundle before its ``</body>``, a report beside its runtime)."""
+    return "".join(
+        pyodide_html(list(packages or [])) if n == "pyodide" else addon_script(n) for n in names
+    )
+
+
 def apply_addons(template: str, names: list[str], packages: list[str] | None = None) -> str:
     """Insert the add-ons' scripts before the template's closing ``</body>``.
 
@@ -123,9 +131,7 @@ def apply_addons(template: str, names: list[str], packages: list[str] | None = N
     """
     if not names:
         return template
-    scripts = "".join(
-        pyodide_html(list(packages or [])) if n == "pyodide" else addon_script(n) for n in names
-    )
+    scripts = addons_html(names, packages)
     at = template.rfind("</body>")
     if at < 0:
         return template + scripts

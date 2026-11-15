@@ -195,6 +195,14 @@ class NotebookExportRequest(BaseModel):
 
     state: AnalysisState
     theme: NotebookTheme = "paper"
+    # The report host of the static runtime: tiles drawn in the page by the
+    # dashboard's own renderers, over the same manifest a static export
+    # bundles (each tile's own output stays as its fallback). ``None`` is the
+    # path's default: on for the report rendered by the server, off for the
+    # downloaded ``.qmd`` (whose reader's client then fetches the manifest and
+    # the runtime from the API when it renders). Owner-only either way, as a
+    # static export is; refused silently (fallbacks only) otherwise.
+    embed_runtime: bool | None = None
 
 
 class NotebookPreflightComponent(BaseModel):

@@ -71,12 +71,13 @@ def render_quarto_html(
     api_url: str,
     api_token: str | None,
     timeout_s: int = 900,
+    extra_env: dict[str, str] | None = None,
 ) -> bytes:
     """The HTML report for an exported ``.qmd``, executed end to end.
 
     ``api_url`` and ``api_token`` are what the notebook's own cells read: the
     report is computed with the rights of whoever asked for it, exactly as if
-    they had run the file themselves.
+    they had run the file themselves. ``extra_env`` reaches those cells too.
     """
     if not quarto_binary():
         raise RenderUnavailable(
@@ -101,6 +102,9 @@ def render_quarto_html(
         env["DEPICTIO_API_TOKEN"] = api_token
     # The notebook is a client of this deployment, whichever side of it runs.
     env["DEPICTIO_CONTEXT"] = "client"
+    # E.g. DEPICTIO_REPORT_RUNTIME_FILE: the report runtime's block, composed
+    # by the worker for the document's last cell to print.
+    env.update(extra_env or {})
 
     with tempfile.TemporaryDirectory(prefix="depictio-report-") as tmp:
         src = Path(tmp) / f"{stem}.qmd"

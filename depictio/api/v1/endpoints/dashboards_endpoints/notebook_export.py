@@ -468,6 +468,7 @@ def build_export_plan(
     current_user: User,
     access_token: str | None,
     theme: str = "paper",
+    embed_runtime: bool = False,
 ) -> ExportPlan:
     family_id, raw_tabs = routes._resolve_tab_family(dashboard_id, current_user, TAB_PROJECTION)
     tabs = [convert_objectid_to_str(t) for t in raw_tabs]
@@ -618,7 +619,60 @@ def build_export_plan(
             tabs, state.filters_as_payload(), current_user, access_token, state.pins.body()
         ),
         theme=theme,
+        embed_runtime=embed_runtime,
     )
+
+
+# ── The report host of the static runtime ─────────────────────────────────────
+#
+# A report can embed, once, the serverless runtime and producer A's manifest of
+# the dashboard (``depictio/serverless/report.py``): its tiles are then drawn by
+# the dashboard's own renderers and follow an in-page filter panel, each tile's
+# own output staying as its fallback. The manifest carries the data, so it is
+# held to the static export's rule (owner on the dashboard's project), and a
+# state the runtime cannot reproduce in the page is not embedded at all.
+
+
+def _runtime_refusal(
+    dashboard_id: PyObjectId, state: AnalysisState, current_user: User
+) -> str | None:
+    """Why this report cannot embed the runtime, or ``None`` when it can."""
+    from depictio.serverless import report
+
+    if not report.runtime_available():
+        return "the report runtime is not built on this deployment"
+    reason = report.ineligibility(state)
+    if reason:
+        return reason
+    if not current_user or not getattr(current_user, "id", None):
+        return "embedding the dashboard's data needs a signed-in owner"
+    try:
+        doc = routes.dashboards_collection.find_one(
+            {"dashboard_id": ObjectId(str(dashboard_id))}, {"project_id": 1}
+        )
+    except Exception:  # noqa: BLE001 - an unreadable id is no owner
+        doc = None
+    project_id = (doc or {}).get("project_id")
+    if not project_id or not routes.check_project_permission(project_id, current_user, "owner"):
+        return "embedding the dashboard's data is limited to its owners, as a static export is"
+    return None
+
+
+def _embed_runtime(
+    request: NotebookExportRequest,
+    dashboard_id: PyObjectId,
+    current_user: User,
+    *,
+    default: bool,
+) -> bool:
+    wanted = default if request.embed_runtime is None else request.embed_runtime
+    if not wanted:
+        return False
+    reason = _runtime_refusal(dashboard_id, request.state, current_user)
+    if reason:
+        logger.info(f"Notebook export {dashboard_id}: tiles stay the export's own ({reason})")
+        return False
+    return True
 
 
 @dashboards_endpoint_router.post(
@@ -657,7 +711,14 @@ def notebook_export(
 
     _require_enabled()
     plan = build_export_plan(
-        dashboard_id, request.state, current_user, access_token, theme=request.theme
+        dashboard_id,
+        request.state,
+        current_user,
+        access_token,
+        theme=request.theme,
+        # Off unless asked: the reader's own render fetches the manifest and the
+        # runtime from this API, which only works for an owner with access.
+        embed_runtime=_embed_runtime(request, dashboard_id, current_user, default=False),
     )
     source = NotebookBuilder(plan).build()
     return Response(
@@ -761,8 +822,14 @@ async def notebook_export_render(
     from depictio.api.v1.services.notebook_export import store
     from depictio.models.models.users import TokenData
 
+    embed_runtime = _embed_runtime(request, dashboard_id, current_user, default=True)
     plan = build_export_plan(
-        dashboard_id, request.state, current_user, access_token, theme=request.theme
+        dashboard_id,
+        request.state,
+        current_user,
+        access_token,
+        theme=request.theme,
+        embed_runtime=embed_runtime,
     )
     builder = NotebookBuilder(plan)
     _require_owner_for_authored_code(dashboard_id, current_user, builder)
@@ -791,6 +858,25 @@ async def notebook_export_render(
             "stem": plan.stem,
             "api_url": settings.fastapi.internal_url,
             "token_id": str(token.id),
+            # The worker builds the manifest in-process (producer A, as the
+            # static export does) and hands the document the composed block.
+            "runtime": (
+                {
+                    "dashboard_id": str(dashboard_id),
+                    "state": request.state.model_dump(mode="json"),
+                    "user": {
+                        "id": user_id,
+                        "email": getattr(current_user, "email", "") or "",
+                        "is_admin": bool(getattr(current_user, "is_admin", False)),
+                        "is_anonymous": bool(getattr(current_user, "is_anonymous", False)),
+                    },
+                    # The look the document's own cell would pass (its brand
+                    # primary and type), so both render paths match.
+                    "config": builder.runtime_config(),
+                }
+                if embed_runtime
+                else None
+            ),
         },
         task_id=job_id,
     )
