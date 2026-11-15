@@ -23,6 +23,7 @@ import gzip
 import hashlib
 import io
 import json
+import logging
 import os
 import urllib.request
 import zipfile
@@ -31,6 +32,8 @@ from pathlib import Path
 from typing import Any
 
 PIN_PATH = Path(__file__).with_name("pin.json")
+logger = logging.getLogger(__name__)
+
 CACHE_ENV = "DEPICTIO_PYODIDE_CACHE"
 DIR_ENV = "DEPICTIO_PYODIDE_DIR"
 
@@ -152,10 +155,16 @@ def _read(name: str, sha256: str, url: str | None = None) -> bytes:
         raise PyodideAssetError(f"could not download {source}: {exc}") from exc
     if _sha(data) != sha256:
         raise PyodideAssetError(f"{source} does not match its pinned sha256")
-    cached.parent.mkdir(parents=True, exist_ok=True)
-    tmp = cached.with_suffix(cached.suffix + ".part")
-    tmp.write_bytes(data)
-    tmp.replace(cached)
+    # The cache only saves the next export a download; a home the process can
+    # not write (a container run as an arbitrary uid, a read-only $HOME) must
+    # not fail the export that already holds the verified bytes.
+    try:
+        cached.parent.mkdir(parents=True, exist_ok=True)
+        tmp = cached.with_suffix(cached.suffix + ".part")
+        tmp.write_bytes(data)
+        tmp.replace(cached)
+    except OSError as exc:
+        logger.warning("pyodide assets: not cached at %s (%s)", cached.parent, exc)
     return data
 
 
