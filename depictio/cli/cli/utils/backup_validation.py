@@ -378,6 +378,10 @@ def check_backup_collections_coverage() -> Dict[str, Any]:
             "migration_pushes",
             "migration_targets",
             "migration_invites",
+            # Static-export jobs (serverless): each row points at a built HTML
+            # bundle in S3, which a MongoDB backup does not hold; a restored row
+            # would only offer a download that no longer exists.
+            "static_exports",
         ]
         core_collections = {
             col
