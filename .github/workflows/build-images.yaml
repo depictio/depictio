@@ -454,6 +454,135 @@ jobs:
           docker rm reopen
           echo "::endgroup::"
 
+  allinone-nfcore-rnaseq:
+    # A whole nf-core run through the module, as a pipeline would use it: the real
+    # nf-core/rnaseq at the release its template targets (-profile test,docker),
+    # then the depictio/ingest module in its default artifact mode on that run's
+    # results (template detected from pipeline_info/, dashboards from the
+    # template), in the all-in-one image as the runner's uid; then the image's
+    # `serve` reopens the artifact with the template's dashboards. amd64 only: the
+    # rnaseq test containers are amd64. `allinone-image-check` covers the
+    # module's mechanics on both arches with a small fixture.
+    name: All-in-one image, nf-core/rnaseq through the module
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    env:
+      RNASEQ_VERSION: 3.26.0
+      NXF_VER: 26.10.6
+      NXF_ANSI_LOG: "false"
+      API: http://127.0.0.1:8058/depictio/api/v1
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Free disk space
+        # rnaseq's containers and the 2.9 GB image do not fit next to the
+        # runner's preinstalled toolchains.
+        run: |
+          df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build the all-in-one image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: docker-images/allinone/Dockerfile
+          platforms: linux/amd64
+          load: true
+          tags: depictio-allinone:ci
+          cache-from: type=gha,scope=depictio-allinone-amd64
+
+      - name: Install Nextflow
+        run: |
+          set -euo pipefail
+          if ! java -version 2>&1 | grep -qE 'version "(1[7-9]|[2-9][0-9])'; then
+            sudo apt-get update -qq && sudo apt-get install -y -qq openjdk-21-jre-headless
+          fi
+          mkdir -p "$RUNNER_TEMP/bin"
+          (cd "$RUNNER_TEMP/bin" && curl -fsSL https://get.nextflow.io | bash)
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
+      - name: Run nf-core/rnaseq (-profile test,docker)
+        working-directory: ${{ runner.temp }}
+        run: |
+          set -euo pipefail
+          # The test profile's samplesheet, fetched once: the pipeline reads it,
+          # and the module stages it at input/samplesheet.csv, where the template
+          # looks (rnaseq publishes no copy of its own).
+          curl -fsSL -o samplesheet.csv \
+            https://raw.githubusercontent.com/nf-core/test-datasets/626c8fab639062eade4b10747e919341cbf9b41a/samplesheet/v3.10/samplesheet_test.csv
+          nextflow run nf-core/rnaseq -r "$RNASEQ_VERSION" -profile test,docker \
+            --input "$PWD/samplesheet.csv" --outdir "$PWD/rnaseq-results" -work-dir "$PWD/rnaseq-work"
+          ls rnaseq-results
+          test -d rnaseq-results/pipeline_info
+          # The pipeline's work directory is several GB the runner does not need.
+          rm -rf rnaseq-work
+
+      - name: Ingest the run with the module, in the all-in-one image
+        working-directory: ${{ runner.temp }}
+        run: |
+          set -euo pipefail
+          FIXTURES="$GITHUB_WORKSPACE/docker-images/allinone/ci"
+          nextflow run "$FIXTURES/module_nfcore.nf" -profile docker \
+            --results "$PWD/rnaseq-results" --samplesheet "$PWD/samplesheet.csv" \
+            --outdir "$PWD/module-results" --image depictio-allinone:ci -work-dir "$PWD/module-work"
+          RESULT=module-results/depictio/run.depictio.json
+          jq . "$RESULT"
+          test "$(jq -r .status "$RESULT")" = success
+          template=$(jq -r .template_id "$RESULT")
+          [ "$template" = "nf-core/rnaseq/$RNASEQ_VERSION" ] \
+            || { echo "::error::template $template, expected nf-core/rnaseq/$RNASEQ_VERSION"; exit 1; }
+          [ "$(jq '.dashboards | length' "$RESULT")" -ge 1 ] \
+            || { echo "::error::the template's dashboards were not created"; exit 1; }
+          ARTIFACT=module-results/depictio/run_depictio
+          test -f "$ARTIFACT/.depictio-local-home"
+          test ! -e "$ARTIFACT/env"
+          if grep -l "from conda-forge" module-work/*/*/.command.log; then
+            echo "::error::the task downloaded the services"; exit 1
+          fi
+          if find module-work ! -user "$(id -u)" | grep -q .; then
+            echo "Files not owned by the runner user:"; find module-work ! -user "$(id -u)" | head
+            exit 1
+          fi
+          du -sh "$ARTIFACT"
+
+      - name: Reopen the artifact with the image's serve
+        working-directory: ${{ runner.temp }}
+        run: |
+          set -euo pipefail
+          ARTIFACT="$PWD/module-results/depictio/run_depictio"
+          RESULT=module-results/depictio/run.depictio.json
+          docker run -d --name reopen -u "$(id -u):$(id -g)" -p 127.0.0.1:8058:8058 \
+            -e DEPICTIO_TELEMETRY_ENABLED=false -v "$ARTIFACT:/data" depictio-allinone:ci
+          for _ in $(seq 1 120); do
+            [ "$(docker inspect --format '{{.State.Health.Status}}' reopen)" = healthy ] && break
+            [ "$(docker inspect --format '{{.State.Running}}' reopen)" = true ] || break
+            sleep 5
+          done
+          if [ "$(docker inspect --format '{{.State.Health.Status}}' reopen)" != healthy ]; then
+            echo "::error::the artifact never served"; docker logs reopen || true; exit 1
+          fi
+          token=$(sed -n 's/^ *access_token: *//p' "$ARTIFACT/cli/admin_config.yaml" | head -1 | tr -d "\"'")
+          listed=$(curl -fsS -H "Authorization: Bearer $token" "$API/dashboards/list")
+          echo "reopened dashboards: $(jq -c '[.[] | .title]' <<< "$listed")"
+          # Every dashboard the ingestion created is there after the reopen.
+          for id in $(jq -r '.dashboards[] | .id // .dashboard_id // empty' "$RESULT"); do
+            jq -e --arg id "$id" 'any(.[]; (.dashboard_id // .id // ._id) == $id)' <<< "$listed" >/dev/null \
+              || { echo "::error::dashboard $id missing after reopen"; exit 1; }
+          done
+          [ "$(jq length <<< "$listed")" -ge 1 ] || { echo "::error::no dashboard after reopen"; exit 1; }
+          curl -fsS -o /dev/null -w "dashboards page: %{http_code}\n" http://127.0.0.1:8058/dashboards
+          docker stop -t 60 reopen
+          test "$(docker inspect --format '{{.State.ExitCode}}' reopen)" = 0
+          docker logs reopen | tail -20
+          docker rm reopen
+
   merge:
     name: Merge ${{ matrix.image }} manifest
     needs: build
