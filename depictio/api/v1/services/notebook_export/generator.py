@@ -56,6 +56,9 @@ _MANTINE_SHADE_6 = {
     "orange": "#fd7e14",
 }
 _CSS_COLOR_RE = re.compile(r"^(#[0-9a-fA-F]{3,8}|rgba?\(|hsla?\()")
+# SectionAccordion's TAB_LINK: a markdown link whose target is another tab.
+_TAB_LINK_RE = re.compile(r"\[([^\]]+)\]\(tab:([^)]+)\)")
+_LEGEND_RE = re.compile(r"\{\{legend:([A-Za-z0-9_.-]+)\}\}")
 
 # One heading level per level of the thing itself, so the document outline (and
 # with it the table of contents) reads the way the dashboard is built: the
@@ -641,6 +644,11 @@ class ExportPlan:
     # endpoint so this module stays infra-free). A missing id renders no
     # icon rather than breaking the export.
     icons: dict[str, str] = field(default_factory=dict)
+    # A text tile's live values at export time, by its index: what
+    # ``bulk_compute_cards`` answered under the exported filters
+    # (``{name: value, "param:KEY": value}``). The document recomputes them
+    # through the API when it runs, and falls back on these offline.
+    text_values: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     @property
     def dashboard_id(self) -> str:
@@ -689,6 +697,53 @@ class NotebookBuilder:
             self.names.reserve(f"final_{self.df_names[dc.dc_id][3:]}")
             self.final_names[dc.dc_id] = f"final_{self.df_names[dc.dc_id][3:]}"
         self._entries: list[tuple[MarkdownUnit | ComponentEntry, str | None]] | None = None
+        self.tab_anchors, self._anchor_by_tab_name = self._tab_anchors()
+
+    def _tab_anchors(self) -> tuple[dict[str, str], dict[str, str]]:
+        """Each tab's heading id, and the tab names a ``](tab:Name)`` link may use.
+
+        Every tab is a part of the one document, so a link that opened a tab in
+        the viewer becomes a jump to that part's heading.
+        """
+        by_unit: dict[str, str] = {}
+        by_name: dict[str, str] = {}
+        taken: set[str] = set()
+        docs = {str(t.get("dashboard_id") or ""): t for t in self.plan.tabs}
+        for unit in ordered_units(self.plan.tabs):
+            if not isinstance(unit, MarkdownUnit) or unit.kind != "tab":
+                continue
+            base = "tab-" + slug(unit.text, max_len=48, fallback="tab").replace("_", "-")
+            anchor, n = base, 2
+            while anchor in taken:
+                anchor, n = f"{base}-{n}", n + 1
+            taken.add(anchor)
+            key = unit.dashboard_id or unit.text
+            by_unit[key] = anchor
+            doc = docs.get(unit.dashboard_id or "") or {}
+            for name in (unit.text, doc.get("title"), doc.get("main_tab_name")):
+                if name:
+                    by_name.setdefault(str(name).strip().lower(), anchor)
+        return by_unit, by_name
+
+    def _rewrite_tab_links(self, text: str) -> str:
+        """``[label](tab:Name)`` → ``[label](#tab-name)``; a tab not in the
+        document keeps its label and loses the link."""
+
+        def sub(m: re.Match[str]) -> str:
+            label, name = m.group(1), m.group(2)
+            anchor = self._anchor_by_tab_name.get(name.strip().lower())
+            return f"[{label}](#{anchor})" if anchor else label
+
+        return _TAB_LINK_RE.sub(sub, text)
+
+    def _legend_html(self, column: str) -> str:
+        """``{{legend:column}}``: a dot in each value's dashboard colour, then the value."""
+        colors = self._category_colors().get(column) or {}
+        return " ".join(
+            f'<span style="white-space:nowrap"><span style="color:{_esc(c)}">\N{BLACK CIRCLE}'
+            f"</span> {_esc(v)}</span>"
+            for v, c in colors.items()
+        )
 
     # ------------------------------------------------------------------ names
     def _stage_name(self, k: int, dc_id: str) -> str:
@@ -814,7 +869,7 @@ class NotebookBuilder:
             "import plotly.graph_objects as go\n"
             "import polars as pl\n"
             "from IPython.display import HTML\n"
-            "from depictio.notebook import DepictioClient, use_document_renderer\n"
+            "from depictio.notebook import DepictioClient, fill_text, use_document_renderer\n"
             "from polars import col, lit\n"
             "\n"
             + _comment(
@@ -1611,7 +1666,7 @@ fig_funnel"""
             )
         ]
         if unit.description:
-            parts.append(f"*{_esc(unit.description)}*")
+            parts.append(f"*{self._rewrite_tab_links(_esc(unit.description))}*")
         return "\n\n".join(parts)
 
     def _tab_header_html(self, unit: MarkdownUnit) -> str:
@@ -1622,6 +1677,7 @@ fig_funnel"""
         brand = self.plan.tab_brands.get(unit.dashboard_id or "") if unit.dashboard_id else None
         fallback = (brand or self.plan.brand or {}).get("primary") or ""
         accent = _resolve_accent_hex(unit.color, fallback)
+        anchor = self.tab_anchors.get(unit.dashboard_id or unit.text)
         parts = [
             self._heading(
                 level=TAB_LEVEL,
@@ -1630,9 +1686,10 @@ fig_funnel"""
                 icon=self._icon_html(unit.icon, accent),
                 kind="tab",
             )
+            + (f" {{#{anchor}}}" if anchor else "")
         ]
         if unit.description:
-            parts.append(f"*{_esc(unit.description)}*")
+            parts.append(f"*{self._rewrite_tab_links(_esc(unit.description))}*")
         # Only a tab that actually overrides the instance brand shows a mark of
         # its own. A tab without an override resolves to the same brand as the
         # document, and printing it would repeat the header's logo under every
@@ -1659,7 +1716,9 @@ fig_funnel"""
         ctype = str(meta.get("component_type") or "")
         title = str(meta.get("title") or meta.get("index") or ctype)
         if ctype == "text":
-            return self._text_cell(meta, entry.unit.section)
+            return self._text_cell(
+                meta, entry.unit.section, tab_id=str(entry.unit.tab.get("dashboard_id") or "")
+            )
         if ctype == "highlight":
             return self._highlight_cell(meta, title)
         if entry.verdict.status == "omitted":
@@ -1717,10 +1776,12 @@ fig_funnel"""
         tab = str(meta.get("source_tab") or "").strip()
         where = f"the **{_esc(tab)}** tab" if tab else "another tab"
         line = f"> **{_esc(title)}** shows *{_esc(source)}* from {where}, drawn in that tab's part."
-        caption = str(meta.get("caption") or "").strip()
+        caption = self._rewrite_tab_links(str(meta.get("caption") or "").strip())
         return md_cell(line + (f"\n>\n> {caption}" if caption else ""))
 
-    def _text_cell(self, meta: dict[str, Any], section: str | None = None) -> Cell:
+    def _text_cell(
+        self, meta: dict[str, Any], section: str | None = None, *, tab_id: str = ""
+    ) -> Cell:
         title = str(meta.get("title") or "").strip()
         body = str(meta.get("body") or "").strip()
         # On the dashboard a section's narration tile sits *under* the section
@@ -1744,7 +1805,45 @@ fig_funnel"""
             parts.append(f"{'#' * level} {title}")
         if body:
             parts.append(body)
-        return md_cell("\n\n".join(parts) or "*(empty text tile)*")
+        text = self._rewrite_tab_links("\n\n".join(parts) or "*(empty text tile)*")
+        legends = {
+            f"legend:{c}": self._legend_html(c) for c in dict.fromkeys(_LEGEND_RE.findall(text))
+        }
+        values = meta.get("values") if isinstance(meta.get("values"), dict) else {}
+        if not values and "{{param:" not in text:
+            for key, html in legends.items():
+                text = text.replace("{{" + key + "}}", html)
+            return md_cell(text)
+        # Live values: computed by Depictio under the state above when the
+        # document runs, printed as the tile's own markdown (`output: asis`), so
+        # headings and links stay the document's. The values the export saw
+        # stand in when the API is out of reach.
+        index = str(meta.get("index") or "")
+        tab_id = tab_id or self.plan.dashboard_id
+        formats = {
+            str(k): str(v.get("format"))
+            for k, v in values.items()
+            if isinstance(v, dict) and v.get("format")
+        }
+        fallback = self.plan.text_values.get(index) or {}
+        lines = [
+            "#| output: asis",
+            _comment(
+                f"Text tile {index!r}: its live values ({', '.join(values) or 'run parameters'}) "
+                "are computed by Depictio under the state above; offline, the values at "
+                "export time stand in"
+            ),
+            "print(",
+            "    fill_text(",
+            f"        {text!r},",
+            f"        client.text_values({tab_id!r}, {index!r}, depictio_state, "
+            f"fallback={fallback!r}),",
+            f"        formats={formats!r},",
+            f"        legends={legends!r},",
+            "    )",
+            ")",
+        ]
+        return Cell("\n".join(lines))
 
     def _api_cell(self, entry: ComponentEntry, title: str, *, show: bool = True) -> Cell:
         meta = entry.unit.meta

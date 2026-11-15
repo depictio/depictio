@@ -331,6 +331,48 @@ def _resolve_tab_icons(tabs: list[dict[str, Any]]) -> dict[str, str]:
     return resolve_icons(icon_ids)
 
 
+def _export_text_values(
+    tabs: list[dict[str, Any]],
+    filters: list[dict[str, Any]],
+    current_user: User,
+    access_token: str | None,
+) -> dict[str, dict[str, Any]]:
+    """Every live-value text tile's values under the exported filters, by its index.
+
+    The same call the viewer makes (``bulk_compute_cards`` with the tiles'
+    indexes), one per tab. Best effort: a tab whose values cannot be computed
+    leaves its tiles printing the values the document computes when it runs.
+    """
+    out: dict[str, dict[str, Any]] = {}
+    for tab in tabs:
+        texts = [
+            str(m.get("index"))
+            for m in tab.get("stored_metadata") or []
+            if isinstance(m, dict)
+            and m.get("component_type") == "text"
+            and routes._text_has_live_values(m)
+        ]
+        if not texts:
+            continue
+        try:
+            payload = routes.bulk_compute_cards(
+                dashboard_id=PyObjectId(str(tab.get("dashboard_id"))),
+                request={"filters": filters, "component_ids": texts},
+                current_user=current_user,
+                access_token=access_token,
+            )
+        except Exception as exc:  # noqa: BLE001 - the document computes them itself
+            logger.debug(
+                f"notebook export: text values unavailable for {tab.get('dashboard_id')}: {exc}"
+            )
+            continue
+        for idx in texts:
+            got = (payload.get("values") or {}).get(idx)
+            if isinstance(got, dict):
+                out[idx] = got
+    return out
+
+
 def build_export_plan(
     dashboard_id: PyObjectId,
     state: AnalysisState,
@@ -473,6 +515,9 @@ def build_export_plan(
         brand=brand,
         tab_brands=_resolve_tab_brands(tabs, main_brand=brand),
         icons=_resolve_tab_icons(tabs),
+        text_values=_export_text_values(
+            tabs, state.filters_as_payload(), current_user, access_token
+        ),
     )
 
 

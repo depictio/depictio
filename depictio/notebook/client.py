@@ -287,6 +287,34 @@ class DepictioClient:
             "context": {"dashboard_id": dashboard_id, "theme": theme},
         }
 
+    def text_values(
+        self,
+        dashboard_id: str,
+        index: str,
+        state: dict[str, Any] | None = None,
+        *,
+        fallback: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """A text tile's live values under ``state``: ``{name: v, "param:KEY": v}``.
+
+        The same computation the viewer asks for (``bulk_compute_cards`` with
+        the tile's index). ``fallback`` — the values at export time — answers
+        when the API is out of reach (offline, ``DEPICTIO_DATA_DIR``), so a
+        document still reads rather than printing dashes everywhere.
+        """
+        state = state or {}
+        try:
+            payload = self.post(
+                f"/dashboards/bulk_compute_cards/{dashboard_id}",
+                {"filters": list(state.get("filters") or []), "component_ids": [index]},
+            )
+            got = (payload.get("values") or {}).get(index)
+            if isinstance(got, dict):
+                return got
+        except Exception:  # noqa: BLE001 - the export-time values stand in
+            pass
+        return dict(fallback or {})
+
     # ------------------------------------------------------------ components
     def component(
         self,

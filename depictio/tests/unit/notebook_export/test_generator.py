@@ -492,3 +492,64 @@ def test_column_colour_by_reaches_code_figures_and_ungrouped_code_is_untouched()
     )
     assert "_make_fig_by_group(final_penguins_complete)" in plain
     assert ".alias('__depictio_group__')" not in plain
+
+
+def _ampliseq_plan(tabs, **extra) -> ExportPlan:
+    dc_ids = sorted(
+        {str(m.get("dc_id")) for t in tabs for m in t["stored_metadata"] if m.get("dc_id")}
+    )
+    state = AnalysisState.model_validate(
+        {"context": {"dashboard_id": str(tabs[0]["dashboard_id"])}}
+    )
+    return ExportPlan(
+        tabs=tabs,
+        project=None,
+        state=state,
+        dcs=[DCPlan(dc_id=d, tag=f"dc_{i}") for i, d in enumerate(dc_ids)],
+        stages=[],
+        title="nf-core/ampliseq",
+        **extra,
+    )
+
+
+def test_tab_links_become_jumps_to_the_tab_headings(ampliseq_tabs):
+    src = generate_qmd(_ampliseq_plan(ampliseq_tabs))
+    assert "](tab:" not in src
+    anchors = set(re.findall(r"\{#(tab-[a-z0-9-]+)\}", src))
+    targets = set(re.findall(r"\]\(#(tab-[a-z0-9-]+)\)", src))
+    assert targets, "the seeded tab links should survive as in-document links"
+    assert targets <= anchors, targets - anchors
+
+
+def test_text_values_are_filled_when_the_document_runs(ampliseq_tabs):
+    """Live values (`{{name}}`, `{{param:KEY}}`) print the server's numbers, not braces."""
+    texts = [
+        m
+        for t in ampliseq_tabs
+        for m in t["stored_metadata"]
+        if m.get("component_type") == "text" and m.get("values")
+    ]
+    assert texts, "ampliseq seeds a text tile with live values"
+    text = texts[0]
+    names = list(text["values"])
+    fallback = {name: 0.4123 for name in names}
+    src = generate_qmd(_ampliseq_plan(ampliseq_tabs, text_values={text["index"]: fallback}))
+    cell = next(c for c in python_chunks(src) if repr(str(text["index"])) in c and "fill_text" in c)
+    assert cell.startswith("#| output: asis")
+
+    import contextlib
+    import io
+
+    from depictio.notebook import fill_text
+
+    class _Offline:
+        def text_values(self, dashboard_id, index, state, *, fallback=None):
+            return dict(fallback or {})
+
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        exec(cell, {"fill_text": fill_text, "client": _Offline(), "depictio_state": {}})  # noqa: S102
+    printed = out.getvalue()
+    for name in names:
+        assert "{{" + name + "}}" not in printed
+    assert "](tab:" not in printed

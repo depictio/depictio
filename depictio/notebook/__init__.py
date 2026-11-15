@@ -26,10 +26,12 @@ In a ``.qmd``::
 
 from .client import DepictioClient, DepictioClientError
 from .components import DepictioComponent, use_document_renderer
+from .text import fill_text
 
 __all__ = [
     "DepictioClient",
     "DepictioClientError",
     "DepictioComponent",
+    "fill_text",
     "use_document_renderer",
 ]
