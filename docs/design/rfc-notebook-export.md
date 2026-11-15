@@ -124,10 +124,23 @@ public global is defined by two chunks (a second one would replace what the firs
 Three verdicts (`classify.py`): **code** (Polars/Plotly in the `.qmd`, needs only the data),
 **api** (`client.component(...)`, rendered by the instance with the exported state) and
 **omitted** (only an unknown type or kind). An `api` tile also says what the reader gets
-(`output` in the preflight): an interactive Plotly figure, static HTML, or a PNG **snapshot** of
-a renderer that is not Plotly. Every `AdvancedVizKind` has an explicit verdict in
-`ADVANCED_VIZ_RENDERING`; the module refuses to import with one missing, and the test pins the
-non-Plotly set by name, so a new kind cannot reach a report by default.
+(`output` in the preflight): an interactive figure, static HTML/SVG, or a PNG **snapshot** of a
+renderer that is not Plotly; `native` marks a tile the document draws itself from its data
+(`depictio.notebook.native`) rather than the server rendering it. Every `AdvancedVizKind` has an
+explicit verdict in `ADVANCED_VIZ_RENDERING`; the module refuses to import with one missing, and
+the tests pin the non-Plotly set by name and require a native renderer for each of them, so a
+new kind cannot reach a report by default.
+
+**Native renderers** (`depictio/notebook/native/`). What the app draws with SVG, a canvas or
+WebGL is drawn in the document with Python libraries from the rows the React renderer reads
+(`/advanced_viz/data` with the state's filters as the renderer sends them, the newick route,
+indexed-file manifests for structures and PAE files): Plotly for tracks, matrices, rings and
+karyotypes; py3Dmol for structures, with 3Dmol.js 2.5.5 shipped in the package and inlined once
+per document; SVG/HTML for layout (record card, ranked table, allele grid, pedigree, HMM logo).
+Each renderer falls back on the server's snapshot when it cannot run (a library missing, a file
+out of reach) and the caption says why; `use_native(False)` / `DEPICTIO_NOTEBOOK_NATIVE=0` asks
+for snapshots everywhere. What only the live view does (fetch an annotation track, follow a
+brush, refetch on zoom, let the reader pick) is named in each tile's caption.
 
 **No tile can break the document.** Every display path of a `DepictioComponent` catches and
 draws a placeholder with the tile's title, the reason and a link to the live dashboard (a
@@ -158,27 +171,49 @@ explicitly still raises.
 | --- | --- | --- | --- |
 | complex_heatmap, upset_plot, sankey (Celery computes); volcano, embedding, manhattan, stacked_bar, stacked_taxonomy, da_barplot, enrichment, ma, qq, sunburst, pr_benchmark, roc_pr_curve, confusion_matrix, metric_ci_bars (registered Python builders) — 17 | api: the server builds the Plotly figure (`build_plotly_export`, inline, no browser); a tile coloured by groups or a column goes through the renderer instead, which applies it | Plotly | yes |
 | phylogenetic (tree), rarefaction, dot_plot, lollipop, oncoplot, coverage_track (track), profile, signal_matrix, fusion_structure, gene_arrow_track, gsea_running_score, sashimi (plotly view), scatter_xy, contact_map, knee_plot, damage_profile, group_compare, transcript_structure, cnv_profile (plotly view), parallel_coordinates, ramachandran, ranked_distribution, spatial_cells — 23 | api: the Plotly figure read off the real React renderer, headless (`/embed`, `gd.data`) | Plotly | yes; contact_map and group_compare on their opening window / pair only |
-| genome_view, genome_chord, ideogram, record_card, ranked_table, molecule_3d, msa, sequence_track, hmm_logo, secondary_structure, domain_architecture, pae_matrix, allele_grid, pedigree — 14; and the views coverage_track `locus`, cnv_profile `locus`, sashimi `genomespy`, phylogenetic with `collapse_rank` | api: a PNG of the real renderer, taken by the same headless pass once the tile reports itself drawn (`data-embed-status`) | static snapshot, captioned "interactive in the live dashboard" | no |
+| genome_view (the opening window: the default region, the one contig, or genome-wide / the stretches the rows cover), genome_chord, ideogram, msa, sequence_track, secondary_structure, domain_architecture, pae_matrix — 8; and the views cnv_profile `locus`, sashimi `genomespy` (the busiest locus), phylogenetic with `collapse_rank` (rank summary: core clades, cladogram, shares, split strip) | **native**: a Plotly figure drawn in the document from the renderer's rows | Plotly (static native until this change: snapshot) | yes: hover, zoom, legend |
+| molecule_3d — 1 | **native**: py3Dmol from the structure file (indexed collection), pLDDT colours, variant sites; the CA backbone in Plotly without py3Dmol | 3D viewer, 3Dmol.js inlined once | yes: rotate, zoom |
+| record_card, ranked_table, allele_grid, pedigree, hmm_logo — 5 | **native**: HTML/SVG from the rows (the picked or default record, or with no pick the records the card picks from; medals, badges and bars; both haplotypes per cell; one pedigree per family; letter heights as `hmmlogo` computes them) | static native | no (tooltips on the SVG) |
+| coverage_track `locus` view; genome_view over indexed files (`source` other than `table`) | api: a PNG of the real renderer, taken by the headless pass once the tile reports itself drawn (`data-embed-status`); also every native tile's fallback | static snapshot, captioned "interactive in the live dashboard" | no |
 
 `bioimage_viewer` (#1118, unmerged) will need a verdict when it lands: the import guard says so.
 
-#### Seeded families, before → after this change
+#### Seeded families, before → after
 
-| family | before | after |
-| --- | --- | --- |
-| nf-core/viralrecon | 4 tiles abort the render, 1 blank JBrowse | 0 fatal; 5 snapshots |
-| nf-core/ampliseq | 3 tiles abort the render | 0 fatal; 3 snapshots |
-| advanced_viz_showcase | 28 tiles abort the render | 0 fatal; 28 snapshots |
-| genome_tracks_examples | 2 blank JBrowse tiles | 2 JBrowse snapshots + track tables |
+Three states: the audit (before snapshots existed), snapshots (`21eab2a`), and native
+renderers (this revision). Measured by rendering each family's `.qmd` with Quarto 1.9.37
+against the seeds' own data; "drawn here" counts tiles the document draws itself.
+
+| family | audit | with snapshots | native (now) |
+| --- | --- | --- | --- |
+| nf-core/viralrecon | 4 tiles abort the render, 1 blank JBrowse | 0 fatal; 5 snapshots | 4 drawn here (1 genome view interactive, 3 record cards static); 1 snapshot (JBrowse) |
+| nf-core/ampliseq | 3 tiles abort the render | 0 fatal; 3 snapshots | 3 drawn here (2 phylogeny summaries interactive, 1 record card static); 0 snapshots |
+| advanced_viz_showcase | 28 tiles abort the render | 0 fatal; 28 snapshots | 28 drawn here (20 interactive, 8 static); 0 snapshots |
+| genome_tracks_examples | 2 blank JBrowse tiles | 2 JBrowse snapshots + track tables | unchanged: 2 JBrowse snapshots + track tables |
+| **all seeds** | 35 fatal, 3 blank | 38 snapshots | **35 drawn here (24 interactive, 11 static), 3 snapshots (JBrowse)**; 0 placeholders among them |
+
+Per kind, snapshot → native: interactive (Plotly) genome_view, genome_chord, ideogram, msa,
+sequence_track, secondary_structure, domain_architecture, pae_matrix, cnv_profile `locus`,
+sashimi `genomespy`, phylogenetic `collapse_rank`; interactive (py3Dmol) molecule_3d; static
+(HTML/SVG) record_card, ranked_table, allele_grid, pedigree, hmm_logo. Still a snapshot:
+JBrowse (§ below), coverage_track `locus` (GenomeSpy, not in any seed; its `track` view is a
+Plotly figure already) and genome_view over indexed files.
+
+What it costs a report: one copy of 3Dmol.js (538 KB) in a document with a structure, Inter
+(three subsets, ~200 KB as data URIs) in every Paper report, and each tile's own data: on the
+showcase the 28 native tiles come to ~3.3 MB of HTML (the 10 000-bin copy-number profile
+0.46 MB, the three structures 0.85 MB with the library), against one PNG per tile before.
 
 Against the audit's per-component targets (72 rows: 17 component types, 55 kinds counting
 #1118's): **api-figure 45** — all reached (UI figures now carry grouping and pins; 17 kinds no
 longer need a browser); **code 13** — 6 reached (code figures, closed-form cards, tables,
 filters, plain and live text), 7 not (multi-metric and `box_plot_stats` cards stay api/static,
-card variants keep the default look, highlights stay pointers, record_card / ranked_table /
-pae_matrix are snapshots); **embedded-offline 10** — 0 embedded, all 10 at their stated
-`static-image` fallback (§3.8); **static-image 4** — 3 reached (images, JBrowse, genome_view),
-bioimage_viewer not on this branch. Before: 14 kinds aborted every report and JBrowse was blank.
+card variants keep the default look, highlights stay pointers; record_card / ranked_table /
+pae_matrix are now drawn from their data, natively rather than as code cells);
+**embedded-offline 10** — reached natively rather than by embedding the React bundle (§3.8):
+interactive for the Plotly and py3Dmol ones, static for the SVG/HTML ones; **static-image 4** —
+3 reached (images, JBrowse, and genome_view now beyond its target, as an interactive opening
+window), bioimage_viewer not on this branch. Before: 14 kinds aborted every report and JBrowse was blank.
 
 #### Cannot be exported (hard reasons)
 
@@ -189,9 +224,11 @@ bioimage_viewer not on this branch. Before: 14 kinds aborted every report and JB
 2. **JBrowse browsing offline.** Tracks (BAM, CRAM, bigWig, VCF) are read by HTTP range through
    the instance's signed, short-lived track proxy, often GB-scale. Ceiling: the opening view's
    snapshot plus the track table and a link.
-3. **GenomeSpy views interactive offline** (genome_view; coverage_track / cnv_profile `locus`;
+3. **GenomeSpy views as GenomeSpy offline** (genome_view; coverage_track / cnv_profile `locus`;
    sashimi `genomespy`). GenomeSpy fetches its annotation tracks itself and zooming refetches;
-   main's offline bundle refuses them too. Ceiling: a snapshot of the opening window.
+   main's offline bundle refuses them too. Ceiling: the opening window's rows drawn natively in
+   Plotly (hover and zoom over what the window holds, no annotation track, no refetch);
+   coverage_track `locus` stays a snapshot.
 4. **bioimage_viewer at full resolution** (#1118). Multiscale OME-Zarr chunks are fetched on
    demand with the viewer's credentials; the hand-off links are public-only or expire.
 5. **contact_map beyond the opening window, group_compare beyond the opening pair.** One server
@@ -248,6 +285,27 @@ MultiQC and advanced-viz data are not versioned server-side.
 
 The client works in any `{python}` chunk a reader adds.
 
+### 3.6a The report's look — Paper
+
+The report reads as the dashboard does in the app's default chrome (id `glass`, "Paper",
+`viewer/src/chrome/variants/glass/`), from the instance brand, with `theme: "classic"` on the
+export request (a Look control in the modal) for Quarto's stock page and Plotly's own figures:
+
+- **the page**: a Quarto brand inline in the front matter (`quarto.paper_brand`; the export stays
+  one file), compiled into the report's Bootstrap theme: white page, gray-9 ink, the instance
+  primary, Inter in front of the app's UI stack (or the brand's own `font_family`), Paper's
+  radii and hairlines;
+- **the chrome** the generator injects (`PAPER_CHROME` over `NOTEBOOK_CHROME`): sections as
+  paper panels with the section's accent edge, every result a tile card, KPI cards, the contents
+  list, the code toggle and DataTables in Paper's wells and pills, every value a `--gl-*` token
+  of `glass.css` resolved for the light scheme;
+- **the figures**: `depictio.notebook.theme` is `glassPlotly` + `glassPlotlyDefaults` in Python,
+  merged as `applyChromePlotly` merges them (defaults under the figure, the patch over it), on
+  every figure the document shows, server-built ones included, and registered as the
+  `depictio_paper` Plotly template for figures built in the document;
+- **the font**: Inter (latin, latin-ext, greek; OFL) ships with the package and the setup cell
+  embeds it as data URIs: the report makes no font request.
+
 ### 3.6b The rendered report (server-side, opt-in)
 
 The second choice in the export modal: **Rendered report**, the `.qmd` run here. The reader gets
@@ -270,7 +328,7 @@ exits 0. The service checks the log for the execution it asked for before believ
 
 **What it costs.** Quarto (~250 MB) is opt-in in the worker image (`--build-arg
 WITH_QUARTO=true`, `Dockerfile.worker`; compose `DEPICTIO_WORKER_WITH_QUARTO`), plus the `render`
-extra (`nbclient`, `ipykernel`, `itables`). A worker without it refuses a render naming the build
+extra (`nbclient`, `ipykernel`, `itables`, `py3Dmol`). A worker without it refuses a render naming the build
 arg; everything else in the export works without it. A render re-executes the notebook against this deployment's own
 API: 45 s for the nf-core/viralrecon report with the figure cache warm, ~4 min cold, since every
 API-path tile is a headless browser pass. `DEPICTIO_NOTEBOOK_EXPORT_RENDER_ENABLED` is **off by
@@ -292,9 +350,16 @@ equals the funnel endpoint's count for that stage, for three stage orders; reord
 intermediate counts and never the final one. Against a live instance,
 `depictio/dev_scripts/verify_notebook_export.py` does the same for seeded dashboards.
 
-### 3.8 Design note — embedded-offline tiles for what is not Plotly (not built)
+### 3.8 Design note — embedded-offline tiles for what is not Plotly (not built; superseded)
 
-The 14 non-Plotly kinds (and the GenomeSpy views) reach the report as PNG snapshots. Exact React
+**Superseded by the native renderers (§3.4).** The non-Plotly kinds are drawn in the document
+from their data, in Python, which costs a report each tile's data plus 3Dmol.js once, against
+~7 MB of React runtime per document below, and needs no build of its own. What it gives up is
+pixel parity with the React renderer and the controls that need no refetch (a record picker, the
+pedigree's family switch); the note is kept for the day that parity is wanted.
+
+Before the native renderers, the 14 non-Plotly kinds (and the GenomeSpy views) reached the
+report as PNG snapshots. Exact React
 parity offline — medals, SVG, canvas, the interactions that need no refetch — is possible only
 with main's offline component bundle (`viewer/dist-embed/embed.html`, `services/export/embed.py`),
 which runs the real `ComponentRenderer` against a mock API fed by
