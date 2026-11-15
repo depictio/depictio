@@ -4,7 +4,7 @@
 # of the artifact with the image's own `serve`. Run from an empty directory.
 #
 #   nfcore_through_module.sh pipeline <name> <version>
-#       nextflow run nf-core/<name> -r <version> -profile test,docker
+#       nf-core/<name> at tag <version>, -profile test,docker
 #       -> nfcore-results/ and its samplesheet nfcore-samplesheet.<ext>, read
 #          from the run's own params.json (`input`), as a pipeline would hand it
 #   nfcore_through_module.sh module <docker|apptainer> <image> <expected template id>
@@ -22,8 +22,12 @@ fail() { echo "::error::$*"; exit 1; }
 
 pipeline() {
     local name=$1 version=$2
+    # Cloned with git rather than pulled by Nextflow, which asks GitHub's API
+    # for the manifest: unauthenticated, the shared runners exhaust its rate
+    # limit ("API rate limit exceeded") when several jobs start at once.
+    git clone --quiet --depth 1 --branch "$version" "https://github.com/nf-core/$name.git" nfcore-pipeline
     # Older pipelines predate Nextflow's strict syntax.
-    NXF_SYNTAX_PARSER=v1 nextflow run "nf-core/$name" -r "$version" -profile test,docker \
+    NXF_SYNTAX_PARSER=v1 nextflow run "$PWD/nfcore-pipeline" -profile test,docker \
         --outdir "$PWD/nfcore-results" -work-dir "$PWD/nfcore-work"
     # The pipeline's work directory is GBs the rest of the job does not need.
     rm -rf nfcore-work
@@ -40,6 +44,7 @@ pipeline() {
         http://*|https://*) curl -fsSL -o "nfcore-samplesheet.$ext" "$input" ;;
         *) cp "$input" "nfcore-samplesheet.$ext" ;;
     esac
+    rm -rf nfcore-pipeline
     du -sh nfcore-results
 }
 
