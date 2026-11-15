@@ -292,14 +292,14 @@ def _resolve_tab_brands(
 def _resolve_tab_icons(tabs: list[dict[str, Any]]) -> dict[str, str]:
     """Every Iconify id a tab or one of its grid sections uses, resolved once.
 
-    Ids repeat across a family's tabs and sections; ``resolve_icons`` itself
-    caches per process (``icons.py``), so this just gathers the set the
-    export needs before asking.
+    From the viewer's bundled icon subset (``icons.py``), so no Iconify call
+    happens on the request path for any icon the viewer itself can draw.
     """
     from depictio.api.v1.services.icons import resolve_icons
     from depictio.api.v1.services.notebook_export.generator import (
         FILTERS_ICON,
         FUNNEL_ICON,
+        INLINE_ICON_RE,
         RESULTS_ICON,
         SUMMARY_ICON,
     )
@@ -328,6 +328,10 @@ def _resolve_tab_icons(tabs: list[dict[str, Any]]) -> dict[str, str]:
         for meta in tab.get("stored_metadata") or []:
             if isinstance(meta, dict) and meta.get("component_type") == "interactive":
                 icon_ids.add(filter_icon_id(meta))
+            # A text tile's inline icons, `![](icon:mdi:flask-outline)`.
+            if isinstance(meta, dict) and meta.get("component_type") == "text":
+                for field in ("title", "body"):
+                    icon_ids.update(INLINE_ICON_RE.findall(str(meta.get(field) or "")))
     return resolve_icons(icon_ids)
 
 

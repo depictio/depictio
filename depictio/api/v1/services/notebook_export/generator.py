@@ -59,6 +59,8 @@ _CSS_COLOR_RE = re.compile(r"^(#[0-9a-fA-F]{3,8}|rgba?\(|hsla?\()")
 # SectionAccordion's TAB_LINK: a markdown link whose target is another tab.
 _TAB_LINK_RE = re.compile(r"\[([^\]]+)\]\(tab:([^)]+)\)")
 _LEGEND_RE = re.compile(r"\{\{legend:([A-Za-z0-9_.-]+)\}\}")
+# A text tile's inline icon, `![](icon:mdi:flask-outline)` (TextRenderer draws it).
+INLINE_ICON_RE = re.compile(r"!\[[^\]]*\]\(icon:([a-z0-9-]+:[a-z0-9-]+)\)")
 
 # One heading level per level of the thing itself, so the document outline (and
 # with it the table of contents) reads the way the dashboard is built: the
@@ -738,6 +740,20 @@ class NotebookBuilder:
             return f"[{label}](#{anchor})" if anchor else label
 
         return _TAB_LINK_RE.sub(sub, text)
+
+    def _inline_icons(self, text: str) -> str:
+        """``![](icon:prefix:name)`` → the glyph as inline SVG (dropped when unknown)."""
+
+        def sub(m: re.Match[str]) -> str:
+            svg = self.plan.icons.get(m.group(1))
+            if not svg:
+                return ""
+            return (
+                '<span style="display:inline-flex;vertical-align:-0.125em;'
+                f'margin-inline-end:0.2em">{svg}</span>'
+            )
+
+        return INLINE_ICON_RE.sub(sub, text)
 
     def _legend_html(self, column: str) -> str:
         """``{{legend:column}}``: a dot in each value's dashboard colour, then the value."""
@@ -1874,7 +1890,9 @@ fig_funnel"""
             parts.append(f"{'#' * level} {title}")
         if body:
             parts.append(body)
-        text = self._rewrite_tab_links("\n\n".join(parts) or "*(empty text tile)*")
+        text = self._inline_icons(
+            self._rewrite_tab_links("\n\n".join(parts) or "*(empty text tile)*")
+        )
         legends = {
             f"legend:{c}": self._legend_html(c) for c in dict.fromkeys(_LEGEND_RE.findall(text))
         }

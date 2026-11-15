@@ -478,6 +478,8 @@ depictio/viewer/dist-table-harness/
 # Generated Iconify icon subset (emitted by depictio/viewer/scripts/generate-icon-subset.mjs,
 # which every `pnpm dev` / `pnpm build` runs first). Regenerate with `pnpm run icons`.
 depictio/viewer/src/generated/
+# The same icon subset as JSON, for the server (scripts/generate-icon-subset.mjs).
+depictio/viewer/dist-icons/
 
 # Generated component-embed single-file bundle (built via pnpm run build:embed).
 # The API image builds and copies this in; see docker-images/Dockerfile.api.

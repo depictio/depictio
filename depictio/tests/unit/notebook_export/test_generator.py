@@ -553,3 +553,17 @@ def test_text_values_are_filled_when_the_document_runs(ampliseq_tabs):
     for name in names:
         assert "{{" + name + "}}" not in printed
     assert "](tab:" not in printed
+
+
+def test_inline_text_icons_become_svg():
+    tab = {
+        "dashboard_id": PENGUINS_DASHBOARD,
+        "title": "T",
+        "stored_metadata": [
+            {"index": "t1", "component_type": "text", "body": "![](icon:mdi:flask) **Samples**"}
+        ],
+    }
+    plan = penguins_plan([tab])
+    plan.icons = {"mdi:flask": '<svg id="flask"></svg>'}
+    src = generate_qmd(plan)
+    assert '<svg id="flask"></svg>' in src and "](icon:" not in src
