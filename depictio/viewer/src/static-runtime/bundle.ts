@@ -36,8 +36,10 @@ let activeTabId: string | null = null;
  */
 let activeView: BundleManifest | null = null;
 
-export function loadBundleFromDocument(): BundleManifest {
-  const el = document.getElementById('bundle-manifest');
+/** `elementId`: the bundle's `bundle-manifest`, or the report's own
+ *  `depictio-report-manifest` (report/main.tsx) — one contract, two hosts. */
+export function loadBundleFromDocument(elementId = 'bundle-manifest'): BundleManifest {
+  const el = document.getElementById(elementId);
   const manifest = parseManifest(JSON.parse(el?.textContent || 'null'));
   window.__DEPICTIO_BUNDLE__ = manifest;
   activeTabId = manifest.dashboard.id;
