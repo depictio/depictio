@@ -17,10 +17,14 @@ import sys
 import zipfile
 
 # 15 MB until the genome browser: its JBrowse and GenomeSpy chunks and the
-# bundled hg19/hg38/mm10 gene annotations put the wheel near 17 MB.
-MAX_MB = 20
+# bundled hg19/hg38/mm10 gene annotations put the wheel near 17 MB (17.9 MB at
+# 1.21.0b6). The serverless bundle template (viewer/dist-static/static.html,
+# 12.5 MB raw, 3.9 MB deflated) adds ~4 MB: 24 MB keeps the same ~2 MB headroom.
+MAX_MB = 24
 REQUIRED = [
     r"depictio/viewer/dist/index\.html",
+    # The serverless bundle template `depictio build-static` injects into.
+    r"depictio/viewer/dist-static/static\.html",
     r"depictio/projects/init/iris/\.db_seeds/dashboard\.json",
     r"depictio/projects/init/penguins/\.db_seeds/dashboard\.json",
     r"depictio/projects/nf-core/rnaseq/[^/]+/template\.yaml",

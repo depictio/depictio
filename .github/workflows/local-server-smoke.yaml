@@ -85,6 +85,8 @@ jobs:
           pnpm install --frozen-lockfile
           cd depictio/viewer
           VITE_NO_SOURCEMAP=true NODE_OPTIONS="--max-old-space-size=4096" pnpm run build
+          # The serverless bundle template the wheel ships (producer B, `depictio build-static`).
+          VITE_NO_SOURCEMAP=true NODE_OPTIONS="--max-old-space-size=4096" pnpm run build:static
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7

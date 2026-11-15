@@ -10,6 +10,8 @@ depictio/viewer/dist/
 # `COPY depictio ./depictio/` layer.
 depictio/viewer/dist-catalog-preview/
 depictio/viewer/dist-embed/
+# And the serverless template: the API / worker / all-in-one images build it.
+depictio/viewer/dist-static/
 
 # -----------------------------
 # Exclude Legacy Directories

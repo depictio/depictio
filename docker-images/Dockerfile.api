@@ -7,6 +7,8 @@
 # stage below and copied in — the runtime layer itself still carries no Node:
 #   catalog-preview.html  GET /catalog/output/{id}/preview-html
 #   embed.html            GET /export/dashboards/{id}/components/{cid}?format=html
+#   static.html           serverless export (producer A; the bundle template
+#                         `depictio/serverless` injects the manifest into)
 # -----------------------------
 
 # -----------------------------
@@ -37,13 +39,20 @@ RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
 # ---- Source + build ----
 COPY packages ./packages/
 COPY depictio/viewer ./depictio/viewer/
+# `pnpm run icons` also scans these for icon ids named only in dashboard data
+# and the kind catalogue (scripts/generate-icon-subset.mjs), as in the
+# all-in-one image; without them a bundle draws those icons blank.
+COPY depictio/models/components/advanced_viz/schemas.py ./depictio/models/components/advanced_viz/schemas.py
+COPY depictio/projects ./depictio/projects/
 
 # Same memory caps as the viewer build: sourcemaps off, heap capped at 4 GB
 # to leave cgroup headroom for native + worker stacks.
 RUN VITE_NO_SOURCEMAP=true NODE_OPTIONS="--max-old-space-size=4096" \
     pnpm --filter depictio-viewer build:catalog-preview && \
     VITE_NO_SOURCEMAP=true NODE_OPTIONS="--max-old-space-size=4096" \
-    pnpm --filter depictio-viewer build:embed
+    pnpm --filter depictio-viewer build:embed && \
+    VITE_NO_SOURCEMAP=true NODE_OPTIONS="--max-old-space-size=4096" \
+    pnpm --filter depictio-viewer build:static
 
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim@sha256:e5b65587bce7de595f299855d7385fe7fca39b8a74baa261ba1b7147afa78e58 AS base
 
@@ -114,6 +123,11 @@ COPY --from=catalog-preview-builder --chown=depictio:depictio \
 COPY --from=catalog-preview-builder --chown=depictio:depictio \
     /build/depictio/viewer/dist-embed/embed.html \
     /app/depictio/viewer/dist-embed/embed.html
+# The serverless bundle template (`pnpm run build:static`): without it every
+# static export fails with "static runtime template not built".
+COPY --from=catalog-preview-builder --chown=depictio:depictio \
+    /build/depictio/viewer/dist-static/static.html \
+    /app/depictio/viewer/dist-static/static.html
 
 COPY --chown=depictio:depictio docker-images/run_fastapi.sh /app/run_fastapi.sh
 RUN chmod +x /app/run_fastapi.sh

@@ -175,6 +175,10 @@ exclude = [
 [tool.setuptools.package-data]
 "depictio" = [
   "viewer/dist/**/*",
+  # The serverless bundle template (cd depictio/viewer && pnpm run build:static):
+  # `depictio build-static` (producer B) injects its manifest into it, so a
+  # pip-installed CLI can build a bundle without a checkout.
+  "viewer/dist-static/static.html",
   # Reference thumbnails of the iris and penguins dashboards only.
   "api/static/screenshots/6824cb3b89d2b72169309737_*.png",
   "api/static/screenshots/6824cb3b89d2b72169309738_*.png",
