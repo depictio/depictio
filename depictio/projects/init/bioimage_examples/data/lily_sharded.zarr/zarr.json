@@ -1,0 +1,129 @@
+{
+  "attributes": {
+    "ome": {
+      "version": "0.5",
+      "multiscales": [
+        {
+          "name": "lily_sharded",
+          "axes": [
+            {
+              "name": "c",
+              "type": "channel"
+            },
+            {
+              "name": "y",
+              "type": "space",
+              "unit": "micrometer"
+            },
+            {
+              "name": "x",
+              "type": "space",
+              "unit": "micrometer"
+            }
+          ],
+          "datasets": [
+            {
+              "path": "0",
+              "coordinateTransformations": [
+                {
+                  "type": "scale",
+                  "scale": [
+                    1.0,
+                    1.24,
+                    1.24
+                  ]
+                }
+              ]
+            },
+            {
+              "path": "1",
+              "coordinateTransformations": [
+                {
+                  "type": "scale",
+                  "scale": [
+                    1.0,
+                    2.48,
+                    2.48
+                  ]
+                }
+              ]
+            },
+            {
+              "path": "2",
+              "coordinateTransformations": [
+                {
+                  "type": "scale",
+                  "scale": [
+                    1.0,
+                    4.96,
+                    4.96
+                  ]
+                }
+              ]
+            }
+          ],
+          "type": "local_mean",
+          "metadata": {
+            "description": "2x mean downsampling of y and x per level",
+            "method": "skimage.transform.downscale_local_mean"
+          }
+        }
+      ],
+      "omero": {
+        "id": 1,
+        "name": "lily_sharded",
+        "channels": [
+          {
+            "active": true,
+            "coefficient": 1,
+            "color": "FF00FF",
+            "family": "linear",
+            "inverted": false,
+            "label": "Ch1 (cell walls)",
+            "window": {
+              "start": 15.0,
+              "end": 4095.0,
+              "min": 0.0,
+              "max": 65535.0
+            }
+          },
+          {
+            "active": true,
+            "coefficient": 1,
+            "color": "00FF00",
+            "family": "linear",
+            "inverted": false,
+            "label": "Ch2 (thick walls)",
+            "window": {
+              "start": 72.0,
+              "end": 4095.0,
+              "min": 0.0,
+              "max": 65535.0
+            }
+          },
+          {
+            "active": true,
+            "coefficient": 1,
+            "color": "00FFFF",
+            "family": "linear",
+            "inverted": false,
+            "label": "Ch4 (cell walls)",
+            "window": {
+              "start": 16.0,
+              "end": 4095.0,
+              "min": 0.0,
+              "max": 65535.0
+            }
+          }
+        ],
+        "rdefs": {
+          "defaultT": 0,
+          "defaultZ": 0,
+          "model": "color"
+        }
+      }
+    }
+  },
+  "zarr_format": 3,
+  "node_type": "group"
+}

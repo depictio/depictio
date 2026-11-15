@@ -33,6 +33,22 @@ dependencies = [
   "pyyaml>=6.0.3",
   "rich==15.0.0",
   "typer==0.27.0",
+  # Reads AnnData tables out of SpatialData stores (zarr v2 and v3, sharded).
+  # zarr 3.2+ needs Python 3.12; 3.1.6 is the last release for 3.11.
+  "zarr==3.4.0; python_version >= '3.12'",
+  "zarr==3.1.6; python_version < '3.12'",
+  # Reads segmentation-mask TIFFs (labels bioimage DCs) to convert them to OME-Zarr.
+  # tifffile 2026.4+ needs Python 3.12; 2026.3.3 is the last release for 3.11.
+  "tifffile==2026.9.20; python_version >= '3.12'",
+  "tifffile==2026.3.3; python_version < '3.12'",
+  # Validates OME-Zarr metadata (NGFF 0.4 / 0.5 images, plates, wells, labels)
+  # at ingest; a finding is reported on the store, never blocks the ingest.
+  # 1.7+ needs Python 3.12. 1.6, the last release for 3.11, cannot build its
+  # models under pydantic 2.13, so 3.11 installs ingest without the check.
+  "ome-zarr-models==1.9.0; python_version >= '3.12'",
+  # ome-zarr-models 1.9 calls GroupSpec.from_zarr(depth=...), which
+  # pydantic-zarr 0.11 no longer takes: every store would read as invalid.
+  "pydantic-zarr==0.10.0; python_version >= '3.12'",
 ]
 authors = [{ name = "Thomas Weber", email = "thomas.weber@embl.de" }]
 urls = { Homepage = "https://github.com/depictio/depictio", Documentation = "https://depictio.github.io/depictio-docs/latest/" }

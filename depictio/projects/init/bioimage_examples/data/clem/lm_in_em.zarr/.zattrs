@@ -1,0 +1,97 @@
+{
+    "multiscales": [
+        {
+            "axes": [
+                {
+                    "name": "c",
+                    "type": "channel"
+                },
+                {
+                    "name": "z",
+                    "type": "space",
+                    "unit": "micrometer"
+                },
+                {
+                    "name": "y",
+                    "type": "space",
+                    "unit": "micrometer"
+                },
+                {
+                    "name": "x",
+                    "type": "space",
+                    "unit": "micrometer"
+                }
+            ],
+            "datasets": [
+                {
+                    "coordinateTransformations": [
+                        {
+                            "scale": [
+                                1.0,
+                                0.25394736842105264,
+                                0.08009153318077804,
+                                0.08002695417789758
+                            ],
+                            "type": "scale"
+                        }
+                    ],
+                    "path": "0"
+                }
+            ],
+            "name": "lm_in_em",
+            "version": "0.4"
+        }
+    ],
+    "omero": {
+        "channels": [
+            {
+                "active": true,
+                "color": "3D7FFF",
+                "label": "DAPI",
+                "window": {
+                    "end": 226.0,
+                    "max": 255,
+                    "min": 0,
+                    "start": 10.0
+                }
+            },
+            {
+                "active": true,
+                "color": "FF2BD6",
+                "label": "Mitochondria",
+                "window": {
+                    "end": 206.0,
+                    "max": 255,
+                    "min": 0,
+                    "start": 10.0
+                }
+            },
+            {
+                "active": false,
+                "color": "35E05A",
+                "label": "Golgi",
+                "window": {
+                    "end": 160.0,
+                    "max": 255,
+                    "min": 0,
+                    "start": 10.0
+                }
+            },
+            {
+                "active": false,
+                "color": "FFB000",
+                "label": "Lysosomes",
+                "window": {
+                    "end": 140.0,
+                    "max": 255,
+                    "min": 0,
+                    "start": 10.0
+                }
+            }
+        ],
+        "rdefs": {
+            "defaultZ": 9,
+            "model": "color"
+        }
+    }
+}

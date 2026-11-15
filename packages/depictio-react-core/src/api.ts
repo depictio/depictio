@@ -1814,6 +1814,7 @@ export type AdvancedVizKind =
   | 'gsea_running_score'
   | 'sashimi'
   | 'scatter_xy'
+  | 'bioimage_viewer'
   | 'contact_map'
   | 'knee_plot'
   | 'damage_profile'
@@ -2538,6 +2539,427 @@ export async function fetchPhylogenyNewick(dcId: string): Promise<string> {
   const res = await authFetch(`${API_BASE}/advanced_viz/phylogeny/${dcId}/newick`);
   if (!res.ok) throw new Error(`Failed to fetch phylogeny newick: ${res.status}`);
   return res.text();
+}
+
+/** What a `bioimage` DC's stores are (`DCBioimageConfig.format`). A
+ *  `spatialdata` store is served rooted at its image element, and a `tiff`
+ *  (segmentation mask) as the OME-Zarr labels image the CLI converted it to,
+ *  so both read as plain OME-Zarr here. */
+export type BioimageFormat = 'ome-zarr' | 'ome-tiff' | 'spatialdata' | 'tiff';
+
+/** What a store's pixels are: intensities, or cell ids (a segmentation mask). */
+export type BioimageKind = 'image' | 'labels';
+
+/** The OME-NGFF metadata check run at ingest (`ome-zarr-models`): reported,
+ *  never blocking. `issues` are `<metadata path>: <message>` lines. */
+export interface BioimageNgffValidation {
+  ok: boolean;
+  ngff_version: string | null;
+  layout: 'image' | 'plate' | 'well' | 'bioformats2raw' | 'labels' | 'unknown';
+  issues: string[];
+  /** Label images the store's `labels/` group lists. */
+  labels: string[];
+  validator: string | null;
+  /** What was read when not the whole store ("plate metadata and 3 of 384
+   *  wells"): large containers are checked on a few members. */
+  checked?: string | null;
+}
+
+/** One image store registered under a `bioimage` DC. `sample` is the DC's
+ *  `sample_pattern` capture on the store name, else the name without its
+ *  suffix (`.zarr`, `.ome.tif`, `.tif`): the value an upstream sample filter
+ *  selects on, and what pairs a labels store with its image. `remote` stores
+ *  are read in place from an allow-listed host or bucket, proxied by the API. */
+export interface BioimageStoreInfo {
+  name: string;
+  sample: string;
+  file_id: string | null;
+  format: BioimageFormat;
+  /** Absent from an API older than the labels overlay: read it as 'image'. */
+  kind?: BioimageKind;
+  remote: boolean;
+  /** Where a remote store is read from (its host); null for a local one. */
+  host?: string | null;
+  /** Ingest's NGFF check; null for a remote store, an OME-TIFF, or a store
+   *  registered before the check existed. */
+  validation?: BioimageNgffValidation | null;
+}
+
+/** The stores of a `bioimage` DC, sorted by name. */
+export async function fetchBioimageStores(dcId: string): Promise<BioimageStoreInfo[]> {
+  const res = await authFetch(
+    `${API_BASE}/advanced_viz/bioimage/${encodeURIComponent(dcId)}/stores`,
+  );
+  if (!res.ok) throw new Error(`Failed to fetch image stores: ${res.status}`);
+  return res.json();
+}
+
+/** The NGFF report of a remote store, made by the API on request (remote
+ *  stores have no ingest check); null when the server cannot validate. */
+export async function fetchBioimageRemoteValidation(
+  dcId: string,
+  store: string,
+): Promise<BioimageNgffValidation | null> {
+  const res = await authFetch(
+    `${API_BASE}/advanced_viz/bioimage/${encodeURIComponent(dcId)}/validation?store=${encodeURIComponent(store)}`,
+  );
+  if (!res.ok) await throwHttpDetailError(res, 'Could not validate the store');
+  return res.json();
+}
+
+/** One store's origin: where it is registered, when, and how big it is.
+ *  `location` is a path, or the URL of a remote store; the times and size are
+ *  null for a store with no File document (found on S3 only). */
+export interface BioimageProvenanceStore {
+  name: string;
+  location: string | null;
+  creation_time: string | null;
+  registration_time: string | null;
+  filesize: number | null;
+  remote: boolean;
+  validation?: BioimageNgffValidation | null;
+}
+
+/** Where a `bioimage` DC's images come from (`GET .../bioimage/{dc}/provenance`). */
+export interface BioimageProvenance {
+  description: string | null;
+  format: BioimageFormat;
+  ngff_version: string | null;
+  upload: boolean;
+  image_path: string | null;
+  scan_source: string | null;
+  stores: BioimageProvenanceStore[];
+}
+
+/** How a `bioimage` DC's stores can be opened in a viewer on another origin
+ *  (`GET .../bioimage/{dc}/handoff`). */
+export interface BioimageHandoffStatus {
+  /** The project is public: its stores are read anonymously, with CORS. */
+  public: boolean;
+  /** Private stores can get a short-lived signed link. */
+  links_enabled: boolean;
+  ttl_minutes: number;
+  /** The https URL each remote store is read from (its own host). */
+  remote_urls: Record<string, string>;
+}
+
+export async function fetchBioimageHandoffStatus(dcId: string): Promise<BioimageHandoffStatus> {
+  const res = await authFetch(
+    `${API_BASE}/advanced_viz/bioimage/${encodeURIComponent(dcId)}/handoff`,
+  );
+  if (!res.ok) throw new Error(`Failed to read hand-off options: ${res.status}`);
+  return res.json();
+}
+
+/** A signed, read-only link to one store (`POST .../{store}/handoff`). `path`
+ *  is the store root under `API_BASE`. */
+export interface BioimageHandoffLink {
+  token: string;
+  jti: string;
+  expires_at: number;
+  ttl_s: number;
+  path: string;
+}
+
+export async function createBioimageHandoffLink(
+  dcId: string,
+  store: string,
+): Promise<BioimageHandoffLink> {
+  const res = await authFetch(
+    `${API_BASE}/advanced_viz/bioimage/${encodeURIComponent(dcId)}/${encodeURIComponent(store)}/handoff`,
+    { method: 'POST' },
+  );
+  if (!res.ok) await throwHttpDetailError(res, 'Could not create a link');
+  return res.json();
+}
+
+/** An absolute URL for a path under `API_BASE`, as a viewer on another origin needs it. */
+export function absoluteApiUrl(path: string): string {
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost';
+  return new URL(`${API_BASE}${path}`, origin).href;
+}
+
+/** The provenance of a `bioimage` DC: its description, scan and store origins. */
+export async function fetchBioimageProvenance(dcId: string): Promise<BioimageProvenance> {
+  const res = await authFetch(
+    `${API_BASE}/advanced_viz/bioimage/${encodeURIComponent(dcId)}/provenance`,
+  );
+  if (!res.ok) throw new Error(`Failed to fetch image provenance: ${res.status}`);
+  return res.json();
+}
+
+/** Root URL of one store. Zarr keys (`.zattrs` or `zarr.json`, `0/.zarray`,
+ *  chunks and shards) resolve under it; a single-file store (OME-TIFF) is the
+ *  file itself. No trailing slash. */
+export function bioimageStoreUrl(dcId: string, store: string): string {
+  return `${API_BASE}/advanced_viz/bioimage/${encodeURIComponent(dcId)}/${encodeURIComponent(store)}`;
+}
+
+/** An image request the API answered with an error status. `status` lets the
+ *  viewer say why (a 403 on a remote store: host not allow-listed). */
+export class BioimageHttpError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'BioimageHttpError';
+    this.status = status;
+  }
+}
+
+/** A byte range of one key, as zarrita's `RangeQuery` spells it: `length`
+ *  bytes from `offset`, or the last `suffixLength` bytes. */
+export type BioimageRangeQuery = { offset: number; length: number } | { suffixLength: number };
+
+/** The subset of zarrita's `AsyncReadable` store interface the OME-Zarr
+ *  loader calls: `get` resolves a key to its bytes, or `undefined` when the key
+ *  does not exist (a sparse chunk, an absent `.zattrs` or `zarr.json`).
+ *  `getRange` reads part of a key: zarr v3 sharded arrays fetch a shard's index
+ *  (a suffix) and then each inner chunk (an offset and length) this way. */
+export interface BioimageZarrStore {
+  get(key: string, opts?: { signal?: AbortSignal }): Promise<Uint8Array | undefined>;
+  getRange(
+    key: string,
+    range: BioimageRangeQuery,
+    opts?: { signal?: AbortSignal },
+  ): Promise<Uint8Array | undefined>;
+}
+
+/** The `Range` header value for one range query: `bytes=<first>-<last>`
+ *  (inclusive) or the suffix form `bytes=-<n>`. */
+export function bioimageRangeHeader(range: BioimageRangeQuery): string {
+  if ('suffixLength' in range) return `bytes=-${range.suffixLength}`;
+  return `bytes=${range.offset}-${range.offset + range.length - 1}`;
+}
+
+/** The requested slice of a full body, for a server that answered a range
+ *  request with a plain 200 (HTTP lets it ignore `Range`). */
+function sliceRange(body: Uint8Array, range: BioimageRangeQuery): Uint8Array {
+  if ('suffixLength' in range) return body.subarray(Math.max(0, body.length - range.suffixLength));
+  return body.subarray(range.offset, range.offset + range.length);
+}
+
+/** Bytes of recently read keys a zarr store keeps, so a chunk asked for by
+ *  several tiles in a row is downloaded once. */
+const BIOIMAGE_STORE_CACHE_BYTES = 32 * 1024 * 1024;
+
+/** `promise`, or an AbortError as soon as `signal` aborts: a caller that gives
+ *  up stops waiting without cancelling a fetch other callers share. */
+function abortable<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return promise;
+  if (signal.aborted) return Promise.reject(new DOMException('Aborted', 'AbortError'));
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(new DOMException('Aborted', 'AbortError'));
+    signal.addEventListener('abort', onAbort, { once: true });
+    promise.then(
+      (v) => {
+        signal.removeEventListener('abort', onAbort);
+        resolve(v);
+      },
+      (e) => {
+        signal.removeEventListener('abort', onAbort);
+        reject(e);
+      },
+    );
+  });
+}
+
+/**
+ * A zarr store over one OME-Zarr store of a DC, fetching through `authFetch`.
+ *
+ * Auth: every key request carries the standard `Authorization: Bearer` header,
+ * with the same proactive refresh and single 401 retry as the rest of the app.
+ * That works because viv's `loadOmeZarrFromStore` takes a store object rather
+ * than a URL, so nothing forces the credential into the URL.
+ *
+ * A 404 is a missing key, which zarr readers treat as a fill-value chunk, so
+ * it resolves to `undefined`; any other failure throws a `BioimageHttpError`.
+ * A ranged read sends one `Range` header (see `bioimageRangeHeader`) and takes
+ * the 206 body; a 200 (a server that ignored the header) is sliced here.
+ */
+export function createBioimageZarrStore(dcId: string, store: string): BioimageZarrStore {
+  const root = bioimageStoreUrl(dcId, store);
+  const read = async (
+    key: string,
+    init: RequestInit,
+  ): Promise<{ res: Response; path: string } | undefined> => {
+    const path = key.startsWith('/') ? key : `/${key}`;
+    const res = await authFetch(`${root}${path}`, init);
+    if (res.status === 404) return undefined;
+    if (!res.ok) {
+      // The server says why it refused (a remote host it does not read from,
+      // say): that sentence helps a reader, a bare status does not.
+      const detail = await res
+        .json()
+        .then((b: unknown) => (b as { detail?: unknown } | null)?.detail)
+        .catch(() => null);
+      throw new BioimageHttpError(
+        typeof detail === 'string' ? detail : `OME-Zarr ${store}${path}: ${res.status}`,
+        res.status,
+      );
+    }
+    return { res, path };
+  };
+  // One fetch per key at a time, and the last few keys kept: viv asks for the
+  // same chunk once per tile, and the contrast statistics read it again, so a
+  // store whose level is one big chunk (a SpatialData Visium image) would
+  // download it many times at once, which the browser fails part of.
+  const inflight = new Map<string, Promise<Uint8Array | undefined>>();
+  const recent = new Map<string, Uint8Array | undefined>();
+  let recentBytes = 0;
+  // A missing key (404) is cached too, at a nominal cost so it still counts
+  // toward the cap.
+  const entrySize = (bytes: Uint8Array | undefined) => bytes?.byteLength ?? 1024;
+  const remember = (key: string, bytes: Uint8Array | undefined) => {
+    const size = entrySize(bytes);
+    if (size > BIOIMAGE_STORE_CACHE_BYTES) return;
+    recent.set(key, bytes);
+    recentBytes += size;
+    for (const [oldKey, oldBytes] of recent) {
+      if (recentBytes <= BIOIMAGE_STORE_CACHE_BYTES) break;
+      recent.delete(oldKey);
+      recentBytes -= entrySize(oldBytes);
+    }
+  };
+  // One fetch per cache key at a time; the result kept with the others.
+  const shared = (
+    cacheKey: string,
+    load: () => Promise<Uint8Array | undefined>,
+  ): Promise<Uint8Array | undefined> => {
+    let pending = inflight.get(cacheKey);
+    if (!pending) {
+      pending = load()
+        .then((bytes) => {
+          remember(cacheKey, bytes);
+          return bytes;
+        })
+        .finally(() => inflight.delete(cacheKey));
+      inflight.set(cacheKey, pending);
+    }
+    return pending;
+  };
+  const fetchKey = (key: string) =>
+    shared(key, () =>
+      read(key, {}).then(async (hit) => hit && new Uint8Array(await hit.res.arrayBuffer())),
+    );
+  const fetchRange = (key: string, range: BioimageRangeQuery) =>
+    shared(`${key}\u0000${bioimageRangeHeader(range)}`, async () => {
+      const hit = await read(key, { headers: { Range: bioimageRangeHeader(range) } });
+      if (!hit) return undefined;
+      const body = new Uint8Array(await hit.res.arrayBuffer());
+      if (hit.res.status === 206) return body;
+      if (hit.res.status === 200) return sliceRange(body, range);
+      throw new BioimageHttpError(
+        `OME-Zarr ${store}${hit.path} (range): ${hit.res.status}`,
+        hit.res.status,
+      );
+    });
+  return {
+    async get(key, opts) {
+      if (recent.has(key)) return recent.get(key);
+      return abortable(fetchKey(key), opts?.signal);
+    },
+    // A sharded array reads its shard index before every chunk, and a chunk
+    // holding several channels once per channel: the same ranges, many times.
+    async getRange(key, range, opts) {
+      if ('length' in range && range.length <= 0) return new Uint8Array(0);
+      const cacheKey = `${key}\u0000${bioimageRangeHeader(range)}`;
+      if (recent.has(cacheKey)) return recent.get(cacheKey);
+      return abortable(fetchRange(key, range), opts?.signal);
+    },
+  };
+}
+
+/** Stores handed out by `bioimageZarrStore`, most recently used last. */
+const SHARED_ZARR_STORES = new Map<string, BioimageZarrStore>();
+// A registration history reads one store per step plus the fixed image.
+const SHARED_ZARR_STORE_LIMIT = 8;
+
+/**
+ * The zarr store of one DC store, shared by every reader on the page: two
+ * tiles on the same image (an overview and its detail view), and the probes a
+ * tile makes while opening it, then fetch each key and range once.
+ */
+export function bioimageZarrStore(dcId: string, store: string): BioimageZarrStore {
+  const id = `${dcId}\u0000${store}`;
+  let found = SHARED_ZARR_STORES.get(id);
+  if (found) {
+    SHARED_ZARR_STORES.delete(id);
+  } else {
+    found = createBioimageZarrStore(dcId, store);
+    if (SHARED_ZARR_STORES.size >= SHARED_ZARR_STORE_LIMIT) {
+      const oldest = SHARED_ZARR_STORES.keys().next().value;
+      if (oldest !== undefined) SHARED_ZARR_STORES.delete(oldest);
+    }
+  }
+  SHARED_ZARR_STORES.set(id, found);
+  return found;
+}
+
+function storedAccessToken(): string | null {
+  const token = readStoredSession()?.access_token;
+  return typeof token === 'string' ? token : null;
+}
+
+/**
+ * Request headers carrying the bearer, for a loader that fetches by itself
+ * instead of through `authFetch`: viv's OME-TIFF loader hands them to geotiff,
+ * which issues its own byte-range requests. The token is refreshed first, as
+ * `authFetch` does.
+ *
+ * `Authorization` is a getter that reads storage each time it is read. geotiff
+ * spreads these headers into every range request, so tiles fetched an hour
+ * into the session carry the token the keep-alive has since minted, not the
+ * one current when the image opened. Anonymous sessions get no header.
+ */
+export async function bioimageAuthHeaders(): Promise<Record<string, string>> {
+  const initial = await ensureFreshAccessToken();
+  const headers: Record<string, string> = {};
+  if (!initial) return headers;
+  Object.defineProperty(headers, 'Authorization', {
+    enumerable: true,
+    get: () => `Bearer ${storedAccessToken() ?? initial}`,
+  });
+  return headers;
+}
+
+/** One single-file store (OME-TIFF), as viv's `loadOmeTiff` wants it. */
+export interface BioimageTiffSource {
+  /** Absolute URL of the file: viv parses it with `new URL()`. */
+  url: string;
+  headers(): Promise<Record<string, string>>;
+  /** HEAD the file through `authFetch`, throwing a `BioimageHttpError` when
+   *  it is not readable. geotiff reports every HTTP failure as the same bare
+   *  "Error fetching data.", so a failed open asks this for the status. */
+  check(): Promise<void>;
+}
+
+export function createBioimageTiffSource(dcId: string, store: string): BioimageTiffSource {
+  const path = bioimageStoreUrl(dcId, store);
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost';
+  return {
+    url: new URL(path, origin).href,
+    headers: bioimageAuthHeaders,
+    async check() {
+      const res = await authFetch(path, { method: 'HEAD' });
+      if (!res.ok) throw new BioimageHttpError(`OME-TIFF ${store}: ${res.status}`, res.status);
+    },
+  };
+}
+
+/** What the viewer opens: a zarr key tree (OME-Zarr, SpatialData served
+ *  rooted at its image, a converted labels TIFF) or a single OME-TIFF file. */
+export type BioimageSource =
+  | { kind: 'zarr'; store: BioimageZarrStore }
+  | { kind: 'tiff'; tiff: BioimageTiffSource };
+
+export function createBioimageSource(
+  dcId: string,
+  store: Pick<BioimageStoreInfo, 'name' | 'format'>,
+): BioimageSource {
+  return store.format === 'ome-tiff'
+    ? { kind: 'tiff', tiff: createBioimageTiffSource(dcId, store.name) }
+    : { kind: 'zarr', store: bioimageZarrStore(dcId, store.name) };
 }
 
 

@@ -1,0 +1,153 @@
+# Multimodal registration: one tab of the bioimage examples.
+#
+# Regenerate the seed after editing:
+#   uv run python -m depictio.dev_scripts.generate_dashboard_seeds bioimage_examples
+#
+# The component `index` values are pinned rather than auto-generated: they are
+# what keeps a regenerated seed byte-identical to the shipped one.
+title: 'Multimodal registration'
+subtitle: 'Two techniques on one tissue core, brought into one frame step by step'
+icon: 'mdi:vector-combine'
+icon_color: 'pink'
+icon_variant: filled
+workflow_system: python
+dashboard_id: '646b0f3c1e4a2d7f8e5b8f39'
+is_main_tab: false
+tab_order: 15
+parent_dashboard_tag: fluorescence
+tab_icon: 'mdi:vector-combine'
+tab_icon_color: 'pink'
+
+filter_sections:
+  - name: 'Core'
+    icon: 'mdi:test-tube'
+    color: 'pink'
+    description: 'The tissue core shown in the viewer, the plot and the table'
+
+grid_sections:
+  - name: 'Registration'
+    icon: 'mdi:microscope'
+    color: 'pink'
+    description: 'The second-harmonic image of the core after each step, over its bright-field image'
+  - name: 'Against the truth'
+    icon: 'mdi:ruler'
+    color: 'pink'
+    description: 'How far each step leaves the image from where it truly belongs'
+
+components:
+  - tag: text-multimodal
+    index: omz-mm-text
+    component_type: text
+    title: 'Making two acquisitions coincide'
+    order: 6
+    alignment: left
+    vertical_alignment: top
+    section: 'Registration'
+    body: >
+      The same breast tissue core, imaged twice: in bright field (an H&E stained
+      section, nuclei purple, stroma pink) and by second-harmonic generation, which
+      shows only the collagen fibres. The second image was rotated and shifted
+      (up to 30 degrees and 100 px), as a second instrument would leave it. The
+      viewer shows it, in magenta, after each step of a registration that brings
+      it into the bright-field frame, with the bright field faded over it: where
+      the two coincide, the fibres sit on the pink stroma. The steps are a real
+      itk-elastix run, mutual information as the metric since the techniques
+      share no intensities. A fit on bright-field brightness fails (brightness
+      says little about collagen); a fit on what the stain says of the stroma
+      (eosin minus haematoxylin), from seven start rotations, lands 1B_B8 and
+      2B_E4 within a few pixels of the truth. 1B_J2 stays off by about 100 px,
+      and the corner error says so: the dataset gives where the image truly
+      belongs. Data from Eliceiri, Li and Keikhosravi, Multimodal Biomedical
+      Dataset for Evaluating Registration Methods (Zenodo 3874362, CC BY 4.0),
+      from Conklin et al., Am J Pathol 2011.
+    layout: { x: 0, y: 0, w: 8, h: 2 }
+
+  - tag: viz-multimodal
+    index: omz-mm-viewer
+    component_type: advanced_viz
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: multimodal_images
+    title: 'Second harmonic onto bright field'
+    description: "The second-harmonic image of the selected core after each step (magenta), resampled into its bright-field image's frame (834 x 834), with the bright field faded over it."
+    section: 'Registration'
+    viz_kind: bioimage_viewer
+    config:
+      viz_kind: bioimage_viewer
+      image_dc_tag: multimodal_images
+      image_wf_id: '646b0f3c1e4a2d7f8e5b8f01'
+      image_dc_id: '646b0f3c1e4a2d7f8e5b8f37'
+      steps_dc_tag: multimodal_steps
+      steps_wf_id: '646b0f3c1e4a2d7f8e5b8f01'
+      steps_dc_id: '646b0f3c1e4a2d7f8e5b8f38'
+      steps_store_col: store
+      steps_label_col: step
+      steps_order_col: step_order
+      steps_sample_col: core
+      steps_reference_col: fixed_store
+      steps_metric_cols: [corner_err_px, nmi]
+      steps_param_col: parameters
+      steps_info_cols: [tool, duration]
+      steps_metric_better: { corner_err_px: lower, nmi: higher }
+      # Two techniques: each step against the bright field (the step before is
+      # the same technique), faded over it; colours would not add up to white.
+      steps_compare_with: fixed
+      steps_compare: fade
+    layout: { x: 0, y: 2, w: 8, h: 10 }
+
+  - tag: figure-multimodal-error
+    index: omz-mm-fig-error
+    component_type: figure
+    section: 'Against the truth'
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: multimodal_steps
+    title: 'Corner error at each step (px)'
+    visu_type: line
+    dict_kwargs:
+      x: step
+      y: corner_err_px
+      color: core
+      markers: true
+      log_y: true
+    layout: { x: 0, y: 12, w: 4, h: 4 }
+
+  - tag: figure-multimodal-nmi
+    index: omz-mm-fig-nmi
+    component_type: figure
+    section: 'Against the truth'
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: multimodal_steps
+    title: 'Mutual information with the stroma (what the fit maximises)'
+    visu_type: line
+    dict_kwargs:
+      x: step
+      y: nmi
+      color: core
+      markers: true
+    layout: { x: 4, y: 12, w: 4, h: 4 }
+
+  - tag: table-multimodal-steps
+    index: omz-mm-steps
+    component_type: table
+    section: 'Against the truth'
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: multimodal_steps
+    title: 'Steps'
+    description: 'One row per core and step: the store it wrote, how far it lands from the truth, and what it ran with.'
+    page_size: 12
+    layout: { x: 0, y: 16, w: 8, h: 4 }
+
+  - tag: filter-multimodal-core
+    index: omz-mm-f-core
+    component_type: interactive
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: multimodal_steps
+    interactive_component_type: Select
+    column_name: core
+    column_type: object
+    title: 'Core'
+    placement: left
+    section: 'Core'
+    display:
+      title_size: md
+      icon_name: 'mdi:circle-slice-8'
+    layout: { x: 0, y: 0, w: 1, h: 3 }

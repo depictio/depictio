@@ -46,6 +46,13 @@ export default defineConfig({
       // friendly "3D preview unavailable in the catalog" the molecule_3d
       // renderer shows as its empty state.
       { find: /^3dmol$/, replacement: path.resolve(__dirname, 'src/catalog-preview/threeDmolStub.ts') },
+      // The OME-Zarr renderer's lazily imported deck.gl/viv adapter: inlined,
+      // it would add several MB to every preview for an image the offline
+      // preview cannot stream. See the stub for details.
+      {
+        find: /^\.\/bioimage\/viewer$/,
+        replacement: path.resolve(__dirname, 'src/catalog-preview/bioimageViewerStub.ts'),
+      },
     ],
     dedupe: [
       'react',

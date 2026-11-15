@@ -1,0 +1,147 @@
+{
+    "multiscales": [
+        {
+            "axes": [
+                {
+                    "name": "c",
+                    "type": "channel"
+                },
+                {
+                    "name": "y",
+                    "type": "space",
+                    "unit": "micrometer"
+                },
+                {
+                    "name": "x",
+                    "type": "space",
+                    "unit": "micrometer"
+                }
+            ],
+            "datasets": [
+                {
+                    "coordinateTransformations": [
+                        {
+                            "scale": [
+                                1.0,
+                                0.65,
+                                0.65
+                            ],
+                            "type": "scale"
+                        }
+                    ],
+                    "path": "0"
+                },
+                {
+                    "coordinateTransformations": [
+                        {
+                            "scale": [
+                                1.0,
+                                1.3,
+                                1.3
+                            ],
+                            "type": "scale"
+                        }
+                    ],
+                    "path": "1"
+                }
+            ],
+            "name": "image",
+            "version": "0.4"
+        }
+    ],
+    "omero": {
+        "channels": [
+            {
+                "active": true,
+                "color": "0000FF",
+                "label": "marker 1",
+                "window": {
+                    "end": 2717.0,
+                    "max": 3000.0,
+                    "min": 0.0,
+                    "start": 0.0
+                }
+            },
+            {
+                "active": true,
+                "color": "00FF00",
+                "label": "marker 2",
+                "window": {
+                    "end": 2734.6249999999964,
+                    "max": 2998.0,
+                    "min": 0.0,
+                    "start": 0.0
+                }
+            },
+            {
+                "active": true,
+                "color": "FF0000",
+                "label": "marker 3",
+                "window": {
+                    "end": 2717.0,
+                    "max": 3000.0,
+                    "min": 0.0,
+                    "start": 0.0
+                }
+            },
+            {
+                "active": true,
+                "color": "FF00FF",
+                "label": "marker 4",
+                "window": {
+                    "end": 2734.6249999999964,
+                    "max": 2998.0,
+                    "min": 0.0,
+                    "start": 0.0
+                }
+            },
+            {
+                "active": true,
+                "color": "00FFFF",
+                "label": "marker 5",
+                "window": {
+                    "end": 2717.0,
+                    "max": 3000.0,
+                    "min": 0.0,
+                    "start": 0.0
+                }
+            },
+            {
+                "active": true,
+                "color": "FFFF00",
+                "label": "marker 6",
+                "window": {
+                    "end": 2734.6249999999964,
+                    "max": 2998.0,
+                    "min": 0.0,
+                    "start": 0.0
+                }
+            },
+            {
+                "active": true,
+                "color": "FF8800",
+                "label": "marker 7",
+                "window": {
+                    "end": 2717.0,
+                    "max": 3000.0,
+                    "min": 0.0,
+                    "start": 0.0
+                }
+            },
+            {
+                "active": true,
+                "color": "8800FF",
+                "label": "marker 8",
+                "window": {
+                    "end": 2734.6249999999964,
+                    "max": 2998.0,
+                    "min": 0.0,
+                    "start": 0.0
+                }
+            }
+        ],
+        "rdefs": {
+            "model": "color"
+        }
+    }
+}

@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field, field_validator
 from depictio.models.config import DEPICTIO_CONTEXT
 from depictio.models.models.base import MongoModel, PyObjectId
 from depictio.models.models.data_collections import WildcardRegexBase
+from depictio.models.models.data_collections_types.bioimage import NgffValidation
 from depictio.models.models.manifest import is_remote_url
 from depictio.models.models.users import Permission
 
@@ -19,6 +20,11 @@ ALLOWED_SCAN_REASONS = frozenset({"added", "skipped", "updated", "failed", "unch
 #: Reasons that mean "this file is already registered and was not re-uploaded".
 #: Counted as skipped rather than as a genuine failure.
 NOT_UPLOADED_SCAN_REASONS = frozenset({"skipped", "unchanged", "changed"})
+
+
+def is_zarr_store_dir(path: str) -> bool:
+    """True when ``path`` is a directory named ``*.zarr`` (an OME-Zarr store)."""
+    return os.path.isdir(path) and path.rstrip("/").endswith(".zarr")
 
 
 class WildcardRegex(WildcardRegexBase):
@@ -63,6 +69,14 @@ class File(MongoModel):
     index_filesize: int | None = Field(
         default=None,
         description="Size in bytes of the index sidecar, when the format has one",
+    )
+
+    # --- bioimage DCs ---------------------------------------------------------
+    # Set by the CLI after validating an OME-Zarr / SpatialData store's NGFF
+    # metadata. A finding never blocks the ingest: the tile reports it.
+    ngff_validation: NgffValidation | None = Field(
+        default=None,
+        description="OME-NGFF metadata validation of the store (bioimage DCs only)",
     )
 
     # id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
@@ -127,7 +141,8 @@ class File(MongoModel):
         if DEPICTIO_CONTEXT.lower() == "cli":
             if not os.path.exists(value):
                 raise ValueError(f"The file '{value}' does not exist.")
-            if not os.path.isfile(value):
+            # An OME-Zarr store is a directory registered as one File.
+            if not os.path.isfile(value) and not is_zarr_store_dir(value):
                 raise ValueError(f"'{value}' is not a file.")
             if not os.access(value, os.R_OK):
                 raise ValueError(f"'{value}' is not readable.")

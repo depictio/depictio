@@ -1,0 +1,202 @@
+# HCS plate: one tab of the bioimage examples.
+#
+# Regenerate the seed after editing:
+#   uv run python -m depictio.dev_scripts.generate_dashboard_seeds bioimage_examples
+#
+# The component `index` values are pinned rather than auto-generated: they are
+# what keeps a regenerated seed byte-identical to the shipped one.
+title: 'HCS plate'
+subtitle: 'One OME-Zarr plate, one image per well, picked from the plate table'
+icon: 'mdi:grid'
+icon_color: 'teal'
+icon_variant: filled
+workflow_system: python
+dashboard_id: '646b0f3c1e4a2d7f8e5b8f25'
+is_main_tab: false
+tab_order: 8
+parent_dashboard_tag: fluorescence
+tab_icon: 'mdi:grid'
+tab_icon_color: 'teal'
+
+filter_sections:
+  - name: 'Wells'
+    icon: 'mdi:table'
+    color: 'teal'
+    description: 'The well picked here is the image the viewer opens'
+  - name: 'Cells'
+    icon: 'mdi:filter-variant'
+    color: 'cyan'
+    description: 'Narrows the cells drawn over the image and the table'
+
+grid_sections:
+  - name: 'Plate'
+    icon: 'mdi:chart-bar'
+    color: 'teal'
+    description: 'The plate at a glance: cells and GFP per well'
+  - name: 'Well image'
+    icon: 'mdi:microscope'
+    color: 'teal'
+    description: 'The selected well, with its cells coloured by GFP; lasso cells to filter the table'
+
+components:
+  - tag: text-plate
+    index: omz-plate-text
+    component_type: text
+    title: 'A plate, one well at a time'
+    order: 6
+    alignment: left
+    vertical_alignment: top
+    section: 'Plate'
+    body: >
+      A synthetic 2 x 3 plate written as one OME-Zarr plate store (NGFF 0.4): each
+      column gets a dose of the same compound, so cells get fewer and brighter in GFP
+      from column 1 to column 3. Pick a well on the left and the viewer opens that
+      well's field; the cells drawn over it are the table's rows of that well. Open the
+      whole plate in vizarr from the viewer's "Open in" menu.
+    layout: { x: 0, y: 0, w: 8, h: 2 }
+
+  - tag: card-plate-cells
+    index: omz-plate-card-cells
+    component_type: card
+    section: 'Plate'
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: hcs_cells
+    aggregation: count
+    column_name: cell_id
+    column_type: int64
+    icon_name: mdi:counter
+    title_font_size: md
+    value_font_size: xl
+    title: 'Cells'
+    layout: { x: 0, y: 2, w: 4, h: 2 }
+
+  - tag: card-plate-gfp
+    index: omz-plate-card-gfp
+    component_type: card
+    section: 'Plate'
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: hcs_cells
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: gfp_mean
+    column_type: float64
+    icon_name: mdi:chart-box-outline
+    title_font_size: md
+    value_font_size: xl
+    title: 'GFP per cell'
+    layout: { x: 0, y: 4, w: 4, h: 2 }
+
+  - tag: figure-plate-cells-per-well
+    index: omz-plate-fig-cells
+    component_type: figure
+    section: 'Plate'
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: hcs_wells
+    title: 'Cells per well'
+    visu_type: bar
+    dict_kwargs:
+      x: well
+      y: n_cells
+      color: treatment
+    layout: { x: 4, y: 2, w: 4, h: 4 }
+
+  - tag: table-plate-wells
+    index: omz-plate-wells
+    component_type: table
+    section: 'Plate'
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: hcs_wells
+    title: 'Wells'
+    description: 'One row per well of the plate.'
+    page_size: 10
+    layout: { x: 0, y: 6, w: 8, h: 3 }
+
+  - tag: viz-plate
+    index: omz-plate-viewer
+    component_type: advanced_viz
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: hcs_plate_image
+    title: 'Selected well'
+    description: 'One 192 x 192 field per well (nominal 0.65 um pixels), DNA and GFP. Cells are coloured by their GFP and faded when filtered out.'
+    section: 'Well image'
+    viz_kind: bioimage_viewer
+    config:
+      viz_kind: bioimage_viewer
+      image_dc_tag: hcs_plate_image
+      image_wf_id: '646b0f3c1e4a2d7f8e5b8f01'
+      image_dc_id: '646b0f3c1e4a2d7f8e5b8f20'
+      # The well filter on the left names the plate's well to show.
+      well_column: well
+      points_dc_tag: hcs_cells
+      points_wf_id: '646b0f3c1e4a2d7f8e5b8f01'
+      points_dc_id: '646b0f3c1e4a2d7f8e5b8f22'
+      cell_id_col: cell_id
+      x_col: x
+      y_col: y
+      color_col: gfp_mean
+      points_well_col: well
+      point_radius: 6
+      show_scalebar: true
+      selection_enabled: true
+    layout: { x: 0, y: 0, w: 8, h: 9 }
+
+  - tag: table-plate-cells
+    index: omz-plate-cells
+    component_type: table
+    section: 'Well image'
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: hcs_cells
+    title: 'Cells'
+    description: 'One row per cell of the selected wells. A lasso on the image narrows it.'
+    columns: [cell_id, well, area_px, dna_mean, gfp_mean]
+    page_size: 25
+    layout: { x: 0, y: 9, w: 8, h: 4 }
+
+  - tag: filter-plate-well
+    index: omz-plate-f-well
+    component_type: interactive
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: hcs_wells
+    interactive_component_type: Select
+    column_name: well
+    column_type: object
+    title: 'Well'
+    placement: left
+    section: 'Wells'
+    display:
+      title_size: md
+      icon_name: 'mdi:grid'
+    layout: { x: 0, y: 0, w: 1, h: 3 }
+
+  - tag: filter-plate-treatment
+    index: omz-plate-f-treatment
+    component_type: interactive
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: hcs_wells
+    interactive_component_type: MultiSelect
+    column_name: treatment
+    column_type: object
+    title: 'Treatment'
+    placement: left
+    section: 'Wells'
+    display:
+      title_size: md
+      icon_name: 'mdi:flask'
+    layout: { x: 0, y: 3, w: 1, h: 3 }
+
+  - tag: filter-plate-gfp
+    index: omz-plate-f-gfp
+    component_type: interactive
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: hcs_cells
+    interactive_component_type: RangeSlider
+    column_name: gfp_mean
+    column_type: float64
+    title: 'GFP per cell'
+    placement: left
+    section: 'Cells'
+    display:
+      title_size: md
+      icon_name: 'mdi:ruler'
+    layout: { x: 0, y: 6, w: 1, h: 3 }

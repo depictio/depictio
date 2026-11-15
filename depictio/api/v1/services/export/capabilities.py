@@ -109,6 +109,10 @@ HTML_UNAVAILABLE_KINDS: dict[str, str] = {
         "structure file, fetched at render time from object storage or the structure "
         "resolver, so it cannot be taken offline. Open the dashboard instead."
     ),
+    "bioimage_viewer": (
+        "The bioimage viewer draws on WebGL and fetches its image chunks with the "
+        "viewer's credentials, so it cannot be taken offline. Open the dashboard instead."
+    ),
 }
 
 #: Views drawn by GenomeSpy (see above), by kind. The kind's default view is
@@ -213,6 +217,7 @@ AV_JSON_SOURCE: dict[str, AvJsonSource] = {
     "pedigree": "client_only",
     # A styled HTML table with medals, badges and bars: no Plotly figure exists.
     "ranked_table": "client_only",
+    "bioimage_viewer": "client_only",
 }
 
 

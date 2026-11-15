@@ -1,0 +1,197 @@
+# Two magnifications (HeLa): one tab of the bioimage examples.
+#
+# Regenerate the seed after editing:
+#   uv run python -m depictio.dev_scripts.generate_dashboard_seeds bioimage_examples
+#
+# The component `index` values are pinned rather than auto-generated: they are
+# what keeps a regenerated seed byte-identical to the shipped one.
+title: 'Two magnifications (HeLa)'
+subtitle: 'An EM overview of a grid, and electron tomograms of cells acquired inside it'
+icon: 'mdi:microscope'
+icon_color: 'grape'
+icon_variant: filled
+workflow_system: python
+dashboard_id: '646b0f3c1e4a2d7f8e5b8f32'
+is_main_tab: false
+tab_order: 13
+parent_dashboard_tag: fluorescence
+tab_icon: 'mdi:microscope'
+tab_icon_color: 'grape'
+
+grid_sections:
+  - name: 'About'
+    icon: 'mdi:information-outline'
+    color: 'grape'
+    description: 'The samples, where the images come from, and how the tiles below work together'
+  - name: 'Acquisitions'
+    icon: 'mdi:microscope'
+    color: 'grape'
+    description: 'The overview with where each tomogram was acquired, and the tomogram picked on it'
+    # One screen: the overview and the tomogram it opens stay side by side.
+    display: linked
+  - name: 'Tomograms'
+    icon: 'mdi:table'
+    color: 'grape'
+    description: 'What was acquired, and where'
+
+components:
+  - tag: text-hela
+    index: omz-hela-text
+    component_type: text
+    title: 'From the grid to the cell'
+    order: 6
+    alignment: left
+    vertical_alignment: top
+    section: 'About'
+    body: >
+      HeLa cells on an electron microscopy grid, imaged twice: an overview of
+      the whole section at 34 nm per pixel, then electron tomograms of single
+      cells at 1.6 nm. The overview is read in place from EMBL's S3 (MoBIE
+      clem-example-project). On the left, each mark is where a tomogram was
+      acquired; zoom in and it becomes the tomogram's footprint. Click one and
+      the right tile opens that tomogram, with Z moving through its depth.
+      Three of the six tomograms are converted for the detail view (binned to
+      6.2 nm, 18 central slices); the others only mark where they were taken.
+      The tomograms are generated locally by
+      dev/bioimage/make_hela_tomograms.py.
+    layout: { x: 0, y: 0, w: 8, h: 2 }
+
+  - tag: viz-hela-overview
+    index: omz-hela-overview
+    component_type: advanced_viz
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: hela_images
+    title: 'EM overview (34 nm)'
+    description: 'The whole section; each mark is a tomogram, coloured by whether it opens on the right. Click one to open it.'
+    section: 'Acquisitions'
+    viz_kind: bioimage_viewer
+    # Linked cells keep controls behind the icon unless placed: the
+    # channels stay in view above the image.
+    controls_placement: top
+    config:
+      viz_kind: bioimage_viewer
+      image_dc_tag: hela_images
+      image_wf_id: '646b0f3c1e4a2d7f8e5b8f01'
+      image_dc_id: '646b0f3c1e4a2d7f8e5b8f30'
+      store: em-overview.ome.zarr
+      # The DC also holds the tomograms: they are the right tile's to show.
+      store_pattern: '^em-overview'
+      points_dc_tag: hela_tomograms
+      points_wf_id: '646b0f3c1e4a2d7f8e5b8f01'
+      points_dc_id: '646b0f3c1e4a2d7f8e5b8f31'
+      cell_id_col: tomogram
+      x_col: x_px
+      y_col: y_px
+      box_w_col: box_w_px
+      box_h_col: box_h_px
+      color_col: converted
+      channels:
+        - index: 0
+          name: 'EM'
+          description: 'Electron microscopy of the section at 34 nm per pixel: one grey-scale channel, dark where the sample scatters electrons (dense material), bright on the empty grid holes.'
+          color: '#FFFFFF'
+      selection_enabled: true
+      show_scalebar: true
+    layout: { x: 0, y: 2, w: 4, h: 10 }
+
+  - tag: viz-hela-tomogram
+    index: omz-hela-tomogram
+    component_type: advanced_viz
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: hela_images
+    title: 'Electron tomogram (6.2 nm)'
+    description: 'The tomogram picked on the overview, in its own orientation; Z moves through its depth.'
+    section: 'Acquisitions'
+    viz_kind: bioimage_viewer
+    # Linked cells keep controls behind the icon unless placed: the
+    # channels stay in view above the image.
+    controls_placement: top
+    config:
+      viz_kind: bioimage_viewer
+      image_dc_tag: hela_images
+      image_wf_id: '646b0f3c1e4a2d7f8e5b8f01'
+      image_dc_id: '646b0f3c1e4a2d7f8e5b8f30'
+      store: tomo_40.zarr
+      sample_dc_tag: hela_tomograms
+      sample_dc_id: '646b0f3c1e4a2d7f8e5b8f31'
+      sample_column: tomogram
+      # Only the tomograms: the overview is the left tile's.
+      store_pattern: '^tomo_'
+      channels:
+        - index: 0
+          name: 'EM'
+          description: 'Electron tomogram: one grey-scale channel of electron density, a slice through the cell volume at 6.2 nm per pixel. Membranes and dense organelles are dark.'
+          color: '#FFFFFF'
+      show_scalebar: true
+    layout: { x: 4, y: 2, w: 4, h: 10 }
+
+  - tag: card-hela-count
+    index: omz-hela-card-count
+    component_type: card
+    section: 'Tomograms'
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: hela_tomograms
+    aggregation: count
+    column_name: tomogram
+    column_type: object
+    icon_name: mdi:cube-outline
+    title_font_size: md
+    value_font_size: xl
+    title: 'Tomograms'
+    layout: { x: 0, y: 12, w: 2, h: 2 }
+
+  - tag: card-hela-field
+    index: omz-hela-card-field
+    component_type: card
+    section: 'Tomograms'
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: hela_tomograms
+    aggregation: average
+    column_name: footprint_um
+    column_type: float64
+    icon_name: mdi:crop-free
+    title_font_size: md
+    value_font_size: xl
+    title: 'Field of view (um)'
+    layout: { x: 2, y: 12, w: 2, h: 2 }
+
+  - tag: card-hela-pixel
+    index: omz-hela-card-pixel
+    component_type: card
+    section: 'Tomograms'
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: hela_tomograms
+    aggregation: average
+    column_name: source_pixel_nm
+    column_type: float64
+    icon_name: mdi:grid
+    title_font_size: md
+    value_font_size: xl
+    title: 'Acquired pixel (nm)'
+    layout: { x: 4, y: 12, w: 2, h: 2 }
+
+  - tag: card-hela-binned
+    index: omz-hela-card-binned
+    component_type: card
+    section: 'Tomograms'
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: hela_tomograms
+    aggregation: average
+    column_name: pixel_nm
+    column_type: float64
+    icon_name: mdi:grid-large
+    title_font_size: md
+    value_font_size: xl
+    title: 'Shown pixel (nm)'
+    layout: { x: 6, y: 12, w: 2, h: 2 }
+
+  - tag: table-hela-tomograms
+    index: omz-hela-tomograms
+    component_type: table
+    section: 'Tomograms'
+    workflow_tag: python/bioimage_demo
+    data_collection_tag: hela_tomograms
+    title: 'Tomograms'
+    description: 'One row per tomogram: where it sits on the overview and whether it opens on the right.'
+    page_size: 10
+    layout: { x: 0, y: 14, w: 8, h: 4 }

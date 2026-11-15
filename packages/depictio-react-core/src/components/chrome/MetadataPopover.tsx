@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { ActionIcon, Popover, ScrollArea, Tooltip } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
@@ -10,6 +10,14 @@ const STYLE = TILE_ACTION_STYLE.metadata;
 
 interface MetadataPopoverProps {
   metadata: StoredMetadata;
+}
+
+const OPEN_EVENT = 'depictio:open-component-info';
+
+/** Open a component's Info popover from inside its tile (a badge that says
+ *  "more about this" opens the panel that has it). */
+export function openComponentInfo(index: string): void {
+  window.dispatchEvent(new CustomEvent<string>(OPEN_EVENT, { detail: index }));
 }
 
 /**
@@ -25,8 +33,24 @@ interface MetadataPopoverProps {
  * so this one is free to just mean metadata.
  */
 const MetadataPopover: React.FC<MetadataPopoverProps> = ({ metadata }) => {
+  const [opened, setOpened] = useState(false);
+  const index = String(metadata.index);
+  useEffect(() => {
+    const onOpen = (e: Event) => {
+      if ((e as CustomEvent<string>).detail === index) setOpened(true);
+    };
+    window.addEventListener(OPEN_EVENT, onOpen);
+    return () => window.removeEventListener(OPEN_EVENT, onOpen);
+  }, [index]);
   return (
-    <Popover position="bottom-end" withArrow shadow="md" width={380}>
+    <Popover
+      position="bottom-end"
+      withArrow
+      shadow="md"
+      width={380}
+      opened={opened}
+      onChange={setOpened}
+    >
       <Popover.Target>
         <Tooltip label={STYLE.label} withArrow>
           <ActionIcon
@@ -34,6 +58,7 @@ const MetadataPopover: React.FC<MetadataPopoverProps> = ({ metadata }) => {
             color={STYLE.color}
             size="sm"
             aria-label={STYLE.label}
+            onClick={() => setOpened((o) => !o)}
           >
             <Icon icon={STYLE.icon} width={16} height={16} />
           </ActionIcon>

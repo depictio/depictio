@@ -736,7 +736,9 @@ def advanced_viz_persist_config(output: Any, render, df: Any = None) -> dict[str
     not advanced_viz or can't be grounded against the fixture (missing file /
     missing columns) — never raises, so it can be called inline from compose.
     """
-    if render.component != "advanced_viz":
+    if render.component != "advanced_viz" or render.is_bioimage_viewer:
+        # bioimage_viewer: the data collections are the tile's to name (see
+        # `bioimage_viewer_use_config`), so there is no config to persist here.
         return None
     try:
         if df is None:
@@ -919,6 +921,9 @@ def _output_info(output: Any, tool: Any = None, df: Any = None) -> dict[str, Any
         "biotools_url": output.biotools_url or (tool.biotools_url if tool else None),
         "edam": edam,
     }
+    if output.bioimage is not None:
+        info["dc_type"] = "bioimage"
+        info["bioimage"] = output.bioimage.dc_properties()
     if df is not None:
         info["n_rows"] = df.height
         info["n_cols"] = df.width
@@ -983,12 +988,28 @@ def _normalise_theme(theme: str) -> str:
 # unique values / ranges / specs computed below.
 _NON_TABULAR_COMPONENTS = frozenset({"image", "text", "map"})
 
+# What a bioimage_viewer render shows instead of a preview: its pixels are image
+# stores the Depictio API serves, which neither this offline bundle nor Tool
+# Studio can read.
+BIOIMAGE_PLACEHOLDER = (
+    "Image preview in Depictio only: the viewer reads its image stores through the "
+    "Depictio API. Add it to a dashboard with the tile below."
+)
+
+
+def _needs_fixture(render: Any) -> bool:
+    return render.component not in _NON_TABULAR_COMPONENTS and not render.is_bioimage_viewer
+
 
 def build_payload(output: Any, theme: str = "light", tool: Any = None) -> dict[str, Any]:
     """Compute the full ``window.__CATALOG_PREVIEW__`` blob for an output."""
     # Outputs whose renders are all non-tabular (multiqc, image, …) don't need a
     # fixture — they show metadata + copyable YAML with a friendly placeholder.
-    all_non_tabular = all(r.component in _NON_TABULAR_COMPONENTS for r in output.renders_as)
+    # A bioimage output is an image store (its fixture, if any, is binary), and
+    # a bioimage_viewer render on a table output does not read the table here.
+    all_non_tabular = output.dc_type == "bioimage" or not any(
+        _needs_fixture(r) for r in output.renders_as
+    )
     df = None if all_non_tabular else _load_fixture_df(output)
     data = _empty_data()
     renders: list[dict[str, Any]] = []
@@ -1013,6 +1034,11 @@ def build_payload(output: Any, theme: str = "light", tool: Any = None) -> dict[s
                 continue
             if comp in _NON_TABULAR_COMPONENTS:
                 meta["_unsupported"] = f"preview for '{comp}' is not wired yet"
+                renders.append(meta)
+                continue
+            if render.is_bioimage_viewer:
+                meta["viz_kind"] = render.kind
+                meta["_unsupported"] = BIOIMAGE_PLACEHOLDER
                 renders.append(meta)
                 continue
             if df is None:

@@ -1,0 +1,95 @@
+{
+    "multiscales": [
+        {
+            "axes": [
+                {
+                    "name": "t",
+                    "type": "time",
+                    "unit": "second"
+                },
+                {
+                    "name": "c",
+                    "type": "channel"
+                },
+                {
+                    "name": "z",
+                    "type": "space",
+                    "unit": "micrometer"
+                },
+                {
+                    "name": "y",
+                    "type": "space",
+                    "unit": "micrometer"
+                },
+                {
+                    "name": "x",
+                    "type": "space",
+                    "unit": "micrometer"
+                }
+            ],
+            "datasets": [
+                {
+                    "coordinateTransformations": [
+                        {
+                            "scale": [
+                                1.0,
+                                1.0,
+                                1.0,
+                                0.65,
+                                0.65
+                            ],
+                            "type": "scale"
+                        }
+                    ],
+                    "path": "0"
+                },
+                {
+                    "coordinateTransformations": [
+                        {
+                            "scale": [
+                                1.0,
+                                1.0,
+                                1.0,
+                                1.3,
+                                1.3
+                            ],
+                            "type": "scale"
+                        }
+                    ],
+                    "path": "1"
+                }
+            ],
+            "name": "image",
+            "version": "0.4"
+        }
+    ],
+    "omero": {
+        "channels": [
+            {
+                "active": true,
+                "color": "FF00FF",
+                "label": "moving x",
+                "window": {
+                    "end": 2647.0,
+                    "max": 3000.0,
+                    "min": 0.0,
+                    "start": 0.0
+                }
+            },
+            {
+                "active": true,
+                "color": "00FFFF",
+                "label": "moving y",
+                "window": {
+                    "end": 2647.0,
+                    "max": 3000.0,
+                    "min": 0.0,
+                    "start": 0.0
+                }
+            }
+        ],
+        "rdefs": {
+            "model": "color"
+        }
+    }
+}

@@ -204,7 +204,8 @@ app.add_middleware(
     allow_credentials=settings.fastapi.cors_allow_credentials and bool(_cors_origins),
     allow_methods=["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     # Range + the exposed headers let a genome browser on another origin (dev
-    # server, split viewer/API hosts) read track files by byte range.
+    # server, split viewer/API hosts) read track files by byte range, and an
+    # OME-TIFF bioimage reader learn the file size from Content-Range.
     allow_headers=["Authorization", "Content-Type", "X-Requested-With", "Range"],
     expose_headers=["Content-Range", "Accept-Ranges", "Content-Length"],
     max_age=600,
@@ -247,6 +248,14 @@ class EmbedPreflightMiddleware(BaseHTTPMiddleware):
 
 
 app.add_middleware(cast(Any, EmbedPreflightMiddleware))
+
+
+# Viewers on other origins reading a handed-off bioimage store (see the class).
+from depictio.api.v1.endpoints.advanced_viz_endpoints.bioimage_handoff import (  # noqa: E402
+    BioimagePreflightMiddleware,
+)
+
+app.add_middleware(cast(Any, BioimagePreflightMiddleware))
 
 
 # Local folders are a single-user feature: on a shared server, reading the

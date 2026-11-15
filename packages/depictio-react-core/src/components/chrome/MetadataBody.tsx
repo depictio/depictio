@@ -24,6 +24,7 @@ import {
   type GenomeSection,
   type SummaryItem,
 } from '../jbrowse/genomeTracksSummary';
+import BioimageImageSection from '../advanced_viz/BioimageImageSection';
 import CatalogOrigin from './CatalogOrigin';
 import { useTileStats } from './tileStats';
 
@@ -33,6 +34,14 @@ interface MetadataBodyProps {
 
 /** 10% of an accent, for the icon tile behind it. */
 const tint = (hex: string) => `${hex}1A`;
+
+/** The image DC a bioimage viewer tile reads, or '' for any other component. */
+const bioimageImageDcId = (m: StoredMetadata): string => {
+  const g = m as Record<string, unknown>;
+  if (g.viz_kind !== 'bioimage_viewer') return '';
+  const cfg = (g.config as Record<string, unknown>) || {};
+  return cfg.image_dc_id ? String(cfg.image_dc_id) : '';
+};
 
 type Row = { label: string; value: string; mono?: boolean };
 
@@ -293,6 +302,7 @@ const MetadataBody: React.FC<MetadataBodyProps> = ({ metadata }) => {
   const json = React.useMemo(() => JSON.stringify(metadata, null, 2), [metadata]);
   const rows = React.useMemo(() => summaryRows(metadata), [metadata]);
   const src = metadata.catalog_source;
+  const imageDcId = bioimageImageDcId(metadata);
 
   const type = componentTypeVisual(metadata.component_type);
   const title = (metadata.title as string) || '';
@@ -355,6 +365,14 @@ const MetadataBody: React.FC<MetadataBodyProps> = ({ metadata }) => {
             {metadata.dc_id && <KeyValue label="Collection" mono>{metadata.dc_id}</KeyValue>}
           </Stack>
         </Box>
+      )}
+
+      {/* The image behind a bioimage tile: what it draws, and where it comes from. */}
+      {imageDcId && (
+        <>
+          <Divider my={2} />
+          <BioimageImageSection dcId={imageDcId} componentKey={String(metadata.index)} />
+        </>
       )}
 
       {/* Catalog origin */}

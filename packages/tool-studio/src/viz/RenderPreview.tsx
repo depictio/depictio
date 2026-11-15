@@ -52,7 +52,34 @@ interface Props {
   position?: number;
 }
 
-export default function RenderPreview({ fixture, render, index, position = 0 }: Props) {
+/** A `bioimage_viewer` render draws image stores the Depictio API serves, so
+ *  no offline surface can preview it. Said plainly rather than left blank. */
+export function isBioimageViewerRender(render: { component: string; kind?: unknown }): boolean {
+  return render.component === 'advanced_viz' && render.kind === 'bioimage_viewer';
+}
+
+export function BioimagePreviewPlaceholder() {
+  return (
+    <Alert
+      color="gray"
+      variant="light"
+      icon={<Icon icon="mdi:microscope" />}
+      title="Image preview in Depictio only"
+      data-studio-preview="bioimage_viewer"
+    >
+      The image viewer reads its image and mask stores through the Depictio API. The render
+      still exports, and depictio dev catalog validate checks its image, labels and points
+      outputs.
+    </Alert>
+  );
+}
+
+export default function RenderPreview(props: Props) {
+  if (isBioimageViewerRender(props.render)) return <BioimagePreviewPlaceholder />;
+  return <LivePreview {...props} />;
+}
+
+function LivePreview({ fixture, render, index, position = 0 }: Props) {
   const metadata = useMemo(
     () => metadataFromRender(render, index, fixture, position),
     [render, index, fixture, position],

@@ -1,0 +1,8 @@
+sample,axes,shape,dtype,note
+shape_yx,YX,96x96,uint8,"one plane, no channel axis"
+shape_zyx,ZYX,16x96x96,uint8,a 16-plane stack: Z slider
+shape_tyx,TYX,15x96x96,uint16,15 time points: Time slider and play
+shape_tczyx,TCZYX,4x2x8x64x64,uint16,"every axis: 4 times, 2 channels, 8 planes"
+shape_float32,CYX,2x96x96,float32,"float32 values in [-1, 1]: contrast from the data range"
+shape_8ch,CYX,8x96x96,uint16,"8 channels: at most 6 show at once, the rest wait their turn"
+shape_yxc,YXC,96x96x2,uint8,"channel axis last: off the NGFF spec, flagged at ingest and refused by the viewer"

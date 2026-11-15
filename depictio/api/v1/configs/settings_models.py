@@ -4,7 +4,7 @@ import re
 import secrets
 import tempfile
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, Optional
+from typing import TYPE_CHECKING, Annotated, Any, Literal, Optional
 from urllib.parse import urlsplit
 
 from pydantic import (
@@ -19,6 +19,7 @@ from pydantic import (
 from pydantic_settings import (
     BaseSettings,
     EnvSettingsSource,
+    NoDecode,
     PydanticBaseSettingsSource,
     SettingsConfigDict,
 )
@@ -1573,6 +1574,87 @@ class StructureResolverSettings(BaseSettings):
         return frozenset(h for h in (urlsplit(u).hostname for u in urls) if h)
 
 
+class BioimageConfig(BaseSettings):
+    """Remote bioimage stores: images a bioimage DC reads in place, proxied by the API.
+
+    A bioimage DC's ``remote_stores`` (``s3://bucket/...`` or ``https://host/...``)
+    are only read once the operator allow-lists their bucket or host here, so the
+    API cannot be turned into an open proxy by whoever writes a project YAML. Both
+    lists are empty by default, which keeps remote reading off.
+    """
+
+    remote_https_hosts: Annotated[list[str], NoDecode] = Field(
+        default_factory=list,
+        description=(
+            "Hostnames remote https:// stores may be read from, matched exactly (lower-cased, "
+            "port ignored). Comma-separated in DEPICTIO_BIOIMAGE_REMOTE_HTTPS_HOSTS, e.g. "
+            "'uk1s3.embassy.ebi.ac.uk,data.example.org'. Empty disables https stores."
+        ),
+    )
+    remote_s3_buckets: Annotated[list[str], NoDecode] = Field(
+        default_factory=list,
+        description=(
+            "Buckets on the server's own S3 endpoint that remote s3:// stores may be read "
+            "from. Comma-separated in DEPICTIO_BIOIMAGE_REMOTE_S3_BUCKETS. The Depictio data "
+            "bucket (DEPICTIO_S3_BUCKET) is always refused, since reading it by URL would "
+            "bypass data-collection access control. Empty disables s3 stores. A listed "
+            "bucket is read with the server's credentials, so any user who can author a "
+            "project can show its *.zarr and *.ome.tif(f) objects: list only buckets meant "
+            "to be readable by every Depictio user. Those credentials need s3:ListBucket, "
+            "otherwise a missing chunk answers 403 instead of 404 and the image fails to open."
+        ),
+    )
+    remote_timeout_s: float = Field(
+        default=20.0, gt=0, description="Timeout, in seconds, of one remote store read."
+    )
+    remote_max_object_mb: int = Field(
+        default=64,
+        gt=0,
+        description=(
+            "Largest body, in MB, the API relays from a remote store (and from S3 for a "
+            "whole single-file store): a larger read fails instead of buffering."
+        ),
+    )
+
+    handoff_enabled: bool = Field(
+        default=False,
+        description=(
+            "Offer 'Open in' links (vizarr, Neuroglancer, the NGFF validator, Vitessce) for "
+            "private bioimage stores: a signed, read-only link to one store, valid for "
+            "handoff_ttl_minutes and revocable. Whoever holds the link reads that store "
+            "until it expires. Stores of public projects are handed off without it."
+        ),
+    )
+    handoff_ttl_minutes: int = Field(
+        default=60,
+        gt=0,
+        le=24 * 60,
+        description="Lifetime, in minutes, of a hand-off link (at most a day).",
+    )
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_BIOIMAGE_")
+
+    @field_validator("remote_https_hosts", "remote_s3_buckets", mode="before")
+    @classmethod
+    def _split_allow_list(cls, v: Any) -> Any:
+        # Comma-separated in env, like DEPICTIO_FASTAPI_CORS_ALLOWED_ORIGINS, or a
+        # JSON list. NoDecode keeps the raw string, so a numeric bucket name is not
+        # JSON-decoded into an int.
+        if isinstance(v, str):
+            if v.strip().startswith("["):
+                import json
+
+                return [str(item) for item in json.loads(v)]
+            return [item.strip() for item in v.split(",") if item.strip()]
+        return v
+
+    @field_validator("remote_https_hosts")
+    @classmethod
+    def _lower_hosts(cls, v: list[str]) -> list[str]:
+        # Compared with ``urlparse(...).hostname``, which is lower-cased.
+        return [h.strip().lower() for h in v if h.strip()]
+
+
 class BackupConfig(BaseSettings):
     """Backup and restore configuration settings."""
 
@@ -2880,6 +2962,7 @@ class Settings(BaseSettings):
 
     # Optional features
     jbrowse: JBrowseConfig = Field(default_factory=JBrowseConfig)
+    bioimage: BioimageConfig = Field(default_factory=BioimageConfig)
     backup: BackupConfig = Field(default_factory=BackupConfig)
     events: EventsConfig = Field(default_factory=EventsConfig)
     monitoring: MonitoringConfig = Field(default_factory=MonitoringConfig)
@@ -2918,7 +3001,9 @@ class Settings(BaseSettings):
             "startup, e.g. 'iris' or 'iris,penguins'. Empty (the default) seeds "
             "all of them. Ignored when DEPICTIO_DISABLE_EXAMPLE_DASHBOARDS is "
             "true (that takes precedence and seeds nothing). Valid names: "
-            "iris, penguins, ampliseq, advanced_viz_showcase, viralrecon."
+            "iris, penguins, ampliseq, advanced_viz_showcase, viralrecon, plus the "
+            "optional catalog_conformance and bioimage_examples, which are seeded "
+            "when listed here even though the default set leaves them out."
         ),
     )
 
@@ -2926,11 +3011,12 @@ class Settings(BaseSettings):
         default="",
         description=(
             "Comma-separated list of *optional* reference projects to seed in "
-            "addition to the default set, e.g. 'catalog_conformance'. Empty (the "
-            "default) seeds none of them. This is additive, unlike "
-            "DEPICTIO_SEED_PROJECTS which narrows the default set — an optional "
-            "project is a test fixture, so it stays out of ordinary deployments "
-            "until something asks for it. Ignored when "
+            "addition to the default set: 'catalog_conformance' (a test fixture) "
+            "or 'bioimage_examples' (image examples, heavier than the table "
+            "demos). Empty (the default) seeds none of them. This is additive, "
+            "unlike DEPICTIO_SEED_PROJECTS which narrows the default set, so an "
+            "optional project stays out of ordinary deployments until something "
+            "asks for it. Ignored when "
             "DEPICTIO_DISABLE_EXAMPLE_DASHBOARDS is true."
         ),
     )

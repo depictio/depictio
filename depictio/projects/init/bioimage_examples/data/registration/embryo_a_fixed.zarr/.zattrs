@@ -1,0 +1,81 @@
+{
+    "multiscales": [
+        {
+            "axes": [
+                {
+                    "name": "c",
+                    "type": "channel"
+                },
+                {
+                    "name": "y",
+                    "type": "space",
+                    "unit": "micrometer"
+                },
+                {
+                    "name": "x",
+                    "type": "space",
+                    "unit": "micrometer"
+                }
+            ],
+            "datasets": [
+                {
+                    "coordinateTransformations": [
+                        {
+                            "scale": [
+                                1.0,
+                                0.5,
+                                0.5
+                            ],
+                            "type": "scale"
+                        }
+                    ],
+                    "path": "0"
+                },
+                {
+                    "coordinateTransformations": [
+                        {
+                            "scale": [
+                                1.0,
+                                1.0,
+                                1.0
+                            ],
+                            "type": "scale"
+                        }
+                    ],
+                    "path": "1"
+                }
+            ],
+            "name": "embryo_a_fixed",
+            "version": "0.4"
+        }
+    ],
+    "omero": {
+        "channels": [
+            {
+                "active": true,
+                "color": "00FFFF",
+                "label": "Nuclei",
+                "window": {
+                    "end": 2474.9838195958255,
+                    "max": 3236.297874208557,
+                    "min": 93.43033843727943,
+                    "start": 153.36307602672224
+                }
+            },
+            {
+                "active": true,
+                "color": "FFFF00",
+                "label": "Membranes",
+                "window": {
+                    "end": 1035.8611535546652,
+                    "max": 1313.9875180617917,
+                    "min": 106.65698442050177,
+                    "start": 153.39852017136286
+                }
+            }
+        ],
+        "rdefs": {
+            "model": "color"
+        }
+    }
+}

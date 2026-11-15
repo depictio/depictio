@@ -1,0 +1,112 @@
+# ADR 0001: The bioimage viewer complements dedicated image viewers
+
+- Status: accepted
+- Date: 2026-09-27
+- Issue: #1086
+
+## Context
+
+OME-Zarr (OME-NGFF) is the interchange format for pyramidal, multiplexed and
+spatial imaging, and spatial-omics pipelines increasingly hand their results
+over as OME-Zarr, SpatialData or pyramidal OME-TIFF. Depictio had no way to show
+an image next to the tables it already serves.
+
+Dedicated viewers already cover deep inspection of one dataset well:
+
+- **Vitessce**: linked spatial, embedding and cell-set views from a JSON view
+  config, segmentation layers, 3D.
+- **MoBIE** (EMBL): TB-scale multi-modal EM and light microscopy with
+  segmentations and tables.
+- **napari**: desktop analysis, labels, plugins (Fractal, SpatialData).
+- **TissUUMaps**: browser-based exploration of large tissue images with
+  millions of spatial markers (in situ sequencing, spatial transcriptomics).
+
+What none of them provides is the view Depictio exists for: many runs or samples
+at once, driven by a samplesheet, with QC tables, cards and filters that stay
+linked across the whole project.
+
+## Decision
+
+Depictio adds a `bioimage` data collection type and a `bioimage_viewer`
+advanced_viz kind whose job is to put an image **in the dashboard context**, not
+to become an image-analysis application:
+
+- The tile renders a pyramidal image with viv on deck.gl, with the controls a
+  reviewer needs at a glance (channels, contrast, z/t, store picker).
+- It participates in Depictio's own coordination: an upstream filter picks the
+  sample's store, points from a table DC are drawn over the image, and a lasso
+  emits a regular `scatter_selection` that tables, cards and analysis groups
+  already understand.
+- Deep inspection is handed off. Anything beyond that scope (segmentation label
+  layers, several linked imaging views, 3D volume rendering, TB-scale EM) is
+  left to the dedicated viewers, reached from the tile through a hand-off link
+  that passes the store location.
+
+## Why viv inside the tile, and not an embedded Vitessce
+
+- **One coordination model.** Vitessce keeps its own coordination space in its
+  view config. Embedding it would duplicate every selection in two stores or
+  leave a closed widget inside a dashboard whose point is cross-filtering.
+- **One WebGL context per tile.** The kind holds a single `useWebglSlot` and one
+  deck.gl context, released when the slot is lost.
+- **Bundle.** viv, deck.gl and luma.gl sit in a lazy `vendor-viv` chunk (about
+  370 kB gzip), fetched only when a dashboard shows an image tile.
+- **Same code in every deployment.** Keys are served by the API from S3 or from
+  disk, unchanged in Docker, K8s and the Docker-free `depictio local up` stack,
+  and the browser CSP stays at `connect-src 'self'`.
+
+## Consequences
+
+- This PR reads OME-Zarr (NGFF 0.4, zarr v2) uploaded to Depictio's bucket or
+  kept on disk. Next: reading stores in place on S3 or allow-listed HTTPS hosts,
+  pyramidal OME-TIFF, and the image element of a SpatialData store, all as
+  `format` values of the same `bioimage` type.
+- NGFF 0.5 (zarr v3, a `zarr.json` per node) is now read as well, sharded
+  arrays included: the API serves shard files with HTTP Range, so the viewer
+  fetches a shard's index and then only the chunks it draws.
+- Segmentation labels, SpatialData shapes/tables as Depictio tables and
+  coordinate transforms are tracked as follow-ups.
+- The hand-off is designed below ("Open in").
+
+## Labels (segmentation masks)
+
+Segmentation masks are now a `bioimage` DC of `kind: labels` (a plain mask
+TIFF, converted to a multiscale OME-Zarr labels image at ingest, or an NGFF
+labels image), drawn over the image of the same sample. This keeps the
+decision above: masks are shown for context, each cell filled and outlined in
+the colour its table row gives it, faded when the dashboard filters exclude
+it, and a click or lasso selects cells through the same `scatter_selection`.
+There is no label editing, painting, merging or proofreading: Depictio is not
+an annotation tool, and curating a segmentation stays with napari, QuPath or
+the pipeline that produced it.
+
+## Open in (hand-off)
+
+The tile's "Open in" menu opens the store in vizarr, Neuroglancer, Vitessce
+or the OME-NGFF validator, and copies its URL or a napari command. Those
+viewers fetch the store's keys themselves, from another origin, and cannot
+send Depictio's `Authorization` header, so the store has to be reachable
+without it. Three tiers, picked by the server (`GET .../bioimage/{dc}/handoff`):
+
+1. **Remote store** (https): its own URL. Depictio is not in the path.
+2. **Public project**: the store's URL on this server. Its reads carry
+   `Access-Control-Allow-Origin: *`, never credentialed, so a cross-origin page
+   reads only what an anonymous visitor could. No other read gets CORS: in
+   single-user mode the anonymous user reads every project, and a blanket grant
+   would let any web page read a local instance's images.
+3. **Private store**: a signed link, minted on click. An RS256 token (the
+   instance's own key pair, with its own `typ`, so it is never an access token)
+   names one store of one DC, reads only, lives
+   `DEPICTIO_BIOIMAGE_HANDOFF_TTL_MINUTES` (60) and can be revoked through
+   Redis. It sits in the URL path, since viewers resolve keys relative to the
+   store root. Off unless `DEPICTIO_BIOIMAGE_HANDOFF_ENABLED`; the menu then
+   shows the targets greyed out with the reason.
+
+Trade-off: whoever holds a link reads that store until it expires, and access
+is checked when the link is made, not on every read. That is why links are
+short-lived, scoped to one store, and off by default.
+
+Targets that cannot take a store say why rather than disappear (OME-TIFF opens
+in Vitessce only). Vitessce gets a config of its own, inline as a data URI.
+MoBIE and QuPath take the copied URL; TissUUMaps is not offered, as it has no
+deep link to open a remote store.
