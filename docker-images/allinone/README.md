@@ -259,11 +259,12 @@ only in shipped dashboards. This Dockerfile copies both.
 ## What was validated, and what was not
 
 CI (`allinone-image-check` in `build-images.yaml`, on every PR touching this
-folder) builds the image for linux/amd64 and runs it on an empty folder, then
-reopens it: `HEALTHCHECK` healthy, `/dashboards` served through `-p`, a
-`docker stop -t 60` that exits 0 and leaves an empty `mongod.lock`, and every
-file under `/data` owned by the runner's user. Releases build linux/arm64
-natively and check that `mongod`, `redis-server` and `weed` start on it.
+folder) builds the image on native linux/amd64 and linux/arm64 runners and, on
+each, runs it on an empty folder with `DEPICTIO_EXAMPLES=iris`, then reopens it:
+`HEALTHCHECK` healthy, `/dashboards` served through `-p`, the iris Delta table
+read back from SeaweedFS (150 rows) and the same dashboards listed after the
+reopen, a `docker stop -t 60` that exits 0 and leaves an empty `mongod.lock`,
+and every file under `/data` owned by the runner's user.
 
 Before that image check existed, the entrypoint was run natively with the
 repository's venv, in a private mount namespace laid out as the image lays itself
@@ -297,6 +298,6 @@ Validated:
 
 Not validated:
 - Apptainer itself (`--containall`, read-only SIF, env passing, Ctrl-C under `srun`);
-- running the stack on arm64 (the build only starts each binary); a Linux >= 6.19 kernel; homes on NFS/Lustre (`flock`, mongod on network FS);
+- a Linux >= 6.19 kernel; homes on NFS/Lustre (`flock`, mongod on network FS);
 - a home produced by the actual Nextflow module (an equivalent `local up` home was used);
 - a MongoDB series mismatch (only the matching case and the warning's code path).

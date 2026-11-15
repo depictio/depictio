@@ -237,16 +237,27 @@ jobs:
 
   allinone-image-check:
     # The all-in-one image (docker-images/allinone/) runs the whole single-user
-    # stack on one /data folder, to reopen the depictio/ folder the Nextflow
-    # module publishes. The `build`/`merge` jobs publish it on releases; this
-    # job is the PR gate: it builds it locally and proves the life cycle a user
-    # goes through, on the runner's kernel (Linux 6.19+ needs GLIBC_TUNABLES
-    # for mongod, which the image sets).
-    name: All-in-one image
-    runs-on: ubuntu-24.04
+    # stack on one /data folder, to reopen the <run>_depictio/ artifact the
+    # Nextflow module publishes. The `build`/`merge` jobs publish it on releases;
+    # this job is the PR gate. On each architecture it publishes, on a native
+    # runner, it builds the image and goes through a user's life cycle: a first
+    # run that loads the iris example, a clean stop, then a reopen that must read
+    # back the same dashboards and the same Delta table rows (MongoDB and
+    # SeaweedFS data both survived). Also on the runner's kernel: Linux 6.19+
+    # needs GLIBC_TUNABLES for mongod, which the image sets. arm64 runs here on
+    # PRs too (unlike `build`): this workflow only runs on PRs that touch a build
+    # recipe, and the release would be the first arm64 run of the stack otherwise.
+    name: All-in-one image (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
     permissions:
       contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: amd64, runner: ubuntu-24.04 }
+          - { arch: arm64, runner: ubuntu-24.04-arm }
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -259,19 +270,23 @@ jobs:
         with:
           context: .
           file: docker-images/allinone/Dockerfile
-          platforms: linux/amd64
+          platforms: linux/${{ matrix.arch }}
           load: true
           tags: depictio-allinone:ci
-          cache-from: type=gha,scope=depictio-allinone-amd64
-          cache-to: type=gha,scope=depictio-allinone-amd64,mode=max
+          cache-from: type=gha,scope=depictio-allinone-${{ matrix.arch }}
+          cache-to: type=gha,scope=depictio-allinone-${{ matrix.arch }},mode=max
 
-      - name: First run on an empty folder, then reopen it
+      - name: First run with the iris example, then reopen it
         env:
           DATA: ${{ runner.temp }}/depictio-data
+          # The iris Delta table (EXAMPLE_TABLES in depictio/cli/cli/local_stack.py).
+          IRIS_DC: 646b0f3c1e4a2d7f8e5b8c9c
+          API: http://127.0.0.1:8058/depictio/api/v1
         run: |
           set -euo pipefail
           mkdir -p "$DATA"
           docker image ls depictio-allinone:ci
+          uname -srm
 
           wait_healthy() {
             for _ in $(seq 1 120); do
@@ -284,12 +299,53 @@ jobs:
             return 1
           }
 
+          # The admin token the API wrote into the home's CLI config on the first run.
+          token() {
+            sed -n 's/^ *access_token: *//p' "$DATA/cli/admin_config.yaml" | head -1 | tr -d "\"'"
+          }
+
+          # "<rows> <dashboards>": the iris table read from SeaweedFS through the
+          # API, and the dashboards MongoDB holds. Retries while the example loads.
+          read_back() {
+            local auth shape
+            auth="Authorization: Bearer $(token)"
+            for _ in $(seq 1 60); do
+              if shape=$(curl -fsS -H "$auth" "$API/deltatables/shape/$IRIS_DC" 2>/dev/null); then
+                rows=$(jq -r '.num_rows' <<< "$shape")
+                dashboards=$(curl -fsS -H "$auth" "$API/dashboards/list" | jq 'length')
+                # The example's dashboard may land a moment after its table.
+                if [ "$dashboards" -ge 1 ]; then
+                  echo "$rows $dashboards"
+                  return 0
+                fi
+              fi
+              sleep 5
+            done
+            echo "The iris table and its dashboard never became readable" >&2
+            docker logs depictio >&2 || true
+            tail -50 "$DATA"/logs/api.log >&2 || true
+            return 1
+          }
+
           for run in first reopen; do
             echo "::group::$run run"
+            examples=none
+            [ "$run" = first ] && examples=iris
             docker run -d --name depictio -p 127.0.0.1:8058:8058 \
-              -e DEPICTIO_TELEMETRY_ENABLED=false -v "$DATA:/data" depictio-allinone:ci
+              -e DEPICTIO_TELEMETRY_ENABLED=false -e DEPICTIO_EXAMPLES=$examples \
+              -v "$DATA:/data" depictio-allinone:ci
             wait_healthy
-            curl -fsS -o /dev/null -w "dashboards: %{http_code}\n" http://127.0.0.1:8058/dashboards
+            curl -fsS -o /dev/null -w "dashboards page: %{http_code}\n" http://127.0.0.1:8058/dashboards
+            got=$(read_back)
+            echo "$run run: iris rows, dashboards = $got"
+            if [ "$run" = first ]; then
+              want=$got
+              read -r rows dashboards <<< "$got"
+              [ "$rows" = 150 ] || { echo "::error::iris has $rows rows, expected 150"; exit 1; }
+              [ "$dashboards" -ge 1 ] || { echo "::error::no dashboard after seeding iris"; exit 1; }
+            else
+              [ "$got" = "$want" ] || { echo "::error::reopen read '$got', first run '$want'"; exit 1; }
+            fi
             docker stop -t 60 depictio
             # A clean stop: the entrypoint exits 0 and mongod leaves no lock behind.
             test "$(docker inspect --format '{{.State.ExitCode}}' depictio)" = 0
