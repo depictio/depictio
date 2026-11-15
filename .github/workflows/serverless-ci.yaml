@@ -115,6 +115,15 @@ jobs:
         working-directory: depictio/viewer
         run: node scripts/check-bundle-budget.mjs dist-static/static.html 4404019 static-runtime
 
+      # The structure-viewer floor: the base runtime plus the conditional
+      # 3Dmol.js add-on (dist-static/static-structure.html, written by
+      # build-demo.mjs). Only bundles holding a molecule_3d tile carry it, so it
+      # has its own line rather than raising the base one. Measured 3.91 MB
+      # (+0.15 MB over the base 3.76 MB); budget = the base budget + 0.2 MB.
+      - name: Byte budget — static runtime + structure viewer (3Dmol add-on)
+        working-directory: depictio/viewer
+        run: node scripts/check-bundle-budget.mjs dist-static/static-structure.html 4613734 static-runtime+3dmol
+
       - name: Byte budget — catalog preview
         working-directory: depictio/viewer
         run: node scripts/check-bundle-budget.mjs dist-catalog-preview/catalog-preview.html 4718592 catalog-preview
@@ -140,4 +149,5 @@ jobs:
           path: |
             depictio/viewer/dist-static/site/
             depictio/viewer/dist-static/static.html
+            depictio/viewer/dist-static/addons/
           retention-days: 7

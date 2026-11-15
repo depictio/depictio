@@ -238,8 +238,14 @@ AV_JSON_SOURCE: dict[str, AvJsonSource] = {
 # ``tree``            — a second, non-tabular source (a Newick tree): frozen.
 # ``per_interaction`` — computed per zoom window / per pair of selections, so
 #                       no snapshot stands for it.
-# ``objects``         — the renderer fetches object-store files or a structure
-#                       resolver at render time, outside ``api.ts``.
+# ``objects``         — a data path whose renderer also reads object-store files
+#                       (structures, PAE matrices) or the structure resolver. The
+#                       producer reads those files at export from the
+#                       collection's storage, under a stated cap
+#                       (``depictio/serverless/objects.py``), and the runtime
+#                       serves them from the bundle; ``molecule_3d`` also gets
+#                       the conditional 3Dmol.js add-on
+#                       (``depictio/serverless/addons.py``).
 ServerlessTier = Literal["live", "frozen", "omitted"]
 ServerlessPath = Literal["data", "compute_live", "celery", "tree", "per_interaction", "objects"]
 
@@ -260,9 +266,9 @@ _CELERY_REASON = (
     "so filters do not reach it"
 )
 _OBJECTS_REASON = (
-    "{kind} fetches {what} at render time, outside the bundle, and draws with 3Dmol.js, "
-    "which the single-file runtime leaves out (measured: +0.56 MB gzip, 3.76 -> 4.32 MB, "
-    "over the 4.2 MB runtime budget); not in a zero-network single-file bundle yet"
+    "{kind} reads {what}; the files are read at export from the collection's storage "
+    "and shipped in the bundle up to a cap (DEPICTIO_STATIC_OBJECTS_MAX_MB, 24 MB by "
+    "default; DEPICTIO_STATIC_OBJECT_MAX_MB, 8 MB per file){extra}"
 )
 
 SERVERLESS_KINDS: dict[str, ServerlessCapability] = {
@@ -340,21 +346,30 @@ SERVERLESS_KINDS: dict[str, ServerlessCapability] = {
         "a group comparison computes on the server for the two groups picked in the "
         "tile; no snapshot stands for it",
     ),
+    # Live since the structure add-on: the bound residue table is a data path,
+    # the structure / PAE files ride along (see ``objects`` above).
     "molecule_3d": ServerlessCapability(
-        "omitted",
+        "live",
         "objects",
-        _OBJECTS_REASON.format(kind="a 3D structure tile", what="its structure file"),
+        _OBJECTS_REASON.format(
+            kind="a 3D structure tile",
+            what="its structure file (or a structure-resolver answer, frozen at export)",
+            extra="; drawn by 3Dmol.js, embedded only into bundles that hold one (+0.15 MB gzip)",
+        ),
     ),
     "pae_matrix": ServerlessCapability(
-        "omitted",
+        "live",
         "objects",
-        "a PAE matrix reads its matrix file from object storage at render time, outside "
-        "the bundle; not in a zero-network single-file bundle yet",
+        _OBJECTS_REASON.format(kind="a PAE matrix", what="its matrix file", extra=""),
     ),
     "ramachandran": ServerlessCapability(
-        "omitted",
+        "live",
         "objects",
-        _OBJECTS_REASON.format(kind="a Ramachandran plot", what="its structure file"),
+        _OBJECTS_REASON.format(
+            kind="a Ramachandran plot",
+            what="its structure file (torsions computed in the browser, Plotly)",
+            extra="",
+        ),
     ),
 }
 

@@ -1,4 +1,5 @@
 {
+ "addons": [],
  "allow_network_tiles": false,
  "bindings": {
   "figure-codemode": {
@@ -357,7 +358,7 @@
    "trendlines": []
   }
  },
- "built_at": "2026-11-15T14:16:31.444088+00:00",
+ "built_at": "2026-11-15T18:59:01.353720+00:00",
  "dashboard": {
   "doc": {
    "left_panel_layout_data": [
@@ -880,6 +881,7 @@
  },
  "manifest_version": 1,
  "mode": "single-file",
+ "objects": {},
  "producer": "B",
  "prologues": {
   "figure-codemode": [
@@ -914,6 +916,7 @@
   "project_name": null,
   "source": null
  },
+ "resolved_structures": [],
  "tabs": [],
  "tiers": {
   "card-body-mass": {

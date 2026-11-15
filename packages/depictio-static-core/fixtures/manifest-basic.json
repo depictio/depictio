@@ -174,5 +174,8 @@
   "allow_network_tiles": false,
   "inline_blobs": {
     "dc_dc00000000000000000000a1": ""
-  }
+  },
+  "objects": {},
+  "resolved_structures": [],
+  "addons": []
 }

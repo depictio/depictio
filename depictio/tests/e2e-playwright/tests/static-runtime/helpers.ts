@@ -31,6 +31,35 @@ export const TABS_MANIFEST = join(
   "packages/depictio-static-core/fixtures/manifest-tabs.json",
 );
 
+/** Protein structure demo: molecule_3d + pae_matrix + ramachandran over
+ *  bundled object files, with the 3Dmol.js add-on. Regenerate with
+ *  `depictio/serverless/examples/generate_demo_manifest.py`. */
+export const PROTEIN_MANIFEST = join(
+  REPO_ROOT,
+  "depictio/viewer/demo/manifests/protein.json",
+);
+const ADDONS_DIR = join(REPO_ROOT, "depictio/viewer/dist-static/addons");
+
+/** Append the add-ons a manifest names before `</body>` — the producers' rule
+ *  (depictio/serverless/addons.py::apply_addons). */
+export function applyAddons(template: string, names: string[]): string {
+  if (!names.length) return template;
+  const registry = JSON.parse(readFileSync(join(ADDONS_DIR, "addons.json"), "utf-8")) as Record<
+    string,
+    { file: string }
+  >;
+  const scripts = names
+    .map((n) => {
+      const info = registry[n];
+      if (!info) throw new Error(`add-on ${n} is not built (pnpm run build:static)`);
+      const body = readFileSync(join(ADDONS_DIR, info.file), "utf-8");
+      return `<script data-depictio-addon="${n}">${body}</script>`;
+    })
+    .join("");
+  const at = template.lastIndexOf("</body>");
+  return at < 0 ? template + scripts : template.slice(0, at) + scripts + template.slice(at);
+}
+
 export function skipUnlessBundleBuilt(): void {
   test.skip(
     !existsSync(BUNDLE_TEMPLATE),
@@ -47,7 +76,8 @@ export function injectedBundleUrl(manifestPath: string = FIXTURE_MANIFEST): stri
   // sequences in the JSON, and Python's .replace (which producers use)
   // replaces every occurrence.
   const blob = JSON.stringify(manifest).replace(/<\//g, "<\\/");
-  const html = template.replaceAll("__BUNDLE_MANIFEST__", () => blob);
+  const names = ((manifest.addons ?? []) as { name: string }[]).map((a) => a.name);
+  const html = applyAddons(template, names).replaceAll("__BUNDLE_MANIFEST__", () => blob);
   const dir = mkdtempSync(join(tmpdir(), "depictio-static-"));
   const out = join(dir, "bundle-fixture.html");
   writeFileSync(out, html);

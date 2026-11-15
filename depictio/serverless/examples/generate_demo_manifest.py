@@ -1,4 +1,4 @@
-"""Regenerate the committed penguins demo manifest.
+"""Regenerate the committed demo manifests (penguins, protein structure).
 
 The per-phase demo site (depictio/viewer/scripts/build-demo.mjs) is built by
 JS-only CI jobs, so the producer-B manifest for the penguins demo is committed
@@ -30,6 +30,9 @@ SPEC = EXAMPLES / "penguins.yaml"
 ISLAND_REGIONS_CSV = EXAMPLES / "data" / "island_regions.csv"
 PENGUINS_DATA = REPO_ROOT / "depictio" / "projects" / "init" / "penguins" / "data"
 OUT = REPO_ROOT / "depictio" / "viewer" / "demo" / "manifests" / "penguins.json"
+PROTEIN_SPEC = EXAMPLES / "protein.yaml"
+PROTEIN_OUT = OUT.parent / "protein.json"
+SHOWCASE_DATA = REPO_ROOT / "depictio" / "projects" / "init" / "advanced_viz_showcase" / "data"
 
 WF_TAG = "penguin_species_analysis"
 DC_TAG = "joined_penguins_complete"
@@ -53,19 +56,47 @@ def island_regions_frame() -> pl.DataFrame:
     return pl.read_csv(ISLAND_REGIONS_CSV)
 
 
+def _write(result, out: Path) -> None:
+    manifest = json_safe(result.manifest.model_dump(mode="json"))
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(manifest, indent=1, sort_keys=True) + "\n")
+    tiers = [f"{cid}:{t['tier']}" for cid, t in sorted(manifest["tiers"].items())]
+    print(f"wrote {out.relative_to(REPO_ROOT)} ({out.stat().st_size / 1024:.0f} KiB)")
+    print("tiers:", ", ".join(tiers))
+
+
+def protein_data_dir(root: Path) -> Path:
+    """The protein example's data dir: the residue table + two indexed_file dirs."""
+    wf = root / "protein_demo"
+    (wf / "structures").mkdir(parents=True)
+    (wf / "pae").mkdir()
+    pl.read_csv(SHOWCASE_DATA / "protein_residues_demo.tsv", separator="\t").write_parquet(
+        wf / "protein_residues_demo.parquet"
+    )
+    (wf / "structures" / "demo_protein.pdb").write_bytes(
+        (SHOWCASE_DATA / "demo_protein.pdb").read_bytes()
+    )
+    (wf / "pae" / "demo_protein.pae.tsv").write_bytes(
+        (SHOWCASE_DATA / "demo_protein.pae.tsv").read_bytes()
+    )
+    return root
+
+
 def main() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         dc_dir = Path(tmp) / WF_TAG
         dc_dir.mkdir(parents=True)
         penguins_frame().write_parquet(dc_dir / f"{DC_TAG}.parquet")
         island_regions_frame().write_parquet(dc_dir / f"{LINKED_DC_TAG}.parquet")
-        result = build_manifest(load_spec(SPEC), Path(tmp))
-    manifest = json_safe(result.manifest.model_dump(mode="json"))
-    OUT.parent.mkdir(parents=True, exist_ok=True)
-    OUT.write_text(json.dumps(manifest, indent=1, sort_keys=True) + "\n")
-    tiers = [f"{cid}:{t['tier']}" for cid, t in sorted(manifest["tiers"].items())]
-    print(f"wrote {OUT.relative_to(REPO_ROOT)} ({OUT.stat().st_size / 1024:.0f} KiB)")
-    print("tiers:", ", ".join(tiers))
+        _write(build_manifest(load_spec(SPEC), Path(tmp)), OUT)
+    with tempfile.TemporaryDirectory() as tmp:
+        result = build_manifest(load_spec(PROTEIN_SPEC), protein_data_dir(Path(tmp)))
+        if not result.manifest.addons:
+            raise SystemExit(
+                "the 3dmol add-on is not built: run `pnpm run build:static` in depictio/viewer "
+                "first, so the protein manifest records it"
+            )
+        _write(result, PROTEIN_OUT)
 
 
 if __name__ == "__main__":

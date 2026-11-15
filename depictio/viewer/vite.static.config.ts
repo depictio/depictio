@@ -13,7 +13,8 @@
  *   - viewer chrome/variants/index.ts   -> src/static-runtime/chromeVariantShim.ts
  *   - depictio-react-core JBrowseRenderer -> src/static-runtime/jbrowseStub.tsx
  *
- * and `3dmol` is aliased to the catalog preview's stub.
+ * and `3dmol` is aliased to `src/static-runtime/threeDmolAddon.ts`, which forwards
+ * to the conditional 3Dmol.js add-on (scripts/build-static-addons.mjs).
  *
  * Producers inject the manifest into dist-static/static.html by replacing the
  * __BUNDLE_MANIFEST__ token (same convention as catalog-preview).
@@ -108,12 +109,14 @@ export default defineConfig({
         replacement: path.resolve(__dirname, '../../packages/depictio-static-core/src'),
       },
       { find: /^plotly\.js$/, replacement: 'plotly.js/dist/plotly' },
-      // Same stub as the catalog preview and the component embed: a
-      // molecule_3d tile fetches its structure at render time, so it cannot
-      // render offline, and the single-file build would inline 3Dmol.js.
+      // 3Dmol.js is a CONDITIONAL add-on: never compiled into the base
+      // runtime (budget), appended by the producer only to bundles holding a
+      // molecule_3d tile (scripts/build-static-addons.mjs builds it next to
+      // static.html). This module forwards to the global the add-on defines,
+      // and behaves as the catalog stub without it.
       {
         find: /^3dmol$/,
-        replacement: path.resolve(__dirname, 'src/catalog-preview/threeDmolStub.ts'),
+        replacement: path.resolve(__dirname, 'src/static-runtime/threeDmolAddon.ts'),
       },
     ],
     dedupe: [

@@ -95,9 +95,13 @@ def test_every_kind_has_exactly_one_explicit_serverless_tier():
     assert NON_TABULAR_VIZ_KINDS == {"phylogenetic"}
     omitted = {k for k in ALL_VIZ_KINDS if SERVERLESS_KINDS[k].tier == "omitted"}
     assert set(LIVE_KINDS) | set(celery) | NON_TABULAR_VIZ_KINDS | omitted == set(ALL_VIZ_KINDS)
-    # The renderer-fetching kinds the deny-list used to call live.
+    # The renderer-fetching kinds the deny-list used to call live by
+    # elimination are live on purpose now: their object files ship in the
+    # bundle (``objects`` path), which is stated, not assumed.
     for kind in ("molecule_3d", "pae_matrix", "ramachandran"):
-        assert SERVERLESS_KINDS[kind].tier != "live", kind
+        assert SERVERLESS_KINDS[kind].tier == "live", kind
+        assert SERVERLESS_KINDS[kind].path == "objects", kind
+        assert "cap" in (SERVERLESS_KINDS[kind].reason or ""), kind
     # Table-driven embeddings are a plain data path; compute_method ones are not.
     assert serves_advanced_viz_live(_spec_comp("embedding", dim_x_col="x", dim_y_col="y"))
     assert not serves_advanced_viz_live(_spec_comp("embedding", compute_method="umap", x_col="x"))

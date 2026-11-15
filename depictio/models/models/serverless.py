@@ -583,6 +583,77 @@ class ExportProvenance(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class BundledObject(BaseModel):
+    """One object-store file shipped inside the bundle (a structure, a PAE matrix).
+
+    The runtime answers the renderer's ``GET /files/indexed/{dc_id}`` from
+    :class:`ObjectCollection` and hands it a ``blob:`` URL over these bytes, so
+    the renderer's own download path (gunzip by magic bytes, per-object cache)
+    runs unchanged and nothing leaves the page.
+    """
+
+    sample: str = Field(description="Entity the file belongs to (the indexed_file sample)")
+    name: str = Field(description="File name as stored (format sniffing reads its extension)")
+    uri: str = Field(description="'inline:obj_<sha>' resolved against inline_blobs")
+    size_bytes: int = Field(ge=0, description="Size of the original object in bytes")
+    gzip: bool = Field(
+        default=False, description="Bytes were gzip-compressed at export (the reader gunzips)"
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class ObjectCollection(BaseModel):
+    """The shipped part of one ``indexed_file`` data collection."""
+
+    format: str = Field(default="", description="indexed_file format (pdb, mmcif, pae, ...)")
+    files: list[BundledObject] = Field(default_factory=list)
+    total: int = Field(default=0, ge=0, description="Objects the collection held at export")
+    cap_bytes: int = Field(
+        default=0, ge=0, description="Per-bundle object budget in force at export (raw bytes)"
+    )
+    dropped: list[str] = Field(
+        default_factory=list,
+        description="Samples left out because they did not fit the cap (named in the tier detail)",
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class ResolvedStructure(BaseModel):
+    """A structure-resolver answer frozen at export (molecule_3d ``resolve`` mode)."""
+
+    uniprot: str | None = None
+    gene: str | None = None
+    sequence: str | None = None
+    taxon: int = 9606
+    uri: str = Field(description="'inline:obj_<sha>' of the PDB model")
+    origin: str | None = Field(default=None, description="afdb | esmfold")
+    accession: str | None = None
+    model_sequence: str = Field(default="", description="One-letter sequence of the model")
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class RuntimeAddon(BaseModel):
+    """An optional runtime piece embedded only into bundles that need it.
+
+    The base runtime (``static.html``) stays inside its byte budget; a producer
+    appends an add-on's script when a component needs it, and records it here so
+    the runtime and the tier table can say what was embedded and why.
+    """
+
+    name: Literal["3dmol", "pyodide"]
+    version: str = Field(description="Exact version of the embedded add-on")
+    packages: list[str] = Field(
+        default_factory=list, description="Python packages loaded (pyodide only)"
+    )
+    bytes: int = Field(default=0, ge=0, description="Size the add-on adds to the HTML file")
+    reason: str = Field(default="", description="Which components needed it")
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class BundleManifest(BaseModel):
     """The serverless bundle contract (RFC §3.1). manifest_version 1."""
 
@@ -636,7 +707,25 @@ class BundleManifest(BaseModel):
     )
     inline_blobs: dict[str, str] = Field(
         default_factory=dict,
-        description="single-file only: 'dc_<id>' -> base64 Parquet bytes referenced by inline: URIs",
+        description=(
+            "single-file only: 'dc_<id>' -> base64 Parquet bytes, 'obj_<sha>' -> base64 "
+            "object bytes, both referenced by inline: URIs"
+        ),
+    )
+    objects: dict[str, ObjectCollection] = Field(
+        default_factory=dict,
+        description=(
+            "indexed_file dc_id -> the objects shipped for it (structures, PAE matrices), "
+            "read at export from the collection's storage under a stated cap"
+        ),
+    )
+    resolved_structures: list[ResolvedStructure] = Field(
+        default_factory=list,
+        description="Structure-resolver answers frozen at export (molecule_3d resolve mode)",
+    )
+    addons: list[RuntimeAddon] = Field(
+        default_factory=list,
+        description="Optional runtime add-ons embedded into this bundle's HTML (3Dmol.js, Pyodide)",
     )
 
     model_config = ConfigDict(extra="forbid")

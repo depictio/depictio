@@ -25,6 +25,9 @@ REQUIRED = [
     r"depictio/viewer/dist/index\.html",
     # The serverless bundle template `depictio build-static` injects into.
     r"depictio/viewer/dist-static/static\.html",
+    # Its conditional add-ons (3Dmol.js for bundles with a molecule_3d tile).
+    r"depictio/viewer/dist-static/addons/addons\.json",
+    r"depictio/viewer/dist-static/addons/3dmol\.js",
     r"depictio/projects/init/iris/\.db_seeds/dashboard\.json",
     r"depictio/projects/init/penguins/\.db_seeds/dashboard\.json",
     r"depictio/projects/nf-core/rnaseq/[^/]+/template\.yaml",

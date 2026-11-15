@@ -32,7 +32,7 @@ def test_every_kind_has_a_tier_and_a_reason_when_not_live(kind: str) -> None:
     if cap.tier != "live":
         assert cap.reason, f"{kind} is {cap.tier} without saying why"
     else:
-        assert cap.path in ("data", "compute_live")
+        assert cap.path in ("data", "compute_live", "objects")
         # A live kind is reduced in the browser by the sampling table.
         assert kind in KIND_SAMPLING_POLICY
 
@@ -42,8 +42,15 @@ def test_no_extra_kinds() -> None:
 
 
 def test_the_offline_embed_and_the_bundle_agree_on_what_fetches_files() -> None:
-    """The renderer-fetching kinds main's embed refuses are not live here either."""
-    for kind in ("molecule_3d", "pae_matrix", "ramachandran", "contact_map", "group_compare"):
+    """Main's component embed refuses the renderer-fetching kinds; the bundle
+    ships their files instead (``objects``), so it is the one path that serves
+    them — and says how, with the cap in the reason."""
+    for kind in ("molecule_3d", "pae_matrix", "ramachandran"):
+        assert kind in HTML_UNAVAILABLE_KINDS
+        cap = SERVERLESS_KINDS[kind]
+        assert (cap.tier, cap.path) == ("live", "objects")
+        assert "MAX_MB" in (cap.reason or "")
+    for kind in ("contact_map", "group_compare"):
         assert kind in HTML_UNAVAILABLE_KINDS
         assert SERVERLESS_KINDS[kind].tier != "live"
 

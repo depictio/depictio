@@ -149,6 +149,47 @@
       "title": "BundleMode",
       "type": "string"
     },
+    "BundledObject": {
+      "additionalProperties": false,
+      "description": "One object-store file shipped inside the bundle (a structure, a PAE matrix).\n\nThe runtime answers the renderer's ``GET /files/indexed/{dc_id}`` from\n:class:`ObjectCollection` and hands it a ``blob:`` URL over these bytes, so\nthe renderer's own download path (gunzip by magic bytes, per-object cache)\nruns unchanged and nothing leaves the page.",
+      "properties": {
+        "gzip": {
+          "default": false,
+          "description": "Bytes were gzip-compressed at export (the reader gunzips)",
+          "title": "Gzip",
+          "type": "boolean"
+        },
+        "name": {
+          "description": "File name as stored (format sniffing reads its extension)",
+          "title": "Name",
+          "type": "string"
+        },
+        "sample": {
+          "description": "Entity the file belongs to (the indexed_file sample)",
+          "title": "Sample",
+          "type": "string"
+        },
+        "size_bytes": {
+          "description": "Size of the original object in bytes",
+          "minimum": 0,
+          "title": "Size Bytes",
+          "type": "integer"
+        },
+        "uri": {
+          "description": "'inline:obj_<sha>' resolved against inline_blobs",
+          "title": "Uri",
+          "type": "string"
+        }
+      },
+      "required": [
+        "sample",
+        "name",
+        "uri",
+        "size_bytes"
+      ],
+      "title": "BundledObject",
+      "type": "object"
+    },
     "CmpArgs": {
       "additionalProperties": false,
       "description": "Argument of ``cmp``: column, operator, literal.",
@@ -716,6 +757,49 @@
       "title": "NotPred",
       "type": "object"
     },
+    "ObjectCollection": {
+      "additionalProperties": false,
+      "description": "The shipped part of one ``indexed_file`` data collection.",
+      "properties": {
+        "cap_bytes": {
+          "default": 0,
+          "description": "Per-bundle object budget in force at export (raw bytes)",
+          "minimum": 0,
+          "title": "Cap Bytes",
+          "type": "integer"
+        },
+        "dropped": {
+          "description": "Samples left out because they did not fit the cap (named in the tier detail)",
+          "items": {
+            "type": "string"
+          },
+          "title": "Dropped",
+          "type": "array"
+        },
+        "files": {
+          "items": {
+            "$ref": "#/$defs/BundledObject"
+          },
+          "title": "Files",
+          "type": "array"
+        },
+        "format": {
+          "default": "",
+          "description": "indexed_file format (pdb, mmcif, pae, ...)",
+          "title": "Format",
+          "type": "string"
+        },
+        "total": {
+          "default": 0,
+          "description": "Objects the collection held at export",
+          "minimum": 0,
+          "title": "Total",
+          "type": "integer"
+        }
+      },
+      "title": "ObjectCollection",
+      "type": "object"
+    },
     "OrPred": {
       "additionalProperties": false,
       "description": "``{\"or\": [<Pred>, ...]}``",
@@ -790,6 +874,140 @@
         "map"
       ],
       "title": "RenameOp",
+      "type": "object"
+    },
+    "ResolvedStructure": {
+      "additionalProperties": false,
+      "description": "A structure-resolver answer frozen at export (molecule_3d ``resolve`` mode).",
+      "properties": {
+        "accession": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Accession"
+        },
+        "gene": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gene"
+        },
+        "model_sequence": {
+          "default": "",
+          "description": "One-letter sequence of the model",
+          "title": "Model Sequence",
+          "type": "string"
+        },
+        "origin": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "afdb | esmfold",
+          "title": "Origin"
+        },
+        "sequence": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sequence"
+        },
+        "taxon": {
+          "default": 9606,
+          "title": "Taxon",
+          "type": "integer"
+        },
+        "uniprot": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Uniprot"
+        },
+        "uri": {
+          "description": "'inline:obj_<sha>' of the PDB model",
+          "title": "Uri",
+          "type": "string"
+        }
+      },
+      "required": [
+        "uri"
+      ],
+      "title": "ResolvedStructure",
+      "type": "object"
+    },
+    "RuntimeAddon": {
+      "additionalProperties": false,
+      "description": "An optional runtime piece embedded only into bundles that need it.\n\nThe base runtime (``static.html``) stays inside its byte budget; a producer\nappends an add-on's script when a component needs it, and records it here so\nthe runtime and the tier table can say what was embedded and why.",
+      "properties": {
+        "bytes": {
+          "default": 0,
+          "description": "Size the add-on adds to the HTML file",
+          "minimum": 0,
+          "title": "Bytes",
+          "type": "integer"
+        },
+        "name": {
+          "enum": [
+            "3dmol",
+            "pyodide"
+          ],
+          "title": "Name",
+          "type": "string"
+        },
+        "packages": {
+          "description": "Python packages loaded (pyodide only)",
+          "items": {
+            "type": "string"
+          },
+          "title": "Packages",
+          "type": "array"
+        },
+        "reason": {
+          "default": "",
+          "description": "Which components needed it",
+          "title": "Reason",
+          "type": "string"
+        },
+        "version": {
+          "description": "Exact version of the embedded add-on",
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "version"
+      ],
+      "title": "RuntimeAddon",
       "type": "object"
     },
     "RuntimeLimits": {
@@ -1099,6 +1317,14 @@
   "additionalProperties": false,
   "description": "The serverless bundle contract (RFC \u00a73.1). manifest_version 1.",
   "properties": {
+    "addons": {
+      "description": "Optional runtime add-ons embedded into this bundle's HTML (3Dmol.js, Pyodide)",
+      "items": {
+        "$ref": "#/$defs/RuntimeAddon"
+      },
+      "title": "Addons",
+      "type": "array"
+    },
     "allow_network_tiles": {
       "default": false,
       "description": "Permit MapLibre tile fetches (static-dir/remote); single-file freezes maps unless style is white-bg",
@@ -1146,7 +1372,7 @@
       "additionalProperties": {
         "type": "string"
       },
-      "description": "single-file only: 'dc_<id>' -> base64 Parquet bytes referenced by inline: URIs",
+      "description": "single-file only: 'dc_<id>' -> base64 Parquet bytes, 'obj_<sha>' -> base64 object bytes, both referenced by inline: URIs",
       "title": "Inline Blobs",
       "type": "object"
     },
@@ -1164,6 +1390,14 @@
     },
     "mode": {
       "$ref": "#/$defs/BundleMode"
+    },
+    "objects": {
+      "additionalProperties": {
+        "$ref": "#/$defs/ObjectCollection"
+      },
+      "description": "indexed_file dc_id -> the objects shipped for it (structures, PAE matrices), read at export from the collection's storage under a stated cap",
+      "title": "Objects",
+      "type": "object"
     },
     "producer": {
       "$ref": "#/$defs/Producer"
@@ -1207,6 +1441,14 @@
     },
     "provenance": {
       "$ref": "#/$defs/ExportProvenance"
+    },
+    "resolved_structures": {
+      "description": "Structure-resolver answers frozen at export (molecule_3d resolve mode)",
+      "items": {
+        "$ref": "#/$defs/ResolvedStructure"
+      },
+      "title": "Resolved Structures",
+      "type": "array"
     },
     "tabs": {
       "description": "Every tab of the bundled family, main tab first, each with its own document. Empty for a single-tab bundle, where `dashboard` is the whole story; when populated it includes the entry tab too, so `dashboard.doc` duplicates one entry. Component-keyed sections (tiers, frozen, bindings, prologues) span the whole family \u2014 component ids are uuids, so they never collide across tabs",

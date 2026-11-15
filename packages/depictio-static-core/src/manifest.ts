@@ -243,6 +243,47 @@ export interface ExportProvenance {
   dashboard_url?: string | null;
 }
 
+/** One object-store file shipped inside the bundle (a structure, a PAE matrix). */
+export interface BundledObject {
+  sample: string;
+  name: string;
+  /** 'inline:obj_<sha>' resolved against inline_blobs. */
+  uri: string;
+  size_bytes: number;
+  /** Bytes were gzip-compressed at export; the reader gunzips by magic bytes. */
+  gzip?: boolean;
+}
+
+/** The shipped part of one indexed_file data collection. */
+export interface ObjectCollection {
+  format: string;
+  files: BundledObject[];
+  total: number;
+  cap_bytes: number;
+  dropped: string[];
+}
+
+/** A structure-resolver answer frozen at export (molecule_3d `resolve` mode). */
+export interface ResolvedStructureEntry {
+  uniprot?: string | null;
+  gene?: string | null;
+  sequence?: string | null;
+  taxon: number;
+  uri: string;
+  origin?: string | null;
+  accession?: string | null;
+  model_sequence: string;
+}
+
+/** An optional runtime piece the producer embedded (3Dmol.js, Pyodide). */
+export interface RuntimeAddon {
+  name: '3dmol' | 'pyodide';
+  version: string;
+  packages: string[];
+  bytes: number;
+  reason: string;
+}
+
 export interface BundleManifest {
   manifest_version: number;
   mode: BundleMode;
@@ -268,8 +309,14 @@ export interface BundleManifest {
   /** Absent in pre-phase-4 manifests — read via `limitsOf()` for defaults. */
   limits?: RuntimeLimits;
   allow_network_tiles: boolean;
-  /** single-file only: 'dc_<id>' -> base64 Parquet bytes. */
+  /** single-file only: 'dc_<id>' -> base64 Parquet bytes, 'obj_<sha>' -> object bytes. */
   inline_blobs: Record<string, string>;
+  /** indexed_file dc_id -> shipped objects. Absent in older manifests. */
+  objects?: Record<string, ObjectCollection>;
+  /** Resolver answers frozen at export. Absent in older manifests. */
+  resolved_structures?: ResolvedStructureEntry[];
+  /** Add-ons embedded into this bundle's HTML. Absent in older manifests. */
+  addons?: RuntimeAddon[];
 }
 
 /** The manifest's sampling ceilings, with server defaults for older bundles. */

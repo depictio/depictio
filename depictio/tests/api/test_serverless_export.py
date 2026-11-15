@@ -86,8 +86,14 @@ from depictio.serverless.producer_a import (
         ({"component_type": "map"}, ComponentTier.FROZEN, TierReason.MAP_TILES),
         ({"component_type": "image"}, ComponentTier.OMITTED, TierReason.IMAGE),
         ({"component_type": "jbrowse"}, ComponentTier.OMITTED, TierReason.JBROWSE),
+        # A computed embedding (``compute_method``) is a Celery kind; with no
+        # derivable request it is omitted. A table-driven one is a data path.
         (
-            {"component_type": "advanced_viz", "viz_kind": "embedding"},
+            {
+                "component_type": "advanced_viz",
+                "viz_kind": "embedding",
+                "config": {"viz_kind": "embedding", "compute_method": "umap"},
+            },
             ComponentTier.OMITTED,
             TierReason.CELERY_COMPUTE,
         ),
@@ -763,10 +769,11 @@ def _dashboard_doc() -> dict[str, Any]:
                 "index": "emb-1",
                 "component_type": "advanced_viz",
                 "viz_kind": "embedding",
-                "wf_id": WF_OID,
                 "dc_id": AV_DC_OID,
                 "dc_config": av_config,
-                "config": {"viz_kind": "embedding"},
+                # A computed (Celery) embedding missing its workflow id: no
+                # request can be derived, so it is omitted in plan and build.
+                "config": {"viz_kind": "embedding", "compute_method": "umap"},
             },
             {"index": "img-1", "component_type": "image"},
         ],

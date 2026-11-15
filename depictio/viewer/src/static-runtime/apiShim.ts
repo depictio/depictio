@@ -67,7 +67,7 @@ import type {
   TextFilterMatchesResult,
 } from '../../../../packages/depictio-react-core/src/api';
 
-import { scopeRegionFilters } from 'depictio-static-core';
+import { base64ToBytes, scopeRegionFilters } from 'depictio-static-core';
 
 import {
   bundle,
@@ -100,6 +100,118 @@ import {
 } from './interactiveLive';
 import { themedFrozenFigure } from './mantinePlotlyTemplate';
 import { renderMultiQCGeneralStatsStatic, renderMultiQCStatic } from './multiqcShim';
+
+// ---- authFetch: object files and the structure resolver ---------------------
+
+/** One `blob:` URL per shipped object, created on first use. */
+const objectUrls = new Map<string, string>();
+
+function objectUrl(uri: string): string | null {
+  const hit = objectUrls.get(uri);
+  if (hit) return hit;
+  if (!uri.startsWith('inline:')) return null;
+  const b64 = rawBundle().inline_blobs?.[uri.slice('inline:'.length)];
+  if (b64 === undefined) return null;
+  const url = URL.createObjectURL(new Blob([base64ToBytes(b64) as BlobPart]));
+  objectUrls.set(uri, url);
+  return url;
+}
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
+const INDEXED_RE = /\/files\/indexed\/([^/?#]+)/;
+const RESOLVE_RE = /\/advanced_viz\/structure\/resolve(?:[?#]|$)/;
+
+/** Normalise a resolver identifier the way `resolveKey` does. */
+function idKey(v: unknown): string | null {
+  const s = typeof v === 'string' ? v.replace(/\s+/g, '').toUpperCase() : '';
+  return s || null;
+}
+
+/**
+ * `authFetch` stand-in. The real one reaches the API; offline it answers the
+ * two object reads the protein tiles make from the manifest and refuses the
+ * rest as a 503 Response (never a network call):
+ *
+ * - `GET /files/indexed/{dc_id}` → `objects[dc_id]` with a `blob:` URL per
+ *   shipped file (the renderer's loader fetches and gunzips it as usual);
+ * - `POST /advanced_viz/structure/resolve` → the resolver answer frozen at
+ *   export for the same uniprot / gene / sequence, else 404 "not found".
+ */
+export async function authFetch(input: string, init: RequestInit = {}): Promise<Response> {
+  const url = String(input);
+  const indexed = INDEXED_RE.exec(url);
+  if (indexed) {
+    const dcId = decodeURIComponent(indexed[1]);
+    const coll = rawBundle().objects?.[dcId];
+    if (!coll) {
+      return jsonResponse(
+        { detail: 'This file collection is not in the bundle.' },
+        404,
+      );
+    }
+    const files = coll.files
+      .map((f) => ({
+        sample: f.sample,
+        name: f.name,
+        size_bytes: f.size_bytes,
+        url: objectUrl(f.uri),
+        index_url: null,
+      }))
+      .filter((f) => f.url !== null);
+    return jsonResponse({
+      data_collection_id: dcId,
+      format: coll.format,
+      index_suffix: '',
+      assembly: null,
+      sample_col: 'sample',
+      // blob: URLs do not expire; the renderer's refresh tick re-reads this.
+      expires_in: 24 * 3600,
+      files,
+    });
+  }
+  if (RESOLVE_RE.test(url)) {
+    let ask: Record<string, unknown> = {};
+    try {
+      ask = JSON.parse(String(init.body ?? '{}')) as Record<string, unknown>;
+    } catch {
+      ask = {};
+    }
+    const want = {
+      uniprot: idKey(ask.uniprot),
+      gene: idKey(ask.gene),
+      sequence: idKey(ask.sequence),
+    };
+    const hit = (rawBundle().resolved_structures ?? []).find(
+      (r) =>
+        (want.uniprot && idKey(r.uniprot) === want.uniprot) ||
+        (want.gene && idKey(r.gene) === want.gene) ||
+        (want.sequence && idKey(r.sequence) === want.sequence),
+    );
+    const modelUrl = hit ? objectUrl(hit.uri) : null;
+    if (!hit || !modelUrl) {
+      return jsonResponse(
+        { detail: 'No structure for this protein was resolved when the bundle was built.' },
+        404,
+      );
+    }
+    return jsonResponse({
+      url: modelUrl,
+      source: 'cache',
+      origin: hit.origin ?? null,
+      upstream: null,
+      accession: hit.accession ?? null,
+      sequence: hit.model_sequence,
+      format: 'pdb',
+    });
+  }
+  return jsonResponse({ detail: `Not available in a read-only bundle: ${url}` }, 503);
+}
 
 // ---- dashboard shell -------------------------------------------------------
 

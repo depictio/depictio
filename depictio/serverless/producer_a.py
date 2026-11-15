@@ -3086,6 +3086,10 @@ def export_manifest(
         workflow_ids_by_dc(project_doc),
     )
 
+    objects, resolved_structures, addons = collect_objects_a(
+        items, tier_by_id, pruned_frames, inline_blobs, user
+    )
+
     built_at = datetime.now(timezone.utc).isoformat()
     manifest = BundleManifest(
         mode=BundleMode.SINGLE_FILE,
@@ -3112,6 +3116,9 @@ def export_manifest(
         links=links_section,
         limits=_runtime_limits(),
         inline_blobs=inline_blobs,
+        objects=objects,
+        resolved_structures=resolved_structures,
+        addons=addons,
     )
     logger.info(
         "producer A: exported %s (%d tab(s), %d component(s), %d data collection(s), "
@@ -3134,6 +3141,215 @@ def export_manifest(
         tabs=[tab.tab_row() for tab in tabs],
         size=bundle_size,
     )
+
+
+def _indexed_file_sources(dc_id: str) -> tuple[str, list[Any]]:
+    """``(format, [ObjectSource])`` of one indexed_file collection, from Mongo + S3.
+
+    The same documents ``GET /files/indexed/{dc_id}`` lists, read here with the
+    backend's own S3 client rather than through presigned URLs: the export runs
+    next to the store, and a presigned URL is signed for the browser's endpoint.
+    """
+    from depictio.api.v1.endpoints.files_endpoints import routes as files_routes
+    from depictio.api.v1.s3 import s3_client
+    from depictio.serverless.objects import ObjectSource
+
+    dc_oid = ObjectId(dc_id)
+    properties = files_routes._indexed_file_dc_properties(dc_oid)
+    if not properties:
+        return "", []
+    docs = files_routes.files_collection.find(
+        {"data_collection_id": dc_oid, "s3_key": {"$ne": None}},
+        {"sample": 1, "filename": 1, "filesize": 1, "s3_key": 1},
+    )
+    bucket = files_routes.settings.minio.bucket
+
+    def loader(key: str):
+        def load() -> bytes:
+            return s3_client.get_object(Bucket=bucket, Key=key)["Body"].read()
+
+        return load
+
+    sources = []
+    for doc in docs:
+        key = doc.get("s3_key")
+        if not key:
+            continue
+        sources.append(
+            ObjectSource(
+                sample=str(doc.get("sample") or ""),
+                name=str(doc.get("filename") or str(key).rsplit("/", 1)[-1]),
+                size_bytes=doc.get("filesize"),
+                load=loader(str(key)),
+            )
+        )
+    return str(properties.get("format", "")).lower(), sources
+
+
+def _entity_values(comp: dict[str, Any], pruned_frames: dict[str, Any]) -> list[str]:
+    """The entities the component's bound table names, most rows first."""
+    column = (comp.get("config") or {}).get("entity_col")
+    frame = pruned_frames.get(str(comp.get("dc_id") or ""))
+    if not column or frame is None or column not in getattr(frame, "columns", ()):
+        return []
+    try:
+        counts = frame.group_by(column).len().sort("len", descending=True)
+        return [str(v) for v in counts[column].to_list() if v is not None]
+    except Exception:
+        return []
+
+
+def _resolve_structures_a(
+    comp: dict[str, Any],
+    pruned_frames: dict[str, Any],
+    user: ExportUser,
+    budget: Any,
+    inline_blobs: dict[str, str],
+) -> tuple[list[Any], str | None]:
+    """Freeze the structure resolver's answers for a resolve-mode tile's entities.
+
+    One resolver call per entity of the bundled table (capped), through the
+    route's own function, so the bundle carries the model the live tile would
+    have drawn; the model is read from the resolver's bucket cache. A disabled
+    resolver leaves the tile with its own "resolver disabled" message.
+    """
+    from depictio.api.v1.endpoints.advanced_viz_endpoints import structure_resolver as sr
+    from depictio.models.models.serverless import ResolvedStructure
+    from depictio.serverless.objects import RESOLVE_MAX_ENTITIES, pack_object
+
+    cfg = sr.settings.structure_resolver
+    if not cfg.enabled:
+        return [], "the structure resolver is disabled on the exporting instance"
+    config = comp.get("config") or {}
+    frame = pruned_frames.get(str(comp.get("dc_id") or ""))
+    if frame is None:
+        return [], "the residue table is not bundled"
+    entity_col = config.get("entity_col")
+    cols = {k: config.get(f"{k}_col") for k in ("uniprot", "gene", "sequence")}
+    taxon = int(config.get("taxon") or 9606)
+    out: list[Any] = []
+    entities = _entity_values(comp, pruned_frames)[:RESOLVE_MAX_ENTITIES] or [None]
+    for entity in entities:
+        rows = frame if entity is None else frame.filter(frame[entity_col].cast(str) == entity)
+        ask: dict[str, Any] = {}
+        for key, col in cols.items():
+            if col and col in rows.columns:
+                vals = [v for v in rows[col].to_list() if v not in (None, "")]
+                ask[key] = str(vals[0]) if vals else None
+        if not any(ask.values()):
+            continue
+        try:
+            payload = sr.StructureResolveRequest(taxon=taxon, **ask)
+            answer = sr.resolve_structure(payload, current_user=user)
+            digest = sr._normalise(payload, cfg).cache_key()
+            key, _ = sr._keys(cfg, digest)
+            data = sr._s3_client().get_object(Bucket=sr.settings.s3.bucket, Key=key)["Body"].read()
+        except Exception as exc:
+            logger.warning("producer A: structure resolve failed for %s: %s", ask, exc)
+            continue
+        if not budget.admits(len(data)):
+            continue
+        blob_key, b64, _gz = pack_object(data)
+        if blob_key not in budget.seen:
+            budget.seen.add(blob_key)
+            budget.used += len(data)
+            inline_blobs[blob_key] = b64
+        out.append(
+            ResolvedStructure(
+                uniprot=ask.get("uniprot"),
+                gene=ask.get("gene"),
+                sequence=ask.get("sequence"),
+                taxon=taxon,
+                uri=f"inline:{blob_key}",
+                origin=answer.get("origin"),
+                accession=answer.get("accession"),
+                model_sequence=str(answer.get("sequence") or ""),
+            )
+        )
+    return out, None if out else "no structure could be resolved at export"
+
+
+def collect_objects_a(
+    items: list[tuple[FamilyTab, dict[str, Any], str]],
+    tier_by_id: dict[str, TierRow],
+    pruned_frames: dict[str, Any],
+    inline_blobs: dict[str, str],
+    user: ExportUser,
+) -> tuple[dict[str, Any], list[Any], list[Any]]:
+    """Ship the object files the live protein tiles read (``objects`` path).
+
+    Returns ``(objects, resolved_structures, addons)``. A tile whose files could
+    not be shipped (none found, or none under the cap) drops to ``partial`` with
+    the reason: its residue-table half still draws, its structure half says the
+    file is not in the bundle.
+    """
+    from depictio.serverless.addons import addon_entry
+    from depictio.serverless.objects import (
+        THREE_DMOL_KINDS,
+        ObjectBudget,
+        build_collection,
+        collection_detail,
+        object_dc_refs,
+        object_kind,
+        resolve_mode,
+    )
+
+    budget = ObjectBudget()
+    objects: dict[str, Any] = {}
+    resolved: list[Any] = []
+    three_dmol: list[str] = []
+    for _tab, comp, cid in items:
+        row = tier_by_id[cid]
+        if comp.get("component_type") != "advanced_viz" or row.tier is ComponentTier.OMITTED:
+            continue
+        kind = object_kind(comp)
+        refs = object_dc_refs(comp)
+        if not refs and not resolve_mode(comp):
+            continue
+        notes: list[str] = []
+        shipped = False
+        for _base, dc_id in refs:
+            if dc_id not in objects:
+                try:
+                    fmt, sources = _indexed_file_sources(dc_id)
+                except Exception as exc:
+                    logger.warning("producer A: objects of %s unreadable: %s", dc_id, exc)
+                    fmt, sources = "", []
+                objects[dc_id] = build_collection(
+                    sources, fmt, budget, inline_blobs, _entity_values(comp, pruned_frames)
+                )
+            collection = objects[dc_id]
+            shipped = shipped or bool(collection.files)
+            note = collection_detail(collection)
+            if note:
+                notes.append(note)
+            if not collection.total:
+                notes.append(f"the file collection {dc_id} holds no readable object")
+        if resolve_mode(comp):
+            answers, note = _resolve_structures_a(comp, pruned_frames, user, budget, inline_blobs)
+            resolved.extend(answers)
+            shipped = shipped or bool(answers)
+            if note:
+                notes.append(note)
+        if kind in THREE_DMOL_KINDS and shipped:
+            three_dmol.append(str(comp.get("title") or cid))
+        if not shipped:
+            row.tier = ComponentTier.PARTIAL
+            row.reason = TierReason.UNSUPPORTED
+            row.detail = (
+                f"advanced_viz '{kind}': the residue table is live, but no file it draws "
+                f"from could be shipped ({'; '.join(notes) or 'none found'})"
+            )
+        elif notes:
+            row.detail = f"advanced_viz '{kind}': live; " + "; ".join(notes)
+    addons = []
+    if three_dmol:
+        entry = addon_entry("3dmol", "3D structure tiles: " + ", ".join(three_dmol))
+        if entry is None:
+            logger.warning("producer A: the 3dmol add-on is not built; 3D tiles show the stub")
+        else:
+            addons.append(entry)
+    return objects, resolved, addons
 
 
 def _refuse_oversized_render(html: str, size: BundleSize | None) -> None:

@@ -17,6 +17,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { applyAddons } from './addons.mjs';
+
 const VIEWER_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const TEMPLATE = join(VIEWER_DIR, 'dist-static', 'static.html');
 const REGISTRY = join(VIEWER_DIR, 'demo', 'manifests.json');
@@ -43,12 +45,22 @@ for (const entry of registry) {
   const manifestPath = resolve(VIEWER_DIR, entry.manifest);
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8'));
   const blob = JSON.stringify(manifest).replace(/<\//g, '<\\/');
-  const html = template.replaceAll(TOKEN, () => blob);
+  // Add-ons first (the producers' order): the manifest names the ones it needs.
+  const withAddons = applyAddons(template, (manifest.addons ?? []).map((a) => a.name));
+  const html = withAddons.replaceAll(TOKEN, () => blob);
   const out = join(SITE_DIR, `demo-${entry.id}.html`);
   writeFileSync(out, html);
   entries.push({ ...entry, file: `demo-${entry.id}.html`, bytes: html.length });
   console.log(`demo-${entry.id}.html: ${(html.length / 1e6).toFixed(2)} MB — ${entry.title}`);
 }
+
+// The "with structure viewer" template: the base runtime plus the 3Dmol.js
+// add-on, i.e. the floor of any bundle holding a molecule_3d tile. CI checks it
+// against its own byte budget beside the base one.
+writeFileSync(
+  join(VIEWER_DIR, 'dist-static', 'static-structure.html'),
+  applyAddons(template, ['3dmol']),
+);
 
 const sha = process.env.GITHUB_SHA?.slice(0, 8) ?? 'local';
 const built = new Date().toISOString();

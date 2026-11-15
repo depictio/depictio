@@ -642,6 +642,80 @@ def _depictio_version() -> str:
             return "unknown"
 
 
+def _collect_objects_b(
+    components: list[dict[str, Any]],
+    tier_by_id: dict[str, TierRow],
+    data_path: Path,
+    inline_blobs: dict[str, str],
+) -> tuple[dict[str, Any], list[Any]]:
+    """Ship the object files of live protein tiles from ``{data_dir}/{wf}/{dc_tag}/``.
+
+    Producer B's convention for an ``indexed_file`` collection: a directory
+    named after the tag, one file per entity (the file name without its
+    extensions is the entity, ``demo_protein.pae.tsv`` → ``demo_protein``).
+    Resolve-mode structure tiles need the resolver, which producer B never
+    calls: their residue table stays live and the structure says it is absent.
+    """
+    from depictio.serverless.addons import addon_entry
+    from depictio.serverless.objects import (
+        THREE_DMOL_KINDS,
+        ObjectBudget,
+        build_collection,
+        collection_detail,
+        local_sources,
+        object_dc_tags,
+        object_kind,
+        resolve_mode,
+    )
+
+    budget = ObjectBudget()
+    objects: dict[str, Any] = {}
+    three_dmol: list[str] = []
+    for comp in components:
+        row = tier_by_id[comp["tag"]]
+        if comp.get("component_type") != "advanced_viz" or row.tier is ComponentTier.OMITTED:
+            continue
+        kind = object_kind(comp)
+        tags = object_dc_tags(comp)
+        if not tags and not resolve_mode(comp):
+            continue
+        wf_tag = comp.get("workflow_tag") or ""
+        notes: list[str] = []
+        shipped = False
+        for _base, tag in tags:
+            dc_id = synthetic_dc_id(wf_tag, tag)
+            if dc_id not in objects:
+                directory = data_path / wf_tag / tag
+                objects[dc_id] = build_collection(
+                    local_sources(directory), "", budget, inline_blobs
+                )
+                if not objects[dc_id].total:
+                    notes.append(f"no files under {directory}")
+            shipped = shipped or bool(objects[dc_id].files)
+            note = collection_detail(objects[dc_id])
+            if note:
+                notes.append(note)
+        if resolve_mode(comp):
+            notes.append("producer B does not call the structure resolver")
+        if kind in THREE_DMOL_KINDS and shipped:
+            three_dmol.append(str(comp.get("title") or comp["tag"]))
+        if not shipped:
+            row.tier = ComponentTier.PARTIAL
+            row.reason = TierReason.UNSUPPORTED
+            row.detail = (
+                f"advanced_viz '{kind}': the residue table is live, but no file it draws "
+                f"from was shipped ({'; '.join(notes) or 'none found'})"
+            )
+        elif notes:
+            row.detail = f"advanced_viz '{kind}': live; " + "; ".join(notes)
+    addons = []
+    if three_dmol:
+        entry = addon_entry("3dmol", "3D structure tiles: " + ", ".join(three_dmol))
+        if entry is not None:
+            addons.append(entry)
+    return objects, addons
+
+
 def build_manifest(
     spec: DashboardDataLite,
     data_dir: str | Path,
@@ -892,6 +966,8 @@ def build_manifest(
                 )
             frozen[row.component_id] = FrozenPayload(kind="figure", payload=payload)
 
+    objects, addons = _collect_objects_b(components, tier_by_id, data_path, inline_blobs)
+
     dashboard_id = hashlib.sha1(f"dashboard:{spec.title}".encode()).hexdigest()[:24]
     manifest = BundleManifest(
         mode=mode,
@@ -914,6 +990,8 @@ def build_manifest(
         links=LinksSection(configs=link_configs),
         limits=_runtime_limits(),
         inline_blobs=inline_blobs,
+        objects=objects,
+        addons=addons,
     )
     # A link whose source DC did not end up bundled (its only components were
     # omitted) has no data to translate through and no precomputed table — the
@@ -939,7 +1017,10 @@ def render_bundle_html(manifest: BundleManifest) -> str:
             f"`cd depictio/viewer && pnpm run build:static`, or point "
             f"{TEMPLATE_PATH_ENV} at a prebuilt static.html"
         )
-    return inject(template.read_text(), BUNDLE_TOKEN, manifest.model_dump(mode="json"))
+    from depictio.serverless.addons import apply_addons
+
+    html = apply_addons(template.read_text(), [a.name for a in manifest.addons])
+    return inject(html, BUNDLE_TOKEN, manifest.model_dump(mode="json"))
 
 
 def build_static(
