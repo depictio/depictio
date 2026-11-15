@@ -175,13 +175,10 @@ class TestPublishSubworkflow:
         include = re.search(r"include \{ DEPICTIO_INGEST \} from '([^']+)'", main).group(1)
         assert (PUBLISH / include).with_suffix(".nf").resolve() == (INGEST / "main.nf").resolve()
 
-    def test_every_setting_it_reads_has_a_default(self):
-        """A pipeline that includes nextflow.config sets none of them."""
-        read = set(re.findall(r"params\.(depictio_\w+)", (PUBLISH / "main.nf").read_text()))
-        config = (PUBLISH / "nextflow.config").read_text()
-        defaults = set(re.findall(r"^\s+(depictio_\w+)\s+=", config, re.MULTILINE))
-        used = set(re.findall(r"params\.(depictio_\w+)", config))
-        assert read | used <= defaults
+    def test_it_reads_no_params(self):
+        """nf-core asks a subworkflow to take every setting as an input."""
+        code = [line.split("//", 1)[0] for line in (PUBLISH / "main.nf").read_text().splitlines()]
+        assert not [line for line in code if "params." in line]
 
     def test_its_selector_matches_with_or_without_an_enclosing_workflow(self):
         selector = re.search(

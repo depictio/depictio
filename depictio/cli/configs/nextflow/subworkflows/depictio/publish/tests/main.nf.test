@@ -17,13 +17,16 @@ nextflow_workflow {
         when {
             params {
                 outdir = "$outputDir"
-                depictio_id = 'run'
             }
             workflow {
                 """
                 input[0] = channel.of('multiqc done')
                 input[1] = "${moduleDir}/tests"
                 input[2] = "${moduleDir}/meta.yml"
+                input[3] = null
+                input[4] = null
+                input[5] = null
+                input[6] = null
                 """
             }
         }
@@ -32,8 +35,8 @@ nextflow_workflow {
             assertAll(
                 { assert workflow.success },
                 { assert workflow.out.result.size() == 1 },
-                { assert file(workflow.out.result[0][1]).name == 'run.depictio.json' },
-                { assert file(workflow.out.artifact[0][1]).name == 'run_depictio' }
+                { assert file(workflow.out.result[0][1]).name.endsWith('.depictio.json') },
+                { assert file(workflow.out.artifact[0][1]).name.endsWith('_depictio') }
             )
         }
     }

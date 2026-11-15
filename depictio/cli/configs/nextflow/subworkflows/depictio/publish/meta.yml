@@ -5,7 +5,9 @@ description: |
   through the depictio/ingest module. The template is detected from the run's
   pipeline_info/ and its route variables from the run's params.json, so the
   subworkflow is the same for every pipeline Depictio has a template for.
-  Settings are params.depictio_* (nextflow.config next to this file).
+  Every setting is an input; nextflow.config next to it carries the
+  DEPICTIO_INGEST process settings (publishDir, ext.args from
+  params.depictio_project / depictio_vars / depictio_ingest_args / depictio_local_args).
 keywords:
   - depictio
   - dashboard
@@ -27,6 +29,18 @@ input:
       description: |
         The run's --input (path or URL), staged at input/samplesheet.<csv|tsv>
         where the templates read it; null when there is none
+  - template:
+      type: string
+      description: A template id (nf-core/rnaseq/3.26.0), or null to detect it from pipeline_info/
+  - project_config:
+      type: string
+      description: A project YAML, for a pipeline with no template, or null
+  - dashboards:
+      type: string
+      description: Dashboard YAML path(s) to import as well, or null
+  - cli_config:
+      type: string
+      description: A CLI.yaml, to send the run to that instance instead of building an artifact, or null
 output:
   - artifact:
       type: channel

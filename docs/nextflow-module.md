@@ -134,7 +134,8 @@ from `input/`. Nothing in it names a pipeline:
   variable, the parameter it follows (`from_params` in its `template.yaml`,
   checked in CI against that release's `nextflow_schema.json`).
 
-In the pipeline's `main.nf`, after the main workflow:
+In the pipeline's `main.nf`, after the main workflow. Every setting is an
+input, as nf-core asks of a subworkflow, so the pipeline passes its own params:
 
 ```groovy
 include { DEPICTIO_PUBLISH } from './subworkflows/local/depictio/publish/main'
@@ -144,38 +145,43 @@ if (params.depictio) {
         NFCORE_RNASEQ.out.multiqc_report,   // published outputs: wait for them
         params.outdir,
         params.input,                       // the samplesheet, path or URL
+        params.depictio_template,           // null: detected from pipeline_info/
+        params.depictio_project_config,     // null: the template's project
+        params.depictio_dashboards,         // null: the template's dashboards
+        params.depictio_cli_config,         // null: an artifact
     )
 }
 ```
 
-In its `nextflow.config`, after its `params` block:
+In its `nextflow.config`, the params, then the subworkflow's process settings
+(or copy that block into `conf/modules.config`):
 
 ```groovy
-params { depictio = true }
+params {
+    depictio                = true
+    depictio_template       = null
+    depictio_project_config = null
+    depictio_dashboards     = null
+    depictio_cli_config     = null
+    depictio_project        = null   // project name (default: the template's)
+    depictio_vars           = [:]    // e.g. [GROUP_COL: 'condition']
+    depictio_ingest_args    = ''     // further `depictio ingest` options
+    depictio_local_args     = ''     // `depictio local up` options, e.g. '--port 8123'
+}
 includeConfig 'subworkflows/local/depictio/publish/nextflow.config'
 ```
 
-Declare `depictio` and the `depictio_*` params in `nextflow_schema.json`, or
-nf-schema rejects them. The included config publishes into
-`<outdir>/depictio/`, ignores a failed ingestion (Depictio reports on the run,
-it is not part of it), and takes every setting from a param, so a run adjusts
-it with `--depictio_*` or a params file, and a site with a `-c` config:
-
-| Param | Default | |
-| --- | --- | --- |
-| `depictio_template` | detected | a template id, to skip detection (`nf-core/rnaseq/3.26.0`) |
-| `depictio_project_config` | none | a project YAML, for a pipeline with no template |
-| `depictio_dashboards` | none | dashboard YAML(s) to import as well |
-| `depictio_cli_config` | none: an artifact | a `CLI.yaml`, to send the run to that instance |
-| `depictio_project` | the template's | the project name |
-| `depictio_vars` | `[:]` | template variables the run's params cannot tell, e.g. `[GROUP_COL: 'condition']` |
-| `depictio_ingest_args` | `''` | further `depictio ingest` options |
-| `depictio_local_args` | `''` | `depictio local up` options, e.g. `--port 8123` |
-| `depictio_id` | `workflow.runName` | names the outputs |
+Declare them in `nextflow_schema.json` too, or nf-schema rejects them. The
+included block publishes into `<outdir>/depictio/` (outputs named after the
+run, `workflow.runName`), ignores a failed ingestion (Depictio reports on the
+run, it is not part of it), and turns the last four params into the module's
+`ext.args` / `ext.args2`. A run sets any of them with `--depictio_*` or a params
+file, a site with a `-c` config.
 
 An explicit `depictio_vars` entry wins over what the run's params say. This
-was run end to end on nf-core/rnaseq 3.26.0 (`-profile test,docker`) and, in CI,
-on further nf-core pipelines at their templates' releases.
+was run end to end on nf-core/rnaseq 3.26.0 (`-profile test,docker`, and under
+Apptainer); CI also runs other nf-core pipelines through it, each at its
+template's release (`allinone-nfcore-templates` in `build-images.yaml`).
 
 The results directory is read as published, so it relies on the outputs having
 been copied by the time the subworkflow starts. Publishing is asynchronous; a
