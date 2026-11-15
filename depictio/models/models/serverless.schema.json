@@ -1419,6 +1419,15 @@
       "title": "Frozen",
       "type": "object"
     },
+    "initial_filters": {
+      "description": "Interactive filters the runtime opens on, in the viewer's InteractiveFilter wire shape (index, value, column_name, interactive_component_type, metadata). Empty = the dashboard's own defaults. A report (the Quarto export's host of the runtime) sets it to the exported analysis state",
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Initial Filters",
+      "type": "array"
+    },
     "inline_blobs": {
       "additionalProperties": {
         "type": "string"

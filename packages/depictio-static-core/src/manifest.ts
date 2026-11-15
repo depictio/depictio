@@ -329,6 +329,13 @@ export interface BundleManifest {
   addons?: RuntimeAddon[];
   /** component_id -> Python job (only with the Pyodide add-on). */
   python_components?: Record<string, PythonComponent>;
+  /**
+   * The interactive filters the runtime opens on, in the viewer's
+   * `InteractiveFilter` wire shape. Empty = the dashboard's own defaults. A
+   * report sets it to the exported analysis state, so the tiles it mounts
+   * open on the state the document narrates. Absent in older manifests.
+   */
+  initial_filters?: Record<string, unknown>[];
 }
 
 /** The manifest's sampling ceilings, with server defaults for older bundles. */

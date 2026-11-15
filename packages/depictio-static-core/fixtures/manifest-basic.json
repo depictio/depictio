@@ -178,5 +178,6 @@
   "objects": {},
   "resolved_structures": [],
   "addons": [],
-  "python_components": {}
+  "python_components": {},
+  "initial_filters": []
 }

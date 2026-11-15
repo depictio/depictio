@@ -764,5 +764,14 @@ class BundleManifest(BaseModel):
             "when the add-on is embedded)"
         ),
     )
+    initial_filters: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description=(
+            "Interactive filters the runtime opens on, in the viewer's InteractiveFilter "
+            "wire shape (index, value, column_name, interactive_component_type, metadata). "
+            "Empty = the dashboard's own defaults. A report (the Quarto export's host of "
+            "the runtime) sets it to the exported analysis state"
+        ),
+    )
 
     model_config = ConfigDict(extra="forbid")
