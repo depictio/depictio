@@ -238,6 +238,29 @@ The artifact holds the stack's keys, admin token and storage password, like any
 local home: share it as you would the data itself. A stack runs a single user,
 so the artifact does too.
 
+### Reopen with the all-in-one image
+
+Without `depictio[local]`, the `depictio-allinone` image runs the same stack
+from one folder. Every release publishes it for linux/amd64 and linux/arm64;
+take the depictio version in the module's `versions.yml`, and mount the artifact
+itself, not `results/depictio/`:
+
+```bash
+docker run --rm -p 127.0.0.1:8058:8058 \
+  -v "$PWD/results/depictio/<run>_depictio:/data" \
+  ghcr.io/depictio/depictio-allinone:<version>
+# -> http://localhost:8058/dashboards
+
+# Apptainer / Singularity
+apptainer build depictio-allinone.sif docker://ghcr.io/depictio/depictio-allinone:<version>
+apptainer run --containall --bind "$PWD/results/depictio/<run>_depictio:/data" depictio-allinone.sif
+```
+
+It needs no download at start and stops cleanly with `docker stop -t 60`; files
+it writes stay owned by the artifact's owner. See
+[`docker-images/allinone/README.md`](../docker-images/allinone/README.md) for
+its settings, Apptainer on a shared node and what it was tested on.
+
 Inside the task, `depictio local up` fetches the same binaries into the work
 directory. Under conda they come from the conda-forge package cache after the
 first run; without that cache, every task downloads them, so the node needs

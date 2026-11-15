@@ -96,11 +96,21 @@ def check_home_dir() -> None:
             return  # created by ensure_dirs (an anonymous folder: nothing kept)
         if not os.access(HOME_DIR, os.R_OK | os.W_OK | os.X_OK):
             die(unusable)
-        # The usual mistake: mounting the pipeline's results folder instead of
-        # results/depictio.
+        # The usual mistake: mounting results/ or results/depictio/ instead of the
+        # artifact itself, results/depictio/<run>_depictio/.
         marker = ".depictio-local-home"
-        if (HOME_DIR / "depictio" / marker).is_file() and not (HOME_DIR / marker).is_file():
-            die(f"{HOME_DIR} holds a depictio home in depictio/: mount that folder at {HOME_DIR}")
+        if not (HOME_DIR / marker).is_file():
+            homes = sorted(
+                str(m.parent.relative_to(HOME_DIR))
+                for pattern in (f"*/{marker}", f"*/*/{marker}")
+                for m in HOME_DIR.glob(pattern)
+                if m.is_file()
+            )
+            if homes:
+                die(
+                    f"{HOME_DIR} holds a depictio home in {', '.join(h + '/' for h in homes)}: "
+                    f"mount that folder at {HOME_DIR}"
+                )
     except PermissionError:
         die(unusable)
 
