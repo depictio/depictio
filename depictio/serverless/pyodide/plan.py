@@ -115,7 +115,8 @@ def unavailable_reason(features: set[str]) -> str | None:
 
     try:
         load_assets(features)
-    except PyodideAssetError as exc:
+    except (PyodideAssetError, OSError) as exc:
+        # An I/O error is as much "not available here" as a failed download.
         return str(exc)
     return None
 

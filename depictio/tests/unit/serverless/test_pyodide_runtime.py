@@ -171,3 +171,32 @@ def test_candidates_and_sizes() -> None:
     # Sized from pin.json alone: core + numpy + polars is the floor.
     assert assets.estimate_bytes(set()) > 30_000_000
     assert assets.estimate_bytes({"group_compare"}) - assets.estimate_bytes(set()) > 15_000_000
+
+
+def test_an_unwritable_cache_does_not_fail_the_export(tmp_path: Path, monkeypatch) -> None:
+    """The asset cache is a convenience: the export's e2e failed with
+    "[Errno 13] Permission denied" when the worker could not write it. The
+    verified bytes come back anyway."""
+    import hashlib
+    import io
+
+    from depictio.serverless.pyodide import assets
+
+    blocker = tmp_path / "not-a-dir"
+    blocker.write_text("a file where the cache directory would go")
+    monkeypatch.setenv(assets.CACHE_ENV, str(blocker / "cache"))
+    monkeypatch.delenv(assets.DIR_ENV, raising=False)
+    payload = b"pinned bytes"
+    monkeypatch.setattr(assets.urllib.request, "urlopen", lambda *a, **k: io.BytesIO(payload))
+    got = assets._read("x.whl", hashlib.sha256(payload).hexdigest(), url="https://example.org/x")
+    assert got == payload
+
+
+def test_an_io_error_leaves_the_runtime_unavailable_not_the_export_failed(monkeypatch) -> None:
+    from depictio.serverless.pyodide import assets, plan
+
+    def _denied(_features):
+        raise PermissionError(13, "Permission denied")
+
+    monkeypatch.setattr(assets, "load_assets", _denied)
+    assert "Permission denied" in (plan.unavailable_reason({"code_figure"}) or "")
