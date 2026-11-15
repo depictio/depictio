@@ -99,6 +99,31 @@ def test_emitted_source_matches_add_filter(itype, column, value, dtype):
     assert got.equals(want), f"{emitted.expr}\n got {got}\n want {want}"
 
 
+# The options add_filter takes besides the value: a Slider's comparison, a
+# TextInput's case and match mode. Each one changes which rows survive, so each
+# one is checked against the server's own predicate.
+OPTION_CASES = [
+    ("Slider", "i", 2, None, {}),  # default: a ``>=`` threshold
+    ("Slider", "i", 0, None, {}),  # 0 is a threshold, not "no filter"
+    *[("Slider", "i", 2, None, {"slider_mode": m}) for m in ("gt", "lte", "lt", "eq", "ne")],
+    ("TextInput", "s", "A", None, {}),  # case-insensitive by default
+    ("TextInput", "s", "A", pl.String, {"case_sensitive": True}),
+    ("TextInput", "s", "a.", None, {"match_mode": "contains"}),  # literal, not a regex
+    ("TextInput", "i", "2", pl.Int64, {}),  # a non-string column is matched on its text
+]
+
+
+@pytest.mark.parametrize("itype,column,value,dtype,options", OPTION_CASES)
+def test_filter_options_match_add_filter(itype, column, value, dtype, options):
+    out: list = []
+    add_filter(out, itype, column, value, dtype=dtype, **options)
+    emitted = emit_predicate(itype, column, value, dtype, **options)
+    assert len(out) == 1 and emitted is not None
+    got = FRAME.filter(_eval(emitted))
+    want = FRAME.filter(out[0])
+    assert got.equals(want), f"{emitted.expr}\n got {got}\n want {want}"
+
+
 @pytest.mark.parametrize(
     "itype,value",
     [

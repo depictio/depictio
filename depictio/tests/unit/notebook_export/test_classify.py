@@ -13,7 +13,7 @@ from depictio.models.components.types import AdvancedVizKind, ComponentType
 
 
 def test_coverage_table_names_every_component_type():
-    assert set(COMPONENT_COVERAGE) == set(get_args(ComponentType)) | {"multiqc"}
+    assert set(COMPONENT_COVERAGE) == set(get_args(ComponentType)) | {"multiqc", "highlight"}
     assert set(ALL_COMPONENT_TYPES) == set(COMPONENT_COVERAGE)
 
 

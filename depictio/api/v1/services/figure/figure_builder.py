@@ -474,6 +474,8 @@ def _value_axis_title_from_labels(fig: Any, visu_type: str, kwargs: dict[str, An
         fig.update_xaxes(title_text=title)
     else:
         fig.update_yaxes(title_text=title)
+
+
 # px parameters whose stored value is a JSON string (the builder serialises
 # maps and lists into text fields) and must be parsed before reaching px.
 JSON_PARSEABLE_PX_PARAMS: frozenset[str] = frozenset(

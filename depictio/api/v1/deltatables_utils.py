@@ -387,6 +387,8 @@ def text_filter_predicate(
     if dtype != pl.String:
         column = column.cast(pl.Utf8, strict=False)
     return column.str.contains(pattern, literal=literal)
+
+
 def parse_iso_datetime(raw: object) -> object:
     """Parse the React-supplied ISO strings a date-range control emits.
 

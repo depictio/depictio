@@ -11,7 +11,20 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[4]
 PROJECTS = REPO_ROOT / "depictio" / "projects"
 PENGUINS_SEEDS = PROJECTS / "init" / "penguins" / ".db_seeds"
-AMPLISEQ_SEEDS = PROJECTS / "nf-core" / "ampliseq" / "2.16.0" / ".db_seeds"
+
+
+def _latest_seeds(pipeline: Path) -> Path:
+    """The highest template version that ships seeds, as seeding itself resolves it."""
+    versions = [
+        d
+        for d in pipeline.iterdir()
+        if d.is_dir() and (d / ".db_seeds").is_dir() and d.name[0].isdigit()
+    ]
+    newest = max(versions, key=lambda d: tuple(int(x) for x in d.name.split(".") if x.isdigit()))
+    return newest / ".db_seeds"
+
+
+AMPLISEQ_SEEDS = _latest_seeds(PROJECTS / "nf-core" / "ampliseq")
 
 
 def strip_extended_json(obj: Any) -> Any:

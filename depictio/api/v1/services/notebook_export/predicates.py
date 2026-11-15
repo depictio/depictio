@@ -21,7 +21,13 @@ from typing import Any
 
 import polars as pl
 
-from depictio.api.v1.deltatables_utils import LINK_NO_MATCH, parse_iso_datetime
+from depictio.api.v1.deltatables_utils import (
+    DEFAULT_SLIDER_MODE,
+    LINK_NO_MATCH,
+    SLIDER_MODES,
+    parse_iso_datetime,
+    text_filter_pattern,
+)
 from depictio.models.components.filter_expr import validate_filter_expr
 
 CATEGORICAL_TYPES: frozenset[str] = frozenset({"Select", "MultiSelect", "SegmentedControl"})
@@ -148,8 +154,17 @@ def emit_predicate(
     column: str,
     value: Any,
     dtype: pl.DataType | None = None,
+    *,
+    slider_mode: str | None = None,
+    case_sensitive: object = None,
+    match_mode: object = None,
 ) -> PredicateSource | None:
     """Source for what ``add_filter`` would append, or ``None`` when it appends nothing.
+
+    ``slider_mode``, ``case_sensitive`` and ``match_mode`` are ``add_filter``'s
+    own options, read off the same filter entry, and resolved by the same
+    helpers: a Slider is a ``>=`` threshold unless its mode says otherwise, a
+    TextInput a case-insensitive regex unless its options say otherwise.
 
     ``None`` is also what a ``Switch`` gets: the server has no branch for it,
     so a Switch never narrows rows, and the notebook must not pretend it does.
@@ -163,13 +178,22 @@ def emit_predicate(
         values = value if isinstance(value, list) else [value]
         return _categorical(column, values, dtype)
     if itype == "TextInput":
-        if not value:
+        compiled = text_filter_pattern(value, case_sensitive, match_mode)
+        if compiled is None:
             return None
-        return PredicateSource(expr=f"{_column(column)}.str.contains({literal(value)})")
+        pattern, is_literal = compiled
+        target = _column(column)
+        if dtype != pl.String:
+            target += ".cast(pl.Utf8, strict=False)"
+        flag = ", literal=True" if is_literal else ""
+        return PredicateSource(expr=f"{target}.str.contains({literal(pattern)}{flag})")
     if itype == "Slider":
-        if not value:
+        # `is not None`, not truthiness: 0 is a real threshold.
+        if value is None or value == "" or isinstance(value, list):
             return None
-        return PredicateSource(expr=f"{_column(column)} == {literal(value)}")
+        mode = (slider_mode or DEFAULT_SLIDER_MODE).lower()
+        op = SLIDER_MODES.get(mode, SLIDER_MODES[DEFAULT_SLIDER_MODE])
+        return PredicateSource(expr=f"{_column(column)} {op} {literal(value)}")
     if itype == "RangeSlider":
         if not value:
             return None

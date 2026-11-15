@@ -265,6 +265,14 @@ EXEMPT: dict[tuple[str, str], str] = {
     (_DASH, "data_version_status_endpoint"): _READ,
     (_DASH, "text_filter_matches_endpoint"): _READ,
     (_DASH, "resolve_groups_endpoint"): _READ,
+    # Notebook export: the dashboard as a document, and one tile in a frame.
+    ("dashboards_endpoints.notebook_export", "notebook_export_preflight"): _READ,
+    ("dashboards_endpoints.notebook_export", "notebook_export"): _READ,
+    ("dashboards_endpoints.notebook_export", "notebook_export_render"): (
+        "renders a report into the caller's own S3 prefix; the dashboard is only read"
+    ),
+    ("dashboards_endpoints.embed", "component_embed"): _READ,
+    ("dashboards_endpoints.embed", "component_figure"): _READ,
     (_VER, "create_dashboard_version"): "records the current state; changes no content",
     (_VER, "pin_dashboard_version"): "ledger metadata; changes no content",
     (_VER, "unpin_dashboard_version"): "ledger metadata; changes no content",

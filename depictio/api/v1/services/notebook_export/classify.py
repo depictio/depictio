@@ -10,8 +10,9 @@ notebook itself:
   lives in Python packages or in the React viewer rather than in a formula;
 * ``omitted`` — nothing can stand in for it, and the notebook says why.
 
-``COMPONENT_COVERAGE`` must name every ``ComponentType`` (plus ``multiqc``,
-which ``stored_metadata`` carries although the literal does not list it);
+``COMPONENT_COVERAGE`` must name every ``ComponentType`` (plus ``multiqc`` and
+``highlight``, which ``stored_metadata`` carries although the literal does not
+list them);
 the exhaustiveness test fails when a new type is added without a verdict.
 """
 
@@ -34,8 +35,8 @@ class Classification:
     kind: str | None = None
 
 
-# A component type that the literal does not list but the viewer draws.
-EXTRA_COMPONENT_TYPES: tuple[str, ...] = ("multiqc",)
+# Component types that the literal does not list but the viewer draws.
+EXTRA_COMPONENT_TYPES: tuple[str, ...] = ("multiqc", "highlight")
 
 ALL_COMPONENT_TYPES: tuple[str, ...] = (*get_args(ComponentType), *EXTRA_COMPONENT_TYPES)
 ALL_ADVANCED_VIZ_KINDS: tuple[str, ...] = tuple(get_args(AdvancedVizKind))
@@ -119,6 +120,10 @@ COMPONENT_COVERAGE: dict[str, Callable[[dict[str, Any]], Classification]] = {
         "api",
         "a genome browser session on the instance's JBrowse host; " + API_REASON,
     ),
+    # A figure shown again from another tab. Every tab is a part of the same
+    # document, so the figure is already drawn where it lives; the highlight
+    # becomes a pointer to it rather than a second copy.
+    "highlight": _always("code", "a pointer to the figure on the tab it comes from"),
 }
 
 

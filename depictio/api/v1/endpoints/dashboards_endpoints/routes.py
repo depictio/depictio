@@ -11026,6 +11026,8 @@ def data_version_status_endpoint(
         raise HTTPException(status_code=400, detail=str(exc))
     identities = _project_collections(dashboard_data.get("project_id"))
     return {"collections": collection_statuses(pins, referenced, identities)}
+
+
 # Notebook export and component embeds live in their own modules but register
 # on this router; the imports must come last so the helpers they borrow from
 # here already exist.

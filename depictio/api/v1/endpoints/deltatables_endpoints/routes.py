@@ -7,8 +7,8 @@ upsert, fetch, batch existence checks, and shape queries.
 
 import asyncio
 import hashlib
-import json
 import io
+import json
 import math
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
