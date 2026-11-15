@@ -292,6 +292,10 @@ services:
     build:
       dockerfile: docker-images/Dockerfile.worker
       context: .
+      args:
+        # Quarto (~250 MB) only for a worker that renders notebook reports
+        # (DEPICTIO_NOTEBOOK_EXPORT_RENDER_ENABLED); see Dockerfile.worker.
+        WITH_QUARTO: "${DEPICTIO_WORKER_WITH_QUARTO:-false}"
     volumes:
       - ./depictio:/app/depictio
       # Mêmes raisons que le backend, plus depictio/tests : en dev mode le worker

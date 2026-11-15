@@ -58,17 +58,26 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
 
 # Quarto renders the exported notebook into the HTML report
 # (`render_notebook_report`). It is a binary with its own pandoc, not a
-# library, so it is installed rather than depended on — ~250 MB, which is why
-# the feature it serves is off by default (DEPICTIO_NOTEBOOK_EXPORT_RENDER_*).
-# It ships here and not in the API image: the render is worker work, minutes
-# long and a browser pass per rendered tile.
+# library, so it is installed rather than depended on: ~250 MB, for a feature
+# that is off by default (DEPICTIO_NOTEBOOK_EXPORT_RENDER_ENABLED). So it is
+# opt-in here too: build with `--build-arg WITH_QUARTO=true` for a worker that
+# renders reports (compose: DEPICTIO_WORKER_WITH_QUARTO=true). Without it the
+# notebook export, the `.qmd` download and figure extraction all work; only the
+# rendered report is refused, with a message naming this build arg. It ships
+# here and not in the API image: the render is worker work, minutes long and a
+# browser pass per rendered tile.
+ARG WITH_QUARTO=false
 ARG QUARTO_VERSION=1.9.37
-RUN arch="$(dpkg --print-architecture)" \
-    && curl -fsSL -o /tmp/quarto.deb \
-        "https://github.com/quarto-dev/quarto-cli/releases/download/v${QUARTO_VERSION}/quarto-${QUARTO_VERSION}-linux-${arch}.deb" \
-    && dpkg -i /tmp/quarto.deb \
-    && rm /tmp/quarto.deb \
-    && quarto --version
+RUN if [ "${WITH_QUARTO}" = "true" ]; then \
+        arch="$(dpkg --print-architecture)" \
+        && curl -fsSL -o /tmp/quarto.deb \
+            "https://github.com/quarto-dev/quarto-cli/releases/download/v${QUARTO_VERSION}/quarto-${QUARTO_VERSION}-linux-${arch}.deb" \
+        && dpkg -i /tmp/quarto.deb \
+        && rm /tmp/quarto.deb \
+        && quarto --version; \
+    else \
+        echo "Quarto not installed (WITH_QUARTO=${WITH_QUARTO}): rendered notebook reports are unavailable"; \
+    fi
 
 ARG UID=1000
 ARG GID=1000

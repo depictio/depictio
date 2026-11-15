@@ -560,6 +560,9 @@ celery:
     # and a report on its passes. With rendered reports on
     # (DEPICTIO_NOTEBOOK_EXPORT_RENDER_ENABLED), run a second release of this
     # worker with "export,report" and >= 3 workers, and set this one to "celery".
+    # Rendered reports also need Quarto in the worker image, which the published
+    # image leaves out (~250 MB): build docker-images/Dockerfile.worker with
+    # `--build-arg WITH_QUARTO=true` and point celery.image at it.
     DEPICTIO_CELERY_QUEUES: "celery,export,report"
   podSecurityContext:
     runAsUser: 1000

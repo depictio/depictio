@@ -80,7 +80,9 @@ def render_quarto_html(
     """
     if not quarto_binary():
         raise RenderUnavailable(
-            "Quarto is not installed on this worker — the HTML report needs the Quarto CLI"
+            "Quarto is not installed on this worker — the HTML report needs the Quarto CLI. "
+            "The worker image installs it only when built with `--build-arg WITH_QUARTO=true` "
+            "(docker-images/Dockerfile.worker)"
         )
     try:
         import ipykernel  # noqa: F401
