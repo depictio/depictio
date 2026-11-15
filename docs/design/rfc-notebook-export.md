@@ -27,7 +27,7 @@ browser tab. Two capabilities close the loop:
    **Quarto document (`.qmd`)** that reproduces the same queries, and — opt-in — an HTML report
    rendered from it on the server.
 2. **Import** — `depictio.notebook.DepictioClient` brings **any** component of a dashboard —
-   figures, cards, tables, filters, text, maps, MultiQC, images, JBrowse, all 18 advanced-viz kinds
+   figures, cards, tables, filters, text, maps, MultiQC, images, JBrowse, all 54 advanced-viz kinds
    — into a cell, bound to the same filters the dashboard applies.
 
 ## 2. Problem
@@ -119,44 +119,125 @@ the export is ungrouped — and the family's `depictio_category_colors`). The AS
 the chunks in order and proves each one only reads what an earlier chunk defined, and that no
 public global is defined by two chunks (a second one would replace what the first showed).
 
-### 3.4 Coverage — how each component reaches the notebook
+### 3.4 Coverage — how each component reaches the document and the report
 
-| component | in the notebook | why |
+Three verdicts (`classify.py`): **code** (Polars/Plotly in the `.qmd`, needs only the data),
+**api** (`client.component(...)`, rendered by the instance with the exported state) and
+**omitted** (only an unknown type or kind). An `api` tile also says what the reader gets
+(`output` in the preflight): an interactive Plotly figure, static HTML, or a PNG **snapshot** of
+a renderer that is not Plotly. Every `AdvancedVizKind` has an explicit verdict in
+`ADVANCED_VIZ_RENDERING`; the module refuses to import with one missing, and the test pins the
+non-Plotly set by name, so a new kind cannot reach a report by default.
+
+**No tile can break the document.** Every display path of a `DepictioComponent` catches and
+draws a placeholder with the tile's title, the reason and a link to the live dashboard (a
+disabled JBrowse, a renderer that timed out, a 413 on the data). Asking for `.figure`/`.data`
+explicitly still raises.
+
+#### Component types
+
+| component | `.qmd` | report | interactive? |
+| --- | --- | --- | --- |
+| figure, UI mode (incl. `heatmap`) | api: `render_figure`, with groups, colour-by, facet, "other" and the version pins | Plotly | yes |
+| figure, code mode | code: the author's code verbatim; `depictio_group_kwargs` / `depictio_group_by` and the `__depictio_group__` label as the server hands them over | Plotly | yes |
+| card, closed-form aggregation | code: `final.select(<expr>).item()` | static HTML | no |
+| card, multi-metric / `secondary_layout` / `box_plot_stats` / `mode` | api: `bulk_compute_cards` (with the group comparison), drawn as static HTML from the server's numbers | static HTML | no |
+| table | code: `final.select(cols).head(page_size)`, every row shown | DataTables (itables, offline) or plain HTML | sort, search, pages |
+| interactive (filters) | code: one funnel stage each, read from `depictio_state` when the document runs | the active-filter summary and the funnel figure | the funnel figure |
+| text | code: markdown; live values (`{{name}}`, `{{param:KEY}}`) printed by an `output: asis` cell from `bulk_compute_cards`, export-time values offline; `](tab:…)` links jump to the tab's heading; inline icons as SVG | static | no |
+| map | api: `render_map` | Plotly (the basemap tiles load from the CDN when viewed) | yes |
+| MultiQC plot | api: `render_multiqc` (live data only: not versioned server-side) | Plotly | yes |
+| MultiQC General Statistics | api: the table and its violin summary | table + Plotly | violin |
+| image gallery | api: `render_image_paths`, images inlined | static images | no |
+| JBrowse | api: assembly, opening locus and shown tracks (`.tracks`), a snapshot of the opening view, a link to the live tile | static snapshot + table | no |
+| highlight | code: a pointer to the tab that draws the figure | static text | no |
+
+#### Advanced visualisations (54 kinds on this branch)
+
+| kinds | how | report | interactive? |
+| --- | --- | --- | --- |
+| complex_heatmap, upset_plot, sankey (Celery computes); volcano, embedding, manhattan, stacked_bar, stacked_taxonomy, da_barplot, enrichment, ma, qq, sunburst, pr_benchmark, roc_pr_curve, confusion_matrix, metric_ci_bars (registered Python builders) — 17 | api: the server builds the Plotly figure (`build_plotly_export`, inline, no browser); a tile coloured by groups or a column goes through the renderer instead, which applies it | Plotly | yes |
+| phylogenetic (tree), rarefaction, dot_plot, lollipop, oncoplot, coverage_track (track), profile, signal_matrix, fusion_structure, gene_arrow_track, gsea_running_score, sashimi (plotly view), scatter_xy, contact_map, knee_plot, damage_profile, group_compare, transcript_structure, cnv_profile (plotly view), parallel_coordinates, ramachandran, ranked_distribution, spatial_cells — 23 | api: the Plotly figure read off the real React renderer, headless (`/embed`, `gd.data`) | Plotly | yes; contact_map and group_compare on their opening window / pair only |
+| genome_view, genome_chord, ideogram, record_card, ranked_table, molecule_3d, msa, sequence_track, hmm_logo, secondary_structure, domain_architecture, pae_matrix, allele_grid, pedigree — 14; and the views coverage_track `locus`, cnv_profile `locus`, sashimi `genomespy`, phylogenetic with `collapse_rank` | api: a PNG of the real renderer, taken by the same headless pass once the tile reports itself drawn (`data-embed-status`) | static snapshot, captioned "interactive in the live dashboard" | no |
+
+`bioimage_viewer` (#1118, unmerged) will need a verdict when it lands: the import guard says so.
+
+#### Seeded families, before → after this change
+
+| family | before | after |
 | --- | --- | --- |
-| text | **code** (markdown cell) | no data path |
-| interactive | **code** (a funnel stage when active) | it *is* the query |
-| card | **code** (`final.select(<reduction>).item()`) | mirrors `_agg_expr`; `box_plot_stats`/`mode` → via API |
-| table | **code** (`final.select(cols).head(page_size)`) | the page the dashboard shows |
-| figure, UI mode | **code** (`px.<visu_type>(final, **kwargs)`) | kwargs cleaned by the same `clean_px_kwargs` as the server; theme not reproduced |
-| figure, code mode | **code** (verbatim) | the prologue *is* code |
-| figure, `heatmap` | via API | plotly-complexheatmap on the server |
-| map, MultiQC | via API (`.figure` = server Plotly) | built by the server |
-| advanced_viz — `complex_heatmap`, `upset_plot`, `sankey` | via API (`.figure` = server Plotly) | Celery computes |
-| advanced_viz — the other 15 kinds | via API (`.figure` **extracted** from the React renderer) | drawn client-side from data |
-| image | via API (`.html`/`.data`) | object-store gallery |
-| jbrowse | via API (`.html` iframe) | a session on the JBrowse host |
+| nf-core/viralrecon | 4 tiles abort the render, 1 blank JBrowse | 0 fatal; 5 snapshots |
+| nf-core/ampliseq | 3 tiles abort the render | 0 fatal; 3 snapshots |
+| advanced_viz_showcase | 28 tiles abort the render | 0 fatal; 28 snapshots |
+| genome_tracks_examples | 2 blank JBrowse tiles | 2 JBrowse snapshots + track tables |
 
-`omitted` is reserved for the case no path can serve (a collection with no Delta table). The
-exhaustiveness test fails when a `ComponentType` or `AdvancedVizKind` gains a member without a
-verdict.
+Against the audit's per-component targets (72 rows: 17 component types, 55 kinds counting
+#1118's): **api-figure 45** — all reached (UI figures now carry grouping and pins; 17 kinds no
+longer need a browser); **code 13** — 6 reached (code figures, closed-form cards, tables,
+filters, plain and live text), 7 not (multi-metric and `box_plot_stats` cards stay api/static,
+card variants keep the default look, highlights stay pointers, record_card / ranked_table /
+pae_matrix are snapshots); **embedded-offline 10** — 0 embedded, all 10 at their stated
+`static-image` fallback (§3.8); **static-image 4** — 3 reached (images, JBrowse, genome_view),
+bioimage_viewer not on this branch. Before: 14 kinds aborted every report and JBrowse was blank.
+
+#### Cannot be exported (hard reasons)
+
+1. **Live cross-tile filtering in a static report.** Server-rendered tiles are computed for one
+   state; a file has no server to ask. Re-rendering with other parameters
+   (`quarto render -P depictio_state:…`) is the supported substitute: every stage and tile
+   follows the new state.
+2. **JBrowse browsing offline.** Tracks (BAM, CRAM, bigWig, VCF) are read by HTTP range through
+   the instance's signed, short-lived track proxy, often GB-scale. Ceiling: the opening view's
+   snapshot plus the track table and a link.
+3. **GenomeSpy views interactive offline** (genome_view; coverage_track / cnv_profile `locus`;
+   sashimi `genomespy`). GenomeSpy fetches its annotation tracks itself and zooming refetches;
+   main's offline bundle refuses them too. Ceiling: a snapshot of the opening window.
+4. **bioimage_viewer at full resolution** (#1118). Multiscale OME-Zarr chunks are fetched on
+   demand with the viewer's credentials; the hand-off links are public-only or expire.
+5. **contact_map beyond the opening window, group_compare beyond the opening pair.** One server
+   compute per zoom window / per pair: no single result stands for the tile.
+6. **Intra-tile controls that refetch** (live UMAP/t-SNE sliders, any control that re-queries).
+   Only the persisted configuration is exported.
+7. **Version-pinned MultiQC and advanced-viz data.** Not versioned server-side; a pinned export
+   says those tiles show live data rather than claim otherwise.
+8. **The live tile in an iframe inside a report.** `/embed` is served with `X-Frame-Options:
+   SAMEORIGIN` / `frame-ancestors 'self'`, and partitioned storage hides the session anyway: a
+   security boundary, not an export bug. `.html` works only for a reader logged into the
+   instance, outside a report.
+9. **Server-side rendering of author-written code for non-owners** (policy,
+   `_require_owner_for_authored_code`): they can download the `.qmd` and run it themselves.
+10. **Pixel parity of UI-built figures as pure `px.*` code.** The chart builder computes options
+    it does not store, which is why those figures are `api`, not code.
 
 ### 3.5 Universal import — three representations per component
 
 `client.component(dashboard, "Bill shape", filters=[...])` returns a `DepictioComponent` with
 `.figure` (a `plotly.graph_objects.Figure`), `.data` (a `polars.DataFrame`, or a dict for cards)
-and `.html` (the live tile). It displays itself through the kernel's
-`_repr_mimebundle_` (what `quarto render` captures); the default is the closest thing to what the
-dashboard shows (figure, DataFrame, a small HTML card, markdown, an image grid, an iframe).
+and `.html` (the live tile, for a reader logged into the instance); a snapshot tile adds `.image`
+(PNG bytes), a JBrowse tile `.tracks`. It displays itself through the kernel's
+`_repr_mimebundle_` (what `quarto render` captures), never raising.
 
-**Headless figure extraction.** For the 15 React-rendered advanced-viz kinds there is no Plotly on
-the server. Rather than port the renderers, the viewer gains `/embed/{dashboard}/{component}
-#state=<base64url JSON>&theme=…`: one `ComponentRenderer`, the real one, fed through the ordinary
-API with the state in the URL hash. The worker loads that page in headless Chromium (the screenshot
-machinery, admin token injected) and reads `gd.data`/`gd.layout` off the Plotly div —
-`POST /dashboards/component_figure/{d}/{c}` dispatches, `GET …/jobs/{id}` polls, results are
-cached per (component, filters, theme). Same renderer, same numbers, no second implementation.
-`POST /dashboards/embed/{d}/{c}` returns an HTML page framing the same route for a reader who is
-logged into the instance.
+**Figures without a browser where the server has a builder.** `POST
+/dashboards/component_figure/{d}/{c}` first asks main's `build_plotly_export` for the 17 kinds
+with a server builder (no Chromium, no nested Celery). The rest go through **headless
+extraction**: the viewer's `/embed/{dashboard}/{component}#state=<base64url JSON>&theme=…` mounts
+the real `ComponentRenderer` (inside `DataVersionProvider` and the load registry) and reports the
+*renderer's* status in `data-embed-status` (`ready` once the tile reported itself drawn, `error`
+with `data-embed-reason`). The worker reads `gd.data`/`gd.layout` off a Plotly div, or, for a
+renderer the classification marks as not Plotly (or one that turns out not to draw one), takes a
+PNG of the tile after network idle and a paint budget (Chromium with SwiftShader for the WebGL
+renderers). Results are cached per (component, whole state, theme, expected output).
+
+**Queues.** The browser passes run on the `export` queue and reports on `report`
+(`celery_app.task_routes`): a pass waits on the tile's compute task (default queue) and a report
+on its passes, so on one pool of two slots they starved each other. The default worker consumes
+`celery,export,report`; a dedicated worker (`docker compose --profile export`) can take the two.
+
+**Version pins.** `AnalysisState.pins` (`as_of_version`, `data_versions`, `definition_version`)
+rides on every render call, both halves together; `client.data(dc, version=N)` reads that Delta
+commit (`/deltatables/data/{dc}?version=N`, scanned directly, never from a cache or the local
+mirror); the export lays the version's component definitions over the family and warns that
+MultiQC and advanced-viz data are not versioned server-side.
 
 ### 3.6 Opening the export
 
@@ -187,8 +268,10 @@ execution can be switched off (project config, freeze, or simply not asked for: 
 Jupyter makes Quarto skip execution — in both cases it writes a report with every result missing and
 exits 0. The service checks the log for the execution it asked for before believing the output.
 
-**What it costs.** The worker image gains Quarto (~250 MB, `Dockerfile.worker`) and the `render`
-extra (`nbclient`, `ipykernel`). A render re-executes the notebook against this deployment's own
+**What it costs.** Quarto (~250 MB) is opt-in in the worker image (`--build-arg
+WITH_QUARTO=true`, `Dockerfile.worker`; compose `DEPICTIO_WORKER_WITH_QUARTO`), plus the `render`
+extra (`nbclient`, `ipykernel`, `itables`). A worker without it refuses a render naming the build
+arg; everything else in the export works without it. A render re-executes the notebook against this deployment's own
 API: 45 s for the nf-core/viralrecon report with the figure cache warm, ~4 min cold, since every
 API-path tile is a headless browser pass. `DEPICTIO_NOTEBOOK_EXPORT_RENDER_ENABLED` is **off by
 default**.
@@ -208,6 +291,33 @@ notebook offline (`DEPICTIO_DATA_DIR`, `App.run()`) and asserts that every stage
 equals the funnel endpoint's count for that stage, for three stage orders; reordering changes the
 intermediate counts and never the final one. Against a live instance,
 `depictio/dev_scripts/verify_notebook_export.py` does the same for seeded dashboards.
+
+### 3.8 Design note — embedded-offline tiles for what is not Plotly (not built)
+
+The 14 non-Plotly kinds (and the GenomeSpy views) reach the report as PNG snapshots. Exact React
+parity offline — medals, SVG, canvas, the interactions that need no refetch — is possible only
+with main's offline component bundle (`viewer/dist-embed/embed.html`, `services/export/embed.py`),
+which runs the real `ComponentRenderer` against a mock API fed by
+`build_component_embed_payload`. One `<iframe srcdoc>` of it per tile is ~7 MB each (30 tiles
+≈ 200 MB, the blow-up plotly.js once caused). The shape that fits a report:
+
+1. A **multi-mount entry** (`viewer/src/embed/mountAll.tsx`, a second single-file Vite build):
+   one copy of the runtime, included once in the document by the imports cell, as plotly.js is.
+2. Each tile emits `<div data-depictio-embed="<index>">` and a
+   `<script type="application/json" data-depictio-payload>` with
+   `build_component_embed_payload(...)` for that tile (fetched by the client through a
+   notebook-scoped endpoint, so it does not depend on `DEPICTIO_FASTAPI_EMBED_ENABLED`).
+3. The payload buckets are already collision-free across tiles (component `index`, `embed::<index>`
+   dc ids), so the mount script merges them into one `window.__DEPICTIO_EMBED__` and mounts each
+   div.
+4. Behind a generator option (`embed_offline`), off by default: ~7 MB once plus each tile's data,
+   which is a data-download policy question the snapshots do not raise.
+5. molecule_3d needs a non-stubbed 3Dmol and the structure in the payload; pae_matrix and
+   ramachandran their files; GenomeSpy views and JBrowse stay snapshots (§3.4, cannot be
+   exported).
+
+Stopped at this note: the multi-mount build, the payload endpoint and the per-tile mounting are a
+change of their own (L), and the snapshot already makes every one of these tiles render.
 
 ## 4. Alternatives considered
 
@@ -231,12 +341,17 @@ intermediate counts and never the final one. Against a live instance,
 - No new dependency on the API image: the `.qmd` is generated text. The worker's `render` extra
   (`nbclient`, `ipykernel`) and Quarto are only needed for the rendered report.
 - Extraction is a headless render per (component, filters): seconds, not milliseconds; cached.
-- **JBrowse** sessions are built with hard-coded `localhost` hosts (`routes.py`,
-  `render_jbrowse`); outside the instance's network the iframe cannot load. Pre-existing; flagged.
+- **JBrowse** is the embedded React linear view reading tracks through the instance's track
+  proxy; the document carries its session as a table, a snapshot and a link (§3.4).
+- Icons come from the viewer's build-time subset (`viewer/dist-icons/icon-subset.json`, shipped
+  in the API image); only an id the subset lacks is asked of Iconify, under one 3 s budget.
 - The dashboard's theme/brand colours are not reproduced in code-path figures (stated in the cell).
 - Twelve stages at most (`FUNNEL_MAX_STAGES`), like the funnel view; the export warns.
 - `EditorApp` is not wired (its filter state has a different shape); the viewer is.
 - `.html` embeds need a Depictio session in the reader's browser; `.figure`/`.data` do not.
+- Snapshots are PNGs of the opening view at 1200×720: 50–300 kB a tile.
+- Render budget: a dashboard of 80 API tiles at 10–20 s per browser pass approaches
+  `render_timeout_s` (900 s); the server builders and the cache are what keep it under.
 
 ## 6. Migration
 
@@ -246,8 +361,7 @@ once merged (Phase 4 of the product plan).
 
 ## 7. Non-goals
 
-Server-side execution or Quarto rendering; attaching notebooks to version snapshots; pinning data
-versions (Delta time travel); wasm/Pyodide export; narrower scopes (one tab, one component) in
+Attaching notebooks to version snapshots; wasm/Pyodide export; narrower scopes (one tab, one component) in
 the export modal — the client covers the "one component" case.
 
 ## 8. What contradicted the brief
