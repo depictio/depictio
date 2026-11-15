@@ -150,20 +150,20 @@ So the entrypoint imports `local_stack` and reuses, unchanged: `claim_home`,
 `ensure_dirs`, `load_secrets`, `load_ports`/`pick_ports`, `server_env`,
 `start_services` (spawn order, readiness probes, SeaweedFS port flags, cleanup of a
 failed start), `wait_for_api` (incl. rebuilding a missing CLI config),
-`check_alive`, `lock_for_startup`, `State`. It adds what `local up` cannot do yet:
+`check_alive`, `lock_for_startup`, `State`. The baked services and the per-user
+SeaweedFS socket names (see *Shared /tmp* below) are `local_stack`'s own, from
+`DEPICTIO_SERVICES_PREFIX=/opt/depictio-services`, which the image sets. It adds what `local up` cannot do yet:
 
 | Added in the entrypoint | Mechanism |
 | --- | --- |
 | foreground supervision | polls the five `Popen`s; a dead one stops all and exits 1 (`--restart` can retry) |
 | ordered shutdown on SIGTERM/SIGINT/SIGHUP | worker+API, then S3+Redis, then MongoDB; further signals ignored meanwhile |
-| baked services | `Paths.env` -> `/opt/depictio-services` (patched property) |
 | API bind host | wraps `local_stack.spawn` to replace `--host 127.0.0.1`; asserts the command shape, so a depictio change fails loudly |
 | run as the data's owner | as root, `setgid/setuid` to the owner of `/data` (like the mongo/postgres images) |
 | writable `HOME` for any uid | `/tmp/depictio-home-<uid>` when `HOME` is unset, `/`, or not writable |
 | home lock for the whole run | `local up` holds `.up.lock` during startup only; here a second container, or a host `local up`/`wipe`, fails fast |
-| per-user SeaweedFS socket names | see *Shared /tmp* below |
 
-Trade-offs: the two monkeypatches (`Paths.env`, `spawn`) tie the entrypoint to
+Trade-offs: the `spawn` monkeypatch ties the entrypoint to
 `local_stack` internals, and `start_services`/`_signals_interrupt` are not a public
 API. The image and the module come from the same commit, and the `spawn` patch
 fails loudly; the proper fix is the depictio changes below, which reduce the
@@ -202,8 +202,8 @@ entrypoint to a root drop plus `exec depictio local up --foreground ...`.
   it. Not tested on a 6.19 kernel (the sandbox runs 6.18).
 - **Shared /tmp (Apptainer).** `weed mini` puts unix sockets in `/tmp` and ignores
   `TMPDIR`. Reproduced: a `/tmp/seaweedfs-s3-9000.sock` owned by another user makes
-  SeaweedFS exit at startup (`Failed to remove ... operation not permitted`). The
-  entrypoint names the two sockets weed lets you name
+  SeaweedFS exit at startup (`Failed to remove ... operation not permitted`).
+  With a services prefix, `local_stack` names the two sockets weed lets you name
   (`-s3.localSocket`/`-filer.localSocket=/tmp/seaweedfs-u<uid>-...`); a foreign
   stale master/volume gRPC socket was tolerated. weed saves these flags in
   `s3/mini.options`; the per-user `/tmp` names stay valid for a later host
@@ -235,18 +235,22 @@ entrypoint to a root drop plus `exec depictio local up --foreground ...`.
 2. `--host` (or `DEPICTIO_LOCAL_BIND_HOST`) for the API; `--home` as a flag
    alongside `DEPICTIO_LOCAL_HOME`. Warn when binding beyond loopback in
    single-user mode.
-3. `DEPICTIO_LOCAL_SERVICES=<prefix>`: use pre-installed binaries, never download
-   into `<home>/env` (`ensure_binaries` + `Paths.env`). Also useful on air-gapped
-   HPC nodes, where `local up` cannot reach conda-forge.
-4. Per-user socket names for `weed mini` in `_start_services`: the stale-socket
-   failure above hits `local up` on any shared node too.
+3. Done: `DEPICTIO_SERVICES_PREFIX=<prefix>` makes `local up` use pre-installed
+   binaries and never download into `<home>/env` (`ensure_binaries` + `Paths.env`);
+   it checks the prefix's `.depictio-specs.json` (written by `install_services.py`)
+   against `CONDA_SPECS` and the platform, and fails on a mismatch. The image sets
+   it, so `depictio local up` runs in the image (the Nextflow module's artifact
+   mode). Also useful on air-gapped HPC nodes, where `local up` cannot reach conda-forge.
+4. Done with a prefix only: per-user socket names for `weed mini`
+   (`seaweedfs_socket_flags`). Without a prefix, `local up` on a shared node can
+   still hit the stale-socket failure above.
 5. Pass `GLIBC_TUNABLES=glibc.pthread.rseq=1` to mongod in `_start_services`
    (harmless on glibc >= 2.35, defensive against an inherited `rseq=0`).
 6. Publish `start_services`/`stop_all`-style helpers as a small public API, or ship
    this entrypoint in the package (`depictio local serve`), so the image does not
    reach into private names (`_signals_interrupt`, `_stop_child`).
 
-With 1-3 the entrypoint becomes: drop root to the owner of `/data`, then
+With 1 and 2 the entrypoint becomes: drop root to the owner of `/data`, then
 `exec depictio local up --foreground --host 0.0.0.0 --examples none --no-open`.
 
 Side finding, unverified: `Dockerfile.viewer` (and the catalog-preview stage of

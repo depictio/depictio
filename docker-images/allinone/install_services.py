@@ -56,12 +56,15 @@ def main() -> None:
     platform = str(Platform.current())
     print(f"Solving {specs} for {platform}", flush=True)
 
+    services: dict[str, str] = {}
+
     async def run() -> None:
         records = await solve(
             sources=["conda-forge"], specs=specs, virtual_packages=VirtualPackage.detect()
         )
         for r in records:
             if r.name.normalized in ("mongodb", "redis-server", "seaweedfs"):
+                services[r.name.normalized] = str(r.version)
                 print(f"  {r.name.normalized} {r.version}", flush=True)
         if "--solve-only" in sys.argv:
             return
@@ -70,8 +73,12 @@ def main() -> None:
     asyncio.run(run())
     if "--solve-only" in sys.argv:
         return
-    # The marker ensure_binaries writes, so the prefix reads like a local home's env/.
-    (prefix / ".depictio-specs.json").write_text(json.dumps({"specs": specs, "platform": platform}))
+    # The manifest: the marker ensure_binaries writes, so the prefix reads like a
+    # local home's env/. With DEPICTIO_SERVICES_PREFIX (the image sets it), `depictio
+    # local up` checks its specs and platform against its own CONDA_SPECS and refuses
+    # a mismatch rather than download. `packages` is informational.
+    manifest = {"specs": specs, "platform": platform, "packages": services}
+    (prefix / ".depictio-specs.json").write_text(json.dumps(manifest))
     for rel in PRUNE:
         path = prefix / rel
         if path.is_dir():

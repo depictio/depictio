@@ -1,0 +1,30 @@
+# The project the module's artifact check ingests (build-images.yaml,
+# allinone-image-check): the iris table, read from the module's data root.
+id: "6a1d0c0ffee0000000000001"
+name: "Nextflow module artifact check"
+project_type: "basic"
+workflows:
+  - id: "6a1d0c0ffee0000000000002"
+    name: "iris_workflow"
+    engine:
+      name: "python"
+    data_location:
+      structure: "flat"
+      locations:
+        - "{DEPICTIO_DATA_ROOT}"
+    data_collections:
+      - id: "6a1d0c0ffee0000000000003"
+        data_collection_tag: "iris_table"
+        description: "Iris dataset in CSV format"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: recursive
+            scan_parameters:
+              regex_config:
+                pattern: "iris.csv"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              separator: ","

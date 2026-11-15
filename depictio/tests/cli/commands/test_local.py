@@ -479,6 +479,147 @@ def test_a_failed_download_is_an_actionable_error(paths, monkeypatch):
         local_stack.ensure_binaries(paths, log=lambda _: None)
 
 
+def _services_prefix(tmp_path, monkeypatch, **manifest):
+    """A prefix laid out as docker-images/allinone/install_services.py leaves it."""
+    prefix = tmp_path / "services"
+    (prefix / "bin").mkdir(parents=True)
+    for name in local_stack.NATIVE_BINARIES:
+        (prefix / "bin" / name).write_text("#!/bin/sh\n")
+    record = {
+        "specs": local_stack.CONDA_SPECS,
+        "platform": local_stack.conda_platform(),
+        "packages": {"mongodb": "8.0.23", "redis-server": "8.10.3", "seaweedfs": "4.53"},
+    }
+    (prefix / local_stack.SPECS_MARKER).write_text(json.dumps({**record, **manifest}))
+    monkeypatch.setenv(local_stack.SERVICES_PREFIX_ENV, str(prefix))
+    return prefix
+
+
+def _no_rattler(monkeypatch):
+    """py-rattler unimportable (the all-in-one image has no [local] extra), so any
+    attempt to download fails the test."""
+    monkeypatch.setitem(sys.modules, "rattler", None)
+
+
+def test_preinstalled_services_are_used_and_nothing_is_downloaded(paths, tmp_path, monkeypatch):
+    prefix = _services_prefix(tmp_path, monkeypatch)
+    _no_rattler(monkeypatch)
+    logged = []
+
+    local_stack.ensure_binaries(paths, log=logged.append)
+
+    assert paths.env == prefix
+    assert paths.bin("mongod") == prefix / "bin" / "mongod"
+    assert not (paths.home / "env").exists()
+    assert logged == []
+
+
+def test_without_a_services_prefix_the_binaries_live_in_the_home(paths):
+    assert paths.env == paths.home / "env"
+
+
+def test_an_exact_pin_within_conda_specs_is_accepted(paths, tmp_path, monkeypatch):
+    """An image built with SERVICES_SPECS="mongodb 8.0.23;..." records other specs,
+    but versions CONDA_SPECS allows."""
+    specs = ["mongodb 8.0.23", "redis-server 8.10.3", "seaweedfs 4.53"]
+    _services_prefix(tmp_path, monkeypatch, specs=specs)
+    _no_rattler(monkeypatch)
+    local_stack.ensure_binaries(paths, log=lambda _: None)
+
+
+@pytest.mark.parametrize(
+    ("manifest", "error"),
+    [
+        (
+            {"packages": {"mongodb": "7.0.14", "redis-server": "8.0.2", "seaweedfs": "4.1"}},
+            "hold mongodb 7.0.14, this depictio needs mongodb 8.0.",
+        ),
+        (
+            {"packages": {"mongodb": "8.0.23", "redis-server": "8.0.2"}},
+            "hold seaweedfs \\(none\\)",
+        ),
+        ({"platform": "osx-arm64-not-this-one"}, "installed for platform"),
+        # A marker without versions, as ensure_binaries writes it.
+        (
+            {"packages": None, "specs": ["mongodb 7.0.*", "redis-server 8.*", "seaweedfs 4.*"]},
+            "installed for specs",
+        ),
+    ],
+)
+def test_a_mismatched_services_prefix_fails_instead_of_downloading(
+    paths, tmp_path, monkeypatch, manifest, error
+):
+    _services_prefix(tmp_path, monkeypatch, **manifest)
+    _no_rattler(monkeypatch)
+    with pytest.raises(LocalStackError, match=f"{error}.*unset DEPICTIO_SERVICES_PREFIX"):
+        local_stack.ensure_binaries(paths, log=lambda _: None)
+    assert not (paths.home / "env").exists()
+
+
+@pytest.mark.parametrize(
+    ("version", "wanted", "ok"),
+    [
+        ("8.0.23", "8.0.*", True),
+        ("8.0", "8.0.*", True),
+        ("8.1.0", "8.0.*", False),
+        ("80.0.1", "8.*", False),
+        ("4.53", "4.53", True),
+        ("4.531", "4.53", False),
+    ],
+)
+def test_service_versions_are_held_to_their_series(version, wanted, ok):
+    assert local_stack._version_matches(version, wanted) is ok
+
+
+def test_a_services_prefix_without_a_manifest_or_a_binary_is_refused(paths, tmp_path, monkeypatch):
+    prefix = _services_prefix(tmp_path, monkeypatch)
+    _no_rattler(monkeypatch)
+    (prefix / "bin" / "weed").unlink()
+    with pytest.raises(LocalStackError, match="weed missing from"):
+        local_stack.ensure_binaries(paths, log=lambda _: None)
+    (prefix / local_stack.SPECS_MARKER).unlink()
+    with pytest.raises(LocalStackError, match="missing or unreadable"):
+        local_stack.ensure_binaries(paths, log=lambda _: None)
+
+
+def test_the_conda_platform_is_read_without_rattler(monkeypatch):
+    _no_rattler(monkeypatch)
+    for sys_platform, machine, expected in [
+        ("linux", "x86_64", "linux-64"),
+        ("linux", "aarch64", "linux-aarch64"),
+        ("darwin", "arm64", "osx-arm64"),
+        ("darwin", "x86_64", "osx-64"),
+    ]:
+        monkeypatch.setattr(local_stack.sys, "platform", sys_platform)
+        monkeypatch.setattr(local_stack.platform, "machine", lambda m=machine: m)
+        assert local_stack.conda_platform() == expected
+
+
+def test_install_services_writes_the_manifest_local_up_checks():
+    """docker-images/allinone/install_services.py reads CONDA_SPECS from local_stack.py
+    and records them under the marker name ensure_binaries checks."""
+    from pathlib import Path
+
+    script = Path(local_stack.__file__).parents[3] / "docker-images/allinone/install_services.py"
+    if not script.is_file():
+        pytest.skip("not a source checkout")
+    text = script.read_text()
+    assert f'"{local_stack.SPECS_MARKER}"' in text
+    assert '{"specs": specs, "platform": platform, "packages": services}' in text
+
+
+def test_seaweedfs_sockets_are_per_user_with_preinstalled_services_only(tmp_path, monkeypatch):
+    cmd = ["weed", "mini", "-s3.port=9123", "-filer.port=8899"]
+    assert local_stack.seaweedfs_socket_flags(cmd) == []
+
+    _services_prefix(tmp_path, monkeypatch)
+    uid = os.getuid()
+    assert local_stack.seaweedfs_socket_flags(cmd) == [
+        f"-s3.localSocket=/tmp/seaweedfs-u{uid}-s3-9123.sock",
+        f"-filer.localSocket=/tmp/seaweedfs-u{uid}-filer-8899.sock",
+    ]
+
+
 def test_port_is_free_sees_a_wildcard_listener():
     # macOS lets a 127.0.0.1 bind succeed next to a 0.0.0.0 listener (Docker-published ports).
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as busy:

@@ -3,10 +3,13 @@ process DEPICTIO_INGEST {
     label 'process_single'
 
     conda "${moduleDir}/environment.yml"
-    container "ghcr.io/depictio/depictio-cli:1.21.0-b6"
-    // The image's ENTRYPOINT is the CLI itself, so `docker run <image> /bin/bash
-    // .command.run` would hand bash to the CLI as a subcommand. Singularity and
-    // Apptainer `exec` ignore the entrypoint already.
+    // The all-in-one image: the CLI, the server and MongoDB, Redis and SeaweedFS
+    // preinstalled (DEPICTIO_SERVICES_PREFIX), so the artifact's stack starts with
+    // no download, and the same image reopens the artifact.
+    container "ghcr.io/depictio/depictio-allinone:1.21.0-b6"
+    // The image's ENTRYPOINT serves a home, and execs any other command; cleared
+    // anyway, so `docker run <image> /bin/bash .command.run` is plain bash.
+    // Singularity and Apptainer `exec` ignore the entrypoint already.
     containerOptions "${workflow.containerEngine in ['docker', 'podman'] ? '--entrypoint ""' : ''}"
 
     input:
@@ -94,6 +97,13 @@ process DEPICTIO_INGEST {
     """
     def result_json = quote.call("${prefix}.depictio.json")
     """
+    # A container run as the host's uid (docker -u) can have HOME=/, which it
+    # cannot write: the CLI keeps its state there.
+    if [ "\${HOME:-/}" = / ] || [ ! -w "\$HOME" ]; then
+        export HOME="\$PWD/.home"
+        mkdir -p "\$HOME"
+    fi
+
     # Rebuild the published layout the template's scan patterns expect. The
     # scan does not descend into symlinked directories, so directories are
     # recreated for real with their files linked (-L also unfolds the symlinked

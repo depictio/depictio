@@ -33,6 +33,10 @@ on:
       - "docker-images/Dockerfile.viewer"
       - "docker-images/Dockerfile.cli"
       - "docker-images/allinone/**"
+      # The module runs in the all-in-one image (its artifact check below), and
+      # `depictio local up` there is local_stack.py.
+      - "depictio/cli/configs/nextflow/modules/depictio/ingest/**"
+      - "depictio/cli/cli/local_stack.py"
       - "docker-images/nginx.conf.template"
       - "docker-images/run_fastapi.sh"
       - "docker-images/run_celery_worker.sh"
@@ -360,6 +364,95 @@ jobs:
             echo "Files not owned by the runner user:"; find "$DATA" ! -user "$(id -u)" | head
             exit 1
           fi
+
+      - name: The Nextflow module builds its artifact in the image, which reopens it
+        # The depictio/ingest module's container is this image. Its default mode
+        # runs `depictio local up` in the task, ingests, `local down`, and publishes
+        # the home: all of it must work with the services baked into the image
+        # (DEPICTIO_SERVICES_PREFIX), downloading nothing, as a uid the image does
+        # not know, on a read-only image (as under Apptainer).
+        env:
+          FIXTURES: ${{ github.workspace }}/docker-images/allinone/ci
+          IRIS_CSV: ${{ github.workspace }}/depictio/projects/init/iris/data/iris.csv
+          # The iris table of docker-images/allinone/ci/iris_project.yaml.
+          IRIS_DC: 6a1d0c0ffee0000000000003
+          API: http://127.0.0.1:8058/depictio/api/v1
+          NXF_VER: 26.10.6
+          NXF_ANSI_LOG: "false"
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/module"
+          mkdir -p "$WORK/direct/data_root" "$WORK/direct/.home"
+          cd "$WORK"
+
+          echo "::group::The module's script logic, run directly"
+          # What the task runs, with the stack's home in the work directory: no
+          # <home>/env may appear, and py-rattler (the downloader) is not even there.
+          cp "$IRIS_CSV" direct/data_root/
+          cp "$FIXTURES/iris_project.yaml" direct/
+          docker run --rm -u "$(id -u):$(id -g)" --read-only --tmpfs /tmp:rw,exec,size=2g \
+            -v "$WORK/direct:/work" -w /work --entrypoint "" \
+            -e DEPICTIO_TELEMETRY_ENABLED=false -e HOME=/work/.home \
+            depictio-allinone:ci bash -euc '
+              if python -c "import rattler" 2>/dev/null; then
+                echo "py-rattler is in the image: a download would be possible"; exit 1
+              fi
+              export DEPICTIO_LOCAL_HOME=/work/stack DEPICTIO_DATA_ROOT=/work/data_root
+              depictio local up --no-open --examples none
+              depictio ingest /work/data_root --project-config-path /work/iris_project.yaml \
+                --server local --result-json /work/result.json
+              depictio local down'
+          jq . direct/result.json
+          test "$(jq -r .status direct/result.json)" = success
+          if [ -e direct/stack/env ]; then
+            echo "::error::local up downloaded the services into <home>/env"; exit 1
+          fi
+          echo "::endgroup::"
+
+          echo "::group::The module under Nextflow (-profile docker)"
+          if ! java -version 2>&1 | grep -qE 'version "(1[7-9]|[2-9][0-9])'; then
+            sudo apt-get update -qq && sudo apt-get install -y -qq openjdk-21-jre-headless
+          fi
+          curl -fsSL https://get.nextflow.io | bash
+          # `image` overrides the release tag the module pins, not published yet.
+          ./nextflow run "$FIXTURES/module_artifact.nf" -profile docker \
+            --iris "$IRIS_CSV" --outdir "$WORK/results" --image depictio-allinone:ci
+          ARTIFACT="$WORK/results/depictio/iris_depictio"
+          jq . results/depictio/iris.depictio.json
+          test "$(jq -r .status results/depictio/iris.depictio.json)" = success
+          test -f "$ARTIFACT/.depictio-local-home"
+          test ! -e "$ARTIFACT/env"
+          if grep -l "from conda-forge" work/*/*/.command.log; then
+            echo "::error::the task downloaded the services"; exit 1
+          fi
+          # The task ran as the runner's uid, not root.
+          if find work ! -user "$(id -u)" | grep -q .; then
+            echo "Files not owned by the runner user:"; find work ! -user "$(id -u)" | head
+            exit 1
+          fi
+          du -sh "$ARTIFACT"
+          echo "::endgroup::"
+
+          echo "::group::Reopen the artifact with the image's serve"
+          docker run -d --name reopen -u "$(id -u):$(id -g)" -p 127.0.0.1:8058:8058 \
+            -e DEPICTIO_TELEMETRY_ENABLED=false -v "$ARTIFACT:/data" depictio-allinone:ci
+          for _ in $(seq 1 120); do
+            [ "$(docker inspect --format '{{.State.Health.Status}}' reopen)" = healthy ] && break
+            [ "$(docker inspect --format '{{.State.Running}}' reopen)" = true ] || break
+            sleep 5
+          done
+          if [ "$(docker inspect --format '{{.State.Health.Status}}' reopen)" != healthy ]; then
+            echo "::error::the artifact never served"; docker logs reopen || true; exit 1
+          fi
+          token=$(sed -n 's/^ *access_token: *//p' "$ARTIFACT/cli/admin_config.yaml" | head -1 | tr -d "\"'")
+          shape=$(curl -fsS -H "Authorization: Bearer $token" "$API/deltatables/shape/$IRIS_DC")
+          echo "reopened iris table: $shape"
+          [ "$(jq -r .num_rows <<< "$shape")" = 150 ] || { echo "::error::expected 150 rows"; exit 1; }
+          docker stop -t 60 reopen
+          test "$(docker inspect --format '{{.State.ExitCode}}' reopen)" = 0
+          docker logs reopen | tail -20
+          docker rm reopen
+          echo "::endgroup::"
 
   merge:
     name: Merge ${{ matrix.image }} manifest

@@ -121,8 +121,22 @@ class TestInterface:
 
 class TestPinsFollowThePackageVersion:
     def test_container_tag(self):
-        tags = re.findall(r'container "ghcr\.io/depictio/depictio-cli:([^"]+)"', _main())
+        """The all-in-one image: the CLI image has no server and no services, so the
+        artifact's `depictio local up` could not start in it."""
+        tags = re.findall(r'container "ghcr\.io/depictio/depictio-allinone:([^"]+)"', _main())
         assert tags == [_package_version()]
+        assert "depictio-cli:" not in _main()
+
+    def test_the_container_image_bakes_its_services_prefix(self):
+        """`local up` in the task reads the services the image preinstalled: nothing
+        is downloaded, and nothing is for the user to set."""
+        dockerfile = (REPO_ROOT / "docker-images" / "allinone" / "Dockerfile").read_text()
+        assert "DEPICTIO_SERVICES_PREFIX=/opt/depictio-services" in dockerfile
+        assert "install_services.py local_stack.py /opt/depictio-services" in dockerfile
+
+    def test_a_container_uid_without_a_writable_home_gets_one(self):
+        """`docker -u $(id -u)` leaves HOME=/ for a uid the image does not know."""
+        assert 'export HOME="\\$PWD/.home"' in _main()
 
     def test_conda_pin(self):
         env = (INGEST / "environment.yml").read_text()
@@ -139,7 +153,8 @@ class TestPinsFollowThePackageVersion:
             assert (INGEST / name).read_text().count(search) == 1, name
 
     def test_the_image_entrypoint_is_cleared_for_docker_and_podman(self):
-        """The CLI image's ENTRYPOINT would otherwise receive bash as a subcommand."""
+        """The image's ENTRYPOINT (tini + the all-in-one entrypoint) is not needed to
+        run the task's bash; cleared so nothing stands between Nextflow and bash."""
         assert (
             "containerOptions \"${workflow.containerEngine in ['docker', 'podman'] "
             "? '--entrypoint \"\"' : ''}\""

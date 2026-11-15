@@ -34,12 +34,18 @@ the template's dashboards), stops it, and emits its data directory. The
 pipeline publishes that directory; anyone reopens it later with one command.
 Nothing outlives the task, so the module runs the same on any executor.
 
-Its conda environment installs `depictio[local]` from PyPI: MultiQC for the
-templates, and MongoDB, Redis and SeaweedFS (fetched by `depictio local up`)
-for the stack. The container is the `ghcr.io/depictio/depictio-cli` image of
-the same release, which has only the `multiqc` extra, not `local`: the artifact
-needs the conda environment (or a local install) until an image carries the
-stack.
+One image both produces the artifact and reopens it: the module's container is
+`ghcr.io/depictio/depictio-allinone` of the same release, which carries the
+CLI, the server and MongoDB, Redis and SeaweedFS, preinstalled. With
+`-profile docker`, `podman`, `singularity` or `apptainer` the task downloads
+nothing and there is nothing to configure. The image is large, about 2.9 GB
+(linux/amd64 and linux/arm64), pulled once per machine or converted once to a
+`.sif`.
+
+The conda environment is the alternative (`-profile conda`): it installs
+`depictio[local]` from PyPI, MultiQC for the templates, and `depictio local up`
+fetches MongoDB, Redis and SeaweedFS from conda-forge (see
+[The artifact](#the-artifact)).
 
 ## Inputs
 
@@ -256,15 +262,21 @@ apptainer build depictio-allinone.sif docker://ghcr.io/depictio/depictio-allinon
 apptainer run --containall --bind "$PWD/results/depictio/<run>_depictio:/data" depictio-allinone.sif
 ```
 
-It needs no download at start and stops cleanly with `docker stop -t 60`; files
-it writes stay owned by the artifact's owner. See
+It is the image the module ran in, so it is already on a machine that ran the
+pipeline with containers. It needs no download at start and stops cleanly with
+`docker stop -t 60`; files it writes stay owned by the artifact's owner. See
 [`docker-images/allinone/README.md`](../docker-images/allinone/README.md) for
 its settings, Apptainer on a shared node and what it was tested on.
 
-Inside the task, `depictio local up` fetches the same binaries into the work
-directory. Under conda they come from the conda-forge package cache after the
-first run; without that cache, every task downloads them, so the node needs
-network access to conda-forge.
+Inside the task, in the container, `depictio local up` reads the services
+baked into the image (`DEPICTIO_SERVICES_PREFIX=/opt/depictio-services`, set by
+the image) and checks they are the versions it expects: a mismatch fails the
+task, it never falls back to a download. Under conda, `local up` fetches the same
+binaries into the work directory instead: they come from the conda-forge package
+cache after the first run; without that cache, every task downloads them, so the
+node needs network access to conda-forge. `DEPICTIO_SERVICES_PREFIX` also works
+outside the image, for a shared install of the three services made with
+`docker-images/allinone/install_services.py`.
 
 ## Sending to an existing instance
 
@@ -324,27 +336,31 @@ module.
 
 ## Containers
 
-The `depictio-cli` image lacks the `local` extra, so today it can only send a
-run to an existing instance; building the artifact in a container needs an
-image that carries the stack.
+The `depictio-allinone` image runs both modes: the artifact (the default) and
+sending to an existing instance (`cli_config`), since it carries the CLI. The
+task runs as whatever uid the engine gives it, with only its work directory
+writable:
 
-The CLI image's `ENTRYPOINT` is `depictio-cli`, so that `docker run <image>
-ingest …` works on its own. Nextflow does not override an entrypoint, which
-would hand the task's bash to the CLI as a subcommand, so under Docker and Podman
-the module clears it with `--entrypoint ""`. Singularity and Apptainer run the
-task with `exec`, which ignores it. Two limits follow:
+- **Docker / Podman.** Run as the host's user, as nf-core pipelines already do,
+  so the task can write its work directory:
 
-- A `containerOptions` set for this process in a config replaces the module's,
+  ```groovy
+  docker.runOptions = '-u $(id -u):$(id -g)'
+  ```
+
+  Such a uid has no entry in the image, hence `HOME=/`; the module then points
+  `HOME` at its work directory. The image's `ENTRYPOINT` serves a home and execs
+  any other command; the module clears it with `--entrypoint ""` all the same.
+  A `containerOptions` set for this process in a config replaces the module's,
   and with it the override: add `--entrypoint ""` to yours.
-- Executors that do not start the container with `docker run`, such as AWS
-  Batch, keep the entrypoint. Use the conda environment there.
+- **Singularity / Apptainer.** `exec` ignores the entrypoint, and the read-only
+  image is fine: nothing writes to it. The stack only listens on 127.0.0.1, on
+  free ports, so it runs on a shared node beside other users' stacks; SeaweedFS's
+  sockets in the node's `/tmp` are named per user.
 
-The image runs as its own user, `depictio`. Run Docker with the host's user,
-as nf-core pipelines already do, so the task can write its work directory:
-
-```groovy
-docker.runOptions = '-u $(id -u):$(id -g)'
-```
+Executors that do not start the container with `docker run`, such as AWS
+Batch, keep the entrypoint; it execs the task's command, so they should work
+too (not tested).
 
 The staging uses GNU `cp -s`, which the image and Linux hosts have. macOS's
 `cp` has no `-s`, so on a Mac run the module in the container, not under conda.

@@ -3,7 +3,9 @@ deployment, with MongoDB, Redis and SeaweedFS (the S3 store) run as plain proces
 
 The native binaries come from conda-forge, installed once into
 ``<home>/env`` with py-rattler (the library pixi is built on), so nothing has to
-be installed by hand and the binaries do not depend on the Linux distribution.
+be installed by hand and the binaries do not depend on the Linux distribution,
+or are read from a preinstalled prefix (``DEPICTIO_SERVICES_PREFIX``, set in the
+all-in-one image) and never downloaded.
 Only configuration differs from the Docker profile: every service is pointed at
 127.0.0.1 through the regular ``DEPICTIO_*`` environment variables.
 """
@@ -15,6 +17,7 @@ import contextlib
 import importlib.util
 import json
 import os
+import platform
 import re
 import secrets
 import shlex
@@ -99,6 +102,13 @@ HOME_MARKER = ".depictio-local-home"
 # Held by `up` while it starts the server, and by `wipe` and `export` while they stop
 # it, so a second command on the home fails fast. Named before those two took it.
 UP_LOCK = ".up.lock"
+# Set, MongoDB, Redis and SeaweedFS are read from this prefix instead of <home>/env,
+# and never downloaded: the all-in-one image bakes /opt/depictio-services (installed
+# by docker-images/allinone/install_services.py), and a shared install (an HPC
+# module, a site-wide prefix) can use it too. Unset, `up` fetches them as before.
+SERVICES_PREFIX_ENV = "DEPICTIO_SERVICES_PREFIX"
+# What ensure_binaries and install_services.py record in a prefix they install.
+SPECS_MARKER = ".depictio-specs.json"
 
 
 class LocalStackError(RuntimeError):
@@ -118,6 +128,28 @@ def check_platform_supported() -> None:
             "build for it and the services are managed as POSIX process groups. "
             "Use WSL2, or the Docker compose stack."
         )
+
+
+def services_prefix() -> Path | None:
+    """The preinstalled services prefix (DEPICTIO_SERVICES_PREFIX), or None."""
+    value = os.environ.get(SERVICES_PREFIX_ENV, "").strip()
+    return Path(value).expanduser().resolve() if value else None
+
+
+def conda_platform() -> str:
+    """The conda platform of this machine (linux-64, osx-arm64, ...), as py-rattler
+    names it. Read without py-rattler where it is not installed (the image)."""
+    try:
+        from rattler import Platform
+    except ImportError:
+        pass
+    else:
+        return str(Platform.current())
+    machine = platform.machine().lower()
+    if sys.platform == "darwin":
+        return "osx-arm64" if machine in ("arm64", "aarch64") else "osx-64"
+    arch = {"x86_64": "64", "amd64": "64", "arm64": "aarch64"}.get(machine, machine)
+    return f"{sys.platform.rstrip('0123456789')}-{arch}"
 
 
 def local_home_env_is_blank() -> bool:
@@ -143,7 +175,7 @@ class Paths:
 
     @property
     def env(self) -> Path:
-        return self.home / "env"
+        return services_prefix() or self.home / "env"
 
     @property
     def logs(self) -> Path:
@@ -241,7 +273,68 @@ def claim_home(paths: Paths) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _version_matches(version: str, wanted: str) -> bool:
+    """``version`` against the version part of a CONDA_SPECS entry: ``8.0.*`` (a
+    series) or an exact version, the only forms CONDA_SPECS uses."""
+    if wanted.endswith(".*"):
+        series = wanted[:-2]
+        return version == series or version.startswith(series + ".")
+    return version == wanted
+
+
+def check_preinstalled_services(prefix: Path) -> None:
+    """Refuse a services prefix that is not what `up` of this version would install:
+    MongoDB only opens data of its own series, so a mismatch fails here rather than
+    fall back to a download (which the prefix exists to avoid).
+
+    The prefix's marker is the manifest install_services.py writes: the specs it
+    solved, the platform and the version of each service. The versions are held to
+    CONDA_SPECS, so an image built with an exact pin (SERVICES_SPECS) still passes;
+    a marker without versions (written by ensure_binaries) must hold CONDA_SPECS."""
+    hint = f"use the services of this depictio version, or unset {SERVICES_PREFIX_ENV}"
+    marker = prefix / SPECS_MARKER
+    try:
+        found = json.loads(marker.read_text())
+    except (OSError, ValueError) as exc:
+        raise LocalStackError(
+            f"{SERVICES_PREFIX_ENV}={prefix}, but {marker} is missing or unreadable ({exc}): "
+            f"it does not hold services installed for depictio local; {hint}"
+        ) from exc
+    found = found if isinstance(found, dict) else {}
+    where = f"{SERVICES_PREFIX_ENV}={prefix}"
+    if found.get("platform") != conda_platform():
+        raise LocalStackError(
+            f"The services in {where} were installed for platform {found.get('platform')!r}, "
+            f"this machine is {conda_platform()!r}: {hint}"
+        )
+    packages = found.get("packages")
+    if isinstance(packages, dict) and packages:
+        for spec in CONDA_SPECS:
+            name, _, wanted = spec.partition(" ")
+            version = packages.get(name)
+            if not isinstance(version, str) or not _version_matches(version, wanted):
+                raise LocalStackError(
+                    f"The services in {where} hold {name} {version or '(none)'}, this depictio "
+                    f"needs {spec}: {hint}"
+                )
+    elif found.get("specs") != CONDA_SPECS:
+        raise LocalStackError(
+            f"The services in {where} were installed for specs {found.get('specs')!r}, "
+            f"this depictio needs {CONDA_SPECS!r}: {hint}"
+        )
+    missing = [name for name in NATIVE_BINARIES if not (prefix / "bin" / name).is_file()]
+    if missing:
+        raise LocalStackError(
+            f"{', '.join(missing)} missing from {prefix / 'bin'} ({where}): {hint}"
+        )
+    logger.debug("Using the preinstalled services in %s: %s", prefix, found)
+
+
 def ensure_binaries(paths: Paths, log=print) -> None:
+    prefix = services_prefix()
+    if prefix is not None:
+        check_preinstalled_services(prefix)
+        return
     try:
         from rattler import Platform, VirtualPackage, install, solve
     except ImportError as exc:
@@ -254,7 +347,7 @@ def ensure_binaries(paths: Paths, log=print) -> None:
     # linux-aarch64 hosts, or a Python switched between Rosetta and native on a
     # Mac, must not reuse binaries built for the other architecture.
     wanted = {"specs": CONDA_SPECS, "platform": str(Platform.current())}
-    marker = paths.env / ".depictio-specs.json"
+    marker = paths.env / SPECS_MARKER
     if not marker.exists():
         logger.debug("No native binaries recorded in %s: installing %s", marker, wanted)
     else:
@@ -505,6 +598,27 @@ def pick_ports(api_port: int | None, saved: dict[str, int] | None = None) -> dic
             ports[name] = pick_port(preferred[name], set(ports.values()))
     logger.info("Ports for this run: %s", ports)
     return ports
+
+
+def seaweedfs_socket_flags(cmd: Sequence[str]) -> list[str]:
+    """Per-user names for the unix sockets weed puts in /tmp (it ignores TMPDIR),
+    added to the `weed mini` command ``cmd`` with preinstalled services only (the
+    image, a shared install).
+
+    Under Apptainer without --contain, /tmp is the node's, shared by its users. A
+    /tmp/seaweedfs-s3-9000.sock left by another user's SeaweedFS makes ours die at
+    startup ("Failed to remove ... operation not permitted"). Only the S3 and filer
+    sockets can be named.
+    """
+    if services_prefix() is None:
+        return []
+    port = next((a.split("=", 1)[1] for a in cmd if a.startswith("-s3.port=")), "9000")
+    filer = next((a.split("=", 1)[1] for a in cmd if a.startswith("-filer.port=")), "8888")
+    uid = os.getuid()
+    return [
+        f"-s3.localSocket=/tmp/seaweedfs-u{uid}-s3-{port}.sock",
+        f"-filer.localSocket=/tmp/seaweedfs-u{uid}-filer-{filer}.sock",
+    ]
 
 
 def seaweedfs_port_flags(taken: set[int]) -> list[str]:
@@ -1031,25 +1145,22 @@ def _start_services(
             "S3_BUCKET": S3_BUCKET,
         }
     )
-    start(
-        "s3",
-        [
-            str(paths.bin("weed")),
-            "mini",
-            f"-dir={paths.home / 's3'}",
-            "-ip=127.0.0.1",
-            "-ip.bind=127.0.0.1",
-            f"-s3.port={ports['s3']}",
-            *seaweedfs_port_flags(set(ports.values())),
-            "-s3.port.iceberg=0",
-            "-s3.port.lance=0",
-            "-admin.ui=false",
-            "-webdav=false",
-            # weed mini reports cluster statistics to seaweedfs.com by default.
-            "-master.telemetry=false",
-        ],
-        s3_env,
-    )
+    weed = [
+        str(paths.bin("weed")),
+        "mini",
+        f"-dir={paths.home / 's3'}",
+        "-ip=127.0.0.1",
+        "-ip.bind=127.0.0.1",
+        f"-s3.port={ports['s3']}",
+        *seaweedfs_port_flags(set(ports.values())),
+        "-s3.port.iceberg=0",
+        "-s3.port.lance=0",
+        "-admin.ui=false",
+        "-webdav=false",
+        # weed mini reports cluster statistics to seaweedfs.com by default.
+        "-master.telemetry=false",
+    ]
+    start("s3", [*weed, *seaweedfs_socket_flags(weed)], s3_env)
 
     wait_until(
         lambda: _probe_tcp(ports["mongo"]), "MongoDB", 60, procs["mongo"], paths.logs / "mongo.log"
