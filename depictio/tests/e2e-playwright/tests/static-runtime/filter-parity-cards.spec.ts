@@ -6,7 +6,8 @@
  * the joined penguins CSVs (depictio/projects/init/penguins/data):
  *   all rows:  mean(body_mass_g) = 4201.754385964912, n_unique(species) = 3
  *   Adelie:    mean(body_mass_g) = 3700.662251655629, n_unique(species) = 1
- * The card renderer displays 4 decimals. If these assertions drift, the
+ * The mean card sets `decimals: 4` (penguins.yaml), so it prints 4 decimals
+ * with en-US separators. If these assertions drift, the
  * in-browser kernels no longer match the server — that is a real bug, not a
  * flaky test.
  */
@@ -29,7 +30,7 @@ test.describe("static bundle — live card parity (penguins)", () => {
     await page.waitForSelector(".react-grid-item", { timeout: 30_000 });
 
     // Unfiltered state — Polars reference values.
-    await expect(page.getByText("4201.7544")).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText("4,201.7544")).toBeVisible({ timeout: 30_000 });
     const speciesCard = page
       .locator(".react-grid-item", { hasText: "Species" })
       .first();
@@ -40,7 +41,7 @@ test.describe("static bundle — live card parity (penguins)", () => {
     await page.getByRole("option", { name: "Adelie" }).click();
 
     // Cards recompute through the in-browser engine — no network involved.
-    await expect(page.getByText("3700.6623")).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText("3,700.6623")).toBeVisible({ timeout: 30_000 });
     await expect(speciesCard.getByText("1", { exact: true })).toBeVisible();
 
     // Clearing the filter restores the unfiltered values.

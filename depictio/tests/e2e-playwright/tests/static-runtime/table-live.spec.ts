@@ -40,6 +40,10 @@ function cell(table: Locator, rowIndex: number, colId: string): Locator {
 
 test.describe("static bundle — live table (penguins)", () => {
   test.beforeEach(() => skipUnlessBundleBuilt());
+  // AG Grid virtualises columns: at the Desktop Chrome 1280 px default the
+  // body_mass_g column sits off-screen and has no header cell to click. Wide
+  // enough that every column of the table is rendered.
+  test.use({ viewport: { width: 2560, height: 1200 } });
 
   test("renders offline, sorts on header click and paginates", async ({
     page,

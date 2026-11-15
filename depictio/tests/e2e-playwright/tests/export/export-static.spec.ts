@@ -347,7 +347,7 @@ test.describe("Static export (owner flows)", () => {
     // The action moved out of the header into the dashboard settings
     // (SettingsDrawer.tsx, "Export static" section), so nothing is on screen
     // until the settings are opened on that section.
-    const settingsBtn = page.getByRole("button", { name: "Settings" });
+    const settingsBtn = page.getByRole("button", { name: "Settings", exact: true });
     await expect(settingsBtn).toBeVisible({ timeout: 15_000 });
     await expect(btn).toHaveCount(0);
 
@@ -416,7 +416,7 @@ test.describe("Static export (non-owner)", () => {
       // from the empty state for this user.
       await expect(page.getByRole("link", { name: /start editing/i })).toHaveCount(0);
 
-      await page.getByRole("button", { name: "Settings" }).click();
+      await page.getByRole("button", { name: "Settings", exact: true }).click();
       const drawer = page.getByRole("dialog").filter({
         hasText: "Dashboard settings",
       });
@@ -463,7 +463,7 @@ test.describe("Static export in public/demo mode", () => {
       "Iris reference dashboard not seeded in this stack.",
     );
 
-    await page.getByRole("button", { name: "Settings" }).click();
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
     const drawer = page.getByRole("dialog").filter({
       hasText: "Dashboard settings",
     });

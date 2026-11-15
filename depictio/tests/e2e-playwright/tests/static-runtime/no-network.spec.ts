@@ -43,7 +43,7 @@ test("the settings drawer offers no export action inside a bundle", async ({ pag
 
   // The Settings gear is NOT static-gated (unlike Edit), so the drawer opens
   // here exactly as it does on a server.
-  await page.getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
   const drawer = page.getByRole("dialog").filter({ hasText: "Dashboard settings" });
   await expect(drawer).toBeVisible();
 

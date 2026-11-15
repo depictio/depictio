@@ -10,6 +10,10 @@
  *   - viewer hooks/useCurrentUser.ts    -> src/static-runtime/useCurrentUserShim.ts
  *   - depictio-react-core realtime.ts   -> src/static-runtime/realtimeShim.ts
  *   - viewer hooks/useServerStatus.ts   -> src/static-runtime/serverStatusShim.ts
+ *   - viewer chrome/variants/index.ts   -> src/static-runtime/chromeVariantShim.ts
+ *   - depictio-react-core JBrowseRenderer -> src/static-runtime/jbrowseStub.tsx
+ *
+ * and `3dmol` is aliased to the catalog preview's stub.
  *
  * Producers inject the manifest into dist-static/static.html by replacing the
  * __BUNDLE_MANIFEST__ token (same convention as catalog-preview).
@@ -44,6 +48,19 @@ export default defineConfig({
         [path.resolve(__dirname, 'src/hooks/useServerStatus.ts')]: path.join(
           RUNTIME,
           'serverStatusShim.ts',
+        ),
+        // Bundles draw the Classic chrome, the one their read-only gating
+        // is wired into (see the shim).
+        [path.resolve(__dirname, 'src/chrome/variants/index.ts')]: path.join(
+          RUNTIME,
+          'chromeVariantShim.ts',
+        ),
+        // Never bundled (a genome browser streams its tracks from the
+        // server), and the single-file build would otherwise inline all of
+        // JBrowse and its adapters.
+        [path.join(CORE_SRC, 'components', 'JBrowseRenderer.tsx')]: path.join(
+          RUNTIME,
+          'jbrowseStub.tsx',
         ),
       },
       // Middle link of the api chain: apiShim's own `export * from api.ts`
@@ -91,6 +108,13 @@ export default defineConfig({
         replacement: path.resolve(__dirname, '../../packages/depictio-static-core/src'),
       },
       { find: /^plotly\.js$/, replacement: 'plotly.js/dist/plotly' },
+      // Same stub as the catalog preview and the component embed: a
+      // molecule_3d tile fetches its structure at render time, so it cannot
+      // render offline, and the single-file build would inline 3Dmol.js.
+      {
+        find: /^3dmol$/,
+        replacement: path.resolve(__dirname, 'src/catalog-preview/threeDmolStub.ts'),
+      },
     ],
     dedupe: [
       'react',

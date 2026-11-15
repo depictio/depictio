@@ -68,6 +68,9 @@ components:
     column_name: body_mass_g
     column_type: float64
     title: "Mean Body Mass (g)"
+    # Four decimals: the static-runtime parity specs pin the in-browser mean
+    # against Polars to this precision (cards round to whole grams otherwise).
+    decimals: 4
     layout: {x: 0, y: 1, w: 4, h: 2}
 
   - tag: card-species-count

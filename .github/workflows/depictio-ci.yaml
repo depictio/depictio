@@ -2978,7 +2978,7 @@ jobs:
         run: |
           pnpm install --frozen-lockfile
           cd depictio/viewer
-          pnpm run build:static
+          NODE_OPTIONS="--max-old-space-size=6144" pnpm run build:static
 
       - name: Log in and start services
         run: |

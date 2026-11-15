@@ -81,22 +81,27 @@
         "#fab005"
        ],
        "font": {
+        "color": "#343a40",
         "family": "-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\""
        },
        "geo": {
-        "bgcolor": "#ffffff"
+        "bgcolor": "rgba(0,0,0,0)"
        },
-       "paper_bgcolor": "#ffffff",
-       "plot_bgcolor": "#ffffff",
+       "paper_bgcolor": "rgba(0,0,0,0)",
+       "plot_bgcolor": "rgba(0,0,0,0)",
        "xaxis": {
-        "gridcolor": "#dee2e6",
+        "color": "#343a40",
+        "gridcolor": "rgba(0,0,0,0.08)",
         "gridwidth": 0.5,
-        "zerolinecolor": "#dee2e6"
+        "linecolor": "rgba(0,0,0,0.08)",
+        "zerolinecolor": "rgba(0,0,0,0.35)"
        },
        "yaxis": {
-        "gridcolor": "#dee2e6",
+        "color": "#343a40",
+        "gridcolor": "rgba(0,0,0,0.08)",
         "gridwidth": 0.5,
-        "zerolinecolor": "#dee2e6"
+        "linecolor": "rgba(0,0,0,0.08)",
+        "zerolinecolor": "rgba(0,0,0,0.35)"
        }
       }
      },
@@ -128,6 +133,7 @@
       "xaxis": "x",
       "yaxis": "y"
      },
+     "customdata": [],
      "fields": {
       "x": "species",
       "y": "mean_mass"
@@ -252,28 +258,34 @@
         "#fab005"
        ],
        "font": {
+        "color": "#343a40",
         "family": "-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\""
        },
        "geo": {
-        "bgcolor": "#ffffff"
+        "bgcolor": "rgba(0,0,0,0)"
        },
-       "paper_bgcolor": "#ffffff",
-       "plot_bgcolor": "#ffffff",
+       "paper_bgcolor": "rgba(0,0,0,0)",
+       "plot_bgcolor": "rgba(0,0,0,0)",
        "xaxis": {
-        "gridcolor": "#dee2e6",
+        "color": "#343a40",
+        "gridcolor": "rgba(0,0,0,0.08)",
         "gridwidth": 0.5,
-        "zerolinecolor": "#dee2e6"
+        "linecolor": "rgba(0,0,0,0.08)",
+        "zerolinecolor": "rgba(0,0,0,0.35)"
        },
        "yaxis": {
-        "gridcolor": "#dee2e6",
+        "color": "#343a40",
+        "gridcolor": "rgba(0,0,0,0.08)",
         "gridwidth": 0.5,
-        "zerolinecolor": "#dee2e6"
+        "linecolor": "rgba(0,0,0,0.08)",
+        "zerolinecolor": "rgba(0,0,0,0.35)"
        }
       }
      },
      "uirevision": "persistent",
      "xaxis": {
       "anchor": "y",
+      "automargin": true,
       "domain": [
        0.0,
        1.0
@@ -284,6 +296,7 @@
      },
      "yaxis": {
       "anchor": "x",
+      "automargin": true,
       "domain": [
        0.0,
        1.0
@@ -300,6 +313,7 @@
       "xaxis": "x",
       "yaxis": "y"
      },
+     "customdata": [],
      "fields": {
       "x": "flipper_length_mm",
       "y": "body_mass_g"
@@ -314,6 +328,7 @@
       "xaxis": "x",
       "yaxis": "y"
      },
+     "customdata": [],
      "fields": {
       "x": "flipper_length_mm",
       "y": "body_mass_g"
@@ -328,6 +343,7 @@
       "xaxis": "x",
       "yaxis": "y"
      },
+     "customdata": [],
      "fields": {
       "x": "flipper_length_mm",
       "y": "body_mass_g"
@@ -341,7 +357,7 @@
    "trendlines": []
   }
  },
- "built_at": "2026-08-05T19:01:28.572882+00:00",
+ "built_at": "2026-11-15T14:16:31.444088+00:00",
  "dashboard": {
   "doc": {
    "left_panel_layout_data": [
@@ -504,22 +520,27 @@
      "description": "",
      "index": "text-intro",
      "order": 2,
+     "surface": "none",
      "title": "Palmer Penguins \u2014 Static Bundle",
      "title_align": "left",
-     "title_size": "sm",
+     "vertical_alignment": "center",
      "wf_id": null,
      "workflow_tag": ""
     },
     {
      "aggregation": "average",
+     "attrition_cols": [],
      "column_name": "body_mass_g",
      "column_type": "float64",
      "component_type": "card",
      "data_collection_tag": "joined_penguins_complete",
      "dc_id": "e26f036c4d124f11b2f23fd8",
+     "decimals": 4,
      "description": "",
+     "follow_region_filter": false,
      "index": "card-body-mass",
      "secondary_layout": "vertical",
+     "threshold_direction": "min",
      "title": "Mean Body Mass (g)",
      "title_align": "left",
      "title_size": "sm",
@@ -529,14 +550,17 @@
     },
     {
      "aggregation": "nunique",
+     "attrition_cols": [],
      "column_name": "species",
      "column_type": "object",
      "component_type": "card",
      "data_collection_tag": "joined_penguins_complete",
      "dc_id": "e26f036c4d124f11b2f23fd8",
      "description": "",
+     "follow_region_filter": false,
      "index": "card-species-count",
      "secondary_layout": "vertical",
+     "threshold_direction": "min",
      "title": "Species",
      "title_align": "left",
      "title_size": "sm",
@@ -545,14 +569,17 @@
      "workflow_tag": "penguin_species_analysis"
     },
     {
+     "always_selected": false,
      "column_name": "species",
      "column_type": "object",
      "component_type": "interactive",
      "data_collection_tag": "joined_penguins_complete",
      "dc_id": "e26f036c4d124f11b2f23fd8",
+     "default_order": "desc",
      "description": "",
      "index": "filter-species",
      "interactive_component_type": "MultiSelect",
+     "multiple": false,
      "placement": "left",
      "title": "Species",
      "title_align": "left",
@@ -560,14 +587,17 @@
      "workflow_tag": "penguin_species_analysis"
     },
     {
+     "always_selected": false,
      "column_name": "year",
      "column_type": "object",
      "component_type": "interactive",
      "data_collection_tag": "joined_penguins_complete",
      "dc_id": "e26f036c4d124f11b2f23fd8",
+     "default_order": "desc",
      "description": "",
      "index": "filter-year",
      "interactive_component_type": "MultiSelect",
+     "multiple": false,
      "placement": "left",
      "title": "Year",
      "title_align": "left",
@@ -604,6 +634,7 @@
      "index": "table-penguins",
      "page_size": 100,
      "row_selection_enabled": false,
+     "row_selection_mode": "multiple",
      "sortable": true,
      "title": "Raw Measurements",
      "title_align": "left",
@@ -632,16 +663,23 @@
      "component_type": "advanced_viz",
      "config": {
       "abundance_col": "body_mass_g",
+      "controls_placement": "popover",
+      "max_depth": 3,
+      "min_percent": 0.5,
+      "palette": "tab20",
       "rank_cols": [
        "species",
        "island"
       ],
+      "show_counts": true,
       "viz_kind": "sunburst"
      },
      "data_collection_tag": "joined_penguins_complete",
      "dc_id": "e26f036c4d124f11b2f23fd8",
      "description": "",
+     "floating_initial_state": "compact",
      "index": "sunburst-mass",
+     "placement": "grid",
      "title": "Body mass by species and island (sunburst)",
      "title_align": "left",
      "title_size": "sm",
@@ -652,18 +690,34 @@
     {
      "component_type": "advanced_viz",
      "config": {
+      "annotate_top_n": 0,
       "cluster_col": "species",
+      "cluster_sort": "name",
+      "colour_scale": "Viridis",
+      "controls_placement": "popover",
+      "default_colour_by": "neg_log10_padj",
       "frac_expressing_col": "bill_length_mm",
       "gene_col": "island",
+      "gene_sort": "name",
+      "log_transform": false,
+      "marker_outline": true,
       "max_dot_size": 22,
+      "max_genes": 50,
       "mean_expression_col": "body_mass_g",
       "min_dot_size": 2,
+      "padj_threshold": 0.05,
+      "reverse_scale": false,
+      "term_sort": "nes",
+      "top_n": 20,
+      "view": "dotplot",
       "viz_kind": "dot_plot"
      },
      "data_collection_tag": "joined_penguins_complete",
      "dc_id": "e26f036c4d124f11b2f23fd8",
      "description": "",
+     "floating_initial_state": "compact",
      "index": "dotplot-mass",
+     "placement": "grid",
      "title": "Mean body mass dot plot",
      "title_align": "left",
      "title_size": "sm",
@@ -672,14 +726,17 @@
      "workflow_tag": "penguin_species_analysis"
     },
     {
+     "always_selected": false,
      "column_name": "region",
      "column_type": "object",
      "component_type": "interactive",
      "data_collection_tag": "island_regions",
      "dc_id": "c87fe9ddedb75e9acb9428cc",
+     "default_order": "desc",
      "description": "",
      "index": "filter-region",
      "interactive_component_type": "MultiSelect",
+     "multiple": false,
      "placement": "left",
      "title": "Region (linked)",
      "title_align": "left",
@@ -696,6 +753,7 @@
      "index": "table-island-regions",
      "page_size": 100,
      "row_selection_enabled": false,
+     "row_selection_mode": "multiple",
      "sortable": true,
      "title": "Island Regions",
      "title_align": "left",
@@ -790,7 +848,7 @@
    "uri": "inline:dc_e26f036c4d124f11b2f23fd8"
   }
  },
- "depictio_version": "1.3.1",
+ "depictio_version": "1.21.0-b6",
  "frozen": {},
  "inline_blobs": {
   "dc_c87fe9ddedb75e9acb9428cc": "UEFSMRUEFVIVVkwVCBUAAAApoAkAAABUb3JnZXJzZW4GAAAAQmlzY29lBQAAAERyZWFtBQAAAEFscGhhFQAVFBUYLBUIFRAVBhUGHDYAKAlUb3JnZXJzZW4YBUFscGhhAAAACiQCAAAACAECA+QAFQwZNQAGEBkYBmlzbGFuZBUCFggWzgEW1gEmeCYIHDYAKAlUb3JnZXJzZW4YBUFscGhhAAAVBBWGARVkTBUGFQAAAENoFwAAAFBhbG1lciBBcmNoaXBlbGFnbyBXZXN0WhsAQEVhc3QJAAAAVW5jaGFydGVkFQAVFBUYLBUIFRAVBhUGHDYAKAlVbmNoYXJ0ZWQYF1BhbG1lciBBcmNoaXBlbGFnbyBFYXN0AAAACiQCAAAACAECA4QAFQwZNQAGEBkYBnJlZ2lvbhUCFggWqAIWigImyAMmyAIcNgAoCVVuY2hhcnRlZBgXUGFsbWVyIEFyY2hpcGVsYWdvIEVhc3QAABkRAhkYBUFscGhhGRgJVG9yZ2Vyc2VuFQAZFgAAGRECGRgXUGFsbWVyIEFyY2hpcGVsYWdvIEVhc3QZGAlVbmNoYXJ0ZWQVABkWAAAZHBZ4FWYWAAAAGRwWyAMVigEWAAAAFQIZPEgEcm9vdBUEABUMJQIYBmlzbGFuZCUATBwAAAAVDCUCGAZyZWdpb24lAEwcAAAAFggZHBksJs4CHBUMGTUABhAZGAZpc2xhbmQVAhYIFs4BFtYBJngmCBw2ACgJVG9yZ2Vyc2VuGAVBbHBoYQAAFvwGFRQW5AUVOgAm0gUcFQwZNQAGEBkYBnJlZ2lvbhUCFggWqAIWigImyAMmyAIcNgAoCVVuY2hhcnRlZBgXUGFsbWVyIEFyY2hpcGVsYWdvIEVhc3QAABaQBxUYFp4GFV4AFvYDFggmCBbgAxQAABkcGAxBUlJPVzpzY2hlbWEY3AEvLy8vLzVzQUFBQUVBQUFBOHYvLy94UUFBQUFFQUFFQUFBQUtBQXNBQ0FBS0FBUUErUC8vL3d3QUFBQUlBQWdBQUFBRUFBSUFBQUF3QUFBQUJBQUFBTVQvLy84WUFBQUFFQUFBQUFnQUFBQUJGQUFBQUFBQUFNVC8vLzhHQUFBQWNtVm5hVzl1QUFEcy8vLy9MQUFBQUNBQUFBQVlBQUFBQVJRQUFCQUFFZ0FFQUJBQUVRQUlBQUFBREFBQUFBQUEvUC8vL3dRQUJBQUdBQUFBYVhOc1lXNWtBQT09ABgGUG9sYXJzGSwcAAAcAAAA4wEAAFBBUjE=",
@@ -849,6 +907,14 @@
    }
   ]
  },
+ "provenance": {
+  "dashboard_url": null,
+  "exported_at": null,
+  "exported_by": null,
+  "project_name": null,
+  "source": null
+ },
+ "tabs": [],
  "tiers": {
   "card-body-mass": {
    "detail": null,

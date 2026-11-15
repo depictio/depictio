@@ -20,7 +20,7 @@
  *
  *   region "Palmer Archipelago East" → island Biscoe
  *     rows                     167 of 342
- *     mean(body_mass_g)        4716.017964071856 → card text "4716.018"
+ *     mean(body_mass_g)        4716.017964071856 → card text "4,716.0180"
  *     n_unique(species)        2  (Adelie 44, Gentoo 123)
  *   region "Uncharted" → island "Alpha"
  *     rows                       0   — "Alpha" is in the lookup table on
@@ -45,11 +45,11 @@ const DOTPLOT = "dotplot-mass";
 
 /** Biscoe (= region "Palmer Archipelago East") reference values. */
 const BISCOE_ROWS = 167;
-const BISCOE_MEAN_MASS = "4716.018";
+const BISCOE_MEAN_MASS = "4,716.0180";
 const BISCOE_SPECIES = "2";
 /** Whole frame / penguins-side species filter. */
 const ALL_ROWS = 342;
-const ALL_MEAN_MASS = "4201.7544";
+const ALL_MEAN_MASS = "4,201.7544";
 const ADELIE_ROWS = 151;
 /** The lookup collection's own row count. */
 const LOOKUP_ROWS = 4;

@@ -32,7 +32,9 @@ test("clicking a rail pill switches tab in place, offline", async ({ page }) => 
 
   // Entry tab: the basic fixture's dashboard, plus a pill per family member.
   await expect(page.getByText("A hand-written fixture manifest")).toBeVisible();
-  await expect(page.locator('[role="tab"]')).toHaveCount(3);
+  // The rail also lists the dashboard Guide (a page of the dashboard, not a
+  // tab of the family), so count the family pills only.
+  await expect(page.locator('[role="tab"]').filter({ hasNotText: "Guide" })).toHaveCount(3);
   for (const name of ["Overview", "Distributions", "Details"]) {
     await expect(tabPill(page, name)).toHaveCount(1);
   }

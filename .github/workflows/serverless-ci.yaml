@@ -83,25 +83,35 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
 
+      # The single-file builds inline every dynamic import of the whole viewer;
+      # Node's default heap runs out on them (same cap as the other builds).
       - name: Build static-runtime bundle + demo site
         working-directory: depictio/viewer
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
         run: pnpm run demo:static
 
       - name: Build catalog-preview bundle
         working-directory: depictio/viewer
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
         run: pnpm run build:catalog-preview
 
-      # Budgets (gzip bytes). static runtime: 3.2 MB — the catalog-preview
-      # floor (2.20 MB) + ~1 MB headroom for runtime code, excluding data.
-      # catalog-preview: 2.6 MB — first-ever guard; measured 2.21 MB today.
-      # A bump is a reviewable diff on these two lines.
+      # Budgets (gzip bytes). A bump is a reviewable diff on these two lines.
+      #
+      # Re-set on the rebase onto main v1.21, whose viewer grew a lot (genome
+      # views, protein kinds, new chrome): measured 3.76 MB for the static
+      # runtime (with JBrowse and 3Dmol stubbed out, see vite.static.config.ts)
+      # and 4.06 MB for main's own catalog preview, against 2.2 MB / 2.21 MB
+      # when these guards were introduced. Each budget is today's measure plus
+      # ~0.4 MB of headroom: static runtime 4.2 MB, catalog preview 4.5 MB.
       - name: Byte budget — static runtime
         working-directory: depictio/viewer
-        run: node scripts/check-bundle-budget.mjs dist-static/static.html 3355443 static-runtime
+        run: node scripts/check-bundle-budget.mjs dist-static/static.html 4404019 static-runtime
 
       - name: Byte budget — catalog preview
         working-directory: depictio/viewer
-        run: node scripts/check-bundle-budget.mjs dist-catalog-preview/catalog-preview.html 2726297 catalog-preview
+        run: node scripts/check-bundle-budget.mjs dist-catalog-preview/catalog-preview.html 4718592 catalog-preview
 
       - name: Install Playwright
         working-directory: depictio/tests/e2e-playwright

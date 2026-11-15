@@ -29,6 +29,7 @@ COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY patches ./patches/
 COPY packages/depictio-components/package.json ./packages/depictio-components/
 COPY packages/depictio-react-core/package.json ./packages/depictio-react-core/
+COPY packages/depictio-static-core/package.json ./packages/depictio-static-core/
 COPY depictio/viewer/package.json ./depictio/viewer/
 RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
     pnpm install --frozen-lockfile

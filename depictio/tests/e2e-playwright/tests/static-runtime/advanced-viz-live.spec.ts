@@ -98,15 +98,22 @@ async function sunburstNodes(page: Page) {
     const ids = traces.flatMap((t) => t.ids ?? []);
     const parents = traces.flatMap((t) => t.parents ?? []);
     const values = traces.flatMap((t) => t.values ?? []);
+    // The renderer draws a centre node ("All", the whole) above the data's
+    // own roots, so the first ring is its children. Read through it, so the
+    // counts below stay the data's node table.
+    const tops = ids.filter((_, i) => parents[i] === "");
+    const centre = tops.length === 1 && parents.includes(tops[0]) ? tops[0] : null;
+    const rootParent = centre ?? "";
     const rootIds: string[] = [];
     let rootTotal = 0;
     for (let i = 0; i < ids.length; i++) {
-      if (parents[i] === "") {
+      if (ids[i] !== centre && parents[i] === rootParent) {
         rootIds.push(ids[i]);
         rootTotal += Number(values[i]) || 0;
       }
     }
-    return { found: true, nodes: ids.length, rootIds: rootIds.sort(), rootTotal };
+    const nodes = ids.length - (centre ? 1 : 0);
+    return { found: true, nodes, rootIds: rootIds.sort(), rootTotal };
   }, SUNBURST);
 }
 

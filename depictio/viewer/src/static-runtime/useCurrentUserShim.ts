@@ -18,6 +18,8 @@ const STATIC_RESULT: UseCurrentUserResult = {
   authMode: 'unauthenticated',
   isPublicMode: true,
   isDemoMode: false,
+  // No sign-in inside a bundle.
+  ssoProviders: [],
   isDevMode: false,
   walkthroughDisabled: true,
   isSingleUserMode: false,
@@ -28,6 +30,15 @@ const STATIC_RESULT: UseCurrentUserResult = {
   // The inspector reads live component metadata from the server; a bundle has
   // none, so the info and notes surfaces stay in their popover/drawer form.
   inspectorEnabled: false,
+  dashboardsDefaultView: null,
+  // Server-side capabilities: a bundle has no server, so every one is off.
+  // `embedEnabled` false also keeps main's component-export action off every
+  // tile (it would call /export/... on a backend that is not there).
+  localDataRootsEnabled: false,
+  remoteBrowseEnabled: false,
+  embedEnabled: false,
+  codeFiguresLocked: false,
+  embedFramingEnabled: false,
   loading: false,
 };
 
