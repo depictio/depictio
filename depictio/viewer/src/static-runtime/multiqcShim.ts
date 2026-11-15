@@ -45,6 +45,8 @@
  * plot.
  */
 import type { InteractiveFilter } from '../../../../packages/depictio-react-core/src/api';
+import { intersectSampleConstraints } from 'depictio-static-core';
+
 import { bundle, frozenPayload } from './bundle';
 import { resolveLinkFilters } from './liveData';
 import { themedFrozenFigure, type ThemeName } from './mantinePlotlyTemplate';
@@ -56,7 +58,15 @@ const LINK_NO_MATCH = '__link_no_match__';
 /** Column names `_resolve_multiqc_sample_filter` treats as "the MultiQC DC's
  *  own sample column" (routes.py:3667 uses `sample`; the sibling fallback list
  *  at routes.py:3622 names the other two). */
-const SAMPLE_COLUMNS = new Set(['sample', 'sample_id', 'sample_name']);
+const SAMPLE_COLUMNS = new Set([
+  'sample',
+  'sample_id',
+  'sample_name',
+  'sampleid',
+  'samplename',
+  'sample-id',
+  'sample-name',
+]);
 
 // ---------------------------------------------------------------------------
 // figure patching — port of services/multiqc/patching.py:59
@@ -88,8 +98,11 @@ function asArray(value: unknown): unknown[] {
  * Returns a new figure; the manifest object is never mutated (a later filter
  * change re-patches from the pristine snapshot).
  */
-export function patchMultiqcFigure(figure: Fig, selectedSamples: string[]): Fig {
-  if (!figure || selectedSamples.length === 0) return figure;
+export function patchMultiqcFigure(figure: Fig, selectedSamples: string[] | null): Fig {
+  // `null`: no sample filter, figure untouched. `[]`: active filters matched no
+  // sample — every sample is filtered out (`patch_multiqc_figures`), the two
+  // must not be conflated.
+  if (!figure || selectedSamples === null) return figure;
   const selected = new Set(selectedSamples.map(String));
   const data = asArray(figure.data).map((raw) => {
     const trace = { ...(raw as Trace) };
@@ -202,65 +215,106 @@ export function multiqcDcIdFor(componentId: string): string {
 }
 
 export interface MultiqcSampleSelection {
-  /** Sample names to keep; empty means "no resolvable filter" (server parity:
-   *  `patch_multiqc_figures` no-ops on an empty list, so the full figure shows). */
-  samples: string[];
+  /** Surviving sample names, or `null` when no sample filter applies (the
+   *  figure renders unfiltered). `[]` means the active filters matched no
+   *  sample: the figure renders EMPTY, as the server's does. */
+  samples: string[] | null;
   /** True when a link into this DC declares the `sample_mapping` resolver but
    *  carries no `mappings` — the canonical ids it produced cannot be trusted to
    *  name real traces, so callers skip patching instead of emptying the plot. */
   mappingsMissing: boolean;
 }
 
+/** `{id: variants}` the producer baked from the reports' `sample_mappings`
+ *  (`expand_canonical_samples_to_variants` per id), when it did. */
+function expansionFor(componentId: string | null): Record<string, string[]> | null {
+  if (!componentId) return null;
+  const entry = bundle().frozen[componentId];
+  const table = (entry?.payload as { sample_expansion?: Record<string, string[]> } | undefined)
+    ?.sample_expansion;
+  return table && typeof table === 'object' ? table : null;
+}
+
+
 /**
- * Resolve the dashboard's filter state into a MultiQC sample list.
+ * Resolve the dashboard's filter state into a MultiQC sample set —
+ * `_resolve_multiqc_sample_filter` (dashboards routes.py), constraint by
+ * constraint:
  *
- * Two sources, mirroring the server (routes.py:3658-3811):
- *   - DIRECT — a filter that lives on the MultiQC DC itself and names a sample
- *     column; its values are used as-is.
- *   - LINKED — everything else goes through `resolveLinkFilters`, the offline
- *     mirror of `_filters_with_links`. The synthetics it appends for this
- *     target DC ARE the resolved sample list (the `sample_mapping` resolver
- *     already ran inside the walk), so no second expansion happens here.
+ *   - DIRECT — every active filter on the MultiQC DC's own sample column
+ *     (`MULTIQC_SAMPLE_FILTER_COLUMNS`) is one constraint, expanded to report
+ *     variants. A TextInput there is a pattern, not a sample name: it leaves
+ *     the sample set alone.
+ *   - LINKED — every other collection whose filters reach this DC through the
+ *     bundled links is one constraint: the link-resolved values of all its
+ *     routes into this DC, pooled (`resolveLinkFilters` appends one synthetic
+ *     filter per route, already through the `sample_mapping` resolver). A
+ *     route that matched nothing (`LINK_NO_MATCH`) contributes an empty pool.
  *
- * A chain that resolved to nothing (`LINK_NO_MATCH`) contributes no samples,
- * which lands on the server's own behaviour: `_resolve_multiqc_sample_filter`
- * returns `[]` when the metadata frame comes back empty, and an empty list
- * makes `patch_multiqc_figures` return the figure unpatched.
+ * The result is the INTERSECTION of the constraints (each active filter only
+ * narrows), `null` when there are none. It used to be the union, so a second
+ * filter widened the figure, and a filter that matched nothing showed it
+ * unfiltered.
  */
 export async function resolveMultiqcSamples(
   dcId: string,
   filters: InteractiveFilter[],
+  componentId: string | null = null,
 ): Promise<MultiqcSampleSelection> {
-  const empty: MultiqcSampleSelection = { samples: [], mappingsMissing: false };
-  if (!dcId || !filters || filters.length === 0) return empty;
+  const none: MultiqcSampleSelection = { samples: null, mappingsMissing: false };
+  if (!dcId || !filters || filters.length === 0) return none;
+  const table = expansionFor(componentId);
 
-  const direct: string[] = [];
+  const constraints: string[][] = [];
   for (const f of filters) {
     const meta = f.metadata ?? {};
     if (String(meta.dc_id ?? '') !== dcId) continue;
     const column = f.column_name ?? meta.column_name;
-    if (!column || !SAMPLE_COLUMNS.has(String(column))) continue;
+    if (!column || !SAMPLE_COLUMNS.has(String(column).toLowerCase())) continue;
     const value = f.value;
-    if (value === null || value === undefined || value === '') continue;
-    for (const v of Array.isArray(value) ? value : [value]) direct.push(String(v));
+    if (value === null || value === undefined || value === '' || (Array.isArray(value) && value.length === 0)) {
+      continue;
+    }
+    if ((f.interactive_component_type ?? meta.interactive_component_type) === 'TextInput') continue;
+    constraints.push((Array.isArray(value) ? value : [value]).map(String));
   }
 
+  // One pooled constraint per source collection with a route into this DC:
+  // the synthetic index is `link_<id>_<id>…`, the last id naming the link
+  // that lands on the MultiQC DC.
+  const linkSource = new Map<string, string>();
+  for (const link of (bundle().links?.configs ?? []) as { id?: unknown; source_dc_id?: unknown }[]) {
+    linkSource.set(String(link.id ?? '?'), String(link.source_dc_id ?? ''));
+  }
   const extended = await resolveLinkFilters(dcId, filters);
-  const linked: string[] = [];
+  const pools = new Map<string, Set<string>>();
+  let linked = 0;
   for (const f of extended) {
-    if (filters.includes(f)) continue; // user filter, already handled above
+    if (filters.includes(f)) continue; // user filter, handled above
     if (String(f.metadata?.dc_id ?? '') !== dcId) continue;
+    const ids = String(f.index ?? '').replace(/^link_/, '').split('_');
+    const source = linkSource.get(ids[ids.length - 1]) ?? String(f.index ?? '');
+    const pool = pools.get(source) ?? new Set<string>();
+    pools.set(source, pool);
     if (f.interactive_component_type === LINK_NO_MATCH) continue;
     for (const v of Array.isArray(f.value) ? f.value : [f.value]) {
-      if (v !== null && v !== undefined && v !== '') linked.push(String(v));
+      if (v !== null && v !== undefined && v !== '') {
+        pool.add(String(v));
+        linked++;
+      }
     }
   }
+  for (const pool of pools.values()) constraints.push([...pool]);
+
+  const samples = intersectSampleConstraints(constraints, table);
+  if (samples === null) return none;
 
   // A `sample_mapping` link with no baked mappings resolved canonical ids to
   // themselves. They will not match MultiQC's variant-keyed traces, and
   // patching with them would blank the figure — worse than not filtering.
   const mappingsMissing =
-    linked.length > 0 &&
+    linked > 0 &&
+    !table &&
     (bundle().links?.configs ?? []).some(
       (link) =>
         String((link as { target_dc_id?: string }).target_dc_id ?? '') === dcId &&
@@ -269,10 +323,7 @@ export async function resolveMultiqcSamples(
         !(link as { link_config?: { mappings?: unknown } }).link_config?.mappings,
     );
 
-  return {
-    samples: [...new Set([...direct, ...linked])],
-    mappingsMissing,
-  };
+  return { samples, mappingsMissing };
 }
 
 // ---------------------------------------------------------------------------
@@ -299,9 +350,9 @@ export async function renderMultiQCStatic(
 ): Promise<MultiqcFigurePayload & { status: 'ready' }> {
   const payload = frozenPayload<MultiqcFigurePayload>(componentId, 'multiqc');
 
-  let selection: MultiqcSampleSelection = { samples: [], mappingsMissing: false };
+  let selection: MultiqcSampleSelection = { samples: null, mappingsMissing: false };
   try {
-    selection = await resolveMultiqcSamples(multiqcDcIdFor(componentId), filters);
+    selection = await resolveMultiqcSamples(multiqcDcIdFor(componentId), filters, componentId);
   } catch (e) {
     console.error(
       `static bundle: MultiQC sample resolution failed for "${componentId}" — serving unfiltered`,
@@ -309,7 +360,7 @@ export async function renderMultiQCStatic(
     );
   }
 
-  if (selection.samples.length === 0 || selection.mappingsMissing) {
+  if (selection.samples === null || selection.mappingsMissing) {
     return { ...themedFrozenFigure(payload, theme), status: 'ready' };
   }
 
@@ -425,16 +476,16 @@ export async function renderMultiQCGeneralStatsStatic(
 ): Promise<GeneralStatsPayloadLike> {
   const payload = frozenPayload<GeneralStatsPayloadLike>(componentId, 'multiqc-general-stats');
 
-  let selection: MultiqcSampleSelection = { samples: [], mappingsMissing: false };
+  let selection: MultiqcSampleSelection = { samples: null, mappingsMissing: false };
   try {
-    selection = await resolveMultiqcSamples(multiqcDcIdFor(componentId), filters);
+    selection = await resolveMultiqcSamples(multiqcDcIdFor(componentId), filters, componentId);
   } catch (e) {
     console.error(
       `static bundle: MultiQC General Stats sample resolution failed for "${componentId}" — serving unfiltered`,
       e,
     );
   }
-  if (selection.samples.length === 0) return payload;
+  if (selection.samples === null) return payload;
 
   const modes: Record<string, GeneralStatsMode | undefined> = {};
   for (const [name, mode] of Object.entries(payload.modes ?? {})) {

@@ -11,3 +11,4 @@ export * from './links';
 export * from './filterBinding';
 export * from './valueOrder';
 export * from './cardLayouts';
+export * from './multiqcSamples';

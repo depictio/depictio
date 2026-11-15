@@ -1433,11 +1433,64 @@ def _freeze_multiqc(
         payload = routes.render_multiqc_general_stats_endpoint(
             dashboard_oid, component_id, request, current_user=user
         )
-        return "multiqc-general-stats", _multiqc_payload(payload, component_id)
+        out = _multiqc_payload(payload, component_id)
+        expansion = multiqc_sample_expansion(str(comp.get("dc_id") or ""))
+        if expansion:
+            out = {**out, "sample_expansion": expansion}
+        return "multiqc-general-stats", out
     payload = routes.render_multiqc_endpoint(
         dashboard_oid, component_id, request, current_user=user
     )
-    return "multiqc", _multiqc_payload(payload, component_id)
+    out = _multiqc_payload(payload, component_id)
+    expansion = multiqc_sample_expansion(str(comp.get("dc_id") or ""))
+    if expansion:
+        out = {**out, "sample_expansion": expansion}
+    return "multiqc", out
+
+
+def multiqc_sample_expansion(dc_id: str) -> dict[str, list[str]]:
+    """``{sample id: report variants}`` for a MultiQC collection, precomputed.
+
+    The server expands every sample constraint (a canonical ``SRR10070130``
+    picked in a filter, or a metadata collection's link values) to the variant
+    names the traces carry (``SRR10070130_1``) with the reports'
+    ``sample_mappings`` (``expand_canonical_samples_to_variants`` +
+    ``remap_mappings_to_hub``). The bundle has no report store, so the answer
+    is baked per id the mappings know; the runtime unions it over a
+    constraint's values before intersecting.
+    """
+    if not dc_id:
+        return {}
+    try:
+        from depictio.api.v1.services.multiqc.patching import (
+            expand_canonical_samples_to_variants,
+        )
+        from depictio.cli.cli.utils.sample_mapping import remap_mappings_to_hub
+
+        mappings: dict[str, list[str]] = {}
+        for rep in _db().multiqc_collection.find(
+            {"data_collection_id": dc_id}, {"metadata.sample_mappings": 1}
+        ):
+            for key, variants in ((rep.get("metadata") or {}).get("sample_mappings") or {}).items():
+                bucket = mappings.setdefault(str(key), [])
+                for v in variants or []:
+                    if str(v) not in bucket:
+                        bucket.append(str(v))
+        if not mappings:
+            return {}
+        ids = {k for k in mappings} | {v for vs in mappings.values() for v in vs}
+        out: dict[str, list[str]] = {}
+        for sample in sorted(ids):
+            variants = expand_canonical_samples_to_variants(
+                [sample], remap_mappings_to_hub(mappings, [sample])
+            )
+            extra = [str(v) for v in variants if str(v) != sample]
+            if extra:
+                out[sample] = extra
+        return out
+    except Exception as exc:
+        logger.warning("producer A: MultiQC sample expansion for %s failed: %s", dc_id, exc)
+        return {}
 
 
 def _multiqc_payload(payload: Any, component_id: str) -> dict[str, Any]:
