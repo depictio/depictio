@@ -6,7 +6,7 @@
  * front matter), and the preflight API contract directly.
  */
 
-import { test, expect } from "@fixtures/auth";
+import { API_PREFIX, API_URL, apiOnlyToken, expect, test } from "@fixtures/auth";
 
 const PENGUINS_DASHBOARD_ID = "6824cb3b89d2b72169309738";
 
@@ -21,7 +21,8 @@ test.describe("Notebook export", () => {
       timeout: 30_000,
     });
 
-    await page.getByRole("button", { name: "Settings" }).click();
+    // `exact`: every tile carries its own "… settings" button.
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
     await page.locator("[data-testid='settings-nav-export']").click();
     const exportButton = page.locator("[data-testid='export-notebook']");
     await expect(exportButton).toBeVisible({ timeout: 15_000 });
@@ -53,17 +54,12 @@ test.describe("Notebook export", () => {
     await expect(modal.locator("[data-testid='notebook-export-done']")).toBeVisible();
   });
 
-  test("preflight API classifies every tile", async ({ loginAsAdmin, page }) => {
-    await loginAsAdmin();
-    const token = await page.evaluate(() => {
-      const raw = window.localStorage.getItem("local-store");
-      return raw ? (JSON.parse(raw).access_token as string) : null;
-    });
-    expect(token).not.toBeNull();
-    const res = await page.request.post(
-      `/depictio/api/v1/dashboards/notebook_export/${PENGUINS_DASHBOARD_ID}/preflight`,
+  test("preflight API classifies every tile", async ({ request }) => {
+    const { access_token } = await apiOnlyToken(request, "adminUser");
+    const res = await request.post(
+      `${API_URL}${API_PREFIX}/dashboards/notebook_export/${PENGUINS_DASHBOARD_ID}/preflight`,
       {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${access_token}` },
         data: {
           state: { version: 1, context: { dashboard_id: PENGUINS_DASHBOARD_ID } },
         },
