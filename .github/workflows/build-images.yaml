@@ -584,7 +584,9 @@ jobs:
       matrix:
         include:
           - { pipeline: ampliseq, version: 2.18.0 }
-          - { pipeline: viralrecon, version: 3.0.0 }
+          # Pangolin's database update asks GitHub's API, which the shared
+          # runners exhaust (403); the template's pangolin collection is optional.
+          - { pipeline: viralrecon, version: 3.0.0, args: --skip_pangolin }
           - { pipeline: taxprofiler, version: 2.0.1 }
           - { pipeline: airrflow, version: 5.1.2 }
           - { pipeline: smrnaseq, version: 2.4.1 }
@@ -630,7 +632,7 @@ jobs:
 
       - name: Run nf-core/${{ matrix.pipeline }} ${{ matrix.version }} (-profile test,docker)
         working-directory: ${{ runner.temp }}
-        run: bash "$CI_SCRIPT" pipeline "${{ matrix.pipeline }}" "${{ matrix.version }}"
+        run: bash "$CI_SCRIPT" pipeline "${{ matrix.pipeline }}" "${{ matrix.version }}" ${{ matrix.args }}
 
       - name: Ingest the run with the module, in the all-in-one image
         working-directory: ${{ runner.temp }}

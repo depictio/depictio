@@ -3,7 +3,7 @@
 # depictio/ingest module (artifact mode) in the all-in-one image, then a reopen
 # of the artifact with the image's own `serve`. Run from an empty directory.
 #
-#   nfcore_through_module.sh pipeline <name> <version>
+#   nfcore_through_module.sh pipeline <name> <version> [pipeline args...]
 #       nf-core/<name> at tag <version>, -profile test,docker
 #       -> nfcore-results/ and its samplesheet nfcore-samplesheet.<ext>, read
 #          from the run's own params.json (`input`), as a pipeline would hand it
@@ -22,6 +22,7 @@ fail() { echo "::error::$*"; exit 1; }
 
 pipeline() {
     local name=$1 version=$2
+    shift 2
     # Cloned with git rather than pulled by Nextflow, which asks GitHub's API
     # for the manifest: unauthenticated, the shared runners exhaust its rate
     # limit ("API rate limit exceeded") when several jobs start at once.
@@ -32,14 +33,14 @@ pipeline() {
     # do not parse under it (smrnaseq 2.4.1, viralrecon 3.0.0), so a parse
     # error, and only a parse error, retries with the old one.
     if ! nextflow run "$PWD/nfcore-pipeline" -profile test,docker \
-        --outdir "$PWD/nfcore-results" -work-dir "$PWD/nfcore-work" 2>&1 | tee nfcore-run.log; then
+        --outdir "$PWD/nfcore-results" -work-dir "$PWD/nfcore-work" "$@" 2>&1 | tee nfcore-run.log; then
         # pipefail: the status is Nextflow's, not tee's.
         grep -qE "Config parsing failed|Unable to parse config|could not be parsed|Statements cannot be mixed" nfcore-run.log \
             || fail "nf-core/$name failed"
         echo "::warning::nf-core/$name $version does not parse under Nextflow's strict syntax; retrying with NXF_SYNTAX_PARSER=v1"
         rm -rf nfcore-results nfcore-work .nextflow*
         NXF_SYNTAX_PARSER=v1 nextflow run "$PWD/nfcore-pipeline" -profile test,docker \
-            --outdir "$PWD/nfcore-results" -work-dir "$PWD/nfcore-work"
+            --outdir "$PWD/nfcore-results" -work-dir "$PWD/nfcore-work" "$@"
     fi
     # The pipeline's work directory is GBs the rest of the job does not need.
     rm -rf nfcore-work
