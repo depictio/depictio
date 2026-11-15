@@ -3,7 +3,8 @@
 // results directory, plus the samplesheet at input/samplesheet.csv, template
 // detected from pipeline_info/. For the allinone-nfcore-rnaseq job in
 // .github/workflows/build-images.yaml:
-//   nextflow run module_nfcore.nf -profile docker --results <outdir> --samplesheet <csv>
+//   nextflow run module_nfcore.nf -profile docker --results <outdir> --samplesheet <file>
+// The samplesheet is staged at input/samplesheet.<its extension> (csv or tsv).
 include { DEPICTIO_INGEST } from '../../../depictio/cli/configs/nextflow/modules/depictio/ingest/main'
 
 workflow {
@@ -11,7 +12,7 @@ workflow {
         channel.of([
             [id: 'run'],
             [file(params.results, type: 'dir', checkIfExists: true), file(params.samplesheet, checkIfExists: true)],
-            ['.', 'input/samplesheet.csv'],
+            ['.', "input/samplesheet.${file(params.samplesheet).extension ?: 'csv'}"],
         ]),
         '',
         [],
