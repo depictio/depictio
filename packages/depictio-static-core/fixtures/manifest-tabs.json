@@ -32,7 +32,9 @@
      "interactive_component_type": "MultiSelect",
      "wf_id": null,
      "dc_id": "dc00000000000000000000a1",
-     "column_name": "species"
+     "column_name": "species",
+     "section": "Cohort",
+     "title": "Species picker"
     },
     {
      "index": "comp-text-1",
@@ -42,7 +44,13 @@
      "body": "A hand-written fixture manifest. Everything frozen."
     }
    ],
-   "stored_layout_data": []
+   "stored_layout_data": [],
+   "filter_sections": [
+    {
+     "name": "Cohort",
+     "persistent": true
+    }
+   ]
   }
  },
  "tabs": [
@@ -78,7 +86,9 @@
       "interactive_component_type": "MultiSelect",
       "wf_id": null,
       "dc_id": "dc00000000000000000000a1",
-      "column_name": "species"
+      "column_name": "species",
+      "section": "Cohort",
+      "title": "Species picker"
      },
      {
       "index": "comp-text-1",
@@ -88,7 +98,13 @@
       "body": "A hand-written fixture manifest. Everything frozen."
      }
     ],
-    "stored_layout_data": []
+    "stored_layout_data": [],
+    "filter_sections": [
+     {
+      "name": "Cohort",
+      "persistent": true
+     }
+    ]
    }
   },
   {

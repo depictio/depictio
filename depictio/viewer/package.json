@@ -7,6 +7,7 @@
   "scripts": {
     "icons": "node scripts/generate-icon-subset.mjs",
     "check:icons": "node scripts/check-icons.mjs",
+    "check:static-shim": "node scripts/check-static-shim.mjs",
     "dev": "pnpm run icons && vite",
     "build": "pnpm run icons && tsc && vite build",
     "build:catalog-preview": "pnpm run icons && vite build --config vite.catalog-preview.config.ts",

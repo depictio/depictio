@@ -139,3 +139,18 @@ test("a single-tab bundle renders exactly as before", async ({ page }) => {
   expect(attempts).toHaveLength(0);
   expect(pageErrors, `page errors:\n${pageErrors.join("\n")}`).toHaveLength(0);
 });
+
+test("a persistent filter section follows the reader onto every tab", async ({ page }) => {
+  // Declared on the main tab, drawn on its siblings through
+  // fetchCrossTabComponents — which a bundle used to leave unshimmed, so the
+  // section silently vanished on every child tab.
+  const attempts = await blockNetwork(page);
+  await page.goto(injectedBundleUrl(TABS_MANIFEST));
+  await expect(page.getByText("Species picker").first()).toBeVisible();
+
+  await tabPill(page, "Distributions").click();
+  await expect(page.getByText("Second tab body.")).toBeVisible();
+  await expect(page.getByText("Species picker").first()).toBeVisible();
+
+  expect(attempts, `unexpected network attempts:\n${attempts.join("\n")}`).toHaveLength(0);
+});

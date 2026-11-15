@@ -52,6 +52,11 @@ import type { InteractiveFilter } from '../../../../packages/depictio-react-core
 import { bundle } from './bundle';
 
 const engine: QueryEngine = new HyparquetEngine();
+
+/** The one engine every live path shares (its column caches included). */
+export function liveEngine(): QueryEngine {
+  return engine;
+}
 const tableCache = new Map<string, Promise<{ ref: DataRef; handle: TableHandle }>>();
 
 export function dataRefFor(dcId: string): DataRef | undefined {
@@ -1141,19 +1146,6 @@ export async function renderTableLive(
     // the infinite row model never purges its block cache mid-scroll.
     data_version: ref.aggregation_hash ?? null,
   };
-}
-
-/** MultiSelect options: codebook keys are the server's exact option strings
- *  (sorted str(v), see companions.py) — no decode needed; String columns
- *  compute unique() from the table. */
-export async function uniqueValuesLive(dcId: string, columnName: string): Promise<string[]> {
-  const ref = dataRefFor(dcId);
-  if (!ref) throw new Error(`static bundle: no data_ref for dc "${dcId}"`);
-  const codebook = ref.codebooks?.[columnName];
-  if (codebook) return Object.keys(codebook).sort();
-  const { handle } = await tableFor(dcId);
-  const vals = await engine.unique(handle, null, columnName);
-  return vals.map((v) => String(v));
 }
 
 export async function columnRangeLive(

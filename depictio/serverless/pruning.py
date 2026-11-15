@@ -178,7 +178,8 @@ def component_columns(comp: dict[str, Any]) -> set[str] | None:
       its ``None`` (whole-frame visu / unparseable kwargs) means keep all.
       Code-mode figures are never projected — arbitrary code reads anything.
     - cards: aggregation column + optional breakdown + filter_expr columns.
-    - interactive: filtered column + filter_expr columns.
+    - interactive: filtered column + filter_expr columns + ``order_by`` /
+      ``default_by`` / ``banner_facts`` columns.
     - tables: all columns (RFC §6) — sorting/filtering may touch any of them.
     - advanced_viz: the columns its config binds, for the kinds served live
       (phase 4). Celery/phylogenetic kinds contribute nothing — their DC is
@@ -199,6 +200,17 @@ def component_columns(comp: dict[str, Any]) -> set[str] | None:
         return cols | filter_expr_columns(comp.get("filter_expr"))
     if ctype == "interactive":
         cols = {comp["column_name"]} if comp.get("column_name") else set()
+        # The columns its option list and scope banner read besides its own:
+        # ``order_by`` (option order), ``default_by`` (the ``always_selected``
+        # start value, ``rank_values``) and each ``banner_facts`` column
+        # (``row_values``) — served in the browser from the same table.
+        for key in ("order_by", "default_by"):
+            if isinstance(comp.get(key), str) and comp[key]:
+                cols.add(comp[key])
+        for fact in comp.get("banner_facts") or []:
+            column = fact.get("column") if isinstance(fact, dict) else None
+            if isinstance(column, str) and column:
+                cols.add(column)
         return cols | filter_expr_columns(comp.get("filter_expr"))
     if ctype == "table":
         return None

@@ -476,3 +476,21 @@ def test_manifest_pins_the_tuned_limits(av_data_dir: Path, monkeypatch: pytest.M
     assert limits.advanced_viz_no_sample_max_rows == 5_000
     assert limits.advanced_viz_tail_p_threshold == 0.01
     assert limits.advanced_viz_tail_effect_threshold == 2.5
+
+
+def test_interactive_keeps_the_columns_its_options_and_banner_read() -> None:
+    """``order_by`` / ``default_by`` / ``banner_facts`` are served in the browser
+    from the bundled table, so pruning must keep them."""
+    from depictio.serverless.pruning import component_columns
+
+    cols = component_columns(
+        {
+            "component_type": "interactive",
+            "column_name": "group",
+            "order_by": "group_order",
+            "default_by": "member_count",
+            "banner_facts": [{"column": "pi", "label": "PI"}, {"column": "site", "label": "Site"}],
+            "filter_expr": "col('active') == True",
+        }
+    )
+    assert cols == {"group", "group_order", "member_count", "pi", "site", "active"}

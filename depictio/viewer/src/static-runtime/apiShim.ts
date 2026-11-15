@@ -52,12 +52,19 @@ export * from '../../../../packages/depictio-react-core/src/api';
 import type {
   AdvancedVizDataRequest,
   AdvancedVizDataResponse,
+  CrossTabComponentsResponse,
   DashboardData,
   DashboardSummary,
   FigureResponse,
+  FloatingComponent,
   FloatingComponentsResponse,
+  FunnelStageColumn,
+  FunnelValuesResponse,
   InteractiveFilter,
+  PersistentSection,
+  ResolvedGroupsResult,
   StoredMetadata,
+  TextFilterMatchesResult,
 } from '../../../../packages/depictio-react-core/src/api';
 
 import { scopeRegionFilters } from 'depictio-static-core';
@@ -73,10 +80,17 @@ import {
   renderPrologueFigureLive,
   renderTableLive,
   specsLive,
-  uniqueValuesLive,
   userColumns,
   type CoverageTrackLiveRequest,
 } from './liveData';
+import {
+  funnelValuesLive,
+  rankedValuesLive,
+  resolvedGroupsLive,
+  rowValuesLive,
+  textFilterMatchesLive,
+  uniqueValuesLive,
+} from './interactiveLive';
 import { themedFrozenFigure } from './mantinePlotlyTemplate';
 import { renderMultiQCGeneralStatsStatic, renderMultiQCStatic } from './multiqcShim';
 
@@ -477,9 +491,38 @@ function interactiveFrozen(dcId: string, columnName?: string, kind = 'interactiv
   return frozenPayload<InteractiveFrozen>(index, kind);
 }
 
-export async function fetchUniqueValues(dcId: string, columnName: string): Promise<string[]> {
-  if (dataRefFor(dcId)) return uniqueValuesLive(dcId, columnName);
+export async function fetchUniqueValues(
+  dcId: string,
+  columnName: string,
+  filterExpr?: string | null,
+  orderBy?: string | null,
+): Promise<string[]> {
+  // The component's own scope (`filter_expr`, through its `__fe__` companion)
+  // and the `order_by` companion column, as `/deltatables/unique_values`.
+  if (dataRefFor(dcId)) return uniqueValuesLive(dcId, columnName, filterExpr, orderBy);
   return interactiveFrozen(dcId, columnName, 'unique-values').unique ?? [];
+}
+
+/** The time-travel variant (`POST /filter_options`): a bundle is one point in
+ *  time and carries no pins, so it is the plain option list. */
+export async function fetchUniqueValuesAt(
+  _dashboardId: string,
+  dcId: string,
+  columnName: string,
+  _pins: unknown,
+  filterExpr?: string | null,
+  orderBy?: string | null,
+): Promise<string[]> {
+  return fetchUniqueValues(dcId, columnName, filterExpr, orderBy);
+}
+
+export async function fetchColumnRangeAt(
+  _dashboardId: string,
+  dcId: string,
+  columnName: string,
+  _pins: unknown,
+) {
+  return fetchColumnRange(dcId, columnName);
 }
 
 export async function fetchColumnRange(dcId: string, columnName: string) {
@@ -688,3 +731,277 @@ export async function dispatchGroupCompare(p: { dc_id: string }) {
 export async function pollGroupCompare(jobId: string) {
   return finishedJob(jobId) as never;
 }
+
+// ---- interactive endpoints beyond the option list (audit §3 item 6) --------
+
+/** Funnel filtering (on by default): which of each component's values still
+ *  lead somewhere under the OTHER active filters. It used to reject on every
+ *  filter change, so options were never narrowed. */
+export async function fetchFunnelValues(
+  _dashboardId: string,
+  filters: unknown[],
+  targetIndexes: string[],
+  includeStages = false,
+  _signal?: AbortSignal,
+  stageColumn?: FunnelStageColumn | null,
+): Promise<FunnelValuesResponse> {
+  return funnelValuesLive(filters as InteractiveFilter[], targetIndexes, includeStages, stageColumn);
+}
+
+/** `always_selected` + `default_by`: the value the Select starts on. */
+export async function fetchRankedValues(
+  dcId: string,
+  columnName: string,
+  by: string,
+  order: 'asc' | 'desc' = 'desc',
+): Promise<string[]> {
+  return rankedValuesLive(dcId, columnName, by, order);
+}
+
+/** `banner_facts`: a few columns of the row a filter value names. */
+export async function fetchRowValues(
+  dcId: string,
+  column: string,
+  value: string,
+  columns: readonly string[],
+  filterExpr?: string | null,
+): Promise<Record<string, unknown> | null> {
+  return rowValuesLive(dcId, column, value, columns, filterExpr);
+}
+
+/** The TextInput "N of M values match" readout. */
+export async function fetchTextFilterMatches(
+  _dashboardId: string,
+  request: Parameters<typeof textFilterMatchesLive>[0],
+  _signal?: AbortSignal,
+): Promise<TextFilterMatchesResult> {
+  return textFilterMatchesLive(request);
+}
+
+/** Selection groups captured on another collection, translated through the
+ *  bundled links for an advanced viz's client-side recolour. */
+export async function fetchResolvedGroups(
+  _dashboardId: string,
+  dcId: string,
+  groups: Array<{ name: string; column_name: string; values: string[]; color: string; dc_id?: string }>,
+  _signal?: AbortSignal,
+): Promise<ResolvedGroupsResult> {
+  return resolvedGroupsLive(dcId, groups);
+}
+
+/** Persistent sections and floating components of the whole tab family —
+ *  `get_cross_tab_components` over the bundled tab documents. Without it the
+ *  persistent filter strips and floating maps of a family vanished on every
+ *  child tab. Never throws (the viewer prunes hydrated filters with it). */
+export async function fetchCrossTabComponents(
+  dashboardId: string,
+  _versionId?: string | null,
+): Promise<CrossTabComponentsResponse> {
+  const raw = rawBundle();
+  const tabs = bundledTabs();
+  const family = tabs.length
+    ? tabs.map((t) => ({ id: t.id, title: t.title, doc: t.doc as Record<string, unknown> }))
+    : [{ id: raw.dashboard.id || dashboardId, title: raw.dashboard.title, doc: raw.dashboard.doc as Record<string, unknown> }];
+
+  type Spec = { name?: string; persistent?: boolean; display?: string; filter_bar?: boolean };
+  type Meta = Record<string, unknown> & { section?: string; component_type?: string; index?: string };
+  const isFloating = (m: Meta) =>
+    m.placement === 'floating' &&
+    (m.component_type === 'map' ||
+      m.component_type === 'jbrowse' ||
+      (m.component_type === 'advanced_viz' && m.viz_kind === 'molecule_3d'));
+
+  const floating: FloatingComponent[] = [];
+  const persistent: PersistentSection[] = [];
+  for (const tab of family) {
+    const metas = ((tab.doc.stored_metadata as Meta[] | undefined) ?? []).filter(Boolean);
+    for (const m of metas) {
+      if (isFloating(m)) {
+        floating.push({ dashboard_id: tab.id, tab_title: tab.title, metadata: m as unknown as StoredMetadata } as FloatingComponent);
+      }
+    }
+    const grid = (tab.doc.grid_sections as Spec[] | undefined) ?? [];
+    const filterSpecs = (tab.doc.filter_sections as Spec[] | undefined) ?? [];
+    const barNames = new Set(grid.filter((s) => s.display === 'strip' || s.filter_bar).map((s) => s.name));
+    for (const [kind, specs] of [
+      ['grid', grid],
+      ['filter', filterSpecs],
+    ] as const) {
+      for (const spec of specs) {
+        if (!spec.persistent) continue;
+        const members = metas
+          .filter((m) => m.section === spec.name)
+          .filter((m) => {
+            const isFilter = m.component_type === 'interactive' && !barNames.has(m.section);
+            return isFilter === (kind === 'filter') && !isFloating(m);
+          })
+          .map((m) => ({ dashboard_id: tab.id, tab_title: tab.title, metadata: m as unknown as StoredMetadata }));
+        const indices = new Set(members.map((m) => String((m.metadata as unknown as Meta).index ?? '')));
+        const layouts =
+          kind === 'grid'
+            ? (((tab.doc.right_panel_layout_data as Record<string, unknown>[] | undefined) ?? []).filter(
+                (item) =>
+                  item && typeof item === 'object' && indices.has(String(item.i ?? '').replace(/^box-/, '')),
+              ) as never[])
+            : [];
+        persistent.push({
+          kind,
+          owner_dashboard_id: tab.id,
+          owner_tab_title: tab.title,
+          spec,
+          components: members,
+          layouts,
+        } as unknown as PersistentSection);
+      }
+    }
+  }
+  const entryDoc = raw.dashboard.doc as { parent_dashboard_id?: string | null };
+  const parentId = tabs.length
+    ? (tabs.find((t) => t.is_main_tab)?.id ?? tabs[0].id)
+    : String(entryDoc.parent_dashboard_id || raw.dashboard.id || dashboardId);
+  return { parent_dashboard_id: parentId, floating, persistent_sections: persistent };
+}
+
+// ---- server-state features: honest no-ops in a read-only bundle -----------
+
+/** Saved filter state lives in the server's per-user store; a bundle has none
+ *  and must not write one. */
+export async function fetchDashboardFilterState(_dashboardId: string) {
+  return null;
+}
+export async function saveDashboardFilterState(): Promise<{ persisted: boolean }> {
+  return { persisted: false };
+}
+
+/** A bundle is one point in time: nothing is pinned, nothing is versioned. */
+export async function fetchDataVersionStatus(): Promise<{ collections: never[] }> {
+  return { collections: [] };
+}
+
+const READ_ONLY = 'not available in a read-only static bundle';
+const unavailable = { ok: false as const, status: 0, detail: READ_ONLY };
+
+export async function fetchDashboardAnnotations() {
+  return unavailable;
+}
+export async function fetchAnnotationTables() {
+  return unavailable;
+}
+export async function saveDashboardAnnotations(): Promise<never> {
+  throw new Error(`Annotations are ${READ_ONLY}.`);
+}
+export async function saveSharedLabels(): Promise<never> {
+  throw new Error(`Shared labels are ${READ_ONLY}.`);
+}
+export async function fetchTableEditStatus(): Promise<never> {
+  throw new Error(`Table editing is ${READ_ONLY}.`);
+}
+export async function fetchTableForEdit(): Promise<never> {
+  throw new Error(`Table editing is ${READ_ONLY}.`);
+}
+export async function patchTableCells(): Promise<never> {
+  throw new Error(`Table editing is ${READ_ONLY}.`);
+}
+export async function mergeTableFile(): Promise<never> {
+  throw new Error(`Table editing is ${READ_ONLY}.`);
+}
+export async function fetchDataCollectionPreview(): Promise<never> {
+  throw new Error(`The data preview is ${READ_ONLY}.`);
+}
+/** `{}` is what the real call answers on a miss: the spatial underlay (the
+ *  one caller) then draws the cells without a background image. */
+export async function fetchDataCollectionConfig(): Promise<Record<string, unknown>> {
+  return {};
+}
+export async function fetchMyAvatarBlob(): Promise<Blob | null> {
+  return null;
+}
+export async function fetchExportManifest(): Promise<never> {
+  throw new Error(`Component export is ${READ_ONLY}.`);
+}
+// The export modal's opener is guarded by `!isStaticBundle`; these keep a
+// future second opener from reaching a server all the same.
+export async function preflightStaticExport(): Promise<never> {
+  throw new Error(`Exporting is ${READ_ONLY}.`);
+}
+export async function dispatchStaticExport(): Promise<never> {
+  throw new Error(`Exporting is ${READ_ONLY}.`);
+}
+export async function pollStaticExport(): Promise<never> {
+  throw new Error(`Exporting is ${READ_ONLY}.`);
+}
+export async function downloadStaticExport(): Promise<never> {
+  throw new Error(`Exporting is ${READ_ONLY}.`);
+}
+
+// Comments: a write path with a server-side ACL. `can_comment: false` is what
+// the real call answers a viewer without access, so the comments UI hides.
+export async function fetchCommentAccess(): Promise<{ can_comment: boolean }> {
+  return { can_comment: false };
+}
+export async function fetchCommentThreads(): Promise<never[]> {
+  return [];
+}
+export async function fetchCommentCounts(): Promise<{ open: Record<string, number>; proposed: Record<string, number> }> {
+  return { open: {}, proposed: {} };
+}
+export async function fetchPublishedAnnotations(): Promise<never[]> {
+  return [];
+}
+export async function createCommentThread(): Promise<never> {
+  throw new Error(`Comments are ${READ_ONLY}.`);
+}
+export async function updateCommentThread(): Promise<never> {
+  throw new Error(`Comments are ${READ_ONLY}.`);
+}
+export async function deleteCommentThread(): Promise<never> {
+  throw new Error(`Comments are ${READ_ONLY}.`);
+}
+export async function reviewCommentThread(): Promise<never> {
+  throw new Error(`Comments are ${READ_ONLY}.`);
+}
+export async function addThreadComment(): Promise<never> {
+  throw new Error(`Comments are ${READ_ONLY}.`);
+}
+export async function editThreadComment(): Promise<never> {
+  throw new Error(`Comments are ${READ_ONLY}.`);
+}
+export async function deleteThreadComment(): Promise<never> {
+  throw new Error(`Comments are ${READ_ONLY}.`);
+}
+
+/** The brand-theme draft preview: its caller falls back to the unresolved
+ *  draft on a rejection, which is the right answer with no server. */
+export async function resolveBrandTheme(): Promise<never> {
+  throw new Error(`Brand theme resolution is ${READ_ONLY}.`);
+}
+
+/** Server details (version, links): there is no server. The store reads a
+ *  rejection as "unknown" and the chrome shows nothing. */
+export async function fetchServerInfo(): Promise<never> {
+  throw new Error('static bundle: no server');
+}
+
+// Version history and data time travel (edit-mode UI): a bundle is one point
+// in time, so there is no history to list and nothing to restore.
+export async function fetchDashboardVersions(): Promise<never> {
+  throw new Error(`Version history is ${READ_ONLY}.`);
+}
+export async function fetchDashboardVersion(): Promise<never> {
+  throw new Error(`Version history is ${READ_ONLY}.`);
+}
+export async function restoreComponentFromVersion(): Promise<never> {
+  throw new Error(`Version history is ${READ_ONLY}.`);
+}
+export async function fetchDeltaHistory(): Promise<never> {
+  throw new Error(`Data history is ${READ_ONLY}.`);
+}
+
+/**
+ * api.ts network calls the static graph reaches that are deliberately left
+ * unshimmed, each with why that is safe. `scripts/check-static-shim.mjs`
+ * fails on any reachable networked api export that is neither defined in
+ * this module (or tabApiShim) nor listed here. Empty today: everything the
+ * graph reaches is shimmed.
+ */
+export const OFFLINE_UNSUPPORTED: Record<string, string> = {};

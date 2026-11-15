@@ -33,6 +33,14 @@ def main() -> None:
 
     main_doc = copy.deepcopy(manifest["dashboard"]["doc"])
     main_doc["title"] = "Overview"
+    # A persistent filter section: declared on the main tab, drawn on every tab
+    # of the family through `fetchCrossTabComponents` (the species filter must
+    # still be on screen on "Distributions").
+    main_doc["filter_sections"] = [{"name": "Cohort", "persistent": True}]
+    for meta in main_doc["stored_metadata"]:
+        if meta["index"] == "comp-interactive-1":
+            meta["section"] = "Cohort"
+            meta["title"] = "Species picker"
     manifest["dashboard"] = {"id": MAIN_ID, "title": "Overview", "doc": main_doc}
 
     second_doc = {

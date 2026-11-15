@@ -9,3 +9,4 @@ export * from './prologue';
 export * from './advancedViz';
 export * from './links';
 export * from './filterBinding';
+export * from './valueOrder';

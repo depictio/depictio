@@ -54,17 +54,42 @@ export function injectedBundleUrl(manifestPath: string = FIXTURE_MANIFEST): stri
   return `file://${out}`;
 }
 
-/** Abort every non-file request; returns the (live) list of attempted URLs. */
+/** A `file://` URL a bundle must never request: from a `file://` page an
+ *  absolute API path (`/depictio/api/v1/...`) or an asset path
+ *  (`/assets/genomes/...`, a GenomeSpy gene lane) resolves to ANOTHER
+ *  `file://` URL, which a "non-file only" guard lets straight through. Such a
+ *  request is an unshimmed server call in disguise. */
+export function isDisguisedServerCall(url: string): boolean {
+  return /^file:\/\/.*\/(depictio\/api|assets)\//.test(url);
+}
+
+/** Abort every non-file request, and every file:// request that is really a
+ *  server/asset call (`isDisguisedServerCall`); returns the (live) list of
+ *  attempted URLs. */
 export async function blockNetwork(page: Page): Promise<string[]> {
   const attempts: string[] = [];
+  const record = (url: string) => {
+    if (!attempts.includes(url)) attempts.push(url);
+  };
   await page.route("**/*", async (route) => {
     const url = route.request().url();
-    if (url.startsWith("file://")) {
+    if (url.startsWith("file://") && !isDisguisedServerCall(url)) {
       await route.continue();
     } else {
-      attempts.push(url);
+      record(url);
       await route.abort();
     }
+  });
+  // Chromium refuses `fetch()` of a file:// URL before routing ever sees it,
+  // so a disguised API call only shows up as the console error it raises.
+  page.on("console", (msg) => {
+    for (const m of msg.text().matchAll(/file:\/\/[^\s'"]+/g)) {
+      const url = m[0].replace(/[.,;:)]+$/, "");
+      if (isDisguisedServerCall(url)) record(url);
+    }
+  });
+  page.on("request", (req) => {
+    if (isDisguisedServerCall(req.url())) record(req.url());
   });
   return attempts;
 }

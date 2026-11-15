@@ -2,12 +2,15 @@
  * The static bundle must render fully offline: file:// origin, every non-file
  * request blocked, zero network attempts, zero page errors.
  *
- * Second test: the same rule one click deep. `preflightStaticExport` and its
- * three siblings are the only api.ts functions in the bundle's module graph
- * that the shim deliberately leaves live (apiShim.ts, SHIM SURFACE), and the
- * one thing keeping them unreachable is the `isStaticBundle` guard on the
- * action that opens the export modal — an action that sits in the Settings
- * drawer, i.e. a surface a reader CAN open inside a bundle.
+ * Second test: the same rule one click deep. The export modal's opener sits
+ * in the Settings drawer, a surface a reader CAN open inside a bundle; its
+ * `isStaticBundle` guard keeps it shut (and the four export calls are shimmed
+ * to refuse all the same — scripts/check-static-shim.mjs gates the whole
+ * shim surface).
+ *
+ * Third test: the guard itself. From a `file://` page `/depictio/api/...`
+ * resolves to another `file://` URL, which a non-file-only guard would wave
+ * through; `blockNetwork` must record it.
  */
 import { expect, test } from "@playwright/test";
 
@@ -57,4 +60,16 @@ test("the settings drawer offers no export action inside a bundle", async ({ pag
   // Opening the drawer is itself a shim surface (fetchProject); it must not
   // reach for the network either.
   expect(attempts, `unexpected network attempts:\n${attempts.join("\n")}`).toHaveLength(0);
+});
+
+test("the offline guard catches an API call disguised as a file:// URL", async ({ page }) => {
+  const attempts = await blockNetwork(page);
+  await page.goto(injectedBundleUrl());
+  await expect(page.locator(".react-grid-item")).toHaveCount(3);
+  await page.evaluate(async () => {
+    await fetch("/depictio/api/v1/dashboards/get/x").catch(() => null);
+    await fetch("/assets/genomes/hg38.genes.json").catch(() => null);
+  });
+  expect(attempts.some((u) => u.startsWith("file://") && u.includes("/depictio/api/v1/"))).toBe(true);
+  expect(attempts.some((u) => u.startsWith("file://") && u.includes("/assets/genomes/"))).toBe(true);
 });

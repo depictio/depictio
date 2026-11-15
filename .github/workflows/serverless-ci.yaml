@@ -85,6 +85,12 @@ jobs:
 
       # The single-file builds inline every dynamic import of the whole viewer;
       # Node's default heap runs out on them (same cap as the other builds).
+      # Every api.ts network call the static entry's module graph reaches
+      # must be shimmed (or declared unsupported with a reason).
+      - name: Static shim coverage
+        working-directory: depictio/viewer
+        run: pnpm run check:static-shim
+
       - name: Build static-runtime bundle + demo site
         working-directory: depictio/viewer
         env:

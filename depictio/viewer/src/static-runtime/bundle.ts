@@ -148,7 +148,7 @@ export function frozenPayload<T>(componentIndex: string, kind: string): T {
   return entry.payload as T;
 }
 
-interface ComponentMeta {
+export interface ComponentMeta {
   index?: string;
   component_type?: string;
   interactive_component_type?: string;
@@ -166,7 +166,7 @@ interface ComponentMeta {
  * across tabs; active-first ordering keeps the on-screen component winning
  * whenever two tabs declare the same (dc_id, column) pair.
  */
-function storedMetadata(): ComponentMeta[] {
+export function familyMetadata(): ComponentMeta[] {
   const activeDoc = bundle().dashboard.doc as { stored_metadata?: ComponentMeta[] };
   const own = activeDoc.stored_metadata ?? [];
   const tabs = rawBundle().tabs ?? [];
@@ -188,7 +188,7 @@ function storedMetadata(): ComponentMeta[] {
 /** Resolve an interactive component's index from the (dc_id, column) its
  *  renderer passes to fetchUniqueValues / fetchColumnRange / fetchSpecs. */
 export function interactiveIndexFor(dcId: string, columnName?: string): string | undefined {
-  return storedMetadata().find(
+  return familyMetadata().find(
     (c) =>
       c.component_type === 'interactive' &&
       String(c.dc_id ?? '') === dcId &&
