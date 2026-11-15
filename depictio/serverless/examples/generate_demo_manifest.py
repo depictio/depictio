@@ -32,6 +32,8 @@ PENGUINS_DATA = REPO_ROOT / "depictio" / "projects" / "init" / "penguins" / "dat
 OUT = REPO_ROOT / "depictio" / "viewer" / "demo" / "manifests" / "penguins.json"
 PROTEIN_SPEC = EXAMPLES / "protein.yaml"
 PROTEIN_OUT = OUT.parent / "protein.json"
+COMPUTE_SPEC = EXAMPLES / "compute.yaml"
+COMPUTE_OUT = OUT.parent / "compute.json"
 SHOWCASE_DATA = REPO_ROOT / "depictio" / "projects" / "init" / "advanced_viz_showcase" / "data"
 
 WF_TAG = "penguin_species_analysis"
@@ -82,6 +84,17 @@ def protein_data_dir(root: Path) -> Path:
     return root
 
 
+def compute_data_dir(root: Path) -> Path:
+    """The compute example's data dir: two showcase tables as Parquet."""
+    wf = root / "compute_demo"
+    wf.mkdir(parents=True)
+    for tag in ("group_compare_demo", "contact_map_demo"):
+        pl.read_csv(SHOWCASE_DATA / f"{tag}.tsv", separator="\t").write_parquet(
+            wf / f"{tag}.parquet"
+        )
+    return root
+
+
 def main() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         dc_dir = Path(tmp) / WF_TAG
@@ -97,6 +110,8 @@ def main() -> None:
                 "first, so the protein manifest records it"
             )
         _write(result, PROTEIN_OUT)
+    with tempfile.TemporaryDirectory() as tmp:
+        _write(build_manifest(load_spec(COMPUTE_SPEC), compute_data_dir(Path(tmp))), COMPUTE_OUT)
 
 
 if __name__ == "__main__":

@@ -12,3 +12,4 @@ export * from './filterBinding';
 export * from './valueOrder';
 export * from './cardLayouts';
 export * from './multiqcSamples';
+export * from './contactMap';

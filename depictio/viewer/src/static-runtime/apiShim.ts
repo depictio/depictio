@@ -80,6 +80,7 @@ import {
 import {
   columnRangeLive,
   computeCardsLive,
+  contactMapLive,
   coverageTrackLive,
   dataRefFor,
   fetchAdvancedVizDataLive,
@@ -88,6 +89,7 @@ import {
   renderTableLive,
   specsLive,
   userColumns,
+  type ContactMapLiveRequest,
   type CoverageTrackLiveRequest,
 } from './liveData';
 import {
@@ -832,16 +834,70 @@ export async function dispatchSankey(p: { dc_id: string }) {
 export async function pollSankey(jobId: string) {
   return finishedJob(jobId) as never;
 }
-// Celery kinds main added (contact_map, group_compare). Producers omit them
-// (no export-time request builder yet), so these normally surface the omitted
-// reason; shimming them keeps a bundle from dispatching to a server either way.
-export async function dispatchContactMap(p: { dc_id: string }) {
+/** contact_map windows are `compute_live`: every step of the task commutes
+ *  with the filters, so the browser replays it over the bundled Parquet
+ *  (`contactMapLive`) for whatever window the reader pans to. A bundle built
+ *  before that carries no data_ref and takes the frozen echo. */
+export async function dispatchContactMap(p: ContactMapLiveRequest) {
+  if (dataRefFor(p.dc_id)) {
+    return {
+      job_id: p.dc_id,
+      status: 'done' as const,
+      result: await contactMapLive(p),
+      from_cache: false,
+    } as never;
+  }
   return finishedJob(p.dc_id) as never;
 }
 export async function pollContactMap(jobId: string) {
   return finishedJob(jobId) as never;
 }
-export async function dispatchGroupCompare(p: { dc_id: string }) {
+
+interface GroupSelector {
+  label?: string;
+  column?: string;
+  values?: unknown[];
+}
+function sameSelector(a: GroupSelector | undefined, b: GroupSelector | undefined): boolean {
+  if (!a || !b) return false;
+  const vals = (s: GroupSelector) => (s.values ?? []).map(String).sort().join('\u0001');
+  return a.column === b.column && vals(a) === vals(b);
+}
+/** group_compare is frozen at its OPENING pair (the producer also points the
+ *  tile's defaults at that pair and turns auto_run on). The frozen result is
+ *  handed back only for that pair and test; another one is a failed job
+ *  saying why, never the opening pair's rows under another label. Filters do
+ *  not reach it, like every frozen tile (its tier badge says so). */
+export async function dispatchGroupCompare(p: {
+  dc_id: string;
+  group_a?: GroupSelector;
+  group_b?: GroupSelector;
+  test?: string;
+  log_transform?: boolean;
+}) {
+  const index = advancedVizIndexFor(p.dc_id, 'group_compare');
+  const frozen = bundle().frozen[index]?.payload as
+    | { result?: unknown; request?: { group_a?: GroupSelector; group_b?: GroupSelector; test?: string; log_transform?: boolean } }
+    | undefined;
+  const req = frozen?.request;
+  if (
+    req &&
+    !(
+      sameSelector(p.group_a, req.group_a) &&
+      sameSelector(p.group_b, req.group_b) &&
+      (p.test ?? 'wilcoxon') === (req.test ?? 'wilcoxon') &&
+      (p.log_transform ?? true) === (req.log_transform ?? true)
+    )
+  ) {
+    return {
+      job_id: p.dc_id,
+      status: 'failed' as const,
+      error:
+        `This bundle holds the comparison of ${req.group_a?.label ?? 'A'} vs ` +
+        `${req.group_b?.label ?? 'B'}, computed when it was ` +
+        'exported. Another pair or test needs the live dashboard.',
+    } as never;
+  }
   return finishedJob(p.dc_id) as never;
 }
 export async function pollGroupCompare(jobId: string) {

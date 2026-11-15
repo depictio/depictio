@@ -277,6 +277,20 @@ def classify_component(comp: dict[str, Any]) -> PlannedTier:
         # One explicit per-kind verdict (export/capabilities.SERVERLESS_KINDS),
         # never "live by elimination".
         cap = advanced_viz_capability(comp)
+        if (
+            kind == "group_compare"
+            and (comp.get("config") or {}).get("group_col")
+            and comp.get("workflow_tag")
+            and comp.get("data_collection_tag")
+        ):
+            # The one compute producer B can run itself: the server's
+            # ``group_compare_from_frame`` imports only numpy / polars / scipy,
+            # so the opening pair is computed from the local Parquet.
+            return PlannedTier(
+                ComponentTier.FROZEN,
+                TierReason.CELERY_COMPUTE,
+                f"advanced_viz '{kind}': {cap.reason}",
+            )
         if cap.path in ("celery", "per_interaction"):
             return PlannedTier(
                 ComponentTier.OMITTED,

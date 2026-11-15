@@ -120,7 +120,29 @@ def advanced_viz_columns(comp: dict[str, Any]) -> list[str]:
             columns.extend(v for v in value if isinstance(v, str) and v)
         elif key.endswith(_COLUMN_SCALAR_SUFFIXES) and isinstance(value, str) and value:
             columns.append(value)
+    columns.extend(_KIND_SCHEMA_COLUMNS.get(advanced_viz_kind(comp), ()))
     return list(dict.fromkeys(columns))
+
+
+#: Columns a kind's compute reads off the table's SCHEMA rather than its
+#: config: ``compute_contact_map`` partitions on the recipe's ``resolution``
+#: column whether or not the YAML names it (``resolve_resolution_column``).
+#: Over-collected like the rest; the consumers intersect with the schema.
+_KIND_SCHEMA_COLUMNS: dict[str, tuple[str, ...]] = {"contact_map": ("resolution",)}
+
+
+#: Frozen kinds whose tile still reads its own table offline before it can
+#: show the frozen result: a group comparison offers its two pickers from the
+#: distinct values of ``group_col`` (``fetchUniqueValues``), and only then
+#: dispatches. Its DC ships with the columns its config binds.
+FROZEN_INPUT_KINDS = frozenset({"group_compare"})
+
+
+def ships_frozen_inputs(comp: dict[str, Any]) -> bool:
+    """True for a frozen tile whose pickers read the bundled table (group_compare)."""
+    return comp.get("component_type") == "advanced_viz" and (
+        advanced_viz_kind(comp) in FROZEN_INPUT_KINDS
+    )
 
 
 #: Columns the volcano's MA view reads off its ``ma_dc_id`` table under fixed
@@ -284,6 +306,8 @@ def component_columns(comp: dict[str, Any]) -> set[str] | None:
     if ctype == "table":
         return None
     if ctype == "advanced_viz":
+        if ships_frozen_inputs(comp):
+            return set(advanced_viz_columns(comp))
         if not serves_advanced_viz_live(comp):
             return set()
         return set(advanced_viz_columns(comp))

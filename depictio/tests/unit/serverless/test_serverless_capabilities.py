@@ -50,9 +50,18 @@ def test_the_offline_embed_and_the_bundle_agree_on_what_fetches_files() -> None:
         cap = SERVERLESS_KINDS[kind]
         assert (cap.tier, cap.path) == ("live", "objects")
         assert "MAX_MB" in (cap.reason or "")
-    for kind in ("contact_map", "group_compare"):
-        assert kind in HTML_UNAVAILABLE_KINDS
-        assert SERVERLESS_KINDS[kind].tier != "live"
+    # The per-interaction computes: a contact-map window is replayed in the
+    # browser (compute_live); a group comparison freezes its opening pair.
+    assert "contact_map" in HTML_UNAVAILABLE_KINDS
+    assert (SERVERLESS_KINDS["contact_map"].tier, SERVERLESS_KINDS["contact_map"].path) == (
+        "live",
+        "compute_live",
+    )
+    assert "group_compare" in HTML_UNAVAILABLE_KINDS
+    cap = SERVERLESS_KINDS["group_compare"]
+    assert (cap.tier, cap.path) == ("frozen", "celery")
+    assert "opening pair" in (cap.reason or "")
+    assert not [k for k, c in SERVERLESS_KINDS.items() if c.path == "per_interaction"]
 
 
 def test_sub_modes_and_unknown_kinds() -> None:

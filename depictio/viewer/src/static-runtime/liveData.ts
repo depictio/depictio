@@ -19,6 +19,9 @@
 import {
   HyparquetEngine,
   applyResolver,
+  contactMapProjection,
+  contactMapWindow,
+  resolveResolutionColumn,
   BREAKDOWN_LAYOUTS,
   bindFilters,
   computeBreakdown,
@@ -42,6 +45,7 @@ import {
   type AggFn,
   type BindingTable,
   type BoundFilter,
+  type ContactMapRequest,
   type ColumnTable,
   type DCLinkLike,
   type DataRef,
@@ -1186,6 +1190,42 @@ export async function coverageTrackLive(
     row_count: sel.length,
     compute_ms: Math.round(performance.now() - startedAt),
   };
+}
+
+// ---- contact_map windows (compute_live) -------------------------------------
+
+/** `ContactMapPayload` as the renderer dispatches it. */
+export interface ContactMapLiveRequest extends ContactMapRequest {
+  dc_id: string;
+  filter_metadata?: InteractiveFilter[];
+}
+
+/**
+ * `compute_contact_map` (celery_tasks.py) over the bundled Parquet: the
+ * dashboard filters (links resolved) are the load's row mask, the projection
+ * is the task's, and the rest is `contact_map_window` — ported as
+ * static-core's `contactMapWindow` and pinned against the Python function by
+ * fixtures/contact-map-expected.json.
+ */
+export async function contactMapLive(req: ContactMapLiveRequest): Promise<Record<string, unknown>> {
+  const startedAt = performance.now();
+  const ref = dataRefFor(req.dc_id);
+  if (!ref) throw new Error(`static bundle: no data_ref for dc "${req.dc_id}"`);
+  if (!(req.chrom1_col && req.start1_col && req.chrom2_col && req.start2_col && req.count_col)) {
+    throw new Error(
+      'compute_contact_map: chrom1_col, start1_col, chrom2_col, start2_col and count_col are required',
+    );
+  }
+  const { handle } = await tableFor(req.dc_id);
+  const schemaNames = userColumns(ref).map((c) => c.name);
+  const schema = new Set(schemaNames);
+  const resolutionCol = resolveResolutionColumn(schemaNames, req.resolution_col);
+  const projection = [...new Set(contactMapProjection(req, resolutionCol))].filter((c) => schema.has(c));
+  const bound = toBoundFilters(await resolveLinkFilters(req.dc_id, req.filter_metadata ?? []));
+  const mask = bound.length ? (await engine.mask(handle, bound)).mask : null;
+  const cols = await engine.columns(handle, projection);
+  const out = contactMapWindow(cols, ref.rows, mask, req, resolutionCol);
+  return { ...out, compute_ms: Math.round(performance.now() - startedAt) };
 }
 
 /** Numeric Polars dtypes → AG Grid's numericColumn, matching the dtype set

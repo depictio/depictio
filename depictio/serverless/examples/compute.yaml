@@ -1,0 +1,86 @@
+# Worked producer-B example — large-compute kinds (RFC §13).
+#
+# Two advanced-viz kinds the live server computes per interaction:
+#
+# - a group comparison (group_compare): every gene tested between two clusters.
+#   The bundle freezes the pair the tile opens on (default_group_a / _b),
+#   computed at build time with the server's own `group_compare_from_frame`;
+#   another pair says it needs the live dashboard.
+# - a Hi-C contact map (contact_map): the whole-chromosome view is the data
+#   path, and every zoom window is replayed in the browser
+#   (`contactMapWindow`, the port of `contact_map_window`) — live at any filter
+#   state.
+#
+# Data (advanced_viz_showcase), laid out by generate_demo_manifest.py:
+#   <data_dir>/compute_demo/group_compare_demo.parquet
+#   <data_dir>/compute_demo/contact_map_demo.parquet
+
+title: "Large computes — static bundle example"
+subtitle: "Producer B worked example (group comparison frozen, contact map live)"
+
+components:
+  - tag: text-compute
+    component_type: text
+    title: "Server computes, offline"
+    order: 2
+    alignment: left
+    body: >
+      The group comparison opens on two clusters computed when this file was built; the contact
+      map reads its windows from the bundled table in the browser. Narrow the chromosome on the left.
+    layout: {x: 0, y: 0, w: 8, h: 1}
+
+  - tag: viz-group-compare
+    component_type: advanced_viz
+    workflow_tag: compute_demo
+    data_collection_tag: group_compare_demo
+    title: "Group A against group B"
+    viz_kind: group_compare
+    config:
+      viz_kind: group_compare
+      index_col: cell_id
+      group_col: cluster
+      test: wilcoxon
+      log_transform: true
+      max_features: 2000
+      min_observations: 3
+      fdr_threshold: 0.05
+      log2fc_threshold: 1.0
+      top_n_labels: 10
+      default_group_a: cluster_1
+      default_group_b: cluster_2
+      controls_placement: header
+    layout: {x: 0, y: 1, w: 4, h: 10}
+
+  - tag: viz-contact-map
+    component_type: advanced_viz
+    workflow_tag: compute_demo
+    data_collection_tag: contact_map_demo
+    title: "Contact matrix"
+    viz_kind: contact_map
+    config:
+      viz_kind: contact_map
+      chrom1_col: chrom
+      start1_col: start
+      end1_col: end
+      chrom2_col: chrom2
+      start2_col: start2
+      end2_col: end2
+      count_col: count
+      resolution_col: resolution
+      display: square
+      log_scale: true
+      colour_scale: Viridis
+      balance: false
+      max_bins: 500
+    layout: {x: 4, y: 1, w: 4, h: 10}
+
+  - tag: filter-chrom
+    component_type: interactive
+    workflow_tag: compute_demo
+    data_collection_tag: contact_map_demo
+    interactive_component_type: MultiSelect
+    column_name: chrom
+    column_type: object
+    title: "Chromosome"
+    placement: left
+    layout: {x: 0, y: 0, w: 1, h: 3}

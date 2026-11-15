@@ -120,6 +120,7 @@ from depictio.models.models.serverless import (
     TierEntry,
     TierReason,
 )
+from depictio.serverless import computes
 from depictio.serverless.binding import (
     BindingMiss,
     build_binding_with_reason,
@@ -159,6 +160,7 @@ from depictio.serverless.pruning import (
     component_columns,
     link_target_column,
     serves_advanced_viz_live,
+    ships_frozen_inputs,
 )
 
 # Component types whose data ships in the bundle (live in the static runtime).
@@ -282,6 +284,7 @@ def _ships_data(comp: dict[str, Any]) -> bool:
         comp.get("component_type") in LIVE_DATA_TYPES
         or _refillable_figure(comp)
         or serves_advanced_viz_live(comp)
+        or ships_frozen_inputs(comp)
     )
 
 
@@ -1399,6 +1402,23 @@ def celery_compute_request(comp: dict[str, Any]) -> tuple[str, dict[str, Any]] |
             "color_intersections_by": config.get("color_intersections_by") or "none",
         }
 
+    if kind == "group_compare":
+        # The renderer's opening request (GroupCompareRenderer `compare`): the
+        # persisted controls at their seeded defaults. The pair itself is
+        # resolved from the data at freeze time (``_group_compare_opening``),
+        # because with no configured defaults it is the first two values of
+        # ``group_col`` — a fact about the table, not the config.
+        group_col = config.get("group_col")
+        if not group_col:
+            return None
+        return "group_compare_opening", {
+            **base,
+            **computes.group_compare_settings(config),
+            "group_col": str(group_col),
+            "default_group_a": config.get("default_group_a"),
+            "default_group_b": config.get("default_group_b"),
+        }
+
     if kind == "sankey":
         available = config.get("available_step_cols") or []
         step_cols = list(config.get("step_cols") or [])
@@ -1419,6 +1439,35 @@ def celery_compute_request(comp: dict[str, Any]) -> tuple[str, dict[str, Any]] |
         }
 
     return None
+
+
+def _group_compare_opening(request: dict[str, Any]) -> dict[str, Any]:
+    """Resolve the opening pair from the table, then run ``compute_group_compare``."""
+    group_col = request["group_col"]
+    frame = _dtu().load_deltatable_lite(
+        workflow_id=ObjectId(request["wf_id"]),
+        data_collection_id=request["dc_id"],
+        select_columns=[group_col],
+    )
+    labels = sorted({str(v) for v in frame.get_column(group_col).to_list() if v is not None})
+    pair = computes.group_compare_opening_pair(
+        labels, request.get("default_group_a"), request.get("default_group_b")
+    )
+    if pair is None:
+        raise ValueError(f"group_col '{group_col}' has fewer than two values")
+    payload = {
+        k: v
+        for k, v in request.items()
+        if k not in ("group_col", "default_group_a", "default_group_b")
+    }
+    payload.update(computes.selectors(group_col, pair))
+    result = _celery().compute_group_compare(payload)
+    return {"__request__": payload, **result} if isinstance(result, dict) else result
+
+
+#: Export-side tasks that wrap a Celery compute (resolve what the renderer
+#: would resolve in the browser first). Looked up before the Celery module.
+_LOCAL_TASKS: dict[str, Any] = {"group_compare_opening": _group_compare_opening}
 
 
 def freeze_celery_compute(
@@ -1446,7 +1495,7 @@ def freeze_celery_compute(
         logger.warning("producer A: %s", detail)
         return None, detail
 
-    func = getattr(_celery(), task_name, None)
+    func = _LOCAL_TASKS.get(task_name) or getattr(_celery(), task_name, None)
     if func is None:
         return None, f"advanced_viz '{kind}' compute task {task_name!r} is unavailable"
 
@@ -1476,7 +1525,14 @@ def freeze_celery_compute(
         budget.remaining,
         budget.total,
     )
-    return {"result": result}, CELERY_FROZEN_DETAIL.format(kind=kind)
+    frozen: dict[str, Any] = {"result": result}
+    if "__request__" in result:
+        # The request the result answers, so the runtime can tell the opening
+        # pair from another one instead of passing this result off for it.
+        frozen["request"] = result.pop("__request__")
+        computes.open_on_frozen_request(comp.setdefault("config", {}), frozen["request"])
+        return frozen, computes.frozen_detail(kind, frozen["request"])
+    return frozen, CELERY_FROZEN_DETAIL.format(kind=kind)
 
 
 def _freeze_multiqc(
@@ -2170,6 +2226,7 @@ def used_dc_ids(
             c.get("component_type") in LIVE_DATA_TYPES
             or cid in bindings
             or (serves_advanced_viz_live(c) and tier_by_id[cid].tier is ComponentTier.LIVE)
+            or (ships_frozen_inputs(c) and tier_by_id[cid].tier is ComponentTier.FROZEN)
         )
     }
     # ...the collections a live text tile's values read...

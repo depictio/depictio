@@ -237,7 +237,10 @@ AV_JSON_SOURCE: dict[str, AvJsonSource] = {
 #                       the default filter state and shipped frozen.
 # ``tree``            — a second, non-tabular source (a Newick tree): frozen.
 # ``per_interaction`` — computed per zoom window / per pair of selections, so
-#                       no snapshot stands for it.
+#                       no snapshot stands for it. No kind is left on it:
+#                       contact_map replays its windows in the browser
+#                       (``compute_live``) and group_compare freezes its
+#                       opening pair (``celery``).
 # ``objects``         — a data path whose renderer also reads object-store files
 #                       (structures, PAE matrices) or the structure resolver. The
 #                       producer reads those files at export from the
@@ -334,17 +337,19 @@ SERVERLESS_KINDS: dict[str, ServerlessCapability] = {
         "also reads a Newick tree data collection; frozen at the export's default filter "
         "state with the tree merged in",
     ),
-    "contact_map": ServerlessCapability(
-        "omitted",
-        "per_interaction",
-        "a contact map computes each zoom window on the server as it is explored; no "
-        "snapshot stands for it",
-    ),
+    # Every step of a contact-map window (filter mask, sample, resolution
+    # partition, square window, sort, cell budget) commutes with the filters,
+    # so the runtime replays it over the bundled Parquet
+    # (static-core ``contactMap.ts`` + ``contactMapLive``), any window, any
+    # filter state.
+    "contact_map": ServerlessCapability("live", "compute_live"),
     "group_compare": ServerlessCapability(
-        "omitted",
-        "per_interaction",
-        "a group comparison computes on the server for the two groups picked in the "
-        "tile; no snapshot stands for it",
+        "frozen",
+        "celery",
+        "a group comparison runs a per-feature test on the server; the bundle holds the "
+        "comparison of the tile's opening pair (default_group_a / default_group_b, else the "
+        "first two values of group_col), computed at export with the server's own function. "
+        "Another pair, or the same pair under other filters, needs the live server",
     ),
     # Live since the structure add-on: the bound residue table is a data path,
     # the structure / PAE files ride along (see ``objects`` above).

@@ -38,6 +38,11 @@ export const PROTEIN_MANIFEST = join(
   REPO_ROOT,
   "depictio/viewer/demo/manifests/protein.json",
 );
+/** Large computes: group_compare frozen at its opening pair, contact_map live. */
+export const COMPUTE_MANIFEST = join(
+  REPO_ROOT,
+  "depictio/viewer/demo/manifests/compute.json",
+);
 const ADDONS_DIR = join(REPO_ROOT, "depictio/viewer/dist-static/addons");
 
 /** Append the add-ons a manifest names before `</body>` — the producers' rule

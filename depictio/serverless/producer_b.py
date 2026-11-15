@@ -642,6 +642,58 @@ def _depictio_version() -> str:
             return "unknown"
 
 
+def _freeze_group_compare_b(
+    comp: dict[str, Any], parquet_path: Path
+) -> tuple[dict[str, Any] | None, str]:
+    """The opening pair of a group_compare tile, computed from the local Parquet.
+
+    Same request the live tile opens with (``computes``) and the same function
+    the Celery task runs (``group_compare_from_frame``), over the whole table
+    (the features are inferred from its schema). ``(None, reason)`` when it
+    cannot run — scipy missing on a CLI-only install, fewer than two labels, a
+    refusal from the function itself.
+    """
+    from depictio.serverless.computes import (
+        frozen_detail,
+        group_compare_opening_pair,
+        group_compare_settings,
+        selectors,
+    )
+
+    config = comp.get("config") or {}
+    group_col = str(config.get("group_col") or "")
+    try:
+        from depictio.api.v1.services.group_compare import group_compare_from_frame
+
+        df = pl.read_parquet(parquet_path)
+        labels = sorted({str(v) for v in df.get_column(group_col).to_list() if v is not None})
+        pair = group_compare_opening_pair(
+            labels, config.get("default_group_a"), config.get("default_group_b")
+        )
+        if pair is None:
+            return None, f"group_col '{group_col}' has fewer than two values"
+        settings = group_compare_settings(config)
+        request = {**settings, **selectors(group_col, pair)}
+        result = group_compare_from_frame(
+            df,
+            index_col=str(settings["index_col"]),
+            group_a=request["group_a"],
+            group_b=request["group_b"],
+            test=str(settings["test"]),
+            log_transform=settings["log_transform"],
+            max_features=settings["max_features"],
+            min_observations=settings["min_observations"],
+            fdr_threshold=settings["fdr_threshold"],
+            log2fc_threshold=settings["log2fc_threshold"],
+            top_n_labels=settings["top_n_labels"],
+        )
+    except Exception as exc:
+        return None, f"advanced_viz 'group_compare' could not be computed at build time: {exc}"
+    return {"result": {**result, "load_ms": 0}, "request": request}, frozen_detail(
+        "group_compare", request
+    )
+
+
 def _collect_objects_b(
     components: list[dict[str, Any]],
     tier_by_id: dict[str, TierRow],
@@ -857,6 +909,8 @@ def build_manifest(
     frozen: dict[str, FrozenPayload] = {}
     bindings: dict[str, BindingTable] = {}
     prologues: dict[str, list[PrologueOp]] = {}
+    # Frozen group comparisons, by component: the tile opens on that pair.
+    opened: dict[str, dict[str, Any]] = {}
     for comp in components:
         row = tier_by_id[comp["tag"]]
         if row.tier is not ComponentTier.FROZEN:
@@ -867,6 +921,18 @@ def build_manifest(
             row.tier = ComponentTier.OMITTED
             row.reason = TierReason.UNSUPPORTED
             row.detail = "component references no resolvable data collection"
+            continue
+        if comp.get("component_type") == "advanced_viz":
+            payload, detail = _freeze_group_compare_b(
+                comp,
+                resolve_parquet_path(data_path, comp["workflow_tag"], comp["data_collection_tag"]),
+            )
+            row.detail = detail
+            if payload is None:
+                row.tier = ComponentTier.OMITTED
+            else:
+                frozen[row.component_id] = FrozenPayload(kind="compute", payload=payload)
+                opened[row.component_id] = payload["request"]
             continue
         # Tables never reach this loop: preflight classifies them LIVE (phase
         # 3) whenever their data collection resolves. Like a bound figure, a
@@ -968,15 +1034,23 @@ def build_manifest(
 
     objects, addons = _collect_objects_b(components, tier_by_id, data_path, inline_blobs)
 
+    dashboard_doc = build_dashboard_doc(spec)
+    if opened:
+        from depictio.serverless.computes import open_on_frozen_request
+
+        for meta in dashboard_doc.get("stored_metadata") or []:
+            request = opened.get(str(meta.get("index")))
+            if request is not None:
+                meta["config"] = dict(meta.get("config") or {})
+                open_on_frozen_request(meta["config"], request)
+
     dashboard_id = hashlib.sha1(f"dashboard:{spec.title}".encode()).hexdigest()[:24]
     manifest = BundleManifest(
         mode=mode,
         producer=Producer.BUILD_FROM_SPEC,
         built_at=datetime.now(timezone.utc).isoformat(),
         depictio_version=_depictio_version(),
-        dashboard=DashboardSection(
-            id=dashboard_id, title=spec.title, doc=build_dashboard_doc(spec)
-        ),
+        dashboard=DashboardSection(id=dashboard_id, title=spec.title, doc=dashboard_doc),
         data_refs=data_refs,
         tiers={
             row.component_id: TierEntry(tier=row.tier, reason=row.reason, detail=row.detail)

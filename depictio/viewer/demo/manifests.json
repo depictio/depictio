@@ -16,5 +16,11 @@
     "title": "Protein structure \u2014 3D model, PAE and torsions from bundled files (3Dmol.js add-on)",
     "manifest": "demo/manifests/protein.json",
     "description": "Built by producer B from the advanced-visualisation showcase's demo protein. The structure (PDB) and its predicted aligned error (TSV) are read at build time from two indexed_file collections and shipped inside the HTML (gzip, base64), under a stated cap; the runtime serves the tiles' file reads from the bundle as blob: URLs. molecule_3d draws with 3Dmol.js, embedded only into bundles that hold one (+0.16 MB gzip, a conditional add-on outside the base runtime's budget); the PAE matrix (canvas) and the Ramachandran plot (Plotly, torsions computed in the browser from the bundled structure) need no add-on. Narrow the residue range: every tile follows. No network."
+  },
+  {
+    "id": "compute-kinds",
+    "title": "Large computes \u2014 group comparison frozen at its opening pair, contact-map windows live",
+    "manifest": "demo/manifests/compute.json",
+    "description": "Built by producer B from the advanced-visualisation showcase. The group comparison (a per-gene Wilcoxon test between two clusters, a server compute) opens on cluster_1 vs cluster_2, computed at build time with the server's own group_compare_from_frame; picking another pair says it needs the live dashboard instead of relabelling the frozen rows. The Hi-C contact map reads its whole-chromosome view through the data path and replays every zoom window in the browser (contactMapWindow, the port of the task's contact_map_window, pinned by a parity fixture). No network."
   }
 ]
