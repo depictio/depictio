@@ -23,6 +23,7 @@ from typing import Any
 
 import polars as pl
 import pytest
+from polars.testing import assert_frame_equal
 from pydantic import TypeAdapter
 
 from depictio.models.models.serverless import PrologueOp
@@ -699,7 +700,7 @@ def test_code_transpiles_to_the_case_ir_and_runs_identically(name):
     from_ir = GEN.apply_ops(df, case["ops"])
 
     # code == IR execution == committed expectation.
-    assert from_code.equals(from_ir), name
+    assert_frame_equal(from_code, from_ir, rel_tol=1e-9, abs_tol=1e-12)
     payload = GEN.columns_payload(from_code)
     _assert_payload_matches(payload, EXPECTED_CASES[name]["output"]["columns"], name)
     assert from_code.height == EXPECTED_CASES[name]["output"]["length"], name

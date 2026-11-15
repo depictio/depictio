@@ -24,9 +24,11 @@ from __future__ import annotations
 import importlib.util
 import json
 from pathlib import Path
+from typing import Any
 
 import polars as pl
 import pytest
+from polars.testing import assert_frame_equal
 from pydantic import TypeAdapter
 
 from depictio.models.models.serverless import PrologueOp
@@ -73,6 +75,26 @@ def test_input_frame_is_the_committed_fixture_input(input_frame: pl.DataFrame) -
 # ---------------------------------------------------------------------------
 
 
+def _assert_payload_matches(got: dict[str, list[Any]], want: dict[str, list[Any]], name: str):
+    """Equal columns, floats to within rounding.
+
+    Polars sums a group's partitions in parallel, so an aggregated mean can
+    differ from the committed value in its last bit between runs (``0.295`` vs
+    ``0.29500000000000004`` on CI, chain_filter_unpivot_group_sort). Names,
+    order, nulls, strings and integers must match exactly. Same rule as
+    ``test_prologue.py``.
+    """
+    assert list(got) == list(want), name
+    for column, values in want.items():
+        actual = got[column]
+        assert len(actual) == len(values), (name, column)
+        for i, (a, w) in enumerate(zip(actual, values, strict=True)):
+            if isinstance(w, float) and isinstance(a, float):
+                assert a == pytest.approx(w, rel=1e-9, abs=1e-12), (name, column, i)
+            else:
+                assert a == w, (name, column, i)
+
+
 @pytest.mark.parametrize("name", sorted(FIXTURE_CASES))
 def test_execute_ops_matches_the_committed_expectation(
     name: str, input_frame: pl.DataFrame
@@ -84,7 +106,7 @@ def test_execute_ops_matches_the_committed_expectation(
 
     expected = EXPECTED_CASES[name]["output"]
     assert out.height == expected["length"], name
-    assert GEN.columns_payload(out) == expected["columns"], name
+    _assert_payload_matches(GEN.columns_payload(out), expected["columns"], name)
 
 
 @pytest.mark.parametrize("name", sorted(FIXTURE_CASES))
@@ -92,9 +114,13 @@ def test_execute_ops_agrees_with_the_generator(name: str, input_frame: pl.DataFr
     """Frame-level equality (dtypes included) against the generator's
     ``apply_ops`` — the JSON payload above is lossy about dtypes."""
     ops_json = FIXTURE_CASES[name]["ops"]
-    assert execute_ops(_OPS.validate_python(ops_json), input_frame).equals(
-        GEN.apply_ops(input_frame, ops_json)
-    ), name
+    # Dtypes, order and nulls exactly; floats to within rounding (see below).
+    assert_frame_equal(
+        execute_ops(_OPS.validate_python(ops_json), input_frame),
+        GEN.apply_ops(input_frame, ops_json),
+        rel_tol=1e-9,
+        abs_tol=1e-12,
+    )
 
 
 def test_empty_program_is_the_identity(input_frame: pl.DataFrame) -> None:
