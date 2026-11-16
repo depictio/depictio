@@ -8608,6 +8608,8 @@ export interface StaticExportPythonRuntime {
   bytes: number;
   bytes_if_embedded: number;
   unavailable?: string;
+  /** Each candidate's tier without the runtime (what it ships as when it is off). */
+  without?: Record<string, { tier: string; reason: string | null; detail: string | null }>;
 }
 
 export type PythonRuntimeMode = 'auto' | 'on' | 'off';

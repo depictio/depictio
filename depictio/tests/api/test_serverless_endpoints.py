@@ -431,7 +431,7 @@ def test_dispatch_creates_job_and_enqueues(
                     "is_admin": False,
                     "is_anonymous": False,
                 },
-                "python_runtime": "auto",
+                "python_runtime": "off",
             }
         ]
     ]

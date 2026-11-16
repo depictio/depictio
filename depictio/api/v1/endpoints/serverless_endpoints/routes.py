@@ -383,7 +383,7 @@ async def preflight_export_static(
 @serverless_endpoint_router.post("/export-static/{dashboard_id}")
 def dispatch_export_static(
     dashboard_id: str,
-    python_runtime: Literal["auto", "on", "off"] = "auto",
+    python_runtime: Literal["auto", "on", "off"] = "off",
     current_user=Depends(get_user_or_anonymous),
 ) -> dict[str, Any]:
     """Enqueue a static-bundle build; poll ``/export-static/status/{job_id}``.

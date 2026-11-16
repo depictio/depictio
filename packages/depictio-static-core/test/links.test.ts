@@ -16,10 +16,12 @@ import { describe, expect, it } from 'vitest';
 import {
   applyResolver,
   extendFiltersViaLinks,
+  GENOME_SELECTION_SOURCE,
   LINK_NO_MATCH,
   linkPaths,
   linkTargetColumn,
   needsTranslation,
+  regionLinkFilters,
   translateViaTable,
   walkLinkPath,
   type DCLinkConfig,
@@ -605,5 +607,96 @@ describe('translateViaTable', () => {
   it('dedupes preserving first-occurrence order and stringifies keys', () => {
     const table = { values: { A: ['S2', 'S1'], B: ['S1', 'S3'], '7': ['S9'] } };
     expect(translateViaTable(table, ['A', 'B', 7])).toEqual(['S2', 'S1', 'S3', 'S9']);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// region links — mirror of depictio/tests/unit/test_filter_links_region.py
+// ---------------------------------------------------------------------------
+
+function regionLink(
+  id = 'rl1',
+  source = 'A',
+  target = 'B',
+  sourceColumn = 'chr',
+  columns: { chrom?: string; pos?: string } = { chrom: 'chromosome', pos: 'position' },
+): DCLinkLike {
+  return {
+    id,
+    source_dc_id: source,
+    target_dc_id: target,
+    source_column: sourceColumn,
+    enabled: true,
+    link_config: { resolver: 'region', columns },
+  };
+}
+
+function brush(index = 'gv-1', chrom = 'chr7', start = 55_000_000, end = 56_000_000) {
+  return [
+    {
+      index,
+      value: [chrom],
+      source: GENOME_SELECTION_SOURCE,
+      metadata: { dc_id: 'A', column_name: 'chr', interactive_component_type: 'MultiSelect' },
+    },
+    {
+      index: `${index}::pos`,
+      value: [start, end],
+      source: GENOME_SELECTION_SOURCE,
+      metadata: { dc_id: 'A', column_name: 'pos', interactive_component_type: 'RangeSlider' },
+    },
+  ];
+}
+
+const neverHop: ResolveHop = async () => {
+  throw new Error('a region link must not be resolved');
+};
+
+describe('region links', () => {
+  it('renames the brush onto the target columns without resolving anything', async () => {
+    const out = await extendFiltersViaLinks('B', { A: brush() }, [regionLink()], neverHop);
+    expect(out.map((f) => [f.index, f.column_name, f.interactive_component_type, f.value])).toEqual([
+      ['region_link_rl1_chrom', 'chromosome', 'MultiSelect', ['chr7']],
+      ['region_link_rl1_pos', 'position', 'RangeSlider', [55_000_000, 56_000_000]],
+    ]);
+    expect(out.every((f) => f.metadata.dc_id === 'B' && f.source === GENOME_SELECTION_SOURCE)).toBe(
+      true,
+    );
+  });
+
+  it('is never walked as a value route', () => {
+    expect(linkPaths([regionLink()], 'A', 'B')).toEqual([]);
+  });
+
+  it('needs the chromosome half', () => {
+    const [, pos] = brush();
+    expect(regionLinkFilters('B', { A: [pos] }, [regionLink()])).toEqual([]);
+  });
+
+  it('follows only the chromosome column the link names', () => {
+    expect(regionLinkFilters('B', { A: brush() }, [regionLink('rl1', 'A', 'B', 'other')])).toEqual(
+      [],
+    );
+    expect(regionLinkFilters('B', { A: brush() }, [regionLink('rl1', 'A', 'B', '')])).toHaveLength(2);
+  });
+
+  it('pairs each position with its own chromosome by index', () => {
+    const [chrom] = brush('gv-1', 'chr1');
+    const [, otherPos] = brush('gv-2', 'chr2', 1, 2);
+    const [, ownPos] = brush('gv-1', 'chr1', 10, 20);
+    const out = regionLinkFilters('B', { A: [chrom, otherPos, ownPos] }, [regionLink()]);
+    expect(out.find((f) => f.index.endsWith('_pos'))?.value).toEqual([10, 20]);
+  });
+
+  it('skips disabled links, other targets and links without columns', () => {
+    const disabled = { ...regionLink(), enabled: false };
+    expect(regionLinkFilters('B', { A: brush() }, [disabled])).toEqual([]);
+    expect(regionLinkFilters('C', { A: brush() }, [regionLink()])).toEqual([]);
+    expect(regionLinkFilters('B', { A: brush() }, [regionLink('rl1', 'A', 'B', 'chr', { chrom: 'c' })])).toEqual([]);
+  });
+
+  it('ignores filters that are not a genome selection', () => {
+    const plain = brush().map((f) => ({ ...f, source: 'interactive' }));
+    expect(regionLinkFilters('B', { A: plain }, [regionLink()])).toEqual([]);
   });
 });
