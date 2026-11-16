@@ -645,13 +645,15 @@ test.describe("Changed since your last visit", () => {
       const adminBefore = await changeSet(request, e.admin, id);
       expect(adminBefore.first_visit).toBe(true);
 
-      // Calls about this dashboard's mark. The bell's inbox (`GET /changes/inbox`)
-      // is an account-wide read that moves nothing, and is on every page.
+      // Calls that move this dashboard's mark: a visit or a "seen". Reading
+      // the change set moves nothing, and the editor reads it (History's "Last
+      // viewed" mark, the What's new pill); so does the bell's inbox, on every
+      // page.
       const writes: string[] = [];
       const watch = (p: Page) =>
         p.on("request", (r) => {
           const path = new URL(r.url()).pathname;
-          if (/\/changes\/(dashboard|component_diff)\//.test(path)) writes.push(`${r.method()} ${r.url()}`);
+          if (/\/changes\/dashboard\/[^/]+\/(visit|seen)$/.test(path)) writes.push(`${r.method()} ${r.url()}`);
         });
       watch(reader.page);
       watch(page);
@@ -669,7 +671,7 @@ test.describe("Changed since your last visit", () => {
       // Past the viewer's visit timer: a normal open would have recorded one by now.
       await reader.page.waitForTimeout(VISIT_DELAY_MS + 3_000);
 
-      expect(writes, "neither view may call the changes API").toEqual([]);
+      expect(writes, "neither view may write a mark").toEqual([]);
       const after = await changeSet(request, readerApi, id);
       expect(after.since, "the reader's mark did not move").toBe(before.since);
       expect(after.dashboard.length).toBe(before.dashboard.length);
