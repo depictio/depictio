@@ -305,8 +305,23 @@
       "content_hash": "5e684d5eea58107bf73ecf44c21563de512c342f4690bfff7a0fa17bc8d682d7"
     },
     "nf-core/eager/2.4.5": {
-      "version": "1.3.1",
-      "content_hash": "65598232c5f686095954a60149cd744ee9f8065c4593b7b21d237581acdca9b3",
+      "version": "1.3.2",
+      "content_hash": "ef56b6f94388f17ff8266deee1896c25b41c60ed9abc208f254ddbbedf904070",
+      "catalog": {
+        "adapterremoval": "1.0.0",
+        "bcftools": "1.0.0",
+        "damageprofiler": "1.0.0",
+        "endorspy": "1.0.0",
+        "multiqc": "1.0.0",
+        "picard": "1.1.0",
+        "preseq": "1.0.0",
+        "qualimap": "1.0.0",
+        "samtools": "1.1.0"
+      }
+    },
+    "nf-core/eager/2.5.3": {
+      "version": "1.4.0",
+      "content_hash": "642d7aab37f39f2f5030978f5ef8f98f65619925f060e61f7d6c9e37708b17c4",
       "catalog": {
         "adapterremoval": "1.0.0",
         "bcftools": "1.0.0",
