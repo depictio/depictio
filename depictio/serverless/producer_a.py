@@ -21,8 +21,8 @@ Everything runs **in-process** — no HTTP round-trips to the API:
   ``build_figure_preview`` (the Celery task *function*, called directly — the
   same code path preview and render share), ``fetch_advanced_viz_data`` (the
   phylogenetic kind only — its ``sampling`` block is kept verbatim),
-  ``render_multiqc*``, and the map service with the basemap forced to
-  ``white-bg`` (zero-network single-file).
+  ``render_multiqc*``, and the map service with the dashboard's own basemap
+  (loaded when the reader is online; ``depictio/serverless/maps.py``).
 - Staleness: each DataRef records the server's ``_get_aggregation_hash`` for
   its DC (RFC errata #8), so a rebuilt bundle can be compared against the
   instance state it was cut from.
@@ -93,6 +93,7 @@ import os
 import re
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -129,6 +130,7 @@ from depictio.serverless.binding import (
     planned_figure_miss,
 )
 from depictio.serverless.companions import filter_expr_companionable
+from depictio.serverless.maps import MAP_FROZEN_DETAIL, freeze_map_payload
 from depictio.serverless.objects import IMAGE_SNAPSHOT_MAX, IMAGE_THUMB_PX, ObjectBudget
 from depictio.serverless.preflight import (
     LINK_TIER_A,
@@ -149,6 +151,7 @@ from depictio.serverless.producer_b import (
     render_bundle_html,
     runtime_floor_bytes,
 )
+from depictio.serverless.project_summary import build_project_summary
 from depictio.serverless.prologue import transpile_with_reason
 from depictio.serverless.prologue_exec import execute_ops, terminal_px_call
 from depictio.serverless.pruning import (
@@ -183,6 +186,9 @@ logger = logging.getLogger(__name__)
 #: stripped from the shipped document (``sanitize_dashboard_doc``).
 _FOLD_COLORS_KEY = "__fold_category_colors__"
 _FOLD_COLUMNS_KEY = "__fold_columns__"
+#: The brand a figure's tab draws in (its own, else its main tab's), set beside
+#: the colours for ui-mode figures and stripped from the shipped document too.
+_FOLD_BRAND_KEY = "__fold_brand_theme__"
 
 
 def figure_code(comp: dict[str, Any]) -> str:
@@ -210,10 +216,16 @@ def annotate_code_context(tabs: list["FamilyTab"]) -> None:
             colors = routes.effective_category_colors(tab.doc) or {}
         except Exception:
             colors = {}
+        brand = tab.doc.get("brand_theme") or tab.doc.get("inherited_brand_theme")
         for comp in tab.components:
-            if comp.get("component_type") != "figure" or comp.get("mode") != "code":
+            if comp.get("component_type") != "figure":
                 continue
             comp[_FOLD_COLORS_KEY] = colors
+            if comp.get("mode") != "code":
+                # A ui-mode figure takes the colours and the brand through its
+                # kwargs (`render_kwargs`), as the render endpoint merges them.
+                comp[_FOLD_BRAND_KEY] = brand
+                continue
             dc_id = str(comp.get("dc_id") or "")
             if dc_id and dc_id not in schema_cache:
                 try:
@@ -233,6 +245,59 @@ def annotate_code_context(tabs: list["FamilyTab"]) -> None:
                     schema_cache[dc_id] = None
             if schema_cache.get(dc_id) is not None:
                 comp[_FOLD_COLUMNS_KEY] = schema_cache[dc_id]
+
+
+def annotate_family_inheritance(tabs: list["FamilyTab"]) -> None:
+    """Give each child tab what ``GET /dashboards/get`` adds at read time.
+
+    A child tab's document holds neither its main tab's category colours nor
+    its brand: the API hands them over as ``inherited_category_colors`` /
+    ``inherited_brand_theme``, and every renderer reading the tab document as
+    its colour source (the phylogenetic tree's tips, a filter bar's chips, the
+    group strips) lays its own over them. A bundle mounts the stored documents,
+    so without this a child tab drew its Phylum tips in the stock palette while
+    the main tab pinned every phylum. Read from the main tab in the family when
+    it is there, else (a single-tab export of a child) from the database.
+    """
+    main = next((tab for tab in tabs if tab.is_main_tab), None)
+    for tab in tabs:
+        doc = tab.doc
+        if tab.is_main_tab or not doc.get("parent_dashboard_id"):
+            continue
+        if main is not None and main.id == str(doc.get("parent_dashboard_id")):
+            colors = main.doc.get("category_colors") or None
+            brand = main.doc.get("brand_theme") or None
+        else:
+            try:
+                core = _dashboards_core()
+                colors = core.family_category_colors(doc)
+                brand = core.family_brand_theme(doc)
+            except Exception:
+                colors, brand = None, None
+        doc["inherited_category_colors"] = colors
+        if not doc.get("brand_theme"):
+            doc["inherited_brand_theme"] = brand
+
+
+def render_kwargs(comp: dict[str, Any]) -> dict[str, Any]:
+    """A ui-mode figure's kwargs as ``render_figure_endpoint`` hands them to the
+    worker: the tab's brand defaults, then its category colours (a column the
+    dashboard colours gets that map as ``color_discrete_map``, the component's
+    own entries winning). Code-mode figures read the colours as
+    ``depictio_category_colors`` instead, so their kwargs pass through."""
+    from depictio.api.v1.services.figure.figure_builder import (
+        merge_category_colors,
+        merge_dashboard_brand_theme,
+    )
+
+    kwargs = comp.get("dict_kwargs") or {}
+    if comp.get("mode", "ui") == "code":
+        return kwargs
+    try:
+        kwargs = merge_dashboard_brand_theme(comp.get(_FOLD_BRAND_KEY), kwargs)
+    except Exception:
+        logger.warning("producer A: unreadable brand theme on %s", comp.get("index"))
+    return merge_category_colors(comp.get(_FOLD_COLORS_KEY), kwargs)
 
 
 def _code_figure_plan(
@@ -474,6 +539,15 @@ class FamilyTab:
             is_main_tab=self.is_main_tab,
             icon=self.doc.get("tab_icon") or self.doc.get("icon"),
             icon_color=self.doc.get("tab_icon_color") or self.doc.get("icon_color"),
+            # The rest of what `/dashboards/list?include_child_tabs=true` gives
+            # the rail: sections, the main tab's own name, the raw tab icon (a
+            # child tab draws an image — the MultiQC logo — only from its own
+            # `tab_icon`) and the line a tab link describes it with.
+            main_tab_name=_str_or_none(self.doc.get("main_tab_name")),
+            tab_group=_str_or_none(self.doc.get("tab_group")),
+            tab_icon=_str_or_none(self.doc.get("tab_icon")),
+            tab_icon_color=_str_or_none(self.doc.get("tab_icon_color")),
+            subtitle=_str_or_none(self.doc.get("subtitle")),
             doc=sanitize_dashboard_doc(self.doc),
         )
 
@@ -485,6 +559,11 @@ class FamilyTab:
             tab_order=self.tab_order,
             is_main_tab=self.is_main_tab,
         )
+
+
+def _str_or_none(value: Any) -> str | None:
+    """A stored string field, blank and non-string values read as unset."""
+    return (value.strip() or None) if isinstance(value, str) else None
 
 
 def family_from_doc(
@@ -693,9 +772,7 @@ def classify_stored_component(comp: dict[str, Any]) -> PlannedTier:
         return PlannedTier(
             ComponentTier.FROZEN,
             TierReason.MAP_TILES,
-            "frozen at the default filter state with the basemap forced to "
-            "'white-bg' — network tiles are unavailable in a zero-network "
-            "single-file bundle",
+            MAP_FROZEN_DETAIL,
         )
     if ctype == "image":
         return PlannedTier(
@@ -710,8 +787,10 @@ def classify_stored_component(comp: dict[str, Any]) -> PlannedTier:
         return PlannedTier(
             ComponentTier.FROZEN,
             TierReason.JBROWSE,
-            "the genome browser streams its tracks from the server at view time; the bundle "
-            "shows the export-time session instead: assembly, locus and the track table",
+            "the genome browser renders offline from its session's files, shipped in the "
+            "bundle within the genome-browser budget (sliced to the opening locus when too "
+            "big to ship whole), frozen at the default filter state; when nothing fits, the "
+            "bundle shows the export-time session instead: assembly, locus and track table",
         )
     if ctype == "advanced_viz":
         kind = advanced_viz_kind(comp)
@@ -888,7 +967,7 @@ def sanitize_dashboard_doc(dashboard_data: dict[str, Any]) -> dict[str, Any]:
             {
                 k: v
                 for k, v in m.items()
-                if k not in (_FOLD_COLORS_KEY, _FOLD_COLUMNS_KEY, PYTHON_JOB_KEY)
+                if k not in (_FOLD_COLORS_KEY, _FOLD_COLUMNS_KEY, _FOLD_BRAND_KEY, PYTHON_JOB_KEY)
             }
             if isinstance(m, dict)
             else m
@@ -1156,7 +1235,7 @@ def _freeze_figure(comp: dict[str, Any], full_load: bool = False) -> tuple[dict[
             "dc_id": str(comp.get("dc_id")),
             "dc_config": convert_objectid_to_str(comp.get("dc_config") or {}),
             "visu_type": comp.get("visu_type", "scatter"),
-            "dict_kwargs": comp.get("dict_kwargs") or {},
+            "dict_kwargs": render_kwargs(comp),
             "mode": comp.get("mode", "ui"),
             "code_content": comp.get("code_content", ""),
             "selection_enabled": bool(comp.get("selection_enabled", False)),
@@ -1167,6 +1246,12 @@ def _freeze_figure(comp: dict[str, Any], full_load: bool = False) -> tuple[dict[
         "theme": "light",
         "full_load": full_load,
     }
+    # The family's colours, as the render endpoint sends them: a code figure
+    # reads them as `depictio_category_colors` (the ampliseq "Phylum
+    # composition per group" bars), and the worker's group colouring too.
+    colors = comp.get(_FOLD_COLORS_KEY)
+    if colors:
+        payload["category_colors"] = colors
     result = _celery().build_figure_preview(payload)
     meta = result.get("metadata") or {}
     if meta.get("error"):
@@ -1751,19 +1836,14 @@ def _multiqc_payload(payload: Any, component_id: str) -> dict[str, Any]:
 def _freeze_map(
     comp: dict[str, Any], user: ExportUser, category_colors: dict | None = None
 ) -> dict[str, Any]:
-    """Freeze a map at the default filter state with a zero-network basemap.
+    """Freeze a map at the default filter state, keeping its own basemap.
 
-    Mirrors ``render_map_endpoint``'s body, but forces ``map_style`` to
-    ``white-bg``: MapLibre tile styles fetch from the network, which a
-    single-file bundle must never do (RFC §2.4). The endpoint itself cannot be
-    reused verbatim because it reads the component from Mongo — the style
-    override has to reach ``render_map``'s ``trigger_data``.
+    Mirrors ``render_map_endpoint``'s body (which reads the component from
+    Mongo, so it cannot be reused verbatim) through the shared
+    :func:`~depictio.serverless.maps.freeze_map_payload`: the dashboard's
+    ``map_style`` is kept, so the basemap loads when the reader is online, and
+    the runtime draws the markers on a blank background when it is not.
     """
-    import json as _json
-
-    from depictio.api.v1.services.figure.mantine_templates import ensure_mantine_templates
-    from depictio.api.v1.services.map.render import render_map
-
     init_entry = _dc_init_entry(comp)
     if init_entry is None:
         raise ProducerAError("map component's DC has no materialised Delta table")
@@ -1774,28 +1854,7 @@ def _freeze_map(
         metadata=None,
         init_data={dc_id: init_entry},
     )
-    ensure_mantine_templates()
-    trigger_data = {**comp, "map_style": "white-bg"}
-    fig, data_info = render_map(
-        df=df,
-        trigger_data=trigger_data,
-        theme="light",
-        existing_metadata=None,
-        access_token=None,
-        category_colors=category_colors,
-    )
-    fig_dict = _json.loads(fig.to_json()) if hasattr(fig, "to_json") else fig
-    if isinstance(fig_dict, dict) and "layout" in fig_dict:
-        fig_dict["layout"].setdefault("uirevision", "persistent")
-    return {
-        "figure": fig_dict,
-        "metadata": {
-            "map_type": comp.get("map_type", "scatter_map"),
-            "filter_applied": False,
-            "displayed_count": data_info.get("displayed_count"),
-            "total_count": data_info.get("total_count"),
-        },
-    }
+    return freeze_map_payload(comp, df, category_colors)
 
 
 # ---------------------------------------------------------------------------
@@ -2449,7 +2508,9 @@ def decide_figure(
         df = pruned_frames.get(str(comp.get("dc_id") or ""))
         if df is not None:
             try:
-                binding, miss = build_binding_with_reason(comp, df)
+                binding, miss = build_binding_with_reason(
+                    {**comp, "dict_kwargs": render_kwargs(comp)}, df
+                )
             except Exception as exc:
                 binding, miss = None, None  # any builder crash freezes below
                 binder_error = f"{type(exc).__name__}: {exc}"
@@ -3080,6 +3141,7 @@ def export_manifest(
     budget = budget or ComputeBudget.from_env()
 
     items = family_components(tabs)
+    annotate_family_inheritance(tabs)
     annotate_code_context(tabs)
     tier_rows: list[TierRow] = []
     for tab in tabs:
@@ -3125,6 +3187,9 @@ def export_manifest(
     # One object budget for every file the bundle ships: structures, PAE
     # matrices and gallery thumbnails alike.
     object_budget = ObjectBudget()
+    # Genome browser tiles whose files were shipped: the bundle then needs the
+    # `jbrowse` runtime add-on (JBrowse itself).
+    jbrowse_tiles: list[str] = []
     computes_frozen = 0
     computes_skipped = 0
 
@@ -3160,7 +3225,7 @@ def export_manifest(
         # data source, not a snapshot of a dead tile.
         if row.tier is not ComponentTier.FROZEN and ctype != "multiqc":
             continue
-        if decide_only and ctype != "figure":
+        if decide_only and ctype not in ("figure", "jbrowse"):
             # A figure is the only tier this loop can still SETTLE cheaply, so
             # it is the only one it runs. The rest keep their planned verdict,
             # which the build can still move: a frozen payload that fails drops
@@ -3232,9 +3297,19 @@ def export_manifest(
                 if note:
                     row.detail = f"{row.detail}; {note}"
             elif ctype == "jbrowse":
-                frozen[component_id] = FrozenPayload(
-                    kind="jbrowse", payload=_freeze_jbrowse(dashboard_oid, component_id, user)
+                payload, outcome = _freeze_jbrowse(
+                    dashboard_oid,
+                    component_id,
+                    user,
+                    object_budget,
+                    inline_blobs,
+                    dry_run=decide_only,
                 )
+                row.detail = outcome.detail()
+                if not decide_only:
+                    frozen[component_id] = FrozenPayload(kind="jbrowse", payload=payload)
+                if outcome.renderable:
+                    jbrowse_tiles.append(str(comp.get("title") or component_id))
         except Exception as exc:
             row.tier = ComponentTier.OMITTED
             row.reason = row.reason or TierReason.UNSUPPORTED
@@ -3309,6 +3384,17 @@ def export_manifest(
     )
     if python_info.get("embedded"):
         addons.append(python_info["addon"])
+    if jbrowse_tiles:
+        from depictio.serverless.addons import addon_entry
+
+        entry = addon_entry("jbrowse", "genome browser tiles: " + ", ".join(jbrowse_tiles))
+        if entry is None:
+            logger.warning(
+                "producer A: the jbrowse add-on is not built; genome browsers show their "
+                "session table"
+            )
+        else:
+            addons.append(entry)
 
     built_at = datetime.now(timezone.utc).isoformat()
     manifest = BundleManifest(
@@ -3325,6 +3411,7 @@ def export_manifest(
         # ``tabs`` is empty there and ``dashboard`` is the whole story.
         tabs=[tab.tab_entry() for tab in tabs] if len(tabs) > 1 else [],
         provenance=build_provenance(user, built_at, project_doc, entry_tab),
+        project=build_project_summary(project_doc, _public_base_url()),
         data_refs=data_refs,
         tiers={
             row.component_id: TierEntry(tier=row.tier, reason=row.reason, detail=row.detail)
@@ -3433,15 +3520,164 @@ def _freeze_image(
     return payload, note
 
 
-def _freeze_jbrowse(dashboard_oid: ObjectId, component_id: str, user: ExportUser) -> dict[str, Any]:
-    """The genome browser's session at the default filter state (its track table)."""
-    return _routes().render_jbrowse_endpoint(
+def _freeze_jbrowse(
+    dashboard_oid: ObjectId,
+    component_id: str,
+    user: ExportUser,
+    budget: ObjectBudget,
+    inline_blobs: dict[str, str] | None,
+    dry_run: bool = False,
+) -> tuple[dict[str, Any], Any]:
+    """The genome browser's session at the default filter state, with its files.
+
+    ``render_jbrowse`` mints the session the live viewer would open; its
+    assembly, track and index files are then read here, through the same
+    lookups the API's track proxy uses (:func:`_jbrowse_opener`), and shipped
+    within the budget (``jbrowse_bundle.bundle_session``), so the bundle mounts
+    the real browser over them. Returns the rewritten payload and the
+    :class:`~depictio.serverless.jbrowse_bundle.BundleResult` (its ``detail()``
+    is the tier detail).
+    """
+    from depictio.serverless.jbrowse_bundle import bundle_session
+
+    session = _routes().render_jbrowse_endpoint(
         dashboard_oid,
         component_id,
         {"filters": []},
         current_user=user,
         access_token=None,
     )
+    result = bundle_session(session, _jbrowse_opener(user), budget, inline_blobs, dry_run=dry_run)
+    return result.payload, result
+
+
+_JBROWSE_PROXY = re.compile(r"/jbrowse/(tracks|assembly|preset|ucsc)/([^?#]+)")
+
+
+class _RemoteFile:
+    """A ``jbrowse_bundle.FileSource`` over one ``remote_read.ByteSource``."""
+
+    def __init__(self, src: Any, label: str):
+        self.src = src
+        self.label = label
+        self._size: int | None = None
+
+    def size(self) -> int:
+        from depictio.api.v1.services import remote_read
+
+        if self._size is None:
+            try:
+                self._size = remote_read.source_size(self.src)
+            except remote_read.RemoteReadError as exc:
+                raise OSError(exc.detail) from exc
+        return self._size
+
+    def read(self, start: int, end: int) -> bytes:
+        from depictio.api.v1.services import remote_read
+
+        if end < start:
+            return b""
+        try:
+            return b"".join(remote_read.open_range(self.src, remote_read.ByteRange(start, end)))
+        except remote_read.RemoteReadError as exc:
+            raise OSError(exc.detail) from exc
+
+
+def _jbrowse_opener(user: ExportUser) -> Callable[[str], Any]:
+    """``uri -> FileSource`` for the locations ``render_jbrowse`` mints.
+
+    The API paths are resolved exactly as their routes do (track manifest row,
+    custom assembly, preset or UCSC catalogue entry), never by fetching the
+    URL: the export runs next to the store, the signed query only matters to a
+    browser. An absolute ``https://`` location (a direct preset or UCSC file, a
+    config override's extra track) is read when its host is UCSC's download
+    server or allow-listed for remote tracks, like the proxy would.
+    """
+    from urllib.parse import parse_qs, unquote, urlparse
+
+    from depictio.api.v1.endpoints.jbrowse_endpoints.routes import _assembly_uri
+    from depictio.api.v1.services import remote_read
+    from depictio.api.v1.services.jbrowse import ucsc
+    from depictio.api.v1.services.jbrowse.assemblies import (
+        get_assembly_preset,
+        preset_file_uri,
+    )
+    from depictio.api.v1.services.jbrowse.tracks import (
+        find_tracks_dc,
+        s3_base_folder,
+        tracks_by_key,
+        user_can_read_project,
+    )
+    from depictio.models.models.data_collections_types.genomic_tracks import CustomAssembly
+    from depictio.serverless.jbrowse_bundle import SourceRefused
+
+    uid = str(user.id)
+
+    def readable_dc(dc_id: str) -> Any:
+        tdc = find_tracks_dc(dc_id)
+        if tdc is None or not (user.is_admin or user_can_read_project(tdc.project_id, uid)):
+            raise SourceRefused("track collection not found")
+        return tdc
+
+    def located(uri: str, base: str, label: str) -> _RemoteFile:
+        try:
+            return _RemoteFile(remote_read.resolve_location(uri, base), label)
+        except remote_read.RemoteReadError as exc:
+            raise SourceRefused(exc.detail) from exc
+
+    def open_uri(uri: str) -> _RemoteFile:
+        parsed = urlparse(uri)
+        m = _JBROWSE_PROXY.search(parsed.path) if not parsed.netloc else None
+        if m is None:
+            if parsed.scheme == "https":
+                host = (parsed.hostname or "").lower()
+                label = unquote(parsed.path.rsplit("/", 1)[-1]) or uri
+                if host == ucsc.UCSC_DOWNLOAD_HOST:
+                    return _RemoteFile(remote_read.ByteSource("https", url=uri), label)
+                return located(uri, "", label)
+            raise SourceRefused(f"not a location the bundle can read: {uri}")
+        scope, rest = m.group(1), [unquote(p) for p in m.group(2).split("/")]
+        if scope == "tracks" and len(rest) == 3:
+            dc_id, key, role = rest
+            pinned = parse_qs(parsed.query).get("v", [None])[0]
+            tdc = readable_dc(dc_id)
+            track = tracks_by_key(tdc, int(pinned) if pinned and pinned.isdigit() else None).get(
+                key
+            )
+            if track is None:
+                raise SourceRefused("track not found in its collection")
+            target = track.uri if role == "data" else track.index_uri
+            if not target:
+                raise SourceRefused("track has no index")
+            what = "index" if role == "index" else track.fmt.upper()
+            return located(target, s3_base_folder(dc_id, tdc.props), f"{track.name} ({what})")
+        if scope == "assembly" and len(rest) == 2:
+            dc_id, role = rest
+            tdc = readable_dc(dc_id)
+            if not isinstance(tdc.props.assembly, CustomAssembly):
+                raise SourceRefused("collection uses a preset assembly")
+            target = _assembly_uri(tdc.props.assembly, role)
+            if not target:
+                raise SourceRefused(f"assembly has no {role} file")
+            return located(target, s3_base_folder(dc_id, tdc.props), f"assembly {role}")
+        if scope == "preset" and len(rest) == 2:
+            preset = get_assembly_preset(rest[0])
+            target = preset_file_uri(preset, rest[1]) if preset else None
+            if not target:
+                raise SourceRefused("unknown assembly preset file")
+            return _RemoteFile(remote_read.ByteSource("https", url=target), f"{rest[0]} {rest[1]}")
+        if scope == "ucsc" and len(rest) == 3:
+            genome, track_name, role = rest
+            entry = ucsc.catalog(genome).get(track_name)
+            target = None if entry is None else (entry.url if role == "data" else entry.index_url)
+            if not target:
+                raise SourceRefused("unknown UCSC track file")
+            return _RemoteFile(
+                remote_read.ByteSource("https", url=target), f"UCSC {genome} {track_name}"
+            )
+        raise SourceRefused(f"not a location the bundle can read: {uri}")
+
+    return open_uri
 
 
 def _indexed_file_sources(dc_id: str) -> tuple[str, list[Any]]:

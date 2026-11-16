@@ -22,5 +22,11 @@
     "title": "Large computes \u2014 group comparison frozen at its opening pair, contact-map windows live",
     "manifest": "demo/manifests/compute.json",
     "description": "Built by producer B from the advanced-visualisation showcase. The group comparison (a per-gene Wilcoxon test between two clusters, a server compute) opens on cluster_1 vs cluster_2, computed at build time with the server's own group_compare_from_frame; picking another pair says it needs the live dashboard instead of relabelling the frozen rows. The Hi-C contact map reads its whole-chromosome view through the data path and replays every zoom window in the browser (contactMapWindow, the port of the task's contact_map_window, pinned by a parity fixture). No network."
+  },
+  {
+    "id": "genome-browser",
+    "title": "Genome browser \u2014 JBrowse over bundled files, a BAM sliced to its opening locus (JBrowse add-on)",
+    "manifest": "demo/manifests/genome.json",
+    "description": "The real JBrowse 2 view, offline. The session producer A froze is rewritten so every file it reads (a FASTA and its index, a BED, a bedGraph, a BAM and its BAI) points at bytes shipped inside the HTML; the runtime answers JBrowse's range requests from memory. The BAM is sliced: only the 256 KiB pages its index names for the opening locus (and its header) are shipped, and a read past them fails in the track with the region the bundle holds. JBrowse itself is a conditional add-on embedded only into bundles with a genome browser. Regenerate with depictio/serverless/examples/genome_demo.py. No network."
   }
 ]

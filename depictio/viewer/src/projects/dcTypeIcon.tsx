@@ -1,6 +1,7 @@
 import React from 'react';
 import { Badge, Box, Group, Tooltip } from '@mantine/core';
 import { Icon } from '@iconify/react';
+import { multiqcLogoOverride } from 'depictio-react-core';
 
 /** The type axis of a data collection: what kind of thing it holds, and so
  *  which components can bind to it. One entry per stored `dc_type`.
@@ -101,7 +102,9 @@ export const DcTypeIcon: React.FC<{
       <Box
         component="img"
         darkHidden
-        src={`${import.meta.env.BASE_URL}logos/multiqc_icon_color.svg`}
+        src={
+          multiqcLogoOverride('color') ?? `${import.meta.env.BASE_URL}logos/multiqc_icon_color.svg`
+        }
         alt="MultiQC"
         width={size}
         height={size}
@@ -110,7 +113,9 @@ export const DcTypeIcon: React.FC<{
       <Box
         component="img"
         lightHidden
-        src={`${import.meta.env.BASE_URL}logos/multiqc_icon_white.svg`}
+        src={
+          multiqcLogoOverride('white') ?? `${import.meta.env.BASE_URL}logos/multiqc_icon_white.svg`
+        }
         alt="MultiQC"
         width={size}
         height={size}

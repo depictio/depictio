@@ -42,7 +42,10 @@ the caller freezes with ``binding_miss``:
 * a whole-frame visualisation (heatmap, scatter_matrix, parallel_*, imshow,
   scatter_geo, choropleth — ``_WHOLE_FRAME_VISU``);
 * every grouping value null, so px would plot nothing at all;
-* a non-OLS ``trendline`` (the runtime only refits closed-form 1-predictor OLS).
+* a ``trendline`` the runtime has no exact port of (see
+  :func:`trendline_refit_miss`: ``ols``/``lowess``/``rolling``/``expanding``/
+  ``ewm`` are refit, a time-offset window or an exotic aggregation is not), an
+  overall-scope one, or one over a non-numeric x/y.
 
 A *single* null grouping value is not one of them — see :func:`_combinations`.
 
@@ -79,7 +82,8 @@ Known accepted deviations (RFC §4 table, plus one)
 categorical axis ticks keep vanished categories. Additionally an OLS
 trendline's *hovertemplate* keeps the unfiltered fit's equation and R² (it is
 baked into the layout-side string by px); the drawn line itself is refit by the
-runtime.
+runtime (``packages/depictio-static-core/src/trendline.ts``, a port of px's
+trendline functions and of the statsmodels/pandas kernels they call).
 """
 
 from __future__ import annotations
@@ -100,6 +104,139 @@ from depictio.models.models.serverless import (
     TrendlineBinding,
 )
 
+#: px ``trendline`` kinds ``trendline.ts`` ports (``TrendlineKind`` in the models).
+_TRENDLINE_KINDS: frozenset[str] = frozenset({"ols", "lowess", "rolling", "expanding", "ewm"})
+#: pandas aggregations ``trendline.ts`` ports for ``rolling``/``expanding``.
+_WINDOW_FUNCTIONS: frozenset[str] = frozenset(
+    {"mean", "sum", "min", "max", "median", "std", "var", "count"}
+)
+#: ... and for ``ewm`` (pandas has no ewm min/max/median/count).
+_EWM_FUNCTIONS: frozenset[str] = frozenset({"mean", "sum", "std", "var"})
+_ROLLING_CLOSED: frozenset[Any] = frozenset({None, "right", "left", "both", "neither"})
+
+
+def _is_int(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _is_number(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+
+
+def trendline_options_of(dict_kwargs: dict[str, Any]) -> dict[str, Any] | None:
+    """px's ``trendline_options`` as the figure builder hands them over.
+
+    ``None``/``""`` (the YAML default) mean "no options"; anything else that is
+    not a mapping reaches px as-is and px refuses it, so it is ``None`` here:
+    there is nothing to port.
+    """
+    options = dict_kwargs.get("trendline_options")
+    if options is None or options == "":
+        return {}
+    return dict(options) if isinstance(options, dict) else None
+
+
+def _window_function_ok(
+    options: dict[str, Any], functions: frozenset[str], dispersion_arg: str
+) -> bool:
+    """``function`` / ``function_args`` (popped by px before the window call)."""
+    function = options.pop("function", "mean")
+    function_args = options.pop("function_args", {})
+    if function not in functions or not isinstance(function_args, dict):
+        return False
+    if function in ("std", "var"):
+        return set(function_args) <= {dispersion_arg} and all(
+            _is_number(v) if dispersion_arg == "ddof" else isinstance(v, bool)
+            for v in function_args.values()
+        )
+    return not function_args
+
+
+def trendline_refit_miss(dict_kwargs: dict[str, Any]) -> BindingMiss | None:
+    """Why this figure's trendline cannot be refit in the browser, or ``None``.
+
+    The rule is "the runtime ports this exactly": ``trendline.ts`` implements
+    px's five trendline functions with the option set listed here, and anything
+    outside it (a time-offset or weighted rolling window, a ``step``, an
+    aggregation pandas computes with a kernel the runtime does not carry, an
+    overall-scope fit) keeps the figure frozen with a reason that names it.
+    """
+    kind = dict_kwargs.get("trendline") or ""
+    if not kind:
+        return None
+    if str(kind) not in _TRENDLINE_KINDS:
+        return BindingMiss.TRENDLINE_UNSUPPORTED
+    scope = dict_kwargs.get("trendline_scope") or "trace"
+    if scope != "trace":
+        return BindingMiss.TRENDLINE_OVERALL
+    options = trendline_options_of(dict_kwargs)
+    if options is None:
+        return BindingMiss.TRENDLINE_UNSUPPORTED
+    ok: bool
+    if kind == "ols":
+        ok = set(options) <= {"add_constant", "log_x", "log_y"} and all(
+            isinstance(v, bool) for v in options.values()
+        )
+    elif kind == "lowess":
+        frac = options.get("frac", 0.6666666)
+        ok = set(options) <= {"frac"} and _is_number(frac) and 0 <= frac <= 1
+    elif kind == "rolling":
+        ok = _window_function_ok(options, _WINDOW_FUNCTIONS, "ddof")
+        window = options.get("window")
+        min_periods = options.get("min_periods")
+        ok = (
+            ok
+            and set(options) <= {"window", "min_periods", "center", "closed"}
+            and _is_int(window)
+            and window >= 0
+            and (min_periods is None or (_is_int(min_periods) and 0 <= min_periods <= window))
+            and isinstance(options.get("center", False), bool)
+            and options.get("closed") in _ROLLING_CLOSED
+        )
+    elif kind == "expanding":
+        ok = _window_function_ok(options, _WINDOW_FUNCTIONS, "ddof")
+        min_periods = options.get("min_periods")
+        ok = (
+            ok
+            and set(options) <= {"min_periods"}
+            and (min_periods is None or (_is_int(min_periods) and min_periods >= 0))
+        )
+    else:  # ewm
+        adjust = options.get("adjust", True)
+        function = options.get("function", "mean")
+        ok = _window_function_ok(options, _EWM_FUNCTIONS, "bias")
+        decay = [k for k in ("com", "span", "halflife", "alpha") if options.get(k) is not None]
+        min_periods = options.get("min_periods")
+        ok = (
+            ok
+            and set(options)
+            <= {"com", "span", "halflife", "alpha", "min_periods", "adjust", "ignore_na"}
+            and len(decay) == 1
+            and _is_number(options[decay[0]])
+            and (min_periods is None or (_is_int(min_periods) and min_periods >= 0))
+            and isinstance(adjust, bool)
+            and isinstance(options.get("ignore_na", False), bool)
+            # pandas: "sum is not implemented with adjust=False"
+            and not (function == "sum" and not adjust)
+        )
+    return None if ok else BindingMiss.TRENDLINE_UNSUPPORTED
+
+
+def _refit_dtype_miss(dict_kwargs: dict[str, Any], df: pl.DataFrame) -> BindingMiss | None:
+    """px casts a text x/y to float before fitting; the runtime does not."""
+    x, y = dict_kwargs.get("x"), dict_kwargs.get("y")
+    if not (isinstance(x, str) and isinstance(y, str) and x in df.columns and y in df.columns):
+        return None  # the pairing step below decides (no x/y binding → unpairable)
+    x_dtype, y_dtype = df.schema[x], df.schema[y]
+    x_ok = x_dtype.is_numeric() or (
+        x_dtype.is_temporal() and x_dtype != pl.Duration and x_dtype != pl.Time
+    )
+    if x_dtype.is_temporal() and (trendline_options_of(dict_kwargs) or {}).get("log_x"):
+        x_ok = False
+    if not (x_ok and y_dtype.is_numeric()):
+        return BindingMiss.TRENDLINE_NON_NUMERIC
+    return None
+
 
 class BindingMiss(str, Enum):
     """Which bail-out refused a figure.
@@ -114,6 +251,8 @@ class BindingMiss(str, Enum):
     NO_DATA = "no_data"
     WHOLE_FRAME_VISU = "whole_frame_visu"
     TRENDLINE_UNSUPPORTED = "trendline_unsupported"
+    TRENDLINE_OVERALL = "trendline_overall"
+    TRENDLINE_NON_NUMERIC = "trendline_non_numeric"
     NO_SOURCE_COLUMNS = "no_source_columns"
     ALL_NULL_GROUPING = "all_null_grouping"
     NO_TRACES = "no_traces"
@@ -138,7 +277,20 @@ BINDING_MISS_DETAIL: dict[BindingMiss, str] = {
         "this visualisation is computed over the whole table at once, so it has no "
         "per-row binding to refill"
     ),
-    BindingMiss.TRENDLINE_UNSUPPORTED: "only an OLS trendline can be refit in the browser",
+    BindingMiss.TRENDLINE_UNSUPPORTED: (
+        "this trendline's kind or trendline_options has no exact browser refit "
+        "(ols, lowess, and integer-window rolling/expanding/ewm with "
+        f"{'/'.join(sorted(_WINDOW_FUNCTIONS))} are refit; time-offset windows, "
+        "win_type, step and other aggregations are not)"
+    ),
+    BindingMiss.TRENDLINE_OVERALL: (
+        "an overall-scope trendline is fit across every trace at once, which the "
+        "browser refit does not reproduce"
+    ),
+    BindingMiss.TRENDLINE_NON_NUMERIC: (
+        "the trendline's x or y column is not numeric or temporal, and px's "
+        "text-to-number cast is not reproduced in the browser"
+    ),
     BindingMiss.NO_SOURCE_COLUMNS: "the figure names no column of the bundled table",
     BindingMiss.ALL_NULL_GROUPING: "every grouping value is null, so the figure plots nothing",
     BindingMiss.NO_TRACES: "the server produced a figure with no traces",
@@ -191,7 +343,7 @@ def planned_figure_miss(component_meta: dict[str, Any]) -> BindingMiss | None:
     """The refusals :func:`build_binding_with_reason` reaches *without* data.
 
     Two of its bail-outs are decided from the component's own metadata alone —
-    a whole-frame visualisation and a non-OLS trendline — so the data-free tier
+    a whole-frame visualisation and a trendline the runtime cannot refit — so the data-free tier
     classifiers can reach the same verdict, in the same words, instead of
     reporting the figure as undecided until the build has tried it. The builder
     itself calls this, which is what keeps plan and build from drifting apart.
@@ -210,11 +362,7 @@ def planned_figure_miss(component_meta: dict[str, Any]) -> BindingMiss | None:
     dict_kwargs = component_meta.get("figure_params") or component_meta.get("dict_kwargs") or {}
     if not isinstance(dict_kwargs, dict):
         return None
-    trendline_kind = dict_kwargs.get("trendline") or ""
-    if trendline_kind and str(trendline_kind).lower() != "ols":
-        # the runtime only refits closed-form 1-predictor OLS
-        return BindingMiss.TRENDLINE_UNSUPPORTED
-    return None
+    return trendline_refit_miss(dict_kwargs)
 
 
 # px grouping kwargs, in the order the manifest contract pins for
@@ -663,15 +811,20 @@ def build_binding_with_reason(
     dict_kwargs = component_meta.get("figure_params") or component_meta.get("dict_kwargs") or {}
     if not isinstance(dict_kwargs, dict) or not isinstance(df, pl.DataFrame) or df.height == 0:
         return None, BindingMiss.NO_DATA
-    # The two bail-outs that need no data (whole-frame visu, non-OLS trendline).
+    # The bail-outs that need no data (whole-frame visu, unportable trendline).
     # They live in :func:`planned_figure_miss` so the preflight classifiers can
     # reach them too — same order, same verdicts.
     data_free_miss = planned_figure_miss(component_meta)
     if data_free_miss is not None:
         return None, data_free_miss
-    # Past that gate a trendline can only be OLS; the matcher below still needs
-    # to know whether one was asked for at all.
-    trendline_kind = dict_kwargs.get("trendline") or ""
+    # Past that gate a trendline is one the runtime refits; the matcher below
+    # still needs to know whether one was asked for at all.
+    trendline_kind = str(dict_kwargs.get("trendline") or "")
+    trendline_options = trendline_options_of(dict_kwargs) or {}
+    if trendline_kind:
+        dtype_miss = _refit_dtype_miss(dict_kwargs, df)
+        if dtype_miss is not None:
+            return None, dtype_miss
 
     referenced = referenced_columns(visu_type, dict_kwargs)
     if not referenced:
@@ -848,7 +1001,14 @@ def build_binding_with_reason(
         ]
         if len(partners) != 1:
             return None, BindingMiss.TRENDLINE_UNPAIRABLE
-        trendlines.append(TrendlineBinding(i=index, on=partners[0]))
+        trendlines.append(
+            TrendlineBinding(
+                i=index,
+                on=partners[0],
+                kind=trendline_kind,  # type: ignore[arg-type]
+                options=trendline_options,
+            )
+        )
     if len(by_index) + len(trendlines) != len(traces_json):
         # an unexplained trace is a mis-render waiting to happen
         return None, BindingMiss.TRACE_UNEXPLAINED

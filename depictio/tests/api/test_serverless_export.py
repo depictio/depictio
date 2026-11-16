@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import base64
 import io
+import json
 import random
 from pathlib import Path
 from typing import Any
@@ -85,7 +86,8 @@ from depictio.serverless.producer_a import (
         ({"component_type": "multiqc"}, ComponentTier.LIVE, None),
         ({"component_type": "map"}, ComponentTier.FROZEN, TierReason.MAP_TILES),
         # Snapshots since the zero-omitted pass: a gallery ships thumbnails of
-        # its default rows, a genome browser its export-time track table.
+        # its default rows, a genome browser its session's files (or, when none
+        # fits, its export-time track table).
         ({"component_type": "image"}, ComponentTier.FROZEN, TierReason.IMAGE),
         ({"component_type": "jbrowse"}, ComponentTier.FROZEN, TierReason.JBROWSE),
         # A computed embedding (``compute_method``) is a Celery kind; with no
@@ -180,15 +182,31 @@ def _ui_figure(**dict_kwargs: Any) -> dict[str, Any]:
     }
 
 
-def test_a_non_ols_trendline_is_a_final_frozen_verdict():
-    """``trendline: lowess`` (the penguins body-mass scatter) is refused by the
-    binder before it ever looks at data — so say so, instead of 'undecided'."""
-    comp = _ui_figure(x="flipper_length_mm", y="body_mass_g", trendline="lowess")
+def test_an_unported_trendline_is_a_final_frozen_verdict():
+    """A trendline the browser cannot refit (here a rolling skew)
+    is refused by the binder before it ever looks at data — so say so, instead
+    of 'undecided'."""
+    comp = _ui_figure(
+        x="flipper_length_mm",
+        y="body_mass_g",
+        trendline="rolling",
+        trendline_options={"window": 5, "function": "skew"},
+    )
     for plan in (classify_stored_component(comp), classify_component(comp)):
         assert plan.tier is ComponentTier.FROZEN
         assert plan.reason is TierReason.BINDING_MISS
-        assert plan.detail and "only an OLS trendline can be refit" in plan.detail
+        assert plan.detail and "other aggregations are not" in plan.detail
         assert plan.provisional is False
+
+
+def test_a_lowess_trendline_is_not_refused_up_front():
+    """``trendline: lowess`` (the penguins body-mass scatter) is refit in the
+    browser now, so no data-free classifier may freeze it for good: the verdict
+    is the binder's, once it has the data."""
+    comp = _ui_figure(x="flipper_length_mm", y="body_mass_g", trendline="lowess")
+    for plan in (classify_stored_component(comp), classify_component(comp)):
+        assert plan.provisional is True
+        assert not (plan.detail or "").startswith("this trendline")
 
 
 def test_a_whole_frame_visu_is_a_final_frozen_verdict():
@@ -1365,6 +1383,7 @@ def _main_tab_doc() -> dict[str, Any]:
         "dashboard_id": MAIN_TAB_OID,
         "project_id": PROJECT_OID,
         "title": "Overview",
+        "main_tab_name": "Summary",
         "is_main_tab": True,
         "icon": "mdi:view-dashboard",
         "stored_metadata": [
@@ -1392,6 +1411,8 @@ def _child_tab_doc(components: list[dict[str, Any]] | None = None) -> dict[str, 
         "tab_order": 2,
         "tab_icon": "mdi:set-merge",
         "tab_icon_color": "grape",
+        "tab_group": "Structure",
+        "subtitle": "Samples grouped by their profiles",
         "stored_metadata": components
         if components is not None
         else [
@@ -1505,6 +1526,40 @@ def test_family_resolves_from_a_child_id_with_that_child_as_entry(family_stack):
     assert [tab.id for tab in result.tabs] == [str(MAIN_TAB_OID), str(CHILD_TAB_OID)]
 
     BundleManifest.model_validate(manifest.model_dump(mode="json"))
+
+
+def test_family_tabs_carry_what_the_rail_reads(family_stack):
+    """The bundle's rail draws from these exactly as the live one draws from the
+    tab list: sections (`tab_group`), the main tab's own name, the raw tab icon
+    (a child tab only draws an IMAGE icon from its own `tab_icon`), and the line
+    a tab link describes the tab with. Missing, the rail was flat and the
+    MultiQC tab lost its logo."""
+    manifest = export_manifest(str(MAIN_TAB_OID), _admin()).manifest
+    assert manifest is not None
+    main, child = manifest.tabs
+    assert main.main_tab_name == "Summary"
+    assert main.tab_group is None
+    assert main.tab_icon is None  # authored on `icon` only; `icon` keeps carrying it
+    assert main.icon == "mdi:view-dashboard"
+    assert child.tab_group == "Structure"
+    assert child.tab_icon == "mdi:set-merge"
+    assert child.tab_icon_color == "grape"
+    assert child.subtitle == "Samples grouped by their profiles"
+    assert child.main_tab_name is None
+
+
+def test_family_manifest_carries_a_sanitised_project_summary(family_stack, monkeypatch):
+    """The project page's data rides in the manifest, read from the project
+    document — and nothing of its ACL does."""
+    monkeypatch.setattr(producer_a, "_public_base_url", lambda: "https://demo.example.org")
+    manifest = export_manifest(str(MAIN_TAB_OID), _admin()).manifest
+    assert manifest is not None
+    assert manifest.project is not None
+    assert manifest.project.id == str(PROJECT_OID)
+    assert manifest.project.name == "Fake project"
+    assert manifest.project.project_url == f"https://demo.example.org/projects/{PROJECT_OID}"
+    dumped = json.dumps(manifest.project.model_dump(mode="json"))
+    assert "permissions" not in dumped
 
 
 def test_family_bundles_a_shared_data_collection_once(family_stack):
@@ -2106,3 +2161,124 @@ def test_a_cold_multiqc_prerender_is_named_not_leaked_as_a_validation_error(monk
         producer_a._freeze_multiqc(
             ObjectId(), {"index": "mqc-1"}, ExportUser(id=ObjectId(), is_admin=True)
         )
+
+
+# ---------------------------------------------------------------------------
+# Family category colours reach a child tab's tiles (ampliseq Tree / Phylum)
+# ---------------------------------------------------------------------------
+
+HABITAT_PINS = {"a": "#123456", "b": "#abcdef"}
+
+# Not transpilable (a `with_columns` the IR cannot express), so it freezes
+# through build_figure_preview — the ampliseq "Phylum composition per group"
+# path. It colours by the family's map the way the seed figures do.
+CODE_WITH_FAMILY_COLOURS = (
+    "d = df.with_columns((pl.col('shannon') * 2).alias('twice'))\n"
+    "fig = px.bar(d.to_pandas(), x='depth', y='twice', color='habitat', "
+    "color_discrete_map=depictio_category_colors.get('habitat') or {})\n"
+)
+
+
+class _FakeFamilyCollection(_FakeTabCollection):
+    """Both lookups the family helpers make: ``find(...).sort`` for the child
+    tabs and ``find_one`` for a tab's parent (colours, brand)."""
+
+    def find_one(self, query: dict[str, Any], projection: Any = None) -> dict[str, Any] | None:
+        return _FakeCollection(self.docs).find_one(query, projection)
+
+
+@pytest.fixture
+def coloured_family(monkeypatch: pytest.MonkeyPatch, family_stack):
+    from depictio.api.v1 import celery_tasks as celery_mod
+    from depictio.api.v1 import db as db_mod
+    from depictio.api.v1.endpoints.dashboards_endpoints import core_functions as core_mod
+
+    main = _main_tab_doc()
+    main["category_colors"] = {"habitat": HABITAT_PINS}
+    child = _child_tab_doc(
+        [
+            {
+                "index": "fig-ui",
+                "component_type": "figure",
+                "visu_type": "scatter",
+                "dict_kwargs": {"x": "depth", "y": "shannon", "color": "habitat"},
+                "wf_id": WF_OID,
+                "dc_id": FAM_DC_OID,
+                "dc_config": _fam_dc_config(),
+            },
+            {
+                "index": "fig-code",
+                "component_type": "figure",
+                "mode": "code",
+                "visu_type": "bar",
+                "code_content": CODE_WITH_FAMILY_COLOURS,
+                "wf_id": WF_OID,
+                "dc_id": FAM_DC_OID,
+                "dc_config": _fam_dc_config(),
+            },
+        ]
+    )
+    docs = [main, child]
+    monkeypatch.setattr(db_mod, "dashboards_collection", _FakeCollection(docs))
+    monkeypatch.setattr(core_mod, "dashboards_collection", _FakeFamilyCollection(docs))
+
+    payloads: list[dict[str, Any]] = []
+
+    def fake_figure_preview(payload: dict[str, Any]) -> dict[str, Any]:
+        """The worker's code path for a code figure: the family colours arrive
+        as ``depictio_category_colors`` (celery_tasks.build_figure_preview)."""
+        import plotly.express as px
+
+        payloads.append(payload)
+        ns: dict[str, Any] = {
+            "df": _fam_frame(),
+            "pl": pl,
+            "px": px,
+            "depictio_category_colors": payload.get("category_colors") or {},
+        }
+        exec(compile(payload["metadata"]["code_content"], "<code>", "exec"), ns)  # noqa: S102
+        return {
+            "figure": ns["fig"].to_plotly_json(),
+            "metadata": {"visu_type": "code", "filter_applied": False, "was_sampled": False},
+        }
+
+    monkeypatch.setattr(celery_mod, "build_figure_preview", fake_figure_preview)
+    return payloads
+
+
+def _trace_colours(figure: dict[str, Any]) -> dict[str, str]:
+    return {t.get("name"): (t.get("marker") or {}).get("color") for t in figure["data"]}
+
+
+def test_child_tab_carries_its_main_tabs_category_colours(coloured_family):
+    """The API adds ``inherited_category_colors`` to a child tab at read time;
+    a bundle mounts stored documents, so without it the phylogenetic tree on a
+    child tab (ampliseq's Phylogeny tab) drew its tips in the stock palette."""
+    manifest = export_manifest(str(MAIN_TAB_OID), _admin()).manifest
+    child = next(t for t in manifest.tabs if not t.is_main_tab)
+    assert child.doc["inherited_category_colors"] == {"habitat": HABITAT_PINS}
+    main = next(t for t in manifest.tabs if t.is_main_tab)
+    assert "inherited_category_colors" not in main.doc
+
+
+def test_frozen_code_figure_reads_the_family_colours(coloured_family):
+    manifest = export_manifest(str(MAIN_TAB_OID), _admin()).manifest
+    assert manifest.tiers["fig-code"].tier is ComponentTier.FROZEN
+    (payload,) = [p for p in coloured_family if p["metadata"]["mode"] == "code"]
+    assert payload["category_colors"] == {"habitat": HABITAT_PINS}
+    colours = _trace_colours(manifest.frozen["fig-code"].payload["figure"])
+    assert colours == HABITAT_PINS
+
+
+def test_bound_ui_figure_draws_in_the_family_colours(coloured_family):
+    """A ui figure colouring by a pinned column gets the pins as its
+    ``color_discrete_map``, as ``render_figure_endpoint`` merges them."""
+    manifest = export_manifest(str(MAIN_TAB_OID), _admin()).manifest
+    assert manifest.tiers["fig-ui"].tier is ComponentTier.LIVE
+    scaffold = manifest.bindings["fig-ui"].scaffold
+    assert _trace_colours(scaffold) == HABITAT_PINS
+    # The shipped document keeps the authored kwargs, not the merged ones.
+    child = next(t for t in manifest.tabs if not t.is_main_tab)
+    (fig_ui,) = [c for c in child.doc["stored_metadata"] if c["index"] == "fig-ui"]
+    assert "color_discrete_map" not in fig_ui["dict_kwargs"]
+    assert not any(k.startswith("__fold") for k in fig_ui)

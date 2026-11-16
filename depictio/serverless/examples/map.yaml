@@ -1,0 +1,54 @@
+# Worked producer-B example — a frozen map keeps its own basemap.
+#
+# The map is frozen at the default filter state with the server's own
+# `render_map`, and keeps the dashboard's `map_style` (Carto positron): the
+# basemap loads when the bundle is opened online, and an offline reader gets
+# the same markers on a blank background (static-runtime/mapBasemap.ts).
+# A filter and a card stay live beside it.
+#
+# Data (repo test project map_demo), laid out by generate_demo_manifest.py:
+#   <data_dir>/map_demo/sampling_locations.parquet
+
+title: "Sampling map — static bundle example"
+subtitle: "Producer B worked example (frozen map with its basemap)"
+
+category_colors:
+  biome:
+    urban: "#e8590c"
+    marine: "#1c7ed6"
+    freshwater: "#2f9e44"
+
+components:
+  - tag: sample-count
+    component_type: card
+    workflow_tag: map_demo
+    data_collection_tag: sampling_locations
+    title: "Samples"
+    aggregation: count
+    column_name: sample_id
+    column_type: object
+    layout: {x: 0, y: 0, w: 2, h: 2}
+
+  - tag: biome-filter
+    component_type: interactive
+    workflow_tag: map_demo
+    data_collection_tag: sampling_locations
+    title: "Biome"
+    interactive_component_type: MultiSelect
+    column_name: biome
+    column_type: object
+    layout: {x: 0, y: 2, w: 2, h: 3}
+
+  - tag: sampling-map
+    component_type: map
+    workflow_tag: map_demo
+    data_collection_tag: sampling_locations
+    title: "Sampling locations"
+    lat_column: latitude
+    lon_column: longitude
+    color_column: biome
+    size_column: read_count
+    hover_columns: [sample_id, site_name, country]
+    map_style: carto-positron
+    size_max: 18
+    layout: {x: 2, y: 0, w: 6, h: 6}

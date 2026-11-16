@@ -20,12 +20,13 @@ import path from 'path';
 import {
   staticRuntimeAliases,
   staticRuntimeDedupe,
+  staticRuntimeJbrowseForwarders,
   staticRuntimeShim,
 } from './vite-plugins/static-runtime';
 
 export default defineConfig({
   base: './',
-  plugins: [react(), staticRuntimeShim(), viteSingleFile()],
+  plugins: [react(), staticRuntimeShim(), staticRuntimeJbrowseForwarders(), viteSingleFile()],
   build: {
     outDir: 'dist-static',
     emptyOutDir: true,

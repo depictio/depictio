@@ -53,6 +53,7 @@
     "project_name": null,
     "dashboard_url": null
   },
+  "project": null,
   "data_refs": {
     "dc00000000000000000000a1": {
       "uri": "inline:dc_dc00000000000000000000a1",

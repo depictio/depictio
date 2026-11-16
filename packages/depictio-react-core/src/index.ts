@@ -83,10 +83,12 @@ export {
   glyphColorVar,
   isImagePath,
   isMultiqcIcon,
+  multiqcLogoOverride,
+  multiqcLogoSrc,
   setMultiqcLogoSources,
   themedIconSrc,
 } from './components/Glyph';
-export type { MultiqcLogoSources } from './components/Glyph';
+export type { MultiqcLogoSources, MultiqcLogoVariant } from './components/Glyph';
 export {
   DEFAULT_PALETTE_SHADE,
   paletteHex,

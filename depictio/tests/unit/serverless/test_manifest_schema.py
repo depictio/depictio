@@ -82,3 +82,18 @@ def test_fixture_is_json_serialisable_roundtrip():
     text = json.dumps(dumped)
     assert "NaN" not in text and "Infinity" not in text
     assert BundleManifest.model_validate(json.loads(text)) == manifest
+
+
+TABS_FIXTURE_PATH = FIXTURE_PATH.with_name("manifest-tabs.json")
+
+
+def test_tabs_fixture_manifest_validates():
+    """The tab-family fixture fills every ``TabEntry`` field and a full
+    ``project`` summary (the runtime's rail and project page specs read it):
+    it must stay a valid manifest, or those specs test a shape no producer
+    writes."""
+    manifest = BundleManifest.model_validate_json(TABS_FIXTURE_PATH.read_text())
+    assert [tab.tab_group for tab in manifest.tabs] == [None, "Analysis", "Analysis", "Quality"]
+    assert manifest.tabs[0].main_tab_name == "Overview"
+    assert manifest.project is not None
+    assert {dc.id for dc in manifest.project.data_collections} >= set(manifest.data_refs)

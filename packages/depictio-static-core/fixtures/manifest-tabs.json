@@ -6,9 +6,9 @@
  "depictio_version": "0.0.0-fixture",
  "dashboard": {
   "id": "f1x70000000000000000c0de",
-  "title": "Overview",
+  "title": "Fixture dashboard",
   "doc": {
-   "title": "Overview",
+   "title": "Fixture dashboard",
    "stored_metadata": [
     {
      "index": "comp-card-1",
@@ -41,7 +41,7 @@
      "component_type": "text",
      "title": "Fixture note",
      "order": 3,
-     "body": "A hand-written fixture manifest. Everything frozen."
+     "body": "A hand-written fixture manifest. Everything frozen.\n\nRead quality in [MultiQC](tab:MultiQC)."
     }
    ],
    "stored_layout_data": [],
@@ -50,19 +50,26 @@
      "name": "Cohort",
      "persistent": true
     }
-   ]
+   ],
+   "main_tab_name": "Overview",
+   "project_id": "f1x7000000000000000000p1"
   }
  },
  "tabs": [
   {
    "id": "f1x70000000000000000c0de",
-   "title": "Overview",
+   "title": "Fixture dashboard",
    "tab_order": 0,
    "is_main_tab": true,
    "icon": "mdi:view-dashboard",
    "icon_color": "orange",
+   "main_tab_name": "Overview",
+   "tab_group": null,
+   "tab_icon": "mdi:view-dashboard",
+   "tab_icon_color": "orange",
+   "subtitle": "The run at a glance",
    "doc": {
-    "title": "Overview",
+    "title": "Fixture dashboard",
     "stored_metadata": [
      {
       "index": "comp-card-1",
@@ -95,7 +102,7 @@
       "component_type": "text",
       "title": "Fixture note",
       "order": 3,
-      "body": "A hand-written fixture manifest. Everything frozen."
+      "body": "A hand-written fixture manifest. Everything frozen.\n\nRead quality in [MultiQC](tab:MultiQC)."
      }
     ],
     "stored_layout_data": [],
@@ -104,7 +111,9 @@
       "name": "Cohort",
       "persistent": true
      }
-    ]
+    ],
+    "main_tab_name": "Overview",
+    "project_id": "f1x7000000000000000000p1"
    }
   },
   {
@@ -114,6 +123,11 @@
    "is_main_tab": false,
    "icon": "mdi:chart-bell-curve",
    "icon_color": "blue",
+   "main_tab_name": null,
+   "tab_group": "Analysis",
+   "tab_icon": "mdi:chart-bell-curve",
+   "tab_icon_color": "blue",
+   "subtitle": "How the measures spread",
    "doc": {
     "title": "Distributions",
     "stored_metadata": [
@@ -143,6 +157,11 @@
    "is_main_tab": false,
    "icon": "mdi:table",
    "icon_color": "grape",
+   "main_tab_name": null,
+   "tab_group": "Analysis",
+   "tab_icon": "mdi:table",
+   "tab_icon_color": "grape",
+   "subtitle": null,
    "doc": {
     "title": "Details",
     "stored_metadata": [
@@ -156,6 +175,33 @@
     ],
     "stored_layout_data": []
    }
+  },
+  {
+   "id": "f1x70000000000000000face",
+   "title": "MultiQC",
+   "tab_order": 3,
+   "is_main_tab": false,
+   "icon": "/assets/images/logos/multiqc_icon_color.svg",
+   "icon_color": "orange",
+   "main_tab_name": null,
+   "tab_group": "Quality",
+   "tab_icon": "/assets/images/logos/multiqc_icon_color.svg",
+   "tab_icon_color": "orange",
+   "subtitle": null,
+   "doc": {
+    "title": "MultiQC",
+    "tab_icon": "/assets/images/logos/multiqc_icon_color.svg",
+    "stored_metadata": [
+     {
+      "index": "comp-text-4",
+      "component_type": "text",
+      "title": "Quality note",
+      "order": 0,
+      "body": "MultiQC tab body."
+     }
+    ],
+    "stored_layout_data": []
+   }
   }
  ],
  "provenance": {
@@ -164,6 +210,96 @@
   "source": "https://demo.depictio.example",
   "project_name": "Fixture project",
   "dashboard_url": "https://demo.depictio.example/dashboard/f1x70000000000000000c0de"
+ },
+ "project": {
+  "id": "f1x7000000000000000000p1",
+  "name": "Fixture project",
+  "description": "A hand-written project around the penguin fixture table.",
+  "project_type": "advanced",
+  "registered_at": "2026-08-01 10:00:00",
+  "external_url": "https://lims.example.org/projects/42",
+  "project_url": "https://demo.depictio.example/projects/f1x7000000000000000000p1",
+  "template": {
+   "template_id": "nf-core/fixture/1.0.0",
+   "template_version": "1.2.0",
+   "applied_at": "2026-08-01T10:00:00"
+  },
+  "workflows": [
+   {
+    "id": "f1x7000000000000000000w1",
+    "name": "fixture-pipeline",
+    "tag": "nf-core/fixture",
+    "engine": "nextflow",
+    "engine_version": "24.10.0",
+    "version": "1.0.0",
+    "repository_url": "https://github.com/nf-core/fixture",
+    "catalog": "nf-core"
+   }
+  ],
+  "data_collections": [
+   {
+    "id": "dc00000000000000000000a1",
+    "tag": "penguins",
+    "type": "table",
+    "metatype": "Aggregate",
+    "workflow_id": "f1x7000000000000000000w1",
+    "description": "One row per penguin."
+   },
+   {
+    "id": "dc00000000000000000000m1",
+    "tag": "multiqc_report",
+    "type": "multiqc",
+    "metatype": null,
+    "workflow_id": "f1x7000000000000000000w1",
+    "description": null
+   }
+  ],
+  "links": [
+   {
+    "id": "f1x7000000000000000000l1",
+    "source_dc_id": "dc00000000000000000000a1",
+    "source_dc_tag": "penguins",
+    "source_column": "species",
+    "target_dc_id": "dc00000000000000000000m1",
+    "target_dc_tag": "multiqc_report",
+    "target_type": "multiqc",
+    "resolver": "sample_mapping",
+    "target_field": "sample_name",
+    "description": "Species to report samples",
+    "enabled": true
+   }
+  ],
+  "joins": [
+   {
+    "name": "penguins_with_report",
+    "left_dc": "penguins",
+    "right_dc": "multiqc_report",
+    "on_columns": [
+     "species"
+    ],
+    "how": "left",
+    "description": null
+   }
+  ],
+  "run_parameters": [
+   {
+    "source": "params",
+    "group": "Sampling",
+    "key": "island",
+    "value": "Biscoe",
+    "highlight": true
+   },
+   {
+    "source": "params",
+    "group": "Input",
+    "key": "input",
+    "value": "\u2026/samplesheet.csv",
+    "highlight": false
+   }
+  ],
+  "run_parameter_files": [
+   "params.json"
+  ]
  },
  "data_refs": {
   "dc00000000000000000000a1": {
@@ -218,6 +354,11 @@
    "detail": null
   },
   "comp-text-3": {
+   "tier": "live",
+   "reason": null,
+   "detail": null
+  },
+  "comp-text-4": {
    "tier": "live",
    "reason": null,
    "detail": null
@@ -334,5 +475,9 @@
  "allow_network_tiles": false,
  "inline_blobs": {
   "dc_dc00000000000000000000a1": ""
- }
+ },
+ "objects": {},
+ "resolved_structures": [],
+ "addons": [],
+ "python_components": {}
 }

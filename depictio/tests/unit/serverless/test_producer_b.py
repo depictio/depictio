@@ -332,11 +332,12 @@ def test_unbindable_figure_falls_back_to_frozen(data_dir: Path) -> None:
     spec_dict = yaml.safe_load(EXAMPLE_SPEC.read_text())
     for comp in spec_dict["components"]:
         if comp["tag"] == "scatter-mass-flipper":
-            # A LOWESS trendline is a fitted trace the runtime cannot recompute
-            # (it only refits closed-form 1-predictor OLS), so the matcher
-            # refuses the figure rather than ship a line frozen at the
-            # unfiltered fit.
-            comp["dict_kwargs"]["trendline"] = "lowess"
+            # A rolling skew is a fitted trace the runtime has no port of
+            # (trendline.ts carries mean/sum/min/max/median/std/var/count), so
+            # the matcher refuses the figure rather than ship a line frozen at
+            # the unfiltered fit.
+            comp["dict_kwargs"]["trendline"] = "rolling"
+            comp["dict_kwargs"]["trendline_options"] = {"window": 5, "function": "skew"}
     manifest = build_manifest(DashboardDataLite.model_validate(spec_dict), data_dir).manifest
 
     assert "scatter-mass-flipper" not in manifest.bindings
@@ -864,3 +865,18 @@ def test_build_static_end_to_end(data_dir: Path, tmp_path: Path) -> None:
     end = html.index("</script>", start)
     embedded = BundleManifest.model_validate_json(html[start:end].replace("<\\/", "</"))
     assert embedded.dashboard.id == result.manifest.dashboard.id
+
+
+def test_a_frozen_figure_with_text_arrays_serialises() -> None:
+    """``to_plotly_json`` keeps object-dtype arrays (a categorical histogram's x)
+    as numpy arrays, which the manifest's JSON dump refused, so the whole build
+    failed on the first such frozen figure."""
+    import json
+
+    from depictio.serverless.producer_b import _freeze_ui_figure
+
+    frame = pl.DataFrame({"biome": ["urban", "marine", "urban", "freshwater"]})
+    payload, _ = _freeze_ui_figure(
+        {"visu_type": "histogram", "dict_kwargs": {"x": "biome", "color": "biome"}}, frame
+    )
+    assert "urban" in json.dumps(payload)

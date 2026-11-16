@@ -37,6 +37,7 @@ import ServerStatusBadge from './ServerStatusBadge';
 import ProfileBadge from './ProfileBadge';
 import AuthModeBadge from './AuthModeBadge';
 import StaticProvenance from './StaticProvenance';
+import { useBundleProjectPage } from './bundlePage';
 import { dashboardHref, dashboardLinkClickHandler } from '../dashboards/lib/dashboardLinks';
 import './chrome.css';
 
@@ -211,6 +212,15 @@ export interface TabNavModel {
   };
   /** Back to the dashboards list. */
   backHref: string;
+  /** A static bundle's project page, which stands in for the project route
+   *  the file does not have. Absent outside a bundle (and in a bundle that
+   *  ships no project). */
+  project?: {
+    name: string;
+    open: boolean;
+    /** Opens the page, or closes it when it is the open page. */
+    onClick: () => void;
+  };
 }
 
 /** The tab list of `Sidebar`, as a model. */
@@ -228,6 +238,8 @@ export function useTabNav({
   const { colorScheme } = useMantineColorScheme();
   const isDark = colorScheme === 'dark';
   const brand = useBranding();
+  const projectPage = useBundleProjectPage();
+  const pageOver = Boolean(guide?.open || projectPage?.open);
   const linkMode: 'view' | 'edit' = window.location.pathname.startsWith('/dashboard-edit/')
     ? 'edit'
     : 'view';
@@ -257,7 +269,7 @@ export function useTabNav({
           />
         ),
         color,
-        active: d.dashboard_id === activeId && !guide?.open,
+        active: d.dashboard_id === activeId && !pageOver,
         isParent,
       };
     }),
@@ -272,6 +284,13 @@ export function useTabNav({
         }
       : undefined,
     backHref: '/dashboards',
+    project: projectPage
+      ? {
+          name: projectPage.name,
+          open: projectPage.open,
+          onClick: projectPage.open ? projectPage.closePage : projectPage.openPage,
+        }
+      : undefined,
   };
 }
 
@@ -351,6 +370,9 @@ const Sidebar: React.FC<SidebarProps> = ({
   // the management page and the server/profile chrome (the theme toggle stays
   // — it's fully client-side). Inert in server builds (always false there).
   const isStaticBundle = useIsStaticBundle();
+  // A static bundle's project page (null elsewhere), laid over the canvas
+  // like the Guide: while it is open no tab pill is the current one.
+  const projectPage = useBundleProjectPage();
 
   // Lift the per-tab menu open-state up here so only ONE "..." menu can be
   // open at a time. Each child Menu was previously self-contained, so opening
@@ -460,7 +482,8 @@ const Sidebar: React.FC<SidebarProps> = ({
     const isActive = d.dashboard_id === activeId;
     // The open Guide takes the list's fill, so the current tab draws as any
     // other until it closes.
-    const isFilled = isActive && !guide?.open && chromeStyle.layout.activeTabFilled !== false;
+    const isFilled =
+      isActive && !guide?.open && !projectPage?.open && chromeStyle.layout.activeTabFilled !== false;
     const label = isParent
       ? d.main_tab_name || d.title || d.dashboard_id
       : d.title || d.dashboard_id;
@@ -625,7 +648,7 @@ const Sidebar: React.FC<SidebarProps> = ({
               orientation="vertical"
               variant="pills"
               placement="left"
-              value={guide?.open ? GUIDE_VALUE : activeId}
+              value={guide?.open ? GUIDE_VALUE : projectPage?.open ? null : activeId}
               onChange={handleTabChange}
               styles={{
                 // `width: '100%'` makes the vertical list fill the navbar
@@ -848,9 +871,29 @@ const Sidebar: React.FC<SidebarProps> = ({
             </div>
           </>
         )}
-        {/* Static bundles only — who exported this file, from where, and with
-            which depictio. Renders null (and imports nothing extra) in the
-            server build. */}
+        {/* Static bundles only: the project page (the bundle's stand-in for
+            the project route), then who exported this file, from where, and
+            with which depictio. Both render nothing in the server build. */}
+        {projectPage && (
+          <Anchor
+            component="button"
+            type="button"
+            size="sm"
+            fw={500}
+            c={projectPage.open ? undefined : 'dimmed'}
+            underline="hover"
+            onClick={projectPage.open ? projectPage.closePage : projectPage.openPage}
+            aria-pressed={projectPage.open}
+            className="depictio-chrome-link"
+            data-testid="sidebar-project"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, maxWidth: '100%' }}
+          >
+            <Icon icon="mdi:folder-outline" width={16} style={{ flexShrink: 0 }} />
+            <Text span inherit truncate="end">
+              {projectPage.name}
+            </Text>
+          </Anchor>
+        )}
         <StaticProvenance />
       </Stack>
     </Stack>

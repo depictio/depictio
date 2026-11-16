@@ -61,7 +61,11 @@ import type {
   FunnelStageColumn,
   FunnelValuesResponse,
   InteractiveFilter,
+  JBrowseCallDensity,
+  JBrowseCallsResponse,
+  JBrowseGeneHit,
   PersistentSection,
+  ProjectListEntry,
   ResolvedGroupsResult,
   StoredMetadata,
   TextFilterMatchesResult,
@@ -77,6 +81,7 @@ import {
   interactiveIndexFor,
   rawBundle,
 } from './bundle';
+import { projectAsApiProject } from './projectModel';
 import {
   columnRangeLive,
   computeCardsLive,
@@ -102,6 +107,7 @@ import {
   uniqueValuesLive,
 } from './interactiveLive';
 import { themedFrozenFigure } from './mantinePlotlyTemplate';
+import { withReachableBasemap } from './mapBasemap';
 import { pythonJob, pythonJobFor, runPythonJob, TooManyRowsError } from './pyodide/jobs';
 import { renderMultiQCGeneralStatsStatic, renderMultiQCStatic } from './multiqcShim';
 
@@ -331,17 +337,24 @@ export async function fetchProjectFromDashboard(_dashboardId: string) {
   throw new Error('static bundle: no project backend');
 }
 
-/** Reached one click deep: the header's Settings gear is NOT `isStaticBundle`-
- *  gated (unlike Edit beside it), and `DashboardInfoBody` enriches
- *  `doc.project_id` — which producer A keeps — into a project name. Rejecting
- *  matches the sibling `fetchProjectFromDashboard` above, and that effect
- *  already catches and falls back to "no name"; the drawer's other fields all
- *  come from the bundled document and still render. */
+/** The project, from the summary producer A ships (`manifest.project`).
+ *
+ *  Its readers in a dashboard are the Settings drawer's About section (name,
+ *  template, key run parameters, the project link that opens the bundle's
+ *  project page) and the Run parameters dialog a text tile's `params:` link
+ *  opens — both work offline once this answers. A bundle without a project
+ *  (producer B, older exports) still rejects, which both readers already
+ *  catch and render as "no project". */
 export async function fetchProject(
   _projectId: string,
   _options: { skipEnrichment?: boolean } = {},
-) {
-  throw new Error('static bundle: no project backend');
+): Promise<{ project: ProjectListEntry; delta_locations: Record<string, string> }> {
+  const project = rawBundle().project;
+  if (!project) throw new Error('static bundle: no project backend');
+  return {
+    project: projectAsApiProject(project) as unknown as ProjectListEntry,
+    delta_locations: {},
+  };
 }
 
 export async function fetchIngestionHealth(_projectId: string) {
@@ -487,8 +500,19 @@ function codeErrorFigure(message: string): FigureResponse {
   } as unknown as FigureResponse;
 }
 
-export async function renderMap(_dashboardId: string, componentId: string) {
-  return frozenPayload(componentId, 'map') as never;
+/** A frozen map (producers keep the dashboard's own `map_style`): re-templated
+ *  for the reader's theme like every frozen figure, its basemap swapped by the
+ *  same light/dark rule `render_map` applies live, and replaced by a blank
+ *  background when the tile host cannot be reached, so an offline reader still
+ *  gets the markers (`./mapBasemap.ts`). */
+export async function renderMap(
+  _dashboardId: string,
+  componentId: string,
+  _filters: InteractiveFilter[] = [],
+  theme: 'light' | 'dark' = 'light',
+) {
+  const payload = themedFrozenFigure(frozenPayload<FigureResponse>(componentId, 'map'), theme);
+  return (await withReachableBasemap(payload, theme)) as never;
 }
 
 /** The "show data" popover behind every map (`MapDataButton`, rendered by both
@@ -578,6 +602,24 @@ export async function fetchImagePaths(_dashboardId: string, componentId: string)
 
 export async function fetchJBrowseSession(_dashboardId: string, componentId: string) {
   return frozenPayload(componentId, 'jbrowse') as never;
+}
+
+/** The genome browser's region navigator and density strip read the
+ *  `locus_from` regions from the server, ranked and paged under the live
+ *  filters. Not reproduced offline yet: the navigator and the strip stay
+ *  empty, the browser itself draws from the bundled files. */
+export async function fetchJBrowseCalls(): Promise<JBrowseCallsResponse> {
+  return { total: 0, rows: [] };
+}
+
+export async function fetchJBrowseCallDensity(): Promise<JBrowseCallDensity> {
+  return { bin_size: 0, max: 0, tracks: [], truncated: 0 };
+}
+
+/** Gene names resolve through UCSC's search, a network service: offline the
+ *  locus box takes coordinates and the bundled tracks' feature names only. */
+export async function searchJBrowseGenes(): Promise<JBrowseGeneHit[]> {
+  return [];
 }
 
 /** Live path: `render_multiqc` never recomputed anything at request time — it

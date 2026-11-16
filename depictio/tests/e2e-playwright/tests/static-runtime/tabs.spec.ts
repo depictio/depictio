@@ -39,8 +39,8 @@ test("clicking a rail pill switches tab in place, offline", async ({ page }) => 
   await expect(page.getByText("A hand-written fixture manifest")).toBeVisible();
   // The rail also lists the dashboard Guide (a page of the dashboard, not a
   // tab of the family), so count the family pills only.
-  await expect(page.locator('[role="tab"]').filter({ hasNotText: "Guide" })).toHaveCount(3);
-  for (const name of ["Overview", "Distributions", "Details"]) {
+  await expect(page.locator('[role="tab"]').filter({ hasNotText: "Guide" })).toHaveCount(4);
+  for (const name of ["Overview", "Distributions", "Details", "MultiQC"]) {
     await expect(tabPill(page, name)).toHaveCount(1);
   }
 
@@ -76,7 +76,9 @@ test("the rail carries the export provenance", async ({ page }) => {
   // Naive timestamp in the manifest — read as UTC, not as local time.
   await expect(rail.getByText("2026-08-03 09:15 UTC")).toBeVisible();
   await expect(rail.getByText("https://demo.depictio.example")).toBeVisible();
-  await expect(rail.getByText("Fixture project")).toBeVisible();
+  // Twice: the provenance row, and the link to the bundle's project page.
+  await expect(rail.getByText("Fixture project")).toHaveCount(2);
+  await expect(rail.getByTestId("sidebar-project")).toContainText("Fixture project");
   await expect(rail.getByText("depictio 0.0.0-fixture")).toBeVisible();
   await expect(rail.getByText("Producer")).toBeVisible();
 

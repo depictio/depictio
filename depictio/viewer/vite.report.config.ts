@@ -23,12 +23,15 @@ import { scopeCss } from './vite-plugins/scope-css';
 import {
   staticRuntimeAliases,
   staticRuntimeDedupe,
+  staticRuntimeJbrowseForwarders,
   staticRuntimeShim,
 } from './vite-plugins/static-runtime';
 
 export default defineConfig({
   base: './',
-  plugins: [react(), staticRuntimeShim()],
+  // JBrowse comes only from the bundle's `jbrowse` add-on, which a report does
+  // not carry: its genome browser tiles keep the session table.
+  plugins: [react(), staticRuntimeShim(), staticRuntimeJbrowseForwarders()],
   define: {
     // Library mode leaves `process.env.NODE_ENV` for the host to define; a
     // report is no build tool, so React's production build is chosen here.

@@ -851,6 +851,503 @@
       "title": "Producer",
       "type": "string"
     },
+    "ProjectDataCollectionSummary": {
+      "additionalProperties": false,
+      "description": "One data collection of the project. Size comes from ``data_refs`` when the\nbundle carries the table; a collection the export left out is still listed,\nso a reader can see what the live project holds.",
+      "properties": {
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "metatype": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Free-form label, display only",
+          "title": "Metatype"
+        },
+        "tag": {
+          "title": "Tag",
+          "type": "string"
+        },
+        "type": {
+          "default": "table",
+          "description": "dc type (table, multiqc, image, ...)",
+          "title": "Type",
+          "type": "string"
+        },
+        "workflow_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Owning workflow, null when direct",
+          "title": "Workflow Id"
+        }
+      },
+      "required": [
+        "id",
+        "tag"
+      ],
+      "title": "ProjectDataCollectionSummary",
+      "type": "object"
+    },
+    "ProjectJoinSummary": {
+      "additionalProperties": false,
+      "description": "A top-level join definition: which collections it combines, on what.",
+      "properties": {
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "how": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "How"
+        },
+        "left_dc": {
+          "title": "Left Dc",
+          "type": "string"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "on_columns": {
+          "items": {
+            "type": "string"
+          },
+          "title": "On Columns",
+          "type": "array"
+        },
+        "right_dc": {
+          "title": "Right Dc",
+          "type": "string"
+        }
+      },
+      "required": [
+        "left_dc",
+        "right_dc"
+      ],
+      "title": "ProjectJoinSummary",
+      "type": "object"
+    },
+    "ProjectLinkSummary": {
+      "additionalProperties": false,
+      "description": "A cross-collection link (``DCLink``) without its value mappings.\n\nMappings and patterns are the resolver's working data, can be large, and\nthe bundle already ships what it needs of them in ``links``; this is the\nreader's view of which collection filters which.",
+      "properties": {
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "resolver": {
+          "default": "direct",
+          "title": "Resolver",
+          "type": "string"
+        },
+        "source_column": {
+          "title": "Source Column",
+          "type": "string"
+        },
+        "source_dc_id": {
+          "title": "Source Dc Id",
+          "type": "string"
+        },
+        "source_dc_tag": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Dc Tag"
+        },
+        "target_dc_id": {
+          "title": "Target Dc Id",
+          "type": "string"
+        },
+        "target_dc_tag": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Target Dc Tag"
+        },
+        "target_field": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Target Field"
+        },
+        "target_type": {
+          "default": "table",
+          "title": "Target Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "source_dc_id",
+        "source_column",
+        "target_dc_id"
+      ],
+      "title": "ProjectLinkSummary",
+      "type": "object"
+    },
+    "ProjectSummary": {
+      "additionalProperties": false,
+      "description": "What a reader can know offline about the dashboard's project.\n\nProducer A reads it from the project document and keeps only display\nfacts: no permissions, owners, emails, tokens, storage credentials or\nserver paths. The bundle's project page renders it.",
+      "properties": {
+        "data_collections": {
+          "items": {
+            "$ref": "#/$defs/ProjectDataCollectionSummary"
+          },
+          "title": "Data Collections",
+          "type": "array"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "external_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "data_management_platform_project_url, kept only when it is http(s)",
+          "title": "External Url"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "joins": {
+          "items": {
+            "$ref": "#/$defs/ProjectJoinSummary"
+          },
+          "title": "Joins",
+          "type": "array"
+        },
+        "links": {
+          "items": {
+            "$ref": "#/$defs/ProjectLinkSummary"
+          },
+          "title": "Links",
+          "type": "array"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "project_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "basic | advanced",
+          "title": "Project Type"
+        },
+        "project_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Absolute URL of the live project page, when the instance has one",
+          "title": "Project Url"
+        },
+        "registered_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Project registration time",
+          "title": "Registered At"
+        },
+        "run_parameter_files": {
+          "description": "File names the parameters were read from (no paths)",
+          "items": {
+            "type": "string"
+          },
+          "title": "Run Parameter Files",
+          "type": "array"
+        },
+        "run_parameters": {
+          "items": {
+            "$ref": "#/$defs/RunParameter"
+          },
+          "title": "Run Parameters",
+          "type": "array"
+        },
+        "template": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProjectTemplateSummary"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "workflows": {
+          "items": {
+            "$ref": "#/$defs/ProjectWorkflowSummary"
+          },
+          "title": "Workflows",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "title": "ProjectSummary",
+      "type": "object"
+    },
+    "ProjectTemplateSummary": {
+      "additionalProperties": false,
+      "description": "The template a project was built from \u2014 its id and revision, nothing more.\n\n``TemplateOrigin`` also carries ``data_root``, ``variables`` and a\n``config_snapshot``: server paths and storage layout, which a file shared\noutside the instance must not leak.",
+      "properties": {
+        "applied_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "When the template was applied",
+          "title": "Applied At"
+        },
+        "template_id": {
+          "description": "e.g. 'nf-core/ampliseq/2.14.0'",
+          "title": "Template Id",
+          "type": "string"
+        },
+        "template_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Template schema revision",
+          "title": "Template Version"
+        }
+      },
+      "required": [
+        "template_id"
+      ],
+      "title": "ProjectTemplateSummary",
+      "type": "object"
+    },
+    "ProjectWorkflowSummary": {
+      "additionalProperties": false,
+      "description": "One workflow of the project, as a reader names it.",
+      "properties": {
+        "catalog": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Catalog name (nf-core, WorkflowHub)",
+          "title": "Catalog"
+        },
+        "engine": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "nextflow, snakemake, galaxy, ...",
+          "title": "Engine"
+        },
+        "engine_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Engine Version"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "repository_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Public http(s) repository URL; anything else is dropped",
+          "title": "Repository Url"
+        },
+        "tag": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "workflow_tag (engine/name)",
+          "title": "Tag"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The pipeline's own version",
+          "title": "Version"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "title": "ProjectWorkflowSummary",
+      "type": "object"
+    },
     "PythonComponent": {
       "additionalProperties": false,
       "description": "A tile the optional Python runtime (Pyodide) recomputes in the browser.\n\nThe runtime runs the server's own function for ``job`` over the bundled\ntable under the current filter mask and answers the tile's request with\nit; the frozen payload, when there is one, stays as the fallback (Python\nruntime not embedded, failed to boot, or the frame above ``max_rows``).",
@@ -1015,6 +1512,41 @@
       "title": "ResolvedStructure",
       "type": "object"
     },
+    "RunParameter": {
+      "additionalProperties": false,
+      "description": "One recorded run parameter (``ProvenanceEntry``), as safe to share.\n\nValues that are absolute paths or object-store URIs keep their last part\nonly (``\u2026/samplesheet.tsv``), and keys that look like credentials have\ntheir value withheld: the parameters say how the data was produced, the\nserver's directory layout and secrets are not part of that.",
+      "properties": {
+        "group": {
+          "default": "Other",
+          "title": "Group",
+          "type": "string"
+        },
+        "highlight": {
+          "default": false,
+          "title": "Highlight",
+          "type": "boolean"
+        },
+        "key": {
+          "title": "Key",
+          "type": "string"
+        },
+        "source": {
+          "default": "",
+          "title": "Source",
+          "type": "string"
+        },
+        "value": {
+          "default": "",
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "key"
+      ],
+      "title": "RunParameter",
+      "type": "object"
+    },
     "RuntimeAddon": {
       "additionalProperties": false,
       "description": "An optional runtime piece embedded only into bundles that need it.\n\nThe base runtime (``static.html``) stays inside its byte budget; a producer\nappends an add-on's script when a component needs it, and records it here so\nthe runtime and the tier table can say what was embedded and why.",
@@ -1029,7 +1561,8 @@
         "name": {
           "enum": [
             "3dmol",
-            "pyodide"
+            "pyodide",
+            "jbrowse"
           ],
           "title": "Name",
           "type": "string"
@@ -1146,7 +1679,7 @@
             }
           ],
           "default": null,
-          "description": "Iconify id shown on the tab pill",
+          "description": "Pill icon: the tab's own tab_icon, else the dashboard's (Iconify id or image path)",
           "title": "Icon"
         },
         "icon_color": {
@@ -1169,6 +1702,71 @@
           "default": false,
           "title": "Is Main Tab",
           "type": "boolean"
+        },
+        "main_tab_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Name the rail shows for the main tab (dashboard title otherwise)",
+          "title": "Main Tab Name"
+        },
+        "subtitle": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "One line on what the tab shows (tab links describe it with this)",
+          "title": "Subtitle"
+        },
+        "tab_group": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Sidebar section of a child tab; null when ungrouped",
+          "title": "Tab Group"
+        },
+        "tab_icon": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The tab's own icon as authored (Iconify id or image path)",
+          "title": "Tab Icon"
+        },
+        "tab_icon_color": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The tab's own icon colour",
+          "title": "Tab Icon Color"
         },
         "tab_order": {
           "default": 0,
@@ -1297,7 +1895,7 @@
     },
     "TrendlineBinding": {
       "additionalProperties": false,
-      "description": "A trendline trace refit client-side via closed-form 1-predictor OLS.",
+      "description": "A px trendline trace refit client-side over its raw trace's rows.\n\n``kind`` and ``options`` are px's ``trendline`` / ``trendline_options``; the\nbinder only emits combinations the runtime ports exactly (anything else\nfreezes the figure), so the runtime treats an unknown option as a contract\nviolation.",
       "properties": {
         "i": {
           "description": "Trendline trace index in the scaffold",
@@ -1305,11 +1903,30 @@
           "title": "I",
           "type": "integer"
         },
+        "kind": {
+          "default": "ols",
+          "description": "px trendline kind",
+          "enum": [
+            "ols",
+            "lowess",
+            "rolling",
+            "expanding",
+            "ewm"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
         "on": {
           "description": "Index of the raw-data trace it is fit against",
           "minimum": 0,
           "title": "On",
           "type": "integer"
+        },
+        "options": {
+          "additionalProperties": true,
+          "description": "px trendline_options, verbatim",
+          "title": "Options",
+          "type": "object"
         }
       },
       "required": [
@@ -1378,7 +1995,7 @@
     },
     "allow_network_tiles": {
       "default": false,
-      "description": "Permit MapLibre tile fetches (static-dir/remote); single-file freezes maps unless style is white-bg",
+      "description": "Not read: every bundle keeps a map's own basemap, loaded when the reader is online (depictio/serverless/maps.py); offline the runtime draws the markers on a blank background",
       "title": "Allow Network Tiles",
       "type": "boolean"
     },
@@ -1461,6 +2078,18 @@
     },
     "producer": {
       "$ref": "#/$defs/Producer"
+    },
+    "project": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ProjectSummary"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The dashboard's project as the bundle's project page shows it (producer A); null when the producer has no project to describe"
     },
     "prologues": {
       "additionalProperties": {

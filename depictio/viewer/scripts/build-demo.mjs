@@ -62,6 +62,11 @@ writeFileSync(
   join(VIEWER_DIR, 'dist-static', 'static-structure.html'),
   applyAddons(template, ['3dmol']),
 );
+// Likewise the genome-browser floor: the base runtime plus the JBrowse add-on.
+writeFileSync(
+  join(VIEWER_DIR, 'dist-static', 'static-genome.html'),
+  applyAddons(template, ['jbrowse']),
+);
 
 // The report host (the Quarto export's tiles drawn by this runtime): the
 // penguins report skeleton (demo/reports/penguins.html, written by
