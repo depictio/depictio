@@ -368,7 +368,12 @@ class TestFacetDisplay:
     def test_split_with_overall_puts_all_first(self):
         groups = [_group("run_b"), _group("run_c"), _group("Seen before")]
         out = apply_group_split_kwargs({}, groups, include_other=False, include_overall=True)
-        assert out["category_orders"][GROUP_COLUMN] == [OVERALL_LABEL, "run_b", "run_c", "Seen before"]
+        assert out["category_orders"][GROUP_COLUMN] == [
+            OVERALL_LABEL,
+            "run_b",
+            "run_c",
+            "Seen before",
+        ]
 
     def test_overall_rows_repeat_every_row_under_all(self):
         df = pl.DataFrame({"sample": ["s1", "s2", "s3"], GROUP_COLUMN: ["A", "Other", "B"]})
