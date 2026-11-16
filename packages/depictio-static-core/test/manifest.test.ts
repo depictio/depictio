@@ -65,4 +65,35 @@ describe('contract pinning against the committed JSON-schema snapshot', () => {
     const ref = Object.values(fixture.data_refs)[0];
     expect(Object.keys(ref).sort()).toEqual(Object.keys(defs.DataRef.properties).sort());
   });
+
+  // The tab-family fixture fills every TabEntry and ProjectSummary field, so
+  // its keys ARE the TS mirror's surface: a field added on the Python side
+  // without the fixture (and so this mirror) following fails here.
+  const TABS_FIXTURE = join(PKG_ROOT, 'fixtures', 'manifest-tabs.json');
+  const defs = (JSON.parse(readFileSync(SCHEMA_SNAPSHOT, 'utf-8')) as {
+    $defs: Record<string, { properties: Record<string, unknown> }>;
+  }).$defs;
+  const tabsFixture = parseManifest(JSON.parse(readFileSync(TABS_FIXTURE, 'utf-8')));
+
+  it('TabEntry mirrors the snapshot definition', () => {
+    for (const tab of tabsFixture.tabs) {
+      expect(Object.keys(tab).sort()).toEqual(Object.keys(defs.TabEntry.properties).sort());
+    }
+  });
+
+  it('ProjectSummary and its parts mirror the snapshot definitions', () => {
+    const project = tabsFixture.project;
+    expect(project).toBeTruthy();
+    if (!project) return;
+    const keys = (o: object) => Object.keys(o).sort();
+    expect(keys(project)).toEqual(keys(defs.ProjectSummary.properties));
+    expect(keys(project.template!)).toEqual(keys(defs.ProjectTemplateSummary.properties));
+    expect(keys(project.workflows[0])).toEqual(keys(defs.ProjectWorkflowSummary.properties));
+    expect(keys(project.data_collections[0])).toEqual(
+      keys(defs.ProjectDataCollectionSummary.properties),
+    );
+    expect(keys(project.links[0])).toEqual(keys(defs.ProjectLinkSummary.properties));
+    expect(keys(project.joins[0])).toEqual(keys(defs.ProjectJoinSummary.properties));
+    expect(keys(project.run_parameters[0])).toEqual(keys(defs.RunParameter.properties));
+  });
 });

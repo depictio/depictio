@@ -26,6 +26,14 @@ FIXTURES = HERE.parent / "fixtures"
 MAIN_ID = "f1x70000000000000000c0de"  # == manifest-basic's dashboard id
 SECOND_ID = "f1x70000000000000000cafe"
 THIRD_ID = "f1x70000000000000000beef"
+MQC_ID = "f1x70000000000000000face"
+PROJECT_ID = "f1x7000000000000000000p1"
+WF_ID = "f1x7000000000000000000w1"
+DC_ID = "dc00000000000000000000a1"  # == manifest-basic's bundled table
+MQC_DC_ID = "dc00000000000000000000m1"  # a MultiQC report: listed, not bundled as a table
+# The legacy YAML path a template's MultiQC tab carries; the runtime swaps it
+# for the inlined logo (it would 404 from a file:// page).
+MULTIQC_ICON = "/assets/images/logos/multiqc_icon_color.svg"
 
 
 def main() -> None:
@@ -64,6 +72,26 @@ def main() -> None:
         ],
         "stored_layout_data": [],
     }
+    mqc_doc = {
+        "title": "MultiQC",
+        "tab_icon": MULTIQC_ICON,
+        "stored_metadata": [
+            {
+                "index": "comp-text-4",
+                "component_type": "text",
+                "title": "Quality note",
+                "order": 0,
+                "body": "MultiQC tab body.",
+            },
+        ],
+        "stored_layout_data": [],
+    }
+    # The main tab's text links to the MultiQC tab by name: the link draws the
+    # tab's own icon, which must be the MultiQC logo, offline.
+    for meta in main_doc["stored_metadata"]:
+        if meta["index"] == "comp-text-1":
+            meta["body"] = f"{meta.get('body', '')}\n\nRead quality in [MultiQC](tab:MultiQC)."
+
     third_doc = {
         "title": "Details",
         "stored_metadata": [
@@ -78,35 +106,155 @@ def main() -> None:
         "stored_layout_data": [],
     }
 
+    # Every TabEntry field filled, so the vitest contract test can pin the TS
+    # mirror's TabEntry against the schema snapshot from this fixture. Two
+    # sections ("Analysis", "Quality") under the ungrouped main tab, as the
+    # live rail draws a family whose tabs name a `tab_group`.
+    def tab(
+        tab_id: str,
+        title: str,
+        order: int,
+        doc: dict,
+        *,
+        icon: str,
+        color: str | None,
+        group: str | None = None,
+        main_name: str | None = None,
+        subtitle: str | None = None,
+    ) -> dict:
+        return {
+            "id": tab_id,
+            "title": title,
+            "tab_order": order,
+            "is_main_tab": order == 0,
+            "icon": icon,
+            "icon_color": color,
+            "main_tab_name": main_name,
+            "tab_group": group,
+            "tab_icon": icon,
+            "tab_icon_color": color,
+            "subtitle": subtitle,
+            "doc": doc,
+        }
+
     manifest["tabs"] = [
-        {
-            "id": MAIN_ID,
-            "title": "Overview",
-            "tab_order": 0,
-            "is_main_tab": True,
-            "icon": "mdi:view-dashboard",
-            "icon_color": "orange",
-            "doc": main_doc,
-        },
-        {
-            "id": SECOND_ID,
-            "title": "Distributions",
-            "tab_order": 1,
-            "is_main_tab": False,
-            "icon": "mdi:chart-bell-curve",
-            "icon_color": "blue",
-            "doc": second_doc,
-        },
-        {
-            "id": THIRD_ID,
-            "title": "Details",
-            "tab_order": 2,
-            "is_main_tab": False,
-            "icon": "mdi:table",
-            "icon_color": "grape",
-            "doc": third_doc,
-        },
+        tab(
+            MAIN_ID,
+            "Fixture dashboard",
+            0,
+            main_doc,
+            icon="mdi:view-dashboard",
+            color="orange",
+            main_name="Overview",
+            subtitle="The run at a glance",
+        ),
+        tab(
+            SECOND_ID,
+            "Distributions",
+            1,
+            second_doc,
+            icon="mdi:chart-bell-curve",
+            color="blue",
+            group="Analysis",
+            subtitle="How the measures spread",
+        ),
+        tab(THIRD_ID, "Details", 2, third_doc, icon="mdi:table", color="grape", group="Analysis"),
+        tab(MQC_ID, "MultiQC", 3, mqc_doc, icon=MULTIQC_ICON, color="orange", group="Quality"),
     ]
+    # The main tab's document names itself the way the tab list does.
+    main_doc["main_tab_name"] = "Overview"
+    main_doc["title"] = "Fixture dashboard"
+    main_doc["project_id"] = PROJECT_ID
+    manifest["dashboard"]["title"] = "Fixture dashboard"
+
+    # The project page's data: every ProjectSummary field filled (the vitest
+    # contract test pins the TS mirror against the snapshot from it).
+    manifest["project"] = {
+        "id": PROJECT_ID,
+        "name": "Fixture project",
+        "description": "A hand-written project around the penguin fixture table.",
+        "project_type": "advanced",
+        "registered_at": "2026-08-01 10:00:00",
+        "external_url": "https://lims.example.org/projects/42",
+        "project_url": f"https://demo.depictio.example/projects/{PROJECT_ID}",
+        "template": {
+            "template_id": "nf-core/fixture/1.0.0",
+            "template_version": "1.2.0",
+            "applied_at": "2026-08-01T10:00:00",
+        },
+        "workflows": [
+            {
+                "id": WF_ID,
+                "name": "fixture-pipeline",
+                "tag": "nf-core/fixture",
+                "engine": "nextflow",
+                "engine_version": "24.10.0",
+                "version": "1.0.0",
+                "repository_url": "https://github.com/nf-core/fixture",
+                "catalog": "nf-core",
+            }
+        ],
+        "data_collections": [
+            {
+                "id": DC_ID,
+                "tag": "penguins",
+                "type": "table",
+                "metatype": "Aggregate",
+                "workflow_id": WF_ID,
+                "description": "One row per penguin.",
+            },
+            {
+                "id": MQC_DC_ID,
+                "tag": "multiqc_report",
+                "type": "multiqc",
+                "metatype": None,
+                "workflow_id": WF_ID,
+                "description": None,
+            },
+        ],
+        "links": [
+            {
+                "id": "f1x7000000000000000000l1",
+                "source_dc_id": DC_ID,
+                "source_dc_tag": "penguins",
+                "source_column": "species",
+                "target_dc_id": MQC_DC_ID,
+                "target_dc_tag": "multiqc_report",
+                "target_type": "multiqc",
+                "resolver": "sample_mapping",
+                "target_field": "sample_name",
+                "description": "Species to report samples",
+                "enabled": True,
+            }
+        ],
+        "joins": [
+            {
+                "name": "penguins_with_report",
+                "left_dc": "penguins",
+                "right_dc": "multiqc_report",
+                "on_columns": ["species"],
+                "how": "left",
+                "description": None,
+            }
+        ],
+        "run_parameters": [
+            {
+                "source": "params",
+                "group": "Sampling",
+                "key": "island",
+                "value": "Biscoe",
+                "highlight": True,
+            },
+            {
+                "source": "params",
+                "group": "Input",
+                "key": "input",
+                "value": "…/samplesheet.csv",
+                "highlight": False,
+            },
+        ],
+        "run_parameter_files": ["params.json"],
+    }
 
     manifest["provenance"] = {
         "exported_by": "curator@example.org",
@@ -127,6 +275,7 @@ def main() -> None:
     }
     manifest["tiers"]["comp-text-2"] = {"tier": "live", "reason": None, "detail": None}
     manifest["tiers"]["comp-text-3"] = {"tier": "live", "reason": None, "detail": None}
+    manifest["tiers"]["comp-text-4"] = {"tier": "live", "reason": None, "detail": None}
 
     second_figure = copy.deepcopy(manifest["frozen"]["comp-figure-1"])
     second_figure["payload"]["figure"]["layout"]["title"]["text"] = "Second tab scatter"

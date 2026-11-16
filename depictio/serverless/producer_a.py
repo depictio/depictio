@@ -149,6 +149,7 @@ from depictio.serverless.producer_b import (
     render_bundle_html,
     runtime_floor_bytes,
 )
+from depictio.serverless.project_summary import build_project_summary
 from depictio.serverless.prologue import transpile_with_reason
 from depictio.serverless.prologue_exec import execute_ops, terminal_px_call
 from depictio.serverless.pruning import (
@@ -474,6 +475,15 @@ class FamilyTab:
             is_main_tab=self.is_main_tab,
             icon=self.doc.get("tab_icon") or self.doc.get("icon"),
             icon_color=self.doc.get("tab_icon_color") or self.doc.get("icon_color"),
+            # The rest of what `/dashboards/list?include_child_tabs=true` gives
+            # the rail: sections, the main tab's own name, the raw tab icon (a
+            # child tab draws an image — the MultiQC logo — only from its own
+            # `tab_icon`) and the line a tab link describes it with.
+            main_tab_name=_str_or_none(self.doc.get("main_tab_name")),
+            tab_group=_str_or_none(self.doc.get("tab_group")),
+            tab_icon=_str_or_none(self.doc.get("tab_icon")),
+            tab_icon_color=_str_or_none(self.doc.get("tab_icon_color")),
+            subtitle=_str_or_none(self.doc.get("subtitle")),
             doc=sanitize_dashboard_doc(self.doc),
         )
 
@@ -485,6 +495,11 @@ class FamilyTab:
             tab_order=self.tab_order,
             is_main_tab=self.is_main_tab,
         )
+
+
+def _str_or_none(value: Any) -> str | None:
+    """A stored string field, blank and non-string values read as unset."""
+    return (value.strip() or None) if isinstance(value, str) else None
 
 
 def family_from_doc(
@@ -3325,6 +3340,7 @@ def export_manifest(
         # ``tabs`` is empty there and ``dashboard`` is the whole story.
         tabs=[tab.tab_entry() for tab in tabs] if len(tabs) > 1 else [],
         provenance=build_provenance(user, built_at, project_doc, entry_tab),
+        project=build_project_summary(project_doc, _public_base_url()),
         data_refs=data_refs,
         tiers={
             row.component_id: TierEntry(tier=row.tier, reason=row.reason, detail=row.detail)

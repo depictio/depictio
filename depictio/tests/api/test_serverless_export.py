@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import base64
 import io
+import json
 import random
 from pathlib import Path
 from typing import Any
@@ -1365,6 +1366,7 @@ def _main_tab_doc() -> dict[str, Any]:
         "dashboard_id": MAIN_TAB_OID,
         "project_id": PROJECT_OID,
         "title": "Overview",
+        "main_tab_name": "Summary",
         "is_main_tab": True,
         "icon": "mdi:view-dashboard",
         "stored_metadata": [
@@ -1392,6 +1394,8 @@ def _child_tab_doc(components: list[dict[str, Any]] | None = None) -> dict[str, 
         "tab_order": 2,
         "tab_icon": "mdi:set-merge",
         "tab_icon_color": "grape",
+        "tab_group": "Structure",
+        "subtitle": "Samples grouped by their profiles",
         "stored_metadata": components
         if components is not None
         else [
@@ -1505,6 +1509,40 @@ def test_family_resolves_from_a_child_id_with_that_child_as_entry(family_stack):
     assert [tab.id for tab in result.tabs] == [str(MAIN_TAB_OID), str(CHILD_TAB_OID)]
 
     BundleManifest.model_validate(manifest.model_dump(mode="json"))
+
+
+def test_family_tabs_carry_what_the_rail_reads(family_stack):
+    """The bundle's rail draws from these exactly as the live one draws from the
+    tab list: sections (`tab_group`), the main tab's own name, the raw tab icon
+    (a child tab only draws an IMAGE icon from its own `tab_icon`), and the line
+    a tab link describes the tab with. Missing, the rail was flat and the
+    MultiQC tab lost its logo."""
+    manifest = export_manifest(str(MAIN_TAB_OID), _admin()).manifest
+    assert manifest is not None
+    main, child = manifest.tabs
+    assert main.main_tab_name == "Summary"
+    assert main.tab_group is None
+    assert main.tab_icon is None  # authored on `icon` only; `icon` keeps carrying it
+    assert main.icon == "mdi:view-dashboard"
+    assert child.tab_group == "Structure"
+    assert child.tab_icon == "mdi:set-merge"
+    assert child.tab_icon_color == "grape"
+    assert child.subtitle == "Samples grouped by their profiles"
+    assert child.main_tab_name is None
+
+
+def test_family_manifest_carries_a_sanitised_project_summary(family_stack, monkeypatch):
+    """The project page's data rides in the manifest, read from the project
+    document — and nothing of its ACL does."""
+    monkeypatch.setattr(producer_a, "_public_base_url", lambda: "https://demo.example.org")
+    manifest = export_manifest(str(MAIN_TAB_OID), _admin()).manifest
+    assert manifest is not None
+    assert manifest.project is not None
+    assert manifest.project.id == str(PROJECT_OID)
+    assert manifest.project.name == "Fake project"
+    assert manifest.project.project_url == f"https://demo.example.org/projects/{PROJECT_OID}"
+    dumped = json.dumps(manifest.project.model_dump(mode="json"))
+    assert "permissions" not in dumped
 
 
 def test_family_bundles_a_shared_data_collection_once(family_stack):

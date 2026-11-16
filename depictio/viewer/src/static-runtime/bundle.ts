@@ -107,19 +107,79 @@ export function setActiveTab(id: string): void {
  * Empty for a single-tab bundle — the rail then renders as it does today.
  */
 export function tabSummaries(): DashboardSummary[] {
-  const tabs = bundledTabs();
+  return summariesFromTabs(bundledTabs(), rawBundle().project?.id ?? null);
+}
+
+/** A string field of a tab document, blank and non-strings read as unset. */
+function docString(doc: Record<string, unknown>, key: string): string | undefined {
+  const v = doc[key];
+  return typeof v === 'string' && v.trim() ? v : undefined;
+}
+
+/** The entry's own field when the manifest has it, the document's otherwise.
+ *  `null` on the entry is an answer (the producer read the field and found it
+ *  unset); only a manifest written before the field existed (`undefined`)
+ *  falls back to the document — which carries the same stored field. */
+function entryOrDoc(
+  entry: string | null | undefined,
+  doc: Record<string, unknown>,
+  key: string,
+): string | undefined {
+  if (entry === undefined) return docString(doc, key);
+  return entry ?? undefined;
+}
+
+/**
+ * Every field the server's tab list (`/dashboards/list?include_child_tabs=true`)
+ * gives the rail, built from the bundled family. Main tab first, then
+ * `tab_order` — the order `bundledTabs()` already sorts by.
+ *
+ * Read by the Sidebar, the Paper rail and the tab links of text tiles:
+ *   - `tab_group` draws the rail's sections (missing, the rail was flat);
+ *   - `main_tab_name` names the main pill (else the dashboard's title);
+ *   - `tab_icon` is the only place a CHILD tab takes an image icon from — the
+ *     MultiQC logo — so without it the MultiQC tab fell back to a generic
+ *     chart glyph, in the rail and in every `[MultiQC](tab:MultiQC)` link;
+ *   - `subtitle` describes a tab in its links; `show_guide` / `guide_intro`
+ *     (main tab only) set the Guide up the way the server's list does.
+ */
+export function summariesFromTabs(
+  tabs: TabEntry[],
+  projectId: string | null = null,
+): DashboardSummary[] {
   if (tabs.length === 0) return [];
   const main = tabs.find((t) => t.is_main_tab) ?? tabs[0];
-  return tabs.map((t) => ({
-    dashboard_id: t.id,
-    title: t.title,
-    // App derives the family (and the Sidebar "is this the main tab?" test)
-    // from this field, so the main tab must carry a null parent.
-    parent_dashboard_id: t.id === main.id ? null : main.id,
-    tab_order: t.tab_order,
-    icon: t.icon ?? undefined,
-    icon_color: t.icon_color ?? undefined,
-  }));
+  return tabs.map((t) => {
+    const doc = (t.doc ?? {}) as Record<string, unknown>;
+    const isMain = t.id === main.id;
+    const tabIcon = entryOrDoc(t.tab_icon, doc, 'tab_icon');
+    const summary: DashboardSummary = {
+      dashboard_id: t.id,
+      title: t.title || docString(doc, 'title'),
+      // App derives the family (and the Sidebar "is this the main tab?" test)
+      // from this field, so the main tab must carry a null parent.
+      parent_dashboard_id: isMain ? null : main.id,
+      tab_order: t.tab_order,
+      main_tab_name: isMain ? entryOrDoc(t.main_tab_name, doc, 'main_tab_name') : undefined,
+      tab_group: isMain ? null : (entryOrDoc(t.tab_group, doc, 'tab_group') ?? null),
+      tab_icon: tabIcon,
+      tab_icon_color: entryOrDoc(t.tab_icon_color, doc, 'tab_icon_color'),
+      // `icon` is the dashboard-level one on the server list. The entry's
+      // `icon` is "tab icon, else dashboard icon", so the document's own
+      // field is the faithful read; the entry's is the fallback for a
+      // document that does not carry it.
+      icon: docString(doc, 'icon') ?? t.icon ?? undefined,
+      icon_color: docString(doc, 'icon_color') ?? t.icon_color ?? undefined,
+      subtitle: entryOrDoc(t.subtitle, doc, 'subtitle'),
+    };
+    if (projectId) summary.project_id = projectId;
+    if (isMain) {
+      if (typeof doc.show_guide === 'boolean') summary.show_guide = doc.show_guide;
+      const intro = docString(doc, 'guide_intro');
+      if (intro) summary.guide_intro = intro;
+    }
+    return summary;
+  });
 }
 
 /** Frozen payload for a component index; throws a readable error on a miss.

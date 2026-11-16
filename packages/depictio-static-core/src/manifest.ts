@@ -229,8 +229,21 @@ export interface TabEntry {
   title: string;
   tab_order: number;
   is_main_tab: boolean;
+  /** Pill icon: the tab's own `tab_icon`, else the dashboard's. */
   icon?: string | null;
   icon_color?: string | null;
+  /**
+   * The rest of what the server's tab list gives the left rail. Absent from
+   * manifests written before them: read them through the runtime's
+   * `tabSummaries`, which falls back to the tab document's own fields.
+   */
+  main_tab_name?: string | null;
+  /** Sidebar section of a child tab; null when ungrouped. */
+  tab_group?: string | null;
+  /** The tab's own icon as authored (Iconify id or image path). */
+  tab_icon?: string | null;
+  tab_icon_color?: string | null;
+  subtitle?: string | null;
   doc: Record<string, unknown>;
 }
 
@@ -241,6 +254,91 @@ export interface ExportProvenance {
   source?: string | null;
   project_name?: string | null;
   dashboard_url?: string | null;
+}
+
+/** The template a project was built from: id and revision only. */
+export interface ProjectTemplateSummary {
+  template_id: string;
+  template_version?: string | null;
+  applied_at?: string | null;
+}
+
+export interface ProjectWorkflowSummary {
+  id: string;
+  name: string;
+  tag?: string | null;
+  engine?: string | null;
+  engine_version?: string | null;
+  version?: string | null;
+  /** Public http(s) URL only. */
+  repository_url?: string | null;
+  catalog?: string | null;
+}
+
+/** One data collection of the project; its size comes from `data_refs`. */
+export interface ProjectDataCollectionSummary {
+  id: string;
+  tag: string;
+  type: string;
+  metatype?: string | null;
+  workflow_id?: string | null;
+  description?: string | null;
+}
+
+/** A cross-collection link without its value mappings. */
+export interface ProjectLinkSummary {
+  id: string;
+  source_dc_id: string;
+  source_dc_tag?: string | null;
+  source_column: string;
+  target_dc_id: string;
+  target_dc_tag?: string | null;
+  target_type: string;
+  resolver: string;
+  target_field?: string | null;
+  description?: string | null;
+  enabled: boolean;
+}
+
+export interface ProjectJoinSummary {
+  name?: string | null;
+  left_dc: string;
+  right_dc: string;
+  on_columns: string[];
+  how?: string | null;
+  description?: string | null;
+}
+
+/** A recorded run parameter; paths keep their last part, secrets are withheld. */
+export interface RunParameter {
+  source: string;
+  group: string;
+  key: string;
+  value: string;
+  highlight: boolean;
+}
+
+/**
+ * What a reader can know offline about the dashboard's project — the bundle's
+ * project page. Display facts only: no ACL, owners, storage or server paths.
+ */
+export interface ProjectSummary {
+  id: string;
+  name: string;
+  description?: string | null;
+  project_type?: string | null;
+  registered_at?: string | null;
+  /** The project's external (LIMS / data platform) page, http(s) only. */
+  external_url?: string | null;
+  /** The live project page, when the instance declares a public URL. */
+  project_url?: string | null;
+  template?: ProjectTemplateSummary | null;
+  workflows: ProjectWorkflowSummary[];
+  data_collections: ProjectDataCollectionSummary[];
+  links: ProjectLinkSummary[];
+  joins: ProjectJoinSummary[];
+  run_parameters: RunParameter[];
+  run_parameter_files: string[];
 }
 
 /** One object-store file shipped inside the bundle (a structure, a PAE matrix). */
@@ -310,6 +408,8 @@ export interface BundleManifest {
    */
   tabs: TabEntry[];
   provenance: ExportProvenance;
+  /** The dashboard's project (producer A); null or absent otherwise. */
+  project?: ProjectSummary | null;
   data_refs: Record<string, DataRef>;
   tiers: Record<string, TierEntry>;
   frozen: Record<string, FrozenPayload>;

@@ -554,8 +554,29 @@ class TabEntry(BaseModel):
     title: str = Field(default="")
     tab_order: int = Field(default=0, description="0 for the main tab, then child order")
     is_main_tab: bool = Field(default=False)
-    icon: str | None = Field(default=None, description="Iconify id shown on the tab pill")
+    icon: str | None = Field(
+        default=None,
+        description="Pill icon: the tab's own tab_icon, else the dashboard's (Iconify id or image path)",
+    )
     icon_color: str | None = Field(default=None)
+    # The rest of what the server's tab list (`/dashboards/list?include_child_tabs=true`)
+    # hands the left rail. Without them a bundle's rail was flat (no `tab_group`
+    # sections), named the main tab by the dashboard title instead of
+    # `main_tab_name`, and lost image tab icons — the MultiQC logo — because a
+    # child tab draws an image only from its OWN `tab_icon`.
+    main_tab_name: str | None = Field(
+        default=None, description="Name the rail shows for the main tab (dashboard title otherwise)"
+    )
+    tab_group: str | None = Field(
+        default=None, description="Sidebar section of a child tab; null when ungrouped"
+    )
+    tab_icon: str | None = Field(
+        default=None, description="The tab's own icon as authored (Iconify id or image path)"
+    )
+    tab_icon_color: str | None = Field(default=None, description="The tab's own icon colour")
+    subtitle: str | None = Field(
+        default=None, description="One line on what the tab shows (tab links describe it with this)"
+    )
     doc: dict[str, Any] = Field(description="That tab's DashboardDataLite-shaped document")
 
     model_config = ConfigDict(extra="forbid")
@@ -578,6 +599,140 @@ class ExportProvenance(BaseModel):
     project_name: str | None = Field(default=None)
     dashboard_url: str | None = Field(
         default=None, description="Absolute URL of the live dashboard, when the builder knows it"
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class ProjectTemplateSummary(BaseModel):
+    """The template a project was built from — its id and revision, nothing more.
+
+    ``TemplateOrigin`` also carries ``data_root``, ``variables`` and a
+    ``config_snapshot``: server paths and storage layout, which a file shared
+    outside the instance must not leak.
+    """
+
+    template_id: str = Field(description="e.g. 'nf-core/ampliseq/2.14.0'")
+    template_version: str | None = Field(default=None, description="Template schema revision")
+    applied_at: str | None = Field(default=None, description="When the template was applied")
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class ProjectWorkflowSummary(BaseModel):
+    """One workflow of the project, as a reader names it."""
+
+    id: str
+    name: str
+    tag: str | None = Field(default=None, description="workflow_tag (engine/name)")
+    engine: str | None = Field(default=None, description="nextflow, snakemake, galaxy, ...")
+    engine_version: str | None = None
+    version: str | None = Field(default=None, description="The pipeline's own version")
+    repository_url: str | None = Field(
+        default=None, description="Public http(s) repository URL; anything else is dropped"
+    )
+    catalog: str | None = Field(default=None, description="Catalog name (nf-core, WorkflowHub)")
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class ProjectDataCollectionSummary(BaseModel):
+    """One data collection of the project. Size comes from ``data_refs`` when the
+    bundle carries the table; a collection the export left out is still listed,
+    so a reader can see what the live project holds."""
+
+    id: str
+    tag: str
+    type: str = Field(default="table", description="dc type (table, multiqc, image, ...)")
+    metatype: str | None = Field(default=None, description="Free-form label, display only")
+    workflow_id: str | None = Field(default=None, description="Owning workflow, null when direct")
+    description: str | None = None
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class ProjectLinkSummary(BaseModel):
+    """A cross-collection link (``DCLink``) without its value mappings.
+
+    Mappings and patterns are the resolver's working data, can be large, and
+    the bundle already ships what it needs of them in ``links``; this is the
+    reader's view of which collection filters which.
+    """
+
+    id: str
+    source_dc_id: str
+    source_dc_tag: str | None = None
+    source_column: str
+    target_dc_id: str
+    target_dc_tag: str | None = None
+    target_type: str = Field(default="table")
+    resolver: str = Field(default="direct")
+    target_field: str | None = None
+    description: str | None = None
+    enabled: bool = True
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class ProjectJoinSummary(BaseModel):
+    """A top-level join definition: which collections it combines, on what."""
+
+    name: str | None = None
+    left_dc: str
+    right_dc: str
+    on_columns: list[str] = Field(default_factory=list)
+    how: str | None = None
+    description: str | None = None
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class RunParameter(BaseModel):
+    """One recorded run parameter (``ProvenanceEntry``), as safe to share.
+
+    Values that are absolute paths or object-store URIs keep their last part
+    only (``…/samplesheet.tsv``), and keys that look like credentials have
+    their value withheld: the parameters say how the data was produced, the
+    server's directory layout and secrets are not part of that.
+    """
+
+    source: str = ""
+    group: str = "Other"
+    key: str
+    value: str = ""
+    highlight: bool = False
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class ProjectSummary(BaseModel):
+    """What a reader can know offline about the dashboard's project.
+
+    Producer A reads it from the project document and keeps only display
+    facts: no permissions, owners, emails, tokens, storage credentials or
+    server paths. The bundle's project page renders it.
+    """
+
+    id: str
+    name: str
+    description: str | None = None
+    project_type: str | None = Field(default=None, description="basic | advanced")
+    registered_at: str | None = Field(default=None, description="Project registration time")
+    external_url: str | None = Field(
+        default=None,
+        description="data_management_platform_project_url, kept only when it is http(s)",
+    )
+    project_url: str | None = Field(
+        default=None, description="Absolute URL of the live project page, when the instance has one"
+    )
+    template: ProjectTemplateSummary | None = None
+    workflows: list[ProjectWorkflowSummary] = Field(default_factory=list)
+    data_collections: list[ProjectDataCollectionSummary] = Field(default_factory=list)
+    links: list[ProjectLinkSummary] = Field(default_factory=list)
+    joins: list[ProjectJoinSummary] = Field(default_factory=list)
+    run_parameters: list[RunParameter] = Field(default_factory=list)
+    run_parameter_files: list[str] = Field(
+        default_factory=list, description="File names the parameters were read from (no paths)"
     )
 
     model_config = ConfigDict(extra="forbid")
@@ -706,6 +861,13 @@ class BundleManifest(BaseModel):
         ),
     )
     provenance: ExportProvenance = Field(default_factory=ExportProvenance)
+    project: ProjectSummary | None = Field(
+        default=None,
+        description=(
+            "The dashboard's project as the bundle's project page shows it (producer A); "
+            "null when the producer has no project to describe"
+        ),
+    )
     data_refs: dict[str, DataRef] = Field(
         default_factory=dict, description="dc_id -> bundled table"
     )
