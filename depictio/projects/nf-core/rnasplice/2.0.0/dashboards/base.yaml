@@ -1,0 +1,2216 @@
+version: 1
+# nf-core/rnasplice 2.0.0: which genes change their splicing between conditions,
+# and do the splicing tools agree? Every rule it follows is written out in
+# depictio/projects/nf-core/RULES.md; ampliseq 2.18.0 is the reference, and the
+# Data & QC group mirrors nf-core/rnaseq 3.26.0 (the same Sample Space strip).
+#
+# Funnel: MultiQC (are the libraries usable?) -> Sample Space (do the samples
+# group by condition?) -> Tool Agreement (which genes does each tool call, and
+# where do they agree?) -> Exon Usage (DEXSeq and edgeR on exons) -> Transcript
+# Usage (DEXSeq DTU) -> Splicing Events (rMATS and SUPPA2).
+#
+# Every per-tool splicing collection is optional: a tool the run skipped prunes
+# its tiles, its findings row and, when nothing is left, its tab. The cross-tool
+# gene table (splicing_genes) is always built, so the persistent splicing
+# filters sit on it and on the contrast table, which template.yaml links to
+# every splicing collection.
+main_dashboard:
+  title: nf-core/rnasplice
+  subtitle: Bulk RNA-seq, from reads to the genes whose splicing changes between conditions
+  project_tag: RNA-seq Alternative Splicing Analysis
+  main_tab_name: Overview
+  tab_icon: mdi:compass-outline
+  tab_icon_color: brandPrimary
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_panel_default: collapsed
+  content_width_default: compact
+  show_tab_header: false
+  # Declared once here, read by every tab. The PCA's `group` holds the same
+  # values as the group column, so the same values take the same colours. The
+  # event types and the call directions are known vocabularies, written out.
+  category_colors:
+    '{GROUP_COL}': auto
+    group: auto
+    contrast: auto
+    event_type:
+      Skipped exon: '#2a78d6'
+      Retained intron: '#eb6834'
+      Mutually exclusive exons: '#1baf7a'
+      Alternative 5' splice site: '#eda100'
+      Alternative 3' splice site: '#e87ba4'
+      Alternative first exon: '#4a3aa7'
+      Alternative last exon: '#008300'
+    direction:
+      up: '#e34948'
+      down: '#2a78d6'
+      not significant: '#adb5bd'
+  # Persistent: drawn in every tab's filter panel, picks kept across tabs. The
+  # sample filters read the sample hub; the splicing filters read the contrast
+  # table and the cross-tool gene table, whose links reach every splicing
+  # collection. MultiQC and Sample Space carry no contrast, so they leave the
+  # splicing filters out.
+  filter_sections:
+  - name: Sample filters
+    icon: mdi:filter-variant
+    color: teal
+    description: Applies to every tab
+    persistent: true
+    pin: top
+  - name: Splicing filters
+    icon: mdi:scale-balance
+    color: indigo
+    description: Applies to every tab that reads splicing calls
+    persistent: true
+    pin: top
+    exclude_tabs:
+    - MultiQC
+    - Sample Space
+  grid_sections:
+  - name: Key figures
+    icon: mdi:counter
+    color: gray
+    appearance: plain
+    card_variant: headline
+    filter_bar: true
+    visible_filters: 2
+    description: The run in four numbers. The filters here narrow these four only.
+  - name: Findings
+    icon: mdi:star-outline
+    color: gray
+    appearance: plain
+    figure_style: minimal
+    filter_bar: true
+    visible_filters: 2
+    description: What the data says, each with the tab that shows it, then the figures behind it.
+  - name: How to read this dashboard
+    icon: mdi:information-outline
+    color: gray
+    appearance: plain
+    description: The tabs by group, each with the question it answers.
+  - name: Sample sheet
+    icon: mdi:table-account
+    color: gray
+    description: The samples and the contrasts the run compared
+    collapsed: true
+    persistent: true
+    pin: bottom
+  components:
+  # First in component order on purpose: the Guide demos the first categorical
+  # filter that shares a data collection with the first card (Samples, below).
+  - component_type: interactive
+    workflow_tag: rnasplice
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: '{GROUP_COL}'
+    column_type: object
+    display:
+      icon_name: mdi:account-group-outline
+      custom_color: violet
+      strip_label: Group
+    section: Key figures
+    tag: rs-ov-kf-group
+    index: ov-kf-group
+    title: '{GROUP_COL_DISPLAY}'
+    layout: {x: 0, y: 0, w: 2, h: 1}
+  - component_type: interactive
+    workflow_tag: rnasplice
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: sample
+    column_type: object
+    display:
+      icon_name: mdi:flask-outline
+      custom_color: teal
+      strip_label: Sample
+    section: Key figures
+    tag: rs-ov-kf-sample
+    index: ov-kf-sample
+    title: Sample ID
+    layout: {x: 2, y: 0, w: 2, h: 1}
+  - component_type: text
+    title: nf-core/rnasplice
+    logo: https://raw.githubusercontent.com/nf-core/rnasplice/master/docs/images/nf-core-rnasplice_logo_light.png
+    logo_dark: https://raw.githubusercontent.com/nf-core/rnasplice/master/docs/images/nf-core-rnasplice_logo_dark.png
+    order: 1
+    body: >
+      Bulk RNA-seq libraries aligned, quantified and tested for differential splicing by four
+      tools: which genes change how they are spliced between conditions, and where the tools
+      agree. [Run parameters](params:)
+    tag: rs-ov-hero
+    index: ov-hero
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  # The study: who was sequenced and what the run compared, from the sample hub and the
+  # contrasts sheet. The strandedness column a sheet may lack has a line of its own.
+  - component_type: text
+    surface: card
+    values:
+      samples: {dc: samples, column: sample, aggregation: nunique, format: integer}
+      groups: {dc: samples, column: condition, aggregation: nunique, format: integer}
+      contrasts: {dc: contrasts, column: contrast, aggregation: nunique, format: integer}
+      rtype: {dc: samples, column: read_type, aggregation: top}
+      strand: {dc: samples, column: strandedness, aggregation: top}
+    body: |
+      ### The study
+      - ![](icon:mdi:flask-outline) **Samples** {{samples}} in {{groups}} conditions
+      - ![](icon:mdi:scale-balance) **Contrasts** {{contrasts}} compared, a treatment against a control
+      - ![](icon:mdi:dna) **Reads** {{rtype}}
+      - ![](icon:mdi:swap-horizontal) **Strandedness** {{strand}}
+      - ![](icon:mdi:file-table-outline) **Samplesheet** [one row per sample](section:Sample sheet), its path in [the run parameters](params:input)
+      - ![](icon:mdi:palette-outline) **{GROUP_COL_DISPLAY}** {{legend:{GROUP_COL}}}
+    tag: rs-ov-study
+    index: ov-study
+    layout: {x: 0, y: 1, w: 5, h: 3}
+  # The run's own settings, read from its params.json: a key the run did not
+  # set prints a dash.
+  - component_type: text
+    surface: card
+    body: |
+      ### The run
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/rnasplice 2.0.0
+      - ![](icon:mdi:map-marker-outline) **Genome** {{param:genome}}
+      - ![](icon:mdi:content-cut) **Aligner** {{param:aligner}}
+    tag: rs-ov-run
+    index: ov-run
+    layout: {x: 5, y: 1, w: 3, h: 3}
+  # A step whose tab can be pruned cites a count from that tab's collections, so the
+  # import takes the line out with its data: a run without DEXSeq transcript usage
+  # keeps no Transcripts step.
+  - component_type: text
+    surface: card
+    accent: green
+    values:
+      n_exon: {dc: dexseq_exon_genes, column: gene_id, aggregation: nunique, format: si}
+      n_dtu: {dc: dexseq_dtu, column: gene_id, aggregation: nunique, format: si}
+    body: |
+      ### Six steps from reads to splicing calls
+      Each step names its settings and the tab that shows its result.
+
+      ::: steps
+      1. ![](icon:mdi:content-cut) **Trim** Trim Galore on the raw reads · [Settings](params:trim) · [MultiQC](tab:MultiQC)
+      2. ![](icon:mdi:dna) **Align** STAR on {{param:genome}}, Salmon on transcripts · [Settings](params:star) · [Sample Space](tab:Sample Space)
+      3. ![](icon:mdi:content-cut) **Exons** DEXSeq and edgeR on exon counts, {{n_exon}} genes tested · [Settings](params:exon) · [Exon Usage](tab:Exon Usage)
+      4. ![](icon:mdi:swap-vertical) **Transcripts** DEXSeq on transcript usage of {{n_dtu}} genes · [Settings](params:dtu) · [Transcript Usage](tab:Transcript Usage)
+      5. ![](icon:mdi:shape-outline) **Events** rMATS and SUPPA2 on local events · [Settings](params:rmats) · [Splicing Events](tab:Splicing Events)
+      6. ![](icon:mdi:set-merge) **Compare** The calls joined per gene · [Settings](params:contrasts) · [Tool Agreement](tab:Tool Agreement)
+      :::
+    tag: rs-ov-steps
+    index: ov-steps
+    layout: {x: 0, y: 4, w: 8, h: 3}
+  - component_type: text
+    surface: card
+    body: |
+      ### About this dashboard
+      nf-core/rnasplice aligns bulk RNA-seq reads with STAR, quantifies transcripts with Salmon, then tests each contrast for differential exon usage, transcript usage and splicing events. This page sums up one run; each tab behind it answers one question, in the order of the steps above.
+
+      The sample filters in the left panel apply to every tab, the contrast and gene filters to every splicing tab. A bar above a section narrows that section only.
+
+      Provenance: every setting and tool version on this page is read from the run's own `params.json` and software-versions report, and every number from the files the run wrote.
+    tag: rs-ov-about
+    index: ov-about
+    layout: {x: 0, y: 7, w: 8, h: 3}
+  # Key figures: one card per stage of the funnel, each opening the tab that
+  # explains it. The icon colour is that tab's colour.
+  - component_type: card
+    workflow_tag: rnasplice
+    data_collection_tag: samples
+    aggregation: nunique
+    column_name: sample
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: '{GROUP_COL}'
+    display:
+      icon_name: mdi:flask-outline
+      icon_color: orange
+      caption: in the sample sheet, by group
+      link: tab:MultiQC
+    section: Key figures
+    tag: rs-ov-kf-samples
+    index: ov-kf-samples
+    title: Samples
+    description: Samples in the sheet, sequencing runs merged. The bar splits them by the group the contrasts compare.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: rnasplice
+    data_collection_tag: sample_pca
+    use: salmon/sample_pca
+    aggregation: median
+    column_name: genes_expressed
+    column_type: int64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:dna
+      icon_color: cyan
+      caption: median per library, at 1 TPM or more
+      link: tab:Sample Space
+      decimals: 0
+    section: Key figures
+    tag: rs-ov-kf-expressed
+    index: ov-kf-expressed
+    title: Genes expressed
+    description: Median number of genes a library expresses at 1 TPM or more. The box shows how it spreads.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: rnasplice
+    data_collection_tag: splicing_genes
+    aggregation: count
+    column_name: gene_id
+    column_type: object
+    filter_expr: col('tools_significant') >= 2
+    secondary_layout: composition
+    breakdown_col: tools_significant
+    top_n_count: 4
+    display:
+      icon_name: mdi:set-merge
+      icon_color: violet
+      caption: genes, by the number of tools calling them
+      link: tab:Tool Agreement
+    section: Key figures
+    tag: rs-ov-kf-agreed
+    index: ov-kf-agreed
+    title: Called by two tools or more
+    description: Genes that at least two of the five splicing tests call, counted once per contrast. The bar splits them by how many tools call them.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: rnasplice
+    data_collection_tag: rmats_events
+    use: rmats/events
+    aggregation: count
+    column_name: event_id
+    column_type: object
+    filter_expr: col('significant')
+    secondary_layout: composition
+    breakdown_col: direction
+    display:
+      icon_name: mdi:shape-outline
+      icon_color: grape
+      caption: calls, by direction of inclusion
+      link: tab:Splicing Events
+    section: Key figures
+    tag: rs-ov-kf-events
+    index: ov-kf-events
+    title: rMATS events called
+    description: Local events rMATS calls under SPLICING_FDR with a large enough PSI change, up or down in the treatment.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  # Findings filter bar: the contrast, then the rMATS event type.
+  - component_type: interactive
+    workflow_tag: rnasplice
+    data_collection_tag: contrasts
+    interactive_component_type: MultiSelect
+    column_name: contrast
+    column_type: object
+    display:
+      icon_name: mdi:scale-balance
+      custom_color: indigo
+      strip_label: Contrast
+    section: Findings
+    tag: rs-ov-findings-contrast
+    index: ov-findings-contrast
+    title: Contrast
+    layout: {x: 0, y: 0, w: 2, h: 1}
+  - component_type: interactive
+    workflow_tag: rnasplice
+    data_collection_tag: rmats_events
+    use: rmats/events
+    interactive_component_type: MultiSelect
+    column_name: event_type
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: grape
+      strip_label: Event type
+    section: Findings
+    tag: rs-ov-findings-event-type
+    index: ov-findings-event-type
+    title: Event type
+    layout: {x: 2, y: 0, w: 2, h: 1}
+  # One result row per finding, each citing one data collection, so the import
+  # removes a row with its tool.
+  - component_type: text
+    surface: card
+    values:
+      n_agree: {dc: splicing_genes, column: gene_id, aggregation: nunique, filter_expr: "col('tools_significant') >= 2",
+        format: integer}
+      n_called: {dc: splicing_genes, column: gene_id, aggregation: nunique, filter_expr: "col('tools_significant') >= 1",
+        format: integer}
+      dex_n: {dc: dexseq_exon_genes, column: gene_id, aggregation: nunique, filter_expr: "col('significant')", format: integer}
+      dtu_n: {dc: dexseq_dtu, column: gene_id, aggregation: nunique, filter_expr: "col('gene_significant')", format: integer}
+      top_event: {dc: rmats_events, column: event_type, aggregation: top, filter_expr: "col('significant')"}
+      ev_share: {dc: rmats_events, column: event_type, aggregation: top_share, filter_expr: "col('significant')", format: percent}
+      top_gene: {dc: rmats_events, column: gene_name, aggregation: top, weight: abs_dpsi, filter_expr: "col('significant')"}
+    body: |
+      - **{{n_agree}}** genes are called by two tools or more, of {{n_called}} called by any – over the contrasts in view [Tool Agreement](tab:Tool Agreement)
+      - **{{dex_n}}** genes change exon usage – DEXSeq, gene q-value under the cut-off [Exon Usage](tab:Exon Usage)
+      - **{{dtu_n}}** genes switch transcript usage – DEXSeq DTU, gene q-value under the cut-off [Transcript Usage](tab:Transcript Usage)
+      - **{{ev_share}}** of the rMATS calls are {{top_event}} events – the most frequent type [Splicing Events](tab:Splicing Events)
+      - The gene with the largest called inclusion changes is [{{top_gene}}](locus:{{top_gene}}): its coverage and junction reads in the genome browser
+    section: Findings
+    tag: rs-ov-findings
+    index: ov-findings
+    layout: {x: 0, y: 0, w: 8, h: 3}
+  # One figure per analysis tab, in the order of the rows above, two even
+  # halves per row (a volcano reads poorly at a third of the row). The two
+  # volcanoes answer different questions, so their titles name the level:
+  # exon bins per gene, then transcripts. Their source titles are too long
+  # for a half-row header, hence the short titles here.
+  - component_type: highlight
+    section: Findings
+    source_tab: Tool Agreement
+    source_component: rs-agree-per-tool
+    title: Calls per tool, by agreement
+    caption: Genes each tool calls, darker where more tools agree; the lightest segment is the calls a tool makes alone.
+    tag: rs-ov-hl-tools
+    index: ov-hl-tools
+    layout: {x: 0, y: 3, w: 4, h: 4}
+  - component_type: highlight
+    section: Findings
+    source_tab: Exon Usage
+    source_component: rs-exon-dexseq-volcano
+    title: Exon usage (DEXSeq)
+    caption: One point per gene, at its most significant exonic bin; right of the line, the bin gains usage in the treatment.
+    tag: rs-ov-hl-dexseq
+    index: ov-hl-dexseq
+    layout: {x: 4, y: 3, w: 4, h: 4}
+  - component_type: highlight
+    section: Findings
+    source_tab: Transcript Usage
+    source_component: rs-tx-volcano
+    title: Transcript usage (DEXSeq DTU)
+    caption: One point per transcript; right of the line, the transcript takes a larger share of its gene in the treatment.
+    tag: rs-ov-hl-dtu
+    index: ov-hl-dtu
+    layout: {x: 0, y: 7, w: 4, h: 4}
+  - component_type: highlight
+    section: Findings
+    source_tab: Splicing Events
+    source_component: rs-ev-rmats-types
+    title: rMATS calls per event type
+    caption: Called rMATS events per type, split by whether inclusion rises or falls in the treatment.
+    tag: rs-ov-hl-event-types
+    index: ov-hl-event-types
+    layout: {x: 4, y: 7, w: 4, h: 4}
+  # The rMATS events on the genome, opened on the chromosome or region they cover:
+  # a click opens the Splicing Events tab's browser on the event, so the Overview
+  # needs no browser of its own.
+  - component_type: advanced_viz
+    workflow_tag: rnasplice
+    data_collection_tag: rmats_events
+    viz_kind: genome_view
+    config:
+      viz_kind: genome_view
+      chr_col: chrom
+      pos_col: start
+      end_col: end
+      score_col: abs_dpsi
+      feature_col: gene_name
+      category_col: direction
+      mark: point
+      point_size: 9
+      score_title: Absolute PSI change
+      assembly: '{GENOME}'
+      region_filter_enabled: false
+      click_opens_browser: true
+      open_on_data: true
+    section: Findings
+    tag: rs-ov-genome
+    index: ov-genome
+    title: Splicing events along the genome
+    link: tab:Splicing Events
+    description: >-
+      Where along the genome does splicing change? Each dot is an rMATS event placed at its start coordinate,
+      its height is the absolute PSI change between treatment and control, and its colour says whether
+      inclusion rises, falls or is not called.
+
+      How to read: a cluster of tall coloured dots on one chromosome points at a region worth a look, while
+      tall grey dots are large changes that did not pass the test. Click a dot to open its gene in the genome
+      browser, or open [Splicing Events](tab:Splicing Events) for the volcanoes, the junction reads and the
+      event table.
+
+      Lines and annotations: no reference line is drawn; the colour carries the call and the height is the
+      measured absolute PSI change, so the height does not depend on any cut-off. An event is called when its
+      rMATS FDR is under SPLICING_FDR (default 0.05) and its absolute PSI change is at least MIN_DPSI (default
+      0, so the rMATS FDR alone decides), both template variables read by the rMATS recipe.
+
+      Source: rMATS-turbo README, events count as significant at FDR 0.05 or lower by default, and the
+      differential test already compares the PSI change with --cstat (default 0.0001),
+      https://github.com/Xinglab/rmats-turbo; nf-core/rnasplice 2.0.0 passes it as rmats_splice_diff_cutoff
+      (default 0.0001), https://github.com/nf-core/rnasplice/blob/2.0.0/nextflow_schema.json
+
+      Note: rMATS publishes no recommended minimum PSI change beyond --cstat. MIN_DPSI is an optional extra
+      floor you can raise, and any value above 0 is your own working value, not a tool default.
+    layout: {x: 0, y: 11, w: 8, h: 4}
+  # Link-only tab tiles: each tile prints its tab's subtitle. A tab the run does
+  # not have is left out, and a heading whose tabs are all missing is hidden.
+  - component_type: text
+    body: |
+      ### Data & QC
+      - [MultiQC](tab:MultiQC)
+      - [Sample Space](tab:Sample Space)
+
+      ### Splicing
+      - [Tool Agreement](tab:Tool Agreement)
+      - [Exon Usage](tab:Exon Usage)
+      - [Transcript Usage](tab:Transcript Usage)
+      - [Splicing Events](tab:Splicing Events)
+    section: How to read this dashboard
+    tag: rs-ov-how-to-read
+    index: ov-how-to-read
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  # Persistent sample filters, the group first.
+  - component_type: interactive
+    workflow_tag: rnasplice
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: '{GROUP_COL}'
+    column_type: object
+    display:
+      icon_name: mdi:account-group-outline
+      custom_color: violet
+    section: Sample filters
+    group: Sample scope
+    tag: rs-filter-group
+    index: sample-filters-group
+    title: '{GROUP_COL_DISPLAY}'
+    layout: {x: 0, y: 0, w: 1, h: 2}
+  - component_type: interactive
+    workflow_tag: rnasplice
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: sample
+    column_type: object
+    display:
+      icon_name: mdi:flask-outline
+      custom_color: teal
+    section: Sample filters
+    group: Sample scope
+    tag: rs-filter-sample
+    index: sample-filters-sample
+    title: Sample ID
+    layout: {x: 0, y: 2, w: 1, h: 3}
+  # One contrast at a time: rnasplice often lists a contrast and its mirror,
+  # and a gene called in both counts twice.
+  - component_type: interactive
+    workflow_tag: rnasplice
+    data_collection_tag: contrasts
+    interactive_component_type: Select
+    column_name: contrast
+    column_type: object
+    display:
+      icon_name: mdi:scale-balance
+      custom_color: indigo
+    section: Splicing filters
+    group: Comparison
+    tag: rs-filter-contrast
+    index: splicing-filters-contrast
+    title: Contrast
+    layout: {x: 0, y: 0, w: 1, h: 2}
+  # A gene pick reaches every per-tool table through the gene_id links.
+  - component_type: interactive
+    workflow_tag: rnasplice
+    data_collection_tag: splicing_genes
+    interactive_component_type: MultiSelect
+    column_name: gene_name
+    column_type: object
+    display:
+      icon_name: mdi:dna
+      custom_color: violet
+    section: Splicing filters
+    group: Comparison
+    tag: rs-filter-gene
+    index: splicing-filters-gene
+    title: Gene
+    layout: {x: 0, y: 2, w: 1, h: 3}
+  - component_type: table
+    workflow_tag: rnasplice
+    data_collection_tag: samples
+    row_selection_enabled: true
+    row_selection_column: sample
+    section: Sample sheet
+    tag: rs-sheet-samples
+    index: sheet-samples
+    title: Samples
+    description: >-
+      The samples the run read: one row per sample, sequencing runs merged, with the design columns (condition
+      and any factor added by the design table).
+
+      How to read: check that every sample sits in the group you expect and that each group has replicates,
+      since every splicing tool compares groups of replicates. Pick a row to narrow the tiles that read
+      per-sample tables.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: rnasplice
+    data_collection_tag: contrasts
+    row_selection_enabled: true
+    row_selection_column: contrast
+    section: Sample sheet
+    tag: rs-sheet-contrasts
+    index: sheet-contrasts
+    title: Contrasts
+    description: >-
+      The comparisons the run made: one row per contrast, setting a treatment group against a control group.
+      Every effect on the other tabs is treatment minus control.
+
+      How to read: a positive PSI change or fold change means more inclusion or usage in the treatment, a
+      negative one means more in the control. Pick a row to restrict the splicing tabs to that contrast.
+    layout: {x: 0, y: 6, w: 8, h: 6}
+tabs:
+- title: MultiQC
+  subtitle: Did trimming, alignment and quantification work for every library?
+  tab_group: Data & QC
+  tab_order: 1
+  tab_icon: /assets/images/logos/multiqc_icon_color.svg
+  tab_icon_color: orange
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  grid_sections:
+  - name: QC overview
+    icon: mdi:chart-box-outline
+    color: orange
+    description: Headline numbers, reads kept through trimming, and how STAR mapped them
+  - name: Quantification
+    icon: mdi:chart-bar
+    color: orange
+    description: Reads featureCounts put on exons, and Salmon's fragment lengths
+  - name: QC details
+    icon: mdi:chart-bell-curve
+    color: gray
+    description: The remaining FastQC, STAR and samtools panels of the report
+    collapsed: true
+  components:
+  # The tab's intro: the method, with its link, and how to read the tab.
+  - component_type: text
+    order: 1
+    body: >
+      [MultiQC](https://multiqc.info) gathers the per-library reports of FastQC, Trim Galore,
+      [STAR](https://github.com/alexdobin/STAR), samtools, featureCounts and
+      [Salmon](https://combine-lab.github.io/salmon/). Splicing tests need depth on junctions,
+      so compare read counts and unique mapping within each condition first. featureCounts
+      feeds the exon-level tests and Salmon the transcript-level ones.
+    tag: rs-mqc-intro
+    index: mqc-intro
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: multiqc
+    workflow_tag: rnasplice
+    data_collection_tag: multiqc_data
+    use: multiqc/general_stats
+    selected_module: general_stats
+    selected_plot: general_stats
+    section: QC overview
+    tag: rs-qc-general-stats
+    title: General statistics
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: multiqc
+    workflow_tag: rnasplice
+    data_collection_tag: multiqc_data
+    use: multiqc/fastqc
+    selected_module: fastqc
+    selected_plot: Sequence Counts
+    section: QC overview
+    tag: rs-qc-fastqc-counts
+    title: Sequence counts, raw and trimmed
+    layout: {x: 0, y: 4, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: rnasplice
+    data_collection_tag: multiqc_data
+    use: multiqc/cutadapt
+    selected_module: cutadapt
+    selected_plot: Filtered Reads
+    section: QC overview
+    tag: rs-qc-cutadapt-filtered
+    title: Reads kept by Trim Galore
+    layout: {x: 4, y: 4, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: rnasplice
+    data_collection_tag: multiqc_data
+    use: multiqc/star
+    selected_module: star
+    selected_plot: Summary Statistics
+    section: QC overview
+    tag: rs-qc-star-summary
+    title: STAR alignment summary
+    layout: {x: 0, y: 8, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: rnasplice
+    data_collection_tag: multiqc_data
+    use: multiqc/samtools
+    selected_module: samtools
+    selected_plot: Percent mapped
+    section: QC overview
+    tag: rs-qc-samtools-mapped
+    title: Mapped reads (samtools)
+    layout: {x: 4, y: 8, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: rnasplice
+    data_collection_tag: multiqc_data
+    use: multiqc/featurecounts
+    selected_module: featurecounts
+    selected_plot: Assignments
+    section: Quantification
+    tag: rs-qc-featurecounts
+    title: featureCounts assignments
+    layout: {x: 0, y: 0, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: rnasplice
+    data_collection_tag: multiqc_data
+    use: multiqc/salmon
+    selected_module: salmon
+    selected_plot: salmon-section-1
+    section: Quantification
+    tag: rs-qc-salmon
+    title: Salmon fragment length distribution
+    layout: {x: 4, y: 0, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: rnasplice
+    data_collection_tag: multiqc_data
+    use: multiqc/fastqc
+    selected_module: fastqc
+    selected_plot: Adapter Content
+    section: QC details
+    tag: rs-qc-fastqc-adapters
+    title: Adapter content
+    layout: {x: 0, y: 0, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: rnasplice
+    data_collection_tag: multiqc_data
+    use: multiqc/fastqc
+    selected_module: fastqc
+    selected_plot: Sequence Quality Histograms
+    section: QC details
+    tag: rs-qc-fastqc-quality
+    title: Per-base sequence quality
+    layout: {x: 4, y: 0, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: rnasplice
+    data_collection_tag: multiqc_data
+    use: multiqc/fastqc
+    selected_module: fastqc
+    selected_plot: Sequence Duplication Levels
+    section: QC details
+    tag: rs-qc-fastqc-duplication
+    title: Sequence duplication levels
+    layout: {x: 0, y: 4, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: rnasplice
+    data_collection_tag: multiqc_data
+    use: multiqc/fastqc
+    selected_module: fastqc
+    selected_plot: Status Checks
+    section: QC details
+    tag: rs-qc-fastqc-status
+    title: FastQC status checks
+    layout: {x: 4, y: 4, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: rnasplice
+    data_collection_tag: multiqc_data
+    use: multiqc/star
+    selected_module: star
+    selected_plot: Alignment Scores
+    section: QC details
+    tag: rs-qc-star-scores
+    title: STAR alignment scores
+    layout: {x: 0, y: 8, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: rnasplice
+    data_collection_tag: multiqc_data
+    use: multiqc/samtools
+    selected_module: samtools
+    selected_plot: Alignment stats
+    section: QC details
+    tag: rs-qc-samtools-stats
+    title: samtools alignment stats
+    layout: {x: 4, y: 8, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: rnasplice
+    data_collection_tag: multiqc_data
+    use: multiqc/samtools
+    selected_module: samtools
+    selected_plot: Flagstat
+    section: QC details
+    tag: rs-qc-samtools-flagstat
+    title: samtools flagstat
+    layout: {x: 0, y: 12, w: 8, h: 4}
+- title: Sample Space
+  subtitle: Do the replicates of each condition sit together?
+  tab_group: Data & QC
+  tab_order: 2
+  tab_icon: mdi:chart-scatter-plot
+  tab_icon_color: cyan
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Sample space filters
+    icon: mdi:filter-variant
+    color: cyan
+    description: Narrows to the libraries inside an expression band
+  grid_sections:
+  - name: Libraries at a glance
+    icon: mdi:counter
+    color: cyan
+    description: How many genes each library reaches, from the merged Salmon TPMs
+  - name: Sample relationships
+    icon: mdi:chart-scatter-plot
+    color: cyan
+    description: The samples on the leading components; pick one to read its record
+  - name: Top variable genes
+    icon: mdi:chart-box-outline
+    color: cyan
+    description: The genes that vary most across the samples, clustered
+  - name: Library summary
+    icon: mdi:table
+    color: gray
+    description: The per-sample PCA coordinates and expression summary
+    collapsed: true
+  components:
+  # The tab's intro: the method, with its link, and how to read the tab.
+  - component_type: text
+    order: 1
+    body: >
+      Each library summarised from the merged [Salmon](https://combine-lab.github.io/salmon/)
+      TPM matrix and placed on a PCA of its most variable genes, then those genes clustered
+      in a heatmap. Splicing differences are easiest to trust when the replicates of a
+      condition sit together; a sample far from its group can drive a tool's calls on its
+      own. Pick a point to read its record.
+    tag: rs-space-intro
+    index: space-intro
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: interactive
+    workflow_tag: rnasplice
+    data_collection_tag: sample_pca
+    interactive_component_type: RangeSlider
+    column_name: genes_expressed
+    column_type: int64
+    display:
+      icon_name: mdi:dna
+      custom_color: cyan
+    section: Sample space filters
+    tag: rs-space-filter-expressed
+    index: space-expressed-range
+    title: Genes expressed
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: rnasplice
+    data_collection_tag: sample_pca
+    interactive_component_type: RangeSlider
+    column_name: median_tpm
+    column_type: float64
+    display:
+      icon_name: mdi:chart-bell-curve
+      custom_color: orange
+    section: Sample space filters
+    tag: rs-space-filter-median-tpm
+    index: space-median-tpm-range
+    title: Median TPM
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  # The same four cards as the Sample Space tab of nf-core/rnaseq: both read
+  # the salmon/sample_pca output.
+  - component_type: card
+    workflow_tag: rnasplice
+    data_collection_tag: sample_pca
+    use: salmon/sample_pca
+    aggregation: count
+    column_name: sample_id
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: group
+    display:
+      icon_name: mdi:flask-outline
+      icon_color: violet
+      caption: one per library, by group
+    section: Libraries at a glance
+    tag: rs-space-card-libraries
+    index: space-card-libraries
+    title: Libraries
+    description: Libraries in the merged TPM matrix, split by the design's group.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: rnasplice
+    data_collection_tag: sample_pca
+    use: salmon/sample_pca
+    aggregation: median
+    column_name: genes_expressed
+    column_type: int64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:dna
+      icon_color: teal
+      caption: median per library, with its spread
+      decimals: 0
+    section: Libraries at a glance
+    tag: rs-space-card-expressed
+    index: space-card-expressed
+    title: Genes expressed
+    description: Genes at 1 TPM or more in a library. The floor depends on the organism and the annotation.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: rnasplice
+    data_collection_tag: sample_pca
+    use: salmon/sample_pca
+    aggregation: median
+    column_name: genes_detected
+    column_type: int64
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:magnify-scan
+      icon_color: cyan
+      caption: median per library, with its distribution
+      decimals: 0
+    section: Libraries at a glance
+    tag: rs-space-card-detected
+    index: space-card-detected
+    title: Genes detected
+    description: Genes with any signal at all in a library, TPM above zero.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: rnasplice
+    data_collection_tag: sample_pca
+    use: salmon/sample_pca
+    aggregation: median
+    column_name: median_tpm
+    column_type: float64
+    secondary_layout: top_n
+    breakdown_col: group
+    top_n_count: 4
+    display:
+      icon_name: mdi:chart-bell-curve
+      icon_color: orange
+      caption: median per condition, highest first
+      decimals: 2
+    section: Libraries at a glance
+    tag: rs-space-card-median-tpm
+    index: space-card-median-tpm
+    title: Median TPM
+    description: Median TPM of the genes a library detects. A condition far above the others spent its reads on few genes.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    workflow_tag: rnasplice
+    data_collection_tag: sample_pca
+    use: salmon/pca
+    config:
+      color_col: group
+      point_size: 12
+      axis_prefix: PC
+      show_centroids: true
+      selection_enabled: true
+      selection_column: sample_id
+      legend_pos: bottom
+    section: Sample relationships
+    tag: rs-space-pca
+    index: rs-space-pca
+    title: Sample PCA on Salmon TPMs
+    description: >-
+      Do the samples separate by condition? Each point is a sample, placed by the first two principal
+      components of its gene expression, and coloured by its group.
+
+      How to read: replicates of one group landing together, and apart from the other group, is the picture
+      that makes a splicing comparison believable. A sample far from its own group, or a group that overlaps
+      the other, is a batch effect, a swap or a weak contrast to check in [MultiQC](tab:MultiQC) first. Click
+      a point to open its record.
+
+      Lines and annotations: each group has a centroid marker at the mean position of its samples, labelled
+      with the group name. The components come from log2(TPM + 1) of the 500 most variable genes of the merged
+      Salmon matrix, not scaled; the count of 500 is a fixed setting of the salmon sample_pca recipe, not a
+      published cut-off.
+
+      Note: expression is not splicing, so a sample can sit with its group here and still splice differently,
+      and the reverse.
+    layout: {x: 0, y: 0, w: 5, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: rnasplice
+    data_collection_tag: sample_pca
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      id_col: sample_id
+      title_col: sample_id
+      selection_source: any
+      linked_component: rs-space-pca
+      sections:
+        Sample: [sample_id, group]
+        Expression: [genes_detected, genes_expressed, median_tpm]
+        Position: [dim_1, dim_2]
+    section: Sample relationships
+    tag: rs-space-record
+    index: rs-space-record
+    title: Sample record
+    description: >-
+      The record of the sample picked on the PCA: its group, how many genes it detects and expresses, its
+      median TPM and its position on the first two components.
+
+      How to read: a library that expresses far fewer genes than the others of its group is the usual sign of
+      an under-sequenced or degraded sample. Genes expressed are those at 1 TPM or more, a fixed setting of
+      the recipe; no published floor is applied to it.
+    layout: {x: 5, y: 0, w: 3, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: rnasplice
+    data_collection_tag: expression_heatmap
+    use: salmon/top_variable_heatmap
+    config:
+      cluster_rows: true
+      cluster_cols: true
+      normalize: row_z
+      colorscale: RdBu
+    section: Top variable genes
+    tag: rs-space-heatmap
+    index: rs-space-heatmap
+    title: Most variable genes
+    description: >-
+      Which genes drive the differences between samples? Each row is one of the most variable genes, each
+      column a sample, and each cell the gene's expression in that sample on the log2(TPM + 1) scale, shown as
+      a z-score across the row.
+
+      How to read: columns that cluster together share an expression profile, and design factors are drawn as
+      coloured bars above the columns to compare the clusters with the groups. A block of rows that switches
+      between two groups is a gene program of the contrast; rows and columns are clustered, so neighbours are
+      similar.
+
+      Lines and annotations: the dendrograms show the clustering of rows and columns, and the colour bar gives
+      the z-score, a diverging scale around the row mean. The 500 genes are the highest variance on the
+      log2(TPM + 1) scale, a fixed setting of the recipe.
+    layout: {x: 0, y: 0, w: 8, h: 5}
+  - component_type: table
+    workflow_tag: rnasplice
+    data_collection_tag: sample_pca
+    use: salmon/sample_pca
+    row_selection_enabled: true
+    row_selection_column: sample_id
+    section: Library summary
+    tag: rs-space-table
+    index: space-table-libraries
+    title: Sample PCA and expression summary
+    description: >-
+      The numbers behind the sample PCA and the expression cards: one row per sample with its group, its
+      coordinates on the first components, the genes it detects (TPM above 0), the genes it expresses (TPM of
+      1 or more) and the median TPM of the genes it detects.
+
+      How to read: sort by genes expressed to find the libraries that reach fewer genes than their peers. Pick
+      a row to open its record.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+- title: Tool Agreement
+  subtitle: Which genes does each tool call, and where do the tools agree?
+  tab_group: Splicing
+  tab_order: 3
+  tab_icon: mdi:set-merge
+  tab_icon_color: violet
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Agreement filters
+    icon: mdi:filter-variant
+    color: violet
+    description: How many tools must call a gene; reaches the per-tool tabs
+  grid_sections:
+  - name: Agreement at a glance
+    icon: mdi:counter
+    color: violet
+    description: Genes tested and called, alone and together, over the contrasts in view
+  - name: Calls per tool
+    icon: mdi:chart-bar
+    color: violet
+    description: The genes each tool calls, by how many tools agree
+  - name: Tool combinations
+    icon: mdi:set-merge
+    color: violet
+    description: The genes each combination of tools calls
+  - name: Gene detail
+    icon: mdi:information-outline
+    color: gray
+    description: One row per contrast and gene; pick one to read every tool's evidence
+    collapsed: true
+  components:
+  # The tab's intro: the method, with its link, and how to read the tab.
+  - component_type: text
+    order: 1
+    body: >
+      The five splicing tests ([DEXSeq](https://bioconductor.org/packages/DEXSeq) on exons and
+      transcripts, [edgeR](https://bioconductor.org/packages/edgeR),
+      [rMATS](https://rnaseq-mats.sourceforge.io) and
+      [SUPPA2](https://github.com/comprehensive-genomics/SUPPA)) joined per gene: a gene that
+      several of them call is a stronger candidate than one a single tool reports. Pick one
+      contrast first in the left panel, since a contrast and its mirror both count. The bars
+      split each tool's calls by how many tools agree, and the UpSet counts the genes each
+      combination of tools calls.
+    tag: rs-agree-intro
+    index: agree-intro
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: interactive
+    workflow_tag: rnasplice
+    data_collection_tag: splicing_genes
+    interactive_component_type: Slider
+    column_name: tools_significant
+    column_type: int64
+    display:
+      icon_name: mdi:set-merge
+      custom_color: violet
+    section: Agreement filters
+    tag: rs-agree-filter-tools
+    index: agree-tools-filter
+    title: Tools calling the gene
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: rnasplice
+    data_collection_tag: splicing_genes
+    aggregation: nunique
+    column_name: gene_id
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: tools_tested
+    top_n_count: 5
+    display:
+      icon_name: mdi:dna
+      icon_color: blue
+      caption: genes, by the number of tests covering them
+    section: Agreement at a glance
+    tag: rs-agree-card-tested
+    index: agree-card-tested
+    title: Genes tested
+    description: Genes at least one splicing test covered. The bar splits them by how many of the five tests covered them.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: rnasplice
+    data_collection_tag: splicing_genes
+    aggregation: nunique
+    column_name: gene_id
+    column_type: object
+    filter_expr: col('tools_significant') >= 1
+    secondary_layout: composition
+    breakdown_col: contrast
+    top_n_count: 4
+    display:
+      icon_name: mdi:check-decagram
+      icon_color: teal
+      caption: genes, by contrast
+    section: Agreement at a glance
+    tag: rs-agree-card-called
+    index: agree-card-called
+    title: Called by any tool
+    description: Genes at least one test calls, split by contrast.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: rnasplice
+    data_collection_tag: splicing_genes
+    aggregation: count
+    column_name: gene_id
+    column_type: object
+    filter_expr: col('tools_significant') >= 2
+    secondary_layout: composition
+    breakdown_col: tools_significant
+    top_n_count: 4
+    display:
+      icon_name: mdi:relation-many-to-many
+      icon_color: violet
+      caption: genes, by the number of tools calling them
+    section: Agreement at a glance
+    tag: rs-agree-card-agreed
+    index: agree-card-agreed
+    title: Called by two tools or more
+    description: Genes at least two tests call, counted once per contrast. The bar splits them by how many tools call them.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: rnasplice
+    data_collection_tag: splicing_genes
+    aggregation: median
+    column_name: tools_significant
+    column_type: int64
+    filter_expr: col('tools_significant') >= 1
+    secondary_layout: gauge
+    coverage_max: 5
+    display:
+      icon_name: mdi:gauge
+      icon_color: orange
+      caption: median per called gene, of five tests
+      decimals: 0
+    section: Agreement at a glance
+    tag: rs-agree-card-tools
+    index: agree-card-tools
+    title: Tools per called gene
+    description: How many of the five tests call a gene, over the genes at least one calls.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  # Each tool's calls, stacked by how many tools call the gene: the summary the
+  # Overview highlights, since a five-set UpSet cannot read at a third of the row.
+  # No sample column, so Analysis mode's groups do not apply here.
+  - component_type: figure
+    workflow_tag: rnasplice
+    data_collection_tag: splicing_genes
+    visu_type: bar
+    mode: code
+    code_content: |-
+      names = {'dexseq_exon': 'DEXSeq exon', 'edger': 'edgeR', 'dexseq_dtu': 'DEXSeq DTU', 'rmats': 'rMATS', 'suppa': 'SUPPA2'}
+      parts = [df.filter(pl.col(c)).select(pl.lit(n).alias('tool'), pl.col('tools_significant')) for c, n in names.items()]
+      d = pl.concat(parts).group_by(['tool', 'tools_significant']).agg(pl.len().alias('genes'))
+      d = d.with_columns(pl.when(pl.col('tools_significant') == 1).then(pl.lit('this tool alone')).otherwise(pl.col('tools_significant').cast(pl.Utf8) + pl.lit(' tools')).alias('agreement'))
+      order = ['this tool alone', '2 tools', '3 tools', '4 tools', '5 tools']
+      fig = px.bar(d.to_pandas(), x='genes', y='tool', color='agreement', orientation='h', category_orders={'agreement': order, 'tool': list(names.values())}, color_discrete_sequence=px.colors.sequential.Purples[4:], labels={'genes': 'Called genes, per contrast', 'tool': 'Tool', 'agreement': 'Tools calling the gene'})
+      fig.update_layout(barmode='stack', margin=dict(t=10))
+    section: Calls per tool
+    tag: rs-agree-per-tool
+    index: rs-agree-per-tool
+    title: Genes each tool calls, by agreement
+    description: >-
+      How many genes does each splicing tool call, and how many of those do other tools call too? One bar per
+      tool, its length the genes the tool calls (a gene counts once per contrast), split into segments by the
+      number of tools that call the same gene.
+
+      How to read: a bar that is mostly the lightest segment (this tool alone) holds calls no other tool
+      backs, while darker segments are genes found by several tools with different methods. The tools see
+      different things (exon bins, exons, transcripts, local events), so agreement is evidence, but low
+      overlap does not by itself mean a tool is wrong. Open [Tool Agreement](tab:Tool Agreement) records to
+      see each tool's evidence for a gene.
+
+      Lines and annotations: no reference line is drawn. Each tool's call applies SPLICING_FDR (default 0.05)
+      to its own gene-level adjusted p-value, and for rMATS and SUPPA2 a gene is called when one of its events
+      passes, including the MIN_DPSI floor (default 0, so no extra floor).
+
+      Source: rMATS-turbo README, FDR 0.05 or lower counts as significant by default,
+      https://github.com/Xinglab/rmats-turbo; nf-core/rnasplice 2.0.0 stageR alpha = 0.05 in
+      bin/run_stager.R (line 160) and SUPPA2 diffsplice_alpha 0.05 in nextflow_schema.json,
+      https://github.com/nf-core/rnasplice/tree/2.0.0
+
+      Note: a tool the run skipped draws no bar. SPLICING_FDR applies one 0.05 to every tool, SUPPA2's
+      p-value included, whereas SUPPA2 gives no recommended cut-off on it. Any MIN_DPSI above 0 is your own
+      working value.
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: advanced_viz
+    workflow_tag: rnasplice
+    data_collection_tag: splicing_genes
+    viz_kind: upset_plot
+    config:
+      viz_kind: upset_plot
+      set_columns: [dexseq_exon, edger, dexseq_dtu, rmats, suppa]
+      sort_by: cardinality
+      sort_order: descending
+      min_size: 1
+      show_set_sizes: true
+      color_intersections_by: degree
+    section: Tool combinations
+    tag: rs-agree-upset
+    index: rs-agree-upset
+    title: Genes called per combination of tools
+    description: >-
+      Which combinations of tools call the same genes? Each column is one combination of tools (dots joined by
+      a line in the matrix), its bar the number of genes called by exactly those tools and no others, and the
+      bars on the left give each tool's total.
+
+      How to read: tall bars of single tools mean most calls are specific to one method, while a tall bar over
+      several joined dots is a robust core. Bars are sorted by size, and the colour follows the number of
+      tools in the combination. Pick a gene of a combination in the table of [Tool Agreement](tab:Tool
+      Agreement) to compare the evidence.
+
+      Lines and annotations: the calls are the same as in the per-tool bars, each tool at SPLICING_FDR
+      (default 0.05) and, for rMATS and SUPPA2, MIN_DPSI (default 0, so no extra floor).
+
+      Source: rMATS-turbo README, FDR 0.05 or lower counts as significant by default,
+      https://github.com/Xinglab/rmats-turbo; nf-core/rnasplice 2.0.0 diffsplice_alpha 0.05,
+      https://github.com/nf-core/rnasplice/blob/2.0.0/nextflow_schema.json
+
+      Note: a tool the run skipped shows an empty set. Any MIN_DPSI above 0 is your own working value.
+    layout: {x: 0, y: 0, w: 8, h: 5}
+  - component_type: table
+    workflow_tag: rnasplice
+    data_collection_tag: splicing_genes
+    row_selection_enabled: true
+    row_selection_column: gene_id
+    section: Gene detail
+    tag: rs-agree-table
+    index: agree-table-genes
+    title: Cross-tool calls per gene
+    description: >-
+      One row per contrast and gene, with a flag for each tool that calls it, how many tools tested and called
+      it, and each tool's strongest evidence.
+
+      How to read: sort by the number of tools that call the gene to start from the best backed ones. Pick a
+      row to read every tool's evidence in the gene record next to it.
+    layout: {x: 0, y: 0, w: 5, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: rnasplice
+    data_collection_tag: splicing_genes
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      id_col: gene_id
+      title_col: gene_name
+      selection_source: any
+      linked_component: rs-agree-table
+      sections:
+        Gene: [gene_name, gene_id, contrast, tools, tools_significant, tools_tested]
+        DEXSeq exon usage: [dexseq_exon, dexseq_exon_padj, dexseq_exon_log2fc]
+        edgeR diffSpliceDGE: [edger, edger_fdr, edger_log2fc]
+        DEXSeq transcript usage: [dexseq_dtu, dexseq_dtu_padj]
+        rMATS: [rmats, rmats_events_significant, rmats_max_abs_dpsi, rmats_min_fdr]
+        SUPPA2: [suppa, suppa_events_significant, suppa_max_abs_dpsi, suppa_min_pvalue]
+      link_templates:
+        gene_id: https://www.ensembl.org/id/{value}
+    section: Gene detail
+    tag: rs-agree-record
+    index: rs-agree-record
+    title: Gene record
+    description: >-
+      The gene picked in the table, with the evidence of each tool side by side: the DEXSeq exon and
+      transcript q-values, the edgeR FDR, the rMATS and SUPPA2 events passing the test and their largest PSI
+      change.
+
+      How to read: a gene with several tools significant and the same direction of change is the clearest
+      case; a single tool with weak support is a candidate to verify. The gene id links out to Ensembl.
+    layout: {x: 5, y: 0, w: 3, h: 6}
+- title: Exon Usage
+  subtitle: Which genes use their exons differently, per DEXSeq and edgeR?
+  tab_group: Splicing
+  tab_order: 4
+  tab_icon: mdi:content-cut
+  tab_icon_color: indigo
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Exon usage filters
+    icon: mdi:filter-variant
+    color: indigo
+    description: Direction and size of the exon usage change; each narrows both tools
+  grid_sections:
+  - name: Exon usage at a glance
+    icon: mdi:counter
+    color: indigo
+    description: Genes each exon-level tool calls, and how large the changes are
+  # Two tests of one question, side by side so a gene far out on both reads at
+  # a glance: DEXSeq on exonic bins, edgeR on exons.
+  - name: DEXSeq and edgeR
+    icon: mdi:chart-scatter-plot
+    color: indigo
+    description: One question, two tests; a gene far out on both is a robust exon-level call
+  - name: Exon gene rows
+    icon: mdi:table
+    color: gray
+    description: One row per contrast and gene for each tool, selectable
+    collapsed: true
+  components:
+  # The tab's intro: the method, with its link, and how to read the tab.
+  - component_type: text
+    order: 1
+    body: >
+      [DEXSeq](https://bioconductor.org/packages/DEXSeq) and
+      [edgeR](https://bioconductor.org/packages/edgeR) diffSpliceDGE ask whether an exon changes
+      its share of the gene's reads, and a positive fold change means more usage in the
+      treatment. The two volcanoes sit side by side, each placing a gene at its most
+      significant exon; genes far out on both are the robust exon-level calls. Pick a contrast
+      first in the left panel.
+    tag: rs-exon-intro
+    index: exon-intro
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  # Both tools name these columns alike, and a filter narrows every collection
+  # with its column: one filter each, on different tools so a run that skips
+  # either keeps one.
+  - component_type: interactive
+    workflow_tag: rnasplice
+    data_collection_tag: edger_genes
+    use: edger/diffsplice_genes
+    interactive_component_type: MultiSelect
+    column_name: direction
+    column_type: object
+    display:
+      icon_name: mdi:swap-vertical
+      custom_color: indigo
+    section: Exon usage filters
+    tag: rs-exon-filter-direction
+    index: exon-direction-filter
+    title: Call, both tools
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: rnasplice
+    data_collection_tag: dexseq_exon_genes
+    interactive_component_type: RangeSlider
+    column_name: abs_log2fc
+    column_type: float64
+    display:
+      icon_name: mdi:ruler
+      custom_color: indigo
+    section: Exon usage filters
+    tag: rs-exon-filter-fc
+    index: exon-fc-filter
+    title: Absolute log2 fold change, both tools
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: rnasplice
+    data_collection_tag: dexseq_exon_genes
+    use: dexseq/exon_genes
+    aggregation: count
+    column_name: gene_id
+    column_type: object
+    filter_expr: col('significant')
+    secondary_layout: composition
+    breakdown_col: direction
+    display:
+      icon_name: mdi:swap-vertical
+      icon_color: indigo
+      caption: genes, by direction of the top bin
+    section: Exon usage at a glance
+    tag: rs-exon-card-dexseq
+    index: exon-card-dexseq
+    title: DEXSeq calls
+    description: Genes with a DEXSeq gene q-value under SPLICING_FDR, per contrast.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: rnasplice
+    data_collection_tag: dexseq_exon_genes
+    use: dexseq/exon_genes
+    aggregation: median
+    column_name: abs_log2fc
+    column_type: float64
+    filter_expr: col('significant')
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:ruler
+      icon_color: cyan
+      caption: median over called genes, with its spread
+      decimals: 2
+    section: Exon usage at a glance
+    tag: rs-exon-card-dexseq-fc
+    index: exon-card-dexseq-fc
+    title: DEXSeq absolute log2 fold change
+    description: Fold change of the most significant bin of each called gene, treatment over control.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: rnasplice
+    data_collection_tag: edger_genes
+    use: edger/diffsplice_genes
+    aggregation: count
+    column_name: gene_id
+    column_type: object
+    filter_expr: col('significant')
+    secondary_layout: donut
+    breakdown_col: direction
+    display:
+      icon_name: mdi:call-split
+      icon_color: blue
+      caption: genes, by direction of the top exon
+    section: Exon usage at a glance
+    tag: rs-exon-card-edger
+    index: exon-card-edger
+    title: edgeR calls
+    description: Genes with an edgeR gene F-test FDR under SPLICING_FDR, per contrast.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: rnasplice
+    data_collection_tag: edger_genes
+    use: edger/diffsplice_genes
+    aggregation: median
+    column_name: abs_log2fc
+    column_type: float64
+    filter_expr: col('significant')
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:chart-histogram
+      icon_color: orange
+      caption: median over called genes, with its distribution
+      decimals: 2
+    section: Exon usage at a glance
+    tag: rs-exon-card-edger-fc
+    index: exon-card-edger-fc
+    title: edgeR absolute log2 fold change
+    description: Fold change of the most significant exon of each called gene, relative to its gene.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    workflow_tag: rnasplice
+    data_collection_tag: dexseq_exon_genes
+    use: dexseq/exon_volcano
+    config:
+      significance_threshold: 0.05
+      effect_threshold: 1.0
+      # Gene ids, often several per bin (ENSG1+ENSG2): labels would pile up.
+      show_labels: false
+      effect_label: Log2 fold change, top bin
+      significance_label: -log10 gene q-value
+      view: volcano
+    section: DEXSeq and edgeR
+    tag: rs-exon-dexseq-volcano
+    index: rs-exon-dexseq-volcano
+    title: 'DEXSeq: q-value against bin fold change'
+    description: >-
+      Which genes use their exons differently according to DEXSeq? Each point is a gene in a contrast: the x
+      axis is the log2 fold change of its most significant exonic bin (treatment over control) and the y axis
+      is -log10 of its gene-level q-value.
+
+      How to read: hits sit in the upper corners, far from zero and high up, a bin used much more or much less
+      in the treatment. Switch to the QQ view to see whether the p-value distribution departs from chance at
+      all, and open the DEXSeq table below for the gene rows.
+
+      Lines and annotations: dotted lines mark the significance cut-off (horizontal, at a q-value of 0.05) and
+      the effect cut-off (vertical, at a log2 fold change of -1 and +1), set in the tile and not read from the
+      run. Hits, beyond all three lines, are larger outlined triangles pointing the way of the change and the
+      rest are small grey circles. In the QQ view the dashed diagonal is the expectation under no effect, the
+      grey band its 95% null envelope and the label lambda, the genomic inflation factor.
+
+      Source: DEXSeq, Anders et al., Genome Research 2012, doi 10.1101/gr.133744.111; genomic inflation
+      factor, Devlin and Roeder, Biometrics 1999, doi 10.1111/j.0006-341X.1999.00997.x
+
+      Warning: the 0.05 and the log2 fold change of 1 are display cut-offs with no published rule behind them
+      for DEXSeq. The cards and the tool-agreement tiles call a gene on the q-value under SPLICING_FDR alone,
+      so the hits drawn here can be fewer than the called genes. Gene ids are not labelled, as DEXSeq joins
+      overlapping genes it cannot separate.
+    layout: {x: 0, y: 0, w: 4, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: rnasplice
+    data_collection_tag: edger_genes
+    use: edger/gene_volcano
+    config:
+      significance_threshold: 0.05
+      effect_threshold: 1.0
+      # Gene ids only (edgeR reports no symbol): labels would pile up.
+      show_labels: false
+      effect_label: Log2 fold change, top exon
+      significance_label: -log10 gene FDR
+      view: volcano
+    section: DEXSeq and edgeR
+    tag: rs-exon-edger-volcano
+    index: rs-exon-edger-volcano
+    title: 'edgeR: FDR against exon fold change'
+    description: >-
+      Which genes use their exons differently according to edgeR? Each point is a gene in a contrast: the x
+      axis is the relative log2 fold change of its most significant exon against its gene (treatment over
+      control) and the y axis is -log10 of the gene-level F-test FDR.
+
+      How to read: hits sit in the upper corners, high up and far from zero. A gene high up with a small fold
+      change has a modest exon shift that is consistently measured; compare it with the DEXSeq volcano beside
+      it, as a gene far out on both is a robust exon-level call.
+
+      Lines and annotations: dotted lines mark the significance cut-off (horizontal, at an FDR of 0.05) and
+      the effect cut-off (vertical, at a log2 fold change of -1 and +1), set in the tile and not read from the
+      run. Hits, beyond all three lines, are larger outlined triangles pointing the way of the change and the
+      rest are small grey circles.
+
+      Source: edgeR diffSpliceDGE tests each exon against the rest of its gene and offers gene-level tests,
+      https://rdrr.io/bioc/edgeR/man/diffSpliceDGE.html
+
+      Warning: the 0.05 and the log2 fold change of 1 are display cut-offs with no published rule behind them
+      for edgeR. The cards call a gene on the F-test FDR under SPLICING_FDR alone, so the hits drawn here can
+      be fewer than the called genes.
+    layout: {x: 4, y: 0, w: 4, h: 6}
+  - component_type: table
+    workflow_tag: rnasplice
+    data_collection_tag: dexseq_exon_genes
+    use: dexseq/exon_genes
+    row_selection_enabled: true
+    row_selection_column: gene_id
+    section: Exon gene rows
+    tag: rs-exon-table-dexseq
+    index: exon-table-dexseq
+    title: DEXSeq exon usage per gene
+    description: >-
+      The rows behind the DEXSeq volcano: one row per contrast and gene with the gene-level q-value, the
+      exonic bins tested and called, and the fold change of the most significant bin.
+
+      How to read: sort by q-value, then check the fold change and the number of bins called; a gene called on
+      one bin with a small change is a weaker case than several bins moving the same way. Pick a row to carry
+      the gene to the other tools.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: rnasplice
+    data_collection_tag: edger_genes
+    use: edger/diffsplice_genes
+    row_selection_enabled: true
+    row_selection_column: gene_id
+    section: Exon gene rows
+    tag: rs-exon-table-edger
+    index: exon-table-edger
+    title: edgeR diffSpliceDGE per gene
+    description: >-
+      The rows behind the edgeR volcano: one row per contrast and gene with the gene-level F-test and Simes
+      FDRs, the exons tested and called, and the relative fold change of the most significant exon.
+
+      How to read: the Simes FDR is the more sensitive call when a single exon carries the change, the F-test
+      when several exons do. Pick a row to carry the gene to the other tools.
+    layout: {x: 0, y: 6, w: 8, h: 6}
+- title: Transcript Usage
+  subtitle: Which transcripts change their share of the gene, per DEXSeq DTU?
+  tab_group: Splicing
+  tab_order: 5
+  tab_icon: mdi:swap-vertical
+  tab_icon_color: teal
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Transcript filters
+    icon: mdi:filter-variant
+    color: teal
+    description: Direction and size of the transcript usage change
+  grid_sections:
+  - name: Transcript usage at a glance
+    icon: mdi:counter
+    color: teal
+    description: Transcripts and genes DEXSeq DTU calls, and how large the shifts are
+  - name: Transcript volcano
+    icon: mdi:chart-scatter-plot
+    color: teal
+    description: Transcript adjusted p-value against usage fold change
+  - name: Transcript rows
+    icon: mdi:table
+    color: gray
+    description: One row per contrast and transcript, selectable
+    collapsed: true
+  components:
+  # The tab's intro: the method, with its link, and how to read the tab.
+  - component_type: text
+    order: 1
+    body: >
+      [DEXSeq](https://bioconductor.org/packages/DEXSeq) DTU tests each transcript's share of its
+      gene's expression, from the [Salmon](https://combine-lab.github.io/salmon/) estimates, so
+      a gene can switch isoforms without changing its total. Look for transcripts of one gene
+      moving in opposite directions; the QQ view checks the raw p-values.
+    tag: rs-tx-intro
+    index: tx-intro
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: interactive
+    workflow_tag: rnasplice
+    data_collection_tag: dexseq_dtu
+    use: dexseq/dtu
+    interactive_component_type: MultiSelect
+    column_name: direction
+    column_type: object
+    display:
+      icon_name: mdi:swap-vertical
+      custom_color: teal
+    section: Transcript filters
+    tag: rs-tx-filter-direction
+    index: tx-direction-filter
+    title: Transcript call
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: rnasplice
+    data_collection_tag: dexseq_dtu
+    interactive_component_type: RangeSlider
+    column_name: log2fc
+    column_type: float64
+    display:
+      icon_name: mdi:ruler
+      custom_color: teal
+    section: Transcript filters
+    tag: rs-tx-filter-fc
+    index: tx-fc-filter
+    title: Usage log2 fold change
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: rnasplice
+    data_collection_tag: dexseq_dtu
+    use: dexseq/dtu
+    aggregation: count
+    column_name: transcript_id
+    column_type: object
+    filter_expr: col('significant')
+    secondary_layout: composition
+    breakdown_col: direction
+    display:
+      icon_name: mdi:swap-vertical
+      icon_color: teal
+      caption: transcripts, by direction
+    section: Transcript usage at a glance
+    tag: rs-tx-card-called
+    index: tx-card-called
+    title: Called transcripts
+    description: Transcripts with an adjusted p-value under SPLICING_FDR, per contrast.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: rnasplice
+    data_collection_tag: dexseq_dtu
+    aggregation: nunique
+    column_name: gene_id
+    column_type: object
+    filter_expr: col('gene_significant')
+    secondary_layout: composition
+    breakdown_col: contrast
+    top_n_count: 4
+    display:
+      icon_name: mdi:dna
+      icon_color: grape
+      caption: genes, by contrast
+    section: Transcript usage at a glance
+    tag: rs-tx-card-genes
+    index: tx-card-genes
+    title: Genes with a switch
+    description: Genes whose DEXSeq gene-level q-value is under SPLICING_FDR.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: rnasplice
+    data_collection_tag: dexseq_dtu
+    use: dexseq/dtu
+    aggregation: median
+    column_name: log2fc
+    column_type: float64
+    # Rising transcripts only: over both directions the median sits at 0.
+    filter_expr: col('significant') & (col('log2fc') > 0)
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:arrow-up-down
+      icon_color: orange
+      caption: median over called transcripts gaining usage, with its spread
+      decimals: 2
+    section: Transcript usage at a glance
+    tag: rs-tx-card-fc
+    index: tx-card-fc
+    title: Usage gain
+    description: Usage log2 fold change of the called transcripts that gain share of their gene, treatment over control.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: rnasplice
+    data_collection_tag: dexseq_dtu
+    aggregation: median
+    column_name: base_mean
+    column_type: float64
+    filter_expr: col('significant')
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:waves
+      icon_color: cyan
+      caption: median over called transcripts, with its distribution
+      decimals: 0
+    section: Transcript usage at a glance
+    tag: rs-tx-card-mean
+    index: tx-card-mean
+    title: Mean count
+    description: Mean normalised count of the called transcripts. Low counts make usage shifts noisy.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    workflow_tag: rnasplice
+    data_collection_tag: dexseq_dtu
+    use: dexseq/dtu_volcano
+    config:
+      significance_threshold: 0.05
+      effect_threshold: 1.0
+      # Labelled with gene ids, one per transcript: labels would pile up.
+      show_labels: false
+      effect_label: Usage log2 fold change
+      significance_label: -log10 adjusted p-value
+      p_value_col: pvalue
+      view: volcano
+      views: [volcano, qq]
+    section: Transcript volcano
+    tag: rs-tx-volcano
+    index: rs-tx-volcano
+    title: Transcript adjusted p-value against usage fold change
+    description: >-
+      Which transcripts change their share of the gene's expression? Each point is a transcript in a contrast:
+      the x axis is its usage log2 fold change (treatment over control) and the y axis is -log10 of its DEXSeq
+      adjusted p-value.
+
+      How to read: hits in the upper corners are transcripts that gain or lose share of their gene, a switch
+      that total gene expression would hide. Use the QQ view to check whether the p-values depart from chance,
+      and open the table below for the gene and transcript rows.
+
+      Lines and annotations: dotted lines mark the significance cut-off (horizontal, at an adjusted p-value of
+      0.05) and the effect cut-off (vertical, at a usage log2 fold change of -1 and +1), set in the tile and
+      not read from the run. Hits, beyond all three lines, are larger outlined triangles and the rest are
+      small grey circles. In the QQ view the dashed diagonal is the expectation under no effect, the grey band
+      its 95% null envelope and the label lambda, the genomic inflation factor.
+
+      Source: DEXSeq, Anders et al., Genome Research 2012, doi 10.1101/gr.133744.111; genomic inflation
+      factor, Devlin and Roeder, Biometrics 1999, doi 10.1111/j.0006-341X.1999.00997.x
+
+      Warning: the 0.05 and the log2 fold change of 1 are display cut-offs with no published rule behind them
+      here. The cards call a transcript on the adjusted p-value under SPLICING_FDR alone, so the hits drawn
+      here can be fewer than the called transcripts.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: rnasplice
+    data_collection_tag: dexseq_dtu
+    use: dexseq/dtu
+    row_selection_enabled: true
+    row_selection_column: gene_id
+    section: Transcript rows
+    tag: rs-tx-table
+    index: tx-table
+    title: DEXSeq transcript usage
+    description: >-
+      The rows behind the transcript volcano: one row per contrast and transcript with its usage log2 fold
+      change, p-value, adjusted p-value and the gene-level q-value.
+
+      How to read: a transcript with a low adjusted p-value inside a gene with a low q-value is the clearest
+      transcript switch. Pick a row to carry the gene to the other tools.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+- title: Splicing Events
+  subtitle: Which event types change, and by how much inclusion?
+  tab_group: Splicing
+  tab_order: 6
+  tab_icon: mdi:shape-outline
+  tab_icon_color: grape
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Event filters
+    icon: mdi:filter-variant
+    color: grape
+    description: Event type, direction and size of the inclusion change; each narrows both tools
+  grid_sections:
+  - name: Events at a glance
+    icon: mdi:counter
+    color: grape
+    description: Events rMATS tested and called, and the types SUPPA2 calls
+  - name: Event types
+    icon: mdi:chart-bar
+    color: grape
+    description: Called events per type and direction, per tool
+  # Two methods on one question, side by side like the event types above:
+  # rMATS from junction reads, SUPPA2 from transcript abundances.
+  - name: rMATS and SUPPA2
+    icon: mdi:chart-scatter-plot
+    color: grape
+    description: One question, two methods; an event far out on both is a robust call
+  # The junctions behind the rMATS calls, drawn per condition. Open, since it
+  # is the only view of the reads themselves; a gene pick narrows it to one locus.
+  - name: Event junctions
+    icon: mdi:dna
+    color: grape
+    description: Junction reads per condition around the called rMATS events; pick a gene first
+  - name: Event detail
+    icon: mdi:information-outline
+    color: gray
+    description: One row per rMATS event; pick one to read its inclusion and its reads on the genome
+    collapsed: true
+  - name: SUPPA2 rows
+    icon: mdi:table
+    color: gray
+    description: One row per contrast and SUPPA2 local event, selectable
+    collapsed: true
+  components:
+  # The tab's intro: the method, with its link, and how to read the tab.
+  - component_type: text
+    order: 1
+    body: >
+      [rMATS](https://rnaseq-mats.sourceforge.io) and
+      [SUPPA2](https://github.com/comprehensive-genomics/SUPPA) score local events such as
+      skipped exons and retained introns by the change in percent spliced-in (PSI), treatment
+      minus control: rMATS from junction reads, SUPPA2 from transcript abundances. Read the
+      event types, then the two volcanoes side by side, where an event far out on both is the
+      robust call. Pick a gene in the left panel to draw its junction reads per condition in
+      the sashimi below.
+    tag: rs-ev-intro
+    index: ev-intro
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  # rMATS and SUPPA2 name these columns alike, and a filter narrows every
+  # collection with its column: one filter each, split over the two tools so a
+  # run that skips either keeps one. SUPPA2 carries all seven event types.
+  - component_type: interactive
+    workflow_tag: rnasplice
+    data_collection_tag: suppa_events
+    use: suppa/local_events
+    interactive_component_type: MultiSelect
+    column_name: event_type
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: grape
+    section: Event filters
+    tag: rs-ev-filter-type
+    index: ev-type-filter
+    title: Event type, both tools
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: rnasplice
+    data_collection_tag: rmats_events
+    use: rmats/events
+    interactive_component_type: MultiSelect
+    column_name: direction
+    column_type: object
+    display:
+      icon_name: mdi:swap-vertical
+      custom_color: grape
+    section: Event filters
+    tag: rs-ev-filter-direction
+    index: ev-direction-filter
+    title: Call, both tools
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: rnasplice
+    data_collection_tag: suppa_events
+    interactive_component_type: RangeSlider
+    column_name: abs_dpsi
+    column_type: float64
+    display:
+      icon_name: mdi:ruler
+      custom_color: grape
+    section: Event filters
+    tag: rs-ev-filter-dpsi
+    index: ev-dpsi-filter
+    title: Absolute PSI change, both tools
+    layout: {x: 0, y: 6, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: rnasplice
+    data_collection_tag: rmats_events
+    use: rmats/events
+    aggregation: count
+    column_name: event_id
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: event_type
+    display:
+      icon_name: mdi:shape-outline
+      icon_color: grape
+      caption: events per contrast, by type
+    section: Events at a glance
+    tag: rs-ev-card-rmats
+    index: ev-card-rmats
+    title: rMATS events tested
+    description: Events with enough junction reads for rMATS to test, one per contrast and event.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: rnasplice
+    data_collection_tag: rmats_events
+    aggregation: count
+    column_name: event_id
+    column_type: object
+    filter_expr: col('significant')
+    secondary_layout: composition
+    breakdown_col: direction
+    display:
+      icon_name: mdi:check-decagram
+      icon_color: red
+      caption: calls, by direction of inclusion
+    section: Events at a glance
+    tag: rs-ev-card-rmats-called
+    index: ev-card-rmats-called
+    title: rMATS calls
+    description: Events under SPLICING_FDR with an absolute PSI change of at least MIN_DPSI (default 0, the rMATS FDR alone).
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: rnasplice
+    data_collection_tag: rmats_events
+    aggregation: median
+    column_name: abs_dpsi
+    column_type: float64
+    filter_expr: col('significant')
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:ruler
+      icon_color: orange
+      caption: median over calls, with its distribution
+      decimals: 2
+    section: Events at a glance
+    tag: rs-ev-card-rmats-dpsi
+    index: ev-card-rmats-dpsi
+    title: rMATS absolute PSI change
+    description: Inclusion change of the called events, up to 1 for an event fully switched between conditions.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: rnasplice
+    data_collection_tag: suppa_events
+    use: suppa/local_events
+    aggregation: count
+    column_name: event_id
+    column_type: object
+    filter_expr: col('significant')
+    secondary_layout: donut
+    breakdown_col: event_type
+    top_n_count: 4
+    display:
+      icon_name: mdi:target
+      icon_color: pink
+      caption: calls, by event type
+    section: Events at a glance
+    tag: rs-ev-card-suppa
+    index: ev-card-suppa
+    title: SUPPA2 calls
+    description: Local events under SPLICING_FDR with an absolute delta PSI of at least MIN_DPSI (default 0, the SUPPA2 p-value alone).
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  # Called events per type, stacked by direction in the family's direction
+  # colours. No sample column, so Analysis mode's groups do not apply here.
+  - component_type: figure
+    workflow_tag: rnasplice
+    data_collection_tag: rmats_events
+    visu_type: histogram
+    mode: code
+    code_content: |-
+      called = df.filter(pl.col('significant'))
+      fig = px.histogram(called.to_pandas(), x='event_type', color='direction', barmode='stack', category_orders={'direction': ['up', 'down']}, color_discrete_map=depictio_category_colors.get('direction') or {}, labels={'event_type': 'Event type', 'direction': 'Inclusion in treatment'})
+      fig.update_xaxes(categoryorder='total descending', automargin=True)
+      fig.update_layout(yaxis_title='Called events', margin=dict(t=10))
+    section: Event types
+    tag: rs-ev-rmats-types
+    index: rs-ev-rmats-types
+    title: Called rMATS events per type
+    description: >-
+      Which kinds of splicing event does rMATS call? One bar per event type, its height the number of called
+      events, stacked by whether inclusion goes up or down in the treatment.
+
+      How to read: a type that is rare or missing may only reflect how few events of that type were testable.
+      A bar split unevenly between up and down says splicing shifts one way in the treatment. Filter the type
+      or the direction in the left panel to narrow the volcano and table.
+
+      Lines and annotations: no reference line is drawn. An event is called when its FDR is under SPLICING_FDR
+      (default 0.05) and its absolute PSI change is at least MIN_DPSI (default 0, so the FDR alone decides);
+      bars are sorted by total.
+
+      Source: rMATS-turbo README, events count as significant at FDR 0.05 or lower by default,
+      https://github.com/Xinglab/rmats-turbo
+
+      Note: any MIN_DPSI above 0 is your own working value, not a tool default.
+    layout: {x: 0, y: 0, w: 4, h: 4}
+  - component_type: figure
+    workflow_tag: rnasplice
+    data_collection_tag: suppa_events
+    visu_type: histogram
+    mode: code
+    code_content: |-
+      called = df.filter(pl.col('significant'))
+      fig = px.histogram(called.to_pandas(), x='event_type', color='direction', barmode='stack', category_orders={'direction': ['up', 'down']}, color_discrete_map=depictio_category_colors.get('direction') or {}, labels={'event_type': 'Event type', 'direction': 'Inclusion in treatment'})
+      fig.update_xaxes(categoryorder='total descending', automargin=True)
+      fig.update_layout(yaxis_title='Called events', margin=dict(t=10))
+    section: Event types
+    tag: rs-ev-suppa-types
+    index: rs-ev-suppa-types
+    title: Called SUPPA2 events per type
+    description: >-
+      Which kinds of local splicing event does SUPPA2 call? One bar per event type, its height the number of
+      called events, stacked by whether the PSI goes up or down in the treatment.
+
+      How to read: compare it with the rMATS bars beside it, as the two tools use different event definitions
+      and the same type does not always look alike. A bar split unevenly between up and down says splicing
+      shifts one way in the treatment.
+
+      Lines and annotations: no reference line is drawn. An event is called when its p-value is under
+      SPLICING_FDR (default 0.05) and its absolute delta PSI is at least MIN_DPSI (default 0, SUPPA2's own
+      lower bound); bars are sorted by total.
+
+      Source: local event types as defined by SUPPA, https://github.com/comprna/SUPPA; diffSplice lower
+      bound default 0 and alpha default 0.05 as passed by nf-core/rnasplice 2.0.0 (diffsplice_lower_bound,
+      diffsplice_alpha), https://github.com/nf-core/rnasplice/blob/2.0.0/nextflow_schema.json
+
+      Note: SUPPA2 gives a p-value, not an FDR, and recommends no cut-off on it; the 0.05 is the diffsplice_alpha
+      default (a family-wise error rate setting) applied here to the p-value as given. Any MIN_DPSI above 0 is
+      your own working value.
+    layout: {x: 4, y: 0, w: 4, h: 4}
+  - component_type: advanced_viz
+    workflow_tag: rnasplice
+    data_collection_tag: rmats_events
+    use: rmats/event_volcano
+    config:
+      significance_threshold: 0.05
+      # MIN_DPSI default (0): the rMATS FDR alone decides; the viewer can raise it.
+      effect_threshold: 0
+      # Gene symbols; one gene can carry several top events, so keep few
+      # labels on a half-row tile.
+      top_n_labels: 6
+      show_labels: true
+      effect_label: PSI change, treatment minus control
+      significance_label: -log10 FDR
+      p_value_col: pvalue
+      view: volcano
+      views: [volcano, qq]
+    section: rMATS and SUPPA2
+    tag: rs-ev-rmats-volcano
+    index: rs-ev-rmats-volcano
+    title: 'rMATS: FDR against inclusion difference'
+    description: >-
+      Which splicing events does rMATS find different? Each point is an event in a contrast: the x axis is the
+      PSI change between treatment and control (treatment minus control) and the y axis is -log10 of its FDR.
+
+      How to read: hits in the upper corners are events whose inclusion rises or falls with confidence and
+      with a large change. A tall point near zero is a precise but small shift. Find a labelled event in the
+      table to read its record.
+
+      Lines and annotations: the dotted horizontal line marks the significance cut-off, at an FDR of 0.05. The
+      two vertical lines start at a PSI change of 0, on the centre line, because rMATS sets no minimum beyond
+      its own --cstat (default 0.0001); raise the effect cut control to draw a floor. Both cut-offs are set in the tile and read from neither the run nor
+      SPLICING_FDR. Hits are larger outlined triangles, the rest small grey circles, and up to six of the
+      strongest hits carry their gene symbol. In the QQ view the dashed diagonal is the expectation under no
+      effect, the grey band its 95% null envelope and the label lambda, the genomic inflation factor.
+
+      Source: rMATS-turbo README, events count as significant at FDR 0.05 or lower by default and the test
+      compares the PSI change with --cstat (default 0.0001), https://github.com/Xinglab/rmats-turbo; genomic
+      inflation factor, Devlin and Roeder, Biometrics 1999, doi 10.1111/j.0006-341X.1999.00997.x
+
+      Note: rMATS publishes no recommended minimum PSI change beyond --cstat, so any floor you set with the
+      effect cut control is your own working value.
+    layout: {x: 0, y: 0, w: 4, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: rnasplice
+    data_collection_tag: suppa_events
+    use: suppa/local_event_volcano
+    config:
+      significance_threshold: 0.05
+      # SUPPA2 diffSplice lower bound default (0); the viewer can raise it.
+      effect_threshold: 0
+      # Gene ids, often joined (ENSG1_and_ENSG2): labels would pile up.
+      show_labels: false
+      effect_label: Delta PSI, treatment minus control
+      significance_label: -log10 p-value
+      p_value_col: pvalue
+      view: volcano
+      views: [volcano, qq]
+    section: rMATS and SUPPA2
+    tag: rs-ev-suppa-volcano
+    index: rs-ev-suppa-volcano
+    title: 'SUPPA2: p-value against delta PSI'
+    description: >-
+      Which local splicing events does SUPPA2 find different? Each point is an event in a contrast: the x axis
+      is the delta PSI (treatment minus control) and the y axis is -log10 of its p-value.
+
+      How to read: hits in the upper corners are events with a large change and a low p-value; compare them
+      with the rMATS volcano beside it, as an event far out on both is a robust call. Genes are not labelled
+      because SUPPA2 joins the ids of overlapping genes.
+
+      Lines and annotations: the dotted horizontal line marks the significance cut-off, at a p-value of 0.05.
+      The two vertical lines start at a delta PSI of 0, on the centre line, which is SUPPA2's default lower
+      bound; raise the effect cut control to draw a floor. Both cut-offs are set in the tile and not read from the run. Hits are
+      larger outlined triangles and the rest small grey circles. In the QQ view the dashed diagonal is the
+      expectation under no effect, the grey band its 95% null envelope and the label lambda, the genomic
+      inflation factor.
+
+      Source: SUPPA2, Trincado et al., Genome Biology 2018, doi 10.1186/s13059-018-1417-1; diffSplice lower
+      bound default 0 and alpha default 0.05, nf-core/rnasplice 2.0.0 schema
+      (diffsplice_lower_bound, diffsplice_alpha), https://github.com/nf-core/rnasplice/blob/2.0.0/nextflow_schema.json;
+      genomic inflation factor, Devlin and Roeder, Biometrics 1999, doi 10.1111/j.0006-341X.1999.00997.x
+
+      Warning: the axis is SUPPA2's p-value, not an FDR as on the other volcanoes. SUPPA2 documents no
+      recommended p-value cut-off, so the 0.05 line is the diffsplice_alpha default (a family-wise error rate
+      setting) applied to the p-value as given, and any delta PSI floor you set is your own working value.
+    layout: {x: 4, y: 0, w: 4, h: 6}
+  # Sashimi of the called rMATS events: STAR's junction reads (SJ.out.tab),
+  # averaged over the replicates of each condition, one lane per condition and
+  # one arc per junction, labelled with its reads. Rows are per gene, so the
+  # Gene filter of the left panel draws one locus; without a pick the tile
+  # opens on the busiest cluster, others a pick away in its locus menu. The
+  # arcs take their lane's colour: rnasplice runs STAR in two-pass mode, whose
+  # annotated flag no longer separates known from novel junctions.
+  - component_type: advanced_viz
+    workflow_tag: rnasplice
+    data_collection_tag: event_junctions
+    viz_kind: sashimi
+    config:
+      viz_kind: sashimi
+      chr_col: chrom
+      start_col: start
+      end_col: end
+      count_col: reads
+      sample_col: condition
+      color_by: sample
+      min_count: 2
+      top_n: 25
+      view: plotly
+      views: [plotly]
+    section: Event junctions
+    tag: rs-ev-sashimi
+    index: rs-ev-sashimi
+    title: Junction reads around the called rMATS events
+    description: >-
+      What do the reads say around a called event? Each lane is one condition and each arc a splice junction,
+      labelled with the mean number of uniquely mapped reads per replicate that cross it, for junctions that
+      touch or span the region of a called rMATS event.
+
+      How to read: pick a gene in the left panel to draw one locus. A junction that is thick in one lane and
+      thin in the other is the read-level evidence of the inclusion change; arcs of similar weight in both
+      lanes mean the call rests on something other than that junction. Open the genome browser below for the
+      alignments.
+
+      Lines and annotations: arcs take the colour of their lane, and the read count is printed on each arc.
+      Junctions under 2 mean reads are hidden and at most 25 junctions are drawn, two display settings of the
+      tile with no published basis.
+
+      Note: STAR runs in two-pass mode here, so its annotated flag no longer separates known from novel
+      junctions and none is marked.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: rnasplice
+    data_collection_tag: rmats_events
+    use: rmats/events
+    row_selection_enabled: true
+    row_selection_column: event_id
+    section: Event detail
+    tag: rs-ev-table-rmats
+    index: ev-table-rmats
+    title: rMATS events
+    description: >-
+      One row per rMATS event and contrast: the gene, event type, locus, the inclusion level (PSI) in each
+      condition, the treatment-minus-control change, the reads behind each condition, the p-value, the FDR and
+      the call.
+
+      How to read: sort by FDR or by the absolute PSI change, and check the reads, as a large change on few
+      reads is fragile. Pick a row to open its record and to frame the genome browser on the event.
+    layout: {x: 0, y: 0, w: 5, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: rnasplice
+    data_collection_tag: rmats_events
+    use: rmats/event_record
+    config:
+      id_col: event_id
+      title_col: gene_name
+      selection_source: any
+      linked_component: rs-ev-table-rmats
+      sections:
+        Event: [gene_name, gene_id, event_type, contrast, locus, strand]
+        Inclusion: [psi_treatment, psi_control, dpsi]
+        Support: [reads_treatment, reads_control]
+        Test: [pvalue, fdr, significant, direction]
+      link_templates:
+        gene_id: https://www.ensembl.org/id/{value}
+        locus: https://genome.ucsc.edu/cgi-bin/hgTracks?db={GENOME}&position={value}
+    section: Event detail
+    tag: rs-ev-record
+    index: rs-ev-record
+    title: Event record
+    description: >-
+      The event picked in the table: gene, event type, locus, PSI in each condition, the supporting reads and
+      the test result.
+
+      How to read: the locus links to the UCSC genome browser and the gene to Ensembl. A call with a low FDR
+      but few reads is worth confirming in the junction lanes or the genome browser.
+    layout: {x: 5, y: 0, w: 3, h: 6}
+  # The reads behind the event picked above: the row narrows rmats_events to
+  # one event, whose region the view frames. Unpicked, it opens on the event
+  # with the largest PSI difference, and the stepper walks the others.
+  - component_type: jbrowse
+    workflow_tag: rnasplice
+    data_collection_tag: tracks
+    section: Event detail
+    initial_tracks: 4
+    max_tracks: 12
+    show_overview: false
+    selection_enabled: true
+    selection_column: sample
+    show_junctions: true
+    color_by: condition
+    locus_from:
+      data_collection_tag: rmats_events
+      chrom_column: chrom
+      start_column: start
+      end_column: end
+      padding: 1000
+      max_rows: 20
+      sort_by: abs_dpsi
+      descending: true
+      label_column: gene_name
+    tag: rs-ev-browser
+    index: rs-ev-browser
+    title: Genome browser
+    description: >-
+      The reads behind an event: the coverage and alignments of the samples in view, with splice junctions, on
+      the locus of the event picked in the table.
+
+      How to read: tracks are coloured by condition, so a difference in coverage or in junction reads between
+      the two colours at the event is the raw evidence for the call. Pick a different event in the table, or
+      step through the largest ones, to move the view.
+
+      Note: the tracks load only when the run's bigWig or BAM files are available to the dashboard.
+    layout: {x: 0, y: 6, w: 8, h: 8}
+  - component_type: table
+    workflow_tag: rnasplice
+    data_collection_tag: suppa_events
+    use: suppa/local_events
+    row_selection_enabled: true
+    row_selection_column: event_id
+    section: SUPPA2 rows
+    tag: rs-ev-table-suppa
+    index: ev-table-suppa
+    title: SUPPA2 local events
+    description: >-
+      One row per contrast and SUPPA2 local event: the parsed event id (gene, type, chromosome, span, strand),
+      the delta PSI oriented treatment minus control, its p-value and the call.
+
+      How to read: sort by p-value or by the absolute delta PSI; the call needs both to pass. Pick a row to
+      carry the gene to the other tabs.
+    layout: {x: 0, y: 0, w: 8, h: 6}

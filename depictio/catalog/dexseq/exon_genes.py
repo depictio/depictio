@@ -15,6 +15,10 @@ usage?"). So this recipe keeps one row per contrast and gene: the gene q-value,
 how many bins were tested and significant, and its most significant bin (the
 smallest bin q-value, the larger shift breaking ties).
 
+nf-core/rnasplice 2.0 (the nf-core ``dexseq/exon`` module) names them
+``<contrast>.dexseq.results.tsv`` and ``<contrast>.dexseq.gene_qvalues.tsv``,
+tab-separated; both layouts are read.
+
 Orientation: DEXSeq names its fold change ``log2fold_<A>_<B>`` = log2(A / B).
 rnasplice names a contrast ``<treatment>-<control>``; when the contrast reads
 ``<B>-<A>`` the sign is flipped so ``log2fc`` is always treatment over control.
@@ -54,6 +58,8 @@ SOURCES: list[RecipeSource] = [
         format="csv",
         read_kwargs={"infer_schema_length": 0, "null_values": ["NA", "NaN", ""]},
         source_path="source_path",
+        # rnasplice < 2.0; 2.0 writes the TSV pair below instead.
+        optional=True,
     ),
     RecipeSource(
         ref="genes",
@@ -66,6 +72,37 @@ SOURCES: list[RecipeSource] = [
         format="csv",
         read_kwargs={"infer_schema_length": 0, "null_values": ["NA", "NaN", ""]},
         source_path="source_path",
+        optional=True,
+    ),
+    # nf-core/rnasplice >= 2.0 (nf-core dexseq/exon module): one TSV pair per
+    # contrast, {contrast}.dexseq.results.tsv and {contrast}.dexseq.gene_qvalues.tsv.
+    # The DTU results carry the same names, hence the directory in the glob.
+    RecipeSource(
+        ref="bins_tsv",
+        input_schema={
+            "source_path": pl.Utf8,
+            "groupID": pl.Utf8,
+            "featureID": pl.Utf8,
+            "padj": pl.Utf8,
+        },
+        glob_pattern="**/dexseq_exon/results/*.dexseq.results.tsv",
+        format="tsv",
+        read_kwargs={"infer_schema_length": 0, "null_values": ["NA", "NaN", ""]},
+        source_path="source_path",
+        optional=True,
+    ),
+    RecipeSource(
+        ref="genes_tsv",
+        input_schema={
+            "source_path": pl.Utf8,
+            "groupID": pl.Utf8,
+            "padj": pl.Utf8,
+        },
+        glob_pattern="**/dexseq_exon/results/*.dexseq.gene_qvalues.tsv",
+        format="tsv",
+        read_kwargs={"infer_schema_length": 0, "null_values": ["NA", "NaN", ""]},
+        source_path="source_path",
+        optional=True,
     ),
 ]
 
@@ -86,7 +123,26 @@ OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
 }
 
 PADJ_ZERO_NEG_LOG10 = 300.0
-_CONTRAST = r"(?:DEXSeqResults|perGeneQValue)\.(.+)\.[ct]sv$"
+# rnasplice < 2.0: DEXSeqResults.<contrast>.csv; >= 2.0: <contrast>.dexseq.results.tsv.
+_CONTRAST = (
+    r"(?:(?:DEXSeqResults|perGeneQValue)\.(.+)|/([^/]+)\.dexseq\.(?:results|gene_qvalues))\.[ct]sv$"
+)
+
+
+def contrast_of(path: pl.Expr) -> pl.Expr:
+    """The contrast a DEXSeq table belongs to, from its file name (either layout)."""
+    parts = path.str.extract_groups(_CONTRAST)
+    return pl.coalesce(parts.struct.field("1"), parts.struct.field("2"))
+
+
+def both_layouts(sources: dict[str, pl.DataFrame | None], ref: str) -> pl.DataFrame:
+    """The <1.x CSV and the >=2.0 TSV tables of one kind, stacked."""
+    frames = [f for f in (sources.get(ref), sources.get(f"{ref}_tsv")) if f is not None]
+    if not frames:
+        raise ValueError(f"dexseq: no {ref} table (DEXSeqResults.*.csv nor *.dexseq.*.tsv)")
+    return pl.concat(frames, how="diagonal_relaxed")
+
+
 _FOLD = re.compile(r"^log2fold_(.+)_(.+)$")
 
 
@@ -125,8 +181,8 @@ def transform(
 ) -> pl.DataFrame:
     """One row per contrast and gene: gene q-value and its most significant bin."""
     fdr = fdr_cutoff(params)
-    bins = sources["bins"].with_columns(
-        pl.col("source_path").str.extract(_CONTRAST, 1).alias("contrast")
+    bins = both_layouts(sources, "bins").with_columns(
+        contrast_of(pl.col("source_path")).alias("contrast")
     )
     bins = bins.select(
         pl.col("contrast"),
@@ -150,8 +206,8 @@ def transform(
         pl.col("bin_padj").first(),
     )
 
-    genes = sources["genes"].select(
-        pl.col("source_path").str.extract(_CONTRAST, 1).alias("contrast"),
+    genes = both_layouts(sources, "genes").select(
+        contrast_of(pl.col("source_path")).alias("contrast"),
         pl.col("groupID").cast(pl.Utf8).alias("gene_id"),
         pl.col("padj").cast(pl.Float64, strict=False).alias("padj"),
     )

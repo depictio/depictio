@@ -12,15 +12,20 @@ Event types: skipped exon (SE), alternative 5' / 3' splice site (A5 / A3),
 mutually exclusive exons (MX), retained intron (RI), alternative first / last
 exon (AF / AL).
 
-Orientation: SUPPA reports the second condition of its header minus the first,
-and nf-core/rnasplice lists the treatment first, so the sign is flipped here to
-give treatment minus control, like the rMATS and DEXSeq recipes.
+Orientation: SUPPA reports the second condition of its header minus the first.
+nf-core/rnasplice 1.x listed the treatment first (control minus treatment);
+2.0 lists the control first (treatment minus control) and names the table
+``local_<treatment>-<control>.dpsi``. The header is read, not assumed: the
+sign is set so that ``dpsi`` is treatment minus control whichever order the
+run wrote, like the rMATS and DEXSeq recipes. A header naming neither order of
+the contrast falls back on the release's convention (its file name).
 
 Events SUPPA could not quantify in one condition come with a NaN delta PSI and
 are dropped.
 
 Sources:
-    events   every ``*_local_diffsplice.dpsi`` under the run root.
+    events   every ``*_local_diffsplice.dpsi`` (rnasplice 1.x) under the run
+             root; the template points 2.0 runs at ``local_*.dpsi``.
 
 Params:
     pvalue     p-value cut-off (default 0.05).
@@ -45,11 +50,12 @@ SOURCES: list[RecipeSource] = [
         },
         glob_pattern="**/*_local_diffsplice.dpsi",
         format="tsv",
+        # The header row is kept as data: it names the two conditions, which
+        # orient the sign (it has one field less, so its p-value is null).
+        # A schema, not new_columns: the shorter header row is padded with a null.
         read_kwargs={
             "has_header": False,
-            "skip_rows": 1,
-            "new_columns": ["event", "dpsi_raw", "pvalue_raw"],
-            "infer_schema_length": 0,
+            "schema": {"event": pl.Utf8, "dpsi_raw": pl.Utf8, "pvalue_raw": pl.Utf8},
         },
         source_path="source_path",
     ),
@@ -84,7 +90,45 @@ EVENT_LABELS = {
     "AF": "Alternative first exon",
     "AL": "Alternative last exon",
 }
-_CONTRAST = r"([^/]+)_local_diffsplice\.dpsi$"
+# 1.x: <contrast>_local_diffsplice.dpsi; 2.0: local_<treatment>-<control>.dpsi.
+_CONTRAST = r"(?:([^/]+)_local_diffsplice|(?:^|/)local_([^/]+))\.dpsi$"
+_HEADER = r"^(?:local_)?(.+?)-(?:local_)?(.+)_dPSI$"
+
+
+def orientation(df: pl.DataFrame) -> pl.DataFrame:
+    """``source_path`` → ``_sign``: +1 when SUPPA's second condition is the
+    contrast's treatment, -1 when it is its control."""
+    parts = pl.col("source_path").str.extract_groups(_CONTRAST)
+    files = (
+        df.select("source_path")
+        .unique()
+        .with_columns(
+            pl.coalesce(parts.struct.field("1"), parts.struct.field("2")).alias("contrast"),
+            parts.struct.field("2").is_not_null().alias("_v2"),
+        )
+    )
+    header = (
+        df.filter(pl.col("pvalue_raw").is_null() & pl.col("event").str.ends_with("_dPSI"))
+        .select("source_path", pl.col("event").str.extract_groups(_HEADER).alias("_h"))
+        .select(
+            "source_path",
+            pl.col("_h").struct.field("1").alias("_first"),
+            pl.col("_h").struct.field("2").alias("_second"),
+        )
+    )
+    files = files.join(header, on="source_path", how="left")
+    sign = (
+        pl.when(pl.col("contrast") == pl.concat_str(["_second", pl.lit("-"), "_first"]))
+        .then(pl.lit(1.0))
+        .when(pl.col("contrast") == pl.concat_str(["_first", pl.lit("-"), "_second"]))
+        .then(pl.lit(-1.0))
+        .when(pl.col("_v2"))
+        .then(pl.lit(1.0))
+        .otherwise(pl.lit(-1.0))
+    )
+    return files.select("source_path", "contrast", sign.alias("_sign"))
+
+
 _EVENT = r"^([^;]+);([A-Z0-9]+):([^:]+):(.+):([+-])$"
 
 
@@ -103,17 +147,19 @@ def transform(
     """Parsed event ids, oriented delta PSI and the significance call."""
     cutoff, min_dpsi = param(params, "pvalue"), param(params, "min_dpsi")
     df = sources["events"]
+    df = df.join(orientation(df), on="source_path", how="left").filter(
+        pl.col("pvalue_raw").is_not_null()
+    )
     parts = pl.col("event").str.extract_groups(_EVENT)
     coords = pl.col("_coords").str.extract_all(r"\d+").list.eval(pl.element().cast(pl.Int64))
     out = (
         df.with_columns(
-            pl.col("source_path").str.extract(_CONTRAST, 1).alias("contrast"),
             parts.struct.field("1").alias("gene_id"),
             parts.struct.field("2").alias("_type"),
             parts.struct.field("3").alias("chrom"),
             parts.struct.field("4").alias("_coords"),
             parts.struct.field("5").alias("strand"),
-            (-pl.col("dpsi_raw").cast(pl.Float64, strict=False)).alias("dpsi"),
+            (pl.col("_sign") * pl.col("dpsi_raw").cast(pl.Float64, strict=False)).alias("dpsi"),
             pl.col("pvalue_raw").cast(pl.Float64, strict=False).alias("pvalue"),
         )
         .filter(pl.col("dpsi").is_not_null() & pl.col("dpsi").is_not_nan())

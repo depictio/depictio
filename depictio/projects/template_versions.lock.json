@@ -7,8 +7,8 @@
       "content_hash": "369ff13f44f44a779cb07e3f46149b97861d9b659b4b1aebde3af1d40c51695c"
     },
     "init/catalog_conformance": {
-      "version": "2.2.1",
-      "content_hash": "d28dc246ba0172f0bce801273b0f4e8429ca8d2f6de14c9b60d8e58885452150",
+      "version": "2.2.2",
+      "content_hash": "b37cdf9b63587e18e3395ee9ac6f555d35aa1a5076e80fedbcc035feaf7d4c42",
       "catalog": {
         "adapterremoval": "1.0.0",
         "agat": "1.0.0",
@@ -44,7 +44,7 @@
         "dbcan": "1.0.0",
         "deeptools": "1.0.0",
         "deseq2": "1.0.0",
-        "dexseq": "1.0.0",
+        "dexseq": "1.1.0",
         "edger": "1.0.0",
         "enchantr": "1.0.0",
         "endorspy": "1.0.0",
@@ -112,7 +112,7 @@
         "ribocode": "1.0.0",
         "ribotish": "1.0.0",
         "ribowaltz": "1.0.0",
-        "rmats": "1.0.0",
+        "rmats": "1.1.0",
         "rseqc": "1.0.0",
         "rtgtools": "1.0.0",
         "s4pred": "1.0.0",
@@ -131,7 +131,7 @@
         "star": "1.0.0",
         "starfusion": "1.0.0",
         "subread": "1.0.0",
-        "suppa": "1.0.0",
+        "suppa": "1.1.0",
         "svanalyzer": "1.0.0",
         "sylph": "1.0.0",
         "tama": "1.0.0",
@@ -443,12 +443,12 @@
       }
     },
     "nf-core/nanoseq/3.0.0": {
-      "version": "3.0.0",
-      "content_hash": "10aeef2d07355f1728e2e36a83f2658d9eae1691db3833ede1da2d25def5e22c",
+      "version": "3.0.1",
+      "content_hash": "f791293abdd7bf4cb23102c566c8d45a89225c27b745318fba42860efdc8f4b2",
       "catalog": {
         "bambu": "1.0.0",
         "deseq2": "1.0.0",
-        "dexseq": "1.0.0",
+        "dexseq": "1.1.0",
         "gtf": "1.0.0",
         "multiqc": "1.0.0",
         "nanoplot": "1.0.0",
@@ -565,15 +565,27 @@
       }
     },
     "nf-core/rnasplice/1.0.4": {
-      "version": "3.0.0",
-      "content_hash": "d3138c744666aeb9282bf5931447bb72c30e84ef1cb1003eb9bab85ccdad2b11",
+      "version": "3.0.1",
+      "content_hash": "20ae628bfa2974203608edcbbb3f9a293b49d2d296d43cc8830e0ecc22fe9577",
       "catalog": {
-        "dexseq": "1.0.0",
+        "dexseq": "1.1.0",
         "edger": "1.0.0",
         "multiqc": "1.0.0",
-        "rmats": "1.0.0",
+        "rmats": "1.1.0",
         "salmon": "1.0.0",
-        "suppa": "1.0.0"
+        "suppa": "1.1.0"
+      }
+    },
+    "nf-core/rnasplice/2.0.0": {
+      "version": "4.0.0",
+      "content_hash": "640527572c3e2de8a6d8949566da67db0010ac1617a3ff388d7115fc8c771159",
+      "catalog": {
+        "dexseq": "1.1.0",
+        "edger": "1.0.0",
+        "multiqc": "1.0.0",
+        "rmats": "1.1.0",
+        "salmon": "1.0.0",
+        "suppa": "1.1.0"
       }
     },
     "nf-core/rnavar/1.3.0": {
