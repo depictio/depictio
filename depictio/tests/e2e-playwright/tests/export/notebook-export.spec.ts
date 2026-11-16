@@ -50,7 +50,9 @@ test.describe("Notebook export", () => {
     expect(content).toContain("jupyter: python3");
     expect(content).toContain("```{python}");
     expect(content).toContain("client = DepictioClient()");
-    expect(content).toContain("# Penguins Species Analysis");
+    // The title lives in the front matter once; the body no longer repeats it.
+    expect(content).toContain("title: Penguins Species Analysis");
+    expect(content).not.toContain("\n# Penguins Species Analysis");
     await expect(modal.locator("[data-testid='notebook-export-done']")).toBeVisible();
   });
 
