@@ -433,6 +433,15 @@
         "qualimap": "1.0.0"
       }
     },
+    "nf-core/methylseq/4.2.0": {
+      "version": "2.0.0",
+      "content_hash": "b3e452af7e080dbbc7b0c4e89e82a32ffd94b65c278eed90ae523cb08a921a25",
+      "catalog": {
+        "bismark": "1.0.0",
+        "multiqc": "1.0.0",
+        "qualimap": "1.0.0"
+      }
+    },
     "nf-core/mhcquant/3.2.0": {
       "version": "1.2.0",
       "content_hash": "916b94df5a765d78a8452f24abd9d194e86555cfa367cc1dae39c7c9dec3e0e3",
