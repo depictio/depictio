@@ -1,14 +1,17 @@
 import React from 'react';
-import { Modal, Tooltip } from '@mantine/core';
+import { Modal, Popover, Tooltip } from '@mantine/core';
 import { useBrandScopeAttributes, useIsStaticBundle, Z_LAYERS } from 'depictio-react-core';
 import {
   ArrowLeft,
   BookOpenText,
+  CalendarClock,
   ChevronRight,
   Compass,
+  FolderKanban,
   Globe,
   LogIn,
   Moon,
+  Package,
   Server,
   Sun,
   UserRound,
@@ -30,6 +33,7 @@ import { ServerInfoPanel, ServerInfoPopover, UpdateDot } from '../../server';
 import type { HeaderModel } from '../../Header';
 import type { TabNavModel } from '../../Sidebar';
 import { SIGN_IN_PATH, rememberHere } from '../../../auth/guestSignIn';
+import { StaticSnapshotDetails, exportedDay, useStaticManifest } from '../../StaticProvenance';
 import { cn } from './cn';
 import { STROKE } from './icons';
 
@@ -164,6 +168,24 @@ export const TabList: React.FC<{
           </span>
           <span className="hy-tablist-label">Guide</span>
         </a>
+      )}
+      {nav.project && (
+        <button
+          type="button"
+          onClick={() => {
+            nav.project?.onClick();
+            onNavigate?.();
+          }}
+          className="hy-tablist-item hy-tablist-quiet"
+          data-active={nav.project.open || undefined}
+          aria-pressed={nav.project.open}
+          data-testid="glass-project-sheet"
+        >
+          <span className="hy-tablist-icon">
+            <FolderKanban size={20} strokeWidth={1.9} aria-hidden />
+          </span>
+          <span className="hy-tablist-label">Project · {nav.project.name}</span>
+        </button>
       )}
       <BackToDashboards href={nav.backHref} />
     </div>}
@@ -571,6 +593,142 @@ export const ServerSheetRow: React.FC = () => (useIsStaticBundle() ? null : <Ser
 /** The server card at the sidebar's foot; nothing in a static bundle. */
 export const SideStatus: React.FC<{ open: boolean }> = ({ open }) =>
   useIsStaticBundle() ? null : <SideStatusLive open={open} />;
+
+/* ------------------------------------------------------- static bundle */
+
+/**
+ * The snapshot card at the foot of a static bundle's sidebar, where the live
+ * app shows its server card ("● Online v1.21.0", the instance mode). A file
+ * has no server to be online: the card says what the file is instead — a
+ * static snapshot, built with which depictio, exported on which day — and
+ * opens the whole provenance (who, from where, the live copy) in a popover,
+ * as the server card opens the server's. Folded, the package glyph alone.
+ */
+export const SnapshotStatus: React.FC<{ open: boolean }> = ({ open }) => {
+  const manifest = useStaticManifest();
+  if (!manifest) return null;
+  const day = exportedDay(manifest);
+  const version = manifest.depictio_version ? `v${manifest.depictio_version}` : null;
+  const label = `Static snapshot${day ? `, exported ${day}` : ''}. Show export details`;
+  return (
+    <div className="hy-status-card hy-status-card--static" data-testid="hy-snapshot-card">
+      <Popover position="right-end" withArrow width={300} shadow="md" offset={12}>
+        <Popover.Target>
+          <Tooltip
+            label={day ? `Static snapshot · ${day}` : 'Static snapshot'}
+            withArrow
+            openDelay={200}
+            disabled={open}
+          >
+            <button
+              type="button"
+              className="hy-status"
+              data-state="static"
+              aria-label={label}
+              aria-haspopup="dialog"
+              data-testid="hy-snapshot"
+            >
+              <Package size={14} strokeWidth={STROKE} aria-hidden className="hy-status-glyph" />
+              <span className="hy-status-text">
+                <span>Static snapshot</span>
+                {version && <span className="hy-status-ver">{version}</span>}
+              </span>
+            </button>
+          </Tooltip>
+        </Popover.Target>
+        <Popover.Dropdown>
+          <StaticSnapshotDetails manifest={manifest} />
+        </Popover.Dropdown>
+      </Popover>
+      {open && day && (
+        <span className="hy-mode">
+          <CalendarClock size={14} strokeWidth={STROKE} aria-hidden />
+          Exported {day}
+        </span>
+      )}
+    </div>
+  );
+};
+
+/** The snapshot card as a row of the phone's More sheet: its details open in
+ *  a dialog above the sheet, as the server row's do. */
+export const SnapshotSheetRow: React.FC = () => {
+  const manifest = useStaticManifest();
+  const [opened, setOpened] = React.useState(false);
+  if (!manifest) return null;
+  const day = exportedDay(manifest);
+  return (
+    <>
+      <button
+        type="button"
+        className="hy-sheet-link"
+        onClick={() => setOpened(true)}
+        aria-haspopup="dialog"
+        data-testid="hy-sheet-snapshot"
+      >
+        <Package size={18} strokeWidth={STROKE} aria-hidden />
+        <span className="hy-sheet-link-text">
+          Static snapshot
+          <span className="hy-sheet-link-note">
+            {[day ? `Exported ${day}` : null, manifest.depictio_version ? `v${manifest.depictio_version}` : null]
+              .filter(Boolean)
+              .join(' · ') || 'A self-contained copy'}
+          </span>
+        </span>
+      </button>
+      <Modal
+        opened={opened}
+        onClose={() => setOpened(false)}
+        title="About this file"
+        centered
+        size="sm"
+        zIndex={Z_LAYERS.nestedOverlay}
+      >
+        <StaticSnapshotDetails manifest={manifest} />
+      </Modal>
+    </>
+  );
+};
+
+/**
+ * The way to the project, at the sidebar's foot where the live app has "All
+ * dashboards": a static bundle's project page. The row names the project
+ * under a small "Project" eyebrow (a project name is long, and the eyebrow
+ * says what the row is when it is cut); folded, the folder glyph with the
+ * name in its tooltip. Lit while the page is open.
+ */
+export const ProjectRow: React.FC<{
+  project: NonNullable<TabNavModel['project']>;
+  open: boolean;
+}> = ({ project, open }) => (
+  <Tooltip
+    label={project.open ? 'Back to the dashboard' : `Project: ${project.name}`}
+    withArrow
+    openDelay={200}
+    disabled={open}
+  >
+    <button
+      type="button"
+      className="hy-row hy-row--project"
+      onClick={project.onClick}
+      data-active={project.open || undefined}
+      aria-pressed={project.open}
+      aria-label={`Project: ${project.name}`}
+      data-testid="glass-project"
+      data-tour-id="project"
+    >
+      <span className="hy-row-icon">
+        <FolderKanban size={20} strokeWidth={STROKE} aria-hidden />
+      </span>
+      <span className="hy-row-label hy-row-label--stacked">
+        <span className="hy-row-eyebrow">Project</span>
+        <span className="hy-row-name" title={project.name}>
+          {project.name}
+        </span>
+      </span>
+    </button>
+  </Tooltip>
+);
 
 /** "All dashboards" in the phone sheet; a static bundle has no such page. */
 const BackToDashboards: React.FC<{ href: string }> = ({ href }) =>

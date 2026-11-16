@@ -146,3 +146,70 @@ const StaticProvenance: React.FC = () => {
 };
 
 export default StaticProvenance;
+
+/** The bundle's manifest, or undefined outside a static bundle (see above). */
+export function useStaticManifest(): BundleManifest | undefined {
+  return typeof window === 'undefined' ? undefined : window.__DEPICTIO_BUNDLE__;
+}
+
+/** "2026-11-16" — the export day, for a line too narrow for the time. */
+export function exportedDay(manifest: BundleManifest): string | null {
+  const stamp = formatExportedAt(manifest.provenance?.exported_at ?? manifest.built_at);
+  return stamp ? stamp.slice(0, 10) : null;
+}
+
+/**
+ * Everything the bundle knows about its own making, as a panel: what a static
+ * snapshot is, then the provenance rows, then the one link that still leads
+ * somewhere live. The Paper rail's snapshot card opens it in a popover, the
+ * phone's More sheet in a dialog — the bundle's counterpart of the server info
+ * panel the live app opens from its "Online" card.
+ */
+export const StaticSnapshotDetails: React.FC<{ manifest: BundleManifest }> = ({ manifest }) => {
+  const rows = provenanceRows(manifest);
+  const live = rows.find((r) => r.href);
+  const facts = rows.filter((r) => !r.href);
+  return (
+    <Stack gap="sm" data-testid="static-snapshot-details">
+      <Group gap={8} wrap="nowrap">
+        <Icon icon="mdi:package-variant-closed" width={18} height={18} />
+        <Text size="sm" fw={600}>
+          Static snapshot
+        </Text>
+      </Group>
+      <Text size="xs" c="dimmed" lh={1.4}>
+        A self-contained copy of this dashboard: its data and views travel inside the file. No
+        server, no live data; filters still work on what was exported.
+      </Text>
+      {facts.length > 0 && (
+        <Stack gap={4}>
+          {facts.map((row) => (
+            <Group key={row.label} gap="sm" wrap="nowrap" align="baseline">
+              <Text size="xs" c="dimmed" w={72} style={{ flexShrink: 0 }}>
+                {row.label}
+              </Text>
+              <Text size="xs" style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
+                {row.label === 'Producer' && row.hint
+                  ? row.hint.replace(/^Producer [A-Z] — /, '')
+                  : row.value}
+              </Text>
+            </Group>
+          ))}
+        </Stack>
+      )}
+      {live?.href && (
+        <Anchor
+          href={live.href}
+          target="_blank"
+          rel="noreferrer"
+          size="xs"
+          fw={500}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
+        >
+          Open the live dashboard
+          <Icon icon="mdi:open-in-new" width={12} />
+        </Anchor>
+      )}
+    </Stack>
+  );
+};

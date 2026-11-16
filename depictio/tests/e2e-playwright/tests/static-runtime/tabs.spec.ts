@@ -76,7 +76,9 @@ test("the rail carries the export provenance", async ({ page }) => {
   // Naive timestamp in the manifest — read as UTC, not as local time.
   await expect(rail.getByText("2026-08-03 09:15 UTC")).toBeVisible();
   await expect(rail.getByText("https://demo.depictio.example")).toBeVisible();
-  await expect(rail.getByText("Fixture project")).toBeVisible();
+  // Twice: the provenance row, and the link to the bundle's project page.
+  await expect(rail.getByText("Fixture project")).toHaveCount(2);
+  await expect(rail.getByTestId("sidebar-project")).toContainText("Fixture project");
   await expect(rail.getByText("depictio 0.0.0-fixture")).toBeVisible();
   await expect(rail.getByText("Producer")).toBeVisible();
 

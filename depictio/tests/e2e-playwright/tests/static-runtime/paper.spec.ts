@@ -1,7 +1,7 @@
 /**
  * Bundles draw Paper (`glass`), the app's default chrome — gated for a
  * read-only file: no Edit / Save, no profile tile, no server card, no "All
- * dashboards", the export provenance at the sidebar's foot, the Plotly styling
+ * dashboards", a static-snapshot card at the sidebar's foot, the Plotly styling
  * of the live app (`glassPlotly`: transparent paper), and zero network
  * requests. `?chrome=base` still opts into Classic.
  */
@@ -41,11 +41,14 @@ test("a bundle draws the Paper shell, read-only, with zero network", async ({ pa
   await expect(page.getByText("Second tab body.")).toBeVisible();
   expect(page.url()).toBe(url);
 
-  // Opened, the sidebar's foot carries the export provenance.
+  // Opened, the sidebar's foot says what the file is (its card opens the
+  // export provenance) and leads to the project; chrome.spec.ts covers both.
   await page.getByTestId("glass-side-toggle").click();
   const side = page.locator("nav.hy-side");
-  await expect(side.getByText("Static export")).toBeVisible();
-  await expect(side.getByText("curator@example.org")).toBeVisible();
+  await expect(side.getByTestId("hy-snapshot-card")).toContainText("Static snapshot");
+  await side.getByTestId("hy-snapshot").click();
+  await expect(page.getByTestId("static-snapshot-details")).toContainText("curator@example.org");
+  await page.keyboard.press("Escape");
   await expect(side.getByText("All dashboards")).toHaveCount(0);
 
   // The Guide opens in place (no navigation, nothing fetched).
