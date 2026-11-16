@@ -18,6 +18,7 @@ import {
   buildSpotlightIndex,
   componentTypeVisual,
   groupSpotlightHits,
+  multiqcLogoSrc,
   searchSpotlight,
   useBranding,
   Z_LAYERS,
@@ -111,11 +112,7 @@ const ComponentGlyph: React.FC<{ type: string }> = ({ type }) => {
     return (
       <ThemeIcon variant="light" color="gray" size={32} radius="md">
         <img
-          src={
-            colorScheme === 'dark'
-              ? '/dashboard/logos/multiqc_icon_white.svg'
-              : '/dashboard/logos/multiqc_icon_dark.svg'
-          }
+          src={multiqcLogoSrc(colorScheme === 'dark' ? 'white' : 'dark')}
           alt=""
           style={{ width: 18, height: 18, objectFit: 'contain' }}
         />

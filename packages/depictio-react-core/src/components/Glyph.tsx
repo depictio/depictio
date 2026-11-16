@@ -32,22 +32,34 @@ export function isMultiqcIcon(path: string | null | undefined): boolean {
  */
 export function themedIconSrc(path: string, isDark: boolean, onFilled = false): string {
   if (!isMultiqcIcon(path)) return path;
-  return onFilled || isDark ? multiqcLogoSources.white : multiqcLogoSources.dark;
+  return multiqcLogoSrc(onFilled || isDark ? 'white' : 'dark');
 }
 
-/** Where `themedIconSrc` points the MultiQC logo, per variant. */
+/** Where the MultiQC logo is drawn from, per variant. */
 export interface MultiqcLogoSources {
+  /** Dark ink, for a light page. */
   dark: string;
+  /** White, for a dark page or a filled (active) background. */
   white: string;
+  /** The brand-coloured logo (the data-collection type icon). */
+  color?: string;
 }
 
-let multiqcLogoSources: MultiqcLogoSources = {
+export type MultiqcLogoVariant = keyof MultiqcLogoSources;
+
+const SERVED_MULTIQC_LOGOS: Required<MultiqcLogoSources> = {
   dark: '/dashboard/logos/multiqc_icon_dark.svg',
   white: '/dashboard/logos/multiqc_icon_white.svg',
+  color: '/dashboard/logos/multiqc_icon_color.svg',
 };
 
+let multiqcLogoSources: Required<MultiqcLogoSources> = { ...SERVED_MULTIQC_LOGOS };
+let multiqcLogosReplaced: Partial<MultiqcLogoSources> = {};
+
 /**
- * Replace the URLs `themedIconSrc` hands out for the MultiQC logo.
+ * Replace the URLs the MultiQC logo is drawn from — every place that draws it:
+ * `themedIconSrc` (tab icons, tab links, section headers), the MultiQC tile's
+ * corner mark, the search palette's row icon and the data-collection type icon.
  *
  * A serverless static bundle opens from file://, where `/dashboard/logos/...`
  * resolves outside the bundle and draws a broken-image glyph; its entry hands
@@ -55,7 +67,19 @@ let multiqcLogoSources: MultiqcLogoSources = {
  * never call it and keep the SPA-served, separately cacheable SVGs.
  */
 export function setMultiqcLogoSources(sources: MultiqcLogoSources): void {
-  multiqcLogoSources = sources;
+  multiqcLogosReplaced = { ...sources };
+  multiqcLogoSources = { ...SERVED_MULTIQC_LOGOS, ...sources };
+}
+
+/** The MultiQC logo's URL for one variant (the served SVG unless replaced). */
+export function multiqcLogoSrc(variant: MultiqcLogoVariant): string {
+  return multiqcLogoSources[variant];
+}
+
+/** The replaced URL for a variant, or null when the build draws the served
+ *  one — for callers that resolve the served path against their own base. */
+export function multiqcLogoOverride(variant: MultiqcLogoVariant): string | null {
+  return multiqcLogosReplaced[variant] ?? null;
 }
 
 /**
