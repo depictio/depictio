@@ -50,6 +50,7 @@ import {
   REPORT_TILE_ATTR,
   groupMountVerdict,
   parseTileRefs,
+  restoreReportBasemaps,
 } from 'depictio-static-core';
 
 import paper from '../../chrome/variants/glass/glass';
@@ -94,6 +95,9 @@ function boot(): void {
     console.warn('[depictio report] manifest unreadable; the report keeps its own output', err);
     return;
   }
+  // A frozen map is frozen on a blank basemap for the offline bundle; in a
+  // report, read online beside the export's own map, it keeps the dashboard's.
+  restoreReportBasemaps(manifest);
   setActiveTab(manifest.dashboard.id);
   // The renderers style their figures through the active chrome (glassPlotly).
   setChromeStyle(paper);

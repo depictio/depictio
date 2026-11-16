@@ -20,20 +20,30 @@ import { Badge, Button, Group, Text } from '@mantine/core';
 import { useDebouncedValue } from '@mantine/hooks';
 import {
   AvailableFilterValuesProvider,
+  CategoryColorsContext,
   ComponentRenderer,
   FilterPanel,
   FunnelView,
+  activeFiltersFor,
   bulkComputeCards,
   enrichFilterWithDcId,
   hasLiveValues,
   mergeFiltersBySource,
   withInteractiveDefaults,
 } from 'depictio-react-core';
-import type { InteractiveFilter, StoredMetadata } from 'depictio-react-core';
+import type {
+  CategoryColorSource,
+  FilterSectionSpec,
+  InteractiveFilter,
+  StoredMetadata,
+} from 'depictio-react-core';
 import {
   REPORT_MOUNTED_ATTR,
+  compactPanelSections,
   componentFor,
+  reportCategorySource,
   type BundleManifest,
+  type ReportSectionSpec,
   type TileRef,
 } from 'depictio-static-core';
 
@@ -98,6 +108,46 @@ class TileBoundary extends React.Component<
   }
 }
 
+/** How far ahead of the viewport a tile starts drawing: close enough that it
+ *  is ready when scrolled to, far enough from the rest of a long report that
+ *  the first paint only pays for what is on screen. */
+const MOUNT_MARGIN = '600px 0px';
+
+/**
+ * The placeholders that have come into view (or near it), once and for all.
+ *
+ * A report is long and mostly folded (`dpx-fold`, the export's own script):
+ * drawing every tile up front draws dozens of plots nobody has opened, each at
+ * a size it cannot measure inside a hidden fold. A tile mounts the first time
+ * it nears the viewport, which also covers a fold being opened: a hidden
+ * element never intersects, and one revealed does. Without an
+ * IntersectionObserver every placeholder counts as seen.
+ */
+function useSeen(hosts: HTMLElement[]): ReadonlySet<HTMLElement> {
+  const [seen, setSeen] = useState<ReadonlySet<HTMLElement>>(() =>
+    typeof IntersectionObserver === 'undefined' ? new Set(hosts) : new Set(),
+  );
+  useEffect(() => {
+    if (typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const hits = entries.filter((e) => e.isIntersecting).map((e) => e.target as HTMLElement);
+        if (hits.length === 0) return;
+        for (const el of hits) observer.unobserve(el);
+        setSeen((prev) => {
+          const next = new Set(prev);
+          for (const el of hits) next.add(el);
+          return next;
+        });
+      },
+      { rootMargin: MOUNT_MARGIN },
+    );
+    for (const host of hosts) observer.observe(host);
+    return () => observer.disconnect();
+  }, [hosts]);
+  return seen;
+}
+
 /** Marks its placeholder drawn once React has committed it. */
 const Mounted: React.FC<{ host: HTMLElement; children: React.ReactNode }> = ({
   host,
@@ -135,6 +185,44 @@ const ReportRuntime: React.FC<Props> = ({ manifest, tiles, panels }) => {
     [metadata],
   );
   const resetFilters = useCallback(() => setFilters(initialFilters), [initialFilters]);
+
+  // Each tab's colours, as the viewer hands its own tab's document to
+  // CategoryColorsContext: a tile resolves "Bacteria" to the colour its tab
+  // (or the main tab) pins, not to the palette's next hue.
+  const colorSources = useMemo(() => {
+    const out = new Map<string, CategoryColorSource | null>();
+    for (const tile of tiles) {
+      const tabId = tile.refs[0]?.tabId ?? '';
+      if (!out.has(tabId)) {
+        out.set(tabId, reportCategorySource(manifest, tabId) as CategoryColorSource | null);
+      }
+    }
+    return out;
+  }, [tiles, manifest]);
+
+  // Only what has come into view is drawn (see useSeen).
+  const hosts = useMemo(
+    () => [...tiles.map((t) => t.host), ...panels.map((p) => p.host)],
+    [tiles, panels],
+  );
+  const seen = useSeen(hosts);
+
+  // The panel, compact: the report's controls are a block of the page, not the
+  // app's rail, so every section opens folded but one narrowing the exported
+  // view. A section's own filter bar on the dashboard is a section here too.
+  const panelSections = useMemo(() => {
+    const doc = manifest.dashboard.doc as {
+      filter_sections?: ReportSectionSpec[];
+      grid_sections?: ReportSectionSpec[];
+    };
+    const active = new Set(activeFiltersFor(initialFilters).map((f) => String(f.index)));
+    return compactPanelSections(
+      doc.filter_sections,
+      entryInteractive,
+      active,
+      doc.grid_sections ?? [],
+    ) as unknown as FilterSectionSpec[];
+  }, [manifest, entryInteractive, initialFilters]);
 
   // Tiles that failed: their fallback comes back.
   const [failed, setFailed] = useState<ReadonlySet<HTMLElement>>(() => new Set());
@@ -211,87 +299,95 @@ const ReportRuntime: React.FC<Props> = ({ manifest, tiles, panels }) => {
       dashboardMetadata={metadata}
       funnel={{ enabled: funnelEnabled, dashboardId: entryId, filters: deferredFilters }}
     >
-      {tiles
-        .filter((tile) => !failed.has(tile.host))
-        .map((tile) =>
+      {tiles.map((tile, i) =>
+        failed.has(tile.host) || !seen.has(tile.host)
+          ? null
+          : createPortal(
+              <TileBoundary onError={() => fail(tile.host)}>
+                <Mounted host={tile.host}>
+                  <CategoryColorsContext.Provider
+                    value={colorSources.get(tile.refs[0]?.tabId ?? '') ?? null}
+                  >
+                    {/* `dashboard-content`: the Paper chrome styles a tile under
+                        it (glass.css), as it does on the dashboard. */}
+                    <div data-testid="dashboard-content" className="depictio-report-content">
+                      {tile.refs.length > 1 ? (
+                        <div className="depictio-report-row">{tile.refs.map(renderComponent)}</div>
+                      ) : (
+                        renderComponent(tile.refs[0])
+                      )}
+                    </div>
+                  </CategoryColorsContext.Provider>
+                </Mounted>
+              </TileBoundary>,
+              tile.mount,
+              // By position: a highlight draws the same component a second
+              // time, and two portals keyed alike would drop one.
+              `${i}:${tile.refs.map((r) => `${r.tabId}:${r.index}`).join(' ')}`,
+            ),
+      )}
+      {panels
+        .filter((panel) => seen.has(panel.host))
+        .map((panel) =>
           createPortal(
-            <TileBoundary onError={() => fail(tile.host)}>
-              <Mounted host={tile.host}>
-                {/* `dashboard-content`: the Paper chrome styles a tile under it
-                    (glass.css), as it does on the dashboard. */}
-                <div data-testid="dashboard-content" className="depictio-report-content">
-                  {tile.refs.length > 1 ? (
-                    <div className="depictio-report-row">{tile.refs.map(renderComponent)}</div>
-                  ) : (
-                    renderComponent(tile.refs[0])
-                  )}
+            <TileBoundary onError={() => fail(panel.host)}>
+              <Mounted host={panel.host}>
+                <div className="depictio-report-filters-body" data-testid="depictio-report-filters">
+                  <Group justify="space-between" mb="xs" wrap="nowrap">
+                    <Text size="sm" c="dimmed">
+                      {touched
+                        ? 'Filtered in this page: every interactive tile below follows. The text ' +
+                          'of the report still describes the exported state.'
+                        : 'The exported state. Change a filter and every interactive tile below ' +
+                          'recomputes in this page, with no server.'}
+                    </Text>
+                    {touched ? (
+                      <Button
+                        size="xs"
+                        variant="light"
+                        onClick={resetFilters}
+                        data-testid="depictio-report-reset"
+                      >
+                        Back to the exported state
+                      </Button>
+                    ) : (
+                      <Badge variant="light" color="gray">
+                        Exported state
+                      </Badge>
+                    )}
+                  </Group>
+                  <div className="depictio-report-panel">
+                    <FilterPanel
+                      components={
+                        panel.tabId === entryId
+                          ? entryInteractive
+                          : metadata.filter((m) => m.component_type === 'interactive')
+                      }
+                      allMetadata={metadata}
+                      filters={filters}
+                      onFilterChange={onFilterChange}
+                      onResetAllFilters={resetFilters}
+                      layoutData={
+                        (manifest.dashboard.doc as { left_panel_layout_data?: unknown })
+                          .left_panel_layout_data
+                      }
+                      filterSections={panelSections}
+                      dashboardId={entryId}
+                      stateScopeId={`report:${entryId}`}
+                      funnel={{
+                        enabled: funnelEnabled,
+                        onToggle: () => setFunnelEnabled((v) => !v),
+                        onOpenView: () => setFunnelViewOpen(true),
+                      }}
+                    />
+                  </div>
                 </div>
               </Mounted>
             </TileBoundary>,
-            tile.mount,
-            tile.refs.map((r) => r.index).join(' '),
+            panel.mount,
+            `panel:${panel.tabId}`,
           ),
         )}
-      {panels.map((panel) =>
-        createPortal(
-          <TileBoundary onError={() => fail(panel.host)}>
-            <Mounted host={panel.host}>
-              <div className="depictio-report-filters-body" data-testid="depictio-report-filters">
-                <Group justify="space-between" mb="xs" wrap="nowrap">
-                  <Text size="sm" c="dimmed">
-                    {touched
-                      ? 'Filtered in this page: every interactive tile below follows. The text ' +
-                        'of the report still describes the exported state.'
-                      : 'The exported state. Change a filter and every interactive tile below ' +
-                        'recomputes in this page, with no server.'}
-                  </Text>
-                  {touched ? (
-                    <Button
-                      size="xs"
-                      variant="light"
-                      onClick={resetFilters}
-                      data-testid="depictio-report-reset"
-                    >
-                      Back to the exported state
-                    </Button>
-                  ) : (
-                    <Badge variant="light" color="gray">
-                      Exported state
-                    </Badge>
-                  )}
-                </Group>
-                <FilterPanel
-                  components={
-                    panel.tabId === entryId
-                      ? entryInteractive
-                      : metadata.filter((m) => m.component_type === 'interactive')
-                  }
-                  allMetadata={metadata}
-                  filters={filters}
-                  onFilterChange={onFilterChange}
-                  onResetAllFilters={resetFilters}
-                  layoutData={
-                    (manifest.dashboard.doc as { left_panel_layout_data?: unknown })
-                      .left_panel_layout_data
-                  }
-                  filterSections={
-                    (manifest.dashboard.doc as { filter_sections?: never }).filter_sections
-                  }
-                  dashboardId={entryId}
-                  stateScopeId={`report:${entryId}`}
-                  funnel={{
-                    enabled: funnelEnabled,
-                    onToggle: () => setFunnelEnabled((v) => !v),
-                    onOpenView: () => setFunnelViewOpen(true),
-                  }}
-                />
-              </div>
-            </Mounted>
-          </TileBoundary>,
-          panel.mount,
-          `panel:${panel.tabId}`,
-        ),
-      )}
       <FunnelView
         opened={funnelViewOpen}
         onClose={() => setFunnelViewOpen(false)}

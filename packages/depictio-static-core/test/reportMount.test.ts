@@ -4,9 +4,12 @@ import { describe, expect, it } from 'vitest';
 
 import { parseManifest, type BundleManifest } from '../src/manifest';
 import {
+  compactPanelSections,
   componentFor,
   groupMountVerdict,
   parseTileRefs,
+  reportCategorySource,
+  restoreReportBasemaps,
   tileMountVerdict,
 } from '../src/reportMount';
 
@@ -90,5 +93,75 @@ describe('groupMountVerdict', () => {
     expect(verdict.mount).toBe(false);
     expect(verdict.mount === false && verdict.reason).toMatch(/^comp-card-1:/);
     expect(groupMountVerdict(m, []).mount).toBe(false);
+  });
+});
+
+function tabsFixture(): BundleManifest {
+  return parseManifest(JSON.parse(readFileSync(TABS_FIXTURE, 'utf-8')));
+}
+
+describe('reportCategorySource', () => {
+  it("lays a child tab's own colours over the main tab's", () => {
+    const m = tabsFixture();
+    const [main, child] = m.tabs;
+    main.doc.category_colors = { Kingdom: { Archaea: '#7048e8', Bacteria: '#000000' } };
+    child.doc.category_colors = { Kingdom: { Bacteria: '#1098ad' } };
+    const src = reportCategorySource(m, child.id) as Record<string, unknown>;
+    expect(src.inherited_category_colors).toEqual(main.doc.category_colors);
+    expect(src.category_colors).toEqual({ Kingdom: { Bacteria: '#1098ad' } });
+    // The main tab inherits nothing from itself.
+    const own = reportCategorySource(m, main.id) as Record<string, unknown>;
+    expect(own.category_colors).toEqual(main.doc.category_colors);
+    expect(own.inherited_category_colors).toBeNull();
+    expect(reportCategorySource(m, 'not-a-tab')).toBeNull();
+  });
+});
+
+describe('restoreReportBasemaps', () => {
+  it("gives a frozen map the dashboard's basemap back", () => {
+    const m = tabsFixture();
+    m.tabs[0].doc.stored_metadata = [
+      { index: 'map-1', component_type: 'map', map_style: 'carto-positron' },
+      { index: 'map-2', component_type: 'map', map_style: 'white-bg' },
+    ];
+    const blank = () => ({
+      kind: 'map',
+      filter_state: [],
+      payload: { figure: { data: [], layout: { map: { style: 'white-bg' } } } },
+    });
+    m.frozen['map-1'] = blank();
+    m.frozen['map-2'] = blank();
+    expect(restoreReportBasemaps(m)).toBe(1);
+    const style = (k: string) =>
+      (m.frozen[k].payload.figure as { layout: { map: { style: string } } }).layout.map.style;
+    expect(style('map-1')).toBe('carto-positron');
+    // The author chose a blank basemap: it stays blank.
+    expect(style('map-2')).toBe('white-bg');
+  });
+});
+
+describe('compactPanelSections', () => {
+  const components = [
+    { index: 'f1', section: 'Sample filters' },
+    { index: 'f2', section: 'Environment' },
+    { index: 'f3', section: 'Key figures' },
+  ];
+  it('folds every section but one narrowing the exported view', () => {
+    const out = compactPanelSections(
+      [
+        { name: 'Sample filters', collapsed: false },
+        { name: 'Environment', collapsed: false },
+      ],
+      components,
+      new Set(['f2']),
+      [{ name: 'Key figures' }, { name: 'Unused bar' }],
+    );
+    expect(out.map((s) => [s.name, s.collapsed])).toEqual([
+      ['Sample filters', true],
+      ['Environment', false],
+      // A section bar's filters, declared so they fold too; a bar with no
+      // control in the panel is left out.
+      ['Key figures', true],
+    ]);
   });
 });

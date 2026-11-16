@@ -32,9 +32,15 @@
   margin: 0.75rem 0 1.25rem;
 }
 
-/* The filter panel is a rail in the app; here it is a block of the page. */
+/* The filter panel is a rail in the app; here it is a block of the page. Its
+   intro line spans the page; the controls keep the width the app's left panel
+   gives them, not the report's full column. */
 .depictio-report-filters .depictio-report-filters-body {
   max-width: 100%;
+}
+
+.depictio-report-filters .depictio-report-panel {
+  max-width: 380px;
 }
 
 /* The Mantine portal root (dropdowns, tooltips, the funnel modal) sits at the

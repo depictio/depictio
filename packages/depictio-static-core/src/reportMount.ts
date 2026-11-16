@@ -114,3 +114,110 @@ export function groupMountVerdict(manifest: BundleManifest, refs: TileRef[]): Mo
   }
   return { mount: true };
 }
+
+/** The colours a tab's tiles resolve categories against (`CategoryColorSource`
+ *  in depictio-react-core): its own `category_colors`, over the main tab's as
+ *  `inherited_category_colors`, with the brand fields riding along. The viewer
+ *  gets the inherited half from the API (`/dashboards/get`); a report reads
+ *  both halves from the manifest's tab documents. Null when the tab is not in
+ *  the bundle. */
+export function reportCategorySource(
+  manifest: BundleManifest,
+  tabId: string,
+): Record<string, unknown> | null {
+  const doc = tabDoc(manifest, tabId);
+  if (!doc) return null;
+  const tabs = manifest.tabs ?? [];
+  const main = tabs.find((t) => t.is_main_tab)?.doc ?? (tabs.length ? tabs[0].doc : null);
+  const inherited =
+    main && main !== doc ? (main.category_colors as Record<string, unknown> | null) : null;
+  return {
+    category_colors: doc.category_colors ?? null,
+    inherited_category_colors: doc.inherited_category_colors ?? inherited ?? null,
+    brand_theme: doc.brand_theme ?? null,
+    inherited_brand_theme:
+      doc.inherited_brand_theme ?? (main !== doc ? main?.brand_theme : null) ?? null,
+  };
+}
+
+/** The style a map draws its basemap with: Plotly's `map` subplot (MapLibre)
+ *  or the older `mapbox` one. */
+const MAP_SUBPLOTS = ['map', 'mapbox'] as const;
+
+/** A frozen map's figure is drawn on a blank `white-bg` style, so a bundle
+ *  opened with no network shows no broken tiles. A report is a web page read
+ *  online, beside the export's own Quarto map, which keeps the dashboard's
+ *  basemap: the mounted map gets the dashboard's `map_style` back (as long as
+ *  the author set one). Returns how many maps it restored; mutates `manifest`. */
+export function restoreReportBasemaps(manifest: BundleManifest): number {
+  let restored = 0;
+  const styleOf = new Map<string, string>();
+  const docs = (manifest.tabs ?? []).length
+    ? (manifest.tabs ?? []).map((t) => t.doc)
+    : [manifest.dashboard.doc];
+  for (const doc of docs) {
+    for (const m of (doc?.stored_metadata as Record<string, unknown>[] | undefined) ?? []) {
+      const style = m.map_style;
+      if (
+        m.component_type === 'map' &&
+        typeof style === 'string' &&
+        style &&
+        style !== 'white-bg'
+      ) {
+        styleOf.set(String(m.index ?? ''), style);
+      }
+    }
+  }
+  for (const [index, entry] of Object.entries(manifest.frozen ?? {})) {
+    const style = styleOf.get(index);
+    const layout = (entry?.payload?.figure as { layout?: Record<string, unknown> } | undefined)
+      ?.layout;
+    if (!style || !layout) continue;
+    for (const key of MAP_SUBPLOTS) {
+      const sub = layout[key] as Record<string, unknown> | undefined;
+      if (sub && typeof sub === 'object' && sub.style === 'white-bg') {
+        sub.style = style;
+        restored += 1;
+      }
+    }
+  }
+  return restored;
+}
+
+/** A filter section spec, as far as the report's panel reads one. */
+export interface ReportSectionSpec {
+  name: string;
+  collapsed?: boolean | null;
+  [key: string]: unknown;
+}
+
+/** The filter panel's sections, compact for a report: every section folded,
+ *  except one holding a filter that is narrowing the exported view, which the
+ *  reader should see without a click. Sections the panel would only infer
+ *  from its components' `section` (a section's own filter bar on the
+ *  dashboard) are declared here too, so they fold as well. */
+export function compactPanelSections(
+  specs: readonly ReportSectionSpec[] | null | undefined,
+  components: readonly { index?: unknown; section?: unknown }[],
+  activeIndexes: ReadonlySet<string>,
+  extraSpecs: readonly ReportSectionSpec[] = [],
+): ReportSectionSpec[] {
+  const active = new Set<string>();
+  for (const c of components) {
+    if (typeof c.section === 'string' && activeIndexes.has(String(c.index ?? ''))) {
+      active.add(c.section);
+    }
+  }
+  const out: ReportSectionSpec[] = [];
+  const seen = new Set<string>();
+  const add = (spec: ReportSectionSpec) => {
+    if (!spec?.name || seen.has(spec.name)) return;
+    seen.add(spec.name);
+    out.push({ ...spec, collapsed: !active.has(spec.name) });
+  };
+  for (const spec of specs ?? []) add(spec);
+  for (const spec of extraSpecs) {
+    if (components.some((c) => c.section === spec.name)) add(spec);
+  }
+  return out;
+}
