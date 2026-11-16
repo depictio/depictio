@@ -303,7 +303,10 @@ def _phylo_summary(tile: Tile) -> Any:
         return sorted(v.items(), key=lambda kv: (-kv[1], kv[0]))[0][0] if v else None
 
     colour_values = [majority(g) or g for g in groups]
-    palette = category_colors(colour_values)
+    # Coloured by the tip column when the tips carry one (a Kingdom), else by
+    # the lineage itself: the dashboard's colours for whichever it is.
+    colour_column = color_col if any(majority(g) for g in groups) else rank
+    palette = category_colors(colour_values, pinned=tile.pinned_colors(colour_column))
     fig = go.Figure()
     xs: list[Any] = []
     ys: list[Any] = []

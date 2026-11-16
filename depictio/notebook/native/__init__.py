@@ -107,6 +107,14 @@ class Tile:
     def filters(self) -> list[dict[str, Any]]:
         return self.component.filters
 
+    def pinned_colors(self, column: str | None) -> dict[str, str] | None:
+        """The dashboard's colours for ``column`` (with the tile's own palette
+        for it): a Kingdom or a site keeps its dashboard colour here too."""
+        try:
+            return self.component.pinned_colors(column)
+        except Exception:  # noqa: BLE001 - a missing palette only costs the pins
+            return None
+
     def rows(
         self,
         columns: list[str | None],
