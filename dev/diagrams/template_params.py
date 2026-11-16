@@ -165,7 +165,7 @@ def build() -> Sketch:
             "`check_template_params.py`: each rule's param",
             "exists in that release's `nextflow_schema.json`",
             "(CI: `template-params.yaml`)",
-            "52 rules in 20 templates",
+            "51 rules in 18 templates",
         ),
     )
     s.box(guard)
