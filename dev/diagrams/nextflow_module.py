@@ -210,9 +210,13 @@ def build_flow() -> Sketch:
         410,
         [
             ("includeConfig '…/publish/nextflow.config'", CODE_STR),
-            ("// --depictio_project, --depictio_vars", CODE_DIM),
+            ("--depictio_project Liver   → --project 'Liver'", CODE_INK),
+            ("--depictio_vars A=b,C=d    → --var 'A=b' --var 'C=d'", CODE_INK),
+            ("--depictio_ingest_args …   → appended to ingest", CODE_INK),
+            ("--depictio_local_args '--port 8123' → local up", CODE_INK),
+            ("publishDir <outdir>/depictio · errorStrategy ignore", CODE_DIM),
         ],
-        size=13,
+        size=11.5,
     )
     note(
         s,
@@ -249,15 +253,22 @@ def build_flow() -> Sketch:
     s.text(img.cx, 432, "preinstalled at `/opt/depictio-services`, checked", size=13, colour=DIM)
     s.text(img.cx, 450, "against the CLI's versions and platform", size=13, colour=DIM)
 
-    steps = (
-        "① template from `pipeline_info/`",
-        "② route variables from `params.json`",
-        "③ `local up` → `ingest` → `local down`",
+    code(
+        s,
+        950,
+        466,
+        430,
+        [
+            ("$ stage_into results/ .     # → data_root/", CODE_INK),
+            ("$ depictio local up --no-open --examples none", CODE_STR),
+            ("$ depictio ingest data_root/ --server local \\", CODE_STR),
+            ("    --triggered-by nextflow --result-json …", CODE_STR),
+            ("  # template + routes: pipeline_info/params_*.json", CODE_DIM),
+            ("$ depictio local down", CODE_STR),
+            ("$ mv stack/{mongo,s3,keys,cli} <run>_depictio/", CODE_INK),
+        ],
+        size=11,
     )
-    for i, step in enumerate(steps):
-        b = Box(960, 478 + i * 50, 410, 40, WHITE, "")
-        s.rect(b, colour=GREY)
-        s.text(976, 503 + i * 50, step, size=14, anchor="start")
     s.arrow(c.right + 4, 300, img.x - 4, 300)
 
     cloud = Box(1460, 190, 170, 100, PINK, "")
