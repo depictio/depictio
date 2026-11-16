@@ -46,7 +46,9 @@ export const MAX_LINK_HOPS = 3;
 /** Mirror of `LinkConfig` (models/links.py:21). Defaults match the Pydantic model. */
 export interface DCLinkConfig {
   /** Resolution strategy; the model defaults to 'direct'. */
-  resolver?: 'direct' | 'sample_mapping' | 'pattern' | 'regex' | 'wildcard';
+  resolver?: 'direct' | 'sample_mapping' | 'pattern' | 'regex' | 'wildcard' | 'region';
+  /** Role -> TARGET column, for the 'region' resolver ('chrom', 'pos'). */
+  columns?: { chrom?: string | null; pos?: string | null } | null;
   /** Canonical ID -> variant list, for the sample_mapping resolver. */
   mappings?: Record<string, string[]> | null;
   /** '{sample}' template, for the pattern resolver. */
@@ -111,8 +113,10 @@ export interface SyntheticLinkFilter {
   index: string;
   value: unknown[];
   column_name: string;
-  /** 'MultiSelect', or {@link LINK_NO_MATCH} when the chain matched nothing. */
+  /** 'MultiSelect', or {@link LINK_NO_MATCH} when the chain matched nothing; a region link keeps its half's own type. */
   interactive_component_type: string;
+  /** Set on region-link filters ({@link GENOME_SELECTION_SOURCE}). */
+  source?: string;
   metadata: {
     dc_id: string;
     column_name: string;
@@ -308,6 +312,11 @@ export function applyResolver(
       };
     }
 
+    case 'region':
+      // Never reached through a walk (`linkPaths` skips region links, as
+      // `_link_paths` does); a region renames columns, it maps no values.
+      return { resolved: values.map(toStr), unmapped: [] };
+
     case 'regex':
     case 'wildcard':
       // `target_known_values` is always None server-side (routes.py:743), so
@@ -319,7 +328,7 @@ export function applyResolver(
     default:
       throw new Error(
         `Unknown resolver type: ${String(resolver)}. ` +
-          'Valid types: direct, sample_mapping, pattern, regex, wildcard',
+          'Valid types: direct, sample_mapping, pattern, regex, wildcard, region',
       );
   }
 }
@@ -382,6 +391,136 @@ export function translateViaTable(table: LinkTable, values: unknown[]): string[]
 }
 
 // ---------------------------------------------------------------------------
+// region links (filter_links.py `region_link_filters`)
+// ---------------------------------------------------------------------------
+
+/** The filter source a genome region travels under (`GENOME_SELECTION_SOURCE`). */
+export const GENOME_SELECTION_SOURCE = 'genome_selection' as const;
+
+/** The position half of a region pair carries its chromosome half's index plus this. */
+const GENOME_POS_INDEX_SUFFIX = '::pos';
+
+/** Which half of a region pair a filter is, by its component type (`_REGION_ROLE_BY_COMPONENT`). */
+const REGION_ROLE_BY_COMPONENT: Record<string, 'chrom' | 'pos'> = {
+  MultiSelect: 'chrom',
+  Select: 'chrom',
+  RangeSlider: 'pos',
+  Slider: 'pos',
+};
+
+/** A source filter as the link walks read it: the viewer's `InteractiveFilter`, loosely. */
+export interface LinkSourceFilter {
+  index?: unknown;
+  value?: unknown;
+  source?: unknown;
+  column_name?: string;
+  interactive_component_type?: string;
+  metadata?: { column_name?: string; interactive_component_type?: string; dc_id?: string };
+}
+
+/** True for a link that renames a genomic region rather than resolving values. */
+export function isRegionLink(link: DCLinkLike): boolean {
+  return link.link_config?.resolver === 'region';
+}
+
+/** Python's `value in (None, [], "", False)` for a region half. */
+function isEmptyRegionValue(value: unknown): boolean {
+  return (
+    value === null ||
+    value === undefined ||
+    value === '' ||
+    value === false ||
+    value === 0 || // Python: 0 == False
+    (Array.isArray(value) && value.length === 0)
+  );
+}
+
+function componentOf(f: LinkSourceFilter): string {
+  return String(f.metadata?.interactive_component_type || f.interactive_component_type || '');
+}
+
+/**
+ * The (chromosome, position) filters of one region pair on one DC — mirror of
+ * `_region_halves`. `sourceColumn` names the chromosome column the link
+ * follows (empty: the first pair found wins); the position half is matched by
+ * index (`<chrom index>::pos`), or is the only position filter there is.
+ */
+export function regionHalves(
+  sourceFilters: LinkSourceFilter[],
+  sourceColumn: string,
+): [LinkSourceFilter | null, LinkSourceFilter | null] {
+  let chromHalf: LinkSourceFilter | null = null;
+  const positions = new Map<string, LinkSourceFilter>();
+  for (const f of sourceFilters ?? []) {
+    if (!f || typeof f !== 'object' || f.source !== GENOME_SELECTION_SOURCE) continue;
+    if (isEmptyRegionValue(f.value)) continue;
+    const role = REGION_ROLE_BY_COMPONENT[componentOf(f)];
+    if (role === 'pos') {
+      positions.set(String(f.index ?? ''), f);
+    } else if (role === 'chrom' && chromHalf === null) {
+      const column = String(f.metadata?.column_name || f.column_name || '');
+      if (!sourceColumn || column === sourceColumn) chromHalf = f;
+    }
+  }
+  if (chromHalf === null) return [null, null];
+  let posHalf = positions.get(`${String(chromHalf.index ?? '')}${GENOME_POS_INDEX_SUFFIX}`) ?? null;
+  if (posHalf === null && positions.size === 1) posHalf = [...positions.values()][0];
+  return [chromHalf, posHalf];
+}
+
+/**
+ * Rewrite genome-region filters onto a target DC's own coordinate columns —
+ * mirror of `region_link_filters`. A region link resolves nothing and reads no
+ * data: it names the target's chromosome and coordinate columns, and the brush's
+ * two filters are re-emitted under those names. One hop only; the chromosome
+ * half is required (a coordinate range on no contig would narrow every contig).
+ */
+export function regionLinkFilters(
+  targetDcId: string,
+  filtersByDc: Record<string, LinkSourceFilter[]>,
+  projectLinks: DCLinkLike[],
+): SyntheticLinkFilter[] {
+  const out: SyntheticLinkFilter[] = [];
+  for (const link of projectLinks) {
+    const enabled = link.enabled === undefined ? true : Boolean(link.enabled);
+    if (!enabled || !isRegionLink(link) || String(link.target_dc_id ?? '') !== targetDcId) continue;
+    const originDc = String(link.source_dc_id ?? '');
+    if (!originDc || originDc === targetDcId) continue;
+    const columns = link.link_config?.columns ?? {};
+    const chromCol = columns.chrom;
+    const posCol = columns.pos;
+    if (!chromCol || !posCol) continue;
+
+    const [chromHalf, posHalf] = regionHalves(
+      filtersByDc[originDc] ?? [],
+      String(link.source_column ?? ''),
+    );
+    if (!chromHalf) continue;
+    const linkId = link.id === undefined || link.id === null ? '?' : String(link.id);
+    for (const [role, sourceFilter, targetColumn] of [
+      ['chrom', chromHalf, chromCol],
+      ['pos', posHalf, posCol],
+    ] as const) {
+      if (!sourceFilter) continue;
+      const component = componentOf(sourceFilter);
+      out.push({
+        index: `region_link_${linkId}_${role}`,
+        value: sourceFilter.value as unknown[],
+        source: GENOME_SELECTION_SOURCE,
+        column_name: targetColumn,
+        interactive_component_type: component,
+        metadata: {
+          dc_id: targetDcId,
+          column_name: targetColumn,
+          interactive_component_type: component,
+        },
+      });
+    }
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
 // graph traversal (filter_links.py)
 // ---------------------------------------------------------------------------
 
@@ -409,6 +548,10 @@ export function linkPaths(
     // present falsy value disables.
     const enabled = link.enabled === undefined ? true : Boolean(link.enabled);
     if (!enabled) continue;
+    // Region links are not value routes (`_link_paths`): walking one would
+    // resolve a coordinate column that needs no translation.
+    // `regionLinkFilters` handles them instead.
+    if (isRegionLink(link)) continue;
     const source = String(link.source_dc_id ?? '');
     const bucket = bySource.get(source);
     if (bucket) bucket.push(link);
@@ -518,11 +661,17 @@ function isActiveFilterValue(value: unknown): boolean {
  */
 export async function extendFiltersViaLinks(
   targetDcId: string,
-  filtersByDc: Record<string, { value?: unknown; metadata?: { column_name?: string } }[]>,
+  filtersByDc: Record<string, LinkSourceFilter[]>,
   projectLinks: DCLinkLike[],
   resolveHop: ResolveHop,
 ): Promise<SyntheticLinkFilter[]> {
-  const linkFilters: SyntheticLinkFilter[] = [];
+  // Region links first, as the server does: they rename two columns and
+  // resolve nothing.
+  const linkFilters: SyntheticLinkFilter[] = regionLinkFilters(
+    targetDcId,
+    filtersByDc,
+    projectLinks,
+  );
 
   for (const [originDc, sourceFilters] of Object.entries(filtersByDc)) {
     if (originDc === targetDcId) continue; // same DC: applies natively

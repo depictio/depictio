@@ -758,13 +758,13 @@ def build_static(
         typer.Option(
             "--python-runtime",
             help=(
-                "Embed the optional Python runtime (Pyodide): 'auto' (default) when a tile "
-                "it can make live exists (a code figure the transpiler refused, a group "
-                "comparison, a PCA/PCoA/t-SNE embedding), 'on' or 'off'. Adds tens of MB; "
-                "the files are fetched once and verified against a pin."
+                "Embed the optional Python runtime (Pyodide): 'off' (default), 'auto' when a "
+                "tile it can make live exists (a code figure the transpiler refused, a group "
+                "comparison, a PCA/PCoA/t-SNE embedding), or 'on'. Adds ~50 MB; the files "
+                "are fetched once and verified against a pin."
             ),
         ),
-    ] = "auto",
+    ] = "off",
 ) -> None:
     """Build a backend-less static dashboard bundle (serverless producer B).
 
@@ -884,13 +884,13 @@ def export_static_cmd(
         typer.Option(
             "--python-runtime",
             help=(
-                "Embed the optional Python runtime (Pyodide): 'auto' (default) when a tile "
-                "it can make live exists — a code figure the transpiler refused, a group "
-                "comparison, a PCA/PCoA/t-SNE embedding — 'on' or 'off'. Adds tens of MB; "
+                "Embed the optional Python runtime (Pyodide): 'off' (default), 'auto' when a "
+                "tile it can make live exists — a code figure the transpiler refused, a group "
+                "comparison, a PCA/PCoA/t-SNE embedding — or 'on'. Adds ~50 MB; "
                 "--check prints the exact figure."
             ),
         ),
-    ] = "auto",
+    ] = "off",
 ) -> None:
     """Export a static bundle from a RUNNING instance (serverless producer A).
 

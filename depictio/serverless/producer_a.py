@@ -1593,11 +1593,6 @@ def multiqc_sample_expansion(dc_id: str) -> dict[str, list[str]]:
     if not dc_id:
         return {}
     try:
-        from depictio.api.v1.services.multiqc.patching import (
-            expand_canonical_samples_to_variants,
-        )
-        from depictio.cli.cli.utils.sample_mapping import remap_mappings_to_hub
-
         mappings: dict[str, list[str]] = {}
         for rep in _db().multiqc_collection.find(
             {"data_collection_id": dc_id}, {"metadata.sample_mappings": 1}
@@ -1607,21 +1602,77 @@ def multiqc_sample_expansion(dc_id: str) -> dict[str, list[str]]:
                 for v in variants or []:
                     if str(v) not in bucket:
                         bucket.append(str(v))
-        if not mappings:
-            return {}
-        ids = {k for k in mappings} | {v for vs in mappings.values() for v in vs}
-        out: dict[str, list[str]] = {}
-        for sample in sorted(ids):
-            variants = expand_canonical_samples_to_variants(
-                [sample], remap_mappings_to_hub(mappings, [sample])
-            )
-            extra = [str(v) for v in variants if str(v) != sample]
-            if extra:
-                out[sample] = extra
-        return out
+        return expansion_from_mappings(mappings)
     except Exception as exc:
+        # Celery's soft time limit is an Exception too: swallowing it here let
+        # an export run on past it and ship without its sample expansion.
+        if type(exc).__name__ == "SoftTimeLimitExceeded":
+            raise
         logger.warning("producer A: MultiQC sample expansion for %s failed: %s", dc_id, exc)
         return {}
+
+
+#: Characters a sample id can follow inside a MultiQC name and still be
+#: matched to it: ``canonicalize_to_hub``'s token boundaries, plus the path
+#: separators ``strip_stage_suffixes`` cuts at.
+_EXPANSION_BOUNDARY = frozenset("._- /\\")
+
+
+def expansion_from_mappings(mappings: dict[str, list[str]]) -> dict[str, list[str]]:
+    """``{id: variants}`` for every key and variant of ``mappings``.
+
+    For each id this is ``expand_canonical_samples_to_variants([id],
+    remap_mappings_to_hub(mappings, [id]))``, the server's own expansion, but
+    each id is computed on the mapping entries that can bear on it rather than
+    on all of them. Doing it on all of them is quadratic: a viralrecon report
+    holds ~21k ids, which took ten minutes and ran past the task's time limit.
+
+    An entry can bear on an id only if one of its names holds the id (case
+    folded, suffix-stripped) at its start or after a boundary character: every
+    rule of ``canonicalize_to_hub`` and of ``SampleLookup.match`` needs that.
+    The remaining entries keep their own keys under the remap and are never
+    looked up, so leaving them out changes nothing.
+    """
+    from bisect import bisect_left
+
+    from depictio.api.v1.services.multiqc.patching import (
+        expand_canonical_samples_to_variants,
+    )
+    from depictio.api.v1.services.multiqc.sample_matching import strip_sample_suffix
+    from depictio.cli.cli.utils.sample_mapping import remap_mappings_to_hub
+
+    if not mappings:
+        return {}
+    entries = list(mappings.items())
+    # Every token-start suffix of every name, lowercased: a prefix search on
+    # this sorted list finds the names holding an id at a boundary.
+    suffixes: list[tuple[str, int]] = []
+    for idx, (key, variants) in enumerate(entries):
+        for name in {str(key), *(str(v) for v in variants or [])}:
+            low = name.strip().lower()
+            for pos, ch in enumerate(low):
+                if pos == 0 or low[pos - 1] in _EXPANSION_BOUNDARY:
+                    suffixes.append((low[pos:], idx))
+    suffixes.sort()
+    heads = [s for s, _ in suffixes]
+
+    ids = {k for k in mappings} | {v for vs in mappings.values() for v in vs}
+    out: dict[str, list[str]] = {}
+    for sample in sorted(ids):
+        probe = strip_sample_suffix(str(sample).strip()).lower()
+        relevant: set[int] = set()
+        i = bisect_left(heads, probe)
+        while i < len(heads) and heads[i].startswith(probe):
+            relevant.add(suffixes[i][1])
+            i += 1
+        subset = {entries[j][0]: entries[j][1] for j in sorted(relevant)}
+        variants = expand_canonical_samples_to_variants(
+            [sample], remap_mappings_to_hub(subset, [sample])
+        )
+        extra = [str(v) for v in variants if str(v) != sample]
+        if extra:
+            out[sample] = extra
+    return out
 
 
 def _multiqc_payload(payload: Any, component_id: str) -> dict[str, Any]:
@@ -1645,7 +1696,9 @@ def _multiqc_payload(payload: Any, component_id: str) -> dict[str, Any]:
     )
 
 
-def _freeze_map(comp: dict[str, Any], user: ExportUser) -> dict[str, Any]:
+def _freeze_map(
+    comp: dict[str, Any], user: ExportUser, category_colors: dict | None = None
+) -> dict[str, Any]:
     """Freeze a map at the default filter state with a zero-network basemap.
 
     Mirrors ``render_map_endpoint``'s body, but forces ``map_style`` to
@@ -1676,8 +1729,8 @@ def _freeze_map(comp: dict[str, Any], user: ExportUser) -> dict[str, Any]:
         trigger_data=trigger_data,
         theme="light",
         existing_metadata=None,
-        active_selection_values=None,
         access_token=None,
+        category_colors=category_colors,
     )
     fig_dict = _json.loads(fig.to_json()) if hasattr(fig, "to_json") else fig
     if isinstance(fig_dict, dict) and "layout" in fig_dict:
@@ -3111,7 +3164,13 @@ def export_manifest(
                 kind, payload = _freeze_multiqc(dashboard_oid, comp, user)
                 frozen[component_id] = FrozenPayload(kind=kind, payload=payload)
             elif ctype == "map":
-                frozen[component_id] = FrozenPayload(kind="map", payload=_freeze_map(comp, user))
+                try:
+                    map_colors = _routes().effective_category_colors(tab.doc)
+                except Exception:
+                    map_colors = None
+                frozen[component_id] = FrozenPayload(
+                    kind="map", payload=_freeze_map(comp, user, map_colors)
+                )
             elif ctype == "image":
                 payload, note = _freeze_image(
                     dashboard_oid, comp, component_id, user, object_budget, inline_blobs
@@ -3632,6 +3691,16 @@ def settle_python_jobs(
             )
             info.update(embedded=False, components=[], bytes=0, unavailable=missing)
             embedded = False
+    # What each candidate shows without the runtime, so a preflight read with
+    # the runtime switched off can say so instead of promising a live tile.
+    info["without"] = {
+        cid: {
+            "tier": tier_by_id[cid].tier.value,
+            "reason": tier_by_id[cid].reason.value if tier_by_id[cid].reason else None,
+            "detail": tier_by_id[cid].detail,
+        }
+        for cid in jobs
+    }
     if not embedded:
         return {}, info
     for cid, job in jobs.items():
@@ -3719,7 +3788,8 @@ def export_static(
             for the tests, and for anyone debugging a dashboard whose data
             cannot be read (an unreachable S3, a Delta table mid-rewrite) who
             still wants the component inventory. Not public CLI surface.
-        python_runtime: ``auto`` (the CLI's and the API's default) embeds the optional Python runtime
+        python_runtime: ``off`` (the CLI's and the export API's default) leaves the
+            optional Python runtime out; ``auto`` embeds it
             (Pyodide) when a tile it can make live survives the build — a code
             figure that did not bind, a group comparison, a PCA / PCoA / t-SNE
             embedding — ``on`` forces it, ``off`` leaves it out (those tiles

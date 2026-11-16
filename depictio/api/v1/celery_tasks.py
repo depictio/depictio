@@ -3359,7 +3359,7 @@ def export_static_bundle(payload: dict) -> dict:
             out_path=out,
             user=export_user,
             single_tab=bool(payload.get("single_tab", False)),
-            python_runtime=str(payload.get("python_runtime") or "auto"),
+            python_runtime=str(payload.get("python_runtime") or "off"),
         )
         html_bytes = out.read_bytes()
 

@@ -188,9 +188,9 @@ const ExportStaticModal: React.FC<ExportStaticModalProps> = ({
   const [preflightLoading, setPreflightLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  // The optional Python runtime: null = follow the preflight's `auto` verdict
-  // (on exactly when a tile would gain from it), else the reader's choice.
-  const [pythonChoice, setPythonChoice] = useState<boolean | null>(null);
+  // The optional Python runtime, off unless the reader turns it on: it adds
+  // ~50 MB to the file and ~10 s before the first tab settles offline.
+  const [pythonChoice, setPythonChoice] = useState(false);
   // Set on close/unmount so in-flight promises and the poll loop go quiet
   // instead of setting state on a closed modal. The server-side build keeps
   // running — reopening and re-exporting is cheap (idempotent job dispatch).
@@ -204,7 +204,7 @@ const ExportStaticModal: React.FC<ExportStaticModalProps> = ({
     setPreflight(null);
     setErrorMessage(null);
     setExporting(false);
-    setPythonChoice(null);
+    setPythonChoice(false);
     setPreflightLoading(true);
     preflightStaticExport(dashboardId)
       .then((pf) => {
@@ -256,7 +256,7 @@ const ExportStaticModal: React.FC<ExportStaticModalProps> = ({
     try {
       const job = await dispatchStaticExport(
         dashboardId,
-        pythonChoice === null ? 'auto' : pythonChoice ? 'on' : 'off',
+        pythonChoice ? 'on' : 'off',
       );
       if (cancelledRef.current) return;
       if (job.status === 'failed') {
@@ -298,7 +298,15 @@ const ExportStaticModal: React.FC<ExportStaticModalProps> = ({
   // Counts are recomputed from the rows rather than read from `preflight.counts`
   // so the badges and the table agree on what is settled: the endpoint's counts
   // include the undecided figures as frozen.
-  const rows: StaticExportTierRow[] = preflight?.tiers ?? [];
+  // The preflight runs with the runtime available, so its Python tiles read
+  // live; with the switch off they ship as what they would be without it.
+  const without = pythonChoice ? undefined : preflight?.python_runtime?.without;
+  const rows: StaticExportTierRow[] = (preflight?.tiers ?? []).map((row) => {
+    const fallback = without?.[row.component_id];
+    return fallback
+      ? ({ ...row, ...fallback } as StaticExportTierRow)
+      : row;
+  });
   const undecidedCount = rows.filter(isProvisional).length;
   const decidedCounts = { live: 0, partial: 0, frozen: 0, omitted: 0 };
   for (const row of rows) {
@@ -504,7 +512,7 @@ const ExportStaticModal: React.FC<ExportStaticModalProps> = ({
         {preflight?.python_runtime && preflight.python_runtime.candidates.length > 0 && (
           <PythonRuntimeOption
             info={preflight.python_runtime}
-            checked={pythonChoice ?? preflight.python_runtime.embedded}
+            checked={pythonChoice}
             onChange={setPythonChoice}
             disabled={exporting}
           />
@@ -533,7 +541,7 @@ const ExportStaticModal: React.FC<ExportStaticModalProps> = ({
 };
 
 /** The optional Python runtime (Pyodide): what it makes live, what it costs.
- *  On by default exactly when a tile would otherwise stay frozen. */
+ *  Off by default: it is the largest thing a bundle can carry. */
 function PythonRuntimeOption({
   info,
   checked,

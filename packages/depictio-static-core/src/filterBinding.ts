@@ -30,8 +30,7 @@
 
 import type { BoundFilter, SliderOp } from './engine/filters';
 
-import { LINK_NO_MATCH } from './links';
-export const GENOME_SELECTION_SOURCE = 'genome_selection';
+import { GENOME_SELECTION_SOURCE, LINK_NO_MATCH } from './links';
 export const RESIDUE_SELECTION_SOURCE = 'residue_selection';
 
 /** The loose shape of a viewer `InteractiveFilter` the binder reads. */
