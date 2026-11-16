@@ -15,6 +15,7 @@ from typer.testing import CliRunner
 from depictio.cli.cli.commands import template as template_cmd
 from depictio.cli.cli.utils.template_check import (
     check_template,
+    compare_releases,
     effect_text,
     nfcore_target,
     rule_text,
@@ -241,3 +242,62 @@ def test_cli_reports_a_template_that_does_not_load(monkeypatch, tmp_path):
     result = _cli(monkeypatch, str(bad))
     assert result.exit_code == 1
     assert "does not load" in result.output
+
+
+def test_a_new_release_that_renames_a_param_breaks_its_rule(meta):
+    new = {
+        "properties": {
+            "skip_aligner": {"type": "boolean"},
+            "skip_multiqc": {"type": "boolean", "default": True},
+            "tools": {"type": "string", "default": "arriba"},
+            "skip_new_tool": {"type": "boolean"},
+        }
+    }
+    drift = compare_releases(meta, SCHEMA, new)
+    assert [(b.variable, b.param, b.suggestions) for b in drift.broken] == [
+        ("PSEUDOALIGNER_ONLY", "skip_alignment", ["skip_aligner"])
+    ]
+    # skip_multiqc now defaults to true: the rule holds on every default run
+    assert [(f.variable, f.before, f.after) for f in drift.flipped] == [
+        ("SKIP_MULTIQC", False, True)
+    ]
+    assert drift.new_skip_params == ["skip_aligner", "skip_new_tool"]
+    assert drift.removed_skip_params == ["skip_alignment", "skip_bigwig", "skip_linting"]
+    assert not drift.ok
+    text = "\n".join(drift.markdown("1.0.0", "2.0.0"))
+    assert "renamed to `skip_aligner`?" in text
+
+
+def test_a_release_that_changes_nothing_for_the_rules(meta):
+    drift = compare_releases(meta, SCHEMA, SCHEMA)
+    assert drift.ok
+    assert "every rule reads a param of the release" in drift.markdown("1", "1")[1]
+
+
+def test_cli_against_a_newer_schema(monkeypatch, tmp_path):
+    old = tmp_path / "old.json"
+    old.write_text(
+        json.dumps(
+            {
+                "properties": {
+                    "skip_alignment": {"type": "boolean"},
+                    "skip_multiqc": {"type": "boolean"},
+                    "skip_quantification_merge": {"type": "boolean"},
+                }
+            }
+        )
+    )
+    new = tmp_path / "new.json"
+    new.write_text(
+        json.dumps(
+            {
+                "properties": {
+                    "skip_multiqc": {"type": "boolean"},
+                    "skip_quantification_merge": {"type": "boolean"},
+                }
+            }
+        )
+    )
+    result = _cli(monkeypatch, "nf-core/rnaseq/3.26.0", "--schema", str(old), "--against", str(new))
+    assert result.exit_code == 1, result.output
+    assert "PSEUDOALIGNER_ONLY reads skip_alignment, gone from the release" in result.output

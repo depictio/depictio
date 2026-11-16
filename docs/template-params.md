@@ -113,3 +113,31 @@ file: no rule fires, and the template is used as is.
 29 templates, `skip_*` flags whose tool the template reads and that no rule
 handles (rnaseq `skip_bigwig`, `skip_deseq2_qc`; ampliseq `skip_multiqc`; …).
 Each one is a route to verify against the release's code before adding it.
+
+## When a new release ships
+
+Everything here is deterministic: two `nextflow_schema.json`, the template, and
+the release's megatest run. No step needs a model.
+
+```bash
+depictio template check nf-core/rnaseq/3.26.0 --against 3.27.0
+```
+
+| Change in the release | Found by | What to do |
+|---|---|---|
+| A param a rule reads is gone or renamed | `--against`: ✗, with the closest new names | fix the rule in the new version's template |
+| A param's default flips a rule on a default run | `--against`: ✗ | check the release's code, adjust the rule |
+| A new `skip_*` flag | `--against`: ➕ | a route to verify (below) |
+| A file the template reads moved | `nfcore_monitor.py` (megatest paths, recipes run on the release's data) | repoint the collection |
+
+The weekly `nfcore-release-monitor` workflow runs both for every release and
+opens one wave PR (`nf-core wave: …`), each pipeline with a verdict; a broken
+rule is ❌ review needed even when the release has no megatest run yet. Then
+`python scripts/bump_template_version.py --pipeline <p> --new-version <v>`
+copies the template, rules included; CI's `template check --all
+--fetch-schema` holds the new version to its own schema.
+
+What stays a person's call is what a *new* flag removes from the outputs. It
+can be settled without one, by running the pipeline's `-profile test` with and
+without the flag and comparing `depictio ingest <outdir> --dry-run`: the
+collections that lose their files are the ones the conditional must drop.

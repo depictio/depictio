@@ -277,3 +277,102 @@ def check_template(
         schema_checked=known is not None,
         run_vars=present,
     )
+
+
+# -- a new release of the pipeline -------------------------------------------------
+
+
+@dataclass
+class BrokenRule:
+    variable: str
+    param: str
+    suggestions: list[str]  # params of the new release with a close name
+
+
+@dataclass
+class FlippedRule:
+    variable: str
+    before: bool  # holds on a default run of the old release
+    after: bool  # ...and of the new one
+
+
+@dataclass
+class ReleaseDrift:
+    """What a new release of the pipeline changes for a template's rules.
+
+    Deterministic: two ``nextflow_schema.json`` and the template, nothing else.
+    It says *that* a rule no longer reads a param, or now holds on a default
+    run, and which ``skip_*`` flags are new; *what* a new flag removes from the
+    outputs is for the megatest (``nfcore_monitor.py``) or a test run to show.
+    """
+
+    broken: list[BrokenRule]
+    flipped: list[FlippedRule]
+    new_skip_params: list[str]
+    removed_skip_params: list[str]
+
+    @property
+    def ok(self) -> bool:
+        return not self.broken and not self.flipped
+
+    def markdown(self, old: str, new: str) -> list[str]:
+        """The ``## Params`` section of a drift report."""
+        title = f"## Params (from_params rules) — {old} → {new}"
+        lines = [title]
+        for b in self.broken:
+            hint = (
+                f"; renamed to {', '.join(f'`{s}`' for s in b.suggestions)}?"
+                if b.suggestions
+                else ""
+            )
+            lines.append(f"- ❌ `{b.variable}` reads `{b.param}`, gone from the release{hint}")
+        for f in self.flipped:
+            state = "now holds" if f.after else "no longer holds"
+            lines.append(
+                f"- ❌ `{f.variable}` {state} on a default run (its param's default changed)"
+            )
+        if self.new_skip_params:
+            lines.append(
+                "- ➕ new skip flags, a route to check: "
+                + ", ".join(f"`{p}`" for p in self.new_skip_params)
+            )
+        if self.removed_skip_params:
+            lines.append(
+                "- ➖ skip flags gone: " + ", ".join(f"`{p}`" for p in self.removed_skip_params)
+            )
+        if len(lines) == 1:
+            lines.append("- every rule reads a param of the release, with the same default result")
+        lines.append("")
+        return lines
+
+
+def compare_releases(meta: TemplateMetadata, old_schema: dict, new_schema: dict) -> ReleaseDrift:
+    """The template's rules, read against the release it targets and a newer one."""
+    import difflib
+
+    old, new = schema_params(old_schema), schema_params(new_schema)
+    old_defaults, new_defaults = schema_defaults(old), schema_defaults(new)
+    added = sorted(set(new) - set(old))
+    broken, flipped = [], []
+    for var in meta.variables:
+        rule = var.from_params
+        if rule is None:
+            continue
+        missing = sorted(p for p in rule.params_used() if p not in new)
+        for param in missing:
+            close = difflib.get_close_matches(param, added, n=2, cutoff=0.6)
+            broken.append(BrokenRule(var.name, param, close))
+        if not missing:
+            before, after = rule.holds(old_defaults), rule.holds(new_defaults)
+            if before != after:
+                flipped.append(FlippedRule(var.name, before, after))
+
+    def skips(params: dict[str, SchemaParam]) -> set[str]:
+        return {n for n, p in params.items() if n.startswith("skip_") and p.type == "boolean"}
+
+    return ReleaseDrift(
+        broken=broken,
+        flipped=flipped,
+        new_skip_params=sorted(skips(new) - skips(old)),
+        removed_skip_params=sorted(skips(old) - skips(new)),
+    )

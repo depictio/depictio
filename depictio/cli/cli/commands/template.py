@@ -365,6 +365,14 @@ def check(
     schema_cache: Annotated[
         Path | None, typer.Option("--schema-cache", help="Keep fetched schemas here")
     ] = None,
+    against: Annotated[
+        str | None,
+        typer.Option(
+            "--against",
+            help="A newer release (3.27.0) or its nextflow_schema.json: which rules it "
+            "breaks or flips, which skip_* flags it adds",
+        ),
+    ] = None,
     verbose: Annotated[
         bool, typer.Option("--verbose", help="Also list variables no conditional reads")
     ] = False,
@@ -382,6 +390,7 @@ def check(
         depictio template check nf-core/rnaseq/3.26.0 --fetch-schema
         depictio template check --run results/ --var TRACKS_URI=s3://bucket/run
         depictio template check ./my-template --schema ../rnaseq/nextflow_schema.json
+        depictio template check nf-core/rnaseq/3.26.0 --against 3.27.0
     """
     import json
 
@@ -444,10 +453,11 @@ def check(
     for template_ref in ids:
         meta, path = _load_metadata(template_ref)
         has_rules = any(v.from_params is not None for v in meta.variables)
+        target = nfcore_target(meta.template_id)
         schema_doc = None
         if schema is not None:
             schema_doc = json.loads(schema.read_text())
-        elif fetch_schema and (target := nfcore_target(meta.template_id)) is not None:
+        elif (fetch_schema or against) and target is not None:
             try:
                 schema_doc = fetch(*target, cache=schema_cache)
             except Exception as exc:  # noqa: BLE001 - reported; fatal only for rules
@@ -474,12 +484,37 @@ def check(
         else:
             _print_check(result, verbose=verbose)
         failed += not result.ok
+        if against and schema_doc is not None:
+            failed += not _print_release_drift(meta, schema_doc, against, target, schema_cache)
     if len(ids) > 1:
         console.print(
             f"\n{len(ids)} templates, {failed} with unknown params, "
             f"{unreachable} schemas unreachable (templates with rules)"
         )
     raise typer.Exit(1 if failed else 2 if unreachable else 0)
+
+
+def _print_release_drift(meta, old_schema: dict, against: str, target, cache) -> bool:
+    """Print what a newer release changes for the template's rules; True when nothing breaks."""
+    import json
+
+    from depictio.cli.cli.utils.template_check import compare_releases, fetch_schema
+
+    if Path(against).is_file():
+        new_schema, label = json.loads(Path(against).read_text()), against
+    elif target is not None:
+        new_schema, label = fetch_schema(target[0], against, cache=cache), against
+    else:
+        console.print(
+            "[red]--against: give a nextflow_schema.json for a non nf-core template[/red]"
+        )
+        return False
+    old_label = target[1] if target else "the template's release"
+    drift = compare_releases(meta, old_schema, new_schema)
+    console.print()
+    for line in drift.markdown(old_label, label):
+        console.print(line.replace("`", ""), markup=False, highlight=False)
+    return drift.ok
 
 
 def _print_summary_line(result) -> None:
