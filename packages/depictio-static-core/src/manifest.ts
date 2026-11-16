@@ -324,6 +324,7 @@ export interface BundleManifest {
   links: LinksSection;
   /** Absent in pre-phase-4 manifests — read via `limitsOf()` for defaults. */
   limits?: RuntimeLimits;
+  /** Not read: a map keeps its own basemap in every bundle (online), blank offline. */
   allow_network_tiles: boolean;
   /** single-file only: 'dc_<id>' -> base64 Parquet bytes, 'obj_<sha>' -> object bytes. */
   inline_blobs: Record<string, string>;

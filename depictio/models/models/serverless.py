@@ -747,7 +747,11 @@ class BundleManifest(BaseModel):
     )
     allow_network_tiles: bool = Field(
         default=False,
-        description="Permit MapLibre tile fetches (static-dir/remote); single-file freezes maps unless style is white-bg",
+        description=(
+            "Not read: every bundle keeps a map's own basemap, loaded when the reader is "
+            "online (depictio/serverless/maps.py); offline the runtime draws the markers "
+            "on a blank background"
+        ),
     )
     inline_blobs: dict[str, str] = Field(
         default_factory=dict,

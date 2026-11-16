@@ -103,7 +103,11 @@ Measured across all 50 `.db_seeds/*.json` (251 components), because the tiering 
 - **Code-mode figures** execute arbitrary user Python via RestrictedPython.
 - **MultiQC** rendering imports the whole `multiqc` package.
 - **Maps need network tiles.** `services/map/render.py` emits MapLibre `scattermap` traces, so
-  "zero network" and live maps are mutually exclusive unless `style:'white-bg'`.
+  "zero network" and a basemap are mutually exclusive. A frozen map keeps the dashboard's own
+  `map_style`, so its basemap loads for an online reader; offline, the static runtime probes the
+  basemap host once and draws the same markers on a blank background (`mapBasemap.ts`). The
+  basemap hosts (`BASEMAP_HOSTS`, `depictio/serverless/maps.py`) are the only network a bundle
+  may reach for a map.
 
 **A bounded prerender cross-product cannot rescue these.** Every real dashboard mixes
 high-cardinality MultiSelects (`sample`, `Phylum`) with **continuous** RangeSliders (`AF`, `lfc`,
@@ -574,11 +578,12 @@ store), the bundle shows an export-time snapshot or summary of it.
 | all interactive filters, funnel, `always_selected`, selection groups | live | yes | unchanged |
 | persistent sections, floating maps, highlight | live / source's tier | as source | unchanged |
 | figure ui-mode (bindable) | live | yes | bind-and-refill |
-| figure ui-mode whole-frame visus / LOWESS | frozen | no | trace set is not a per-group partition |
+| figure ui-mode trendlines (ols + options, lowess, rolling / expanding / ewm) | live | yes | refit in TypeScript (`trendline.ts`), pinned to px by a parity fixture; a time-offset or weighted window, a `step`, another aggregation or an overall-scope fit stays frozen |
+| figure ui-mode whole-frame visus | frozen | no | trace set is not a per-group partition |
 | figure code-mode (transpilable, context folded) | live | yes | prologue IR + bind-and-refill |
 | figure code-mode (arbitrary Python) | **live (Python)** / frozen | yes (Python) | re-run in the server's RestrictedPython sandbox (`code_executor.py`, verbatim) on every filter change, ≤ 200k filtered rows; frozen without the add-on |
 | MultiQC plots / General Statistics | live (A) / omitted (B) | yes | GS data bars keep the export scale |
-| map (scatter/density) | frozen | no | basemap forced to `white-bg` |
+| map (scatter/density) | frozen (A and B) | no | the dashboard's own basemap when online; markers on a blank background offline. A choropleth: frozen (A), omitted (B: no region geometry) |
 | image gallery | **frozen (snapshot)** — was omitted | no | default rows' images read from the bucket at export, ≤ 384 px thumbnails, ≤ 48, under the object budget; `blob:` URLs |
 | JBrowse | **frozen (summary)** — was omitted | no | export-time session: assembly, locus, track table (`render_jbrowse` at the default state) |
 | server-state (comments, annotations, versions, saved filters, avatar, editing) | hidden | — | shimmed to "not available in a read-only bundle" |
@@ -615,14 +620,14 @@ runtime computed embeddings and code figures go live.
 | a gallery / structure whose files exceed the object budget | the files that fit ship; the rest are named in the tier detail |
 | (not on this branch) `bioimage_viewer` | see §13.5 |
 
-**Renders, not interactive** (a snapshot or a frozen compute, badged): map (white-bg),
-whole-frame visus / LOWESS, complex_heatmap, upset_plot, sankey, phylogenetic, UMAP layout
+**Renders, not interactive** (a snapshot or a frozen compute, badged): map (with its basemap online),
+whole-frame visus, trendlines with an unported option (time-offset or weighted windows), complex_heatmap, upset_plot, sankey, phylogenetic, UMAP layout
 (points follow filters), group_compare and arbitrary code-mode figures *without* the Python
 runtime, image gallery, JBrowse session, MultiQC GS data-bar scale, resolver models beyond the
 12 frozen entities.
 
 **Hard limits, unchanged in kind** (they now degrade to the snapshots above): live UMAP (numba,
-no WASM build); network basemap tiles; JBrowse / GenomeSpy remote tracks and references;
+no WASM build); basemap tiles for an OFFLINE reader (online, they load); JBrowse / GenomeSpy remote tracks and references;
 large bioimage pyramids; server state (time travel, comments, annotations, realtime, editing).
 
 ### 13.4 Measured costs

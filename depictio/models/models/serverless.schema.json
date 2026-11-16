@@ -1397,7 +1397,7 @@
     },
     "allow_network_tiles": {
       "default": false,
-      "description": "Permit MapLibre tile fetches (static-dir/remote); single-file freezes maps unless style is white-bg",
+      "description": "Not read: every bundle keeps a map's own basemap, loaded when the reader is online (depictio/serverless/maps.py); offline the runtime draws the markers on a blank background",
       "title": "Allow Network Tiles",
       "type": "boolean"
     },

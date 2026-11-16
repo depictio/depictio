@@ -21,8 +21,8 @@ Everything runs **in-process** — no HTTP round-trips to the API:
   ``build_figure_preview`` (the Celery task *function*, called directly — the
   same code path preview and render share), ``fetch_advanced_viz_data`` (the
   phylogenetic kind only — its ``sampling`` block is kept verbatim),
-  ``render_multiqc*``, and the map service with the basemap forced to
-  ``white-bg`` (zero-network single-file).
+  ``render_multiqc*``, and the map service with the dashboard's own basemap
+  (loaded when the reader is online; ``depictio/serverless/maps.py``).
 - Staleness: each DataRef records the server's ``_get_aggregation_hash`` for
   its DC (RFC errata #8), so a rebuilt bundle can be compared against the
   instance state it was cut from.
@@ -129,6 +129,7 @@ from depictio.serverless.binding import (
     planned_figure_miss,
 )
 from depictio.serverless.companions import filter_expr_companionable
+from depictio.serverless.maps import MAP_FROZEN_DETAIL, freeze_map_payload
 from depictio.serverless.objects import IMAGE_SNAPSHOT_MAX, IMAGE_THUMB_PX, ObjectBudget
 from depictio.serverless.preflight import (
     LINK_TIER_A,
@@ -693,9 +694,7 @@ def classify_stored_component(comp: dict[str, Any]) -> PlannedTier:
         return PlannedTier(
             ComponentTier.FROZEN,
             TierReason.MAP_TILES,
-            "frozen at the default filter state with the basemap forced to "
-            "'white-bg' — network tiles are unavailable in a zero-network "
-            "single-file bundle",
+            MAP_FROZEN_DETAIL,
         )
     if ctype == "image":
         return PlannedTier(
@@ -1751,19 +1750,14 @@ def _multiqc_payload(payload: Any, component_id: str) -> dict[str, Any]:
 def _freeze_map(
     comp: dict[str, Any], user: ExportUser, category_colors: dict | None = None
 ) -> dict[str, Any]:
-    """Freeze a map at the default filter state with a zero-network basemap.
+    """Freeze a map at the default filter state, keeping its own basemap.
 
-    Mirrors ``render_map_endpoint``'s body, but forces ``map_style`` to
-    ``white-bg``: MapLibre tile styles fetch from the network, which a
-    single-file bundle must never do (RFC §2.4). The endpoint itself cannot be
-    reused verbatim because it reads the component from Mongo — the style
-    override has to reach ``render_map``'s ``trigger_data``.
+    Mirrors ``render_map_endpoint``'s body (which reads the component from
+    Mongo, so it cannot be reused verbatim) through the shared
+    :func:`~depictio.serverless.maps.freeze_map_payload`: the dashboard's
+    ``map_style`` is kept, so the basemap loads when the reader is online, and
+    the runtime draws the markers on a blank background when it is not.
     """
-    import json as _json
-
-    from depictio.api.v1.services.figure.mantine_templates import ensure_mantine_templates
-    from depictio.api.v1.services.map.render import render_map
-
     init_entry = _dc_init_entry(comp)
     if init_entry is None:
         raise ProducerAError("map component's DC has no materialised Delta table")
@@ -1774,28 +1768,7 @@ def _freeze_map(
         metadata=None,
         init_data={dc_id: init_entry},
     )
-    ensure_mantine_templates()
-    trigger_data = {**comp, "map_style": "white-bg"}
-    fig, data_info = render_map(
-        df=df,
-        trigger_data=trigger_data,
-        theme="light",
-        existing_metadata=None,
-        access_token=None,
-        category_colors=category_colors,
-    )
-    fig_dict = _json.loads(fig.to_json()) if hasattr(fig, "to_json") else fig
-    if isinstance(fig_dict, dict) and "layout" in fig_dict:
-        fig_dict["layout"].setdefault("uirevision", "persistent")
-    return {
-        "figure": fig_dict,
-        "metadata": {
-            "map_type": comp.get("map_type", "scatter_map"),
-            "filter_applied": False,
-            "displayed_count": data_info.get("displayed_count"),
-            "total_count": data_info.get("total_count"),
-        },
-    }
+    return freeze_map_payload(comp, df, category_colors)
 
 
 # ---------------------------------------------------------------------------

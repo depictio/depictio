@@ -865,3 +865,18 @@ def test_build_static_end_to_end(data_dir: Path, tmp_path: Path) -> None:
     end = html.index("</script>", start)
     embedded = BundleManifest.model_validate_json(html[start:end].replace("<\\/", "</"))
     assert embedded.dashboard.id == result.manifest.dashboard.id
+
+
+def test_a_frozen_figure_with_text_arrays_serialises() -> None:
+    """``to_plotly_json`` keeps object-dtype arrays (a categorical histogram's x)
+    as numpy arrays, which the manifest's JSON dump refused, so the whole build
+    failed on the first such frozen figure."""
+    import json
+
+    from depictio.serverless.producer_b import _freeze_ui_figure
+
+    frame = pl.DataFrame({"biome": ["urban", "marine", "urban", "freshwater"]})
+    payload, _ = _freeze_ui_figure(
+        {"visu_type": "histogram", "dict_kwargs": {"x": "biome", "color": "biome"}}, frame
+    )
+    assert "urban" in json.dumps(payload)

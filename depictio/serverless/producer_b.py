@@ -50,7 +50,7 @@ from typing import Any
 import polars as pl
 import yaml
 
-from depictio.models.models.dashboards import DashboardDataLite
+from depictio.models.models.dashboards import DashboardDataLite, strip_auto_category_colors
 from depictio.models.models.serverless import (
     BindingTable,
     BundleManifest,
@@ -74,6 +74,7 @@ from depictio.serverless.binding import (
     miss_tier_reason,
 )
 from depictio.serverless.companions import build_companions, filter_expr_targets
+from depictio.serverless.maps import freeze_map_payload
 from depictio.serverless.preflight import (
     LINK_TIER_A,
     LINK_TIER_INERT,
@@ -494,8 +495,12 @@ def _freeze_ui_figure(comp: dict[str, Any], df: pl.DataFrame) -> tuple[dict[str,
         max_points=comp.get("max_points"),
         render_stats=stats,
     )
+    from depictio.serverless.inject import json_safe
+
     payload = {
-        "figure": fig.to_plotly_json(),
+        # ``to_plotly_json`` leaves object-dtype (text) arrays as numpy arrays —
+        # a categorical histogram's x — which the manifest cannot serialise.
+        "figure": json_safe(fig.to_plotly_json()),
         "metadata": {
             "visu_type": visu_type,
             "filter_applied": False,
@@ -876,6 +881,10 @@ def build_manifest(
         row = tier_by_id[comp["tag"]]
         if row.tier is ComponentTier.OMITTED:
             continue
+        if comp.get("component_type") == "map":
+            # A frozen map reads its whole table at build time and ships only the
+            # figure; its collection is bundled only if a live component reads it.
+            continue
         wf_tag = comp.get("workflow_tag") or ""
         dc_tag = comp.get("data_collection_tag") or ""
         if not wf_tag or not dc_tag:
@@ -1016,6 +1025,23 @@ def build_manifest(
     for comp in components:
         row = tier_by_id[comp["tag"]]
         if row.tier is not ComponentTier.FROZEN:
+            continue
+        if comp.get("component_type") == "map":
+            parquet_path = resolve_parquet_path(
+                data_path, comp.get("workflow_tag") or "", comp.get("data_collection_tag") or ""
+            )
+            if not parquet_path.exists():
+                row.tier = ComponentTier.OMITTED
+                row.reason = TierReason.UNSUPPORTED
+                row.detail = f"no Parquet for the map's data collection: expected {parquet_path}"
+                continue
+            colors = strip_auto_category_colors(getattr(spec, "category_colors", None) or {})
+            frozen[row.component_id] = FrozenPayload(
+                kind="map",
+                payload=freeze_map_payload(
+                    comp, pl.read_parquet(parquet_path), colors if colors else None
+                ),
+            )
             continue
         key = dc_key(comp.get("workflow_tag") or "", comp.get("data_collection_tag") or "")
         df = pruned_frames.get(key)

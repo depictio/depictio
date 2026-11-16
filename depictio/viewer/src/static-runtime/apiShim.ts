@@ -102,6 +102,7 @@ import {
   uniqueValuesLive,
 } from './interactiveLive';
 import { themedFrozenFigure } from './mantinePlotlyTemplate';
+import { withReachableBasemap } from './mapBasemap';
 import { pythonJob, pythonJobFor, runPythonJob, TooManyRowsError } from './pyodide/jobs';
 import { renderMultiQCGeneralStatsStatic, renderMultiQCStatic } from './multiqcShim';
 
@@ -487,8 +488,19 @@ function codeErrorFigure(message: string): FigureResponse {
   } as unknown as FigureResponse;
 }
 
-export async function renderMap(_dashboardId: string, componentId: string) {
-  return frozenPayload(componentId, 'map') as never;
+/** A frozen map (producers keep the dashboard's own `map_style`): re-templated
+ *  for the reader's theme like every frozen figure, its basemap swapped by the
+ *  same light/dark rule `render_map` applies live, and replaced by a blank
+ *  background when the tile host cannot be reached, so an offline reader still
+ *  gets the markers (`./mapBasemap.ts`). */
+export async function renderMap(
+  _dashboardId: string,
+  componentId: string,
+  _filters: InteractiveFilter[] = [],
+  theme: 'light' | 'dark' = 'light',
+) {
+  const payload = themedFrozenFigure(frozenPayload<FigureResponse>(componentId, 'map'), theme);
+  return (await withReachableBasemap(payload, theme)) as never;
 }
 
 /** The "show data" popover behind every map (`MapDataButton`, rendered by both
