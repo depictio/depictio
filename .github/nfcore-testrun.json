@@ -1,0 +1,9 @@
+[
+  {"pipeline": "methylseq", "version": "4.2.0", "template": "nf-core/methylseq/2.3.0"},
+  {"pipeline": "eager", "version": "2.5.3", "template": "nf-core/eager/2.4.5"},
+  {"pipeline": "genomeassembler", "version": "2.0.1", "template": "nf-core/genomeassembler/2.0.0"},
+  {"pipeline": "nanoseq", "version": "3.1.0", "template": "nf-core/nanoseq/3.0.0"},
+  {"pipeline": "proteinfamilies", "version": "2.6.0", "template": "nf-core/proteinfamilies/2.5.0"},
+  {"pipeline": "quantms", "version": "1.2.0", "template": "nf-core/quantms/1.1.1"},
+  {"pipeline": "rnafusion", "version": "4.2.0", "template": "nf-core/rnafusion/4.1.3"}
+]

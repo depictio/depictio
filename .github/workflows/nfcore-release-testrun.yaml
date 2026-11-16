@@ -1,0 +1,144 @@
+name: nf-core release test run
+
+# Evidence for a template bump when the release has no usable AWS megatest run
+# (the monitor's ⚪ "unverified"): run the release's own `-profile test,docker`,
+# then ask the template what it makes of that outdir, with the same two commands
+# a maintainer runs on a megatest subset:
+#
+#   depictio template check <template> --schema <release schema> --run <outdir>
+#   depictio ingest <outdir> --template <template> --dry-run
+#
+# The outdir (files over 50 MB dropped) is uploaded as an artifact, so the run
+# can be ingested into `depictio local up` and its dashboards looked at.
+#
+# The matrix is `.github/nfcore-testrun.json` of the pushed branch: a list of
+# {pipeline, version, template[, args]}; `template` is the template the run is
+# checked against (the previous version's, before the bump copies it).
+on:
+  push:
+    branches: ["nfcore-testrun/**"]
+    paths:
+      - ".github/nfcore-testrun.json"
+      - ".github/workflows/nfcore-release-testrun.yaml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  matrix:
+    runs-on: ubuntu-24.04
+    outputs:
+      runs: ${{ steps.read.outputs.runs }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: read
+        run: echo "runs=$(jq -c . .github/nfcore-testrun.json)" >> "$GITHUB_OUTPUT"
+
+  testrun:
+    needs: matrix
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        run: ${{ fromJSON(needs.matrix.outputs.runs) }}
+    name: ${{ matrix.run.pipeline }} ${{ matrix.run.version }}
+    env:
+      NXF_VER: 26.10.6
+      NXF_ANSI_LOG: "false"
+      COLUMNS: "200"
+      PIPELINE: ${{ matrix.run.pipeline }}
+      VERSION: ${{ matrix.run.version }}
+      TEMPLATE: ${{ matrix.run.template }}
+      EXTRA_ARGS: ${{ matrix.run.args }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Install Nextflow
+        run: |
+          curl -fsSL https://get.nextflow.io | bash
+          sudo mv nextflow /usr/local/bin/
+
+      - name: Run the release's -profile test,docker
+        run: |
+          set -euo pipefail
+          # Cloned with git, not pulled by Nextflow (GitHub API rate limit).
+          git -c advice.detachedHead=false clone --quiet --depth 1 --branch "$VERSION" \
+            "https://github.com/nf-core/$PIPELINE.git" nfcore-pipeline
+          run_pipeline() {
+            # shellcheck disable=SC2086
+            nextflow run "$PWD/nfcore-pipeline" -profile test,docker \
+              --outdir "$PWD/results" -work-dir "$PWD/work" $EXTRA_ARGS
+          }
+          if ! run_pipeline 2>&1 | tee run.log; then
+            # Releases written before the strict parser: retry with the old one,
+            # on a parse error only.
+            grep -qE "Config parsing failed|Unable to parse config|could not be parsed|Statements cannot be mixed" run.log \
+              || { echo "::error::nf-core/$PIPELINE $VERSION failed"; exit 1; }
+            echo "::warning::nf-core/$PIPELINE $VERSION needs NXF_SYNTAX_PARSER=v1"
+            rm -rf results work .nextflow*
+            NXF_SYNTAX_PARSER=v1 run_pipeline
+          fi
+          rm -rf work
+          du -sh results
+
+      - uses: astral-sh/setup-uv@v7
+
+      - name: Install the CLI (base install)
+        run: |
+          uv venv --python 3.12 venv
+          uv pip install --python venv/bin/python -e .
+
+      - name: What the template makes of the run
+        run: |
+          set -uo pipefail
+          {
+            echo "## nf-core/$PIPELINE $VERSION (-profile test) against $TEMPLATE"
+            echo '```'
+            find results -maxdepth 2 -type d | sort
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          status=0
+          echo "::group::template check (release schema, this run's params)"
+          venv/bin/depictio template check "$TEMPLATE" \
+            --schema nfcore-pipeline/nextflow_schema.json --run results | tee check.txt || status=1
+          echo "::endgroup::"
+          echo "::group::ingest --dry-run"
+          venv/bin/depictio ingest results --template "$TEMPLATE" --dry-run | tee dryrun.txt || status=1
+          echo "::endgroup::"
+          { echo '```'; cat check.txt dryrun.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          exit $status
+
+      - name: Keep the outdir (files over 50 MB dropped)
+        if: always()
+        run: |
+          [ -d results ] || exit 0
+          find results -type f -size +50M -print -delete
+          # The release's samplesheet, as the run read it (params.json `input`).
+          params=$(find results/pipeline_info -maxdepth 1 -name 'params_*.json' | sort | tail -1)
+          input=$(jq -r '.input // empty' "$params" 2>/dev/null || true)
+          mkdir -p results/.testrun
+          cp run.log check.txt dryrun.txt results/.testrun/ 2>/dev/null || true
+          case "$input" in
+            http://*|https://*) curl -fsSL -o "results/.testrun/samplesheet.${input##*.}" "$input" || true ;;
+            ?*) cp "$input" results/.testrun/ 2>/dev/null || true ;;
+          esac
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: ${{ matrix.run.pipeline }}-${{ matrix.run.version }}-testrun
+          path: results
+          retention-days: 14
+          include-hidden-files: true
