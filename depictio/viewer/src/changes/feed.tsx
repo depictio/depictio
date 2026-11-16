@@ -319,3 +319,39 @@ export const FeedIconAction: React.FC<{
     </ActionIcon>
   </Tooltip>
 );
+
+/** Runs named with the dot of their colour (runColors.ts), up to `max`. */
+export const RunDots: React.FC<{
+  runs: string[];
+  colorOf: (run: string) => string;
+  max?: number;
+}> = ({ runs, colorOf, max = 3 }) => {
+  const shown = runs.slice(0, max);
+  const more = runs.length - shown.length;
+  return (
+    <Group gap={10} wrap="wrap" data-testid="run-dots">
+      {shown.map((run) => (
+        <Group key={run} gap={5} wrap="nowrap" style={{ minWidth: 0 }}>
+          <span
+            aria-hidden
+            style={{
+              flex: '0 0 auto',
+              width: 8,
+              height: 8,
+              borderRadius: '50%',
+              background: colorOf(run),
+            }}
+          />
+          <Text size="xs" fw={500} lineClamp={1}>
+            {run}
+          </Text>
+        </Group>
+      ))}
+      {more > 0 && (
+        <Text size="xs" c="dimmed">
+          +{more}
+        </Text>
+      )}
+    </Group>
+  );
+};

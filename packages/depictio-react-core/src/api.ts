@@ -10696,6 +10696,9 @@ export interface DashboardChangeSet {
   /** `tabId:componentIndex` -> why it is marked. */
   changed_components: Record<string, Array<'definition' | 'data'>>;
   baseline_version_id: string | null;
+  /** Runs that are one group of the dashboard's pinned colours, in that
+   *  group's colour (epic #1399). Other runs take a colour of the palette. */
+  run_colors?: Record<string, string>;
   server_held: boolean;
   mark_mode: MarkMode;
   current_baseline?: ReaderBaseline;
@@ -10872,6 +10875,8 @@ export interface InboxItem {
   scope_id: string;
   title: string;
   new_run_tags: string[];
+  /** As `DashboardChangeSet.run_colors`, for the new runs. */
+  run_colors?: Record<string, string>;
   refreshed: string[];
   dashboard_versions: number;
   at: string | null;

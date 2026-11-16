@@ -55,6 +55,7 @@ import {
   nameList,
 } from './feed';
 import { newRowsHref } from './NewRowsPreview';
+import { useRunColor } from './runColors';
 import { CHANGE_COLOR } from './palette';
 
 const VIEW_HINT: Record<NewsView, string> = {
@@ -91,7 +92,8 @@ const RunFocus: React.FC<{
   runs: string[];
   focusRun: string | null;
   onPick: (value: string | null) => void;
-}> = ({ runs, focusRun, onPick }) => {
+  colorOf: (run: string) => string;
+}> = ({ runs, focusRun, onPick, colorOf }) => {
   const value = focusRun ?? ALL_RUNS;
   if (runs.length > RUN_CHIPS_MAX) {
     return (
@@ -115,19 +117,24 @@ const RunFocus: React.FC<{
   }
   if (runs.length <= 1) return null;
   const chips = [
-    { value: ALL_RUNS, label: 'All new runs', testId: 'changes-run-focus-all' },
-    ...runs.map((run) => ({ value: run, label: run, testId: `changes-run-focus-${run}` })),
+    { value: ALL_RUNS, label: 'All new runs', testId: 'changes-run-focus-all', color: CHANGE_COLOR.new },
+    ...runs.map((run) => ({
+      value: run,
+      label: run,
+      testId: `changes-run-focus-${run}`,
+      color: colorOf(run),
+    })),
   ];
   return (
     <Chip.Group multiple={false} value={value} onChange={onPick}>
-      {/* Blue like every "new" mark, whatever the page's primary. */}
+      {/* Each run in its own colour (runColors.ts); "all" in the colour of new. */}
       <Group gap={4} data-testid="changes-run-focus">
         {chips.map((chip) => (
           <Chip
             key={chip.value}
             size="xs"
             variant="outline"
-            color={CHANGE_COLOR.new}
+            color={chip.color}
             value={chip.value}
             data-testid={chip.testId}
           >
@@ -150,6 +157,7 @@ const NewsViewControl: React.FC<{ ctx: ChangesSinceValue; runOrder: string[] }> 
   // Newest first, as the list below: the runs the panel dates, then any other.
   const runs = [...runOrder.filter((r) => ctx.newRuns.includes(r)), ...ctx.newRuns.filter((r) => !runOrder.includes(r))];
   const pickRun = (v: string | null) => (!v || v === ALL_RUNS ? ctx.setFocusRun(null) : ctx.showRun(v));
+  const colorOf = useRunColor(ctx.changeSet.run_colors);
   return (
     <Paper withBorder radius="md" p="xs" className="dc-news-card" data-testid="changes-view-card">
       <Stack gap={8}>
@@ -178,7 +186,7 @@ const NewsViewControl: React.FC<{ ctx: ChangesSinceValue; runOrder: string[] }> 
           aria-label="Show what is new on the dashboard"
           data-testid="changes-view"
         />
-        <RunFocus runs={runs} focusRun={ctx.focusRun} onPick={pickRun} />
+        <RunFocus runs={runs} focusRun={ctx.focusRun} onPick={pickRun} colorOf={colorOf} />
         {overlayish && (
           <Switch
             size="xs"
@@ -360,9 +368,11 @@ const RunRow: React.FC<{
   const [open, setOpen] = React.useState(lines.length <= RUN_LINES_OPEN);
   const shown = ctx.focusRun === news.run && ctx.view !== 'off';
   const canShow = ctx.highlightable > 0 || ctx.splitAvailable;
+  const colorOf = useRunColor(ctx.changeSet.run_colors);
   return (
     <FeedItem
       kind="run"
+      color={colorOf(news.run)}
       title={news.run}
       summary={runFacts(news).join(' · ') || 'New run'}
       by={news.by}

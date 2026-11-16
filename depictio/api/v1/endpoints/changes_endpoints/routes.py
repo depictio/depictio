@@ -25,6 +25,7 @@ from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from depictio.api.v1.configs.config import settings
+from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import (
     comment_threads_collection,
     dashboard_versions_collection,
@@ -142,6 +143,7 @@ def dashboard_change_set(
         "comments": [],
         "changed_components": {},
         "baseline_version_id": base.version_id if base else None,
+        "run_colors": {},
     }
     if base is None:
         return out
@@ -166,8 +168,26 @@ def dashboard_change_set(
         dashboard=dashboard,
         comments=comments,
         changed_components=marked,
+        run_colors=_run_colors(data, main, collections),
     )
     return out
+
+
+def _run_colors(
+    data: list[dict[str, Any]], main: dict[str, Any], collections: dict[str, dict[str, Any]]
+) -> dict[str, str]:
+    """The runs of the change set that are one group of the dashboard's pinned
+    colours, in that group's colour (``run_colors.group_run_colors``)."""
+    from depictio.api.v1.services.changes.run_colors import group_run_colors
+
+    runs = sorted(
+        {t for d in data for t in [*(d.get("new_run_tags") or []), *(d.get("seen_run_tags") or [])]}
+    )
+    try:
+        return group_run_colors(runs, main.get("category_colors"), collections)
+    except Exception as exc:  # colours are a nicety: never fail the change set
+        logger.warning(f"run colours: {type(exc).__name__}: {exc}")
+        return {}
 
 
 @changes_router.post("/dashboard/{dashboard_id}")
@@ -591,13 +611,16 @@ def _inbox_item(
         project = projects_collection.find_one({"_id": ObjectId(scope_id)}, {"name": 1}) or {}
         data = df.data_changes(base, now, bl.project_collections(scope_id))
         runs = df.new_workflow_runs(base, now)
+        run_colors: dict[str, str] = {}
         title = project.get("name") or ""
         dashboard_versions = 0
         project_id: str | None = scope_id
     else:
         family_id, main, docs = _family(scope_id, user)
         now = bl.family_baseline(family_id, docs)
-        data = df.data_changes(base, now, bl.project_collections(main.get("project_id")))
+        collections = bl.project_collections(main.get("project_id"))
+        data = df.data_changes(base, now, collections)
+        run_colors = _run_colors(data, main, collections)
         runs = []
         title = main.get("title") or ""
         project_id = str(main["project_id"]) if main.get("project_id") else None
@@ -619,6 +642,7 @@ def _inbox_item(
         "scope_id": scope_id,
         "title": title,
         "new_run_tags": new_run_tags,
+        "run_colors": {t: c for t, c in run_colors.items() if t in new_run_tags},
         "refreshed": [d.get("data_collection_tag") for d in data],
         "dashboard_versions": dashboard_versions,
         "at": max(times) if times else None,

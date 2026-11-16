@@ -84,6 +84,9 @@ export function newSideOnly(split: NewsSplit): NewsSplit {
 export interface SplitColors {
   fresh: string;
   seen: string;
+  /** A run's own colour (runColors.ts). When the new side is one run, it is
+   *  drawn in it; several runs together keep `fresh`. */
+  run?: (tag: string) => string;
 }
 
 const freshName = (tags: string[], fallback: string): string =>
@@ -108,8 +111,9 @@ function runGroups(cs: DashboardChangeSet | null | undefined, colors: SplitColor
     fresh.add(focus);
   }
   const freshTags = [...fresh].sort();
+  const freshColor = freshTags.length === 1 && colors.run ? colors.run(freshTags[0]) : colors.fresh;
   const groups: GroupRenderDef[] = [
-    { name: freshName(freshTags, 'New'), column_name: RUN_COLUMN, values: freshTags, color: colors.fresh },
+    { name: freshName(freshTags, 'New'), column_name: RUN_COLUMN, values: freshTags, color: freshColor },
   ];
   if (seen.size > 0) {
     groups.push({
@@ -167,12 +171,14 @@ function sampleGroups(d: DataChange, colors: SplitColors, focus: string | null):
   if (fresh.length === 0 || seen.length === 0) return null;
   // A truncated list would file the samples it left out under neither side.
   if ((d.new_sample_count ?? fresh.length) !== fresh.length) return null;
+  const tags = [...d.new_run_tags].sort();
   return [
     {
-      name: freshName([...d.new_run_tags].sort(), 'New samples'),
+      name: freshName(tags, 'New samples'),
       column_name: SAMPLE_COLUMN,
       values: [...fresh].sort(),
-      color: colors.fresh,
+      // One run's samples in that run's colour, as the run groups.
+      color: tags.length === 1 && colors.run ? colors.run(tags[0]) : colors.fresh,
       dc_id: d.dc_id,
     },
     { name: 'Seen before', column_name: SAMPLE_COLUMN, values: [...seen].sort(), color: colors.seen, dc_id: d.dc_id },

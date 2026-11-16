@@ -23,7 +23,18 @@ import {
 
 import { useChangesSinceEnabled } from '../hooks/useChangesSinceEnabled';
 import { useCurrentUser } from '../hooks/useCurrentUser';
-import { FeedHeader, FeedItem, FeedMarkSeen, FeedScroll, facts, nameList } from '../changes/feed';
+import {
+  FEED_KIND,
+  FeedHeader,
+  FeedItem,
+  FeedMarkSeen,
+  FeedScroll,
+  RunDots,
+  facts,
+  nameList,
+} from '../changes/feed';
+import { CHANGE_COLOR } from '../changes/palette';
+import { useRunColor } from '../changes/runColors';
 import { projectRunsHref } from '../changes/describe';
 import {
   useProjectIngestionEvents,
@@ -104,6 +115,14 @@ const itemSignature = (item: InboxItem) =>
 /** A live ingestion toast stands for this long: a poll naming the same project
  *  within it does not toast again. */
 const LIVE_COVERS_MS = 5 * 60_000;
+
+/** A toast's colour: one run's own, several runs neutral (their dots carry the
+ *  colours; the colour of "new" would read as one more run), none the colour
+ *  of refreshed data. */
+function toastColor(runs: string[], runColor: (tag: string) => string): string {
+  if (runs.length === 1) return runColor(runs[0]);
+  return runs.length ? 'gray' : CHANGE_COLOR.data;
+}
 
 const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? '' : 's'}`;
 
@@ -198,36 +217,57 @@ const NotificationsBell: React.FC<NotificationsBellProps> = ({
   itemsRef.current = items;
   const dashboardProjectRef = useRef(dashboardProject);
   dashboardProjectRef.current = dashboardProject;
+  // The toasts are built in stable callbacks: they read the run colours here.
+  const colorOf = useRunColor(null);
+  const colorOfRef = useRef(colorOf);
+  colorOfRef.current = colorOf;
   const announced = useRef(new Set<string>());
   // project id -> when a live toast named it.
   const liveAt = useRef(new Map<string, number>());
+  // project id -> the inbox toast shown for it: the ingestion's own toast,
+  // often a moment later, replaces it rather than stacking a second one.
+  const polledToast = useRef(new Map<string, string>());
   // What the last read said, per item; null until the first read of this page,
   // which is only a baseline: what it holds was there before the page opened.
   const signatures = useRef<Map<string, string> | null>(null);
 
-  const announcePolled = useCallback((item: InboxItem) => {
+  const announcePolled = useCallback((item: InboxItem, before: InboxItem | undefined) => {
     const project =
       item.scope_kind === 'project' ? item.scope_id : dashboardProjectRef.current[item.scope_id];
     const live = project ? liveAt.current.get(project) : undefined;
     if (live != null && Date.now() - live < LIVE_COVERS_MS) return;
     const title = `New in ${item.title || (item.scope_kind === 'project' ? 'a project' : 'a dashboard')}`;
-    const runs = item.new_run_tags;
+    // Only what the previous read did not hold: the runs the reader had already
+    // been told about (and not yet opened) stay in the bell, not in this toast.
+    const told = new Set(before?.new_run_tags ?? []);
+    const runs = item.new_run_tags.filter((t) => !told.has(t));
+    const versions = item.dashboard_versions - (before?.dashboard_versions ?? 0);
     const body = facts(
       runs.length ? `${plural(runs.length, 'new run')}: ${nameList(runs, CHIPS_SHOWN)}` : null,
-      item.dashboard_versions > 0 ? plural(item.dashboard_versions, 'dashboard change') : null,
+      versions > 0 ? plural(versions, 'dashboard change') : null,
       item.refreshed.length > 0 ? `${nameList(item.refreshed, CHIPS_SHOWN)} refreshed` : null,
     );
     const href = itemHref(item);
     showDesktopNotification(title, body, `inbox-${itemKey(item)}`, href);
+    const runColor = (tag: string) => item.run_colors?.[tag] ?? colorOfRef.current(tag);
+    const rest = facts(
+      versions > 0 ? plural(versions, 'dashboard change') : null,
+      item.refreshed.length > 0 ? `${nameList(item.refreshed, CHIPS_SHOWN)} refreshed` : null,
+    );
+    const toastId = `inbox-${itemKey(item)}-${itemSignature(item)}`;
+    if (project) polledToast.current.set(project, toastId);
     notifications.show({
-      id: `inbox-${itemKey(item)}-${itemSignature(item)}`,
+      id: toastId,
       title,
       autoClose: 20_000,
+      color: toastColor(runs, runColor),
+      icon: <Icon icon={runs.length ? FEED_KIND.run.icon : FEED_KIND.data.icon} width={16} />,
       message: (
         <Stack gap={4} data-testid="inbox-toast">
-          {body && (
+          {runs.length > 0 && <RunDots runs={runs} colorOf={runColor} max={CHIPS_SHOWN} />}
+          {rest && (
             <Text size="xs" c="dimmed">
-              {body}
+              {rest}
             </Text>
           )}
           <Anchor href={href} size="xs" data-testid="inbox-toast-open">
@@ -244,8 +284,11 @@ const NotificationsBell: React.FC<NotificationsBellProps> = ({
       const previous = signatures.current;
       const next = new Map(inbox.items.map((i) => [itemKey(i), itemSignature(i)]));
       if (previous) {
+        const before = new Map(itemsRef.current.map((i) => [itemKey(i), i]));
         for (const item of inbox.items) {
-          if (previous.get(itemKey(item)) !== next.get(itemKey(item))) announcePolled(item);
+          if (previous.get(itemKey(item)) !== next.get(itemKey(item))) {
+            announcePolled(item, before.get(itemKey(item)));
+          }
         }
       }
       signatures.current = next;
@@ -317,35 +360,42 @@ const NotificationsBell: React.FC<NotificationsBellProps> = ({
     return [...ids];
   }, [items, dashboardProject, followed]);
 
-  const onFinished = useCallback(
-    (event: IngestionFinishedPayload) => {
-      if (announced.current.has(event.run_id)) return;
-      announced.current.add(event.run_id);
-      const name = event.project_name || 'a project';
-      const labels = event.run_tags.length > 0 ? event.run_tags : event.collections;
-      const marked = itemsRef.current.find(
+  const showLive = useCallback(
+    (event: IngestionFinishedPayload, name: string, labels: string[], items: InboxItem[]) => {
+      const marked = items.find(
         (i) =>
           i.scope_kind === 'dashboard' &&
           dashboardProjectRef.current[i.scope_id] === event.project_id,
       );
-      liveAt.current.set(event.project_id, Date.now());
       const href = projectRunsHref(event.project_id, event.run_tags[0]);
+      const polled = polledToast.current.get(event.project_id);
+      if (polled) {
+        notifications.hide(polled);
+        polledToast.current.delete(event.project_id);
+      }
       showDesktopNotification(
         `New data in ${name}`,
         labels.length > 0 ? nameList(labels, CHIPS_SHOWN) : 'An ingestion finished.',
         `ingestion-${event.run_id}`,
         href,
       );
+      const runColor = (tag: string) => marked?.run_colors?.[tag] ?? colorOfRef.current(tag);
       notifications.show({
         id: `ingestion-${event.run_id}`,
         title: `New data in ${name}`,
         autoClose: 20_000,
+        color: toastColor(event.run_tags, runColor),
+        icon: <Icon icon={event.run_tags.length ? FEED_KIND.run.icon : FEED_KIND.data.icon} width={16} />,
         message: (
           <Stack gap="xs" data-testid="ingestion-toast">
-            {labels.length > 0 && (
-              <Text size="xs" c="dimmed">
-                {nameList(labels, CHIPS_SHOWN)}
-              </Text>
+            {event.run_tags.length > 0 ? (
+              <RunDots runs={event.run_tags} colorOf={runColor} max={CHIPS_SHOWN} />
+            ) : (
+              labels.length > 0 && (
+                <Text size="xs" c="dimmed">
+                  {nameList(labels, CHIPS_SHOWN)}
+                </Text>
+              )
             )}
             <Group gap="xs">
               <Anchor href={href} size="xs" data-testid="ingestion-toast-open-project">
@@ -367,6 +417,26 @@ const NotificationsBell: React.FC<NotificationsBellProps> = ({
       void refresh();
     },
     [refresh],
+  );
+
+  const onFinished = useCallback(
+    (event: IngestionFinishedPayload) => {
+      if (announced.current.has(event.run_id)) return;
+      announced.current.add(event.run_id);
+      const name = event.project_name || 'a project';
+      const labels = event.run_tags.length > 0 ? event.run_tags : event.collections;
+      liveAt.current.set(event.project_id, Date.now());
+      // The colours of the runs just ingested: the inbox read before the
+      // ingestion does not know them, so read it again (the last one if the
+      // read fails).
+      void fetchChangesInbox()
+        .then(
+          (inbox) => inbox.items,
+          () => itemsRef.current,
+        )
+        .then((items) => showLive(event, name, labels, items));
+    },
+    [showLive],
   );
 
   useProjectIngestionEvents(projectIds, onFinished, eligible && heldByServer);

@@ -335,6 +335,14 @@ check('focus: that run against every other', newsSplitGroups(twoNew, COLORS, 'ru
   showOther: false,
   samples: {},
 });
+check(
+  'one run alone is drawn in its own colour, several keep the colour of new',
+  [
+    newsSplitGroups(twoNew, { ...COLORS, run: (t) => `#${t}` }, 'run_4').groups[0].color,
+    newsSplitGroups(twoNew, { ...COLORS, run: (t) => `#${t}` }).groups[0].color,
+  ],
+  ['#run_4', COLORS.fresh],
+);
 check('focus: a run that is not new is ignored', newsSplitGroups(twoNew, COLORS, 'run_1'), newsSplitGroups(twoNew, COLORS));
 const mqcTwo = { ...empty, data: [delta({ new_run_tags: ['run_3', 'run_4'] }), { ...delta({}), dc_id: 'm', new_run_tags: ['run_3', 'run_4'], new_samples: ['a'], seen_samples: ['b'], new_sample_count: 1 }] };
 check('focus: MultiQC samples that mix runs are not split', Object.keys(newsSplitGroups(mqcTwo, COLORS, 'run_4').samples), []);
