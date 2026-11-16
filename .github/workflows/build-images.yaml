@@ -33,9 +33,10 @@ on:
       - "docker-images/Dockerfile.viewer"
       - "docker-images/Dockerfile.cli"
       - "docker-images/allinone/**"
-      # The module runs in the all-in-one image (its artifact check below), and
-      # `depictio local up` there is local_stack.py.
+      # The module and its subworkflow run in the all-in-one image (the artifact
+      # and nf-core checks below), and `depictio local up` there is local_stack.py.
       - "depictio/cli/configs/nextflow/modules/depictio/ingest/**"
+      - "depictio/cli/configs/nextflow/subworkflows/depictio/publish/**"
       - "depictio/cli/cli/local_stack.py"
       - "docker-images/nginx.conf.template"
       - "docker-images/run_fastapi.sh"

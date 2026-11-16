@@ -608,6 +608,12 @@ def test_install_services_writes_the_manifest_local_up_checks():
     assert '{"specs": specs, "platform": platform, "packages": services}' in text
 
 
+def test_mongod_puts_no_unix_socket_in_tmp():
+    """A /tmp/mongodb-<port>.sock left by another user on a shared node aborts ours."""
+    source = open(local_stack.__file__, encoding="utf-8").read()
+    assert '"--nounixsocket"' in source
+
+
 def test_seaweedfs_sockets_are_per_user_with_preinstalled_services_only(tmp_path, monkeypatch):
     cmd = ["weed", "mini", "-s3.port=9123", "-filer.port=8899"]
     assert local_stack.seaweedfs_socket_flags(cmd) == []

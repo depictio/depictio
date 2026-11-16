@@ -115,6 +115,17 @@ class TestInterface:
         """The scan skips symlinked directories, so linking one whole loses its files."""
         assert 'cp -rsfL "$src/." "$dst/"' in _main().replace("\\$", "$")
 
+    def test_an_earlier_artifact_in_the_results_is_not_ingested(self):
+        """<outdir>/depictio/ holds the last run's stack (MongoDB files, admin keys)."""
+        assert "find data_root -name .depictio-local-home" in _main()
+
+    def test_every_staged_path_is_quoted(self):
+        """A results directory named `results 2024` must still stage."""
+        script = _main().split("script:", 1)[1].split("stub:", 1)[0]
+        assert "stage_into ${quote.call(f)} ${quote.call(r)}" in script
+        for flag in ("--project-config-path", "--dashboard", "--server"):
+            assert re.search(rf"{flag} \$\{{quote\.call\(", script), flag
+
     def test_the_cli_is_called_as_depictio(self):
         main = _main()
         assert re.search(r"^\s*depictio \\\\$", main, re.MULTILINE)
@@ -179,6 +190,18 @@ class TestPublishSubworkflow:
         """nf-core asks a subworkflow to take every setting as an input."""
         code = [line.split("//", 1)[0] for line in (PUBLISH / "main.nf").read_text().splitlines()]
         assert not [line for line in code if "params." in line]
+
+    def test_it_runs_when_the_channel_it_waits_on_is_empty(self):
+        """collect() emits nothing for an empty channel (--skip_multiqc); toList() emits []."""
+        main = (PUBLISH / "main.nf").read_text()
+        assert ".toList()" in main
+        assert ".collect()" not in main.split("main:", 1)[1].split("DEPICTIO_INGEST(", 1)[0]
+
+    def test_depictio_vars_reads_a_command_line_string_too(self):
+        """`--depictio_vars 'A=b,C=d'` arrives as a String, not a Map."""
+        config = (PUBLISH / "nextflow.config").read_text()
+        assert "params.depictio_vars instanceof Map" in config
+        assert ".tokenize(',')" in config
 
     def test_its_selector_matches_with_or_without_an_enclosing_workflow(self):
         selector = re.search(

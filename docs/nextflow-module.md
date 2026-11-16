@@ -92,7 +92,7 @@ ch_depictio = ch_multiqc_data
         [ 'multiqc/multiqc_data', 'star_salmon/salmon.merged.gene_counts.tsv' ],
     ] }
 
-DEPICTIO_INGEST(ch_depictio, 'nf-core/rnaseq/3.26.0', [], [], [], '')
+DEPICTIO_INGEST(ch_depictio, 'nf-core/rnaseq/3.26.0', [], [], [])
 ```
 
 The two lists pair up by position, and a size mismatch stops the task, as does
@@ -107,7 +107,7 @@ leave `relpaths` empty:
   ```groovy
   DEPICTIO_INGEST(
       Channel.of([ [id: 'run'], file(params.results, type: 'dir'), [] ]),
-      '', [], [], [], '',
+      '', [], [], [],
   )
   ```
 

@@ -45,7 +45,7 @@ process DEPICTIO_INGEST {
     // Options of `depictio local up`, e.g. '--port 8123' for the API port.
     def args2 = task.ext.args2 ?: ''
     prefix = task.ext.prefix ?: "${meta.id}"
-    // Single-quoted for the shell. Staged paths need none: Nextflow escapes them.
+    // Single-quoted for the shell, staged paths too: a file name may hold a space.
     def quote = { value -> "'" + value.toString().replace("'", "'\\''") + "'" }
     def inputs = files instanceof List ? files : [files]
     def rels = relpaths ? (relpaths instanceof List ? relpaths : [relpaths]) : []
@@ -60,18 +60,18 @@ process DEPICTIO_INGEST {
         // One directory is the data root itself; anything else is laid out flat.
         rels = inputs.size() == 1 ? ['.'] : inputs.collect { f -> f.name }
     }
-    def layout = [inputs, rels].transpose().collect { f, r -> "stage_into ${f} ${quote.call(r)}" }.join('\n    ')
+    def layout = [inputs, rels].transpose().collect { f, r -> "stage_into ${quote.call(f)} ${quote.call(r)}" }.join('\n    ')
 
     def project_args = ''
     if (project_config) {
-        project_args = "--project-config-path ${project_config}"
+        project_args = "--project-config-path ${quote.call(project_config)}"
     } else if (template) {
         project_args = "--template ${quote.call(template)}"
     }
     def dashboard_list = dashboards instanceof List ? dashboards : (dashboards ? [dashboards] : [])
-    def dashboard_args = dashboard_list.collect { d -> "--dashboard ${d}" }.join(' ')
+    def dashboard_args = dashboard_list.collect { d -> "--dashboard ${quote.call(d)}" }.join(' ')
     def artifact = !cli_config
-    def server_args = artifact ? '--server local' : "--server ${cli_config}"
+    def server_args = artifact ? '--server local' : "--server ${quote.call(cli_config)}"
     def artifact_dir = quote.call("${prefix}_depictio")
     // The stack's home is in the work directory, so it never touches
     // ~/.depictio/local, and its ports are picked free, so it runs beside any other
@@ -129,6 +129,12 @@ process DEPICTIO_INGEST {
     }
     mkdir -p data_root
     ${layout}
+    # An earlier run's artifact published into the same results directory
+    # (<outdir>/depictio/) is a whole stack, MongoDB files and admin keys
+    # included: never data to ingest.
+    find data_root -name .depictio-local-home -exec dirname {} \\; | while read -r stale; do
+        rm -rf "\$stale"
+    done
 
     ${start_stack}
     # Expanded in a project YAML's locations ({DEPICTIO_DATA_ROOT}).

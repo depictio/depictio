@@ -1115,6 +1115,10 @@ def _start_services(
             str(ports["mongo"]),
             "--bind_ip",
             "127.0.0.1",
+            # No /tmp/mongodb-<port>.sock: nothing here connects through it, and
+            # one left on a shared node by another user's mongod (another uid,
+            # so not removable) makes ours abort at startup.
+            "--nounixsocket",
         ],
         base_env,
     )

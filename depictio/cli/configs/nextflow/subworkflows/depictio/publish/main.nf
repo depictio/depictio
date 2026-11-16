@@ -27,8 +27,10 @@ workflow DEPICTIO_PUBLISH {
         ? (dashboards instanceof List ? dashboards : [dashboards]).collect { d -> file(d, checkIfExists: true) }
         : []
 
+    // toList, not collect: it emits once even when ch_done is empty (a report
+    // the run skipped, e.g. --skip_multiqc), so the run is still published.
     ch_run = ch_done
-        .collect()
+        .toList()
         .map { _done ->
             def files = [file(outdir.toString(), type: 'dir', checkIfExists: true)]
             def relpaths = ['.']

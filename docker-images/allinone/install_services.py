@@ -75,8 +75,9 @@ def main() -> None:
         return
     # The manifest: the marker ensure_binaries writes, so the prefix reads like a
     # local home's env/. With DEPICTIO_SERVICES_PREFIX (the image sets it), `depictio
-    # local up` checks its specs and platform against its own CONDA_SPECS and refuses
-    # a mismatch rather than download. `packages` is informational.
+    # local up` checks it against its own CONDA_SPECS and refuses a mismatch rather
+    # than download: the installed version of each service in `packages` (so an
+    # exact-pin SERVICES_SPECS build passes), else `specs`, and the platform.
     manifest = {"specs": specs, "platform": platform, "packages": services}
     (prefix / ".depictio-specs.json").write_text(json.dumps(manifest))
     for rel in PRUNE:
