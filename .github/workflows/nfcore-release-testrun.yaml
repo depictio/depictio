@@ -52,6 +52,8 @@ jobs:
       VERSION: ${{ matrix.run.version }}
       TEMPLATE: ${{ matrix.run.template }}
       EXTRA_ARGS: ${{ matrix.run.args }}
+      # Older releases (DSL1, Nextflow 23 syntax) pin their own Nextflow.
+      MATRIX_NXF_VER: ${{ matrix.run.nxf_ver }}
     steps:
       - uses: actions/checkout@v7
 
@@ -63,10 +65,11 @@ jobs:
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: "21"
+          java-version: "17"
 
       - name: Install Nextflow
         run: |
+          if [ -n "$MATRIX_NXF_VER" ]; then echo "NXF_VER=$MATRIX_NXF_VER" >> "$GITHUB_ENV"; export NXF_VER=$MATRIX_NXF_VER; fi
           curl -fsSL https://get.nextflow.io | bash
           sudo mv nextflow /usr/local/bin/
 
@@ -93,6 +96,22 @@ jobs:
           rm -rf work
           du -sh results
 
+      - name: The run's samplesheet into input/
+        # Pipelines do not publish their samplesheet; templates read the copy a
+        # megatest fetch drops into input/ (params.json `input`).
+        run: |
+          params=$(find results/pipeline_info -maxdepth 1 -name 'params_*.json' | sort | tail -1)
+          input=$(jq -r '.input // empty' "$params" 2>/dev/null || true)
+          [ -n "$input" ] || exit 0
+          name=$(basename "$input")
+          [ -e "results/input/$name" ] && exit 0
+          mkdir -p results/input
+          case "$input" in
+            http://*|https://*) curl -fsSL -o "results/input/$name" "$input" ;;
+            *) cp "$input" results/input/ ;;
+          esac
+          ls -l results/input
+
       - uses: astral-sh/setup-uv@v7
 
       - name: Install the CLI (base install)
@@ -115,7 +134,10 @@ jobs:
             --schema nfcore-pipeline/nextflow_schema.json --run results | tee check.txt || status=1
           echo "::endgroup::"
           echo "::group::ingest --dry-run"
-          venv/bin/depictio ingest results --template "$TEMPLATE" --dry-run | tee dryrun.txt || status=1
+          # Without a server the dry run stops at its step 1 and exits 1 after
+          # listing the collections: what counts is the table it printed.
+          venv/bin/depictio ingest results --template "$TEMPLATE" --dry-run | tee dryrun.txt || true
+          grep -q "will ingest" dryrun.txt || status=1
           echo "::endgroup::"
           { echo '```'; cat check.txt dryrun.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
           exit $status
@@ -125,15 +147,8 @@ jobs:
         run: |
           [ -d results ] || exit 0
           find results -type f -size +50M -print -delete
-          # The release's samplesheet, as the run read it (params.json `input`).
-          params=$(find results/pipeline_info -maxdepth 1 -name 'params_*.json' | sort | tail -1)
-          input=$(jq -r '.input // empty' "$params" 2>/dev/null || true)
           mkdir -p results/.testrun
           cp run.log check.txt dryrun.txt results/.testrun/ 2>/dev/null || true
-          case "$input" in
-            http://*|https://*) curl -fsSL -o "results/.testrun/samplesheet.${input##*.}" "$input" || true ;;
-            ?*) cp "$input" results/.testrun/ 2>/dev/null || true ;;
-          esac
 
       - uses: actions/upload-artifact@v7
         if: always()
