@@ -44,10 +44,12 @@ const FILTER_DEBOUNCE_MS = 250;
 
 /** A tile's height in the document. The dashboard sizes tiles by its grid;
  *  a document stacks them full width, so plots get the height of a figure
- *  and cards and controls their own. */
+ *  and cards and controls their own. An advanced viz is taller: at full width
+ *  its controls open above the plot (thresholds, labels, search), and at
+ *  480 px they left a volcano ~150 px to draw in. */
 const TILE_HEIGHT: Record<string, number> = {
   figure: 440,
-  advanced_viz: 480,
+  advanced_viz: 680,
   table: 460,
   multiqc: 460,
   map: 460,
