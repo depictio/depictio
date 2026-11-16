@@ -373,9 +373,9 @@ export interface ResolvedStructureEntry {
   model_sequence: string;
 }
 
-/** An optional runtime piece the producer embedded (3Dmol.js, Pyodide). */
+/** An optional runtime piece the producer embedded (3Dmol.js, Pyodide, JBrowse). */
 export interface RuntimeAddon {
-  name: '3dmol' | 'pyodide';
+  name: '3dmol' | 'pyodide' | 'jbrowse';
   version: string;
   packages: string[];
   bytes: number;

@@ -142,7 +142,7 @@ const REASON_TEXT: Record<string, string> = {
   map_tiles:
     'Shows the map as it was when the dashboard was exported, without its online background tiles: a standalone file cannot reach the tile service.',
   jbrowse:
-    'The genome browser streams its tracks from a Depictio server, so this panel could not be included.',
+    'The genome browser draws the files included in this export, frozen at the tracks it opened with. Filters no longer change them, and large files hold only the region it opened on.',
   image:
     'The pictures live in storage that a standalone file cannot reach, so the gallery could not be included.',
   whole_frame_viz:

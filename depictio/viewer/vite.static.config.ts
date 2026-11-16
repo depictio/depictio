@@ -12,8 +12,12 @@
  *   - viewer hooks/useServerStatus.ts   -> src/static-runtime/serverStatusShim.ts
  *   - viewer chrome/variants/index.ts   -> src/static-runtime/chromeVariantShim.ts
  *   - depictio-react-core JBrowseRenderer -> src/static-runtime/jbrowseStub.tsx
+ *                                          (which mounts the real one when the
+ *                                          bundle ships the session's files)
  *
- * and `3dmol` is aliased to `src/static-runtime/threeDmolAddon.ts`, which forwards
+ * JBrowse itself (and MUI, mobx) is never compiled in: every import of it
+ * resolves to a forwarder over the conditional `jbrowse` add-on
+ * (vite-plugins/jbrowse-vendor.ts, vite.static-jbrowse.config.ts). And `3dmol` is aliased to `src/static-runtime/threeDmolAddon.ts`, which forwards
  * to the conditional 3Dmol.js add-on (scripts/build-static-addons.mjs).
  *
  * Producers inject the manifest into dist-static/static.html by replacing the
@@ -25,6 +29,7 @@ import { viteSingleFile } from 'vite-plugin-singlefile';
 import path from 'path';
 
 import { moduleShim } from './vite-plugins/module-shim';
+import { jbrowseVendorForwarders } from './vite-plugins/jbrowse-vendor';
 
 const CORE_SRC = path.resolve(__dirname, '../../packages/depictio-react-core/src');
 const RUNTIME = path.resolve(__dirname, 'src/static-runtime');
@@ -56,9 +61,8 @@ export default defineConfig({
           RUNTIME,
           'chromeVariantShim.ts',
         ),
-        // Never bundled (a genome browser streams its tracks from the
-        // server), and the single-file build would otherwise inline all of
-        // JBrowse and its adapters.
+        // The stub decides: the real renderer over the bundled session files
+        // (JBrowse from the add-on), or the session table when nothing fits.
         [path.join(CORE_SRC, 'components', 'JBrowseRenderer.tsx')]: path.join(
           RUNTIME,
           'jbrowseStub.tsx',
@@ -67,6 +71,12 @@ export default defineConfig({
       // Middle link of the api chain: apiShim's own `export * from api.ts`
       // must reach the real module, not bounce back through tabApiShim.
       [path.join(RUNTIME, 'apiShim.ts')],
+    ),
+    // JBrowse, MUI and mobx come from the `jbrowse` add-on at runtime: the
+    // base runtime would otherwise grow by ~1.1 MB gzip for every bundle.
+    jbrowseVendorForwarders(
+      path.join(CORE_SRC, 'components', 'jbrowse', 'vendorModules.ts'),
+      path.join(RUNTIME, 'jbrowse', 'vendor.ts'),
     ),
     viteSingleFile(),
   ],

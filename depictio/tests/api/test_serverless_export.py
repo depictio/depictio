@@ -86,7 +86,8 @@ from depictio.serverless.producer_a import (
         ({"component_type": "multiqc"}, ComponentTier.LIVE, None),
         ({"component_type": "map"}, ComponentTier.FROZEN, TierReason.MAP_TILES),
         # Snapshots since the zero-omitted pass: a gallery ships thumbnails of
-        # its default rows, a genome browser its export-time track table.
+        # its default rows, a genome browser its session's files (or, when none
+        # fits, its export-time track table).
         ({"component_type": "image"}, ComponentTier.FROZEN, TierReason.IMAGE),
         ({"component_type": "jbrowse"}, ComponentTier.FROZEN, TierReason.JBROWSE),
         # A computed embedding (``compute_method``) is a Celery kind; with no

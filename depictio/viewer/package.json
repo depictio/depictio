@@ -11,7 +11,7 @@
     "dev": "pnpm run icons && vite",
     "build": "pnpm run icons && tsc && vite build",
     "build:catalog-preview": "pnpm run icons && vite build --config vite.catalog-preview.config.ts",
-    "build:static": "pnpm run icons && vite build --config vite.static.config.ts && node scripts/build-static-addons.mjs",
+    "build:static": "pnpm run icons && vite build --config vite.static.config.ts && vite build --config vite.static-jbrowse.config.ts && node scripts/build-static-addons.mjs",
     "demo:static": "pnpm run build:static && node scripts/build-demo.mjs",
     "build:embed": "pnpm run icons && vite build --config vite.embed.config.ts",
     "preview": "vite preview",

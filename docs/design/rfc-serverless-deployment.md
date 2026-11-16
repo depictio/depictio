@@ -585,7 +585,7 @@ store), the bundle shows an export-time snapshot or summary of it.
 | MultiQC plots / General Statistics | live (A) / omitted (B) | yes | GS data bars keep the export scale |
 | map (scatter/density) | frozen | no | basemap forced to `white-bg` |
 | image gallery | **frozen (snapshot)** — was omitted | no | default rows' images read from the bucket at export, ≤ 384 px thumbnails, ≤ 48, under the object budget; `blob:` URLs |
-| JBrowse | **frozen (summary)** — was omitted | no | export-time session: assembly, locus, track table (`render_jbrowse` at the default state) |
+| JBrowse | **frozen (real browser)** — was omitted, then a summary | no | the real JBrowse view over the session's files, shipped (`serverless/jbrowse_bundle.py`): `render_jbrowse` at the default state, every location rewritten to `https://bundle.depictio.invalid/jbrowse/<key>` and answered by the runtime's fetch shim (`static-runtime/jbrowse/bundleFetch.ts`) by byte range; files ≤ 1 MB whole, a bigger indexed BAM / tabix file sliced to the index's 256 KiB pages for the opening locus (± its width), anything else whole or left out with the reason; the sequence whole when it fits, else the chromosome lengths (`ChromSizesAdapter`, no bases); ≤ 16 MB per browser (`DEPICTIO_STATIC_JBROWSE_MAX_MB`) inside the bundle's object budget; JBrowse itself as the conditional `jbrowse` add-on. Falls back to the session table (assembly, locus, track table) with the reason when nothing fits |
 | server-state (comments, annotations, versions, saved filters, avatar, editing) | hidden | — | shimmed to "not available in a read-only bundle" |
 
 ### 13.2 Advanced-viz kinds (54 on this branch)
@@ -623,11 +623,14 @@ runtime computed embeddings and code figures go live.
 **Renders, not interactive** (a snapshot or a frozen compute, badged): map (white-bg),
 whole-frame visus / LOWESS, complex_heatmap, upset_plot, sankey, phylogenetic, UMAP layout
 (points follow filters), group_compare and arbitrary code-mode figures *without* the Python
-runtime, image gallery, JBrowse session, MultiQC GS data-bar scale, resolver models beyond the
+runtime, image gallery, JBrowse (its files frozen at the default filter state; a sliced file only
+holds its opening region; region navigator, density strip and gene search are empty offline),
+MultiQC GS data-bar scale, resolver models beyond the
 12 frozen entities.
 
 **Hard limits, unchanged in kind** (they now degrade to the snapshots above): live UMAP (numba,
-no WASM build); network basemap tiles; JBrowse / GenomeSpy remote tracks and references;
+no WASM build); network basemap tiles; GenomeSpy remote tracks and references; JBrowse files
+past the budget (bigWig / bigBed / CRAM are never sliced, only BAM and tabix files are);
 large bioimage pyramids; server state (time travel, comments, annotations, realtime, editing).
 
 ### 13.4 Measured costs
@@ -636,6 +639,7 @@ large bioimage pyramids; server state (time travel, comments, annotations, realt
 |---|---|---|---|
 | static runtime (`static.html`) | 12.00 MB | 3.77 MB | unchanged; budget 4.2 MB |
 | + structure viewer (`static-structure.html`) | 12.51 MB | 3.92 MB | 3Dmol.js 2.5.5's own minified UMD as a conditional add-on (+0.15 MB, vs +0.56 MB when Vite compiled the unminified ES entry in); second budget line, 4.4 MB |
+| + genome browser (`static-genome.html`) | 15.04 MB | 4.73 MB | JBrowse 2 (4.3.0) + MUI + mobx as the conditional `jbrowse` add-on (3.04 MB raw / 0.92 MB gzip, vs +3.6 MB raw / +1.08 MB gzip compiled into every bundle); the base runtime keeps the depictio half of the renderer (+0.14 MB raw / +0.06 MB gzip, now 12.14 / 3.81 MB); budget line 5.4 MB |
 | + Python runtime, demo job set (code figure + group_compare + PCA) | 81.5 MB | 52.4 MiB | the add-on is ~69 MB of base64 (already-compressed wheels barely gzip); size budget line 60 MiB |
 
 Python add-on, base64 bytes each (`pin.json`): core (pyodide.asm.wasm gzip'd, asm.mjs gzip'd,

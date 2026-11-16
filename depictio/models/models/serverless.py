@@ -798,7 +798,7 @@ class RuntimeAddon(BaseModel):
     the runtime and the tier table can say what was embedded and why.
     """
 
-    name: Literal["3dmol", "pyodide"]
+    name: Literal["3dmol", "pyodide", "jbrowse"]
     version: str = Field(description="Exact version of the embedded add-on")
     packages: list[str] = Field(
         default_factory=list, description="Python packages loaded (pyodide only)"
