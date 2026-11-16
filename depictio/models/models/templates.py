@@ -438,6 +438,11 @@ class TemplateOrigin(BaseModel):
         default_factory=dict,
         description="Resolved template variables (DATA_ROOT, SAMPLESHEET_FILE, GROUP_COL, etc.)",
     )
+    run_variables: dict[str, dict[str, str]] | None = Field(
+        default=None,
+        description="The resolved variables of each run location, when a project's runs "
+        "were resolved with different values. `variables` stays the first location's.",
+    )
     config_snapshot: dict[str, Any] = Field(
         default_factory=dict,
         description="Frozen copy of the resolved template config (for reproducibility)",

@@ -62,6 +62,12 @@ class TestRedaction:
         for field in _OPERATOR_FIELDS:
             assert field not in redacted, f"{field} leaked to a non-editor"
 
+    def test_run_tags_are_kept(self):
+        # Run tags are run-folder names, not operator paths: a viewer needs them
+        # to see which runs a past ingestion brought in.
+        run = {**_run(), "run_tags": ["run_c"]}
+        assert _redact_run(run, full=False)["run_tags"] == ["run_c"]
+
     def test_identity_fields_are_removed(self):
         redacted = _redact_run(_run(), full=False)
         assert "email" not in redacted

@@ -93,6 +93,7 @@ from depictio.api.v1.services.figure.figure_builder import (
     merge_dashboard_brand_theme,
 )
 from depictio.api.v1.services.figure.style_presets import figure_style_payload
+from depictio.api.v1.services.multiqc.dc_lookup import report_set_digest
 from depictio.models.components.category_palette import assign_category_colors
 from depictio.models.components.constants import FLOATING_ADVANCED_VIZ_KINDS
 from depictio.models.components.lite import (
@@ -3879,6 +3880,8 @@ async def render_figure_endpoint(
          "groups": [{name, column_name, values, color}], "color_by_group": bool,
          "color_by_column": {"column_name": str, "color_map": {value: "#rrggbb"}},
          "grouping_display": "color" | "facet",
+         "group_keep_color": bool,  # facet by group, keep the figure's colours
+         "group_overall": bool,  # with it, an "All" panel of every row first
          "include_other": bool,
          "style": {"figure_style": "default" | "minimal",
                    "header_title": bool, "hide_legend": bool}}
@@ -4037,6 +4040,10 @@ async def render_figure_endpoint(
         payload["color_by_column"] = color_by_column
     if (color_by_group or color_by_column) and grouping_display == "facet":
         payload["grouping_display"] = "facet"
+        if color_by_group and request.get("group_keep_color") is True:
+            payload["group_keep_color"] = True
+            if request.get("group_overall") is True:
+                payload["group_overall"] = True
     import time as _time
 
     _t0 = _time.perf_counter()
@@ -6492,6 +6499,74 @@ def _resolve_multiqc_sample_filter(
     return sorted(surviving)
 
 
+def _pinned_multiqc_locations(
+    pins: DataVersionPins, dc_id: Any, project_id: Any
+) -> tuple[list[str], list[str]] | None:
+    """The reports a pinned MultiQC read draws from, or None for a live read.
+
+    Returns ``(s3_locations, live_locations)``: the parquets of the pinned
+    report ids that still exist, and every parquet the collection holds now
+    (so a caller can tell a pin that equals the live set from a real subset).
+    400 when none of the pinned reports exist any more: answering with today's
+    data under a past label is the failure time travel exists to prevent.
+    """
+    if not dc_id:
+        return None
+    report_ids = pins.reports_for_dc(str(dc_id))
+    if report_ids is None:
+        return None
+    from depictio.api.v1.services.multiqc.dc_lookup import (
+        fetch_s3_locations_for_reports,
+        fetch_s3_locations_from_dc,
+    )
+
+    locations = fetch_s3_locations_for_reports(str(dc_id), report_ids)
+    if not locations:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "None of the MultiQC reports of the selected data version exist any more "
+                f"(dc_id={dc_id!s})."
+            ),
+        )
+    return locations, fetch_s3_locations_from_dc(str(dc_id), str(project_id))
+
+
+def _start_pinned_multiqc_build(
+    cache: Any,
+    dc_id: Any,
+    bare_key: str,
+    s3_locations: list[str],
+    module: str,
+    plot: str,
+    dataset_id: Any,
+    theme: str,
+) -> None:
+    """Build a pinned report subset's figure in the background, once.
+
+    The Celery prerender only builds figures over every report a collection
+    holds, so a read pinned to a different set would answer 202 forever. This
+    parses the subset on a thread (``create_multiqc_plot`` caches the result
+    under the key the next poll probes). The lock is left to expire on
+    failure so a broken build is not retried on every poll.
+    """
+    lock_key = f"multiqc:pinned_build_lock:dc={dc_id}:{bare_key}"
+    if not cache.set_nx(lock_key, "building", ttl=600):
+        return
+
+    def _run() -> None:
+        try:
+            from depictio.api.v1.services.multiqc.figures import create_multiqc_plot
+
+            create_multiqc_plot(
+                s3_locations, module, plot, dataset_id, theme=theme, dc_id=str(dc_id)
+            )
+        except Exception as exc:
+            logger.warning(f"render_multiqc: pinned build failed for dc={dc_id}: {exc}")
+
+    threading.Thread(target=_run, daemon=True, name=f"multiqc-pinned-{dc_id}").start()
+
+
 @dashboards_endpoint_router.post("/render_multiqc/{dashboard_id}/{component_id}")
 def render_multiqc_endpoint(
     dashboard_id: PyObjectId,
@@ -6525,10 +6600,10 @@ def render_multiqc_endpoint(
     if not project_id or not check_project_permission(project_id, current_user, "viewer"):
         raise HTTPException(status_code=403, detail="Permission denied.")
 
-    # A past version's module and plot when the body names one. The data is
-    # not versioned (MultiQC reports are plain parquet), which
-    # `data_version_status` reports as such.
+    # A past version's module and plot when the body names one, and the set of
+    # reports it held (`manifest_pins`) when the body pins the data.
     component = _render_component(dashboard_data, component_id, "multiqc", request, label="MultiQC")
+    pins = _data_pins(request, dashboard_data)
 
     selected_module, selected_plot, selected_dataset, is_gs = _resolve_selected_keys(component)
 
@@ -6556,6 +6631,13 @@ def render_multiqc_endpoint(
         )
         if live_locations:
             s3_locations = live_locations
+
+    # Pinned to the reports a past version held: read only those parquets.
+    pinned = _pinned_multiqc_locations(pins, dc_id, project_id)
+    pinned_differs = False
+    if pinned is not None:
+        s3_locations, all_live_locations = pinned
+        pinned_differs = sorted(s3_locations) != sorted(all_live_locations)
 
     if not selected_module or not selected_plot or not s3_locations:
         missing = []
@@ -6629,6 +6711,9 @@ def render_multiqc_endpoint(
             except Exception as e:
                 logger.debug(f"render_multiqc: aggregation_version lookup failed: {e}")
         version_filter_sig = f"v={agg_version or '0'}|{filter_sig or ''}"
+        if pinned is not None:
+            # A pinned read is its own entry, never the live one.
+            version_filter_sig += f"|pin={report_set_digest(pins.reports_for_dc(str(dc_id)) or [])}"
 
         cache = get_cache()
         filter_aware_key = generate_figure_cache_key(
@@ -6677,7 +6762,9 @@ def render_multiqc_endpoint(
             dc_id=str(dc_id) if dc_id else None,
         )
 
-        if cached is None and dc_id:
+        # The prerender ledger and the Celery build cover the collection's
+        # whole report set; a read pinned to a different set has neither.
+        if cached is None and dc_id and not pinned_differs:
             # S3 prerender: the CLI may have shipped this figure at ingest
             # (``s3://{bucket}/{dc_id}/prerender/<sha>.json.gz``), keyed by the
             # same bare cache key. If so, warm the bare Redis key + disk store
@@ -6802,6 +6889,26 @@ def render_multiqc_endpoint(
                     # ``set_nx``-locked prerender task and 202 so the React poll
                     # loop retries once the figure lands on disk/Redis.
                     rebuild_lock_key = f"multiqc:prerender_build_lock:dc={dc_id}"
+                    if pinned_differs:
+                        _start_pinned_multiqc_build(
+                            cache,
+                            dc_id,
+                            bare_key,
+                            s3_locations,
+                            selected_module,
+                            selected_plot,
+                            selected_dataset,
+                            theme,
+                        )
+                        return JSONResponse(
+                            status_code=202,
+                            content={
+                                "status": "preparing",
+                                "dc_id": str(dc_id),
+                                "component_id": component_id,
+                                "message": "MultiQC figure of the selected version is being prepared.",
+                            },
+                        )
                     if dc_id and cache.get(rebuild_lock_key) is None:
                         from depictio.api.celery_app import build_multiqc_prerender
                         from depictio.api.v1.db import multiqc_prerender_collection
@@ -6918,10 +7025,10 @@ def render_multiqc_general_stats_endpoint(
     if not project_id or not check_project_permission(project_id, current_user, "viewer"):
         raise HTTPException(status_code=403, detail="Permission denied.")
 
-    # A past version's module and plot when the body names one. The data is
-    # not versioned (MultiQC reports are plain parquet), which
-    # `data_version_status` reports as such.
+    # A past version's module and plot when the body names one, and the set of
+    # reports it held when the body pins the data.
     component = _render_component(dashboard_data, component_id, "multiqc", request, label="MultiQC")
+    pins = _data_pins(request, dashboard_data)
 
     s3_locations = component.get("s3_locations") or []
     dc_id = component.get("dc_id") or component.get("data_collection_id")
@@ -6938,6 +7045,10 @@ def render_multiqc_general_stats_endpoint(
         live_locations = fetch_s3_locations_from_dc(str(dc_id), str(project_id))
         if live_locations:
             s3_locations = live_locations
+
+    pinned = _pinned_multiqc_locations(pins, dc_id, project_id)
+    if pinned is not None:
+        s3_locations = pinned[0]
 
     if not s3_locations:
         raise HTTPException(
@@ -7005,6 +7116,8 @@ def render_multiqc_general_stats_endpoint(
         # `_generate_figure_cache_key`.
         all_paths = "|".join(sorted(s3_locations))
         cache_key_str = f"{all_paths}::{filter_sig}::general_stats_payload"
+        if pinned is not None:
+            cache_key_str += f"::pin={report_set_digest(pins.reports_for_dc(str(dc_id)) or [])}"
         # Embed `dc=<id>` literally so the same `cache.delete_pattern(f"dc={dc_id}")`
         # invalidation that the figure cache uses also drops every GS payload
         # variant (theme/filter) for this DC after append/replace/clear.
@@ -8270,6 +8383,31 @@ def _family_main_id(doc: dict) -> Any:
     return doc["dashboard_id"]
 
 
+def _gained_category_colors(
+    colour_spec: Any, existing: dict, project_id: Any
+) -> dict[str, dict[str, str]] | None:
+    """A kept dashboard's colours, extended to the values its data gained.
+
+    An --attach-run keeps the dashboard as edited, but a new run brings new
+    values (a second locality) that its `auto` columns never coloured: the
+    legend and the figures then name only the first run's (epic #1399). The
+    template's spec is resolved again with the stored colours first, so every
+    value already coloured keeps its colour (edited in the viewer or not) and
+    only new ones take a palette slot. None when nothing was gained.
+    """
+    if not isinstance(colour_spec, dict) or not colour_spec:
+        return None
+    current = existing.get("category_colors") or {}
+    probe = {
+        "category_colors": json.loads(json.dumps(colour_spec)),
+        "stored_metadata": existing.get("stored_metadata") or [],
+    }
+    _resolve_auto_category_colors(probe, project_id, current)
+    # The stored map wins value by value: a resolve only ever adds.
+    merged = _layered_category_colors(probe.get("category_colors"), current)
+    return merged if merged != current else None
+
+
 def _keep_existing_dashboard(
     existing: dict,
     project_id: PyObjectId,
@@ -8279,6 +8417,7 @@ def _keep_existing_dashboard(
     *,
     current_user: Any,
     before_write: Callable[[], None] | None = None,
+    colour_spec: Any = None,
 ) -> dict[str, Any]:
     """The response of an import that leaves a dashboard the project has as it is.
 
@@ -8288,10 +8427,14 @@ def _keep_existing_dashboard(
     for a multi-tab main: the tabs it gained, which the response lists with the
     ones it had.
 
-    A version is recorded only when the family's content moved: a rename, or
-    tabs gained. A `source_key` alone names the dashboard and changes nothing on
-    screen. `before_write` is the caller's pre-import capture, already run if the
-    caller wrote tabs, so the state before them is the one recorded.
+    `colour_spec`, the YAML's `category_colors`, colours the values the data
+    gained since (see `_gained_category_colors`).
+
+    A version is recorded only when the family's content moved: a rename, new
+    colours, or tabs gained. A `source_key` alone names the dashboard and
+    changes nothing on screen. `before_write` is the caller's pre-import
+    capture, already run if the caller wrote tabs, so the state before them is
+    the one recorded.
     """
     family_id = _family_main_id(existing)
     before_write = before_write or _capture_before_import(family_id, current_user)
@@ -8300,14 +8443,20 @@ def _keep_existing_dashboard(
         changes["title"] = title
     if source_key and not existing.get("source_key"):
         changes["source_key"] = source_key
+    gained = _gained_category_colors(colour_spec, existing, project_id)
+    if gained is not None:
+        changes["category_colors"] = gained
+    content_moved = "title" in changes or "category_colors" in changes
     if changes:
-        if "title" in changes:
+        if content_moved:
             before_write()
         dashboards_collection.update_one({"_id": existing["_id"]}, {"$set": changes})
-    if "title" in changes or tabs_added:
+    if content_moved or tabs_added:
         _capture_import(family_id, current_user)
     kept = {**existing, **changes}
     message = "Dashboard kept as it is" + (", renamed" if "title" in changes else "")
+    if "category_colors" in changes:
+        message += ", colours added for new values"
     if tabs_added:
         message += f", {tabs_added} tab{'s' if tabs_added > 1 else ''} added"
     response: dict[str, Any] = {
@@ -8412,6 +8561,7 @@ def _import_multi_tab_dashboard(
             tabs_added=len(added),
             current_user=current_user,
             before_write=before_write,
+            colour_spec=main_dashboard_data.get("category_colors"),
         )
 
     main_dashboard_dict = main_lite.to_full()
@@ -8902,7 +9052,12 @@ def import_dashboard_yaml_content(
     )
     if keep_existing and existing_dashboard is not None:
         return _keep_existing_dashboard(
-            existing_dashboard, project_id, source_key, main_title, current_user=current_user
+            existing_dashboard,
+            project_id,
+            source_key,
+            main_title,
+            current_user=current_user,
+            colour_spec=yaml_data.get("category_colors") if isinstance(yaml_data, dict) else None,
         )
     if existing_dashboard:
         logger.info(
@@ -10939,13 +11094,21 @@ async def resolve_groups_endpoint(
     A group that cannot reach ``dc_id`` is absent from ``groups`` and says why
     in ``status``. Viewer permission on the dashboard; ``dc_id`` must belong to
     its project.
+
+    With ``"component_id"``, groups of runs (on ``depictio_run_id``, the
+    Overlay of "What's new") are rewritten to the ids the component matches
+    its marks by: its id role (``sample_id_col``, ``feature_id_col``, ...),
+    the ids whose rows came from those runs. A component whose ids each carry
+    rows of several runs gets none of them back (``runs_ambiguous``).
     """
+    from depictio.api.v1.deltatables_utils import RUN_ID_COLUMN
     from depictio.api.v1.services.figure.groups import sanitize_group_defs
 
     dc_id = request.get("dc_id")
     if not isinstance(dc_id, str) or not dc_id:
         raise HTTPException(status_code=400, detail="dc_id is required.")
     group_defs = sanitize_group_defs(request.get("groups"))
+    component_id = request.get("component_id")
 
     def _run() -> dict[str, Any]:
         dashboard_data = _viewable_dashboard(dashboard_id, current_user)
@@ -10955,12 +11118,93 @@ async def resolve_groups_endpoint(
                 status_code=404,
                 detail=f"Data collection {dc_id} is not part of this dashboard's project.",
             )
-        resolved, status = _resolve_group_defs(
-            group_defs, dc_id, project_id, access_token, "advanced_viz"
+
+        # Groups of runs, as the Overlay builds them: on the run column and
+        # captured on no collection (the client's `isRunGroup`). A group taken
+        # on another collection's run column goes through the links instead.
+        def is_run_group(g: dict) -> bool:
+            return g["column_name"] == RUN_ID_COLUMN and not g.get("dc_id")
+
+        run_defs = [g for g in group_defs if is_run_group(g)]
+        by_runs = (
+            _run_groups_for_component(dashboard_data, component_id, dc_id, run_defs)
+            if run_defs and isinstance(component_id, str) and component_id
+            else None
         )
-        return {"groups": resolved, "status": status}
+        if by_runs is None:
+            # No answer for the runs: they resolve as any other group.
+            resolved, status = _resolve_group_defs(
+                group_defs, dc_id, project_id, access_token, "advanced_viz"
+            )
+            return {"groups": resolved, "status": status}
+        run_groups, run_status = by_runs
+        others = [g for g in group_defs if not is_run_group(g)]
+        resolved, status = _resolve_group_defs(
+            others, dc_id, project_id, access_token, "advanced_viz"
+        )
+        # Back in the order the groups were asked in: the first wins a mark.
+        kept = {g["name"]: g for g in [*resolved, *run_groups]}
+        verdicts = {v["name"]: v for v in [*status, *run_status]}
+        return {
+            "groups": [kept[g["name"]] for g in group_defs if g["name"] in kept],
+            "status": [verdicts[g["name"]] for g in group_defs if g["name"] in verdicts],
+        }
 
     return await run_in_threadpool(_run)
+
+
+def _component_by_index(components: Any, component_id: str) -> dict | None:
+    return next((c for c in components or [] if str(c.get("index")) == component_id), None)
+
+
+def _family_component(dashboard_data: dict, component_id: str) -> dict | None:
+    """A component of this tab, else of another tab of its family (a highlight
+    draws a component of the tab it points at)."""
+    component = _component_by_index(dashboard_data.get("stored_metadata"), component_id)
+    if component:
+        return component
+    family_id = versioning.resolve_family_id(dashboard_data) or dashboard_data.get("dashboard_id")
+    for tab in dashboards_collection.find(
+        {"$or": [{"dashboard_id": family_id}, {"parent_dashboard_id": family_id}]},
+        {"stored_metadata": 1},
+    ):
+        component = _component_by_index(tab.get("stored_metadata"), component_id)
+        if component:
+            return component
+    return None
+
+
+def _run_groups_for_component(
+    dashboard_data: dict, component_id: str, dc_id: str, run_defs: list[dict]
+) -> tuple[list[dict], list[dict]] | None:
+    """Groups of runs as groups of the component's mark ids, or None when that
+    cannot be said (no id role, no run column): the caller then resolves them
+    as any other group."""
+    from depictio.api.v1.deltatables_utils import RUN_ID_COLUMN, load_deltatable_lite
+    from depictio.api.v1.services.changes.advanced_diff import key_role
+    from depictio.api.v1.services.figure.groups import run_groups_to_identities
+
+    component = _family_component(dashboard_data, component_id)
+    if component is None or str(component.get("dc_id")) != dc_id or not component.get("wf_id"):
+        return None
+    config = component.get("config") or {}
+    _role, identity = key_role(config)
+    if not identity and component.get("viz_kind") == "complex_heatmap":
+        # A heatmap names its rows by its index, and a matrix of samples by
+        # samples names its columns by the same ids: its group strip reads them.
+        identity = config.get("index_column")
+    if not identity:
+        return None
+    try:
+        frame = load_deltatable_lite(
+            ObjectId(str(component["wf_id"])), dc_id, select_columns=[identity, RUN_ID_COLUMN]
+        )
+    except Exception as exc:
+        logger.warning(f"run groups on {dc_id}: could not read {identity!r} ({exc})")
+        return None
+    if identity not in frame.columns or RUN_ID_COLUMN not in frame.columns:
+        return None
+    return run_groups_to_identities(run_defs, frame, identity, RUN_ID_COLUMN)
 
 
 @dashboards_endpoint_router.post("/data_version_status/{dashboard_id}")
@@ -10975,13 +11219,15 @@ def data_version_status_endpoint(
     not pin: a collection added since, one kept live, MultiQC reports. The
     client asks this once per selection and badges what still shows live data.
 
-    Request body: ``{"as_of_version": str, "data_versions": {"<dc_id>": int | null}}``,
-    both optional, resolved exactly as a render resolves them (same 400s).
+    Request body: ``{"as_of_version": str, "data_versions": {"<dc_id>": int | null},
+    "report_sets": {"<dc_id>": [report_id, ...] | null}}``, all optional, resolved
+    exactly as a render resolves them (same 400s).
 
     Response:
         {"collections": [{"dc_id", "workflow_tag", "data_collection_tag",
                           "dc_type", "status": "pinned" | "live" | "not_versioned",
                           "delta_version": int | null, "reason": str | null}]}
+    A pinned MultiQC collection also carries ``"report_count"``.
 
     One entry per collection the family's live components read, then per
     collection the version stamped that none of them reads any more. See

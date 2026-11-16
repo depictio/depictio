@@ -52,6 +52,7 @@ import { Dock } from './Dock';
 import { STROKE } from './icons';
 import { useScrollOverflow } from '../../useScrollOverflow';
 import {
+  BellTile,
   DrawerHead,
   ProfileRows,
   ProfileTile,
@@ -275,7 +276,9 @@ const Slot: React.FC<{ action: HeaderAction; named?: boolean }> = ({ action, nam
 };
 
 /** The dock's clusters: find | read | author + mode (the primary last). */
-const OFF_DOCK = new Set(['filters', 'settings', 'feedback']);
+// "What's new" (#1397) is news about the page, not a way of reading it: it
+// sits in the top bar with the bell, never in the dock.
+const OFF_DOCK = new Set(['filters', 'settings', 'feedback', 'changes']);
 function dockClusters(actions: HeaderAction[]) {
   const rank = (a: HeaderAction) =>
     a.group === 'find' ? 0 : a.group === 'author' || a.group === 'mode' ? 2 : 1;
@@ -408,7 +411,7 @@ const DeskLayout: React.FC<DashboardShellProps> = ({
   const topH = TOP_H - (dense ? DENSE.top : 0);
 
   const byId = (id: string) => header.model.actions.find((a) => a.id === id);
-  const topKeys = ['feedback', 'settings'].map(byId).filter(Boolean) as HeaderAction[];
+  const topKeys = ['changes', 'feedback', 'settings'].map(byId).filter(Boolean) as HeaderAction[];
   const clusters = dockClusters(header.model.actions);
 
   const aside = inspector.aside as { width?: unknown } | undefined;
@@ -468,6 +471,7 @@ const DeskLayout: React.FC<DashboardShellProps> = ({
                 ))}
               </ChromeButtonGroup>
               <ThemeTile place="top" />
+              <BellTile />
               <ProfileTile />
             </div>
           }

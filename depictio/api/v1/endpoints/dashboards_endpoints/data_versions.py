@@ -16,6 +16,12 @@ to draw it from by this module. Three sources, in order of precedence:
 
 3. **Nothing** — read current data. Every existing caller.
 
+A MultiQC collection has no Delta commit; its "version" is the set of reports
+it held (a ``manifest`` stamp's ``report_ids``). Both grains above reach it
+too: ``as_of_version`` yields ``manifest_pins`` and ``report_sets:
+{"<dc_id>": [report_id, ...]}`` overrides one collection, which is how a
+reader's last-visit baseline is compared with now.
+
 Two design choices worth stating, because both were tempting to get wrong:
 
 **Unresolvable pins are reported, never hidden.** A collection a version cannot
@@ -54,6 +60,9 @@ class DataVersionPins:
     """
 
     pins: dict[str, int] = field(default_factory=dict)
+    #: MultiQC collections pinned to the set of report ids they held. Absent
+    #: collections read every report they hold now.
+    manifest_pins: dict[str, list[str]] = field(default_factory=dict)
     unresolved: dict[str, str] = field(default_factory=dict)
     #: The version id this came from, when resolved via ``as_of_version``.
     as_of_version_id: str | None = None
@@ -66,9 +75,13 @@ class DataVersionPins:
         """The Delta commit to read for this collection, or None for current."""
         return self.pins.get(str(dc_id))
 
+    def reports_for_dc(self, dc_id: str) -> list[str] | None:
+        """The report ids to read for a MultiQC collection, or None for all."""
+        return self.manifest_pins.get(str(dc_id))
+
     @property
     def active(self) -> bool:
-        return bool(self.pins) or bool(self.unresolved)
+        return bool(self.pins) or bool(self.manifest_pins) or bool(self.unresolved)
 
 
 #: The reason a collection the dashboard reads is not pinned when the version
@@ -131,10 +144,11 @@ def pins_from_stamps(
 ) -> DataVersionPins:
     """Turn a stored version's data-collection stamps into read pins.
 
-    A stamp only yields a pin when it recorded a Delta commit. Anything else —
-    a manifest collection, an asset, a pre-provenance aggregation — is reported
-    as unresolved with the stamp's own reason, which is already written for a
-    human to read.
+    A stamp yields a pin when it recorded a Delta commit, or, for a manifest
+    collection, a set of report ids. Anything else — a JBrowse collection, an
+    asset, a pre-provenance aggregation, a MultiQC stamp taken before report
+    ids were recorded — is reported as unresolved with the stamp's own reason,
+    which is already written for a human to read.
 
     ``referenced`` is what the dashboard reads now. A collection in it with no
     stamp at all was added after the version was taken; it reads current data
@@ -152,12 +166,18 @@ def pins_from_stamps(
         delta_version = stamp.get("delta_version")
         if stamp.get("version_kind") == "delta" and isinstance(delta_version, int):
             resolved.pins[dc_id] = delta_version
+        elif stamp.get("version_kind") == "manifest" and stamp.get("report_ids"):
+            resolved.manifest_pins[dc_id] = [str(r) for r in stamp["report_ids"]]
         else:
             resolved.unresolved[dc_id] = str(stamp.get("reason") or "no_version_recorded")
 
     for dc_id in referenced or []:
         key = str(dc_id)
-        if key not in resolved.pins and key not in resolved.unresolved:
+        if (
+            key not in resolved.pins
+            and key not in resolved.manifest_pins
+            and key not in resolved.unresolved
+        ):
             resolved.unresolved[key] = NOT_IN_VERSION
 
     return resolved
@@ -176,6 +196,24 @@ def _delta_version_or_error(dc_id: str, version: Any) -> int:
             f"more) or null, not {version!r}."
         )
     return version
+
+
+#: Most report ids a ``report_sets`` entry may name.
+MAX_REPORTS_PER_SET = 500
+
+
+def _report_set_or_error(dc_id: str, value: Any) -> list[str]:
+    """A ``report_sets`` value as a list of report ids, or ``ValueError``."""
+    if (
+        not isinstance(value, list)
+        or len(value) > MAX_REPORTS_PER_SET
+        or not all(isinstance(r, str) and r for r in value)
+    ):
+        raise ValueError(
+            f"report_sets[{dc_id}] must be a list of at most {MAX_REPORTS_PER_SET} "
+            f"report ids (strings) or null."
+        )
+    return list(dict.fromkeys(value))
 
 
 def resolve_data_versions(
@@ -227,11 +265,26 @@ def resolve_data_versions(
         if version is None:
             # Explicit "this one stays live": drop any dashboard-level pin.
             resolved.pins.pop(key, None)
+            resolved.manifest_pins.pop(key, None)
             resolved.unresolved.pop(key, None)
             resolved.kept_live.add(key)
             continue
         resolved.pins[key] = _delta_version_or_error(key, version)
         resolved.unresolved.pop(key, None)
+
+    report_sets = request.get("report_sets")
+    if report_sets is not None and not isinstance(report_sets, dict):
+        raise ValueError("report_sets must map data collection ids to lists of report ids.")
+    for dc_id, report_ids in (report_sets or {}).items():
+        key = str(dc_id)
+        if report_ids is None:
+            resolved.manifest_pins.pop(key, None)
+            resolved.unresolved.pop(key, None)
+            resolved.kept_live.add(key)
+            continue
+        resolved.manifest_pins[key] = _report_set_or_error(key, report_ids)
+        resolved.unresolved.pop(key, None)
+        resolved.kept_live.discard(key)
 
     # Logged because "the picker does nothing" is indistinguishable, from the
     # server's side, between a client that never sent a pin and a server that
@@ -240,7 +293,9 @@ def resolve_data_versions(
     if resolved.active:
         logger.info(
             f"data time travel: as_of={resolved.as_of_version_id} "
-            f"pins={resolved.pins} unresolved={resolved.unresolved}"
+            f"pins={resolved.pins} "
+            f"manifest_pins={ {k: len(v) for k, v in resolved.manifest_pins.items()} } "
+            f"unresolved={resolved.unresolved}"
         )
 
     return resolved
@@ -262,8 +317,12 @@ def collection_statuses(
     * ``live``: read as it is now. ``reason`` says why when time travel was
       asked for: ``not_in_version`` (added since), ``kept_live`` (a
       ``data_versions`` null), or the stamp's own reason.
-    * ``not_versioned``: a collection with no Delta history at all (MultiQC,
-      JBrowse, GeoJSON, phylogeny), always shown as it is now.
+    * ``not_versioned``: a collection with no history at all (JBrowse,
+      GeoJSON, phylogeny), always shown as it is now.
+
+    A MultiQC collection is ``pinned`` to the reports its version held (with
+    ``report_count``) or ``live``. Only the set of reports travels: a report
+    overwritten in place keeps its S3 key, which ``reason`` says.
 
     ``identities`` maps a collection to its ``workflow_tag``,
     ``data_collection_tag`` and ``dc_type`` as the project holds them; a
@@ -289,7 +348,17 @@ def collection_statuses(
             "delta_version": None,
             "reason": None,
         }
-        if kind in ("manifest", "asset"):
+        if dc_type.lower() == "multiqc":
+            reports = pins.reports_for_dc(dc_id)
+            if reports is not None:
+                entry["status"] = "pinned"
+                entry["report_count"] = len(reports)
+                entry["reason"] = "report_overwrites_not_versioned"
+            elif dc_id in pins.kept_live:
+                entry["reason"] = "kept_live"
+            elif dc_id in pins.unresolved:
+                entry["reason"] = pins.unresolved[dc_id]
+        elif kind in ("manifest", "asset"):
             entry["status"] = "not_versioned"
             entry["reason"] = stamp.get("reason") or f"{kind}_versioning_not_enabled"
         elif pins.for_dc(dc_id) is not None:

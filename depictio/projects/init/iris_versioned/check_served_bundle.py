@@ -61,6 +61,10 @@ REQUIRED = {
         "ComponentVersionModal",
         "VersionHistoryPanel",
         "DataVersionPanel",
+        # "What's new" (#1397) looks in the editor too, without recording a visit.
+        "ChangesHeaderButton",
+        "ChangeMarksProvider",
+        "recordVisits",
     ],
     # The viewer must NOT offer to re-point live data; that is edit-mode only.
     # Asserted as an absence below.
@@ -69,7 +73,17 @@ REQUIRED = {
     # component definitions and labels the result as the past. That was a real
     # bug, and it is invisible in source review because both halves are correct
     # on their own.
-    "/src/App.tsx": ["DataVersionProvider", "definitionVersionId"],
+    #
+    # "Changed since your last visit" (#1397) reaches the viewer and the editor
+    # through these two. Only the viewer records a visit (see FORBIDDEN).
+    "/src/App.tsx": [
+        "DataVersionProvider",
+        "definitionVersionId",
+        "ChangesHeaderButton",
+        "ChangeMarksProvider",
+    ],
+    f"{PKG}/components/chrome/ComponentChrome.tsx": ["ChangeDot"],
+    f"{PKG}/changeMarks.tsx": ["useChangeMark", "ChangeMarksContext"],
     "/src/versions/preview.ts": ["definitionVersionFromPreview"],
 }
 
@@ -93,6 +107,13 @@ FORBIDDEN = {
         "VersionHistoryPanel",
         "DataVersionPanel",
         "DatasetVersionPicker",
+    ],
+    # "Changed since your last visit" records a visit and moves a mark: viewer
+    # only. The editor shows the same tools (REQUIRED above) but never records
+    # a visit itself: an editor open must never count as a reader having looked.
+    "/src/EditorApp.tsx": [
+        "recordDashboardVisit",
+        "markDashboardSeen",
     ],
 }
 

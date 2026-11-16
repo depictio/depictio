@@ -543,6 +543,7 @@ def _load_reduced(
     viz_kind: str | None = None,
     roles: dict[str, str] | None = None,
     tail: dict | None = None,
+    delta_version: int | None = None,
 ) -> tuple[Any | None, int | None, dict | None]:
     """Read the filtered frame, reduced the way ``policy`` allows.
 
@@ -580,6 +581,7 @@ def _load_reduced(
             metadata=filter_metadata or None,
             init_data=init_data,
             select_columns=projection,
+            delta_version=delta_version,
         )
         if scan is None:
             return None, None, None
@@ -711,6 +713,14 @@ def fetch_advanced_viz_data(
     roles = payload.get("roles") or {}
     tail = payload.get("tail") or None
     aggregate = payload.get("aggregate") or None
+    # A past commit of the collection, for a before/after comparison (#1397).
+    # Read through the same pinned path as every other render: the frame cache
+    # is salted with it and the local mirror is skipped.
+    delta_version = payload.get("delta_version")
+    if delta_version is not None and (
+        isinstance(delta_version, bool) or not isinstance(delta_version, int) or delta_version < 0
+    ):
+        raise HTTPException(status_code=400, detail="delta_version must be an integer >= 0")
 
     if not wf_id or not dc_id:
         raise HTTPException(status_code=400, detail="wf_id and dc_id are required")
@@ -894,6 +904,7 @@ def fetch_advanced_viz_data(
             viz_kind=viz_kind,
             roles=roles,
             tail=tail,
+            delta_version=delta_version,
         )
     if df is None:
         try:
@@ -904,6 +915,7 @@ def fetch_advanced_viz_data(
                 limit_rows=limit_rows,
                 select_columns=projection,
                 init_data=init_data,
+                delta_version=delta_version,
             )
         except Exception as exc:
             logger.warning(
@@ -998,7 +1010,21 @@ _CACHE_KEY_VERSION = "v3"
 _FAILED_RETRY_AFTER_S = 60
 
 
-def _find_reusable_cache_entry(cache, cache_key: str) -> dict | None:
+def _entry_age_s(doc: dict, *fields: str) -> float | None:
+    """Seconds since the first of ``fields`` the doc carries, or None."""
+    from datetime import datetime, timezone
+
+    stamp = next((doc.get(f) for f in fields if doc.get(f)), None)
+    if not isinstance(stamp, datetime):
+        return None
+    if stamp.tzinfo is None:  # pymongo returns naive UTC by default
+        stamp = stamp.replace(tzinfo=timezone.utc)
+    return (datetime.now(timezone.utc) - stamp).total_seconds()
+
+
+def _find_reusable_cache_entry(
+    cache, cache_key: str, stale_after_s: float | None = None
+) -> dict | None:
     """Return the cached compute doc for ``cache_key``, or None on a miss.
 
     ``done`` and ``pending`` entries are reused as-is. A ``failed`` entry is
@@ -1006,19 +1032,29 @@ def _find_reusable_cache_entry(cache, cache_key: str) -> dict | None:
     ``_FAILED_RETRY_AFTER_S`` it is deleted and the caller re-enqueues the
     computation. A younger failed entry is still returned so rapid re-renders
     see the error instead of spawning a task per render.
-    """
-    from datetime import datetime, timezone
 
+    A ``pending`` entry older than twice ``stale_after_s`` (the task's hard
+    time limit) is gone the same way: its result was lost (a Redis restarted
+    without persistence, as under ``depictio local up``, keeps no result) and
+    the tile would poll forever. The limit counts from when a worker starts
+    the task and the entry is stamped at enqueue, so the second limit leaves
+    the task as long again to wait in the queue.
+    """
     existing = cache.find_one({"_id": cache_key})
+    if existing and existing.get("status") == "pending" and stale_after_s:
+        age_s = _entry_age_s(existing, "created_at")
+        if age_s is not None and age_s > 2 * stale_after_s:
+            # Only the entry read: a concurrent request may already have
+            # replaced it with a fresh pending one.
+            cache.delete_one(
+                {"_id": cache_key, "status": "pending", "created_at": existing.get("created_at")}
+            )
+            return None
     if not existing or existing.get("status") != "failed":
         return existing
-    stamp = existing.get("completed_at") or existing.get("created_at")
-    if isinstance(stamp, datetime):
-        if stamp.tzinfo is None:  # pymongo returns naive UTC by default
-            stamp = stamp.replace(tzinfo=timezone.utc)
-        age_s = (datetime.now(timezone.utc) - stamp).total_seconds()
-        if age_s < _FAILED_RETRY_AFTER_S:
-            return existing
+    age_s = _entry_age_s(existing, "completed_at", "created_at")
+    if age_s is not None and age_s < _FAILED_RETRY_AFTER_S:
+        return existing
     # Only drop it if it is still the failed doc we read (a concurrent retry may
     # already have replaced it with a fresh pending entry).
     cache.delete_one({"_id": cache_key, "status": "failed"})
@@ -1096,7 +1132,9 @@ def dispatch_compute_embedding(
 
     cache = db["compute_results"]
     cache_key = _compute_cache_key(payload, current_user.id)
-    existing = _find_reusable_cache_entry(cache, cache_key)
+    existing = _find_reusable_cache_entry(
+        cache, cache_key, getattr(compute_task, "time_limit", None)
+    )
 
     # Cache hit (done or pending).
     if existing:
@@ -1256,7 +1294,9 @@ def dispatch_compute_complex_heatmap(
     payload_for_key = dict(payload)
     payload_for_key.setdefault("method", "complex_heatmap")
     cache_key = _compute_cache_key(payload_for_key, current_user.id)
-    existing = _find_reusable_cache_entry(cache, cache_key)
+    existing = _find_reusable_cache_entry(
+        cache, cache_key, getattr(compute_task, "time_limit", None)
+    )
     if existing:
         return {
             "job_id": cache_key,
@@ -1391,7 +1431,9 @@ def dispatch_compute_upset(
     payload_for_key = dict(payload)
     payload_for_key.setdefault("method", "upset_plot")
     cache_key = _compute_cache_key(payload_for_key, current_user.id)
-    existing = _find_reusable_cache_entry(cache, cache_key)
+    existing = _find_reusable_cache_entry(
+        cache, cache_key, getattr(compute_task, "time_limit", None)
+    )
     if existing:
         return {
             "job_id": cache_key,
@@ -1534,7 +1576,9 @@ def _dispatch_compute(
             "from_cache": True,
         }
 
-    existing = _find_reusable_cache_entry(cache, cache_key)
+    existing = _find_reusable_cache_entry(
+        cache, cache_key, getattr(compute_task, "time_limit", None)
+    )
     if existing:
         return _from_cache(existing)
 

@@ -11,7 +11,7 @@
  * collection a user merely clicks through.
  */
 
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   Accordion,
   Alert,
@@ -19,6 +19,7 @@ import {
   Center,
   Group,
   Loader,
+  Select,
   Stack,
   Table,
   Text,
@@ -31,9 +32,14 @@ import { formatDateTimeVerbose } from '../../lib/datetime';
 import { compactCount, relTime } from '../../monitoring/format';
 import { TriggerBadge } from '../../monitoring/TriggerBadge';
 import {
+  commitLineage,
+  entriesForRun,
   HISTORY_LIMIT,
+  historyRuns,
   isUnmatchedRecord,
   orderHistory,
+  SCOPE_COLOR,
+  scopeLabel,
   summarizeHistory,
   timestampOf,
 } from './deltaHistory';
@@ -57,6 +63,69 @@ const WRITE_MODE_LABEL: Record<string, string> = {
   overwrite: 'full rewrite',
   append: 'appended',
   'replace-runs': 'runs replaced',
+};
+
+const SCOPE_HELP: Record<string, string> = {
+  aggregate:
+    'This collection mixes samples (a distance, an ordination, a top-N): it is recomputed over every run, so a new run can change the rows of the runs before it.',
+  pipeline:
+    'A statistic the pipeline computed within each run: kept per run, never recomputed over several.',
+  run: 'Computed one run at a time: a new run adds its rows and leaves the others as they were.',
+};
+
+/** Runs, scope and lineage of one commit. */
+const RunsCell: React.FC<{ entry: DeltaVersionEntry }> = ({ entry }) => {
+  const lineage = commitLineage(entry);
+  const label = scopeLabel(lineage);
+  const runs = lineage.runTags.length ? lineage.runTags : lineage.computedFrom;
+  // An aggregate reads every run: naming them would only repeat the label.
+  const listsRuns = lineage.scope !== 'aggregate';
+  if (!label && runs.length === 0 && lineage.inputs.length === 0) {
+    return (
+      <Text size="xs" c="dimmed">
+        —
+      </Text>
+    );
+  }
+  return (
+    <Stack gap={2}>
+      <Group gap={4} wrap="wrap">
+        {label && lineage.scope && (
+          <Tooltip label={SCOPE_HELP[lineage.scope]} multiline w={300} withArrow withinPortal>
+            <Badge size="xs" variant="light" color={SCOPE_COLOR[lineage.scope]}>
+              {label}
+            </Badge>
+          </Tooltip>
+        )}
+        {listsRuns &&
+          runs.slice(0, 3).map((tag) => (
+            <Badge key={tag} size="xs" variant="outline" color="gray">
+              {tag}
+            </Badge>
+          ))}
+        {listsRuns && (runs.length > 3 || lineage.capped) && (
+          <Tooltip label={runs.join(', ')} multiline maw={420} withArrow withinPortal>
+            <Text size="xs" c="dimmed">
+              {runs.length > 3 ? `+${runs.length - 3}` : '+ more'}
+            </Text>
+          </Tooltip>
+        )}
+      </Group>
+      {lineage.inputs.length > 0 && (
+        <Tooltip
+          label="The collections this commit was computed from, at the version it read them"
+          multiline
+          w={260}
+          withArrow
+          withinPortal
+        >
+          <Text size="xs" c="dimmed" truncate maw={260}>
+            from {lineage.inputs.map((i) => (i.version ? `${i.tag} v${i.version}` : i.tag)).join(', ')}
+          </Text>
+        </Tooltip>
+      )}
+    </Stack>
+  );
 };
 
 const VersionRow: React.FC<{ entry: DeltaVersionEntry; isCurrent: boolean }> = ({
@@ -130,6 +199,9 @@ const VersionRow: React.FC<{ entry: DeltaVersionEntry; isCurrent: boolean }> = (
         </Group>
       </Table.Td>
       <Table.Td>
+        <RunsCell entry={entry} />
+      </Table.Td>
+      <Table.Td>
         <Text size="xs" ff="monospace">
           {entry.rows_added != null ? `+${compactCount(entry.rows_added)}` : '—'}
         </Text>
@@ -168,6 +240,7 @@ export const DeltaVersionHistory: React.FC<{ dcId: string }> = ({ dcId }) => {
   const [history, setHistory] = useState<DeltaHistoryResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [run, setRun] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     // Fetched once per mount: the history only changes when someone ingests,
@@ -186,7 +259,8 @@ export const DeltaVersionHistory: React.FC<{ dcId: string }> = ({ dcId }) => {
 
   const versions = history?.versions ?? [];
   const summary = summarizeHistory(versions, HISTORY_LIMIT, history?.truncated);
-  const ordered = orderHistory(versions);
+  const runs = useMemo(() => historyRuns(versions), [versions]);
+  const ordered = entriesForRun(orderHistory(versions), run);
 
   return (
     <Accordion variant="separated" radius="md" onChange={(v) => v === 'history' && load()}>
@@ -230,18 +304,32 @@ export const DeltaVersionHistory: React.FC<{ dcId: string }> = ({ dcId }) => {
                   recorded: commits written outside depictio are missing.
                 </Alert>
               )}
+              {runs.length > 1 && (
+                <Select
+                  size="xs"
+                  w={240}
+                  clearable
+                  placeholder="All runs"
+                  aria-label="Show the commits of one run"
+                  leftSection={<Icon icon="mdi:filter-variant" width={14} />}
+                  data={runs}
+                  value={run}
+                  onChange={setRun}
+                />
+              )}
               {ordered.length === 0 ? (
                 <Text size="sm" c="dimmed">
-                  No commits recorded yet.
+                  {run ? `No commit touched ${run}.` : 'No commits recorded yet.'}
                 </Text>
               ) : (
-                <Table.ScrollContainer minWidth={620}>
+                <Table.ScrollContainer minWidth={760}>
                   <Table verticalSpacing="xs" striped highlightOnHover>
                     <Table.Thead>
                       <Table.Tr>
                         <Table.Th>Version</Table.Th>
                         <Table.Th>When</Table.Th>
                         <Table.Th>Operation</Table.Th>
+                        <Table.Th>Runs</Table.Th>
                         <Table.Th>Rows</Table.Th>
                         <Table.Th>Files</Table.Th>
                         <Table.Th>By</Table.Th>

@@ -4,6 +4,12 @@ import Plot from 'react-plotly.js';
 import { followSeriesHover } from '../../figureHover';
 import { tintSingleSeries } from '../../figureTint';
 import { useTabHue } from '../../tabColor';
+import {
+  applyFigureDiffOverlay,
+  buildFigureDiffOverlay,
+  resolveDiffColors,
+} from '../../figureDiffOverlay';
+import { AdvancedVizDiffContext } from './diffOverlayContext';
 
 /**
  * Whether the advanced viz drawn below hides its Plotly legend: the tile's
@@ -33,11 +39,24 @@ const LegendAwarePlot: React.FC<React.ComponentProps<typeof Plot>> = (props) => 
     () => followSeriesHover((props.data as unknown[]) ?? [], tinted.data),
     [props.data, tinted],
   );
+  // The rows that are new since the reader's last visit, ringed (#1397). Only
+  // while "Compare with last visit" is on; the diff is null otherwise.
+  const diff = useContext(AdvancedVizDiffContext);
+  const shown = useMemo(
+    () =>
+      diff && diff.supported
+        ? applyFigureDiffOverlay(
+            data,
+            buildFigureDiffOverlay({ data, layout: props.layout as Record<string, unknown> }, diff, resolveDiffColors()),
+          )
+        : data,
+    [diff, data, props.layout],
+  );
   const layout = useMemo(
     () => (hide ? { ...tinted.layout, showlegend: false } : tinted.layout),
     [hide, tinted],
   );
-  return <Plot {...props} data={data as never} layout={layout as never} />;
+  return <Plot {...props} data={shown as never} layout={layout as never} />;
 };
 
 export default LegendAwarePlot;

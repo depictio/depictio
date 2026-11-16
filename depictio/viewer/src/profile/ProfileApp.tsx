@@ -54,6 +54,7 @@ import {
   UiScaleField,
 } from '../components/settings/preferences';
 import { formatDateTime } from '../lib/datetime';
+import ChangesSincePref from '../changes/ChangesSincePref';
 import { usePageTitle } from '../branding';
 import { useTourLauncher } from '../walkthrough';
 import { squareDownscale } from './avatarImage';
@@ -377,6 +378,7 @@ const ProfileApp: React.FC = () => {
             <ThemeField />
             <ChromeLookField />
             <UiScaleField />
+            <ChangesSincePref signedIn={!user.is_anonymous && !user.is_temporary} />
           </Stack>
         </SettingsSection>
 
