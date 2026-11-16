@@ -44,7 +44,7 @@ template:
     - name: "SKIP_MULTIQC"
       description: "Set (--var SKIP_MULTIQC=true) for a run with --skip_multiqc or --skip_qc. Prunes the MultiQC data collection: no report was written, so the QC tab has nothing to read."
       required: false
-      from_params: {any: [{param: skip_multiqc}, {param: skip_qc}]}
+      from_params: {param: skip_multiqc}  # --skip_qc keeps MultiQC in 3.26.0
     - name: "SKIP_QUANTIFICATION_MERGE"
       description: "Set (--var SKIP_QUANTIFICATION_MERGE=true) for a run with --skip_quantification_merge. The merged salmon.merged.gene_*.tsv matrices are absent, so every expression panel loses its source and only the QC tab survives."
       required: false

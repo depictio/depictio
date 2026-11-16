@@ -72,6 +72,18 @@ class ParamRule(BaseModel):
         default=None, description="An item of a list param (JSON list or comma-separated)"
     )
     not_contains: str | None = Field(default=None, description="Not an item of a list param")
+
+    @field_validator("equals", "not_equals", "contains", "not_contains", mode="before")
+    @classmethod
+    def _as_text(cls, v: Any) -> Any:
+        """YAML reads `equals: 0.1` or `equals: true` as a number or a bool; the
+        comparison is on text anyway."""
+        if isinstance(v, bool):
+            return str(v).lower()
+        if isinstance(v, (int, float)):
+            return str(v)
+        return v
+
     any: list["ParamRule"] | None = Field(default=None, description="Holds when one rule holds")
     all: list["ParamRule"] | None = Field(default=None, description="Holds when every rule holds")
 
@@ -157,6 +169,19 @@ class TemplateVariable(BaseModel):
         description="Set the variable from the run's own params.json (see ParamRule): "
         "the run's --skip_* and route parameters, so a pipeline passes no --var.",
     )
+
+    @model_validator(mode="after")
+    def _from_params_is_optional(self) -> "TemplateVariable":
+        """A rule that does not hold leaves the variable unset, so it cannot be
+        required: unset, `required` follows; set to true, it is refused."""
+        if self.from_params is not None:
+            if "required" in self.model_fields_set and self.required:
+                raise ValueError(
+                    f"variable {self.name!r}: a from_params variable cannot be required "
+                    "(a rule that does not hold leaves it unset)"
+                )
+            self.required = False
+        return self
 
     @field_validator("name")
     @classmethod

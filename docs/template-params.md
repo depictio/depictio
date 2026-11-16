@@ -19,12 +19,17 @@ variables:
     from_params: {param: skip_alignment}
   - name: SKIP_MULTIQC
     description: "no MultiQC report"
-    from_params: {any: [{param: skip_multiqc}, {param: skip_qc}]}
-  - name: NANOPORE
+    from_params: {param: skip_multiqc}
+  - name: IS_NANOPORE
+    description: "a nanopore run (the ARTIC route)"
     from_params: {param: platform, equals: nanopore}
-  - name: SKIP_ARRIBA
-    from_params: {all: [{param: tools, not_contains: arriba}, {param: tools, not_contains: all}]}
+  - name: SKIP_ANCOM
+    description: "ANCOM-BC off, or no metadata to test against"
+    from_params: {any: [{param: ancombc, is: false}, {param: metadata, is: false}]}
 ```
+
+A `from_params` variable is optional (`required: true` is refused): a rule
+that does not hold leaves it unset.
 
 | Test | Holds when |
 |---|---|
@@ -35,13 +40,17 @@ variables:
 | `any` / `all` | one / every nested rule holds |
 
 A rule that holds sets its variable to `"true"`. A rule that does not hold sets
-nothing. An explicit `--var` is never overridden.
+nothing. An explicit `--var` is never overridden, and since conditionals test
+presence, `--var X=false` (or `0`, `null`, empty) unsets the variable: the way
+to overrule a rule that fires on a run where it should not.
 
 ## Where the params come from
 
 The newest `pipeline_info/params_*.json` under the data root (a resumed run
-leaves one per attempt; only the last describes the outputs). When the root
-holds runs (`run_*/`), the first run's file is read, with a warning: pass the
+leaves one per attempt; only the last describes the outputs). That file is the
+full dump nf-core writes; `nf-params.json` holds only what the user overrode, so
+a default left out of it would read as off, and it is not used for the rules.
+When the root holds runs (`run_*/`), the first run's file is read, with a warning: pass the
 variable with `--var` if the runs differ. No file: no variable is set, and the
 template behaves as before.
 

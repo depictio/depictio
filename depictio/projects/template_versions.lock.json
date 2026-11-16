@@ -179,7 +179,7 @@
     },
     "nf-core/ampliseq/2.16.0": {
       "version": "1.3.0",
-      "content_hash": "c7560732a26df8fc161e6584c27b40385c0179fea4ddca7ed913c9f6486327b5",
+      "content_hash": "c4c8b33cdd453b7bfdbb4dd6e8c278cadae46661e2d33cc5949d2207085d528f",
       "catalog": {
         "multiqc": "1.0.0",
         "qiime2": "2.0.0",
@@ -189,7 +189,7 @@
     },
     "nf-core/ampliseq/2.18.0": {
       "version": "1.4.0",
-      "content_hash": "08ef11d187e51f79548ee71887d4d6142e759814fdf8a50b7f7bde06672cc9ed",
+      "content_hash": "244823be1ca54e8e8cc99229699dc73287d752f08b6f07f9cd19e2c171c73e4c",
       "catalog": {
         "multiqc": "1.0.0",
         "qiime2": "2.0.0",
@@ -237,8 +237,8 @@
       }
     },
     "nf-core/chipseq/2.1.0": {
-      "version": "4.3.0",
-      "content_hash": "6bd8415b78080159682d52a9ea69a640031cfa19c2e81b6469bfa033577fdd76",
+      "version": "4.2.0",
+      "content_hash": "119d9e0b7fc99ee5fd7d644fd6d8f59adad2a14325b20ee06551b16f78b20553",
       "catalog": {
         "deeptools": "1.0.0",
         "deseq2": "1.0.0",
@@ -556,7 +556,7 @@
     },
     "nf-core/rnaseq/3.26.0": {
       "version": "2.3.0",
-      "content_hash": "a10cd3138e6c26802e666d2bcd4431a93291fce7317a2dced668398c92b5fcb9",
+      "content_hash": "10631a55d4bdcb2819af563d6e9c11b224ca767af24ab2867b7779390b1cd5e3",
       "catalog": {
         "deseq2": "1.0.0",
         "multiqc": "1.0.0",

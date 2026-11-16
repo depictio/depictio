@@ -12,7 +12,7 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
-from depictio.cli.cli.utils.templates import apply_params_rules
+from depictio.cli.cli.utils.templates import _read_run_params, apply_params_rules
 from depictio.models.models.templates import ParamRule, TemplateMetadata, TemplateVariable
 
 PROJECTS = Path(__file__).resolve().parents[3] / "projects"
@@ -112,6 +112,23 @@ class TestRuleValidation:
         with pytest.raises(ValidationError):
             ParamRule.model_validate(spec)
 
+    def test_scalar_test_values_are_read_as_text(self):
+        """YAML reads `equals: 0.1` as a float and `equals: true` as a bool."""
+        assert _rule(param="t", equals=0.1).holds({"t": "0.1"})
+        assert _rule(param="t", equals=True).holds({"t": "true"})
+        assert _rule(param="t", not_equals=0).holds({"t": 5})
+
+    def test_a_from_params_variable_cannot_be_required(self):
+        """A rule that does not hold leaves it unset: required would always fail."""
+        implicit = TemplateVariable.model_validate(
+            {"name": "X", "description": "d", "from_params": {"param": "x"}}
+        )
+        assert implicit.required is False
+        with pytest.raises(ValidationError):
+            TemplateVariable.model_validate(
+                {"name": "X", "description": "d", "required": True, "from_params": {"param": "x"}}
+            )
+
     def test_a_misspelt_variable_key_is_refused(self):
         """`from_param:` would otherwise be dropped and the route never set."""
         with pytest.raises(ValidationError):
@@ -142,11 +159,25 @@ class TestShippedRules:
         assert _template("rnaseq/3.26.0").variables_from_params(params) == {}
 
     def test_rnaseq_pseudoaligner_run(self):
-        params = {"skip_alignment": True, "skip_qc": "true"}
+        params = {"skip_alignment": True, "skip_multiqc": "true"}
         assert _template("rnaseq/3.26.0").variables_from_params(params) == {
             "PSEUDOALIGNER_ONLY": "true",
             "SKIP_MULTIQC": "true",
         }
+
+    def test_rnaseq_skip_qc_keeps_multiqc(self):
+        """rnaseq 3.26.0: --skip_qc skips every QC step *except* MultiQC."""
+        assert "SKIP_MULTIQC" not in _template("rnaseq/3.26.0").variables_from_params(
+            {"skip_qc": True, "skip_multiqc": False}
+        )
+
+    def test_ampliseq_ancombc_needs_metadata(self):
+        """ANCOM-BC runs only with --ancombc and --metadata."""
+        meta = _template("ampliseq/2.18.0")
+        assert "SKIP_ANCOM" in meta.variables_from_params({"ancombc": True, "metadata": None})
+        assert "SKIP_ANCOM" not in meta.variables_from_params(
+            {"ancombc": True, "metadata": "meta.tsv"}
+        )
 
     def test_rnafusion_all_tools_skips_none(self):
         rules = _template("rnafusion/4.1.3").variables_from_params({"tools": "all"})
@@ -160,7 +191,9 @@ class TestShippedRules:
     def test_ampliseq_ancombc_is_opt_in(self):
         meta = _template("ampliseq/2.18.0")
         assert meta.variables_from_params({"ancombc": False})["SKIP_ANCOM"] == "true"
-        assert "SKIP_ANCOM" not in meta.variables_from_params({"ancombc": True})
+        assert "SKIP_ANCOM" not in meta.variables_from_params(
+            {"ancombc": True, "metadata": "m.tsv"}
+        )
 
     def test_airrflow_threshold_report(self):
         meta = _template("airrflow/5.1.2")
@@ -176,9 +209,30 @@ class TestApplyParamsRules:
         added = apply_params_rules(
             _template("rnaseq/3.26.0"), {"skip_alignment": True, "skip_multiqc": True}, variables
         )
-        assert variables["PSEUDOALIGNER_ONLY"] == "false"
+        # The rule held, the explicit off won: unset, so if_var_present does not fire.
+        assert "PSEUDOALIGNER_ONLY" not in variables
         assert added == ["SKIP_MULTIQC"]
         assert variables["SKIP_MULTIQC"] == "true"
+
+    def test_an_explicit_off_unsets_a_from_params_variable(self):
+        """Conditionals test presence: --var X=false must undo a misfiring rule."""
+        variables = {"SKIP_MULTIQC": "false"}
+        apply_params_rules(_template("rnaseq/3.26.0"), {"skip_multiqc": True}, variables)
+        assert "SKIP_MULTIQC" not in variables
+
+    def test_only_the_full_params_dump_feeds_the_rules(self, tmp_path):
+        """nf-params.json holds the overrides only: an absent default reads as off."""
+        info = tmp_path / "pipeline_info"
+        info.mkdir()
+        (info / "nf-params.json").write_text('{"input": "s.csv"}')
+        assert _read_run_params(tmp_path, full_dump_only=True) == {}
+        assert _read_run_params(tmp_path) == {"input": "s.csv"}
+
+    def test_a_params_file_that_is_not_an_object_sets_nothing(self, tmp_path):
+        info = tmp_path / "pipeline_info"
+        info.mkdir()
+        (info / "params_2026-01-01_00-00-00.json").write_text("[1, 2]")
+        assert _read_run_params(tmp_path) == {}
 
     def test_no_params_no_variables(self):
         variables: dict[str, str] = {}

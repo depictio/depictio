@@ -37,7 +37,9 @@ class TestStringBooleans:
 
     def test_string_true_ancombc_keeps_the_differential_abundance(self, tmp_path):
         _write_params(
-            tmp_path / "pipeline_info", "params_2026-08-25_13-30-37.json", {"ancombc": "true"}
+            tmp_path / "pipeline_info",
+            "params_2026-08-25_13-30-37.json",
+            {"ancombc": "true", "metadata": "meta.tsv"},
         )
 
         variables = _flags(tmp_path)

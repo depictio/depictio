@@ -37,7 +37,16 @@ def schema_params(schema: dict) -> set[str]:
     return names
 
 
+# The keys of a ParamRule (depictio/models/models/templates.py). This check runs
+# without the package installed, so it reads the YAML; a key it does not know
+# fails here rather than hide a param it would not inspect.
+RULE_KEYS = {"param", "is", "equals", "not_equals", "contains", "not_contains", "any", "all"}
+
+
 def rule_params(rule: dict) -> set[str]:
+    unknown = set(rule) - RULE_KEYS
+    if unknown:
+        raise ValueError(f"unknown from_params key(s) {sorted(unknown)}: teach this check them")
     if "param" in rule:
         return {rule["param"]}
     return set().union(*(rule_params(r) for r in rule.get("any", []) + rule.get("all", [])))

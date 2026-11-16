@@ -55,9 +55,9 @@ template:
       required: false
       from_params: {param: skip_alpha_rarefaction}
     - name: "SKIP_ANCOM"
-      description: "Auto-set from params.json (skip_ancom). Prunes the ANCOM-BC differential-abundance DCs (qiime2/ancombc/ is absent)."
+      description: "Auto-set from params.json: ANCOM-BC off (--ancombc not given) or no --metadata to test against. Prunes the ANCOM-BC differential-abundance DCs (qiime2/ancombc/ is absent)."
       required: false
-      from_params: {param: ancombc, is: false}
+      from_params: {any: [{param: ancombc, is: false}, {param: metadata, is: false}]}
     - name: "SKIP_QIIME"
       description: "Auto-set from params.json (skip_qiime). Prunes the QIIME2 data collections: an ITS/sintax or --skip_qiime run writes no qiime2/."
       required: false

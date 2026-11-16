@@ -41,6 +41,7 @@ from depictio.models.models.templates import (
     TemplateMetadata,
     TemplateOrigin,
 )
+from depictio.models.models.templates import _truthy as _param_truthy
 
 _TEMPLATE_VAR_RE = re.compile(r"\{([A-Z0-9_]+)\}")
 
@@ -1286,7 +1287,7 @@ def _pick_input_file(root: DataRoot, keyword: str, suffixes: tuple[str, ...]) ->
     return root.url(candidates[0]) if candidates else None
 
 
-def _read_run_params(root: DataRoot | str) -> dict:
+def _read_run_params(root: DataRoot | str, *, full_dump_only: bool = False) -> dict:
     """The run's nf-core ``pipeline_info/params*.json``, parsed; ``{}`` when there
     is none (or none parses). Best effort: a run without one simply gets no
     params-derived variables.
@@ -1317,15 +1318,20 @@ def _read_run_params(root: DataRoot | str) -> dict:
                     f"explicitly via --var."
                 )
                 break
-    params: dict = {}
+    # full_dump_only, for from_params rules: only the dump nf-core writes
+    # (params_<timestamp>.json). nf-params.json holds just the params the user
+    # overrode, and a rule reads an absent param as off, so a default left out
+    # of it would route the run wrongly.
+    if full_dump_only:
+        candidates = [c for c in candidates if c.rsplit("/", 1)[-1].startswith("params")]
     for candidate in candidates:
         try:
             params = json.loads(root.read_bytes(candidate))
-            break
         except (OSError, ValueError):
             continue
-
-    return params
+        # Best effort: a file that is not a JSON object sets nothing.
+        return params if isinstance(params, dict) else {}
+    return {}
 
 
 def apply_params_rules(
@@ -1339,6 +1345,14 @@ def apply_params_rules(
         if name not in variables:
             variables[name] = value
             added.append(name)
+    # Conditionals test presence, so `--var X=false` on a from_params variable
+    # would still fire `if_var_present: X`: an explicit off unsets it instead,
+    # the way to overrule a rule that misfires.
+    for var in template_metadata.variables:
+        if var.from_params is not None and var.name in variables:
+            if not _param_truthy(variables[var.name]):
+                del variables[var.name]
+                logger.info(f"{var.name} set off explicitly: unset, its conditionals do not fire")
     if added:
         logger.info(f"Set from the run's params.json: {', '.join(sorted(added))}")
     return added
@@ -1592,7 +1606,9 @@ def resolve_template_config(
     # (introspection). Neither overrides an explicit --var.
     if root is not None:
         run_params = _read_run_params(root)
-        apply_params_rules(template_metadata, run_params, variables)
+        apply_params_rules(
+            template_metadata, _read_run_params(root, full_dump_only=True), variables
+        )
         _introspect_pipeline_params(root, variables, run_params)
 
     # 3b. Collect the run's provenance (parameters, thresholds, tool versions)

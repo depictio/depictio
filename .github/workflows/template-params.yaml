@@ -16,6 +16,7 @@ on:
     branches: [main]
     paths:
       - "depictio/projects/**/template.yaml"
+      - "depictio/models/models/templates.py"
       - "scripts/check_template_params.py"
 
 jobs:
