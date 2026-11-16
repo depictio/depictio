@@ -178,7 +178,6 @@ def build_figure_preview(payload: dict) -> dict:
         apply_facet_kwargs,
         apply_group_coloring_kwargs,
         apply_group_split_kwargs,
-        with_overall_rows,
         code_group_globals,
         group_annotation_expr,
         group_source_columns,
@@ -186,6 +185,7 @@ def build_figure_preview(payload: dict) -> dict:
         sanitize_group_defs,
         sanitize_grouping_display,
         tidy_facet_layout,
+        with_overall_rows,
     )
 
     coloring_allowed = mode != "code" and (visu_type or "").lower() not in _WHOLE_FRAME_VISU

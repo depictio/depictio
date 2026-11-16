@@ -22,17 +22,17 @@ from depictio.api.v1.services.figure.groups import (
     MAX_VALUES_PER_GROUP,
     OTHER_COLOR,
     OTHER_LABEL,
+    OVERALL_LABEL,
     apply_column_coloring_kwargs,
     apply_facet_kwargs,
     apply_group_coloring_kwargs,
-    OVERALL_LABEL,
     apply_group_split_kwargs,
     group_annotation_expr,
-    with_overall_rows,
     group_source_columns,
     sanitize_color_by_column,
     sanitize_group_defs,
     sanitize_grouping_display,
+    with_overall_rows,
 )
 
 
