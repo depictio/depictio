@@ -519,11 +519,11 @@
     },
     "nf-core/quantms/1.1.1": {
       "version": "1.1.2",
-      "content_hash": "daca8724976c330c08d9ad8a87aab1119446ea56099c68feab7df3f78fce8d45"
+      "content_hash": "ca5ed95b05540040a4a46ebc95d96a09b2ca49a04f57f44160b197b842c9c0b3"
     },
     "nf-core/quantms/1.2.0": {
       "version": "1.2.0",
-      "content_hash": "ac909e47f4863576370588f15ff2af612bd0befe9c3da5d6f17d9b2b2cf3eb0a"
+      "content_hash": "d691439687a3dcb015ce9efaf8847c327b8e397493f5994beb5008bf7d9606f1"
     },
     "nf-core/raredisease/3.1.2": {
       "version": "2.0.0",
