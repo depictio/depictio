@@ -154,7 +154,7 @@ describe('compactPanelSections', () => {
       ],
       components,
       new Set(['f2']),
-      [{ name: 'Key figures' }, { name: 'Unused bar' }],
+      [{ name: 'Key figures', appearance: 'plain', filter_bar: true }, { name: 'Unused bar' }],
     );
     expect(out.map((s) => [s.name, s.collapsed])).toEqual([
       ['Sample filters', true],
@@ -163,5 +163,6 @@ describe('compactPanelSections', () => {
       // control in the panel is left out.
       ['Key figures', true],
     ]);
+    expect(out[2]).not.toHaveProperty('appearance');
   });
 });

@@ -217,7 +217,11 @@ export function compactPanelSections(
   };
   for (const spec of specs ?? []) add(spec);
   for (const spec of extraSpecs) {
-    if (components.some((c) => c.section === spec.name)) add(spec);
+    if (!components.some((c) => c.section === spec.name)) continue;
+    // A grid section's look (`appearance`, `card_variant`, its bar) is the
+    // grid's; in the panel it reads as one more filter section.
+    const { name, icon, color, description } = spec;
+    add({ name, icon, color, description });
   }
   return out;
 }
