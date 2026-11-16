@@ -1,0 +1,186 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="820" viewBox="0 0 1440 820">
+  <rect width="1440" height="820" fill="#ffffff"/>
+  <text x="46.0" y="52.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="25" fill="#1e1e1e" text-anchor="start" font-weight="normal">What CI runs on every change to the module or the image</text>
+  <text x="46.0" y="78.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="15" fill="#5c5c5c" text-anchor="start" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="13.2">build-images.yaml</tspan>: the image once, then every engine and nine nf-core releases through the subworkflow</text>
+  <rect x="60.0" y="120.0" width="260.0" height="130.0" rx="6" fill="#fff9db"/>
+  <path d="M60.1,119.8 C146.1,118.9 233.8,118.6 319.3,120.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M59.9,120.5 C145.2,119.8 232.0,118.7 319.4,119.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M320.8,119.3 C320.4,164.8 320.2,206.3 320.6,249.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M319.5,120.1 C318.9,162.1 319.4,207.7 320.2,249.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M320.3,249.9 C233.5,248.6 145.3,249.1 59.7,250.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M319.6,250.1 C233.2,249.4 147.6,250.6 60.0,250.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M59.9,250.4 C60.7,206.0 61.5,162.1 59.4,120.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M60.6,249.7 C58.5,207.2 60.8,163.6 60.3,120.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="190.0" y="147.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">build the image</text>
+  <text x="190.0" y="171.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">amd64 + arm64</text>
+  <text x="190.0" y="192.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">build-time check of</text>
+  <text x="190.0" y="213.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">the services prefix</text>
+  <rect x="380.0" y="110.0" width="300.0" height="150.0" rx="6" fill="#ebfbee"/>
+  <path d="M380.0,110.3 C480.3,109.9 581.1,111.4 679.3,110.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M379.8,110.3 C480.5,111.6 581.0,109.3 679.2,109.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M679.4,109.6 C678.9,158.8 678.6,210.9 679.8,260.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M680.5,110.6 C678.7,159.8 680.2,211.2 679.6,259.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M679.5,259.6 C579.5,261.2 481.5,258.9 379.6,260.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M679.8,260.1 C580.3,259.2 478.4,259.7 380.7,260.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M380.6,260.4 C380.0,210.4 380.6,158.6 380.6,110.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M379.3,259.3 C379.7,209.7 378.7,160.4 379.5,109.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="530.0" y="137.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">Docker</text>
+  <text x="530.0" y="161.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">iris: <tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">local up</tspan> → ingest → down</text>
+  <text x="530.0" y="182.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">module, <tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">-u uid</tspan>, <tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">--read-only</tspan></text>
+  <text x="530.0" y="203.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">cli_config</tspan> → running instance</text>
+  <text x="530.0" y="224.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">reopen: 150 rows, clean stop</text>
+  <rect x="740.0" y="110.0" width="200.0" height="150.0" rx="6" fill="#e7f5ff"/>
+  <path d="M739.4,109.8 C806.2,108.6 871.7,108.9 939.2,110.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M739.8,109.4 C807.0,108.9 872.5,109.5 940.6,110.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M939.7,109.6 C939.9,159.9 938.7,208.7 940.5,259.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M940.1,109.2 C938.5,161.4 940.1,208.9 940.0,260.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M939.5,260.4 C874.5,260.6 805.9,259.6 740.1,260.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M940.6,260.5 C872.8,259.1 807.7,261.6 740.5,260.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M739.2,259.6 C739.1,210.1 739.5,158.5 739.6,110.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M740.7,259.8 C741.5,209.8 741.4,161.6 739.6,109.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="840.0" y="137.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="15.8">.sif</tspan> job</text>
+  <text x="840.0" y="161.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">docker-daemon://</tspan> →</text>
+  <text x="840.0" y="182.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">apptainer build</tspan></text>
+  <text x="840.0" y="203.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">artifact handed on,</text>
+  <text x="840.0" y="224.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">disk freed</text>
+  <rect x="1000.0" y="110.0" width="380.0" height="150.0" rx="6" fill="#ebfbee"/>
+  <path d="M1000.5,110.0 C1125.7,109.1 1253.7,111.3 1380.2,110.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1000.4,110.0 C1125.3,110.5 1254.6,110.9 1379.5,110.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1379.8,110.7 C1379.5,161.0 1381.5,209.7 1380.4,259.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1379.4,110.5 C1378.8,158.9 1381.3,211.0 1380.8,260.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1380.8,260.2 C1252.9,260.2 1125.5,258.4 1000.0,260.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1379.6,259.7 C1253.1,261.2 1127.7,259.1 999.6,260.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M999.8,259.9 C999.2,209.7 998.8,161.3 1000.1,110.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1000.0,259.2 C999.7,211.3 1000.0,160.1 999.9,109.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="1190.0" y="137.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">Apptainer</text>
+  <text x="1190.0" y="161.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">module under <tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">-profile apptainer</tspan></text>
+  <text x="1190.0" y="182.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">reopen with <tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">--containall</tspan></text>
+  <text x="1190.0" y="203.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">same assertions as Docker</text>
+  <path d="M320.5,185.1 C338.0,186.2 358.7,184.9 379.7,185.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M319.5,184.6 C340.2,186.1 358.4,185.2 380.5,185.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M380.1,185.0 C376.0,183.3 372.6,180.5 367.7,178.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M380.2,185.4 C375.8,187.3 371.7,190.3 368.1,191.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M679.2,184.9 C700.2,186.8 721.4,183.5 739.1,184.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M679.3,185.4 C698.3,185.7 721.1,186.6 740.3,184.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M739.9,185.0 C736.6,183.7 731.2,181.5 728.1,178.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M739.7,184.8 C735.2,187.1 731.8,189.1 727.9,191.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M940.2,185.0 C960.2,184.8 978.1,184.3 999.1,186.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M939.1,185.6 C961.2,186.9 978.4,184.1 999.5,184.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M999.6,185.4 C995.7,183.6 992.4,180.1 987.7,178.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M999.6,185.4 C995.1,186.3 992.1,189.2 987.8,191.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="60.0" y="310.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="17" fill="#1e1e1e" text-anchor="start" font-weight="normal">nf-core releases, <tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="15.0">-profile test,docker</tspan>, cloned with git (no GitHub API)</text>
+  <text x="60.0" y="332.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="13" fill="#5c5c5c" text-anchor="start" font-weight="normal">each: pipeline → subworkflow → status <tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="11.4">success</tspan>, expected template id, ≥ 1 dashboard, no <tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="11.4">env/</tspan>, no root-owned file → reopen</text>
+  <path d="M189.9,249.7 C188.3,263.4 188.3,275.5 190.1,286.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M189.2,249.3 C189.1,260.5 190.1,273.0 189.1,285.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M190.0,285.7 C191.8,281.5 194.9,277.3 196.4,273.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M189.7,286.0 C187.3,280.9 186.1,277.9 183.9,273.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <rect x="60.0" y="360.0" width="230.0" height="38.0" rx="6" fill="#ebfbee"/>
+  <path d="M59.8,360.0 C137.7,359.8 213.3,361.1 290.3,360.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M59.8,359.8 C136.2,361.1 214.0,360.4 289.3,359.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M289.3,360.5 C288.6,373.4 289.2,384.3 290.6,398.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M289.5,359.9 C289.3,371.8 289.3,385.2 289.6,398.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M289.7,397.8 C214.8,398.2 135.8,399.5 59.2,397.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M289.2,397.6 C213.3,398.0 135.7,398.0 59.3,397.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M60.1,398.0 C58.5,383.8 59.4,371.8 60.4,360.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M60.8,397.4 C60.7,386.5 59.6,372.1 60.4,360.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="175.0" y="385.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="15" fill="#1e1e1e" text-anchor="middle" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="13.2">rnaseq</tspan> 3.26.0</text>
+  <text x="314.0" y="385.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="start" font-weight="normal">full run, then reopen</text>
+  <rect x="60.0" y="406.0" width="230.0" height="38.0" rx="6" fill="#ebfbee"/>
+  <path d="M60.4,406.5 C135.2,407.1 214.6,406.4 289.4,406.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M60.1,406.6 C136.7,407.1 214.3,407.0 290.3,406.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M289.4,406.5 C289.1,417.2 288.8,430.9 290.1,444.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M290.5,406.4 C290.4,419.2 290.0,429.7 290.0,444.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M289.3,443.6 C213.8,442.6 137.4,443.2 60.4,443.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M290.0,444.3 C214.1,445.5 136.6,443.6 60.4,444.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M60.4,443.7 C60.5,430.0 58.9,417.9 60.1,405.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M60.3,443.7 C58.6,430.6 60.6,419.3 60.0,405.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="175.0" y="431.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="15" fill="#1e1e1e" text-anchor="middle" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="13.2">sarek</tspan> 3.11.0</text>
+  <rect x="60.0" y="452.0" width="230.0" height="38.0" rx="6" fill="#ebfbee"/>
+  <path d="M60.8,452.7 C136.6,450.8 214.6,451.0 289.2,451.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M59.5,452.7 C137.7,453.5 213.2,451.3 289.5,452.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M290.5,452.0 C288.9,464.7 291.4,476.2 290.6,490.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M289.2,452.0 C289.1,465.9 290.0,475.8 289.9,489.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M289.2,490.4 C212.2,489.5 136.1,491.1 60.5,489.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M289.8,489.8 C214.7,490.7 138.0,489.3 60.8,490.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M59.4,490.5 C59.6,477.1 59.3,463.2 59.7,452.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M59.8,490.7 C59.2,476.6 60.0,463.7 60.6,452.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="175.0" y="477.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="15" fill="#1e1e1e" text-anchor="middle" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="13.2">airrflow</tspan> 5.1.2</text>
+  <text x="314.0" y="477.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="start" font-weight="normal">needs the strict parser</text>
+  <rect x="60.0" y="498.0" width="230.0" height="38.0" rx="6" fill="#ebfbee"/>
+  <path d="M60.4,497.3 C137.1,499.3 214.7,498.2 290.4,497.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M60.7,497.4 C137.5,498.5 212.6,496.6 290.0,497.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M290.2,497.7 C289.4,511.4 291.5,522.6 290.1,535.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M290.0,497.6 C288.9,509.6 289.1,524.6 290.7,536.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M289.7,535.3 C213.2,534.8 135.7,534.7 59.6,535.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M289.9,536.0 C213.6,537.2 137.5,535.7 59.8,535.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M60.0,536.2 C58.6,522.6 61.5,509.5 60.6,497.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M60.7,536.6 C59.3,522.5 59.7,510.5 60.6,497.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="175.0" y="523.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="15" fill="#1e1e1e" text-anchor="middle" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="13.2">taxprofiler</tspan> 2.0.1</text>
+  <rect x="60.0" y="544.0" width="230.0" height="38.0" rx="6" fill="#ebfbee"/>
+  <path d="M60.1,543.2 C135.2,544.7 214.6,543.9 289.8,544.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M59.4,543.4 C137.7,545.1 214.8,543.2 290.0,544.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M289.9,544.1 C291.4,557.4 290.5,570.2 289.3,582.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M289.4,543.6 C289.1,558.0 290.5,568.7 290.2,582.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M289.8,581.6 C212.1,580.6 136.7,582.3 60.2,581.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M290.6,582.0 C212.7,581.9 138.1,582.5 59.6,581.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M60.0,582.3 C61.5,570.0 59.4,555.1 59.9,543.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M59.7,581.9 C60.5,570.7 59.1,555.2 60.3,543.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="175.0" y="569.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="15" fill="#1e1e1e" text-anchor="middle" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="13.2">funcscan</tspan> 4.0.0</text>
+  <rect x="60.0" y="590.0" width="230.0" height="38.0" rx="6" fill="#ebfbee"/>
+  <path d="M60.8,589.7 C137.6,590.8 213.3,589.1 290.5,589.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M60.0,589.5 C135.8,590.8 212.7,591.4 289.6,589.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M289.5,590.8 C290.5,604.1 288.9,615.0 289.4,627.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M290.4,590.8 C288.6,602.3 291.3,616.6 290.7,627.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M290.3,627.8 C212.3,629.4 137.5,626.5 59.8,627.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M290.7,627.4 C212.3,626.4 136.0,627.5 60.7,627.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M59.3,628.0 C59.5,616.4 61.0,602.5 59.8,590.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M59.9,628.5 C59.0,614.9 61.3,601.2 60.4,589.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="175.0" y="615.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="15" fill="#1e1e1e" text-anchor="middle" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="13.2">ampliseq</tspan> 2.18.0</text>
+  <rect x="60.0" y="636.0" width="230.0" height="38.0" rx="6" fill="#fff9db"/>
+  <path d="M60.4,636.6 C135.2,634.6 214.7,635.2 289.7,635.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M59.7,635.6 C138.1,636.4 212.6,636.7 289.2,636.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M289.6,636.0 C291.3,649.1 291.4,659.8 290.7,674.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M290.7,635.5 C289.6,647.9 289.8,661.3 290.5,674.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M289.7,673.8 C214.4,674.9 137.0,673.4 60.5,673.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M289.3,674.1 C212.4,674.8 135.9,672.6 59.7,674.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M59.4,674.0 C61.2,662.9 59.2,647.3 60.3,635.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M60.4,674.6 C59.1,661.1 60.4,649.2 60.3,635.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="175.0" y="661.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="15" fill="#1e1e1e" text-anchor="middle" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="13.2">smrnaseq</tspan> 2.4.1</text>
+  <text x="314.0" y="661.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#1e1e1e" text-anchor="start" font-weight="normal">parses only with v1 → retried</text>
+  <rect x="60.0" y="682.0" width="230.0" height="38.0" rx="6" fill="#fff9db"/>
+  <path d="M60.4,681.5 C137.8,681.3 213.5,681.6 289.6,681.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M59.8,682.8 C135.6,683.2 213.6,681.4 290.0,681.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M290.0,682.5 C291.0,695.2 291.6,706.1 290.5,720.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M290.8,682.1 C288.5,694.0 288.8,706.3 290.7,719.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M290.7,719.4 C214.5,719.8 135.9,720.9 60.2,720.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M289.6,720.2 C212.4,719.6 135.5,719.1 60.2,719.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M59.7,719.5 C58.4,706.8 60.6,693.7 60.5,682.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M60.2,719.3 C58.6,706.1 59.7,694.8 59.5,682.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="175.0" y="707.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="15" fill="#1e1e1e" text-anchor="middle" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="13.2">viralrecon</tspan> 3.0.0</text>
+  <text x="314.0" y="707.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#1e1e1e" text-anchor="start" font-weight="normal">v1 parser + <tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">--skip_pangolin</tspan></text>
+  <rect x="60.0" y="728.0" width="230.0" height="38.0" rx="6" fill="#ffe3e3"/>
+  <path d="M59.7,728.1 C136.4,727.3 212.7,729.5 289.8,727.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M60.4,727.5 C137.8,729.6 212.9,727.0 289.2,728.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M289.9,727.5 C289.8,741.7 289.7,754.6 289.2,766.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M289.8,728.0 C290.5,742.0 288.7,753.7 289.4,765.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M290.5,766.7 C213.4,767.4 135.4,766.0 59.5,765.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M290.7,765.8 C214.8,767.5 136.6,764.6 60.6,766.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M59.8,766.6 C61.0,752.2 60.9,739.8 60.5,727.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M59.4,765.6 C59.1,753.0 60.1,740.3 60.4,728.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="175.0" y="753.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="15" fill="#1e1e1e" text-anchor="middle" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="13.2">scrnaseq</tspan> 4.2.0</text>
+  <text x="314.0" y="753.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#1e1e1e" text-anchor="start" font-weight="normal">template wants a megatest layout</text>
+  <path d="M612.4,738.5 C616.2,744.5 623.3,748.6 628.1,755.1" fill="none" stroke="#c92a2a" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M611.9,755.2 C617.6,749.2 622.5,744.5 627.9,738.9" fill="none" stroke="#c92a2a" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="640.0" y="753.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#c92a2a" text-anchor="start" font-weight="normal">out of the matrix: a template matter</text>
+  <text x="900.0" y="400.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="17" fill="#1e1e1e" text-anchor="start" font-weight="normal">what the pipelines turned up</text>
+  <text x="900.0" y="430.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="start" font-weight="normal">Nextflow 26.10 parses strictly by default:</text>
+  <text x="900.0" y="452.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="start" font-weight="normal">a parse error, and only that, reruns with</text>
+  <text x="900.0" y="474.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="start" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">NXF_SYNTAX_PARSER=v1</tspan> and a warning</text>
+  <text x="900.0" y="496.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="start" font-weight="normal"></text>
+  <text x="900.0" y="518.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="start" font-weight="normal">the shared runners exhaust GitHub's API:</text>
+  <text x="900.0" y="540.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="start" font-weight="normal">pipelines are cloned with git, and pangolin's</text>
+  <text x="900.0" y="562.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="start" font-weight="normal">database update is skipped (its collection</text>
+  <text x="900.0" y="584.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="start" font-weight="normal">is optional in the template)</text>
+  <text x="900.0" y="606.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="start" font-weight="normal"></text>
+  <text x="900.0" y="628.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="start" font-weight="normal">none of them was a fault in the module</text>
+</svg>
