@@ -518,8 +518,12 @@
       }
     },
     "nf-core/quantms/1.1.1": {
-      "version": "1.1.1",
-      "content_hash": "f6f764d65e93f268bcde10d4f3d9746d2d3200df8077e76c6810c1146d9916b3"
+      "version": "1.1.2",
+      "content_hash": "daca8724976c330c08d9ad8a87aab1119446ea56099c68feab7df3f78fce8d45"
+    },
+    "nf-core/quantms/1.2.0": {
+      "version": "1.2.0",
+      "content_hash": "ac909e47f4863576370588f15ff2af612bd0befe9c3da5d6f17d9b2b2cf3eb0a"
     },
     "nf-core/raredisease/3.1.2": {
       "version": "2.0.0",
