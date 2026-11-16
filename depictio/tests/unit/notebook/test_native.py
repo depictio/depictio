@@ -315,6 +315,20 @@ def test_the_tree_of_life_wears_the_dashboards_kingdom_colours(client, api):
     assert "#222222" not in colours  # ...over the main tab's
 
 
+def test_the_tree_of_lifes_group_strip_wears_the_group_colours(client, api):
+    meta = next(m for _, m in SEED_TILES if m.get("index") == "ov-tree")
+    split_col = meta["config"].get("abundance_split_col")
+    assert split_col and "{" not in split_col
+    api.dashboard = {"category_colors": {split_col: {"Soil": "#e24a33"}}}
+    comp = component_for(client, "dash", meta, {"filters": []})
+    strip = {
+        t.marker.color
+        for t in comp.figure.data
+        if t.marker is not None and isinstance(t.marker.color, str)
+    }
+    assert "#e24a33" in strip
+
+
 def test_pinned_colours_win_and_the_rest_keep_the_palette():
     from depictio.notebook.native.layout import category_colors
 
