@@ -3881,6 +3881,7 @@ async def render_figure_endpoint(
          "color_by_column": {"column_name": str, "color_map": {value: "#rrggbb"}},
          "grouping_display": "color" | "facet",
          "group_keep_color": bool,  # facet by group, keep the figure's colours
+         "group_overall": bool,  # with it, an "All" panel of every row first
          "include_other": bool,
          "style": {"figure_style": "default" | "minimal",
                    "header_title": bool, "hide_legend": bool}}
@@ -4041,6 +4042,8 @@ async def render_figure_endpoint(
         payload["grouping_display"] = "facet"
         if color_by_group and request.get("group_keep_color") is True:
             payload["group_keep_color"] = True
+            if request.get("group_overall") is True:
+                payload["group_overall"] = True
     import time as _time
 
     _t0 = _time.perf_counter()

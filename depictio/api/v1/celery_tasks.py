@@ -178,6 +178,7 @@ def build_figure_preview(payload: dict) -> dict:
         apply_facet_kwargs,
         apply_group_coloring_kwargs,
         apply_group_split_kwargs,
+        with_overall_rows,
         code_group_globals,
         group_annotation_expr,
         group_source_columns,
@@ -255,11 +256,13 @@ def build_figure_preview(payload: dict) -> dict:
     # "Split, colours kept" (#1397's what's new): one panel per group with the
     # figure's own colours, instead of recolouring by group.
     group_keep_color = bool(payload.get("group_keep_color")) and grouping_display == "facet"
+    # With it, an "All" panel first: every row, the groups' together.
+    group_overall = group_keep_color and bool(payload.get("group_overall"))
 
     def _grouped_kwargs(base: dict) -> dict:
-        n_panels = len(group_defs) + (1 if include_other else 0)
+        n_panels = len(group_defs) + (1 if include_other else 0) + (1 if group_overall else 0)
         if group_keep_color and n_panels <= MAX_FACET_CATEGORIES:
-            return apply_group_split_kwargs(base, group_defs, include_other)
+            return apply_group_split_kwargs(base, group_defs, include_other, group_overall)
         # +1 when "Other" is shown: the synthetic column then carries the
         # fallback label as its own category (and facet panel in Split mode).
         return _apply_display(
@@ -405,9 +408,12 @@ def build_figure_preview(payload: dict) -> dict:
                         group_defs, scan_schema.names(), dict(scan_schema)
                     )
                     if group_expr is not None:
-                        scan = scan.with_columns(group_expr)
+                        annotated_scan = scan.with_columns(group_expr)
+                        scan = annotated_scan
                         if not include_other:
                             scan = scan.filter(pl.col(GROUP_COLUMN) != OTHER_LABEL)
+                        if group_overall:
+                            scan = with_overall_rows(scan, annotated_scan)
                         group_colored = True
                     else:
                         # No group column in this frame: render ungrouped, and
@@ -472,9 +478,12 @@ def build_figure_preview(payload: dict) -> dict:
             # subset keeps its labels.
             group_expr = group_annotation_expr(group_defs, df.columns, dict(df.schema))
             if group_expr is not None:
-                df = df.with_columns(group_expr)
+                annotated_df = df.with_columns(group_expr)
+                df = annotated_df
                 if not include_other:
                     df = df.filter(pl.col(GROUP_COLUMN) != OTHER_LABEL)
+                if group_overall:
+                    df = with_overall_rows(df, annotated_df)
                 if code_group_optin:
                     # Same kwargs, handed over rather than applied: the author's
                     # code decides which px call they land in.

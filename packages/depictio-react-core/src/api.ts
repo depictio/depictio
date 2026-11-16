@@ -1728,6 +1728,8 @@ export interface RenderFigureOptions {
   /** Groups in "facet": split into one panel per group but keep the figure's
    *  own colours (the "what's new" split, #1397). */
   keepColor?: boolean;
+  /** With `keepColor`: an "All" panel of every row first. */
+  showOverall?: boolean;
   /** Draw the figure in this style rather than its own (a highlight showing a
    *  figure from another tab). Sent only when set. */
   style?: FigureStyleRequest;
@@ -1769,7 +1771,10 @@ export async function renderFigure(
   }
   if (Object.keys(groupBody).length > 0 && options?.display === 'facet') {
     groupBody.grouping_display = 'facet';
-    if (options.keepColor && groupBody.color_by_group) groupBody.group_keep_color = true;
+    if (options.keepColor && groupBody.color_by_group) {
+      groupBody.group_keep_color = true;
+      if (options.showOverall) groupBody.group_overall = true;
+    }
   }
   if (options?.style) groupBody.style = options.style;
   const res = await authFetch(
@@ -10635,6 +10640,9 @@ export interface DataChange {
   reports_removed?: number;
   new_samples?: string[];
   new_sample_count?: number;
+  /** MultiQC collections: the new samples of each new run. A sample that
+   *  reports of several runs name is under none. */
+  new_samples_by_run?: Record<string, string[]>;
   /** MultiQC collections: the samples the reader had seen that are still
    *  there, the other side of the split. Null when either side is too long
    *  to list in full. */

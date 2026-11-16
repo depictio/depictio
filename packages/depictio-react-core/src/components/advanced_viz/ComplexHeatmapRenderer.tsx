@@ -105,6 +105,25 @@ interface Props {
  *  instead, in the groups' colours. */
 const GROUP_STRIP = 'Group';
 
+/** The figure's layout for a split panel: no tick labels, no legend, thin
+ *  margins. At panel size the row and column names cannot be read, and they,
+ *  the strip legend and the margins together left Plotly no room to draw
+ *  ("Something went wrong with axis scaling"). Hover still names every cell,
+ *  and the panel's title names its group. */
+function withoutTickLabels(layout: unknown): Record<string, unknown> {
+  const out: Record<string, unknown> = {
+    ...((layout as Record<string, unknown>) ?? {}),
+    showlegend: false,
+    margin: { l: 8, r: 8, t: 8, b: 8 },
+  };
+  for (const [key, axis] of Object.entries(out)) {
+    if (/^[xy]axis\d*$/.test(key) && axis && typeof axis === 'object') {
+      out[key] = { ...(axis as Record<string, unknown>), showticklabels: false, automargin: false };
+    }
+  }
+  return out;
+}
+
 const ComplexHeatmapRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, groupRender }) => {
   const config = (metadata.config || {}) as ComplexHeatmapConfig;
   const { colorScheme } = useMantineColorScheme();
@@ -549,7 +568,7 @@ const ComplexHeatmapRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
           layout={
             applyLayoutTheme(
               {
-                ...(figure.layout as Record<string, unknown>),
+                ...(inSplit ? withoutTickLabels(figure.layout) : (figure.layout as Record<string, unknown>)),
                 width: undefined,
                 height: undefined,
                 autosize: true,

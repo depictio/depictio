@@ -295,6 +295,25 @@ def test_a_run_with_more_sample_names_than_listed_still_splits(ctx, monkeypatch)
     assert mqc["seen_samples"] == ["SRR1_1", "SRR1_2", "SRR2_1", "SRR2_2"]
 
 
+def test_new_multiqc_samples_are_filed_by_run(ctx):
+    # Two runs since the visit: each run's samples, so the split can draw them
+    # apart (a sample in reports of both runs is filed under neither).
+    _visit(ctx)
+    _ingest_run_c(ctx)
+    ctx["db"]["multiqc"].insert_one(
+        {
+            "data_collection_id": ctx["dc_mqc"],
+            "run_tag": "run_d",
+            "ingestion_run_id": "ing-d",
+            "processed_at": T0 + timedelta(hours=2),
+            "metadata": {"samples": ["SRR4_1", "SRR3_2"]},
+        }
+    )
+
+    [mqc] = _changes(ctx)["data"]
+    assert mqc["new_samples_by_run"] == {"run_c": ["SRR3_1"], "run_d": ["SRR4_1"]}
+
+
 def test_a_delta_refresh_reports_new_run_tags_and_rows(ctx):
     _visit(ctx)
     ctx["db"]["deltatables"].update_one(

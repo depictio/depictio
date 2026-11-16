@@ -33,13 +33,18 @@ export const RUN_COLUMN = 'depictio_run_id';
 export const SAMPLE_COLUMN = 'sample';
 
 export interface NewsSplit {
-  /** New runs against the runs seen, on `RUN_COLUMN`. Empty when no Delta
-   *  collection gained a run. */
+  /** One group per new run, then the runs seen, on `RUN_COLUMN`. Empty when
+   *  no Delta collection gained a run. */
   groups: GroupRenderDef[];
+  /** Every new run as one group: what "New only" keeps. */
+  allNew?: GroupRenderDef | null;
   /** False when both sides are named: no row is left over. */
   showOther: boolean;
-  /** MultiQC collections, by `dc_id`: new samples against the samples seen. */
+  /** MultiQC collections, by `dc_id`: the new samples (one group per run
+   *  when each is filed under one) against the samples seen. */
   samples: Record<string, GroupRenderDef[]>;
+  /** MultiQC collections, by `dc_id`: every new sample as one group. */
+  samplesNew?: Record<string, GroupRenderDef>;
   /** Set by the change marks: both sides side by side, coloured in one
    *  panel, or the new side alone. */
   mode?: 'split' | 'overlay' | 'new';
@@ -77,8 +82,11 @@ export function writeSharedView(familyId: string, view: NewsView): void {
 /** The new side alone of each split ("New only"): the first group is always it. */
 export function newSideOnly(split: NewsSplit): NewsSplit {
   const samples: Record<string, GroupRenderDef[]> = {};
-  for (const [dcId, groups] of Object.entries(split.samples)) samples[dcId] = groups.slice(0, 1);
-  return { groups: split.groups.slice(0, 1), showOther: false, samples, mode: 'new' };
+  for (const [dcId, groups] of Object.entries(split.samples)) {
+    const fresh = split.samplesNew?.[dcId];
+    samples[dcId] = fresh ? [fresh] : groups.slice(0, 1);
+  }
+  return { groups: split.allNew ? [split.allNew] : [], showOther: false, samples, mode: 'new' };
 }
 
 export interface SplitColors {
@@ -111,10 +119,20 @@ function runGroups(cs: DashboardChangeSet | null | undefined, colors: SplitColor
     fresh.add(focus);
   }
   const freshTags = [...fresh].sort();
-  const freshColor = freshTags.length === 1 && colors.run ? colors.run(freshTags[0]) : colors.fresh;
-  const groups: GroupRenderDef[] = [
-    { name: freshName(freshTags, 'New'), column_name: RUN_COLUMN, values: freshTags, color: freshColor },
-  ];
+  // One group per new run, each in its own colour: the Overlay tells them
+  // apart, the Split draws them side by side (after an "All" panel).
+  const groups: GroupRenderDef[] = freshTags.map((t) => ({
+    name: freshName([t], 'New'),
+    column_name: RUN_COLUMN,
+    values: [t],
+    color: colors.run ? colors.run(t) : colors.fresh,
+  }));
+  const allNew: GroupRenderDef = {
+    name: freshName(freshTags, 'New'),
+    column_name: RUN_COLUMN,
+    values: freshTags,
+    color: freshTags.length === 1 ? groups[0].color : colors.fresh,
+  };
   if (seen.size > 0) {
     groups.push({
       name: others.length ? 'Other runs' : 'Seen before',
@@ -123,7 +141,7 @@ function runGroups(cs: DashboardChangeSet | null | undefined, colors: SplitColor
       color: colors.seen,
     });
   }
-  return { groups, showOther: seen.size === 0 };
+  return { groups, allNew, showOther: seen.size === 0 };
 }
 
 /** The new runs of each collection, narrowed to the one in focus (a
@@ -159,30 +177,45 @@ export function writeSharedFocus(familyId: string, run: string | null): void {
 }
 
 /** Both sides of a MultiQC collection, or null when either is unknown or empty. */
-function sampleGroups(d: DataChange, colors: SplitColors, focus: string | null): GroupRenderDef[] | null {
+function sampleGroups(
+  d: DataChange,
+  colors: SplitColors,
+  focus: string | null,
+): { groups: GroupRenderDef[]; allNew: GroupRenderDef } | null {
   const fresh = d.new_samples ?? [];
   const seen = d.seen_samples;
   if (d.kind !== 'refreshed' || !Array.isArray(seen)) return null;
-  // The new samples are not filed by run: with one run in focus, only a
-  // collection whose news is that run alone can be split.
-  if (focus && d.new_run_tags.length > 0 && !(d.new_run_tags.length === 1 && d.new_run_tags[0] === focus)) {
-    return null;
-  }
   if (fresh.length === 0 || seen.length === 0) return null;
   // A truncated list would file the samples it left out under neither side.
   if ((d.new_sample_count ?? fresh.length) !== fresh.length) return null;
   const tags = [...d.new_run_tags].sort();
-  return [
-    {
-      name: freshName(tags, 'New samples'),
-      column_name: SAMPLE_COLUMN,
-      values: [...fresh].sort(),
-      // One run's samples in that run's colour, as the run groups.
-      color: tags.length === 1 && colors.run ? colors.run(tags[0]) : colors.fresh,
-      dc_id: d.dc_id,
-    },
-    { name: 'Seen before', column_name: SAMPLE_COLUMN, values: [...seen].sort(), color: colors.seen, dc_id: d.dc_id },
-  ];
+  const byRun = d.new_samples_by_run ?? {};
+  const runTags = Object.keys(byRun).sort();
+  // Filed: every new sample is under exactly one run.
+  const filed = runTags.length > 0 && runTags.reduce((n, t) => n + byRun[t].length, 0) === fresh.length;
+  // One run's samples in that run's colour, as the run groups.
+  const side = (name: string, values: string[], color: string): GroupRenderDef => ({
+    name,
+    column_name: SAMPLE_COLUMN,
+    values: [...values].sort(),
+    color,
+    dc_id: d.dc_id,
+  });
+  const runSide = (t: string) => side(freshName([t], 'New samples'), byRun[t], colors.run ? colors.run(t) : colors.fresh);
+  if (focus && tags.length > 0 && !(tags.length === 1 && tags[0] === focus)) {
+    // One run in focus among several: its samples against everything else.
+    if (!filed || !byRun[focus]) return null;
+    const one = runSide(focus);
+    const others = runTags.filter((t) => t !== focus).flatMap((t) => byRun[t]);
+    return { groups: [one, side('Other runs', [...seen, ...others], colors.seen)], allNew: one };
+  }
+  const allNew = side(
+    freshName(tags, 'New samples'),
+    fresh,
+    tags.length === 1 && colors.run ? colors.run(tags[0]) : colors.fresh,
+  );
+  const news = filed && runTags.length > 1 ? runTags.map(runSide) : [allNew];
+  return { groups: [...news, side('Seen before', seen, colors.seen)], allNew };
 }
 
 /**
@@ -200,10 +233,19 @@ export function newsSplitGroups(
   const run = focus && newRuns.has(focus) ? focus : null;
   const runs = runGroups(cs, colors, run);
   const samples: Record<string, GroupRenderDef[]> = {};
+  const samplesNew: Record<string, GroupRenderDef> = {};
   for (const d of cs?.data ?? []) {
-    const groups = sampleGroups(d, colors, run);
-    if (groups) samples[d.dc_id] = groups;
+    const sides = sampleGroups(d, colors, run);
+    if (!sides) continue;
+    samples[d.dc_id] = sides.groups;
+    samplesNew[d.dc_id] = sides.allNew;
   }
   if (!runs && Object.keys(samples).length === 0) return null;
-  return { groups: runs?.groups ?? [], showOther: runs?.showOther ?? false, samples };
+  return {
+    groups: runs?.groups ?? [],
+    allNew: runs?.allNew ?? null,
+    showOther: runs?.showOther ?? false,
+    samples,
+    samplesNew,
+  };
 }

@@ -418,6 +418,22 @@ def _multiqc_change(dc_id: str, before: DcSeenState) -> dict[str, Any] | None:
         and len(seen_now) <= MAX_SPLIT_SAMPLES
     )
     listed = MAX_SPLIT_SAMPLES if split_known else MAX_LISTED_SAMPLES
+    # The new samples of each new run, for a split by run. A sample that
+    # reports of several runs name belongs to none of them.
+    by_run: dict[str, set[str]] = {}
+    if split_known:
+        for report in added:
+            tag = _report_run_tag(report)
+            if tag and tag not in known:
+                by_run.setdefault(tag, set()).update(bl.report_samples(report) & new_samples)
+        shared = {
+            sample
+            for tag, samples in by_run.items()
+            for other, others in by_run.items()
+            if other != tag
+            for sample in samples & others
+        }
+        by_run = {tag: samples - shared for tag, samples in by_run.items() if samples - shared}
     return {
         "kind": "emptied" if not reports else "refreshed",
         "seen_samples": sorted(seen_now) if split_known else None,
@@ -428,6 +444,7 @@ def _multiqc_change(dc_id: str, before: DcSeenState) -> dict[str, Any] | None:
         "reports_removed": len(removed),
         "new_samples": sorted(new_samples)[:listed],
         "new_sample_count": len(new_samples),
+        "new_samples_by_run": {tag: sorted(samples) for tag, samples in sorted(by_run.items())},
         "removed_samples": sorted(removed_samples)[:MAX_LISTED_SAMPLES],
         "ingestion_run_ids": sorted(
             {r["ingestion_run_id"] for r in changed if r.get("ingestion_run_id")}

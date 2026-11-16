@@ -77,6 +77,9 @@ export interface GroupRenderState {
   /** Groups in "facet" only: one panel per group, the figure keeping its own
    *  colours. Set by the "what's new" split (#1397), never by saved groups. */
   keepColor?: boolean;
+  /** Groups in "facet" only: an "All" panel first, every row whatever its
+   *  group. Set by the "what's new" split (#1399). */
+  showOverall?: boolean;
 }
 
 /** The dashboard-global "Color by" control: nothing, the saved groups, or a

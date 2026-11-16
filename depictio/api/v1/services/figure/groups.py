@@ -75,6 +75,9 @@ def code_group_globals(
 OTHER_LABEL = "Other"
 # Neutral gray for unassigned rows: context, not a category of its own.
 OTHER_COLOR = "#adb5bd"
+#: The first panel of the "what's new" split: every row, whatever its group.
+#: Kept in step with `OVERALL_LABEL` in the viewer's `splitPanels.ts`.
+OVERALL_LABEL = "All"
 
 # Caps mirror the client's (MAX_GROUP_VALUES in selectionGroups.ts) with server
 # headroom — the request body is untrusted, so the server enforces its own.
@@ -503,20 +506,36 @@ def apply_facet_kwargs(dict_kwargs: dict, column: str) -> dict:
     return out
 
 
-def apply_group_split_kwargs(dict_kwargs: dict, groups: list[dict], include_other: bool) -> dict:
+def apply_group_split_kwargs(
+    dict_kwargs: dict, groups: list[dict], include_other: bool, include_overall: bool = False
+) -> dict:
     """Copy of ``dict_kwargs`` split into one panel per group, colours kept.
 
     The "what's new" split (#1397): the panels are the reader's runs (new
     ones, the ones seen before), and inside each panel the figure keeps its
     own colour encoding, so a species is the same colour on both sides. Only
-    the panel order is set, in group order with ``Other`` last.
+    the panel order is set, in group order with ``Other`` last, after an
+    ``All`` panel when ``include_overall`` (see ``with_overall_rows``).
     """
     out = dict(dict_kwargs)
     out["category_orders"] = {
         **(out.get("category_orders") if isinstance(out.get("category_orders"), dict) else {}),
-        GROUP_COLUMN: [g["name"] for g in groups] + ([OTHER_LABEL] if include_other else []),
+        GROUP_COLUMN: ([OVERALL_LABEL] if include_overall else [])
+        + [g["name"] for g in groups]
+        + ([OTHER_LABEL] if include_other else []),
     }
     return apply_facet_kwargs(out, GROUP_COLUMN)
+
+
+def with_overall_rows(grouped: Any, annotated: Any) -> Any:
+    """``grouped`` preceded by every row of ``annotated`` labelled ``All``.
+
+    ``annotated`` is the frame with its group column, before ``Other`` is
+    dropped: the ``All`` panel is the whole data. Works on a DataFrame or a
+    LazyFrame (both arguments the same kind).
+    """
+    overall = annotated.with_columns(pl.lit(OVERALL_LABEL).alias(GROUP_COLUMN))
+    return pl.concat([overall, grouped], how="vertical_relaxed")
 
 
 def tidy_facet_layout(fig: Any) -> Any:

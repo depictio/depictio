@@ -29,6 +29,8 @@ import {
   fetchDashboardChanges,
   markDashboardSeen,
   mergeLocalDismissed,
+  OVERALL_COLOR,
+  OVERALL_LABEL,
   readLocalMode,
   readLocalReader,
   recordDashboardVisit,
@@ -454,7 +456,11 @@ const ChangeMarksProvider: React.FC<Props> = ({
     for (const g of [...applied.groups, ...Object.values(applied.samples).flat()]) {
       if (!byName.has(g.name)) byName.set(g.name, g);
     }
-    return [...byName.values()];
+    const sides = [...byName.values()];
+    // The Split opens on an "All" panel.
+    return applied.mode === 'split' && sides.length > 1
+      ? [{ name: OVERALL_LABEL, column_name: '', values: [], color: OVERALL_COLOR }, ...sides]
+      : sides;
   }, [splitOn, applied]);
   useEffect(() => {
     onSplitChange?.(applied);

@@ -322,8 +322,10 @@ check('split: new run against the runs seen', newsSplitGroups({ ...empty, data: 
     { name: 'New: run_3', column_name: 'depictio_run_id', values: ['run_3'], color: '#159090' },
     { name: 'Seen before', column_name: 'depictio_run_id', values: ['run_1', 'run_2'], color: '#adb5bd' },
   ],
+  allNew: { name: 'New: run_3', column_name: 'depictio_run_id', values: ['run_3'], color: '#159090' },
   showOther: false,
   samples: {},
+  samplesNew: {},
 });
 console.log('== one run in focus (#1399) ==');
 const twoNew = { ...empty, data: [delta({ new_run_tags: ['run_3', 'run_4'], seen_run_tags: ['run_1', 'run_2'] })] };
@@ -332,16 +334,28 @@ check('focus: that run against every other', newsSplitGroups(twoNew, COLORS, 'ru
     { name: 'New: run_4', column_name: 'depictio_run_id', values: ['run_4'], color: '#159090' },
     { name: 'Other runs', column_name: 'depictio_run_id', values: ['run_1', 'run_2', 'run_3'], color: '#adb5bd' },
   ],
+  allNew: { name: 'New: run_4', column_name: 'depictio_run_id', values: ['run_4'], color: '#159090' },
   showOther: false,
   samples: {},
+  samplesNew: {},
 });
 check(
-  'one run alone is drawn in its own colour, several keep the colour of new',
+  'each new run is its own group, in its own colour; New only keeps them all',
+  (() => {
+    const both = newsSplitGroups(twoNew, { ...COLORS, run: (t) => `#${t}` });
+    return [
+      both.groups.map((g) => [g.name, g.color]),
+      newSideOnly(both).groups.map((g) => [g.name, g.values, g.color]),
+    ];
+  })(),
   [
-    newsSplitGroups(twoNew, { ...COLORS, run: (t) => `#${t}` }, 'run_4').groups[0].color,
-    newsSplitGroups(twoNew, { ...COLORS, run: (t) => `#${t}` }).groups[0].color,
+    [
+      ['New: run_3', '#run_3'],
+      ['New: run_4', '#run_4'],
+      ['Seen before', COLORS.seen],
+    ],
+    [['New: 2 runs', ['run_3', 'run_4'], COLORS.fresh]],
   ],
-  ['#run_4', COLORS.fresh],
 );
 check('focus: a run that is not new is ignored', newsSplitGroups(twoNew, COLORS, 'run_1'), newsSplitGroups(twoNew, COLORS));
 const mqcTwo = { ...empty, data: [delta({ new_run_tags: ['run_3', 'run_4'] }), { ...delta({}), dc_id: 'm', new_run_tags: ['run_3', 'run_4'], new_samples: ['a'], seen_samples: ['b'], new_sample_count: 1 }] };
@@ -359,9 +373,14 @@ check(
   'split: nothing seen keeps the rest as Other',
   newsSplitGroups({ ...empty, data: [delta({ seen_run_tags: [], new_run_tags: ['a', 'b'] })] }, COLORS),
   {
-    groups: [{ name: 'New: 2 runs', column_name: 'depictio_run_id', values: ['a', 'b'], color: '#159090' }],
+    groups: [
+      { name: 'New: a', column_name: 'depictio_run_id', values: ['a'], color: '#159090' },
+      { name: 'New: b', column_name: 'depictio_run_id', values: ['b'], color: '#159090' },
+    ],
+    allNew: { name: 'New: 2 runs', column_name: 'depictio_run_id', values: ['a', 'b'], color: '#159090' },
     showOther: true,
     samples: {},
+    samplesNew: {},
   },
 );
 const mqc = (over) => ({
@@ -380,6 +399,7 @@ const mqc = (over) => ({
 });
 check('split: MultiQC splits on its own samples', newsSplitGroups({ ...empty, data: [mqc({})] }, COLORS), {
   groups: [],
+  allNew: null,
   showOther: false,
   samples: {
     mqc1: [
@@ -387,7 +407,45 @@ check('split: MultiQC splits on its own samples', newsSplitGroups({ ...empty, da
       { name: 'Seen before', column_name: 'sample', values: ['S1_1', 'S2_1'], color: '#adb5bd', dc_id: 'mqc1' },
     ],
   },
+  samplesNew: {
+    mqc1: { name: 'New: run_c', column_name: 'sample', values: ['S3_1'], color: '#159090', dc_id: 'mqc1' },
+  },
 });
+const mqcRuns = mqc({
+  new_run_tags: ['run_c', 'run_d'],
+  new_samples: ['S3_1', 'S4_1'],
+  new_sample_count: 2,
+  new_samples_by_run: { run_c: ['S3_1'], run_d: ['S4_1'] },
+});
+check(
+  'split: MultiQC samples filed by run make one side per run',
+  newsSplitGroups({ ...empty, data: [mqcRuns] }, COLORS).samples.mqc1.map((g) => [g.name, g.values]),
+  [
+    ['New: run_c', ['S3_1']],
+    ['New: run_d', ['S4_1']],
+    ['Seen before', ['S1_1', 'S2_1']],
+  ],
+);
+check(
+  'new only: MultiQC runs together',
+  newSideOnly(newsSplitGroups({ ...empty, data: [mqcRuns] }, COLORS)).samples.mqc1.map((g) => [g.name, g.values]),
+  [['New: 2 runs', ['S3_1', 'S4_1']]],
+);
+check(
+  'split: a sample in two runs keeps the new side whole',
+  newsSplitGroups({ ...empty, data: [{ ...mqcRuns, new_samples_by_run: { run_c: ['S3_1'] } }] }, COLORS).samples.mqc1.map(
+    (g) => g.name,
+  ),
+  ['New: 2 runs', 'Seen before'],
+);
+check(
+  'focus: MultiQC samples filed by run split on the run in focus',
+  newsSplitGroups({ ...empty, data: [mqcRuns] }, COLORS, 'run_d').samples.mqc1.map((g) => [g.name, g.values]),
+  [
+    ['New: run_d', ['S4_1']],
+    ['Other runs', ['S1_1', 'S2_1', 'S3_1']],
+  ],
+);
 check(
   'split: a truncated sample list is not split',
   newsSplitGroups({ ...empty, data: [mqc({ new_sample_count: 300 })] }, COLORS),
@@ -400,9 +458,10 @@ check(
 );
 
 check(
-  'new only: the first side of each split, nothing left over',
+  'new only: every new run as one side, nothing left over',
   newSideOnly({
     groups: [{ name: 'New: run_c', column_name: 'depictio_run_id', values: ['run_c'] }, { name: 'Seen before', column_name: 'depictio_run_id', values: ['run_a'] }],
+    allNew: { name: 'New: run_c', column_name: 'depictio_run_id', values: ['run_c'] },
     showOther: true,
     samples: { mqc1: [{ name: 'New', column_name: 'sample', values: ['S3_1'] }, { name: 'Seen before', column_name: 'sample', values: ['S1_1'] }] },
   }),

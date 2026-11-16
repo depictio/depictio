@@ -6,7 +6,7 @@ import { renderMultiQC, InteractiveFilter, StoredMetadata } from '../../api';
 import { useInView } from '../../hooks/useInView';
 import { useDataVersionRequest } from '../../dataVersions';
 import { useChangeMark, useNewsSplitGroups } from '../../changeMarks';
-import { panelFilters, panelsFromGroups } from '../../splitPanels';
+import { panelFilters, panelsFromGroups, withOverallPanel } from '../../splitPanels';
 import SplitPanels from '../advanced_viz/SplitPanels';
 import { useFigureDiffOverlay } from '../../hooks/useComponentDiff';
 import { enqueueFetch, isStaleFetch } from '../../fetchQueue';
@@ -66,7 +66,8 @@ const MultiQCFigure: React.FC<MultiQCFigureProps> = (props) => {
   const meta = props.metadata as Record<string, unknown>;
   const dcId = String(meta.dc_id ?? meta.data_collection_id ?? '');
   const splitGroups = useNewsSplitGroups(props.bare ? null : dcId);
-  const panels = useMemo(() => panelsFromGroups(splitGroups), [splitGroups]);
+  // Two sides mean the Split: the whole report first, as for the runs.
+  const panels = useMemo(() => withOverallPanel(panelsFromGroups(splitGroups)), [splitGroups]);
   if (panels.length > 1) {
     return (
       <MultiQCSplit {...props} panels={panels} isGeneralStats={isGeneralStats} />

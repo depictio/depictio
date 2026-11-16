@@ -231,6 +231,7 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
                   display: groupRender.display,
                   showOther: groupRender.showOther,
                   keepColor: groupRender.keepColor,
+                  showOverall: groupRender.showOverall,
                 }
               : {}),
             ...(styleRequest ? { style: styleRequest } : {}),

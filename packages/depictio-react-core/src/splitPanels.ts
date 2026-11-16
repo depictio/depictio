@@ -60,6 +60,16 @@ function valueConstraint(
  *
  *  There is no "Other" panel: a MultiSelect projects `is_in`, and "in none of
  *  these groups" is not expressible that way. */
+/** The first panel of the "what's new" split: every row. Kept in step with
+ *  `OVERALL_LABEL` in `depictio/api/v1/services/figure/groups.py`. */
+export const OVERALL_LABEL = 'All';
+export const OVERALL_COLOR = '#495057';
+
+/** `panels` after an "All" panel that narrows nothing. */
+export function withOverallPanel(panels: PanelSpec[]): PanelSpec[] {
+  return panels.length > 1 ? [{ name: OVERALL_LABEL, color: OVERALL_COLOR, constraints: [] }, ...panels] : panels;
+}
+
 export function panelsFromGroups(groups: GroupRenderDef[]): PanelSpec[] {
   return groups
     .filter((g) => (g.values ?? []).length > 0)
@@ -148,7 +158,10 @@ export function panelsForGrouping(
   filters: readonly InteractiveFilter[] = [],
 ): PanelSpec[] {
   if (!groupRender || groupRender.display !== 'facet') return [];
-  if (groupRender.colorByGroup) return panelsFromGroups(groupRender.groups ?? []);
+  if (groupRender.colorByGroup) {
+    const panels = panelsFromGroups(groupRender.groups ?? []);
+    return groupRender.showOverall ? withOverallPanel(panels) : panels;
+  }
   const column = groupRender.colorByColumn;
   // A column split needs its value set up front, and the palette the dashboard
   // computed from the column's unfiltered universe is exactly that.

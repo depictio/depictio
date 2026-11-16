@@ -12,6 +12,7 @@ import {
   panelsFromColumnValues,
   panelsFromGroups,
   shouldSplitIntoPanels,
+  withOverallPanel,
 } from './splitPanels';
 
 const GROUPS = [
@@ -265,5 +266,20 @@ describe('splitPanels', () => {
     it('splits on nothing when the filter names values the palette never saw', () => {
       expect(panelsForGrouping(wide, select(['Chordata']))).toEqual([]);
     });
+  });
+});
+
+describe('the All panel of the what\'s new split', () => {
+  it('comes first and narrows nothing', () => {
+    const render: GroupRenderState = { groups: GROUPS, colorByGroup: true, display: 'facet', showOverall: true };
+    const panels = panelsForGrouping(render);
+    expect(panels.map((p) => p.name)).toEqual(['All', 'North', 'South']);
+    expect(panels[0].constraints).toEqual([]);
+  });
+
+  it('is not added to a single side, nor without the flag', () => {
+    expect(withOverallPanel(panelsFromGroups(GROUPS.slice(0, 1))).map((p) => p.name)).toEqual(['North']);
+    const render: GroupRenderState = { groups: GROUPS, colorByGroup: true, display: 'facet' };
+    expect(panelsForGrouping(render).map((p) => p.name)).toEqual(['North', 'South']);
   });
 });

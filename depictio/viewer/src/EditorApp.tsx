@@ -2050,6 +2050,8 @@ const EditorApp: React.FC = () => {
             display: 'facet' as const,
             showOther: runSplit.showOther,
             keepColor: true,
+            // "All" first, then each new run, then the runs seen before.
+            showOverall: true,
           }
         : runOverlay
           ? {
