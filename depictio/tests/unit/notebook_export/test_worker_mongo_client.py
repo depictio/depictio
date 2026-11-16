@@ -11,9 +11,9 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-import depictio
-
-PACKAGE = Path(depictio.__file__).parent
+# The package of this checkout (not whatever ``depictio`` an editable install
+# resolves to, which may sit above nested worktrees and their virtualenvs).
+PACKAGE = Path(__file__).resolve().parents[3]
 
 
 def _motor_imports(path: Path) -> list[int]:
@@ -38,7 +38,10 @@ def test_no_runtime_code_imports_motor() -> None:
     offenders = [
         f"{path.relative_to(PACKAGE)}:{line}"
         for path in PACKAGE.rglob("*.py")
-        if "tests" not in path.relative_to(PACKAGE).parts
+        if not any(
+            part == "tests" or part.startswith(".") or part == "site-packages"
+            for part in path.relative_to(PACKAGE).parts
+        )
         for line in _motor_imports(path)
     ]
     assert offenders == []
