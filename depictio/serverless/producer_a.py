@@ -821,6 +821,58 @@ def classify_stored_metadata(
 # ---------------------------------------------------------------------------
 
 
+#: A text tile's header logo is fetched at most this large; past it the URL stays.
+MAX_INLINE_LOGO_BYTES = 1024 * 1024
+
+_IMAGE_MAGIC: tuple[tuple[bytes, str], ...] = (
+    (b"\x89PNG\r\n\x1a\n", "image/png"),
+    (b"\xff\xd8\xff", "image/jpeg"),
+    (b"GIF87a", "image/gif"),
+    (b"GIF89a", "image/gif"),
+    (b"RIFF", "image/webp"),
+)
+
+
+def _image_mime(data: bytes) -> str | None:
+    for magic, mime in _IMAGE_MAGIC:
+        if data.startswith(magic) and (mime != "image/webp" or data[8:12] == b"WEBP"):
+            return mime
+    head = data[:512].lstrip().lower()
+    if head.startswith(b"<svg") or (head.startswith(b"<?xml") and b"<svg" in head):
+        return "image/svg+xml"
+    return None
+
+
+def inline_text_logos(comp: dict[str, Any]) -> None:
+    """Replace a text tile's remote ``logo`` / ``logo_dark`` with a data URI.
+
+    A bundle opens without a network, and a header logo on
+    raw.githubusercontent.com (the nf-core templates') was the one request it
+    still made, drawn as a broken image. The fetch goes through the SSRF
+    gateway (``remote_fetch``), is capped at ``MAX_INLINE_LOGO_BYTES`` and
+    must be an image; any failure keeps the URL, so an export never fails over
+    a logo.
+    """
+    import base64
+
+    for key in ("logo", "logo_dark"):
+        url = comp.get(key)
+        if not isinstance(url, str) or not url.startswith(("https://", "http://")):
+            continue
+        try:
+            from depictio.api.v1.remote_fetch import fetch_validated_bytes
+
+            data = fetch_validated_bytes(url, max_bytes=MAX_INLINE_LOGO_BYTES, timeout=10)
+        except Exception as exc:  # rejected, unreachable, too large: keep the URL
+            logger.info("producer A: text logo %s left remote (%s)", url, exc)
+            continue
+        mime = _image_mime(data)
+        if mime is None:
+            logger.info("producer A: text logo %s is not an image; left remote", url)
+            continue
+        comp[key] = f"data:{mime};base64,{base64.b64encode(data).decode('ascii')}"
+
+
 def sanitize_dashboard_doc(dashboard_data: dict[str, Any]) -> dict[str, Any]:
     """The dashboard document the static runtime mounts.
 
@@ -3047,6 +3099,7 @@ def export_manifest(
             params = text_run_params(project_doc, comp)
             if params:
                 comp["run_params"] = params
+            inline_text_logos(comp)
     dc_ids = dashboard_dc_ids(stored_metadata)
     emitted_links = emit_link_configs(project_links(project_doc), dc_ids)
 

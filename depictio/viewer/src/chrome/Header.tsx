@@ -206,6 +206,10 @@ export function useHeaderModel({
   const activeLabel = isChild
     ? activeTab?.title || dashboardId || 'Dashboard'
     : activeTab?.main_tab_name ||
+      // A static bundle's tab entries carry no `main_tab_name`; the document
+      // on screen (this main tab) does, else the breadcrumb printed the
+      // dashboard's title twice.
+      (dashboard as { main_tab_name?: string | null } | null | undefined)?.main_tab_name ||
       activeTab?.title ||
       dashboard?.title ||
       dashboardId ||
