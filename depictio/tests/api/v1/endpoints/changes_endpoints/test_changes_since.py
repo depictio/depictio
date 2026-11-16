@@ -280,6 +280,21 @@ def test_a_new_run_is_listed_and_its_components_marked(ctx):
     assert result["changed_components"] == {f"{ctx['family']}:mqc-1": ["data"]}
 
 
+def test_a_run_with_more_sample_names_than_listed_still_splits(ctx, monkeypatch):
+    # MultiQC names a sample once per read and module: a run of 29 samples
+    # brought 243 names, past the 200 a change lists, and the split was lost.
+    from depictio.api.v1.services.changes import diff
+
+    monkeypatch.setattr(diff, "MAX_LISTED_SAMPLES", 1)
+    _visit(ctx)
+    _ingest_run_c(ctx)
+
+    [mqc] = _changes(ctx)["data"]
+    assert mqc["new_samples"] == ["SRR3_1", "SRR3_2"]
+    assert mqc["new_sample_count"] == 2
+    assert mqc["seen_samples"] == ["SRR1_1", "SRR1_2", "SRR2_1", "SRR2_2"]
+
+
 def test_a_delta_refresh_reports_new_run_tags_and_rows(ctx):
     _visit(ctx)
     ctx["db"]["deltatables"].update_one(

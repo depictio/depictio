@@ -407,13 +407,17 @@ def _multiqc_change(dc_id: str, before: DcSeenState) -> dict[str, Any] | None:
     added_tags = sorted({t for t in (_report_run_tag(r) for r in added) if t})
     # The other side of the "what's new" split: the samples the reader had
     # seen that are still there. Only when both sides are known in full, since
-    # a split on a truncated list would file samples under the wrong side.
+    # a split on a truncated list would file samples under the wrong side. The
+    # new side is then listed in full too: MultiQC names a sample once per read
+    # and module, so a run of 29 samples brings some 240 names, past what a
+    # change lists for reading.
     seen_now = samples_now - new_samples
     split_known = (
         before.samples_complete
-        and len(new_samples) <= MAX_LISTED_SAMPLES
+        and len(new_samples) <= MAX_SPLIT_SAMPLES
         and len(seen_now) <= MAX_SPLIT_SAMPLES
     )
+    listed = MAX_SPLIT_SAMPLES if split_known else MAX_LISTED_SAMPLES
     return {
         "kind": "emptied" if not reports else "refreshed",
         "seen_samples": sorted(seen_now) if split_known else None,
@@ -422,7 +426,7 @@ def _multiqc_change(dc_id: str, before: DcSeenState) -> dict[str, Any] | None:
         "reports_added": len(added),
         "reports_refreshed": len(refreshed),
         "reports_removed": len(removed),
-        "new_samples": sorted(new_samples)[:MAX_LISTED_SAMPLES],
+        "new_samples": sorted(new_samples)[:listed],
         "new_sample_count": len(new_samples),
         "removed_samples": sorted(removed_samples)[:MAX_LISTED_SAMPLES],
         "ingestion_run_ids": sorted(
