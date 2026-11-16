@@ -16,6 +16,7 @@ from depictio.api.v1.services.notebook_export.generator import (
     StagePlan,
     generate_qmd,
 )
+from depictio.api.v1.services.notebook_export.reading_order import MarkdownUnit
 from depictio.models.models.analysis_state import AnalysisState
 
 PENGUINS_DC = "646b0f3c1e4a2d7f8e5b8ca1"
@@ -400,27 +401,54 @@ def test_penguins_export_is_one_quarto_document(penguins_tabs):
     assert "| **Notebook** | Quarto document (.qmd) |" in src or "Quarto document (.qmd)" in src
 
 
-def test_a_highlight_points_at_the_figure_it_repeats(ampliseq_tabs):
-    """A highlight re-shows a figure from another tab. The document already
-    draws that figure in its own tab's part, so the highlight is a pointer,
-    with no name and no code of its own."""
+def test_a_highlight_draws_its_figure_in_place(ampliseq_tabs):
+    """A highlight re-shows a figure from another tab, and the dashboard draws
+    that figure on the tab that highlights it. So does the document: the
+    Overview's part holds the figure itself, read from its own tab, with a
+    line linking there, not a pointer to another part."""
     tabs = ampliseq_tabs
     state = AnalysisState.model_validate(
         {"context": {"dashboard_id": str(tabs[0]["dashboard_id"])}}
     )
     plan = ExportPlan(tabs=tabs, project=None, state=state, dcs=[], stages=[], title="x")
-    pre = NotebookBuilder(plan).preflight()
-    highlights = [c for c in pre.components if c.component_type == "highlight"]
-    assert highlights
-    assert all(c.status == "code" and c.name is None for c in highlights)
+    builder = NotebookBuilder(plan)
+    entries = [e for e, _ in builder.entries() if not isinstance(e, MarkdownUnit)]
+    drawn = [e for e in entries if e.highlight is not None]
+    seeded = [
+        m for t in tabs for m in t["stored_metadata"] if m.get("component_type") == "highlight"
+    ]
+    assert len(drawn) == len(seeded) == 3
+    for e in drawn:
+        assert e.unit.meta["component_type"] in ("figure", "advanced_viz")
+        assert e.name  # a cell of its own
+        assert e.unit.meta["index"] == e.highlight["source_component"]
+        assert e.unit.section == e.highlight["section"]
     src = generate_qmd(plan)
-    source = next(
-        m
-        for t in tabs
-        for m in t["stored_metadata"]
-        if m.get("component_type") == "highlight" and m.get("source_tab")
-    )
-    assert f"from the **{html.escape(source['source_tab'])}** tab" in src
+    for e in drawn:
+        tab_id = e.unit.tab["dashboard_id"]
+        assert f"client.component({tab_id!r}, {e.unit.meta['index']!r}" in src
+    assert "drawn in that tab's part" not in src
+    assert "*From the [Community &amp; Diversity](#tab-community-diversity) tab.*" in src
+
+
+def test_an_unresolvable_highlight_stays_a_pointer():
+    tab = {
+        "dashboard_id": PENGUINS_DASHBOARD,
+        "title": "T",
+        "is_main_tab": True,
+        "stored_metadata": [
+            {
+                "index": "hl",
+                "component_type": "highlight",
+                "source_tab": "Nowhere",
+                "source_component": "gone",
+            }
+        ],
+    }
+    state = AnalysisState.model_validate({"context": {"dashboard_id": PENGUINS_DASHBOARD}})
+    plan = ExportPlan(tabs=[tab], project=None, state=state, dcs=[], stages=[], title="x")
+    src = generate_qmd(plan)
+    assert "from the **Nowhere** tab" in src
 
 
 def _code_figure_tab(code: str) -> dict:
@@ -624,3 +652,92 @@ def test_unbranded_paper_falls_back_to_mantine_blue_and_inter(penguins_tabs):
     boot = _front(src)["brand"]["defaults"]["bootstrap"]["defaults"]
     assert boot["font-family-sans-serif"].startswith("'Inter Variable', Inter,")
     assert "print(use_theme(\"paper\", primary='#228be6'))" in src
+
+
+def _heading_lines(src: str) -> list[str]:
+    return [line for line in src.splitlines() if re.match(r"#{1,6} <span data-dpx-accent", line)]
+
+
+def test_the_report_opens_on_its_first_tab_with_the_rest_folded(ampliseq_tabs):
+    """Every tab after the first opens folded, every section the dashboard
+    opens folded opens folded, and the filters are one folded line."""
+    src = generate_qmd(_ampliseq_plan(ampliseq_tabs))
+    tabs = [h for h in _heading_lines(src) if 'data-dpx-kind="tab"' in h]
+    assert len(tabs) == len(ampliseq_tabs)
+    assert 'data-dpx-fold="closed"' not in tabs[0]
+    assert all('data-dpx-fold="closed"' in h for h in tabs[1:])
+    collapsed = {
+        s["name"] for t in ampliseq_tabs for s in t.get("grid_sections") or [] if s.get("collapsed")
+    }
+    assert collapsed
+    for h in _heading_lines(src):
+        if 'data-dpx-kind="section"' not in h:
+            continue
+        name = html.unescape(re.sub(r"<[^>]+>", "", h.split(">", 1)[1]))
+        name = re.sub(r"\s*\{#.*\}$", "", name).strip()
+        assert ('data-dpx-fold="closed"' in h) == (name in collapsed), name
+    filters = next(h for h in _heading_lines(src) if 'data-dpx-kind="filters"' in h)
+    assert 'data-dpx-fold="closed"' in filters
+    assert '<span class="dpx-h-note">none active</span>' in filters
+    # One fold control per tab, and links into folded parts open them.
+    assert "function tabButtons()" in src and "function openTo(target)" in src
+
+
+def test_active_filters_are_counted_on_the_folded_filters_line(penguins_tabs):
+    src = generate_qmd(penguins_plan(penguins_tabs))
+    filters = next(h for h in _heading_lines(src) if 'data-dpx-kind="filters"' in h)
+    assert re.search(r'<span class="dpx-h-note">\d+ active</span>', filters)
+
+
+def test_a_text_tiles_own_headings_rank_under_its_section(ampliseq_tabs):
+    """`### Data & QC` inside a text tile used to close the section and the
+    tab holding it, and listed itself among the tabs in the contents."""
+    src = generate_qmd(_ampliseq_plan(ampliseq_tabs))
+    for line in src.splitlines():
+        m = re.match(r"(#{1,6}) ", line)
+        if m and "data-dpx-accent" not in line and not line.startswith("# "):
+            # Any heading a tile writes is below the section level (h4).
+            assert len(m.group(1)) >= 5, line
+    assert "##### Data & QC" in src
+    assert "##### About this dashboard" in src
+
+
+def test_the_overview_holds_everything_the_live_overview_shows(ampliseq_tabs):
+    """In the dashboard's order: the opening text and the floating map, then
+    the sections, with the highlighted figures drawn in place."""
+    plan = _ampliseq_plan(ampliseq_tabs)
+    builder = NotebookBuilder(plan)
+    overview: list[str] = []
+    tabs = 0
+    for e, _ in builder.entries():
+        if isinstance(e, MarkdownUnit):
+            if e.kind == "tab":
+                tabs += 1
+                if tabs > 1:
+                    break
+            overview.append(e.text)
+        else:
+            overview.append(
+                ("hl:" if e.highlight is not None else "") + str(e.unit.meta.get("index"))
+            )
+    assert overview == [
+        "Overview",
+        "ov-hero",
+        "ov-about",
+        "ov-run",
+        "ov-steps",
+        "ref-sampling-sites",
+        "Key figures",
+        "ov-kf-samples",
+        "ov-kf-phyla",
+        "ov-kf-shannon",
+        "ov-kf-reads-kept",
+        "Findings",
+        "ov-findings",
+        "hl:comm-composition-by-group",
+        "hl:adv-volcano",
+        "hl:ord-embedding",
+        "ov-tree",
+        "How to read this dashboard",
+        "ov-how-to-read",
+    ]

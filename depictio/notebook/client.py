@@ -217,6 +217,29 @@ class DepictioClient:
             self._dashboards[dashboard_id] = self.get(f"/dashboards/get/{dashboard_id}")
         return self._dashboards[dashboard_id]
 
+    def category_colors(self, dashboard_id: str) -> dict[str, dict[str, str]]:
+        """``{column: {value: colour}}`` the dashboard draws in.
+
+        Its main tab's (``inherited_category_colors``) with its own laid over,
+        per column and value: ``effective_category_colors`` on the server. Empty
+        when the dashboard cannot be read (offline): colours then fall back to
+        the palette, as for a dashboard that pins none.
+        """
+        try:
+            doc = self.dashboard(dashboard_id)
+        except Exception:  # noqa: BLE001 - a missing palette only costs the pins
+            return {}
+        merged: dict[str, dict[str, str]] = {}
+        for layer in (doc.get("inherited_category_colors"), doc.get("category_colors")):
+            if not isinstance(layer, dict):
+                continue
+            for column, values in layer.items():
+                if isinstance(values, dict) and values:
+                    merged.setdefault(str(column), {}).update(
+                        {str(k): str(v) for k, v in values.items() if isinstance(v, str) and v}
+                    )
+        return merged
+
     def components(self, dashboard_id: str) -> pl.DataFrame:
         """One row per component: index, title, type, kind, section, column."""
         rows = []

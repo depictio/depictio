@@ -63,6 +63,9 @@ TAB_PROJECTION = {
         "grid_sections",
         "filter_sections",
         "stored_metadata",
+        # Where each tile sits on its tab's grid (``box-<index>``): the
+        # document reads a tab in the order the grid draws it.
+        "right_panel_layout_data",
         "project_id",
         "brand_theme",
         # Sidebar precedence is tab_icon(_color) || icon(_color) — both are

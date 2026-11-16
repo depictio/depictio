@@ -133,10 +133,10 @@ def _scatter(go: Any) -> Any:
     return go.Scatter
 
 
-def colors_for(values: list[Any]) -> dict[str, str]:
+def colors_for(values: list[Any], pinned: dict[str, str] | None = None) -> dict[str, str]:
     from .layout import category_colors
 
-    return category_colors(values)
+    return category_colors(values, pinned=pinned)
 
 
 class GenomeAxis:
@@ -268,7 +268,11 @@ def _genome_view(tile: Tile) -> Any:
         vertical_spacing=0.04,
         subplot_titles=[f for f in facets] if facets != [None] else None,
     )
-    colors = colors_for(df[cat_col].to_list()) if cat_col and cat_col in df.columns else {}
+    colors = (
+        colors_for(df[cat_col].to_list(), tile.pinned_colors(cat_col))
+        if cat_col and cat_col in df.columns
+        else {}
+    )
     primary = paper_colorway()[0]
     mark = str(cfg.get("mark") or "point")
     opacity = float(cfg.get("opacity") or 0.85)
@@ -603,7 +607,9 @@ def _sashimi(tile: Tile) -> Any:
         vertical_spacing=0.05,
         subplot_titles=[s for s in samples] if samples != [None] else None,
     )
-    ann_colors = colors_for(df[ann].to_list()) if ann and ann in df.columns else {}
+    ann_colors = (
+        colors_for(df[ann].to_list(), tile.pinned_colors(ann)) if ann and ann in df.columns else {}
+    )
     top_n = int(cfg.get("top_n") or 25)
     seen: set[str] = set()
     for r, sample in enumerate(samples, start=1):
@@ -775,7 +781,7 @@ def _genome_chord(tile: Tile) -> Any:
 
     colour_by = str(cfg.get("colour_by") or "category")
     key = cat if colour_by == "category" and cat and cat in df.columns else None
-    colors = colors_for(df[key].to_list()) if key else {}
+    colors = colors_for(df[key].to_list(), tile.pinned_colors(key)) if key else {}
     weights = df[wt].cast(pl.Float64).to_list() if wt and wt in df.columns else [1.0] * df.height
     wmax = max([w for w in weights if w is not None] + [1e-9])
     seen: set[str] = set()
@@ -888,7 +894,9 @@ def _ideogram(tile: Tile) -> Any:
         horizontal_spacing=0.04,
         vertical_spacing=0.08,
     )
-    colors = colors_for(df[cat].to_list()) if cat and cat in df.columns else {}
+    colors = (
+        colors_for(df[cat].to_list(), tile.pinned_colors(cat)) if cat and cat in df.columns else {}
+    )
     seen: set[str] = set()
     max_len = 0
     lanes = 0

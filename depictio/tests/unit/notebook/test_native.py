@@ -64,6 +64,8 @@ class SeedApi:
 
     def __init__(self) -> None:
         self.calls: list[tuple[str, dict]] = []
+        # What `/dashboards/get/<id>` answers: the colours a tab draws in.
+        self.dashboard: dict = {}
 
     def frame(self, dc_id: str) -> pl.DataFrame:
         return pl.read_csv(
@@ -96,6 +98,8 @@ class SeedApi:
         if "/deltatables/specs/" in path:
             df = self.frame(path.rsplit("/", 1)[-1])
             return httpx.Response(200, json=[{"name": c} for c in df.columns])
+        if "/dashboards/get/" in path:
+            return httpx.Response(200, json=self.dashboard)
         if "/component_figure/" in path:
             png = "data:image/png;base64,iVBORw0KGgo="
             return httpx.Response(200, json={"status": "ready", "image": png})
@@ -284,3 +288,50 @@ def test_lineages_sit_at_their_core_clades():
     summary = phylo.induced(tree, {cores[g][0]: g for g in cores})
     assert sorted(n.name for n in phylo._leaves(summary)) == ["P1", "P2"]
     assert phylo.format_share(0.0996) == "10%" and phylo.format_share(0.0004) == "<0.1%"
+
+
+def test_the_tree_of_life_wears_the_dashboards_kingdom_colours(client, api):
+    """`color_col: Kingdom` on the ampliseq overview: the tips take the colours
+    the dashboard pins for Kingdom (inherited from the main tab and laid over
+    by the tab's own), not the palette's next hues."""
+    meta = next(m for _, m in SEED_TILES if m.get("index") == "ov-tree")
+    api.dashboard = {
+        "inherited_category_colors": {"Kingdom": {"Archaea": "#111111", "Bacteria": "#222222"}},
+        "category_colors": {"Kingdom": {"Bacteria": "#1098ad"}},
+    }
+    comp = component_for(client, "dash", meta, {"filters": []})
+    fig = comp.figure
+    assert comp.native_error is None, comp.native_error
+    colours = {
+        c
+        for trace in fig.data
+        for c in (
+            trace.marker.color
+            if trace.marker is not None and isinstance(trace.marker.color, (list, tuple))
+            else []
+        )
+    }
+    assert "#1098ad" in colours  # Bacteria: the tab's own pin wins
+    assert "#222222" not in colours  # ...over the main tab's
+
+
+def test_the_tree_of_lifes_group_strip_wears_the_group_colours(client, api):
+    meta = next(m for _, m in SEED_TILES if m.get("index") == "ov-tree")
+    split_col = meta["config"].get("abundance_split_col")
+    assert split_col and "{" not in split_col
+    api.dashboard = {"category_colors": {split_col: {"Soil": "#e24a33"}}}
+    comp = component_for(client, "dash", meta, {"filters": []})
+    strip = {
+        t.marker.color
+        for t in comp.figure.data
+        if t.marker is not None and isinstance(t.marker.color, str)
+    }
+    assert "#e24a33" in strip
+
+
+def test_pinned_colours_win_and_the_rest_keep_the_palette():
+    from depictio.notebook.native.layout import category_colors
+
+    out = category_colors(["b", "a", "c"], pinned={"b": "#123456"})
+    assert out["b"] == "#123456"
+    assert out["a"] != out["c"] and "#123456" not in (out["a"], out["c"])

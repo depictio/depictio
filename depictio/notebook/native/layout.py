@@ -26,12 +26,20 @@ def _rgba(hex_color: str, a: float) -> str:
     return f"rgba({r},{g},{b},{a})"
 
 
-def category_colors(values: list[Any], primary: str | None = None) -> dict[str, str]:
-    """A stable colour per value: Paper's colorway, in the values' sorted order."""
+def category_colors(
+    values: list[Any], primary: str | None = None, pinned: dict[str, str] | None = None
+) -> dict[str, str]:
+    """A stable colour per value: the dashboard's own colour for a value it
+    pins (``pinned``, ``Tile.pinned_colors``), else Paper's colorway, handed
+    out in the sorted order of the values left."""
     first, _ = resolve_primary(primary)
     hues = [first, *(MANTINE_SHADES[h][0] for h in GLASS_HUES if MANTINE_SHADES[h][0] != first)]
+    pinned = pinned or {}
     keys = sorted({str(v) for v in values if v is not None}, key=_natural)
-    return {k: hues[i % len(hues)] for i, k in enumerate(keys)}
+    free = [k for k in keys if k not in pinned]
+    out = {k: hues[i % len(hues)] for i, k in enumerate(free)}
+    out.update({k: pinned[k] for k in keys if k in pinned})
+    return out
 
 
 def _natural(text: str) -> list[Any]:
@@ -321,7 +329,9 @@ def _ranked_table(tile: Tile) -> Any:
     total = df.height
     df = df.head(top)
     palettes = {
-        c["column"]: category_colors(df[c["column"]].to_list())
+        c["column"]: category_colors(
+            df[c["column"]].to_list(), pinned=tile.pinned_colors(c["column"])
+        )
         for c in columns
         if c.get("display") == "badge" and c["column"] in df.columns
     }
@@ -484,7 +494,8 @@ def _allele_grid(tile: Tile) -> Any:
     samples = samples[: int(cfg.get("max_samples") or 200)]
     colors = {
         locus: category_colors(
-            df.filter(pl.col(locus_col).cast(pl.Utf8) == locus)[allele_col].to_list()
+            df.filter(pl.col(locus_col).cast(pl.Utf8) == locus)[allele_col].to_list(),
+            pinned=tile.pinned_colors(allele_col),
         )
         for locus in loci
     }

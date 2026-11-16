@@ -235,6 +235,7 @@ def _phylo_summary(tile: Tile) -> Any:
     share: dict[str, float] = {}
     split: dict[str, dict[str, float]] | None = None
     split_values: list[str] = []
+    split_col: str | None = None
     if (
         cfg.get("size_by", "abundance") == "abundance"
         and cfg.get("abundance_dc_id")
@@ -279,6 +280,7 @@ def _phylo_summary(tile: Tile) -> Any:
         denom = len(samples) if samples else total
         share = {g: v / denom for g, v in sums.items()} if denom else {}
         if a_split and samples:
+            split_col = str(a_split)
             split_values = sorted(by_split)
             split = {g: {s: v / len(by_split[s]) for s, v in d.items()} for g, d in per.items()}
 
@@ -303,7 +305,10 @@ def _phylo_summary(tile: Tile) -> Any:
         return sorted(v.items(), key=lambda kv: (-kv[1], kv[0]))[0][0] if v else None
 
     colour_values = [majority(g) or g for g in groups]
-    palette = category_colors(colour_values)
+    # Coloured by the tip column when the tips carry one (a Kingdom), else by
+    # the lineage itself: the dashboard's colours for whichever it is.
+    colour_column = color_col if any(majority(g) for g in groups) else rank
+    palette = category_colors(colour_values, pinned=tile.pinned_colors(colour_column))
     fig = go.Figure()
     xs: list[Any] = []
     ys: list[Any] = []
@@ -358,6 +363,10 @@ def _phylo_summary(tile: Tile) -> Any:
         )
     strip_x0 = depth + 3.2
     if split and split_values:
+        # One colour per group of the strip, as the live summary draws it: the
+        # dashboard's own for that column (a habitat keeps its colour), else
+        # the palette's.
+        split_palette = category_colors(split_values, pinned=tile.pinned_colors(split_col))
         for j, sv in enumerate(split_values):
             vals = [split.get(g, {}).get(sv, 0.0) for g in groups]
             vmax = max(vals + [1e-9])
@@ -369,7 +378,7 @@ def _phylo_summary(tile: Tile) -> Any:
                     mode="markers",
                     marker={
                         "size": [4 + 16 * (v / vmax) ** 0.5 if v > 0 else 0 for v in vals],
-                        "color": colours,
+                        "color": split_palette.get(sv, "#868e96"),
                         "opacity": 0.85,
                     },
                     hovertext=[
@@ -382,7 +391,7 @@ def _phylo_summary(tile: Tile) -> Any:
             fig.add_annotation(
                 x=x,
                 y=-0.9,
-                text=sv,
+                text=f"<span style='color:{split_palette.get(sv, '#868e96')}'>\u25cf</span> {sv}",
                 showarrow=False,
                 textangle=-35,
                 font={"size": 10, "color": "#868e96"},

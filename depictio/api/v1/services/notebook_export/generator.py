@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pprint
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from html import escape as _esc
 from typing import Any
@@ -39,7 +39,16 @@ from .names import NameAllocator, slug
 from .predicates import PredicateSource, emit_filter_expr, emit_predicate
 from .provenance import EXPORT_DETAILS_ICON, PROVENANCE_ICON, header_markdown
 from .quarto import QuartoFrontMatter, paper_brand
-from .reading_order import ComponentUnit, MarkdownUnit, ordered_units
+from .reading_order import (
+    ComponentUnit,
+    MarkdownUnit,
+    ordered_units,
+    tab_display_name,
+    tab_link_key,
+)
+
+# What a highlight can show (``highlightTile.ts``: ``HIGHLIGHTABLE_TYPES``).
+_HIGHLIGHTABLE = frozenset({"figure", "advanced_viz"})
 
 # Shade 6 of ``@mantine/core``'s own ``DEFAULT_COLORS`` — the shade every
 # icon/accent use in the live app resolves a bare palette name to. The server
@@ -162,6 +171,14 @@ body table:not(.dpx-plain) td { border-bottom: 1px solid #f1f3f5; }
   white-space: nowrap;
 }
 .dpx-all:hover { opacity: 1; }
+/* A tab's own fold control sits on its heading, smaller than the report's. */
+.dpx-tab-all { font-size: .5em; }
+/* A heading's aside ("2 active"): quiet, and not repeated in the contents. */
+.dpx-h-note {
+  font-size: .62em; font-weight: 500; color: #868e96; margin-inline-start: .6em;
+  white-space: nowrap;
+}
+#TOC .dpx-h-note, nav[role="doc-toc"] .dpx-h-note { display: none; }
 /* Icon and title on one optical line. The glyph is sized in `em`, so it
    follows the heading's size, but an inline box hangs it off the baseline
    and it reads as sitting too low next to large text. Laying the heading out
@@ -294,16 +311,38 @@ nav[role="doc-toc"] a.active {
     }
     return out;
   }
-  function fold(h, body) {
+  // Folded content is still in the page, only hidden: what it holds was drawn
+  // (or will be) at a size it could not measure. Every unfold re-fits the
+  // figures it reveals and tells anything else listening (the report runtime,
+  // Plotly's own responsive handler) that the layout changed.
+  function setFold(h, body, folded) {
+    h.classList.toggle('dpx-folded', folded);
+    body.style.display = folded ? 'none' : '';
+  }
+  function reveal(body) {
+    controls();
+    refit();
+    try {
+      window.dispatchEvent(new Event('resize'));
+      document.dispatchEvent(new CustomEvent('dpx:reveal', { detail: body }));
+    } catch (e) { /* an old browser keeps the static fit */ }
+  }
+  function fold(h, body, closed) {
     h.classList.add('dpx-h');
     var chev = document.createElement('span');
     chev.className = 'dpx-chev';
     chev.textContent = '▾';
     h.insertBefore(chev, h.firstChild);
     h.addEventListener('click', function (ev) {
-      if (ev.target.closest('a')) return;
-      body.style.display = h.classList.toggle('dpx-folded') ? 'none' : '';
+      if (ev.target.closest('a, button')) return;
+      var folded = !h.classList.contains('dpx-folded');
+      setFold(h, body, folded);
+      if (!folded) reveal(body);
+      syncTabButtons();
     });
+    // The export's default for this heading: a tab after the first, a
+    // section the dashboard opens folded, the filters.
+    if (closed) setFold(h, body, true);
   }
   // These documents embed every figure, so the browser is still parsing the
   // page long after the script first runs: a heading enhanced early would keep
@@ -344,10 +383,15 @@ nav[role="doc-toc"] a.active {
       }
       nodes[0].parentNode.insertBefore(body, nodes[0]);
       for (var j = 0; j < nodes.length; j++) body.appendChild(nodes[j]);
-      fold(h, body);
+      fold(h, body, mark.getAttribute('data-dpx-fold') === 'closed');
       pairs.push([h, body]);
     }
     for (var k = 0; k < pairs.length; k++) absorb(pairs[k][0], pairs[k][1]);
+    tabButtons();
+    if (!hashDone && location.hash) {
+      hashDone = true;
+      openHash(location.hash);
+    }
     collapseAll();
     tocFold();
     controls();
@@ -493,13 +537,90 @@ nav[role="doc-toc"] a.active {
     if (open) open.click();
   });
   function setAll(folded) {
-    for (var i = 0; i < pairs.length; i++) {
-      pairs[i][0].classList.toggle('dpx-folded', folded);
-      pairs[i][1].style.display = folded ? 'none' : '';
-    }
+    for (var i = 0; i < pairs.length; i++) setFold(pairs[i][0], pairs[i][1], folded);
     // A figure unfolded back into view was never measured while hidden.
-    if (!folded) { controls(); refit(); }
+    if (!folded) reveal(document.body);
+    syncTabButtons();
   }
+  function kindOf(pair) { return pair[1].getAttribute('data-dpx-kind') || ''; }
+  // The sections of one tab: every folding heading inside its body.
+  function sectionsOf(tab) {
+    var out = [];
+    for (var i = 0; i < pairs.length; i++) {
+      if (pairs[i] !== tab && tab[1].contains(pairs[i][0])) out.push(pairs[i]);
+    }
+    return out;
+  }
+  function tabOpen(tab) {
+    if (tab[0].classList.contains('dpx-folded')) return false;
+    var secs = sectionsOf(tab);
+    for (var i = 0; i < secs.length; i++) {
+      if (!secs[i][0].classList.contains('dpx-folded')) return true;
+    }
+    return secs.length === 0;
+  }
+  // The dashboard's own "Collapse all / Expand all", one per tab: it folds the
+  // tab's sections, or opens the tab and every section in it.
+  function tabButtons() {
+    for (var i = 0; i < pairs.length; i++) {
+      var tab = pairs[i];
+      if (kindOf(tab) !== 'tab' || tab[0].querySelector('.dpx-tab-all')) continue;
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'dpx-all dpx-tab-all';
+      btn.addEventListener('click', (function (t, b) {
+        return function (ev) {
+          ev.stopPropagation();
+          var open = tabOpen(t), secs = sectionsOf(t);
+          if (open && !secs.length) {
+            setFold(t[0], t[1], true);
+          } else if (open) {
+            for (var j = 0; j < secs.length; j++) setFold(secs[j][0], secs[j][1], true);
+          } else {
+            setFold(t[0], t[1], false);
+            for (var k = 0; k < secs.length; k++) setFold(secs[k][0], secs[k][1], false);
+            reveal(t[1]);
+          }
+          syncTabButtons();
+        };
+      })(tab, btn));
+      tab[0].appendChild(btn);
+    }
+    syncTabButtons();
+  }
+  function syncTabButtons() {
+    for (var i = 0; i < pairs.length; i++) {
+      var btn = kindOf(pairs[i]) === 'tab' && pairs[i][0].querySelector('.dpx-tab-all');
+      if (btn) btn.textContent = tabOpen(pairs[i]) ? 'Collapse all' : 'Expand all';
+    }
+  }
+  // A link into folded content (the contents list, a tab link in the text,
+  // a shared #anchor) opens every fold on the way to it, then the target's
+  // own heading.
+  var hashDone = false;
+  function openTo(target) {
+    var opened = null;
+    for (var i = 0; i < pairs.length; i++) {
+      var h = pairs[i][0], b = pairs[i][1];
+      if (!h.classList.contains('dpx-folded')) continue;
+      if (b.contains(target) || h === target || h.parentElement === target) {
+        setFold(h, b, false);
+        opened = opened || b;
+      }
+    }
+    if (opened) { reveal(opened); syncTabButtons(); }
+  }
+  function openHash(hash) {
+    var id = hash.charAt(0) === '#' ? hash.slice(1) : hash;
+    try { id = decodeURIComponent(id); } catch (e) { /* keep it as written */ }
+    var el = id && document.getElementById(id);
+    if (el) openTo(el);
+  }
+  document.addEventListener('click', function (ev) {
+    var a = ev.target.closest && ev.target.closest('a[href^="#"]');
+    if (a) openHash(a.getAttribute('href'));
+  }, true);
+  window.addEventListener('hashchange', function () { openHash(location.hash); });
   // One control for the whole report, on the heading the tabs hang off. It
   // lives in the heading and not in its body, so it stays reachable once
   // everything below it is folded away.
@@ -821,6 +942,45 @@ class ComponentEntry:
     unit: ComponentUnit
     verdict: Classification
     name: str | None
+    # A highlight drawn in place: the highlight's own metadata, while ``unit``
+    # holds the figure it shows (its source tab and its own definition).
+    highlight: dict[str, Any] | None = None
+
+
+_FENCE_RE = re.compile(r"^\s*(`{3,}|~{3,})")
+_ATX_RE = re.compile(r"^(#{1,6})(?=\s|$)")
+
+
+def demote_headings(markdown: str, floor: int) -> str:
+    """Shift every ATX heading of ``markdown`` so the biggest one is ``floor``.
+
+    Relative ranks are kept (capped at h6); fenced code is left alone. A text
+    tile is a block inside a section, and its own headings must nest under it.
+    """
+    lines = markdown.split("\n")
+    fence: str | None = None
+    found: list[tuple[int, int]] = []
+    for i, line in enumerate(lines):
+        m = _FENCE_RE.match(line)
+        if m:
+            marker = m.group(1)[0] * 3
+            if fence is None:
+                fence = marker
+            elif marker == fence:
+                fence = None
+            continue
+        if fence is None:
+            h = _ATX_RE.match(line)
+            if h:
+                found.append((i, len(h.group(1))))
+    if not found:
+        return markdown
+    shift = max(0, floor - min(lvl for _, lvl in found))
+    if not shift:
+        return markdown
+    for i, lvl in found:
+        lines[i] = "#" * min(6, lvl + shift) + lines[i][lvl:]
+    return "\n".join(lines)
 
 
 def _sentence(text: str) -> str:
@@ -931,6 +1091,12 @@ class NotebookBuilder:
                     current_tab = unit.text
                 out.append((unit, current_tab))
                 continue
+            highlight: dict[str, Any] | None = None
+            if unit.meta.get("component_type") == "highlight":
+                source = self._highlight_source(unit.meta)
+                if source is not None:
+                    highlight = unit.meta
+                    unit = replace(source, section=unit.section, persistent=unit.persistent)
             meta = unit.meta
             verdict = classify(meta)
             dc_id = str(meta.get("dc_id") or "")
@@ -944,9 +1110,60 @@ class NotebookBuilder:
                         output="static" if meta.get("component_type") != "figure" else None,
                     )
             name = self._name_for(meta, verdict)
-            out.append((ComponentEntry(unit=unit, verdict=verdict, name=name), current_tab))
+            out.append(
+                (
+                    ComponentEntry(unit=unit, verdict=verdict, name=name, highlight=highlight),
+                    current_tab,
+                )
+            )
         self._entries = out
         return out
+
+    def _highlight_source(self, meta: dict[str, Any]) -> ComponentUnit | None:
+        """The figure a highlight shows, on the tab it lives on (``highlightTile.ts``).
+
+        The tab by id first, then by name; on it, the component by index, then a
+        figure or advanced visualisation of that title. ``None`` when the
+        highlight names nothing the family holds: it stays a pointer.
+        """
+        tabs = self.plan.tabs
+        tab_id = str(meta.get("source_dashboard_id") or "").strip()
+        name = str(meta.get("source_tab") or "").strip()
+        tab = next((t for t in tabs if tab_id and str(t.get("dashboard_id")) == tab_id), None)
+        if tab is None and name:
+            key = tab_link_key(name)
+            tab = next(
+                (
+                    t
+                    for t in tabs
+                    if key
+                    in {
+                        tab_link_key(tab_display_name(t)),
+                        tab_link_key(str(t.get("title") or "")),
+                    }
+                    or str(t.get("dashboard_id")) == name
+                ),
+                None,
+            )
+        ref = str(meta.get("source_component") or "").strip()
+        if tab is None or not ref:
+            return None
+        comps = [m for m in tab.get("stored_metadata") or [] if isinstance(m, dict)]
+        key = tab_link_key(ref)
+
+        def titled(m: dict[str, Any]) -> bool:
+            return bool(m.get("title")) and tab_link_key(str(m["title"])) == key
+
+        found = next((m for m in comps if str(m.get("index")) == ref), None) or next(
+            (m for m in comps if m.get("component_type") in _HIGHLIGHTABLE and titled(m)), None
+        )
+        if found is None or found.get("component_type") not in _HIGHLIGHTABLE:
+            return None
+        merged = dict(found)
+        for k in ("title", "subtitle", "caption"):
+            if str(meta.get(k) or "").strip():
+                merged[k] = meta[k]
+        return ComponentUnit(meta=merged, tab=tab, section=None)
 
     def _name_for(self, meta: dict[str, Any], verdict: Classification) -> str | None:
         ctype = str(meta.get("component_type") or "")
@@ -1639,19 +1856,28 @@ fig_funnel"""
         stages = self.plan.stages
         accent = _resolve_accent_hex((self.plan.brand or {}).get("primary"), "#228be6")
 
-        def part(title: str, icon: str, level: int, kind: str) -> str:
+        def part(title: str, icon: str, level: int, kind: str, **opts: Any) -> str:
             return self._heading(
                 level=level,
                 text=title,
                 accent=accent,
                 icon=self._icon_html(icon, accent),
                 kind=kind,
+                **opts,
             )
+
+        # One line, folded: the report opens on its results, and the filters
+        # are a click away. What the line says is all a reader needs before
+        # deciding to open it: whether the view is filtered at all.
+        filters_opts: dict[str, Any] = {
+            "folded": True,
+            "note": (f"{len(stages)} active" if stages else "none active"),
+        }
 
         if not stages:
             cells.append(
                 md_cell(
-                    part("Filters", FILTERS_ICON, RESULTS_LEVEL, "filters")
+                    part("Filters", FILTERS_ICON, RESULTS_LEVEL, "filters", **filters_opts)
                     + "\n\nNo filter was active when this notebook was exported: "
                     "every tile below reads the whole table."
                 )
@@ -1662,7 +1888,7 @@ fig_funnel"""
             # and so should the export.
             cells.append(
                 md_cell(
-                    part("Filters", FILTERS_ICON, RESULTS_LEVEL, "filters")
+                    part("Filters", FILTERS_ICON, RESULTS_LEVEL, "filters", **filters_opts)
                     + "\n\n*Each stage applies one filter on top of the previous one, in the "
                     "order the funnel view showed. Reordering stages changes the intermediate "
                     "counts, never the final one. The stages read their filters from "
@@ -1895,11 +2121,25 @@ fig_funnel"""
                 cells.append(md_cell(tile_close()))
             row.clear()
 
+        tabs_seen = 0
         for entry, _tab in self.entries():
             if isinstance(entry, MarkdownUnit):
                 flush_row()
-                cells.append(md_cell(self._markdown_unit_html(entry)))
+                # The first tab opens unfolded, every other one folded: the
+                # report opens on its overview, not on every plot at once.
+                if entry.kind == "tab":
+                    tabs_seen += 1
+                cells.append(
+                    md_cell(
+                        self._markdown_unit_html(
+                            entry, folded=entry.kind == "tab" and tabs_seen > 1
+                        )
+                    )
+                )
                 continue
+            if entry.highlight is not None:
+                flush_row()
+                cells.append(self._highlight_note(entry))
             # Only cards fold into a row — a dashboard's card strip is what
             # "several tiles on one line" means; figures/tables/text stay
             # full-width, same as the dashboard draws them.
@@ -1993,7 +2233,17 @@ fig_funnel"""
             f'color:{color_hex or "inherit"}">{svg}</span>'
         )
 
-    def _heading(self, *, level: int, text: str, accent: str, icon: str, kind: str) -> str:
+    def _heading(
+        self,
+        *,
+        level: int,
+        text: str,
+        accent: str,
+        icon: str,
+        kind: str,
+        folded: bool = False,
+        note: str = "",
+    ) -> str:
         """One heading line: a real ATX heading, decorated inline.
 
         The `#`s have to stay: the table of contents, the anchor links and (in
@@ -2002,14 +2252,16 @@ fig_funnel"""
         markdown parsing entirely. So the icon, the colour and the marker the
         script keys on all ride *inside* the line as inline HTML.
         """
-        mark = f'<span data-dpx-accent="{accent}" data-dpx-kind="{kind}">{icon}</span>'
+        fold = ' data-dpx-fold="closed"' if folded else ""
+        mark = f'<span data-dpx-accent="{accent}" data-dpx-kind="{kind}"{fold}>{icon}</span>'
         title = f'<span style="color:{accent}">{_esc(text)}</span>' if accent else _esc(text)
-        return f"{'#' * max(1, min(6, level))} {mark}{title}"
+        aside = f' <span class="dpx-h-note">{_esc(note)}</span>' if note else ""
+        return f"{'#' * max(1, min(6, level))} {mark}{title}{aside}"
 
-    def _markdown_unit_html(self, unit: MarkdownUnit) -> str:
+    def _markdown_unit_html(self, unit: MarkdownUnit, *, folded: bool = False) -> str:
         if unit.kind == "section":
             return self._section_header_html(unit)
-        return self._tab_header_html(unit)
+        return self._tab_header_html(unit, folded=folded)
 
     def _results_header_html(self) -> str:
         """The one heading every tab hangs off: the dashboard itself."""
@@ -2040,13 +2292,27 @@ fig_funnel"""
                 accent=accent,
                 icon=self._icon_html(unit.icon, accent),
                 kind="section",
+                # The dashboard's own default: a section it opens folded, the
+                # report opens folded too.
+                folded=unit.collapsed,
             )
         ]
+        lines = []
         if unit.description:
-            parts.append(f"*{self._rewrite_tab_links(_esc(unit.description))}*")
+            lines.append(f"*{self._rewrite_tab_links(_esc(unit.description))}*")
+        if unit.persistent:
+            # Written once, here; on the dashboard it is on every tab.
+            but = ", ".join(_esc(t) for t in unit.exclude_tabs)
+            lines.append(
+                "*On the dashboard this section is shown on every tab"
+                + (f" but {but}" if but else "")
+                + ".*"
+            )
+        if lines:
+            parts.append("<br>".join(lines) if len(lines) > 1 else lines[0])
         return "\n\n".join(parts)
 
-    def _tab_header_html(self, unit: MarkdownUnit) -> str:
+    def _tab_header_html(self, unit: MarkdownUnit, *, folded: bool = False) -> str:
         # Each tab of a multi-tab family is its own dashboard_id with its own
         # possible brand_theme override — the live sidebar shows a different
         # icon/colour per tab, so the export's per-tab part gets its own
@@ -2062,6 +2328,7 @@ fig_funnel"""
                 accent=accent,
                 icon=self._icon_html(unit.icon, accent),
                 kind="tab",
+                folded=folded,
             )
             + (f" {{#{anchor}}}" if anchor else "")
         ]
@@ -2148,6 +2415,26 @@ fig_funnel"""
             return self._figure_cell(meta, name, source, prelude, title)
         return md_cell(f"> **{title}** ({ctype}) has no code path yet.")
 
+    def _highlight_note(self, entry: ComponentEntry) -> Cell:
+        """A highlight drawn in place: where its figure lives, then its caption.
+
+        The dashboard shows the figure itself on the tab that highlights it, so
+        the document does too, rather than pointing at the tab's part. The
+        figure is the same one that tab draws (its definition, its data); the
+        line below says so, and links there.
+        """
+        tab = entry.unit.tab
+        anchor = self.tab_anchors.get(str(tab.get("dashboard_id") or "")) or self.tab_anchors.get(
+            tab_display_name(tab)
+        )
+        name = _esc(tab_display_name(tab))
+        where = f"[{name}](#{anchor})" if anchor else f"**{name}**"
+        # The highlight's own caption: the figure, drawn from its own tab's
+        # definition, carries the source's.
+        caption = self._rewrite_tab_links(str((entry.highlight or {}).get("caption") or "").strip())
+        line = f"*From the {where} tab.*"
+        return md_cell(line + (f" {caption}" if caption else ""))
+
     def _highlight_cell(self, meta: dict[str, Any], title: str) -> Cell:
         source = str(meta.get("source_component") or "a figure")
         tab = str(meta.get("source_tab") or "").strip()
@@ -2181,7 +2468,10 @@ fig_funnel"""
         if title:
             parts.append(f"{'#' * level} {title}")
         if body:
-            parts.append(body)
+            # Headings a tile writes inside itself rank under its section too:
+            # `### Data & QC` in a tile's body used to close the section and
+            # the tab around it, and listed itself among the tabs.
+            parts.append(demote_headings(body, level + 1 if title else level))
         text = self._inline_icons(
             self._rewrite_tab_links("\n\n".join(parts) or "*(empty text tile)*")
         )

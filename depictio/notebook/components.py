@@ -474,11 +474,25 @@ class DepictioComponent:
         """The dashboard's colour per category value, when the colour-by needs it."""
         if ((self.state.get("color_by") or {}).get("kind") or "none") != "column":
             return {}
-        try:
-            colors = self.client.dashboard(self.dashboard_id).get("category_colors")
-        except Exception:  # noqa: BLE001 - a missing palette only costs the facet
-            return {}
-        return colors if isinstance(colors, dict) else {}
+        return self.client.category_colors(self.dashboard_id)
+
+    def pinned_colors(self, column: str | None) -> dict[str, str] | None:
+        """The colours the dashboard pins for ``column``, with the component's
+        own ``category_palettes`` for it laid over value by value
+        (``columnCategoryColors`` / ``pinnedPalette`` in the app). ``None``
+        when nothing is pinned: the renderer keeps its own palette."""
+        if not column:
+            return None
+        merged: dict[str, str] = {}
+        cfg = self.meta.get("config") if isinstance(self.meta.get("config"), dict) else {}
+        own = (cfg.get("category_palettes") or {}) if isinstance(cfg, dict) else {}
+        for layer in (self.client.category_colors(self.dashboard_id).get(column), own.get(column)):
+            if not isinstance(layer, dict):
+                continue
+            for value, colour in layer.items():
+                if str(value) != "*" and isinstance(colour, str) and colour:
+                    merged[str(value)] = colour
+        return merged or None
 
     # ------------------------------------------------------------- fetching
     def _fetch_figure(self):

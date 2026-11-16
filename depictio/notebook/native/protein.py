@@ -402,7 +402,11 @@ def _sequence_track(tile: Tile) -> Any:
             )
             from .layout import category_colors
 
-            colours = category_colors(variants[vc].to_list()) if vc in variants.columns else {}
+            colours = (
+                category_colors(variants[vc].to_list(), pinned=tile.pinned_colors(vc))
+                if vc in variants.columns
+                else {}
+            )
             for row in variants.iter_rows(named=True):
                 c = colours.get(str(row.get(vc)), paper_colorway()[0])
                 fig.add_trace(
@@ -629,7 +633,11 @@ def _domain_architecture(tile: Tile) -> Any:
         raise NothingToDraw("no domain under the thresholds")
     df = df.sort([ent, st])
     colour_key = lab if str(cfg.get("color_by") or "label") == "label" else (srcc or lab)
-    colours = category_colors(df[colour_key].to_list()) if colour_key in df.columns else {}
+    colours = (
+        category_colors(df[colour_key].to_list(), pinned=tile.pinned_colors(colour_key))
+        if colour_key in df.columns
+        else {}
+    )
     proteins: list[tuple[str, float, list[dict[str, Any]]]] = []
     from .layout import _natural
 
