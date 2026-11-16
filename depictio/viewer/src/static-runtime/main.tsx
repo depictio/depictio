@@ -37,6 +37,8 @@ import App from '../App';
 import { bundledTabs, currentTabId, loadBundleFromDocument, setActiveTab } from './bundle';
 import { installBundleNavigation } from './tabNav';
 import { installInlineMultiqcLogos } from '../chrome/multiqcLogo';
+import { BundleProjectPageContext, type BundleProjectPage } from '../chrome/bundlePage';
+import ProjectPage from './ProjectPage';
 
 // file:// cannot reach `/dashboard/logos/...`: MultiQC tab icons use the
 // inlined copies instead (react-core's themedIconSrc reads this).
@@ -70,7 +72,8 @@ if (bundledTabs().length > 0) {
 }
 
 /**
- * Owns which tab of the family is on screen.
+ * Owns which tab of the family is on screen, and whether the project page is
+ * laid over it.
  *
  * App is REMOUNTED on a switch (`key`), not re-rendered: `extractDashboardId()`
  * reads the global once per render and is not reactive, and every piece of
@@ -80,14 +83,51 @@ if (bundledTabs().length > 0) {
  * a bundle and on the instance it was exported from: interactive filters reset,
  * while the floating-map selection (persisted to storage) and the panel
  * width/collapse prefs (persisted per dashboard id) survive.
+ *
+ * The project page answers every link the live app has to `/projects/<id>`
+ * (the Settings drawer, the sidebar's project row): a bundle has no such
+ * route, so it opens over the canvas here, and moving to a tab closes it.
  */
 const StaticRuntime: React.FC = () => {
   const [tabId, setTabId] = React.useState(() => currentTabId());
+  const [projectOpen, setProjectOpen] = React.useState(false);
+  const project = manifest.project ?? null;
   // `setActiveTab` has already run inside the interceptor by the time this
   // state lands; the effect only wires the listener up (and tears it down for
   // StrictMode's double mount).
-  React.useEffect(() => installBundleNavigation(setTabId), []);
-  return <App key={tabId} />;
+  React.useEffect(
+    () =>
+      installBundleNavigation({
+        onSwitchTab: (id) => {
+          setProjectOpen(false);
+          setTabId(id);
+        },
+        onOpenProject: () => {
+          if (!project) return false;
+          setProjectOpen(true);
+          return true;
+        },
+      }),
+    [project],
+  );
+  const projectPage = React.useMemo<BundleProjectPage | null>(
+    () =>
+      project
+        ? {
+            name: project.name,
+            open: projectOpen,
+            openPage: () => setProjectOpen(true),
+            closePage: () => setProjectOpen(false),
+            render: (props) => <ProjectPage {...props} />,
+          }
+        : null,
+    [project, projectOpen],
+  );
+  return (
+    <BundleProjectPageContext.Provider value={projectPage}>
+      <App key={tabId} />
+    </BundleProjectPageContext.Provider>
+  );
 };
 
 // The badge provider must sit above every LazyMount/Suspense boundary: one of

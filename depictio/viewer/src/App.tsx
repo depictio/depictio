@@ -172,6 +172,7 @@ import DashboardLoadIndicator from './components/DashboardLoadIndicator';
 import BootSplash from './components/BootSplash';
 import { usePageTitle } from './branding';
 import { DashboardGuide, useGuideRoute } from './guide';
+import { useBundleProjectPage } from './chrome/bundlePage';
 import { LandingHint, useLandingHint } from './landing';
 import { DashboardSpotlight } from './spotlight';
 import { useLayoutOverride } from './layoutOverride';
@@ -1630,33 +1631,51 @@ const App: React.FC = () => {
     (typeof dashboard?.subtitle === 'string' ? dashboard.subtitle.trim() : '') ||
     (parentTab?.title || dashboard?.title || '').trim() ||
     null;
+  // A static bundle's project page (null everywhere else). It is laid over
+  // the canvas like the Guide, so the two take turns: opening one closes the
+  // other, and the canvas is hidden while either is up.
+  const projectPage = useBundleProjectPage();
+  const projectPageOpen = Boolean(projectPage?.open);
+  const pageOver = guide.open || projectPageOpen;
   // On a phone the sidebar is an overlay: leave it open over the Guide and the
   // Guide is behind it.
   const openGuideFromSidebar = useCallback(() => {
+    projectPage?.closePage();
     guide.openGuide();
     if (isNarrow && mobileOpened) toggleMobile();
-  }, [guide, isNarrow, mobileOpened, toggleMobile]);
+  }, [guide, projectPage, isNarrow, mobileOpened, toggleMobile]);
   const closeGuideFromSidebar = useCallback(() => {
     guide.closeGuide();
     if (isNarrow && mobileOpened) toggleMobile();
   }, [guide, isNarrow, mobileOpened, toggleMobile]);
   // The Analysis panel is docked beside the canvas: the Guide takes its place.
   useEffect(() => {
-    if (guide.open) {
+    if (pageOver) {
       setAnalysisOpen(false);
       setMetadataOpen(false);
     }
-  }, [guide.open]);
+  }, [pageOver]);
+  // The project page opens from the Settings drawer's project link as much as
+  // from the sidebar: whatever it opened from, it takes the screen.
+  useEffect(() => {
+    if (!projectPageOpen) return;
+    closeSettings();
+    if (guide.open) guide.closeGuide();
+    if (isNarrow && mobileOpened) toggleMobile();
+    // Only the page opening is an event here; the rest is read at that moment.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectPageOpen]);
   // Before the dashboard search lands on something of this tab: the Guide and,
   // on a phone, the tab list both cover the canvas, and a filter lives in a
   // drawer there.
   const uncoverForSearch = useCallback(
     (index: string | null) => {
       if (guide.open) guide.closeGuide();
+      projectPage?.closePage();
       if (isNarrow && mobileOpened) toggleMobile();
       if (index && isNarrow && leftComponents.some((m) => m.index === index)) openFilterDrawer();
     },
-    [guide, isNarrow, mobileOpened, toggleMobile, leftComponents, openFilterDrawer],
+    [guide, projectPage, isNarrow, mobileOpened, toggleMobile, leftComponents, openFilterDrawer],
   );
 
   // The tab's scope: its `always_selected` filters, shown in a banner under
@@ -1919,9 +1938,9 @@ const App: React.FC = () => {
         // the Guide closes, but neither painted nor in the focus order.
         // Only the canvas: the filter panel stays on screen beside the
         // Guide, so its "Show me" rings the real panel in place.
-        aria-hidden={guide.open || undefined}
+        aria-hidden={pageOver || undefined}
         style={{
-          visibility: guide.open ? 'hidden' : undefined,
+          visibility: pageOver ? 'hidden' : undefined,
           // Page-width preference: the canvas centres in what the
           // filter panel leaves, the panel staying by the sidebar.
           padding: 4,
@@ -2107,7 +2126,7 @@ const App: React.FC = () => {
       )}
       {/* The page's fixed furniture sits above the Guide's layer; hidden
           with the canvas while the Guide is up. */}
-      <div style={guide.open ? { visibility: 'hidden' } : undefined}>
+      <div style={pageOver ? { visibility: 'hidden' } : undefined}>
         {/* Unmounted while previewing. It would start from the snapshot's
             notes, and `saveDashboardNotes` writes the editor's text onto the
             live dashboard it re-reads, so a save here would put a past
@@ -2165,6 +2184,16 @@ const App: React.FC = () => {
           onOpenYourView={() => openSettingsAt('view')}
         />
       )}
+      {projectPage?.open &&
+        projectPage.render({
+          tabName:
+            (activeTab && !activeTab.parent_dashboard_id
+              ? activeTab.main_tab_name || activeTab.title
+              : activeTab?.title) ||
+            dashboard?.title ||
+            'the dashboard',
+          onClose: projectPage.closePage,
+        })}
     </>
   );
   const outside = (

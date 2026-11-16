@@ -37,7 +37,7 @@ const PRODUCER_LABEL: Record<string, string> = {
  * time — so a bare string gets a `Z` before parsing. Anything unparseable is
  * shown verbatim: a provenance line must never invent a date.
  */
-function formatExportedAt(raw: string | null | undefined): string | null {
+export function formatExportedAt(raw: string | null | undefined): string | null {
   if (!raw) return null;
   const hasZone = /(?:Z|[+-]\d{2}:?\d{2})$/.test(raw);
   const parsed = new Date(hasZone ? raw : `${raw}Z`);
@@ -45,7 +45,7 @@ function formatExportedAt(raw: string | null | undefined): string | null {
   return `${parsed.toISOString().slice(0, 16).replace('T', ' ')} UTC`;
 }
 
-interface ProvenanceRow {
+export interface ProvenanceRow {
   label: string;
   value: string;
   /** Tooltip text. Defaults to the value, which is what a truncated one needs. */
@@ -54,7 +54,7 @@ interface ProvenanceRow {
   href?: string;
 }
 
-function provenanceRows(manifest: BundleManifest): ProvenanceRow[] {
+export function provenanceRows(manifest: BundleManifest): ProvenanceRow[] {
   const p = manifest.provenance ?? {};
   const rows: ProvenanceRow[] = [];
   const push = (label: string, value: string | null | undefined, hint?: string) => {

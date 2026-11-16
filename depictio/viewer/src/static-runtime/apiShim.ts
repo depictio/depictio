@@ -62,6 +62,7 @@ import type {
   FunnelValuesResponse,
   InteractiveFilter,
   PersistentSection,
+  ProjectListEntry,
   ResolvedGroupsResult,
   StoredMetadata,
   TextFilterMatchesResult,
@@ -77,6 +78,7 @@ import {
   interactiveIndexFor,
   rawBundle,
 } from './bundle';
+import { projectAsApiProject } from './projectModel';
 import {
   columnRangeLive,
   computeCardsLive,
@@ -331,17 +333,24 @@ export async function fetchProjectFromDashboard(_dashboardId: string) {
   throw new Error('static bundle: no project backend');
 }
 
-/** Reached one click deep: the header's Settings gear is NOT `isStaticBundle`-
- *  gated (unlike Edit beside it), and `DashboardInfoBody` enriches
- *  `doc.project_id` — which producer A keeps — into a project name. Rejecting
- *  matches the sibling `fetchProjectFromDashboard` above, and that effect
- *  already catches and falls back to "no name"; the drawer's other fields all
- *  come from the bundled document and still render. */
+/** The project, from the summary producer A ships (`manifest.project`).
+ *
+ *  Its readers in a dashboard are the Settings drawer's About section (name,
+ *  template, key run parameters, the project link that opens the bundle's
+ *  project page) and the Run parameters dialog a text tile's `params:` link
+ *  opens — both work offline once this answers. A bundle without a project
+ *  (producer B, older exports) still rejects, which both readers already
+ *  catch and render as "no project". */
 export async function fetchProject(
   _projectId: string,
   _options: { skipEnrichment?: boolean } = {},
-) {
-  throw new Error('static bundle: no project backend');
+): Promise<{ project: ProjectListEntry; delta_locations: Record<string, string> }> {
+  const project = rawBundle().project;
+  if (!project) throw new Error('static bundle: no project backend');
+  return {
+    project: projectAsApiProject(project) as unknown as ProjectListEntry,
+    delta_locations: {},
+  };
 }
 
 export async function fetchIngestionHealth(_projectId: string) {

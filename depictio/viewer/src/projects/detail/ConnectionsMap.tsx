@@ -6,7 +6,10 @@ import type { DCLink } from 'depictio-react-core';
 
 import { DcTypeIcon } from '../dcTypeIcon';
 
-import { STROKE } from '../../chrome/variants/glass/pages';
+// The glyph stroke, from the chrome's icons rather than the page shell's
+// barrel: a static bundle draws this map on its project page, and the barrel
+// would bring the whole management-page shell along.
+import { STROKE } from '../../chrome/variants/glass/icons';
 import '../../chrome/variants/glass/pages/connections.css';
 
 /** The slice of a data collection the map needs. */
@@ -57,8 +60,10 @@ interface ConnectionsMapProps {
   links: DCLink[];
   joins?: ProjectJoin[];
   canMutate: boolean;
-  onInspect: (link: DCLink) => void;
-  onEdit: (link: DCLink) => void;
+  /** Without either handler the map is read-only: no row actions at all (a
+   *  static bundle's project page, which has no server to ask). */
+  onInspect?: (link: DCLink) => void;
+  onEdit?: (link: DCLink) => void;
 }
 
 const sameFocus = (a: Exclude<Focus, null>, b: Exclude<Focus, null>) =>
@@ -574,31 +579,38 @@ const ConnectionsMap: React.FC<ConnectionsMapProps> = ({
                     {e.kind === 'join' ? `Join, ${e.how}` : e.how}
                   </span>
                   {!e.enabled && <span className="cm-row-off">Off</span>}
-                  {e.link && (
+                  {e.link && (onInspect || onEdit) && (
                     <span className="cm-row-actions">
-                      <Tooltip label="Inspect mapping" withArrow>
-                        <ActionIcon
-                          variant="subtle"
-                          color="gray"
-                          size="sm"
-                          aria-label="Inspect mapping"
-                          onClick={() => e.link && onInspect(e.link)}
+                      {onInspect && (
+                        <Tooltip label="Inspect mapping" withArrow>
+                          <ActionIcon
+                            variant="subtle"
+                            color="gray"
+                            size="sm"
+                            aria-label="Inspect mapping"
+                            onClick={() => e.link && onInspect(e.link)}
+                          >
+                            <ScanSearch size={14} strokeWidth={STROKE} aria-hidden />
+                          </ActionIcon>
+                        </Tooltip>
+                      )}
+                      {onEdit && (
+                        <Tooltip
+                          label={canMutate ? 'Edit link' : 'Disabled in public/demo mode'}
+                          withArrow
                         >
-                          <ScanSearch size={14} strokeWidth={STROKE} aria-hidden />
-                        </ActionIcon>
-                      </Tooltip>
-                      <Tooltip label={canMutate ? 'Edit link' : 'Disabled in public/demo mode'} withArrow>
-                        <ActionIcon
-                          variant="subtle"
-                          color="gray"
-                          size="sm"
-                          aria-label="Edit link"
-                          disabled={!canMutate}
-                          onClick={() => e.link && onEdit(e.link)}
-                        >
-                          <Pencil size={14} strokeWidth={STROKE} aria-hidden />
-                        </ActionIcon>
-                      </Tooltip>
+                          <ActionIcon
+                            variant="subtle"
+                            color="gray"
+                            size="sm"
+                            aria-label="Edit link"
+                            disabled={!canMutate}
+                            onClick={() => e.link && onEdit(e.link)}
+                          >
+                            <Pencil size={14} strokeWidth={STROKE} aria-hidden />
+                          </ActionIcon>
+                        </Tooltip>
+                      )}
                     </span>
                   )}
                 </li>

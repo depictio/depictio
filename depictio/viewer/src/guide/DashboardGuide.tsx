@@ -107,7 +107,7 @@ const CANVAS_SELECTOR = '[data-testid="dashboard-content"]';
  * the observer sees). Null until measured, or with no canvas on the page: the
  * stylesheet's AppShell offsets place the layer then.
  */
-function useCanvasBox(): LayerBox | null {
+export function useCanvasBox(): LayerBox | null {
   const [box, setBox] = useState<LayerBox | null>(null);
   useLayoutEffect(() => {
     let canvas = document.querySelector<HTMLElement>(CANVAS_SELECTOR);

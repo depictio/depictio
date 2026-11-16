@@ -28,6 +28,7 @@ import {
   fetchProject,
   readTemplateRevision,
   templateRevisionMismatch,
+  useIsStaticBundle,
   Z_LAYERS,
 } from 'depictio-react-core';
 import {
@@ -143,6 +144,10 @@ const DashboardInfoBody: React.FC<DashboardInfoBodyProps> = ({ dashboard, active
   const isMainTab =
     typeof dashboard?.is_main_tab === 'boolean' ? (dashboard.is_main_tab as boolean) : null;
   const parentDashboardId = (dashboard?.parent_dashboard_id as string | undefined) || null;
+  // In a static bundle the project link opens the bundle's own project page
+  // (the runtime intercepts `/projects/<id>`), but there is no ingestion
+  // report to open: those links are left out rather than left dead.
+  const isStaticBundle = useIsStaticBundle();
 
   // Resolve project_id → project.name + template_origin asynchronously.
   // Skip enrichment to keep the request small (we only need name +
@@ -210,7 +215,9 @@ const DashboardInfoBody: React.FC<DashboardInfoBodyProps> = ({ dashboard, active
                   style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
                 >
                   {projectName}
-                  <Icon icon="mdi:open-in-new" width={12} />
+                  {/* In a bundle the link opens the file's own project page,
+                      in place: no "new tab" glyph. */}
+                  <Icon icon={isStaticBundle ? 'mdi:arrow-right' : 'mdi:open-in-new'} width={12} />
                 </Anchor>
               </Tooltip>
             ) : projectName ? (
@@ -240,7 +247,7 @@ const DashboardInfoBody: React.FC<DashboardInfoBodyProps> = ({ dashboard, active
             }
           />
         )}
-        {projectId && (
+        {projectId && !isStaticBundle && (
           <MetaRow
             icon="mdi:clipboard-check-outline"
             color="indigo"
@@ -261,7 +268,7 @@ const DashboardInfoBody: React.FC<DashboardInfoBodyProps> = ({ dashboard, active
               <RunParameters
                 entries={runProvenance}
                 files={runProvenanceFiles}
-                projectId={projectId}
+                projectId={isStaticBundle ? null : projectId}
                 template={parsedTemplate}
               />
             }
@@ -275,6 +282,8 @@ const DashboardInfoBody: React.FC<DashboardInfoBodyProps> = ({ dashboard, active
             value={<Text size="sm">{ownerEmail}</Text>}
           />
         )}
+        {/* Who may open the live dashboard: an ACL a file does not have. */}
+        {!isStaticBundle && (
         <MetaRow
           icon={isPublic ? 'mdi:earth' : 'mdi:lock'}
           color={isPublic ? 'teal' : 'violet'}
@@ -285,6 +294,7 @@ const DashboardInfoBody: React.FC<DashboardInfoBodyProps> = ({ dashboard, active
             </Badge>
           }
         />
+        )}
         {lastSaved && (
           <MetaRow
             icon="mdi:clock-outline"
