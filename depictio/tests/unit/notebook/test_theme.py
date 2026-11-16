@@ -99,6 +99,16 @@ def test_an_unplaced_legend_runs_along_the_top_left():
     assert (lay["legend"]["xref"], lay["legend"]["yref"]) == ("container", "container")
 
 
+def test_a_titled_figure_gets_its_legend_at_the_bottom_left():
+    # Paper puts the title at the top left: a legend there printed over it
+    # (a map's "Sampling sites" under its colour key).
+    for title in ("Sampling sites", {"text": "Sampling sites"}):
+        lay = theme.apply_theme({"data": [], "layout": {"title": title}}, "paper")["layout"]
+        assert (lay["legend"]["y"], lay["legend"]["yanchor"]) == (0, "bottom")
+    untitled = theme.apply_theme({"data": [], "layout": {"title": {"text": " "}}}, "paper")
+    assert untitled["layout"]["legend"]["yanchor"] == "top"
+
+
 def test_use_theme_registers_the_template_and_embeds_inter():
     style = theme.use_theme("paper", primary="violet")
     assert style.startswith("<style>@font-face{font-family:'Inter Variable'")

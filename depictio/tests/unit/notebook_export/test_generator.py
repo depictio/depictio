@@ -278,7 +278,10 @@ def test_penguins_export_content(penguins_tabs):
     # than jumping a level between tabs.
     # The main tab carries its own sidebar label ("Species"), not the
     # dashboard's title, which the document already prints as its h1.
-    assert re.search(r"^\s*# Penguins Species Analysis", src, re.M)
+    # The title lives in the front matter only (Quarto's title block), never
+    # repeated as a heading in the body.
+    assert "\ntitle: Penguins Species Analysis\n" in src
+    assert not re.search(r"^\s*# Penguins Species Analysis", src, re.M)
     assert re.search(r"^\s*## <span data-dpx-accent=.*Results", src, re.M)
     assert re.search(r"^\s*### <span data-dpx-accent=.*Species", src, re.M)
     assert re.search(r"^\s*#### <span data-dpx-accent=.*Cohort", src, re.M)
