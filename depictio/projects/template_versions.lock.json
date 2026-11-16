@@ -556,7 +556,7 @@
     },
     "nf-core/rnaseq/3.26.0": {
       "version": "2.3.0",
-      "content_hash": "10631a55d4bdcb2819af563d6e9c11b224ca767af24ab2867b7779390b1cd5e3",
+      "content_hash": "67d45c6d9ee80d57cc46aea40153490810b439601c4d0dbaaac2bbc39a28e86b",
       "catalog": {
         "deseq2": "1.0.0",
         "multiqc": "1.0.0",

@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 """Render the ``from_params`` schema as a hand-drawn SVG (+ PNG).
 
-One diagram for ``docs/template-params.md`` and PR #1408: how a run's own
-``params_<ts>.json`` becomes the variables a template's conditionals read,
-without anyone passing ``--var``, and what CI holds true about the rules.
-
-The worked example is nf-core/rnaseq 3.26.0 run with ``--skip_alignment``: its
-real rules and conditionals, and their real outcome (the genome tracks are
-dropped, MultiQC is kept).
+One diagram for ``docs/template-params.md`` and PR #1408. Everything in it is
+the real thing, nothing is illustrative: nf-core/rnaseq 3.26.0 run with
+``--skip_alignment``, its params dump, the template's three rules evaluated on
+it, the four conditionals (one fires), the exact paths each collection reads
+before and after, the output of ``depictio template check`` on it, and the
+coverage of the 57 bundled templates.
 
 Logos are embedded from ``dev/diagrams/logos/``; see its README.
 
@@ -26,7 +25,6 @@ import typer
 sys.path.insert(0, str(Path(__file__).parent))
 
 from sketch import (  # noqa: E402
-    BLUE,
     DIM,
     GREEN,
     GREY,
@@ -42,8 +40,6 @@ from sketch import (  # noqa: E402
     circle,
     dot,
     folder,
-    page,
-    terminal,
     tick,
     write,
 )
@@ -53,14 +49,17 @@ app = typer.Typer(add_completion=False)
 LOGOS = Path(__file__).parent / "logos"
 SECTION = "#7048e8"
 ORANGE_INK = "#e8590c"
+TICK = "#2f9e44"
 CODE_BG = "#1e1e1e"
 CODE_INK = "#e9ecef"
 CODE_KEY = "#b197fc"
 CODE_STR = "#8ce99a"
 CODE_NUM = "#ffc078"
 CODE_DIM = "#868e96"
+CODE_RED = "#ff8787"
 
-W, H = 1760, 1140
+W, H = 1760, 1330
+NBSP = " "
 
 
 def logo(s: Sketch, name: str, x: float, y: float, w: float, h: float | None = None) -> None:
@@ -71,6 +70,10 @@ def section(s: Sketch, x: float, y: float, label: str) -> None:
     s.text(x, y, label, size=17, colour=SECTION, anchor="start", weight="bold")
 
 
+def mono(s: Sketch, x: float, y: float, text: str, *, size: float = 13, colour: str = INK) -> None:
+    s.text(x, y, f"`{text.replace(' ', NBSP)}`", size=size, colour=colour, anchor="start")
+
+
 def code(
     s: Sketch,
     x: float,
@@ -78,7 +81,7 @@ def code(
     w: float,
     lines: list[tuple[str, str]],
     *,
-    size: float = 14,
+    size: float = 13,
     title: str = "",
 ) -> Box:
     """A dark code card: (text, colour) per line, monospace."""
@@ -90,29 +93,9 @@ def code(
     if title:
         s.text(x + w - 14, y + 19, f"`{title}`", size=12, colour=CODE_DIM, anchor="end")
     for i, (text, colour) in enumerate(lines):
-        if not text:
-            continue
-        shown = text.replace(" ", " ")
-        s.text(
-            x + 16, y + 44 + i * (size + 7), f"`{shown}`", size=size, colour=colour, anchor="start"
-        )
+        if text:
+            mono(s, x + 16, y + 44 + i * (size + 7), text, size=size, colour=colour)
     return box
-
-
-def pill(s: Sketch, x: float, y: float, label: str, fill: str = VIOLET) -> float:
-    """A rule-test chip; returns the x after it."""
-    w = 18 + len(label) * 8.2
-    s.rect(Box(x, y, w, 28, fill, ""), colour=DIM)
-    s.text(x + w / 2, y + 19, f"`{label}`", size=13)
-    return x + w + 10
-
-
-def bars(s: Sketch, x: float, y: float, w: float, h: float, heights: tuple[float, ...]) -> None:
-    n = len(heights)
-    bw = w / n * 0.62
-    for i, frac in enumerate(heights):
-        bx = x + i * w / n + (w / n - bw) / 2
-        s.rect(Box(bx, y + h * (1 - frac), bw, h * frac, "#a5d8ff", ""))
 
 
 def build() -> Sketch:
@@ -120,253 +103,254 @@ def build() -> Sketch:
     s.heading(
         60,
         64,
-        "The run says which route it took; the template listens",
-        "`from_params` rules read the run's `pipeline_info/params_<ts>.json` · no `--var` to pass · an explicit `--var` always wins",
+        "nf-core/rnaseq 3.26.0 run with `--skip_alignment`: what the template does, step by step",
+        "the real rules, values, conditionals and paths of `nf-core/rnaseq/3.26.0/template.yaml`; nobody passes `--var`",
     )
     s.line(60, 104, 1190, 104, colour=SECTION, width=2.4, amount=1.0, passes=1)
 
     # -- 1 · the run ------------------------------------------------------------
-    section(s, 60, 160, "1 · THE RUN WRITES WHAT IT DID")
-    run = Box(60, 180, 420, 500, WHITE, "")
+    section(s, 60, 160, "1 · THE RUN")
+    run = Box(60, 180, 440, 600, WHITE, "")
     s.rect(run)
-    logo(s, "nf-core.png", 80, 196, 50)
-    logo(s, "nf-core-rnaseq.webp", 140, 194, 150, 56)
-    s.text(300, 228, "`3.26.0`", size=15, anchor="start")
-    s.text(140, 270, "run with `--skip_alignment`", size=14, colour=DIM, anchor="start")
-
-    out = folder(s, 80, 296, 110, 72, YELLOW, "")
-    s.text(out.cx, out.y + 46, "`--outdir`", size=14)
-    tree = (
-        ("`pipeline_info/`", INK, None),
-        ("`  params_2026-11-02_1012.json`", INK, "newest"),
-        ("`  params_2026-11-01_0915.json`", GREY, None),
-        ("`  nf-params.json`", GREY, "overrides"),
-    )
-    for i, (text, colour, mark) in enumerate(tree):
-        ty = 304 + i * 22
-        s.text(206, ty, text.replace(" ", " "), size=12.5, colour=colour, anchor="start")
-        if mark == "newest":
-            tick(s, 458, ty - 5, size=6)
-        elif mark == "overrides":
-            s.cross(458, ty - 5, size=6)
-    s.text(206, 400, "newest dump decides (a resumed run", size=12, colour=DIM, anchor="start")
-    s.text(206, 416, "leaves one per attempt); overrides only", size=12, colour=DIM, anchor="start")
-    s.text(206, 432, "would read an absent default as off", size=12, colour=DIM, anchor="start")
-
-    js = code(
+    logo(s, "nf-core.png", 78, 194, 44)
+    logo(s, "nf-core-rnaseq.webp", 130, 192, 140, 52)
+    s.text(282, 226, "`3.26.0`", size=15, anchor="start")
+    code(
         s,
-        80,
-        452,
-        380,
+        78,
+        254,
+        404,
+        [
+            ("nextflow run nf-core/rnaseq -r 3.26.0 \\", CODE_INK),
+            ("  --skip_alignment \\", CODE_NUM),
+            ("  --pseudo_aligner salmon  …", CODE_INK),
+        ],
+        size=12.5,
+    )
+    folder(s, 78, 372, 92, 62, YELLOW, "")
+    s.text(124, 412, "`results/`", size=12.5)
+    tree = (
+        ("pipeline_info/params_2026-11-02_10-12-00.json", INK, "tick", "read: the newest full dump"),
+        ("pipeline_info/nf-params.json", GREY, "cross", "never: overrides only"),
+        ("salmon/salmon.merged.gene_tpm.tsv", INK, "tick", "written"),
+        ("star_salmon/", GREY, "cross", "not written: no alignment"),
+        ("multiqc/salmon/multiqc_report_data/", INK, "tick", "written"),
+    )
+    for i, (path, colour, mark, why) in enumerate(tree):
+        ty = 382 + i * 34
+        mono(s, 184, ty, path, size=11, colour=colour)
+        s.text(184, ty + 15, why, size=11, colour=DIM, anchor="start")
+        if mark == "tick":
+            tick(s, 482, ty - 4, size=5)
+        else:
+            s.cross(482, ty - 4, size=5)
+    code(
+        s,
+        78,
+        562,
+        404,
         [
             ("{", CODE_INK),
             ('  "skip_alignment": true,', CODE_NUM),
             ('  "pseudo_aligner": "salmon",', CODE_STR),
             ('  "skip_multiqc": false,', CODE_NUM),
             ('  "skip_quantification_merge": false,', CODE_NUM),
-            ("  …", CODE_DIM),
+            ("  …  (133 params in the 3.26.0 schema)", CODE_DIM),
             ("}", CODE_INK),
         ],
-        size=13,
-        title="params_<ts>.json",
+        size=12.5,
+        title="params_2026-11-02_10-12-00.json",
     )
-    s.text(run.cx, js.bottom + 24, '`true`, `"true"`, `"a,b"`, `["a"]`: all read', size=13, colour=DIM)
 
-    # -- 2 · the template -------------------------------------------------------
-    section(s, 540, 160, "2 · THE TEMPLATE DECLARES A RULE PER ROUTE")
-    yml = code(
-        s,
-        540,
-        180,
-        500,
-        [
-            ("variables:", CODE_KEY),
-            ("  - name: PSEUDOALIGNER_ONLY", CODE_INK),
-            ("    from_params: {param: skip_alignment}", CODE_STR),
-            ("  - name: SKIP_MULTIQC", CODE_INK),
-            ("    from_params: {param: skip_multiqc}", CODE_STR),
-            ("  - name: SKIP_QUANTIFICATION_MERGE", CODE_INK),
-            ("    from_params: {param: skip_quantification_merge}", CODE_STR),
-            ("", CODE_INK),
-            ("conditionals:", CODE_KEY),
-            ("  - if_var_present: PSEUDOALIGNER_ONLY", CODE_INK),
-            ("    remove_dc_tags: [tracks]", CODE_NUM),
-            ("  - if_var_present: SKIP_MULTIQC", CODE_INK),
-            ("    remove_dc_tags: [multiqc_data, general_stats]", CODE_NUM),
-        ],
-        size=13.5,
-        title="rnaseq/3.26.0/template.yaml",
-    )
-    s.arrow(run.right, 360, yml.x, 300)
-
-    s.text(540, yml.bottom + 34, "what a rule can test", size=15, anchor="start")
-    x = 540.0
-    for label in ("param", "is: false", "equals", "not_equals"):
-        x = pill(s, x, yml.bottom + 48, label)
-    x = 540.0
-    for label in ("contains", "not_contains", "any: [...]", "all: [...]"):
-        x = pill(s, x, yml.bottom + 86, label, fill=BLUE)
-    for i, line in enumerate(
-        (
-            "rnafusion: `{all: [{param: tools, not_contains: arriba},`",
-            "`                   {param: tools, not_contains: all}]}`",
-        )
-    ):
-        s.text(
-            540, yml.bottom + 144 + i * 18, line.replace("  ", "  "),
-            size=12.5, colour=DIM, anchor="start",
-        )
-
-    # -- 3 · the variables and the dashboard -----------------------------------
-    section(s, 1100, 160, "3 · WHAT THE TEMPLATE GETS")
-    var = Box(1100, 180, 330, 176, GREEN, "")
-    s.rect(var)
-    s.text(1118, 208, "variables", size=16, anchor="start", weight="bold")
+    # -- 2 · the rules on this run -----------------------------------------------
+    section(s, 540, 160, "2 · EACH VARIABLE, ON THIS RUN")
+    tbl = Box(540, 180, 680, 300, WHITE, "")
+    s.rect(tbl)
+    cols = (556, 790, 1060, 1140)
+    for x, head in zip(cols, ("variable", "set by (template.yaml)", "value", "→")):
+        s.text(x, 210, head, size=13, colour=DIM, anchor="start")
+    s.line(552, 220, 1208, 220, colour=GREY, width=1.0, amount=0.4, passes=1)
     rows = (
-        ("PSEUDOALIGNER_ONLY", "= true", True),
-        ("SKIP_MULTIQC", "not set", False),
-        ("SKIP_QUANTIFICATION_MERGE", "not set", False),
+        ("PSEUDOALIGNER_ONLY", "from_params: {param: skip_alignment}", "true", "true", True),
+        ("SKIP_MULTIQC", "from_params: {param: skip_multiqc}", "false", "unset", False),
+        ("SKIP_QUANTIFICATION_", "from_params: {param:", "false", "unset", False),
+        ("TRACKS_URI", "--var only (where BAMs live)", "", "unset", False),
+        ("SAMPLESHEET_FILE", "auto: input/samplesheet.csv", "", "found", True),
+        ("DATA_ROOT", "auto: the results directory", "", "results/", True),
     )
-    for i, (name, value, on) in enumerate(rows):
-        ry = 244 + i * 34
+    y = 246
+    for name, how, value, result, on in rows:
+        mono(s, cols[0], y, name, size=12, colour=INK if on else DIM)
+        mono(s, cols[1], y, how, size=11.5, colour=SECTION if how.startswith("from") else DIM)
+        if value:
+            mono(s, cols[2], y, value, size=12, colour=ORANGE_INK)
         if on:
-            tick(s, 1126, ry - 5, size=7)
+            tick(s, cols[3] + 4, y - 4, size=6)
         else:
-            dot(s, 1126, ry - 5, GREY)
-        s.text(1144, ry, f"`{name}`", size=13, colour=INK if on else DIM, anchor="start")
-        if on or len(name) < 20:
-            s.text(1416, ry, value, size=13, colour=INK if on else GREY, anchor="end")
-    s.text(1118, 346, "a rule that does not hold sets nothing", size=12.5, colour=DIM, anchor="start")
-    s.arrow(yml.right, 268, var.x, 268)
+            dot(s, cols[3] + 4, y - 4, GREY)
+        mono(s, cols[3] + 18, y, result, size=12, colour=TICK if on else GREY)
+        if name.endswith("_"):
+            y += 18
+            mono(s, cols[0], y, "  MERGE", size=12, colour=DIM)
+            mono(s, cols[1], y, "  skip_quantification_merge}", size=11.5, colour=SECTION)
+        y += 34
+    s.arrow(run.right, 470, tbl.x, 300)
 
-    # The user, who can always overrule a rule.
-    circle(s, 1480, 196, 11, "#ffc9c9")
-    s.poly([(1462, 236), (1466, 216), (1494, 216), (1498, 236)], fill="#ffc9c9", amount=0.8)
-    s.text(1512, 222, "an explicit `--var` wins", size=14, anchor="start")
-    term = terminal(s, 1460, 250, 250, 58)
-    s.text(1472, 294, "`--var SKIP_X=false`", size=13, anchor="start")
-    s.text(1460, 330, "`false`, `0`, `null`, empty: unsets", size=12.5, colour=DIM, anchor="start")
-    s.text(1460, 348, "a rule that misfires", size=12.5, colour=DIM, anchor="start")
-    s.arrow(term.x, term.cy, var.right, term.cy, colour=ORANGE_INK)
+    over = Box(540, 500, 680, 120, YELLOW, "")
+    s.rect(over)
+    s.text(556, 528, "an explicit `--var` always wins", size=14, anchor="start", weight="bold")
+    mono(s, 556, 556, "--var SKIP_MULTIQC=true", size=12)
+    s.text(780, 556, "sets it, whatever the rule says", size=12.5, colour=DIM, anchor="start")
+    mono(s, 556, 582, "--var PSEUDOALIGNER_ONLY=false", size=12)
+    s.text(840, 582, "unsets it (also `0`, `null`, empty)", size=12.5, colour=DIM, anchor="start")
+    s.text(556, 606, "no params file: no rule fires; the template is used as is", size=12.5, colour=DIM, anchor="start")
 
-    dash = browser(s, 1100, 400, 610, 260)
-    s.text(1160, 419, "`dashboard · nf-core/rnaseq`", size=12, colour=DIM, anchor="start")
-    logo(s, "depictio.png", 1680, 404, 22)
-    for i, (tab, active) in enumerate((("Overview", True), ("Expression", False), ("QC", False))):
-        tx = 1116 + i * 110
-        s.rect(Box(tx, 438, 100, 26, VIOLET if active else WHITE, ""), colour=GREY)
-        s.text(tx + 50, 456, tab, size=12.5)
+    rulebox = Box(540, 640, 680, 140, VIOLET, "")
+    s.rect(rulebox)
+    s.text(556, 668, "the five tests a rule can use", size=14, anchor="start", weight="bold")
+    tests = (
+        ("{param: p}", "on: true, \"true\", non-empty"),
+        ("{param: p, is: false}", "off, \"null\", empty, absent"),
+        ("equals / not_equals: v", "the value, any case"),
+        ("contains / not_contains: v", "in a list or \"a,b\""),
+        ("any: [...] / all: [...]", "one / every nested rule"),
+    )
+    for i, (rule, what) in enumerate(tests):
+        tx, dx = (556, 740) if i < 3 else (900, 1080)
+        ty = 694 + (i % 3) * 24
+        mono(s, tx, ty, rule, size=11.5, colour=SECTION)
+        s.text(dx, ty, what, size=11.5, colour=DIM, anchor="start")
 
-    expr = Box(1116, 478, 190, 160, WHITE, "")
+    # -- 3 · the conditionals --------------------------------------------------------
+    section(s, 1260, 160, "3 · CONDITIONALS")
+    cond = code(
+        s,
+        1260,
+        180,
+        440,
+        [
+            ("conditional:", CODE_KEY),
+            ("- if_var_present: PSEUDOALIGNER_ONLY", CODE_STR),
+            ("    remove_dc_tags: [tracks]", CODE_NUM),
+            ("    override_dcs:          # 7 collections", CODE_INK),
+            ("      sample_overview, expression_heatmap,", CODE_INK),
+            ("      gene_expression, gene_summary,", CODE_INK),
+            ("      gene_counts, deseq2_qc_pca,", CODE_INK),
+            ("      deseq2_qc_dists   → salmon/", CODE_INK),
+            ("", CODE_INK),
+            ("- if_var_present: SKIP_MULTIQC", CODE_DIM),
+            ("    remove_dc_tags: [multiqc_data,", CODE_DIM),
+            ("                     general_stats]", CODE_DIM),
+            ("- if_var_present: SKIP_QUANTIFICATION_MERGE", CODE_DIM),
+            ("    remove_dc_tags: [5 expression DCs]", CODE_DIM),
+            ("- if_var_present: TRACKS_URI", CODE_DIM),
+            ("    override_dcs: tracks → read in place", CODE_DIM),
+        ],
+        size=12,
+        title="template.yaml",
+    )
+    # line i of the card sits at y + 44 + i * 19
+    tick(s, 1680, 180 + 44 + 19 - 5, size=7)
+    for i in (9, 12, 14):
+        dot(s, 1684, 180 + 44 + i * 19 - 5, GREY)
+    s.text(1260, cond.bottom + 26, "green: fires on this run · grey: does not", size=12.5, colour=DIM, anchor="start")
+    s.arrow(tbl.right, 260, cond.x, 230)
+
+    # -- 4 · what each collection reads ---------------------------------------------
+    section(s, 60, 830, "4 · WHAT EACH COLLECTION READS")
+    dcs = Box(60, 850, 1080, 250, WHITE, "")
+    s.rect(dcs)
+    dc_cols = (76, 330, 740)
+    for x, head in zip(dc_cols, ("data collection", "a default run (STAR + Salmon)", "this run")):
+        s.text(x, 878, head, size=13, colour=DIM, anchor="start")
+    s.line(72, 888, 1128, 888, colour=GREY, width=1.0, amount=0.4, passes=1)
+    dc_rows = (
+        ("sample_overview, expression_heatmap,", "star_salmon/salmon.merged.gene_tpm.tsv", "salmon/salmon.merged.gene_tpm.tsv", "moved"),
+        ("  gene_expression, gene_summary", "", "", None),
+        ("gene_counts", "star_salmon/salmon.merged.gene_counts.tsv", "salmon/salmon.merged.gene_counts.tsv", "moved"),
+        ("deseq2_qc_pca, deseq2_qc_dists", "star_salmon/deseq2_qc/*pca.vals.txt …", "salmon/deseq2_qc/*pca.vals.txt …", "moved"),
+        ("multiqc_data, general_stats", "multiqc/star_salmon/multiqc_report_data/", "multiqc/salmon/… (same pattern)", "kept"),
+        ("tracks", "star_salmon/bigwig/*.bigWig, *.markdup.sorted.bam", "dropped: no alignment, no BAM", "dropped"),
+    )
+    y = 914
+    for tag, before, after, state in dc_rows:
+        mono(s, dc_cols[0], y, tag, size=11.5)
+        if before:
+            mono(s, dc_cols[1], y, before, size=11.5, colour=DIM)
+        if state == "moved":
+            mono(s, dc_cols[2], y, after, size=11.5, colour=TICK)
+        elif state == "kept":
+            mono(s, dc_cols[2], y, after, size=11.5, colour=INK)
+        elif state == "dropped":
+            s.cross(dc_cols[2] + 6, y - 4, size=6)
+            s.text(dc_cols[2] + 20, y, after, size=12, colour=RED, anchor="start")
+        y += 30
+    s.curve([(cond.cx, cond.bottom + 40), (cond.cx, 820), (1100, 820), (1100, dcs.y)], colour=INK)
+    s.arrow(1100, 830, 1100, dcs.y)
+
+    dash = browser(s, 1180, 850, 520, 250)
+    s.text(1240, 869, "`dashboard · nf-core/rnaseq`", size=12, colour=DIM, anchor="start")
+    logo(s, "depictio.png", 1672, 854, 22)
+    for i, tab in enumerate(("Overview", "Expression", "QC")):
+        s.rect(Box(1196 + i * 100, 888, 92, 24, VIOLET if i == 0 else WHITE, ""), colour=GREY)
+        s.text(1242 + i * 100, 905, tab, size=12)
+    expr = Box(1196, 924, 160, 160, WHITE, "")
     s.rect(expr, colour=GREY)
-    bars(s, 1128, 500, 166, 80, (0.4, 0.75, 0.55, 0.95, 0.3))
-    s.text(expr.cx, 604, "expression", size=12.5)
-    s.text(expr.cx, 624, "reads `salmon/`", size=12, colour=DIM)
-
-    mqc = Box(1318, 478, 180, 160, VIOLET, "")
+    for i, frac in enumerate((0.4, 0.75, 0.55, 0.95, 0.3)):
+        s.rect(Box(1210 + i * 28, 950 + 80 * (1 - frac), 18, 80 * frac, "#a5d8ff", ""))
+    s.text(expr.cx, 1052, "expression", size=12)
+    mono(s, 1218, 1072, "salmon/", size=11, colour=TICK)
+    mqc = Box(1366, 924, 160, 160, VIOLET, "")
     s.rect(mqc, colour=GREY)
-    logo(s, "multiqc_icon_color.svg", mqc.cx - 22, 494, 44)
-    s.text(mqc.cx, 562, "MultiQC", size=13)
-    tick(s, mqc.cx - 30, 590, size=6)
-    s.text(mqc.cx - 18, 595, "kept", size=12.5, colour=DIM, anchor="start")
-    s.text(mqc.cx, 622, "`skip_multiqc: false`", size=11.5, colour=DIM)
-
-    trk = Box(1510, 478, 186, 160, PINK, "")
+    logo(s, "multiqc_icon_color.svg", mqc.cx - 20, 940, 40)
+    s.text(mqc.cx, 1006, "MultiQC", size=12.5)
+    tick(s, mqc.cx - 18, 1036, size=6)
+    s.text(mqc.cx - 6, 1041, "kept", size=12, colour=DIM, anchor="start")
+    trk = Box(1536, 924, 150, 160, PINK, "")
     s.rect(trk, colour=RED, dashed=True)
     for i in range(3):
-        ly = 506 + i * 22
-        s.line(1526, ly, 1680, ly, colour=GREY, width=3, amount=0.6, passes=1)
-        s.rect(Box(1540 + i * 34, ly - 6, 40 + i * 6, 12, "#ffa8a8", ""), colour=GREY)
-    s.cross(trk.cx, 528, size=22)
-    s.text(trk.cx, 600, "genome tracks", size=13)
-    s.text(trk.cx, 622, "dropped: no BAM", size=12, colour=RED)
-    s.arrow(var.cx, var.bottom, var.cx, dash.y)
+        ly = 950 + i * 20
+        s.line(1550, ly, 1672, ly, colour=GREY, width=3, amount=0.5, passes=1)
+    s.cross(trk.cx, 970, size=20)
+    s.text(trk.cx, 1040, "genome tracks", size=12.5)
+    s.text(trk.cx, 1060, "tab dropped", size=12, colour=RED)
 
-    s.text(
-        1100,
-        690,
-        "one template fits a default run, a pseudo-aligner run, a run without MultiQC…",
-        size=13.5,
-        colour=DIM,
-        anchor="start",
-    )
-
-    # -- 4 · CI -----------------------------------------------------------------
-    section(s, 60, 760, "4 · HELD TRUE IN CI")
-    ci = Box(60, 780, 700, 290, WHITE, "")
-    s.rect(ci)
-    logo(s, "githubactions.svg", 80, 798, 36)
-    s.text(128, 824, "`template-params.yaml`, on every template change", size=15, anchor="start")
-
-    page(s, 90, 860, 64, 82, BLUE)
-    s.text(122, 962, "`template.yaml`", size=12, colour=DIM)
-    s.text(122, 978, "51 rules", size=12, colour=DIM)
-    s.arrow(170, 900, 250, 900)
-    terminal(s, 256, 862, 220, 76)
-    s.text(268, 904, "`check_template_`", size=13, anchor="start")
-    s.text(268, 922, "`params.py`", size=13, anchor="start")
-    s.arrow(574, 900, 486, 900)
-    logo(s, "github.svg", 652, 846, 26)
-    page(s, 584, 874, 58, 66, YELLOW)
-    s.text(650, 962, "`nextflow_schema.json`", size=12, colour=DIM)
-    s.text(650, 978, "at each template's release tag", size=12, colour=DIM)
-
-    tick(s, 96, 1010, size=8)
-    s.text(116, 1015, "every rule's param exists in its release: 51 rules, 0 unknown", size=14, anchor="start")
-    s.cross(96, 1046, size=8)
-    s.text(
-        116,
-        1051,
-        "a param renamed upstream fails CI, not a rule that silently never holds",
-        size=14,
-        colour=RED,
-        anchor="start",
-    )
-
-    tests = Box(800, 780, 420, 290, GREEN, "")
-    s.rect(tests)
-    s.text(820, 816, "pytest, every shipped template", size=15, anchor="start", weight="bold")
-    for i, line in enumerate(
-        (
-            "loads: `extra=forbid`, so `from_param:` fails",
-            "`required: true` with a rule is refused",
-            '`"true"`, `"False"`, `"null"` read as booleans',
-            "only `params_<ts>.json` feeds rules",
-            "a `[]` or scalar params file sets nothing",
-            "`--var X=false` unsets; no file: as before",
-        )
-    ):
-        ly = 856 + i * 34
-        tick(s, 826, ly - 5, size=6)
-        s.text(842, ly, line, size=13, anchor="start")
-
-    reach = Box(1260, 780, 450, 290, WHITE, "")
-    s.rect(reach)
-    s.text(1280, 816, "51 rules · 18 templates · 15 pipelines", size=15, anchor="start", weight="bold")
-    for i, name in enumerate(("rnaseq", "airrflow", "smrnaseq", "funcscan", "ampliseq", "viralrecon")):
-        lx = 1280 + (i % 3) * 140
-        ly = 838 + (i // 3) * 64
-        logo(s, f"nf-core-{name}.webp", lx, ly, 128, 50)
-    for i, line in enumerate(
-        (
-            "+ rnafusion, mhcquant, crisprseq, pairgenomealign,",
-            "proteinannotator, stableexpression, epitopeprediction,",
-            "differentialabundance, demultiplex",
-            "each read against the release's schema and code",
-        )
-    ):
-        s.text(1280, 988 + i * 19, line, size=12.5, colour=DIM if i < 3 else INK, anchor="start")
-
-    s.text(
+    # -- 5 · check it yourself ----------------------------------------------------
+    section(s, 60, 1150, "5 · CHECK IT YOURSELF")
+    code(
+        s,
         60,
-        H - 30,
-        "Stays `--var` (params alone cannot tell): mcmicro `SINGLE_SEGMENTER`, epitopeprediction "
-        "`SINGLE_PREDICTOR` / `NO_VARIANT_INPUT`, chipseq `PRESEQ_RAN`. Output introspection "
-        "(phylogeny, pplacer, metadata file) still runs after the rules.",
-        size=13,
-        colour=DIM,
-        anchor="start",
+        1166,
+        760,
+        [
+            ("$ depictio template check nf-core/rnaseq/3.26.0 --fetch-schema --run results/", CODE_INK),
+            ("This run fires: if_var_present: PSEUDOALIGNER_ONLY → drops tracks; repoints …", CODE_STR),
+            ("✓ every param a rule reads exists in this release", CODE_STR),
+            ("! skip_* params no rule reads, whose tool the template names: skip_bigwig, …", CODE_NUM),
+        ],
+        size=12,
     )
+    ci = Box(850, 1166, 400, 124, WHITE, "")
+    s.rect(ci)
+    logo(s, "githubactions.svg", 866, 1180, 30)
+    logo(s, "github.svg", 1214, 1180, 22)
+    s.text(906, 1200, "`template-params.yaml`", size=13, anchor="start")
+    s.text(866, 1230, "the same command, `--all`, on every template", size=12.5, colour=DIM, anchor="start")
+    s.text(866, 1250, "change, against each release's schema on GitHub", size=12.5, colour=DIM, anchor="start")
+    tick(s, 872, 1272, size=6)
+    s.text(886, 1277, "57 templates · 51 rules · 0 unknown params", size=12.5, anchor="start")
+
+    cov = Box(1280, 1166, 420, 124, WHITE, "")
+    s.rect(cov)
+    s.text(1296, 1190, "coverage of the 57 templates", size=13.5, anchor="start", weight="bold")
+    x0, total, bw = 1296, 57, 388
+    for n, fill, label in ((18, GREEN, "18 rules"), (24, YELLOW, "24 inputs only"), (15, "#f1f3f5", "15 no route")):
+        w = bw * n / total
+        s.rect(Box(x0, 1204, w, 26, fill, ""), colour=GREY)
+        s.text(x0 + w / 2, 1222, label, size=11.5)
+        x0 += w
+    s.text(1296, 1254, "29 with `skip_*` flags to verify (`--all` lists them)", size=12, colour=ORANGE_INK, anchor="start")
+    s.text(1296, 1274, "see docs/template-params.md, Coverage", size=11.5, colour=DIM, anchor="start")
     return s
 
 
