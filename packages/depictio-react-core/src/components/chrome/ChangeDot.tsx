@@ -8,6 +8,10 @@ import { Z_LAYERS } from '../../zLayers';
 
 /** Component types whose figure can show the before/after overlay. */
 const COMPARABLE_TYPES = new Set(['figure', 'multiqc', 'advanced_viz']);
+/** Component types the side-by-side "Before | Now" cannot redraw yet: an
+ *  advanced viz fetches its data without a version, so its earlier state is
+ *  not drawn. The item stays, disabled and saying why. */
+const NO_BEFORE_NOW_TYPES = new Set(['advanced_viz']);
 
 const REASON_LABEL = {
   definition: 'Changed since your last visit',
@@ -33,6 +37,7 @@ const ChangeDot: React.FC<{ componentType: string; index: string }> = ({ compone
 
   const lines = details.length > 0 ? details : reasons.map((r) => REASON_LABEL[r]);
   const comparable = COMPARABLE_TYPES.has(componentType);
+  const beforeNow = !NO_BEFORE_NOW_TYPES.has(componentType);
 
   return (
     <Menu
@@ -99,10 +104,22 @@ const ChangeDot: React.FC<{ componentType: string; index: string }> = ({ compone
         )}
         <Menu.Item
           leftSection={<Icon icon="mdi:view-split-vertical" width={14} />}
-          onClick={() => openCompare(key)}
+          onClick={beforeNow ? () => openCompare(key) : undefined}
+          disabled={!beforeNow}
           data-testid="component-updated-before-now"
         >
           Before | Now
+          {!beforeNow && (
+            <Text
+              size="xs"
+              c="dimmed"
+              data-testid="component-updated-before-now-hint"
+              style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+            >
+              <Icon icon="mdi:information-outline" width={12} aria-hidden />
+              Standard figures only, for now
+            </Text>
+          )}
         </Menu.Item>
       </Menu.Dropdown>
     </Menu>

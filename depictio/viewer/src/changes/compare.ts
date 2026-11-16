@@ -50,7 +50,7 @@ export function beforePane(
   if (componentType === 'advanced_viz') {
     return {
       kind: 'unavailable',
-      note: 'The earlier data of this visualisation cannot be redrawn here. The rows that changed are listed below.',
+      note: 'Before | Now draws standard figures only, for now. The rows that changed are listed below.',
     };
   }
   const definitionVersionId = baselineVersionId || null;
