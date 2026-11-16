@@ -61,6 +61,10 @@ REQUIRED = {
         "ComponentVersionModal",
         "VersionHistoryPanel",
         "DataVersionPanel",
+        # "What's new" (#1397) looks in the editor too, without recording a visit.
+        "ChangesHeaderButton",
+        "ChangeMarksProvider",
+        "recordVisits",
     ],
     # The viewer must NOT offer to re-point live data; that is edit-mode only.
     # Asserted as an absence below.
@@ -70,8 +74,8 @@ REQUIRED = {
     # bug, and it is invisible in source review because both halves are correct
     # on their own.
     #
-    # "Changed since your last visit" (#1397) reaches the viewer only through
-    # these two; both must stay in the viewer and out of the editor.
+    # "Changed since your last visit" (#1397) reaches the viewer and the editor
+    # through these two. Only the viewer records a visit (see FORBIDDEN).
     "/src/App.tsx": [
         "DataVersionProvider",
         "definitionVersionId",
@@ -105,10 +109,9 @@ FORBIDDEN = {
         "DatasetVersionPicker",
     ],
     # "Changed since your last visit" records a visit and moves a mark: viewer
-    # only. An editor open must never count as a reader having looked.
+    # only. The editor shows the same tools (REQUIRED above) but never records
+    # a visit itself: an editor open must never count as a reader having looked.
     "/src/EditorApp.tsx": [
-        "ChangeMarksProvider",
-        "ChangesHeaderButton",
         "recordDashboardVisit",
         "markDashboardSeen",
     ],

@@ -15,8 +15,10 @@
  *    back in the request body.
  * The server decides, through `server_held`, not this component.
  *
- * Never mounted by the editor, and a read-only view (`?since=`/`?before_run=`)
- * never records a visit or a "seen".
+ * The editor mounts it too, to look and compare, with `recordVisits` off: an
+ * editor open is not a reader having looked, so it never records a visit nor
+ * moves the mark by itself. A read-only view (`?since=`/`?before_run=`) never
+ * records a visit or a "seen" either.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { notifications } from '@mantine/notifications';
@@ -49,6 +51,7 @@ import CompareModal from './CompareModal';
 import { ChangesSinceContext, type ChangesSinceValue } from './ChangesSinceContext';
 import { dropCachedChangeSet, readCachedChangeSet, writeCachedChangeSet } from './changeSetCache';
 import { useRunUnscopedDcs } from './runColumns';
+import { useRunColor } from './runColors';
 import { isReadOnlyQuery, markDetails, parseReadOnlyQuery } from './describe';
 import {
   focusedRuns,
@@ -88,6 +91,10 @@ interface Props {
   /** The "Split" view: the virtual New / Seen before groups the dashboard
    *  draws its figures and cards with, or null to draw them as usual. */
   onSplitChange?: (split: NewsSplit | null) => void;
+  /** Whether being on the page counts as a visit (it moves the reader's
+   *  mark). The viewer: yes. The editor passes false: it only looks. An
+   *  explicit "Mark as seen" is the reader's own gesture and still works. */
+  recordVisits?: boolean;
   children: React.ReactNode;
 }
 
@@ -153,6 +160,7 @@ const ChangeMarksProvider: React.FC<Props> = ({
   components = NO_COMPONENTS,
   filters = NO_FILTERS,
   onSplitChange,
+  recordVisits = true,
   children,
 }) => {
   const flagOn = useChangesSinceEnabled();
@@ -200,7 +208,7 @@ const ChangeMarksProvider: React.FC<Props> = ({
         if (!cs.server_held) {
           // A first visit: remember where this reader stands, now, so a visit
           // they leave before the debounce still has a baseline next time.
-          if (!readOnly && !local?.baseline && cs.current_baseline) {
+          if (!readOnly && recordVisits && !local?.baseline && cs.current_baseline) {
             writeLocalBaseline(familyId, cs.current_baseline);
           }
           setModeState(readLocalMode() ?? cs.mark_mode);
@@ -220,7 +228,7 @@ const ChangeMarksProvider: React.FC<Props> = ({
     return () => {
       cancelled = true;
     };
-  }, [active, familyId, readOnly, readOnlyQuery, reader]);
+  }, [active, familyId, readOnly, readOnlyQuery, reader, recordVisits]);
 
   // Every state of the set (fetched, dismissed, marked seen) is what the next
   // tab paints first; the cached paint itself is not, or it never ages out.
@@ -233,7 +241,7 @@ const ChangeMarksProvider: React.FC<Props> = ({
   // After 10 s on the page: one visit. Never in a read-only view, and never
   // on a cached set: its baseline may predate the last tab's visit.
   useEffect(() => {
-    if (!active || readOnly || !familyId || !fetchedFamily) return;
+    if (!active || readOnly || !recordVisits || !familyId || !fetchedFamily) return;
     const held = changeSet?.server_held ?? false;
     const baseline = changeSet?.current_baseline;
     const timer = window.setTimeout(() => {
@@ -247,7 +255,7 @@ const ChangeMarksProvider: React.FC<Props> = ({
     return () => window.clearTimeout(timer);
     // changeSet is read for two values fixed at load; the timer must not restart on dismissals.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, readOnly, familyId, fetchedFamily]);
+  }, [active, readOnly, recordVisits, familyId, fetchedFamily]);
 
   const fail = useCallback((message: string, err: unknown) => {
     notifications.show({
@@ -353,21 +361,24 @@ const ChangeMarksProvider: React.FC<Props> = ({
     [changeSet],
   );
   const focus = focusRun && newRuns.includes(focusRun) ? focusRun : null;
+  const runColor = useRunColor(changeSet?.run_colors);
   const split = useMemo<NewsSplit | null>(
     () =>
       active && changeSet && !changeSet.first_visit
         ? newsSplitGroups(
             changeSet,
             {
-              // "New" is blue on every page, like the tile's updated dot and
-              // the run rows, whatever the page's primary colour.
+              // Several new runs together are blue on every page, like the
+              // tile's updated dot, whatever the page's primary colour. One run
+              // alone is drawn in its own colour, as in the panel.
               fresh: brandHex('--mantine-color-blue-6', '#228be6'),
               seen: brandHex('--mantine-color-gray-5', '#adb5bd'),
+              run: runColor,
             },
             focus,
           )
         : null,
-    [active, changeSet, focus],
+    [active, changeSet, focus, runColor],
   );
   const setFocusRun = useCallback(
     (run: string | null) => {
@@ -571,7 +582,7 @@ const ChangeMarksProvider: React.FC<Props> = ({
   ]);
 
   // The component behind the open key. Opening needs marks to be live, so the
-  // modal is mounted only then and never in a pinned preview or the editor.
+  // modal is mounted only then and never in a pinned preview.
   const compareMetadata = useMemo(
     () =>
       compareKey && dashboardId

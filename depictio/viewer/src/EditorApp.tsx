@@ -139,6 +139,7 @@ import {
   dataPinBody,
   fetchDashboardVersion,
   fetchDashboardChanges,
+  panelsFromGroups,
   isCurrentDataOnlyType,
   isHttpStatus,
   DATA_VERSION_GONE_EVENT,
@@ -161,6 +162,7 @@ import type {
   RealtimeJournalEntry,
   GroupRenderState,
   ControlsPlacement,
+  BulkComputeOptions,
 } from 'depictio-react-core';
 
 import GridItemEditOverlay from './components/GridItemEditOverlay';
@@ -197,6 +199,9 @@ import DataVersionPanel from './versions/DataVersionPanel';
 import VersionHistoryPanel, { type RestoreOutcome } from './versions/VersionHistoryPanel';
 import { useVersionHistory } from './versions/useVersionHistory';
 import { useChangesSinceEnabled } from './hooks/useChangesSinceEnabled';
+import ChangeMarksProvider from './changes/ChangeMarksProvider';
+import ChangesHeaderButton from './changes/ChangesHeaderButton';
+import type { NewsSplit } from './changes/newsSplit';
 import DataVersionBanner from './versions/DataVersionBanner';
 import type { PinnedLabel } from './versions/dataVersionStatus';
 import { useDataVersionStatus } from './versions/useDataVersionStatus';
@@ -388,10 +393,32 @@ const EditorApp: React.FC = () => {
     return id ? String(id) : undefined;
   }, [dashboard, dashboardId]);
   const groupsApi = useSelectionGroups(groupingScopeId);
+  // "What's new" views (#1397), as in App.tsx: virtual New / Seen before
+  // groups that stand in for the author's own while Split / Overlay is on.
+  // Display state only, never stored: it reaches the figures and cards through
+  // `groupRender`, `bulkOptions` and `combinedFilters`, and none of those is
+  // part of the saved document (`filters` and `groupsApi` stay as they were).
+  const [newsSplit, setNewsSplit] = useState<NewsSplit | null>(null);
+  const runNews = newsSplit && newsSplit.groups.length > 0 ? newsSplit : null;
+  const runSplit = runNews?.mode === 'split' ? runNews : null;
+  const runOverlay = runNews?.mode === 'overlay' ? runNews : null;
+  const newOnlyFilters = useMemo(
+    () => (runNews?.mode === 'new' ? panelsFromGroups(runNews.groups)[0]?.constraints ?? [] : []),
+    [runNews],
+  );
+  const bulkOptions = useMemo<BulkComputeOptions | undefined>(
+    () =>
+      runSplit
+        ? { groups: runSplit.groups, compareGroups: true, showOther: runSplit.showOther, showOverall: true }
+        : groupsApi.bulkOptions,
+    [runSplit, groupsApi.bulkOptions],
+  );
   const combinedFilters = useMemo(
     () =>
-      groupsApi.groupFilters.length > 0 ? [...filters, ...groupsApi.groupFilters] : filters,
-    [filters, groupsApi.groupFilters],
+      groupsApi.groupFilters.length > 0 || newOnlyFilters.length > 0
+        ? [...filters, ...groupsApi.groupFilters, ...newOnlyFilters]
+        : filters,
+    [filters, groupsApi.groupFilters, newOnlyFilters],
   );
   // Authors see the panel as viewers will. Cross-tab (floating) filter
   // persistence is deliberately viewer-only: an editing session's filter state
@@ -779,7 +806,7 @@ const EditorApp: React.FC = () => {
             dashboardId,
             req.filters,
             req.ids,
-            groupsApi.bulkOptions,
+            bulkOptions,
             // See App.tsx: prevents a slow superseded compare-on response from
             // overwriting a newer one.
             signal,
@@ -815,7 +842,7 @@ const EditorApp: React.FC = () => {
     stableFilterKey(combinedFilters),
     filterScopes,
     // Undefined while compare is off, so group edits don't refire the fetch.
-    JSON.stringify(groupsApi.bulkOptions ?? null),
+    JSON.stringify(bulkOptions ?? null),
     versionKey,
   ]);
 
@@ -2016,21 +2043,52 @@ const EditorApp: React.FC = () => {
   // Memoised for the grid's per-item render memo (mirrors App.tsx).
   const groupRender = useMemo(
     () =>
-      resolveGroupRender(
-        groupsApi.colorBy,
-        groupsApi.renderGroups,
-        colorByColumnRender,
-        groupsApi.displayMode,
-        groupsApi.showOther,
-      ),
+      runSplit
+        ? {
+            groups: runSplit.groups,
+            colorByGroup: true,
+            display: 'facet' as const,
+            showOther: runSplit.showOther,
+            keepColor: true,
+          }
+        : runOverlay
+          ? {
+              // One panel: the new runs in the dashboard's colour, the runs
+              // seen before in grey (mirrors App.tsx).
+              groups: runOverlay.groups,
+              colorByGroup: true,
+              display: 'color' as const,
+              showOther: runOverlay.showOther,
+              keepColor: false,
+            }
+          : resolveGroupRender(
+              groupsApi.colorBy,
+              groupsApi.renderGroups,
+              colorByColumnRender,
+              groupsApi.displayMode,
+              groupsApi.showOther,
+            ),
     [
       groupsApi.colorBy,
       groupsApi.renderGroups,
       colorByColumnRender,
       groupsApi.displayMode,
       groupsApi.showOther,
+      runSplit,
+      runOverlay,
     ],
   );
+  // A view that redraws the canvas is no edit. The click that turned it on
+  // armed `userActedRef`, and a grid re-measuring what it now draws would
+  // report a layout that gets saved: disarm it, as for a server copy. The
+  // next click or key press arms it again. Done during render, like the fetch
+  // generation in App.tsx: the grid's layout callbacks run in the same commit,
+  // before any effect of this component could.
+  const lastRunNewsRef = useRef(runNews);
+  if (lastRunNewsRef.current !== runNews) {
+    lastRunNewsRef.current = runNews;
+    userActedRef.current = false;
+  }
 
   // The Grouping panel's body, mounted in the header popover (mirrors App.tsx).
   const groupsSection = (
@@ -2480,7 +2538,7 @@ const EditorApp: React.FC = () => {
           onResetBarFilters={handleResetFilterIndices}
           onFilterChange={handleFilterChange}
           groupRender={groupRender}
-          bulkOptions={groupsApi.bulkOptions}
+          bulkOptions={bulkOptions}
           renderSectionActions={renderPersistentSectionAction}
           autofit={dashboard?.autofit !== false}
         />
@@ -2780,6 +2838,10 @@ const EditorApp: React.FC = () => {
   const ready = Boolean(dashboard) && !loading && !error;
   const headerActions: HeaderAction[] = [];
   if (dashboard) {
+    // "What's new" (#1397): a read of what changed since the author's last
+    // visit. Renders nothing on a first visit, when nothing changed, or with
+    // the feature off.
+    headerActions.push({ id: 'changes', group: 'read', node: <ChangesHeaderButton /> });
     headerActions.push({
       id: 'analysis',
       group: 'read',
@@ -3051,7 +3113,7 @@ const EditorApp: React.FC = () => {
               onResetBarFilters={handleResetFilterIndices}
               onFilterChange={handleFilterChange}
               groupRender={groupRender}
-              bulkOptions={groupsApi.bulkOptions}
+              bulkOptions={bulkOptions}
               renderSectionActions={renderPersistentSectionAction}
               autofit={dashboard?.autofit !== false}
             />
@@ -3309,6 +3371,23 @@ const EditorApp: React.FC = () => {
         viewer does rather than as plain text. */}
     <TabLinkProvider tabs={tabSiblings} mode="edit">
       <GenomeBrowserTargetProvider dashboardId={dashboardId ?? null} dashboard={dashboard} tabs={tabSiblings}>
+    {/* "What's new" (#1397): the change set, the marks on the canvas and the
+        Overlay / Split views. Looks only: `recordVisits` is off, so an editor
+        open never counts as a visit nor moves the author's mark, and what it
+        draws stays out of the saved document. */}
+    <ChangeMarksProvider
+      dashboardId={dashboardId ?? null}
+      familyId={groupingScopeId}
+      projectId={dashboard?.project_id ? String(dashboard.project_id) : null}
+      previewVersionId={null}
+      userLoading={userLoading}
+      readerId={currentUser?.id ?? currentUser?.email ?? null}
+      canEdit
+      components={summaryMetadata}
+      filters={combinedFilters}
+      onSplitChange={setNewsSplit}
+      recordVisits={false}
+    >
     <ShellHost
       mode="edit"
       isNarrow={Boolean(isNarrow)}
@@ -3400,6 +3479,7 @@ const EditorApp: React.FC = () => {
       }}
       guideOpen={guide.open}
     />
+    </ChangeMarksProvider>
       </GenomeBrowserTargetProvider>
     </TabLinkProvider>
     </TabColorContext.Provider>
