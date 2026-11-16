@@ -184,6 +184,9 @@ logger = logging.getLogger(__name__)
 #: stripped from the shipped document (``sanitize_dashboard_doc``).
 _FOLD_COLORS_KEY = "__fold_category_colors__"
 _FOLD_COLUMNS_KEY = "__fold_columns__"
+#: The brand a figure's tab draws in (its own, else its main tab's), set beside
+#: the colours for ui-mode figures and stripped from the shipped document too.
+_FOLD_BRAND_KEY = "__fold_brand_theme__"
 
 
 def figure_code(comp: dict[str, Any]) -> str:
@@ -211,10 +214,16 @@ def annotate_code_context(tabs: list["FamilyTab"]) -> None:
             colors = routes.effective_category_colors(tab.doc) or {}
         except Exception:
             colors = {}
+        brand = tab.doc.get("brand_theme") or tab.doc.get("inherited_brand_theme")
         for comp in tab.components:
-            if comp.get("component_type") != "figure" or comp.get("mode") != "code":
+            if comp.get("component_type") != "figure":
                 continue
             comp[_FOLD_COLORS_KEY] = colors
+            if comp.get("mode") != "code":
+                # A ui-mode figure takes the colours and the brand through its
+                # kwargs (`render_kwargs`), as the render endpoint merges them.
+                comp[_FOLD_BRAND_KEY] = brand
+                continue
             dc_id = str(comp.get("dc_id") or "")
             if dc_id and dc_id not in schema_cache:
                 try:
@@ -234,6 +243,59 @@ def annotate_code_context(tabs: list["FamilyTab"]) -> None:
                     schema_cache[dc_id] = None
             if schema_cache.get(dc_id) is not None:
                 comp[_FOLD_COLUMNS_KEY] = schema_cache[dc_id]
+
+
+def annotate_family_inheritance(tabs: list["FamilyTab"]) -> None:
+    """Give each child tab what ``GET /dashboards/get`` adds at read time.
+
+    A child tab's document holds neither its main tab's category colours nor
+    its brand: the API hands them over as ``inherited_category_colors`` /
+    ``inherited_brand_theme``, and every renderer reading the tab document as
+    its colour source (the phylogenetic tree's tips, a filter bar's chips, the
+    group strips) lays its own over them. A bundle mounts the stored documents,
+    so without this a child tab drew its Phylum tips in the stock palette while
+    the main tab pinned every phylum. Read from the main tab in the family when
+    it is there, else (a single-tab export of a child) from the database.
+    """
+    main = next((tab for tab in tabs if tab.is_main_tab), None)
+    for tab in tabs:
+        doc = tab.doc
+        if tab.is_main_tab or not doc.get("parent_dashboard_id"):
+            continue
+        if main is not None and main.id == str(doc.get("parent_dashboard_id")):
+            colors = main.doc.get("category_colors") or None
+            brand = main.doc.get("brand_theme") or None
+        else:
+            try:
+                core = _dashboards_core()
+                colors = core.family_category_colors(doc)
+                brand = core.family_brand_theme(doc)
+            except Exception:
+                colors, brand = None, None
+        doc["inherited_category_colors"] = colors
+        if not doc.get("brand_theme"):
+            doc["inherited_brand_theme"] = brand
+
+
+def render_kwargs(comp: dict[str, Any]) -> dict[str, Any]:
+    """A ui-mode figure's kwargs as ``render_figure_endpoint`` hands them to the
+    worker: the tab's brand defaults, then its category colours (a column the
+    dashboard colours gets that map as ``color_discrete_map``, the component's
+    own entries winning). Code-mode figures read the colours as
+    ``depictio_category_colors`` instead, so their kwargs pass through."""
+    from depictio.api.v1.services.figure.figure_builder import (
+        merge_category_colors,
+        merge_dashboard_brand_theme,
+    )
+
+    kwargs = comp.get("dict_kwargs") or {}
+    if comp.get("mode", "ui") == "code":
+        return kwargs
+    try:
+        kwargs = merge_dashboard_brand_theme(comp.get(_FOLD_BRAND_KEY), kwargs)
+    except Exception:
+        logger.warning("producer A: unreadable brand theme on %s", comp.get("index"))
+    return merge_category_colors(comp.get(_FOLD_COLORS_KEY), kwargs)
 
 
 def _code_figure_plan(
@@ -887,7 +949,7 @@ def sanitize_dashboard_doc(dashboard_data: dict[str, Any]) -> dict[str, Any]:
             {
                 k: v
                 for k, v in m.items()
-                if k not in (_FOLD_COLORS_KEY, _FOLD_COLUMNS_KEY, PYTHON_JOB_KEY)
+                if k not in (_FOLD_COLORS_KEY, _FOLD_COLUMNS_KEY, _FOLD_BRAND_KEY, PYTHON_JOB_KEY)
             }
             if isinstance(m, dict)
             else m
@@ -1155,7 +1217,7 @@ def _freeze_figure(comp: dict[str, Any], full_load: bool = False) -> tuple[dict[
             "dc_id": str(comp.get("dc_id")),
             "dc_config": convert_objectid_to_str(comp.get("dc_config") or {}),
             "visu_type": comp.get("visu_type", "scatter"),
-            "dict_kwargs": comp.get("dict_kwargs") or {},
+            "dict_kwargs": render_kwargs(comp),
             "mode": comp.get("mode", "ui"),
             "code_content": comp.get("code_content", ""),
             "selection_enabled": bool(comp.get("selection_enabled", False)),
@@ -1166,6 +1228,12 @@ def _freeze_figure(comp: dict[str, Any], full_load: bool = False) -> tuple[dict[
         "theme": "light",
         "full_load": full_load,
     }
+    # The family's colours, as the render endpoint sends them: a code figure
+    # reads them as `depictio_category_colors` (the ampliseq "Phylum
+    # composition per group" bars), and the worker's group colouring too.
+    colors = comp.get(_FOLD_COLORS_KEY)
+    if colors:
+        payload["category_colors"] = colors
     result = _celery().build_figure_preview(payload)
     meta = result.get("metadata") or {}
     if meta.get("error"):
@@ -2422,7 +2490,9 @@ def decide_figure(
         df = pruned_frames.get(str(comp.get("dc_id") or ""))
         if df is not None:
             try:
-                binding, miss = build_binding_with_reason(comp, df)
+                binding, miss = build_binding_with_reason(
+                    {**comp, "dict_kwargs": render_kwargs(comp)}, df
+                )
             except Exception as exc:
                 binding, miss = None, None  # any builder crash freezes below
                 binder_error = f"{type(exc).__name__}: {exc}"
@@ -3053,6 +3123,7 @@ def export_manifest(
     budget = budget or ComputeBudget.from_env()
 
     items = family_components(tabs)
+    annotate_family_inheritance(tabs)
     annotate_code_context(tabs)
     tier_rows: list[TierRow] = []
     for tab in tabs:

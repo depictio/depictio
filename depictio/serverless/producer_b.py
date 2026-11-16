@@ -512,6 +512,25 @@ def _freeze_ui_figure(comp: dict[str, Any], df: pl.DataFrame) -> tuple[dict[str,
     return payload, bool(stats.get("sampled", False))
 
 
+def _spec_render_kwargs(spec: DashboardDataLite, comp: dict[str, Any]) -> dict[str, Any]:
+    """A ui-mode figure's kwargs with the spec's brand and category colours
+    merged in, the way ``render_figure_endpoint`` merges the dashboard's (and
+    producer A's ``render_kwargs``): a figure colouring by a column the spec
+    pins draws those colours, the component's own map winning value by value.
+    """
+    from depictio.api.v1.services.figure.figure_builder import (
+        merge_category_colors,
+        merge_dashboard_brand_theme,
+    )
+
+    kwargs = comp.get("figure_params") or comp.get("dict_kwargs") or {}
+    brand = getattr(spec, "brand_theme", None)
+    if brand is not None:
+        kwargs = merge_dashboard_brand_theme(brand, kwargs)
+    colors = strip_auto_category_colors(getattr(spec, "category_colors", None) or {})
+    return merge_category_colors(colors, kwargs)
+
+
 def _run_code_figure(comp: dict[str, Any], df: pl.DataFrame) -> Any:
     """Run a code-mode figure's Python and return the Plotly ``fig`` OBJECT.
 
@@ -1132,6 +1151,10 @@ def build_manifest(
             # the authentic layout, and the runtime refills the arrays from the
             # bundled Parquet, so a frozen snapshot would only be a second copy
             # of data the bundle already has.
+            # The kwargs the render endpoint hands the worker: the spec's brand
+            # defaults, then its category colours as `color_discrete_map`.
+            comp = {**comp, "dict_kwargs": _spec_render_kwargs(spec, comp)}
+            comp.pop("figure_params", None)
             binding, miss = build_binding_with_reason(comp, df)
             if binding is not None:
                 bindings[row.component_id] = binding

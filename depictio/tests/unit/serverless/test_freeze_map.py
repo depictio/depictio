@@ -103,3 +103,31 @@ def test_producer_b_map_bundle_keeps_the_basemap_and_family_colours(tmp_path: Pa
     # components' (card + filter), pruned to their columns.
     (ref,) = manifest.data_refs.values()
     assert {c.name for c in ref.columns} <= {"sample_id", "biome"}
+
+
+def test_producer_b_ui_figures_draw_in_the_spec_category_colours(tmp_path: Path) -> None:
+    """A ui figure colouring by a column the spec pins gets the pins, as the
+    render endpoint merges a dashboard's ``category_colors`` live."""
+    import yaml
+
+    from depictio.models.models.dashboards import DashboardDataLite
+    from depictio.serverless.producer_b import build_manifest
+
+    (tmp_path / "map_demo").mkdir()
+    pl.read_csv(MAP_CSV).write_parquet(tmp_path / "map_demo" / "sampling_locations.parquet")
+    spec = yaml.safe_load(MAP_SPEC.read_text())
+    spec["components"].append(
+        {
+            "tag": "depth-scatter",
+            "component_type": "figure",
+            "workflow_tag": "map_demo",
+            "data_collection_tag": "sampling_locations",
+            "visu_type": "scatter",
+            "dict_kwargs": {"x": "depth_m", "y": "read_count", "color": "biome"},
+            "layout": {"x": 0, "y": 6, "w": 4, "h": 4},
+        }
+    )
+    manifest = build_manifest(DashboardDataLite.model_validate(spec), tmp_path).manifest
+    scaffold = manifest.bindings["depth-scatter"].scaffold
+    colours = {t["name"]: t["marker"]["color"] for t in scaffold["data"]}
+    assert colours == {"urban": "#e8590c", "marine": "#1c7ed6", "freshwater": "#2f9e44"}
