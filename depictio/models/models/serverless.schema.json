@@ -1029,7 +1029,8 @@
         "name": {
           "enum": [
             "3dmol",
-            "pyodide"
+            "pyodide",
+            "jbrowse"
           ],
           "title": "Name",
           "type": "string"

@@ -61,6 +61,11 @@ writeFileSync(
   join(VIEWER_DIR, 'dist-static', 'static-structure.html'),
   applyAddons(template, ['3dmol']),
 );
+// Likewise the genome-browser floor: the base runtime plus the JBrowse add-on.
+writeFileSync(
+  join(VIEWER_DIR, 'dist-static', 'static-genome.html'),
+  applyAddons(template, ['jbrowse']),
+);
 
 const sha = process.env.GITHUB_SHA?.slice(0, 8) ?? 'local';
 const built = new Date().toISOString();

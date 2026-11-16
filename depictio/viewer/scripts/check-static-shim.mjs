@@ -46,6 +46,7 @@ const SWAPS = {
   [path.join(VIEWER, 'src/chrome/variants/index.ts')]: path.join(RUNTIME, 'chromeVariantShim.ts'),
   [path.join(CORE, 'components/JBrowseRenderer.tsx')]: path.join(RUNTIME, 'jbrowseStub.tsx'),
 };
+const SWAP_TARGETS = new Set(Object.values(SWAPS));
 const ALIASES = [
   ['depictio-react-core', CORE],
   ['depictio-components', path.join(ROOT, 'packages/depictio-components/src/lib')],
@@ -89,7 +90,9 @@ function resolve(spec, importer) {
   if (base === null) return null; // a package: not ours to walk
   const file = tryFile(base.replace(/\.(js|mjs)$/, ''));
   if (!file || !/\.(ts|tsx)$/.test(file)) return null;
-  if (SHIM_FILES.includes(importer)) return file; // a shim reaches its real module
+  // A shim reaches its real module (module-shim treats every swap target as a
+  // shim: jbrowseStub mounts the real JBrowseRenderer, whose graph is walked).
+  if (SHIM_FILES.includes(importer) || SWAP_TARGETS.has(importer)) return file;
   return SWAPS[file] ?? file;
 }
 

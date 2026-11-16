@@ -127,6 +127,15 @@ jobs:
         working-directory: depictio/viewer
         run: node scripts/check-bundle-budget.mjs dist-static/static-structure.html 4613734 static-runtime+3dmol
 
+      # The genome-browser floor: the base runtime plus the conditional JBrowse
+      # add-on (dist-static/static-genome.html, written by build-demo.mjs). The
+      # add-on is JBrowse 2 + MUI + mobx, 3.04 MB raw / 0.92 MB gzip; the base
+      # runtime keeps the depictio half of the renderer (+0.06 MB gzip). Measured
+      # 4.73 MB; budget = the base budget + the add-on + 0.3 MB.
+      - name: Byte budget — static runtime + genome browser (JBrowse add-on)
+        working-directory: depictio/viewer
+        run: node scripts/check-bundle-budget.mjs dist-static/static-genome.html 5662310 static-runtime+jbrowse
+
       - name: Byte budget — catalog preview
         working-directory: depictio/viewer
         run: node scripts/check-bundle-budget.mjs dist-catalog-preview/catalog-preview.html 4718592 catalog-preview

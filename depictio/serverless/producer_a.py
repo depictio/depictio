@@ -93,6 +93,7 @@ import os
 import re
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -710,8 +711,10 @@ def classify_stored_component(comp: dict[str, Any]) -> PlannedTier:
         return PlannedTier(
             ComponentTier.FROZEN,
             TierReason.JBROWSE,
-            "the genome browser streams its tracks from the server at view time; the bundle "
-            "shows the export-time session instead: assembly, locus and the track table",
+            "the genome browser renders offline from its session's files, shipped in the "
+            "bundle within the genome-browser budget (sliced to the opening locus when too "
+            "big to ship whole), frozen at the default filter state; when nothing fits, the "
+            "bundle shows the export-time session instead: assembly, locus and track table",
         )
     if ctype == "advanced_viz":
         kind = advanced_viz_kind(comp)
@@ -3125,6 +3128,9 @@ def export_manifest(
     # One object budget for every file the bundle ships: structures, PAE
     # matrices and gallery thumbnails alike.
     object_budget = ObjectBudget()
+    # Genome browser tiles whose files were shipped: the bundle then needs the
+    # `jbrowse` runtime add-on (JBrowse itself).
+    jbrowse_tiles: list[str] = []
     computes_frozen = 0
     computes_skipped = 0
 
@@ -3160,7 +3166,7 @@ def export_manifest(
         # data source, not a snapshot of a dead tile.
         if row.tier is not ComponentTier.FROZEN and ctype != "multiqc":
             continue
-        if decide_only and ctype != "figure":
+        if decide_only and ctype not in ("figure", "jbrowse"):
             # A figure is the only tier this loop can still SETTLE cheaply, so
             # it is the only one it runs. The rest keep their planned verdict,
             # which the build can still move: a frozen payload that fails drops
@@ -3232,9 +3238,19 @@ def export_manifest(
                 if note:
                     row.detail = f"{row.detail}; {note}"
             elif ctype == "jbrowse":
-                frozen[component_id] = FrozenPayload(
-                    kind="jbrowse", payload=_freeze_jbrowse(dashboard_oid, component_id, user)
+                payload, outcome = _freeze_jbrowse(
+                    dashboard_oid,
+                    component_id,
+                    user,
+                    object_budget,
+                    inline_blobs,
+                    dry_run=decide_only,
                 )
+                row.detail = outcome.detail()
+                if not decide_only:
+                    frozen[component_id] = FrozenPayload(kind="jbrowse", payload=payload)
+                if outcome.renderable:
+                    jbrowse_tiles.append(str(comp.get("title") or component_id))
         except Exception as exc:
             row.tier = ComponentTier.OMITTED
             row.reason = row.reason or TierReason.UNSUPPORTED
@@ -3309,6 +3325,17 @@ def export_manifest(
     )
     if python_info.get("embedded"):
         addons.append(python_info["addon"])
+    if jbrowse_tiles:
+        from depictio.serverless.addons import addon_entry
+
+        entry = addon_entry("jbrowse", "genome browser tiles: " + ", ".join(jbrowse_tiles))
+        if entry is None:
+            logger.warning(
+                "producer A: the jbrowse add-on is not built; genome browsers show their "
+                "session table"
+            )
+        else:
+            addons.append(entry)
 
     built_at = datetime.now(timezone.utc).isoformat()
     manifest = BundleManifest(
@@ -3433,15 +3460,164 @@ def _freeze_image(
     return payload, note
 
 
-def _freeze_jbrowse(dashboard_oid: ObjectId, component_id: str, user: ExportUser) -> dict[str, Any]:
-    """The genome browser's session at the default filter state (its track table)."""
-    return _routes().render_jbrowse_endpoint(
+def _freeze_jbrowse(
+    dashboard_oid: ObjectId,
+    component_id: str,
+    user: ExportUser,
+    budget: ObjectBudget,
+    inline_blobs: dict[str, str] | None,
+    dry_run: bool = False,
+) -> tuple[dict[str, Any], Any]:
+    """The genome browser's session at the default filter state, with its files.
+
+    ``render_jbrowse`` mints the session the live viewer would open; its
+    assembly, track and index files are then read here, through the same
+    lookups the API's track proxy uses (:func:`_jbrowse_opener`), and shipped
+    within the budget (``jbrowse_bundle.bundle_session``), so the bundle mounts
+    the real browser over them. Returns the rewritten payload and the
+    :class:`~depictio.serverless.jbrowse_bundle.BundleResult` (its ``detail()``
+    is the tier detail).
+    """
+    from depictio.serverless.jbrowse_bundle import bundle_session
+
+    session = _routes().render_jbrowse_endpoint(
         dashboard_oid,
         component_id,
         {"filters": []},
         current_user=user,
         access_token=None,
     )
+    result = bundle_session(session, _jbrowse_opener(user), budget, inline_blobs, dry_run=dry_run)
+    return result.payload, result
+
+
+_JBROWSE_PROXY = re.compile(r"/jbrowse/(tracks|assembly|preset|ucsc)/([^?#]+)")
+
+
+class _RemoteFile:
+    """A ``jbrowse_bundle.FileSource`` over one ``remote_read.ByteSource``."""
+
+    def __init__(self, src: Any, label: str):
+        self.src = src
+        self.label = label
+        self._size: int | None = None
+
+    def size(self) -> int:
+        from depictio.api.v1.services import remote_read
+
+        if self._size is None:
+            try:
+                self._size = remote_read.source_size(self.src)
+            except remote_read.RemoteReadError as exc:
+                raise OSError(exc.detail) from exc
+        return self._size
+
+    def read(self, start: int, end: int) -> bytes:
+        from depictio.api.v1.services import remote_read
+
+        if end < start:
+            return b""
+        try:
+            return b"".join(remote_read.open_range(self.src, remote_read.ByteRange(start, end)))
+        except remote_read.RemoteReadError as exc:
+            raise OSError(exc.detail) from exc
+
+
+def _jbrowse_opener(user: ExportUser) -> Callable[[str], Any]:
+    """``uri -> FileSource`` for the locations ``render_jbrowse`` mints.
+
+    The API paths are resolved exactly as their routes do (track manifest row,
+    custom assembly, preset or UCSC catalogue entry), never by fetching the
+    URL: the export runs next to the store, the signed query only matters to a
+    browser. An absolute ``https://`` location (a direct preset or UCSC file, a
+    config override's extra track) is read when its host is UCSC's download
+    server or allow-listed for remote tracks, like the proxy would.
+    """
+    from urllib.parse import parse_qs, unquote, urlparse
+
+    from depictio.api.v1.endpoints.jbrowse_endpoints.routes import _assembly_uri
+    from depictio.api.v1.services import remote_read
+    from depictio.api.v1.services.jbrowse import ucsc
+    from depictio.api.v1.services.jbrowse.assemblies import (
+        get_assembly_preset,
+        preset_file_uri,
+    )
+    from depictio.api.v1.services.jbrowse.tracks import (
+        find_tracks_dc,
+        s3_base_folder,
+        tracks_by_key,
+        user_can_read_project,
+    )
+    from depictio.models.models.data_collections_types.genomic_tracks import CustomAssembly
+    from depictio.serverless.jbrowse_bundle import SourceRefused
+
+    uid = str(user.id)
+
+    def readable_dc(dc_id: str) -> Any:
+        tdc = find_tracks_dc(dc_id)
+        if tdc is None or not (user.is_admin or user_can_read_project(tdc.project_id, uid)):
+            raise SourceRefused("track collection not found")
+        return tdc
+
+    def located(uri: str, base: str, label: str) -> _RemoteFile:
+        try:
+            return _RemoteFile(remote_read.resolve_location(uri, base), label)
+        except remote_read.RemoteReadError as exc:
+            raise SourceRefused(exc.detail) from exc
+
+    def open_uri(uri: str) -> _RemoteFile:
+        parsed = urlparse(uri)
+        m = _JBROWSE_PROXY.search(parsed.path) if not parsed.netloc else None
+        if m is None:
+            if parsed.scheme == "https":
+                host = (parsed.hostname or "").lower()
+                label = unquote(parsed.path.rsplit("/", 1)[-1]) or uri
+                if host == ucsc.UCSC_DOWNLOAD_HOST:
+                    return _RemoteFile(remote_read.ByteSource("https", url=uri), label)
+                return located(uri, "", label)
+            raise SourceRefused(f"not a location the bundle can read: {uri}")
+        scope, rest = m.group(1), [unquote(p) for p in m.group(2).split("/")]
+        if scope == "tracks" and len(rest) == 3:
+            dc_id, key, role = rest
+            pinned = parse_qs(parsed.query).get("v", [None])[0]
+            tdc = readable_dc(dc_id)
+            track = tracks_by_key(tdc, int(pinned) if pinned and pinned.isdigit() else None).get(
+                key
+            )
+            if track is None:
+                raise SourceRefused("track not found in its collection")
+            target = track.uri if role == "data" else track.index_uri
+            if not target:
+                raise SourceRefused("track has no index")
+            what = "index" if role == "index" else track.fmt.upper()
+            return located(target, s3_base_folder(dc_id, tdc.props), f"{track.name} ({what})")
+        if scope == "assembly" and len(rest) == 2:
+            dc_id, role = rest
+            tdc = readable_dc(dc_id)
+            if not isinstance(tdc.props.assembly, CustomAssembly):
+                raise SourceRefused("collection uses a preset assembly")
+            target = _assembly_uri(tdc.props.assembly, role)
+            if not target:
+                raise SourceRefused(f"assembly has no {role} file")
+            return located(target, s3_base_folder(dc_id, tdc.props), f"assembly {role}")
+        if scope == "preset" and len(rest) == 2:
+            preset = get_assembly_preset(rest[0])
+            target = preset_file_uri(preset, rest[1]) if preset else None
+            if not target:
+                raise SourceRefused("unknown assembly preset file")
+            return _RemoteFile(remote_read.ByteSource("https", url=target), f"{rest[0]} {rest[1]}")
+        if scope == "ucsc" and len(rest) == 3:
+            genome, track_name, role = rest
+            entry = ucsc.catalog(genome).get(track_name)
+            target = None if entry is None else (entry.url if role == "data" else entry.index_url)
+            if not target:
+                raise SourceRefused("unknown UCSC track file")
+            return _RemoteFile(
+                remote_read.ByteSource("https", url=target), f"UCSC {genome} {track_name}"
+            )
+        raise SourceRefused(f"not a location the bundle can read: {uri}")
+
+    return open_uri
 
 
 def _indexed_file_sources(dc_id: str) -> tuple[str, list[Any]]:

@@ -13,6 +13,13 @@ say what was embedded and why.
   (``static-runtime/threeDmolAddon.ts``) reads the global the script defines and
   falls back to the stub's message when it is absent.
 
+* ``jbrowse`` — JBrowse 2 with MUI and mobx (Apache-2.0 / MIT), for genome
+  browser tiles whose files producer A shipped (``jbrowse_bundle.py``). Built
+  by ``viewer/vite.static-jbrowse.config.ts`` into an IIFE with React external,
+  wrapped by ``build-static-addons.mjs`` in a factory the runtime calls with
+  its own React (``static-runtime/jbrowse/vendor.ts``); the base runtime keeps
+  the depictio half of the renderer and forwards every JBrowse import to it.
+
 * ``pyodide`` — the optional Python runtime (Pyodide, pinned in
   ``serverless/pyodide/pin.json``): the core, the packages the bundle's Python
   jobs need, and the server modules they run, all inlined as data blocks

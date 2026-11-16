@@ -61,6 +61,9 @@ import type {
   FunnelStageColumn,
   FunnelValuesResponse,
   InteractiveFilter,
+  JBrowseCallDensity,
+  JBrowseCallsResponse,
+  JBrowseGeneHit,
   PersistentSection,
   ResolvedGroupsResult,
   StoredMetadata,
@@ -578,6 +581,24 @@ export async function fetchImagePaths(_dashboardId: string, componentId: string)
 
 export async function fetchJBrowseSession(_dashboardId: string, componentId: string) {
   return frozenPayload(componentId, 'jbrowse') as never;
+}
+
+/** The genome browser's region navigator and density strip read the
+ *  `locus_from` regions from the server, ranked and paged under the live
+ *  filters. Not reproduced offline yet: the navigator and the strip stay
+ *  empty, the browser itself draws from the bundled files. */
+export async function fetchJBrowseCalls(): Promise<JBrowseCallsResponse> {
+  return { total: 0, rows: [] };
+}
+
+export async function fetchJBrowseCallDensity(): Promise<JBrowseCallDensity> {
+  return { bin_size: 0, max: 0, tracks: [], truncated: 0 };
+}
+
+/** Gene names resolve through UCSC's search, a network service: offline the
+ *  locus box takes coordinates and the bundled tracks' feature names only. */
+export async function searchJBrowseGenes(): Promise<JBrowseGeneHit[]> {
+  return [];
 }
 
 /** Live path: `render_multiqc` never recomputed anything at request time — it

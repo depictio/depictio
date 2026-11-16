@@ -3,15 +3,19 @@
  * Build the static runtime's conditional add-ons next to the template.
  *
  *   dist-static/addons/3dmol.js     3Dmol.js's own minified UMD build (BSD-3)
+ *   dist-static/addons/jbrowse.js   JBrowse 2 + MUI + mobx (Apache-2.0 / MIT), the
+ *                                   IIFE vite.static-jbrowse.config.ts built, wrapped
+ *                                   in the factory the runtime calls with its React
  *   dist-static/addons/addons.json  {name: {version, file, bytes, sha256}}
  *
  * The base runtime (static.html) never contains these; a producer appends an
  * add-on to one bundle's HTML only when a component needs it
  * (depictio/serverless/addons.py, and scripts/addons.mjs for the demos and the
- * offline specs). Run after `vite build` — that step empties dist-static/.
+ * offline specs). Run after both `vite build`s — the runtime's empties
+ * dist-static/, the add-on's writes dist-static/jbrowse-addon/.
  */
 import { createHash } from 'node:crypto';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -48,6 +52,33 @@ function add(name, version, body) {
   const license = readFileSync(join(dirname(pkgPath), 'build', '3Dmol-min.js.LICENSE.txt'), 'utf-8');
   // The LICENSE.txt is itself a `/*! ... */` banner (BSD-3-Clause).
   add('3dmol', pkg.version, `${license.trim()}\n${min}`);
+}
+
+// JBrowse 2: React is an external of that build (it must render with the
+// runtime's React), so the IIFE is wrapped in a factory the runtime calls with
+// it (src/static-runtime/jbrowse/vendor.ts). The parameter names are the
+// `globals` of vite.static-jbrowse.config.ts.
+{
+  const built = join(VIEWER_DIR, 'dist-static', 'jbrowse-addon', 'jbrowse-addon.js');
+  if (!existsSync(built)) {
+    throw new Error(`${built} is missing: run vite build --config vite.static-jbrowse.config.ts`);
+  }
+  const iife = readFileSync(built, 'utf-8');
+  const name = '__depictioJBrowseAddon';
+  if (!iife.startsWith(`var ${name}=`)) {
+    throw new Error(`unexpected jbrowse add-on prologue: ${iife.slice(0, 60)}`);
+  }
+  // The pinned version (react-core's package.json): @jbrowse/core does not
+  // export its own package.json.
+  const coreDeps = JSON.parse(
+    readFileSync(join(VIEWER_DIR, '../../packages/depictio-react-core/package.json'), 'utf-8'),
+  ).dependencies;
+  const body =
+    '/*! JBrowse 2 (Apache-2.0), MUI and mobx (MIT): the depictio static runtime jbrowse add-on */\n' +
+    'globalThis.__depictioJBrowseVendor=function(__dpReact,__dpReactDOM,__dpReactDOMClient,__dpJsxRuntime){' +
+    `${iife}\nreturn ${name};};`;
+  add('jbrowse', coreDeps['@jbrowse/core'], body);
+  rmSync(join(VIEWER_DIR, 'dist-static', 'jbrowse-addon'), { recursive: true, force: true });
 }
 
 writeFileSync(join(OUT, 'addons.json'), `${JSON.stringify(registry, null, 2)}\n`);
