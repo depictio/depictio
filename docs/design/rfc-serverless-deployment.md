@@ -550,6 +550,16 @@ must have an entry (import-time self-check +
 Which tiles the Python runtime takes is `depictio/serverless/pyodide/plan.py`. Bundles draw the
 **Paper** chrome (the app default), gated read-only; `?chrome=base` opts into Classic.
 
+Navigation chrome in a bundle matches the live app's where a file can honour it, and says what the
+file is where it cannot. The rail reads every field the server's tab list carries (`TabEntry`:
+`tab_group` sections, `main_tab_name`, the raw `tab_icon` a child tab draws an image from, e.g. the
+MultiQC logo). Every `/projects/<id>` link opens a read-only **project page** the runtime draws over
+the canvas from `manifest.project` (a `ProjectSummary` producer A builds from an allow-list of the
+project document, `depictio/serverless/project_summary.py`: no ACL, emails, storage or server paths;
+run-parameter paths keep their last part, credential-like keys are withheld). The sidebar's foot
+shows a **static snapshot** card (depictio version, export day; it opens the provenance) where the
+live app shows "Online", and the project row where it shows "All dashboards".
+
 Rule of this pass: **every component the live server can render renders in a bundle.** Where the
 browser cannot recompute it, the producer renders it at export with the server's own code and
 ships the result, badged; where even the view needs a remote service (a genome browser, an image
