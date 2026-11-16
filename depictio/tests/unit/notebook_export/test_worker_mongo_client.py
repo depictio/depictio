@@ -17,7 +17,12 @@ PACKAGE = Path(depictio.__file__).parent
 
 
 def _motor_imports(path: Path) -> list[int]:
-    tree = ast.parse(path.read_text(encoding="utf-8"))
+    try:
+        # Bytes, so a file's own coding declaration is honoured; a file that is
+        # not Python source at all (a stray non-UTF-8 fixture) cannot hold an import.
+        tree = ast.parse(path.read_bytes())
+    except (SyntaxError, UnicodeDecodeError, ValueError):
+        return []
     lines = []
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom) and (node.module or "").split(".")[0] == "motor":
