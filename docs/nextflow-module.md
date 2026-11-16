@@ -360,7 +360,9 @@ writable:
 - **Singularity / Apptainer.** `exec` ignores the entrypoint, and the read-only
   image is fine: nothing writes to it. The stack only listens on 127.0.0.1, on
   free ports, so it runs on a shared node beside other users' stacks; SeaweedFS's
-  sockets in the node's `/tmp` are named per user.
+  sockets in the node's `/tmp` are named per user, and MongoDB opens none.
+
+![what a task finds on a shared node](images/nextflow-module/schema_shared_node.png)
 
 Executors that do not start the container with `docker run`, such as AWS
 Batch, keep the entrypoint; it execs the task's command, so they should work
