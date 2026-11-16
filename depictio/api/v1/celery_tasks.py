@@ -3438,7 +3438,7 @@ def extract_component_figure_task(payload: dict) -> dict:
     import asyncio
 
     from beanie import init_beanie
-    from motor.motor_asyncio import AsyncIOMotorClient
+    from pymongo import AsyncMongoClient
 
     from depictio.api.v1.configs.config import MONGODB_URL, settings
     from depictio.api.v1.services.embed.extract import extract_component_figure
@@ -3449,7 +3449,7 @@ def extract_component_figure_task(payload: dict) -> dict:
         # same admin-token lookup the screenshot task uses) reads UserBeanie
         # and TokenBeanie — a bare Celery task has no Beanie context of its
         # own, so it must init one here, same as generate_dashboard_screenshot_dual.
-        client = AsyncIOMotorClient(MONGODB_URL)
+        client: AsyncMongoClient = AsyncMongoClient(MONGODB_URL)
         try:
             await init_beanie(
                 database=client[settings.mongodb.db_name],
@@ -3463,7 +3463,7 @@ def extract_component_figure_task(payload: dict) -> dict:
                 expect="image" if payload.get("expect") == "image" else "plotly",
             )
         finally:
-            client.close()
+            await client.close()
 
     try:
         return asyncio.run(run())

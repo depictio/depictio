@@ -1039,7 +1039,7 @@ def render_notebook_report(
     import asyncio
 
     from beanie import init_beanie
-    from motor.motor_asyncio import AsyncIOMotorClient
+    from pymongo import AsyncMongoClient
 
     from depictio.api.v1.configs.config import MONGODB_URL
     from depictio.api.v1.configs.logging_init import logger
@@ -1048,7 +1048,7 @@ def render_notebook_report(
     from depictio.models.models.users import TokenBeanie, UserBeanie
 
     async def _with_token(action):
-        client = AsyncIOMotorClient(MONGODB_URL)
+        client: AsyncMongoClient = AsyncMongoClient(MONGODB_URL)
         try:
             await init_beanie(
                 database=client[settings.mongodb.db_name],
@@ -1057,7 +1057,7 @@ def render_notebook_report(
             token = await TokenBeanie.get(token_id)
             return await action(token)
         finally:
-            client.close()
+            await client.close()
 
     async def _read(token):
         return token.access_token if token else None
