@@ -29,7 +29,7 @@
 # samtools/filter/, deduplication/*/*.bam, genotyping/*.vcf.gz: 11 GB).
 pipeline: eager
 version: "2.5.3"
-# s3://nf-core-awsmegatests/eager/results-<results_sha>/ == the 2.5.3 release tag_sha.
+# s3://nf-core-awsmegatests/eager/results-<results_sha>/ is the 2.4.5 run (2.5.3 has none).
 results_sha: "42c9d5f8602e5e88fdcec28f194d2cd4cff61c75"
 run_root: ""
 multiqc:
