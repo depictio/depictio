@@ -261,6 +261,47 @@ class TestPhylumLevel:
 
         assert variables["PHYLUM_LEVEL"] == "3"
 
+    def test_ampliseq3_names_the_table_after_the_first_database(self, tmp_path):
+        """3.x: one table per classifier and database; the first listed one counts."""
+        tables = tmp_path / "qiime2" / "rel_abundance_tables"
+        self._write(
+            tables / "rel-table-ASV_with-DADA2-silva-tax.tsv",
+            '"ID"\t"Domain"\t"Kingdom"\t"Phylum"\t"sample_1"\n',
+        )
+        self._write(
+            tables / "rel-table-ASV_with-DADA2-gtdb-tax.tsv",
+            '"ID"\t"Domain"\t"Phylum"\t"Class"\t"sample_1"\n',
+        )
+        params = {"dada_ref_taxonomy": "silva,gtdb", "tax_agglom_max": 6}
+
+        assert self._introspect(tmp_path, params)["PHYLUM_LEVEL"] == "3"
+
+    def test_a_database_list_reads_the_first_databases_taxlevels(self, tmp_path):
+        params = {
+            "dada_ref_taxonomy": "silva=144,gtdb",
+            "dada_ref_databases": {
+                "silva=144": {"taxlevels": "Domain,Kingdom,Phylum,Class,Order,Family,Genus"}
+            },
+            "tax_agglom_max": 6,
+        }
+
+        assert self._introspect(tmp_path, params)["PHYLUM_LEVEL"] == "3"
+
+    def test_the_dada2_table_label_is_the_first_database_sanitised(self, tmp_path):
+        variables = self._introspect(tmp_path, {"dada_ref_taxonomy": "silva=138.2, gtdb"})
+
+        assert variables["DADA2_REF_DB"] == "silva_138_2"
+
+    def test_a_consolidated_taxonomy_is_its_own_label(self, tmp_path):
+        params = {"dada_ref_taxonomy": "silva,gtdb", "consolidate_taxonomies": "score"}
+
+        assert self._introspect(tmp_path, params)["DADA2_REF_DB"] == "consolidated_score"
+
+    def test_one_database_is_never_consolidated(self, tmp_path):
+        params = {"dada_ref_taxonomy": "sbdi-gtdb", "consolidate_taxonomies": "score"}
+
+        assert self._introspect(tmp_path, params)["DADA2_REF_DB"] == "sbdi-gtdb"
+
     def test_rank_prefixed_barplot_lineages(self, tmp_path):
         barplot = tmp_path / "qiime2" / "barplot"
         self._write(barplot / "level-1.csv", "index,k__Bacteria,treatment\n")

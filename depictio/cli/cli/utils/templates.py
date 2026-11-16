@@ -1207,6 +1207,22 @@ def _params_newest_first(root: DataRoot, directory: str) -> list[str]:
     return []
 
 
+def _ampliseq_dada2_label(params: dict) -> str | None:
+    """The database label ampliseq >= 3.0 writes into the name of the DADA2
+    taxonomy its single-taxonomy steps read (``rel-table-ASV_with-DADA2-<label>-tax.tsv``),
+    spelt as workflows/ampliseq.nf does: the first listed ``--dada_ref_taxonomy``
+    database with ``=`` and ``.`` turned to ``_``, or ``consolidated_<mode>`` when
+    several databases are consolidated by another rule than ``first``."""
+    databases = [db.strip() for db in str(params.get("dada_ref_taxonomy") or "").split(",")]
+    databases = [db for db in databases if db]
+    if not databases:
+        return None
+    mode = params.get("consolidate_taxonomies") or "first"
+    if len(databases) > 1 and mode != "first":
+        return f"consolidated_{mode}"
+    return databases[0].replace("=", "_").replace(".", "_")
+
+
 def _infer_phylum_level(root: DataRoot, params: dict) -> int | None:
     """Depth at which an ampliseq run's QIIME2 collapsed taxonomy ends in the Phylum.
 
@@ -1246,13 +1262,23 @@ def _infer_phylum_level(root: DataRoot, params: dict) -> int | None:
         and not (params.get("pplace_tree") and params.get("pplace_taxonomy"))
     )
     if level is None and dada2_collapsed:
-        tax_table = "qiime2/rel_abundance_tables/rel-table-ASV_with-DADA2-tax.tsv"
-        ranks = header(tax_table, "\t")[1:]
+        # ampliseq >= 3.0 takes a comma-separated list of databases, the first
+        # feeding every single-taxonomy step, and names the table after the
+        # classifier and database (`rel-table-ASV_with-DADA2-<db>-tax.tsv`).
+        first_db = str(params.get("dada_ref_taxonomy") or "").split(",")[0].strip()
+        ranks: list[str] = []
+        for tax_table in (
+            f"qiime2/rel_abundance_tables/rel-table-ASV_with-DADA2-{_ampliseq_dada2_label(params)}-tax.tsv",
+            "qiime2/rel_abundance_tables/rel-table-ASV_with-DADA2-tax.tsv",
+        ):
+            ranks = header(tax_table, "\t")[1:]
+            if ranks:
+                break
         if not ranks and params:
             # ampliseq's precedence: --dada_assign_taxlevels, the database's
             # taxlevels, then DADA2's 7-rank default.
             databases = params.get("dada_ref_databases") or {}
-            database = databases.get(params["dada_ref_taxonomy"]) or {}
+            database = databases.get(first_db) or {}
             taxlevels = params.get("dada_assign_taxlevels") or database.get("taxlevels")
             ranks = (taxlevels or "Kingdom,Phylum,Class,Order,Family,Genus,Species").split(",")
         if "Phylum" in ranks:
@@ -1375,6 +1401,8 @@ def _introspect_pipeline_params(
         follow an explicit ``--var PHYLUM_LEVEL``
       - ``METADATA_FILE``: the run's metadata copy under ``input/`` when the run
         used one
+      - ``DADA2_REF_DB``: the database label ampliseq 3.x writes into the name
+        of the DADA2 taxonomy its single-taxonomy steps read
     """
     root = as_data_root(root)
     if params is None:
@@ -1392,6 +1420,10 @@ def _introspect_pipeline_params(
 
     if not params:
         return
+
+    dada2_label = _ampliseq_dada2_label(params)
+    if dada2_label:
+        variables.setdefault("DADA2_REF_DB", dada2_label)
 
     # ampliseq phylogenetic placement never writes qiime2/phylogenetic_tree/tree.nwk;
     # the tree is the EPA-ng graft under pplace/. Keyed on the reference tree input
