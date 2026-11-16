@@ -107,6 +107,7 @@ describe('splitPanels', () => {
       'sankey',
       'oncoplot',
       'signal_matrix',
+      'complex_heatmap',
     ];
     const COLOUR = [
       'embedding',
@@ -122,7 +123,6 @@ describe('splitPanels', () => {
     ];
     const NONE = [
       'phylogenetic',
-      'complex_heatmap',
       'dot_plot',
       'upset_plot',
       'enrichment',

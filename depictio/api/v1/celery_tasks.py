@@ -1537,6 +1537,8 @@ def compute_complex_heatmap(payload: dict) -> dict:
         _narrow_wide_matrix_columns(value_columns, filter_metadata, what="heatmap columns")
         or value_columns
     )
+    if filter_metadata:
+        value_columns = _square_matrix_columns(df, index_column, value_columns)
 
     # Column annotations, in priority order. Both branches produce the same
     # ``{annotation_name: {sample_column: value}}`` shape the aligner below
@@ -1833,6 +1835,26 @@ def _heatmap_clustering_flags(
             logger.info("not clustering heatmap columns by correlation: %d row(s) left", n_rows)
             cluster_cols = False
     return cluster_rows, cluster_cols
+
+
+def _square_matrix_columns(df: Any, index_column: str, value_columns: list[str]) -> list[str]:
+    """The columns of a matrix whose rows name them, cut to the rows a filter kept.
+
+    A sample-by-sample matrix (a distance, a correlation) names each column by
+    a row's index. A filter that removed rows (a run, a group of a split)
+    leaves their columns standing, so the matrix would read the kept samples
+    against every sample. When every kept row names a column, the columns
+    follow the rows. A matrix of anything else by samples (taxa, genes) never
+    names a column by a row and is left alone.
+    """
+    if index_column not in df.columns or df.height == 0:
+        return value_columns
+    kept = {str(v) for v in df.get_column(index_column).drop_nulls().to_list()}
+    if not kept or len(kept) >= len(value_columns):
+        return value_columns
+    if not kept <= {str(c) for c in value_columns}:
+        return value_columns
+    return [c for c in value_columns if str(c) in kept]
 
 
 def _narrow_wide_matrix_columns(

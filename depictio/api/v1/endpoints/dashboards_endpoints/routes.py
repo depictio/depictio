@@ -11184,7 +11184,12 @@ def _run_groups_for_component(
     component = _family_component(dashboard_data, component_id)
     if component is None or str(component.get("dc_id")) != dc_id or not component.get("wf_id"):
         return None
-    _role, identity = key_role(component.get("config") or {})
+    config = component.get("config") or {}
+    _role, identity = key_role(config)
+    if not identity and component.get("viz_kind") == "complex_heatmap":
+        # A heatmap names its rows by its index, and a matrix of samples by
+        # samples names its columns by the same ids: its group strip reads them.
+        identity = config.get("index_column")
     if not identity:
         return None
     try:

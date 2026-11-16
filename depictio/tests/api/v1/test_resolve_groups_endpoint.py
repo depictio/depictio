@@ -201,3 +201,19 @@ def test_run_groups_fall_back_when_the_component_cannot_answer(
     out = _call({"dc_id": "dc-lib", "component_id": "emb", "groups": [NEW, SEEN]})
     assert seen == [["New: 2 runs", "Seen before"]]
     assert [s["status"] for s in out["status"]] == ["applied", "applied"]
+
+
+def test_a_heatmap_reads_run_groups_by_its_index(project, frame, monkeypatch):
+    heatmap = {
+        "index": "emb",
+        "dc_id": "dc-lib",
+        "wf_id": "0" * 24,
+        "viz_kind": "complex_heatmap",
+        "config": {"index_column": "sample_id"},
+    }
+    _with_embedding(monkeypatch, heatmap)
+    out = _call({"dc_id": "dc-lib", "component_id": "emb", "groups": [NEW, SEEN]})
+    assert [(g["name"], g["values"]) for g in out["groups"]] == [
+        ("New: 2 runs", ["s2", "s3"]),
+        ("Seen before", ["s1"]),
+    ]
