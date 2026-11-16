@@ -413,7 +413,8 @@ def test_export_headers_and_content(patched_env):
     src = resp.body.decode()
     assert src.startswith("---\ntitle: Wells & Rivers\n")
     assert "\njupyter: python3\n" in src.split("\n---\n", 1)[0]
-    assert "# Wells & Rivers" in src and "Where the samples came from" in src
+    assert "title: Wells & Rivers" in src and "subtitle: Where the samples came from" in src
+    assert "# Wells & Rivers" not in src
     assert "min_depth" in src  # run provenance in the header
     assert "t.weber@example.org" in src
     assert "Groundwater" in src and "Riverwater" in src

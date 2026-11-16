@@ -100,6 +100,14 @@ const LEGEND_PLACEMENT = ['orientation', 'x', 'y', 'xanchor', 'yanchor', 'xref',
  * - The colorway, led by the instance's primary: a figure's own colorway
  *   and any trace's own colour win over it.
  */
+/** Whether a figure draws a title of its own (mirrored by ``theme.py`` ``has_title``). */
+export const hasTitle = (layout?: Record<string, unknown>): boolean => {
+  const title = layout?.title as unknown;
+  const text =
+    title && typeof title === 'object' ? (title as Record<string, unknown>).text : title;
+  return typeof text === 'string' && text.trim() !== '';
+};
+
 export const glassPlotlyDefaults = (
   scheme: 'light' | 'dark',
   layout?: Record<string, unknown>,
@@ -110,6 +118,9 @@ export const glassPlotlyDefaults = (
   if (/^#[0-9a-f]{6}$/i.test(primary) && !colorway.includes(primary)) colorway.unshift(primary);
   const own = (layout?.legend ?? {}) as Record<string, unknown>;
   const placeLegend = layout !== undefined && !LEGEND_PLACEMENT.some((k) => own[k] !== undefined);
+  // A titled figure keeps its title at the top left (the theme puts it there),
+  // so the legend row goes to the bottom left instead of printing over it.
+  const top = !hasTitle(layout);
   return {
     margin: { l: 4, r: 8, t: 8, b: 4, pad: 0 },
     ...(colorway.length ? { colorway } : {}),
@@ -120,8 +131,8 @@ export const glassPlotlyDefaults = (
             x: 0,
             xanchor: 'left',
             xref: 'container',
-            y: 1,
-            yanchor: 'top',
+            y: top ? 1 : 0,
+            yanchor: top ? 'top' : 'bottom',
             yref: 'container',
           },
         }

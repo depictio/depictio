@@ -171,9 +171,10 @@ def header_markdown(
     brand_html = _brand_header_html(brand)
     if brand_html:
         parts.append(brand_html)
-    parts.append(f"# {title}")
-    if subtitle:
-        parts.append(f"*{subtitle}*")
+    # No ``# title`` / subtitle here: the front matter carries both and Quarto
+    # draws them in its title block, so repeating them printed the dashboard
+    # name twice at the top of every report.
+    del title, subtitle
 
     # A persistent link back to the live dashboard: the export is a point-in-
     # time snapshot, and a reader who wants the current view (or to change a

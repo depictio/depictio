@@ -196,16 +196,26 @@ def paper_defaults(
     }
     own = (layout or {}).get("legend") or {}
     if layout is not None and not any(own.get(k) is not None for k in LEGEND_PLACEMENT):
+        # A titled figure keeps its title at the top left, so the legend row
+        # goes to the bottom left instead of printing over it.
+        top = not has_title(layout)
         out["legend"] = {
             "orientation": "h",
             "x": 0,
             "xanchor": "left",
             "xref": "container",
-            "y": 1,
-            "yanchor": "top",
+            "y": 1 if top else 0,
+            "yanchor": "top" if top else "bottom",
             "yref": "container",
         }
     return out
+
+
+def has_title(layout: dict[str, Any]) -> bool:
+    """Whether the figure draws a title of its own (``plotly.ts`` ``hasTitle``)."""
+    title = layout.get("title")
+    text = title.get("text") if isinstance(title, dict) else title
+    return isinstance(text, str) and bool(text.strip())
 
 
 def _deep_merge(base: Any, patch: dict[str, Any]) -> dict[str, Any]:
