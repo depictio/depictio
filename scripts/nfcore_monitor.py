@@ -14,7 +14,10 @@ This script does two things:
   template (nf-co.re ``pipelines.json`` release index, GitHub releases API as
   the fallback, vs. our pinned version dirs).
 * ``report`` — for a pipeline with an update, validate the template against that
-  version's AWS megatest results (anonymous S3) in three layers:
+  version's AWS megatest results (anonymous S3). The main layer is the
+  differential ingestion (``nfcore_drift.py``): the template resolved, read and
+  built on the run it was pinned to and on the release's run, and the two
+  compared (files, columns, tables, parameters, new outputs). Then:
     1. source-path existence (which recipe inputs moved/renamed),
     2. recipe execution — download each file-based recipe's inputs and actually
        run ``transform()`` + assert ``OUTPUT_SCHEMA`` (catches column/content
@@ -601,6 +604,7 @@ def compute_verdict(
     recipe_results: list[RecipeCheck] | None,
     structure: StructureDiff | None,
     params_problems: int = 0,
+    diff_errors: int = 0,
 ) -> Verdict:
     """Order matters: a major bump always needs a person; a broken from_params rule
     is known from the two schemas alone, with or without a run; without the
@@ -614,6 +618,10 @@ def compute_verdict(
         )
     if not new_data:
         return Verdict("unverified", "no usable megatest run for this release")
+    if diff_errors:
+        return Verdict(
+            "review", f"{diff_errors} error(s) when the template is run on both runs"
+        )
     if structure is not None and structure.lost_paths:
         return Verdict(
             "review", f"{len(structure.lost_paths)} path(s) the template reads left the run folder"
@@ -832,6 +840,57 @@ def params_drift(template: dict, pipeline: str, local: str, new: str) -> tuple[l
     return drift.markdown(local, new), len(drift.broken) + len(drift.flipped)
 
 
+def _diff_variables(template: dict) -> dict[str, str]:
+    """``reference.vars`` that are not paths: a group column, a genome. The ones
+    under ``{DATA_ROOT}`` name the vendored copy, which a megatest run lacks."""
+    return {k: v for k, v in _template_vars(template).items() if "{DATA_ROOT}" not in v}
+
+
+def _params_read(template: dict) -> set[str]:
+    """The params the template's ``from_params`` rules read."""
+    from depictio.models.models.templates import TemplateMetadata
+
+    try:
+        meta = TemplateMetadata(**template["template"])
+    except Exception:  # noqa: BLE001
+        return set()
+    return {p for var in meta.variables if var.from_params for p in var.from_params.params_used()}
+
+
+def differential_ingestion(
+    template: dict, pipeline: str, local: str, new_version: str, old_prefix: str, new_prefix: str,
+    *, build: bool, old_label: str, max_file_mb: float = 50.0,
+) -> tuple[list[str], int]:  # fmt: skip
+    """The ``## Differential ingestion`` section and its error count: the template
+    resolved, read and built on its own pinned run and on the release's
+    (``nfcore_drift``), and the two compared; plus the two schemas' params."""
+    import nfcore_drift
+
+    from depictio.cli.cli.utils.template_check import fetch_schema
+
+    try:
+        old_schema, new_schema = fetch_schema(pipeline, local), fetch_schema(pipeline, new_version)
+    except Exception:  # noqa: BLE001 - the run comparison stands without them
+        old_schema = new_schema = None
+    try:
+        findings, lines = nfcore_drift.diff_runs(
+            f"nf-core/{pipeline}/{local}",
+            f"s3://{MEGATEST_BUCKET}/{old_prefix}",
+            f"s3://{MEGATEST_BUCKET}/{new_prefix}",
+            _diff_variables(template),
+            old_label=old_label,
+            new_label=new_version,
+            old_schema=old_schema,
+            new_schema=new_schema,
+            params_read=_params_read(template),
+            build=build,
+            max_bytes=int(max_file_mb * 1_000_000),
+        )
+    except Exception as exc:  # noqa: BLE001 - reported, never crashes the run
+        return [f"## Differential ingestion — not run ({type(exc).__name__}: {exc})", ""], 0
+    return lines, sum(f.level == "error" for f in findings)
+
+
 def _run_prefix(pipeline: str, sha: str, run_root: str) -> str:
     root = run_root.strip("/")
     return f"{pipeline}/results-{sha}/" + (f"{root}/" if root else "")
@@ -916,6 +975,8 @@ def report_pipeline(
     # Old run (the one the template was built on) vs the release's run.
     structure: StructureDiff | None = None
     structure_lines: list[str] | None = None
+    diff_lines: list[str] = []
+    diff_errors = 0
     new_sha = results_prefix.split("/")[1].removeprefix("results-")
     if not pinned_sha:
         structure_lines = ["## Run structure — not compared (the template pins no run)", ""]
@@ -931,6 +992,12 @@ def report_pipeline(
             structure = diff_structure(old_keys, keys, read_paths)
             old_label = sha_to_tag(index, pipeline, pinned_sha) or f"run {pinned_sha[:8]}"
             structure_lines = render_structure(structure, old_label, len(old_keys), len(keys))
+            print("→ differential ingestion (old run vs the release's run)", file=sys.stderr)
+            diff_lines, diff_errors = differential_ingestion(
+                template, pipeline, local, new_version,
+                _run_prefix(pipeline, pinned_sha, run_root), results_prefix,
+                build=not no_exec, old_label=old_label, max_file_mb=max_file_mb,
+            )  # fmt: skip
 
     recipe_results: list[RecipeCheck] | None = None
     if not no_exec:
@@ -956,11 +1023,12 @@ def report_pipeline(
         recipe_results=recipe_results,
         structure=structure,
         params_problems=params_problems,
+        diff_errors=diff_errors,
     )
     report, _ = build_drift_report(
         pipeline, local, new_version, results_prefix, source_paths, keys, recipe_results,
         catalog_result, run_root=run_root, verdict=verdict,
-        structure_lines=params_lines + (structure_lines or []),
+        structure_lines=params_lines + diff_lines + (structure_lines or []),
     )  # fmt: skip
     return PipelineReport(pipeline, local, new_version, verdict, report, n_problems)
 

@@ -506,3 +506,27 @@ def test_params_drift_reads_both_schemas(nfm: ModuleType, monkeypatch: pytest.Mo
     lines, problems = nfm.params_drift(template, "demo", "1.0.0", "2.0.0")
     assert problems == 1
     assert "`X` reads `skip_x`, gone from the release; renamed to `skip_xx`" in "\n".join(lines)
+
+
+def test_an_error_running_the_template_on_both_runs_needs_review(nfm: ModuleType) -> None:
+    """Recipes passing on the new run prove nothing when the differential run
+    found a source the recipe silently fell back from (ampliseq 3.x)."""
+    passing = [nfm.RecipeCheck("t", "r", "PASS", "ok")] * 3
+    structure = nfm.StructureDiff([], [], [], [], n_checked=3)
+    verdict = nfm.compute_verdict(
+        "1.0.0", "1.0.1", new_data=True, n_problems=0,
+        recipe_results=passing, structure=structure, diff_errors=2,
+    )  # fmt: skip
+    assert verdict.key == "review"
+    assert "both runs" in verdict.reason
+
+
+def test_diff_variables_leave_out_the_vendored_paths(nfm: ModuleType) -> None:
+    template = {
+        "template": {
+            "reference": {
+                "vars": {"GROUP_COL": "habitat", "METADATA_FILE": "{DATA_ROOT}/input/m.tsv"}
+            }
+        }
+    }
+    assert nfm._diff_variables(template) == {"GROUP_COL": "habitat"}

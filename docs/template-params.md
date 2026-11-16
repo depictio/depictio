@@ -116,28 +116,48 @@ Each one is a route to verify against the release's code before adding it.
 
 ## When a new release ships
 
-Everything here is deterministic: two `nextflow_schema.json`, the template, and
-the release's megatest run. No step needs a model.
+Detection is deterministic: the same two runs always give the same report.
+Deciding what to do with a change the template does not cover yet (a new
+output, a step redesigned) is still a person's call, or a model's; it is rare
+in nf-core pipelines, and every change it has to judge is listed for it.
 
 ```bash
+# Rules against the two schemas, no run needed
 depictio template check nf-core/rnaseq/3.26.0 --against 3.27.0
+
+# The template run on the run it was built on and on the release's run
+python scripts/nfcore_drift.py --template nf-core/ampliseq/2.18.0 \
+  --old s3://nf-core-awsmegatests/ampliseq/results-<pinned sha>/ \
+  --new s3://nf-core-awsmegatests/ampliseq/results-<release sha>/   # or a local -profile test outdir
 ```
 
-| Change in the release | Found by | What to do |
+`nfcore_drift.py` resolves the template on both runs exactly as `depictio
+ingest` does (auto-detection, `from_params` rules, conditionals), then builds
+every collection: scans read, recipes run in dependency order with their
+`dc_ref` inputs. It compares the two in five layers:
+
+| Layer | What it reports | Example (ampliseq 2.18 → 3.1) |
 |---|---|---|
-| A param a rule reads is gone or renamed | `--against`: ✗, with the closest new names | fix the rule in the new version's template |
-| A param's default flips a rule on a default run | `--against`: ✗ | check the release's code, adjust the rule |
-| A new `skip_*` flag | `--against`: ➕ | a route to verify (below) |
-| A file the template reads moved | `nfcore_monitor.py` (megatest paths, recipes run on the release's data) | repoint the collection |
+| Files | a collection or a recipe source that found files and finds none, optional or not, with the release's closest new file | ❌ `rel-table-ASV_with-DADA2-tax.tsv` → likely `…DADA2-sbdi-gtdb-tax.tsv`; the recipe was silently using its fallback |
+| Columns | columns removed (❌ when the recipe declares or names them), renamed in place, added (a family such as `*_confidence` is named); a header made of data (taxa, samples) is summarised | `Kingdom` → gone in the renamed table, 7 new `*_confidence` columns |
+| Tables | a collection that built and now fails or loses a column (❌); rows, nulls, categories, a unit (scale ×100) and, on rows paired by their key across the two runs, values that anti-correlate (a flipped sign convention) | tip metadata: `Family` 14 % → 71 % null |
+| Parameters | the two schemas (removed, renamed by description or close name, default or type changed; ❌ for a param a rule reads) and the two runs' own `params.json`, nested values included | `taxlevels` lost its `Kingdom`: the Phylum moved one level up |
+| Outputs | folders of the release's run that the old run lacked and no collection reads | `summary_tables/` |
 
-The weekly `nfcore-release-monitor` workflow runs both for every release and
-opens one wave PR (`nf-core wave: …`), each pipeline with a verdict; a broken
-rule is ❌ review needed even when the release has no megatest run yet. Then
-`python scripts/bump_template_version.py --pipeline <p> --new-version <v>`
-copies the template, rules included; CI's `template check --all
---fetch-schema` holds the new version to its own schema.
+`nfcore_monitor.py report` runs it whenever the template pins a megatest run
+and the release has one; a ❌ in it makes the verdict ❌ review needed. When the
+release has no megatest run, run its `-profile test` (the
+`nfcore-release-testrun` workflow keeps the outdir as an artifact) and pass the
+outdir as `--new`; a test profile exercises fewer routes than a megatest, so
+read a lost collection there against the profile's settings first.
 
-What stays a person's call is what a *new* flag removes from the outputs. It
-can be settled without one, by running the pipeline's `-profile test` with and
-without the flag and comparing `depictio ingest <outdir> --dry-run`: the
-collections that lose their files are the ones the conditional must drop.
+The weekly `nfcore-release-monitor` workflow opens one wave PR (`nf-core wave:
+…`), each pipeline with a verdict. Then `python scripts/bump_template_version.py
+--pipeline <p> --new-version <v>` copies the template, and CI's `template check
+--fetch-schema` holds each changed template to its own release's schema (every
+template, weekly and when the checker changes).
+
+What a *new* flag removes from the outputs can be settled the same way: run the
+pipeline's `-profile test` with and without it and pass both outdirs to
+`nfcore_drift.py`: the collections that lose their files are the ones the
+conditional must drop.
