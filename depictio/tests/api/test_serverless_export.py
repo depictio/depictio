@@ -180,15 +180,31 @@ def _ui_figure(**dict_kwargs: Any) -> dict[str, Any]:
     }
 
 
-def test_a_non_ols_trendline_is_a_final_frozen_verdict():
-    """``trendline: lowess`` (the penguins body-mass scatter) is refused by the
-    binder before it ever looks at data — so say so, instead of 'undecided'."""
-    comp = _ui_figure(x="flipper_length_mm", y="body_mass_g", trendline="lowess")
+def test_an_unported_trendline_is_a_final_frozen_verdict():
+    """A trendline the browser cannot refit (here a rolling skew)
+    is refused by the binder before it ever looks at data — so say so, instead
+    of 'undecided'."""
+    comp = _ui_figure(
+        x="flipper_length_mm",
+        y="body_mass_g",
+        trendline="rolling",
+        trendline_options={"window": 5, "function": "skew"},
+    )
     for plan in (classify_stored_component(comp), classify_component(comp)):
         assert plan.tier is ComponentTier.FROZEN
         assert plan.reason is TierReason.BINDING_MISS
-        assert plan.detail and "only an OLS trendline can be refit" in plan.detail
+        assert plan.detail and "other aggregations are not" in plan.detail
         assert plan.provisional is False
+
+
+def test_a_lowess_trendline_is_not_refused_up_front():
+    """``trendline: lowess`` (the penguins body-mass scatter) is refit in the
+    browser now, so no data-free classifier may freeze it for good: the verdict
+    is the binder's, once it has the data."""
+    comp = _ui_figure(x="flipper_length_mm", y="body_mass_g", trendline="lowess")
+    for plan in (classify_stored_component(comp), classify_component(comp)):
+        assert plan.provisional is True
+        assert not (plan.detail or "").startswith("this trendline")
 
 
 def test_a_whole_frame_visu_is_a_final_frozen_verdict():

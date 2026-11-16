@@ -332,11 +332,12 @@ def test_unbindable_figure_falls_back_to_frozen(data_dir: Path) -> None:
     spec_dict = yaml.safe_load(EXAMPLE_SPEC.read_text())
     for comp in spec_dict["components"]:
         if comp["tag"] == "scatter-mass-flipper":
-            # A LOWESS trendline is a fitted trace the runtime cannot recompute
-            # (it only refits closed-form 1-predictor OLS), so the matcher
-            # refuses the figure rather than ship a line frozen at the
-            # unfiltered fit.
-            comp["dict_kwargs"]["trendline"] = "lowess"
+            # A rolling skew is a fitted trace the runtime has no port of
+            # (trendline.ts carries mean/sum/min/max/median/std/var/count), so
+            # the matcher refuses the figure rather than ship a line frozen at
+            # the unfiltered fit.
+            comp["dict_kwargs"]["trendline"] = "rolling"
+            comp["dict_kwargs"]["trendline_options"] = {"window": 5, "function": "skew"}
     manifest = build_manifest(DashboardDataLite.model_validate(spec_dict), data_dir).manifest
 
     assert "scatter-mass-flipper" not in manifest.bindings

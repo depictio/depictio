@@ -17,7 +17,12 @@ import polars as pl
 import pytest
 
 from depictio.models.models.serverless import BindingTable
-from depictio.serverless.binding import BindingMiss, build_binding, build_binding_with_reason
+from depictio.serverless.binding import (
+    BindingMiss,
+    build_binding,
+    build_binding_with_reason,
+    planned_figure_miss,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 PENGUINS_DATA = REPO_ROOT / "depictio" / "projects" / "init" / "penguins" / "data"
@@ -223,6 +228,103 @@ def test_ols_trendline_pairs_with_its_raw_trace(penguins: pl.DataFrame) -> None:
         assert _arrays_in(table.scaffold["data"][trendline.i]) == []
 
 
+@pytest.mark.parametrize(
+    ("kind", "options"),
+    [
+        ("lowess", {}),
+        ("lowess", {"frac": 0.3}),
+        ("rolling", {"window": 5}),
+        ("expanding", {"function": "median"}),
+        ("ewm", {"span": 4, "adjust": False}),
+        ("ols", {"log_x": True, "log_y": True}),
+    ],
+)
+def test_every_ported_trendline_kind_binds_with_its_options(
+    penguins: pl.DataFrame, kind: str, options: dict[str, Any]
+) -> None:
+    """Non-OLS kinds are refit by trendline.ts, so the binder ships them —
+    kind and options verbatim — instead of freezing the figure."""
+    table, miss = build_binding_with_reason(
+        _figure(
+            x="flipper_length_mm",
+            y="body_mass_g",
+            color="species",
+            trendline=kind,
+            trendline_options=options,
+        ),
+        penguins,
+    )
+    assert miss is None and table is not None
+    assert [(t.i, t.on) for t in table.trendlines] == [(1, 0), (3, 2), (5, 4)]
+    assert {t.kind for t in table.trendlines} == {kind}
+    assert all(t.options == options for t in table.trendlines)
+    for trendline in table.trendlines:
+        assert _arrays_in(table.scaffold["data"][trendline.i]) == []
+
+
+def test_the_penguins_lowess_scatter_binds(penguins: pl.DataFrame) -> None:
+    """The dashboard's own "Body Mass vs Flipper Length" (colour × symbol, size,
+    box/violin marginals, lowess) — the figure users saw frozen."""
+    import yaml
+
+    dashboard = REPO_ROOT / "depictio/projects/init/penguins/dashboards/species_analysis.yaml"
+    spec = yaml.safe_load(dashboard.read_text())
+    (component,) = [
+        c for c in spec["components"] if c.get("title") == "Body Mass vs Flipper Length"
+    ]
+    assert component["dict_kwargs"]["trendline"] == "lowess"
+    table, miss = build_binding_with_reason(component, penguins)
+    assert miss is None and table is not None
+    assert len(table.trendlines) == 5  # one per (species, island) cell
+    assert {t.kind for t in table.trendlines} == {"lowess"}
+
+
+@pytest.mark.parametrize(
+    ("extra", "miss"),
+    [
+        ({"trendline": "rolling", "trendline_options": {"window": "7D"}}, "trendline_unsupported"),
+        (
+            {"trendline": "rolling", "trendline_options": {"window": 3, "win_type": "gaussian"}},
+            "trendline_unsupported",
+        ),
+        (
+            {"trendline": "rolling", "trendline_options": {"window": 3, "function": "skew"}},
+            "trendline_unsupported",
+        ),
+        ({"trendline": "ewm", "trendline_options": {"function": "mean"}}, "trendline_unsupported"),
+        (
+            {
+                "trendline": "ewm",
+                "trendline_options": {"com": 1, "function": "sum", "adjust": False},
+            },
+            "trendline_unsupported",
+        ),
+        (
+            {"trendline": "lowess", "trendline_options": {"frac": 0.5, "it": 0}},
+            "trendline_unsupported",
+        ),
+        ({"trendline": "ols", "trendline_scope": "overall"}, "trendline_overall"),
+        ({"trendline": "ols", "trendline_options": "{}"}, "trendline_unsupported"),
+    ],
+)
+def test_unported_trendlines_freeze_with_a_reason(
+    penguins: pl.DataFrame, extra: dict[str, Any], miss: str
+) -> None:
+    component = _figure(x="flipper_length_mm", y="body_mass_g", **extra)
+    assert planned_figure_miss(component) == BindingMiss(miss)
+    table, got = build_binding_with_reason(component, penguins)
+    assert table is None and got == BindingMiss(miss)
+
+
+def test_a_text_axis_trendline_freezes(penguins: pl.DataFrame) -> None:
+    """px casts a text y to float before the fit; the runtime does not."""
+    frame = penguins.with_columns(pl.col("body_mass_g").cast(pl.Utf8))
+    table, miss = build_binding_with_reason(
+        _figure(x="flipper_length_mm", y="body_mass_g", trendline="lowess"), frame
+    )
+    assert table is None and miss is BindingMiss.TRENDLINE_NON_NUMERIC
+
+
 # ---------------------------------------------------------------------------
 # Null grouping values — px drops those rows, and the binding must agree
 # ---------------------------------------------------------------------------
@@ -370,10 +472,14 @@ def test_all_grouping_values_null_returns_none() -> None:
 
 def test_whole_frame_and_unsupported_trendline_return_none(penguins: pl.DataFrame) -> None:
     assert build_binding(_figure("scatter_matrix", dimensions=["body_mass_g"]), penguins) is None
-    assert (
-        build_binding(_figure(x="flipper_length_mm", y="body_mass_g", trendline="lowess"), penguins)
-        is None
+    # A time-offset rolling window has no browser port (trendline.ts).
+    unported = _figure(
+        x="flipper_length_mm",
+        y="body_mass_g",
+        trendline="rolling",
+        trendline_options={"window": "7D"},
     )
+    assert build_binding(unported, penguins) is None
 
 
 def test_empty_frame_returns_none() -> None:
@@ -544,7 +650,12 @@ def test_each_bail_out_names_itself(penguins: pl.DataFrame) -> None:
     cases = [
         (_figure("scatter_matrix", dimensions=["body_mass_g"]), BindingMiss.WHOLE_FRAME_VISU),
         (
-            _figure(x="flipper_length_mm", y="body_mass_g", trendline="lowess"),
+            _figure(
+                x="flipper_length_mm",
+                y="body_mass_g",
+                trendline="rolling",
+                trendline_options={"window": 3, "function": "skew"},
+            ),
             BindingMiss.TRENDLINE_UNSUPPORTED,
         ),
     ]

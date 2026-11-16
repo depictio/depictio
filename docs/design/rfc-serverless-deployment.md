@@ -219,9 +219,14 @@ Layout never changes.
 
 This is exact where it matters: histogram binning, box quartiles, violin KDE and `histogram2d` are
 computed **by plotly.js** from the raw arrays it receives — precisely what the server used to send.
-It also makes two things *in scope* that looked like blockers: `trendline` (1-predictor OLS is
-closed-form, ~20 LOC) and `marginal_x`/`marginal_y` (raw-data traces in scaffold-fixed subplot
-domains, so they bind as ordinary raw traces).
+It also makes two things *in scope* that looked like blockers: `trendline` and
+`marginal_x`/`marginal_y` (raw-data traces in scaffold-fixed subplot domains, so they bind as
+ordinary raw traces). Every px trendline kind is refit in TypeScript, without the Python runtime:
+`ols` (closed-form, with `add_constant`/`log_x`/`log_y`), `lowess` (the statsmodels kernel, px's
+`frac=0.6666666`, `it=3`, `delta=0`), and `rolling`/`expanding`/`ewm` (pandas' window kernels for
+mean/sum/min/max/median/std/var/count) — `packages/depictio-static-core/src/trendline.ts`, pinned
+against px by `fixtures/trendline-expected.json`. A time-offset or weighted window, a `step`,
+another aggregation or an overall-scope fit stays frozen, and says which.
 
 **Degradation is structural:** any trace that fails to match exactly one tuple freezes the whole
 component rather than rendering something wrong.

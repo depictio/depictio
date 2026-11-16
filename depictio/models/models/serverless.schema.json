@@ -1297,7 +1297,7 @@
     },
     "TrendlineBinding": {
       "additionalProperties": false,
-      "description": "A trendline trace refit client-side via closed-form 1-predictor OLS.",
+      "description": "A px trendline trace refit client-side over its raw trace's rows.\n\n``kind`` and ``options`` are px's ``trendline`` / ``trendline_options``; the\nbinder only emits combinations the runtime ports exactly (anything else\nfreezes the figure), so the runtime treats an unknown option as a contract\nviolation.",
       "properties": {
         "i": {
           "description": "Trendline trace index in the scaffold",
@@ -1305,11 +1305,30 @@
           "title": "I",
           "type": "integer"
         },
+        "kind": {
+          "default": "ols",
+          "description": "px trendline kind",
+          "enum": [
+            "ols",
+            "lowess",
+            "rolling",
+            "expanding",
+            "ewm"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
         "on": {
           "description": "Index of the raw-data trace it is fit against",
           "minimum": 0,
           "title": "On",
           "type": "integer"
+        },
+        "options": {
+          "additionalProperties": true,
+          "description": "px trendline_options, verbatim",
+          "title": "Options",
+          "type": "object"
         }
       },
       "required": [
