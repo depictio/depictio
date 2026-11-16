@@ -627,8 +627,11 @@ def compare_runs(old: RunSnapshot, new: RunSnapshot) -> list[Finding]:
                 ))  # fmt: skip
         elif o.kind == "scan" and o.matched and n.matched == 0 and n.status == "ok":
             findings.append(Finding("error", "files", tag, f"{o.matched} file(s) → 0"))
+        still_builds = bool(
+            o.table and n.table and o.table.status == "ok" and n.table.status == "ok"
+        )
         findings += _compare_sources(
-            tag, o, n, old_keys, new_keys, old.label, new.label, new.header_of
+            tag, o, n, old_keys, new_keys, old.label, new.label, new.header_of, still_builds
         )
         if o.header and n.header:
             findings += _compare_header(tag, o.header, n.header, [])
@@ -673,7 +676,7 @@ def _hint_for_files(files: list[str], old_keys: set[str], new_keys: set[str]) ->
 
 def _compare_sources(
     tag: str, o: DCSnapshot, n: DCSnapshot, old_keys: set[str], new_keys: set[str],
-    old_label: str, new_label: str, header_of: Any = None,
+    old_label: str, new_label: str, header_of: Any = None, still_builds: bool = False,
 ) -> list[Finding]:  # fmt: skip
     out: list[Finding] = []
     new_sources = {s.ref: s for s in n.sources}
@@ -711,7 +714,7 @@ def _compare_sources(
             )
         if so.header and sn.header:
             out += _compare_header(
-                subject, so.header, sn.header, so.required_columns, so.recipe_text
+                subject, so.header, sn.header, so.required_columns, so.recipe_text, still_builds
             )
     return out
 
@@ -727,10 +730,17 @@ def _reads(text: str, col: str) -> bool:
 
 
 def _compare_header(
-    subject: str, old: list[str], new: list[str], required: list[str], text: str = ""
-) -> list[Finding]:
+    subject: str, old: list[str], new: list[str], required: list[str], text: str = "",
+    still_builds: bool = False,
+) -> list[Finding]:  # fmt: skip
+    """``required`` columns are declared by the recipe; a column only quoted in
+    its source is ``named``. A named column that left the header is an error
+    unless the collection was built on both runs: then the build, which ran the
+    recipe, says more than a string search of its source."""
     out: list[Finding] = []
-    required = list(required) + [c for c in old if c not in required and _reads(text, c)]
+    named = [c for c in old if c not in required and _reads(text, c)]
+    if not still_builds:
+        required, named = list(required) + named, []
     removed, added, renamed = header_changes(old, new)
     changed = len(set(old) ^ set(new))
     if len(old) >= DATA_HEADER_MIN and changed / max(len(old), len(new)) > DATA_HEADER_SHARE:
@@ -745,13 +755,20 @@ def _compare_header(
             f"{', '.join(f'`{c}`' for c in kept[:5]) or 'none'})",
         ))  # fmt: skip
         return out
+    def hint(col: str) -> str:
+        if col in required:
+            return "the recipe reads it"
+        if col in named:
+            return "the recipe names it, but the collection still builds"
+        return ""
+
     for a, b in renamed:
         level = "error" if a in required else "warn"
-        out.append(Finding(level, "headers", subject, f"column `{a}` became `{b}` (same position)"))
+        out.append(Finding(level, "headers", subject,
+                           f"column `{a}` became `{b}` (same position)", hint(a)))  # fmt: skip
     for col in removed:
         level = "error" if col in required else "warn"
-        out.append(Finding(level, "headers", subject, f"column `{col}` is gone",
-                           "the recipe reads it" if col in required else ""))  # fmt: skip
+        out.append(Finding(level, "headers", subject, f"column `{col}` is gone", hint(col)))
     if added:
         pattern = _added_pattern(added)
         shown = ", ".join(f"`{c}`" for c in added[:8]) + (" …" if len(added) > 8 else "")
@@ -1112,14 +1129,20 @@ def diff_runs(
     params_read: Iterable[str] = (),
     build: bool = True,
     max_bytes: int = DEFAULT_MAX_BYTES,
+    new_template_id: str | None = None,
 ) -> tuple[list[Finding], list[str]]:
-    """The findings and the rendered ``## Differential ingestion`` section."""
+    """The findings and the rendered ``## Differential ingestion`` section.
+
+    ``new_template_id`` runs another template on the new run: a version bump's
+    copy, as edited for the release, against the template it was copied from on
+    its own run. A path the copy already fixed is then no finding."""
     old = snapshot_run(
         template_id, old_location, variables, label=old_label, build=build, max_bytes=max_bytes
     )
     new = snapshot_run(
-        template_id, new_location, variables, label=new_label, build=build, max_bytes=max_bytes
-    )
+        new_template_id or template_id, new_location, variables,
+        label=new_label, build=build, max_bytes=max_bytes,
+    )  # fmt: skip
     findings = compare_runs(old, new)
     if old_schema and new_schema:
         findings += compare_schemas(old_schema, new_schema, params_read)
@@ -1138,6 +1161,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--new", required=True, help="the new release's run (folder or s3://)")
     parser.add_argument(
+        "--new-template", help="template run on --new (default: --template), e.g. a bump's copy"
+    )
+    parser.add_argument(
         "--var", action="append", default=[], help="KEY=VALUE, as for depictio ingest"
     )
     parser.add_argument("--no-build", action="store_true", help="files and headers only")
@@ -1147,6 +1173,7 @@ def main(argv: list[str] | None = None) -> int:
     findings, lines = diff_runs(
         args.template, args.old, args.new, variables,
         build=not args.no_build, max_bytes=int(args.max_mb * 1e6),
+        new_template_id=args.new_template,
     )  # fmt: skip
     print("\n".join(lines))
     return 1 if any(f.level == "error" for f in findings) else 0

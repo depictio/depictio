@@ -157,6 +157,12 @@ The weekly `nfcore-release-monitor` workflow opens one wave PR (`nf-core wave:
 --fetch-schema` holds each changed template to its own release's schema (every
 template, weekly and when the checker changes).
 
+On that pull request, the `template-drift` workflow runs `python
+scripts/nfcore_monitor.py bump --target <p>/<v>`: the version it was copied from,
+on its pinned run, against the new copy on the release's own run. A path the
+copy already fixed is then no finding; what remains is posted as a comment, and
+an error fails the check. Run the same command locally before pushing.
+
 What a *new* flag removes from the outputs can be settled the same way: run the
 pipeline's `-profile test` with and without it and pass both outdirs to
 `nfcore_drift.py`: the collections that lose their files are the ones the

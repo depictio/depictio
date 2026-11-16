@@ -229,3 +229,16 @@ def test_an_upgrade_is_described_change_by_change(
     assert any(f.layer == "tables" and "anti-correlated" in f.message for f in findings)
     assert any(f.layer == "outputs" and f.subject == "newtool/" for f in findings)
     assert "## Differential ingestion" in text
+
+
+def test_a_named_column_is_not_an_error_when_the_collection_still_builds(
+    nfd: ModuleType,
+) -> None:
+    # A lineage helper names `Kingdom` and handles its absence: the build, not
+    # a string search of the source, says whether the recipe still works.
+    old, new = ["ID", "Kingdom", "S1"], ["ID", "S1"]
+    text = 'RANKS = ("Kingdom", "Phylum")'
+    built = nfd._compare_header("dc.src", old, new, [], text=text, still_builds=True)
+    assert [f.level for f in built] == ["warn"] and "still builds" in built[0].hint
+    declared = nfd._compare_header("dc.src", old, new, ["Kingdom"], text=text, still_builds=True)
+    assert [f.level for f in declared] == ["error"]

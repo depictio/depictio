@@ -860,10 +860,14 @@ def _params_read(template: dict) -> set[str]:
 def differential_ingestion(
     template: dict, pipeline: str, local: str, new_version: str, old_prefix: str, new_prefix: str,
     *, build: bool, old_label: str, max_file_mb: float = 50.0,
+    new_template_version: str | None = None, strict: bool = False,
 ) -> tuple[list[str], int]:  # fmt: skip
     """The ``## Differential ingestion`` section and its error count: the template
     resolved, read and built on its own pinned run and on the release's
-    (``nfcore_drift``), and the two compared; plus the two schemas' params."""
+    (``nfcore_drift``), and the two compared; plus the two schemas' params.
+
+    ``new_template_version`` runs that version's template on the new run (a
+    bump's copy); ``strict`` lets a failure raise instead of being reported."""
     import nfcore_drift
 
     from depictio.cli.cli.utils.template_check import fetch_schema
@@ -885,8 +889,13 @@ def differential_ingestion(
             params_read=_params_read(template),
             build=build,
             max_bytes=int(max_file_mb * 1_000_000),
+            new_template_id=(
+                f"nf-core/{pipeline}/{new_template_version}" if new_template_version else None
+            ),
         )
     except Exception as exc:  # noqa: BLE001 - reported, never crashes the run
+        if strict:
+            raise
         return [f"## Differential ingestion — not run ({type(exc).__name__}: {exc})", ""], 0
     return lines, sum(f.level == "error" for f in findings)
 
@@ -1059,6 +1068,103 @@ def cmd_report(args: argparse.Namespace) -> int:
 
 
 # ---------------------------------------------------------------------------
+# Bump: a new version dir in a pull request, against the one it was copied from
+# ---------------------------------------------------------------------------
+def previous_version(pipeline: str, version: str, projects_dir: Path | None = None) -> str | None:
+    """The highest pinned version below ``version``: the one a bump copied."""
+    pinned = discover_pipelines(projects_dir or NFCORE_PROJECTS_DIR).get(pipeline, [])
+    lower = [v for v in pinned if v < Version(version)]
+    return str(max(lower)) if lower else None
+
+
+def bump_report(
+    pipeline: str, version: str, *, max_file_mb: float = 50.0, index: dict[str, Any] | None = None
+) -> tuple[str, int]:
+    """The previous version's template on its pinned megatest run, against the
+    bumped copy on ``version``'s own run: ``(markdown, error count)``. A bump
+    with nothing to compare it with (no earlier version, no run on either side)
+    says so and counts no error: it is not evidence of anything."""
+    title = f"## nf-core/{pipeline} {version}: the template on both releases' runs"
+    projects = NFCORE_PROJECTS_DIR
+    if not (projects / pipeline / version / "template.yaml").is_file():
+        raise ReportError(f"no template nf-core/{pipeline}/{version} in this checkout", 2)
+    old = previous_version(pipeline, version, projects)
+    if old is None:
+        return f"{title}\n\nNot compared: no earlier version of this template.\n", 0
+    title = f"## nf-core/{pipeline} {old} → {version}: the template on both releases' runs"
+
+    def skipped(reason: str) -> tuple[str, int]:
+        return f"{title}\n\nNot compared: {reason}.\n", 0
+
+    old_manifest = manifest_path(pipeline, old, projects)
+    if not old_manifest.is_file():
+        return skipped(f"{old} has no `{old_manifest.name}`, so no pinned run")
+    loaded = load_manifest(old_manifest)
+    if not loaded.results_sha:
+        return skipped(f"{old}'s `{old_manifest.name}` pins no run")
+    old_prefix = _run_prefix(pipeline, loaded.results_sha, loaded.run_root)
+
+    # The bump copies megatest.yaml as is; until it is refreshed it still names
+    # the old run, so the release's own run is looked up instead.
+    new_sha, new_root = None, loaded.run_root
+    new_manifest = manifest_path(pipeline, version, projects)
+    if new_manifest.is_file():
+        bumped = load_manifest(new_manifest)
+        new_root = bumped.run_root
+        if bumped.results_sha and bumped.results_sha != loaded.results_sha:
+            new_sha = bumped.results_sha
+    if new_sha is None:
+        if index is None:
+            index = load_index_or_none()
+        try:
+            run = resolve_run(pipeline, version=version, run_root=new_root, index=index)
+        except MegatestError as exc:
+            return skipped(f"{version} has no usable megatest run ({exc.reason})")
+        new_sha = run.results_sha
+    if new_sha == loaded.results_sha:
+        return skipped("both versions point at the same megatest run")
+
+    template = load_template(pipeline, version, projects)
+    lines, errors = differential_ingestion(
+        template, pipeline, old, version, old_prefix, _run_prefix(pipeline, new_sha, new_root),
+        build=True, old_label=old, max_file_mb=max_file_mb,
+        new_template_version=version, strict=True,
+    )  # fmt: skip
+    head = [
+        title,
+        "",
+        f"`nf-core/{pipeline}/{old}` on `results-{loaded.results_sha[:12]}`, "
+        f"`nf-core/{pipeline}/{version}` on `results-{new_sha[:12]}` "
+        f"([changelog](https://github.com/nf-core/{pipeline}/blob/{version}/CHANGELOG.md)).",
+        "",
+    ]
+    # diff_runs' own title is a level-2 heading too: demote it under ours
+    body = [f"#{line}" if line.startswith("## ") else line for line in lines]
+    return "\n".join(head + body) + "\n", errors
+
+
+def cmd_bump(args: argparse.Namespace) -> int:
+    """Every ``--target pipeline/version`` of a pull request, one section each."""
+    index = load_index_or_none()
+    sections, errors = [], 0
+    for target in args.target:
+        pipeline, _, version = target.partition("/")
+        print(f"→ nf-core/{pipeline} {version}", file=sys.stderr)
+        try:
+            text, n = bump_report(pipeline, version, max_file_mb=args.max_file_mb, index=index)
+        except ReportError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return exc.code
+        sections.append(text)
+        errors += n
+    markdown = "\n".join(sections)
+    if args.out:
+        Path(args.out).write_text(markdown)
+    print(markdown)
+    return 1 if errors else 0
+
+
+# ---------------------------------------------------------------------------
 # Wave: every pipeline with a newer release, one report each, one summary
 # ---------------------------------------------------------------------------
 _VERDICT_ORDER = ["review", "verified", "probable", "unverified"]
@@ -1175,6 +1281,16 @@ def main(argv: list[str] | None = None) -> int:
         help="Skip downloading/executing recipe sources larger than this (default 50)",
     )
     p_report.set_defaults(func=cmd_report)
+
+    p_bump = sub.add_parser(
+        "bump", help="A version a pull request adds, against the version it was copied from"
+    )
+    p_bump.add_argument(
+        "--target", action="append", required=True, help="pipeline/version, e.g. ampliseq/3.1.0"
+    )
+    p_bump.add_argument("--out", help="Also write the markdown here")
+    p_bump.add_argument("--max-file-mb", type=float, default=50.0)
+    p_bump.set_defaults(func=cmd_bump)
 
     p_wave = sub.add_parser(
         "wave", help="Report every pipeline with a newer release: one file each + SUMMARY.md"
