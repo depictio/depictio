@@ -1,0 +1,2011 @@
+version: 1
+# nf-core/mhcquant 3.3.0, on the family rules of depictio/projects/nf-core/RULES.md
+# (ampliseq/2.18.0 is the reference implementation).
+#
+# Funnel: the MultiQC report and the replicate agreement (Data & QC) -> the
+# search, its FDR and the physico-chemical checks of the identifications
+# (Search) -> the immunopeptidome itself, its length and anchor signature and
+# the peptides and proteins the conditions share (Immunopeptidome). The
+# samplesheet (`samples`) is what every filter starts from: its links carry a
+# pick to every sample-level table by sample_id and to the Comet tables by
+# run_id.
+#
+# Routes: a run without --quantify prunes the three replicate collections, and
+# with them the whole Reproducibility tab (all its tiles bind them); the
+# per-sample summary keeps its replicate columns, empty. A run with
+# --annotate_ions false prunes the fragment-ion annotation, the collapsed
+# Fragment ions section of the Physico-chemical checks tab.
+main_dashboard:
+  title: nf-core/mhcquant
+  subtitle: Immunopeptidomics, from the spectra to the peptides each sample presents
+  project_tag: mhcquant Immunopeptidomics
+  main_tab_name: Overview
+  tab_icon: mdi:compass-outline
+  tab_icon_color: brandPrimary
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_panel_default: collapsed
+  content_width_default: compact
+  show_tab_header: false
+  # Declared once here, read by every tab of the family.
+  category_colors:
+    '{GROUP_COL}': auto
+    # Peptide lengths run past the palette's eight colours on a class II run:
+    # the import ranks them by peptide count, the most common lengths first.
+    length_class:
+      '*': 'auto:peptides'
+    length_window:
+      Class I range: '#1c7ed6'
+      Class II range: '#ae3ec9'
+      Outside both: '#adb5bd'
+    modification_state:
+      Unmodified: '#868e96'
+      Modified: '#f76707'
+    sharing:
+      All conditions: '#0ca678'
+      Several conditions: '#1098ad'
+      One condition: '#f59f00'
+    charge_state: auto
+    replicate_label: auto
+    pair: auto
+  # Persistent: drawn in every tab's filter panel, picks kept across tabs. All
+  # three are bound to the samplesheet, the source of every sample link.
+  filter_sections:
+  - name: Sample filters
+    icon: mdi:filter-variant
+    color: teal
+    description: Applies to every tab
+    persistent: true
+    pin: top
+  grid_sections:
+  - name: Key figures
+    icon: mdi:counter
+    color: gray
+    appearance: plain
+    card_variant: headline
+    filter_bar: true
+    visible_filters: 2
+    description: The run in four numbers. The filters here narrow these four only.
+  - name: Findings
+    icon: mdi:star-outline
+    color: gray
+    appearance: plain
+    figure_style: minimal
+    filter_bar: true
+    visible_filters: 2
+    description: What the data says, each with the tab that shows it, then the figures behind it.
+  - name: How to read this dashboard
+    icon: mdi:information-outline
+    color: gray
+    appearance: plain
+    description: The tabs by group, each with the question it answers.
+  # Declared on the main tab, which no route removes.
+  - name: Sample sheet
+    icon: mdi:table-account
+    color: gray
+    description: The samplesheet behind every tab, narrowed by the sample filters
+    collapsed: true
+    persistent: true
+    pin: bottom
+  - name: Reference tables
+    icon: mdi:table
+    color: gray
+    description: The per-sample summary behind the tiles
+    collapsed: true
+    persistent: true
+    pin: bottom
+    exclude_tabs:
+    - Overview
+  components:
+  # First in component order on purpose: the Guide demos the first categorical
+  # filter that shares a data collection with the first card (Samples, below).
+  - component_type: interactive
+    workflow_tag: mhcquant
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: '{GROUP_COL}'
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: violet
+      strip_label: '{GROUP_COL_DISPLAY}'
+    section: Key figures
+    tag: mq-ov-kf-group
+    index: ov-kf-group
+    title: '{GROUP_COL_DISPLAY}'
+    layout: {x: 0, y: 0, w: 2, h: 1}
+  - component_type: interactive
+    workflow_tag: mhcquant
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: sample_id
+    column_type: object
+    display:
+      icon_name: mdi:flask-outline
+      custom_color: teal
+      strip_label: Sample
+    section: Key figures
+    tag: mq-ov-kf-sample
+    index: ov-kf-sample
+    title: Sample
+    layout: {x: 2, y: 0, w: 2, h: 1}
+  # The pipeline's wordmark, read from its repository; where it cannot load (no
+  # internet), the title is drawn as text.
+  - component_type: text
+    title: nf-core/mhcquant
+    logo: https://raw.githubusercontent.com/nf-core/mhcquant/master/docs/images/nf-core-mhcquant_logo_light.png
+    logo_dark: https://raw.githubusercontent.com/nf-core/mhcquant/master/docs/images/nf-core-mhcquant_logo_dark.png
+    order: 1
+    body: >
+      Immunopeptidomics spectra turned into the peptides each sample presents on its MHC
+      molecules: how well the search went, which lengths and motifs the peptides show and
+      which proteins they come from. [Run parameters](params:)
+    tag: mq-ov-hero
+    index: ov-hero
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  # The study: the samplesheet's samples, the conditions they compare and the injections
+  # each was measured in.
+  - component_type: text
+    surface: card
+    values:
+      samples: {dc: samples, column: sample_id, aggregation: nunique, format: integer}
+      raw_files: {dc: samples, column: run_id, aggregation: nunique, format: integer}
+      conditions: {dc: samples, column: Condition, aggregation: nunique, format: integer}
+      replicates: {dc: samples, column: replicate, aggregation: max, format: integer}
+    body: |
+      ### The study
+      - ![](icon:mdi:flask-outline) **Samples** {{samples}} from {{raw_files}} raw files
+      - ![](icon:mdi:shape-outline) **Conditions** {{conditions}}
+      - ![](icon:mdi:layers-outline) **Replicates** up to {{replicates}} injections of one sample
+      - ![](icon:mdi:file-table-outline) **Samplesheet** [one row per raw file](section:Sample sheet), its path in [the run parameters](params:input)
+      - ![](icon:mdi:palette-outline) **{GROUP_COL_DISPLAY}** {{legend:{GROUP_COL}}}
+    tag: mq-ov-study
+    index: ov-study
+    layout: {x: 0, y: 1, w: 5, h: 3}
+  # The run's own settings, read from its params.json: a key the run did not
+  # set prints a dash.
+  - component_type: text
+    surface: card
+    body: |
+      ### The run
+      - ![](icon:mdi:source-branch) **Pipeline** nf-core/mhcquant 3.3.0
+      - ![](icon:mdi:magnify-scan) **Enzyme** {{param:enzyme}}
+      - ![](icon:mdi:filter-outline) **FDR** {{param:fdr_threshold}}
+      - ![](icon:mdi:ruler) **Lengths** {{param:peptide_min_length}} to {{param:peptide_max_length}}
+      - ![](icon:mdi:molecule) **Rescoring** {{param:rescoring_engine}}
+    tag: mq-ov-run
+    index: ov-run
+    layout: {x: 5, y: 1, w: 3, h: 3}
+  # The marks take the family's colour (the header's), not the theme's blue. The
+  # Quantify step cites a count from the Reproducibility tab's collections, so a run
+  # without --quantify drops the line with its data.
+  - component_type: text
+    surface: card
+    accent: green
+    values:
+      n_tracked: {dc: mhcquant_replicate_detection, column: peptide, aggregation: nunique, format: si}
+    body: |
+      ### Six steps from spectra to presented peptides
+      Each step names its settings and the tab that shows its result. A step the run skipped drops out.
+
+      ::: steps
+      1. ![](icon:mdi:magnify-scan) **Search** Comet matches spectra to the database · [Settings](params:precursor) · [Identification](tab:Identification)
+      2. ![](icon:mdi:molecule) **Rescore** {{param:rescoring_engine}} with predicted features · [Settings](params:feature) · [Physico-chemical](tab:Physico-chemical checks)
+      3. ![](icon:mdi:filter-outline) **Filter** Peptides kept at the set FDR · [Settings](params:fdr) · [Identification](tab:Identification)
+      4. ![](icon:mdi:set-merge) **Quantify** {{n_tracked}} peptides followed across the replicate injections · [Settings](params:quantif) · [Reproducibility](tab:Reproducibility)
+      5. ![](icon:mdi:ruler) **Profile** Lengths and anchor motifs · [Settings](params:peptide) · [MHC signature](tab:MHC signature)
+      6. ![](icon:mdi:relation-many-to-many) **Compare** Conditions and source proteins · [Peptides](tab:Peptides and proteins)
+      :::
+    tag: mq-ov-steps
+    index: ov-steps
+    layout: {x: 0, y: 4, w: 8, h: 3}
+  - component_type: text
+    surface: card
+    body: |
+      ### About this dashboard
+      nf-core/mhcquant searches immunopeptidomics spectra with Comet, rescores the matches with predicted retention times and spectra, and keeps the peptides that pass an FDR filter. This page sums up one run; each tab behind it answers one question, in the order of the steps above.
+
+      The sample filters in the left panel apply to every tab: narrow the samples once and the whole dashboard follows. A bar above a section narrows that section only.
+    tag: mq-ov-about
+    index: ov-about
+    layout: {x: 0, y: 7, w: 8, h: 3}
+  # Key figures: one card per stage of the funnel, each opening the tab that
+  # explains it. All four read collections every route writes.
+  - component_type: card
+    workflow_tag: mhcquant
+    data_collection_tag: samples
+    aggregation: nunique
+    column_name: sample_id
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: '{GROUP_COL}'
+    display:
+      icon_name: mdi:flask-outline
+      icon_color: orange
+      caption: in the samplesheet, by {GROUP_COL_DISPLAY}
+      link: tab:MultiQC
+    section: Key figures
+    tag: mq-ov-kf-samples
+    index: ov-kf-samples
+    title: Samples
+    description: Samples in the samplesheet, each with its raw replicate files. The bar splits them by {GROUP_COL_DISPLAY}.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: mhcquant
+    data_collection_tag: mhcquant_sample_summary
+    use: mhcquant/sample_summary
+    aggregation: sum
+    column_name: psms
+    column_type: int64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:magnify-scan
+      icon_color: blue
+      caption: PSMs per sample, with their spread
+      link: tab:Identification
+      format: si
+    section: Key figures
+    tag: mq-ov-kf-psms
+    index: ov-kf-psms
+    title: PSMs
+    description: Peptide-spectrum matches that passed the FDR filter, over the samples in view. The box shows how many each sample yielded.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: mhcquant
+    data_collection_tag: peptide_condition_sharing
+    aggregation: count
+    column_name: sequence
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: length_class
+    display:
+      icon_name: mdi:dna
+      icon_color: violet
+      caption: distinct sequences, by length
+      link: tab:MHC signature
+    section: Key figures
+    tag: mq-ov-kf-peptides
+    index: ov-kf-peptides
+    title: Peptides
+    description: Distinct peptide sequences over the samples in view. The bar splits them by length, the first sign of the MHC class.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  # identification_rate is per raw file, so the median is of files, not of
+  # spectra.
+  - component_type: card
+    workflow_tag: mhcquant
+    data_collection_tag: openms_comet_psms
+    use: openms/comet_psms
+    aggregation: median
+    column_name: identification_rate
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:target
+      icon_color: blue
+      caption: median per raw file, with its spread
+      link: tab:Identification
+      format: percent
+    section: Key figures
+    tag: mq-ov-kf-idrate
+    index: ov-kf-idrate
+    title: Identification rate
+    description: Share of the searched spectra that Comet matches at 1% FDR, before rescoring, per raw file.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  # Findings filter bar: the group, then the peptide length.
+  - component_type: interactive
+    workflow_tag: mhcquant
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: '{GROUP_COL}'
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: violet
+      strip_label: '{GROUP_COL_DISPLAY}'
+    section: Findings
+    tag: mq-ov-findings-group
+    index: ov-findings-group
+    title: '{GROUP_COL_DISPLAY}'
+    layout: {x: 0, y: 0, w: 2, h: 1}
+  - component_type: interactive
+    workflow_tag: mhcquant
+    data_collection_tag: mhcquant_peptides
+    interactive_component_type: MultiSelect
+    column_name: length_class
+    column_type: object
+    display:
+      icon_name: mdi:ruler
+      custom_color: pink
+      strip_label: Length
+    section: Findings
+    tag: mq-ov-findings-length
+    index: ov-findings-length
+    title: Peptide length
+    layout: {x: 2, y: 0, w: 2, h: 1}
+  # One result row per finding, each citing one data collection, so the import
+  # removes a row with its data.
+  - component_type: text
+    surface: card
+    values:
+      n_pep: {dc: mhcquant_peptides, column: sequence, aggregation: nunique, format: integer}
+      rt_err: {dc: mhcquant_sample_summary, column: median_abs_rt_error_min, aggregation: median,
+        format: 'decimals:1'}
+      top_len: {dc: mhcquant_length_distribution, column: length_class, aggregation: top, weight: peptides}
+      len_share: {dc: mhcquant_length_distribution, column: length_class, aggregation: top_share,
+        weight: peptides, format: percent}
+      n_prot: {dc: mhcquant_source_proteins, column: protein, aggregation: nunique, format: integer}
+      pep_prot: {dc: mhcquant_source_proteins, column: peptides, aggregation: median, format: 'decimals:0'}
+    body: |
+      - **{{n_pep}}** distinct peptide sequences pass the FDR filter – after rescoring [Identification](tab:Identification)
+      - **{{rt_err}}** minutes, the median gap to the predicted retention time – per sample [Physico-chemical](tab:Physico-chemical checks)
+      - **{{len_share}}** of the peptides are {{top_len}}s – the most common length [MHC signature](tab:MHC signature)
+      - **{{n_prot}}** source proteins give the peptides – median peptides per protein: {{pep_prot}} [Peptides](tab:Peptides and proteins)
+    section: Findings
+    tag: mq-ov-findings
+    index: ov-findings
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  # One highlight per analysis tab, in the order of the rows above. The tiles
+  # of a row share a stored height.
+  - component_type: highlight
+    section: Findings
+    source_tab: Identification
+    source_component: id-fdr-curve
+    caption: Target PSMs Comet accepts as the FDR threshold is relaxed, one curve per raw file; the line marks 1%.
+    hide_legend: true
+    tag: mq-ov-hl-fdr
+    index: ov-hl-fdr
+    layout: {x: 0, y: 2, w: 4, h: 4}
+  - component_type: highlight
+    section: Findings
+    source_tab: Physico-chemical checks
+    source_component: phys-rt-predicted
+    caption: One point per peptide, observed against predicted retention time; off the diagonal, unsupported.
+    hide_legend: true
+    tag: mq-ov-hl-rt
+    index: ov-hl-rt
+    layout: {x: 4, y: 2, w: 4, h: 4}
+  - component_type: highlight
+    section: Findings
+    source_tab: MHC signature
+    source_component: sig-length-profile
+    caption: Each sample's peptides by length, one curve per sample; shaded, the class I and class II ranges.
+    hide_legend: true
+    tag: mq-ov-hl-length
+    index: ov-hl-length
+    layout: {x: 0, y: 6, w: 4, h: 4}
+  - component_type: highlight
+    section: Findings
+    source_tab: Peptides and proteins
+    source_component: pep-protein-scatter
+    caption: One point per protein and sample, by the peptides it gives and their intensity; colour is the sample.
+    hide_legend: true
+    tag: mq-ov-hl-proteins
+    index: ov-hl-proteins
+    layout: {x: 4, y: 6, w: 4, h: 4}
+  # Link-only tab tiles: each tile prints its tab's subtitle, the question the
+  # tab answers. A tab the run does not have is left out.
+  - component_type: text
+    body: |
+      ### Data & QC
+      - [MultiQC](tab:MultiQC)
+      - [Reproducibility](tab:Reproducibility)
+
+      ### Search
+      - [Identification](tab:Identification)
+      - [Physico-chemical checks](tab:Physico-chemical checks)
+
+      ### Immunopeptidome
+      - [MHC signature](tab:MHC signature)
+      - [Peptides and proteins](tab:Peptides and proteins)
+    section: How to read this dashboard
+    tag: mq-ov-how-to-read
+    index: ov-how-to-read
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  # Persistent sample filters, the group first.
+  - component_type: interactive
+    workflow_tag: mhcquant
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: '{GROUP_COL}'
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: violet
+    section: Sample filters
+    group: Sample scope
+    tag: mq-filter-group
+    index: sample-filters-group
+    title: '{GROUP_COL_DISPLAY}'
+    layout: {x: 0, y: 0, w: 1, h: 2}
+  - component_type: interactive
+    workflow_tag: mhcquant
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: sample_id
+    column_type: object
+    display:
+      icon_name: mdi:flask-outline
+      custom_color: teal
+    section: Sample filters
+    group: Sample scope
+    tag: mq-filter-sample
+    index: sample-filters-sample
+    title: Sample
+    layout: {x: 0, y: 2, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: mhcquant
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: run_id
+    column_type: object
+    display:
+      icon_name: mdi:file-document-outline
+      custom_color: cyan
+    section: Sample filters
+    group: Sample scope
+    tag: mq-filter-raw-file
+    index: sample-filters-raw-file
+    title: Raw file
+    layout: {x: 0, y: 5, w: 1, h: 3}
+  # Row selection feeds the Analysis panel.
+  - component_type: table
+    workflow_tag: mhcquant
+    data_collection_tag: samples
+    row_selection_enabled: true
+    row_selection_column: sample_id
+    section: Sample sheet
+    tag: mq-sample-sheet
+    index: sample-sheet
+    title: Samplesheet
+    description: >-
+      Which raw files went into the run, and how are they grouped? One row per raw file, with its sample,
+      its condition and the search database it was matched against.
+
+      How to read: check that every file sits in the intended sample and condition before reading the
+      other tabs, since the replicate and condition-sharing tiles group by these columns. Select a row to
+      filter the linked tiles on that sample.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  # Every column of the per-sample summary, the replicate correlations
+  # included (empty on a run without --quantify).
+  - component_type: table
+    workflow_tag: mhcquant
+    data_collection_tag: mhcquant_sample_summary
+    use: mhcquant/sample_summary
+    row_selection_enabled: true
+    row_selection_column: sample
+    section: Reference tables
+    tag: mq-ref-summary
+    index: ref-sample-summary
+    title: Immunopeptidome summary per sample
+    description: >-
+      How did each sample do overall? One row per sample: PSMs, distinct peptides and peptidoforms, source
+      proteins, the modified share, the length signature (median length, 9-mer share, class I and class II
+      window shares), median score and retention-time error, and, for a quantified run, replicate
+      completeness and correlation.
+
+      How to read: compare rows on yield first, then on the length signature and the retention-time error.
+      A sample far from its peers on one of them is the one to open in
+      [Identification](tab:Identification), [Physico-chemical checks](tab:Physico-chemical checks) or [MHC
+      signature](tab:MHC signature).
+
+      Note: the replicate columns are empty on a run without --quantify. The class I and class II windows
+      are the 8 to 12 and 13 to 25 residue ranges drawn on the length profile of the MHC signature tab;
+      they are published ranges of eluted ligands, not filters.
+
+      Sources: Gfeller et al. 2018, J Immunol 201:3705, doi:10.4049/jimmunol.1800914; Chicz et al. 1992,
+      Nature 358:764, doi:10.1038/358764a0.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+tabs:
+# ============================================================================
+# Data & QC
+# ============================================================================
+- title: MultiQC
+  subtitle: Did the search identify peptides evenly across samples?
+  tab_group: Data & QC
+  tab_order: 1
+  tab_icon: /assets/images/logos/multiqc_icon_color.svg
+  tab_icon_color: orange
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  grid_sections:
+  - name: Identification yield
+    icon: mdi:chart-box-outline
+    color: orange
+    description: Identifications, q-values and search scores per sample
+  - name: Peptide properties
+    icon: mdi:chart-bell-curve
+    color: orange
+    description: Precursor m/z, retention time and intensity of the identified peptides
+  - name: Acquisition and rescoring
+    icon: mdi:file-document-outline
+    color: gray
+    description: Chromatograms, fragment mass error and Percolator feature weights
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      mhcquant writes its own [MultiQC](https://multiqc.info) sections: identification
+      counts, q-value and score distributions, and the m/z, retention time and intensity
+      of the peptides. Compare the counts across samples first, then check that a
+      low-yield sample's scores look like the others.
+    tag: mq-mqc-intro
+    index: mqc-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: multiqc
+    workflow_tag: mhcquant
+    data_collection_tag: multiqc_data
+    selected_module: stats_table
+    selected_plot: stats_table-section
+    section: Identification yield
+    tag: mq-mqc-stats
+    title: Identification counts
+    description: PSMs, peptides, modified peptides and proteins per sample.
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: multiqc
+    workflow_tag: mhcquant
+    data_collection_tag: multiqc_data
+    selected_module: qvalue_plot
+    selected_plot: qvalue_plot-section
+    section: Identification yield
+    tag: mq-mqc-qvalue
+    title: q-value distribution
+    description: Peptide-level q-values of the accepted identifications.
+    layout: {x: 0, y: 4, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: mhcquant
+    data_collection_tag: multiqc_data
+    selected_module: scores_plot_xcorr
+    selected_plot: scores_plot_xcorr-section
+    section: Identification yield
+    tag: mq-mqc-xcorr
+    title: Comet Xcorr per sample
+    description: Search score of the accepted identifications.
+    layout: {x: 4, y: 4, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: mhcquant
+    data_collection_tag: multiqc_data
+    selected_module: mz_plot
+    selected_plot: mz_plot-section
+    section: Peptide properties
+    tag: mq-mqc-mz
+    title: Precursor m/z
+    description: m/z distribution of the identified precursors.
+    layout: {x: 0, y: 0, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: mhcquant
+    data_collection_tag: multiqc_data
+    selected_module: rt_plot
+    selected_plot: rt_plot-section
+    section: Peptide properties
+    tag: mq-mqc-rt
+    title: Retention time
+    description: Elution time distribution of the identified peptides.
+    layout: {x: 4, y: 0, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: mhcquant
+    data_collection_tag: multiqc_data
+    selected_module: peptide_intensity_plot
+    selected_plot: peptide_intensity_plot-section
+    section: Peptide properties
+    tag: mq-mqc-intensity
+    title: Peptide intensity
+    description: Quantified peptide intensities per sample.
+    layout: {x: 0, y: 4, w: 8, h: 4}
+  - component_type: multiqc
+    workflow_tag: mhcquant
+    data_collection_tag: multiqc_data
+    selected_module: chromatogram
+    selected_plot: chromatogram-section
+    section: Acquisition and rescoring
+    tag: mq-mqc-chromatogram
+    title: Total ion chromatograms
+    description: Ion current over the gradient, one trace per raw file.
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: multiqc
+    workflow_tag: mhcquant
+    data_collection_tag: multiqc_data
+    selected_module: mass_error
+    selected_plot: mass_error-section
+    section: Acquisition and rescoring
+    tag: mq-mqc-mass-error
+    title: Fragment mass error
+    description: Fragment ion mass error per raw file.
+    layout: {x: 0, y: 4, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: mhcquant
+    data_collection_tag: multiqc_data
+    use: multiqc/percolator
+    selected_module: percolator
+    selected_plot: percolator_median_feature_weights
+    section: Acquisition and rescoring
+    tag: mq-mqc-percolator
+    title: Percolator feature weights
+    description: Median weight of each rescoring feature, per sample.
+    layout: {x: 4, y: 4, w: 4, h: 4}
+# Every tile binds a replicate collection, so a run without --quantify drops
+# the whole tab with them. The per-sample replicate correlations live in the
+# Reference tables (persistent, pinned at the bottom of this tab).
+- title: Reproducibility
+  subtitle: Do the replicate injections of a sample quantify the same peptides?
+  tab_group: Data & QC
+  tab_order: 2
+  tab_icon: mdi:set-merge
+  tab_icon_color: cyan
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Replicate filters
+    icon: mdi:filter-variant
+    color: cyan
+    description: Replicate pairs, or peptides seen in a given number of replicates
+  grid_sections:
+  - name: Replicates at a glance
+    icon: mdi:counter
+    color: cyan
+    description: How completely and how strongly the replicates quantify the peptides
+  - name: Replicate agreement
+    icon: mdi:chart-scatter-plot
+    color: cyan
+    description: Peptide intensity in one replicate against another, pair by pair
+  - name: Replicate overlap
+    icon: mdi:set-merge
+    color: cyan
+    description: Peptides by the combination of replicates they were quantified in
+  - name: Replicate table
+    icon: mdi:table
+    color: gray
+    description: Replicate membership of every peptide
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      [OpenMS](https://openms.de) aligns the replicate injections of each sample and
+      quantifies every peptide in each of them. Replicates of one sample should quantify
+      the same peptides at similar intensities. A pair off the diagonal, or a small
+      all-replicate core, points at one injection to check in the chromatograms.
+    tag: mq-rep-intro
+    index: rep-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: interactive
+    workflow_tag: mhcquant
+    data_collection_tag: mhcquant_replicate_pairs
+    interactive_component_type: MultiSelect
+    column_name: pair
+    column_type: object
+    display:
+      icon_name: mdi:vector-link
+      custom_color: green
+    section: Replicate filters
+    group: Replicates
+    tag: mq-rep-filter-pair
+    index: rep-pair-filter
+    title: Replicate pair
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: mhcquant
+    data_collection_tag: mhcquant_replicate_detection
+    interactive_component_type: RangeSlider
+    column_name: replicates_detected
+    column_type: int64
+    display:
+      icon_name: mdi:counter
+      custom_color: yellow
+    section: Replicate filters
+    group: Replicates
+    tag: mq-rep-filter-detected
+    index: rep-detected-range
+    title: Replicates detected
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: mhcquant
+    data_collection_tag: mhcquant_replicate_detection
+    use: mhcquant/replicate_detection
+    aggregation: median
+    column_name: replicates_detected
+    column_type: int64
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:set-merge
+      icon_color: cyan
+      caption: median, with its distribution
+      decimals: 0
+    section: Replicates at a glance
+    tag: mq-rep-card-detected
+    index: rep-card-detected
+    title: Replicates per peptide
+    description: In how many replicates of its sample a peptide was quantified.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: mhcquant
+    data_collection_tag: mhcquant_replicate_intensity
+    use: mhcquant/replicate_intensity
+    aggregation: count
+    column_name: peptide
+    column_type: object
+    filter_expr: col('detected') == 1
+    secondary_layout: donut
+    breakdown_col: replicate_label
+    display:
+      icon_name: mdi:chart-donut
+      icon_color: grape
+      caption: detections, by replicate
+    section: Replicates at a glance
+    tag: mq-rep-card-detections
+    index: rep-card-detections
+    title: Peptide detections
+    description: Peptides quantified in a replicate, counted once per replicate they were seen in.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: mhcquant
+    data_collection_tag: mhcquant_replicate_intensity
+    use: mhcquant/replicate_intensity
+    aggregation: median
+    column_name: log10_intensity
+    column_type: float64
+    filter_expr: col('detected') == 1
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:chart-bell-curve
+      icon_color: indigo
+      caption: median log10, with its spread
+      decimals: 1
+    section: Replicates at a glance
+    tag: mq-rep-card-intensity
+    index: rep-card-intensity
+    title: Peptide intensity
+    description: Median log10 intensity of the peptides where they were quantified.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: mhcquant
+    data_collection_tag: mhcquant_replicate_pairs
+    use: mhcquant/replicate_pairs
+    aggregation: count
+    column_name: peptide
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: pair
+    display:
+      icon_name: mdi:vector-link
+      icon_color: orange
+      caption: peptides in both replicates, by pair
+    section: Replicates at a glance
+    tag: mq-rep-card-pairs
+    index: rep-card-pairs
+    title: Paired peptides
+    description: Peptides quantified in both replicates of a pair, counted once per pair.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    workflow_tag: mhcquant
+    data_collection_tag: mhcquant_replicate_pairs
+    use: mhcquant/replicate_scatter
+    config:
+      x_title: log10 intensity, first replicate
+      y_title: log10 intensity, second replicate
+      reference_line: diagonal
+      density_threshold: 5000
+      opacity: 0.5
+      marker_size: 5
+      legend_pos: bottom
+    section: Replicate agreement
+    tag: mq-rep-av-pairs
+    index: rep-pairs-scatter
+    title: Peptide intensity, replicate against replicate
+    description: >-
+      How reproducible is the quantification between two injections of the same sample? Each point is one
+      peptide quantified in both replicates of a pair, with its log10 intensity in the first replicate on
+      x and in the second on y, coloured by pair.
+
+      How to read: a tight cloud along the diagonal is a reproducible pair. A wide cloud, or one shifted
+      off the diagonal, marks a replicate with a loading, spray or alignment problem. Compare with the
+      replicate correlation columns of the Immunopeptidome summary table.
+
+      Lines and annotations: the dashed line labelled x = y is the identity diagonal, drawn over the range
+      both axes share; a point on it has the same intensity in both replicates. It is a geometric
+      reference, not a cut-off, and no correlation threshold is drawn.
+
+      Note: only peptides quantified in both replicates appear, and a very dense cloud is drawn as a
+      density view instead of single points.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: mhcquant
+    data_collection_tag: mhcquant_replicate_detection
+    use: mhcquant/replicate_upset
+    config:
+      set_columns_pattern: ^rep_
+      sort_by: cardinality
+      show_values: true
+    section: Replicate overlap
+    tag: mq-rep-av-upset
+    index: rep-upset
+    title: Peptides quantified per replicate combination
+    description: >-
+      How much of a sample is seen in every injection? Each bar counts the distinct peptidoforms
+      quantified in exactly the replicate combination marked by the dots under it, pooled over the
+      selected samples.
+
+      How to read: bars are sorted by size, so on a well reproduced run the all-replicate combination
+      comes first. Tall single-replicate bars are peptides that hang on one injection, so their
+      intensities rest on little evidence.
+
+      Note: replicate numbers count within each sample, so replicate 1 of one sample and replicate 1 of
+      another are different injections. A peptide absent from a replicate was not quantified there; it may
+      still be present below the detection limit.
+    layout: {x: 0, y: 0, w: 8, h: 5}
+  - component_type: table
+    workflow_tag: mhcquant
+    data_collection_tag: mhcquant_replicate_detection
+    use: mhcquant/replicate_detection
+    row_selection_enabled: true
+    row_selection_column: peptide
+    section: Replicate table
+    tag: mq-rep-table-detection
+    index: rep-table-detection
+    title: Replicate membership per peptide
+    description: >-
+      Which replicates saw each peptide? One row per sample and peptidoform, with a 0/1 column for each
+      replicate index telling whether the peptide was quantified in that raw file.
+
+      How to read: filter a replicate column to 0 to list the peptides it missed, or sum the columns to
+      see who is seen everywhere. It holds the rows behind the bars of the replicate combination plot.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+# ============================================================================
+# Search
+# ============================================================================
+- title: Identification
+  subtitle: How many spectra became peptides, and at what FDR?
+  tab_group: Search
+  tab_order: 3
+  tab_icon: mdi:magnify-scan
+  tab_icon_color: blue
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Identification filters
+    icon: mdi:filter-variant
+    color: blue
+    description: Keep peptides inside a score or PSM-support band
+  grid_sections:
+  - name: Yield at a glance
+    icon: mdi:counter
+    color: blue
+    description: From spectra searched to the peptides that passed the FDR filter
+  - name: Search and FDR
+    icon: mdi:chart-line
+    color: blue
+    description: Accepted PSMs across FDR thresholds, and the score of the accepted peptides
+  - name: Search table
+    icon: mdi:table
+    color: gray
+    description: Comet search yield per raw file
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      [Comet](https://uwpr.github.io/Comet/) searches every raw file against the database
+      with its decoys; rescoring then separates true matches and the FDR filter keeps the
+      confident peptides. The Comet numbers are the search's own yield before rescoring,
+      so a raw file that lags there has a spectrum or search problem.
+    tag: mq-id-intro
+    index: id-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: interactive
+    workflow_tag: mhcquant
+    data_collection_tag: mhcquant_peptides
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: score
+    column_type: float64
+    display:
+      icon_name: mdi:chart-bell-curve
+      custom_color: blue
+    section: Identification filters
+    group: Peptide support
+    tag: mq-id-filter-score
+    index: id-score-range
+    title: Peptide score
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: mhcquant
+    data_collection_tag: mhcquant_peptides
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: psms
+    column_type: int64
+    display:
+      icon_name: mdi:counter
+      custom_color: indigo
+    section: Identification filters
+    group: Peptide support
+    tag: mq-id-filter-psms
+    index: id-psm-range
+    title: PSMs per peptide
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: mhcquant
+    data_collection_tag: openms_comet_psms
+    use: openms/comet_psms
+    aggregation: sum
+    column_name: spectra_searched
+    column_type: int64
+    secondary_layout: attrition
+    attrition_cols: [target_psms, psms_5pct_fdr, psms_1pct_fdr]
+    display:
+      icon_name: mdi:magnify-scan
+      icon_color: blue
+      caption: searched, matched, then accepted at 5% and 1%
+    section: Yield at a glance
+    tag: mq-id-card-spectra
+    index: id-card-spectra
+    title: Spectra searched
+    description: MS2 spectra Comet searched, then those with a target match and those accepted at 5% and 1% FDR.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: mhcquant
+    data_collection_tag: openms_comet_psms
+    use: openms/comet_psms
+    aggregation: median
+    column_name: identification_rate
+    column_type: float64
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:target
+      icon_color: cyan
+      caption: median per raw file, with its distribution
+      format: percent
+    section: Yield at a glance
+    tag: mq-id-card-rate
+    index: id-card-rate
+    title: Identification rate
+    description: Share of the searched spectra accepted at 1% FDR before rescoring, per raw file.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: mhcquant
+    data_collection_tag: mhcquant_sample_summary
+    use: mhcquant/sample_summary
+    aggregation: sum
+    column_name: psms
+    column_type: int64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:chart-bar
+      icon_color: indigo
+      caption: per sample, with their spread
+    section: Yield at a glance
+    tag: mq-id-card-psms
+    index: id-card-psms
+    title: PSMs
+    description: Peptide-spectrum matches that passed the pipeline's FDR filter, after rescoring.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: mhcquant
+    data_collection_tag: mhcquant_peptides
+    use: mhcquant/peptides
+    aggregation: count
+    column_name: peptide
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: modification_state
+    display:
+      icon_name: mdi:dna
+      icon_color: grape
+      caption: precursors, by modification
+    section: Yield at a glance
+    tag: mq-id-card-precursors
+    index: id-card-precursors
+    title: Accepted precursors
+    description: Peptide precursors that passed the FDR filter, one per sample, peptidoform and charge.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    workflow_tag: mhcquant
+    data_collection_tag: openms_comet_fdr_curve
+    use: openms/fdr_profile
+    config:
+      x_title: Target-decoy q-value threshold
+      y_title: Accepted target PSMs
+      reference_x: 0.01
+      reference_label: 1% FDR
+      legend_pos: bottom
+    section: Search and FDR
+    tag: mq-id-av-fdr-curve
+    index: id-fdr-curve
+    title: Accepted PSMs against the FDR threshold, per raw file
+    description: >-
+      How many spectra can the search identify at each confidence level? One curve per raw file: the
+      number of target PSMs accepted as the target-decoy q-value threshold on the raw Comet Xcorr is
+      relaxed from 0 to 10%.
+
+      How to read: a curve that rises early and keeps climbing is a file with good spectra. One that rises
+      late or flattens low has weaker spectra or a search-space problem; open the Comet search yield table
+      below for its identification rate and mass error.
+
+      Lines and annotations: the dotted vertical line labelled 1% FDR marks a q-value of 0.01. It is the
+      default fdr_threshold of nf-core/mhcquant, the level at which the final peptides are kept; it is a
+      fixed reference of this tile and does not read the value the run was given.
+
+      Sources: nf-core/mhcquant 3.3.0 parameters, https://nf-co.re/mhcquant/3.3.0/parameters; Elias and
+      Gygi 2007, Nat Methods, doi:10.1038/nmeth1019 for target-decoy FDR.
+
+      Note: the q-values come from target-decoy competition on Xcorr alone, before rescoring, so this is a
+      conservative first estimate and the rescored counts are higher.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: figure
+    workflow_tag: mhcquant
+    data_collection_tag: mhcquant_peptides
+    use: mhcquant/peptides
+    visu_type: histogram
+    dict_kwargs:
+      x: score
+      color: sample
+      labels: {score: Peptide score, sample: ''}
+    section: Search and FDR
+    tag: mq-id-fig-score
+    index: id-score-histogram
+    title: Score of the accepted peptides
+    description: >-
+      What do the search scores of the accepted peptides look like? A histogram of the best score of each
+      accepted peptide precursor, one colour per sample.
+
+      How to read: samples whose histograms overlap are scored alike. A sample shifted towards weaker
+      scores, or with a long tail of borderline hits, was identified with less confidence than its peers.
+      Which end is better depends on the score type, named in the score_type column of the Identified
+      peptides table.
+
+      Note: every peptide here already passed the FDR filter of the run, so no pass line is drawn and none
+      of the bars is a rejected hit.
+    layout: {x: 0, y: 6, w: 8, h: 4}
+  - component_type: table
+    workflow_tag: mhcquant
+    data_collection_tag: openms_comet_psms
+    use: openms/comet_psms
+    row_selection_enabled: true
+    row_selection_column: run_id
+    section: Search table
+    tag: mq-id-table-comet
+    index: id-table-comet
+    title: Comet search yield per raw file
+    description: >-
+      How productive was the search of each raw file, before rescoring? One row per raw file: spectra
+      searched, target and decoy matches, PSMs at 1% and 5% FDR, the identification rate, the median Xcorr
+      of targets and of decoys, and the median precursor mass error.
+
+      How to read: a raw file with few PSMs at 1% FDR next to its peers has an acquisition or search-space
+      problem, not a rescoring one. A target Xcorr median clearly above the decoy median is a clean
+      separation, and a median mass error far from zero ppm points at calibration.
+
+      Note: the FDR is estimated on the raw Comet Xcorr by target-decoy competition, so the counts are
+      lower than the rescored peptides. The 1% and 5% levels are reporting levels of this table, not run
+      settings.
+
+      Source: Elias and Gygi 2007, Nat Methods, doi:10.1038/nmeth1019.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+- title: Physico-chemical checks
+  subtitle: Do the identified peptides elute and ionise as peptides should?
+  tab_group: Search
+  tab_order: 4
+  tab_icon: mdi:waves
+  tab_icon_color: lime
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Precursor filters
+    icon: mdi:filter-variant
+    color: lime
+    description: Narrow by precursor charge or retention-time window
+  grid_sections:
+  - name: Accuracy at a glance
+    icon: mdi:counter
+    color: lime
+    description: Retention-time and mass accuracy, spectrum agreement and charge
+  - name: Chromatography
+    icon: mdi:chart-scatter-plot
+    color: lime
+    description: Observed against predicted retention time; pick a point to read the peptide
+  - name: Hydropathy and charge
+    icon: mdi:chart-scatter-plot
+    color: lime
+    description: Retention time against hydropathy, and precursor m/z over the gradient
+  - name: Fragment ions
+    icon: mdi:file-document-outline
+    color: gray
+    description: Matched fragment ions and their mass error, per peptide
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      True identifications elute where [DeepLC](https://github.com/compomics/DeepLC)
+      predicts, follow hydrophobicity and sit within the instrument's mass accuracy.
+      Outliers on these plots are the identifications to question first: pick a point on
+      the retention-time plot to read its evidence beside it.
+    tag: mq-phys-intro
+    index: phys-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: interactive
+    workflow_tag: mhcquant
+    data_collection_tag: mhcquant_peptides
+    interactive_component_type: MultiSelect
+    column_name: charge_state
+    column_type: object
+    display:
+      icon_name: mdi:flash
+      custom_color: lime
+    section: Precursor filters
+    group: Precursors
+    tag: mq-phys-filter-charge
+    index: phys-charge-filter
+    title: Precursor charge
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: mhcquant
+    data_collection_tag: mhcquant_peptides
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: rt_min
+    column_type: float64
+    display:
+      icon_name: mdi:clock-outline
+      custom_color: yellow
+    section: Precursor filters
+    group: Precursors
+    tag: mq-phys-filter-rt
+    index: phys-rt-range
+    title: Retention time (min)
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: mhcquant
+    data_collection_tag: mhcquant_sample_summary
+    use: mhcquant/sample_summary
+    aggregation: median
+    column_name: median_abs_rt_error_min
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:clock-outline
+      icon_color: lime
+      caption: median minutes per sample, with its spread
+      decimals: 2
+    section: Accuracy at a glance
+    tag: mq-phys-card-rt-error
+    index: phys-card-rt-error
+    title: Retention-time error
+    description: Median absolute gap between observed and DeepLC-predicted retention time, per sample.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: mhcquant
+    data_collection_tag: openms_comet_psms
+    use: openms/comet_psms
+    aggregation: median
+    column_name: median_mass_error_ppm
+    column_type: float64
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:scale-balance
+      icon_color: orange
+      caption: median ppm per raw file, distribution
+      decimals: 1
+    section: Accuracy at a glance
+    tag: mq-phys-card-precursor-ppm
+    index: phys-card-precursor-ppm
+    title: Precursor mass error
+    description: Median precursor mass error of the Comet matches, in ppm, per raw file.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: mhcquant
+    data_collection_tag: mhcquant_peptides
+    use: mhcquant/peptides
+    aggregation: median
+    column_name: spectrum_correlation
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:chart-bell-curve
+      icon_color: teal
+      caption: median, with its spread
+      decimals: 2
+    section: Accuracy at a glance
+    tag: mq-phys-card-spectrum-r
+    index: phys-card-spectrum-r
+    title: Spectrum correlation
+    description: Median correlation between each peptide's spectrum and the one MS2PIP predicts for it.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: mhcquant
+    data_collection_tag: mhcquant_peptides
+    use: mhcquant/peptides
+    aggregation: count
+    column_name: peptide
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: charge_state
+    display:
+      icon_name: mdi:flash
+      icon_color: grape
+      caption: precursors, by charge
+    section: Accuracy at a glance
+    tag: mq-phys-card-charge
+    index: phys-card-charge
+    title: Precursors
+    description: Accepted peptide precursors, split by their charge state.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    workflow_tag: mhcquant
+    data_collection_tag: mhcquant_peptides
+    use: mhcquant/rt_observed_predicted
+    config:
+      x_title: Predicted retention time (min)
+      y_title: Observed retention time (min)
+      reference_line: diagonal
+      density_threshold: 8000
+      opacity: 0.5
+      marker_size: 5
+      legend_pos: bottom
+      selection_enabled: true
+      selection_column: sequence
+    section: Chromatography
+    tag: mq-phys-av-rt-predicted
+    index: phys-rt-predicted
+    title: Observed against predicted retention time
+    description: >-
+      Does each identified peptide elute when its sequence says it should? Each point is one accepted
+      peptide precursor, with DeepLC's predicted retention time on x and the observed one on y, coloured
+      by sample.
+
+      How to read: points on the diagonal elute as predicted. Points far off it are identifications the
+      chromatography does not support, so check them first; a whole sample shifted away from the diagonal
+      points at a gradient difference. Click a point to read the peptide in the record card next to it.
+
+      Lines and annotations: the dashed line labelled x = y is the identity diagonal over the range both
+      axes share. It is a geometric reference: no tolerance band is drawn and no retention-time cut-off is
+      applied.
+
+      Source: DeepLC, Bouwmeester et al. 2021, Nat Methods, doi:10.1038/s41592-021-01301-5.
+    layout: {x: 0, y: 0, w: 5, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: mhcquant
+    data_collection_tag: mhcquant_peptides
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      linked_component: mq-phys-av-rt-predicted
+      id_col: sequence
+      title_col: peptide
+      selection_source: scatter_selection
+      sections:
+        Peptide: [sequence, peptide, sample, length_class, charge_state]
+        Chromatography: [rt_min, predicted_rt_min, rt_error_min, gravy]
+        Evidence: [score, score_type, psms, spectrum_correlation, fragment_error_ppm]
+        Source: [protein, protein_entry, n_proteins]
+      link_templates:
+        protein: https://www.uniprot.org/uniprotkb/{value}
+    section: Chromatography
+    tag: mq-phys-av-rt-record
+    index: phys-rt-record
+    title: Picked peptide
+    description: >-
+      What is the peptide picked on the retention-time plot? A card with its sequence and sample, its
+      retention-time evidence, its search evidence and its source protein.
+
+      How to read: weigh the score and PSM support against the gap between observed and predicted
+      retention time; a large gap on a weakly supported peptide is a doubtful identification. The protein
+      accession links to UniProt.
+
+      Note: the card stays empty until a point is picked on the plot.
+    layout: {x: 5, y: 0, w: 3, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: mhcquant
+    data_collection_tag: mhcquant_peptides
+    use: mhcquant/rt_hydropathy
+    config:
+      x_title: Hydropathy (GRAVY)
+      y_title: Observed retention time (min)
+      density_threshold: 8000
+      opacity: 0.5
+      marker_size: 5
+      legend_pos: bottom
+      selection_enabled: true
+      selection_column: sequence
+    section: Hydropathy and charge
+    tag: mq-phys-av-rt-gravy
+    index: phys-rt-gravy
+    title: Retention time against hydropathy
+    description: >-
+      Does retention time follow hydrophobicity? Each point is one accepted peptide precursor, with the
+      Kyte-Doolittle hydropathy of its sequence (GRAVY, the mean over its residues) on x and the observed
+      retention time on y, coloured by length.
+
+      How to read: on reversed-phase chromatography hydrophobic peptides elute later, so the cloud should
+      rise from left to right. A cloud that tilts differently from its peers, or is flat, points at a
+      gradient problem. Click a point to read the peptide.
+
+      Source: Kyte and Doolittle 1982, J Mol Biol, doi:10.1016/0022-2836(82)90515-0.
+
+      Note: no line is drawn, and the hydropathy is computed on the unmodified sequence, so modifications
+      are ignored. It is a trend, not a prediction; the prediction is the observed against predicted plot.
+    layout: {x: 0, y: 0, w: 4, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: mhcquant
+    data_collection_tag: mhcquant_peptides
+    use: mhcquant/mz_retention
+    config:
+      x_title: Observed retention time (min)
+      y_title: Precursor m/z
+      density_threshold: 8000
+      opacity: 0.5
+      marker_size: 5
+      legend_pos: bottom
+      selection_enabled: true
+      selection_column: sequence
+    section: Hydropathy and charge
+    tag: mq-phys-av-mz-rt
+    index: phys-mz-rt
+    title: Precursor m/z over the gradient, by charge
+    description: >-
+      Where do the precursors fall over the gradient? Each point is one accepted peptide precursor, with
+      its observed retention time on x and its precursor m/z on y, coloured by charge state.
+
+      How to read: each charge state forms its own band. Crowding at one end of the gradient shows where
+      the acquisition saturated, and an empty stretch is a part of the gradient that identified nothing.
+      Click a point to read the peptide.
+    layout: {x: 4, y: 0, w: 4, h: 6}
+  # The fragment-ion annotation is optional (--annotate_ions): its cards stay
+  # out of the KPI strip so a run without it keeps four cards there.
+  - component_type: card
+    workflow_tag: mhcquant
+    data_collection_tag: mhcquant_fragment_ions
+    use: mhcquant/fragment_ions
+    aggregation: median
+    column_name: fragment_error_ppm
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:scale-balance
+      icon_color: pink
+      caption: median ppm, with its spread
+      decimals: 1
+    section: Fragment ions
+    tag: mq-phys-card-fragment-ppm
+    index: phys-card-fragment-ppm
+    title: Fragment mass error
+    description: Median mass error of the matched fragment ions, per peptide, in ppm.
+    layout: {x: 0, y: 0, w: 4, h: 2}
+  - component_type: card
+    workflow_tag: mhcquant
+    data_collection_tag: mhcquant_fragment_ions
+    use: mhcquant/fragment_ions
+    aggregation: median
+    column_name: fragment_ions
+    column_type: int64
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:chart-histogram
+      icon_color: indigo
+      caption: median per peptide, with its distribution
+      decimals: 0
+    section: Fragment ions
+    tag: mq-phys-card-fragment-ions
+    index: phys-card-fragment-ions
+    title: Matched fragment ions
+    description: b, y and other ions matched in each peptide's spectrum.
+    layout: {x: 4, y: 0, w: 4, h: 2}
+  - component_type: table
+    workflow_tag: mhcquant
+    data_collection_tag: mhcquant_fragment_ions
+    use: mhcquant/fragment_ions
+    row_selection_enabled: true
+    row_selection_column: peptide
+    section: Fragment ions
+    tag: mq-phys-table-fragments
+    index: phys-table-fragments
+    title: Matched fragment ions per peptide
+    description: >-
+      How well is each spectrum explained? One row per sample and peptidoform: the number of matched
+      fragment ions (b, y and other series) and their median absolute mass error in ppm.
+
+      How to read: few matched ions, or a large error, mark an identification resting on a handful of
+      peaks. Sort by the error to find the spectra worth opening first.
+
+      Note: the table is only filled when the run sets --annotate_ions, the pipeline's ion annotation
+      option.
+
+      Source: nf-core/mhcquant 3.3.0 parameters, https://nf-co.re/mhcquant/3.3.0/parameters.
+    layout: {x: 0, y: 2, w: 8, h: 6}
+# ============================================================================
+# Immunopeptidome
+# ============================================================================
+- title: MHC signature
+  subtitle: Which MHC class do the peptide lengths and anchor motifs point to?
+  tab_group: Immunopeptidome
+  tab_order: 5
+  tab_icon: mdi:ruler
+  tab_icon_color: violet
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Signature filters
+    icon: mdi:filter-variant
+    color: violet
+    description: Restrict the profile, the composition and the motifs to chosen lengths
+  grid_sections:
+  - name: Signature at a glance
+    icon: mdi:counter
+    color: violet
+    description: The length mode and the anchor residues of the peptides
+  - name: Length signature
+    icon: mdi:ruler
+    color: violet
+    description: How peptide lengths, charges and modifications spread in each sample
+  - name: Anchor motifs
+    icon: mdi:dna
+    color: violet
+    description: Amino-acid frequency at each position, per sample and length
+  - name: Length table
+    icon: mdi:table
+    color: gray
+    description: Length counts behind the profile
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      mhcquant's [peptide tables](https://nf-co.re/mhcquant/3.3.0/docs/output) give each
+      sample's length profile and anchor motifs. Class I ligands peak sharply at 9 residues
+      within 8 to 12, class II ligands spread over 13 to 25. A flat or shifted profile points
+      at co-purified peptides or a length filter set too wide; pick a length on the left to
+      read one motif at a time.
+    tag: mq-sig-intro
+    index: sig-intro
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: interactive
+    workflow_tag: mhcquant
+    data_collection_tag: mhcquant_peptides
+    interactive_component_type: MultiSelect
+    column_name: length_class
+    column_type: object
+    display:
+      icon_name: mdi:ruler
+      custom_color: pink
+    section: Signature filters
+    group: Peptides
+    tag: mq-sig-filter-length
+    index: sig-length-filter
+    title: Peptide length
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: mhcquant
+    data_collection_tag: mhcquant_peptides
+    interactive_component_type: MultiSelect
+    column_name: modification_state
+    column_type: object
+    display:
+      icon_name: mdi:tag-outline
+      custom_color: orange
+    section: Signature filters
+    group: Peptides
+    tag: mq-sig-filter-modification
+    index: sig-modification-filter
+    title: Modification
+    layout: {x: 0, y: 3, w: 1, h: 2}
+  - component_type: card
+    workflow_tag: mhcquant
+    data_collection_tag: mhcquant_sample_summary
+    use: mhcquant/sample_summary
+    aggregation: median
+    column_name: ninemer_fraction
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:star-outline
+      icon_color: violet
+      caption: median per sample, with its spread
+      format: percent
+    section: Signature at a glance
+    tag: mq-sig-card-ninemer
+    index: sig-card-ninemer
+    title: 9-mer share
+    description: Share of each sample's distinct sequences that are 9 residues long, the class I mode.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: mhcquant
+    data_collection_tag: mhcquant_peptides
+    use: mhcquant/peptides
+    aggregation: median
+    column_name: length
+    column_type: int64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:ruler
+      icon_color: blue
+      caption: residues per peptide, with their spread
+      decimals: 0
+    section: Signature at a glance
+    tag: mq-sig-card-median-length
+    index: sig-card-median-length
+    title: Median length
+    description: Median length of the identified peptides, in residues.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: mhcquant
+    data_collection_tag: mhcquant_peptides
+    use: mhcquant/peptides
+    aggregation: nunique
+    column_name: sequence
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: anchor_p2
+    top_n_count: 5
+    display:
+      icon_name: mdi:target-arrow
+      icon_color: pink
+      caption: sequences by their P2 residue
+    section: Signature at a glance
+    tag: mq-sig-card-p2
+    index: sig-card-p2
+    title: P2 anchor
+    description: Distinct sequences ranked by the residue at position 2, a class I anchor.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: mhcquant
+    data_collection_tag: mhcquant_peptides
+    use: mhcquant/peptides
+    aggregation: nunique
+    column_name: sequence
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: anchor_c_term
+    top_n_count: 5
+    display:
+      icon_name: mdi:ray-end
+      icon_color: teal
+      caption: sequences by their C-terminal residue
+    section: Signature at a glance
+    tag: mq-sig-card-cterm
+    index: sig-card-cterm
+    title: C-terminal anchor
+    description: Distinct sequences ranked by their last residue, the other class I anchor.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    workflow_tag: mhcquant
+    data_collection_tag: mhcquant_length_distribution
+    use: mhcquant/length_profile
+    config:
+      x_title: Peptide length (residues)
+      y_title: Share of the sample's peptides
+      shaded_bands:
+      - [8, 12, Class I range]
+      - [13, 25, Class II range]
+      legend_pos: bottom
+    section: Length signature
+    tag: mq-sig-av-length-profile
+    index: sig-length-profile
+    title: Peptide length distribution per sample
+    description: >-
+      Which MHC class do the peptide lengths point to? One line per sample: the share of its distinct
+      sequences at each length.
+
+      How to read: a sharp peak at 9 residues inside the class I band is the class I signature. A broad
+      shoulder of longer peptides, inside the class II band, marks class II or contamination by peptides
+      that were not presented. Read the anchor motifs below to see which alleles the samples present.
+
+      Lines and annotations: the two shaded bands mark the class I range, 8 to 12 residues, and the class
+      II range, 13 to 25 residues, each labelled above the plot. They are published length ranges of
+      eluted ligands, not cut-offs, and nothing is filtered by them.
+
+      Sources: class I, Gfeller et al. 2018, J Immunol 201:3705, doi:10.4049/jimmunol.1800914; class II,
+      Chicz et al. 1992, Nature 358:764, doi:10.1038/358764a0.
+
+      Note: nf-core/mhcquant keeps peptides of 8 to 12 residues by default (peptide_min_length 8,
+      peptide_max_length 12), so a run on defaults holds no class II length peptides; raise the maximum to
+      see them. Ranges vary between alleles (nf-core/mhcquant 3.3.0 parameters,
+      https://nf-co.re/mhcquant/3.3.0/parameters).
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: mhcquant
+    data_collection_tag: mhcquant_peptide_composition
+    use: mhcquant/composition_bars
+    config:
+      default_rank: Peptide length
+      normalise_to_one: true
+      sample_sort: input
+      sort_by: abundance
+      top_n: 8
+    section: Length signature
+    tag: mq-sig-av-composition
+    index: sig-composition
+    title: Peptide composition per sample
+    description: >-
+      How is each sample's peptide set composed? One stacked bar per sample, normalised to 100%, splitting
+      its distinct peptidoforms by peptide length, by precursor charge or by modification state; the
+      controls switch between the three.
+
+      How to read: compare the splits between samples. A sample with a different mix of lengths or charges
+      from its peers was loaded or eluted differently, and a high modified share can be biology or sample
+      handling.
+
+      Lines and annotations: the grey segment labelled Other lumps the categories beyond the eight largest
+      of the view. No threshold is drawn.
+    layout: {x: 0, y: 6, w: 8, h: 5}
+  - component_type: advanced_viz
+    workflow_tag: mhcquant
+    data_collection_tag: mhcquant_motif_matrix
+    use: mhcquant/motif_heatmap
+    config:
+      index_column: row_id
+      # The residues only: the matrix also carries `peptides`, a count in the
+      # thousands that would push every frequency to the bottom of the scale.
+      value_columns: [A, C, D, E, F, G, H, I, K, L, M, N, P, Q, R, S, T, V, W, Y]
+      row_annotation_cols: [length_class]
+      cluster_rows: false
+      cluster_cols: true
+      cluster_method: ward
+      colorscale: Blues
+    section: Anchor motifs
+    tag: mq-sig-av-motif
+    index: sig-motif
+    title: Amino-acid frequency by peptide position
+    description: >-
+      Which residues anchor the presented peptides? Each row is one sample and peptide length at one
+      position (P1, P2 and so on), each column an amino acid, and the colour is how often that residue
+      sits at that position among the distinct sequences.
+
+      How to read: anchor positions stand out as columns dominated by a few residues, while middle
+      positions stay close to background; for class I 9-mers these are position 2 and the C-terminus. A
+      donor with several alleles shows a mixture of motifs, so compare with the length profile above.
+
+      Lines and annotations: the Blues colour scale runs from low to high frequency, the columns are
+      clustered (Ward linkage) so residues with similar profiles sit together, and the side bar marks each
+      row's length class. No cut-off is drawn.
+
+      Note: lengths supported by fewer than 20 distinct sequences in a sample are left out, a
+      data-sufficiency floor fixed in the recipe, because a position frequency over a handful of peptides
+      is not a motif.
+    layout: {x: 0, y: 0, w: 8, h: 5}
+  - component_type: table
+    workflow_tag: mhcquant
+    data_collection_tag: mhcquant_length_distribution
+    use: mhcquant/length_distribution
+    section: Length table
+    tag: mq-sig-table-length
+    index: sig-table-length
+    title: Peptides per length and sample
+    description: >-
+      How many peptides sit at each length? One row per sample and length: the distinct sequences as a
+      count and as the share of the sample.
+
+      How to read: look for the length with the largest share in each sample; a class I sample has a clear
+      mode at 9 residues. Filter on length class to compare one length across samples.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+- title: Peptides and proteins
+  subtitle: Which peptides do conditions share, and which proteins do they come from?
+  tab_group: Immunopeptidome
+  tab_order: 6
+  tab_icon: mdi:relation-many-to-many
+  tab_icon_color: grape
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Peptide filters
+    icon: mdi:filter-variant
+    color: grape
+    description: Narrow by condition sharing or by how many peptides a protein gives
+  grid_sections:
+  - name: Peptides at a glance
+    icon: mdi:counter
+    color: grape
+    description: Distinct peptides, their sharing and the proteins they come from
+  - name: Sharing between conditions
+    icon: mdi:set-merge
+    color: grape
+    description: Peptides common to several conditions or private to one
+  - name: Source proteins
+    icon: mdi:chart-scatter-plot
+    color: grape
+    description: Proteins that give the most peptides to presentation; click one to select it
+  - name: Peptide detail
+    icon: mdi:file-document-outline
+    color: gray
+    description: Pick a peptide in the table to read its record
+    collapsed: true
+  - name: Protein detail
+    icon: mdi:file-document-outline
+    color: gray
+    description: Pick a protein in the table to read its record
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      Every distinct sequence by the conditions of the samplesheet it was identified in,
+      and every source protein ([UniProt](https://www.uniprot.org) accession) by the
+      peptides it gives. Peptides private to one condition
+      are the candidates for condition-specific presentation; check their support in the
+      peptide record before reading them as biology.
+    tag: mq-pep-intro
+    index: pep-intro
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: interactive
+    workflow_tag: mhcquant
+    data_collection_tag: peptide_condition_sharing
+    interactive_component_type: MultiSelect
+    column_name: sharing
+    column_type: object
+    display:
+      icon_name: mdi:set-merge
+      custom_color: grape
+    section: Peptide filters
+    group: Peptides
+    tag: mq-pep-filter-sharing
+    index: pep-sharing-filter
+    title: Condition sharing
+    layout: {x: 0, y: 0, w: 1, h: 2}
+  - component_type: interactive
+    workflow_tag: mhcquant
+    data_collection_tag: mhcquant_source_proteins
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: peptides
+    column_type: int64
+    display:
+      icon_name: mdi:counter
+      custom_color: indigo
+    section: Peptide filters
+    group: Peptides
+    tag: mq-pep-filter-protein-peptides
+    index: pep-protein-peptides-range
+    title: Peptides per protein
+    layout: {x: 0, y: 2, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: mhcquant
+    data_collection_tag: peptide_condition_sharing
+    aggregation: count
+    column_name: sequence
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: sharing
+    display:
+      icon_name: mdi:dna
+      icon_color: grape
+      caption: sequences, by condition sharing
+    section: Peptides at a glance
+    tag: mq-pep-card-distinct
+    index: pep-card-distinct
+    title: Distinct peptides
+    description: Distinct sequences, split by whether every condition, several or only one presents them.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: mhcquant
+    data_collection_tag: mhcquant_source_proteins
+    use: mhcquant/source_proteins
+    aggregation: median
+    column_name: peptides
+    column_type: int64
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:chart-bar
+      icon_color: indigo
+      caption: median per protein, with its distribution
+      decimals: 0
+    section: Peptides at a glance
+    tag: mq-pep-card-per-protein
+    index: pep-card-per-protein
+    title: Peptides per protein
+    description: Distinct peptides each source protein gives, per protein and sample.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: mhcquant
+    data_collection_tag: mhcquant_source_proteins
+    use: mhcquant/source_proteins
+    aggregation: median
+    column_name: log10_intensity
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:chart-bell-curve
+      icon_color: orange
+      caption: median log10, with its spread
+      decimals: 1
+    section: Peptides at a glance
+    tag: mq-pep-card-intensity
+    index: pep-card-intensity
+    title: Protein intensity
+    description: Summed log10 intensity of each protein's peptides, per protein and sample.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: mhcquant
+    data_collection_tag: mhcquant_peptides
+    use: mhcquant/peptides
+    aggregation: median
+    column_name: n_proteins
+    column_type: int64
+    secondary_layout: threshold
+    threshold_value: 1
+    threshold_direction: max
+    display:
+      icon_name: mdi:relation-many-to-many
+      icon_color: cyan
+      caption: median per precursor, one protein passes
+      decimals: 0
+    section: Peptides at a glance
+    tag: mq-pep-card-multimapping
+    index: pep-card-multimapping
+    title: Proteins per peptide
+    description: Source proteins a peptide sequence maps to; above 1, its origin is ambiguous.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    workflow_tag: mhcquant
+    data_collection_tag: peptide_condition_sharing
+    viz_kind: upset_plot
+    config:
+      viz_kind: upset_plot
+      # One set per samplesheet condition. The two count columns can be all
+      # ones on a small run, which would make them look like sets.
+      set_columns_pattern: ^(?!samples_detected$|conditions_detected$)
+      sort_by: cardinality
+      show_values: true
+    section: Sharing between conditions
+    tag: mq-pep-av-sharing-upset
+    index: pep-sharing-upset
+    title: Peptides per condition combination
+    description: >-
+      Which peptides do the conditions share? Each bar counts the distinct sequences identified in exactly
+      the combination of conditions marked by the dots under it, with one set per samplesheet condition.
+
+      How to read: when the conditions resemble each other the first bar is the shared core. Tall
+      single-condition bars are peptides private to that condition, which is the result of interest when
+      the conditions differ by design.
+
+      Note: a peptide missing from a condition was not identified there; it may still be present below the
+      identification threshold.
+    layout: {x: 0, y: 0, w: 8, h: 5}
+  # Labels name the five proteins giving the most peptides, by their entry
+  # name, so the Overview's highlight stays readable.
+  - component_type: advanced_viz
+    workflow_tag: mhcquant
+    data_collection_tag: mhcquant_source_proteins
+    use: mhcquant/protein_coverage
+    config:
+      x_title: Distinct peptides from the protein
+      y_title: log10 summed peptide intensity
+      log_x: true
+      top_n_labels: 3
+      density_threshold: 8000
+      legend_pos: bottom
+      selection_enabled: true
+      selection_column: protein
+    section: Source proteins
+    tag: mq-pep-av-protein-scatter
+    index: pep-protein-scatter
+    title: Peptides per source protein against their intensity
+    description: >-
+      Which proteins feed the presented peptides most? Each point is one source protein in one sample,
+      with the number of distinct peptides from it on x (log scale) and the log10 of their summed
+      intensity on y, sized by PSMs and coloured by sample.
+
+      How to read: proteins far to the right are tiled by many peptides. Points high and to the right are
+      both well sampled and abundant; a protein with a single peptide is sampled once, which may be
+      chance. Click a point to select the protein and open its record.
+
+      Lines and annotations: the three points with the most PSMs carry a text label, the protein's entry
+      name. No reference line is drawn, and labels are dropped when a very dense cloud switches to a
+      density view.
+
+      Note: a peptide that maps to several proteins is credited to each of them, so related proteins can
+      look better sampled than they are.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: mhcquant
+    data_collection_tag: mhcquant_peptides
+    use: mhcquant/peptides
+    row_selection_enabled: true
+    row_selection_column: sequence
+    section: Peptide detail
+    tag: mq-pep-table-peptides
+    index: pep-table-peptides
+    title: Identified peptides
+    description: >-
+      Which peptides were identified? One row per sample and precursor (peptidoform and charge) that
+      passed the FDR filter, with its score, PSM support, retention time, charge and source proteins.
+
+      How to read: sort by score or PSMs for the best supported peptides, or filter on length class to
+      isolate one length. Select a row to open its record next to the table.
+    layout: {x: 0, y: 0, w: 5, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: mhcquant
+    data_collection_tag: mhcquant_peptides
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      linked_component: mq-pep-table-peptides
+      id_col: sequence
+      title_col: peptide
+      selection_source: table_selection
+      sections:
+        Peptide: [sequence, peptide, sample, length_class, modification_state, charge_state]
+        Evidence: [score, score_type, psms, spectrum_correlation, fragment_ions, fragment_error_ppm]
+        Chromatography: [rt_min, predicted_rt_min, rt_error_min, mz, neutral_mass, gravy]
+        Source: [protein, protein_entry, proteins, n_proteins, aa_before, aa_after, start]
+        Quantification: [log10_intensity, replicates_quantified, replicates_total]
+      link_templates:
+        protein: https://www.uniprot.org/uniprotkb/{value}
+    section: Peptide detail
+    tag: mq-pep-av-peptide-record
+    index: pep-peptide-record
+    title: Peptide record
+    description: >-
+      What is known about the selected peptide? One card per sample and precursor it was identified as,
+      with its sequence, evidence, chromatography, source protein and quantification.
+
+      How to read: weigh the evidence (score, PSMs, spectrum correlation, fragment error) against the
+      retention-time gap. The replicates quantified, out of the replicates the sample has, say how
+      reproducible its intensity is. The protein accession links to UniProt.
+
+      Note: the fragment-ion fields are filled only when the run sets --annotate_ions, and the
+      quantification fields only with --quantify.
+    layout: {x: 5, y: 0, w: 3, h: 6}
+  - component_type: table
+    workflow_tag: mhcquant
+    data_collection_tag: mhcquant_source_proteins
+    use: mhcquant/source_proteins
+    row_selection_enabled: true
+    row_selection_column: protein
+    section: Protein detail
+    tag: mq-pep-table-proteins
+    index: pep-table-proteins
+    title: Source proteins
+    description: >-
+      Which proteins do the peptides come from? One row per sample and source protein: distinct peptides,
+      shared peptides, PSMs, best score and summed intensity.
+
+      How to read: sort by peptides to see the proteins the sample presents most. A protein whose peptides
+      are mostly shared is a weaker call than one with many private peptides. Select a row to open its
+      record.
+
+      Note: shared peptides are credited to every protein they map to.
+    layout: {x: 0, y: 0, w: 5, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: mhcquant
+    data_collection_tag: mhcquant_source_proteins
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      linked_component: mq-pep-table-proteins
+      id_col: protein
+      title_col: protein_entry
+      selection_source: any
+      sections:
+        Protein: [protein, protein_entry, sample]
+        Presentation: [peptides, shared_peptides, psms, best_score, log10_intensity]
+        Peptides: [peptide_list]
+      link_templates:
+        protein: https://www.uniprot.org/uniprotkb/{value}
+    section: Protein detail
+    tag: mq-pep-av-protein-record
+    index: pep-protein-record
+    title: Protein record
+    description: >-
+      What does the selected protein contribute? One card per sample it was seen in, with its peptide
+      count, shared peptides, PSMs, best score, summed intensity and the list of its peptides.
+
+      How to read: a protein with many distinct peptides and few shared ones is solidly supported as a
+      source, while one whose peptides are mostly shared may stand in for a family member. The accession
+      links to UniProt.
+    layout: {x: 5, y: 0, w: 3, h: 6}
