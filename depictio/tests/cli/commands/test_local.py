@@ -614,13 +614,10 @@ def test_mongod_puts_no_unix_socket_in_tmp():
     assert '"--nounixsocket"' in source
 
 
-def test_seaweedfs_sockets_are_per_user_with_preinstalled_services_only(tmp_path, monkeypatch):
-    cmd = ["weed", "mini", "-s3.port=9123", "-filer.port=8899"]
-    assert local_stack.seaweedfs_socket_flags(cmd) == []
-
-    _services_prefix(tmp_path, monkeypatch)
+def test_seaweedfs_sockets_are_per_user():
+    """A shared /tmp: another user's stale socket must not be ours."""
     uid = os.getuid()
-    assert local_stack.seaweedfs_socket_flags(cmd) == [
+    assert local_stack.seaweedfs_socket_flags(9123, 8899) == [
         f"-s3.localSocket=/tmp/seaweedfs-u{uid}-s3-9123.sock",
         f"-filer.localSocket=/tmp/seaweedfs-u{uid}-filer-8899.sock",
     ]

@@ -416,7 +416,7 @@ jobs:
           fi
           curl -fsSL https://get.nextflow.io | bash
           # `image` overrides the release tag the module pins, not published yet.
-          ./nextflow run "$FIXTURES/module_artifact.nf" -profile docker \
+          ./nextflow run "$FIXTURES/module_iris.nf" -profile docker \
             --iris "$IRIS_CSV" --outdir "$WORK/results" --image depictio-allinone:ci
           ARTIFACT="$WORK/results/depictio/iris_depictio"
           jq . results/depictio/iris.depictio.json
@@ -480,7 +480,7 @@ jobs:
           if [ "$(docker inspect --format '{{.State.Health.Status}}' instance)" != healthy ]; then
             echo "::error::the instance never started"; docker logs instance || true; exit 1
           fi
-          "$RUNNER_TEMP/module/nextflow" run "$FIXTURES/module_cli_config.nf" -profile docker,hostnet \
+          "$RUNNER_TEMP/module/nextflow" run "$FIXTURES/module_iris.nf" -profile docker,hostnet \
             --iris "$IRIS_CSV" --cli_config "$WORK/instance/cli/admin_config.yaml" \
             --outdir "$WORK/results" --image depictio-allinone:ci
           jq . results/depictio/iris.depictio.json
@@ -762,7 +762,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir iris && cd iris
-          nextflow run "$GITHUB_WORKSPACE/docker-images/allinone/ci/module_artifact.nf" -profile apptainer \
+          nextflow run "$GITHUB_WORKSPACE/docker-images/allinone/ci/module_iris.nf" -profile apptainer \
             --iris "$IRIS_CSV" --outdir "$PWD/results" --image "$RUNNER_TEMP/depictio-allinone.sif"
           test "$(jq -r .status results/depictio/iris.depictio.json)" = success
           test -f results/depictio/iris_depictio/.depictio-local-home

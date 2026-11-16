@@ -32,15 +32,17 @@ pipeline() {
     # configs written for the new (airrflow 5.1.2). Releases written before it
     # do not parse under it (smrnaseq 2.4.1, viralrecon 3.0.0), so a parse
     # error, and only a parse error, retries with the old one.
-    if ! nextflow run "$PWD/nfcore-pipeline" -profile test,docker \
-        --outdir "$PWD/nfcore-results" -work-dir "$PWD/nfcore-work" "$@" 2>&1 | tee nfcore-run.log; then
-        # pipefail: the status is Nextflow's, not tee's.
+    run_pipeline() {
+        nextflow run "$PWD/nfcore-pipeline" -profile test,docker \
+            --outdir "$PWD/nfcore-results" -work-dir "$PWD/nfcore-work" "$@"
+    }
+    # pipefail: the status is Nextflow's, not tee's.
+    if ! run_pipeline "$@" 2>&1 | tee nfcore-run.log; then
         grep -qE "Config parsing failed|Unable to parse config|could not be parsed|Statements cannot be mixed" nfcore-run.log \
             || fail "nf-core/$name failed"
         echo "::warning::nf-core/$name $version does not parse under Nextflow's strict syntax; retrying with NXF_SYNTAX_PARSER=v1"
         rm -rf nfcore-results nfcore-work .nextflow*
-        NXF_SYNTAX_PARSER=v1 nextflow run "$PWD/nfcore-pipeline" -profile test,docker \
-            --outdir "$PWD/nfcore-results" -work-dir "$PWD/nfcore-work" "$@"
+        NXF_SYNTAX_PARSER=v1 run_pipeline "$@"
     fi
     # The pipeline's work directory is GBs the rest of the job does not need.
     rm -rf nfcore-work

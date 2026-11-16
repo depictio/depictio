@@ -336,7 +336,7 @@ def ensure_binaries(paths: Paths, log=print) -> None:
         check_preinstalled_services(prefix)
         return
     try:
-        from rattler import Platform, VirtualPackage, install, solve
+        from rattler import VirtualPackage, install, solve
     except ImportError as exc:
         raise LocalStackError(
             "py-rattler is required to fetch MongoDB, Redis and SeaweedFS. "
@@ -346,7 +346,7 @@ def ensure_binaries(paths: Paths, log=print) -> None:
     # The platform is part of the marker: a $HOME shared between linux-64 and
     # linux-aarch64 hosts, or a Python switched between Rosetta and native on a
     # Mac, must not reuse binaries built for the other architecture.
-    wanted = {"specs": CONDA_SPECS, "platform": str(Platform.current())}
+    wanted = {"specs": CONDA_SPECS, "platform": conda_platform()}
     marker = paths.env / SPECS_MARKER
     if not marker.exists():
         logger.debug("No native binaries recorded in %s: installing %s", marker, wanted)
@@ -600,24 +600,18 @@ def pick_ports(api_port: int | None, saved: dict[str, int] | None = None) -> dic
     return ports
 
 
-def seaweedfs_socket_flags(cmd: Sequence[str]) -> list[str]:
-    """Per-user names for the unix sockets weed puts in /tmp (it ignores TMPDIR),
-    added to the `weed mini` command ``cmd`` with preinstalled services only (the
-    image, a shared install).
+def seaweedfs_socket_flags(s3_port: int, filer_port: int) -> list[str]:
+    """Per-user names for the unix sockets weed puts in /tmp (it ignores TMPDIR).
 
-    Under Apptainer without --contain, /tmp is the node's, shared by its users. A
-    /tmp/seaweedfs-s3-9000.sock left by another user's SeaweedFS makes ours die at
-    startup ("Failed to remove ... operation not permitted"). Only the S3 and filer
-    sockets can be named.
+    On a shared node (Apptainer without --contain, or a plain host), /tmp is
+    shared by its users. A /tmp/seaweedfs-s3-9000.sock left by another user's
+    SeaweedFS makes ours die at startup ("Failed to remove ... operation not
+    permitted"). Only the S3 and filer sockets can be named.
     """
-    if services_prefix() is None:
-        return []
-    port = next((a.split("=", 1)[1] for a in cmd if a.startswith("-s3.port=")), "9000")
-    filer = next((a.split("=", 1)[1] for a in cmd if a.startswith("-filer.port=")), "8888")
     uid = os.getuid()
     return [
-        f"-s3.localSocket=/tmp/seaweedfs-u{uid}-s3-{port}.sock",
-        f"-filer.localSocket=/tmp/seaweedfs-u{uid}-filer-{filer}.sock",
+        f"-s3.localSocket=/tmp/seaweedfs-u{uid}-s3-{s3_port}.sock",
+        f"-filer.localSocket=/tmp/seaweedfs-u{uid}-filer-{filer_port}.sock",
     ]
 
 
@@ -1149,22 +1143,31 @@ def _start_services(
             "S3_BUCKET": S3_BUCKET,
         }
     )
-    weed = [
-        str(paths.bin("weed")),
-        "mini",
-        f"-dir={paths.home / 's3'}",
-        "-ip=127.0.0.1",
-        "-ip.bind=127.0.0.1",
-        f"-s3.port={ports['s3']}",
-        *seaweedfs_port_flags(set(ports.values())),
-        "-s3.port.iceberg=0",
-        "-s3.port.lance=0",
-        "-admin.ui=false",
-        "-webdav=false",
-        # weed mini reports cluster statistics to seaweedfs.com by default.
-        "-master.telemetry=false",
-    ]
-    start("s3", [*weed, *seaweedfs_socket_flags(weed)], s3_env)
+    port_flags = seaweedfs_port_flags(set(ports.values()))
+    filer_port = next(
+        (f.split("=", 1)[1] for f in port_flags if f.startswith("-filer.port=")),
+        SEAWEEDFS_PORTS["filer.port"],
+    )
+    start(
+        "s3",
+        [
+            str(paths.bin("weed")),
+            "mini",
+            f"-dir={paths.home / 's3'}",
+            "-ip=127.0.0.1",
+            "-ip.bind=127.0.0.1",
+            f"-s3.port={ports['s3']}",
+            *port_flags,
+            *seaweedfs_socket_flags(ports["s3"], filer_port),
+            "-s3.port.iceberg=0",
+            "-s3.port.lance=0",
+            "-admin.ui=false",
+            "-webdav=false",
+            # weed mini reports cluster statistics to seaweedfs.com by default.
+            "-master.telemetry=false",
+        ],
+        s3_env,
+    )
 
     wait_until(
         lambda: _probe_tcp(ports["mongo"]), "MongoDB", 60, procs["mongo"], paths.logs / "mongo.log"
