@@ -32,11 +32,12 @@
  * that matches no rows simply yields a hidden trace — same visible outcome as
  * the server rendering an empty subframe for that group.
  *
- * Trendlines: px's `trendline="ols"` is a 1-predictor OLS, which is
- * closed-form — refit over the (x, y) pairs of the raw trace it was fit
- * against (`on`), drawn as a 2-point segment at [xmin, xmax]. Pairs with a
- * null/NaN on either side are dropped (px fits on the cleaned subframe);
- * fewer than 2 usable points, or zero x-variance, hides the trendline.
+ * Trendlines: every kind px offers that the binder accepted (`ols` with its
+ * options, `lowess`, `rolling`, `expanding`, `ewm`) is refit over the rows
+ * the raw trace it was fit against (`on`) keeps under the mask, by a port of
+ * px's own trendline functions (`./trendline.ts`): one fitted point per
+ * non-missing (x, y) pair, sorted by x, exactly the vertices px draws. Fewer
+ * than 2 usable pairs hides the trendline (px emits it empty).
  *
  * Counting mirrors the server's FigureResponse metadata: `displayed` is the
  * points actually plotted — the sum of rows written across RAW traces
@@ -47,6 +48,7 @@
 
 import type { BindingTable, TraceBinding } from './manifest';
 import { serializeOption } from './engine/filters';
+import { fitTrendline } from './trendline';
 
 export interface RefillInput {
   binding: BindingTable;
@@ -141,50 +143,14 @@ export async function refillFigure(input: RefillInput): Promise<RefillResult> {
       throw new Error(`refill: trendline ${tl.i} source trace ${tl.on} has no x/y binding`);
     }
     const sel = selectionByTrace.get(tl.on) ?? [];
-    const xs = cols[xCol];
-    const ys = cols[yCol];
-
-    // Clean numeric pairs only — px fits OLS on the NaN-dropped subframe.
-    let n = 0;
-    let sx = 0;
-    let sy = 0;
-    let xmin = Number.POSITIVE_INFINITY;
-    let xmax = Number.NEGATIVE_INFINITY;
-    const px: number[] = [];
-    const py: number[] = [];
-    for (const r of sel) {
-      const x = toNumber(xs[r]);
-      const y = toNumber(ys[r]);
-      if (x === null || y === null) continue;
-      px.push(x);
-      py.push(y);
-      sx += x;
-      sy += y;
-      n++;
-      if (x < xmin) xmin = x;
-      if (x > xmax) xmax = x;
-    }
-    if (n < 2) {
+    const fit = fitTrendline(tl.kind ?? 'ols', tl.options ?? {}, cols[xCol], cols[yCol], sel);
+    if (fit === null) {
+      // px leaves the trace empty below 2 usable (x, y) pairs.
       trace.visible = false;
       continue;
     }
-    const xbar = sx / n;
-    const ybar = sy / n;
-    let sxx = 0;
-    let sxy = 0;
-    for (let k = 0; k < n; k++) {
-      sxx += (px[k] - xbar) * (px[k] - xbar);
-      sxy += (px[k] - xbar) * (py[k] - ybar);
-    }
-    if (sxx === 0) {
-      // Vertical/degenerate x — no defined 1-predictor OLS line.
-      trace.visible = false;
-      continue;
-    }
-    const slope = sxy / sxx;
-    const intercept = ybar - slope * xbar;
-    trace.x = [xmin, xmax];
-    trace.y = [intercept + slope * xmin, intercept + slope * xmax];
+    trace.x = fit.x;
+    trace.y = fit.y;
   }
 
   return { figure: { data, layout }, displayed, total };
@@ -265,11 +231,4 @@ function setPath(obj: Record<string, unknown>, path: string, value: unknown): vo
     cur = cur[parts[k]] as Record<string, unknown>;
   }
   cur[parts[parts.length - 1]] = value;
-}
-
-/** Finite number or null (nulls, NaN and non-numerics are unusable for OLS). */
-function toNumber(v: unknown): number | null {
-  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
-  if (typeof v === 'bigint') return Number(v);
-  return null;
 }

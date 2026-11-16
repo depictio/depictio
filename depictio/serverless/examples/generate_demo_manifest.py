@@ -1,4 +1,4 @@
-"""Regenerate the committed demo manifests (penguins, protein structure).
+"""Regenerate the committed demo manifests (penguins, protein, compute, map).
 
 The per-phase demo site (depictio/viewer/scripts/build-demo.mjs) is built by
 JS-only CI jobs, so the producer-B manifest for the penguins demo is committed
@@ -34,6 +34,9 @@ PROTEIN_SPEC = EXAMPLES / "protein.yaml"
 PROTEIN_OUT = OUT.parent / "protein.json"
 COMPUTE_SPEC = EXAMPLES / "compute.yaml"
 COMPUTE_OUT = OUT.parent / "compute.json"
+MAP_SPEC = EXAMPLES / "map.yaml"
+MAP_OUT = OUT.parent / "map.json"
+MAP_DATA = REPO_ROOT / "depictio" / "projects" / "test" / "map_demo" / "sampling_locations.csv"
 SHOWCASE_DATA = REPO_ROOT / "depictio" / "projects" / "init" / "advanced_viz_showcase" / "data"
 
 WF_TAG = "penguin_species_analysis"
@@ -95,6 +98,14 @@ def compute_data_dir(root: Path) -> Path:
     return root
 
 
+def map_data_dir(root: Path) -> Path:
+    """The map example's data dir: the map demo's sampling sites as Parquet."""
+    wf = root / "map_demo"
+    wf.mkdir(parents=True)
+    pl.read_csv(MAP_DATA).write_parquet(wf / "sampling_locations.parquet")
+    return root
+
+
 def main() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         dc_dir = Path(tmp) / WF_TAG
@@ -118,6 +129,11 @@ def main() -> None:
                 load_spec(COMPUTE_SPEC), compute_data_dir(Path(tmp)), python_runtime="off"
             ),
             COMPUTE_OUT,
+        )
+    with tempfile.TemporaryDirectory() as tmp:
+        _write(
+            build_manifest(load_spec(MAP_SPEC), map_data_dir(Path(tmp)), python_runtime="off"),
+            MAP_OUT,
         )
 
 

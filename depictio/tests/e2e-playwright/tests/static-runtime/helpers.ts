@@ -50,6 +50,13 @@ export const GENOME_MANIFEST = join(
   REPO_ROOT,
   "depictio/viewer/demo/manifests/genome.json",
 );
+/** A frozen map that keeps its own basemap (Carto positron) beside a live
+ *  card and filter. Regenerate with
+ *  `depictio/serverless/examples/generate_demo_manifest.py`. */
+export const MAP_MANIFEST = join(
+  REPO_ROOT,
+  "depictio/viewer/demo/manifests/map.json",
+);
 const ADDONS_DIR = join(REPO_ROOT, "depictio/viewer/dist-static/addons");
 
 /** Append the add-ons a manifest names before `</body>` — the producers' rule

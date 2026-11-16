@@ -185,11 +185,25 @@ class TraceBinding(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+#: The px ``trendline`` kinds the runtime refits (``packages/depictio-static-core/src/trendline.ts``).
+TrendlineKind = Literal["ols", "lowess", "rolling", "expanding", "ewm"]
+
+
 class TrendlineBinding(BaseModel):
-    """A trendline trace refit client-side via closed-form 1-predictor OLS."""
+    """A px trendline trace refit client-side over its raw trace's rows.
+
+    ``kind`` and ``options`` are px's ``trendline`` / ``trendline_options``; the
+    binder only emits combinations the runtime ports exactly (anything else
+    freezes the figure), so the runtime treats an unknown option as a contract
+    violation.
+    """
 
     i: int = Field(ge=0, description="Trendline trace index in the scaffold")
     on: int = Field(ge=0, description="Index of the raw-data trace it is fit against")
+    kind: TrendlineKind = Field(default="ols", description="px trendline kind")
+    options: dict[str, Any] = Field(
+        default_factory=dict, description="px trendline_options, verbatim"
+    )
 
     model_config = ConfigDict(extra="forbid")
 
@@ -895,7 +909,11 @@ class BundleManifest(BaseModel):
     )
     allow_network_tiles: bool = Field(
         default=False,
-        description="Permit MapLibre tile fetches (static-dir/remote); single-file freezes maps unless style is white-bg",
+        description=(
+            "Not read: every bundle keeps a map's own basemap, loaded when the reader is "
+            "online (depictio/serverless/maps.py); offline the runtime draws the markers "
+            "on a blank background"
+        ),
     )
     inline_blobs: dict[str, str] = Field(
         default_factory=dict,

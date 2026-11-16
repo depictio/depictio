@@ -9,6 +9,8 @@
  * regenerate the snapshot, then update this mirror.
  */
 
+import type { TrendlineKind } from './trendline';
+
 export const MANIFEST_VERSION = 1;
 
 export type BundleMode = 'single-file' | 'static-dir' | 'remote';
@@ -98,8 +100,12 @@ export interface TraceBinding {
 
 export interface TrendlineBinding {
   i: number;
-  /** Index of the raw-data trace the OLS refit runs against. */
+  /** Index of the raw-data trace the refit runs against. */
   on: number;
+  /** px `trendline` kind; absent on bundles built before non-OLS refits (= 'ols'). */
+  kind?: TrendlineKind;
+  /** px `trendline_options`, verbatim (the binder only admits ones `trendline.ts` ports). */
+  options?: Record<string, unknown>;
 }
 
 export interface BindingTable {
@@ -418,6 +424,7 @@ export interface BundleManifest {
   links: LinksSection;
   /** Absent in pre-phase-4 manifests — read via `limitsOf()` for defaults. */
   limits?: RuntimeLimits;
+  /** Not read: a map keeps its own basemap in every bundle (online), blank offline. */
   allow_network_tiles: boolean;
   /** single-file only: 'dc_<id>' -> base64 Parquet bytes, 'obj_<sha>' -> object bytes. */
   inline_blobs: Record<string, string>;

@@ -370,7 +370,7 @@ const MapRenderer: React.FC<MapRendererProps> = ({
         point?.marker?.opacity ?? region?.marker?.opacity ?? density?.opacity,
         1,
       ),
-      style: typeof mapLayout.style === 'string' ? (mapLayout.style as string) : null,
+      style: styleName(mapLayout.style),
     };
   }, [figure, metadata.size_max]);
 
@@ -857,3 +857,15 @@ function customdataMatches(
 }
 
 export default MapRenderer;
+
+/** A basemap's name: the style string, or the name an inlined style document
+ *  was resolved from (a static bundle inlines Carto's style.json and records
+ *  the name under `metadata['depictio:style']`). */
+function styleName(style: unknown): string | null {
+  if (typeof style === 'string') return style;
+  if (style !== null && typeof style === 'object') {
+    const name = ((style as { metadata?: Record<string, unknown> }).metadata ?? {})['depictio:style'];
+    return typeof name === 'string' ? name : null;
+  }
+  return null;
+}

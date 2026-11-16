@@ -7,7 +7,8 @@
  *   A points (x, y) = (1,2) (2,3) (4,7) (7,10)
  *   x̄ = 3.5, ȳ = 5.5, Sxy = 29, Sxx = 21
  *   slope = 29/21, intercept = 5.5 − 3.5·29/21 = 2/3
- *   line at [xmin, xmax] = [1, 7] → y = [43/21, 31/3]
+ *   one vertex per point, as px draws it: x = [1, 2, 4, 7] →
+ *   y = [43/21, 24/7, 130/21, 31/3]
  *
  * The last suite is contract-integration: it loads the demo penguins bundle
  * manifest and, IF the producer has landed a bindings entry, refills through
@@ -117,10 +118,9 @@ describe('refillFigure — no mask', () => {
     const { figure } = await refill(fixtureBinding(), null);
     const trend = (figure.data as Trace[])[2];
     expect(trend.visible).not.toBe(false);
-    expect(trend.x).toEqual([1, 7]);
-    const [y0, y1] = trend.y as number[];
-    expect(y0).toBeCloseTo(43 / 21, 12);
-    expect(y1).toBeCloseTo(31 / 3, 12);
+    expect(trend.x).toEqual([1, 2, 4, 7]);
+    const ys = trend.y as number[];
+    [43 / 21, 24 / 7, 130 / 21, 31 / 3].forEach((v, k) => expect(ys[k]).toBeCloseTo(v, 12));
   });
 
   it('never touches the layout (verbatim scaffold clone)', async () => {

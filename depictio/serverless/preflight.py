@@ -255,10 +255,15 @@ def classify_component(comp: dict[str, Any]) -> PlannedTier:
             "MultiQC rendering needs the multiqc Python package (producer A)",
         )
     if ctype == "map":
+        from depictio.serverless.maps import MAP_FROZEN_DETAIL, TABLE_ONLY_MAP_TYPES
+
+        if (comp.get("map_type") or "scatter_map") in TABLE_ONLY_MAP_TYPES:
+            return PlannedTier(ComponentTier.FROZEN, TierReason.MAP_TILES, MAP_FROZEN_DETAIL)
         return PlannedTier(
             ComponentTier.OMITTED,
-            TierReason.MAP_TILES,
-            "maps need network tiles; single-file bundles are zero-network",
+            TierReason.UNSUPPORTED,
+            "a choropleth also needs its region geometry (a GeoJSON data collection or "
+            "URL), which the build-from-spec producer does not fetch",
         )
     if ctype == "image":
         return PlannedTier(
