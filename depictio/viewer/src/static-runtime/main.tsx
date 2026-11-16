@@ -130,12 +130,34 @@ const StaticRuntime: React.FC = () => {
   );
 };
 
+/**
+ * The scheme the bundle opens in: the reader's earlier pick in this browser,
+ * else their system's. Resolved here rather than handed to Mantine as `auto`:
+ * every theme-aware piece of the viewer reads `colorScheme === 'dark'`, which
+ * is false for `auto`, so on a dark system the MultiQC logo, the tab icons and
+ * the theme toggle all took their light-page variant (dark ink on a dark
+ * rail). The live app never runs on `auto` either (main.tsx starts from the
+ * stored scheme, else light).
+ */
+function initialColorScheme(): 'light' | 'dark' {
+  try {
+    const stored = localStorage.getItem('mantine-color-scheme-value');
+    if (stored === 'light' || stored === 'dark') return stored;
+  } catch {
+    /* storage blocked: fall through to the system's preference */
+  }
+  return typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-color-scheme: dark)').matches
+    ? 'dark'
+    : 'light';
+}
+
 // The badge provider must sit above every LazyMount/Suspense boundary: one of
 // the ten chrome call sites (AdvancedVizDispatch) lives in a separately
 // lazy-loaded chunk and reads the context after this tree is mounted.
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <MantineProvider theme={depictioTheme} defaultColorScheme="auto">
+    <MantineProvider theme={depictioTheme} defaultColorScheme={initialColorScheme()}>
       <DatesProvider settings={{ locale: 'en', firstDayOfWeek: 1 }}>
         <Notifications position="bottom-right" />
         <StaticBadgeProvider tiers={manifest.tiers as StaticTierMap}>
