@@ -43,7 +43,7 @@ jobs:
       fail-fast: false
       matrix:
         run: ${{ fromJSON(needs.matrix.outputs.runs) }}
-    name: ${{ matrix.run.pipeline }} ${{ matrix.run.version }}
+    name: ${{ matrix.run.pipeline }} ${{ matrix.run.version }} ${{ matrix.run.label }}
     env:
       NXF_VER: 26.10.6
       NXF_ANSI_LOG: "false"
@@ -54,6 +54,9 @@ jobs:
       EXTRA_ARGS: ${{ matrix.run.args }}
       # Older releases (DSL1, Nextflow 23 syntax) pin their own Nextflow.
       MATRIX_NXF_VER: ${{ matrix.run.nxf_ver }}
+      # Another test profile than `test` (one that reaches the outputs a
+      # template reads), and a label telling two runs of one release apart.
+      PROFILE: ${{ matrix.run.profile || 'test' }}
     steps:
       - uses: actions/checkout@v7
 
@@ -81,7 +84,7 @@ jobs:
             "https://github.com/nf-core/$PIPELINE.git" nfcore-pipeline
           run_pipeline() {
             # shellcheck disable=SC2086
-            nextflow run "$PWD/nfcore-pipeline" -profile test,docker \
+            nextflow run "$PWD/nfcore-pipeline" -profile "$PROFILE,docker" \
               --outdir "$PWD/results" -work-dir "$PWD/work" $EXTRA_ARGS
           }
           if ! run_pipeline 2>&1 | tee run.log; then
@@ -153,7 +156,7 @@ jobs:
       - uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: ${{ matrix.run.pipeline }}-${{ matrix.run.version }}-testrun
+          name: ${{ matrix.run.pipeline }}-${{ matrix.run.version }}-testrun${{ matrix.run.label && format('-{0}', matrix.run.label) || '' }}
           path: results
           retention-days: 14
           include-hidden-files: true

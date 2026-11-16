@@ -1,6 +1,6 @@
 [
-  {"pipeline": "eager", "version": "2.5.3", "template": "nf-core/eager/2.4.5", "nxf_ver": "22.10.8"},
-  {"pipeline": "nanoseq", "version": "3.1.0", "template": "nf-core/nanoseq/3.0.0", "nxf_ver": "23.04.5"},
-  {"pipeline": "proteinfamilies", "version": "2.6.0", "template": "nf-core/proteinfamilies/2.5.0"},
-  {"pipeline": "quantms", "version": "1.2.0", "template": "nf-core/quantms/1.1.1", "nxf_ver": "23.04.5"}
+  {"pipeline": "methylseq", "version": "4.2.0", "template": "nf-core/methylseq/2.3.0", "label": "default"},
+  {"pipeline": "methylseq", "version": "4.2.0", "template": "nf-core/methylseq/2.3.0", "label": "qualimap", "args": "--run_qualimap --run_preseq"},
+  {"pipeline": "nanoseq", "version": "3.1.0", "template": "nf-core/nanoseq/3.0.0", "nxf_ver": "23.04.5", "label": "bambu", "profile": "test_nodx_stringtie", "args": "--quantification_method bambu"},
+  {"pipeline": "rnafusion", "version": "4.2.0", "template": "nf-core/rnafusion/4.1.3", "label": "nofusioncatcher", "args": "--tools arriba,starfusion,ctatsplicing,stringtie,fusionreport,fusioninspector,salmon,fastp"}
 ]
