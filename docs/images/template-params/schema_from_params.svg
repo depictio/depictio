@@ -1,0 +1,140 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="860" viewBox="0 0 1440 860">
+  <rect width="1440" height="860" fill="#ffffff"/>
+  <text x="46.0" y="52.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="25" fill="#1e1e1e" text-anchor="start" font-weight="normal">The run says which route it took; the template listens</text>
+  <text x="46.0" y="78.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="15" fill="#5c5c5c" text-anchor="start" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="13.2">from_params</tspan> rules read the run's <tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="13.2">pipeline_info/params_*.json</tspan>; an explicit <tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="13.2">--var</tspan> always wins</text>
+  <rect x="60.0" y="130.0" width="300.0" height="220.0" rx="6" fill="#ffffff"/>
+  <path d="M60.1,129.8 C159.4,128.9 260.5,128.6 359.3,130.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M59.9,130.5 C158.5,129.8 258.6,128.7 359.4,129.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M360.8,129.3 C360.4,204.8 360.2,276.3 360.6,349.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M359.5,130.1 C358.9,202.1 359.4,277.7 360.2,349.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M360.3,349.9 C260.2,348.6 158.6,349.1 59.7,350.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M359.6,350.1 C259.9,349.4 160.9,350.6 60.0,350.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M59.9,350.4 C60.7,276.0 61.5,202.1 59.4,130.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M60.6,349.7 C58.5,277.2 60.8,203.6 60.3,130.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="210.0" y="157.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">the run's outdir</text>
+  <text x="210.0" y="181.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">pipeline_info/params_&lt;ts&gt;.json</tspan></text>
+  <text x="210.0" y="202.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">newest first: a resumed run</text>
+  <text x="210.0" y="223.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">leaves one per attempt</text>
+  <text x="210.0" y="244.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal"></text>
+  <text x="210.0" y="265.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">none at the root →</text>
+  <text x="210.0" y="286.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">the first <tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">run_*/pipeline_info/</tspan></text>
+  <text x="210.0" y="307.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">(sequencing-run projects)</text>
+  <rect x="60.0" y="390.0" width="300.0" height="170.0" rx="6" fill="#fff9db"/>
+  <path d="M60.0,390.3 C160.3,389.9 261.1,391.4 359.3,390.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M59.8,390.3 C160.5,391.6 261.0,389.3 359.2,389.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M359.4,389.6 C358.9,445.4 358.6,504.2 359.8,560.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M360.5,390.6 C358.7,446.5 360.2,504.6 359.6,559.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M359.5,559.6 C259.5,561.2 161.5,558.9 59.6,560.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M359.8,560.1 C260.3,559.2 158.4,559.7 60.7,560.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M60.6,560.4 C60.0,503.7 60.6,445.2 60.6,390.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M59.3,559.3 C59.7,503.0 58.7,447.1 59.5,389.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="210.0" y="417.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">e.g. rnaseq</text>
+  <text x="210.0" y="441.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">"skip_alignment": true</tspan></text>
+  <text x="210.0" y="462.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">"skip_qc": "true"</tspan></text>
+  <text x="210.0" y="483.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">"aligner": "star_salmon"</tspan></text>
+  <text x="210.0" y="504.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">bool, string or list:</text>
+  <text x="210.0" y="525.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">"true"</tspan>, <tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">"a,b"</tspan>, <tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">["a"]</tspan> all read</text>
+  <path d="M209.2,349.7 C209.4,361.5 208.0,375.3 209.1,390.7" fill="none" stroke="#adb5bd" stroke-width="1.7" stroke-linecap="round" stroke-dasharray="9 7"/>
+  <path d="M209.7,349.2 C210.5,361.9 209.0,376.1 210.7,391.0" fill="none" stroke="#adb5bd" stroke-width="1.7" stroke-linecap="round" stroke-dasharray="9 7"/>
+  <rect x="430.0" y="130.0" width="400.0" height="300.0" rx="6" fill="#e7f5ff"/>
+  <path d="M429.7,129.6 C563.2,129.9 695.3,128.7 830.5,129.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M430.1,129.2 C561.8,131.4 696.8,128.9 830.0,130.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M829.5,130.4 C831.2,230.6 829.2,329.6 830.1,430.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M830.6,130.5 C829.5,229.1 831.0,331.6 830.5,430.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M829.2,429.6 C695.8,430.1 562.9,428.5 429.6,430.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M830.7,429.8 C698.1,429.8 564.7,431.6 429.6,429.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M430.5,430.0 C429.0,329.1 430.4,231.3 430.2,130.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M430.4,430.0 C428.7,330.5 431.3,230.9 429.5,130.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="630.0" y="157.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="15.8">template.yaml</tspan> variables</text>
+  <text x="630.0" y="181.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">PSEUDOALIGNER_ONLY:</tspan></text>
+  <text x="630.0" y="202.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">  <tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">from_params: {param: skip_alignment}</tspan></text>
+  <text x="630.0" y="223.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">SKIP_MULTIQC:</tspan></text>
+  <text x="630.0" y="244.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">  <tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">from_params: {any: [{param: skip_multiqc},</tspan></text>
+  <text x="630.0" y="265.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">                <tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">{param: skip_qc}]}</tspan></text>
+  <text x="630.0" y="286.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal"></text>
+  <text x="630.0" y="307.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">tests: bare (on/off), <tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">is</tspan>, <tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">equals</tspan>,</text>
+  <text x="630.0" y="328.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">not_equals</tspan>, <tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">contains</tspan>, <tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">not_contains</tspan>,</text>
+  <text x="630.0" y="349.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">nested <tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">any</tspan> / <tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">all</tspan></text>
+  <text x="630.0" y="370.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">extra=forbid</tspan>: a typo is a load error</text>
+  <path d="M359.8,240.9 C382.7,241.2 408.6,239.6 430.4,239.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M359.3,240.7 C381.8,238.6 408.3,241.2 431.0,240.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M430.5,240.1 C425.6,237.9 421.0,234.6 417.7,233.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M429.8,239.8 C425.7,242.9 422.4,243.8 417.4,246.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <rect x="900.0" y="130.0" width="240.0" height="170.0" rx="6" fill="#ebfbee"/>
+  <path d="M899.8,129.9 C979.2,129.7 1058.8,131.3 1140.1,130.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M900.0,129.2 C979.7,131.3 1060.0,130.1 1139.9,129.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1140.4,130.1 C1138.4,187.6 1139.0,243.2 1139.7,300.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1139.6,129.6 C1140.2,187.6 1138.7,243.5 1140.4,300.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1140.2,300.0 C1060.2,300.8 981.3,299.8 900.0,300.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1140.3,300.6 C1059.8,300.1 979.9,301.4 900.7,299.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M899.4,299.9 C900.2,244.8 901.1,185.5 899.3,129.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M899.4,300.3 C898.6,243.9 900.9,187.9 900.3,129.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="1020.0" y="157.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">variables</text>
+  <text x="1020.0" y="181.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">PSEUDOALIGNER_ONLY=true</tspan></text>
+  <text x="1020.0" y="202.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">SKIP_MULTIQC=true</tspan></text>
+  <text x="1020.0" y="223.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal"></text>
+  <text x="1020.0" y="244.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">a rule that does not</text>
+  <text x="1020.0" y="265.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">hold sets nothing</text>
+  <path d="M829.8,215.0 C854.9,216.9 875.5,216.8 901.0,215.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M829.4,214.6 C852.0,214.7 876.7,214.4 900.4,214.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M900.1,215.0 C896.0,212.7 890.8,210.3 887.2,208.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M899.5,215.3 C896.5,218.1 891.0,218.9 887.4,221.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <rect x="1200.0" y="130.0" width="190.0" height="120.0" rx="6" fill="#ffe8cc"/>
+  <path d="M1199.4,130.7 C1263.1,131.3 1327.7,129.2 1390.1,130.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1199.3,130.7 C1262.0,128.6 1327.3,129.8 1390.2,130.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1389.9,129.7 C1388.7,171.1 1388.6,211.2 1390.1,250.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1389.4,129.5 C1389.3,168.8 1390.1,209.2 1389.3,249.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1390.0,249.5 C1326.1,249.4 1264.2,249.3 1199.8,249.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1389.5,250.0 C1325.9,248.4 1264.1,250.2 1200.7,249.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1199.8,250.0 C1201.0,209.8 1200.0,171.1 1200.3,130.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1199.8,249.8 C1199.5,211.1 1200.7,170.4 1199.3,129.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="1295.0" y="157.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="15.8">--var X=…</tspan></text>
+  <text x="1295.0" y="181.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">set by the user:</text>
+  <text x="1295.0" y="202.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">never overridden</text>
+  <path d="M1199.2,190.7 C1178.3,191.0 1159.0,188.7 1140.7,190.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1199.3,189.9 C1179.1,189.0 1159.2,189.8 1139.5,190.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1139.8,189.9 C1145.1,192.3 1147.7,195.3 1151.9,196.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1139.5,189.8 C1144.1,187.8 1147.6,185.6 1152.0,183.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <rect x="900.0" y="360.0" width="490.0" height="200.0" rx="6" fill="#f3f0ff"/>
+  <path d="M900.1,360.0 C1061.9,358.5 1226.0,359.1 1390.4,360.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M900.8,359.4 C1064.0,361.2 1226.3,359.4 1390.4,360.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1390.4,360.5 C1388.5,427.7 1391.3,493.7 1389.4,560.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1390.1,360.6 C1390.0,427.7 1391.0,494.4 1390.3,560.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1389.4,560.5 C1225.8,558.5 1062.2,559.6 900.1,560.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1390.5,560.4 C1227.1,560.6 1063.3,558.4 900.0,560.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M899.3,559.6 C900.5,491.9 900.8,425.9 900.4,359.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M900.0,560.3 C900.8,494.9 900.0,426.3 900.4,360.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="1145.0" y="387.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">the template's conditionals</text>
+  <text x="1145.0" y="411.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">if_var_present: SKIP_MULTIQC</tspan> → drop the MultiQC DCs</text>
+  <text x="1145.0" y="432.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">if_var_present: PSEUDOALIGNER_ONLY</tspan> → drop the tracks,</text>
+  <text x="1145.0" y="453.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">re-point the sample overview</text>
+  <text x="1145.0" y="474.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">the same template now fits a default run,</text>
+  <text x="1145.0" y="495.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">a pseudo-aligner run, a run without QC…</text>
+  <text x="1145.0" y="516.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">without anyone passing a flag</text>
+  <path d="M1020.5,299.6 C1028.9,318.3 1035.3,339.0 1045.1,359.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1020.4,299.6 C1026.6,319.1 1037.4,340.8 1045.0,359.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1045.5,360.4 C1045.4,354.6 1046.7,350.1 1045.8,346.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1044.7,360.4 C1042.0,358.0 1037.7,353.6 1033.9,351.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <rect x="430.0" y="480.0" width="400.0" height="170.0" rx="6" fill="#ffe3e3"/>
+  <path d="M430.5,480.0 C562.2,480.1 698.1,478.8 830.6,480.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M429.2,480.0 C562.5,481.3 696.6,478.5 829.9,479.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M829.2,480.4 C828.9,536.2 829.4,594.4 830.5,649.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M829.8,479.8 C831.4,537.3 831.3,592.7 830.8,650.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M829.4,650.5 C696.2,649.8 562.6,648.6 429.7,650.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M829.8,650.7 C695.9,649.3 563.4,649.0 430.6,650.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M430.4,649.3 C430.4,594.7 431.4,536.8 430.4,479.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M430.7,649.4 C430.8,593.8 429.3,535.2 430.0,479.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="630.0" y="507.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">held true by</text>
+  <text x="630.0" y="531.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">every shipped template parses (pytest)</text>
+  <text x="630.0" y="552.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">check_template_params.py</tspan>: each rule's param</text>
+  <text x="630.0" y="573.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">exists in that release's <tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">nextflow_schema.json</tspan></text>
+  <text x="630.0" y="594.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">(CI: <tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">template-params.yaml</tspan>)</text>
+  <text x="630.0" y="615.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">52 rules in 20 templates</text>
+  <path d="M630.3,429.6 C629.2,447.6 631.9,462.4 630.1,479.8" fill="none" stroke="#adb5bd" stroke-width="1.7" stroke-linecap="round" stroke-dasharray="9 7"/>
+  <path d="M630.0,429.4 C628.7,445.3 628.8,465.0 630.8,481.0" fill="none" stroke="#adb5bd" stroke-width="1.7" stroke-linecap="round" stroke-dasharray="9 7"/>
+  <path d="M70.8,710.5 C76.9,716.1 82.3,722.0 88.7,728.7" fill="none" stroke="#c92a2a" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M70.9,729.0 C77.2,723.9 83.6,716.8 88.9,710.8" fill="none" stroke="#c92a2a" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="100.0" y="726.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#c92a2a" text-anchor="start" font-weight="normal">a renamed param in a new release would make a rule silently never hold:</text>
+  <text x="100.0" y="748.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="start" font-weight="normal">the schema check fails instead, at the template's version, before any ingestion</text>
+  <text x="46.0" y="824.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="13" fill="#5c5c5c" text-anchor="start" font-weight="normal">introspection of the outputs still runs after the rules, for what params cannot tell (phylogeny, pplacer, metadata file)</text>
+</svg>

@@ -632,7 +632,7 @@ def _chromium_executable() -> str | None:
     root = Path(os.environ.get("PLAYWRIGHT_BROWSERS_PATH", ""))
     if not root.is_dir():
         return None
-    for candidate in sorted(root.glob("chromium-*/chrome-linux/chrome")):
+    for candidate in sorted(root.glob("chromium-*/chrome-linux*/chrome")):
         if candidate.is_file():
             return str(candidate)
     return None
