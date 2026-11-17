@@ -23,7 +23,9 @@ repos:
     -   id: check-added-large-files
         # bundled gene annotations (hg38/mm10, ~0.9 MB) and the cnv_profile showcase fixture
         args: ['--maxkb=1100']
-        exclude: ^dev/
+        # ampliseq's reference seed TSVs (one row per sample x taxon x rank, and
+        # per rarefaction depth) outgrow it; every version bump re-adds them.
+        exclude: ^dev/|^depictio/projects/nf-core/ampliseq/[^/]+/(stacked_taxonomy|rarefaction)_canonical\.tsv$
 
 # Ruff lint & format (includes import sorting)
 -   repo: https://github.com/astral-sh/ruff-pre-commit
