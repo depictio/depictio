@@ -199,6 +199,10 @@ exclude = [
   # to draw its tiles with the dashboard's renderers (serverless/report.py).
   "viewer/dist-static/report-runtime.js",
   "viewer/dist-static/report-runtime.css",
+  # The combined runtime (same build): the report AND the dashboard in one file
+  # (serverless/combined.py, `depictio dashboard combine-report`).
+  "viewer/dist-static/combined-runtime.js",
+  "viewer/dist-static/combined-runtime.css",
   # Its conditional add-ons (3Dmol.js, 0.54 MB raw / 0.16 MB deflated), appended
   # only to bundles that need one (depictio/serverless/addons.py).
   "viewer/dist-static/addons/*",

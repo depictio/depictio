@@ -678,6 +678,24 @@ def _embed_runtime(
     return True
 
 
+def _combined_refusal(
+    dashboard_id: PyObjectId, state: AnalysisState, current_user: User
+) -> str | None:
+    """Why this caller cannot have the combined report + dashboard file.
+
+    It is a rendered report with the dashboard's manifest embedded, so it needs
+    both: a deployment that renders reports, and the runtime's rules (a state it
+    can reproduce, an owner, as a static export).
+    """
+    from depictio.serverless import combined
+
+    if not settings.notebook_export.render_enabled:
+        return "this server does not render reports (Quarto is not enabled)"
+    if not combined.combined_runtime_available():
+        return "the combined runtime is not built on this deployment"
+    return _runtime_refusal(dashboard_id, state, current_user)
+
+
 @dashboards_endpoint_router.post(
     "/notebook_export/{dashboard_id}/preflight", response_model=NotebookPreflight
 )
@@ -694,7 +712,13 @@ def notebook_export_preflight(
     )
     # Whether the *worker* can render is not something the API can see (Quarto
     # lives in the worker image), so this is the operator's switch, not a probe.
-    return NotebookBuilder(plan).preflight(render_available=settings.notebook_export.render_enabled)
+    preflight = NotebookBuilder(plan).preflight(
+        render_available=settings.notebook_export.render_enabled
+    )
+    reason = _combined_refusal(dashboard_id, request.state, current_user)
+    preflight.combined_available = reason is None
+    preflight.combined_reason = reason
+    return preflight
 
 
 @dashboards_endpoint_router.post("/notebook_export/{dashboard_id}")
@@ -738,6 +762,11 @@ def notebook_export(
 # export renders rather than computes costs a browser pass, so a dashboard's
 # report is minutes of work. The client starts it, polls the status, then
 # downloads.
+
+
+def combined_filename(stem: str) -> str:
+    """The combined file's name: the report's, marked as holding the dashboard."""
+    return f"{stem}-report-dashboard.html"
 
 
 def _require_render_enabled() -> None:
@@ -825,7 +854,18 @@ async def notebook_export_render(
     from depictio.api.v1.services.notebook_export import store
     from depictio.models.models.users import TokenData
 
-    embed_runtime = _embed_runtime(request, dashboard_id, current_user, default=True)
+    combined = request.output == "combined"
+    if combined:
+        # The user asked for the dashboard in the file: a report without it is
+        # not what they asked for, so a refusal is an error, not a downgrade.
+        refusal = _combined_refusal(dashboard_id, request.state, current_user)
+        if refusal:
+            raise HTTPException(
+                status_code=409, detail=f"The report + dashboard file is unavailable: {refusal}."
+            )
+        embed_runtime = True
+    else:
+        embed_runtime = _embed_runtime(request, dashboard_id, current_user, default=True)
     plan = build_export_plan(
         dashboard_id,
         request.state,
@@ -840,6 +880,7 @@ async def notebook_export_render(
 
     job_id = uuid4().hex
     user_id = str(current_user.id)
+    filename = combined_filename(plan.stem) if combined else f"{plan.stem}.html"
     notebook_key = store.job_key(user_id, job_id, f"{plan.stem}.qmd")
     store.put(notebook_key, qmd, store.QMD_MEDIA_TYPE)
 
@@ -880,13 +921,18 @@ async def notebook_export_render(
                 if embed_runtime
                 else None
             ),
+            # The combined file: the same render, then the report's runtime
+            # block swapped for the App runtime the dashboard view shares.
+            "combined": {"default_view": request.default_view} if combined else None,
+            "filename": filename,
         },
         task_id=job_id,
     )
-    logger.info(f"📄 Notebook report {job_id} queued for dashboard {dashboard_id}")
-    return NotebookRenderStatus(
-        job_id=job_id, status="queued", filename=f"{plan.stem}.html", phase="queued"
+    logger.info(
+        f"📄 Notebook {'report + dashboard' if combined else 'report'} {job_id} queued "
+        f"for dashboard {dashboard_id}"
     )
+    return NotebookRenderStatus(job_id=job_id, status="queued", filename=filename, phase="queued")
 
 
 @dashboards_endpoint_router.get(

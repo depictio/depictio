@@ -203,6 +203,14 @@ class NotebookExportRequest(BaseModel):
     # the runtime from the API when it renders). Owner-only either way, as a
     # static export is; refused silently (fallbacks only) otherwise.
     embed_runtime: bool | None = None
+    # What the render produces: the report alone, or the combined file — the
+    # report AND the interactive dashboard in one HTML, behind a
+    # "Report | Dashboard" switch (``depictio/serverless/combined.py``). The
+    # combined file always embeds the runtime, so it is held to its rules
+    # (owner, a state the runtime can reproduce).
+    output: Literal["report", "combined"] = "report"
+    # The view a combined file opens on when its link names none.
+    default_view: Literal["report", "dashboard"] = "report"
 
 
 class NotebookPreflightComponent(BaseModel):
@@ -239,6 +247,10 @@ class NotebookPreflight(BaseModel):
     warnings: list[str] = Field(default_factory=list)
     render_available: bool = False
     counts: dict[str, int] = Field(default_factory=dict)
+    # Whether this caller can have the combined report + dashboard file, and
+    # if not, why (the export UI then defaults to the dashboard alone).
+    combined_available: bool = False
+    combined_reason: str | None = None
 
 
 class NotebookRenderStatus(BaseModel):

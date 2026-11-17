@@ -2243,6 +2243,7 @@ fig_funnel"""
         kind: str,
         folded: bool = False,
         note: str = "",
+        tab_id: str | None = None,
     ) -> str:
         """One heading line: a real ATX heading, decorated inline.
 
@@ -2253,7 +2254,10 @@ fig_funnel"""
         script keys on all ride *inside* the line as inline HTML.
         """
         fold = ' data-dpx-fold="closed"' if folded else ""
-        mark = f'<span data-dpx-accent="{accent}" data-dpx-kind="{kind}"{fold}>{icon}</span>'
+        # A tab's part names its dashboard tab: the combined file's "Show this
+        # tab in the report" lands on it.
+        tab = f' data-depictio-tab="{_esc(tab_id)}"' if tab_id else ""
+        mark = f'<span data-dpx-accent="{accent}" data-dpx-kind="{kind}"{fold}{tab}>{icon}</span>'
         title = f'<span style="color:{accent}">{_esc(text)}</span>' if accent else _esc(text)
         aside = f' <span class="dpx-h-note">{_esc(note)}</span>' if note else ""
         return f"{'#' * max(1, min(6, level))} {mark}{title}{aside}"
@@ -2329,6 +2333,7 @@ fig_funnel"""
                 icon=self._icon_html(unit.icon, accent),
                 kind="tab",
                 folded=folded,
+                tab_id=unit.dashboard_id,
             )
             + (f" {{#{anchor}}}" if anchor else "")
         ]

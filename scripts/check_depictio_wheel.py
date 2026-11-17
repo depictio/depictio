@@ -22,7 +22,9 @@ import zipfile
 # 12.5 MB raw, 3.9 MB deflated) adds ~4 MB: 24 MB keeps the same ~2 MB headroom.
 # The report runtime beside it (report-runtime.js + .css, 10.2 MB raw, ~3.2 MB
 # deflated), what `depictio local up` needs to embed a report's tiles: 28 MB.
-MAX_MB = 28
+# The combined runtime (combined-runtime.js + .css, 12.8 MB raw, ~3.9 MB
+# deflated), the default report + dashboard export: 32 MB.
+MAX_MB = 32
 REQUIRED = [
     r"depictio/viewer/dist/index\.html",
     # The serverless bundle template `depictio build-static` injects into.
@@ -33,6 +35,9 @@ REQUIRED = [
     # The report runtime a rendered notebook report inlines (serverless/report.py).
     r"depictio/viewer/dist-static/report-runtime\.js",
     r"depictio/viewer/dist-static/report-runtime\.css",
+    # The combined report + dashboard runtime (serverless/combined.py).
+    r"depictio/viewer/dist-static/combined-runtime\.js",
+    r"depictio/viewer/dist-static/combined-runtime\.css",
     r"depictio/projects/init/iris/\.db_seeds/dashboard\.json",
     r"depictio/projects/init/penguins/\.db_seeds/dashboard\.json",
     r"depictio/projects/nf-core/rnaseq/[^/]+/template\.yaml",

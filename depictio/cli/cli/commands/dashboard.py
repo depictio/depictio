@@ -6,6 +6,7 @@ Provides simple commands for dashboard YAML management:
 - import: Import YAML to server (project from YAML or --project override)
 - export: Export dashboard from server to YAML
 - build-static: Build a backend-less static bundle from a spec + local Parquet
+- combine-report: Turn a rendered report into the combined report + dashboard file
 """
 
 import os
@@ -983,6 +984,77 @@ def export_static_cmd(
         import webbrowser
 
         webbrowser.open(out.resolve().as_uri())
+
+
+@app.command("combine-report")
+def combine_report_cmd(
+    report: Annotated[
+        Path,
+        typer.Argument(
+            help=(
+                "A rendered report that embeds the dashboard's runtime (the server's "
+                "'Report only' download, or `quarto render` of an export made by an owner)"
+            ),
+            exists=True,
+            dir_okay=False,
+        ),
+    ],
+    out: Annotated[
+        Path | None,
+        typer.Option(
+            "--out", "-o", help="Output HTML path (default: <report>-report-dashboard.html)"
+        ),
+    ] = None,
+    default_view: Annotated[
+        str,
+        typer.Option("--default-view", help="The view the file opens on: 'report' or 'dashboard'"),
+    ] = "report",
+    open_browser: Annotated[
+        bool, typer.Option("--open", help="Open the combined file in a browser tab")
+    ] = False,
+) -> None:
+    """Turn a rendered report into the combined report + dashboard file.
+
+    Offline, from the file alone: the report already carries the dashboard's
+    manifest (with its data) beside the report runtime. This swaps that runtime
+    for the combined one — the whole interactive dashboard behind a
+    "Report | Dashboard" switch, one filter state across both views — and drops
+    Quarto's own copy of Plotly. The server's default export produces the same
+    file directly.
+
+    Example:
+        depictio dashboard combine-report penguins.html --out penguins-all.html
+    """
+    from depictio.serverless import combined
+
+    if default_view not in ("report", "dashboard"):
+        console.print("[red]Error: --default-view must be 'report' or 'dashboard'[/red]")
+        raise typer.Exit(1)
+    html = report.read_text(encoding="utf-8")
+    manifest = combined.embedded_manifest(html)
+    if not manifest:
+        console.print(
+            "[red]Error: this report does not embed the dashboard's manifest. Render it with "
+            "the runtime embedded (the server's report, or an export made by an owner).[/red]"
+        )
+        raise typer.Exit(1)
+    try:
+        result = combined.combine_report(html, manifest, default_view=default_view)  # type: ignore[arg-type]
+    except Exception as e:  # noqa: BLE001 - runtime not built, unreadable report
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1)
+    target = out or report.with_name(f"{report.stem}-report-dashboard.html")
+    target.write_text(result.html, encoding="utf-8")
+    size_mb = target.stat().st_size / 1_048_576
+    saved = result.plotly_dropped / 1_048_576
+    console.print(
+        f"[green]✓ Report + dashboard written: {target} ({size_mb:.2f} MB; the report's own "
+        f"Plotly copy dropped, {saved:.2f} MB)[/green]"
+    )
+    if open_browser:
+        import webbrowser
+
+        webbrowser.open(target.resolve().as_uri())
 
 
 @app.command()

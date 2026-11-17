@@ -1009,6 +1009,35 @@ def prewarm_multiqc_dc_all_plots(self, dc_id: str) -> dict:
             logger.warning(f"prewarm_multiqc_dc_all_plots: failed to clear lock {lock_key}: {exc}")
 
 
+def _combined_manifest(runtime: dict) -> dict:
+    """Producer A's manifest for a combined file, with the requester's rights.
+
+    Unlike the report's runtime block, nothing stands in when this fails: a
+    combined file without its dashboard is not what was asked for.
+    """
+    from depictio.models.models.analysis_state import AnalysisState
+    from depictio.serverless import report
+    from depictio.serverless.producer_a import ExportUser
+
+    manifest = report.build_report_manifest(
+        str(runtime["dashboard_id"]),
+        ExportUser(**runtime["user"]),
+        AnalysisState.model_validate(runtime["state"]),
+    )
+    return manifest.model_dump(mode="json")
+
+
+def _empty_runtime_file(job_id: str) -> str:
+    """A runtime file with no block: the document's last cell prints nothing,
+    and the combined runtime is put in afterwards, once, by the producer."""
+    import os
+    import tempfile
+
+    fd, path = tempfile.mkstemp(prefix=f"depictio-report-{job_id}-", suffix=".html")
+    os.close(fd)
+    return path
+
+
 def _report_runtime_file(job_id: str, runtime: dict) -> str:
     """Compose a report's runtime block on this worker; the file's path.
 
@@ -1058,6 +1087,8 @@ def render_notebook_report(
     api_url: str,
     token_id: str,
     runtime: dict | None = None,
+    combined: dict | None = None,
+    filename: str | None = None,
 ) -> dict:
     """Execute an exported notebook and keep the report Quarto renders from it.
 
@@ -1077,6 +1108,12 @@ def render_notebook_report(
     does — and hand the document the composed block through
     ``DEPICTIO_REPORT_RUNTIME_FILE``. Any failure there leaves the block empty:
     the report then keeps every tile's own output, and the render goes on.
+
+    ``combined`` (``{default_view}``, with ``runtime``) makes the job produce
+    the combined report + dashboard file instead (``serverless/combined.py``):
+    the manifest is built first (a failure fails the job), the report renders
+    with no runtime block, and the combined runtime, the manifest and the
+    add-ons are put in once afterwards.
     """
     import asyncio
     from pathlib import Path
@@ -1113,14 +1150,22 @@ def render_notebook_report(
             await token.delete()
         return None
 
-    html_key = store.job_key(user_id, job_id, f"{stem}.html")
+    out_name = filename or f"{stem}.html"
+    html_key = store.job_key(user_id, job_id, out_name)
+    manifest: dict | None = None
     try:
         access_token = asyncio.run(_with_token(_read))
         if not access_token:
             raise RuntimeError("the render token expired before the job started")
+        if combined and not runtime:
+            raise RuntimeError("a combined file needs the dashboard's runtime settings")
         if runtime:
             self.update_state(state="PROGRESS", meta={"phase": "embedding", "job_id": job_id})
-            extra_env[RUNTIME_FILE_ENV] = _report_runtime_file(job_id, runtime)
+            if combined:
+                manifest = _combined_manifest(runtime)
+                extra_env[RUNTIME_FILE_ENV] = _empty_runtime_file(job_id)
+            else:
+                extra_env[RUNTIME_FILE_ENV] = _report_runtime_file(job_id, runtime)
         self.update_state(state="PROGRESS", meta={"phase": "rendering", "job_id": job_id})
         notebook = store.get(notebook_key)
         html = render_quarto_html(
@@ -1131,6 +1176,21 @@ def render_notebook_report(
             timeout_s=settings.notebook_export.render_timeout_s,
             extra_env=extra_env,
         )
+        if combined and manifest is not None and runtime:
+            from depictio.serverless.combined import combine_report
+
+            self.update_state(state="PROGRESS", meta={"phase": "combining", "job_id": job_id})
+            result = combine_report(
+                html.decode("utf-8"),
+                manifest,
+                config=runtime.get("config"),
+                default_view=combined.get("default_view") or "report",
+            )
+            html = result.html.encode("utf-8")
+            logger.info(
+                f"📄 Report {job_id}: dashboard combined in ({len(html) / 1e6:.1f} MB; "
+                f"report's plotly.js dropped: {result.plotly_dropped / 1e6:.1f} MB)"
+            )
         self.update_state(state="PROGRESS", meta={"phase": "storing", "job_id": job_id})
         store.put(html_key, html, store.HTML_MEDIA_TYPE)
         logger.info(f"📄 Rendered notebook report {html_key} ({len(html) / 1e6:.1f} MB)")
@@ -1139,7 +1199,7 @@ def render_notebook_report(
             "job_id": job_id,
             "user_id": user_id,
             "key": html_key,
-            "filename": f"{stem}.html",
+            "filename": out_name,
             "size": len(html),
         }
     finally:

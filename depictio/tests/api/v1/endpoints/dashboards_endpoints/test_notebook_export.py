@@ -588,6 +588,65 @@ def test_render_stages_the_notebook_and_queues_the_job(patched_env):
     assert "access_token" not in queued["kwargs"]
 
 
+def test_a_combined_render_queues_the_combined_job(patched_env):
+    """The default export: the report AND the dashboard, one file, its own name."""
+    staged: dict[str, bytes] = {}
+    queued: dict[str, object] = {}
+
+    class _Token:
+        id = ObjectId()
+
+    async def _fake_add_token(token_data):
+        return _Token()
+
+    with (
+        patch.object(nbx.settings.notebook_export, "render_enabled", True),
+        patch.object(nbx, "_combined_refusal", lambda *a: None),
+        patch(
+            "depictio.api.v1.services.screenshot_service.check_dashboard_owner_permission_sync",
+            lambda *a: True,
+        ),
+        patch(
+            "depictio.api.v1.services.notebook_export.store.put",
+            lambda key, body, content_type: staged.__setitem__(key, body),
+        ),
+        patch(
+            "depictio.api.v1.endpoints.user_endpoints.core_functions._add_token", _fake_add_token
+        ),
+        patch(
+            "depictio.api.celery_app.render_notebook_report.apply_async",
+            lambda **kw: queued.update(kw),
+        ),
+    ):
+        status = asyncio.run(
+            nbx.notebook_export_render(
+                dashboard_id=DASHBOARD_ID,  # type: ignore[arg-type]
+                request=NotebookExportRequest(
+                    state=_state(FILTERS), output="combined", default_view="dashboard"
+                ),
+                current_user=_RenderUser(),  # type: ignore[arg-type]
+                access_token=None,
+            )
+        )
+    assert status.filename.endswith("-report-dashboard.html")
+    kwargs = queued["kwargs"]
+    assert kwargs["combined"] == {"default_view": "dashboard"}
+    assert kwargs["filename"] == status.filename
+    # The combined file always embeds the runtime: its tiles are placeholders.
+    assert kwargs["runtime"] is not None
+    assert b"data-depictio-tile" in next(iter(staged.values()))
+
+
+def test_the_preflight_says_whether_the_combined_file_is_on(patched_env):
+    with patch.object(nbx, "_combined_refusal", lambda *a: "this server does not render reports"):
+        pre = _preflight(_state(FILTERS))
+    assert pre.combined_available is False
+    assert pre.combined_reason == "this server does not render reports"
+    with patch.object(nbx, "_combined_refusal", lambda *a: None):
+        pre = _preflight(_state(FILTERS))
+    assert pre.combined_available is True and pre.combined_reason is None
+
+
 def test_a_render_job_of_another_user_is_not_found(patched_env):
     class _Result:
         state = "SUCCESS"
