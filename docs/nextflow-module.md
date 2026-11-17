@@ -340,18 +340,6 @@ module.
 
 ## Containers
 
-**Trying an unreleased change.** Every pull request of this repository
-publishes its all-in-one image once the image's checks pass (amd64 and arm64):
-`ghcr.io/depictio/depictio-allinone:pr-<number>` follows the PR, and
-`pr-<number>-<sha7>` names one commit (the run's summary prints it). Point the
-module at it in the pipeline's config:
-
-```groovy
-process { withName: '.*DEPICTIO_INGEST' { container = 'ghcr.io/depictio/depictio-allinone:pr-1407' } }
-```
-
-Apptainer takes the same name: `docker://ghcr.io/depictio/depictio-allinone:pr-1407`.
-
 The `depictio-allinone` image runs both modes: the artifact (the default) and
 sending to an existing instance (`cli_config`), since it carries the CLI. The
 task runs as whatever uid the engine gives it, with only its work directory
