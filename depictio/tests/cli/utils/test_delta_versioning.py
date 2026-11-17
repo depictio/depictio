@@ -806,7 +806,9 @@ class TestStringHeldAsCategorical:
             scoped=True,
             partition=True,
         )
-        assert pl.read_delta(destination).sort("v").equals(plain)
+        # A partitioned table reads back with its partition column last.
+        back = pl.read_delta(destination).select(plain.columns)
+        assert back.sort("v").equals(plain)
         # A real type change still is.
         assert scoped_frame_conflicts({"v": pl.Float64}, table) == [
             "v is Float64 here but Int64 in the table"
