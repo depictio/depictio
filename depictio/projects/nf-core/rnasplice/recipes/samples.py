@@ -12,8 +12,12 @@ The optional design table (``METADATA_FILE``, the ``metadata`` collection)
 adds factors the sheet does not carry. Its columns win over a same-named sheet
 column, so a design table can refine ``condition`` without being ignored.
 
+rnasplice 2.0 publishes no validated sheet: the template points ``sheet`` at
+the run's own ``--input`` (``SAMPLESHEET_FILE``), which has no ``single_end``
+column (an empty ``fastq_2`` says it) and repeats a sample's name per run.
+
 Sources:
-    sheet     ``pipeline_info/samplesheet.valid.csv``
+    sheet     ``pipeline_info/samplesheet.valid.csv`` (1.x), or the run's sheet
     metadata  the optional ``metadata`` collection (dc_ref)
 
 Params:
@@ -41,9 +45,10 @@ SOURCES: list[RecipeSource] = [
         ref="sheet",
         path="pipeline_info/samplesheet.valid.csv",
         format="csv",
+        # single_end is the validated sheet's (1.x); a raw --input sheet (2.0
+        # publishes no validated copy) tells single-end reads by an empty fastq_2.
         input_schema={
             "sample": pl.Utf8,
-            "single_end": pl.Utf8,
             "condition": pl.Utf8,
             "strandedness": pl.Utf8,
         },
@@ -86,7 +91,14 @@ def transform(
 ) -> pl.DataFrame:
     """Collapse the sheet's runs to samples, then carry the design table."""
     sheet = sources["sheet"]
-    single = pl.col("single_end").cast(pl.Utf8).str.to_lowercase().is_in(_TRUE)
+    if "single_end" in sheet.columns:
+        single = pl.col("single_end").cast(pl.Utf8).str.to_lowercase().is_in(_TRUE)
+    elif "fastq_2" in sheet.columns:
+        single = pl.col("fastq_2").is_null() | (
+            pl.col("fastq_2").cast(pl.Utf8).str.strip_chars() == ""
+        )
+    else:
+        single = pl.lit(False)
     hub = (
         sheet.with_columns(
             pl.col("sample").cast(pl.Utf8).str.replace(_RUN_SUFFIX, "").alias("sample"),
